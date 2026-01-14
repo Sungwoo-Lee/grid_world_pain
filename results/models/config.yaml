@@ -6,13 +6,13 @@ agent:
   gamma: 0.99
 body:
   death_penalty: 100
-  food_satiation_gain: 2
+  food_satiation_gain: 5
   max_satiation: 20
   overeating_death: false
   random_start_satiation: true
   satiation_setpoint: 20
   start_satiation: 10
-  use_homeostatic_reward: true
+  use_homeostatic_reward: false
   with_satiation: true
 environment:
   food_pos:
@@ -29,4 +29,4 @@ testing:
   seed: 56
 training:
   seed: 42
-  training_episode: 1000
+  training_episode: 200

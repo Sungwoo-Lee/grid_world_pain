@@ -131,7 +131,7 @@ def save_video(frames, output_path, fps=5):
     imageio.mimsave(output_path, frames, fps=fps)
     print(f"Saved video to {output_path}")
 
-def plot_learning_curves(history_csv_path, output_dir):
+def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestones=None):
     """
     Plots learning curves from a training history CSV file.
     """
@@ -172,6 +172,20 @@ def plot_learning_curves(history_csv_path, output_dir):
     ax2.set_title("Training Performance: Steps per Episode")
     ax2.legend()
     ax2.grid(True, linestyle='--', alpha=0.7)
+    
+    if max_steps:
+        ax2.set_ylim(0, max_steps)
+
+    # Add Checkpoint Indicators
+    if milestones:
+        for ep, pct in milestones.items():
+            # Add vertical line to both plots
+            for ax in [ax1, ax2]:
+                ax.axvline(x=ep, color='red', linestyle='--', alpha=0.4, linewidth=1)
+            
+            # Add label to the top plot (Reward)
+            y_max = ax1.get_ylim()[1]
+            ax1.text(ep, y_max, f' {pct}%', color='red', verticalalignment='bottom', fontweight='bold', fontsize=9)
 
     plt.tight_layout()
     plt.savefig(save_path)

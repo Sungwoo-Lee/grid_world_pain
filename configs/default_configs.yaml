@@ -12,11 +12,11 @@ body:
   max_satiation: 20
   satiation_setpoint: 20
   overeating_death: false  
-  use_homeostatic_reward: true
+  use_homeostatic_reward: false
   death_penalty: 100
   random_start_satiation: true
   start_satiation: 10
-  food_satiation_gain: 2
+  food_satiation_gain: 5
 
 agent:
   alpha: 0.1

@@ -170,7 +170,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     min_epsilon = 0.05
     
     # Define milestones for saving intermediate visualizations
-    milestones = {int(episodes * p): int(p * 100) for p in [0.1, 0.25, 0.5, 0.75, 1.0]}
+    milestones = {int(episodes * p): int(p * 100) for p in [0.01, 0.1, 0.25, 0.5, 0.75, 1.0]}
     
     episode_rewards = []
     episode_steps = []
@@ -255,7 +255,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     print(f"Training history saved to {history_filename}")
 
     # Generate learning curves
-    plot_learning_curves(history_filename, os.path.join(results_dir, "plots"))
+    plot_learning_curves(history_filename, os.path.join(results_dir, "plots"), max_steps=max_steps, milestones=milestones)
     
     print("\nTraining complete. Use evaluation.py to generate plots and videos.")
 
