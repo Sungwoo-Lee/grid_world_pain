@@ -207,7 +207,7 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
     agent.save(model_filename)
     
     # Post-Training: Generate all visualizations and videos from saved checkpoints
-    print("\nGenerating all artifact checkpoints (plots & videos)...")
+    print("\nGenerating all plots & videos from checkpoints...")
     import glob
     checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
     
@@ -238,7 +238,7 @@ if __name__ == "__main__":
     config = get_default_config()
     
     # Overrides
-    episodes = args.episodes or config.get('training.default_episodes', 100000)
+    episodes = args.episodes or config.get('training.training_episode', 100000)
     seed = args.seed or config.get('training.seed', 42)
     with_satiation = config.get('body.with_satiation', True)
     if args.no_satiation:
