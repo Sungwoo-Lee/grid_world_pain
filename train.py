@@ -95,7 +95,7 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 
     print("\n" + "=" * width + "\n")
 
-def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=True, food_satiation_gain=10, max_steps=100, random_start_satiation=True, use_homeostatic_reward=False, satiation_setpoint=15, testing_seed=42, config_dict=None):
+def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=True, food_satiation_gain=10, max_steps=100, random_start_satiation=True, use_homeostatic_reward=False, satiation_setpoint=15, death_penalty=100, testing_seed=42, config_dict=None):
     """
     Trains the Q-learning agent.
     
@@ -148,7 +148,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         random_start_satiation=random_start_satiation, 
         food_satiation_gain=food_satiation_gain,
         use_homeostatic_reward=use_homeostatic_reward,
-        satiation_setpoint=satiation_setpoint
+        satiation_setpoint=satiation_setpoint,
+        death_penalty=death_penalty
     )
     
     # We need to inform the agent about expected max_satiation for sizing Q-table
@@ -192,7 +193,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             
             if with_satiation:
                 # Step Internal - Reward comes from survival/metabolism
-                next_body_state, reward, done = body.step(info)
+                next_body_state, reward, body_done = body.step(info)
+                done = env_done or body_done
                 next_state = (*next_env_state, next_body_state)
             else:
                 # Conventional - Reward comes from environment goal
@@ -262,6 +264,7 @@ if __name__ == "__main__":
     food_satiation_gain = config.get('body.food_satiation_gain', 10)
     use_homeostatic_reward = config.get('body.use_homeostatic_reward', False)
     satiation_setpoint = config.get('body.satiation_setpoint', 15)
+    death_penalty = config.get('body.death_penalty', 100)
     testing_seed = config.get('testing.seed', 42)
     
-    train_agent(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, food_satiation_gain=food_satiation_gain, max_steps=max_steps, random_start_satiation=random_start_satiation, use_homeostatic_reward=use_homeostatic_reward, satiation_setpoint=satiation_setpoint, testing_seed=testing_seed, config_dict=config)
+    train_agent(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, food_satiation_gain=food_satiation_gain, max_steps=max_steps, random_start_satiation=random_start_satiation, use_homeostatic_reward=use_homeostatic_reward, satiation_setpoint=satiation_setpoint, death_penalty=death_penalty, testing_seed=testing_seed, config_dict=config)

@@ -53,6 +53,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     food_satiation_gain = config.get('body.food_satiation_gain', 10)
     use_homeostatic_reward = config.get('body.use_homeostatic_reward', False)
     satiation_setpoint = config.get('body.satiation_setpoint', 15)
+    death_penalty = config.get('body.death_penalty', 100)
 
     # 2. Environment & Body Setup
     # Set seed for deterministic evaluation
@@ -66,7 +67,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         random_start_satiation=random_start_satiation, 
         food_satiation_gain=food_satiation_gain,
         use_homeostatic_reward=use_homeostatic_reward,
-        satiation_setpoint=satiation_setpoint
+        satiation_setpoint=satiation_setpoint,
+        death_penalty=death_penalty
     )
     
     # Mock composite env for agent
@@ -106,7 +108,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             next_env_state, _, env_done, info = env.step(action)
             
             if with_satiation:
-                next_body_state, _, done = body.step(info)
+                next_body_state, _, body_done = body.step(info)
+                done = env_done or body_done
                 next_state = (*next_env_state, next_body_state)
                 frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_idx, step=step_count+1))
             else:

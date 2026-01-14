@@ -14,7 +14,7 @@ class InteroceptiveBody:
     This class acts as the "Internal Environment". Unlike standard RL where the external world
     defines the reward, here the *Body* defines the reward based on its needs.
     """
-    def __init__(self, max_satiation=20, start_satiation=10, overeating_death=True, random_start_satiation=True, food_satiation_gain=10, use_homeostatic_reward=False, satiation_setpoint=15):
+    def __init__(self, max_satiation=20, start_satiation=10, overeating_death=True, random_start_satiation=True, food_satiation_gain=10, use_homeostatic_reward=False, satiation_setpoint=15, death_penalty=100):
         """
         Initialize the body.
         
@@ -26,6 +26,7 @@ class InteroceptiveBody:
             food_satiation_gain (int): Satiation increase from eating food.
             use_homeostatic_reward (bool): Whether to use drive reduction reward.
             satiation_setpoint (int): Ideal satiation level for homeostasis.
+            death_penalty (float): Penalty subtracted from reward upon death.
         """
         self.max_satiation = max_satiation
         self.start_satiation = start_satiation
@@ -34,6 +35,7 @@ class InteroceptiveBody:
         self.food_satiation_gain = food_satiation_gain
         self.use_homeostatic_reward = use_homeostatic_reward
         self.satiation_setpoint = satiation_setpoint
+        self.death_penalty = death_penalty
         self.satiation = start_satiation
         
     def reset(self):
@@ -95,11 +97,11 @@ class InteroceptiveBody:
             current_drive = abs(self.satiation - self.satiation_setpoint)
             reward = prev_drive - current_drive
             
-            # Penalize death heavily in homeostatic mode to ensure survival is prioritized
+            # Penalize death heavily
             if done:
-                reward -= 10
+                reward -= self.death_penalty
         else:
             # Traditional Reward: +1 for every step of SURVIVAL
-            reward = 1 if not done else 0
+            reward = 1 if not done else -self.death_penalty
         
         return self.satiation, reward, done

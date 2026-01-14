@@ -83,6 +83,7 @@ def main():
     food_satiation_gain = config.get('body.food_satiation_gain', 10)
     use_homeostatic_reward = config.get('body.use_homeostatic_reward', False)
     satiation_setpoint = config.get('body.satiation_setpoint', 15)
+    death_penalty = config.get('body.death_penalty', 100)
 
     print(f"Starting Debug Session")
     print(f"Video will be saved to: {video_filename}")
@@ -96,7 +97,8 @@ def main():
         random_start_satiation=random_start_satiation, 
         food_satiation_gain=food_satiation_gain,
         use_homeostatic_reward=use_homeostatic_reward,
-        satiation_setpoint=satiation_setpoint
+        satiation_setpoint=satiation_setpoint,
+        death_penalty=death_penalty
     )
     
     # Mock composite env for agent init
@@ -147,7 +149,8 @@ def main():
             next_env_state, env_reward, env_done, info = env.step(action)
             
             if with_satiation:
-                next_body_state, reward, done = body.step(info)
+                next_body_state, reward, body_done = body.step(info)
+                done = env_done or body_done
                 next_state = (*next_env_state, next_body_state)
                 print(f"  Info: {info}")
                 print(f"  Satiation: {body.satiation}/{body.max_satiation}")
