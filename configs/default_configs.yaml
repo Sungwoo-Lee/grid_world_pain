@@ -6,11 +6,12 @@ environment:
   start_pos: [0, 0]
   food_pos: [4, 4]
   with_satiation: true
+  max_steps: 200
 
 body:
   max_satiation: 20
   start_satiation: 10
-  overeating_death: true
+  overeating_death: false
 
 agent:
   alpha: 0.1

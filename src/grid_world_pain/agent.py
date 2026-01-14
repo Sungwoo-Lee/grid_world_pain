@@ -135,7 +135,6 @@ class QLearningAgent:
             filepath (str): Path to save the file.
         """
         np.save(filepath, self.q_table)
-        print(f"Q-table saved to {filepath}")
 
     def load(self, filepath):
         """
@@ -145,5 +144,4 @@ class QLearningAgent:
             filepath (str): Path to load the file from.
         """
         self.q_table = np.load(filepath)
-        print(f"Q-table loaded from {filepath}")
 

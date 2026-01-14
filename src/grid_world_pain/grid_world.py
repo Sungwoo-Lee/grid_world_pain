@@ -30,7 +30,7 @@ class GridWorld:
       not the external world. The environment only provides signals (like 'ate_food').
     """
     
-    def __init__(self, height=5, width=5, start=(0, 0), food_pos=(4, 4), with_satiation=True):
+    def __init__(self, height=5, width=5, start=(0, 0), food_pos=(4, 4), with_satiation=True, max_steps=100):
         """
         Initializes the GridWorld foraging environment.
 
@@ -40,6 +40,7 @@ class GridWorld:
             start (tuple): Start position (row, col).
             food_pos (tuple): Food position (row, col).
             with_satiation (bool): Whether to include satiation/homeostasis.
+            max_steps (int): Maximum steps allowed per episode.
         """
         self.height = height
         self.width = width
@@ -47,6 +48,8 @@ class GridWorld:
         self.food_pos = food_pos
         self.agent_pos = start
         self.with_satiation = with_satiation
+        self.max_steps = max_steps
+        self.current_step = 0
         
     def reset(self):
         """
@@ -55,6 +58,7 @@ class GridWorld:
         Returns:
             tuple: The initial state (row, col).
         """
+        self.current_step = 0
         while True:
             row = np.random.randint(0, self.height)
             col = np.random.randint(0, self.width)
@@ -74,9 +78,10 @@ class GridWorld:
             tuple: A tuple containing:
                 - next_state (tuple): (row, col).
                 - reward (int): 0 (External environment provides no reward).
-                - done (bool): False (External environment doesn't terminate).
+                - done (bool): True if goal reached or max_steps exceeded.
                 - info (dict): {'ate_food': bool}
         """
+        self.current_step += 1
         row, col = self.agent_pos
         
         # Movement logic
@@ -101,6 +106,9 @@ class GridWorld:
             if ate_food:
                 reward = 10 # Conventional goal reward
                 done = True # REACHED GOAL
+        
+        if self.current_step >= self.max_steps:
+            done = True
         
         info = {'ate_food': ate_food}
         

@@ -26,7 +26,7 @@ Usage Examples:
 from src.grid_world_pain import GridWorld
 from src.grid_world_pain.body import InteroceptiveBody
 from src.grid_world_pain.agent import QLearningAgent
-from src.grid_world_pain.visualization import plot_q_table
+from src.grid_world_pain.visualization import plot_q_table, run_and_save_episode
 from src.grid_world_pain.config import get_default_config
 import time
 import numpy as np
@@ -34,7 +34,7 @@ import numpy as np
 import sys
 import argparse
 
-def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeating_death=True):
+def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeating_death=True, max_steps=100):
     """
     Trains the Q-learning agent and visualizes the result.
     
@@ -64,7 +64,7 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
     os.makedirs(plots_dir, exist_ok=True)
 
     # Initialize environment, body, and agent
-    env = GridWorld(with_satiation=with_satiation)
+    env = GridWorld(with_satiation=with_satiation, max_steps=max_steps)
     body = InteroceptiveBody(overeating_death=overeating_death)
     
     # We need to inform the agent about expected max_satiation for sizing Q-table
@@ -157,6 +157,15 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
     # Final visualization
     vis_filename = os.path.join(plots_dir, "q_table_vis.png")
     plot_q_table(agent.q_table, vis_filename, env.food_pos)
+    
+    # NEW: Generate post-training video
+    video_dir = os.path.join(results_dir, "videos")
+    os.makedirs(video_dir, exist_ok=True)
+    video_filename = os.path.join(video_dir, "final_trained_agent.mp4")
+    
+    print(f"Generating final video for trained agent...")
+    agent.epsilon = 0 # No exploration for final video
+    run_and_save_episode(env, body, agent, video_filename, max_steps=max_steps, num_episodes=1, with_satiation=with_satiation)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train RL Agent")
@@ -180,5 +189,7 @@ if __name__ == "__main__":
     overeating_death = config.get('body.overeating_death', True)
     if args.no_overeating_death:
         overeating_death = False
+        
+    max_steps = config.get('environment.max_steps', 100)
     
-    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death)
+    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, max_steps=max_steps)

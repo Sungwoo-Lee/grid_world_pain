@@ -113,7 +113,6 @@ def plot_q_table(q_table, save_path, food_pos=None):
     
     plt.suptitle("Learned Policy & Value at Different Satiation Levels", fontsize=16)
     plt.savefig(save_path)
-    print(f"Q-table visualization saved to {save_path}")
     plt.close(fig)
 
 def plot_q_table_conventional(q_table, save_path, food_pos=None):
@@ -143,12 +142,8 @@ def plot_q_table_conventional(q_table, save_path, food_pos=None):
         
     fig.colorbar(cax, ax=ax, label='Max Q-Value')
     plt.savefig(save_path)
-    print(f"Conventional Q-table visualization saved to {save_path}")
     plt.close(fig)
 
-    plt.savefig(save_path)
-    print(f"Q-table visualization saved to {save_path}")
-    plt.close(fig)
 
 def run_and_save_episode(env, body, agent, output_path, max_steps=50, num_episodes=1, with_satiation=True):
     """

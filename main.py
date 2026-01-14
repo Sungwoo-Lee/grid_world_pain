@@ -58,6 +58,8 @@ def main():
     overeating_death = config.get('body.overeating_death', True)
     if args.no_overeating_death:
         overeating_death = False
+        
+    max_steps = config.get('environment.max_steps', 100)
 
     # Setup results directory
     results_dir = "results"
@@ -72,7 +74,7 @@ def main():
     print(f"Video will be saved to: {video_filename}")
 
     # Initialize components
-    env = GridWorld(with_satiation=with_satiation)
+    env = GridWorld(with_satiation=with_satiation, max_steps=max_steps)
     body = InteroceptiveBody(overeating_death=overeating_death)
     
     # Mock composite env for agent init
