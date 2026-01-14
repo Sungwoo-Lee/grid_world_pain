@@ -80,7 +80,64 @@ def train_and_visualize():
     # Save model
     model_filename = os.path.join(results_dir, "q_table.npy")
     agent.save(model_filename)
+    
+    # Visualize Q-table
+    vis_filename = os.path.join(results_dir, "q_table_vis.png")
+    plot_q_table(agent.q_table, vis_filename)
 
+def plot_q_table(q_table, save_path):
+    """
+    Visualizes the Q-table as a heatmap with action arrows.
+    
+    Args:
+        q_table (numpy.ndarray): The Q-table of shape (height, width, 4).
+        save_path (str): Path to save the visualization.
+    """
+    import matplotlib.pyplot as plt
+    
+    height, width, _ = q_table.shape
+    
+    # Calculate best action and max Q-value for each cell
+    best_actions = np.argmax(q_table, axis=2)
+    max_q_values = np.max(q_table, axis=2)
+    
+    fig, ax = plt.subplots(figsize=(8, 8))
+    
+    # Plot heatmap
+    cax = ax.imshow(max_q_values, cmap='viridis', interpolation='nearest')
+    fig.colorbar(cax, label='Max Q-Value')
+    
+    # Add arrows indicating best action
+    # Actions: 0=Up, 1=Right, 2=Down, 3=Left
+    # Corresponding (dx, dy) for plotting arrows
+    # Note: In matric coordinates (row, col), Up is (-1, 0), Right is (0, 1), etc.
+    # But for plotting with matplotlib (x, y) where x=col, y=row (inverted y-axis by imshow)
+    action_deltas = {
+        0: (0, -0.3),  # Up (negative y in plot coordinates if origin is top-left)
+        1: (0.3, 0),   # Right
+        2: (0, 0.3),   # Down
+        3: (-0.3, 0)   # Left
+    }
+    
+    for r in range(height):
+        for c in range(width):
+            action = best_actions[r, c]
+            dx, dy = action_deltas[action]
+            
+            # Draw arrow
+            # Note: origin is 'upper' by default for imshow, so y increases downwards
+            ax.arrow(c, r, dx, dy, head_width=0.1, head_length=0.1, fc='white', ec='white')
+            
+    ax.set_title("Learned Policy (Q-Table)")
+    ax.set_xticks(np.arange(width))
+    ax.set_yticks(np.arange(height))
+    ax.set_xlabel("Column")
+    ax.set_ylabel("Row")
+    
+    plt.tight_layout()
+    plt.savefig(save_path)
+    print(f"Q-table visualization saved to {save_path}")
+    plt.close(fig)
 
 if __name__ == "__main__":
     train_and_visualize()
