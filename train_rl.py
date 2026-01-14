@@ -9,17 +9,18 @@ This script:
 
 Arguments:
 - `--episodes <int>`: (Default: 100000) Total number of training episodes.
+- `--seed <int>`: (Default: 42) Random seed for reproducibility.
 
 Usage Examples:
 
 1. **Quick Test** (Verify code works):
    ```bash
-   python train_rl.py --episodes 100
+   python train_rl.py --episodes 100 --seed 42
    ```
 
 2. **Full Training** (Train a robust agent):
    ```bash
-   python train_rl.py --episodes 50000
+   python train_rl.py --episodes 50000 --seed 123
    ```
 """
 from src.grid_world_pain import GridWorld
@@ -32,7 +33,7 @@ import numpy as np
 import sys
 import argparse
 
-def train_and_visualize(episodes=100000):
+def train_and_visualize(episodes=100000, seed=42):
     """
     Trains the Q-learning agent and visualizes the result.
     
@@ -51,7 +52,7 @@ def train_and_visualize(episodes=100000):
     import os # Import os here or at top for results_dir handling
     
     # Set numpy random seed for determinism
-    np.random.seed(42)
+    np.random.seed(seed)
     
     results_dir = "results"
     models_dir = os.path.join(results_dir, "models")
@@ -150,7 +151,8 @@ def train_and_visualize(episodes=100000):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train RL Agent")
-    parser.add_argument("--episodes", type=int, default=100000, help="Number of episodes to train")
+    parser.add_argument("--episodes", type=int, default=100000, help="Number of episodes to train (default: 100000)")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
     args = parser.parse_args()
     
-    train_and_visualize(episodes=args.episodes)
+    train_and_visualize(episodes=args.episodes, seed=args.seed)

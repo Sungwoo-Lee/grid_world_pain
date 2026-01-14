@@ -9,6 +9,7 @@ Purpose:
 Arguments:
 - `--episodes <int>`: (Default: 3) Number of episodes to record in the video.
 - `--max_steps <int>`: (Default: 30) Maximum steps to record per episode.
+- `--seed <int>`: (Default: 42) Random seed for reproducibility.
 
 Usage Examples:
 
@@ -19,7 +20,7 @@ Usage Examples:
 
 2. **Longer Observation**:
    ```bash
-   python main.py --episodes 5 --max_steps 50
+   python main.py --episodes 5 --max_steps 50 --seed 123
    ```
 """
 
@@ -37,6 +38,7 @@ def main():
     parser = argparse.ArgumentParser(description="GridWorld Debug Sandbox")
     parser.add_argument("--episodes", type=int, default=3, help="Number of episodes to record in video (default: 3)")
     parser.add_argument("--max_steps", type=int, default=30, help="Maximum steps to record per episode (default: 30)")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
     args = parser.parse_args()
 
     # Setup results directory
@@ -44,7 +46,7 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
     
     # Set numpy random seed for determinism
-    np.random.seed(42)
+    np.random.seed(args.seed)
     
     video_filename = os.path.join(results_dir, "gridworld_debug.mp4")
     
