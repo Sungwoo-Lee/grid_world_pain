@@ -131,6 +131,53 @@ def save_video(frames, output_path, fps=5):
     imageio.mimsave(output_path, frames, fps=fps)
     print(f"Saved video to {output_path}")
 
+def plot_learning_curves(history_csv_path, output_dir):
+    """
+    Plots learning curves from a training history CSV file.
+    """
+    if not os.path.exists(history_csv_path):
+        print(f"Warning: {history_csv_path} not found. Skipping learning curves plot.")
+        return
+
+    import pandas as pd
+    try:
+        df = pd.read_csv(history_csv_path)
+    except Exception as e:
+        print(f"Error reading history CSV: {e}")
+        return
+
+    if df.empty:
+        print("Warning: History CSV is empty. Skipping learning curves plot.")
+        return
+
+    os.makedirs(output_dir, exist_ok=True)
+    save_path = os.path.join(output_dir, "learning_curves.png")
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+
+    # Plot Episode Rewards
+    window = max(1, len(df) // 100)
+    ax1.plot(df['episode'], df['reward'], alpha=0.3, color='blue', label='Raw Reward')
+    ax1.plot(df['episode'], df['reward'].rolling(window=window).mean(), color='darkblue', linewidth=2, label=f'Moving Average (n={window})')
+    ax1.set_ylabel("Cumulative Reward")
+    ax1.set_title("Training Performance: Reward per Episode")
+    ax1.legend()
+    ax1.grid(True, linestyle='--', alpha=0.7)
+
+    # Plot Episode Steps
+    ax2.plot(df['episode'], df['steps'], alpha=0.3, color='green', label='Raw Steps')
+    ax2.plot(df['episode'], df['steps'].rolling(window=window).mean(), color='darkgreen', linewidth=2, label=f'Moving Average (n={window})')
+    ax2.set_xlabel("Episode")
+    ax2.set_ylabel("Survival Steps")
+    ax2.set_title("Training Performance: Steps per Episode")
+    ax2.legend()
+    ax2.grid(True, linestyle='--', alpha=0.7)
+
+    plt.tight_layout()
+    plt.savefig(save_path)
+    plt.close(fig)
+    print(f"Saved learning curves to {save_path}")
+
 if __name__ == "__main__":
     print("This module is a utility library and should not be run directly.")
     print("Use train.py for training and evaluation.py for generating artifacts.")

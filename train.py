@@ -26,7 +26,7 @@ Usage Examples:
 from src.grid_world_pain import GridWorld
 from src.grid_world_pain.body import InteroceptiveBody
 from src.grid_world_pain.agent import QLearningAgent
-from src.grid_world_pain.visualization import plot_q_table
+from src.grid_world_pain.visualization import plot_q_table, plot_learning_curves
 from src.grid_world_pain.config import get_default_config
 import time
 import numpy as np
@@ -172,6 +172,9 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     # Define milestones for saving intermediate visualizations
     milestones = {int(episodes * p): int(p * 100) for p in [0.1, 0.25, 0.5, 0.75, 1.0]}
     
+    episode_rewards = []
+    episode_steps = []
+    
     for episode in range(episodes):
         # Reset External
         env_state = env.reset()
@@ -184,6 +187,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             state = env_state
         
         done = False
+        total_reward = 0
+        steps = 0
         
         while not done:
             action = agent.choose_action(state)
@@ -204,9 +209,14 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             
             agent.update(state, action, reward, next_state)
             state = next_state
+            total_reward += reward
+            steps += 1
             
         # Decay epsilon
         agent.epsilon = max(min_epsilon, agent.epsilon * decay_rate)
+        
+        episode_rewards.append(total_reward)
+        episode_steps.append(steps)
         
         # Progress Bar
         if (episode + 1) % 100 == 0:
@@ -233,6 +243,19 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     # Final model save
     model_filename = os.path.join(models_dir, "q_table.npy")
     agent.save(model_filename)
+    
+    # Save training history
+    import csv
+    history_filename = os.path.join(models_dir, "training_history.csv")
+    with open(history_filename, mode='w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['episode', 'reward', 'steps'])
+        for i in range(len(episode_rewards)):
+            writer.writerow([i + 1, episode_rewards[i], episode_steps[i]])
+    print(f"Training history saved to {history_filename}")
+
+    # Generate learning curves
+    plot_learning_curves(history_filename, os.path.join(results_dir, "plots"))
     
     print("\nTraining complete. Use evaluation.py to generate plots and videos.")
 
