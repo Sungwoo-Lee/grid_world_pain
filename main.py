@@ -126,7 +126,7 @@ def main():
         
         while not done and step_count < max_steps_per_episode:
             action = agent.choose_action(state)
-            action_names = ["Up", "Right", "Down", "Left"]
+            action_names = ["Up", "Right", "Down", "Left", "Stay"]
             
             print(f"Step {step_count + 1}: Action {action_names[action]}")
             

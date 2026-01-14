@@ -37,9 +37,9 @@ class QLearningAgent:
         # If with_satiation: 4D Array [Height, Width, Satiation, Actions]
         # If not with_satiation: 3D Array [Height, Width, Actions]
         if self.with_satiation:
-            self.q_table = np.zeros((self.env.height, self.env.width, self.env.max_satiation + 2, 4))
+            self.q_table = np.zeros((self.env.height, self.env.width, self.env.max_satiation + 2, 5))
         else:
-            self.q_table = np.zeros((self.env.height, self.env.width, 4))
+            self.q_table = np.zeros((self.env.height, self.env.width, 5))
 
     def choose_action(self, state):
         """
@@ -53,11 +53,11 @@ class QLearningAgent:
             state (tuple): Current state. (row, col, satiation) or (row, col).
 
         Returns:
-            int: Chosen action (0-3).
+            int: Chosen action (0-4).
         """
         if np.random.uniform(0, 1) < self.epsilon:
             # Explore: choose a random action
-            return np.random.randint(0, 4)
+            return np.random.randint(0, 5)
         else:
             # Exploit: choose the action with the highest Q-value
             if self.with_satiation:

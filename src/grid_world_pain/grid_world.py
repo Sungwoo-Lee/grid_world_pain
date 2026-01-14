@@ -72,7 +72,7 @@ class GridWorld:
         Moves the agent.
         
         Args:
-            action (int): The action to take (0=Up, 1=Right, 2=Down, 3=Left).
+            action (int): The action to take (0=Up, 1=Right, 2=Down, 3=Left, 4=Stay).
             
         Returns:
             tuple: A tuple containing:
@@ -93,6 +93,8 @@ class GridWorld:
             row = min(self.height - 1, row + 1)
         elif action == 3: # Left
             col = max(0, col - 1)
+        elif action == 4: # Stay
+            pass
             
         self.agent_pos = (row, col)
         

@@ -66,7 +66,7 @@ def plot_q_table(q_table, save_path, food_pos=None):
         for r in range(height):
             for c in range(width):
                 action = policy[r, c]
-                arrow_char = ['\u2191', '\u2192', '\u2193', '\u2190'][action]
+                arrow_char = ['\u2191', '\u2192', '\u2193', '\u2190', '\u2022'][action]
                 ax.text(c, r, arrow_char, ha='center', va='center', color='white', fontsize=12, weight='bold')
         
         # Mark Food Location
@@ -112,7 +112,7 @@ def plot_q_table_conventional(q_table, save_path, food_pos=None):
     for r in range(height):
         for c in range(width):
             action = policy[r, c]
-            arrow_char = ['\u2191', '\u2192', '\u2193', '\u2190'][action]
+            arrow_char = ['\u2191', '\u2192', '\u2193', '\u2190', '\u2022'][action]
             ax.text(c, r, arrow_char, ha='center', va='center', color='white', fontsize=12, weight='bold')
     
     if food_pos is not None:

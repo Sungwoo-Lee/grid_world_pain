@@ -91,7 +91,7 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 
     print("\n" + "=" * width + "\n")
 
-def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=True, max_steps=100, random_start_satiation=True, testing_seed=42, config_dict=None):
+def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=True, food_satiation_gain=10, max_steps=100, random_start_satiation=True, testing_seed=42, config_dict=None):
     """
     Trains the Q-learning agent.
     
