@@ -17,6 +17,10 @@ def plot_q_table(q_table, save_path, food_pos=None):
     if len(q_table.shape) == 3:
         return plot_q_table_conventional(q_table, save_path, food_pos)
 
+    # Ensure output directory exists
+    if save_path:
+        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+
     # q_table shape: (height, width, satiation_dim, actions)
     height, width, sat_dim, _ = q_table.shape
     
@@ -83,6 +87,10 @@ def plot_q_table_conventional(q_table, save_path, food_pos=None):
     """
     Visualizes a 3D Q-table (Conventional Mode).
     """
+    # Ensure output directory exists
+    if save_path:
+        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+
     height, width, _ = q_table.shape
     fig, ax = plt.subplots(figsize=(7, 6))
     

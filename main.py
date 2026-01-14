@@ -72,7 +72,6 @@ def main():
     # Setup results directory
     results_dir = "results"
     video_dir = os.path.join(results_dir, "videos")
-    os.makedirs(video_dir, exist_ok=True)
     
     # Set numpy random seed for determinism
     np.random.seed(args.seed)

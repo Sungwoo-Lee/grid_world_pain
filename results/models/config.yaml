@@ -21,6 +21,7 @@ environment:
   - 0
   width: 5
 testing:
+  evaluation_episodes: 1
   seed: 56
 training:
   seed: 42

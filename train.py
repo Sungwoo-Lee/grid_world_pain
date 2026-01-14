@@ -127,9 +127,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     # Setup directories
     results_dir = "results"
     models_dir = os.path.join(results_dir, "models")
-    plots_dir = os.path.join(results_dir, "plots")
     os.makedirs(models_dir, exist_ok=True)
-    os.makedirs(plots_dir, exist_ok=True)
 
     # NEW: Save the resolved configuration for evaluation
     if config_dict is not None:
