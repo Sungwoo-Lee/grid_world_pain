@@ -79,12 +79,25 @@ def main():
     
     video_filename = os.path.join(video_dir, "gridworld_debug.mp4")
     
+    random_start_satiation = config.get('body.random_start_satiation', True)
+    food_satiation_gain = config.get('body.food_satiation_gain', 10)
+    use_homeostatic_reward = config.get('body.use_homeostatic_reward', False)
+    satiation_setpoint = config.get('body.satiation_setpoint', 15)
+
     print(f"Starting Debug Session")
     print(f"Video will be saved to: {video_filename}")
 
     # Initialize components
     env = GridWorld(height=height, width=width, start=start_pos, food_pos=food_pos, with_satiation=with_satiation, max_steps=max_steps)
-    body = InteroceptiveBody(max_satiation=max_satiation, start_satiation=start_satiation, overeating_death=overeating_death, random_start_satiation=random_start_satiation, food_satiation_gain=food_satiation_gain)
+    body = InteroceptiveBody(
+        max_satiation=max_satiation, 
+        start_satiation=start_satiation, 
+        overeating_death=overeating_death, 
+        random_start_satiation=random_start_satiation, 
+        food_satiation_gain=food_satiation_gain,
+        use_homeostatic_reward=use_homeostatic_reward,
+        satiation_setpoint=satiation_setpoint
+    )
     
     # Mock composite env for agent init
     class CompositeEnv:

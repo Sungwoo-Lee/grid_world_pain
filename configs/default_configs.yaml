@@ -13,7 +13,9 @@ body:
   start_satiation: 10
   random_start_satiation: true
   overeating_death: false  
-  food_satiation_gain: 2
+  food_satiation_gain: 10
+  use_homeostatic_reward: false
+  satiation_setpoint: 15
 
 agent:
   alpha: 0.1

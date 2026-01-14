@@ -37,7 +37,7 @@ import yaml
 import sys
 import argparse
 
-def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, testing_seed):
+def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed):
     """
     Prints a professional and fancy configuration summary.
     """
@@ -60,6 +60,10 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
         "Max Steps": max_steps,
         "Mode": "Interoceptive (Homeostasis)" if with_satiation else "Conventional (Goal-driven)"
     }
+    if with_satiation:
+        env_data["Reward Logic"] = "Homeostatic (Drive Reduction)" if use_homeostatic_reward else "Survival Step"
+        if use_homeostatic_reward:
+            env_data["Satiation Setpoint"] = satiation_setpoint
     print_section("Environment", env_data)
 
     # Body (if applicable)
@@ -91,7 +95,7 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 
     print("\n" + "=" * width + "\n")
 
-def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=True, food_satiation_gain=10, max_steps=100, random_start_satiation=True, testing_seed=42, config_dict=None):
+def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=True, food_satiation_gain=10, max_steps=100, random_start_satiation=True, use_homeostatic_reward=False, satiation_setpoint=15, testing_seed=42, config_dict=None):
     """
     Trains the Q-learning agent.
     
@@ -117,12 +121,10 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         config_dict.set('training.training_episode', episodes)
         config_dict.set('training.seed', seed)
         config_dict.set('body.with_satiation', with_satiation)
-        config_dict.set('body.overeating_death', overeating_death)
-        config_dict.set('environment.max_steps', max_steps)
-        config_dict.set('body.random_start_satiation', random_start_satiation)
-        config_dict.set('testing.seed', testing_seed)
+        config_dict.set('body.use_homeostatic_reward', use_homeostatic_reward)
+        config_dict.set('body.satiation_setpoint', satiation_setpoint)
         
-        print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, testing_seed)
+        print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed)
     
     # Setup directories
     results_dir = "results"
@@ -141,7 +143,13 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
 
     # Initialize environment, body, and agent
     env = GridWorld(with_satiation=with_satiation, max_steps=max_steps)
-    body = InteroceptiveBody(overeating_death=overeating_death, random_start_satiation=random_start_satiation, food_satiation_gain=food_satiation_gain)
+    body = InteroceptiveBody(
+        overeating_death=overeating_death, 
+        random_start_satiation=random_start_satiation, 
+        food_satiation_gain=food_satiation_gain,
+        use_homeostatic_reward=use_homeostatic_reward,
+        satiation_setpoint=satiation_setpoint
+    )
     
     # We need to inform the agent about expected max_satiation for sizing Q-table
     class CompositeEnv:
@@ -252,6 +260,8 @@ if __name__ == "__main__":
     max_steps = config.get('environment.max_steps', 100)
     random_start_satiation = config.get('body.random_start_satiation', True)
     food_satiation_gain = config.get('body.food_satiation_gain', 10)
+    use_homeostatic_reward = config.get('body.use_homeostatic_reward', False)
+    satiation_setpoint = config.get('body.satiation_setpoint', 15)
     testing_seed = config.get('testing.seed', 42)
     
-    train_agent(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, food_satiation_gain=food_satiation_gain, max_steps=max_steps, random_start_satiation=random_start_satiation, testing_seed=testing_seed, config_dict=config)
+    train_agent(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, food_satiation_gain=food_satiation_gain, max_steps=max_steps, random_start_satiation=random_start_satiation, use_homeostatic_reward=use_homeostatic_reward, satiation_setpoint=satiation_setpoint, testing_seed=testing_seed, config_dict=config)

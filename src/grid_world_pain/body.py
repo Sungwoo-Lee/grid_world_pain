@@ -14,7 +14,7 @@ class InteroceptiveBody:
     This class acts as the "Internal Environment". Unlike standard RL where the external world
     defines the reward, here the *Body* defines the reward based on its needs.
     """
-    def __init__(self, max_satiation=20, start_satiation=10, overeating_death=True, random_start_satiation=True, food_satiation_gain=10):
+    def __init__(self, max_satiation=20, start_satiation=10, overeating_death=True, random_start_satiation=True, food_satiation_gain=10, use_homeostatic_reward=False, satiation_setpoint=15):
         """
         Initialize the body.
         
@@ -24,12 +24,16 @@ class InteroceptiveBody:
             overeating_death (bool): Whether overeating (>= max_satiation) causes death.
             random_start_satiation (bool): Whether to randomize start satiation on reset.
             food_satiation_gain (int): Satiation increase from eating food.
+            use_homeostatic_reward (bool): Whether to use drive reduction reward.
+            satiation_setpoint (int): Ideal satiation level for homeostasis.
         """
         self.max_satiation = max_satiation
         self.start_satiation = start_satiation
         self.overeating_death = overeating_death
         self.random_start_satiation = random_start_satiation
         self.food_satiation_gain = food_satiation_gain
+        self.use_homeostatic_reward = use_homeostatic_reward
+        self.satiation_setpoint = satiation_setpoint
         self.satiation = start_satiation
         
     def reset(self):
@@ -58,6 +62,9 @@ class InteroceptiveBody:
         Returns:
             tuple: (satiation, reward, done)
         """
+        # 0. Store previous state for reward calculation
+        prev_satiation = self.satiation
+
         # 1. Metabolism: Burn 1 unit of energy per step
         self.satiation -= 1
         
@@ -80,8 +87,19 @@ class InteroceptiveBody:
             done = True # Death by Overeating
             
         # 4. Generate Reward signal
-        # Reward = 1 for every step of SURVIVAL.
-        # This implicitly encourages the agent to maintain homeostasis as long as possible.
-        reward = 1 if not done else 0
+        # Homeostatic Reward (Keramati & Gutkin): Drive Reduction
+        # Drive D(H) = |H - H*|
+        # Reward = D(H_prev) - D(H_current)
+        if self.use_homeostatic_reward:
+            prev_drive = abs(prev_satiation - self.satiation_setpoint)
+            current_drive = abs(self.satiation - self.satiation_setpoint)
+            reward = prev_drive - current_drive
+            
+            # Penalize death heavily in homeostatic mode to ensure survival is prioritized
+            if done:
+                reward -= 10
+        else:
+            # Traditional Reward: +1 for every step of SURVIVAL
+            reward = 1 if not done else 0
         
         return self.satiation, reward, done
