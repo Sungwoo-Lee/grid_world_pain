@@ -11,7 +11,7 @@ environment:
 body:
   max_satiation: 20
   start_satiation: 10
-  overeating_death: false
+  overeating_death: true  
 
 agent:
   alpha: 0.1

@@ -251,6 +251,53 @@ def generate_video_from_checkpoint(checkpoint_path, results_dir, max_steps=50, n
     output_path = os.path.join(results_dir, "videos", f"video_{pct}.mp4")
     run_and_save_episode(env, body, agent, output_path, max_steps=max_steps, num_episodes=num_episodes, with_satiation=with_satiation)
 
+def generate_artifacts_from_checkpoint(checkpoint_path, results_dir, max_steps=50, num_episodes=1, with_satiation=True, food_pos=None):
+    """
+    Generates both Q-table plot and performance video for a given checkpoint.
+    """
+    filename = os.path.basename(checkpoint_path)
+    match = re.search(r"q_table_(\d+).npy", filename)
+    if not match:
+        pct = "final" if filename == "q_table.npy" else "unknown"
+    else:
+        pct = match.group(1)
+        
+    print(f"Processing checkpoint: {filename} ({pct}%)")
+    
+    # 1. Load Agent
+    env = GridWorld(with_satiation=with_satiation)
+    body = InteroceptiveBody()
+    
+    class CompositeEnv:
+        def __init__(self, env, body):
+            self.height = env.height
+            self.width = env.width
+            self.max_satiation = body.max_satiation
+    
+    composite_env = CompositeEnv(env, body)
+    agent = QLearningAgent(composite_env, with_satiation=with_satiation)
+    
+    try:
+        agent.load(checkpoint_path)
+    except Exception as e:
+        print(f"Failed to load {checkpoint_path}: {e}")
+        return
+
+    # 2. Generate Plot
+    plots_dir = os.path.join(results_dir, "plots")
+    os.makedirs(plots_dir, exist_ok=True)
+    vis_filename = os.path.join(plots_dir, f"q_table_vis_{pct}.png" if pct != "final" else "q_table_vis.png")
+    plot_q_table(agent.q_table, vis_filename, food_pos or env.food_pos)
+    
+    # 3. Generate Video
+    videos_dir = os.path.join(results_dir, "videos")
+    os.makedirs(videos_dir, exist_ok=True)
+    video_filename = os.path.join(videos_dir, f"video_{pct}.mp4" if pct != "final" else "final_trained_agent.mp4")
+    
+    agent.epsilon = 0
+    np.random.seed(42) 
+    run_and_save_episode(env, body, agent, video_filename, max_steps=max_steps, num_episodes=num_episodes, with_satiation=with_satiation, verbose=False)
+
 def run_random_demo(videos_dir, max_steps=50, num_episodes=1, with_satiation=True):
     """
     Runs a random agent demo.
@@ -322,7 +369,12 @@ def main():
     checkpoints.sort(key=extract_number)
     
     for checkpoint in checkpoints:
-        generate_video_from_checkpoint(checkpoint, results_dir, max_steps=args.max_steps, num_episodes=args.episodes, with_satiation=with_satiation)
+        generate_artifacts_from_checkpoint(checkpoint, results_dir, max_steps=args.max_steps, num_episodes=args.episodes, with_satiation=with_satiation)
+    
+    # Also handle the final model if it exists
+    final_model = os.path.join(models_dir, "q_table.npy")
+    if os.path.exists(final_model):
+        generate_artifacts_from_checkpoint(final_model, results_dir, max_steps=args.max_steps, num_episodes=args.episodes, with_satiation=with_satiation)
 
 if __name__ == "__main__":
     main()

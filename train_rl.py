@@ -26,7 +26,7 @@ Usage Examples:
 from src.grid_world_pain import GridWorld
 from src.grid_world_pain.body import InteroceptiveBody
 from src.grid_world_pain.agent import QLearningAgent
-from src.grid_world_pain.visualization import plot_q_table, run_and_save_episode
+from src.grid_world_pain.visualization import plot_q_table, run_and_save_episode, generate_artifacts_from_checkpoint
 from src.grid_world_pain.config import get_default_config
 import time
 import numpy as np
@@ -135,23 +135,9 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
         if (episode + 1) in milestones:
             pct = milestones[episode + 1]
             
-            vis_filename = os.path.join(plots_dir, f"q_table_vis_{pct}.png")
-            plot_q_table(agent.q_table, vis_filename, env.food_pos)
-            
-            # Save Q-table snapshot
+            # Save Q-table snapshot (Only save the model during training loop)
             model_snap_filename = os.path.join(models_dir, f"q_table_{pct}.npy")
             agent.save(model_snap_filename)
-            
-            # NEW: Generate milestone video
-            video_dir = os.path.join(results_dir, "videos")
-            os.makedirs(video_dir, exist_ok=True)
-            milestone_video_filename = os.path.join(video_dir, f"video_{pct}.mp4")
-            
-            # Temporary disable epsilon for recording
-            original_epsilon = agent.epsilon
-            agent.epsilon = 0.0
-            run_and_save_episode(env, body, agent, milestone_video_filename, max_steps=max_steps, num_episodes=1, with_satiation=with_satiation, verbose=False)
-            agent.epsilon = original_epsilon
     
     print() # Newline after progress bar
     
@@ -162,22 +148,24 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
     model_filename = os.path.join(models_dir, "q_table.npy")
     agent.save(model_filename)
     
-    # Also save as q_table_100.npy for consistency with generate_videos
-    agent.save(os.path.join(models_dir, "q_table_100.npy"))
+    # Post-Training: Generate all visualizations and videos from saved checkpoints
+    print("\nGenerating all artifact checkpoints (plots & videos)...")
+    import glob
+    checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
     
-    # Final visualization
-    vis_filename = os.path.join(plots_dir, "q_table_vis.png")
-    plot_q_table(agent.q_table, vis_filename, env.food_pos)
+    # Sort checkpoints by percentage
+    import re
+    def extract_number(path):
+        match = re.search(r"q_table_(\d+).npy", path)
+        return int(match.group(1)) if match else -1
+    checkpoints.sort(key=extract_number)
     
-    # Final video generation is now handled by the 100% milestone
-    # But for clarity, we can ensure results/videos/final_trained_agent.mp4 exists as a symlink or copy if needed.
-    # For now, milestone video_100.mp4 is the final one.
-    video_dir = os.path.join(results_dir, "videos")
-    final_src = os.path.join(video_dir, "video_100.mp4")
-    final_dst = os.path.join(video_dir, "final_trained_agent.mp4")
-    if os.path.exists(final_src):
-        import shutil
-        shutil.copy(final_src, final_dst)
+    # Process each milestone
+    for checkpoint in checkpoints:
+        generate_artifacts_from_checkpoint(checkpoint, results_dir, max_steps=max_steps, with_satiation=with_satiation, food_pos=env.food_pos)
+    
+    # Process final model
+    generate_artifacts_from_checkpoint(model_filename, results_dir, max_steps=max_steps, with_satiation=with_satiation, food_pos=env.food_pos)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train RL Agent")
