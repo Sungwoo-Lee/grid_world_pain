@@ -29,7 +29,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     Evaluates a single checkpoint:
     - Sets up environment and body based on config.
     - Loads agent.
-    - Runs evaluation episode to collect frames.
+    - Runs evaluation episodes to collect frames.
     - Generates Q-table plot and performance video.
     """
     filename = os.path.basename(checkpoint_path)
@@ -43,6 +43,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     overeating_death = config.get('body.overeating_death', True)
     max_steps = config.get('environment.max_steps', 100)
     seed = config.get('testing.seed', 42)
+    num_episodes = config.get('testing.evaluation_episodes', 1)
     food_pos = config.get('environment.food_pos', [4, 4])
     height = config.get('environment.height', 5)
     width = config.get('environment.width', 5)
@@ -72,45 +73,47 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         print(f"  Error loading checkpoint: {e}")
         return
 
-    # 3. Run Evaluation Episode (Collect Frames)
+    # 3. Run Evaluation Episodes (Collect Frames)
     agent.epsilon = 0 # No exploration during evaluation
     frames = []
     
-    env_state = env.reset()
-    if with_satiation:
-        body_state = body.reset()
-        state = (*env_state, body_state)
-        frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=1, step=0))
-    else:
-        state = env_state
-        frames.append(env.render_rgb_array(episode=1, step=0))
-    
-    done = False
-    step_count = 0
-    while not done and step_count < max_steps:
-        action = agent.choose_action(state)
-        next_env_state, _, env_done, info = env.step(action)
-        
+    for ep in range(num_episodes):
+        ep_idx = ep + 1
+        env_state = env.reset()
         if with_satiation:
-            next_body_state, _, done = body.step(info)
-            next_state = (*next_env_state, next_body_state)
-            frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=1, step=step_count+1))
+            body_state = body.reset()
+            state = (*env_state, body_state)
+            frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_idx, step=0))
         else:
-            done = env_done
-            next_state = next_env_state
-            frames.append(env.render_rgb_array(episode=1, step=step_count+1))
+            state = env_state
+            frames.append(env.render_rgb_array(episode=ep_idx, step=0))
         
-        state = next_state
-        step_count += 1
-        
-        if done:
-            # Buffer end frames
-            for _ in range(5):
-                if with_satiation:
-                    frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=1, step=step_count))
-                else:
-                    frames.append(env.render_rgb_array(episode=1, step=step_count))
-            break
+        done = False
+        step_count = 0
+        while not done and step_count < max_steps:
+            action = agent.choose_action(state)
+            next_env_state, _, env_done, info = env.step(action)
+            
+            if with_satiation:
+                next_body_state, _, done = body.step(info)
+                next_state = (*next_env_state, next_body_state)
+                frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_idx, step=step_count+1))
+            else:
+                done = env_done
+                next_state = next_env_state
+                frames.append(env.render_rgb_array(episode=ep_idx, step=step_count+1))
+            
+            state = next_state
+            step_count += 1
+            
+            if done:
+                # Buffer end frames
+                for _ in range(5):
+                    if with_satiation:
+                        frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_idx, step=step_count))
+                    else:
+                        frames.append(env.render_rgb_array(episode=ep_idx, step=step_count))
+                break
 
     # 4. Generate Visual Artifacts
     # Plot Q-Table
@@ -126,6 +129,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
 def main():
     parser = argparse.ArgumentParser(description="GridWorld Evaluation")
     parser.add_argument("--seed", type=int, help="Override testing seed")
+    parser.add_argument("--episodes", type=int, help="Number of episodes to evaluate")
     parser.add_argument("--results_dir", type=str, default="results", help="Path to results directory")
     args = parser.parse_args()
 
@@ -144,15 +148,20 @@ def main():
         saved_config_dict = yaml.safe_load(f)
         config = Config(saved_config_dict)
 
-    # 2. Key Overrides (Allow user to change testing seed)
+    # 2. Key Overrides (Allow user to change testing seed/episodes)
     global_config = get_default_config()
     testing_seed = args.seed or global_config.get('testing.seed', 42)
+    eval_episodes = args.episodes or global_config.get('testing.evaluation_episodes', 1)
+    
     config.set('testing.seed', testing_seed)
+    config.set('testing.evaluation_episodes', eval_episodes)
     
     # 3. Print Summary
     print("-" * 40)
     print(f"Evaluation Mode: {'Interoceptive' if config.get('body.with_satiation') else 'Conventional'}")
+    print(f"Grid Size: {config.get('environment.height')}x{config.get('environment.width') if config.get('environment.width') else '?'}")
     print(f"Testing Seed: {testing_seed}")
+    print(f"Num Episodes: {eval_episodes}")
     print("-" * 40)
 
     # 4. Find all checkpoints
