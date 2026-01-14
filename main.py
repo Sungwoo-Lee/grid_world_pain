@@ -51,7 +51,7 @@ def main():
     config = get_default_config()
     
     # Overrides
-    with_satiation = config.get('environment.with_satiation', True)
+    with_satiation = config.get('body.with_satiation', True)
     if args.no_satiation:
         with_satiation = False
 
@@ -60,22 +60,24 @@ def main():
         overeating_death = False
         
     max_steps = config.get('environment.max_steps', 100)
+    random_start_satiation = config.get('body.random_start_satiation', True)
 
     # Setup results directory
     results_dir = "results"
-    os.makedirs(results_dir, exist_ok=True)
+    video_dir = os.path.join(results_dir, "videos")
+    os.makedirs(video_dir, exist_ok=True)
     
     # Set numpy random seed for determinism
     np.random.seed(args.seed)
     
-    video_filename = os.path.join(results_dir, "gridworld_debug.mp4")
+    video_filename = os.path.join(video_dir, "gridworld_debug.mp4")
     
     print(f"Starting Debug Session")
     print(f"Video will be saved to: {video_filename}")
 
     # Initialize components
     env = GridWorld(with_satiation=with_satiation, max_steps=max_steps)
-    body = InteroceptiveBody(overeating_death=overeating_death)
+    body = InteroceptiveBody(overeating_death=overeating_death, random_start_satiation=random_start_satiation)
     
     # Mock composite env for agent init
     class CompositeEnv:

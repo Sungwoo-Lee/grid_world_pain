@@ -14,7 +14,7 @@ class InteroceptiveBody:
     This class acts as the "Internal Environment". Unlike standard RL where the external world
     defines the reward, here the *Body* defines the reward based on its needs.
     """
-    def __init__(self, max_satiation=20, start_satiation=10, overeating_death=True):
+    def __init__(self, max_satiation=20, start_satiation=10, overeating_death=True, random_start_satiation=True):
         """
         Initialize the body.
         
@@ -22,10 +22,12 @@ class InteroceptiveBody:
             max_satiation (int): Maximum satiation level (upper bound termination).
             start_satiation (int): Starting satiation level.
             overeating_death (bool): Whether overeating (>= max_satiation) causes death.
+            random_start_satiation (bool): Whether to randomize start satiation on reset.
         """
         self.max_satiation = max_satiation
         self.start_satiation = start_satiation
         self.overeating_death = overeating_death
+        self.random_start_satiation = random_start_satiation
         self.satiation = start_satiation
         
     def reset(self):
@@ -35,10 +37,13 @@ class InteroceptiveBody:
         Returns:
             int: Initial satiation.
         """
-        # Randomize start satiation between middle and max to provide varied experiences
-        # This helps the agent learn from different levels of need.
-        min_start = self.max_satiation // 2
-        self.satiation = np.random.randint(min_start, self.max_satiation + 1)
+        if self.random_start_satiation:
+            # Randomize start satiation between middle and max to provide varied experiences
+            # This helps the agent learn from different levels of need.
+            min_start = self.max_satiation // 2
+            self.satiation = np.random.randint(min_start, self.max_satiation + 1)
+        else:
+            self.satiation = self.start_satiation
         return self.satiation
     
     def step(self, info):

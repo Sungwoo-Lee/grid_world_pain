@@ -34,7 +34,7 @@ import numpy as np
 import sys
 import argparse
 
-def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps):
+def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation):
     """
     Prints a professional and fancy configuration summary.
     """
@@ -64,6 +64,7 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
         body_data = {
             "Max Satiation": config_dict.get('body.max_satiation', 20),
             "Start Satiation": config_dict.get('body.start_satiation', 10),
+            "Random Start Sat": "ENABLED" if random_start_satiation else "DISABLED",
             "Overeating Death": "ENABLED" if overeating_death else "DISABLED"
         }
         print_section("Body (Internal States)", body_data)
@@ -86,7 +87,7 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 
     print("\n" + "=" * width + "\n")
 
-def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeating_death=True, max_steps=100, config_dict=None):
+def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeating_death=True, max_steps=100, random_start_satiation=True, config_dict=None):
     """
     Trains the Q-learning agent and visualizes the result.
     
@@ -107,7 +108,7 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
     
     # NEW: Professional Config Summary
     if config_dict is not None:
-        print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps)
+        print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation)
     
     # Set numpy random seed for determinism
     np.random.seed(seed)
@@ -121,7 +122,7 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
 
     # Initialize environment, body, and agent
     env = GridWorld(with_satiation=with_satiation, max_steps=max_steps)
-    body = InteroceptiveBody(overeating_death=overeating_death)
+    body = InteroceptiveBody(overeating_death=overeating_death, random_start_satiation=random_start_satiation)
     
     # We need to inform the agent about expected max_satiation for sizing Q-table
     class CompositeEnv:
@@ -238,7 +239,7 @@ if __name__ == "__main__":
     # Overrides
     episodes = args.episodes or config.get('training.default_episodes', 100000)
     seed = args.seed or config.get('training.seed', 42)
-    with_satiation = config.get('environment.with_satiation', True)
+    with_satiation = config.get('body.with_satiation', True)
     if args.no_satiation:
         with_satiation = False
         
@@ -247,5 +248,6 @@ if __name__ == "__main__":
         overeating_death = False
         
     max_steps = config.get('environment.max_steps', 100)
+    random_start_satiation = config.get('body.random_start_satiation', True)
     
-    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, max_steps=max_steps, config_dict=config)
+    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, max_steps=max_steps, random_start_satiation=random_start_satiation, config_dict=config)
