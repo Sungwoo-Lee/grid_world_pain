@@ -34,7 +34,59 @@ import numpy as np
 import sys
 import argparse
 
-def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeating_death=True, max_steps=100):
+def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps):
+    """
+    Prints a professional and fancy configuration summary.
+    """
+    width = 60
+    header = " GRIDWORLD RL CONFIGURATION "
+    
+    print("\n" + "=" * width)
+    print(header.center(width, "="))
+    print("=" * width)
+    
+    def print_section(title, data):
+        print(f"\n[{title}]")
+        for key, value in data.items():
+            print(f"  \u25cf {key:.<25} {value}")
+
+    # Environment
+    env_data = {
+        "Grid Size": f"{config_dict.get('environment.height', 5)}x{config_dict.get('environment.width', 5)}",
+        "Food Position": str(config_dict.get('environment.food_pos', [4, 4])),
+        "Max Steps": max_steps,
+        "Mode": "Interoceptive (Homeostasis)" if with_satiation else "Conventional (Goal-driven)"
+    }
+    print_section("Environment", env_data)
+
+    # Body (if applicable)
+    if with_satiation:
+        body_data = {
+            "Max Satiation": config_dict.get('body.max_satiation', 20),
+            "Start Satiation": config_dict.get('body.start_satiation', 10),
+            "Overeating Death": "ENABLED" if overeating_death else "DISABLED"
+        }
+        print_section("Body (Internal States)", body_data)
+
+    # Agent
+    agent_data = {
+        "Algorithm": "Tabular Q-Learning",
+        "Alpha (Learning Rate)": config_dict.get('agent.alpha', 0.1),
+        "Gamma (Discount)": config_dict.get('agent.gamma', 0.99),
+        "Min Epsilon": 0.05
+    }
+    print_section("RL Agent", agent_data)
+
+    # Training
+    train_data = {
+        "Total Episodes": episodes,
+        "Random Seed": seed
+    }
+    print_section("Training Schedule", train_data)
+
+    print("\n" + "=" * width + "\n")
+
+def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeating_death=True, max_steps=100, config_dict=None):
     """
     Trains the Q-learning agent and visualizes the result.
     
@@ -52,6 +104,10 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
     - Plots: `results/plots/q_table_vis_N.png`
     """
     import os # Import os here or at top for results_dir handling
+    
+    # NEW: Professional Config Summary
+    if config_dict is not None:
+        print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps)
     
     # Set numpy random seed for determinism
     np.random.seed(seed)
@@ -192,4 +248,4 @@ if __name__ == "__main__":
         
     max_steps = config.get('environment.max_steps', 100)
     
-    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, max_steps=max_steps)
+    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, max_steps=max_steps, config_dict=config)
