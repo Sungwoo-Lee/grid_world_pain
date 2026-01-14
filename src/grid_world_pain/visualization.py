@@ -251,7 +251,7 @@ def generate_video_from_checkpoint(checkpoint_path, results_dir, max_steps=50, n
     output_path = os.path.join(results_dir, "videos", f"video_{pct}.mp4")
     run_and_save_episode(env, body, agent, output_path, max_steps=max_steps, num_episodes=num_episodes, with_satiation=with_satiation)
 
-def generate_artifacts_from_checkpoint(checkpoint_path, results_dir, max_steps=50, num_episodes=1, with_satiation=True, food_pos=None):
+def generate_visuals_from_checkpoint(checkpoint_path, results_dir, max_steps=50, num_episodes=1, with_satiation=True, food_pos=None, seed=42):
     """
     Generates both Q-table plot and performance video for a given checkpoint.
     """
@@ -263,6 +263,9 @@ def generate_artifacts_from_checkpoint(checkpoint_path, results_dir, max_steps=5
         pct = match.group(1)
         
     print(f"Processing checkpoint: {filename} ({pct}%)")
+    
+    # Set seed for deterministic evaluation
+    np.random.seed(seed)
     
     # 1. Load Agent
     env = GridWorld(with_satiation=with_satiation)
@@ -295,7 +298,6 @@ def generate_artifacts_from_checkpoint(checkpoint_path, results_dir, max_steps=5
     video_filename = os.path.join(videos_dir, f"video_{pct}.mp4" if pct != "final" else "final_trained_agent.mp4")
     
     agent.epsilon = 0
-    np.random.seed(42) 
     run_and_save_episode(env, body, agent, video_filename, max_steps=max_steps, num_episodes=num_episodes, with_satiation=with_satiation, verbose=False)
 
 def run_random_demo(videos_dir, max_steps=50, num_episodes=1, with_satiation=True):
@@ -369,12 +371,12 @@ def main():
     checkpoints.sort(key=extract_number)
     
     for checkpoint in checkpoints:
-        generate_artifacts_from_checkpoint(checkpoint, results_dir, max_steps=args.max_steps, num_episodes=args.episodes, with_satiation=with_satiation)
+        generate_visuals_from_checkpoint(checkpoint, results_dir, max_steps=args.max_steps, num_episodes=args.episodes, with_satiation=with_satiation, seed=config.get('testing.seed', 42))
     
     # Also handle the final model if it exists
     final_model = os.path.join(models_dir, "q_table.npy")
     if os.path.exists(final_model):
-        generate_artifacts_from_checkpoint(final_model, results_dir, max_steps=args.max_steps, num_episodes=args.episodes, with_satiation=with_satiation)
+        generate_visuals_from_checkpoint(final_model, results_dir, max_steps=args.max_steps, num_episodes=args.episodes, with_satiation=with_satiation, seed=config.get('testing.seed', 42))
 
 if __name__ == "__main__":
     main()

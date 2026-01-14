@@ -26,7 +26,7 @@ Usage Examples:
 from src.grid_world_pain import GridWorld
 from src.grid_world_pain.body import InteroceptiveBody
 from src.grid_world_pain.agent import QLearningAgent
-from src.grid_world_pain.visualization import plot_q_table, run_and_save_episode, generate_artifacts_from_checkpoint
+from src.grid_world_pain.visualization import plot_q_table, run_and_save_episode, generate_visuals_from_checkpoint
 from src.grid_world_pain.config import get_default_config
 import time
 import numpy as np
@@ -34,7 +34,7 @@ import numpy as np
 import sys
 import argparse
 
-def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation):
+def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, testing_seed):
     """
     Prints a professional and fancy configuration summary.
     """
@@ -81,13 +81,14 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
     # Training
     train_data = {
         "Total Episodes": episodes,
-        "Random Seed": seed
+        "Training Seed": seed,
+        "Testing Seed": testing_seed
     }
     print_section("Training Schedule", train_data)
 
     print("\n" + "=" * width + "\n")
 
-def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeating_death=True, max_steps=100, random_start_satiation=True, config_dict=None):
+def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeating_death=True, max_steps=100, random_start_satiation=True, testing_seed=42, config_dict=None):
     """
     Trains the Q-learning agent and visualizes the result.
     
@@ -108,7 +109,7 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
     
     # NEW: Professional Config Summary
     if config_dict is not None:
-        print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation)
+        print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, testing_seed)
     
     # Set numpy random seed for determinism
     np.random.seed(seed)
@@ -219,10 +220,10 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
     
     # Process each milestone
     for checkpoint in checkpoints:
-        generate_artifacts_from_checkpoint(checkpoint, results_dir, max_steps=max_steps, with_satiation=with_satiation, food_pos=env.food_pos)
+        generate_visuals_from_checkpoint(checkpoint, results_dir, max_steps=max_steps, with_satiation=with_satiation, food_pos=env.food_pos, seed=testing_seed)
     
     # Process final model
-    generate_artifacts_from_checkpoint(model_filename, results_dir, max_steps=max_steps, with_satiation=with_satiation, food_pos=env.food_pos)
+    generate_visuals_from_checkpoint(model_filename, results_dir, max_steps=max_steps, with_satiation=with_satiation, food_pos=env.food_pos, seed=testing_seed)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train RL Agent")
@@ -249,5 +250,6 @@ if __name__ == "__main__":
         
     max_steps = config.get('environment.max_steps', 100)
     random_start_satiation = config.get('body.random_start_satiation', True)
+    testing_seed = config.get('testing.seed', 42)
     
-    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, max_steps=max_steps, random_start_satiation=random_start_satiation, config_dict=config)
+    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, max_steps=max_steps, random_start_satiation=random_start_satiation, testing_seed=testing_seed, config_dict=config)
