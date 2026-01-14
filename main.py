@@ -7,12 +7,12 @@ Purpose:
 - Checks if "Eating" works, if "Satiation" changes, and if "Death" occurs correctly.
 
 Arguments:
-- `--episodes <int>`: (Default: 3) Number of debug episodes to run.
-- `--max_steps <int>`: (Default: 30) Maximum steps per episode.
+- `--episodes <int>`: (Default: 3) Number of episodes to record in the video.
+- `--max_steps <int>`: (Default: 30) Maximum steps to record per episode.
 
 Usage Examples:
 
-1. **Short Debug Run** (Default):
+1. **Short Video** (Default):
    ```bash
    python main.py
    ```
@@ -35,8 +35,8 @@ from src.grid_world_pain.body import InteroceptiveBody
 
 def main():
     parser = argparse.ArgumentParser(description="GridWorld Debug Sandbox")
-    parser.add_argument("--episodes", type=int, default=3, help="Number of episodes to run (default: 3)")
-    parser.add_argument("--max_steps", type=int, default=30, help="Maximum steps per episode (default: 30)")
+    parser.add_argument("--episodes", type=int, default=3, help="Number of episodes to record in video (default: 3)")
+    parser.add_argument("--max_steps", type=int, default=30, help="Maximum steps to record per episode (default: 30)")
     args = parser.parse_args()
 
     # Setup results directory
