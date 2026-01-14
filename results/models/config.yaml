@@ -29,4 +29,4 @@ testing:
   seed: 56
 training:
   seed: 42
-  training_episode: 200
+  training_episode: 500

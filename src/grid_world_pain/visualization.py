@@ -133,7 +133,7 @@ def save_video(frames, output_path, fps=5):
 
 def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestones=None):
     """
-    Plots learning curves from a training history CSV file.
+    Plots learning curves from a training history CSV file with a professional fancy theme.
     """
     if not os.path.exists(history_csv_path):
         print(f"Warning: {history_csv_path} not found. Skipping learning curves plot.")
@@ -153,44 +153,76 @@ def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestone
     os.makedirs(output_dir, exist_ok=True)
     save_path = os.path.join(output_dir, "learning_curves.png")
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
-
-    # Plot Episode Rewards
+    # --- Fancy Theme Configuration ---
+    # Colors (Vibrant & Professional)
+    reward_color_main = '#4C6EF5'  # Royal Blue
+    reward_color_raw = '#A5D8FF'   # Lighter Blue
+    steps_color_main = '#20C997'   # Teal
+    steps_color_raw = '#C3FAE8'    # Lighter Teal
+    milestone_color = '#FA5252'    # Soft Red for badges
+    bg_color = '#F8F9FA'           # Soft Gray background
+    
+    # Global Settings
+    plt.rcParams['font.family'] = 'sans-serif'
+    
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True, facecolor=bg_color)
+    
+    # --- Plot 1: Cumulative Reward ---
     window = max(1, len(df) // 100)
-    ax1.plot(df['episode'], df['reward'], alpha=0.3, color='blue', label='Raw Reward')
-    ax1.plot(df['episode'], df['reward'].rolling(window=window).mean(), color='darkblue', linewidth=2, label=f'Moving Average (n={window})')
-    ax1.set_ylabel("Cumulative Reward")
-    ax1.set_title("Training Performance: Reward per Episode")
-    ax1.legend()
-    ax1.grid(True, linestyle='--', alpha=0.7)
-
-    # Plot Episode Steps
-    ax2.plot(df['episode'], df['steps'], alpha=0.3, color='green', label='Raw Steps')
-    ax2.plot(df['episode'], df['steps'].rolling(window=window).mean(), color='darkgreen', linewidth=2, label=f'Moving Average (n={window})')
-    ax2.set_xlabel("Episode")
-    ax2.set_ylabel("Survival Steps")
-    ax2.set_title("Training Performance: Steps per Episode")
-    ax2.legend()
-    ax2.grid(True, linestyle='--', alpha=0.7)
+    ax1.set_facecolor(bg_color)
+    ax1.plot(df['episode'], df['reward'], color=reward_color_raw, alpha=0.5, label='Raw Reward', linewidth=1)
+    ax1.plot(df['episode'], df['reward'].rolling(window=window).mean(), color=reward_color_main, linewidth=2.5, label=f'Moving Average (n={window})')
+    
+    ax1.set_ylabel("Cumulative Reward", fontsize=12, fontweight='bold', color='#495057')
+    ax1.set_title("Training Performance: Reward Evolution", loc='left', fontsize=14, fontweight='bold', pad=15, color='#212529')
+    ax1.legend(frameon=True, facecolor='white', framealpha=0.8)
+    ax1.grid(True, linestyle='--', alpha=0.3, color='#ADB5BD')
+    
+    # --- Plot 2: Survival Steps ---
+    ax2.set_facecolor(bg_color)
+    ax2.plot(df['episode'], df['steps'], color=steps_color_raw, alpha=0.5, label='Raw Steps', linewidth=1)
+    ax2.plot(df['episode'], df['steps'].rolling(window=window).mean(), color=steps_color_main, linewidth=2.5, label=f'Moving Average (n={window})')
+    
+    ax2.set_xlabel("Episode", fontsize=12, fontweight='bold', color='#495057')
+    ax2.set_ylabel("Survival Steps", fontsize=12, fontweight='bold', color='#495057')
+    ax2.set_title("Training Performance: Survival Capacity", loc='left', fontsize=14, fontweight='bold', pad=15, color='#212529')
+    ax2.legend(frameon=True, facecolor='white', framealpha=0.8)
+    ax2.grid(True, linestyle='--', alpha=0.3, color='#ADB5BD')
     
     if max_steps:
-        ax2.set_ylim(0, max_steps)
+        ax2.set_ylim(0, max_steps * 1.1)  # Give some headroom for labels
 
-    # Add Checkpoint Indicators
+    # --- Vertical Milestone Lines & Badges ---
     if milestones:
+        # Get Y limits for badge placement
+        y1_min, y1_max = ax1.get_ylim()
+        
         for ep, pct in milestones.items():
-            # Add vertical line to both plots
+            # Add vertical line through both subplots
             for ax in [ax1, ax2]:
-                ax.axvline(x=ep, color='red', linestyle='--', alpha=0.4, linewidth=1)
+                ax.axvline(x=ep, color=milestone_color, linestyle=':', alpha=0.6, linewidth=1.5)
             
-            # Add label to the top plot (Reward)
-            y_max = ax1.get_ylim()[1]
-            ax1.text(ep, y_max, f' {pct}%', color='red', verticalalignment='bottom', fontweight='bold', fontsize=9)
+            # Add "Badge" label at the top of the first plot
+            # Badge Background (box)
+            ax1.text(ep, y1_max * 0.95, f" {pct}% ", color='white', fontsize=9, fontweight='bold',
+                     ha='center', va='center',
+                     bbox=dict(boxstyle='round,pad=0.3', facecolor=milestone_color, edgecolor='none', alpha=0.9))
 
-    plt.tight_layout()
-    plt.savefig(save_path)
+    # Clean up spines (Standard feature for "Fancy" plots)
+    for ax in [ax1, ax2]:
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color('#DEE2E6')
+        ax.spines['bottom'].set_color('#DEE2E6')
+        ax.tick_params(colors='#495057')
+
+    # Add a main Dashboard title
+    plt.suptitle("Interoceptive AI Training Dashboard", fontsize=20, fontweight='bold', y=0.98, color='#343A40')
+    
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig(save_path, facecolor=bg_color, dpi=150)
     plt.close(fig)
-    print(f"Saved learning curves to {save_path}")
+    print(f"Saved fancy learning curves to {save_path}")
 
 if __name__ == "__main__":
     print("This module is a utility library and should not be run directly.")
