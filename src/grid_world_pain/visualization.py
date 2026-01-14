@@ -251,10 +251,14 @@ def generate_video_from_checkpoint(checkpoint_path, results_dir, max_steps=50, n
     output_path = os.path.join(results_dir, "videos", f"video_{pct}.mp4")
     run_and_save_episode(env, body, agent, output_path, max_steps=max_steps, num_episodes=num_episodes, with_satiation=with_satiation)
 
-def generate_visuals_from_checkpoint(checkpoint_path, results_dir, max_steps=50, num_episodes=1, with_satiation=True, food_pos=None, seed=42):
+def generate_visuals_from_checkpoint(checkpoint_path, results_dir, config=None):
     """
     Generates both Q-table plot and performance video for a given checkpoint.
     """
+    if config is None:
+        from src.grid_world_pain.config import get_default_config
+        config = get_default_config()
+
     filename = os.path.basename(checkpoint_path)
     match = re.search(r"q_table_(\d+).npy", filename)
     if not match:
@@ -264,12 +268,19 @@ def generate_visuals_from_checkpoint(checkpoint_path, results_dir, max_steps=50,
         
     print(f"Processing checkpoint: {filename} ({pct}%)")
     
+    # 1. Configuration extraction
+    with_satiation = config.get('body.with_satiation', True)
+    overeating_death = config.get('body.overeating_death', True)
+    max_steps = config.get('environment.max_steps', 100)
+    seed = config.get('testing.seed', 42)
+    food_pos = config.get('environment.food_pos', [4, 4])
+    
     # Set seed for deterministic evaluation
     np.random.seed(seed)
     
-    # 1. Load Agent
-    env = GridWorld(with_satiation=with_satiation)
-    body = InteroceptiveBody()
+    # 2. Load Agent
+    env = GridWorld(with_satiation=with_satiation, max_steps=max_steps)
+    body = InteroceptiveBody(overeating_death=overeating_death)
     
     class CompositeEnv:
         def __init__(self, env, body):
@@ -286,19 +297,19 @@ def generate_visuals_from_checkpoint(checkpoint_path, results_dir, max_steps=50,
         print(f"Failed to load {checkpoint_path}: {e}")
         return
 
-    # 2. Generate Plot
+    # 3. Generate Plot
     plots_dir = os.path.join(results_dir, "plots")
     os.makedirs(plots_dir, exist_ok=True)
     vis_filename = os.path.join(plots_dir, f"q_table_vis_{pct}.png" if pct != "final" else "q_table_vis.png")
-    plot_q_table(agent.q_table, vis_filename, food_pos or env.food_pos)
+    plot_q_table(agent.q_table, vis_filename, food_pos)
     
-    # 3. Generate Video
+    # 4. Generate Video
     videos_dir = os.path.join(results_dir, "videos")
     os.makedirs(videos_dir, exist_ok=True)
     video_filename = os.path.join(videos_dir, f"video_{pct}.mp4" if pct != "final" else "final_trained_agent.mp4")
     
     agent.epsilon = 0
-    run_and_save_episode(env, body, agent, video_filename, max_steps=max_steps, num_episodes=num_episodes, with_satiation=with_satiation, verbose=False)
+    run_and_save_episode(env, body, agent, video_filename, max_steps=max_steps, num_episodes=1, with_satiation=with_satiation, verbose=False)
 
 def run_random_demo(videos_dir, max_steps=50, num_episodes=1, with_satiation=True):
     """
@@ -371,12 +382,12 @@ def main():
     checkpoints.sort(key=extract_number)
     
     for checkpoint in checkpoints:
-        generate_visuals_from_checkpoint(checkpoint, results_dir, max_steps=args.max_steps, num_episodes=args.episodes, with_satiation=with_satiation, seed=config.get('testing.seed', 42))
+        generate_visuals_from_checkpoint(checkpoint, results_dir, config=config)
     
     # Also handle the final model if it exists
     final_model = os.path.join(models_dir, "q_table.npy")
     if os.path.exists(final_model):
-        generate_visuals_from_checkpoint(final_model, results_dir, max_steps=args.max_steps, num_episodes=args.episodes, with_satiation=with_satiation, seed=config.get('testing.seed', 42))
+        generate_visuals_from_checkpoint(final_model, results_dir, config=config)
 
 if __name__ == "__main__":
     main()

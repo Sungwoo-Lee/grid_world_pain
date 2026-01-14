@@ -24,6 +24,19 @@ class Config:
                 return default
         return val
 
+    def set(self, key, value):
+        # Support nested keys like 'environment.height'
+        keys = key.split('.')
+        val = self._config
+        for i, k in enumerate(keys[:-1]):
+            if k not in val:
+                val[k] = {}
+            val = val[k]
+        val[keys[-1]] = value
+
+    def to_dict(self):
+        return self._config
+
 # Global instance for default config
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "default_configs.yaml")
 

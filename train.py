@@ -30,6 +30,9 @@ from src.grid_world_pain.visualization import plot_q_table, run_and_save_episode
 from src.grid_world_pain.config import get_default_config
 import time
 import numpy as np
+import os
+import re
+import yaml
 
 import sys
 import argparse
@@ -88,9 +91,9 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 
     print("\n" + "=" * width + "\n")
 
-def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeating_death=True, max_steps=100, random_start_satiation=True, testing_seed=42, config_dict=None):
+def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=True, max_steps=100, random_start_satiation=True, testing_seed=42, config_dict=None):
     """
-    Trains the Q-learning agent and visualizes the result.
+    Trains the Q-learning agent.
     
     Training Loop Logic:
     1. Reset Environment (and Body if with_satiation).
@@ -103,23 +106,40 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
        
     Artifacts Saved:
     - Models: `results/models/q_table_N.npy`
-    - Plots: `results/plots/q_table_vis_N.png`
+    - Configuration: `results/models/config.yaml`
     """
     import os # Import os here or at top for results_dir handling
     
-    # NEW: Professional Config Summary
+    # Professional Config Summary
     if config_dict is not None:
+        # Update config_dict with resolved values for saving
+        # This reflects the exact environment used for training
+        config_dict.set('training.training_episode', episodes)
+        config_dict.set('training.seed', seed)
+        config_dict.set('body.with_satiation', with_satiation)
+        config_dict.set('body.overeating_death', overeating_death)
+        config_dict.set('environment.max_steps', max_steps)
+        config_dict.set('body.random_start_satiation', random_start_satiation)
+        config_dict.set('testing.seed', testing_seed)
+        
         print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, testing_seed)
     
-    # Set numpy random seed for determinism
-    np.random.seed(seed)
-    
+    # Setup directories
     results_dir = "results"
     models_dir = os.path.join(results_dir, "models")
     plots_dir = os.path.join(results_dir, "plots")
-    
     os.makedirs(models_dir, exist_ok=True)
     os.makedirs(plots_dir, exist_ok=True)
+
+    # NEW: Save the resolved configuration for evaluation
+    if config_dict is not None:
+        config_save_path = os.path.join(models_dir, "config.yaml")
+        with open(config_save_path, 'w') as f:
+            yaml.dump(config_dict.to_dict(), f, default_flow_style=False)
+        print(f"Resolved configuration saved to {config_save_path}")
+
+    # Set numpy random seed for determinism
+    np.random.seed(seed)
 
     # Initialize environment, body, and agent
     env = GridWorld(with_satiation=with_satiation, max_steps=max_steps)
@@ -202,28 +222,11 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
     training_time = time.time() - start_time
     print(f"Training completed in {training_time:.2f} seconds.")
     
-    # Save model
+    # Final model save
     model_filename = os.path.join(models_dir, "q_table.npy")
     agent.save(model_filename)
     
-    # Post-Training: Generate all visualizations and videos from saved checkpoints
-    print("\nGenerating all plots & videos from checkpoints...")
-    import glob
-    checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
-    
-    # Sort checkpoints by percentage
-    import re
-    def extract_number(path):
-        match = re.search(r"q_table_(\d+).npy", path)
-        return int(match.group(1)) if match else -1
-    checkpoints.sort(key=extract_number)
-    
-    # Process each milestone
-    for checkpoint in checkpoints:
-        generate_visuals_from_checkpoint(checkpoint, results_dir, max_steps=max_steps, with_satiation=with_satiation, food_pos=env.food_pos, seed=testing_seed)
-    
-    # Process final model
-    generate_visuals_from_checkpoint(model_filename, results_dir, max_steps=max_steps, with_satiation=with_satiation, food_pos=env.food_pos, seed=testing_seed)
+    print("\nTraining complete. Use evaluation.py to generate plots and videos.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train RL Agent")
@@ -252,4 +255,4 @@ if __name__ == "__main__":
     random_start_satiation = config.get('body.random_start_satiation', True)
     testing_seed = config.get('testing.seed', 42)
     
-    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, max_steps=max_steps, random_start_satiation=random_start_satiation, testing_seed=testing_seed, config_dict=config)
+    train_agent(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, max_steps=max_steps, random_start_satiation=random_start_satiation, testing_seed=testing_seed, config_dict=config)
