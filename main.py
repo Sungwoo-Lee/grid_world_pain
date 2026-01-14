@@ -34,7 +34,7 @@ import numpy as np
 from src.grid_world_pain import GridWorld
 from src.grid_world_pain.body import InteroceptiveBody
 from src.grid_world_pain.agent import QLearningAgent
-from src.grid_world_pain.visualization import run_and_save_episode
+from src.grid_world_pain.visualization import save_video
 from src.grid_world_pain.config import get_default_config
 
 def main():
@@ -167,10 +167,7 @@ def main():
         if not done:
              print("Episode Ended (Max Steps Reached).")
              
-    # Save video
-    print(f"\nSaving video with {len(frames)} frames...")
-    imageio.mimsave(video_filename, frames, fps=5)
-    print(f"Video saved successfully: {video_filename}")
+    save_video(frames, video_filename)
 
 if __name__ == "__main__":
     main()

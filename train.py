@@ -26,7 +26,7 @@ Usage Examples:
 from src.grid_world_pain import GridWorld
 from src.grid_world_pain.body import InteroceptiveBody
 from src.grid_world_pain.agent import QLearningAgent
-from src.grid_world_pain.visualization import plot_q_table, run_and_save_episode, generate_visuals_from_checkpoint
+from src.grid_world_pain.visualization import plot_q_table
 from src.grid_world_pain.config import get_default_config
 import time
 import numpy as np
