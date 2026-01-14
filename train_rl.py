@@ -1,4 +1,27 @@
+"""
+Training script for the GridWorld Reinforcement Learning agent.
 
+This script:
+1. Initializes the `GridWorld` environment and `InteroceptiveBody`.
+2. Creates a `QLearningAgent`.
+3. Trains the agent for a specified number of episodes.
+4. Periodically saves checkpoints and visualizations to `results/`.
+
+Arguments:
+- `--episodes <int>`: (Default: 100000) Total number of training episodes.
+
+Usage Examples:
+
+1. **Quick Test** (Verify code works):
+   ```bash
+   python train_rl.py --episodes 100
+   ```
+
+2. **Full Training** (Train a robust agent):
+   ```bash
+   python train_rl.py --episodes 50000
+   ```
+"""
 from src.grid_world_pain import GridWorld
 from src.grid_world_pain.body import InteroceptiveBody
 from src.grid_world_pain.agent import QLearningAgent
