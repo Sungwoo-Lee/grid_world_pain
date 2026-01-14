@@ -14,16 +14,18 @@ class InteroceptiveBody:
     This class acts as the "Internal Environment". Unlike standard RL where the external world
     defines the reward, here the *Body* defines the reward based on its needs.
     """
-    def __init__(self, max_satiation=20, start_satiation=10):
+    def __init__(self, max_satiation=20, start_satiation=10, overeating_death=True):
         """
         Initialize the body.
         
         Args:
             max_satiation (int): Maximum satiation level (upper bound termination).
             start_satiation (int): Starting satiation level.
+            overeating_death (bool): Whether overeating (>= max_satiation) causes death.
         """
         self.max_satiation = max_satiation
         self.start_satiation = start_satiation
+        self.overeating_death = overeating_death
         self.satiation = start_satiation
         
     def reset(self):
@@ -55,16 +57,20 @@ class InteroceptiveBody:
         # 2. Ingestion: React to external possibilities (Eating)
         if info.get('ate_food', False):
             self.satiation += 10
-            # Clamp logic (allowing one step over max for termination check consistency)
-            # We allow it to go slightly over to trigger the overeating condition below.
-            self.satiation = min(self.satiation, self.max_satiation + 1)
+            
+            # If overeating death is off, we clamp to max_satiation.
+            # If it's on, we allow it to go over to trigger the death condition below.
+            if not self.overeating_death:
+                self.satiation = min(self.satiation, self.max_satiation)
+            else:
+                self.satiation = min(self.satiation, self.max_satiation + 1)
             
         # 3. Termination Checks (Death conditions)
         done = False
         if self.satiation <= 0:
             done = True # Death by Starvation
-        elif self.satiation >= self.max_satiation:
-            done = True # Death by Overeating (Rupture/Obesity limit)
+        elif self.overeating_death and self.satiation >= self.max_satiation:
+            done = True # Death by Overeating
             
         # 4. Generate Reward signal
         # Reward = 1 for every step of SURVIVAL.

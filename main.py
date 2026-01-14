@@ -44,6 +44,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
     parser.add_argument("--config", type=str, help="Path to config YAML")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
+    parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
     args = parser.parse_args()
 
     # Load default config
@@ -53,6 +54,10 @@ def main():
     with_satiation = config.get('environment.with_satiation', True)
     if args.no_satiation:
         with_satiation = False
+
+    overeating_death = config.get('body.overeating_death', True)
+    if args.no_overeating_death:
+        overeating_death = False
 
     # Setup results directory
     results_dir = "results"
@@ -68,7 +73,7 @@ def main():
 
     # Initialize components
     env = GridWorld(with_satiation=with_satiation)
-    body = InteroceptiveBody()
+    body = InteroceptiveBody(overeating_death=overeating_death)
     
     # Mock composite env for agent init
     class CompositeEnv:

@@ -45,15 +45,25 @@ from src.grid_world_pain.config import get_default_config
 
 def plot_q_table(q_table, save_path, food_pos=None):
     """
-    Visualizes the Q-table policy and values.
-    
-    If with_satiation=True (4D Q-table):
-    - Takes slices at Low, Mid, and High satiation.
-    If with_satiation=False (3D Q-table):
-    - Shows a single 2D heatmap of the state values.
+    Visualizes the Q-table policy and values at different satiation levels.
     """
-    # q_table shape: (height, width, satiation_dim, actions) or (height, width, actions)
-    shape = q_table.shape
+    # Dispatch to conventional plotter if q_table is 3D
+    if len(q_table.shape) == 3:
+        return plot_q_table_conventional(q_table, save_path, food_pos)
+
+    # q_table shape: (height, width, satiation_dim, actions)
+    height, width, sat_dim, _ = q_table.shape
+    
+    # Define representative slices to visualize
+    max_satiation = sat_dim - 2
+    
+    slices = [
+        max_satiation // 4,       # Low Satiation (Hungry)
+        max_satiation // 2,       # Mid Satiation
+        int(max_satiation * 0.9)  # High Satiation (Full)
+    ]
+    
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
     
     action_deltas = {
         0: (-1, 0), # Up
@@ -61,71 +71,80 @@ def plot_q_table(q_table, save_path, food_pos=None):
         2: (1, 0),  # Down
         3: (0, -1)  # Left
     }
-
-    if len(shape) == 4:
-        # Interoceptive Mode (With Satiation)
-        height, width, sat_dim, _ = shape
-        max_satiation = sat_dim - 2
+    
+    for idx, sat_level in enumerate(slices):
+        ax = axes[idx]
         
-        slices = [
-            max_satiation // 4,       # Low Satiation (Hungry)
-            max_satiation // 2,       # Mid Satiation
-            int(max_satiation * 0.9)  # High Satiation (Full)
-        ]
+        # Extract 2D Q-table for this satiation
+        q_slice = q_table[:, :, sat_level, :]
         
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        # Value function: Max Q over actions
+        v_values = np.max(q_slice, axis=2)
         
-        for idx, sat_level in enumerate(slices):
-            ax = axes[idx]
-            q_slice = q_table[:, :, sat_level, :]
-            v_values = np.max(q_slice, axis=2)
-            policy = np.argmax(q_slice, axis=2)
-            
-            cax = ax.imshow(v_values, cmap='viridis', interpolation='nearest')
-            labels = ["Low", "Mid", "High"]
-            ax.set_title(f"{labels[idx]} Satiation (Sat={sat_level})")
-            ax.set_xticks(np.arange(width))
-            ax.set_yticks(np.arange(height))
-            
-            for r in range(height):
-                for c in range(width):
-                    action = policy[r, c]
-                    arrow_char = ['↑', '→', '↓', '←'][action]
-                    ax.text(c, r, arrow_char, ha='center', va='center', color='white', fontsize=12, weight='bold')
-            
-            if food_pos is not None:
-                fr, fc = food_pos
-                ax.text(fc, fr, 'F', ha='center', va='center', color='lime', fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
+        # Policy: Argmax Q
+        policy = np.argmax(q_slice, axis=2)
         
-        fig.subplots_adjust(right=0.9)
-        cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
-        fig.colorbar(cax, cax=cbar_ax, label='Max Q-Value')
-        plt.suptitle("Learned Policy & Value at Different Satiation Levels", fontsize=16)
-
-    else:
-        # Conventional Mode (No Satiation)
-        height, width, _ = shape
-        fig, ax = plt.subplots(figsize=(7, 6))
-        
-        v_values = np.max(q_table, axis=2)
-        policy = np.argmax(q_table, axis=2)
-        
+        # Plot Heatmap of Value
         cax = ax.imshow(v_values, cmap='viridis', interpolation='nearest')
-        ax.set_title("Learned Policy & Value (Conventional)")
+        
+        # Add simpler title
+        labels = ["Low", "Mid", "High"]
+        ax.set_title(f"{labels[idx]} Satiation (Sat={sat_level})")
         ax.set_xticks(np.arange(width))
         ax.set_yticks(np.arange(height))
         
+        # Overlay Arrows for Policy
         for r in range(height):
             for c in range(width):
                 action = policy[r, c]
-                arrow_char = ['↑', '→', '↓', '←'][action]
+                # arrow_char = ['↑', '→', '↓', '←'][action]
+                arrow_char = ['\u2191', '\u2192', '\u2193', '\u2190'][action] # Use unicode arrows
                 ax.text(c, r, arrow_char, ha='center', va='center', color='white', fontsize=12, weight='bold')
         
+        # Mark Food Location
         if food_pos is not None:
             fr, fc = food_pos
-            ax.text(fc, fr, 'G', ha='center', va='center', color='lime', fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
-            
-        fig.colorbar(cax, ax=ax, label='Max Q-Value')
+            ax.text(fc, fr, 'F', ha='center', va='center', color='lime', fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
+                
+    # Add colorbar
+    fig.subplots_adjust(right=0.9)
+    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+    fig.colorbar(cax, cax=cbar_ax, label='Max Q-Value')
+    
+    plt.suptitle("Learned Policy & Value at Different Satiation Levels", fontsize=16)
+    plt.savefig(save_path)
+    print(f"Q-table visualization saved to {save_path}")
+    plt.close(fig)
+
+def plot_q_table_conventional(q_table, save_path, food_pos=None):
+    """
+    Visualizes a 3D Q-table (Conventional Mode).
+    """
+    height, width, _ = q_table.shape
+    fig, ax = plt.subplots(figsize=(7, 6))
+    
+    v_values = np.max(q_table, axis=2)
+    policy = np.argmax(q_table, axis=2)
+    
+    cax = ax.imshow(v_values, cmap='viridis', interpolation='nearest')
+    ax.set_title("Learned Policy & Value (Conventional Mode)")
+    ax.set_xticks(np.arange(width))
+    ax.set_yticks(np.arange(height))
+    
+    for r in range(height):
+        for c in range(width):
+            action = policy[r, c]
+            arrow_char = ['\u2191', '\u2192', '\u2193', '\u2190'][action]
+            ax.text(c, r, arrow_char, ha='center', va='center', color='white', fontsize=12, weight='bold')
+    
+    if food_pos is not None:
+        fr, fc = food_pos
+        ax.text(fc, fr, 'G', ha='center', va='center', color='lime', fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
+        
+    fig.colorbar(cax, ax=ax, label='Max Q-Value')
+    plt.savefig(save_path)
+    print(f"Conventional Q-table visualization saved to {save_path}")
+    plt.close(fig)
 
     plt.savefig(save_path)
     print(f"Q-table visualization saved to {save_path}")

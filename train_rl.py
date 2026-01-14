@@ -34,7 +34,7 @@ import numpy as np
 import sys
 import argparse
 
-def train_and_visualize(episodes=100000, seed=42, with_satiation=True):
+def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeating_death=True):
     """
     Trains the Q-learning agent and visualizes the result.
     
@@ -65,7 +65,7 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True):
 
     # Initialize environment, body, and agent
     env = GridWorld(with_satiation=with_satiation)
-    body = InteroceptiveBody()
+    body = InteroceptiveBody(overeating_death=overeating_death)
     
     # We need to inform the agent about expected max_satiation for sizing Q-table
     class CompositeEnv:
@@ -164,6 +164,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
     parser.add_argument("--config", type=str, help="Path to config YAML")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
+    parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
     args = parser.parse_args()
     
     # Load default config
@@ -175,5 +176,9 @@ if __name__ == "__main__":
     with_satiation = config.get('environment.with_satiation', True)
     if args.no_satiation:
         with_satiation = False
+        
+    overeating_death = config.get('body.overeating_death', True)
+    if args.no_overeating_death:
+        overeating_death = False
     
-    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation)
+    train_and_visualize(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death)
