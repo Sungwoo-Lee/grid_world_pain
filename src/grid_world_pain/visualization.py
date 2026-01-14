@@ -274,13 +274,18 @@ def generate_visuals_from_checkpoint(checkpoint_path, results_dir, config=None):
     max_steps = config.get('environment.max_steps', 100)
     seed = config.get('testing.seed', 42)
     food_pos = config.get('environment.food_pos', [4, 4])
+    height = config.get('environment.height', 5)
+    width = config.get('environment.width', 5)
+    max_satiation = config.get('body.max_satiation', 20)
+    start_satiation = config.get('body.start_satiation', 10)
+    random_start_satiation = config.get('body.random_start_satiation', True)
     
     # Set seed for deterministic evaluation
     np.random.seed(seed)
     
     # 2. Load Agent
-    env = GridWorld(with_satiation=with_satiation, max_steps=max_steps)
-    body = InteroceptiveBody(overeating_death=overeating_death)
+    env = GridWorld(height=height, width=width, food_pos=food_pos, with_satiation=with_satiation, max_steps=max_steps)
+    body = InteroceptiveBody(max_satiation=max_satiation, start_satiation=start_satiation, overeating_death=overeating_death, random_start_satiation=random_start_satiation)
     
     class CompositeEnv:
         def __init__(self, env, body):

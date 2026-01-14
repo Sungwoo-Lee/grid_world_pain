@@ -14,24 +14,46 @@ import glob
 import re
 import yaml
 import sys
+import argparse
 from src.grid_world_pain.visualization import generate_visuals_from_checkpoint
+from src.grid_world_pain.config import get_default_config
 
 def main():
-    results_dir = "results"
+    parser = argparse.ArgumentParser(description="GridWorld Evaluation")
+    parser.add_argument("--seed", type=int, help="Override testing seed")
+    parser.add_argument("--results_dir", type=str, default="results", help="Path to results directory")
+    args = parser.parse_args()
+
+    results_dir = args.results_dir
     models_dir = os.path.join(results_dir, "models")
     config_path = os.path.join(models_dir, "config.yaml")
 
     # 1. Load saved configuration
     if not os.path.exists(config_path):
-        print(f"Error: Configuration file not found at {config_path}")
+        print(f"Error: Training configuration file not found at {config_path}")
         print("Please run train.py first to generate a model and its configuration.")
         return
 
-    print(f"Loading configuration from {config_path}...")
+    print(f"Loading training configuration from {config_path}...")
     with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+        # Load into an actual Config object for ease of use
+        from src.grid_world_pain.config import Config
+        saved_config_dict = yaml.safe_load(f)
+        config = Config(saved_config_dict)
 
-    # 2. Find all checkpoints
+    # 2. Key Overrides (Allow user to change testing seed without retraining)
+    global_config = get_default_config()
+    testing_seed = args.seed or global_config.get('testing.seed', 42)
+    config.set('testing.seed', testing_seed)
+    
+    # 3. Print Summary
+    print("-" * 40)
+    print(f"Evaluation Mode: {'Interoceptive' if config.get('body.with_satiation') else 'Conventional'}")
+    print(f"Grid Size: {config.get('environment.height')}x{config.get('environment.width') if config.get('environment.width') else '?'}")
+    print(f"Testing Seed: {testing_seed}")
+    print("-" * 40)
+
+    # 4. Find all checkpoints
     checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
     
     # Sort checkpoints by percentage milestone
@@ -49,10 +71,9 @@ def main():
         print(f"No model checkpoints found in {models_dir}")
         return
 
-    print(f"Found {len(checkpoints)} checkpoints. Starting evaluation...")
-    print("-" * 40)
+    print(f"Found {len(checkpoints)} checkpoints. Starting visual generation...")
 
-    # 3. Generate visuals for each checkpoint
+    # 5. Generate visuals for each checkpoint
     for checkpoint in checkpoints:
         generate_visuals_from_checkpoint(checkpoint, results_dir, config=config)
 

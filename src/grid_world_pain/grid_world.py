@@ -44,9 +44,9 @@ class GridWorld:
         """
         self.height = height
         self.width = width
-        self.start = start
-        self.food_pos = food_pos
-        self.agent_pos = start
+        self.start = tuple(start)
+        self.food_pos = tuple(food_pos)
+        self.agent_pos = self.start
         self.with_satiation = with_satiation
         self.max_steps = max_steps
         self.current_step = 0

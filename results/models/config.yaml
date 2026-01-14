@@ -21,7 +21,7 @@ environment:
   - 0
   width: 5
 testing:
-  seed: 52
+  seed: 56
 training:
   seed: 42
-  training_episode: 100
+  training_episode: 10000

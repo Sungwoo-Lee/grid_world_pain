@@ -26,4 +26,4 @@ training:
   seed: 42
 
 testing:
-  seed: 52
+  seed: 56
