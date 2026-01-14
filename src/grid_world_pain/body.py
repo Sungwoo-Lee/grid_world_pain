@@ -14,7 +14,7 @@ class InteroceptiveBody:
     This class acts as the "Internal Environment". Unlike standard RL where the external world
     defines the reward, here the *Body* defines the reward based on its needs.
     """
-    def __init__(self, max_satiation=20, start_satiation=10, overeating_death=True, random_start_satiation=True):
+    def __init__(self, max_satiation=20, start_satiation=10, overeating_death=True, random_start_satiation=True, food_satiation_gain=10):
         """
         Initialize the body.
         
@@ -23,11 +23,13 @@ class InteroceptiveBody:
             start_satiation (int): Starting satiation level.
             overeating_death (bool): Whether overeating (>= max_satiation) causes death.
             random_start_satiation (bool): Whether to randomize start satiation on reset.
+            food_satiation_gain (int): Satiation increase from eating food.
         """
         self.max_satiation = max_satiation
         self.start_satiation = start_satiation
         self.overeating_death = overeating_death
         self.random_start_satiation = random_start_satiation
+        self.food_satiation_gain = food_satiation_gain
         self.satiation = start_satiation
         
     def reset(self):
@@ -61,7 +63,7 @@ class InteroceptiveBody:
         
         # 2. Ingestion: React to external possibilities (Eating)
         if info.get('ate_food', False):
-            self.satiation += 10
+            self.satiation += self.food_satiation_gain
             
             # If overeating death is off, we clamp to max_satiation.
             # If it's on, we allow it to go over to trigger the death condition below.

@@ -13,6 +13,7 @@ body:
   start_satiation: 10
   random_start_satiation: true
   overeating_death: false  
+  food_satiation_gain: 10
 
 agent:
   alpha: 0.1

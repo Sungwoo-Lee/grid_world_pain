@@ -50,13 +50,14 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     max_satiation = config.get('body.max_satiation', 20)
     start_satiation = config.get('body.start_satiation', 10)
     random_start_satiation = config.get('body.random_start_satiation', True)
+    food_satiation_gain = config.get('body.food_satiation_gain', 10)
 
     # 2. Environment & Body Setup
     # Set seed for deterministic evaluation
     np.random.seed(seed)
     
     env = GridWorld(height=height, width=width, food_pos=food_pos, with_satiation=with_satiation, max_steps=max_steps)
-    body = InteroceptiveBody(max_satiation=max_satiation, start_satiation=start_satiation, overeating_death=overeating_death, random_start_satiation=random_start_satiation)
+    body = InteroceptiveBody(max_satiation=max_satiation, start_satiation=start_satiation, overeating_death=overeating_death, random_start_satiation=random_start_satiation, food_satiation_gain=food_satiation_gain)
     
     # Mock composite env for agent
     class CompositeEnv:

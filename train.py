@@ -141,7 +141,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
 
     # Initialize environment, body, and agent
     env = GridWorld(with_satiation=with_satiation, max_steps=max_steps)
-    body = InteroceptiveBody(overeating_death=overeating_death, random_start_satiation=random_start_satiation)
+    body = InteroceptiveBody(overeating_death=overeating_death, random_start_satiation=random_start_satiation, food_satiation_gain=food_satiation_gain)
     
     # We need to inform the agent about expected max_satiation for sizing Q-table
     class CompositeEnv:
@@ -251,6 +251,7 @@ if __name__ == "__main__":
         
     max_steps = config.get('environment.max_steps', 100)
     random_start_satiation = config.get('body.random_start_satiation', True)
+    food_satiation_gain = config.get('body.food_satiation_gain', 10)
     testing_seed = config.get('testing.seed', 42)
     
-    train_agent(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, max_steps=max_steps, random_start_satiation=random_start_satiation, testing_seed=testing_seed, config_dict=config)
+    train_agent(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, food_satiation_gain=food_satiation_gain, max_steps=max_steps, random_start_satiation=random_start_satiation, testing_seed=testing_seed, config_dict=config)
