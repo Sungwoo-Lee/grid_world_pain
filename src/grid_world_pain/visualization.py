@@ -5,6 +5,28 @@ Includes Q-table plotting and video generation logic.
 This module helps "peek" into the agent's brain:
 1. plot_q_table: Shows what the agent thinks is the best action at different hunger levels.
 2. generate_video_from_checkpoint: Replays learned behavior to confirm it works.
+
+Arguments:
+- `--demo`: Run a random agent demo instead of loading a checkpoint.
+- `--max_steps <int>`: (Default: 50) Limit the number of steps per episode. Useful for debugging specific behaviors or long-term survival.
+- `--episodes <int>`: (Default: 1) Number of episodes to record in a single video.
+
+Usage Examples:
+
+1. **Random Agent Demo** (2 episodes, max 30 steps):
+   ```bash
+   python -m src.grid_world_pain.visualization --demo --episodes 2 --max_steps 30
+   ```
+
+2. **Checkpoint Replay** (Default settings: 1 episode, 50 steps):
+   ```bash
+   python -m src.grid_world_pain.visualization
+   ```
+
+3. **Long Replay** (Watch a trained agent survive for 100 steps):
+   ```bash
+   python -m src.grid_world_pain.visualization --max_steps 100
+   ```
 """
 
 import os
@@ -99,41 +121,51 @@ def plot_q_table(q_table, save_path, food_pos=None):
     print(f"Q-table visualization saved to {save_path}")
     plt.close(fig)
 
-def run_and_save_episode(env, body, agent, output_path):
+def run_and_save_episode(env, body, agent, output_path, max_steps=50, num_episodes=1):
     """
-    Helper to run one episode and save video.
-    """
-    env_state = env.reset()
-    body_state = body.reset()
-    state = (*env_state, body_state)
+    Helper to run episodes and save video.
     
+    Args:
+        env: The GridWorld environment.
+        body: The InteroceptiveBody.
+        agent: The Agent.
+        output_path (str): Path to save .mp4.
+        max_steps (int): Maximum steps per episode.
+        num_episodes (int): Number of episodes to record in the video.
+    """
     frames = []
     
-    # Initial frame
-    frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=1, step=0))
-    
-    done = False
-    step_count = 0
-    max_steps = 50
-    
-    while not done and step_count < max_steps:
-        action = agent.choose_action(state)
+    for ep in range(num_episodes):
+        print(f"Recording Episode {ep+1}/{num_episodes}...")
         
-        next_env_state, _, _, info = env.step(action)
-        next_body_state, reward, done = body.step(info)
-        next_state = (*next_env_state, next_body_state)
+        env_state = env.reset()
+        body_state = body.reset()
+        state = (*env_state, body_state)
         
-        frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=1, step=step_count+1))
+        # Initial frame
+        frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep+1, step=0))
         
-        state = next_state
-        step_count += 1
+        done = False
+        step_count = 0
         
-        if done:
-            # End frames
-            for _ in range(5):
-                frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=1, step=step_count))
-            break
+        while not done and step_count < max_steps:
+            action = agent.choose_action(state)
             
+            next_env_state, _, _, info = env.step(action)
+            next_body_state, reward, done = body.step(info)
+            next_state = (*next_env_state, next_body_state)
+            
+            frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep+1, step=step_count+1))
+            
+            state = next_state
+            step_count += 1
+            
+            if done:
+                # End frames (pause on death)
+                for _ in range(5):
+                    frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep+1, step=step_count))
+                break
+                
     # Save video
     # Ensure dir exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -141,7 +173,7 @@ def run_and_save_episode(env, body, agent, output_path):
     imageio.mimsave(output_path, frames, fps=5)
     print(f"Saved video to {output_path}")
 
-def generate_video_from_checkpoint(checkpoint_path, results_dir):
+def generate_video_from_checkpoint(checkpoint_path, results_dir, max_steps=50, num_episodes=1):
     """
     Generates a video for a given Q-table checkpoint.
     """
@@ -185,9 +217,9 @@ def generate_video_from_checkpoint(checkpoint_path, results_dir):
     np.random.seed(42) 
     
     output_path = os.path.join(results_dir, "videos", f"video_{pct}.mp4")
-    run_and_save_episode(env, body, agent, output_path)
+    run_and_save_episode(env, body, agent, output_path, max_steps=max_steps, num_episodes=num_episodes)
 
-def run_random_demo(videos_dir):
+def run_random_demo(videos_dir, max_steps=50, num_episodes=1):
     """
     Runs a random agent demo.
     """
@@ -208,11 +240,14 @@ def run_random_demo(videos_dir):
     np.random.seed(None) # Random seed for demo
     
     output_path = os.path.join(videos_dir, "gridworld_demo.mp4")
-    run_and_save_episode(env, body, agent, output_path)
+    run_and_save_episode(env, body, agent, output_path, max_steps=max_steps, num_episodes=num_episodes)
 
 def main():
     parser = argparse.ArgumentParser(description="GridWorld Video Generator")
     parser.add_argument("--demo", action="store_true", help="Run a random agent demo instead of processing checkpoints.")
+    parser.add_argument("--max_steps", type=int, default=50, help="Maximum steps per episode (default: 50)")
+    parser.add_argument("--episodes", type=int, default=1, help="Number of episodes to record (default: 1)")
+    
     args = parser.parse_args()
 
     results_dir = "results"
@@ -220,7 +255,7 @@ def main():
     if args.demo:
         videos_dir = os.path.join(results_dir, "videos")
         os.makedirs(videos_dir, exist_ok=True)
-        run_random_demo(videos_dir)
+        run_random_demo(videos_dir, max_steps=args.max_steps, num_episodes=args.episodes)
         return
 
     models_dir = os.path.join(results_dir, "models")
@@ -247,7 +282,7 @@ def main():
     checkpoints.sort(key=extract_number)
     
     for checkpoint in checkpoints:
-        generate_video_from_checkpoint(checkpoint, results_dir)
+        generate_video_from_checkpoint(checkpoint, results_dir, max_steps=args.max_steps, num_episodes=args.episodes)
 
 if __name__ == "__main__":
     main()
