@@ -84,8 +84,16 @@ def plot_q_table(q_table, save_path, food_pos=None):
         # Policy: Argmax Q
         policy = np.argmax(q_slice, axis=2)
         
-        # Plot Heatmap of Value
-        cax = ax.imshow(v_values, cmap='viridis', interpolation='nearest')
+        # Normalize Value function for visualization (0 to 1 range across displayed slices)
+        # We find global max/min across the slices being visualized for consistent color mapping
+        v_min, v_max = np.min(v_values), np.max(v_values)
+        if v_max > v_min:
+            v_norm = (v_values - v_min) / (v_max - v_min)
+        else:
+            v_norm = np.zeros_like(v_values)
+            
+        # Plot Heatmap of Normalized Value
+        cax = ax.imshow(v_norm, cmap='viridis', interpolation='nearest', vmin=0, vmax=1)
         
         # Add simpler title
         labels = ["Low", "Mid", "High"]
@@ -109,7 +117,7 @@ def plot_q_table(q_table, save_path, food_pos=None):
     # Add colorbar
     fig.subplots_adjust(right=0.9)
     cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
-    fig.colorbar(cax, cax=cbar_ax, label='Max Q-Value')
+    fig.colorbar(cax, cax=cbar_ax, label='Max Q-Value (Normalized)')
     
     plt.suptitle("Learned Policy & Value at Different Satiation Levels", fontsize=16)
     plt.savefig(save_path)
@@ -125,7 +133,14 @@ def plot_q_table_conventional(q_table, save_path, food_pos=None):
     v_values = np.max(q_table, axis=2)
     policy = np.argmax(q_table, axis=2)
     
-    cax = ax.imshow(v_values, cmap='viridis', interpolation='nearest')
+    # Normalize for visualization
+    v_min, v_max = np.min(v_values), np.max(v_values)
+    if v_max > v_min:
+        v_norm = (v_values - v_min) / (v_max - v_min)
+    else:
+        v_norm = np.zeros_like(v_values)
+        
+    cax = ax.imshow(v_norm, cmap='viridis', interpolation='nearest', vmin=0, vmax=1)
     ax.set_title("Learned Policy & Value (Conventional Mode)")
     ax.set_xticks(np.arange(width))
     ax.set_yticks(np.arange(height))
@@ -140,19 +155,20 @@ def plot_q_table_conventional(q_table, save_path, food_pos=None):
         fr, fc = food_pos
         ax.text(fc, fr, 'G', ha='center', va='center', color='lime', fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
         
-    fig.colorbar(cax, ax=ax, label='Max Q-Value')
+    fig.colorbar(cax, ax=ax, label='Max Q-Value (Normalized)')
     plt.savefig(save_path)
     plt.close(fig)
 
 
-def run_and_save_episode(env, body, agent, output_path, max_steps=50, num_episodes=1, with_satiation=True):
+def run_and_save_episode(env, body, agent, output_path, max_steps=50, num_episodes=1, with_satiation=True, verbose=True):
     """
     Helper to run episodes and save video.
     """
     frames = []
     
     for ep in range(num_episodes):
-        print(f"Recording Episode {ep+1}/{num_episodes}...")
+        if verbose:
+            print(f"Recording Episode {ep+1}/{num_episodes}...")
         
         env_state = env.reset()
         if with_satiation:
@@ -195,7 +211,8 @@ def run_and_save_episode(env, body, agent, output_path, max_steps=50, num_episod
                 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     imageio.mimsave(output_path, frames, fps=5)
-    print(f"Saved video to {output_path}")
+    if verbose:
+        print(f"Saved video to {output_path}")
 
 def generate_video_from_checkpoint(checkpoint_path, results_dir, max_steps=50, num_episodes=1, with_satiation=True):
     """

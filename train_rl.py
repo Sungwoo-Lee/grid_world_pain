@@ -141,6 +141,17 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
             # Save Q-table snapshot
             model_snap_filename = os.path.join(models_dir, f"q_table_{pct}.npy")
             agent.save(model_snap_filename)
+            
+            # NEW: Generate milestone video
+            video_dir = os.path.join(results_dir, "videos")
+            os.makedirs(video_dir, exist_ok=True)
+            milestone_video_filename = os.path.join(video_dir, f"video_{pct}.mp4")
+            
+            # Temporary disable epsilon for recording
+            original_epsilon = agent.epsilon
+            agent.epsilon = 0.0
+            run_and_save_episode(env, body, agent, milestone_video_filename, max_steps=max_steps, num_episodes=1, with_satiation=with_satiation, verbose=False)
+            agent.epsilon = original_epsilon
     
     print() # Newline after progress bar
     
@@ -158,14 +169,15 @@ def train_and_visualize(episodes=100000, seed=42, with_satiation=True, overeatin
     vis_filename = os.path.join(plots_dir, "q_table_vis.png")
     plot_q_table(agent.q_table, vis_filename, env.food_pos)
     
-    # NEW: Generate post-training video
+    # Final video generation is now handled by the 100% milestone
+    # But for clarity, we can ensure results/videos/final_trained_agent.mp4 exists as a symlink or copy if needed.
+    # For now, milestone video_100.mp4 is the final one.
     video_dir = os.path.join(results_dir, "videos")
-    os.makedirs(video_dir, exist_ok=True)
-    video_filename = os.path.join(video_dir, "final_trained_agent.mp4")
-    
-    print(f"Generating final video for trained agent...")
-    agent.epsilon = 0 # No exploration for final video
-    run_and_save_episode(env, body, agent, video_filename, max_steps=max_steps, num_episodes=1, with_satiation=with_satiation)
+    final_src = os.path.join(video_dir, "video_100.mp4")
+    final_dst = os.path.join(video_dir, "final_trained_agent.mp4")
+    if os.path.exists(final_src):
+        import shutil
+        shutil.copy(final_src, final_dst)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train RL Agent")
