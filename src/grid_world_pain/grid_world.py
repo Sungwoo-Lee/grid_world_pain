@@ -30,7 +30,7 @@ class GridWorld:
       not the external world. The environment only provides signals (like 'ate_food').
     """
     
-    def __init__(self, height=5, width=5, start=(0, 0), food_pos=(4, 4)):
+    def __init__(self, height=5, width=5, start=(0, 0), food_pos=(4, 4), with_satiation=True):
         """
         Initializes the GridWorld foraging environment.
 
@@ -39,12 +39,14 @@ class GridWorld:
             width (int): Number of columns.
             start (tuple): Start position (row, col).
             food_pos (tuple): Food position (row, col).
+            with_satiation (bool): Whether to include satiation/homeostasis.
         """
         self.height = height
         self.width = width
         self.start = start
         self.food_pos = food_pos
         self.agent_pos = start
+        self.with_satiation = with_satiation
         
     def reset(self):
         """
@@ -92,9 +94,14 @@ class GridWorld:
         # Check if food is eaten
         ate_food = (self.agent_pos == self.food_pos)
             
-        # Reward/Done: External environment doesn't handle survival/satiation
+        # Reward/Done: Behavior depends on whether satiation is enabled.
         reward = 0
         done = False
+        if not self.with_satiation:
+            if ate_food:
+                reward = 10 # Conventional goal reward
+                done = True # REACHED GOAL
+        
         info = {'ate_food': ate_food}
         
         return self.agent_pos, reward, done, info
@@ -156,15 +163,17 @@ class GridWorld:
         ax.add_patch(agent_circle)
         
         # Draw Food (Green Square)
-        food_rect = plt.Rectangle((self.food_pos[1], self.food_pos[0]), 1, 1, color='green', alpha=0.5, label='Food')
+        food_color = 'green'
+        food_label = 'Food' if self.with_satiation else 'Goal'
+        food_rect = plt.Rectangle((self.food_pos[1], self.food_pos[0]), 1, 1, color=food_color, alpha=0.5, label=food_label)
         ax.add_patch(food_rect)
         
         # Remove axis ticks/labels for a cleaner look
         ax.set_xticklabels([])
         ax.set_yticklabels([])
 
-        # --- Satiation Bar ---
-        if satiation is not None and max_satiation is not None:
+        # --- Satiation Bar (Only if applicable) ---
+        if self.with_satiation and satiation is not None and max_satiation is not None:
             # Create a new axes for the progress bar at the bottom
             # [left, bottom, width, height] in normalized (0,1) units
             bar_ax = fig.add_axes([0.15, 0.05, 0.7, 0.05]) 

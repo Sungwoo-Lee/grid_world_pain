@@ -16,7 +16,7 @@ class QLearningAgent:
     The agent learns a policy pi(state) -> action to maximize future rewards.
     Here, "State" is a combination of where it is and how it feels (hunger).
     """
-    def __init__(self, env, alpha=0.1, gamma=0.99, epsilon=0.1):
+    def __init__(self, env, alpha=0.1, gamma=0.99, epsilon=0.1, with_satiation=True):
         """
         Initialize the Q-Learning agent.
 
@@ -25,25 +25,21 @@ class QLearningAgent:
             alpha (float): Learning rate (how much to accept new info).
             gamma (float): Discount factor (importance of future vs immediate rewards).
             epsilon (float): Exploration rate (prob of random action).
+            with_satiation (bool): Whether satiation is part of the state space.
         """
         self.env = env
         self.alpha = alpha
         self.gamma = gamma
         self.epsilon = epsilon
+        self.with_satiation = with_satiation
         
-        # Q-Table Initialization: 4D Array
-        # Dimensions: [Height, Width, Satiation, Actions]
-        #
-        # Why Satiation?
-        # The optimal action depends on hunger.
-        # - If full: Avoid food (to avoid overeating death) or explore.
-        # - If hungry: Go to food.
-        # - So the state MUST include Satiation for the agent to learn these distinct behaviors.
-        #
-        # Size Calculation:
-        # - Satiation ranges from 0 to max_satiation + 1 (clipped).
-        # - So we need max_satiation + 2 indices to cover 0..max+1 safely.
-        self.q_table = np.zeros((self.env.height, self.env.width, self.env.max_satiation + 2, 4))
+        # Q-Table Initialization:
+        # If with_satiation: 4D Array [Height, Width, Satiation, Actions]
+        # If not with_satiation: 3D Array [Height, Width, Actions]
+        if self.with_satiation:
+            self.q_table = np.zeros((self.env.height, self.env.width, self.env.max_satiation + 2, 4))
+        else:
+            self.q_table = np.zeros((self.env.height, self.env.width, 4))
 
     def choose_action(self, state):
         """
@@ -54,7 +50,7 @@ class QLearningAgent:
         - With probability 1-epsilon: Exploit (Best known action).
 
         Args:
-            state (tuple): Current state (row, col, satiation).
+            state (tuple): Current state. (row, col, satiation) or (row, col).
 
         Returns:
             int: Chosen action (0-3).
@@ -64,10 +60,13 @@ class QLearningAgent:
             return np.random.randint(0, 4)
         else:
             # Exploit: choose the action with the highest Q-value
-            row, col, sat = state
-            # Safety check for index
-            sat = int(sat)
-            return np.argmax(self.q_table[row, col, sat])
+            if self.with_satiation:
+                row, col, sat = state
+                sat = int(sat)
+                return np.argmax(self.q_table[row, col, sat])
+            else:
+                row, col = state
+                return np.argmax(self.q_table[row, col])
 
     def update(self, state, action, reward, next_state):
         """
@@ -80,26 +79,36 @@ class QLearningAgent:
         - We nudge the current estimate towards the actual received reward plus estimated future value.
 
         Args:
-            state (tuple): Previous state (row, col, satiation).
+            state (tuple): Previous state.
             action (int): Action taken.
             reward (float): Reward received.
-            next_state (tuple): New state (row, col, satiation).
+            next_state (tuple): New state.
         """
-        row, col, sat = state
-        next_row, next_col, next_sat = next_state
-        
-        sat = int(sat)
-        next_sat = int(next_sat)
-        
-        # max_a' Q(s', a') - Best potential future value
-        best_next_action_value = np.max(self.q_table[next_row, next_col, next_sat])
-        
-        # Current estimate
-        current_q_value = self.q_table[row, col, sat, action]
-        
-        # Update rule
-        new_q_value = current_q_value + self.alpha * (reward + self.gamma * best_next_action_value - current_q_value)
-        self.q_table[row, col, sat, action] = new_q_value
+        if self.with_satiation:
+            row, col, sat = state
+            next_row, next_col, next_sat = next_state
+            
+            sat = int(sat)
+            next_sat = int(next_sat)
+            
+            # max_a' Q(s', a') - Best potential future value
+            best_next_action_value = np.max(self.q_table[next_row, next_col, next_sat])
+            
+            # Current estimate
+            current_q_value = self.q_table[row, col, sat, action]
+            
+            # Update rule
+            new_q_value = current_q_value + self.alpha * (reward + self.gamma * best_next_action_value - current_q_value)
+            self.q_table[row, col, sat, action] = new_q_value
+        else:
+            row, col = state
+            next_row, next_col = next_state
+            
+            best_next_action_value = np.max(self.q_table[next_row, next_col])
+            current_q_value = self.q_table[row, col, action]
+            
+            new_q_value = current_q_value + self.alpha * (reward + self.gamma * best_next_action_value - current_q_value)
+            self.q_table[row, col, action] = new_q_value
 
     def train(self, episodes=1000):
         """

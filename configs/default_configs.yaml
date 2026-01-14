@@ -1,0 +1,23 @@
+# Default Configuration for GridWorld Interoceptive AI
+
+environment:
+  height: 5
+  width: 5
+  start_pos: [0, 0]
+  food_pos: [4, 4]
+  with_satiation: true
+
+body:
+  max_satiation: 20
+  start_satiation: 10
+
+agent:
+  alpha: 0.1
+  gamma: 0.99
+  epsilon_start: 1.0
+  epsilon_decay: 0.9995
+  epsilon_min: 0.05
+
+training:
+  default_episodes: 100000
+  seed: 42

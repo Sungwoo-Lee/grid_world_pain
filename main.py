@@ -33,13 +33,26 @@ import numpy as np
 
 from src.grid_world_pain import GridWorld
 from src.grid_world_pain.body import InteroceptiveBody
+from src.grid_world_pain.agent import QLearningAgent
+from src.grid_world_pain.visualization import run_and_save_episode
+from src.grid_world_pain.config import get_default_config
 
 def main():
     parser = argparse.ArgumentParser(description="GridWorld Debug Sandbox")
     parser.add_argument("--episodes", type=int, default=3, help="Number of episodes to record in video (default: 3)")
     parser.add_argument("--max_steps", type=int, default=30, help="Maximum steps to record per episode (default: 30)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
+    parser.add_argument("--config", type=str, help="Path to config YAML")
+    parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
     args = parser.parse_args()
+
+    # Load default config
+    config = get_default_config()
+    
+    # Overrides
+    with_satiation = config.get('environment.with_satiation', True)
+    if args.no_satiation:
+        with_satiation = False
 
     # Setup results directory
     results_dir = "results"
@@ -53,9 +66,20 @@ def main():
     print(f"Starting Debug Session")
     print(f"Video will be saved to: {video_filename}")
 
-    # Initialize environment and body
-    env = GridWorld()
+    # Initialize components
+    env = GridWorld(with_satiation=with_satiation)
     body = InteroceptiveBody()
+    
+    # Mock composite env for agent init
+    class CompositeEnv:
+        def __init__(self, env, body):
+            self.height = env.height
+            self.width = env.width
+            self.max_satiation = body.max_satiation
+            
+    composite_env = CompositeEnv(env, body)
+    agent = QLearningAgent(composite_env, with_satiation=with_satiation)
+    agent.epsilon = 1.0 # Force random behavior for debug sandbox
     
     frames = []
     
@@ -66,63 +90,62 @@ def main():
         ep_num = episode + 1
         print(f"\n--- Starting Episode {ep_num}/{num_episodes} ---")
         
-        # Reset for new episode
-        env.reset()
-        satiation = body.reset()
-        
-        # Capture initial state
-        print("Start State:")
-        print(f"Satiation: {satiation}/{body.max_satiation}")
-        print(f"Agent Pos: {env.agent_pos}")
-        
-        frames.append(env.render_rgb_array(
-            satiation=body.satiation, 
-            max_satiation=body.max_satiation,
-            episode=ep_num,
-            step=0
-        ))
+        # Reset
+        env_state = env.reset()
+        if with_satiation:
+            body_state = body.reset()
+            state = (*env_state, body_state)
+            print("Start State:")
+            print(f"Satiation: {body.satiation}/{body.max_satiation}")
+            print(f"Agent Pos: {env.agent_pos}")
+            frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=0))
+        else:
+            state = env_state
+            print("Start State:")
+            print(f"Agent Pos: {env.agent_pos}")
+            frames.append(env.render_rgb_array(episode=ep_num, step=0))
         
         done = False
         step_count = 0
         
         while not done and step_count < max_steps_per_episode:
-            # Random action
-            action = np.random.randint(0, 4)
-            action_name = ["Up", "Right", "Down", "Left"][action]
+            action = agent.choose_action(state)
+            action_names = ["Up", "Right", "Down", "Left"]
             
-            print(f"Step {step_count + 1}: Action {action_name}")
+            print(f"Step {step_count + 1}: Action {action_names[action]}")
             
-            # Step environment
-            _, _, _, info = env.step(action)
+            # Step External
+            next_env_state, env_reward, env_done, info = env.step(action)
             
-            # Step body
-            satiation, reward, done = body.step(info)
+            if with_satiation:
+                next_body_state, reward, done = body.step(info)
+                next_state = (*next_env_state, next_body_state)
+                print(f"  Info: {info}")
+                print(f"  Satiation: {body.satiation}/{body.max_satiation}")
+                print(f"  Reward: {reward}, Done: {done}")
+                frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=step_count+1))
+            else:
+                reward = env_reward
+                done = env_done
+                next_state = next_env_state
+                print(f"  Info: {info}")
+                print(f"  Reward: {reward}, Done: {done}")
+                frames.append(env.render_rgb_array(episode=ep_num, step=step_count+1))
             
-            # Log details
-            print(f"  Info: {info}")
-            print(f"  Satiation: {satiation}/{body.max_satiation}")
-            print(f"  Reward: {reward}, Done: {done}")
-            
-            # Capture frame
-            frames.append(env.render_rgb_array(
-                satiation=body.satiation, 
-                max_satiation=body.max_satiation,
-                episode=ep_num,
-                step=step_count + 1
-            ))
-            
+            state = next_state
             step_count += 1
             
             if done:
-                print("Episode Ended (Starved or Overfed).")
-                # Add pause at the end of episode
+                if with_satiation:
+                    print("Episode Ended (Starved or Overfed).")
+                else:
+                    print("Episode Ended (Reached Goal).")
+                # Add pause
                 for _ in range(5):
-                    frames.append(env.render_rgb_array(
-                        satiation=body.satiation, 
-                        max_satiation=body.max_satiation,
-                        episode=ep_num,
-                        step=step_count
-                    ))
+                    if with_satiation:
+                        frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=step_count))
+                    else:
+                        frames.append(env.render_rgb_array(episode=ep_num, step=step_count))
                 break
         
         if not done:
