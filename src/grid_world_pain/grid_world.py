@@ -6,65 +6,78 @@ class GridWorld:
     """
     A simple 2D GridWorld environment for Reinforcement Learning.
     
-    The agent moves in a grid of size (height x width).
-    The goal is to reach a specific target cell.
-    
-    Coordinates: (row, col)
+    This class represents the "External Environment" where the agent moves.
+    It handles:
+    1. Grid Navigation: Movement logic (Up, Right, Down, Left).
+    2. Object Placement: Food and Agent positions.
+    3. Rendering: visual representation of the world.
+
+    Coordinate System: (row, col)
     - (0, 0) is the top-left corner.
+    - Rows increase downward.
+    - Columns increase to the right.
     - (height-1, width-1) is the bottom-right corner.
     
-    Actions:
-    - 0: Up
-    - 1: Right
-    - 2: Down
-    - 3: Left
+    Actions (Discrete):
+    - 0: Up (Decreases row index)
+    - 1: Right (Increases col index)
+    - 2: Down (Increases row index)
+    - 3: Left (Decreases col index)
     
     Rewards:
-    - -1 for each step (to encourage shortest path).
-    - 0 when the goal is reached.
+    - This external environment returns a reward of 0.
+    - In this "Interoceptive AI" paradigm, strict rewards come from the *Body* (internal state),
+      not the external world. The environment only provides signals (like 'ate_food').
     """
     
-    def __init__(self, height=5, width=5, start=(0, 0), goal=(4, 4)):
+    def __init__(self, height=5, width=5, start=(0, 0), food_pos=(4, 4)):
         """
-        Initializes the GridWorld environment.
+        Initializes the GridWorld foraging environment.
 
         Args:
-            height (int): Number of rows in the grid.
-            width (int): Number of columns in the grid.
+            height (int): Number of rows.
+            width (int): Number of columns.
             start (tuple): Start position (row, col).
-            goal (tuple): Goal position (row, col).
+            food_pos (tuple): Food position (row, col).
         """
         self.height = height
         self.width = width
         self.start = start
-        self.goal = goal
+        self.food_pos = food_pos
         self.agent_pos = start
         
     def reset(self):
         """
-        Resets the agent to the start position.
+        Resets the agent to a random position, avoiding the food location.
         
         Returns:
-            tuple: The initial state (agent position).
+            tuple: The initial state (row, col).
         """
-        self.agent_pos = self.start
+        while True:
+            row = np.random.randint(0, self.height)
+            col = np.random.randint(0, self.width)
+            if (row, col) != self.food_pos:
+                self.agent_pos = (row, col)
+                break
         return self.agent_pos
     
     def step(self, action):
         """
-        Moves the agent based on the chosen action.
+        Moves the agent.
         
         Args:
             action (int): The action to take (0=Up, 1=Right, 2=Down, 3=Left).
             
         Returns:
             tuple: A tuple containing:
-                - next_state (tuple): The new (row, col) position of the agent.
-                - reward (int): The reward received (-1 per step, 0 at goal).
-                - done (bool): True if the goal is reached, False otherwise.
+                - next_state (tuple): (row, col).
+                - reward (int): 0 (External environment provides no reward).
+                - done (bool): False (External environment doesn't terminate).
+                - info (dict): {'ate_food': bool}
         """
         row, col = self.agent_pos
         
+        # Movement logic
         if action == 0:   # Up
             row = max(0, row - 1)
         elif action == 1: # Right
@@ -76,73 +89,104 @@ class GridWorld:
             
         self.agent_pos = (row, col)
         
-        done = (self.agent_pos == self.goal)
-        reward = 0 if done else -1
+        # Check if food is eaten
+        ate_food = (self.agent_pos == self.food_pos)
+            
+        # Reward/Done: External environment doesn't handle survival/satiation
+        reward = 0
+        done = False
+        info = {'ate_food': ate_food}
         
-        return self.agent_pos, reward, done
+        return self.agent_pos, reward, done, info
 
     def render(self):
         """
-        Prints a simple ASCII representation of the grid to the console.
-        
-        'A' represents the Agent.
-        'G' represents the Goal.
-        '.' represents an empty cell.
+        Prints grid info.
         """
         for r in range(self.height):
             line = ""
             for c in range(self.width):
                 if (r, c) == self.agent_pos:
                     line += "A "
-                elif (r, c) == self.goal:
-                    line += "G "
+                elif (r, c) == self.food_pos:
+                    line += "F "
                 else:
                     line += ". "
             print(line)
         print()
 
-    def render_rgb_array(self):
+    def render_rgb_array(self, satiation=None, max_satiation=None, episode=None, step=None):
         """
-        Renders the grid as an RGB image using Matplotlib.
+        Renders the grid as an RGB image using Matplotlib with enhanced visualization.
         
-        This method creates a figure, draws the grid, agent, and goal,
-        and converts the plot into a numpy array suitable for video generation.
-        
+        Args:
+            satiation (int, optional): Current satiation level to display.
+            max_satiation (int, optional): Max satiation level for display.
+            episode (int, optional): Current episode number.
+            step (int, optional): Current step number.
+
         Returns:
             numpy.ndarray: An RGB image array of shape (height, width, 3).
         """
-        fig, ax = plt.subplots(figsize=(6, 6))
+        # Set figsize and dpi to ensure output dimensions are multiples of 16 (640x720) to avoid imageio warning
+        fig, ax = plt.subplots(figsize=(6.4, 7.2), dpi=100)
         
-        # Setup the grid axes
-        ax.set_xlim(0, self.width)
+        # Grid area
         ax.set_ylim(0, self.height)
+        ax.set_xlim(0, self.width)
         ax.set_xticks(np.arange(0, self.width + 1, 1))
         ax.set_yticks(np.arange(0, self.height + 1, 1))
         ax.grid(True, color='black')
         ax.set_aspect('equal')
         
+        # Title Info (Episode / Step)
+        title_text = ""
+        if episode is not None:
+            title_text += f"Episode: {episode}  "
+        if step is not None:
+            title_text += f"Step: {step}"
+        if title_text:
+            ax.set_title(title_text, fontsize=12, fontweight='bold', pad=10)
+        
         # Invert y-axis to match array indexing (0,0 at top-left)
-        # In matrix coordinates, row increases downwards.
         ax.invert_yaxis()
         
         # Draw Agent (Red Circle)
-        # We add 0.5 to coordinates to center the shape in the cell
         agent_circle = plt.Circle((self.agent_pos[1] + 0.5, self.agent_pos[0] + 0.5), 0.3, color='red', label='Agent')
         ax.add_patch(agent_circle)
         
-        # Draw Goal (Green Square)
-        goal_rect = plt.Rectangle((self.goal[1], self.goal[0]), 1, 1, color='green', alpha=0.5, label='Goal')
-        ax.add_patch(goal_rect)
+        # Draw Food (Green Square)
+        food_rect = plt.Rectangle((self.food_pos[1], self.food_pos[0]), 1, 1, color='green', alpha=0.5, label='Food')
+        ax.add_patch(food_rect)
         
         # Remove axis ticks/labels for a cleaner look
         ax.set_xticklabels([])
         ax.set_yticklabels([])
-        
-        plt.legend(loc='upper right')
-        
+
+        # --- Satiation Bar ---
+        if satiation is not None and max_satiation is not None:
+            # Create a new axes for the progress bar at the bottom
+            # [left, bottom, width, height] in normalized (0,1) units
+            bar_ax = fig.add_axes([0.15, 0.05, 0.7, 0.05]) 
+            
+            pct = max(0, min(1, satiation / max_satiation))
+            
+            # Color transition from Red (low) to Green (high)
+            bar_color = (1 - pct, pct, 0) # Simple R->G gradient
+            
+            bar_ax.barh(0, pct, color=bar_color, height=0.5)
+            bar_ax.set_xlim(0, 1)
+            bar_ax.set_xticks([])
+            bar_ax.set_yticks([])
+            bar_ax.set_title(f"Satiation: {satiation}/{max_satiation}", fontsize=10)
+            
+            # Draw border for the bar
+            rect = plt.Rectangle((0, -0.25), 1, 0.5, fill=False, edgecolor='black')
+            bar_ax.add_patch(rect)
+
+
         # Draw the canvas and convert to numpy array
         fig.canvas.draw()
-        # buffer_rgba returns a buffer representation of the image
         data = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
         data = data.reshape(fig.canvas.get_width_height()[::-1] + (4,))
         

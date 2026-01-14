@@ -1,52 +1,117 @@
 """
-Main script for demonstrating the custom GridWorld environment.
-This script initializes the environment and runs a single episode with a random agent,
-printing the grid state to the console at each step.
+Debugging Script / Sandbox.
+
+Purpose:
+- To verify the Environmental Mechanics (Grid + Body) without any Learning Agent.
+- Uses a Random Agent to simply walk around.
+- Checks if "Eating" works, if "Satiation" changes, and if "Death" occurs correctly.
+
+Usage:
+- Run this to ensure the physics/rules of the world are working as intended before running `train_rl.py`.
 """
 
-from src.grid_world_pain import GridWorld
-import random
+import os
+
 import time
+import datetime
+import imageio
+import numpy as np
+
+from src.grid_world_pain import GridWorld
+from src.grid_world_pain.body import InteroceptiveBody
 
 def main():
-    # Initialize the environment with default parameters (5x5 grid)
+    # Setup results directory
+    results_dir = "results"
+    os.makedirs(results_dir, exist_ok=True)
+    
+    # Set numpy random seed for determinism
+    np.random.seed(42)
+    
+    video_filename = os.path.join(results_dir, "gridworld_video.mp4")
+    
+    print(f"Starting Debug Session")
+    print(f"Video will be saved to: {video_filename}")
+
+    # Initialize environment and body
     env = GridWorld()
+    body = InteroceptiveBody()
     
-    # Reset the environment to the start state
-    state = env.reset()
-    print("Start State:")
-    env.render()
+    frames = []
     
-    done = False
-    step_count = 0
-    max_steps = 20 # Safety limit to prevent infinite loops if agent gets stuck
+    num_episodes = 3
+    max_steps_per_episode = 30
     
-    # Main loop: Continue taking steps until goal is reached or max steps exceeded
-    while not done and step_count < max_steps:
-        # Choose a random action:
-        # 0=Up, 1=Right, 2=Down, 3=Left
-        action = random.randint(0, 3)
+    for episode in range(num_episodes):
+        ep_num = episode + 1
+        print(f"\n--- Starting Episode {ep_num}/{num_episodes} ---")
         
-        # Helper list to print human-readable action names
-        action_name = ["Up", "Right", "Down", "Left"][action]
-        print(f"Step {step_count + 1}: Action {action_name}")
+        # Reset for new episode
+        env.reset()
+        satiation = body.reset()
         
-        # Take the step in the environment
-        # state: The new position (row, col)
-        # reward: The immediate reward received
-        # done: Boolean flag, True if the episode is finished (goal reached)
-        state, reward, done = env.step(action)
+        # Capture initial state
+        print("Start State:")
+        print(f"Satiation: {satiation}/{body.max_satiation}")
+        print(f"Agent Pos: {env.agent_pos}")
         
-        # Visualize the new state in the console
-        env.render()
-        print(f"Reward: {reward}, Done: {done}\n")
+        frames.append(env.render_rgb_array(
+            satiation=body.satiation, 
+            max_satiation=body.max_satiation,
+            episode=ep_num,
+            step=0
+        ))
         
-        step_count += 1
+        done = False
+        step_count = 0
         
-        # Check for success condition
-        if done:
-            print("Goal Reached!")
-            break
+        while not done and step_count < max_steps_per_episode:
+            # Random action
+            action = np.random.randint(0, 4)
+            action_name = ["Up", "Right", "Down", "Left"][action]
+            
+            print(f"Step {step_count + 1}: Action {action_name}")
+            
+            # Step environment
+            _, _, _, info = env.step(action)
+            
+            # Step body
+            satiation, reward, done = body.step(info)
+            
+            # Log details
+            print(f"  Info: {info}")
+            print(f"  Satiation: {satiation}/{body.max_satiation}")
+            print(f"  Reward: {reward}, Done: {done}")
+            
+            # Capture frame
+            frames.append(env.render_rgb_array(
+                satiation=body.satiation, 
+                max_satiation=body.max_satiation,
+                episode=ep_num,
+                step=step_count + 1
+            ))
+            
+            step_count += 1
+            
+            if done:
+                print("Episode Ended (Starved or Overfed).")
+                # Add pause at the end of episode
+                for _ in range(5):
+                    frames.append(env.render_rgb_array(
+                        satiation=body.satiation, 
+                        max_satiation=body.max_satiation,
+                        episode=ep_num,
+                        step=step_count
+                    ))
+                break
+        
+        if not done:
+             print("Episode Ended (Max Steps Reached).")
+             
+    # Save video
+    print(f"\nSaving video with {len(frames)} frames...")
+    imageio.mimsave(video_filename, frames, fps=5)
+    print(f"Video saved successfully: {video_filename}")
 
 if __name__ == "__main__":
     main()

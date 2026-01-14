@@ -1,143 +1,133 @@
 
 from src.grid_world_pain import GridWorld
+from src.grid_world_pain.body import InteroceptiveBody
 from src.grid_world_pain.agent import QLearningAgent
+from src.grid_world_pain.visualization import plot_q_table
 import time
-import imageio
 import numpy as np
 
-def train_and_visualize():
+import sys
+import argparse
+
+def train_and_visualize(episodes=100000):
     """
     Trains the Q-learning agent and visualizes the result.
+    
+    Training Loop Logic:
+    1. Reset Environment and Body.
+    2. While episode not done:
+       a. Agent chooses action based on current state (Env pos + Body satiation).
+       b. External Environment steps (moves agent, checks for food).
+       c. Internal Body steps (metabolizes, checks eating, generates reward).
+       d. Agent updates Q-table based on reward and new state.
+       
+    Artifacts Saved:
+    - Models: `results/models/q_table_N.npy`
+    - Plots: `results/plots/q_table_vis_N.png`
     """
-    # Initialize environment and agent
+    import os # Import os here or at top for results_dir handling
+    
+    # Set numpy random seed for determinism
+    np.random.seed(42)
+    
+    results_dir = "results"
+    models_dir = os.path.join(results_dir, "models")
+    plots_dir = os.path.join(results_dir, "plots")
+    
+    os.makedirs(models_dir, exist_ok=True)
+    os.makedirs(plots_dir, exist_ok=True)
+
+    # Initialize environment, body, and agent
     env = GridWorld()
-    agent = QLearningAgent(env)
+    body = InteroceptiveBody()
+    
+    # We need to inform the agent about expected max_satiation for sizing Q-table
+    class CompositeEnv:
+        def __init__(self, env, body):
+            self.height = env.height
+            self.width = env.width
+            self.max_satiation = body.max_satiation
+            
+    composite_env = CompositeEnv(env, body)
+    agent = QLearningAgent(composite_env)
     
     print("Training agent...")
     start_time = time.time()
     
-    # Train the agent
-    episodes = 500
-    agent.train(episodes=episodes)
+    agent.epsilon = 1.0 # Start with full exploration
+    decay_rate = 0.9995
+    min_epsilon = 0.05
+    
+    # Define milestones for saving intermediate visualizations
+    milestones = {int(episodes * p): int(p * 100) for p in [0.1, 0.25, 0.5, 0.75, 1.0]}
+    
+    for episode in range(episodes):
+        # Reset both
+        env_state = env.reset()
+        body_state = body.reset()
+        state = (*env_state, body_state)
+        
+        done = False
+        
+        while not done:
+            action = agent.choose_action(state)
+            
+            # Step External
+            next_env_state, _, _, info = env.step(action)
+            
+            # Step Internal
+            next_body_state, reward, done = body.step(info)
+            
+            next_state = (*next_env_state, next_body_state)
+            
+            agent.update(state, action, reward, next_state)
+            state = next_state
+            
+        # Decay epsilon
+        agent.epsilon = max(min_epsilon, agent.epsilon * decay_rate)
+        
+        # Progress Bar
+        if (episode + 1) % 100 == 0:
+            progress = (episode + 1) / episodes
+            bar_length = 40
+            block = int(round(bar_length * progress))
+            text = "\rProgress: [{0}] {1:.1f}%".format( "#" * block + "-" * (bar_length - block), progress * 100)
+            sys.stdout.write(text)
+            sys.stdout.write(text)
+            sys.stdout.flush()
+            
+        # Check milestones
+        if (episode + 1) in milestones:
+            pct = milestones[episode + 1]
+            if not os.path.exists("results"):
+                 os.makedirs("results", exist_ok=True)
+            
+            vis_filename = os.path.join(plots_dir, f"q_table_vis_{pct}.png")
+            plot_q_table(agent.q_table, vis_filename, env.food_pos)
+            
+            # Save Q-table snapshot
+            model_snap_filename = os.path.join(models_dir, f"q_table_{pct}.npy")
+            agent.save(model_snap_filename)
+    
+    print() # Newline after progress bar
     
     training_time = time.time() - start_time
     print(f"Training completed in {training_time:.2f} seconds.")
     
-    # --- Visualization / Verification ---
-    print("\nRunning verification episode...")
-    
-    # Switch to greedy policy (epsilon = 0)
-    agent.epsilon = 0
-    
-    state = env.reset()
-    frames = []
-    frames.append(env.render_rgb_array())
-    
-    done = False
-    step_count = 0
-    max_steps = 20
-    
-    print("Path taken:")
-    print("Start State")
-    
-    while not done and step_count < max_steps:
-        # Choose best action
-        action = agent.choose_action(state)
-        
-        # Take step
-        next_state, reward, done = env.step(action)
-        
-        # Record frame
-        frames.append(env.render_rgb_array())
-        
-        # Print info
-        action_name = ["Up", "Right", "Down", "Left"][action]
-        print(f"Step {step_count+1}: Action {action_name}, State {next_state}")
-        
-        state = next_state
-        step_count += 1
-        
-        if done:
-            print("Goal Reached!")
-            # Add end frames
-            for _ in range(5):
-                frames.append(env.render_rgb_array())
-            break
-            
-    if not done:
-        print("Failed to reach goal within max steps.")
-
-    # Save results
-    import os
-    results_dir = "results"
-    os.makedirs(results_dir, exist_ok=True)
-    
-    # Save video
-    video_filename = os.path.join(results_dir, "rl_agent_video.mp4")
-    imageio.mimsave(video_filename, frames, fps=5)
-    print(f"\nVideo saved to {video_filename}")
-    
     # Save model
-    model_filename = os.path.join(results_dir, "q_table.npy")
+    model_filename = os.path.join(models_dir, "q_table.npy")
     agent.save(model_filename)
     
-    # Visualize Q-table
-    vis_filename = os.path.join(results_dir, "q_table_vis.png")
-    plot_q_table(agent.q_table, vis_filename)
-
-def plot_q_table(q_table, save_path):
-    """
-    Visualizes the Q-table as a heatmap with action arrows.
+    # Also save as q_table_100.npy for consistency with generate_videos
+    agent.save(os.path.join(models_dir, "q_table_100.npy"))
     
-    Args:
-        q_table (numpy.ndarray): The Q-table of shape (height, width, 4).
-        save_path (str): Path to save the visualization.
-    """
-    import matplotlib.pyplot as plt
-    
-    height, width, _ = q_table.shape
-    
-    # Calculate best action and max Q-value for each cell
-    best_actions = np.argmax(q_table, axis=2)
-    max_q_values = np.max(q_table, axis=2)
-    
-    fig, ax = plt.subplots(figsize=(8, 8))
-    
-    # Plot heatmap
-    cax = ax.imshow(max_q_values, cmap='viridis', interpolation='nearest')
-    fig.colorbar(cax, label='Max Q-Value')
-    
-    # Add arrows indicating best action
-    # Actions: 0=Up, 1=Right, 2=Down, 3=Left
-    # Corresponding (dx, dy) for plotting arrows
-    # Note: In matric coordinates (row, col), Up is (-1, 0), Right is (0, 1), etc.
-    # But for plotting with matplotlib (x, y) where x=col, y=row (inverted y-axis by imshow)
-    action_deltas = {
-        0: (0, -0.3),  # Up (negative y in plot coordinates if origin is top-left)
-        1: (0.3, 0),   # Right
-        2: (0, 0.3),   # Down
-        3: (-0.3, 0)   # Left
-    }
-    
-    for r in range(height):
-        for c in range(width):
-            action = best_actions[r, c]
-            dx, dy = action_deltas[action]
-            
-            # Draw arrow
-            # Note: origin is 'upper' by default for imshow, so y increases downwards
-            ax.arrow(c, r, dx, dy, head_width=0.1, head_length=0.1, fc='white', ec='white')
-            
-    ax.set_title("Learned Policy (Q-Table)")
-    ax.set_xticks(np.arange(width))
-    ax.set_yticks(np.arange(height))
-    ax.set_xlabel("Column")
-    ax.set_ylabel("Row")
-    
-    plt.tight_layout()
-    plt.savefig(save_path)
-    print(f"Q-table visualization saved to {save_path}")
-    plt.close(fig)
+    # Final visualization
+    vis_filename = os.path.join(plots_dir, "q_table_vis.png")
+    plot_q_table(agent.q_table, vis_filename, env.food_pos)
 
 if __name__ == "__main__":
-    train_and_visualize()
+    parser = argparse.ArgumentParser(description="Train RL Agent")
+    parser.add_argument("--episodes", type=int, default=100000, help="Number of episodes to train")
+    args = parser.parse_args()
+    
+    train_and_visualize(episodes=args.episodes)

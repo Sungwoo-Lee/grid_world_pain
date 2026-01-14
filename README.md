@@ -65,8 +65,8 @@ grid_world_pain/
 
 ## 🛠️ Usage
 
-### 1. Simple Text Demo
-Run the console-based simulation to see the agent move in ASCII format.
+### 1. Simple Debugging Session
+Run the console-based simulation to see the agent move in the GridWorld with random behaviors and satiation dynamics.
 
 ```bash
 python main.py
@@ -80,15 +80,22 @@ python visualize.py
 ```
 
 ### 3. Training the RL Agent
-Train the Q-Learning agent and verify its performance. The script will save the trained model and a replay video to the `results/` folder.
+Train the Q-Learning agent and verify its performance. The script supports command-line arguments for flexibility.
 
+**Run with default settings (100,000 episodes):**
 ```bash
 python train_rl.py
 ```
 
-**Outputs:**
-- `results/q_table.npy`: The learned Q-values.
-- `results/rl_agent_video.mp4`: A video recording of the trained agent.
+**Run a quick debug session (e.g., 500 episodes):**
+```bash
+python train_rl.py --episodes 500
+```
+
+**Outputs in `results/`:**
+- `q_table.npy`: The learned Q-values.
+- `rl_agent_video.mp4`: A video recording of the trained agent verification episode.
+- `q_table_vis.png`: A multi-panel visualization showing the learned policy and values at **Low**, **Mid**, and **High** satiation levels, including the food location.
 
 ---
 
@@ -100,10 +107,18 @@ The core class located in `src/grid_world_pain/grid_world.py`.
 | Method | Description |
 | :--- | :--- |
 | `__init__(width, height, start, goal)` | Initializes the grid dimensions and key coordinates. |
-| `reset()` | Resets the environment and returns the initial state. |
+| `reset()` | Resets the environment and returns the initial state. **Now randomizes agent position.** |
 | `step(action)` | Executes an action (`Up`, `Right`, `Down`, `Left`) and returns `(state, reward, done)`. |
 | `render()` | Prints the grid state to the console. |
-| `render_rgb_array()` | Returns a NumPy array representing the current frame (for video). |
+| `render_rgb_array(satiation, max_satiation)` | Returns a NumPy array representing the current frame with a satiation bar. |
+
+### `InteroceptiveBody`
+Simulates the agent's internal physiological state (satiation).
+
+| Method | Description |
+| :--- | :--- |
+| `reset()` | **Randomizes start satiation** (between 50%-100% max) and returns initial level. |
+| `step(info)` | Updates satiation based on metabolism (-1) and eating (+5). |
 
 ### `QLearningAgent`
 The RL agent located in `src/grid_world_pain/agent.py`.
