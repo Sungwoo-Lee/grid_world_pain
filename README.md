@@ -15,6 +15,7 @@
 ## ✨ Key Features
 
 - **🚀 Lightweight Core**: Built with pure Python and optimized for speed.
+- **🤖 RL Ready**: Includes a Q-Learning agent implementation out of the box.
 - **🎥 Built-in Visualization**: Seamless integration with `matplotlib` and `imageio` for generating MP4 replays.
 - **🧩 Standard Interface**: Familiar API design (`reset`, `step`, `render`) compliant with standard RL paradigms.
 - **📦 Modular Architecture**: Clean separation between environment logic, visualization, and execution.
@@ -28,11 +29,14 @@ grid_world_pain/
 ├── pyproject.toml              # ⚙️ Configuration & Dependencies
 ├── main.py                     # 🏃‍♂️ Console Demo Entry Point
 ├── visualize.py                # 🎬 Video Generation Script
+├── train_rl.py                 # 🧠 RL Training & Verification Script
 ├── README.md                   # 📄 Documentation
+├── results/                    # 📂 Training Results & Artifacts
 └── src/
     └── grid_world_pain/        # 🐍 Source Code
         ├── __init__.py         # Package Exporter
-        └── grid_world.py       # Core Environment Logic
+        ├── grid_world.py       # Core Environment Logic
+        └── agent.py            # 🤖 Q-Learning Agent
 ```
 
 ---
@@ -75,6 +79,17 @@ Create a high-quality `.mp4` video of the agent's episode.
 python visualize.py
 ```
 
+### 3. Training the RL Agent
+Train the Q-Learning agent and verify its performance. The script will save the trained model and a replay video to the `results/` folder.
+
+```bash
+python train_rl.py
+```
+
+**Outputs:**
+- `results/q_table.npy`: The learned Q-values.
+- `results/rl_agent_video.mp4`: A video recording of the trained agent.
+
 ---
 
 ## 📚 API Reference
@@ -89,6 +104,17 @@ The core class located in `src/grid_world_pain/grid_world.py`.
 | `step(action)` | Executes an action (`Up`, `Right`, `Down`, `Left`) and returns `(state, reward, done)`. |
 | `render()` | Prints the grid state to the console. |
 | `render_rgb_array()` | Returns a NumPy array representing the current frame (for video). |
+
+### `QLearningAgent`
+The RL agent located in `src/grid_world_pain/agent.py`.
+
+| Method | Description |
+| :--- | :--- |
+| `__init__(env, alpha, gamma, epsilon)` | Initializes hyperparameters and Q-table. |
+| `choose_action(state)` | Selects an action using epsilon-greedy policy. |
+| `update(state, action, reward, next_state)` | Updates Q-values based on experience. |
+| `train(episodes)` | Runs the training loop. |
+| `save(filepath)` | Saves the Q-table to a file. |
 
 ---
 
