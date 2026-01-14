@@ -6,12 +6,25 @@ Purpose:
 - Uses a Random Agent to simply walk around.
 - Checks if "Eating" works, if "Satiation" changes, and if "Death" occurs correctly.
 
-Usage:
-- Run this to ensure the physics/rules of the world are working as intended before running `train_rl.py`.
+Arguments:
+- `--episodes <int>`: (Default: 3) Number of debug episodes to run.
+- `--max_steps <int>`: (Default: 30) Maximum steps per episode.
+
+Usage Examples:
+
+1. **Short Debug Run** (Default):
+   ```bash
+   python main.py
+   ```
+
+2. **Longer Observation**:
+   ```bash
+   python main.py --episodes 5 --max_steps 50
+   ```
 """
 
 import os
-
+import argparse
 import time
 import datetime
 import imageio
@@ -21,6 +34,11 @@ from src.grid_world_pain import GridWorld
 from src.grid_world_pain.body import InteroceptiveBody
 
 def main():
+    parser = argparse.ArgumentParser(description="GridWorld Debug Sandbox")
+    parser.add_argument("--episodes", type=int, default=3, help="Number of episodes to run (default: 3)")
+    parser.add_argument("--max_steps", type=int, default=30, help="Maximum steps per episode (default: 30)")
+    args = parser.parse_args()
+
     # Setup results directory
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
@@ -28,7 +46,7 @@ def main():
     # Set numpy random seed for determinism
     np.random.seed(42)
     
-    video_filename = os.path.join(results_dir, "gridworld_video.mp4")
+    video_filename = os.path.join(results_dir, "gridworld_debug.mp4")
     
     print(f"Starting Debug Session")
     print(f"Video will be saved to: {video_filename}")
@@ -39,8 +57,8 @@ def main():
     
     frames = []
     
-    num_episodes = 3
-    max_steps_per_episode = 30
+    num_episodes = args.episodes
+    max_steps_per_episode = args.max_steps
     
     for episode in range(num_episodes):
         ep_num = episode + 1
