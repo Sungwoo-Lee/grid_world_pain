@@ -345,4 +345,4 @@ def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestone
 
 if __name__ == "__main__":
     print("This module is a utility library and should not be run directly.")
-    print("Use train.py for training and evaluation.py for generating artifacts.")
+    print("Use train.py for training and evaluation.py for generating visualizations.")

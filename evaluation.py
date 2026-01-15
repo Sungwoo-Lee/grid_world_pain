@@ -237,7 +237,7 @@ def main():
         evaluate_checkpoint(checkpoint, results_dir, config)
 
     print("-" * 40)
-    print(f"Evaluation complete! Artifacts are in {results_dir}/plots/ and {results_dir}/videos/")
+    print(f"Evaluation complete! Visualizations are in {results_dir}/plots/ and {results_dir}/videos/")
 
 if __name__ == "__main__":
     main()
