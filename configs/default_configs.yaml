@@ -6,17 +6,26 @@ environment:
   start_pos: [0, 0]
   food_pos: [4, 4]
   max_steps: 100
+  danger_prob: 0.1
+  danger_duration: 5
+  damage_amount: 5
 
 body:
   with_satiation: true
   max_satiation: 20
   satiation_setpoint: 20
   overeating_death: false  
-  use_homeostatic_reward: false
+  use_homeostatic_reward: true
   death_penalty: 100
   random_start_satiation: true
   start_satiation: 10
   food_satiation_gain: 5
+  
+  with_health: true
+  max_health: 20
+  start_health: 10
+  health_recovery: 1
+  start_health_random: true
 
 agent:
   alpha: 0.1
@@ -26,7 +35,7 @@ agent:
   epsilon_min: 0.05
 
 training:
-  training_episode: 10000
+  training_episode: 3000
   seed: 42
 
 testing:

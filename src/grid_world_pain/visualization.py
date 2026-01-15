@@ -16,6 +16,11 @@ def plot_q_table(q_table, save_path, food_pos=None):
     # Dispatch to conventional plotter if q_table is 3D
     if len(q_table.shape) == 3:
         return plot_q_table_conventional(q_table, save_path, food_pos)
+        
+    # Dispatch to 4D plotter if q_table is 5D (H, W, Sat, Health, Actions) or 4D depending on how we count
+    # agent.py initialization: (height, width, max_sat+2, max_health+2, 5) -> 5 dimensions
+    if len(q_table.shape) == 5:
+        return plot_q_table_health(q_table, save_path, food_pos)
 
     # Ensure output directory exists
     if save_path:
@@ -80,6 +85,75 @@ def plot_q_table(q_table, save_path, food_pos=None):
     fig.colorbar(cax, cax=cbar_ax, label='Max Q-Value (Normalized)')
     
     plt.suptitle("Learned Policy & Value at Different Satiation Levels", fontsize=16)
+    plt.savefig(save_path)
+    plt.close(fig)
+
+def plot_q_table_health(q_table, save_path, food_pos=None):
+    """
+    Visualizes representative slices of a 5D Q-table (Height, Width, Sat, Health, Actions).
+    Visualizes across Satiation (Cols) and Health (Rows).
+    """
+    # Ensure output directory exists
+    if save_path:
+        os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+        
+    height, width, sat_dim, health_dim, _ = q_table.shape
+    max_satiation = sat_dim - 2
+    max_health = health_dim - 2
+    
+    # Slices
+    sat_slices = [max_satiation // 4, max_satiation // 2, int(max_satiation * 0.9)]
+    sat_labels = ["Low Sat", "Mid Sat", "High Sat"]
+    
+    # Health Slices: Injured vs Healthy
+    # We want to see behavior when severely injured vs fully healthy
+    health_slices = [max_health // 4, int(max_health * 0.9)] 
+    health_labels = ["Injured", "Healthy"]
+    
+    rows = len(health_slices)
+    cols = len(sat_slices)
+    
+    # Larger figure for multi-row
+    fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
+    
+    for r_idx, h_level in enumerate(health_slices):
+        for c_idx, s_level in enumerate(sat_slices):
+            # If 1 row or 1 col, axes might be 1D, handle that but here we have 2x3 so it's 2D
+            ax = axes[r_idx, c_idx]
+            
+            # Extract 2D Q-table
+            q_slice = q_table[:, :, s_level, h_level, :]
+            
+            v_values = np.max(q_slice, axis=2)
+            policy = np.argmax(q_slice, axis=2)
+            
+            v_min, v_max = np.min(v_values), np.max(v_values)
+            if v_max > v_min:
+                v_norm = (v_values - v_min) / (v_max - v_min)
+            else:
+                v_norm = np.zeros_like(v_values)
+                
+            cax = ax.imshow(v_norm, cmap='viridis', interpolation='nearest', vmin=0, vmax=1)
+            
+            ax.set_title(f"{health_labels[r_idx]} (H={h_level}) | {sat_labels[c_idx]} (S={s_level})")
+            ax.set_xticks(np.arange(width))
+            ax.set_yticks(np.arange(height))
+            
+            for r in range(height):
+                for c in range(width):
+                    action = policy[r, c]
+                    arrow_char = ['\u2191', '\u2192', '\u2193', '\u2190', '\u2022'][action]
+                    ax.text(c, r, arrow_char, ha='center', va='center', color='white', fontsize=12, weight='bold')
+            
+            if food_pos is not None:
+                fr, fc = food_pos
+                ax.text(fc, fr, 'F', ha='center', va='center', color='lime', fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
+
+    fig.subplots_adjust(right=0.9)
+    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
+    fig.colorbar(cax, cax=cbar_ax, label='Max Q-Value (Normalized)')
+    
+    plt.suptitle("Policy: Satiation (Cols) vs Health (Rows)", fontsize=16)
     plt.savefig(save_path)
     plt.close(fig)
 

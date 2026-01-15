@@ -33,10 +33,19 @@ class QLearningAgent:
         self.epsilon = epsilon
         self.with_satiation = with_satiation
         
+        # Check if environment supports health
+        self.with_health = getattr(env, 'with_health', False)
+        self.max_health = getattr(env, 'max_health', 20)
+        
         # Q-Table Initialization:
-        # If with_satiation: 4D Array [Height, Width, Satiation, Actions]
+        # If with_health: 4D Array [Height, Width, Satiation, Health, Actions]
+        # If with_satiation: 3D Array [Height, Width, Satiation, Actions] (Legacy compatibility if needed, but we'll assume satiation is dim 3)
         # If not with_satiation: 3D Array [Height, Width, Actions]
-        if self.with_satiation:
+        
+        if self.with_health and self.with_satiation:
+             # Height x Width x Satiation x Health x Actions
+             self.q_table = np.zeros((self.env.height, self.env.width, self.env.max_satiation + 2, self.max_health + 2, 5))
+        elif self.with_satiation:
             self.q_table = np.zeros((self.env.height, self.env.width, self.env.max_satiation + 2, 5))
         else:
             self.q_table = np.zeros((self.env.height, self.env.width, 5))
@@ -50,7 +59,7 @@ class QLearningAgent:
         - With probability 1-epsilon: Exploit (Best known action).
 
         Args:
-            state (tuple): Current state. (row, col, satiation) or (row, col).
+            state (tuple): Current state. (row, col, satiation, health) or (row, col, satiation) or (row, col).
 
         Returns:
             int: Chosen action (0-4).
@@ -60,7 +69,12 @@ class QLearningAgent:
             return np.random.randint(0, 5)
         else:
             # Exploit: choose the action with the highest Q-value
-            if self.with_satiation:
+            if self.with_health and self.with_satiation:
+                row, col, sat, health = state
+                sat = int(sat)
+                health = int(health)
+                return np.argmax(self.q_table[row, col, sat, health])
+            elif self.with_satiation:
                 row, col, sat = state
                 sat = int(sat)
                 return np.argmax(self.q_table[row, col, sat])
@@ -84,7 +98,22 @@ class QLearningAgent:
             reward (float): Reward received.
             next_state (tuple): New state.
         """
-        if self.with_satiation:
+        if self.with_health and self.with_satiation:
+            row, col, sat, health = state
+            next_row, next_col, next_sat, next_health = next_state
+            
+            sat = int(sat)
+            health = int(health)
+            next_sat = int(next_sat)
+            next_health = int(next_health)
+            
+            best_next_action_value = np.max(self.q_table[next_row, next_col, next_sat, next_health])
+            current_q_value = self.q_table[row, col, sat, health, action]
+            
+            new_q_value = current_q_value + self.alpha * (reward + self.gamma * best_next_action_value - current_q_value)
+            self.q_table[row, col, sat, health, action] = new_q_value
+            
+        elif self.with_satiation:
             row, col, sat = state
             next_row, next_col, next_sat = next_state
             

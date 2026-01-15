@@ -54,12 +54,24 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     use_homeostatic_reward = config.get('body.use_homeostatic_reward', False)
     satiation_setpoint = config.get('body.satiation_setpoint', 15)
     death_penalty = config.get('body.death_penalty', 100)
+    
+    # New Health/Pain Params
+    with_health = config.get('body.with_health', False)
+    max_health = config.get('body.max_health', 20)
+    start_health = config.get('body.start_health', 10)
+    health_recovery = config.get('body.health_recovery', 1)
+    start_health_random = config.get('body.start_health_random', True)
+    
+    pain_prob = config.get('environment.danger_prob', 0.1)
+    pain_duration = config.get('environment.danger_duration', 5)
+    damage_amount = config.get('environment.damage_amount', 5)
 
     # 2. Environment & Body Setup
     # Set seed for deterministic evaluation
     np.random.seed(seed)
     
-    env = GridWorld(height=height, width=width, food_pos=food_pos, with_satiation=with_satiation, max_steps=max_steps)
+    env = GridWorld(height=height, width=width, food_pos=food_pos, with_satiation=with_satiation, max_steps=max_steps,
+                    danger_prob=pain_prob, danger_duration=pain_duration, damage_amount=damage_amount)
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
         start_satiation=start_satiation, 
@@ -68,7 +80,12 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         food_satiation_gain=food_satiation_gain,
         use_homeostatic_reward=use_homeostatic_reward,
         satiation_setpoint=satiation_setpoint,
-        death_penalty=death_penalty
+        death_penalty=death_penalty,
+        with_health=with_health,
+        max_health=max_health,
+        start_health=start_health,
+        health_recovery=health_recovery,
+        start_health_random=start_health_random
     )
     
     # Mock composite env for agent
@@ -77,6 +94,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             self.height = env.height
             self.width = env.width
             self.max_satiation = body.max_satiation
+            self.with_health = body.with_health
+            self.max_health = body.max_health
             
     agent = QLearningAgent(CompositeEnv(env, body), with_satiation=with_satiation)
     
@@ -93,10 +112,17 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     for ep in range(num_episodes):
         ep_idx = ep + 1
         env_state = env.reset()
+        
         if with_satiation:
-            body_state = body.reset()
-            state = (*env_state, body_state)
-            frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_idx, step=0))
+            body_return = body.reset()
+            if with_health:
+                satiation, health = body_return
+                state = (*env_state, satiation, health)
+                frames.append(env.render_rgb_array(satiation, max_satiation, health, max_health, episode=ep_idx, step=0))
+            else:
+                satiation = body_return
+                state = (*env_state, satiation)
+                frames.append(env.render_rgb_array(satiation, max_satiation, episode=ep_idx, step=0))
         else:
             state = env_state
             frames.append(env.render_rgb_array(episode=ep_idx, step=0))
@@ -108,10 +134,17 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             next_env_state, _, env_done, info = env.step(action)
             
             if with_satiation:
-                next_body_state, _, body_done = body.step(info)
+                body_return, _, body_done = body.step(info)
                 done = env_done or body_done
-                next_state = (*next_env_state, next_body_state)
-                frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_idx, step=step_count+1))
+                
+                if with_health:
+                    next_sat, next_health = body_return
+                    next_state = (*next_env_state, next_sat, next_health)
+                    frames.append(env.render_rgb_array(next_sat, max_satiation, next_health, max_health, episode=ep_idx, step=step_count+1))
+                else:
+                    next_sat = body_return
+                    next_state = (*next_env_state, next_sat)
+                    frames.append(env.render_rgb_array(next_sat, max_satiation, episode=ep_idx, step=step_count+1))     
             else:
                 done = env_done
                 next_state = next_env_state
@@ -124,7 +157,11 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 # Buffer end frames
                 for _ in range(5):
                     if with_satiation:
-                        frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_idx, step=step_count))
+                        if with_health:
+                             # Use last known state values
+                             frames.append(env.render_rgb_array(body.satiation, max_satiation, body.health, max_health, episode=ep_idx, step=step_count))
+                        else:
+                             frames.append(env.render_rgb_array(body.satiation, max_satiation, episode=ep_idx, step=step_count))
                     else:
                         frames.append(env.render_rgb_array(episode=ep_idx, step=step_count))
                 break
