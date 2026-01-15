@@ -147,7 +147,7 @@ def plot_q_table_health(q_table, save_path, food_pos=None):
                 ax.set_title(f"{sat_labels[c_idx]}\n(Satiation={s_level})", fontsize=12, fontweight='bold', color='#495057')
             
             if c_idx == 0:
-                ax.set_ylabel(f"{health_labels[r_idx]}", fontsize=12, fontweight='bold', color='#495057')
+                ax.set_ylabel(f"{health_labels[r_idx]}\n(Health={h_level})", fontsize=12, fontweight='bold', color='#495057')
 
             # Clean Axes
             ax.set_xticks([])
