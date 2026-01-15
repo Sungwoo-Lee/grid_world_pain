@@ -71,6 +71,13 @@ def main():
     start_satiation = config.get('body.start_satiation', 10)
     food_satiation_gain = config.get('body.food_satiation_gain', 10)
 
+    # Health Configs
+    with_health = config.get('body.with_health', False)
+    max_health = config.get('body.max_health', 20)
+    start_health = config.get('body.start_health', 10)
+    health_recovery = config.get('body.health_recovery', 1)
+    start_health_random = config.get('body.start_health_random', True)
+
     # Setup results directory
     results_dir = "results"
     video_dir = os.path.join(results_dir, "videos")
@@ -111,7 +118,12 @@ def main():
         food_satiation_gain=food_satiation_gain,
         use_homeostatic_reward=use_homeostatic_reward,
         satiation_setpoint=satiation_setpoint,
-        death_penalty=death_penalty
+        death_penalty=death_penalty,
+        with_health=with_health,
+        max_health=max_health,
+        start_health=start_health,
+        health_recovery=health_recovery,
+        start_health_random=start_health_random
     )
     
     sensory_system = None
@@ -201,7 +213,9 @@ def main():
                 print(f"Sensory: {sensory_state} (FoodIdx, DangerIdx)")
                 vis_data = sensory_system.get_visualization_data(sensory_state)
                 
-            frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=0, sensory_data=vis_data))
+            health = body.health if body.with_health else None
+            max_health = body.max_health if body.with_health else None
+            frames.append(env.render_rgb_array(satiation=body.satiation, max_satiation=body.max_satiation, health=health, max_health=max_health, episode=ep_num, step=0, sensory_data=vis_data))
         else:
             # No body
             if using_sensory:
@@ -261,7 +275,10 @@ def main():
                      print(f"  Sensory: {next_sensory_state}")
                      vis_data = sensory_system.get_visualization_data(next_sensory_state)
                 print(f"  Reward: {reward}, Done: {done}")
-                frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=step_count+1, sensory_data=vis_data))
+                
+                health = body.health if body.with_health else None
+                max_health = body.max_health if body.with_health else None
+                frames.append(env.render_rgb_array(satiation=body.satiation, max_satiation=body.max_satiation, health=health, max_health=max_health, episode=ep_num, step=step_count+1, sensory_data=vis_data))
             else:
                 reward = env_reward
                 done = env_done
@@ -290,7 +307,9 @@ def main():
                 # Add pause
                 for _ in range(5):
                     if with_satiation:
-                        frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=step_count, sensory_data=vis_data))
+                        health = body.health if body.with_health else None
+                        max_health = body.max_health if body.with_health else None
+                        frames.append(env.render_rgb_array(satiation=body.satiation, max_satiation=body.max_satiation, health=health, max_health=max_health, episode=ep_num, step=step_count, sensory_data=vis_data))
                     else:
                         frames.append(env.render_rgb_array(episode=ep_num, step=step_count, sensory_data=vis_data))
                 break
@@ -300,7 +319,9 @@ def main():
              # Add pause for max steps too
              for _ in range(5):
                 if with_satiation:
-                    frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=step_count, sensory_data=vis_data))
+                    health = body.health if body.with_health else None
+                    max_health = body.max_health if body.with_health else None
+                    frames.append(env.render_rgb_array(satiation=body.satiation, max_satiation=body.max_satiation, health=health, max_health=max_health, episode=ep_num, step=step_count, sensory_data=vis_data))
                 else:
                     frames.append(env.render_rgb_array(episode=ep_num, step=step_count, sensory_data=vis_data))
              
