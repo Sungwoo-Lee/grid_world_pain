@@ -127,10 +127,26 @@ class InteroceptiveBody:
         # 4. Generate Reward signal
         reward = 0
         if self.use_homeostatic_reward:
-            # Drive Reduction for Satiation
-            prev_drive = abs(prev_satiation - self.satiation_setpoint)
-            current_drive = abs(self.satiation - self.satiation_setpoint)
-            reward += (prev_drive - current_drive)
+            # Homeostatic Drive Reduction (Euclidean Distance using NumPy)
+            # Goal state: (satiation_setpoint, max_health)
+            
+            # 1. Define vectors as numpy arrays
+            # ideally [setpoint, max_health] if health enabled
+            if self.with_health:
+                target_vec = np.array([self.satiation_setpoint, self.max_health])
+                prev_vec = np.array([prev_satiation, prev_health])
+                curr_vec = np.array([self.satiation, self.health])
+            else:
+                target_vec = np.array([self.satiation_setpoint])
+                prev_vec = np.array([prev_satiation])
+                curr_vec = np.array([self.satiation])
+            
+            # 2. Calculate Euclidean Drive (Distance to ideal state)
+            prev_drive = np.linalg.norm(prev_vec - target_vec)
+            curr_drive = np.linalg.norm(curr_vec - target_vec)
+            
+            # 3. Reward is reduction in drive
+            reward += (prev_drive - curr_drive)
             
             # Penalize death heavily
             if done:
