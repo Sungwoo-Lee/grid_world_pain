@@ -1,0 +1,11 @@
+sensory:
+  using_sensory: true
+  food_radius: 2
+  danger_radius: 1
+agent:
+  algorithm: "DQN"
+  batch_size: 64
+  learning_rate: 0.001
+  epsilon_start: 1.0
+  epsilon_decay: 0.995
+  epsilon_end: 0.05

@@ -39,7 +39,7 @@ from src.models.q_learning_agent import QLearningAgent
 from src.models.dqn_agent import DQNAgent
 from src.environment.sensory import SensorySystem
 from src.environment.visualization import save_video
-from src.environment.config import get_default_config
+from src.environment.config import get_default_config, Config
 
 def main():
     parser = argparse.ArgumentParser(description="GridWorld Debug Sandbox")
@@ -47,17 +47,35 @@ def main():
     parser.add_argument("--max_steps", type=int, default=30, help="Maximum steps to record per episode (default: 30)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
     parser.add_argument("--config", type=str, help="Path to config YAML")
+    parser.add_argument("--agent_config", type=str, default="configs/agents/dqn.yaml", help="Path to agent config YAML")
+    parser.add_argument("--tag", type=str, default="default", help="Tag for the run")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
+    parser.add_argument("--no-health", action="store_true", help="Disable health")
     parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
     args = parser.parse_args()
 
     # Load default config
     config = get_default_config()
+
+    # Load and merge agent config
+    if args.agent_config:
+        print(f"Loading agent config from: {args.agent_config}")
+        agent_config = Config.load_yaml(args.agent_config)
+        config.merge(agent_config)
     
     # Overrides
+    if args.config:
+        print(f"Loading main config from: {args.config}")
+        user_config = Config.load_yaml(args.config)
+        config.merge(user_config)
+
     with_satiation = config.get('body.with_satiation', True)
     if args.no_satiation:
         with_satiation = False
+
+    with_health = config.get('body.with_health', False)
+    if args.no_health:
+        with_health = False
 
     overeating_death = config.get('body.overeating_death', True)
     if args.no_overeating_death:
@@ -81,10 +99,41 @@ def main():
     health_recovery = config.get('body.health_recovery', 1)
     start_health_random = config.get('body.start_health_random', True)
 
+    # Danger Config
+    danger_prob = config.get('environment.danger_prob', 0.1)
+    danger_duration = config.get('environment.danger_duration', 5)
+    damage_amount = config.get('environment.damage_amount', 5)
+
+    # Sensory Config
+    using_sensory = config.get('sensory.using_sensory', False)
+    food_radius = config.get('sensory.food_radius', 1)
+    danger_radius = config.get('sensory.danger_radius', 1)
+
     # Setup results directory
     results_dir = "results"
-    video_dir = os.path.join(results_dir, "videos")
     
+    # Determine Model Name
+    if using_sensory:
+         model_name = "Debug_DQN"
+    else:
+         model_name = "Debug_Tabular"
+         
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tag = args.tag # Pass tag via config/arg
+    
+    run_name = f"{timestamp}_{tag}"
+    
+    output_dir = os.path.join(results_dir, model_name, run_name)
+    video_dir = os.path.join(output_dir, "videos")
+    os.makedirs(video_dir, exist_ok=True)
+    
+    # Save config for debug
+    if config:
+        config_save_path = os.path.join(output_dir, "config.yaml")
+        with open(config_save_path, 'w') as f:
+            yaml.dump(config.to_dict(), f, default_flow_style=False)
+            
     # Set numpy random seed for determinism
     np.random.seed(args.seed)
     
@@ -95,16 +144,6 @@ def main():
     use_homeostatic_reward = config.get('body.use_homeostatic_reward', False)
     satiation_setpoint = config.get('body.satiation_setpoint', 15)
     death_penalty = config.get('body.death_penalty', 100)
-
-    # Danger Config
-    danger_prob = config.get('environment.danger_prob', 0.1)
-    danger_duration = config.get('environment.danger_duration', 5)
-    damage_amount = config.get('environment.damage_amount', 5)
-
-    # Sensory Config
-    using_sensory = config.get('sensory.using_sensory', False)
-    food_radius = config.get('sensory.food_radius', 1)
-    danger_radius = config.get('sensory.danger_radius', 1)
 
     print(f"Starting Debug Session")
     print(f"Video will be saved to: {video_filename}")

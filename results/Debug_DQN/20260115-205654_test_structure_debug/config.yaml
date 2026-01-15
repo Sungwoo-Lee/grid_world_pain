@@ -1,9 +1,10 @@
 agent:
-  alpha: 0.1
-  epsilon_decay: 0.9995
-  epsilon_min: 0.05
+  algorithm: DQN
+  batch_size: 64
+  epsilon_decay: 0.995
+  epsilon_end: 0.05
   epsilon_start: 1.0
-  gamma: 0.99
+  learning_rate: 0.001
 body:
   death_penalty: 100
   food_satiation_gain: 5
@@ -33,10 +34,12 @@ environment:
   - 0
   width: 5
 sensory:
-  using_sensory: false
+  danger_radius: 1
+  food_radius: 2
+  using_sensory: true
 testing:
   evaluation_episodes: 1
   seed: 56
 training:
   seed: 42
-  training_episode: 1
+  training_episode: 100

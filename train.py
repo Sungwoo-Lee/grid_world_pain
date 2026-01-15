@@ -148,8 +148,31 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     
     # Setup directories
     results_dir = "results"
-    models_dir = os.path.join(results_dir, "models")
+    
+    # Determine Model Name
+    if using_sensory:
+         model_name = "DQN"
+    else:
+         model_name = "Tabular_Q_Learning"
+         
+    # Override from agent config if available
+    if config.get('agent.algorithm'):
+        model_name = config.get('agent.algorithm').replace(" ", "_")
+        
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tag = config.get('tag', 'default') # Pass tag via config/arg
+    
+    run_name = f"{timestamp}_{tag}"
+    
+    output_dir = os.path.join(results_dir, model_name, run_name)
+    models_dir = os.path.join(output_dir, "models")
+    plots_dir = os.path.join(output_dir, "plots") # Ensure plots dir is tracked
+    
     os.makedirs(models_dir, exist_ok=True)
+    os.makedirs(plots_dir, exist_ok=True)
+    
+    print(f"Results will be saved to: {output_dir}")
 
     # Save configuration
     if config_dict is not None:
@@ -413,7 +436,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     print(f"Training history saved to {history_filename}")
 
     # Generate learning curves
-    plot_learning_curves(history_filename, os.path.join(results_dir, "plots"), max_steps=max_steps, milestones=milestones)
+    plot_learning_curves(history_filename, plots_dir, max_steps=max_steps, milestones=milestones)
     
     print("\nTraining complete.")
 
@@ -421,7 +444,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train RL Agent")
     parser.add_argument("--episodes", type=int, help="Number of episodes to train")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
-    parser.add_argument("--config", type=str, help="Path to config YAML")
+    parser.add_argument("--config", type=str, help="Path to base config YAML")
+    parser.add_argument("--agent_config", type=str, default="configs/agents/dqn.yaml", help="Path to agent config YAML")
+    parser.add_argument("--tag", type=str, default="default", help="Tag for the training run")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
     parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
     args = parser.parse_args()
@@ -429,6 +454,16 @@ if __name__ == "__main__":
     # Load default config
     config = get_default_config()
     
+    # Load and merge agent config
+    from src.environment.config import Config
+    if args.agent_config:
+        print(f"Loading agent config from: {args.agent_config}")
+        agent_config = Config.load_yaml(args.agent_config)
+        config.merge(agent_config)
+    
+    # Set tag
+    config.set('tag', args.tag)
+        
     # Overrides
     episodes = args.episodes or config.get('training.training_episode', 100000)
     seed = args.seed or config.get('training.seed', 42)

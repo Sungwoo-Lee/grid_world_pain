@@ -27,21 +27,8 @@ body:
   health_recovery: 1
   start_health_random: true
 
-sensory:
-  using_sensory: true
-  # Radius for detection (1 = UP/DOWN/LEFT/RIGHT)
-  food_radius: 2
-  danger_radius: 1
-
-agent:
-  alpha: 0.1
-  gamma: 0.99
-  epsilon_start: 1.0
-  epsilon_decay: 0.9995
-  epsilon_min: 0.05
-
 training:
-  training_episode: 5000
+  training_episode: 100
   seed: 42
 
 testing:

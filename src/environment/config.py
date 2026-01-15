@@ -37,6 +37,26 @@ class Config:
     def to_dict(self):
         return self._config
 
+    def merge(self, other_config):
+        """
+        Merges another configuration dictionary or Config object into this one.
+        Deep merge is preferred for nested configs.
+        """
+        if isinstance(other_config, Config):
+            other = other_config.to_dict()
+        else:
+            other = other_config
+
+        def deep_update(d, u):
+            for k, v in u.items():
+                if isinstance(v, dict):
+                    d[k] = deep_update(d.get(k, {}), v)
+                else:
+                    d[k] = v
+            return d
+
+        self._config = deep_update(self._config, other)
+
 # Global instance for default config
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "default_configs.yaml")
 

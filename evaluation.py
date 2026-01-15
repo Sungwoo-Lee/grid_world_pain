@@ -18,11 +18,12 @@ import re
 import yaml
 import numpy as np
 import argparse
-from src.grid_world_pain import GridWorld
-from src.grid_world_pain.body import InteroceptiveBody
-from src.grid_world_pain.agent import QLearningAgent
-from src.grid_world_pain.config import Config, get_default_config
-from src.grid_world_pain.visualization import plot_q_table, save_video
+from src.environment import GridWorld
+from src.environment.body import InteroceptiveBody
+from src.models.q_learning_agent import QLearningAgent
+from src.environment.sensory import SensorySystem
+from src.environment.config import Config, get_default_config
+from src.environment.visualization import plot_q_table, save_video
 
 def evaluate_checkpoint(checkpoint_path, results_dir, config):
     """
@@ -33,8 +34,13 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     - Generates Q-table plot and performance video.
     """
     filename = os.path.basename(checkpoint_path)
+    # Try Q-table pattern
     match = re.search(r"q_table_(\d+).npy", filename)
-    pct = match.group(1) if match else ("final" if filename == "q_table.npy" else "unknown")
+    if not match:
+        # Try DQN pattern
+        match = re.search(r"dqn_model_(\d+).pth", filename)
+        
+    pct = match.group(1) if match else ("final" if "final" in filename or filename == "q_table.npy" else "unknown")
     
     print(f"Evaluating checkpoint: {filename} ({pct}%)")
 
@@ -88,22 +94,63 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         start_health_random=start_health_random
     )
     
-    # Mock composite env for agent
-    class CompositeEnv:
-        def __init__(self, env, body):
-            self.height = env.height
-            self.width = env.width
-            self.max_satiation = body.max_satiation
-            self.with_health = body.with_health
-            self.max_health = body.max_health
+    # Sensory System
+    using_sensory = config.get('sensory.using_sensory', False)
+    sensory_system = None
+    if using_sensory:
+        food_radius = config.get('sensory.food_radius', 1)
+        danger_radius = config.get('sensory.danger_radius', 1)
+        sensory_system = SensorySystem(food_radius=food_radius, danger_radius=danger_radius)
+
+    # Initialize Agent
+    agent = None
+    if using_sensory:
+        # DQN
+        input_dim = sensory_system.food_sensor.vector_size + sensory_system.danger_sensor.vector_size
+        if with_satiation:
+            input_dim += 1
+            if with_health:
+                 input_dim += 1
+        
+        from src.models.dqn_agent import DQNAgent
+        agent = DQNAgent(state_dim=input_dim, action_dim=5)
+        # Load weights
+        import torch
+        agent.policy_net.load_state_dict(torch.load(checkpoint_path))
+        agent.target_net.load_state_dict(agent.policy_net.state_dict())
+        agent.epsilon = 0.0 # Eval mode
+    else:
+        # Tabular
+        class CompositeEnv:
+            def __init__(self, env, body):
+                self.height = env.height
+                self.width = env.width
+                self.max_satiation = body.max_satiation
+                self.with_health = body.with_health
+                self.max_health = body.max_health
+                
+        agent = QLearningAgent(CompositeEnv(env, body), with_satiation=with_satiation)
+        try:
+            agent.load(checkpoint_path)
+            agent.epsilon = 0 # No exploration during evaluation
+        except Exception as e:
+            print(f"  Error loading checkpoint: {e}")
+            return
             
-    agent = QLearningAgent(CompositeEnv(env, body), with_satiation=with_satiation)
-    
-    try:
-        agent.load(checkpoint_path)
-    except Exception as e:
-        print(f"  Error loading checkpoint: {e}")
-        return
+    # Preprocessor for DQN
+    def preprocess_state(state_tuple):
+        food_idx = state_tuple[0]
+        danger_idx = state_tuple[1]
+        food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
+        danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
+        flat_list = list(food_vec) + list(danger_vec)
+        if len(state_tuple) > 2:
+            satiation = state_tuple[2]
+            flat_list.append(satiation / body.max_satiation) 
+        if len(state_tuple) > 3:
+            health = state_tuple[3]
+            flat_list.append(health / body.max_health)
+        return np.array(flat_list, dtype=np.float32)
 
     # 3. Run Evaluation Episodes (Collect Frames)
     agent.epsilon = 0 # No exploration during evaluation
@@ -111,46 +158,109 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     
     for ep in range(num_episodes):
         ep_idx = ep + 1
-        env_state = env.reset()
-        
+        # Determine initial sensory state
+        current_agent_pos = env.agent_pos
+        current_danger_pos_list = []
+        if hasattr(env, 'danger_pos') and env.danger_pos is not None:
+             current_danger_pos_list = [env.danger_pos]
+        if using_sensory:
+            sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
+
         if with_satiation:
             body_return = body.reset()
-            if with_health:
-                satiation, health = body_return
-                state = (*env_state, satiation, health)
-                frames.append(env.render_rgb_array(satiation, max_satiation, health, max_health, episode=ep_idx, step=0))
+            if using_sensory:
+                if isinstance(body_return, tuple):
+                     state = (*sensory_state, *body_return)
+                else:
+                     state = (*sensory_state, body_return)
             else:
-                satiation = body_return
-                state = (*env_state, satiation)
-                frames.append(env.render_rgb_array(satiation, max_satiation, episode=ep_idx, step=0))
+                if with_health:
+                    satiation, health = body_return
+                    state = (*env_state, satiation, health)
+                    frames.append(env.render_rgb_array(satiation, max_satiation, health, max_health, episode=ep_idx, step=0))
+                else:
+                    satiation = body_return
+                    state = (*env_state, satiation)
+                    frames.append(env.render_rgb_array(satiation, max_satiation, episode=ep_idx, step=0))
+            
+            # Initial frame handling for POMDP?
+            # Existing code only handled FOMDP rendering logic above for initial frame.
+            # POMDP initial frame logic:
+            if using_sensory and with_satiation:
+                health = body.health if with_health else None
+                max_h = body.max_health if with_health else None
+                frames.append(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)))
+
         else:
-            state = env_state
-            frames.append(env.render_rgb_array(episode=ep_idx, step=0))
+            if using_sensory:
+                state = sensory_state
+                frames.append(env.render_rgb_array(episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)))
+            else:
+                state = env_state
+                frames.append(env.render_rgb_array(episode=ep_idx, step=0))
         
         done = False
         step_count = 0
+        
+        # Preprocess if DQN
+        if using_sensory:
+            flat_state = preprocess_state(state)
+        
         while not done and step_count < max_steps:
-            action = agent.choose_action(state)
+            if using_sensory:
+                action = agent.choose_action(flat_state)
+            else:
+                action = agent.choose_action(state)
+            
             next_env_state, _, env_done, info = env.step(action)
+            
+            # Observations
+            current_agent_pos = env.agent_pos
+            if hasattr(env, 'danger_pos') and env.danger_pos is not None:
+                 current_danger_pos_list = [env.danger_pos]
+            else:
+                 current_danger_pos_list = []
+            if using_sensory:
+                 next_sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
             
             if with_satiation:
                 body_return, _, body_done = body.step(info)
                 done = env_done or body_done
                 
-                if with_health:
-                    next_sat, next_health = body_return
-                    next_state = (*next_env_state, next_sat, next_health)
-                    frames.append(env.render_rgb_array(next_sat, max_satiation, next_health, max_health, episode=ep_idx, step=step_count+1))
+                vis_data = None
+                if using_sensory:
+                     vis_data = sensory_system.get_visualization_data(next_sensory_state)
+                     if isinstance(body_return, tuple):
+                         next_state = (*next_sensory_state, *body_return)
+                     else:
+                         next_state = (*next_sensory_state, body_return)
                 else:
-                    next_sat = body_return
-                    next_state = (*next_env_state, next_sat)
-                    frames.append(env.render_rgb_array(next_sat, max_satiation, episode=ep_idx, step=step_count+1))     
+                     # FOMDP logic
+                     if with_health:
+                        next_sat, next_health = body_return
+                        next_state = (*next_env_state, next_sat, next_health)
+                     else:
+                        next_sat = body_return
+                        next_state = (*next_env_state, next_sat)
+
+                health = body.health if with_health else None
+                max_h = body.max_health if with_health else None
+                frames.append(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=step_count+1, sensory_data=vis_data))     
             else:
                 done = env_done
-                next_state = next_env_state
-                frames.append(env.render_rgb_array(episode=ep_idx, step=step_count+1))
+                vis_data = None
+                
+                if using_sensory:
+                    next_state = next_sensory_state
+                    vis_data = sensory_system.get_visualization_data(next_sensory_state)
+                else:
+                    next_state = next_env_state
+
+                frames.append(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data))
             
             state = next_state
+            if using_sensory:
+                flat_state = preprocess_state(state)
             step_count += 1
             
             if done:
@@ -159,21 +269,25 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                     if with_satiation:
                         if with_health:
                              # Use last known state values
-                             frames.append(env.render_rgb_array(body.satiation, max_satiation, body.health, max_health, episode=ep_idx, step=step_count))
+                             frames.append(env.render_rgb_array(body.satiation, max_satiation, body.health, max_health, episode=ep_idx, step=step_count, sensory_data=vis_data))
                         else:
-                             frames.append(env.render_rgb_array(body.satiation, max_satiation, episode=ep_idx, step=step_count))
+                             frames.append(env.render_rgb_array(body.satiation, max_satiation, episode=ep_idx, step=step_count, sensory_data=vis_data))
                     else:
-                        frames.append(env.render_rgb_array(episode=ep_idx, step=step_count))
+                        frames.append(env.render_rgb_array(episode=ep_idx, step=step_count, sensory_data=vis_data))
                 break
 
     # 4. Generate Visual Artifacts
-    # Plot Q-Table
-    plots_dir = os.path.join(results_dir, "plots")
-    vis_filename = os.path.join(plots_dir, f"q_table_vis_{pct}.png" if pct != "final" else "q_table_vis.png")
-    plot_q_table(agent.q_table, vis_filename, food_pos)
+    
+    # Plot Q-Table (Tabular only)
+    if not using_sensory and hasattr(agent, 'q_table'):
+        plots_dir = os.path.join(results_dir, "plots")
+        os.makedirs(plots_dir, exist_ok=True)
+        vis_filename = os.path.join(plots_dir, f"q_table_vis_{pct}.png" if pct != "final" else "q_table_vis.png")
+        plot_q_table(agent.q_table, vis_filename, food_pos)
     
     # Save Video
     videos_dir = os.path.join(results_dir, "videos")
+    os.makedirs(videos_dir, exist_ok=True)
     video_filename = os.path.join(videos_dir, f"video_{pct}.mp4" if pct != "final" else "final_trained_agent.mp4")
     save_video(frames, video_filename)
 
@@ -216,13 +330,22 @@ def main():
     print("-" * 40)
 
     # 4. Find all checkpoints
-    checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
-    def extract_number(path):
-        match = re.search(r"q_table_(\d+).npy", path)
-        return int(match.group(1)) if match else -1
+    using_sensory = config.get('sensory.using_sensory', False)
+    if using_sensory:
+        checkpoints = glob.glob(os.path.join(models_dir, "dqn_model_*.pth"))
+        def extract_number(path):
+            match = re.search(r"dqn_model_(\d+).pth", path)
+            return int(match.group(1)) if match else -1
+        final_model = os.path.join(models_dir, "dqn_model_final.pth")
+    else:
+        checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
+        def extract_number(path):
+            match = re.search(r"q_table_(\d+).npy", path)
+            return int(match.group(1)) if match else -1
+        final_model = os.path.join(models_dir, "q_table.npy")
+
     checkpoints.sort(key=extract_number)
     
-    final_model = os.path.join(models_dir, "q_table.npy")
     if os.path.exists(final_model):
         checkpoints.append(final_model)
 
