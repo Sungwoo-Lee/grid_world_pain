@@ -85,11 +85,18 @@ def main():
     satiation_setpoint = config.get('body.satiation_setpoint', 15)
     death_penalty = config.get('body.death_penalty', 100)
 
+    # Danger Config
+    danger_prob = config.get('environment.danger_prob', 0.1)
+    danger_duration = config.get('environment.danger_duration', 5)
+    damage_amount = config.get('environment.damage_amount', 5)
+
     print(f"Starting Debug Session")
     print(f"Video will be saved to: {video_filename}")
 
     # Initialize components
-    env = GridWorld(height=height, width=width, start=start_pos, food_pos=food_pos, with_satiation=with_satiation, max_steps=max_steps)
+    env = GridWorld(height=height, width=width, start=start_pos, food_pos=food_pos, 
+                    with_satiation=with_satiation, max_steps=max_steps,
+                    danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount)
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
         start_satiation=start_satiation, 

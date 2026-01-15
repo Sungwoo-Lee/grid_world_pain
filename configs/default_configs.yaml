@@ -35,7 +35,7 @@ agent:
   epsilon_min: 0.05
 
 training:
-  training_episode: 10000
+  training_episode: 5000
   seed: 42
 
 testing:
