@@ -1,6 +1,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as PathEffects
 
 class GridWorld:
     """
@@ -171,93 +172,117 @@ class GridWorld:
 
     def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=None, step=None):
         """
-        Renders the grid as an RGB image using Matplotlib with enhanced visualization.
-        
-        Args:
-            satiation (int, optional): Current satiation level to display.
-            max_satiation (int, optional): Max satiation level for display.
-            health (int, optional): Current health level.
-            max_health (int, optional): Max health level.
-            episode (int, optional): Current episode number.
-            step (int, optional): Current step number.
-
-        Returns:
-            numpy.ndarray: An RGB image array of shape (height, width, 3).
+        Renders the grid as an RGB image using Matplotlib with a professional Light Theme (Scientific/Apple Style).
         """
-        # Set figsize and dpi to ensure output dimensions are multiples of 16 (640x720) to avoid imageio warning
-        fig, ax = plt.subplots(figsize=(6.4, 7.2), dpi=100)
+        # --- Theme Settings ---
+        bg_color = '#FFFFFF'       # White Background
+        grid_color = '#E9ECEF'     # Very light grey for grid
+        agent_color = '#339AF0'    # Soft Blue
+        food_color = '#40C057'     # Soft Green
+        danger_color = '#FA5252'   # Soft Red
+        text_color = '#343A40'     # Dark Grey text
         
-        # Grid area
-        ax.set_ylim(0, self.height)
-        ax.set_xlim(0, self.width)
-        ax.set_xticks(np.arange(0, self.width + 1, 1))
-        ax.set_yticks(np.arange(0, self.height + 1, 1))
-        ax.grid(True, color='black')
-        ax.set_aspect('equal')
+        # Setup Figure with GridSpec for Dashboard Layout
+        fig = plt.figure(figsize=(8, 6), dpi=100)
+        fig.patch.set_facecolor(bg_color)
         
-        # Title Info (Episode / Step)
-        title_text = ""
-        if episode is not None:
-            title_text += f"Episode: {episode}  "
-        if step is not None:
-            title_text += f"Step: {step}"
-        if title_text:
-            ax.set_title(title_text, fontsize=12, fontweight='bold', pad=10)
+        # GridSpec: Main Grid (left) and Stats Panel (right)
+        gs = fig.add_gridspec(1, 2, width_ratios=[2, 1])
+        ax_grid = fig.add_subplot(gs[0])
+        ax_stats = fig.add_subplot(gs[1])
         
-        # Invert y-axis to match array indexing (0,0 at top-left)
-        ax.invert_yaxis()
+        # --- 1. Draw Grid World ---
+        ax_grid.set_facecolor(bg_color)
+        ax_grid.set_xlim(-0.5, self.width - 0.5)
+        ax_grid.set_ylim(-0.5, self.height - 0.5)
+        ax_grid.invert_yaxis() # Top-left is (0,0)
+        ax_grid.set_aspect('equal')
+        ax_grid.axis('off') # Hide default axes
         
-        # Draw Agent (Red Circle)
-        agent_circle = plt.Circle((self.agent_pos[1] + 0.5, self.agent_pos[0] + 0.5), 0.3, color='blue', label='Agent')
-        ax.add_patch(agent_circle)
+        # Use simple subtle shadow effect
+        shadow_effect = [PathEffects.SimpleLineShadow(offset=(2, -2), shadow_color='grey', alpha=0.3), PathEffects.Normal()]
         
-        # Draw Food / Danger
-        if self.is_danger:
-            target_color = 'red'
-            target_label = 'Danger'
-        else:
-            target_color = 'green'
-            target_label = 'Food' if self.with_satiation else 'Goal'
+        # Draw Custom Grid Lines
+        for x in range(self.width + 1):
+            ax_grid.vlines(x - 0.5, -0.5, self.height - 0.5, colors=grid_color, linestyles='-', linewidth=1.5)
+        for y in range(self.height + 1):
+            ax_grid.hlines(y - 0.5, -0.5, self.width - 0.5, colors=grid_color, linestyles='-', linewidth=1.5)
             
-        food_rect = plt.Rectangle((self.food_pos[1], self.food_pos[0]), 1, 1, color=target_color, alpha=0.5, label=target_label)
-        ax.add_patch(food_rect)
-        
-        # Remove axis ticks/labels for a cleaner look
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
+        # Draw Food / Danger
+        fr, fc = self.food_pos
+        if self.is_danger:
+            # Danger: Cross / Skull representation
+            ax_grid.plot(fc, fr, marker='X', markersize=20, color=danger_color, markeredgecolor='white', markeredgewidth=2, path_effects=shadow_effect)
+        else:
+            # Food: Diamond representation
+            ax_grid.plot(fc, fr, marker='D', markersize=18, color=food_color, markeredgecolor='white', markeredgewidth=2, path_effects=shadow_effect)
+            
+        # Draw Agent
+        ar, ac = self.agent_pos
+        # Agent: Circle with thick border
+        agent_circle = plt.Circle((ac, ar), 0.35, color=agent_color, path_effects=shadow_effect)
+        ax_grid.add_patch(agent_circle)
+        # Inner dot for agent
+        ax_grid.plot(ac, ar, marker='o', markersize=5, color='white')
 
-        # --- Status Bars ---
+        # --- 2. Draw Stats Dashboard ---
+        ax_stats.set_facecolor(bg_color)
+        ax_stats.axis('off')
+        
+        # Clean Title
+        ax_stats.text(0.5, 0.90, "INTEROCEPTIVE AI", color=text_color, ha='center', fontsize=14, fontweight='bold', transform=ax_stats.transAxes)
+        ax_stats.plot([0.2, 0.8], [0.88, 0.88], color='#ADB5BD', transform=ax_stats.transAxes, linewidth=1)
+        
+        # Episode / Step info (Monospace font for numbers)
+        ep_str = f"EPISODE: {episode}" if episode is not None else "EPISODE: --"
+        step_str = f"STEP:    {step}" if step is not None else "STEP:    --"
+        ax_stats.text(0.1, 0.80, ep_str, color='#495057', fontsize=10, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        ax_stats.text(0.1, 0.76, step_str, color='#495057', fontsize=10, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        
+        # Bars Helper (Flat Design)
+        def draw_bar(y_pos, label, value, max_val, color):
+            pct = max(0, min(1, value / max_val)) if max_val > 0 else 0
+            # Label
+            ax_stats.text(0.1, y_pos + 0.05, f"{label}: {value:.1f}/{max_val}", color=text_color, fontsize=9, fontweight='bold', transform=ax_stats.transAxes)
+            # Background Bar (Light Grey)
+            rect_bg = plt.Rectangle((0.1, y_pos), 0.8, 0.03, color='#F1F3F5', transform=ax_stats.transAxes, ec='none')
+            ax_stats.add_patch(rect_bg)
+            # Fill Bar
+            rect_fill = plt.Rectangle((0.1, y_pos), 0.8 * pct, 0.03, color=color, transform=ax_stats.transAxes, ec='none')
+            ax_stats.add_patch(rect_fill)
+            
         # Satiation Bar
         if self.with_satiation and satiation is not None and max_satiation is not None:
-            bar_ax = fig.add_axes([0.15, 0.08, 0.7, 0.03]) 
-            pct = max(0, min(1, satiation / max_satiation))
-            bar_color = (1 - pct, pct, 0) # R->G
-            bar_ax.barh(0, pct, color=bar_color, height=0.5)
-            bar_ax.set_xlim(0, 1)
-            bar_ax.axis('off')
-            bar_ax.set_title(f"Satiation: {satiation}", fontsize=10, loc='left')
-            rect = plt.Rectangle((0, -0.25), 1, 0.5, fill=False, edgecolor='black')
-            bar_ax.add_patch(rect)
-
+            draw_bar(0.60, "SATIATION", satiation, max_satiation, food_color)
+            
         # Health Bar
         if health is not None and max_health is not None:
-            health_ax = fig.add_axes([0.15, 0.02, 0.7, 0.03])
-            pct_h = max(0, min(1, health / max_health))
-            # Cyan to Blue or distinct color
-            health_color = (1-pct_h, 0, pct_h) # Red to Blue? Or just Cyan
-            health_color = 'cyan'
+            draw_bar(0.50, "HEALTH", health, max_health, danger_color)
             
-            health_ax.barh(0, pct_h, color=health_color, height=0.5)
-            health_ax.set_xlim(0, 1)
-            health_ax.axis('off')
-            health_ax.set_title(f"Health: {health}", fontsize=10, loc='left')
-            rect_h = plt.Rectangle((0, -0.25), 1, 0.5, fill=False, edgecolor='black')
-            health_ax.add_patch(rect_h)
+        # Status Text (Pill style background)
+        status_y = 0.35
+        if self.is_danger:
+            status_text = "RESOURCE: DANGER"
+            status_bg = danger_color
+        else:
+            status_text = "RESOURCE: FOOD"
+            status_bg = food_color
+            
+        ax_stats.text(0.5, status_y, status_text, color='white', ha='center', va='center', fontsize=10, fontweight='bold', 
+                      transform=ax_stats.transAxes,
+                      bbox=dict(boxstyle='round,pad=0.5', facecolor=status_bg, edgecolor='none'))
 
-        # Draw the canvas and convert to numpy array
+        # Footer
+        ax_stats.text(0.5, 0.05, "GridWorld Environment", color='#CED4DA', ha='center', fontsize=8, transform=ax_stats.transAxes)
+
+        # Convert to array
         fig.canvas.draw()
-        data = np.frombuffer(fig.canvas.buffer_rgba(), dtype=np.uint8)
-        data = data.reshape(fig.canvas.get_width_height()[::-1] + (4,))
         
-        plt.close(fig) # Close the figure to prevent memory leaks
-        return data[..., :3]  # Return RGB channels, omitting Alpha
+        # Modern Matplotlib (buffer_rgba)
+        buf = fig.canvas.buffer_rgba()
+        data = np.asarray(buf)
+        img = data[..., :3]
+        
+        plt.close(fig)
+        
+        return img

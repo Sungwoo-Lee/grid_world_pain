@@ -90,10 +90,8 @@ def plot_q_table(q_table, save_path, food_pos=None):
 
 def plot_q_table_health(q_table, save_path, food_pos=None):
     """
-    Visualizes representative slices of a 5D Q-table (Height, Width, Sat, Health, Actions).
-    Visualizes across Satiation (Cols) and Health (Rows).
+    Visualizes representative slices of a 5D Q-table (Height, Width, Sat, Health, Actions) with fancy styling.
     """
-    # Ensure output directory exists
     if save_path:
         os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
         
@@ -105,20 +103,20 @@ def plot_q_table_health(q_table, save_path, food_pos=None):
     sat_slices = [max_satiation // 4, max_satiation // 2, int(max_satiation * 0.9)]
     sat_labels = ["Low Sat", "Mid Sat", "High Sat"]
     
-    # Health Slices: Injured vs Healthy
-    # We want to see behavior when severely injured vs fully healthy
     health_slices = [max_health // 4, int(max_health * 0.9)] 
     health_labels = ["Injured", "Healthy"]
     
     rows = len(health_slices)
     cols = len(sat_slices)
     
-    # Larger figure for multi-row
-    fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
+    # Global Font Settings for aesthetics
+    plt.rcParams['font.family'] = 'sans-serif'
+    
+    fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows), constrained_layout=True)
+    fig.patch.set_facecolor('#F8F9FA') # Soft grey background for the whole figure
     
     for r_idx, h_level in enumerate(health_slices):
         for c_idx, s_level in enumerate(sat_slices):
-            # If 1 row or 1 col, axes might be 1D, handle that but here we have 2x3 so it's 2D
             ax = axes[r_idx, c_idx]
             
             # Extract 2D Q-table
@@ -127,34 +125,65 @@ def plot_q_table_health(q_table, save_path, food_pos=None):
             v_values = np.max(q_slice, axis=2)
             policy = np.argmax(q_slice, axis=2)
             
+            # Normalize
             v_min, v_max = np.min(v_values), np.max(v_values)
             if v_max > v_min:
                 v_norm = (v_values - v_min) / (v_max - v_min)
             else:
                 v_norm = np.zeros_like(v_values)
-                
+            
+            # Heatmap with white lines to separate grid cells
             cax = ax.imshow(v_norm, cmap='viridis', interpolation='nearest', vmin=0, vmax=1)
             
-            ax.set_title(f"{health_labels[r_idx]} (H={h_level}) | {sat_labels[c_idx]} (S={s_level})")
-            ax.set_xticks(np.arange(width))
-            ax.set_yticks(np.arange(height))
+            # Grid lines (white for separation)
+            ax.set_xticks(np.arange(width) - 0.5, minor=True)
+            ax.set_yticks(np.arange(height) - 0.5, minor=True)
+            ax.grid(which="minor", color="white", linestyle='-', linewidth=2)
+            ax.tick_params(which="minor", bottom=False, left=False)
+            
+            # Title with consistent padding
+            title_str = f"{health_labels[r_idx]}\n(Health={h_level})" if c_idx == 0 else ""
+            if r_idx == 0:
+                ax.set_title(f"{sat_labels[c_idx]}\n(Satiation={s_level})", fontsize=12, fontweight='bold', color='#495057')
+            
+            if c_idx == 0:
+                ax.set_ylabel(f"{health_labels[r_idx]}", fontsize=12, fontweight='bold', color='#495057')
+
+            # Clean Axes
+            ax.set_xticks([])
+            ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+            
+            # Arrows with path effects for visibility
+            arrow_shadow = [PathEffects.withStroke(linewidth=2, foreground='black', alpha=0.5)]
             
             for r in range(height):
                 for c in range(width):
+                    val = v_norm[r, c]
                     action = policy[r, c]
+                    # Arrow color dynamic: White for dark cells, Black for light cells (simple heuristic)
+                    arrow_color = 'white' if val < 0.7 else 'black'
+                    
                     arrow_char = ['\u2191', '\u2192', '\u2193', '\u2190', '\u2022'][action]
-                    ax.text(c, r, arrow_char, ha='center', va='center', color='white', fontsize=12, weight='bold')
+                    text = ax.text(c, r, arrow_char, ha='center', va='center', color=arrow_color, fontsize=14, weight='bold')
+                    text.set_path_effects(arrow_shadow)
             
+            # Food marker
             if food_pos is not None:
                 fr, fc = food_pos
-                ax.text(fc, fr, 'F', ha='center', va='center', color='lime', fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
+                ax.text(fc, fr, 'F', ha='center', va='center', color='#51CF66', fontsize=22, weight='bold', 
+                        path_effects=[PathEffects.withStroke(linewidth=4, foreground='white')])
 
-    fig.subplots_adjust(right=0.9)
-    cbar_ax = fig.add_axes([0.92, 0.15, 0.02, 0.7])
-    fig.colorbar(cax, cax=cbar_ax, label='Max Q-Value (Normalized)')
+    # Colorbar
+    # Create an axes for colorbar
+    # fig.colorbar(cax, ax=axes, orientation='vertical', fraction=0.02, pad=0.04, label="Normalized Q-Value")
+    cb = fig.colorbar(cax, ax=axes.ravel().tolist(), orientation='vertical', shrink=0.6, pad=0.02)
+    cb.set_label('Max Q-Value (Normalized)', fontsize=12, labelpad=10)
+    cb.outline.set_visible(False)
     
-    plt.suptitle("Policy: Satiation (Cols) vs Health (Rows)", fontsize=16)
-    plt.savefig(save_path)
+    plt.suptitle("Learned Policy: Health vs Satiation", fontsize=18, fontweight='bold', color='#343A40', y=1.02)
+    plt.savefig(save_path, bbox_inches='tight', dpi=150, facecolor='#F8F9FA')
     plt.close(fig)
 
 def plot_q_table_conventional(q_table, save_path, food_pos=None):
