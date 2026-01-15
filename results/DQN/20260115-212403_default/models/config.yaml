@@ -37,10 +37,10 @@ sensory:
   danger_radius: 1
   food_radius: 2
   using_sensory: false
-tag: dqn_verify_final_pth
+tag: default
 testing:
   evaluation_episodes: 1
   seed: 56
 training:
   seed: 42
-  training_episode: 1
+  training_episode: 1000

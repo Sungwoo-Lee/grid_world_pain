@@ -58,7 +58,7 @@ class Config:
         self._config = deep_update(self._config, other)
 
 # Global instance for default config
-DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "default_configs.yaml")
+DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "configs", "environment", "environment.yaml")
 
 def get_default_config():
     # Adjust path if needed based on package structure

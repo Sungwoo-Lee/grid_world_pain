@@ -2,15 +2,17 @@
 Evaluation script for the GridWorld Reinforcement Learning agent.
 
 This script:
-1. Loads the configuration saved during training (results/models/config.yaml).
-2. Sets up the evaluation environment (Grid, Body, Agent).
-3. Evaluates checkpoints:
-   - Runs evaluation episodes.
-   - Collects frames and Q-tables.
-   - Uses visualization utilities to generate plots and videos.
+1. Loads the configuration saved during training (results/.../models/config.yaml).
+2. Sets up the evaluation environment (Grid, Body, Sensory) to match training.
+3. Instantiates the appropriate agent (Tabular, DQN, or PPO).
+4. Evaluates checkpoints:
+   - Runs evaluation episodes (deterministic).
+   - Collects frames for video generation.
+   - Generates Q-table plots (if Tabular).
+   - Saves artifacts to `results/.../RunName/`.
 
 Usage:
-    python evaluation.py [--seed SEED] [--results_dir DIR]
+    python evaluation.py --results_dir results/DQN/MyRun_... --episodes 3
 """
 import os
 import glob

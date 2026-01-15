@@ -1,11 +1,10 @@
 agent:
-  K_epochs: 4
-  algorithm: PPO
-  eps_clip: 0.2
-  gamma: 0.99
-  lr_actor: 0.0003
-  lr_critic: 0.001
-  update_timestep: 1000
+  algorithm: DQN
+  batch_size: 64
+  epsilon_decay: 0.995
+  epsilon_end: 0.05
+  epsilon_start: 1.0
+  learning_rate: 0.001
 body:
   death_penalty: 100
   food_satiation_gain: 5
@@ -37,11 +36,11 @@ environment:
 sensory:
   danger_radius: 1
   food_radius: 2
-  using_sensory: false
-tag: ppo_verify
+  using_sensory: true
+tag: sensory
 testing:
   evaluation_episodes: 1
   seed: 56
 training:
   seed: 42
-  training_episode: 1
+  training_episode: 1000

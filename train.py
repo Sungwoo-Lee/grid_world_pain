@@ -2,25 +2,32 @@
 Training script for the GridWorld Reinforcement Learning agent.
 
 This script:
-1. Initializes the `GridWorld` environment and `InteroceptiveBody`.
-2. Creates a `QLearningAgent`.
+1. Initializes the `GridWorld` environment (Conventional or Interoceptive) and `InteroceptiveBody`.
+2. Creates an RL Agent (Tabular Q-Learning, DQN, or PPO).
 3. Trains the agent for a specified number of episodes.
-4. Periodically saves checkpoints and visualizations to `results/`.
+4. Periodically saves checkpoints (models) and visualizations (learning curves) to `results/`.
 
 Arguments:
 - `--episodes <int>`: (Default: 100000) Total number of training episodes.
 - `--seed <int>`: (Default: 42) Random seed for reproducibility.
+- `--agent_config <path>`: Path to agent-specific config (e.g., `configs/models/ppo.yaml`).
+- `--tag <str>`: Tag for the training run directory.
 
 Usage Examples:
 
-1. **Quick Test** (Verify code works):
+1. **Train DQN**:
    ```bash
-   python train_rl.py --episodes 100 --seed 42
+   python train.py --agent_config configs/models/dqn.yaml --episodes 1000
    ```
 
-2. **Full Training** (Train a robust agent):
+2. **Train PPO**:
    ```bash
-   python train_rl.py --episodes 50000 --seed 123
+   python train.py --agent_config configs/models/ppo.yaml --episodes 5000
+   ```
+   
+3. **Train Tabular**:
+   ```bash
+   python train.py --agent_config configs/models/q_learning.yaml
    ```
 """
 from src.environment import GridWorld
@@ -143,7 +150,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
                 with_health=False, max_health=20, start_health=10, health_recovery=1, start_health_random=True,
                 danger_prob=0.1, danger_duration=5, damage_amount=5):
     """
-    Trains the Q-learning or DQN agent.
+    Trains the RL agent (Tabular Q-Learning, DQN, or PPO).
     """
     import os 
     

@@ -35,9 +35,6 @@ import yaml
 
 from src.environment import GridWorld
 from src.environment.body import InteroceptiveBody
-from src.models.q_learning import QLearningAgent
-from src.models.dqn import DQNAgent
-from src.models.ppo import PPOAgent
 from src.environment.sensory import SensorySystem
 from src.environment.visualization import save_video
 from src.environment.config import get_default_config, Config
@@ -48,7 +45,6 @@ def main():
     parser.add_argument("--max_steps", type=int, default=30, help="Maximum steps to record per episode (default: 30)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
     parser.add_argument("--config", type=str, help="Path to config YAML")
-    parser.add_argument("--agent_config", type=str, default="configs/models/dqn.yaml", help="Path to agent config YAML")
     parser.add_argument("--tag", type=str, default="default", help="Tag for the run")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
     parser.add_argument("--no-health", action="store_true", help="Disable health")
@@ -58,12 +54,6 @@ def main():
     # Load default config
     config = get_default_config()
 
-    # Load and merge agent config
-    if args.agent_config:
-        print(f"Loading agent config from: {args.agent_config}")
-        agent_config = Config.load_yaml(args.agent_config)
-        config.merge(agent_config)
-    
     # Overrides
     if args.config:
         print(f"Loading main config from: {args.config}")
@@ -110,38 +100,13 @@ def main():
     food_radius = config.get('sensory.food_radius', 1)
     danger_radius = config.get('sensory.danger_radius', 1)
 
-    # Setup results directory
-    results_dir = "results"
+    # Setup paths
+    # Save video directly to current directory for easy debugging access
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    video_filename = os.path.join(current_dir, "gridworld_debug.mp4")
     
-    # Determine Model Name
-    model_name_config = config.get('agent.algorithm', 'Tabular Q-Learning').replace(" ", "_")
-    if model_name_config == "DQN":
-         model_name = "Debug_DQN"
-    elif model_name_config == "PPO":
-         model_name = "Debug_PPO"
-    else:
-         model_name = "Debug_Tabular"
-         
-    import datetime
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    tag = args.tag # Pass tag via config/arg
-    
-    run_name = f"{timestamp}_{tag}"
-    
-    output_dir = os.path.join(results_dir, model_name, run_name)
-    video_dir = os.path.join(output_dir, "videos")
-    os.makedirs(video_dir, exist_ok=True)
-    
-    # Save config for debug
-    if config:
-        config_save_path = os.path.join(output_dir, "config.yaml")
-        with open(config_save_path, 'w') as f:
-            yaml.dump(config.to_dict(), f, default_flow_style=False)
-            
     # Set numpy random seed for determinism
     np.random.seed(args.seed)
-    
-    video_filename = os.path.join(video_dir, "gridworld_debug.mp4")
     
     random_start_satiation = config.get('body.random_start_satiation', True)
     food_satiation_gain = config.get('body.food_satiation_gain', 10)
@@ -197,90 +162,10 @@ def main():
         state_dims = sensory_dims + body_dims
         print(f"State Dimensions: {state_dims}")
 
-    # Helper to flatten state for DQN
-    def preprocess_state(state_tuple):
-        """
-        Flattens the complex state tuple into a single 1D numpy array.
-        Structure: [Sensory/Coords, Satiation (1), Health (1)]
-        """
-        flat_list = []
-        
-        if using_sensory:
-            food_idx = state_tuple[0]
-            danger_idx = state_tuple[1]
-            food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
-            danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
-            flat_list.extend(food_vec)
-            flat_list.extend(danger_vec)
-            body_start_idx = 2
-        else:
-            # Coords
-            row = state_tuple[0]
-            col = state_tuple[1]
-            flat_list.append(row / height)
-            flat_list.append(col / width)
-            body_start_idx = 2
-        
-        # Append Body States
-        if len(state_tuple) > body_start_idx:
-            satiation = state_tuple[body_start_idx]
-            flat_list.append(satiation / max_satiation) # Normalize
-            
-        if len(state_tuple) > body_start_idx + 1:
-            health = state_tuple[body_start_idx + 1]
-            flat_list.append(health / max_health) # Normalize
-            
-        return np.array(flat_list, dtype=np.float32)
-
-    # Initialize Agent
-    algorithm = config.get('agent.algorithm', "Tabular Q-Learning")
-    
-    if algorithm == "DQN":
-        # Calculate Input Dimension for DQN
-        input_dim = 0
-        if using_sensory:
-            input_dim = sensory_system.food_sensor.vector_size + \
-                        sensory_system.danger_sensor.vector_size
-        else:
-            input_dim = 2 # Coords
-            
-        if with_satiation:
-            input_dim += 1
-            if config.get('body.with_health', False):
-                 input_dim += 1
-                 
-        print(f"DQN Input Dimension: {input_dim}")
-        agent = DQNAgent(state_dim=input_dim, action_dim=5)
-        # Load weights if exist? For debug scratchpad, maybe not.
-    elif algorithm == "PPO":
-        # Calculate Input Dimension for PPO (Same as DQN)
-        input_dim = 0
-        if using_sensory:
-            input_dim = sensory_system.food_sensor.vector_size + \
-                        sensory_system.danger_sensor.vector_size
-        else:
-            input_dim = 2 # Coords
-            
-        if with_satiation:
-            input_dim += 1
-            if config.get('body.with_health', False):
-                 input_dim += 1
-                 
-        print(f"PPO Input Dimension: {input_dim}")
-        agent = PPOAgent(state_dim=input_dim, action_dim=5)
-    else:
-        # Mock composite env for agent init
-        class CompositeEnv:
-            def __init__(self, env, body):
-                self.height = env.height
-                self.width = env.width
-                self.max_satiation = body.max_satiation
-                self.with_health = body.with_health
-                self.max_health = body.max_health
-                
-        composite_env = CompositeEnv(env, body)
-        agent = QLearningAgent(composite_env, with_satiation=with_satiation, state_dims=state_dims)
-        agent.epsilon = 1.0 # Force random behavior for debug sandbox
+    # --- REMOVED AGENT ---
+    # This script is for environment testing only.
+    # We will use random actions.
+    print(f"Agent: Random (Environment Debug Mode)")
     
     frames = []
     
@@ -355,13 +240,9 @@ def main():
         while not done and step_count < max_steps_per_episode:
             
             # Action Selection
-            if isinstance(agent, (DQNAgent, PPOAgent)):
-                # Preprocess state for DQN/PPO
-                flat_state = preprocess_state(state)
-                # DQN/PPO choose action
-                action = agent.choose_action(flat_state)
-            else:
-                action = agent.choose_action(state)
+            # Action Selection
+            # Random Action for Debugging
+            action = np.random.randint(0, 5)
                 
             action_names = ["Up", "Right", "Down", "Left", "Stay"]
             

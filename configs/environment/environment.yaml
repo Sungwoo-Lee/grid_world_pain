@@ -36,7 +36,7 @@ testing:
   evaluation_episodes: 1
 
 sensory:
-  using_sensory: false
+  using_sensory: true
   food_radius: 2
   danger_radius: 1
 
