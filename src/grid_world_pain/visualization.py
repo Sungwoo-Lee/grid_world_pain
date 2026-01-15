@@ -268,7 +268,8 @@ def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestone
     # Global Settings
     plt.rcParams['font.family'] = 'sans-serif'
     
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True, facecolor=bg_color)
+    # 3 Subplots: Reward, Steps, Epsilon
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 12), sharex=True, facecolor=bg_color)
     
     # --- Plot 1: Cumulative Reward ---
     window = max(1, len(df) // 100)
@@ -286,7 +287,6 @@ def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestone
     ax2.plot(df['episode'], df['steps'], color=steps_color_raw, alpha=0.5, label='Raw Steps', linewidth=1)
     ax2.plot(df['episode'], df['steps'].rolling(window=window).mean(), color=steps_color_main, linewidth=2.5, label=f'Moving Average (n={window})')
     
-    ax2.set_xlabel("Episode", fontsize=12, fontweight='bold', color='#495057')
     ax2.set_ylabel("Survival Steps", fontsize=12, fontweight='bold', color='#495057')
     ax2.set_title("Training Performance: Survival Capacity", loc='left', fontsize=14, fontweight='bold', pad=15, color='#212529')
     ax2.legend(frameon=True, facecolor='white', framealpha=0.8)
@@ -295,14 +295,30 @@ def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestone
     if max_steps:
         ax2.set_ylim(0, max_steps * 1.1)  # Give some headroom for labels
 
+    # --- Plot 3: Epsilon Decay ---
+    ax3.set_facecolor(bg_color)
+    if 'epsilon' in df.columns:
+        epsilon_color = '#FCC419' # Yellow/Orange
+        ax3.plot(df['episode'], df['epsilon'], color=epsilon_color, linewidth=2, label='Epsilon')
+        ax3.fill_between(df['episode'], 0, df['epsilon'], color=epsilon_color, alpha=0.1)
+    else:
+        ax3.text(0.5, 0.5, "Epsilon data not found in history", ha='center', va='center', color='#868E96')
+        
+    ax3.set_xlabel("Episode", fontsize=12, fontweight='bold', color='#495057')
+    ax3.set_ylabel("Epsilon (Exploration)", fontsize=12, fontweight='bold', color='#495057')
+    ax3.set_title("Exploration Strategy: Epsilon Decay", loc='left', fontsize=14, fontweight='bold', pad=15, color='#212529')
+    ax3.legend(frameon=True, facecolor='white', framealpha=0.8)
+    ax3.grid(True, linestyle='--', alpha=0.3, color='#ADB5BD')
+    ax3.set_ylim(0, 1.1)
+
     # --- Vertical Milestone Lines & Badges ---
     if milestones:
         # Get Y limits for badge placement
         y1_min, y1_max = ax1.get_ylim()
         
         for ep, pct in milestones.items():
-            # Add vertical line through both subplots
-            for ax in [ax1, ax2]:
+            # Add vertical line through all subplots
+            for ax in [ax1, ax2, ax3]:
                 ax.axvline(x=ep, color=milestone_color, linestyle=':', alpha=0.6, linewidth=1.5)
             
             # Add "Badge" label at the top of the first plot
@@ -312,7 +328,7 @@ def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestone
                      bbox=dict(boxstyle='round,pad=0.3', facecolor=milestone_color, edgecolor='none', alpha=0.9))
 
     # Clean up spines (Standard feature for "Fancy" plots)
-    for ax in [ax1, ax2]:
+    for ax in [ax1, ax2, ax3]:
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
         ax.spines['left'].set_color('#DEE2E6')

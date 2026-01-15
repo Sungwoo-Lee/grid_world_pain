@@ -197,6 +197,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     
     episode_rewards = []
     episode_steps = []
+    episode_epsilons = []
     
     for episode in range(episodes):
         # Reset External
@@ -250,6 +251,9 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             total_reward += reward
             steps += 1
             
+        # Store current epsilon before decay for this episode record
+        episode_epsilons.append(agent.epsilon)
+
         # Decay epsilon
         agent.epsilon = max(min_epsilon, agent.epsilon * decay_rate)
         
@@ -287,9 +291,9 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     history_filename = os.path.join(models_dir, "training_history.csv")
     with open(history_filename, mode='w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['episode', 'reward', 'steps'])
+        writer.writerow(['episode', 'reward', 'steps', 'epsilon'])
         for i in range(len(episode_rewards)):
-            writer.writerow([i + 1, episode_rewards[i], episode_steps[i]])
+            writer.writerow([i + 1, episode_rewards[i], episode_steps[i], episode_epsilons[i]])
     print(f"Training history saved to {history_filename}")
 
     # Generate learning curves
