@@ -44,7 +44,7 @@ class DQN(nn.Module):
         return self.fc3(x)
 
 class DQNAgent:
-    def __init__(self, state_dim, action_dim, lr=1e-3, gamma=0.99, buffer_size=10000, batch_size=64, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay=0.995):
+    def __init__(self, state_dim, action_dim, lr=1e-3, gamma=0.99, buffer_size=10000, batch_size=64, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay=0.995, device="auto"):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.lr = lr
@@ -56,7 +56,12 @@ class DQNAgent:
         self.epsilon_decay = epsilon_decay
         
         # Device Check
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if device == "auto" or device is None:
+             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+             self.device = torch.device(device)
+        
+        print(f"DQN Agent using device: {self.device}")
         
         # Networks
         self.policy_net = DQN(state_dim, action_dim).to(self.device)

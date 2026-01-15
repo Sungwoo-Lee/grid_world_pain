@@ -70,7 +70,7 @@ class ActorCritic(nn.Module):
         return action_logprobs, state_values, dist_entropy
 
 class PPOAgent:
-    def __init__(self, state_dim, action_dim, lr_actor=0.0003, lr_critic=0.001, gamma=0.99, K_epochs=4, eps_clip=0.2, update_timestep=2000):
+    def __init__(self, state_dim, action_dim, lr_actor=0.0003, lr_critic=0.001, gamma=0.99, K_epochs=4, eps_clip=0.2, update_timestep=2000, device="auto"):
         self.lr_actor = lr_actor
         self.lr_critic = lr_critic
         self.gamma = gamma
@@ -80,7 +80,13 @@ class PPOAgent:
         
         self.buffer = RolloutBuffer()
         
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # Device Check
+        if device == "auto" or device is None:
+             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+             self.device = torch.device(device)
+             
+        print(f"PPO Agent using device: {self.device}")
         
         self.policy = ActorCritic(state_dim, action_dim).to(self.device)
         self.optimizer = torch.optim.Adam([

@@ -16,14 +16,12 @@ class SensoryModule:
     def _generate_offsets(self, radius):
         """
         Generate list of (dx, dy) relative coordinates within the radius.
-        Excludes (0, 0).
+        Includes (0, 0).
         """
         offsets = []
         # Simple bounding box iteration to find points within Euclidean distance
         for dx in range(-radius, radius + 1):
             for dy in range(-radius, radius + 1):
-                if dx == 0 and dy == 0:
-                    continue
                 if np.sqrt(dx**2 + dy**2) <= radius:
                     offsets.append((dx, dy))
         

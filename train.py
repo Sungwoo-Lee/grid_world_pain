@@ -12,6 +12,7 @@ Arguments:
 - `--seed <int>`: (Default: 42) Random seed for reproducibility.
 - `--agent_config <path>`: Path to agent-specific config (e.g., `configs/models/ppo.yaml`).
 - `--tag <str>`: Tag for the training run directory.
+- `--device <str>`: Device to use for training (e.g., `cpu`, `cuda`, `cuda:0`, `auto`). Default: `auto`.
 
 Usage Examples:
 
@@ -51,7 +52,7 @@ import argparse
 
 
 def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed,
-                         with_health, danger_prob, damage_amount):
+                         with_health, danger_prob, damage_amount, device="auto"):
     """
     Prints a professional and fancy configuration summary.
     """
@@ -82,6 +83,9 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
     if with_health:
         env_data["Danger Prob"] = danger_prob
         env_data["Damage Amount"] = damage_amount
+        
+    env_data["Food Prob"] = config_dict.get('environment.food_prob', 0.2)
+    env_data["Food Duration"] = config_dict.get('environment.food_duration', 10)
         
     print_section("Environment", env_data)
 
@@ -140,7 +144,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
     train_data = {
         "Total Episodes": episodes,
         "Training Seed": seed,
-        "Testing Seed": testing_seed
+        "Testing Seed": testing_seed,
+        "Device": device
     }
     print_section("Training Schedule", train_data)
 
@@ -148,7 +153,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 
 def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=True, food_satiation_gain=10, max_steps=100, random_start_satiation=True, use_homeostatic_reward=False, satiation_setpoint=15, death_penalty=100, testing_seed=42, config_dict=None,
                 with_health=False, max_health=20, start_health=10, health_recovery=1, start_health_random=True,
-                danger_prob=0.1, danger_duration=5, damage_amount=5):
+                danger_prob=0.1, danger_duration=5, damage_amount=5,
+                food_prob=0.2, food_duration=10, device="auto"):
     """
     Trains the RL agent (Tabular Q-Learning, DQN, or PPO).
     """
@@ -170,7 +176,9 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         config_dict.set('body.with_health', with_health)
         config_dict.set('environment.danger_prob', danger_prob)
         
-        print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_health, danger_prob, damage_amount)
+        config_dict.set('training.device', device)
+        
+        print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_health, danger_prob, damage_amount, device)
     
     # Setup directories
     results_dir = "results"
@@ -214,7 +222,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
 
     # Initialize environment, body
     env = GridWorld(with_satiation=with_satiation, max_steps=max_steps,
-                    danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount)
+                    danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount,
+                    food_prob=food_prob, food_duration=food_duration)
     
     body = InteroceptiveBody(
         overeating_death=overeating_death, 
@@ -293,7 +302,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
                  input_dim += 1
         
         print(f"Initializing DQN Agent (Input Dim: {input_dim})...")
-        agent = DQNAgent(state_dim=input_dim, action_dim=5)
+        agent = DQNAgent(state_dim=input_dim, action_dim=5, device=device)
         
     elif algorithm == "PPO":
         # Calculate Input Dimension
@@ -318,7 +327,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             gamma=config_dict.get('agent.gamma', 0.99),
             K_epochs=config_dict.get('agent.K_epochs', 4),
             eps_clip=config_dict.get('agent.eps_clip', 0.2),
-            update_timestep=config_dict.get('agent.update_timestep', 2000)
+            update_timestep=config_dict.get('agent.update_timestep', 2000),
+            device=device
         )
 
     else:
@@ -364,8 +374,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         # Determine internal start state
         current_agent_pos = env.agent_pos
         current_danger_pos_list = []
-        if hasattr(env, 'danger_pos') and env.danger_pos is not None:
-             current_danger_pos_list = [env.danger_pos]
+        if env.is_danger:
+             current_danger_pos_list = [env.food_pos]
 
         if using_sensory:
              sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
@@ -411,8 +421,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             # Update Observations
             current_agent_pos = env.agent_pos
             current_danger_pos_list = []
-            if hasattr(env, 'danger_pos') and env.danger_pos is not None:
-                 current_danger_pos_list = [env.danger_pos]
+            if env.is_danger:
+                 current_danger_pos_list = [env.food_pos]
 
             if using_sensory:
                  next_sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
@@ -529,6 +539,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, help="Path to base config YAML")
     parser.add_argument("--agent_config", type=str, default="configs/models/dqn.yaml", help="Path to agent config YAML")
     parser.add_argument("--tag", type=str, default="default", help="Tag for the training run")
+    parser.add_argument("--device", type=str, help="Device to use (e.g., 'cpu', 'cuda', 'cuda:0', 'cuda:1', 'auto')")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
     parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
     args = parser.parse_args()
@@ -576,6 +587,16 @@ if __name__ == "__main__":
     danger_duration = config.get('environment.danger_duration', 5)
     damage_amount = config.get('environment.damage_amount', 5)
     
+    danger_prob = config.get('environment.danger_prob', 0.1)
+    danger_duration = config.get('environment.danger_duration', 5)
+    damage_amount = config.get('environment.damage_amount', 5)
+    
+    food_prob = config.get('environment.food_prob', 0.2)
+    food_duration = config.get('environment.food_duration', 10)
+    
+    device = args.device or config.get('training.device', 'auto')
+    
     train_agent(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, food_satiation_gain=food_satiation_gain, max_steps=max_steps, random_start_satiation=random_start_satiation, use_homeostatic_reward=use_homeostatic_reward, satiation_setpoint=satiation_setpoint, death_penalty=death_penalty, testing_seed=testing_seed, config_dict=config,
                 with_health=with_health, max_health=max_health, start_health=start_health, health_recovery=health_recovery, start_health_random=start_health_random,
-                danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount)
+                danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount,
+                food_prob=food_prob, food_duration=food_duration, device=device)

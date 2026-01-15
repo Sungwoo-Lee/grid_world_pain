@@ -13,6 +13,11 @@ This script:
 
 Usage:
     python evaluation.py --results_dir results/DQN/MyRun_... --episodes 3
+
+Notes:
+- Uses the configuration saved during training (`config.yaml`).
+- Supports CPU/GPU execution (auto-detected or inherited from config).
+- Ensures at least one resource (Food or Danger) is active at all times.
 """
 import os
 import glob
@@ -74,13 +79,17 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     pain_prob = config.get('environment.danger_prob', 0.1)
     pain_duration = config.get('environment.danger_duration', 5)
     damage_amount = config.get('environment.damage_amount', 5)
+    
+    food_prob = config.get('environment.food_prob', 0.2)
+    food_duration = config.get('environment.food_duration', 10)
 
     # 2. Environment & Body Setup
     # Set seed for deterministic evaluation
     np.random.seed(seed)
     
     env = GridWorld(height=height, width=width, food_pos=food_pos, with_satiation=with_satiation, max_steps=max_steps,
-                    danger_prob=pain_prob, danger_duration=pain_duration, damage_amount=damage_amount)
+                    danger_prob=pain_prob, danger_duration=pain_duration, damage_amount=damage_amount,
+                    food_prob=food_prob, food_duration=food_duration)
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
         start_satiation=start_satiation, 
@@ -206,8 +215,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         # Determine initial sensory state
         current_agent_pos = env.agent_pos
         current_danger_pos_list = []
-        if hasattr(env, 'danger_pos') and env.danger_pos is not None:
-             current_danger_pos_list = [env.danger_pos]
+        if env.is_danger:
+             current_danger_pos_list = [env.food_pos]
         if using_sensory:
             sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
 
@@ -261,10 +270,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             
             # Observations
             current_agent_pos = env.agent_pos
-            if hasattr(env, 'danger_pos') and env.danger_pos is not None:
-                 current_danger_pos_list = [env.danger_pos]
-            else:
-                 current_danger_pos_list = []
+            current_danger_pos_list = []
+            if env.is_danger:
+                 current_danger_pos_list = [env.food_pos]
+            
             if using_sensory:
                  next_sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
             

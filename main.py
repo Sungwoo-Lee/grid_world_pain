@@ -118,9 +118,13 @@ def main():
     print(f"Video will be saved to: {video_filename}")
 
     # Initialize components
-    env = GridWorld(height=height, width=width, start=start_pos, food_pos=food_pos, 
-                    with_satiation=with_satiation, max_steps=max_steps,
-                    danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount)
+    food_prob = config.get('environment.food_prob', 0.2)
+    food_duration = config.get('environment.food_duration', 10)
+    
+    # Initialize Environment
+    env = GridWorld(height=height, width=width, with_satiation=with_satiation, max_steps=max_steps,
+                    danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount,
+                    food_prob=food_prob, food_duration=food_duration)
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
         start_satiation=start_satiation, 
@@ -181,13 +185,10 @@ def main():
         
         # Determine Initial OBSERVATION (State)
         current_agent_pos = env.agent_pos
-        # Note: GridWorld doesn't expose list of dangers easily? 
-        # Actually GridWorld internal logic handles danger but maybe we need to access it for sensors.
-        # Let's check GridWorld implementation. 
-        # Assuming GridWorld has `danger_pos` if active.
+        # Note: GridWorld danger overlays food when active
         current_danger_pos_list = []
-        if hasattr(env, 'danger_pos') and env.danger_pos is not None:
-             current_danger_pos_list = [env.danger_pos]
+        if env.is_danger:
+             current_danger_pos_list = [env.food_pos]
              
         if using_sensory:
             sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
@@ -246,16 +247,17 @@ def main():
                 
             action_names = ["Up", "Right", "Down", "Left", "Stay"]
             
-            print(f"Step {step_count + 1}: Action {action_names[action]}")
-            
             # Step External
             next_env_state, env_reward, env_done, info = env.step(action)
+            
+            # Print Step Info
+            print(f"Step {step_count+1}: Action {action_names[action]}")
             
             # --- CALCULATE NEXT OBSERVATION (State) ---
             current_agent_pos = env.agent_pos # Updated pos
             current_danger_pos_list = []
-            if hasattr(env, 'danger_pos') and env.danger_pos is not None:
-                 current_danger_pos_list = [env.danger_pos]
+            if env.is_danger:
+                 current_danger_pos_list = [env.food_pos]
 
             if using_sensory:
                  next_sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)

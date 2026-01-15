@@ -7,8 +7,10 @@ environment:
   food_pos: [4, 4]
   max_steps: 100
   danger_prob: 0.1
-  danger_duration: 5
+  danger_duration: 3
   damage_amount: 5
+  food_prob: 0.1
+  food_duration: 5
 
 body:
   with_satiation: true
@@ -27,17 +29,18 @@ body:
   health_recovery: 1
   start_health_random: true
 
-training:
-  training_episode: 100
-  seed: 42
-
-testing:
-  seed: 56
-  evaluation_episodes: 1
-
 sensory:
   using_sensory: true
   food_radius: 2
   danger_radius: 1
+
+training:
+  training_episode: 100
+  seed: 42
+  device: "auto"
+
+testing:
+  seed: 56
+  evaluation_episodes: 1
 
 

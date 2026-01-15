@@ -32,7 +32,8 @@ class GridWorld:
     """
     
     def __init__(self, height=5, width=5, start=(0, 0), food_pos=(4, 4), with_satiation=True, max_steps=100,
-                 danger_prob=0.1, danger_duration=5, damage_amount=5):
+                 danger_prob=0.1, danger_duration=5, damage_amount=5,
+                 food_prob=0.2, food_duration=10):
         """
         Initializes the GridWorld foraging environment.
 
@@ -56,13 +57,25 @@ class GridWorld:
         self.max_steps = max_steps
         self.current_step = 0
         
-        # Pain / Danger Mechanism
+        # Resource State Machine (Food <-> Danger)
+        # Requirement: At least one is active.
         self.danger_prob = danger_prob
         self.danger_duration = danger_duration
         self.damage_amount = damage_amount
-        self.is_danger = False
-        self.danger_timer = 0
+        self.food_prob = food_prob # Used? Maybe redundant if we force toggle.
+        self.food_duration = food_duration
         
+        self.resource_state = 'food' # 'food' or 'danger'
+        self.resource_timer = self.food_duration
+        
+    @property
+    def is_danger(self):
+        return self.resource_state == 'danger'
+        
+    @property
+    def is_food_active(self):
+        return self.resource_state == 'food'
+
     def reset(self):
         """
         Resets the agent to a random position, avoiding the food location.
@@ -71,8 +84,10 @@ class GridWorld:
             tuple: The initial state (row, col).
         """
         self.current_step = 0
-        self.is_danger = False
-        self.danger_timer = 0
+        
+        # Reset Resource State
+        self.resource_state = 'food'
+        self.resource_timer = self.food_duration
         
         while True:
             row = np.random.randint(0, self.height)
@@ -98,16 +113,26 @@ class GridWorld:
         """
         self.current_step += 1
         
-        # Update Danger State
-        if self.is_danger:
-            self.danger_timer -= 1
-            if self.danger_timer <= 0:
-                self.is_danger = False
-        else:
-            # Chance to become danger if not already
+        # --- Resource State Update ---
+        if self.resource_state == 'danger':
+            self.resource_timer -= 1
+            if self.resource_timer < 0:
+                # Danger Expired -> Switch to Food
+                self.resource_state = 'food'
+                self.resource_timer = self.food_duration
+                
+        elif self.resource_state == 'food':
+            # Check for Danger Interrupt (Per Step)
             if np.random.random() < self.danger_prob:
-                self.is_danger = True
-                self.danger_timer = self.danger_duration
+                self.resource_state = 'danger'
+                self.resource_timer = self.danger_duration
+            else:
+                self.resource_timer -= 1
+                if self.resource_timer < 0:
+                    # Food Expired -> Renew Food (since "at least one" must be active)
+                    # Alternatively, we could force a Danger switch here, but random interrupt is smoother.
+                    self.resource_state = 'food'
+                    self.resource_timer = self.food_duration
 
         row, col = self.agent_pos
         
@@ -132,7 +157,7 @@ class GridWorld:
         if self.agent_pos == self.food_pos:
             if self.is_danger:
                 damage = self.damage_amount
-            else:
+            elif self.is_food_active:
                 ate_food = True
             
         # Reward/Done: Behavior depends on whether satiation is enabled.
@@ -162,12 +187,14 @@ class GridWorld:
                 elif (r, c) == self.food_pos:
                     if self.is_danger:
                         line += "X " # Danger
-                    else:
+                    elif self.is_food_active:
                         line += "F "
+                    else:
+                        line += ". "
                 else:
                     line += ". "
             print(line)
-        print(f"Step: {self.current_step}, Danger: {self.is_danger}")
+        print(f"Step: {self.current_step}, Danger: {self.is_danger}, Food: {self.is_food_active}")
         print()
 
     def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=None, step=None, sensory_data=None):
@@ -227,7 +254,7 @@ class GridWorld:
         if self.is_danger:
             # Danger: Cross / Skull representation
             ax_grid.plot(fc, fr, marker='X', markersize=20, color=danger_color, markeredgecolor='white', markeredgewidth=2, path_effects=shadow_effect)
-        else:
+        elif self.is_food_active:
             # Food: Diamond representation
             ax_grid.plot(fc, fr, marker='D', markersize=18, color=food_color, markeredgecolor='white', markeredgewidth=2, path_effects=shadow_effect)
             
