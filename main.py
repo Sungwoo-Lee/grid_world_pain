@@ -37,6 +37,7 @@ from src.environment import GridWorld
 from src.environment.body import InteroceptiveBody
 from src.models.q_learning import QLearningAgent
 from src.models.dqn import DQNAgent
+from src.models.ppo import PPOAgent
 from src.environment.sensory import SensorySystem
 from src.environment.visualization import save_video
 from src.environment.config import get_default_config, Config
@@ -116,6 +117,8 @@ def main():
     model_name_config = config.get('agent.algorithm', 'Tabular Q-Learning').replace(" ", "_")
     if model_name_config == "DQN":
          model_name = "Debug_DQN"
+    elif model_name_config == "PPO":
+         model_name = "Debug_PPO"
     else:
          model_name = "Debug_Tabular"
          
@@ -249,6 +252,22 @@ def main():
         print(f"DQN Input Dimension: {input_dim}")
         agent = DQNAgent(state_dim=input_dim, action_dim=5)
         # Load weights if exist? For debug scratchpad, maybe not.
+    elif algorithm == "PPO":
+        # Calculate Input Dimension for PPO (Same as DQN)
+        input_dim = 0
+        if using_sensory:
+            input_dim = sensory_system.food_sensor.vector_size + \
+                        sensory_system.danger_sensor.vector_size
+        else:
+            input_dim = 2 # Coords
+            
+        if with_satiation:
+            input_dim += 1
+            if config.get('body.with_health', False):
+                 input_dim += 1
+                 
+        print(f"PPO Input Dimension: {input_dim}")
+        agent = PPOAgent(state_dim=input_dim, action_dim=5)
     else:
         # Mock composite env for agent init
         class CompositeEnv:
@@ -336,9 +355,10 @@ def main():
         while not done and step_count < max_steps_per_episode:
             
             # Action Selection
-            if isinstance(agent, DQNAgent):
-                # Preprocess state for DQN
+            if isinstance(agent, (DQNAgent, PPOAgent)):
+                # Preprocess state for DQN/PPO
                 flat_state = preprocess_state(state)
+                # DQN/PPO choose action
                 action = agent.choose_action(flat_state)
             else:
                 action = agent.choose_action(state)

@@ -37,8 +37,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     # Try Q-table pattern
     match = re.search(r"q_table_(\d+).npy", filename)
     if not match:
-        # Try DQN pattern
         match = re.search(r"dqn_model_(\d+).pth", filename)
+    if not match:
+        match = re.search(r"ppo_model_(\d+).pth", filename)
         
     pct = match.group(1) if match else ("final" if "final" in filename or filename == "q_table.npy" else "unknown")
     
@@ -155,6 +156,23 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         agent.policy_net.load_state_dict(torch.load(checkpoint_path))
         agent.target_net.load_state_dict(agent.policy_net.state_dict())
         agent.epsilon = 0.0 # Eval mode
+    elif algorithm == "PPO":
+        from src.models.ppo import PPOAgent
+        # PPO inputs same as DQN
+        input_dim = 0
+        if using_sensory:
+             input_dim += sensory_system.food_sensor.vector_size + \
+                          sensory_system.danger_sensor.vector_size
+        else:
+             input_dim += 2 # row, col
+
+        if with_satiation:
+            input_dim += 1
+            if with_health:
+                 input_dim += 1
+        
+        agent = PPOAgent(state_dim=input_dim, action_dim=5)
+        agent.load(checkpoint_path)
     else:
         # Tabular
         class CompositeEnv:
@@ -363,13 +381,19 @@ def main():
             match = re.search(r"dqn_model_(\d+).pth", path)
             return int(match.group(1)) if match else -1
         final_model = os.path.join(models_dir, "dqn_model_final.pth")
+    elif algorithm == "PPO":
+        checkpoints = glob.glob(os.path.join(models_dir, "ppo_model_*.pth"))
+        def extract_number(path):
+            match = re.search(r"ppo_model_(\d+).pth", path)
+            return int(match.group(1)) if match else -1
+        final_model = os.path.join(models_dir, "ppo_model_final.pth")
     else:
         checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
         def extract_number(path):
             match = re.search(r"q_table_(\d+).npy", path)
             return int(match.group(1)) if match else -1
         final_model = os.path.join(models_dir, "q_table.npy")
-
+    
     checkpoints.sort(key=extract_number)
     
     if os.path.exists(final_model):

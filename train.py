@@ -27,6 +27,7 @@ from src.environment import GridWorld
 from src.environment.body import InteroceptiveBody
 from src.models.q_learning import QLearningAgent
 from src.models.dqn import DQNAgent
+from src.models.ppo import PPOAgent
 from src.environment.sensory import SensorySystem
 from src.environment.visualization import plot_q_table, plot_learning_curves
 from src.environment.config import get_default_config
@@ -105,6 +106,19 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
              agent_data["Food Radius"] = config_dict.get('sensory.food_radius', 1)
              agent_data["Danger Radius"] = config_dict.get('sensory.danger_radius', 1)
              
+    elif algorithm == "PPO":
+        agent_data = {
+            "Algorithm": "Proximal Policy Optimization (PPO)",
+            "Sensory Inputs": "Enabled" if using_sensory else "Disabled (Coordinates)",
+            "Actor LR": config_dict.get('agent.lr_actor', 0.0003),
+            "Critic LR": config_dict.get('agent.lr_critic', 0.001),
+            "Gamma (Discount)": config_dict.get('agent.gamma', 0.99),
+            "Update Frequency": config_dict.get('agent.update_timestep', 2000)
+        }
+        if using_sensory:
+             agent_data["Food Radius"] = config_dict.get('sensory.food_radius', 1)
+             agent_data["Danger Radius"] = config_dict.get('sensory.danger_radius', 1)
+
     else:
         agent_data = {
             "Algorithm": "Tabular Q-Learning",
@@ -274,6 +288,32 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         print(f"Initializing DQN Agent (Input Dim: {input_dim})...")
         agent = DQNAgent(state_dim=input_dim, action_dim=5)
         
+    elif algorithm == "PPO":
+        # Calculate Input Dimension
+        input_dim = 0
+        if using_sensory:
+             input_dim += sensory_system.food_sensor.vector_size + \
+                          sensory_system.danger_sensor.vector_size
+        else:
+             input_dim += 2 # row, col
+             
+        if with_satiation:
+            input_dim += 1
+            if with_health:
+                 input_dim += 1
+                 
+        print(f"Initializing PPO Agent (Input Dim: {input_dim})...")
+        agent = PPOAgent(
+            state_dim=input_dim, 
+            action_dim=5,
+            lr_actor=config_dict.get('agent.lr_actor', 0.0003),
+            lr_critic=config_dict.get('agent.lr_critic', 0.001),
+            gamma=config_dict.get('agent.gamma', 0.99),
+            K_epochs=config_dict.get('agent.K_epochs', 4),
+            eps_clip=config_dict.get('agent.eps_clip', 0.2),
+            update_timestep=config_dict.get('agent.update_timestep', 2000)
+        )
+
     else:
         # Tabular (Default)
         print(f"Initializing Tabular Agent ({algorithm})...")
@@ -347,13 +387,13 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         total_reward = 0
         steps = 0
         
-        # Preprocess for DQN
+        # Preprocess for DQN/PPO
         flat_state = None
-        if isinstance(agent, DQNAgent):
+        if isinstance(agent, (DQNAgent, PPOAgent)):
             flat_state = preprocess_state(state)
         
         while not done:
-            if isinstance(agent, DQNAgent):
+            if isinstance(agent, (DQNAgent, PPOAgent)):
                 action = agent.choose_action(flat_state)
             else:
                 action = agent.choose_action(state)
@@ -392,8 +432,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
                 else:
                     next_state = next_env_state
             
-            if isinstance(agent, DQNAgent):
-                # DQN Update
+            if isinstance(agent, (DQNAgent, PPOAgent)):
+                # DQN/PPO Update
                 flat_next_state = preprocess_state(next_state)
                 agent.store_transition(flat_state, action, reward, flat_next_state, done)
                 agent.update()
@@ -411,13 +451,14 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         # End of Episode
         episode_epsilons.append(agent.epsilon)
 
-        if not isinstance(agent, DQNAgent):
+        if not isinstance(agent, (DQNAgent, PPOAgent)):
             # Manually decay for tabular
             agent.epsilon = max(tabular_min_epsilon, agent.epsilon * tabular_decay_rate)
-        else:
+        elif isinstance(agent, DQNAgent):
             # DQN handles decay internally in update(), also target net update
             if episode % 10 == 0:
                 agent.update_target_network()
+        # PPO: No epsilon decay, no target net
         
         episode_rewards.append(total_reward)
         episode_steps.append(steps)
@@ -438,6 +479,9 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             if isinstance(agent, DQNAgent):
                 model_snap_filename = os.path.join(models_dir, f"dqn_model_{pct}.pth")
                 agent.save(model_snap_filename)
+            elif isinstance(agent, PPOAgent):
+                model_snap_filename = os.path.join(models_dir, f"ppo_model_{pct}.pth")
+                agent.save(model_snap_filename)
             else:
                 model_snap_filename = os.path.join(models_dir, f"q_table_{pct}.npy")
                 agent.save(model_snap_filename)
@@ -450,6 +494,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     # Final model save
     if isinstance(agent, DQNAgent):
          model_filename = os.path.join(models_dir, "dqn_model_final.pth")
+    elif isinstance(agent, PPOAgent):
+         model_filename = os.path.join(models_dir, "ppo_model_final.pth")
     else:
          model_filename = os.path.join(models_dir, "q_table.npy")
     agent.save(model_filename)

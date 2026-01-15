@@ -1,0 +1,8 @@
+agent:
+  algorithm: "PPO"
+  lr_actor: 0.0003
+  lr_critic: 0.001
+  gamma: 0.99
+  K_epochs: 4
+  eps_clip: 0.2
+  update_timestep: 1000 # Update every 2000 steps
