@@ -36,8 +36,8 @@ from src.models.q_learning import QLearningAgent
 from src.models.dqn import DQNAgent
 from src.models.ppo import PPOAgent
 from src.environment.sensory import SensorySystem
-from src.environment.visualization import plot_q_table, plot_learning_curves
-from src.environment.config import get_default_config
+from src.utils.visualization import plot_q_table, plot_learning_curves
+from src.utils.config import get_default_config
 import time
 import numpy as np
 import os
@@ -537,7 +537,7 @@ if __name__ == "__main__":
     config = get_default_config()
     
     # Load and merge agent config
-    from src.environment.config import Config
+    from src.utils.config import Config
     if args.agent_config:
         print(f"Loading agent config from: {args.agent_config}")
         agent_config = Config.load_yaml(args.agent_config)

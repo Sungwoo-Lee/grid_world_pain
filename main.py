@@ -36,8 +36,8 @@ import yaml
 from src.environment import GridWorld
 from src.environment.body import InteroceptiveBody
 from src.environment.sensory import SensorySystem
-from src.environment.visualization import save_video
-from src.environment.config import get_default_config, Config
+from src.utils.visualization import save_video
+from src.utils.config import get_default_config, Config
 
 def main():
     parser = argparse.ArgumentParser(description="GridWorld Debug Sandbox")

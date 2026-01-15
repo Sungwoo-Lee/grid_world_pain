@@ -24,8 +24,8 @@ from src.environment import GridWorld
 from src.environment.body import InteroceptiveBody
 from src.models.q_learning import QLearningAgent
 from src.environment.sensory import SensorySystem
-from src.environment.config import Config, get_default_config
-from src.environment.visualization import plot_q_table, save_video
+from src.utils.config import Config, get_default_config
+from src.utils.visualization import plot_q_table, save_video
 
 def evaluate_checkpoint(checkpoint_path, results_dir, config):
     """
