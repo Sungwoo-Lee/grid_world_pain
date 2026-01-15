@@ -170,9 +170,10 @@ class GridWorld:
         print(f"Step: {self.current_step}, Danger: {self.is_danger}")
         print()
 
-    def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=None, step=None):
+    def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=None, step=None, sensory_data=None):
         """
         Renders the grid as an RGB image using Matplotlib with a professional Light Theme (Scientific/Apple Style).
+        Supports visualizing sensory modules if data is provided.
         """
         # --- Theme Settings ---
         bg_color = '#FFFFFF'       # White Background
@@ -182,14 +183,27 @@ class GridWorld:
         danger_color = '#FA5252'   # Soft Red
         text_color = '#343A40'     # Dark Grey text
         
-        # Setup Figure with GridSpec for Dashboard Layout
-        fig = plt.figure(figsize=(8, 6), dpi=100)
+        # Setup Figure
+        # If sensory data exists, we need more space on the right
+        # CRITICAL: This must be consistent across all frames in a video. 
+        # Since we control main.py, we rely on it passing sensory_data if enabled.
+        fig_width = 10 if sensory_data is not None else 8
+        fig = plt.figure(figsize=(fig_width, 6), dpi=100)
         fig.patch.set_facecolor(bg_color)
         
-        # GridSpec: Main Grid (left) and Stats Panel (right)
-        gs = fig.add_gridspec(1, 2, width_ratios=[2, 1])
-        ax_grid = fig.add_subplot(gs[0])
-        ax_stats = fig.add_subplot(gs[1])
+        # GridSpec Layout
+        if sensory_data is not None:
+            # Layout: [ Main Grid (2) ] [ Stats (1) ]
+            #                           [ Sensors (1) ]
+            gs = fig.add_gridspec(2, 2, width_ratios=[1.5, 1], height_ratios=[1, 1.5])
+            ax_grid = fig.add_subplot(gs[:, 0]) # Left column full height
+            ax_stats = fig.add_subplot(gs[0, 1]) # Top Right
+            ax_sensory = fig.add_subplot(gs[1, 1]) # Bottom Right
+        else:
+            gs = fig.add_gridspec(1, 2, width_ratios=[2, 1])
+            ax_grid = fig.add_subplot(gs[0])
+            ax_stats = fig.add_subplot(gs[1])
+            ax_sensory = None
         
         # --- 1. Draw Grid World ---
         ax_grid.set_facecolor(bg_color)
@@ -230,50 +244,119 @@ class GridWorld:
         ax_stats.axis('off')
         
         # Clean Title
-        ax_stats.text(0.5, 0.90, "INTEROCEPTIVE AI", color=text_color, ha='center', fontsize=14, fontweight='bold', transform=ax_stats.transAxes)
-        ax_stats.plot([0.2, 0.8], [0.88, 0.88], color='#ADB5BD', transform=ax_stats.transAxes, linewidth=1)
+        ax_stats.text(0.5, 0.90, "INTEROCEPTIVE AI", color=text_color, ha='center', fontsize=12, fontweight='bold', transform=ax_stats.transAxes)
+        ax_stats.plot([0.2, 0.8], [0.85, 0.85], color='#ADB5BD', transform=ax_stats.transAxes, linewidth=1)
         
-        # Episode / Step info (Monospace font for numbers)
-        ep_str = f"EPISODE: {episode}" if episode is not None else "EPISODE: --"
-        step_str = f"STEP:    {step}" if step is not None else "STEP:    --"
-        ax_stats.text(0.1, 0.80, ep_str, color='#495057', fontsize=10, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
-        ax_stats.text(0.1, 0.76, step_str, color='#495057', fontsize=10, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        # Episode / Step info
+        ep_str = f"EPISODE: {episode}" if episode is not None else "EP: --"
+        step_str = f"STEP:    {step}" if step is not None else "STEP: --"
+        ax_stats.text(0.1, 0.70, ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        ax_stats.text(0.1, 0.60, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
         
         # Bars Helper (Flat Design)
         def draw_bar(y_pos, label, value, max_val, color):
             pct = max(0, min(1, value / max_val)) if max_val > 0 else 0
             # Label
-            ax_stats.text(0.1, y_pos + 0.05, f"{label}: {value:.1f}/{max_val}", color=text_color, fontsize=9, fontweight='bold', transform=ax_stats.transAxes)
-            # Background Bar (Light Grey)
-            rect_bg = plt.Rectangle((0.1, y_pos), 0.8, 0.03, color='#F1F3F5', transform=ax_stats.transAxes, ec='none')
+            ax_stats.text(0.1, y_pos + 0.1, f"{label}: {value:.1f}/{max_val}", color=text_color, fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
+            # Background Bar
+            rect_bg = plt.Rectangle((0.1, y_pos), 0.8, 0.08, color='#F1F3F5', transform=ax_stats.transAxes, ec='none')
             ax_stats.add_patch(rect_bg)
             # Fill Bar
-            rect_fill = plt.Rectangle((0.1, y_pos), 0.8 * pct, 0.03, color=color, transform=ax_stats.transAxes, ec='none')
+            rect_fill = plt.Rectangle((0.1, y_pos), 0.8 * pct, 0.08, color=color, transform=ax_stats.transAxes, ec='none')
             ax_stats.add_patch(rect_fill)
             
         # Satiation Bar
         if self.with_satiation and satiation is not None and max_satiation is not None:
-            draw_bar(0.60, "SATIATION", satiation, max_satiation, food_color)
+            draw_bar(0.40, "SATIATION", satiation, max_satiation, food_color)
             
         # Health Bar
         if health is not None and max_health is not None:
-            draw_bar(0.50, "HEALTH", health, max_health, danger_color)
+            draw_bar(0.20, "HEALTH", health, max_health, danger_color)
             
-        # Status Text (Pill style background)
-        status_y = 0.35
+        # Status Text
         if self.is_danger:
-            status_text = "RESOURCE: DANGER"
+            status_text = "DANGER"
             status_bg = danger_color
         else:
-            status_text = "RESOURCE: FOOD"
+            status_text = "SAFE" # or FOOD?
             status_bg = food_color
+        if not self.with_satiation:
+             status_text = "FOOD" if not self.is_danger else "DANGER"
             
-        ax_stats.text(0.5, status_y, status_text, color='white', ha='center', va='center', fontsize=10, fontweight='bold', 
+        ax_stats.text(0.8, 0.70, status_text, color='white', ha='center', va='center', fontsize=8, fontweight='bold', 
                       transform=ax_stats.transAxes,
-                      bbox=dict(boxstyle='round,pad=0.5', facecolor=status_bg, edgecolor='none'))
+                      bbox=dict(boxstyle='round,pad=0.3', facecolor=status_bg, edgecolor='none'))
+
+        # --- 3. Draw Sensory Modules ---
+        if ax_sensory and sensory_data:
+            ax_sensory.set_facecolor(bg_color)
+            ax_sensory.axis('off')
+            
+            # Title
+            ax_sensory.text(0.5, 0.95, "SENSORY MODULES", color=text_color, ha='center', fontsize=10, fontweight='bold', transform=ax_sensory.transAxes)
+            
+            # Divide into sub-areas for each sensor
+            num_sensors = len(sensory_data)
+            # We'll just place them manually
+            
+            for i, sensor in enumerate(sensory_data):
+                # Calculate center y position for this sensor
+                y_center = 0.75 - (i * 0.45) 
+                
+                # Sensor Label
+                name = sensor['name']
+                vector = sensor['vector']
+                radius = sensor['radius']
+                offsets = sensor['offsets']
+                color = sensor['color'] # Hex color
+                
+                ax_sensory.text(0.1, y_center + 0.15, name.upper(), color=text_color, fontsize=9, fontweight='bold', transform=ax_sensory.transAxes)
+                
+                # Draw Mini Grid centered at (0.5, y_center) in axes coords?
+                # Actually better to use inset axes or just plot scatter points in transform coordinates
+                # Let's try drawing simple circles for the relative grid
+                
+                # Center of this sensor display in Axes Coords
+                cx, cy = 0.5, y_center
+                
+                # Scale factor for dots
+                scale = 0.08
+                
+                # Draw Center (Agent)
+                agent_dot = plt.Circle((cx, cy), scale/1.5, color='grey', transform=ax_sensory.transAxes, alpha=0.5)
+                ax_sensory.add_patch(agent_dot)
+                
+                # Draw Offsets
+                # We map offsets (dx, dy) to (cx + dx*scale, cy - dy*scale) 
+                # Note: y is up in plot usually, grid row is down. dy>0 means Down. So y_plot - dy.
+                
+                # Create a set of active offsets for quick lookup
+                active_indices = [idx for idx, val in enumerate(vector) if val == 1]
+                
+                # We need to match offsets to vector indices. 
+                # SensoryModule sorts offsets. Assuming `offsets` list passed stands for vector indices order.
+                
+                for idx, (dr, dc) in enumerate(offsets):
+                    px = cx + dc * scale
+                    py = cy - dr * scale # Invert row for plot Y
+                    
+                    is_active = (idx in active_indices) or (vector[idx] == 1)
+                    
+                    dot_color = color if is_active else '#DEE2E6' # Active vs Inactive Grey
+                    edge_color = 'white'
+                    alpha = 1.0 if is_active else 0.5
+                    size = scale
+                    
+                    dot = plt.Circle((px, py), size, facecolor=dot_color, edgecolor=edge_color, transform=ax_sensory.transAxes, alpha=alpha)
+                    ax_sensory.add_patch(dot)
+                    
+                    # Optional: Add small ring if active to make it "glow"
+                    if is_active:
+                         glow = plt.Circle((px, py), size*1.3, facecolor='none', edgecolor=color, linewidth=1, transform=ax_sensory.transAxes, alpha=0.5)
+                         ax_sensory.add_patch(glow)
 
         # Footer
-        ax_stats.text(0.5, 0.05, "GridWorld Environment", color='#CED4DA', ha='center', fontsize=8, transform=ax_stats.transAxes)
+        ax_stats.text(0.5, 0.02, "GridWorld Env", color='#CED4DA', ha='center', fontsize=7, transform=fig.transFigure)
 
         # Convert to array
         fig.canvas.draw()

@@ -36,6 +36,7 @@ from src.grid_world_pain.body import InteroceptiveBody
 from src.grid_world_pain.agent import QLearningAgent
 from src.grid_world_pain.visualization import save_video
 from src.grid_world_pain.config import get_default_config
+from src.grid_world_pain.sensory import SensorySystem
 
 def main():
     parser = argparse.ArgumentParser(description="GridWorld Debug Sandbox")
@@ -90,6 +91,11 @@ def main():
     danger_duration = config.get('environment.danger_duration', 5)
     damage_amount = config.get('environment.damage_amount', 5)
 
+    # Sensory Config
+    using_sensory = config.get('sensory.using_sensory', False)
+    food_radius = config.get('sensory.food_radius', 1)
+    danger_radius = config.get('sensory.danger_radius', 1)
+
     print(f"Starting Debug Session")
     print(f"Video will be saved to: {video_filename}")
 
@@ -108,6 +114,31 @@ def main():
         death_penalty=death_penalty
     )
     
+    sensory_system = None
+    state_dims = None
+    
+    # Sensory System Init
+    if using_sensory:
+        print(f"Initializing Sensory System (Food R={food_radius}, Danger R={danger_radius})")
+        sensory_system = SensorySystem(food_radius=food_radius, danger_radius=danger_radius)
+        
+        # Calculate State Dimensions
+        # Sensory: (FoodStateSpace, DangerStateSpace)
+        sensory_dims = sensory_system.state_dims
+        
+        # Body: (max_satiation+2, max_health+2) ??
+        # Let's match Agent's expectation for Body Dimensions
+        body_dims = ()
+        if with_satiation:
+            # Note: Agent adds +2 padding for safety/terminal states usually
+            if body.with_health:
+                body_dims = (body.max_satiation + 2, body.max_health + 2)
+            else:
+                body_dims = (body.max_satiation + 2,)
+        
+        state_dims = sensory_dims + body_dims
+        print(f"State Dimensions: {state_dims}")
+
     # Mock composite env for agent init
     class CompositeEnv:
         def __init__(self, env, body):
@@ -116,7 +147,9 @@ def main():
             self.max_satiation = body.max_satiation
             
     composite_env = CompositeEnv(env, body)
-    agent = QLearningAgent(composite_env, with_satiation=with_satiation)
+    
+    # Initialize Agent with explicit state_dims if using_sensory
+    agent = QLearningAgent(composite_env, with_satiation=with_satiation, state_dims=state_dims)
     agent.epsilon = 1.0 # Force random behavior for debug sandbox
     
     frames = []
@@ -130,18 +163,59 @@ def main():
         
         # Reset
         env_state = env.reset()
+        
+        # Determine Initial OBSERVATION (State)
+        current_agent_pos = env.agent_pos
+        # Note: GridWorld doesn't expose list of dangers easily? 
+        # Actually GridWorld internal logic handles danger but maybe we need to access it for sensors.
+        # Let's check GridWorld implementation. 
+        # Assuming GridWorld has `danger_pos` if active.
+        current_danger_pos_list = []
+        if hasattr(env, 'danger_pos') and env.danger_pos is not None:
+             current_danger_pos_list = [env.danger_pos]
+             
+        if using_sensory:
+            sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
+            # sensory_state is (food_idx, danger_idx)
+            
         if with_satiation:
             body_state = body.reset()
-            state = (*env_state, body_state)
+            if using_sensory:
+                 if isinstance(body_state, tuple):
+                     state = (*sensory_state, *body_state)
+                 else:
+                     state = (*sensory_state, body_state)
+            else:
+                # FOMDP
+                if isinstance(body_state, tuple):
+                     state = (*env_state, *body_state)
+                else:
+                     state = (*env_state, body_state)
+                     
             print("Start State:")
             print(f"Satiation: {body.satiation}/{body.max_satiation}")
             print(f"Agent Pos: {env.agent_pos}")
-            frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=0))
+            
+            vis_data = None
+            if using_sensory:
+                print(f"Sensory: {sensory_state} (FoodIdx, DangerIdx)")
+                vis_data = sensory_system.get_visualization_data(sensory_state)
+                
+            frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=0, sensory_data=vis_data))
         else:
-            state = env_state
+            # No body
+            if using_sensory:
+                state = sensory_state
+                vis_data = sensory_system.get_visualization_data(sensory_state)
+            else:
+                state = env_state
+                vis_data = None
+                
             print("Start State:")
             print(f"Agent Pos: {env.agent_pos}")
-            frames.append(env.render_rgb_array(episode=ep_num, step=0))
+            if using_sensory:
+                print(f"Sensory: {sensory_state}")
+            frames.append(env.render_rgb_array(episode=ep_num, step=0, sensory_data=vis_data))
         
         done = False
         step_count = 0
@@ -155,21 +229,55 @@ def main():
             # Step External
             next_env_state, env_reward, env_done, info = env.step(action)
             
+            # --- CALCULATE NEXT OBSERVATION (State) ---
+            current_agent_pos = env.agent_pos # Updated pos
+            current_danger_pos_list = []
+            if hasattr(env, 'danger_pos') and env.danger_pos is not None:
+                 current_danger_pos_list = [env.danger_pos]
+
+            if using_sensory:
+                 next_sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
+
             if with_satiation:
                 next_body_state, reward, body_done = body.step(info)
                 done = env_done or body_done
-                next_state = (*next_env_state, next_body_state)
+                
+                if using_sensory:
+                     if isinstance(next_body_state, tuple):
+                         next_state = (*next_sensory_state, *next_body_state)
+                     else:
+                         next_state = (*next_sensory_state, next_body_state)
+                else:
+                    # FOMDP
+                    if isinstance(next_body_state, tuple):
+                        next_state = (*next_env_state, *next_body_state)
+                    else:
+                        next_state = (*next_env_state, next_body_state)
+                        
                 print(f"  Info: {info}")
                 print(f"  Satiation: {body.satiation}/{body.max_satiation}")
+                vis_data = None
+                if using_sensory:
+                     print(f"  Sensory: {next_sensory_state}")
+                     vis_data = sensory_system.get_visualization_data(next_sensory_state)
                 print(f"  Reward: {reward}, Done: {done}")
-                frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=step_count+1))
+                frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=step_count+1, sensory_data=vis_data))
             else:
                 reward = env_reward
                 done = env_done
-                next_state = next_env_state
+                
+                if using_sensory:
+                    next_state = next_sensory_state
+                else:
+                    next_state = next_env_state
+                    
                 print(f"  Info: {info}")
+                vis_data = None
+                if using_sensory:
+                    print(f"  Sensory: {next_sensory_state}")
+                    vis_data = sensory_system.get_visualization_data(next_sensory_state)
                 print(f"  Reward: {reward}, Done: {done}")
-                frames.append(env.render_rgb_array(episode=ep_num, step=step_count+1))
+                frames.append(env.render_rgb_array(episode=ep_num, step=step_count+1, sensory_data=vis_data))
             
             state = next_state
             step_count += 1
@@ -182,13 +290,19 @@ def main():
                 # Add pause
                 for _ in range(5):
                     if with_satiation:
-                        frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=step_count))
+                        frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=step_count, sensory_data=vis_data))
                     else:
-                        frames.append(env.render_rgb_array(episode=ep_num, step=step_count))
+                        frames.append(env.render_rgb_array(episode=ep_num, step=step_count, sensory_data=vis_data))
                 break
         
         if not done:
              print("Episode Ended (Max Steps Reached).")
+             # Add pause for max steps too
+             for _ in range(5):
+                if with_satiation:
+                    frames.append(env.render_rgb_array(body.satiation, body.max_satiation, episode=ep_num, step=step_count, sensory_data=vis_data))
+                else:
+                    frames.append(env.render_rgb_array(episode=ep_num, step=step_count, sensory_data=vis_data))
              
     save_video(frames, video_filename)
 

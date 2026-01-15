@@ -14,7 +14,7 @@ body:
   with_satiation: true
   max_satiation: 20
   satiation_setpoint: 20
-  overeating_death: false  
+  overeating_death: false
   use_homeostatic_reward: true
   death_penalty: 100
   random_start_satiation: true
@@ -41,3 +41,9 @@ training:
 testing:
   seed: 56
   evaluation_episodes: 1
+
+sensory:
+  using_sensory: true
+  # Radius for detection (1 = UP/DOWN/LEFT/RIGHT)
+  food_radius: 1
+  danger_radius: 1
