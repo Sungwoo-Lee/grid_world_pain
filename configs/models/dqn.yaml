@@ -1,7 +1,3 @@
-sensory:
-  using_sensory: true
-  food_radius: 2
-  danger_radius: 1
 agent:
   algorithm: "DQN"
   batch_size: 64

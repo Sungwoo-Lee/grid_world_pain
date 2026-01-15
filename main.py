@@ -35,8 +35,8 @@ import yaml
 
 from src.environment import GridWorld
 from src.environment.body import InteroceptiveBody
-from src.models.q_learning_agent import QLearningAgent
-from src.models.dqn_agent import DQNAgent
+from src.models.q_learning import QLearningAgent
+from src.models.dqn import DQNAgent
 from src.environment.sensory import SensorySystem
 from src.environment.visualization import save_video
 from src.environment.config import get_default_config, Config
@@ -47,7 +47,7 @@ def main():
     parser.add_argument("--max_steps", type=int, default=30, help="Maximum steps to record per episode (default: 30)")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility (default: 42)")
     parser.add_argument("--config", type=str, help="Path to config YAML")
-    parser.add_argument("--agent_config", type=str, default="configs/agents/dqn.yaml", help="Path to agent config YAML")
+    parser.add_argument("--agent_config", type=str, default="configs/models/dqn.yaml", help="Path to agent config YAML")
     parser.add_argument("--tag", type=str, default="default", help="Tag for the run")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
     parser.add_argument("--no-health", action="store_true", help="Disable health")
@@ -113,7 +113,8 @@ def main():
     results_dir = "results"
     
     # Determine Model Name
-    if using_sensory:
+    model_name_config = config.get('agent.algorithm', 'Tabular Q-Learning').replace(" ", "_")
+    if model_name_config == "DQN":
          model_name = "Debug_DQN"
     else:
          model_name = "Debug_Tabular"
@@ -197,47 +198,49 @@ def main():
     def preprocess_state(state_tuple):
         """
         Flattens the complex state tuple into a single 1D numpy array.
-        Structure: [FoodVector (12), DangerVector (4), Satiation (1), Health (1)]
+        Structure: [Sensory/Coords, Satiation (1), Health (1)]
         """
-        # Unpack
-        # State tuple structure varies: (*sensory, *body)
-        # Sensory is always (food_idx, danger_idx)
-        # Body is (satiation, health) or (satiation,)
+        flat_list = []
         
-        # We need to reconstruct. 'state_tuple' is just a flat tuple of ints right now.
-        # Length 2 (sensory only), 3 (sensory+sat), 4 (sensory+sat+health)
+        if using_sensory:
+            food_idx = state_tuple[0]
+            danger_idx = state_tuple[1]
+            food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
+            danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
+            flat_list.extend(food_vec)
+            flat_list.extend(danger_vec)
+            body_start_idx = 2
+        else:
+            # Coords
+            row = state_tuple[0]
+            col = state_tuple[1]
+            flat_list.append(row / height)
+            flat_list.append(col / width)
+            body_start_idx = 2
         
-        food_idx = state_tuple[0]
-        danger_idx = state_tuple[1]
-        
-        # Convert indices to vectors
-        food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
-        danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
-        
-        flat_list = list(food_vec) + list(danger_vec)
-        
-        # Append Body States (Normalize them for NN stability?)
-        # For simple debugging, raw is fine, or simple scaling.
-        # Let's keep raw for consistency with checks, or normalize 0-1.
-        # DQN usually prefers normalized.
-        
-        if len(state_tuple) > 2:
-            satiation = state_tuple[2]
+        # Append Body States
+        if len(state_tuple) > body_start_idx:
+            satiation = state_tuple[body_start_idx]
             flat_list.append(satiation / max_satiation) # Normalize
             
-        if len(state_tuple) > 3:
-            health = state_tuple[3]
+        if len(state_tuple) > body_start_idx + 1:
+            health = state_tuple[body_start_idx + 1]
             flat_list.append(health / max_health) # Normalize
             
         return np.array(flat_list, dtype=np.float32)
 
     # Initialize Agent
-    if using_sensory:
+    algorithm = config.get('agent.algorithm', "Tabular Q-Learning")
+    
+    if algorithm == "DQN":
         # Calculate Input Dimension for DQN
-        # Food(12) + Danger(4) + Satiation(1) + Health(1) = 18
-        # We can calculate dynamically based on config
-        input_dim = sensory_system.food_sensor.vector_size + \
-                    sensory_system.danger_sensor.vector_size
+        input_dim = 0
+        if using_sensory:
+            input_dim = sensory_system.food_sensor.vector_size + \
+                        sensory_system.danger_sensor.vector_size
+        else:
+            input_dim = 2 # Coords
+            
         if with_satiation:
             input_dim += 1
             if config.get('body.with_health', False):
@@ -253,6 +256,8 @@ def main():
                 self.height = env.height
                 self.width = env.width
                 self.max_satiation = body.max_satiation
+                self.with_health = body.with_health
+                self.max_health = body.max_health
                 
         composite_env = CompositeEnv(env, body)
         agent = QLearningAgent(composite_env, with_satiation=with_satiation, state_dims=state_dims)
@@ -331,7 +336,7 @@ def main():
         while not done and step_count < max_steps_per_episode:
             
             # Action Selection
-            if using_sensory:
+            if isinstance(agent, DQNAgent):
                 # Preprocess state for DQN
                 flat_state = preprocess_state(state)
                 action = agent.choose_action(flat_state)

@@ -20,7 +20,7 @@ import numpy as np
 import argparse
 from src.environment import GridWorld
 from src.environment.body import InteroceptiveBody
-from src.models.q_learning_agent import QLearningAgent
+from src.models.q_learning import QLearningAgent
 from src.environment.sensory import SensorySystem
 from src.environment.config import Config, get_default_config
 from src.environment.visualization import plot_q_table, save_video
@@ -102,20 +102,56 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         danger_radius = config.get('sensory.danger_radius', 1)
         sensory_system = SensorySystem(food_radius=food_radius, danger_radius=danger_radius)
 
+    # Preprocessor for DQN
+    def preprocess_state(state_tuple):
+        flat_list = []
+        if using_sensory:
+            food_idx = state_tuple[0]
+            danger_idx = state_tuple[1]
+            food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
+            danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
+            flat_list.extend(food_vec)
+            flat_list.extend(danger_vec)
+            body_start_idx = 2
+        else:
+            # Coords
+            row = state_tuple[0]
+            col = state_tuple[1]
+            flat_list.append(row / height)
+            flat_list.append(col / width)
+            body_start_idx = 2
+
+        if len(state_tuple) > body_start_idx:
+            satiation = state_tuple[body_start_idx]
+            flat_list.append(satiation / body.max_satiation) 
+        if len(state_tuple) > body_start_idx + 1:
+            health = state_tuple[body_start_idx + 1]
+            flat_list.append(health / body.max_health)
+        return np.array(flat_list, dtype=np.float32)
+
     # Initialize Agent
     agent = None
-    if using_sensory:
-        # DQN
-        input_dim = sensory_system.food_sensor.vector_size + sensory_system.danger_sensor.vector_size
+    algorithm = config.get('agent.algorithm', "Tabular Q-Learning")
+    
+    if algorithm == "DQN":
+        # DQN inputs
+        input_dim = 0
+        if using_sensory:
+             input_dim += sensory_system.food_sensor.vector_size + \
+                          sensory_system.danger_sensor.vector_size
+        else:
+             input_dim += 2 # row, col
+
         if with_satiation:
             input_dim += 1
             if with_health:
                  input_dim += 1
         
-        from src.models.dqn_agent import DQNAgent
+        from src.models.dqn import DQNAgent
         agent = DQNAgent(state_dim=input_dim, action_dim=5)
         # Load weights
         import torch
+        # Map location if needed? default load is fine
         agent.policy_net.load_state_dict(torch.load(checkpoint_path))
         agent.target_net.load_state_dict(agent.policy_net.state_dict())
         agent.epsilon = 0.0 # Eval mode
@@ -136,21 +172,6 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         except Exception as e:
             print(f"  Error loading checkpoint: {e}")
             return
-            
-    # Preprocessor for DQN
-    def preprocess_state(state_tuple):
-        food_idx = state_tuple[0]
-        danger_idx = state_tuple[1]
-        food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
-        danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
-        flat_list = list(food_vec) + list(danger_vec)
-        if len(state_tuple) > 2:
-            satiation = state_tuple[2]
-            flat_list.append(satiation / body.max_satiation) 
-        if len(state_tuple) > 3:
-            health = state_tuple[3]
-            flat_list.append(health / body.max_health)
-        return np.array(flat_list, dtype=np.float32)
 
     # 3. Run Evaluation Episodes (Collect Frames)
     agent.epsilon = 0 # No exploration during evaluation
@@ -158,6 +179,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     
     for ep in range(num_episodes):
         ep_idx = ep + 1
+        
+        # Reset environment
+        env_state = env.reset() # Returns (row, col)
+        
         # Determine initial sensory state
         current_agent_pos = env.agent_pos
         current_danger_pos_list = []
@@ -330,8 +355,9 @@ def main():
     print("-" * 40)
 
     # 4. Find all checkpoints
-    using_sensory = config.get('sensory.using_sensory', False)
-    if using_sensory:
+    algorithm = config.get('agent.algorithm', "Tabular Q-Learning")
+    
+    if algorithm == "DQN":
         checkpoints = glob.glob(os.path.join(models_dir, "dqn_model_*.pth"))
         def extract_number(path):
             match = re.search(r"dqn_model_(\d+).pth", path)

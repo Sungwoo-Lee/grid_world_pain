@@ -25,8 +25,8 @@ Usage Examples:
 """
 from src.environment import GridWorld
 from src.environment.body import InteroceptiveBody
-from src.models.q_learning_agent import QLearningAgent
-from src.models.dqn_agent import DQNAgent
+from src.models.q_learning import QLearningAgent
+from src.models.dqn import DQNAgent
 from src.environment.sensory import SensorySystem
 from src.environment.visualization import plot_q_table, plot_learning_curves
 from src.environment.config import get_default_config
@@ -93,17 +93,22 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 
     # Agent
     using_sensory = config_dict.get('sensory.using_sensory', False)
-    if using_sensory:
+    algorithm = config_dict.get('agent.algorithm', "Tabular Q-Learning")
+    
+    if algorithm == "DQN":
         agent_data = {
             "Algorithm": "Deep Q-Network (DQN)",
-            "Sensory Inputs": "Enabled",
-            "Food Radius": config_dict.get('sensory.food_radius', 1),
-            "Danger Radius": config_dict.get('sensory.danger_radius', 1),
+            "Sensory Inputs": "Enabled" if using_sensory else "Disabled (Coordinates)",
             "Batch Size": 64
         }
+        if using_sensory:
+             agent_data["Food Radius"] = config_dict.get('sensory.food_radius', 1)
+             agent_data["Danger Radius"] = config_dict.get('sensory.danger_radius', 1)
+             
     else:
         agent_data = {
             "Algorithm": "Tabular Q-Learning",
+            "Sensory Inputs": "Enabled" if using_sensory else "Disabled (Coordinates)",
             "Alpha (Learning Rate)": config_dict.get('agent.alpha', 0.1),
             "Gamma (Discount)": config_dict.get('agent.gamma', 0.99),
             "Min Epsilon": 0.05
@@ -213,33 +218,54 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     def preprocess_state(state_tuple):
         """
         Flattens state tuple to float array.
+        Handles both Sensory (Vector) and Conventional (Coordinate) inputs.
         """
-        food_idx = state_tuple[0]
-        danger_idx = state_tuple[1]
+        flat_list = []
         
-        food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
-        danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
-        
-        flat_list = list(food_vec) + list(danger_vec)
-        
-        if len(state_tuple) > 2:
-            satiation = state_tuple[2]
+        if using_sensory:
+            food_idx = state_tuple[0]
+            danger_idx = state_tuple[1]
+            food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
+            danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
+            flat_list.extend(food_vec)
+            flat_list.extend(danger_vec)
+            
+            # Body states follow sensory
+            body_start_idx = 2
+        else:
+            # Conventional: (row, col)
+            # Normalize coordinates?
+            row = state_tuple[0]
+            col = state_tuple[1]
+            flat_list.append(row / env.height)
+            flat_list.append(col / env.width)
+            
+            body_start_idx = 2
+            
+        # Append Body States if present
+        if len(state_tuple) > body_start_idx:
+            satiation = state_tuple[body_start_idx]
             flat_list.append(satiation / body.max_satiation) 
             
-        if len(state_tuple) > 3:
-            health = state_tuple[3]
-            # Handle potential None if health not active but tuple exists?
-            # Assuming logic is consistent
+        if len(state_tuple) > body_start_idx + 1:
+            health = state_tuple[body_start_idx + 1]
             flat_list.append(health / body.max_health)
             
         return np.array(flat_list, dtype=np.float32)
 
     # Initialize Agent
     agent = None
-    if using_sensory:
+    algorithm = config_dict.get('agent.algorithm', "Tabular Q-Learning")
+    
+    if algorithm == "DQN":
         # Calculate Input Dimension
-        input_dim = sensory_system.food_sensor.vector_size + \
-                    sensory_system.danger_sensor.vector_size
+        input_dim = 0
+        if using_sensory:
+             input_dim += sensory_system.food_sensor.vector_size + \
+                          sensory_system.danger_sensor.vector_size
+        else:
+             input_dim += 2 # row, col
+             
         if with_satiation:
             input_dim += 1
             if with_health:
@@ -247,8 +273,10 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         
         print(f"Initializing DQN Agent (Input Dim: {input_dim})...")
         agent = DQNAgent(state_dim=input_dim, action_dim=5)
+        
     else:
-        # Tabular
+        # Tabular (Default)
+        print(f"Initializing Tabular Agent ({algorithm})...")
         class CompositeEnv:
             def __init__(self, env, body):
                 self.height = env.height
@@ -320,11 +348,12 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         steps = 0
         
         # Preprocess for DQN
-        if using_sensory:
+        flat_state = None
+        if isinstance(agent, DQNAgent):
             flat_state = preprocess_state(state)
         
         while not done:
-            if using_sensory:
+            if isinstance(agent, DQNAgent):
                 action = agent.choose_action(flat_state)
             else:
                 action = agent.choose_action(state)
@@ -363,7 +392,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
                 else:
                     next_state = next_env_state
             
-            if using_sensory:
+            if isinstance(agent, DQNAgent):
                 # DQN Update
                 flat_next_state = preprocess_state(next_state)
                 agent.store_transition(flat_state, action, reward, flat_next_state, done)
@@ -382,7 +411,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         # End of Episode
         episode_epsilons.append(agent.epsilon)
 
-        if not using_sensory:
+        if not isinstance(agent, DQNAgent):
             # Manually decay for tabular
             agent.epsilon = max(tabular_min_epsilon, agent.epsilon * tabular_decay_rate)
         else:
@@ -406,7 +435,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         if (episode + 1) in milestones:
             pct = milestones[episode + 1]
             
-            if using_sensory:
+            if isinstance(agent, DQNAgent):
                 model_snap_filename = os.path.join(models_dir, f"dqn_model_{pct}.pth")
                 agent.save(model_snap_filename)
             else:
@@ -419,7 +448,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     print(f"Training completed in {training_time:.2f} seconds.")
     
     # Final model save
-    if using_sensory:
+    if isinstance(agent, DQNAgent):
          model_filename = os.path.join(models_dir, "dqn_model_final.pth")
     else:
          model_filename = os.path.join(models_dir, "q_table.npy")
@@ -445,7 +474,7 @@ if __name__ == "__main__":
     parser.add_argument("--episodes", type=int, help="Number of episodes to train")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
     parser.add_argument("--config", type=str, help="Path to base config YAML")
-    parser.add_argument("--agent_config", type=str, default="configs/agents/dqn.yaml", help="Path to agent config YAML")
+    parser.add_argument("--agent_config", type=str, default="configs/models/dqn.yaml", help="Path to agent config YAML")
     parser.add_argument("--tag", type=str, default="default", help="Tag for the training run")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
     parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")

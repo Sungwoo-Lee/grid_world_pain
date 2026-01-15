@@ -36,7 +36,7 @@ environment:
 sensory:
   danger_radius: 1
   food_radius: 2
-  using_sensory: true
+  using_sensory: false
 testing:
   evaluation_episodes: 1
   seed: 56
