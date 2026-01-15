@@ -30,7 +30,7 @@ body:
 sensory:
   using_sensory: true
   # Radius for detection (1 = UP/DOWN/LEFT/RIGHT)
-  food_radius: 3
+  food_radius: 2
   danger_radius: 1
 
 agent:

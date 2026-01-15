@@ -30,13 +30,16 @@ import time
 import datetime
 import imageio
 import numpy as np
+import re
+import yaml
 
-from src.grid_world_pain import GridWorld
-from src.grid_world_pain.body import InteroceptiveBody
-from src.grid_world_pain.agent import QLearningAgent
-from src.grid_world_pain.visualization import save_video
-from src.grid_world_pain.config import get_default_config
-from src.grid_world_pain.sensory import SensorySystem
+from src.environment import GridWorld
+from src.environment.body import InteroceptiveBody
+from src.models.q_learning_agent import QLearningAgent
+from src.models.dqn_agent import DQNAgent
+from src.environment.sensory import SensorySystem
+from src.environment.visualization import save_video
+from src.environment.config import get_default_config
 
 def main():
     parser = argparse.ArgumentParser(description="GridWorld Debug Sandbox")
@@ -151,18 +154,70 @@ def main():
         state_dims = sensory_dims + body_dims
         print(f"State Dimensions: {state_dims}")
 
-    # Mock composite env for agent init
-    class CompositeEnv:
-        def __init__(self, env, body):
-            self.height = env.height
-            self.width = env.width
-            self.max_satiation = body.max_satiation
+    # Helper to flatten state for DQN
+    def preprocess_state(state_tuple):
+        """
+        Flattens the complex state tuple into a single 1D numpy array.
+        Structure: [FoodVector (12), DangerVector (4), Satiation (1), Health (1)]
+        """
+        # Unpack
+        # State tuple structure varies: (*sensory, *body)
+        # Sensory is always (food_idx, danger_idx)
+        # Body is (satiation, health) or (satiation,)
+        
+        # We need to reconstruct. 'state_tuple' is just a flat tuple of ints right now.
+        # Length 2 (sensory only), 3 (sensory+sat), 4 (sensory+sat+health)
+        
+        food_idx = state_tuple[0]
+        danger_idx = state_tuple[1]
+        
+        # Convert indices to vectors
+        food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
+        danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
+        
+        flat_list = list(food_vec) + list(danger_vec)
+        
+        # Append Body States (Normalize them for NN stability?)
+        # For simple debugging, raw is fine, or simple scaling.
+        # Let's keep raw for consistency with checks, or normalize 0-1.
+        # DQN usually prefers normalized.
+        
+        if len(state_tuple) > 2:
+            satiation = state_tuple[2]
+            flat_list.append(satiation / max_satiation) # Normalize
             
-    composite_env = CompositeEnv(env, body)
-    
-    # Initialize Agent with explicit state_dims if using_sensory
-    agent = QLearningAgent(composite_env, with_satiation=with_satiation, state_dims=state_dims)
-    agent.epsilon = 1.0 # Force random behavior for debug sandbox
+        if len(state_tuple) > 3:
+            health = state_tuple[3]
+            flat_list.append(health / max_health) # Normalize
+            
+        return np.array(flat_list, dtype=np.float32)
+
+    # Initialize Agent
+    if using_sensory:
+        # Calculate Input Dimension for DQN
+        # Food(12) + Danger(4) + Satiation(1) + Health(1) = 18
+        # We can calculate dynamically based on config
+        input_dim = sensory_system.food_sensor.vector_size + \
+                    sensory_system.danger_sensor.vector_size
+        if with_satiation:
+            input_dim += 1
+            if config.get('body.with_health', False):
+                 input_dim += 1
+                 
+        print(f"DQN Input Dimension: {input_dim}")
+        agent = DQNAgent(state_dim=input_dim, action_dim=5)
+        # Load weights if exist? For debug scratchpad, maybe not.
+    else:
+        # Mock composite env for agent init
+        class CompositeEnv:
+            def __init__(self, env, body):
+                self.height = env.height
+                self.width = env.width
+                self.max_satiation = body.max_satiation
+                
+        composite_env = CompositeEnv(env, body)
+        agent = QLearningAgent(composite_env, with_satiation=with_satiation, state_dims=state_dims)
+        agent.epsilon = 1.0 # Force random behavior for debug sandbox
     
     frames = []
     
@@ -235,7 +290,15 @@ def main():
         step_count = 0
         
         while not done and step_count < max_steps_per_episode:
-            action = agent.choose_action(state)
+            
+            # Action Selection
+            if using_sensory:
+                # Preprocess state for DQN
+                flat_state = preprocess_state(state)
+                action = agent.choose_action(flat_state)
+            else:
+                action = agent.choose_action(state)
+                
             action_names = ["Up", "Right", "Down", "Left", "Stay"]
             
             print(f"Step {step_count + 1}: Action {action_names[action]}")

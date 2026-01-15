@@ -8,5 +8,6 @@
 *.npy
 *.png
 *.csv
+*.pth
 dist/
 build/
