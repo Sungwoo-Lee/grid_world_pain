@@ -35,7 +35,7 @@ from src.environment.body import InteroceptiveBody
 from src.models.q_learning import QLearningAgent
 from src.models.dqn import DQNAgent
 from src.models.ppo import PPOAgent
-from src.environment.sensory import SensorySystem
+from src.environment.sensor import SensorySystem
 from src.utils.visualization import plot_q_table, plot_learning_curves
 from src.utils.config import get_default_config
 import time

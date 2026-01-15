@@ -35,7 +35,7 @@ import yaml
 
 from src.environment import GridWorld
 from src.environment.body import InteroceptiveBody
-from src.environment.sensory import SensorySystem
+from src.environment.sensor import SensorySystem
 from src.utils.visualization import save_video
 from src.utils.config import get_default_config, Config
 
