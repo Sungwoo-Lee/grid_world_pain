@@ -54,6 +54,8 @@ import sys
 import argparse
 
 
+from tqdm import tqdm
+
 def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed,
                          with_health, danger_prob, damage_amount, device="auto"):
     """
@@ -490,7 +492,13 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     tabular_decay_rate = 0.9995
     tabular_min_epsilon = 0.05
     
-    for episode in range(episodes):
+    tabular_decay_rate = 0.9995
+    tabular_min_epsilon = 0.05
+    
+    # Progress Bar with tqdm
+    pbar = tqdm(range(episodes), desc="Training", unit="ep")
+    
+    for episode in pbar:
         # Reset External
         env_state = env.reset()
         if hasattr(agent, 'reset_hidden'):
@@ -606,14 +614,15 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         episode_rewards.append(total_reward)
         episode_steps.append(steps)
         
-        # Progress Bar
-        if (episode + 1) % 100 == 0:
-            progress = (episode + 1) / episodes
-            bar_length = 40
-            block = int(round(bar_length * progress))
-            text = "\rProgress: [{0}] {1:.1f}%".format( "#" * block + "-" * (bar_length - block), progress * 100)
-            sys.stdout.write(text)
-            sys.stdout.flush()
+
+            
+        # Update tqdm postfix
+        if (episode + 1) % 10 == 0:
+             current_epsilon = agent.epsilon if hasattr(agent, 'epsilon') else 0.0
+             avg_reward = np.mean(episode_rewards[-10:]) if len(episode_rewards) > 0 else 0
+             pbar.set_postfix({'Rw': f'{avg_reward:.1f}', 'Eps': f'{current_epsilon:.3f}'})
+
+        # Check milestones
             
         # Check milestones
         if (episode + 1) in milestones:
