@@ -47,6 +47,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         match = re.search(r"dqn_model_(\d+).pth", filename)
     if not match:
         match = re.search(r"ppo_model_(\d+).pth", filename)
+    if not match:
+        match = re.search(r"drqn_model_(\d+).pth", filename)
+    if not match:
+        match = re.search(r"recurrent_ppo_model_(\d+).pth", filename)
         
     pct = match.group(1) if match else ("final" if "final" in filename or filename == "q_table.npy" else "unknown")
     
@@ -145,6 +149,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     agent = None
     algorithm = config.get('agent.algorithm', "Tabular Q-Learning")
     
+    device = config.get('training.device', 'auto') # Use training device setting or auto
+    
     if algorithm == "DQN":
         # DQN inputs
         input_dim = 0
@@ -164,9 +170,28 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         # Load weights
         import torch
         # Map location if needed? default load is fine
-        agent.policy_net.load_state_dict(torch.load(checkpoint_path))
-        agent.target_net.load_state_dict(agent.policy_net.state_dict())
+        agent.policy_net.load_state_dict(torch.load(checkpoint_path, map_location=device if device != 'auto' else None))
         agent.epsilon = 0.0 # Eval mode
+
+    elif algorithm == "DRQN":
+        input_dim = 0
+        if using_sensory:
+             input_dim += sensory_system.food_sensor.vector_size + \
+                          sensory_system.danger_sensor.vector_size
+        else:
+             input_dim += 2 
+
+        if with_satiation:
+            input_dim += 1
+            if with_health:
+                 input_dim += 1
+        
+        from src.models.drqn import DRQNAgent
+        agent = DRQNAgent(state_dim=input_dim, action_dim=5, device=device)
+        import torch
+        agent.load(checkpoint_path)
+        agent.epsilon = 0.0
+
     elif algorithm == "PPO":
         from src.models.ppo import PPOAgent
         # PPO inputs same as DQN
@@ -182,8 +207,26 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             if with_health:
                  input_dim += 1
         
-        agent = PPOAgent(state_dim=input_dim, action_dim=5)
+        agent = PPOAgent(state_dim=input_dim, action_dim=5, device=device)
         agent.load(checkpoint_path)
+
+    elif algorithm == "RecurrentPPO":
+        from src.models.recurrent_ppo import RecurrentPPOAgent
+        input_dim = 0
+        if using_sensory:
+             input_dim += sensory_system.food_sensor.vector_size + \
+                          sensory_system.danger_sensor.vector_size
+        else:
+             input_dim += 2 
+
+        if with_satiation:
+            input_dim += 1
+            if with_health:
+                 input_dim += 1
+        
+        agent = RecurrentPPOAgent(state_dim=input_dim, action_dim=5, sequence_length=config.get('agent.sequence_length', 8), device=device)
+        agent.load(checkpoint_path)
+
     else:
         # Tabular
         class CompositeEnv:
@@ -211,6 +254,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         
         # Reset environment
         env_state = env.reset() # Returns (row, col)
+        
+        if hasattr(agent, 'reset_hidden'):
+            agent.reset_hidden()
         
         # Determine initial sensory state
         current_agent_pos = env.agent_pos
@@ -398,6 +444,18 @@ def main():
             match = re.search(r"ppo_model_(\d+).pth", path)
             return int(match.group(1)) if match else -1
         final_model = os.path.join(models_dir, "ppo_model_final.pth")
+    elif algorithm == "DRQN":
+        checkpoints = glob.glob(os.path.join(models_dir, "drqn_model_*.pth"))
+        def extract_number(path):
+            match = re.search(r"drqn_model_(\d+).pth", path)
+            return int(match.group(1)) if match else -1
+        final_model = os.path.join(models_dir, "drqn_model_final.pth")
+    elif algorithm == "RecurrentPPO":
+        checkpoints = glob.glob(os.path.join(models_dir, "recurrent_ppo_model_*.pth"))
+        def extract_number(path):
+            match = re.search(r"recurrent_ppo_model_(\d+).pth", path)
+            return int(match.group(1)) if match else -1
+        final_model = os.path.join(models_dir, "recurrent_ppo_model_final.pth")
     else:
         checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
         def extract_number(path):
