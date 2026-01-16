@@ -252,14 +252,24 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         print(f"Resolved configuration saved to {config_save_path}")
 
     # Set numpy/torch random seed
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    random.seed(seed)
-
-    # Initialize environment, body
-    env = GridWorld(with_satiation=with_satiation, max_steps=max_steps,
-                    danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount,
-                    food_prob=food_prob, food_duration=food_duration)
+    resource_pos = config_dict.get('environment.resource_pos')
+    if resource_pos is None: # Backward compatibility
+         resource_pos = config_dict.get('environment.food_pos', [4, 4])
+         
+    env = GridWorld(
+        height=config_dict.get('environment.height', 5),
+        width=config_dict.get('environment.width', 5),
+        start=tuple(config_dict.get('environment.start_pos', [0, 0])),
+        resource_pos=tuple(resource_pos),
+        max_steps=max_steps,
+        danger_prob=danger_prob,
+        danger_duration=danger_duration,
+        damage_amount=damage_amount,
+        food_prob=food_prob,
+        food_duration=food_duration,
+        relocate_resource=config_dict.get('environment.relocate_resource', False),
+        relocation_steps=config_dict.get('environment.relocation_steps', 20)
+    )
     
     body = InteroceptiveBody(
         overeating_death=overeating_death, 
@@ -490,10 +500,10 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         current_agent_pos = env.agent_pos
         current_danger_pos_list = []
         if env.is_danger:
-             current_danger_pos_list = [env.food_pos]
+             current_danger_pos_list = [env.resource_pos]
 
         if using_sensory:
-             sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
+             sensory_state = sensory_system.sense(current_agent_pos, env.resource_pos, current_danger_pos_list)
 
         if with_satiation:
             body_return = body.reset()
@@ -537,10 +547,10 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             current_agent_pos = env.agent_pos
             current_danger_pos_list = []
             if env.is_danger:
-                 current_danger_pos_list = [env.food_pos]
+                 current_danger_pos_list = [env.resource_pos]
 
             if using_sensory:
-                 next_sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
+                 next_sensory_state = sensory_system.sense(current_agent_pos, env.resource_pos, current_danger_pos_list)
             
             if with_satiation:
                 body_return, reward, body_done = body.step(info)

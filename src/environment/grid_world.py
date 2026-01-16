@@ -31,9 +31,9 @@ class GridWorld:
       not the external world. The environment only provides signals (like 'ate_food').
     """
     
-    def __init__(self, height=5, width=5, start=(0, 0), food_pos=(4, 4), with_satiation=True, max_steps=100,
+    def __init__(self, height=5, width=5, start=(0, 0), resource_pos=(4, 4), with_satiation=True, max_steps=100,
                  danger_prob=0.1, danger_duration=5, damage_amount=5,
-                 food_prob=0.2, food_duration=10):
+                 food_prob=0.2, food_duration=10, relocate_resource=False, relocation_steps=20):
         """
         Initializes the GridWorld foraging environment.
 
@@ -41,17 +41,19 @@ class GridWorld:
             height (int): Number of rows.
             width (int): Number of columns.
             start (tuple): Start position (row, col).
-            food_pos (tuple): Food position (row, col).
+            resource_pos (tuple): Resource position (row, col).
             with_satiation (bool): Whether to include satiation/homeostasis.
             max_steps (int): Maximum steps allowed per episode.
             danger_prob (float): Probability of food turning into danger.
             danger_duration (int): How long danger persists.
             damage_amount (int): Amount of damage taken in danger state.
+            relocate_resource (bool): Whether to randomly relocate resource.
+            relocation_steps (int): Relocate every N steps.
         """
         self.height = height
         self.width = width
         self.start = tuple(start)
-        self.food_pos = tuple(food_pos)
+        self.resource_pos = tuple(resource_pos)
         self.agent_pos = self.start
         self.with_satiation = with_satiation
         self.max_steps = max_steps
@@ -67,6 +69,11 @@ class GridWorld:
         
         self.resource_state = 'food' # 'food' or 'danger'
         self.resource_timer = self.food_duration
+        
+        # Relocation
+        self.relocate_resource = relocate_resource
+        self.relocation_steps = relocation_steps
+        self.relocation_timer = relocation_steps
         
     @property
     def is_danger(self):
@@ -92,9 +99,20 @@ class GridWorld:
         while True:
             row = np.random.randint(0, self.height)
             col = np.random.randint(0, self.width)
-            if (row, col) != self.food_pos:
+            row = np.random.randint(0, self.height)
+            col = np.random.randint(0, self.width)
+            if (row, col) != self.resource_pos and (row, col) != self.start:
                 self.agent_pos = (row, col)
                 break
+        
+        if self.relocate_resource:
+             # Also reset resource pos? Or keep it? Usually reset logic is fresh.
+             # Let's respawn resource randomly on reset too?
+             # For now keep config pos or random? 
+             # Let's keep it simple: reset uses configured pos, or random if configured?
+             pass
+             
+        self.relocation_timer = self.relocation_steps
         return self.agent_pos
     
     def step(self, action):
@@ -134,6 +152,22 @@ class GridWorld:
                     self.resource_state = 'food'
                     self.resource_timer = self.food_duration
 
+                    self.resource_state = 'food'
+                    self.resource_timer = self.food_duration
+
+        # --- Relocation Update ---
+        if self.relocate_resource:
+            self.relocation_timer -= 1
+            if self.relocation_timer <= 0:
+                # Relocate Resource
+                while True:
+                    rr = np.random.randint(0, self.height)
+                    rc = np.random.randint(0, self.width)
+                    if (rr, rc) != self.agent_pos:
+                        self.resource_pos = (rr, rc)
+                        break
+                self.relocation_timer = self.relocation_steps
+
         row, col = self.agent_pos
         
         # Movement logic
@@ -154,7 +188,7 @@ class GridWorld:
         ate_food = False
         damage = 0
         
-        if self.agent_pos == self.food_pos:
+        if self.agent_pos == self.resource_pos:
             if self.is_danger:
                 damage = self.damage_amount
             elif self.is_food_active:
@@ -184,7 +218,7 @@ class GridWorld:
             for c in range(self.width):
                 if (r, c) == self.agent_pos:
                     line += "A "
-                elif (r, c) == self.food_pos:
+                elif (r, c) == self.resource_pos:
                     if self.is_danger:
                         line += "X " # Danger
                     elif self.is_food_active:
@@ -250,7 +284,7 @@ class GridWorld:
             ax_grid.hlines(y - 0.5, -0.5, self.width - 0.5, colors=grid_color, linestyles='-', linewidth=1.5)
             
         # Draw Food / Danger
-        fr, fc = self.food_pos
+        fr, fc = self.resource_pos
         if self.is_danger:
             # Danger: Cross / Skull representation
             ax_grid.plot(fc, fr, marker='X', markersize=20, color=danger_color, markeredgecolor='white', markeredgewidth=2, path_effects=shadow_effect)

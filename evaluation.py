@@ -64,7 +64,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     max_steps = config.get('environment.max_steps', 100)
     seed = config.get('testing.seed', 42)
     num_episodes = config.get('testing.evaluation_episodes', 1)
-    food_pos = config.get('environment.food_pos', [4, 4])
+    resource_pos = config.get('environment.resource_pos')
+    if resource_pos is None:
+         resource_pos = config.get('environment.food_pos', [4, 4])
+         
     height = config.get('environment.height', 5)
     width = config.get('environment.width', 5)
     max_satiation = config.get('body.max_satiation', 20)
@@ -93,7 +96,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     # Set seed for deterministic evaluation
     np.random.seed(seed)
     
-    env = GridWorld(height=height, width=width, food_pos=food_pos, with_satiation=with_satiation, max_steps=max_steps,
+    env = GridWorld(height=height, width=width, resource_pos=resource_pos, with_satiation=with_satiation, max_steps=max_steps,
                     danger_prob=pain_prob, danger_duration=pain_duration, damage_amount=damage_amount,
                     food_prob=food_prob, food_duration=food_duration)
     body = InteroceptiveBody(
@@ -281,9 +284,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         current_agent_pos = env.agent_pos
         current_danger_pos_list = []
         if env.is_danger:
-             current_danger_pos_list = [env.food_pos]
+             current_danger_pos_list = [env.resource_pos]
         if using_sensory:
-            sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
+            sensory_state = sensory_system.sense(current_agent_pos, env.resource_pos, current_danger_pos_list)
 
         if with_satiation:
             body_return = body.reset()
@@ -337,10 +340,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             current_agent_pos = env.agent_pos
             current_danger_pos_list = []
             if env.is_danger:
-                 current_danger_pos_list = [env.food_pos]
+                 current_danger_pos_list = [env.resource_pos]
             
             if using_sensory:
-                 next_sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
+                 next_sensory_state = sensory_system.sense(current_agent_pos, env.resource_pos, current_danger_pos_list)
             
             if with_satiation:
                 body_return, _, body_done = body.step(info)
@@ -402,7 +405,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         plots_dir = os.path.join(results_dir, "plots")
         os.makedirs(plots_dir, exist_ok=True)
         vis_filename = os.path.join(plots_dir, f"q_table_vis_{pct}.png" if pct != "final" else "q_table_vis.png")
-        plot_q_table(agent.q_table, vis_filename, food_pos)
+        plot_q_table(agent.q_table, vis_filename, resource_pos)
     
     # Save Video
     videos_dir = os.path.join(results_dir, "videos")

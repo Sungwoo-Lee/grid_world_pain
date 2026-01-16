@@ -4,13 +4,15 @@ environment:
   height: 5
   width: 5
   start_pos: [0, 0]
-  food_pos: [4, 4]
+  resource_pos: [4, 4]
   max_steps: 100
   danger_prob: 0.1
   danger_duration: 3
   damage_amount: 5
   food_prob: 0.1
   food_duration: 5
+  relocate_resource: true
+  relocation_steps: 20
 
 body:
   with_satiation: true
