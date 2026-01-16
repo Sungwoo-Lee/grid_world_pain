@@ -1,0 +1,24 @@
+agent:
+  algorithm: "DRQN"
+  lr: 0.001
+  gamma: 0.99
+  buffer_size: 10000
+  batch_size: 32
+  trace_length: 8
+  burn_in_length: 4
+  epsilon_start: 1.0
+  epsilon_end: 0.05
+  epsilon_decay: 0.999 # Slow decay for longer convergence
+  
+sensory:
+  using_sensory: true
+  food_radius: 2
+  danger_radius: 2
+
+training:
+  training_episode: 50000
+  device: "auto"
+
+environment:
+  max_steps: 100
+  danger_prob: 0.05
