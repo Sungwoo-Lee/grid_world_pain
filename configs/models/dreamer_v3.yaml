@@ -1,0 +1,8 @@
+agent:
+  algorithm: "DreamerV3"
+  batch_size: 16
+  batch_length: 16
+  train_steps: 1
+  model_lr: 1e-4
+  actor_lr: 8e-5
+  value_lr: 8e-5

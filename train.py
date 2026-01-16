@@ -38,6 +38,7 @@ from src.models.dqn import DQNAgent
 from src.models.drqn import DRQNAgent
 from src.models.ppo import PPOAgent
 from src.models.recurrent_ppo import RecurrentPPOAgent
+from src.models.dreamer_v3 import DreamerV3Agent
 from src.environment.sensor import SensorySystem
 from src.utils.visualization import plot_q_table, plot_learning_curves
 from src.utils.config import get_default_config
@@ -138,6 +139,17 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             "Critic LR": config_dict.get('agent.lr_critic', 0.001),
             "Gamma (Discount)": config_dict.get('agent.gamma', 0.99),
             "Update Frequency": config_dict.get('agent.update_timestep', 2000)
+        }
+        if using_sensory:
+             agent_data["Food Radius"] = config_dict.get('sensory.food_radius', 1)
+             agent_data["Danger Radius"] = config_dict.get('sensory.danger_radius', 1)
+
+    elif algorithm == "DreamerV3":
+        agent_data = {
+            "Algorithm": "Dreamer V3",
+            "Sensory Inputs": "Enabled" if using_sensory else "Disabled (Coordinates)",
+            "Batch Size": config_dict.get('agent.batch_size', 16),
+            "Batch Length": config_dict.get('agent.batch_length', 16),
         }
         if using_sensory:
              agent_data["Food Radius"] = config_dict.get('sensory.food_radius', 1)
@@ -406,6 +418,32 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             device=device
         )
 
+    elif algorithm == "DreamerV3":
+        # Calculate Input Dimension
+        input_dim = 0
+        if using_sensory:
+             input_dim += sensory_system.food_sensor.vector_size + \
+                          sensory_system.danger_sensor.vector_size
+        else:
+             input_dim += 2 # row, col
+             
+        if with_satiation:
+            input_dim += 1
+            if with_health:
+                 input_dim += 1
+                 
+        print(f"Initializing Dreamer V3 Agent (Input Dim: {input_dim})...")
+        agent = DreamerV3Agent(
+            state_dim=input_dim, 
+            action_dim=5,
+            batch_size=int(config_dict.get('agent.batch_size', 16)),
+            batch_length=int(config_dict.get('agent.batch_length', 16)),
+            model_lr=float(config_dict.get('agent.model_lr', 1e-4)),
+            actor_lr=float(config_dict.get('agent.actor_lr', 8e-5)),
+            value_lr=float(config_dict.get('agent.value_lr', 8e-5)),
+            device=device
+        )
+
     else:
         # Tabular (Default)
         print(f"Initializing Tabular Agent ({algorithm})...")
@@ -483,11 +521,11 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         
         # Preprocess for DQN/PPO
         flat_state = None
-        if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent)):
+        if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
             flat_state = preprocess_state(state)
         
         while not done:
-            if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent)):
+            if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 action = agent.choose_action(flat_state)
             else:
                 action = agent.choose_action(state)
@@ -527,8 +565,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
                     next_state = next_env_state
                     next_state = next_env_state
             
-            if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent)):
-                # DQN/PPO/DRQN/RecurrentPPO Update
+            if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
+                # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update
                 flat_next_state = preprocess_state(next_state)
                 agent.store_transition(flat_state, action, reward, flat_next_state, done)
                 agent.update()
@@ -544,9 +582,9 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             steps += 1
             
         # End of Episode
-        episode_epsilons.append(agent.epsilon)
+        episode_epsilons.append(agent.epsilon if hasattr(agent, 'epsilon') else 0.0)
 
-        if not isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent)):
+        if not isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
             # Manually decay for tabular
             agent.epsilon = max(tabular_min_epsilon, agent.epsilon * tabular_decay_rate)
         elif isinstance(agent, (DQNAgent, DRQNAgent)):
@@ -583,6 +621,9 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             elif isinstance(agent, RecurrentPPOAgent):
                 model_snap_filename = os.path.join(models_dir, f"recurrent_ppo_model_{pct}.pth")
                 agent.save(model_snap_filename)
+            elif isinstance(agent, DreamerV3Agent):
+                model_snap_filename = os.path.join(models_dir, f"dreamer_model_{pct}.pth")
+                agent.save(model_snap_filename)
             else:
                 model_snap_filename = os.path.join(models_dir, f"q_table_{pct}.npy")
                 agent.save(model_snap_filename)
@@ -601,6 +642,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
          model_filename = os.path.join(models_dir, "ppo_model_final.pth")
     elif isinstance(agent, RecurrentPPOAgent):
          model_filename = os.path.join(models_dir, "recurrent_ppo_model_final.pth")
+    elif isinstance(agent, DreamerV3Agent):
+         model_filename = os.path.join(models_dir, "dreamer_model_final.pth")
     else:
          model_filename = os.path.join(models_dir, "q_table.npy")
     agent.save(model_filename)

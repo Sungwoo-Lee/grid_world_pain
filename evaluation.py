@@ -51,6 +51,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         match = re.search(r"drqn_model_(\d+).pth", filename)
     if not match:
         match = re.search(r"recurrent_ppo_model_(\d+).pth", filename)
+    if not match:
+        match = re.search(r"dreamer_model_(\d+).pth", filename)
         
     pct = match.group(1) if match else ("final" if "final" in filename or filename == "q_table.npy" else "unknown")
     
@@ -225,6 +227,23 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                  input_dim += 1
         
         agent = RecurrentPPOAgent(state_dim=input_dim, action_dim=5, sequence_length=config.get('agent.sequence_length', 8), device=device)
+        agent.load(checkpoint_path)
+
+    elif algorithm == "DreamerV3":
+        from src.models.dreamer_v3 import DreamerV3Agent
+        input_dim = 0
+        if using_sensory:
+             input_dim += sensory_system.food_sensor.vector_size + \
+                          sensory_system.danger_sensor.vector_size
+        else:
+             input_dim += 2 
+
+        if with_satiation:
+            input_dim += 1
+            if with_health:
+                 input_dim += 1
+        
+        agent = DreamerV3Agent(state_dim=input_dim, action_dim=5, batch_size=config.get('agent.batch_size', 16), batch_length=config.get('agent.batch_length', 16), device=device)
         agent.load(checkpoint_path)
 
     else:
@@ -456,6 +475,12 @@ def main():
             match = re.search(r"recurrent_ppo_model_(\d+).pth", path)
             return int(match.group(1)) if match else -1
         final_model = os.path.join(models_dir, "recurrent_ppo_model_final.pth")
+    elif algorithm == "DreamerV3":
+        checkpoints = glob.glob(os.path.join(models_dir, "dreamer_model_*.pth"))
+        def extract_number(path):
+            match = re.search(r"dreamer_model_(\d+).pth", path)
+            return int(match.group(1)) if match else -1
+        final_model = os.path.join(models_dir, "dreamer_model_final.pth")
     else:
         checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
         def extract_number(path):
