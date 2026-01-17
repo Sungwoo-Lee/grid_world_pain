@@ -1,0 +1,42 @@
+IMAGEIO FFMPEG_WRITER WARNING: input image is not divisible by macro_block_size=16, resizing from (1000, 1380) to (1008, 1392) to ensure video compatibility with most codecs and players. To prevent resizing, make your input image divisible by the macro_block_size or set the macro_block_size to 1 (risking incompatibility).
+Traceback (most recent call last):
+  File "/media/nas01/projects/Interoceptive-AI/grid_world_pain/evaluation.py", line 656, in <module>
+    main()
+    ~~~~^^
+  File "/media/nas01/projects/Interoceptive-AI/grid_world_pain/evaluation.py", line 650, in main
+    evaluate_checkpoint(checkpoint, results_dir, config)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/nas01/projects/Interoceptive-AI/grid_world_pain/evaluation.py", line 548, in evaluate_checkpoint
+    save_video(frames, video_filename)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/nas01/projects/Interoceptive-AI/grid_world_pain/src/utils/visualization.py", line 236, in save_video
+    imageio.mimsave(output_path, frames, fps=fps)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vncuser/miniconda3/envs/grid_world_pain/lib/python3.14/site-packages/imageio/v2.py", line 495, in mimwrite
+    return file.write(ims, is_batch=True, **kwargs)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/vncuser/miniconda3/envs/grid_world_pain/lib/python3.14/site-packages/imageio/core/legacy_plugin_wrapper.py", line 253, in write
+    writer.append_data(image, metadata)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/vncuser/miniconda3/envs/grid_world_pain/lib/python3.14/site-packages/imageio/core/format.py", line 590, in append_data
+    return self._append_data(im, total_meta)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/home/vncuser/miniconda3/envs/grid_world_pain/lib/python3.14/site-packages/imageio/plugins/ffmpeg.py", line 597, in _append_data
+    raise ValueError("All images in a movie should have same size")
+ValueError: All images in a movie should have same size
+
+ERROR conda.cli.main_run:execute(125): `conda run python evaluation.py --episodes 1 --results_dir results/DreamerV3/20260117-214742_default` failed. (See above for error)
+Loading training configuration from results/DreamerV3/20260117-214742_default/models/config.yaml...
+----------------------------------------
+Evaluation Mode: Interoceptive
+Grid Size: 5x5
+Testing Seed: 56
+Num Episodes: 1
+----------------------------------------
+Found 8 checkpoints. Starting evaluation...
+Evaluating checkpoint: dreamer_model_final.pth (final%)
+DreamerV3 Agent using device: cuda
+  Monitoring activations for DreamerV3Agent...
+  Running warmup forward pass...
+  Warmup successful. Captured 9 layers.
+

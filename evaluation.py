@@ -335,8 +335,12 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                      print("  Running warmup forward pass...")
                      with torch.no_grad():
                           if hasattr(agent, 'reset_hidden'): agent.reset_hidden()
-                          if "DRQN" in type(agent).__name__ or "Recurrent" in type(agent).__name__:
-                               # DRQN forward expects (batch, seq, dim)
+                          is_recurrent = "DRQN" in type(agent).__name__ or \
+                                         "Recurrent" in type(agent).__name__ or \
+                                         "Dreamer" in type(agent).__name__
+                          
+                          if is_recurrent:
+                               # Recurrent forward expects (batch, seq, dim)
                                dummy_input = dummy_input.unsqueeze(0) 
                                model_to_monitor(dummy_input)
                                if hasattr(agent, 'reset_hidden'): agent.reset_hidden()
@@ -356,25 +360,40 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
 
 
 
-    # Helper to process frame
-    def append_frame_with_activations(game_frame):
-        if monitor:
-            acts = monitor.get_current_activations()
+            # Define Input Structure for Visualization
+            input_structure = []
+            if using_sensory:
+                input_structure.append(("Food", sensory_system.food_sensor.vector_size))
+                input_structure.append(("Danger", sensory_system.danger_sensor.vector_size))
+            else:
+                input_structure.append(("Agent", 2)) # row, col
+
+            if with_satiation:
+                input_structure.append(("Sat", 1))
+                if with_health:
+                     input_structure.append(("Hlth", 1))
             
-            # If empty (first frame), try to use template with zeros
-            if not acts and hasattr(monitor, 'template_activations') and monitor.template_activations:
-                 # Create zero-fill using template structure
-                 acts = {k: np.zeros_like(v) for k,v in monitor.template_activations.items()}
+            # Helper to process frame
+            def append_frame_with_activations(game_frame):
+                if monitor:
+                    acts = monitor.get_current_activations()
+                    
+                    # If empty (first frame), try to use template with zeros
+                    if not acts and hasattr(monitor, 'template_activations') and monitor.template_activations:
+                         # Create zero-fill using template structure
+                         acts = {k: np.zeros_like(v) for k,v in monitor.template_activations.items()}
+                    
+                    # If still empty (warmup failed or no layers), visualize returns None
+                    act_frame = visualize_activations(acts, game_frame.shape[1], input_structure=input_structure)
+
+                combined = combine_frame_and_activations(game_frame, act_frame)
+                frames.append(combined)
             
-            # If still empty (warmup failed or no layers), visualize returns None
-            act_frame = visualize_activations(acts, game_frame.shape[1])
-            combined = combine_frame_and_activations(game_frame, act_frame)
-            frames.append(combined)
-            
-            if acts and acts is not getattr(monitor, 'template_activations', None):
-                 monitor.record_step()
-        else:
-            frames.append(game_frame)
+                if acts and acts is not getattr(monitor, 'template_activations', None):
+                     monitor.record_step()
+                else:
+                    frames.append(game_frame)
+
 
 
 

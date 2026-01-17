@@ -299,20 +299,8 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0).unsqueeze(0) # (1, 1, Dim)
         
         with torch.no_grad():
-            embed = self.encoder(state_tensor)
-            # RSSM observe single step
-            # action: (1, 1, A)
-            action_in = self.prev_action.unsqueeze(1)
-            is_first = torch.zeros(1, 1, device=self.device) # Assume not first if in loop (reset called externally)
-            # Typically first step logic handled via reset_hidden which sets default prev state
-            
-            post, _ = self.rssm.observe(embed, action_in, is_first, self.prev_state)
-            
-            # Extract feature
-            feat = torch.cat([post['deter'], post['stoch']], dim=-1) # (1, 1, Feature)
-            
-            # Actor
-            logits = self.actor(feat)
+            # Invoke self() to trigger Input hooks for ActivationMonitor
+            logits, post = self(state_tensor)
             dist = D.Categorical(logits=logits)
             
             if eval_mode:
@@ -328,6 +316,52 @@ class DreamerV3Agent(nn.Module, EMAMixin):
             self.prev_action = action_onehot
             
             return action_idx
+
+
+    def forward(self, state_tensor):
+        """
+        Forward pass for visualization and single-step inference.
+        state_tensor: (B, T, D)
+        """
+        embed = self.encoder(state_tensor)
+        
+        # Determine previous action/state
+        # For warmup (B=1, T=1), match self.prev_action shape or reset
+        B = state_tensor.shape[0]
+        if self.prev_action.shape[0] != B:
+             # Batch size mismatch (e.g. warmup uses 1, but maybe internal state is different?)
+             # Reset temp state
+             prev_action = torch.zeros(B, self.action_dim, device=self.device)
+             state = self.rssm.initial(B, self.device)
+             is_first = torch.zeros(B, 1, device=self.device)
+        else:
+             prev_action = self.prev_action
+             state = self.prev_state
+             is_first = torch.zeros(B, 1, device=self.device)
+             
+        # RSSM Observe
+        # prev_action: (B, A) -> (B, 1, A)
+        post, _ = self.rssm.observe(embed, prev_action.unsqueeze(1), is_first, state)
+        
+        # Extract feature
+        feat = torch.cat([post['deter'], post['stoch']], dim=-1) # (B, T, F)
+        
+        # Actor
+        logits = self.actor(feat)
+        
+        # We need to expose 'post' for choose_action to update state?
+        # Or we attach it to self? No, forward shouldn't side-effect mostly.
+        # But choose_action NEEDS to side-effect.
+        # Let's keep choose_action logic duplicated or split.
+        # If I strictly implement forward for WARMUP, I can ignore side effects.
+        # But hooks need to catch encoder/rssm/actor.
+        # This implementation does that.
+        
+        # For choose_action, we can continue using old logic OR call forward.
+        # If I don't change choose_action, I avoid breaking it.
+        # And forward is ONLY used by Warmup.
+        return logits, post
+
 
     def store_transition(self, state, action, reward, next_state, done):
         # Store in current episode list

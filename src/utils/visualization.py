@@ -349,10 +349,15 @@ if __name__ == "__main__":
     print("This module is a utility library and should not be run directly.")
     
 
-def visualize_activations(activations, target_width):
+def visualize_activations(activations, target_width, input_structure=None):
     """
     Visualizes neural network activations as a stacked heatmap image with a professional dark theme.
     Respects the order of the `activations` dictionary (assumed Input -> Output).
+    
+    Args:
+        activations (dict): {layer_name: numpy_array}
+        target_width (int): Target width for the output image.
+        input_structure (list, optional): List of (label, size) tuples for Input layer segmentation.
     """
     if not activations:
         return None
@@ -388,18 +393,20 @@ def visualize_activations(activations, target_width):
     
     # Height calculation: Base overhead + per-layer height
     # Give enough space for colorbar and labels
-    row_height = 0.6
-    header_height = 0.5
+    # Height calculation: Base overhead + per-layer height
+    # Give enough space for colorbar and labels
+    row_height = 0.8
+    header_height = 0.6
     fig_height = header_height + (n_layers * row_height)
     
     # Grid: [Main Heatmap] [Spacer] [Colorbar]
     # Width ratios: 90% Heatmap, 2% space, 3% Cbar, 5% margin
     
     fig = plt.figure(figsize=(fig_width, fig_height), facecolor=bg_color)
-    gs = fig.add_gridspec(n_layers, 3, width_ratios=[30, 1, 1], wspace=0.1, hspace=0.5, 
+    gs = fig.add_gridspec(n_layers, 3, width_ratios=[30, 1, 1], wspace=0.1, hspace=0.6, 
                           top=1.0 - (header_height/fig_height), bottom=0.05, left=0.15, right=0.95)
     
-    fig.suptitle("Neural Network Activity (Input \u2192 Output)", color=text_color, fontsize=12, fontweight='bold', y=0.98)
+    fig.suptitle("Neural Network Activity (Input \u2192 Output)", color=text_color, fontsize=14, fontweight='bold', y=0.98)
     
     # Iterate in order
     for idx, (name, vals) in enumerate(experiments.items()):
@@ -425,7 +432,7 @@ def visualize_activations(activations, target_width):
              
              # Colorbar
              cbar = plt.colorbar(im, cax=ax_cbar, orientation='vertical')
-             cbar.ax.tick_params(labelsize=6, colors=label_color, width=0.5)
+             cbar.ax.tick_params(labelsize=8, colors=label_color, width=0.5)
              cbar.outline.set_visible(False)
              
              # Min/Max labels on colorbar are automatic, but let's ensure readability
@@ -434,7 +441,7 @@ def visualize_activations(activations, target_width):
              if vmin < 0 < vmax: ticks.append(0)
              ticks = np.unique(ticks)
              cbar.set_ticks(ticks)
-             cbar.set_ticklabels([f"{t:.2f}" for t in ticks])
+             cbar.set_ticklabels([f"{t:.2f}" for t in ticks], fontweight='bold')
 
         else:
              ax_map.text(0.5, 0.5, "Empty", color=label_color, ha='center', va='center')
@@ -448,7 +455,28 @@ def visualize_activations(activations, target_width):
             
         # Label (Layer Name + Shape)
         label_str = f"{name}\n{vals.shape}"
-        ax_map.set_ylabel(label_str, rotation=0, ha='right', va='center', fontsize=7, color=text_color, labelpad=10)
+        ax_map.set_ylabel(label_str, rotation=0, ha='right', va='center', fontsize=9, fontweight='bold', color=text_color, labelpad=10)
+
+        # Special handling for Input layer segmentation
+        if name == "Input" and input_structure and vals.size > 0:
+            # input_structure is list of (label, size)
+            # Check if total size matches
+            total_size = sum(s for l, s in input_structure)
+            if total_size == vals.size:
+                current_idx = 0
+                for i, (label, size) in enumerate(input_structure):
+                    # Separator Line (at end of segment, unless last)
+                    if i < len(input_structure) - 1:
+                        sep_idx = current_idx + size - 0.5
+                        ax_map.vlines(sep_idx, -0.5, 0.5, colors='white', linestyles='-', linewidth=0.5, alpha=0.5)
+                    
+                    # Label centered
+                    center_idx = current_idx + (size / 2.0) - 0.5
+                    # Annotate (Top of heatmap)
+                    ax_map.text(center_idx, -0.55, label, color=label_color, ha='center', va='bottom', fontsize=8, fontweight='bold')
+                    
+                    current_idx += size
+
 
     # Render
     canvas = FigureCanvas(fig)

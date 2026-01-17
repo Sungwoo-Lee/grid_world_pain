@@ -47,8 +47,8 @@ class ActorCritic(nn.Module):
             nn.Linear(hidden_dim, 1)
         )
         
-    def forward(self):
-        raise NotImplementedError
+    def forward(self, state):
+        return self.actor(state)
     
     def act(self, state):
         action_probs = self.actor(state)

@@ -50,8 +50,11 @@ class ActorCriticRNN(nn.Module):
             nn.Linear(hidden_dim, 1)
         )
         
-    def forward(self):
-        raise NotImplementedError
+    def forward(self, state, hidden=None):
+        # state: (batch, seq, dim)
+        x = F.relu(self.fc1(state))
+        x, new_hidden = self.lstm(x, hidden)
+        return self.actor_head(x)
         
     def act(self, state, hidden):
         # state: (1, input_dim) -> unsqueeze for seq_len=1: (1, 1, input_dim)
