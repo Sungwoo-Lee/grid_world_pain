@@ -6,6 +6,10 @@
 ![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
 ![Status](https://img.shields.io/badge/status-active-success?style=for-the-badge)
 
+<div align="center">
+  <img src="assets/agent_demo.gif" alt="GridWorld Agent Demo" width="600px" />
+</div>
+
 ---
 
 ## 📖 Overview
@@ -106,6 +110,13 @@ Run the console-based simulation to see the agent move in the GridWorld with ran
 
 ```bash
 python main.py
+```
+
+### 4. Reproducing the Benchmark Demo
+You can automatically regenerate the training, evaluation, and visual assets (including the README GIF) using the provided script:
+
+```bash
+./generate_demo.sh
 ```
 
 ---
