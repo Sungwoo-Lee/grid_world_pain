@@ -106,11 +106,14 @@ class GridWorld:
                 break
         
         if self.relocate_resource:
-             # Also reset resource pos? Or keep it? Usually reset logic is fresh.
-             # Let's respawn resource randomly on reset too?
-             # For now keep config pos or random? 
-             # Let's keep it simple: reset uses configured pos, or random if configured?
-             pass
+             # Randomize resource position
+             while True:
+                rr = np.random.randint(0, self.height)
+                rc = np.random.randint(0, self.width)
+                # Ensure it doesn't spawn on agent (which was just randomized)
+                if (rr, rc) != self.agent_pos:
+                    self.resource_pos = (rr, rc)
+                    break
              
         self.relocation_timer = self.relocation_steps
         return self.agent_pos
