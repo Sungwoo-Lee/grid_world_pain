@@ -530,9 +530,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
 
     # Save Activations
     if monitor:
-        activations_file = os.path.join(data_dir, f"activations_{pct}.npz" if pct != "final" else "activations_final.npz")
+        activations_file = os.path.join(data_dir, f"activations_{pct}.h5" if pct != "final" else "activations_final.h5")
         monitor.save_history(activations_file)
         monitor.close()
+
 
 
 

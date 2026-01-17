@@ -1,7 +1,11 @@
 
 import torch
 import torch.nn as nn
+import torch
+import torch.nn as nn
 import numpy as np
+import h5py
+
 
 class ActivationMonitor:
     def __init__(self, model, tracked_layers=None):
@@ -15,14 +19,19 @@ class ActivationMonitor:
         """
         self.model = model
         self.activations = {}
+        # Register hooks
         self.hooks = []
         
+        # 1. Register Input Pre-hook (to capture 'Input' first)
+        self.hooks.append(model.register_forward_pre_hook(self._hook_input))
+        
+        # 2. Register Layer hooks
         if tracked_layers is None:
-            self.tracked_layers = (nn.Linear, nn.Conv2d, nn.LSTM, nn.GRU, nn.RNN)
+             tracked_types = (nn.Linear, nn.Conv2d, nn.LSTM, nn.GRU, nn.RNN)
         else:
-            self.tracked_layers = tuple(tracked_layers)
-            
-        self._register_hooks(model)
+             tracked_types = tuple(tracked_layers)
+             
+        self._register_hooks_recursive(model, tracked_types)
         
         # Storage for the current step
         self.current_activations = {}
@@ -30,15 +39,29 @@ class ActivationMonitor:
         # Storage for history (list of dicts)
         self.history = []
 
-    def _register_hooks(self, module, prefix=""):
+    def _hook_input(self, module, args):
+        """
+        Pre-hook to capture model input.
+        """
+        try:
+            # args is a tuple of input arguments
+            if args:
+                inp = args[0] # Assume first arg is main input
+                if isinstance(inp, torch.Tensor):
+                     val = inp.detach().cpu().numpy()
+                     self.current_activations["Input"] = val
+        except Exception as e:
+            print(f"Error capturing input: {e}")
+
+    def _register_hooks_recursive(self, module, tracked_types, prefix=""):
         for name, child in module.named_children():
             full_name = f"{prefix}.{name}" if prefix else name
             
-            if isinstance(child, self.tracked_layers):
+            if isinstance(child, tracked_types):
                 self._hook_layer(child, full_name)
             
             # Recurse
-            self._register_hooks(child, full_name)
+            self._register_hooks_recursive(child, tracked_types, full_name)
 
     def _hook_layer(self, layer, name):
         def hook(module, input, output):
@@ -73,8 +96,11 @@ class ActivationMonitor:
 
     def save_history(self, filepath):
         """
-        Saves the history to a compressed numpy file.
-        Structure: keys are "layer_name", values are arrays of shape (T, ...)
+        Saves the history to an HDF5 file.
+        Structure: 
+          - Root Group
+             - Dataset "Input": (Time, ...)
+             - Dataset "LayerName": (Time, ...)
         """
         if not self.history:
             return
@@ -85,14 +111,21 @@ class ActivationMonitor:
         
         for step_data in self.history:
             for k in keys:
-                if k in step_data:
-                    consolidated[k].append(step_data[k])
+                 if k in step_data:
+                     consolidated[k].append(step_data[k])
         
         # Convert to numpy arrays
         final_data = {k: np.array(v) for k, v in consolidated.items()}
         
-        np.savez_compressed(filepath, **final_data)
-        print(f"Saved activation history to {filepath}")
+        # Save to HDF5
+        try:
+            with h5py.File(filepath, 'w') as f:
+                for k, v in final_data.items():
+                    f.create_dataset(k, data=v, compression="gzip")
+            print(f"Saved activation history to {filepath}")
+        except Exception as e:
+            print(f"Failed to save history to HDF5: {e}")
+
 
     def close(self):
         """Removes all hooks."""

@@ -106,7 +106,7 @@ python evaluation.py --results_dir results/DQN/20260117-141318_default --episode
 - Generates `.mp4` videos of the agent's performance in `results/.../videos/`.
     - **Note:** For Deep RL agents, these videos include real-time visualizations of neural network layer activations.
 - If using Tabular Q-Learning, generates Q-table visualizations.
-- **Activation Data**: Saves neural activations as compressed numpy files (`activations_*.npz`) in the `videos/` directory for further analysis (Time-Series Analysis).
+- **Activation Data**: Saves neural activations as HDF5 files (`activations_*.h5`) in the `data/` directory for further analysis (Hierarchical Data: Input, Layers).
 
 ### 3. Simple Debugging Session
 Run the console-based simulation to see the agent move in the GridWorld with random behaviors.
