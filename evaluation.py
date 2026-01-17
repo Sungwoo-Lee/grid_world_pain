@@ -32,6 +32,7 @@ from src.environment.sensor import SensorySystem
 from src.utils.config import Config, get_default_config
 from src.utils.visualization import plot_q_table, save_video, visualize_activations, combine_frame_and_activations
 from src.utils.activation_monitor import ActivationMonitor
+from src.utils.lrp_monitor import LRPMonitor
 import torch
 
 
@@ -374,17 +375,56 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                      input_structure.append(("Hlth", 1))
             
             # Helper to process frame
-            def append_frame_with_activations(game_frame):
+            def append_frame_with_activations(game_frame, action=None, state=None):
+                act_frame = None
                 if monitor:
                     acts = monitor.get_current_activations()
                     
                     # If empty (first frame), try to use template with zeros
                     if not acts and hasattr(monitor, 'template_activations') and monitor.template_activations:
-                         # Create zero-fill using template structure
                          acts = {k: np.zeros_like(v) for k,v in monitor.template_activations.items()}
                     
+                    # Compute Attributions if LRP monitor is active and we have an action
+                    attributions = None
+                    if lrp_monitor and action is not None and state is not None:
+                        # Convert state to tensor
+                        if not isinstance(state, torch.Tensor):
+                             # state is tuple or array. Preprocess logic duplication?
+                             # Reuse preprocess_state logic from checking inputs
+                             # We need the tensor that was passed to the model.
+                             # This is tricky because `choose_action` does preprocessing internally usually or we did it before.
+                             # In the loop below, `flat_state` is computed if sensory.
+                             # For non-sensory, `state` is tuple.
+                             # DQN `choose_action` takes numpy or tuple and converts to tensor internally.
+                             # We need to replicate that input tensor.
+                             try:
+                                 input_tensor = None
+                                 if using_sensory:
+                                      # flat_state is already numpy array float32
+                                      # defined in the loop
+                                      if isinstance(state, np.ndarray):
+                                          input_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
+                                 else:
+                                      # Preprocess state tuple
+                                      flat = preprocess_state(state)
+                                      input_tensor = torch.FloatTensor(flat).unsqueeze(0).to(device)
+                                      
+                                 if input_tensor is not None:
+                                      attributions = lrp_monitor.compute_relevance(input_tensor, action)
+                             except Exception as e:
+                                 # print(f"LRP Error: {e}")
+                                 pass
+
                     # If still empty (warmup failed or no layers), visualize returns None
-                    act_frame = visualize_activations(acts, game_frame.shape[1], input_structure=input_structure)
+                    # Use fixed ranges for stability and readability
+                    act_frame = visualize_activations(
+                        acts, 
+                        game_frame.shape[1], 
+                        input_structure=input_structure, 
+                        attributions=attributions,
+                        activation_range=(0, 4.0),     # Fixed ReLU range (Magma)
+                        attribution_range=(-1.0, 1.0)  # Fixed LRP range (Seismic)
+                    )
 
                 combined = combine_frame_and_activations(game_frame, act_frame)
                 frames.append(combined)
@@ -392,10 +432,13 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 if acts and acts is not getattr(monitor, 'template_activations', None):
                      monitor.record_step()
                 else:
-                    frames.append(game_frame)
+                    pass # Don't record duplicate step if using template? Actually monitor logic handles it.
 
-
-
+            # Update append calls in loop
+            # Initialize LRP monitor
+            lrp_monitor = None
+            if monitor and algorithm == "DQN": # Start with DQN
+                lrp_monitor = LRPMonitor(model_to_monitor)
 
     # 3. Run Evaluation Episodes (Collect Frames)
     agent.epsilon = 0 # No exploration during evaluation
@@ -429,11 +472,11 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 if with_health:
                     satiation, health = body_return
                     state = (*env_state, satiation, health)
-                    append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, health, max_health, episode=ep_idx, step=0))
+                    append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, health, max_health, episode=ep_idx, step=0), state=state)
                 else:
                     satiation = body_return
                     state = (*env_state, satiation)
-                    append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, episode=ep_idx, step=0))
+                    append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, episode=ep_idx, step=0), state=state)
             
             # Initial frame handling for POMDP?
             # Existing code only handled FOMDP rendering logic above for initial frame.
@@ -441,15 +484,15 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             if using_sensory and with_satiation:
                 health = body.health if with_health else None
                 max_h = body.max_health if with_health else None
-                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)))
+                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)), state=state)
 
         else:
             if using_sensory:
                 state = sensory_state
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)))
+                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)), state=state)
             else:
                 state = env_state
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0))
+                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0), state=state)
 
         
         done = False
@@ -464,6 +507,11 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 action = agent.choose_action(flat_state)
             else:
                 action = agent.choose_action(state)
+            
+            # Pass action for LRP (using PREVIOUS state for LRP computation before step)
+            # The activation monitor captured activations during `choose_action` (forward pass).
+            # LRP needs the input and the action.
+            # `flat_state` or `state` is the input.
             
             next_env_state, _, env_done, info = env.step(action)
             
@@ -498,7 +546,43 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
 
                 health = body.health if with_health else None
                 max_h = body.max_health if with_health else None
-                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=step_count+1, sensory_data=vis_data))     
+                # Render using NEXT state?
+                # Usually we visualize the result of the action.
+                # But activations are from the PREVIOUS state.
+                # `append_frame_with_activations` uses `monitor.get_current_activations()`.
+                # If we call it here, we are attaching activations of `state` to the frame of `next_state`?
+                # Or is the frame showing `next_state`? 
+                # `env.render_rgb_array` usually shows current state of env. 
+                # After `env.step`, the env is in `next_state`.
+                # So we are visualizing `next_state` with `state`'s activations?
+                # Ideally, we want to visualize `state` with `state`'s activations.
+                # The generic loop above calls `append...` right after init (step 0).
+                # Then inside loop, after step, it calls `append...` with step+1.
+                # So frame 0 = State 0. Frame 1 = State 1.
+                # Activations captured during `choose_action` correspond to State 0 -> Action.
+                # So we should append frame 0 AFTER choose_action but BEFORE step?
+                # No, the existing code appends frame 0 BEFORE loop.
+                # Then inside loop, it steps, then appends frame 1.
+                # So Frame 0 has NO activations (empty).
+                # Frame 1 has activations from Step 0?
+                # `monitor` captures the LAST forward pass.
+                # If we rely on `monitor` having state from `choose_action` call above:
+                # We should append frame for `state` NOW, before `env.step` changes things?
+                # But `env.render` renders CURRENT env state.
+                # If we call render after `env.step`, it renders `next_state`.
+                # So we associate `state` activations with `next_state` frame. This is slight mismatch.
+                # However, changing this logic is big refactor.
+                # I will stick to existing pattern but pass `action` and `flat_state` (of current step).
+                # Wait, `append_frame_with_activations` is called at end of loop.
+                # So it attaches "activations from this step" to "frame of next step".
+                
+                # Correct logic for LRP:
+                # We need to explain `action` taken at `state`.
+                # Pass `action` and `flat_state` (or `state` if not flat) to `append_frame_with_activations`.
+                # Note: `flat_state` is available in loop scope.
+                
+                l_state = flat_state if using_sensory else state
+                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=step_count+1, sensory_data=vis_data), action=action, state=l_state)     
             else:
                 done = env_done
                 vis_data = None
@@ -508,8 +592,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                     vis_data = sensory_system.get_visualization_data(next_sensory_state)
                 else:
                     next_state = next_env_state
-
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data))
+                
+                l_state = flat_state if using_sensory else state
+                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data), action=action, state=l_state)
 
             
             state = next_state

@@ -349,15 +349,17 @@ if __name__ == "__main__":
     print("This module is a utility library and should not be run directly.")
     
 
-def visualize_activations(activations, target_width, input_structure=None):
+def visualize_activations(activations, target_width, input_structure=None, attributions=None, activation_range=None, attribution_range=None):
     """
-    Visualizes neural network activations as a stacked heatmap image with a professional dark theme.
-    Respects the order of the `activations` dictionary (assumed Input -> Output).
+    Visualizes neural network activations and optional attributions (LRP).
     
     Args:
         activations (dict): {layer_name: numpy_array}
         target_width (int): Target width for the output image.
         input_structure (list, optional): List of (label, size) tuples for Input layer segmentation.
+        attributions (dict, optional): {layer_name: numpy_array} - LRP scores
+        activation_range (tuple, optional): (min, max) for activation colorbar.
+        attribution_range (tuple, optional): (min, max) for attribution colorbar.
     """
     if not activations:
         return None
@@ -369,9 +371,6 @@ def visualize_activations(activations, target_width, input_structure=None):
         if v is None: continue
         vals = np.squeeze(v)
         if vals.ndim == 0: vals = np.expand_dims(vals, 0)
-        # Flatten multi-dim layers (Conv2d: C*H*W) for 1D visualization
-        # Alternatively, for Conv2d, we could show mean across spatial dims? 
-        # But flattening preserves all info.
         if vals.ndim > 1:
             vals = vals.flatten()
         experiments[k] = vals
@@ -391,17 +390,12 @@ def visualize_activations(activations, target_width, input_structure=None):
     dpi = 100
     fig_width = target_width / dpi
     
-    # Height calculation: Base overhead + per-layer height
-    # Give enough space for colorbar and labels
-    # Height calculation: Base overhead + per-layer height
-    # Give enough space for colorbar and labels
+    # Height calculation
     row_height = 0.8
     header_height = 0.6
     fig_height = header_height + (n_layers * row_height)
     
     # Grid: [Main Heatmap] [Spacer] [Colorbar]
-    # Width ratios: 90% Heatmap, 2% space, 3% Cbar, 5% margin
-    
     fig = plt.figure(figsize=(fig_width, fig_height), facecolor=bg_color)
     gs = fig.add_gridspec(n_layers, 3, width_ratios=[30, 1, 1], wspace=0.1, hspace=0.6, 
                           top=1.0 - (header_height/fig_height), bottom=0.05, left=0.15, right=0.95)
@@ -412,68 +406,151 @@ def visualize_activations(activations, target_width, input_structure=None):
     for idx, (name, vals) in enumerate(experiments.items()):
         ax_map = fig.add_subplot(gs[idx, 0])
         ax_cbar = fig.add_subplot(gs[idx, 2])
+        label_str = f"{name}\n{vals.shape}"
         
         # Prepare Data
         if vals.size > 0:
              img = np.expand_dims(vals, 0)
              
-             # Determine visual range
-             # Robust min/max to avoid outliers washing out details?
-             # For now, absolute min/max
-             vmin, vmax = vals.min(), vals.max()
-             
-             # Heatmap
-             # Use a professional colormap: 'magma' or 'mako' or 'viridis'
-             # 'coolwarm' for diverging if values are +/-? 
-             # Neural activations (ReLU) are 0+, Tanh are +/-.
-             cmap = 'magma' if vmin >= 0 else 'coolwarm'
-             
-             im = ax_map.imshow(img, cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax)
-             
-             # Colorbar
-             cbar = plt.colorbar(im, cax=ax_cbar, orientation='vertical')
-             cbar.ax.tick_params(labelsize=8, colors=label_color, width=0.5)
-             cbar.outline.set_visible(False)
-             
-             # Min/Max labels on colorbar are automatic, but let's ensure readability
-             # Maybe reduce ticks to just min/max/0
-             ticks = [vmin, vmax]
-             if vmin < 0 < vmax: ticks.append(0)
-             ticks = np.unique(ticks)
-             cbar.set_ticks(ticks)
-             cbar.set_ticklabels([f"{t:.2f}" for t in ticks], fontweight='bold')
+             # Determine if we have attribution for this layer
+             attribution = None
+             if attributions and name in attributions:
+                 attribution = attributions[name]
+                 if attribution.ndim > 1:
+                     attribution = attribution.flatten()
+                 attribution = np.expand_dims(attribution, 0) # Make it (1, W) for imshow
 
+             # Helper to plot a single strip
+             def plot_strip(ax, data, cmap, vmin, vmax):
+                 im = ax.imshow(data, cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax)
+                 return im
+
+             if attribution is not None:
+                 # Split ax_map
+                 pos = ax_map.get_position()
+                 ax_map.set_visible(False) # Hide original holder
+                 
+                 # Create two stacked axes
+                 h = pos.height / 2
+                 ax_act = fig.add_axes([pos.x0, pos.y0 + h, pos.width, h])
+                 ax_attr = fig.add_axes([pos.x0, pos.y0, pos.width, h])
+                 
+                 # -- Plot Activation (Top) --
+                 vmin = activation_range[0] if activation_range else vals.min()
+                 vmax = activation_range[1] if activation_range else vals.max()
+                 if vmin == vmax: vmax += 1e-5
+                 
+                 cmap = 'magma' 
+                 im_act = plot_strip(ax_act, img, cmap, vmin, vmax)
+                 ax_act.set_xticks([])
+                 ax_act.set_yticks([])
+                 for spine in ax_act.spines.values(): spine.set_visible(False)
+                 
+                 # Label "Act"
+                 ax_act.text(-0.01, 0.5, "Act", transform=ax_act.transAxes, 
+                             ha='right', va='center', fontsize=7, color=label_color, alpha=0.7)
+
+                 # -- Plot Attribution (Bottom) --
+                 if attribution_range:
+                     limit_min, limit_max = attribution_range
+                 else:
+                     limit = np.max(np.abs(attribution))
+                     if limit == 0: limit = 1e-5
+                     limit_min, limit_max = -limit, limit
+                     
+                 im_attr = plot_strip(ax_attr, attribution, 'seismic', limit_min, limit_max)
+                 ax_attr.set_xticks([])
+                 ax_attr.set_yticks([])
+                 for spine in ax_attr.spines.values(): spine.set_visible(False)
+
+                 # Label "LRP"
+                 ax_attr.text(-0.01, 0.5, "LRP", transform=ax_attr.transAxes, 
+                             ha='right', va='center', fontsize=7, color=label_color, alpha=0.7)
+                 
+                 # Label Layer Name centered
+                 fig.text(pos.x0 - 0.08, pos.y0 + pos.height/2, name, 
+                          ha='right', va='center', fontsize=9, fontweight='bold', color=text_color)
+                 
+                 # -- Split Colorbar --
+                 pos_cb = ax_cbar.get_position()
+                 ax_cbar.set_visible(False)
+                 
+                 ax_cb_act = fig.add_axes([pos_cb.x0, pos_cb.y0 + h + 0.01, pos_cb.width, h - 0.01])
+                 ax_cb_attr = fig.add_axes([pos_cb.x0, pos_cb.y0, pos_cb.width, h - 0.01])
+                 
+                 cbar1 = plt.colorbar(im_act, cax=ax_cb_act)
+                 cbar1.ax.tick_params(labelsize=6, colors=label_color)
+                 cbar1.outline.set_visible(False)
+                 cbar1.set_ticks([vmin, vmax])
+                 cbar1.set_ticklabels([f"{vmin:.1f}", f"{vmax:.1f}"])
+                 
+                 cbar2 = plt.colorbar(im_attr, cax=ax_cb_attr)
+                 cbar2.ax.tick_params(labelsize=6, colors=label_color)
+                 cbar2.outline.set_visible(False)
+                 cbar2.set_ticks([limit_min, 0, limit_max])
+                 cbar2.set_ticklabels([f"{limit_min:.1f}", "0", f"{limit_max:.1f}"])
+                 
+                 current_ax_list = [ax_act, ax_attr]
+
+             else:
+                 # Standard Plotting (Activations Only)
+                 vmin = activation_range[0] if activation_range else vals.min()
+                 vmax = activation_range[1] if activation_range else vals.max()
+                 if vmin == vmax: vmax += 1e-5
+                 
+                 cmap = 'magma' if vmin >= 0 else 'coolwarm'
+                 im = ax_map.imshow(img, cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax)
+                 
+                 # Label "Act"
+                 ax_map.text(-0.01, 0.5, "Act", transform=ax_map.transAxes, 
+                             ha='right', va='center', fontsize=7, color=label_color, alpha=0.7)
+                 
+                 # Colorbar
+                 cbar = plt.colorbar(im, cax=ax_cbar, orientation='vertical')
+                 cbar.ax.tick_params(labelsize=8, colors=label_color, width=0.5)
+                 cbar.outline.set_visible(False)
+                 ticks = [vmin, vmax]
+                 if vmin < 0 < vmax: ticks.append(0)
+                 ticks = np.unique(ticks)
+                 cbar.set_ticks(ticks)
+                 cbar.set_ticklabels([f"{t:.2f}" for t in ticks], fontweight='bold')
+                 
+                 label_str = f"{name}\n{vals.shape}"
+                 ax_map.set_ylabel(label_str, rotation=0, ha='right', va='center', fontsize=9, fontweight='bold', color=text_color, labelpad=10)
+                 ax_map.set_xticks([])
+                 ax_map.set_yticks([])
+                 for spine in ax_map.spines.values(): spine.set_visible(False)
+                 current_ax_list = [ax_map]
+             
         else:
              ax_map.text(0.5, 0.5, "Empty", color=label_color, ha='center', va='center')
              ax_cbar.axis('off')
 
         # Styling Ax Map
-        ax_map.set_yticks([])
-        ax_map.set_xticks([])
-        for spine in ax_map.spines.values():
-            spine.set_visible(False)
+        if 'current_ax_list' not in locals():
+             ax_map.set_yticks([])
+             ax_map.set_xticks([])
+             for spine in ax_map.spines.values():
+                 spine.set_visible(False)
             
-        # Label (Layer Name + Shape)
-        label_str = f"{name}\n{vals.shape}"
-        ax_map.set_ylabel(label_str, rotation=0, ha='right', va='center', fontsize=9, fontweight='bold', color=text_color, labelpad=10)
-
         # Special handling for Input layer segmentation
         if name == "Input" and input_structure and vals.size > 0:
-            # input_structure is list of (label, size)
-            # Check if total size matches
+            # Apply to all active axes for this layer
+            target_axes = current_ax_list if 'current_ax_list' in locals() else [ax_map]
+            
             total_size = sum(s for l, s in input_structure)
             if total_size == vals.size:
                 current_idx = 0
                 for i, (label, size) in enumerate(input_structure):
-                    # Separator Line (at end of segment, unless last)
+                    # Separator Line
                     if i < len(input_structure) - 1:
                         sep_idx = current_idx + size - 0.5
-                        ax_map.vlines(sep_idx, -0.5, 0.5, colors='white', linestyles='-', linewidth=0.5, alpha=0.5)
+                        for ax in target_axes:
+                             ax.vlines(sep_idx, -0.5, 0.5, colors='white', linestyles='-', linewidth=0.5, alpha=0.5)
                     
                     # Label centered
                     center_idx = current_idx + (size / 2.0) - 0.5
-                    # Annotate (Top of heatmap)
-                    ax_map.text(center_idx, -0.55, label, color=label_color, ha='center', va='bottom', fontsize=8, fontweight='bold')
+                    target_axes[0].text(center_idx, -0.55, label, color=label_color, ha='center', va='bottom', fontsize=8, fontweight='bold')
                     
                     current_idx += size
 
@@ -492,32 +569,24 @@ def visualize_activations(activations, target_width, input_structure=None):
     
     return image
 
-
-def combine_frame_and_activations(game_frame, activation_frame):
+def combine_frame_and_activations(game_frame, act_frame):
     """
-    Stacks game frame and activation frame vertically.
-    Adjusts activation frame width to match game frame if needed.
+    Combines the game frame and activation visualization vertically.
+    Ensures widths match before concatenation.
     """
-    if activation_frame is None:
+    if act_frame is None:
         return game_frame
         
-    g_h, g_w, _ = game_frame.shape
-    a_h, a_w, _ = activation_frame.shape
+    import cv2
     
-    if g_w != a_w:
-        # Resize activation frame is complex without cv2/PIL
-        # Simplest: Crop or Pad.
-        # But we generated activation frame with target_width=g_w usually.
-        # But due to DPI rounding, might be off by few pixels.
+    # Check shapes
+    h1, w1 = game_frame.shape[:2]
+    h2, w2 = act_frame.shape[:2]
+    
+    # If widths differ, resize act_frame to match game_frame width
+    if w1 != w2:
+        new_w = w1
+        new_h = int(h2 * (w1 / w2))
+        act_frame = cv2.resize(act_frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
         
-        # Simple nearest-neighbor resize or just pad/crop
-        if a_w > g_w:
-            activation_frame = activation_frame[:, :g_w, :]
-        else:
-            # Pad with black
-            pad = np.zeros((a_h, g_w - a_w, 3), dtype=game_frame.dtype)
-            activation_frame = np.concatenate([activation_frame, pad], axis=1)
-            
-    # Vertical Stack
-    return np.concatenate([game_frame, activation_frame], axis=0)
-
+    return np.concatenate((game_frame, act_frame), axis=0)
