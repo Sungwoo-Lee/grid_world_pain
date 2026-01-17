@@ -240,9 +240,12 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     output_dir = os.path.join(results_dir, model_name, run_name)
     models_dir = os.path.join(output_dir, "models")
     plots_dir = os.path.join(output_dir, "plots") # Ensure plots dir is tracked
+    data_dir = os.path.join(output_dir, "data")
     
     os.makedirs(models_dir, exist_ok=True)
     os.makedirs(plots_dir, exist_ok=True)
+    os.makedirs(data_dir, exist_ok=True)
+
     
     print(f"Results will be saved to: {output_dir}")
 
@@ -669,7 +672,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     
     # Save training history
     import csv
-    history_filename = os.path.join(models_dir, "training_history.csv")
+    history_filename = os.path.join(data_dir, "training_history.csv")
+
     with open(history_filename, mode='w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['episode', 'reward', 'steps', 'epsilon'])

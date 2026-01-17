@@ -43,7 +43,14 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     - Runs evaluation episodes to collect frames.
     - Generates Q-table plot and performance video.
     """
+    import torch # Explicit import to fix UnboundLocalError
     filename = os.path.basename(checkpoint_path)
+    # Create Data Dir
+
+    # Create Data Dir
+    data_dir = os.path.join(results_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    
     # Try Q-table pattern
     match = re.search(r"q_table_(\d+).npy", filename)
     if not match:
@@ -163,6 +170,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     algorithm = config.get('agent.algorithm', "Tabular Q-Learning")
     
     device = config.get('training.device', 'auto') # Use training device setting or auto
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"{algorithm} Agent using device: {device}")
+
     
     if algorithm == "DQN":
         # DQN inputs
@@ -321,6 +332,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 
                 if dummy_input is not None:
                      # Run forward
+                     print("  Running warmup forward pass...")
                      with torch.no_grad():
                           if hasattr(agent, 'reset_hidden'): agent.reset_hidden()
                           if "DRQN" in type(agent).__name__ or "Recurrent" in type(agent).__name__:
@@ -333,11 +345,15 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                      
                      monitor.template_activations = monitor.get_current_activations().copy()
                      monitor.clear_history() # Clear the dummy record
+                     print(f"  Warmup successful. Captured {len(monitor.template_activations)} layers.")
                 else:
-                    monitor.template_activations = None
+                    raise RuntimeError("Warmup failed: No suitable input layer found (Linear/Conv2d) to infer input shape.")
             except Exception as e:
-                print(f"Activation warm-up failed: {e}")
-                monitor.template_activations = None
+                print(f"  Activation warm-up failed with error: {e}")
+                # Re-raise to stop execution and debug
+                raise e
+
+
 
 
     # Helper to process frame
@@ -514,9 +530,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
 
     # Save Activations
     if monitor:
-        activations_file = os.path.join(videos_dir, f"activations_{pct}.npz" if pct != "final" else "activations_final.npz")
+        activations_file = os.path.join(data_dir, f"activations_{pct}.npz" if pct != "final" else "activations_final.npz")
         monitor.save_history(activations_file)
         monitor.close()
+
 
 
 def main():
