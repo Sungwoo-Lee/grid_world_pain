@@ -400,19 +400,20 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                              try:
                                  input_tensor = None
                                  if using_sensory:
-                                      # flat_state is already numpy array float32
-                                      # defined in the loop
                                       if isinstance(state, np.ndarray):
                                           input_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
                                  else:
-                                      # Preprocess state tuple
                                       flat = preprocess_state(state)
                                       input_tensor = torch.FloatTensor(flat).unsqueeze(0).to(device)
                                       
+                                 if algorithm in ["DRQN", "RecurrentPPO", "DreamerV3", "LSTM"]:
+                                     if input_tensor is not None and input_tensor.ndim == 2:
+                                         input_tensor = input_tensor.unsqueeze(1)
+
                                  if input_tensor is not None:
                                       attributions = lrp_monitor.compute_relevance(input_tensor, action)
                              except Exception as e:
-                                 # print(f"LRP Error: {e}")
+                                 print(f"LRP Error: {e}")
                                  pass
 
                     # If still empty (warmup failed or no layers), visualize returns None
@@ -435,10 +436,47 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                     pass # Don't record duplicate step if using template? Actually monitor logic handles it.
 
             # Update append calls in loop
+            # Update append calls in loop
             # Initialize LRP monitor
             lrp_monitor = None
-            if monitor and algorithm == "DQN": # Start with DQN
-                lrp_monitor = LRPMonitor(model_to_monitor)
+            try:
+                if monitor:
+                    if algorithm == "DQN":
+                        lrp_monitor = LRPMonitor(model_to_monitor)
+                    
+                    elif algorithm == "PPO":
+                        # PPO: Monitor the Actor network
+                        # model_to_monitor is agent.policy (ActorCritic)
+                        lrp_monitor = LRPMonitor(model_to_monitor.actor)
+
+                    elif algorithm == "DRQN":
+                        # DRQN: Monitor policy_net (which IS model_to_monitor)
+                        # Wrapper needed for tuple return (q_values, hidden)
+                        class OutputWrapper(torch.nn.Module):
+                            def __init__(self, model, index=0):
+                                super().__init__()
+                                self.model = model
+                                self.index = index
+                            def forward(self, x):
+                                return self.model(x)[self.index]
+                        
+                        lrp_monitor = LRPMonitor(OutputWrapper(model_to_monitor, 0))
+
+                    elif algorithm == "DreamerV3":
+                        # DreamerV3: Monitor Agent forward pass (logits, post)
+                        class OutputWrapper(torch.nn.Module):
+                            def __init__(self, model, index=0):
+                                super().__init__()
+                                self.model = model
+                                self.index = index
+                            def forward(self, x):
+                                return self.model(x)[self.index]
+                                
+                        lrp_monitor = LRPMonitor(OutputWrapper(model_to_monitor, 0))
+                        
+            except Exception as e:
+                print(f"Failed to initialize LRP for {algorithm}: {e}")
+                lrp_monitor = None
 
     # 3. Run Evaluation Episodes (Collect Frames)
     agent.epsilon = 0 # No exploration during evaluation
