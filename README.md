@@ -24,6 +24,7 @@ It supports both **Classic Tabular Methods** and **Deep Reinforcement Learning**
 - **🤖 Multi-Agent Support**: Includes implementations for **DQN, DRQN, PPO, RecurrentPPO**, and **DreamerV3**, alongside classic Q-Learning.
 - **🧠 Interoception**: Simulation of internal body states (Satiation, Health) that drive reward signals (Homeostatic RL).
 - **🎥 Built-in Visualization**: Seamless integration with `matplotlib` and `imageio` for generating MP4 replays.
+- **🔍 Activation Monitoring**: Visualizes internal neural network activations (Layer-wise Heatmaps) and logs them for analysis.
 - **📦 Configuration Driven**: Fully YAML-based configuration for easy experimentation.
 
 ---
@@ -103,7 +104,9 @@ python evaluation.py --results_dir results/DQN/20260117-141318_default --episode
 
 **Outputs:**
 - Generates `.mp4` videos of the agent's performance in `results/.../videos/`.
+    - **Note:** For Deep RL agents, these videos include real-time visualizations of neural network layer activations.
 - If using Tabular Q-Learning, generates Q-table visualizations.
+- **Activation Data**: Saves neural activations as compressed numpy files (`activations_*.npz`) in the `videos/` directory for further analysis (Time-Series Analysis).
 
 ### 3. Simple Debugging Session
 Run the console-based simulation to see the agent move in the GridWorld with random behaviors.

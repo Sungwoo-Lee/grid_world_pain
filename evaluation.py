@@ -30,7 +30,10 @@ from src.environment.body import InteroceptiveBody
 from src.models.q_learning import QLearningAgent
 from src.environment.sensor import SensorySystem
 from src.utils.config import Config, get_default_config
-from src.utils.visualization import plot_q_table, save_video
+from src.utils.visualization import plot_q_table, save_video, visualize_activations, combine_frame_and_activations
+from src.utils.activation_monitor import ActivationMonitor
+import torch
+
 
 def evaluate_checkpoint(checkpoint_path, results_dir, config):
     """
@@ -272,6 +275,93 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             print(f"  Error loading checkpoint: {e}")
             return
 
+    # Setup Activation Monitor
+
+    monitor = None
+    if algorithm != "Tabular Q-Learning":
+        model_to_monitor = None
+        if isinstance(agent, torch.nn.Module):
+            model_to_monitor = agent
+        elif hasattr(agent, 'policy_net'):
+            model_to_monitor = agent.policy_net
+        elif hasattr(agent, 'policy'):
+            # For PPO, policy is ActorCritic which has actor and critic
+            model_to_monitor = agent.policy
+            
+        if model_to_monitor:
+            print(f"  Monitoring activations for {type(model_to_monitor).__name__}...")
+            # We track Linear and Conv layers primarily
+            monitor = ActivationMonitor(model_to_monitor, tracked_layers=[torch.nn.Linear, torch.nn.Conv2d, torch.nn.LSTM, torch.nn.GRU])
+            
+            # Warm-up to prompt monitor to capture layer structure and determine frame size
+            # Create a dummy input based on input_dim
+            # input_dim logic is complex above, but we can just use a zero tensor of approx shape?
+            # Or just wait for first frame? No, first frame is rendered BEFORE first step.
+            
+            # Helper to generate zero frame of correct size
+            # We need to know the dummy input shape.
+            # Reuse logic for `input_dim` or just one forward.
+            try:
+                # Construct dummy state
+                # We need input_dim from code above.
+                # Code above defines `input_dim` inside blocks (DQN, etc).
+                # We can access it if we move monitor setup AFTER agent init fully.
+                # Monitor setup IS after agent init.
+                # But `input_dim` variable is local to blocks.
+                # Let's try to infer from agent.policy_net first layer?
+                dummy_input = None
+                first_layer = None
+                for module in model_to_monitor.modules():
+                     if isinstance(module, torch.nn.Linear):
+                         dummy_input = torch.zeros(1, module.in_features).to(device)
+                         break
+                     elif isinstance(module, torch.nn.Conv2d):
+                         # Assuming square input? tough.
+                         pass
+                
+                if dummy_input is not None:
+                     # Run forward
+                     with torch.no_grad():
+                          if hasattr(agent, 'reset_hidden'): agent.reset_hidden()
+                          if "DRQN" in type(agent).__name__ or "Recurrent" in type(agent).__name__:
+                               # DRQN forward expects (batch, seq, dim)
+                               dummy_input = dummy_input.unsqueeze(0) 
+                               model_to_monitor(dummy_input)
+                               if hasattr(agent, 'reset_hidden'): agent.reset_hidden()
+                          else:
+                               model_to_monitor(dummy_input)
+                     
+                     monitor.template_activations = monitor.get_current_activations().copy()
+                     monitor.clear_history() # Clear the dummy record
+                else:
+                    monitor.template_activations = None
+            except Exception as e:
+                print(f"Activation warm-up failed: {e}")
+                monitor.template_activations = None
+
+
+    # Helper to process frame
+    def append_frame_with_activations(game_frame):
+        if monitor:
+            acts = monitor.get_current_activations()
+            
+            # If empty (first frame), try to use template with zeros
+            if not acts and hasattr(monitor, 'template_activations') and monitor.template_activations:
+                 # Create zero-fill using template structure
+                 acts = {k: np.zeros_like(v) for k,v in monitor.template_activations.items()}
+            
+            # If still empty (warmup failed or no layers), visualize returns None
+            act_frame = visualize_activations(acts, game_frame.shape[1])
+            combined = combine_frame_and_activations(game_frame, act_frame)
+            frames.append(combined)
+            
+            if acts and acts is not getattr(monitor, 'template_activations', None):
+                 monitor.record_step()
+        else:
+            frames.append(game_frame)
+
+
+
     # 3. Run Evaluation Episodes (Collect Frames)
     agent.epsilon = 0 # No exploration during evaluation
     frames = []
@@ -304,11 +394,11 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 if with_health:
                     satiation, health = body_return
                     state = (*env_state, satiation, health)
-                    frames.append(env.render_rgb_array(satiation, max_satiation, health, max_health, episode=ep_idx, step=0))
+                    append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, health, max_health, episode=ep_idx, step=0))
                 else:
                     satiation = body_return
                     state = (*env_state, satiation)
-                    frames.append(env.render_rgb_array(satiation, max_satiation, episode=ep_idx, step=0))
+                    append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, episode=ep_idx, step=0))
             
             # Initial frame handling for POMDP?
             # Existing code only handled FOMDP rendering logic above for initial frame.
@@ -316,15 +406,16 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             if using_sensory and with_satiation:
                 health = body.health if with_health else None
                 max_h = body.max_health if with_health else None
-                frames.append(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)))
+                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)))
 
         else:
             if using_sensory:
                 state = sensory_state
-                frames.append(env.render_rgb_array(episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)))
+                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)))
             else:
                 state = env_state
-                frames.append(env.render_rgb_array(episode=ep_idx, step=0))
+                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0))
+
         
         done = False
         step_count = 0
@@ -372,7 +463,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
 
                 health = body.health if with_health else None
                 max_h = body.max_health if with_health else None
-                frames.append(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=step_count+1, sensory_data=vis_data))     
+                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=step_count+1, sensory_data=vis_data))     
             else:
                 done = env_done
                 vis_data = None
@@ -383,7 +474,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 else:
                     next_state = next_env_state
 
-                frames.append(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data))
+                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data))
+
             
             state = next_state
             if using_sensory:
@@ -392,15 +484,17 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             
             if done:
                 # Buffer end frames
+                # Buffer end frames
                 for _ in range(5):
                     if with_satiation:
                         if with_health:
                              # Use last known state values
-                             frames.append(env.render_rgb_array(body.satiation, max_satiation, body.health, max_health, episode=ep_idx, step=step_count, sensory_data=vis_data))
+                             append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, body.health, max_health, episode=ep_idx, step=step_count, sensory_data=vis_data))
                         else:
-                             frames.append(env.render_rgb_array(body.satiation, max_satiation, episode=ep_idx, step=step_count, sensory_data=vis_data))
+                             append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, episode=ep_idx, step=step_count, sensory_data=vis_data))
                     else:
-                        frames.append(env.render_rgb_array(episode=ep_idx, step=step_count, sensory_data=vis_data))
+                        append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count, sensory_data=vis_data))
+
                 break
 
     # 4. Generate Visual Artifacts
@@ -417,6 +511,13 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     os.makedirs(videos_dir, exist_ok=True)
     video_filename = os.path.join(videos_dir, f"video_{pct}.mp4" if pct != "final" else "final_trained_agent.mp4")
     save_video(frames, video_filename)
+
+    # Save Activations
+    if monitor:
+        activations_file = os.path.join(videos_dir, f"activations_{pct}.npz" if pct != "final" else "activations_final.npz")
+        monitor.save_history(activations_file)
+        monitor.close()
+
 
 def main():
     parser = argparse.ArgumentParser(description="GridWorld Evaluation")

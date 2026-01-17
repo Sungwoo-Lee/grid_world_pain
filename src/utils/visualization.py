@@ -8,6 +8,8 @@ import imageio
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+
 
 def plot_q_table(q_table, save_path, food_pos=None):
     """
@@ -345,4 +347,149 @@ def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestone
 
 if __name__ == "__main__":
     print("This module is a utility library and should not be run directly.")
-    print("Use train.py for training and evaluation.py for generating visualizations.")
+    
+
+def visualize_activations(activations, target_width):
+    """
+    Visualizes neural network activations as a stacked heatmap image with a professional dark theme.
+    Respects the order of the `activations` dictionary (assumed Input -> Output).
+    """
+    if not activations:
+        return None
+        
+    # Maintain order from dict (Python 3.7+ guarantees insertion order, hooks fire in execution order)
+    # Filter and process
+    experiments = {}
+    for k, v in activations.items():
+        if v is None: continue
+        vals = np.squeeze(v)
+        if vals.ndim == 0: vals = np.expand_dims(vals, 0)
+        # Flatten multi-dim layers (Conv2d: C*H*W) for 1D visualization
+        # Alternatively, for Conv2d, we could show mean across spatial dims? 
+        # But flattening preserves all info.
+        if vals.ndim > 1:
+            vals = vals.flatten()
+        experiments[k] = vals
+
+    n_layers = len(experiments)
+    if n_layers == 0:
+        return None
+
+    # Style Configuration
+    plt.rcParams['font.family'] = 'sans-serif'
+    # text colors
+    text_color = '#E0E0E0'
+    label_color = '#B0B0B0'
+    bg_color = '#1A1A1A'
+    
+    # Dimensions
+    dpi = 100
+    fig_width = target_width / dpi
+    
+    # Height calculation: Base overhead + per-layer height
+    # Give enough space for colorbar and labels
+    row_height = 0.6
+    header_height = 0.5
+    fig_height = header_height + (n_layers * row_height)
+    
+    # Grid: [Main Heatmap] [Spacer] [Colorbar]
+    # Width ratios: 90% Heatmap, 2% space, 3% Cbar, 5% margin
+    
+    fig = plt.figure(figsize=(fig_width, fig_height), facecolor=bg_color)
+    gs = fig.add_gridspec(n_layers, 3, width_ratios=[30, 1, 1], wspace=0.1, hspace=0.5, 
+                          top=1.0 - (header_height/fig_height), bottom=0.05, left=0.15, right=0.95)
+    
+    fig.suptitle("Neural Network Activity (Input \u2192 Output)", color=text_color, fontsize=12, fontweight='bold', y=0.98)
+    
+    # Iterate in order
+    for idx, (name, vals) in enumerate(experiments.items()):
+        ax_map = fig.add_subplot(gs[idx, 0])
+        ax_cbar = fig.add_subplot(gs[idx, 2])
+        
+        # Prepare Data
+        if vals.size > 0:
+             img = np.expand_dims(vals, 0)
+             
+             # Determine visual range
+             # Robust min/max to avoid outliers washing out details?
+             # For now, absolute min/max
+             vmin, vmax = vals.min(), vals.max()
+             
+             # Heatmap
+             # Use a professional colormap: 'magma' or 'mako' or 'viridis'
+             # 'coolwarm' for diverging if values are +/-? 
+             # Neural activations (ReLU) are 0+, Tanh are +/-.
+             cmap = 'magma' if vmin >= 0 else 'coolwarm'
+             
+             im = ax_map.imshow(img, cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax)
+             
+             # Colorbar
+             cbar = plt.colorbar(im, cax=ax_cbar, orientation='vertical')
+             cbar.ax.tick_params(labelsize=6, colors=label_color, width=0.5)
+             cbar.outline.set_visible(False)
+             
+             # Min/Max labels on colorbar are automatic, but let's ensure readability
+             # Maybe reduce ticks to just min/max/0
+             ticks = [vmin, vmax]
+             if vmin < 0 < vmax: ticks.append(0)
+             ticks = np.unique(ticks)
+             cbar.set_ticks(ticks)
+             cbar.set_ticklabels([f"{t:.2f}" for t in ticks])
+
+        else:
+             ax_map.text(0.5, 0.5, "Empty", color=label_color, ha='center', va='center')
+             ax_cbar.axis('off')
+
+        # Styling Ax Map
+        ax_map.set_yticks([])
+        ax_map.set_xticks([])
+        for spine in ax_map.spines.values():
+            spine.set_visible(False)
+            
+        # Label (Layer Name + Shape)
+        label_str = f"{name}\n{vals.shape}"
+        ax_map.set_ylabel(label_str, rotation=0, ha='right', va='center', fontsize=7, color=text_color, labelpad=10)
+
+    # Render
+    canvas = FigureCanvas(fig)
+    canvas.draw()
+    
+    # Buffer
+    s, (width, height) = canvas.print_to_buffer()
+    image = np.frombuffer(s, dtype='uint8').reshape((int(height), int(width), 4))
+    
+    # RGB
+    image = image[:, :, :3]
+    plt.close(fig)
+    
+    return image
+
+
+def combine_frame_and_activations(game_frame, activation_frame):
+    """
+    Stacks game frame and activation frame vertically.
+    Adjusts activation frame width to match game frame if needed.
+    """
+    if activation_frame is None:
+        return game_frame
+        
+    g_h, g_w, _ = game_frame.shape
+    a_h, a_w, _ = activation_frame.shape
+    
+    if g_w != a_w:
+        # Resize activation frame is complex without cv2/PIL
+        # Simplest: Crop or Pad.
+        # But we generated activation frame with target_width=g_w usually.
+        # But due to DPI rounding, might be off by few pixels.
+        
+        # Simple nearest-neighbor resize or just pad/crop
+        if a_w > g_w:
+            activation_frame = activation_frame[:, :g_w, :]
+        else:
+            # Pad with black
+            pad = np.zeros((a_h, g_w - a_w, 3), dtype=game_frame.dtype)
+            activation_frame = np.concatenate([activation_frame, pad], axis=1)
+            
+    # Vertical Stack
+    return np.concatenate([game_frame, activation_frame], axis=0)
+
