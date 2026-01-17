@@ -10,15 +10,17 @@
 
 ## 📖 Overview
 
-**GridWorld Pain** is a custom, high-performance implementation of the classic GridWorld environment designed for **Reinforcement Learning (RL)** research and development. Unlike standard implementations, this package places a heavy emphasis on **observability** and **visualization**, allowing you to not only train agents but also watch them learn in real-time or export high-quality video demonstrations.
+**GridWorld Pain** is a custom, high-performance implementation of the classic GridWorld environment designed for **Reinforcement Learning (RL)** research and development. Unlike standard implementations, this package places a heavy emphasis on **observability**, **visualization**, and **interoception** (internal body states).
+
+It supports both **Classic Tabular Methods** and **Deep Reinforcement Learning** algorithms.
 
 ## ✨ Key Features
 
 - **🚀 Lightweight Core**: Built with pure Python and optimized for speed.
-- **🤖 RL Ready**: Includes a Q-Learning agent implementation out of the box.
+- **🤖 Multi-Agent Support**: Includes implementations for **DQN, DRQN, PPO, RecurrentPPO**, and **DreamerV3**, alongside classic Q-Learning.
+- **🧠 Interoception**: Simulation of internal body states (Satiation, Health) that drive reward signals (Homeostatic RL).
 - **🎥 Built-in Visualization**: Seamless integration with `matplotlib` and `imageio` for generating MP4 replays.
-- **🧩 Standard Interface**: Familiar API design (`reset`, `step`, `render`) compliant with standard RL paradigms.
-- **📦 Modular Architecture**: Clean separation between environment logic, visualization, and execution.
+- **📦 Configuration Driven**: Fully YAML-based configuration for easy experimentation.
 
 ---
 
@@ -26,17 +28,16 @@
 
 ```text
 grid_world_pain/
-├── pyproject.toml              # ⚙️ Configuration & Dependencies
+├── configs/                    # ⚙️ Configuration YAMLs (Environment & Models)
+├── evaluation.py               # 🎬 Evaluation & Visualization Script
 ├── main.py                     # 🏃‍♂️ Console Demo Entry Point
-├── visualize.py                # 🎬 Video Generation Script
-├── train_rl.py                 # 🧠 RL Training & Verification Script
+├── train.py                    # 🧠 RL Training Script
 ├── README.md                   # 📄 Documentation
 ├── results/                    # 📂 Training Results & Artifacts
-└── src/
-    └── grid_world_pain/        # 🐍 Source Code
-        ├── __init__.py         # Package Exporter
-        ├── grid_world.py       # Core Environment Logic
-        └── agent.py            # 🤖 Q-Learning Agent
+└── src/                        # 🐍 Source Code
+    ├── environment/            # 🌍 Environment Logic (GridWorld, Body, Sensory)
+    ├── models/                 # 🤖 Agent Implementations (DQN, PPO, etc.)
+    └── utils/                  # 🛠️ Utilities (Config, Visualization)
 ```
 
 ---
@@ -50,13 +51,13 @@ grid_world_pain/
 
 ### 💿 Installation
 
-1.  **Create and activate a fresh Conda environment:**
+1.  **Create and activate the Conda environment:**
     ```bash
     conda create -n grid_world_pain python
     conda activate grid_world_pain
     ```
 
-2.  **Install the package in editable mode:**
+2.  **Install dependencies:**
     ```bash
     pip install -e .
     ```
@@ -65,75 +66,63 @@ grid_world_pain/
 
 ## 🛠️ Usage
 
-### 1. Simple Debugging Session
-Run the console-based simulation to see the agent move in the GridWorld with random behaviors and satiation dynamics.
+### 1. Training Agents
+Train various RL agents using the `train.py` script. Configuration is handled via YAML files in `configs/`.
+
+**Train DQN:**
+```bash
+python train.py --agent_config configs/models/dqn.yaml --episodes 1000
+```
+
+**Train DRQN (Recurrent):**
+```bash
+python train.py --agent_config configs/models/drqn.yaml --episodes 1000
+```
+
+**Train PPO:**
+```bash
+python train.py --agent_config configs/models/ppo.yaml --episodes 5000
+```
+
+**Command Line Overrides:**
+You can override common parameters directly:
+```bash
+python train.py --agent_config configs/models/dqn.yaml --episodes 500 --device cuda:0
+```
+
+### 2. Evaluating & Visualizing
+After training, use `evaluation.py` to generate videos and verify performance. This script automatically loads the configuration used during training.
+
+```bash
+python evaluation.py --results_dir results/DQN/20260117-141318_default --episodes 3
+```
+
+**Outputs:**
+- Generates `.mp4` videos of the agent's performance in `results/.../videos/`.
+- If using Tabular Q-Learning, generates Q-table visualizations.
+
+### 3. Simple Debugging Session
+Run the console-based simulation to see the agent move in the GridWorld with random behaviors.
 
 ```bash
 python main.py
 ```
 
-### 2. Generate Video Replays
-Create a high-quality `.mp4` video of the agent's episode.
-
-```bash
-python visualize.py
-```
-
-### 3. Training the RL Agent
-Train the Q-Learning agent and verify its performance. The script supports command-line arguments for flexibility.
-
-**Run with default settings (100,000 episodes):**
-```bash
-python train_rl.py
-```
-
-**Run a quick debug session (e.g., 500 episodes):**
-```bash
-python train_rl.py --episodes 500
-```
-
-**Outputs in `results/`:**
-- `q_table.npy`: The learned Q-values.
-- `rl_agent_video.mp4`: A video recording of the trained agent verification episode.
-- `q_table_vis.png`: A multi-panel visualization showing the learned policy and values at **Low**, **Mid**, and **High** satiation levels, including the food location.
-
 ---
 
-## 📚 API Reference
+## 📚 Environment Features
 
 ### `GridWorld`
-The core class located in `src/grid_world_pain/grid_world.py`.
-
-| Method | Description |
-| :--- | :--- |
-| `__init__(width, height, start, goal)` | Initializes the grid dimensions and key coordinates. |
-| `reset()` | Resets the environment and returns the initial state. **Now randomizes agent position.** |
-| `step(action)` | Executes an action (`Up`, `Right`, `Down`, `Left`) and returns `(state, reward, done)`. |
-| `render()` | Prints the grid state to the console. |
-| `render_rgb_array(satiation, max_satiation)` | Returns a NumPy array representing the current frame with a satiation bar. |
-
-### Configuration Extensions
-- **Resource Relocation**: Resources (food) can now periodically change location (`relocate_resource: true`).
-- **Safety/Pain**: Configurable danger zones and health mechanics.
+The core environment (`src/environment/grid_world.py`) supports:
+- **Resource Relocation**: Food can periodically change location during an episode (`relocate_resource: true`).
+- **Random Initialization**: Agents and resources (if enabled) start at random positions on reset.
+- **Hazards**: Configurable danger zones (`danger_prob`, `danger_duration`) that affect health.
 
 ### `InteroceptiveBody`
-Simulates the agent's internal physiological state (satiation).
-
-| Method | Description |
-| :--- | :--- |
-| `reset()` | **Randomizes start satiation** (between 50%-100% max) and returns initial level. |
-| `step(info)` | Updates satiation based on metabolism (-1) and eating (+5). |
-
-### `QLearningAgent`
-The RL agent located in `src/grid_world_pain/agent.py`.
-
-| Method | Description |
-| :--- | :--- |
-| `__init__(env, alpha, gamma, epsilon)` | Initializes hyperparameters and Q-table. |
-| `choose_action(state)` | Selects an action using epsilon-greedy policy. |
-| `update(state, action, reward, next_state)` | Updates Q-values based on experience. |
-| `train(episodes)` | Runs the training loop. |
-| `save(filepath)` | Saves the Q-table to a file. |
+Simulates the agent's physiological needs (`src/environment/body.py`):
+- **Satiation**: Hunger mechanics constrained by `max_satiation`.
+- **Health**: Physical health that degrades in danger zones and recovers over time.
+- **Homeostatic Reward**: Rewards are generated based on drive reduction (maintaining variables near setpoints) rather than simple external goals.
 
 ---
 
