@@ -4,7 +4,7 @@ set -e
 # Configuration
 ENV_NAME="grid_world_pain"
 CONFIG_PATH="configs/models/drqn.yaml"
-EPISODES=100
+EPISODES=1000
 DEVICE="cuda"
 RESULTS_BASE_DIR="results"
 ASSETS_DIR="assets"
@@ -56,7 +56,7 @@ fi
 # 3. Convert to GIF
 echo "[3/3] Converting to GIF..."
 ffmpeg -y -v warning -i "$VIDEO_PATH" \
-    -vf "fps=10,scale=600:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
+    -vf "fps=10,scale=1200:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
     "$ASSETS_DIR/$GIF_NAME"
 
 echo "=========================================="
