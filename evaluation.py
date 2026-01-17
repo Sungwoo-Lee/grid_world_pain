@@ -91,6 +91,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     
     food_prob = config.get('environment.food_prob', 0.2)
     food_duration = config.get('environment.food_duration', 10)
+    
+    # Extract Relocation Config
+    relocate_resource = config.get('environment.relocate_resource', False)
+    relocation_steps = config.get('environment.relocation_steps', 20)
 
     # 2. Environment & Body Setup
     # Set seed for deterministic evaluation
@@ -98,7 +102,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     
     env = GridWorld(height=height, width=width, resource_pos=resource_pos, with_satiation=with_satiation, max_steps=max_steps,
                     danger_prob=pain_prob, danger_duration=pain_duration, damage_amount=damage_amount,
-                    food_prob=food_prob, food_duration=food_duration)
+                    food_prob=food_prob, food_duration=food_duration,
+                    relocate_resource=relocate_resource, relocation_steps=relocation_steps)
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
         start_satiation=start_satiation, 

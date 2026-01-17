@@ -112,6 +112,10 @@ The core class located in `src/grid_world_pain/grid_world.py`.
 | `render()` | Prints the grid state to the console. |
 | `render_rgb_array(satiation, max_satiation)` | Returns a NumPy array representing the current frame with a satiation bar. |
 
+### Configuration Extensions
+- **Resource Relocation**: Resources (food) can now periodically change location (`relocate_resource: true`).
+- **Safety/Pain**: Configurable danger zones and health mechanics.
+
 ### `InteroceptiveBody`
 Simulates the agent's internal physiological state (satiation).
 
