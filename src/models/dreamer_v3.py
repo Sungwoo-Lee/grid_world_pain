@@ -19,6 +19,115 @@ class EMAMixin:
         for t, s in zip(target.parameters(), source.parameters()):
             t.data.mul_(rate).add_(s.data, alpha=1 - rate)
 
+class LayerNormGRUCell(nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.weight_ih = nn.Linear(input_size, 3 * hidden_size, bias=False)
+        self.weight_hh = nn.Linear(hidden_size, 3 * hidden_size, bias=False)
+        self.ln_ih = nn.LayerNorm(3 * hidden_size)
+        self.ln_hh = nn.LayerNorm(3 * hidden_size)
+    
+    def forward(self, input, state):
+        gates_ih = self.ln_ih(self.weight_ih(input))
+        gates_hh = self.ln_hh(self.weight_hh(state))
+        gates = gates_ih + gates_hh
+        reset_gate, update_gate, candidate_gate = gates.chunk(3, dim=-1)
+        
+        reset_gate = torch.sigmoid(reset_gate)
+        update_gate = torch.sigmoid(update_gate)
+        candidate_gate = torch.tanh(candidate_gate) # DreamerV3 often uses tanh here too
+        
+        return (1 - update_gate) * state + update_gate * candidate_gate
+
+def to_twohot(x, min_v=-20.0, max_v=20.0, num_buckets=255):
+    x = symlog(x)
+    # Range of symlog values. symlog(20) ~= 3.0. 
+    # Let's align with official implementation which uses generic buckets.
+    # Official: 255 buckets usually cover expected return range.
+    # If we assume range is [-20, 20], symlog range is approx [-3, 3].
+    # We map this range to [0, 255].
+    
+    # Scale x to [0, num_buckets - 1]
+    # x_norm = (x - min_v) / (max_v - min_v) * (num_buckets - 1)
+    
+    # But wait, DreamerV3 uses symlog on the *targets* before bucketing? 
+    # Or buckets represent symlog values?
+    # Usually: values are symlog-ed, then discretized into buckets.
+    # Let's assume input x is already UN-transformed value.
+    
+    # Paper: "We transform the targets to symlog(x) ... and discretize them into 255 buckets..."
+    
+    vals = torch.linspace(symlog(torch.tensor(min_v)), symlog(torch.tensor(max_v)), num_buckets, device=x.device)
+    # But efficient scatter implementation:
+    
+    # Simplified logic:
+    # 1. Symlog the input
+    x = symlog(x)
+    # 2. Normalize to [0, num_buckets-1]
+    # We need fixed boundaries. 
+    # Transformation: typically we just define a fixed wide range.
+    # Let's fix range to e.g. [-20, 20] in SYMLOG space? No that's huge. symlog(e^20) is huge.
+    # 
+    # Let's follow simple TwoHot regression logic:
+    # min_v, max_v are in RAW space.
+    # No, usually buckets are linear in Symlog space.
+    
+    # Let's trust the params provided: min_v, max_v are raw.
+    bottom = symlog(torch.tensor(min_v, device=x.device))
+    top = symlog(torch.tensor(max_v, device=x.device))
+    
+    # Clip
+    x = torch.clamp(x, bottom, top)
+    
+    # Project to [0, num_buckets-1]
+    # (x - bottom) / (top - bottom) * (B - 1)
+    rel = (x - bottom) / (top - bottom) * (num_buckets - 1)
+    
+    floor = rel.floor().long()
+    ceil = rel.ceil().long()
+    
+    prob_ceil = rel - floor.float()
+    prob_floor = 1.0 - prob_ceil
+    
+    # Create target distribution
+    target = torch.zeros((*x.shape, num_buckets), device=x.device)
+    
+    # Scatter
+    # We need to handle arbitrary batch dims
+    # Easier: one_hot(floor) * prob_floor + one_hot(ceil) * prob_ceil
+    
+    floor = torch.clamp(floor, 0, num_buckets - 1)
+    ceil = torch.clamp(ceil, 0, num_buckets - 1)
+    
+    target.scatter_add_(-1, floor.unsqueeze(-1), prob_floor.unsqueeze(-1))
+    target.scatter_add_(-1, ceil.unsqueeze(-1), prob_ceil.unsqueeze(-1))
+    
+    # Handle the case where floor == ceil (exact integer)? 
+    # scatter_add handles it (adds probability twice? No, indices are same, values sum up to 1.0)
+    # Wait, if floor==ceil, we add to same index twice?
+    # prob_ceil is 0, prob_floor is 1. If floor==ceil, rel is integer.
+    # Actually if indices are same, scatter_add sums them.
+    # If floor == ceil, prob_floor + prob_ceil = 1.0. Correct.
+    
+    return target
+
+def from_twohot(logits, min_v=-20.0, max_v=20.0, num_buckets=255):
+    # Logits -> Probs -> Expectation in Symlog Space -> Symexp
+    probs = F.softmax(logits, dim=-1)
+    
+    bottom = symlog(torch.tensor(min_v, device=logits.device))
+    top = symlog(torch.tensor(max_v, device=logits.device))
+    
+    # Bucket values in symlog space
+    bucket_vals = torch.linspace(bottom, top, num_buckets, device=logits.device)
+    
+    # Expected value in symlog space
+    sym_val = (probs * bucket_vals).sum(dim=-1)
+    
+    return symexp(sym_val)
+
 # -----------------------------------------------------------------------------
 # Networks
 # -----------------------------------------------------------------------------
@@ -81,7 +190,7 @@ class RSSM(nn.Module):
         self.hidden_dim = hidden_dim
         
         # Cell
-        self.cell = nn.GRUCell(hidden_dim, deter_dim)
+        self.cell = LayerNormGRUCell(hidden_dim, deter_dim)
         
         # Prior (Dynamics) -> Predict Z_t from h_t
         self.img_out = nn.Linear(deter_dim, stoch_dim * discrete)
@@ -261,12 +370,12 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         self.encoder = Encoder(state_dim, embed_dim).to(self.device)
         self.rssm = RSSM(embed_dim, action_dim, deter_dim, stoch_dim, discrete).to(self.device)
         self.decoder = Decoder(deter_dim + stoch_dim * discrete, state_dim).to(self.device)
-        self.reward_pred = MLP(deter_dim + stoch_dim * discrete, 1).to(self.device)
+        self.reward_pred = MLP(deter_dim + stoch_dim * discrete, 255).to(self.device)
         self.continue_pred = MLP(deter_dim + stoch_dim * discrete, 1).to(self.device)
         
         self.actor = MLP(deter_dim + stoch_dim * discrete, action_dim).to(self.device)
-        self.critic = MLP(deter_dim + stoch_dim * discrete, 1).to(self.device)
-        self.target_critic = MLP(deter_dim + stoch_dim * discrete, 1).to(self.device)
+        self.critic = MLP(deter_dim + stoch_dim * discrete, 255).to(self.device)
+        self.target_critic = MLP(deter_dim + stoch_dim * discrete, 255).to(self.device)
         self.target_critic.load_state_dict(self.critic.state_dict())
         
         # Optimizers
@@ -397,6 +506,9 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         term = torch.tensor(batch['terminal'], dtype=torch.float32, device=self.device)
         first = torch.tensor(batch['is_first'], dtype=torch.float32, device=self.device)
         
+        # [NEW] Symlog Inputs
+        obs = symlog(obs) 
+        
         # 1. Train World Model
         embed = self.encoder(obs)
         post, prior = self.rssm.observe(embed, act, first)
@@ -408,25 +520,38 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         
         # Losses
         recon_loss = F.mse_loss(recon, obs)
-        rew_loss = F.mse_loss(rew_pred.squeeze(-1), symlog(rew))
+        
+        # [NEW] Reward TwoHot Loss
+        rew_target = to_twohot(rew)
+        rew_loss = -torch.mean(torch.sum(rew_target * F.log_softmax(rew_pred, dim=-1), dim=-1))
+        
         cont_loss = F.binary_cross_entropy_with_logits(cont_pred.squeeze(-1), 1.0 - term)
         
-        # KL Loss
-        # Prior/Post are categoricals (logits)
-        # Dynamic balancing or fixed scale? Fixed 1.0 for simplicity
+        # [NEW] KL Balancing
+        # DreamerV3: 0.1 * KL(sg(post) || prior) + 0.9 * KL(post || sg(prior)) (Dynamics vs Repr coefficients)
+        # Using specific coefficients: 0.5 for dyn, 0.1 for rep (from SheepRL/Paper)
+        
         p_logits = prior['logits']
-        q_logits = post['logits'].detach() # Stop grad for posterior matching? No, KL both.
-        # DreamerV3: KL(stop(post), prior) + KL(post, stop(prior)) is tricky.
-        # Simple KL(post || prior)
+        q_logits = post['logits']
         
         # Reshape to (B, T, Stoch, Discrete)
         shape = p_logits.shape[:-1] + (self.rssm.stoch_dim, self.rssm.discrete)
         p_dist = D.OneHotCategorical(logits=p_logits.reshape(shape))
-        q_dist = D.OneHotCategorical(logits=post['logits'].reshape(shape))
+        q_dist = D.OneHotCategorical(logits=q_logits.reshape(shape))
         
-        kl_loss = D.kl_divergence(q_dist, p_dist).mean()
+        # Detach for Dynamics Loss (Prior learning to match Posterior)
+        q_dist_detach = D.OneHotCategorical(logits=q_logits.detach().reshape(shape))
+        dyn_kl = D.kl_divergence(q_dist_detach, p_dist) # KL(sg(q) || p)
+        dyn_loss = torch.max(dyn_kl, torch.tensor(1.0, device=self.device)).mean()
         
-        model_loss = recon_loss + rew_loss + cont_loss + 0.1 * kl_loss
+        # Detach for Representation Loss (Posterior learning to be predictable)
+        p_dist_detach = D.OneHotCategorical(logits=p_logits.detach().reshape(shape))
+        rep_kl = D.kl_divergence(q_dist, p_dist_detach) # KL(q || sg(p))
+        rep_loss = torch.max(rep_kl, torch.tensor(1.0, device=self.device)).mean()
+        
+        kl_loss = 0.5 * dyn_loss + 0.1 * rep_loss
+        
+        model_loss = recon_loss + rew_loss + cont_loss + kl_loss
         
         self.model_opt.zero_grad()
         model_loss.backward()
@@ -434,17 +559,10 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         self.model_opt.step()
         
         # 2. Behavior Learning (Imagination)
-        # Sample starting states from posterior (stop grad)
         with torch.no_grad():
-            start = {k: v.reshape(-1, v.shape[-1]).detach() for k, v in post.items()} # Flatten B,T for starts? 
-            # Actually, usually sample from buffer posteriors.
-            # Let's use the sequence rollout we just did.
-            # Flatten: (B*T, ...)
+            start = {k: v.reshape(-1, v.shape[-1]).detach() for k, v in post.items()}
             
-        # Unroll imagination Horizon=15
         horizon = 15
-        # We need a recurring imagination loop.
-        # Start states:
         start_deter = start['deter']
         start_stoch = start['stoch']
         
@@ -452,114 +570,96 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         imag_rews = []
         imag_conts = []
         imag_acts = []
+        imag_log_probs = [] # [NEW] For Reinforce
         
         curr_deter = start_deter
         curr_stoch = start_stoch
         
         for _ in range(horizon):
-            # Actor action
             curr_feat = torch.cat([curr_deter, curr_stoch], dim=-1)
             act_logits = self.actor(curr_feat)
             act_dist = D.Categorical(logits=act_logits)
             act_idx = act_dist.sample()
             act_onehot = F.one_hot(act_idx, self.action_dim).float()
             
-            # Step RSSM (Prior)
-            # Need 'img_in' logic from RSSM
+            # [NEW] Store log prob
+            log_prob = act_dist.log_prob(act_idx)
+            imag_log_probs.append(log_prob)
+            
             x = torch.cat([curr_stoch, act_onehot], dim=-1)
             x = self.rssm.img_in(x)
             next_deter = self.rssm.cell(x, curr_deter)
             next_prior_logits = self.rssm.img_out(next_deter)
             next_stoch = self.rssm.get_stoch(next_prior_logits)
             
-            # Predictions
             next_feat = torch.cat([next_deter, next_stoch], dim=-1)
             rew_p = self.reward_pred(next_feat)
             cont_p = self.continue_pred(next_feat)
             
-            imag_feats.append(curr_feat) # Store current or next? Usually state -> action -> next_state -> reward
+            imag_feats.append(curr_feat)
             imag_acts.append(act_logits)
-            imag_rews.append(rew_p)
+            
+            # [NEW] Decode TwoHot Reward
+            rew_scalar = from_twohot(rew_p)
+            imag_rews.append(rew_scalar)
+            
             imag_conts.append(cont_p)
             
             curr_deter = next_deter
             curr_stoch = next_stoch
             
-        # Calculate Returns (Lambda-Return)
-        # Using target critic
         last_feat = torch.cat([curr_deter, curr_stoch], dim=-1)
-        next_values = self.target_critic(last_feat).squeeze(-1)
+        # [NEW] Decode Target Value
+        next_values = from_twohot(self.target_critic(last_feat))
         
-        imag_rews = torch.stack(imag_rews).squeeze(-1) # (H, B*T)
+        imag_rews = torch.stack(imag_rews) # (H, B*T)
         imag_conts = torch.sigmoid(torch.stack(imag_conts).squeeze(-1))
         imag_values = []
         
-        # Bootstrap
         lambda_ = 0.95
         R = next_values
         for t in reversed(range(horizon)):
             r = imag_rews[t]
             c = imag_conts[t]
-            # V_target = r + gamma * c * ((1-lambda)*v + lambda*R)
-            # But we need V(s_t) to train critic.
-            # Dreamer V3 uses symlog return
-            # Simplified:
-            v_pred = self.target_critic(imag_feats[t]).squeeze(-1)
-            R = r + self.model_opt.param_groups[0]['lr'] * c * R # oops, gamma missing
-            # Let's implement standard lambda return
-            R = r + 0.99 * c * ((1 - lambda_) * v_pred + lambda_ * R)
+            # [NEW] Decode V_pred for lambda return mixing
+            v_pred = from_twohot(self.target_critic(imag_feats[t]))
+            R = r + 0.997 * c * ((1 - lambda_) * v_pred + lambda_ * R)
             imag_values.insert(0, R)
             
-        imag_values = torch.stack(imag_values) # (H, B*T)
-        imag_feats = torch.stack(imag_feats) # (H, B*T, F)
-        imag_acts = torch.stack(imag_acts) # (H, B*T, A)
+        imag_values = torch.stack(imag_values)
+        imag_feats = torch.stack(imag_feats)
+        imag_log_probs = torch.stack(imag_log_probs)
         
         # Critic Update
-        # Predict value from feat
-        v_pred = self.critic(imag_feats.detach()).squeeze(-1)
-        critic_loss = F.mse_loss(v_pred, imag_values.detach())
+        v_pred_logits = self.critic(imag_feats.detach())
+        # [NEW] Target TwoHot
+        target_value_twohot = to_twohot(imag_values.detach())
+        critic_loss = -torch.mean(torch.sum(target_value_twohot * F.log_softmax(v_pred_logits, dim=-1), dim=-1))
         
         self.critic_opt.zero_grad()
         critic_loss.backward()
         self.critic_opt.step()
         
         # Actor Update
-        # Maximize value +  Entropy
-        # Loss = - (V_lambda - Baseline) * logpi ??
-        # Or just maximize V_lambda (Pathwise derivative if continuous, but we have discrete)
-        # REINFORCE for discrete:
-        # returns = imag_values
-        # baseline = v_pred.detach()
-        # adv = returns - baseline
-        # Actor Loss = - (mean(adv * logprob))
+        # [NEW] Reinforce + Entropy
+        # Loss = - (R - V).detach * log_prob - entropy_scale * entropy
         
-        # Re-evaluate logprobs
-        dist = D.Categorical(logits=imag_acts)
-        # Which action was taken? We sampled it.
-        # But we need grads flow for continuous.
-        # For discrete, we used sample().
-        # Dreamer Discrete often uses Straight-Through or Reinforce.
-        # Let's use Reinforce term:
-        # We need the stored action indices or onehots.
-        # We didn't store indices.
-        # Let's just use Dynamics Backprop? No, discrete latent breaks it unless ST.
-        # Simplified: PPO-style or just Reinforce.
+        baseline = from_twohot(v_pred_logits.detach())
+        advantage = (imag_values - baseline).detach()
         
-        # Let's stick to simple Reinforce on imagined rollout
-        # We need Action indices taken during rollout
-        # ... skipped storing them properly in loop above.
+        # Entropy
+        act_dist_imag = D.Categorical(logits=torch.stack(imag_acts))
+        entropy = act_dist_imag.entropy()
         
-        # Fix: Add entropy bonus
-        actor_loss = -(imag_values.mean()) # Naive maximization?
+        # Normalize Advantage? Often helpful but V3 uses fixed scales usually. 
+        # Using raw advantage.
         
-        # More proper:
-        # actor_loss = - (imag_values - v_pred.detach()) * log_prob
+        actor_loss = -(advantage * imag_log_probs + 3e-4 * entropy).mean()
         
         self.actor_opt.zero_grad()
         actor_loss.backward()
         self.actor_opt.step()
         
-        # Update Target
         self.update_ema(self.target_critic, self.critic, 0.02)
 
     def save(self, checkpoint_path):
