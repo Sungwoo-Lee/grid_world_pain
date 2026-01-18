@@ -353,7 +353,19 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
                  input_dim += 1
         
         print(f"Initializing DQN Agent (Input Dim: {input_dim})...")
-        agent = DQNAgent(state_dim=input_dim, action_dim=5, device=device)
+        agent = DQNAgent(
+            state_dim=input_dim, 
+            action_dim=5, 
+            lr=config_dict.get('agent.learning_rate', 1e-3),
+            gamma=config_dict.get('agent.gamma', 0.99),
+            buffer_size=config_dict.get('agent.buffer_size', 10000),
+            batch_size=config_dict.get('agent.batch_size', 64),
+            epsilon_start=config_dict.get('agent.epsilon_start', 1.0),
+            epsilon_end=config_dict.get('agent.epsilon_end', 0.05),
+            epsilon_decay=config_dict.get('agent.epsilon_decay', 0.995),
+            target_update_freq=config_dict.get('agent.target_update_freq', 1000),
+            device=device
+        )
 
     elif algorithm == "DRQN":
         # Calculate Input Dimension
@@ -373,8 +385,16 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         agent = DRQNAgent(
             state_dim=input_dim, 
             action_dim=5, 
+            lr=config_dict.get('agent.learning_rate', 1e-3),
+            gamma=config_dict.get('agent.gamma', 0.99),
+            buffer_size=config_dict.get('agent.buffer_size', 10000),
+            batch_size=config_dict.get('agent.batch_size', 32),
             trace_length=config_dict.get('agent.trace_length', 8),
             burn_in_length=config_dict.get('agent.burn_in_length', 0),
+            epsilon_start=config_dict.get('agent.epsilon_start', 1.0),
+            epsilon_end=config_dict.get('agent.epsilon_end', 0.05),
+            epsilon_decay=config_dict.get('agent.epsilon_decay', 0.995),
+            target_update_freq=config_dict.get('agent.target_update_freq', 1000),
             device=device
         )
         
@@ -402,6 +422,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             K_epochs=config_dict.get('agent.K_epochs', 4),
             eps_clip=config_dict.get('agent.eps_clip', 0.2),
             update_timestep=config_dict.get('agent.update_timestep', 2000),
+            entropy_coef=config_dict.get('agent.entropy_coef', 0.01),
             device=device
         )
 
@@ -430,6 +451,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             eps_clip=config_dict.get('agent.eps_clip', 0.2),
             update_timestep=config_dict.get('agent.update_timestep', 2000),
             sequence_length=config_dict.get('agent.sequence_length', 8),
+            entropy_coef=config_dict.get('agent.entropy_coef', 0.01),
             device=device
         )
 
@@ -608,10 +630,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         if not isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
             # Manually decay for tabular
             agent.epsilon = max(tabular_min_epsilon, agent.epsilon * tabular_decay_rate)
-        elif isinstance(agent, (DQNAgent, DRQNAgent)):
-            # DQN/DRQN handles decay internally in update(), also target net update
-            if episode % 10 == 0:
-                agent.update_target_network()
+        # DQN/DRQN handles decay internally in update(), also target net update handled internally
         # PPO: No epsilon decay, no target net
         
         episode_rewards.append(total_reward)

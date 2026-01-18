@@ -10,29 +10,34 @@ from datetime import datetime
 # Define Search Spaces
 SEARCH_SPACES = {
     "dqn": {
-        "agent.batch_size": [32, 64],
-        "agent.learning_rate": [1e-3, 5e-4],
-        "agent.epsilon_decay": [0.99, 0.995],
+        "agent.learning_rate": [1e-4, 3e-4, 1e-3],
+        "agent.batch_size": [64, 128],
+        "agent.epsilon_decay": [0.995, 0.999],
+        "agent.target_update_freq": [1000, 5000],
         "agent.algorithm": ["DQN"]
     },
     "drqn": {
+        "agent.learning_rate": [1e-4, 3e-4, 1e-3],
         "agent.batch_size": [32, 64],
-        "agent.learning_rate": [1e-3, 5e-4],
-        "agent.epsilon_decay": [0.99, 0.995],
+        "agent.trace_length": [8, 16],
+        "agent.target_update_freq": [1000, 5000],
         "agent.algorithm": ["DRQN"]
     },
     "ppo": {
-        "agent.lr_actor": [3e-4, 1e-4],
-        "agent.lr_critic": [1e-3, 5e-4],
-        "agent.gamma": [0.99],
+        "agent.lr_actor": [1e-4, 3e-4],
+        "agent.lr_critic": [5e-4, 1e-3],
+        "agent.clip_param": [0.1, 0.2],
+        "agent.entropy_coef": [0.001, 0.01],
         "agent.K_epochs": [4, 10],
         "agent.algorithm": ["PPO"]
     },
     "recurrent_ppo": {
-        "agent.lr_actor": [3e-4, 1e-4],
-        "agent.lr_critic": [1e-3, 5e-4],
-        "agent.gamma": [0.99],
+        "agent.lr_actor": [1e-4, 3e-4],
+        "agent.lr_critic": [5e-4, 1e-3],
+        "agent.clip_param": [0.1, 0.2],
+        "agent.entropy_coef": [0.001, 0.01],
         "agent.K_epochs": [4, 10],
+        "agent.sequence_length": [8],
         "agent.algorithm": ["RecurrentPPO"]
     }
 }
@@ -53,7 +58,7 @@ def generate_config(base_config_path, params, output_path):
     # Helper to set nested dict values
     def set_nested(d, key, value):
         keys = key.split('.')
-        for k in keys[:-1]:
+        for i, k in enumerate(keys[:-1]):
             d = d.setdefault(k, {})
         d[keys[-1]] = value
 
@@ -81,18 +86,22 @@ def run_search(algorithm, episodes, seed, dry_run=False):
     base_config_path = f"configs/models/{algorithm}.yaml"
     if not os.path.exists(base_config_path):
         print(f"Warning: Base config {base_config_path} not found. Starting from empty.")
-        # Create a basic config file structure if it doesn't exist? 
-        # Actually it's better to just ensure the key params are present.
-        # But for now, let's assume the user has the base files.
 
     for i, combo in enumerate(combinations):
         params = dict(zip(keys, combo))
         
         # Create a unique tag
-        tag_parts = [f"{k.split('.')[-1]}_{v}" for k, v in params.items() if k != 'agent.algorithm']
+        # Shorten keys for readability
+        tag_parts = []
+        for k, v in params.items():
+            if k == 'agent.algorithm':
+                continue
+            short_key = k.split('.')[-1]
+            tag_parts.append(f"{short_key}_{v}")
+            
         tag = f"search_{algorithm}_{'_'.join(tag_parts)}"
         
-        # Limit tag length just in case
+        # Limit tag length
         if len(tag) > 200:
             tag = tag[:200]
             
@@ -112,15 +121,17 @@ def run_search(algorithm, episodes, seed, dry_run=False):
 
         if dry_run:
             print(f"Dry Run Command: {' '.join(cmd)}")
+            # Cleanup immediately in dry run
+            if os.path.exists(temp_config_path):
+                os.remove(temp_config_path)
         else:
             try:
                 subprocess.run(cmd, check=True)
             except subprocess.CalledProcessError as e:
                 print(f"Error running training for {tag}: {e}")
-            
-        # Cleanup
-        if os.path.exists(temp_config_path):
-            os.remove(temp_config_path)
+            finally:
+                if os.path.exists(temp_config_path):
+                    os.remove(temp_config_path)
 
     print("\nSearch complete.")
     try:

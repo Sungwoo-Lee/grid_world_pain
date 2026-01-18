@@ -44,12 +44,13 @@ class DQN(nn.Module):
         return self.fc3(x)
 
 class DQNAgent:
-    def __init__(self, state_dim, action_dim, lr=1e-3, gamma=0.99, buffer_size=10000, batch_size=64, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay=0.995, device="auto"):
+    def __init__(self, state_dim, action_dim, lr=1e-3, gamma=0.99, buffer_size=10000, batch_size=64, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay=0.995, target_update_freq=1000, device="auto"):
         self.state_dim = state_dim
         self.action_dim = action_dim
         self.lr = lr
         self.gamma = gamma
         self.batch_size = batch_size
+        self.target_update_freq = target_update_freq
         
         self.epsilon = epsilon_start
         self.epsilon_end = epsilon_end
@@ -120,6 +121,10 @@ class DQNAgent:
         # Epsilon Decay
         self.epsilon = max(self.epsilon_end, self.epsilon * self.epsilon_decay)
         self.steps_done += 1
+        
+        # Update Target Network
+        if self.steps_done % self.target_update_freq == 0:
+            self.update_target_network()
         
     def update_target_network(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())
