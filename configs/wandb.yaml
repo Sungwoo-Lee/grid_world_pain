@@ -1,0 +1,5 @@
+wandb:
+  entity: "sungwoolee"
+  project: "grid_world_pain"
+  group: null
+  mode: "online" # set to "disabled" to turn off logging globally

@@ -11,8 +11,14 @@ This script:
    - Generates Q-table plots (if Tabular).
    - Saves artifacts to `results/.../RunName/`.
 
+
+
 Usage:
-    python evaluation.py --results_dir results/DQN/MyRun_... --episodes 3
+    # Basic evaluation of a specific run
+    python evaluation.py --results_dir results/DQN/20260118-120000_my_run --episodes 5
+
+    # Override seed and episodes
+    python evaluation.py --results_dir results/PPO/20260118-130000_test --episodes 10 --seed 123
 
 Notes:
 - Uses the configuration saved during training (`config.yaml`).

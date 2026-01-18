@@ -13,12 +13,16 @@ Arguments:
 - `--agent_config <path>`: Path to agent-specific config (e.g., `configs/models/ppo.yaml`).
 - `--tag <str>`: Tag for the training run directory.
 - `--device <str>`: Device to use for training (e.g., `cpu`, `cuda`, `cuda:0`, `auto`). Default: `auto`.
+- `--wandb-project <str>`: WandB project name (default: "grid_world_pain").
+- `--wandb-group <str>`: WandB group name for grouping runs.
+- `--wandb-name <str>`: Specific name for the run.
+- `--no-wandb`: Disable WandB logging.
 
 Usage Examples:
 
 1. **Train DQN**:
    ```bash
-   python train.py --agent_config configs/models/dqn.yaml --episodes 1000
+   python train.py --agent_config configs/models/dqn.yaml --episodes 1000 --wandb-project my_project
    ```
 
 2. **Train PPO**:
@@ -49,6 +53,7 @@ import re
 import yaml
 import torch
 import random
+import wandb
 
 import sys
 import argparse
@@ -194,9 +199,23 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
                 danger_prob=0.1, danger_duration=5, damage_amount=5,
                 food_prob=0.2, food_duration=10, device="auto"):
     """
-    Trains the RL agent (Tabular Q-Learning, DQN, or PPO).
+    Trains the RL Agent (Tabular Q-Learning, DQN, or PPO).
     """
     import os 
+    
+    # Initialize WandB
+    if config_dict and not config_dict.get('wandb.disabled', False):
+        wandb_project = config_dict.get('wandb.project', 'grid_world_pain')
+        wandb_group = config_dict.get('wandb.group', None)
+        wandb_name = config_dict.get('wandb.name', None)
+        
+        wandb.init(
+            project=wandb_project,
+            group=wandb_group,
+            name=wandb_name,
+            config=config_dict.to_dict(),
+            reinit=True
+        )
     
     # Extract Sensory Config
     using_sensory = config_dict.get('sensory.using_sensory', False)
@@ -636,6 +655,15 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         episode_rewards.append(total_reward)
         episode_steps.append(steps)
         
+        # Log to WandB
+        if wandb.run is not None:
+            wandb.log({
+                "Reward": total_reward,
+                "Steps": steps,
+                "Epsilon": agent.epsilon if hasattr(agent, 'epsilon') else 0.0,
+                "Episode": episode + 1
+            })
+        
 
             
         # Update tqdm postfix
@@ -715,13 +743,24 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, help="Device to use (e.g., 'cpu', 'cuda', 'cuda:0', 'cuda:1', 'auto')")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
     parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
+    parser.add_argument("--wandb-project", type=str, default="grid_world_pain", help="WandB Project Name")
+    parser.add_argument("--wandb-group", type=str, help="WandB Group Name")
+    parser.add_argument("--wandb-name", type=str, help="WandB Run Name")
+    parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
     args = parser.parse_args()
     
     # Load default config
     config = get_default_config()
-    
-    # Load and merge agent config
     from src.utils.config import Config
+    
+    # Load WandB config if exists
+    wandb_config_path = "configs/wandb.yaml"
+    if os.path.exists(wandb_config_path):
+        print(f"Loading WandB config from: {wandb_config_path}")
+        wandb_config = Config.load_yaml(wandb_config_path)
+        config.merge(wandb_config)
+
+    # Load and merge agent config
     if args.agent_config:
         print(f"Loading agent config from: {args.agent_config}")
         agent_config = Config.load_yaml(args.agent_config)
@@ -729,6 +768,23 @@ if __name__ == "__main__":
     
     # Set tag
     config.set('tag', args.tag)
+    
+    # Set WandB Config - CLI overrides config file
+    if args.no_wandb:
+        config.set('wandb.disabled', True)
+    else:
+        # Only set if arg is provided, otherwise keep config file value or default
+        if args.wandb_project != "grid_world_pain" or not(config.get('wandb.project')):
+             config.set('wandb.project', args.wandb_project)
+        
+        if args.wandb_group:
+            config.set('wandb.group', args.wandb_group)
+        if args.wandb_name:
+            config.set('wandb.name', args.wandb_name)
+            
+        # Ensure mode uses config if not disabled via CLI
+        if not config.get('wandb.disabled'):
+             config.set('wandb.disabled', config.get('wandb.mode') == 'disabled')
         
     # Overrides
     episodes = args.episodes or config.get('training.training_episode', 100000)

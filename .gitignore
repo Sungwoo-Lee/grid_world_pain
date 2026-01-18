@@ -15,3 +15,4 @@ build/
 antigravity_instruction.txt
 sheeprl/
 temp_configs/
+wandb/

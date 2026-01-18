@@ -1,3 +1,35 @@
+"""
+Hyperparameter Search Runner for GridWorld RL Agents.
+
+This script automates the process of running multiple training sessions with different
+hyperparameter combinations. It generates temporary configuration files and executes
+`train.py` for each combination.
+
+Supported Algorithms:
+- DQN
+- DRQN
+- PPO
+- RecurrentPPO
+
+features:
+- defined search spaces for each algorithm.
+- automatic grouping of runs in weights & biases (wandb).
+- dry-run mode to preview commands.
+
+Arguments:
+- `--algorithm <str>`: Algorithm to search (dqn, ppo, drqn, recurrent_ppo).
+- `--episodes <int>`: Number of episodes per run (default: 1000).
+- `--seed <int>`: Random seed (default: 42).
+- `--wandb-project <str>`: WandB project name (default: "grid_world_pain").
+- `--dry-run`: Print commands without executing.
+
+Usage:
+    # Run a DQN search with 1000 episodes per run
+    python hyperparameter_search.py --algorithm dqn --episodes 1000 --wandb-project my_project
+
+    # Preview commands for PPO search
+    python hyperparameter_search.py --algorithm ppo --episodes 5000 --dry-run
+"""
 import os
 import yaml
 import itertools
@@ -68,7 +100,7 @@ def generate_config(base_config_path, params, output_path):
     with open(output_path, 'w') as f:
         yaml.dump(config, f)
 
-def run_search(algorithm, episodes, seed, dry_run=False):
+def run_search(algorithm, episodes, seed, wandb_project, dry_run=False):
     if algorithm not in SEARCH_SPACES:
         print(f"Error: Algorithm '{algorithm}' not found in search spaces.")
         print(f"Available: {list(SEARCH_SPACES.keys())}")
@@ -116,7 +148,10 @@ def run_search(algorithm, episodes, seed, dry_run=False):
             "--episodes", str(episodes),
             "--seed", str(seed),
             "--agent_config", temp_config_path,
-            "--tag", tag
+            "--tag", tag,
+            "--wandb-project", wandb_project,
+            "--wandb-group", f"search_{algorithm}_{int(time.time())}", # Group all runs in this search together
+            "--wandb-name", tag
         ]
 
         if dry_run:
@@ -146,9 +181,19 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing")
     
+    # Load default project from config if available
+    default_project = "grid_world_pain"
+    if os.path.exists("configs/wandb.yaml"):
+        with open("configs/wandb.yaml", 'r') as f:
+            wc = yaml.safe_load(f)
+            if wc and 'wandb' in wc and 'project' in wc['wandb']:
+                default_project = wc['wandb']['project']
+
+    parser.add_argument("--wandb-project", type=str, default=default_project, help=f"WandB Project Name (default: {default_project})")
+    
     args = parser.parse_args()
     
-    run_search(args.algorithm, args.episodes, args.seed, args.dry_run)
+    run_search(args.algorithm, args.episodes, args.seed, args.wandb_project, args.dry_run)
 
 if __name__ == "__main__":
     main()
