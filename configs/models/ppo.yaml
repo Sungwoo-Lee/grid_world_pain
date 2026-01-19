@@ -5,4 +5,7 @@ agent:
   gamma: 0.99
   K_epochs: 4
   eps_clip: 0.2
-  update_timestep: 1000 # Update every 2000 steps
+  update_timestep: 1000 # Update every 1000 steps
+  actor_fc_layers: [64, 64]
+  critic_fc_layers: [64, 64]
+  entropy_coef: 0.01

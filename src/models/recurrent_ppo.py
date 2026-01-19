@@ -25,44 +25,66 @@ class RolloutBuffer:
         del self.hidden_states[:]
 
 class ActorCriticRNN(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_dim=64):
+    def __init__(self, state_dim, action_dim, fc_layers=[64], recurrent_layers=[64], actor_fc_layers=[64], critic_fc_layers=[64]):
         super(ActorCriticRNN, self).__init__()
-        self.hidden_dim = hidden_dim
         
+        # Verify recurrent layers
+        if len(recurrent_layers) > 0:
+            self.hidden_dim = recurrent_layers[0]
+            if not all(x == self.hidden_dim for x in recurrent_layers):
+                raise ValueError(f"PyTorch LSTM requires uniform hidden size for stacked layers. Got: {recurrent_layers}")
+            num_recurrent_layers = len(recurrent_layers)
+        else:
+             raise ValueError("recurrent_layers cannot be empty for RecurrentPPO")
+
         # Shared Feature Extractor
-        self.fc1 = nn.Linear(state_dim, hidden_dim)
+        layers = []
+        in_dim = state_dim
+        for hidden_dim in fc_layers:
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.ReLU()) # Shared features usually ReLU?
+            in_dim = hidden_dim
+        
+        self.fc_net = nn.Sequential(*layers)
         
         # Shared LSTM
-        self.lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
+        self.lstm = nn.LSTM(input_size=in_dim, hidden_size=self.hidden_dim, num_layers=num_recurrent_layers, batch_first=True)
+        self.num_recurrent_layers = num_recurrent_layers
         
         # Actor Head
-        self.actor_head = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Tanh(),
-            nn.Linear(hidden_dim, action_dim),
-            nn.Softmax(dim=-1)
-        )
+        layers = []
+        in_dim = self.hidden_dim
+        for hidden_dim in actor_fc_layers:
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.Tanh())
+            in_dim = hidden_dim
+        layers.append(nn.Linear(in_dim, action_dim))
+        layers.append(nn.Softmax(dim=-1))
+        self.actor_head = nn.Sequential(*layers)
         
         # Critic Head
-        self.critic_head = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Tanh(),
-            nn.Linear(hidden_dim, 1)
-        )
+        layers = []
+        in_dim = self.hidden_dim
+        for hidden_dim in critic_fc_layers:
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.Tanh())
+            in_dim = hidden_dim
+        layers.append(nn.Linear(in_dim, 1))
+        self.critic_head = nn.Sequential(*layers)
         
     def forward(self, state, hidden=None):
         # state: (batch, seq, dim)
-        x = F.relu(self.fc1(state))
+        x = self.fc_net(state)
         x, new_hidden = self.lstm(x, hidden)
         return self.actor_head(x)
         
     def act(self, state, hidden):
         # state: (1, input_dim) -> unsqueeze for seq_len=1: (1, 1, input_dim)
         x = state.unsqueeze(1)
-        x = F.relu(self.fc1(x))
+        x = self.fc_net(x)
         
         # LSTM
-        # out: (1, 1, hidden), hidden: (1, 1, hidden)
+        # out: (1, 1, hidden), hidden: (num_layers, 1, hidden)
         x, new_hidden = self.lstm(x, hidden)
         x = x[:, -1, :] # Take last step
         
@@ -78,15 +100,10 @@ class ActorCriticRNN(nn.Module):
         # state: (batch, seq, dim)
         # hidden: (1, batch, dim) for h and c
         
-        batch_size, seq_len, _ = state.size()
-        
-        x = F.relu(self.fc1(state))
+        x = self.fc_net(state)
         
         # LSTM
         lstm_out, _ = self.lstm(x, hidden)
-        
-        # Determine output shape? (batch, seq, dim)
-        # Heads are applied to every step
         
         # Flatten for heads (batch*seq, dim)
         lstm_out_flat = lstm_out.contiguous().view(-1, self.hidden_dim)
@@ -103,8 +120,23 @@ class ActorCriticRNN(nn.Module):
         return action_logprobs, state_values, dist_entropy
 
 class RecurrentPPOAgent:
-    def __init__(self, state_dim, action_dim, lr_actor=0.0003, lr_critic=0.001, gamma=0.99, K_epochs=4, 
-                 eps_clip=0.2, update_timestep=2000, sequence_length=8, entropy_coef=0.01, device="auto"):
+    def __init__(self, state_dim, action_dim, lr_actor=None, lr_critic=None, gamma=None, K_epochs=None, 
+                 eps_clip=None, update_timestep=None, sequence_length=None, entropy_coef=None, 
+                 fc_layers=None, recurrent_layers=None, actor_fc_layers=None, critic_fc_layers=None, device="auto"):
+        # Validation
+        if lr_actor is None: raise ValueError("RecurrentPPOAgent: 'lr_actor' must be specified in config.")
+        if lr_critic is None: raise ValueError("RecurrentPPOAgent: 'lr_critic' must be specified in config.")
+        if gamma is None: raise ValueError("RecurrentPPOAgent: 'gamma' must be specified in config.")
+        if K_epochs is None: raise ValueError("RecurrentPPOAgent: 'K_epochs' must be specified in config.")
+        if eps_clip is None: raise ValueError("RecurrentPPOAgent: 'eps_clip' must be specified in config.")
+        if update_timestep is None: raise ValueError("RecurrentPPOAgent: 'update_timestep' must be specified in config.")
+        if sequence_length is None: raise ValueError("RecurrentPPOAgent: 'sequence_length' must be specified in config.")
+        if entropy_coef is None: raise ValueError("RecurrentPPOAgent: 'entropy_coef' must be specified in config.")
+        if fc_layers is None: raise ValueError("RecurrentPPOAgent: 'fc_layers' (shared) must be specified in config.")
+        if recurrent_layers is None: raise ValueError("RecurrentPPOAgent: 'recurrent_layers' must be specified in config.")
+        if actor_fc_layers is None: raise ValueError("RecurrentPPOAgent: 'actor_fc_layers' must be specified in config.")
+        if critic_fc_layers is None: raise ValueError("RecurrentPPOAgent: 'critic_fc_layers' must be specified in config.")
+
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
@@ -120,17 +152,17 @@ class RecurrentPPOAgent:
         else:
              self.device = torch.device(device)
              
-        print(f"Recurrent PPO Agent using device: {self.device}")
+        # print(f"Recurrent PPO Agent using device: {self.device}")
         
-        self.policy = ActorCriticRNN(state_dim, action_dim).to(self.device)
+        self.policy = ActorCriticRNN(state_dim, action_dim, fc_layers, recurrent_layers, actor_fc_layers, critic_fc_layers).to(self.device)
         self.optimizer = torch.optim.Adam([
             {'params': self.policy.actor_head.parameters(), 'lr': lr_actor},
             {'params': self.policy.critic_head.parameters(), 'lr': lr_critic},
-            {'params': self.policy.fc1.parameters(), 'lr': lr_actor}, # Shared params
+            {'params': self.policy.fc_net.parameters(), 'lr': lr_actor}, # Shared params
             {'params': self.policy.lstm.parameters(), 'lr': lr_actor}
         ])
         
-        self.policy_old = ActorCriticRNN(state_dim, action_dim).to(self.device)
+        self.policy_old = ActorCriticRNN(state_dim, action_dim, fc_layers, recurrent_layers, actor_fc_layers, critic_fc_layers).to(self.device)
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss()
@@ -143,9 +175,12 @@ class RecurrentPPOAgent:
         
     def reset_hidden(self):
         # Hidden state: (h, c)
-        # shape: (num_layers, batch_size, hidden_dim) -> (1, 1, 64)
-        self.hidden_state = (torch.zeros(1, 1, 64).to(self.device),
-                             torch.zeros(1, 1, 64).to(self.device))
+        # shape: (num_layers, batch_size, hidden_dim)
+        num_layers = self.policy.num_recurrent_layers
+        hidden_dim = self.policy.hidden_dim
+        
+        self.hidden_state = (torch.zeros(num_layers, 1, hidden_dim).to(self.device),
+                             torch.zeros(num_layers, 1, hidden_dim).to(self.device))
                              
     def choose_action(self, state, eval_mode=False):
         if isinstance(state, np.ndarray):

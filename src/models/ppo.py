@@ -25,27 +25,29 @@ class RolloutBuffer:
         del self.is_terminals[:]
 
 class ActorCritic(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_dim=64):
+    def __init__(self, state_dim, action_dim, actor_fc_layers=[64, 64], critic_fc_layers=[64, 64]):
         super(ActorCritic, self).__init__()
         
         # Actor
-        self.actor = nn.Sequential(
-            nn.Linear(state_dim, hidden_dim),
-            nn.Tanh(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Tanh(),
-            nn.Linear(hidden_dim, action_dim),
-            nn.Softmax(dim=-1)
-        )
+        layers = []
+        in_dim = state_dim
+        for hidden_dim in actor_fc_layers:
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.Tanh())
+            in_dim = hidden_dim
+        layers.append(nn.Linear(in_dim, action_dim))
+        layers.append(nn.Softmax(dim=-1))
+        self.actor = nn.Sequential(*layers)
         
         # Critic
-        self.critic = nn.Sequential(
-            nn.Linear(state_dim, hidden_dim),
-            nn.Tanh(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.Tanh(),
-            nn.Linear(hidden_dim, 1)
-        )
+        layers = []
+        in_dim = state_dim
+        for hidden_dim in critic_fc_layers:
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.Tanh())
+            in_dim = hidden_dim
+        layers.append(nn.Linear(in_dim, 1))
+        self.critic = nn.Sequential(*layers)
         
     def forward(self, state):
         return self.actor(state)
@@ -70,7 +72,18 @@ class ActorCritic(nn.Module):
         return action_logprobs, state_values, dist_entropy
 
 class PPOAgent:
-    def __init__(self, state_dim, action_dim, lr_actor=0.0003, lr_critic=0.001, gamma=0.99, K_epochs=4, eps_clip=0.2, update_timestep=2000, entropy_coef=0.01, device="auto"):
+    def __init__(self, state_dim, action_dim, lr_actor=None, lr_critic=None, gamma=None, K_epochs=None, eps_clip=None, update_timestep=None, entropy_coef=None, actor_fc_layers=None, critic_fc_layers=None, device="auto"):
+        # Validation for required config parameters
+        if lr_actor is None: raise ValueError("PPOAgent: 'lr_actor' must be specified in config.")
+        if lr_critic is None: raise ValueError("PPOAgent: 'lr_critic' must be specified in config.")
+        if gamma is None: raise ValueError("PPOAgent: 'gamma' must be specified in config.")
+        if K_epochs is None: raise ValueError("PPOAgent: 'K_epochs' must be specified in config.")
+        if eps_clip is None: raise ValueError("PPOAgent: 'eps_clip' must be specified in config.")
+        if update_timestep is None: raise ValueError("PPOAgent: 'update_timestep' must be specified in config.")
+        if entropy_coef is None: raise ValueError("PPOAgent: 'entropy_coef' must be specified in config.")
+        if actor_fc_layers is None: raise ValueError("PPOAgent: 'actor_fc_layers' must be specified in config.")
+        if critic_fc_layers is None: raise ValueError("PPOAgent: 'critic_fc_layers' must be specified in config.")
+
         self.lr_actor = lr_actor
         self.lr_critic = lr_critic
         self.gamma = gamma
@@ -87,15 +100,15 @@ class PPOAgent:
         else:
              self.device = torch.device(device)
              
-        print(f"PPO Agent using device: {self.device}")
+        # print(f"PPO Agent using device: {self.device}")
         
-        self.policy = ActorCritic(state_dim, action_dim).to(self.device)
+        self.policy = ActorCritic(state_dim, action_dim, actor_fc_layers, critic_fc_layers).to(self.device)
         self.optimizer = torch.optim.Adam([
             {'params': self.policy.actor.parameters(), 'lr': lr_actor},
             {'params': self.policy.critic.parameters(), 'lr': lr_critic}
         ])
         
-        self.policy_old = ActorCritic(state_dim, action_dim).to(self.device)
+        self.policy_old = ActorCritic(state_dim, action_dim, actor_fc_layers, critic_fc_layers).to(self.device)
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss()

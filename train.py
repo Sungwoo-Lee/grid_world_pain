@@ -197,7 +197,7 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=True, food_satiation_gain=10, max_steps=100, random_start_satiation=True, use_homeostatic_reward=False, satiation_setpoint=15, death_penalty=100, testing_seed=42, config_dict=None,
                 with_health=False, max_health=20, start_health=10, health_recovery=1, start_health_random=True,
                 danger_prob=0.1, danger_duration=5, damage_amount=5,
-                food_prob=0.2, food_duration=10, device="auto"):
+                food_prob=0.2, food_duration=10, device="auto", quiet=False):
     """
     Trains the RL Agent (Tabular Q-Learning, DQN, or PPO).
     """
@@ -205,6 +205,9 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     
     # Initialize WandB
     if config_dict and not config_dict.get('wandb.disabled', False):
+        if quiet:
+             os.environ["WANDB_SILENT"] = "true"
+        
         wandb_project = config_dict.get('wandb.project', 'grid_world_pain')
         wandb_group = config_dict.get('wandb.group', None)
         wandb_name = config_dict.get('wandb.name', None)
@@ -239,7 +242,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         
         config_dict.set('training.device', device)
         
-        print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_health, danger_prob, damage_amount, device)
+        if not quiet:
+            print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_health, danger_prob, damage_amount, device)
     
     # Setup directories
     results_dir = "results"
@@ -270,14 +274,16 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     os.makedirs(data_dir, exist_ok=True)
 
     
-    print(f"Results will be saved to: {output_dir}")
+    if not quiet:
+        print(f"Results will be saved to: {output_dir}")
 
     # Save configuration
     if config_dict is not None:
         config_save_path = os.path.join(models_dir, "config.yaml")
         with open(config_save_path, 'w') as f:
             yaml.dump(config_dict.to_dict(), f, default_flow_style=False)
-        print(f"Resolved configuration saved to {config_save_path}")
+        if not quiet:
+            print(f"Resolved configuration saved to {config_save_path}")
 
     # Set numpy/torch random seed
     resource_pos = config_dict.get('environment.resource_pos')
@@ -315,7 +321,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     
     sensory_system = None
     if using_sensory:
-        print(f"Initializing Sensory System (Food R={food_radius}, Danger R={danger_radius})")
+        if not quiet:
+            print(f"Initializing Sensory System (Food R={food_radius}, Danger R={danger_radius})")
         sensory_system = SensorySystem(food_radius=food_radius, danger_radius=danger_radius)
 
     # Define Preprocessor for DQN
@@ -375,18 +382,20 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             if with_health:
                  input_dim += 1
         
-        print(f"Initializing DQN Agent (Input Dim: {input_dim})...")
+        if not quiet:
+            print(f"Initializing DQN Agent (Input Dim: {input_dim})...")
         agent = DQNAgent(
             state_dim=input_dim, 
             action_dim=5, 
-            lr=config_dict.get('agent.learning_rate', 1e-3),
-            gamma=config_dict.get('agent.gamma', 0.99),
-            buffer_size=config_dict.get('agent.buffer_size', 10000),
-            batch_size=config_dict.get('agent.batch_size', 64),
-            epsilon_start=config_dict.get('agent.epsilon_start', 1.0),
-            epsilon_end=config_dict.get('agent.epsilon_end', 0.05),
-            epsilon_decay=config_dict.get('agent.epsilon_decay', 0.995),
-            target_update_freq=config_dict.get('agent.target_update_freq', 1000),
+            lr=float(config_dict.get('agent.learning_rate')),
+            gamma=float(config_dict.get('agent.gamma')),
+            buffer_size=int(config_dict.get('agent.buffer_size')),
+            batch_size=int(config_dict.get('agent.batch_size')),
+            epsilon_start=float(config_dict.get('agent.epsilon_start')),
+            epsilon_end=float(config_dict.get('agent.epsilon_end')),
+            epsilon_decay=float(config_dict.get('agent.epsilon_decay')),
+            target_update_freq=int(config_dict.get('agent.target_update_freq')),
+            fc_layers=config_dict.get('agent.fc_layers'),
             device=device
         )
 
@@ -404,20 +413,23 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             if with_health:
                  input_dim += 1
         
-        print(f"Initializing DRQN Agent (Input Dim: {input_dim})...")
+        if not quiet:
+            print(f"Initializing DRQN Agent (Input Dim: {input_dim})...")
         agent = DRQNAgent(
             state_dim=input_dim, 
             action_dim=5, 
-            lr=config_dict.get('agent.learning_rate', 1e-3),
-            gamma=config_dict.get('agent.gamma', 0.99),
-            buffer_size=config_dict.get('agent.buffer_size', 10000),
-            batch_size=config_dict.get('agent.batch_size', 32),
-            trace_length=config_dict.get('agent.trace_length', 8),
-            burn_in_length=config_dict.get('agent.burn_in_length', 0),
-            epsilon_start=config_dict.get('agent.epsilon_start', 1.0),
-            epsilon_end=config_dict.get('agent.epsilon_end', 0.05),
-            epsilon_decay=config_dict.get('agent.epsilon_decay', 0.995),
-            target_update_freq=config_dict.get('agent.target_update_freq', 1000),
+            lr=float(config_dict.get('agent.learning_rate')),
+            gamma=float(config_dict.get('agent.gamma')),
+            buffer_size=int(config_dict.get('agent.buffer_size')),
+            batch_size=int(config_dict.get('agent.batch_size')),
+            trace_length=int(config_dict.get('agent.trace_length')),
+            burn_in_length=int(config_dict.get('agent.burn_in_length')),
+            epsilon_start=float(config_dict.get('agent.epsilon_start')),
+            epsilon_end=float(config_dict.get('agent.epsilon_end')),
+            epsilon_decay=float(config_dict.get('agent.epsilon_decay')),
+            target_update_freq=int(config_dict.get('agent.target_update_freq')),
+            fc_layers=config_dict.get('agent.fc_layers'),
+            recurrent_layers=config_dict.get('agent.recurrent_layers'),
             device=device
         )
         
@@ -435,17 +447,20 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             if with_health:
                  input_dim += 1
                  
-        print(f"Initializing PPO Agent (Input Dim: {input_dim})...")
+        if not quiet:
+            print(f"Initializing PPO Agent (Input Dim: {input_dim})...")
         agent = PPOAgent(
             state_dim=input_dim, 
             action_dim=5,
-            lr_actor=config_dict.get('agent.lr_actor', 0.0003),
-            lr_critic=config_dict.get('agent.lr_critic', 0.001),
-            gamma=config_dict.get('agent.gamma', 0.99),
-            K_epochs=config_dict.get('agent.K_epochs', 4),
-            eps_clip=config_dict.get('agent.eps_clip', 0.2),
-            update_timestep=config_dict.get('agent.update_timestep', 2000),
-            entropy_coef=config_dict.get('agent.entropy_coef', 0.01),
+            lr_actor=float(config_dict.get('agent.lr_actor')),
+            lr_critic=float(config_dict.get('agent.lr_critic')),
+            gamma=float(config_dict.get('agent.gamma')),
+            K_epochs=int(config_dict.get('agent.K_epochs')),
+            eps_clip=float(config_dict.get('agent.eps_clip')),
+            update_timestep=int(config_dict.get('agent.update_timestep')),
+            entropy_coef=float(config_dict.get('agent.entropy_coef')),
+            actor_fc_layers=config_dict.get('agent.actor_fc_layers'),
+            critic_fc_layers=config_dict.get('agent.critic_fc_layers'),
             device=device
         )
 
@@ -463,18 +478,23 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             if with_health:
                  input_dim += 1
                  
-        print(f"Initializing Recurrent PPO Agent (Input Dim: {input_dim})...")
+        if not quiet:
+            print(f"Initializing Recurrent PPO Agent (Input Dim: {input_dim})...")
         agent = RecurrentPPOAgent(
             state_dim=input_dim, 
             action_dim=5,
-            lr_actor=config_dict.get('agent.lr_actor', 0.0003),
-            lr_critic=config_dict.get('agent.lr_critic', 0.001),
-            gamma=config_dict.get('agent.gamma', 0.99),
-            K_epochs=config_dict.get('agent.K_epochs', 4),
-            eps_clip=config_dict.get('agent.eps_clip', 0.2),
-            update_timestep=config_dict.get('agent.update_timestep', 2000),
-            sequence_length=config_dict.get('agent.sequence_length', 8),
-            entropy_coef=config_dict.get('agent.entropy_coef', 0.01),
+            lr_actor=float(config_dict.get('agent.lr_actor')),
+            lr_critic=float(config_dict.get('agent.lr_critic')),
+            gamma=float(config_dict.get('agent.gamma')),
+            K_epochs=int(config_dict.get('agent.K_epochs')),
+            eps_clip=float(config_dict.get('agent.eps_clip')),
+            update_timestep=int(config_dict.get('agent.update_timestep')),
+            sequence_length=int(config_dict.get('agent.sequence_length')),
+            entropy_coef=float(config_dict.get('agent.entropy_coef')),
+            fc_layers=config_dict.get('agent.fc_layers'),
+            recurrent_layers=config_dict.get('agent.recurrent_layers'),
+            actor_fc_layers=config_dict.get('agent.actor_fc_layers'),
+            critic_fc_layers=config_dict.get('agent.critic_fc_layers'),
             device=device
         )
 
@@ -492,21 +512,33 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             if with_health:
                  input_dim += 1
                  
-        print(f"Initializing Dreamer V3 Agent (Input Dim: {input_dim})...")
+        if not quiet:
+            print(f"Initializing Dreamer V3 Agent (Input Dim: {input_dim})...")
         agent = DreamerV3Agent(
             state_dim=input_dim, 
             action_dim=5,
-            batch_size=int(config_dict.get('agent.batch_size', 16)),
-            batch_length=int(config_dict.get('agent.batch_length', 16)),
-            model_lr=float(config_dict.get('agent.model_lr', 1e-4)),
-            actor_lr=float(config_dict.get('agent.actor_lr', 8e-5)),
-            value_lr=float(config_dict.get('agent.value_lr', 8e-5)),
+            batch_size=int(config_dict.get('agent.batch_size')),
+            batch_length=int(config_dict.get('agent.batch_length')),
+            model_lr=float(config_dict.get('agent.model_lr')),
+            actor_lr=float(config_dict.get('agent.actor_lr')),
+            value_lr=float(config_dict.get('agent.value_lr')),
+            encoder_dim=int(config_dict.get('agent.encoder_dim')),
+            encoder_fc_layers=config_dict.get('agent.encoder_fc_layers'),
+            rssm_deter_dim=int(config_dict.get('agent.rssm_deter_dim')),
+            rssm_stoch_dim=int(config_dict.get('agent.rssm_stoch_dim')),
+            rssm_classes=int(config_dict.get('agent.rssm_classes')),
+            decoder_fc_layers=config_dict.get('agent.decoder_fc_layers'),
+            reward_fc_layers=config_dict.get('agent.reward_fc_layers'),
+            continue_fc_layers=config_dict.get('agent.continue_fc_layers'),
+            actor_fc_layers=config_dict.get('agent.actor_fc_layers'),
+            critic_fc_layers=config_dict.get('agent.critic_fc_layers'),
             device=device
         )
 
     else:
         # Tabular (Default)
-        print(f"Initializing Tabular Agent ({algorithm})...")
+        if not quiet:
+            print(f"Initializing Tabular Agent ({algorithm})...")
         class CompositeEnv:
             def __init__(self, env, body):
                 self.height = env.height
@@ -520,7 +552,8 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         agent.epsilon = 1.0 # Start with full exploration
 
     
-    print(f"Training agent (with_satiation={with_satiation}, with_health={with_health})...")
+    if not quiet:
+        print(f"Training agent (with_satiation={with_satiation}, with_health={with_health})...")
     start_time = time.time()
     
     # Common Epsilon Params (Agent handles its own, but we track for logs)
@@ -544,7 +577,7 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
     tabular_min_epsilon = 0.05
     
     # Progress Bar with tqdm
-    pbar = tqdm(range(episodes), desc="Training", unit="ep")
+    pbar = tqdm(range(episodes), desc="Training", unit="ep", disable=quiet)
     
     for episode in pbar:
         # Reset External
@@ -668,13 +701,12 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
                 "Episode": episode + 1
             })
         
-
-            
-        # Update tqdm postfix
-        if (episode + 1) % 10 == 0:
-             current_epsilon = agent.epsilon if hasattr(agent, 'epsilon') else 0.0
-             avg_reward = np.mean(episode_rewards[-10:]) if len(episode_rewards) > 0 else 0
-             pbar.set_postfix({'Rw': f'{avg_reward:.1f}', 'Eps': f'{current_epsilon:.3f}'})
+        if not quiet:
+            # Update tqdm postfix
+            if (episode + 1) % 10 == 0:
+                 current_epsilon = agent.epsilon if hasattr(agent, 'epsilon') else 0.0
+                 avg_reward = np.mean(episode_rewards[-10:]) if len(episode_rewards) > 0 else 0
+                 pbar.set_postfix({'Rw': f'{avg_reward:.1f}', 'Eps': f'{current_epsilon:.3f}'})
 
         # Check milestones
             
@@ -701,10 +733,12 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
                 model_snap_filename = os.path.join(models_dir, f"q_table_{pct}.npy")
                 agent.save(model_snap_filename)
     
-    print() # Newline after progress bar
+    if not quiet:
+        print() # Newline after progress bar
     
     training_time = time.time() - start_time
-    print(f"Training completed in {training_time:.2f} seconds.")
+    if not quiet:
+        print(f"Training completed in {training_time:.2f} seconds.")
     
     # Final model save
     if isinstance(agent, DQNAgent):
@@ -730,12 +764,14 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         writer.writerow(['episode', 'reward', 'steps', 'epsilon'])
         for i in range(len(episode_rewards)):
             writer.writerow([i + 1, episode_rewards[i], episode_steps[i], episode_epsilons[i]])
-    print(f"Training history saved to {history_filename}")
+    if not quiet:
+        print(f"Training history saved to {history_filename}")
 
     # Generate learning curves
     plot_learning_curves(history_filename, plots_dir, max_steps=max_steps, milestones=milestones)
     
-    print("\nTraining complete.")
+    if not quiet:
+        print("\nTraining complete.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train RL Agent")
@@ -747,26 +783,29 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, help="Device to use (e.g., 'cpu', 'cuda', 'cuda:0', 'cuda:1', 'auto')")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
     parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
-    parser.add_argument("--wandb-project", type=str, default="grid_world_pain", help="WandB Project Name")
+    parser.add_argument("--wandb-project", type=str, help="WandB Project Name")
     parser.add_argument("--wandb-group", type=str, help="WandB Group Name")
     parser.add_argument("--wandb-name", type=str, help="WandB Run Name")
     parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
+    parser.add_argument("--quiet", action="store_true", help="Suppress output and progress bar")
     args = parser.parse_args()
     
     # Load default config
     config = get_default_config()
     from src.utils.config import Config
     
-    # Load WandB config if exists
+    # Load WandB config
     wandb_config_path = "configs/wandb.yaml"
     if os.path.exists(wandb_config_path):
-        print(f"Loading WandB config from: {wandb_config_path}")
+        if not args.quiet:
+            print(f"Loading WandB config from: {wandb_config_path}")
         wandb_config = Config.load_yaml(wandb_config_path)
         config.merge(wandb_config)
 
     # Load and merge agent config
     if args.agent_config:
-        print(f"Loading agent config from: {args.agent_config}")
+        if not args.quiet:
+            print(f"Loading agent config from: {args.agent_config}")
         agent_config = Config.load_yaml(args.agent_config)
         config.merge(agent_config)
     
@@ -777,8 +816,8 @@ if __name__ == "__main__":
     if args.no_wandb:
         config.set('wandb.disabled', True)
     else:
-        # Only set if arg is provided, otherwise keep config file value or default
-        if args.wandb_project != "grid_world_pain" or not(config.get('wandb.project')):
+        # Only set if arg is provided
+        if args.wandb_project:
              config.set('wandb.project', args.wandb_project)
         
         if args.wandb_group:
@@ -791,8 +830,14 @@ if __name__ == "__main__":
              config.set('wandb.disabled', config.get('wandb.mode') == 'disabled')
         
     # Overrides
-    episodes = args.episodes or config.get('training.training_episode', 100000)
-    seed = args.seed or config.get('training.seed', 42)
+    # Prioritize Args > Config.
+    # We remove hardcoded defaults in get() where safe, assuming config has them or get_default_config() provides them.
+    # Note: validation logic might be needed if config is missing keys.
+    
+    episodes = args.episodes if args.episodes is not None else config.get('training.training_episode', 100000)
+    seed = args.seed if args.seed is not None else config.get('training.seed', 42)
+    
+    # Satiation
     with_satiation = config.get('body.with_satiation', True)
     if args.no_satiation:
         with_satiation = False
@@ -801,6 +846,7 @@ if __name__ == "__main__":
     if args.no_overeating_death:
         overeating_death = False
         
+    # Environment & Body params - relying on config or safe defaults if not in basic config
     max_steps = config.get('environment.max_steps', 100)
     random_start_satiation = config.get('body.random_start_satiation', True)
     food_satiation_gain = config.get('body.food_satiation_gain', 10)
@@ -820,16 +866,12 @@ if __name__ == "__main__":
     danger_duration = config.get('environment.danger_duration', 5)
     damage_amount = config.get('environment.damage_amount', 5)
     
-    danger_prob = config.get('environment.danger_prob', 0.1)
-    danger_duration = config.get('environment.danger_duration', 5)
-    damage_amount = config.get('environment.damage_amount', 5)
-    
     food_prob = config.get('environment.food_prob', 0.2)
     food_duration = config.get('environment.food_duration', 10)
     
-    device = args.device or config.get('training.device', 'auto')
+    device = args.device if args.device else config.get('training.device', 'auto')
     
     train_agent(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, food_satiation_gain=food_satiation_gain, max_steps=max_steps, random_start_satiation=random_start_satiation, use_homeostatic_reward=use_homeostatic_reward, satiation_setpoint=satiation_setpoint, death_penalty=death_penalty, testing_seed=testing_seed, config_dict=config,
                 with_health=with_health, max_health=max_health, start_health=start_health, health_recovery=health_recovery, start_health_random=start_health_random,
                 danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount,
-                food_prob=food_prob, food_duration=food_duration, device=device)
+                food_prob=food_prob, food_duration=food_duration, device=device, quiet=args.quiet)

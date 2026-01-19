@@ -343,7 +343,7 @@ def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestone
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.savefig(save_path, facecolor=bg_color, dpi=150)
     plt.close(fig)
-    print(f"Saved fancy learning curves to {save_path}")
+    # print(f"Saved fancy learning curves to {save_path}")
 
 if __name__ == "__main__":
     print("This module is a utility library and should not be run directly.")

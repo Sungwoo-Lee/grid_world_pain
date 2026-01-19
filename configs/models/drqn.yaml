@@ -1,6 +1,6 @@
 agent:
   algorithm: "DRQN"
-  lr: 0.001
+  learning_rate: 0.001
   gamma: 0.99
   buffer_size: 10000
   batch_size: 32
@@ -8,4 +8,7 @@ agent:
   burn_in_length: 4
   epsilon_start: 1.0
   epsilon_end: 0.05
-  epsilon_decay: 0.999 # Slow decay for longer convergence
+  epsilon_decay: 0.999 
+  target_update_freq: 1000
+  fc_layers: [128]
+  recurrent_layers: [128]

@@ -133,43 +133,39 @@ def from_twohot(logits, min_v=-20.0, max_v=20.0, num_buckets=255):
 # -----------------------------------------------------------------------------
 
 class Encoder(nn.Module):
-    def __init__(self, input_dim, embed_dim=256):
+    def __init__(self, input_dim, embed_dim=256, fc_layers=[256]):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, embed_dim),
-            nn.LayerNorm(embed_dim),
-            nn.SiLU(),
-            nn.Linear(embed_dim, embed_dim),
-            nn.LayerNorm(embed_dim),
-            nn.SiLU(),
-        )
+        # Encoder mapping to embedding space
+        self.net = MLP(input_dim, embed_dim, fc_layers)
+        self.ln = nn.LayerNorm(embed_dim)
+        self.act = nn.SiLU()
+        
     def forward(self, x):
-        return self.net(x)
+        x = self.net(x)
+        x = self.ln(x)
+        return self.act(x)
 
 class Decoder(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=256):
+    def __init__(self, input_dim, output_dim, fc_layers=[256, 256]):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.SiLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.SiLU(),
-            nn.Linear(hidden_dim, output_dim)
-        )
+        self.net = MLP(input_dim, output_dim, fc_layers)
+        
     def forward(self, x):
         return self.net(x)
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=256, layers=2):
+    def __init__(self, input_dim, output_dim, hidden_layers=[256]):
         super().__init__()
         modules = []
-        for _ in range(layers):
-            modules.append(nn.Linear(input_dim if _ == 0 else hidden_dim, hidden_dim))
-            modules.append(nn.LayerNorm(hidden_dim))
+        in_dim = input_dim
+        
+        for h_dim in hidden_layers:
+            modules.append(nn.Linear(in_dim, h_dim))
+            modules.append(nn.LayerNorm(h_dim))
             modules.append(nn.SiLU())
-        modules.append(nn.Linear(hidden_dim, output_dim))
+            in_dim = h_dim
+            
+        modules.append(nn.Linear(in_dim, output_dim))
         self.net = nn.Sequential(*modules)
         
     def forward(self, x):
@@ -347,9 +343,33 @@ class DreamerV3Buffer:
 
 class DreamerV3Agent(nn.Module, EMAMixin):
     def __init__(self, state_dim, action_dim, device="auto", 
-                 batch_size=16, batch_length=16, 
-                 model_lr=1e-4, actor_lr=8e-5, value_lr=8e-5):
+                 batch_size=None, batch_length=None, 
+                 model_lr=None, actor_lr=None, value_lr=None,
+                 encoder_dim=None, encoder_fc_layers=None,
+                 rssm_deter_dim=None, rssm_stoch_dim=None, rssm_classes=None,
+                 decoder_fc_layers=None,
+                 reward_fc_layers=None,
+                 continue_fc_layers=None,
+                 actor_fc_layers=None,
+                 critic_fc_layers=None):
         super().__init__()
+        
+        # Validation
+        if batch_size is None: raise ValueError("DreamerV3Agent: 'batch_size' must be specified in config.")
+        if batch_length is None: raise ValueError("DreamerV3Agent: 'batch_length' must be specified in config.")
+        if model_lr is None: raise ValueError("DreamerV3Agent: 'model_lr' must be specified in config.")
+        if actor_lr is None: raise ValueError("DreamerV3Agent: 'actor_lr' must be specified in config.")
+        if value_lr is None: raise ValueError("DreamerV3Agent: 'value_lr' must be specified in config.")
+        if encoder_dim is None: raise ValueError("DreamerV3Agent: 'encoder_dim' must be specified in config.")
+        if encoder_fc_layers is None: raise ValueError("DreamerV3Agent: 'encoder_fc_layers' must be specified in config.")
+        if rssm_deter_dim is None: raise ValueError("DreamerV3Agent: 'rssm_deter_dim' must be specified in config.")
+        if rssm_stoch_dim is None: raise ValueError("DreamerV3Agent: 'rssm_stoch_dim' must be specified in config.")
+        if rssm_classes is None: raise ValueError("DreamerV3Agent: 'rssm_classes' must be specified in config.")
+        if decoder_fc_layers is None: raise ValueError("DreamerV3Agent: 'decoder_fc_layers' must be specified in config.")
+        if reward_fc_layers is None: raise ValueError("DreamerV3Agent: 'reward_fc_layers' must be specified in config.")
+        if continue_fc_layers is None: raise ValueError("DreamerV3Agent: 'continue_fc_layers' must be specified in config.")
+        if actor_fc_layers is None: raise ValueError("DreamerV3Agent: 'actor_fc_layers' must be specified in config.")
+        if critic_fc_layers is None: raise ValueError("DreamerV3Agent: 'critic_fc_layers' must be specified in config.")
         
         if device == "auto" or device is None:
              self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -361,21 +381,24 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         self.batch_length = batch_length
         
         # Dimensions
-        embed_dim = 256
-        deter_dim = 256
-        stoch_dim = 32
-        discrete = 32
+        self.embed_dim = encoder_dim
+        self.deter_dim = rssm_deter_dim
+        self.stoch_dim = rssm_stoch_dim
+        self.discrete = rssm_classes
         
         # Components
-        self.encoder = Encoder(state_dim, embed_dim).to(self.device)
-        self.rssm = RSSM(embed_dim, action_dim, deter_dim, stoch_dim, discrete).to(self.device)
-        self.decoder = Decoder(deter_dim + stoch_dim * discrete, state_dim).to(self.device)
-        self.reward_pred = MLP(deter_dim + stoch_dim * discrete, 255).to(self.device)
-        self.continue_pred = MLP(deter_dim + stoch_dim * discrete, 1).to(self.device)
+        self.encoder = Encoder(state_dim, self.embed_dim, encoder_fc_layers).to(self.device)
+        self.rssm = RSSM(self.embed_dim, action_dim, self.deter_dim, self.stoch_dim, self.discrete, hidden_dim=self.deter_dim).to(self.device)
         
-        self.actor = MLP(deter_dim + stoch_dim * discrete, action_dim).to(self.device)
-        self.critic = MLP(deter_dim + stoch_dim * discrete, 255).to(self.device)
-        self.target_critic = MLP(deter_dim + stoch_dim * discrete, 255).to(self.device)
+        feat_dim = self.deter_dim + self.stoch_dim * self.discrete
+        
+        self.decoder = Decoder(feat_dim, state_dim, decoder_fc_layers).to(self.device)
+        self.reward_pred = MLP(feat_dim, 255, reward_fc_layers).to(self.device)
+        self.continue_pred = MLP(feat_dim, 1, continue_fc_layers).to(self.device)
+        
+        self.actor = MLP(feat_dim, action_dim, actor_fc_layers).to(self.device)
+        self.critic = MLP(feat_dim, 255, critic_fc_layers).to(self.device)
+        self.target_critic = MLP(feat_dim, 255, critic_fc_layers).to(self.device)
         self.target_critic.load_state_dict(self.critic.state_dict())
         
         # Optimizers

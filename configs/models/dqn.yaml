@@ -1,7 +1,11 @@
 agent:
   algorithm: "DQN"
-  batch_size: 64
   learning_rate: 0.001
+  gamma: 0.99
+  buffer_size: 10000
+  batch_size: 64
+  target_update_freq: 1000
   epsilon_start: 1.0
   epsilon_decay: 0.995
   epsilon_end: 0.05
+  fc_layers: [128, 128]

@@ -80,38 +80,87 @@ class RecurrentReplayBuffer:
         return len(self.buffer)
 
 class DRQN(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=128):
+    def __init__(self, input_dim, output_dim, fc_layers=[128], recurrent_layers=[128]):
         """
         Deep Recurrent Q-Network using LSTM.
+        
+        Args:
+            input_dim (int): flattened state dimension.
+            output_dim (int): number of actions.
+            fc_layers (list): list of dimensions for pre-processing FC layers.
+            recurrent_layers (list): list of hidden dimensions for LSTM layers. 
+                                     Note: PyTorch LSTM requires uniform hidden size for stacked layers.
+                                     We will use recurrent_layers[0] as hidden_size and len() as num_layers,
+                                     verifying all elements are equal.
         """
         super(DRQN, self).__init__()
-        self.hidden_dim = hidden_dim
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
-        self.fc2 = nn.Linear(hidden_dim, output_dim)
+        
+        # Verify recurrent layers
+        if len(recurrent_layers) > 0:
+            hidden_size = recurrent_layers[0]
+            if not all(x == hidden_size for x in recurrent_layers):
+                raise ValueError(f"PyTorch LSTM requires uniform hidden size for stacked layers. Got: {recurrent_layers}")
+            num_recurrent_layers = len(recurrent_layers)
+        else:
+             # Default or Error? DRQN needs recurrence.
+             raise ValueError("recurrent_layers cannot be empty for DRQN")
+
+        # Build FC Pre-processing
+        layers = []
+        in_dim = input_dim
+        
+        for hidden_dim in fc_layers:
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            in_dim = hidden_dim
+            
+        self.fc_net = nn.Sequential(*layers)
+        
+        # LSTM
+        self.lstm = nn.LSTM(input_size=in_dim, hidden_size=hidden_size, num_layers=num_recurrent_layers, batch_first=True)
+        
+        # Output Head
+        self.output_head = nn.Linear(hidden_size, output_dim)
         
     def forward(self, x, hidden=None):
         # x shape: (batch_size, seq_len, input_dim)
         
-        # Pre-process with FC layer
-        batch_size, seq_len, _ = x.size()
+        # Pre-process with FC layer (apply to each step)
+        # FC Net expects (N, *, In). Dense layers work on arbitrary last dim usually?
+        # Linear works on (..., In).
         
-        x = F.relu(self.fc1(x))
+        x = self.fc_net(x)
         
         # LSTM
         # out: (batch, seq, hidden), hidden: (num_layers, batch, hidden)
         out, new_hidden = self.lstm(x, hidden)
         
-        # Output head - apply to all steps in sequence
-        q_values = self.fc2(out)
+        # Output head
+        q_values = self.output_head(out)
         
         return q_values, new_hidden
 
 class DRQNAgent:
-    def __init__(self, state_dim, action_dim, lr=1e-3, gamma=0.99, buffer_size=10000, batch_size=32, 
-                 trace_length=8, burn_in_length=0, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay=0.995, target_update_freq=1000, device="auto"):
+    def __init__(self, state_dim, action_dim, lr=None, gamma=None, buffer_size=None, batch_size=None, 
+                 trace_length=None, burn_in_length=None, epsilon_start=None, epsilon_end=None, epsilon_decay=None, target_update_freq=None, 
+                 fc_layers=None, recurrent_layers=None, device="auto"):
         self.state_dim = state_dim
         self.action_dim = action_dim
+        
+        # Validation for required config parameters
+        if lr is None: raise ValueError("DRQNAgent: 'learning_rate' (lr) must be specified in config.")
+        if gamma is None: raise ValueError("DRQNAgent: 'gamma' must be specified in config.")
+        if buffer_size is None: raise ValueError("DRQNAgent: 'buffer_size' must be specified in config.")
+        if batch_size is None: raise ValueError("DRQNAgent: 'batch_size' must be specified in config.")
+        if trace_length is None: raise ValueError("DRQNAgent: 'trace_length' must be specified in config.")
+        if burn_in_length is None: raise ValueError("DRQNAgent: 'burn_in_length' must be specified in config.")
+        if epsilon_start is None: raise ValueError("DRQNAgent: 'epsilon_start' must be specified in config.")
+        if epsilon_end is None: raise ValueError("DRQNAgent: 'epsilon_end' must be specified in config.")
+        if epsilon_decay is None: raise ValueError("DRQNAgent: 'epsilon_decay' must be specified in config.")
+        if target_update_freq is None: raise ValueError("DRQNAgent: 'target_update_freq' must be specified in config.")
+        if fc_layers is None: raise ValueError("DRQNAgent: 'fc_layers' must be specified in config.")
+        if recurrent_layers is None: raise ValueError("DRQNAgent: 'recurrent_layers' must be specified in config.")
+
         self.lr = lr
         self.gamma = gamma
         self.batch_size = batch_size
@@ -130,11 +179,11 @@ class DRQNAgent:
         else:
              self.device = torch.device(device)
         
-        print(f"DRQN Agent using device: {self.device}")
+        # print(f"DRQN Agent using device: {self.device}")
         
         # Networks
-        self.policy_net = DRQN(state_dim, action_dim).to(self.device)
-        self.target_net = DRQN(state_dim, action_dim).to(self.device)
+        self.policy_net = DRQN(state_dim, action_dim, fc_layers, recurrent_layers).to(self.device)
+        self.target_net = DRQN(state_dim, action_dim, fc_layers, recurrent_layers).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         

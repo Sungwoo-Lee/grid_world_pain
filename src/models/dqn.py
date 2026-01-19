@@ -23,30 +23,48 @@ class ReplayBuffer:
         return len(self.buffer)
 
 class DQN(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=128):
+    def __init__(self, input_dim, output_dim, fc_layers=[128, 128]):
         """
-        Deep Q-Network.
+        Deep Q-Network with dynamic layer configuration.
         
         Args:
             input_dim (int): flattened state dimension.
             output_dim (int): number of actions.
-            hidden_dim (int): hidden layer size.
+            fc_layers (list): list of hidden layer dimensions.
         """
         super(DQN, self).__init__()
         
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, output_dim)
+        layers = []
+        in_dim = input_dim
+        
+        for hidden_dim in fc_layers:
+            layers.append(nn.Linear(in_dim, hidden_dim))
+            layers.append(nn.ReLU())
+            in_dim = hidden_dim
+            
+        layers.append(nn.Linear(in_dim, output_dim))
+        
+        self.net = nn.Sequential(*layers)
         
     def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
+        return self.net(x)
 
 class DQNAgent:
-    def __init__(self, state_dim, action_dim, lr=1e-3, gamma=0.99, buffer_size=10000, batch_size=64, epsilon_start=1.0, epsilon_end=0.05, epsilon_decay=0.995, target_update_freq=1000, device="auto"):
+    def __init__(self, state_dim, action_dim, lr=None, gamma=None, buffer_size=None, batch_size=None, epsilon_start=None, epsilon_end=None, epsilon_decay=None, target_update_freq=None, fc_layers=None, device="auto"):
         self.state_dim = state_dim
         self.action_dim = action_dim
+        
+        # Validation for required config parameters
+        if lr is None: raise ValueError("DQNAgent: 'learning_rate' (lr) must be specified in config.")
+        if gamma is None: raise ValueError("DQNAgent: 'gamma' must be specified in config.")
+        if buffer_size is None: raise ValueError("DQNAgent: 'buffer_size' must be specified in config.")
+        if batch_size is None: raise ValueError("DQNAgent: 'batch_size' must be specified in config.")
+        if epsilon_start is None: raise ValueError("DQNAgent: 'epsilon_start' must be specified in config.")
+        if epsilon_end is None: raise ValueError("DQNAgent: 'epsilon_end' must be specified in config.")
+        if epsilon_decay is None: raise ValueError("DQNAgent: 'epsilon_decay' must be specified in config.")
+        if target_update_freq is None: raise ValueError("DQNAgent: 'target_update_freq' must be specified in config.")
+        if fc_layers is None: raise ValueError("DQNAgent: 'fc_layers' must be specified in config.")
+
         self.lr = lr
         self.gamma = gamma
         self.batch_size = batch_size
@@ -62,11 +80,11 @@ class DQNAgent:
         else:
              self.device = torch.device(device)
         
-        print(f"DQN Agent using device: {self.device}")
+        # print(f"DQN Agent using device: {self.device}")
         
         # Networks
-        self.policy_net = DQN(state_dim, action_dim).to(self.device)
-        self.target_net = DQN(state_dim, action_dim).to(self.device)
+        self.policy_net = DQN(state_dim, action_dim, fc_layers).to(self.device)
+        self.target_net = DQN(state_dim, action_dim, fc_layers).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         
