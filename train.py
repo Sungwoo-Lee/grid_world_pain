@@ -229,6 +229,13 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         # Log Source Code
         # Explicitly log key files and src directory
         wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py"))
+        
+        # Define x-axis for different metrics
+        # Episode metrics use Episode/Number as x-axis
+        wandb.define_metric("Episode/*", step_metric="Episode/Number")
+        # Step metrics (losses) use global_step as x-axis
+        wandb.define_metric("global_step", step_metric="global_step") 
+        wandb.define_metric("*", step_metric="global_step")
     
     # Extract Sensory Config
     # Strict retrieval for using_sensory?
@@ -641,7 +648,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     pbar = tqdm(range(episodes), desc="Training", unit="ep", disable=quiet or debug)
     
     losses = {} # Track latest losses for debug display
-    training_step = 0 # Global step for WandB logging
+    global_step = 0 # Unified counter for WandB (Environment Interactions)
     for episode in pbar:
         # Reset External
         env_state = env.reset()
@@ -738,10 +745,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 upd_duration = (time.time() - start_upd) * 1000 # ms
                 
                 if isinstance(update_result, dict):
-                    losses = update_result # Store for debug display
+                    losses = update_result.copy() # Use copy to avoid mutating agent inner dict
+                    losses["global_step"] = global_step
                     if wandb.run is not None:
-                        # Log losses as individual points
-                        wandb.log(losses, step=training_step)
+                        # Log losses with global_step explicitly included as a metric
+                        wandb.log(losses, step=global_step)
                 
                 # Dynamic Debug Print (Per Step)
                 if debug and not quiet:
@@ -749,12 +757,14 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                     if losses:
                         if isinstance(agent, DreamerV3Agent):
                             m_l = losses.get('model_loss', 0)
+                            r_l = losses.get('recon_loss', 0)
+                            rew_l = losses.get('rew_loss', 0)
+                            kl = losses.get('kl_loss', 0)
                             a_l = losses.get('actor_loss', 0)
                             c_l = losses.get('critic_loss', 0)
-                            kl = losses.get('kl_loss', 0)
                             gn = losses.get('model_grad_norm', 0)
                             v_m = losses.get('value_mean', 0)
-                            loss_str = f"L:[M:{m_l:.2f} A:{a_l:.2f} C:{c_l:.2f} KL:{kl:.1f}] GN:{gn:.1f} V:{v_m:.1f} "
+                            loss_str = f"L:[M:{m_l:.2f}(Re:{r_l:.2f},Rw:{rew_l:.2f}) A:{a_l:.2f} C:{c_l:.2f} KL:{kl:.1f}] GN:{gn:.1f} V:{v_m:.1f} "
                         else:
                             # Show primary loss for DQN/PPO etc
                             main_loss = losses.get('loss', losses.get('mean_loss', 0))
@@ -762,8 +772,6 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                     
                     # Print as new line for granular history as requested
                     print(f"Ep:{episode+1} St:{steps+1} Act:{action} R:{total_reward+reward:.1f} {loss_str}Time:{upd_duration:.1f}ms")
-
-                training_step += 1
 
                 state = next_state # Tuple kept for logic
                 flat_state = flat_next_state # Flat for next iter
@@ -774,6 +782,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 
             total_reward += reward
             steps += 1
+            global_step += 1
             
         if debug and not quiet:
             print(f"--- Episode {episode+1} Finished ---")
@@ -796,8 +805,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 "Episode/Reward": total_reward,
                 "Episode/Steps": steps,
                 "Episode/Epsilon": agent.epsilon if hasattr(agent, 'epsilon') else 0.0,
-                "Episode/Number": episode + 1
-            }, step=training_step)
+                "Episode/Number": episode + 1,
+            }, step=global_step)
         
         if not quiet:
             # Update tqdm postfix
