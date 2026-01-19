@@ -641,6 +641,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     pbar = tqdm(range(episodes), desc="Training", unit="ep", disable=quiet or debug)
     
     losses = {} # Track latest losses for debug display
+    training_step = 0 # Global step for WandB logging
     for episode in pbar:
         # Reset External
         env_state = env.reset()
@@ -739,19 +740,27 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 if isinstance(update_result, dict):
                     losses = update_result # Store for debug display
                     if wandb.run is not None:
-                        wandb.log(losses, commit=False) # Log losses but don't commit step yet
+                        # Log losses as individual points
+                        wandb.log(losses, step=training_step)
                 
-                # Dynamic Debug Print
+                # Dynamic Debug Print (Per Step)
                 if debug and not quiet:
                     loss_str = ""
                     if losses:
-                        # Extract key losses for display
-                        m_l = losses.get('model_loss', 0.123) # Placeholder if not dreamerv3
-                        a_l = losses.get('actor_loss', 0.123)
-                        c_l = losses.get('critic_loss', 0.123)
-                        loss_str = f"L:[M:{m_l:.2f} A:{a_l:.2f} C:{c_l:.2f}] "
+                        if isinstance(agent, DreamerV3Agent):
+                            m_l = losses.get('model_loss', 0)
+                            a_l = losses.get('actor_loss', 0)
+                            c_l = losses.get('critic_loss', 0)
+                            loss_str = f"L:[M:{m_l:.2f} A:{a_l:.2f} C:{c_l:.2f}] "
+                        else:
+                            # Show primary loss for DQN/PPO etc
+                            main_loss = losses.get('loss', losses.get('mean_loss', 0))
+                            loss_str = f"L:{main_loss:.4f} "
                     
-                    print(f"\rEp:{episode+1} St:{steps+1} Act:{action} R:{total_reward+reward:.1f} {loss_str}Time:{upd_duration:.1f}ms   ", end='', flush=True)
+                    # Print as new line for granular history as requested
+                    print(f"Ep:{episode+1} St:{steps+1} Act:{action} R:{total_reward+reward:.1f} {loss_str}Time:{upd_duration:.1f}ms")
+
+                training_step += 1
 
                 state = next_state # Tuple kept for logic
                 flat_state = flat_next_state # Flat for next iter
@@ -764,7 +773,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             steps += 1
             
         if debug and not quiet:
-            print() # Newline after dynamic status line
+            print(f"--- Episode {episode+1} Finished ---")
         
         # End of Episode
         episode_epsilons.append(agent.epsilon if hasattr(agent, 'epsilon') else 0.0)
@@ -778,14 +787,14 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         episode_rewards.append(total_reward)
         episode_steps.append(steps)
         
-        # Log to WandB
+        # Log episode metrics to WandB
         if wandb.run is not None:
             wandb.log({
-                "Reward": total_reward,
-                "Steps": steps,
-                "Epsilon": agent.epsilon if hasattr(agent, 'epsilon') else 0.0,
-                "Episode": episode + 1
-            })
+                "Episode/Reward": total_reward,
+                "Episode/Steps": steps,
+                "Episode/Epsilon": agent.epsilon if hasattr(agent, 'epsilon') else 0.0,
+                "Episode/Number": episode + 1
+            }, step=training_step)
         
         if not quiet:
             # Update tqdm postfix
