@@ -8,4 +8,4 @@ agent:
   epsilon_start: 1.0
   epsilon_decay: 0.995
   epsilon_end: 0.05
-  fc_layers: [128, 128]
+  fc_layers: [256, 128, 64]
