@@ -197,7 +197,7 @@ def run_single_combination_wrapper(args):
     """Wrapper to unpack arguments for imap."""
     return run_single_combination(*args)
 
-def run_search(algorithm, episodes, seed, wandb_project, num_processes=1, dry_run=False, wandb_job_type="hyperparameter_search"):
+def run_search(algorithm, episodes, seed, wandb_project, num_processes, dry_run, wandb_job_type):
     if algorithm not in SEARCH_SPACES:
         print(f"Error: Algorithm '{algorithm}' not found in search spaces.")
         print(f"Available: {list(SEARCH_SPACES.keys())}")
@@ -243,7 +243,7 @@ def main():
     parser.add_argument("--algorithm", type=str, required=True, help="Algorithm to search (dqn, ppo, drqn, recurrent_ppo)")
     parser.add_argument("--episodes", type=int, help="Number of episodes per run (Required)")
     parser.add_argument("--seed", type=int, help="Random seed (Required)")
-    parser.add_argument("--num-processes", type=int, default=1, help="Number of parallel processes")
+    parser.add_argument("--num-processes", type=int, required=True, help="Number of parallel processes (Required)")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing")
     parser.add_argument("--wandb-project", type=str, help="WandB Project Name")
     parser.add_argument("--wandb-job-type", type=str, help="WandB Job Type")

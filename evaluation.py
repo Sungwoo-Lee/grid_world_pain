@@ -118,11 +118,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     food_duration = config.get_mandatory('environment.food_duration', int)
     
     # Extract Relocation Config
-    relocate_resource = config.get('environment.relocate_resource')
-    if relocate_resource is None: relocate_resource = False # Optional feature, defaulting to False acceptable?
-    # Actually, config file from train.py might not have it if it wasn't in basic config.
-    # I'll default to False here as it's a specific feature not always used.
-    
+    relocate_resource = config.get_mandatory('environment.relocate_resource')
     relocation_steps = config.get_mandatory('environment.relocation_steps', int)
 
     # 2. Environment & Body Setup
@@ -188,7 +184,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     agent = None
     algorithm = config.get_mandatory('agent.algorithm')
     
-    device = config.get('training.device', 'auto') # Use training device setting or auto
+    device = config.get_mandatory('training.device')
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"{algorithm} Agent using device: {device}")
@@ -724,7 +720,7 @@ def main():
     parser = argparse.ArgumentParser(description="GridWorld Evaluation")
     parser.add_argument("--seed", type=int, help="Override testing seed")
     parser.add_argument("--episodes", type=int, help="Number of episodes to evaluate")
-    parser.add_argument("--results_dir", type=str, default="results", help="Path to results directory")
+    parser.add_argument("--results_dir", type=str, required=True, help="Path to results directory (Required)")
     args = parser.parse_args()
 
     results_dir = args.results_dir

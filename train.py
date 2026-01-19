@@ -251,7 +251,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     # Essential Training Params
     episodes = int(resolve_param(episodes, 'training.training_episode'))
     seed = int(resolve_param(seed, 'training.seed'))
-    testing_seed = int(resolve_param(testing_seed, 'training.testing_seed'))
+    testing_seed = int(resolve_param(testing_seed, 'testing.seed'))
     
     # Environment Params
     max_steps = int(resolve_param(max_steps, 'environment.max_steps'))
@@ -277,11 +277,13 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         start_health = float(resolve_param(start_health, 'body.start_health'))
         health_recovery = float(resolve_param(health_recovery, 'body.health_recovery'))
         start_health_random = resolve_param(start_health_random, 'body.start_health_random')
+    
+    device = resolve_param(device, 'training.device')
 
     # Update config_dict with resolved values for consistency in logging/saving
     config_dict.set('training.training_episode', episodes)
     config_dict.set('training.seed', seed)
-    config_dict.set('training.testing_seed', testing_seed)
+    config_dict.set('testing.seed', testing_seed) # Corrected key
     # ... (Update others if needed, mostly used for display/save)
     
     config_dict.set('training.device', device)
@@ -825,8 +827,8 @@ if __name__ == "__main__":
     parser.add_argument("--episodes", type=int, help="Number of episodes to train")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
     parser.add_argument("--config", type=str, help="Path to base config YAML")
-    parser.add_argument("--agent_config", type=str, default="configs/models/dqn.yaml", help="Path to agent config YAML")
-    parser.add_argument("--tag", type=str, default="default", help="Tag for the training run")
+    parser.add_argument("--agent_config", type=str, required=True, help="Path to agent config YAML (Required)")
+    parser.add_argument("--tag", type=str, help="Tag for the training run")
     parser.add_argument("--device", type=str, help="Device to use (e.g., 'cpu', 'cuda', 'cuda:0', 'cuda:1', 'auto')")
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
     parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
@@ -876,50 +878,39 @@ if __name__ == "__main__":
     if not config.get('wandb.disabled'):
          if config.get('wandb.mode') == 'disabled':
              config.set('wandb.disabled', True)
+    
+
         
-    # Overrides
-    # Prioritize Args > Config.
-    # We remove hardcoded defaults in get() where safe, assuming config has them or get_default_config() provides them.
-    # Note: validation logic might be needed if config is missing keys.
+    # Overrides and Strict Pass-through
+    # We pass explicit CLI args or None. train_agent will strictly resolve against config.
     
-    episodes = args.episodes if args.episodes is not None else config.get('training.training_episode', 100000)
-    seed = args.seed if args.seed is not None else config.get('training.seed', 42)
+    # Logic for flags
+    arg_with_satiation = False if args.no_satiation else None
+    arg_overeating_death = False if args.no_overeating_death else None
     
-    # Satiation
-    with_satiation = config.get('body.with_satiation', True)
-    if args.no_satiation:
-        with_satiation = False
-        
-    overeating_death = config.get('body.overeating_death', True)
-    if args.no_overeating_death:
-        overeating_death = False
-        
-    # Environment & Body params - relying on config or safe defaults if not in basic config
-    max_steps = config.get('environment.max_steps', 100)
-    random_start_satiation = config.get('body.random_start_satiation', True)
-    food_satiation_gain = config.get('body.food_satiation_gain', 10)
-    use_homeostatic_reward = config.get('body.use_homeostatic_reward', False)
-    satiation_setpoint = config.get('body.satiation_setpoint', 15)
-    death_penalty = config.get('body.death_penalty', 100)
-    testing_seed = config.get('testing.seed', 42)
+    # For parameters not exposed in argparse, we pass None so train_agent enforces config.
     
-    # Health / Pain Params
-    with_health = config.get('body.with_health', False)
-    max_health = config.get('body.max_health', 20)
-    start_health = config.get('body.start_health', 10)
-    health_recovery = config.get('body.health_recovery', 1)
-    start_health_random = config.get('body.start_health_random', True)
-    
-    danger_prob = config.get('environment.danger_prob', 0.1)
-    danger_duration = config.get('environment.danger_duration', 5)
-    damage_amount = config.get('environment.damage_amount', 5)
-    
-    food_prob = config.get('environment.food_prob', 0.2)
-    food_duration = config.get('environment.food_duration', 10)
-    
-    device = args.device if args.device else config.get('training.device', 'auto')
-    
-    train_agent(episodes=episodes, seed=seed, with_satiation=with_satiation, overeating_death=overeating_death, food_satiation_gain=food_satiation_gain, max_steps=max_steps, random_start_satiation=random_start_satiation, use_homeostatic_reward=use_homeostatic_reward, satiation_setpoint=satiation_setpoint, death_penalty=death_penalty, testing_seed=testing_seed, config_dict=config,
-                with_health=with_health, max_health=max_health, start_health=start_health, health_recovery=health_recovery, start_health_random=start_health_random,
-                danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount,
-                food_prob=food_prob, food_duration=food_duration, device=device, quiet=args.quiet)
+    train_agent(episodes=args.episodes, 
+                seed=args.seed, 
+                with_satiation=arg_with_satiation, 
+                overeating_death=arg_overeating_death, 
+                food_satiation_gain=None, 
+                max_steps=None, 
+                random_start_satiation=None, 
+                use_homeostatic_reward=None, 
+                satiation_setpoint=None, 
+                death_penalty=None, 
+                testing_seed=None, 
+                config_dict=config,
+                with_health=None, 
+                max_health=None, 
+                start_health=None, 
+                health_recovery=None, 
+                start_health_random=None,
+                danger_prob=None, 
+                danger_duration=None, 
+                damage_amount=None,
+                food_prob=None, 
+                food_duration=None, 
+                device=args.device, 
+                quiet=args.quiet)
