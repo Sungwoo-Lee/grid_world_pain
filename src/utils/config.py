@@ -36,6 +36,22 @@ class Config:
 
     def to_dict(self):
         return self._config
+        
+    def get_mandatory(self, key, type_converter=None):
+        """
+        Retrieves a value from the configuration. Raises ValueError if the key is missing.
+        Optional type_converter can be passed to cast the value (e.g., int, float).
+        """
+        val = self.get(key)
+        if val is None:
+            raise ValueError(f"Strict Config: Configuration key '{key}' is required but missing.")
+        
+        if type_converter:
+            try:
+                val = type_converter(val)
+            except ValueError as e:
+                raise ValueError(f"Strict Config: Failed to convert key '{key}' value '{val}' to {type_converter.__name__}: {e}")
+        return val
 
     def merge(self, other_config):
         """

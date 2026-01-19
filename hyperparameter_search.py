@@ -241,25 +241,50 @@ def run_search(algorithm, episodes, seed, wandb_project, num_processes=1, dry_ru
 def main():
     parser = argparse.ArgumentParser(description="Hyperparameter Search Runner")
     parser.add_argument("--algorithm", type=str, required=True, help="Algorithm to search (dqn, ppo, drqn, recurrent_ppo)")
-    parser.add_argument("--episodes", type=int, default=1000, help="Number of episodes per run")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--episodes", type=int, help="Number of episodes per run (Required)")
+    parser.add_argument("--seed", type=int, help="Random seed (Required)")
     parser.add_argument("--num-processes", type=int, default=1, help="Number of parallel processes")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing")
-    
-    # Load default project from config if available
-    default_project = "grid_world_pain"
-    if os.path.exists("configs/wandb.yaml"):
-        with open("configs/wandb.yaml", 'r') as f:
-            wc = yaml.safe_load(f)
-            if wc and 'wandb' in wc and 'project' in wc['wandb']:
-                default_project = wc['wandb']['project']
-
-    parser.add_argument("--wandb-project", type=str, default=default_project, help=f"WandB Project Name (default: {default_project})")
-    parser.add_argument("--wandb-job-type", type=str, default="hyperparameter_search", help="WandB Job Type (default: hyperparameter_search)")
+    parser.add_argument("--wandb-project", type=str, help="WandB Project Name")
+    parser.add_argument("--wandb-job-type", type=str, help="WandB Job Type")
     
     args = parser.parse_args()
     
-    run_search(args.algorithm, args.episodes, args.seed, args.wandb_project, args.num_processes, args.dry_run, args.wandb_job_type)
+    # Ensure src is importable
+    if os.getcwd() not in sys.path:
+        sys.path.append(os.getcwd())
+    from src.utils.config import Config
+
+    # Load defaults from WandB config
+    wandb_project = None
+    wandb_job_type = None
+    
+    wandb_config_path = "configs/wandb.yaml"
+    if os.path.exists(wandb_config_path):
+        try:
+            wc = Config.load_yaml(wandb_config_path)
+            wandb_project = wc.get('wandb.project')
+            wandb_job_type = wc.get('wandb.job_type')
+        except Exception as e:
+            print(f"Warning: Failed to load {wandb_config_path}: {e}")
+
+    # Override with CLI args
+    if args.wandb_project:
+        wandb_project = args.wandb_project
+    if args.wandb_job_type:
+        wandb_job_type = args.wandb_job_type
+        
+    # Strict Validation
+    if args.episodes is None:
+        raise ValueError("Strict Config: '--episodes' is a required argument.")
+    if args.seed is None:
+        raise ValueError("Strict Config: '--seed' is a required argument.")
+    if wandb_project is None:
+        raise ValueError("Strict Config: 'wandb.project' must be specified in configs/wandb.yaml or via --wandb-project")
+    if wandb_job_type is None:
+        raise ValueError("Strict Config: 'wandb.job_type' must be specified in configs/wandb.yaml or via --wandb-job-type")
+    
+    run_search(args.algorithm, args.episodes, args.seed, wandb_project, args.num_processes, args.dry_run, wandb_job_type)
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn", force=True) # Safe for pytorch/cuda
