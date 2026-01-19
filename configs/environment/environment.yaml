@@ -5,7 +5,7 @@ environment:
   width: 5
   start_pos: [0, 0]
   resource_pos: [4, 4]
-  max_steps: 1000
+  max_steps: 500
   danger_prob: 0.1
   danger_duration: 3
   damage_amount: 5

@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions as D
 import numpy as np
+from typing import Any, Dict, Optional, Tuple, Sequence
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -740,14 +741,21 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         imag_rews = torch.stack(imag_rews) # (H, B*T)
         imag_conts = torch.sigmoid(torch.stack(imag_conts).squeeze(-1))
         
+        imag_feats_stacked = torch.stack(imag_feats)
+        with torch.no_grad():
+            v_imag = from_twohot(self.target_critic(imag_feats_stacked)) # (H, B*T)
+        
+        # values_all: (H+1, B*T)
+        values_all = torch.cat([v_imag, next_values.unsqueeze(0)], dim=0)
+        
         lambda_values = compute_lambda_values(
              imag_rews,
-             next_values, 
+             values_all, 
              imag_conts,
              lmbda=0.95
         )
         
-        imag_feats = torch.stack(imag_feats)
+        imag_feats = imag_feats_stacked
         imag_log_probs = torch.stack(imag_log_probs)
         
         # Critic Update
