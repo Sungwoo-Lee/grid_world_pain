@@ -102,20 +102,21 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
     # Body (if applicable)
     if with_satiation:
         body_data = {
-            "Max Satiation": config_dict.get('body.max_satiation', 20),
-            "Start Satiation": config_dict.get('body.start_satiation', 10),
+            "Max Satiation": config_dict.get_mandatory('body.max_satiation'),
+            "Start Satiation": config_dict.get_mandatory('body.start_satiation'),
             "Random Start Sat": "ENABLED" if random_start_satiation else "DISABLED",
             "Overeating Death": "ENABLED" if overeating_death else "DISABLED"
         }
         if with_health:
-             body_data["Max Health"] = config_dict.get('body.max_health', 20)
-             body_data["Health Recovery"] = config_dict.get('body.health_recovery', 1)
+             body_data["Max Health"] = config_dict.get_mandatory('body.max_health')
+             body_data["Health Recovery"] = config_dict.get_mandatory('body.health_recovery')
              
         print_section("Body (Internal States)", body_data)
 
     # Agent
-    using_sensory = config_dict.get('sensory.using_sensory', False)
-    algorithm = config_dict.get('agent.algorithm', "Tabular Q-Learning")
+    # Agent
+    using_sensory = config_dict.get_mandatory('sensory.using_sensory')
+    algorithm = config_dict.get_mandatory('agent.algorithm')
     
     if algorithm == "DQN":
         agent_data = {
@@ -124,61 +125,61 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             "Batch Size": 64
         }
         if using_sensory:
-             agent_data["Food Radius"] = config_dict.get('sensory.food_radius', 1)
-             agent_data["Danger Radius"] = config_dict.get('sensory.danger_radius', 1)
+             agent_data["Food Radius"] = config_dict.get_mandatory('sensory.food_radius')
+             agent_data["Danger Radius"] = config_dict.get_mandatory('sensory.danger_radius')
              
     elif algorithm == "DRQN":
         agent_data = {
             "Algorithm": "Deep Recurrent Q-Network (DRQN)",
             "Sensory Inputs": "Enabled" if using_sensory else "Disabled (Coordinates)",
-            "Batch Size": 32,
-            "Trace Length": 8
+            "Batch Size": config_dict.get_mandatory('agent.batch_size'),
+            "Trace Length": config_dict.get_mandatory('agent.trace_length')
         }
         if using_sensory:
-             agent_data["Food Radius"] = config_dict.get('sensory.food_radius', 1)
-             agent_data["Danger Radius"] = config_dict.get('sensory.danger_radius', 1)
+             agent_data["Food Radius"] = config_dict.get_mandatory('sensory.food_radius')
+             agent_data["Danger Radius"] = config_dict.get_mandatory('sensory.danger_radius')
 
     elif algorithm == "PPO":
         agent_data = {
             "Algorithm": "Proximal Policy Optimization (PPO)",
             "Sensory Inputs": "Enabled" if using_sensory else "Disabled (Coordinates)",
-            "Actor LR": config_dict.get('agent.lr_actor', 0.0003),
-            "Critic LR": config_dict.get('agent.lr_critic', 0.001),
-            "Gamma (Discount)": config_dict.get('agent.gamma', 0.99),
-            "Update Frequency": config_dict.get('agent.update_timestep', 2000)
+            "Actor LR": config_dict.get_mandatory('agent.lr_actor'),
+            "Critic LR": config_dict.get_mandatory('agent.lr_critic'),
+            "Gamma (Discount)": config_dict.get_mandatory('agent.gamma'),
+            "Update Frequency": config_dict.get_mandatory('agent.update_timestep')
         }
         if using_sensory:
-             agent_data["Food Radius"] = config_dict.get('sensory.food_radius', 1)
-             agent_data["Danger Radius"] = config_dict.get('sensory.danger_radius', 1)
+             agent_data["Food Radius"] = config_dict.get_mandatory('sensory.food_radius')
+             agent_data["Danger Radius"] = config_dict.get_mandatory('sensory.danger_radius')
 
     elif algorithm == "DreamerV3":
         agent_data = {
             "Algorithm": "Dreamer V3",
             "Sensory Inputs": "Enabled" if using_sensory else "Disabled (Coordinates)",
-            "Batch Size": config_dict.get('agent.batch_size', 16),
-            "Batch Length": config_dict.get('agent.batch_length', 16),
+            "Batch Size": config_dict.get_mandatory('agent.batch_size'),
+            "Batch Length": config_dict.get_mandatory('agent.batch_length'),
         }
         if using_sensory:
-             agent_data["Food Radius"] = config_dict.get('sensory.food_radius', 1)
-             agent_data["Danger Radius"] = config_dict.get('sensory.danger_radius', 1)
+             agent_data["Food Radius"] = config_dict.get_mandatory('sensory.food_radius')
+             agent_data["Danger Radius"] = config_dict.get_mandatory('sensory.danger_radius')
 
     elif algorithm == "RecurrentPPO":
         agent_data = {
             "Algorithm": "Recurrent PPO (LSTM)",
             "Sensory Inputs": "Enabled" if using_sensory else "Disabled (Coordinates)",
-            "Sequence Length": config_dict.get('agent.sequence_length', 8),
-            "Update Timestep": config_dict.get('agent.update_timestep', 2000)
+            "Sequence Length": config_dict.get_mandatory('agent.sequence_length'),
+            "Update Timestep": config_dict.get_mandatory('agent.update_timestep')
         }
         if using_sensory:
-             agent_data["Food Radius"] = config_dict.get('sensory.food_radius', 1)
-             agent_data["Danger Radius"] = config_dict.get('sensory.danger_radius', 1)
+             agent_data["Food Radius"] = config_dict.get_mandatory('sensory.food_radius')
+             agent_data["Danger Radius"] = config_dict.get_mandatory('sensory.danger_radius')
 
     else:
         agent_data = {
             "Algorithm": "Tabular Q-Learning",
             "Sensory Inputs": "Enabled" if using_sensory else "Disabled (Coordinates)",
-            "Alpha (Learning Rate)": config_dict.get('agent.alpha', 0.1),
-            "Gamma (Discount)": config_dict.get('agent.gamma', 0.99),
+            "Alpha (Learning Rate)": config_dict.get_mandatory('agent.alpha'),
+            "Gamma (Discount)": config_dict.get_mandatory('agent.gamma'),
             "Min Epsilon": 0.05
         }
     print_section("RL Agent", agent_data)
