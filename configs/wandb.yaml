@@ -1,6 +1,7 @@
 wandb:
   entity: "sungwoolee"
   project: "grid_world_pain"
-  group: null
+  group: "train"
   job_type: "training" # Default job type (e.g., training, evaluation, sweep)
+  name: "default"
   mode: "online" # set to "disabled" to turn off logging globally

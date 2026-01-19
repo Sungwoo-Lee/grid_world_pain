@@ -48,7 +48,7 @@ testing:
 tag: "default"
 
 wandb:
-  disabled: true
+  disabled: false
   project: "grid_world_pain"
   group: null
   job_type: "training"
