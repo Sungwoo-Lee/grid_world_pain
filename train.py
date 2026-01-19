@@ -802,8 +802,8 @@ if __name__ == "__main__":
     if os.path.exists(wandb_config_path):
         if not args.quiet:
             print(f"Loading WandB config from {wandb_config_path}")
-        wandb_config = Config(wandb_config_path)
-        config.update(wandb_config._config)
+        wandb_config = Config.load_yaml(wandb_config_path)
+        config.merge(wandb_config)
         
     # Override WandB settings with CLI args
     if args.wandb_project:
