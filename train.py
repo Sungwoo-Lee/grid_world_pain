@@ -751,7 +751,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                             m_l = losses.get('model_loss', 0)
                             a_l = losses.get('actor_loss', 0)
                             c_l = losses.get('critic_loss', 0)
-                            loss_str = f"L:[M:{m_l:.2f} A:{a_l:.2f} C:{c_l:.2f}] "
+                            kl = losses.get('kl_loss', 0)
+                            gn = losses.get('model_grad_norm', 0)
+                            v_m = losses.get('value_mean', 0)
+                            loss_str = f"L:[M:{m_l:.2f} A:{a_l:.2f} C:{c_l:.2f} KL:{kl:.1f}] GN:{gn:.1f} V:{v_m:.1f} "
                         else:
                             # Show primary loss for DQN/PPO etc
                             main_loss = losses.get('loss', losses.get('mean_loss', 0))

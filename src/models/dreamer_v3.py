@@ -402,32 +402,50 @@ class DreamerV3Buffer:
             self.total_steps -= len(rem['action'])
             
     def sample(self, batch_size):
-        # Sample random episodes
-        # Then sample random chunks
-        obs, acts, rews, terms, firsts = [], [], [], [], []
+        # Sample random episodes and chunks
+        obs_batch, acts_batch, rews_batch, terms_batch, firsts_batch = [], [], [], [], []
+        
+        # Filter episodes that are long enough? No, let's allow shorter ones and pad.
+        # This prevents infinite loops if agent always dies fast.
         
         for _ in range(batch_size):
-            while True:
-                idx = np.random.randint(0, len(self.episodes))
-                ep = self.episodes[idx]
-                if len(ep['action']) > self.sequence_length:
-                    break
+            idx = np.random.randint(0, len(self.episodes))
+            ep = self.episodes[idx]
+            ep_len = len(ep['action'])
             
-            start = np.random.randint(0, len(ep['action']) - self.sequence_length + 1)
-            end = start + self.sequence_length
-            
-            obs.append(ep['observation'][start:end])
-            acts.append(ep['action'][start:end])
-            rews.append(ep['reward'][start:end])
-            terms.append(ep['terminal'][start:end])
-            firsts.append(ep['is_first'][start:end])
-            
+            if ep_len >= self.sequence_length:
+                start = np.random.randint(0, ep_len - self.sequence_length + 1)
+                end = start + self.sequence_length
+                
+                obs_batch.append(ep['observation'][start:end])
+                acts_batch.append(ep['action'][start:end])
+                rews_batch.append(ep['reward'][start:end])
+                terms_batch.append(ep['terminal'][start:end])
+                firsts_batch.append(ep['is_first'][start:end])
+            else:
+                # Pad shorter episode to sequence_length
+                pad_len = self.sequence_length - ep_len
+                
+                # Padding values (use last state/action or zeros?)
+                # Zeros are safer for terminal/reward
+                obs_pad = np.tile(ep['observation'][-1], (pad_len, 1))
+                act_pad = np.zeros((pad_len, ep['action'].shape[1]), dtype=np.float32)
+                rew_pad = np.zeros(pad_len, dtype=np.float32)
+                term_pad = np.ones(pad_len, dtype=np.float32) # Padded steps are terminal
+                first_pad = np.zeros(pad_len, dtype=np.bool_)
+                
+                obs_batch.append(np.concatenate([ep['observation'], obs_pad], axis=0))
+                acts_batch.append(np.concatenate([ep['action'], act_pad], axis=0))
+                rews_batch.append(np.concatenate([ep['reward'], rew_pad], axis=0))
+                terms_batch.append(np.concatenate([ep['terminal'], term_pad], axis=0))
+                firsts_batch.append(np.concatenate([ep['is_first'], first_pad], axis=0))
+                
         batch = {
-            'observation': np.stack(obs),
-            'action': np.stack(acts),
-            'reward': np.stack(rews),
-            'terminal': np.stack(terms),
-            'is_first': np.stack(firsts),
+            'observation': np.stack(obs_batch),
+            'action': np.stack(acts_batch),
+            'reward': np.stack(rews_batch),
+            'terminal': np.stack(terms_batch),
+            'is_first': np.stack(firsts_batch),
         }
         return batch
 
@@ -504,14 +522,13 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         self.critic.apply(uniform_init_weights(1.0))
         self.target_critic.load_state_dict(self.critic.state_dict())
         
-        # Optimizers
-        self.model_opt = torch.optim.Adam([
-            {'params': self.encoder.parameters()},
-            {'params': self.rssm.parameters()},
-            {'params': self.decoder.parameters()},
-            {'params': self.reward_pred.parameters()},
-            {'params': self.continue_pred.parameters()}
-        ], lr=model_lr)
+        self.model_params = list(self.encoder.parameters()) + \
+                            list(self.rssm.parameters()) + \
+                            list(self.decoder.parameters()) + \
+                            list(self.reward_pred.parameters()) + \
+                            list(self.continue_pred.parameters())
+                            
+        self.model_opt = torch.optim.Adam(self.model_params, lr=model_lr)
         
         self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_opt = torch.optim.Adam(self.critic.parameters(), lr=value_lr)
@@ -644,6 +661,8 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         rew_pred = self.reward_pred(feat)
         cont_pred = self.continue_pred(feat)
         
+        metrics = {}
+        
         # Losses
         recon_loss = F.mse_loss(recon, obs)
         
@@ -681,8 +700,10 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         
         self.model_opt.zero_grad()
         model_loss.backward()
-        nn.utils.clip_grad_norm_(self.model_opt.param_groups[0]['params'], 100.0)
+        model_grad_norm = nn.utils.clip_grad_norm_(self.model_params, 1000.0)
         self.model_opt.step()
+        
+        metrics["model_grad_norm"] = model_grad_norm.item()
         
         # 2. Behavior Learning (Imagination)
         with torch.no_grad():
@@ -766,7 +787,10 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         
         self.critic_opt.zero_grad()
         critic_loss.backward()
+        critic_grad_norm = torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 100.0)
         self.critic_opt.step()
+
+        metrics["critic_grad_norm"] = critic_grad_norm.item()
         
         # Actor Update
         # [NEW] Reinforce + Entropy + Moments Normalization
@@ -787,12 +811,15 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         
         self.actor_opt.zero_grad()
         actor_loss.backward()
+        actor_grad_norm = torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 100.0)
         self.actor_opt.step()
+
+        metrics["actor_grad_norm"] = actor_grad_norm.item()
         
         self.update_ema(self.target_critic, self.critic, 0.02)
 
         # Return losses for logging
-        return {
+        metrics.update({
             "model_loss": model_loss.item(),
             "recon_loss": recon_loss.item(),
             "rew_loss": rew_loss.item(),
@@ -802,8 +829,11 @@ class DreamerV3Agent(nn.Module, EMAMixin):
             "rep_loss": rep_loss.item(),
             "critic_loss": critic_loss.item(),
             "actor_loss": actor_loss.item(),
-            "entropy": entropy.mean().item()
-        }
+            "entropy": entropy.mean().item(),
+            "value_mean": lambda_values.mean().item(),
+            "buffer_size": self.buffer.total_steps
+        })
+        return metrics
 
     def save(self, checkpoint_path):
         torch.save(self.state_dict(), checkpoint_path)
