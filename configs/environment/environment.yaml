@@ -45,4 +45,13 @@ testing:
   seed: 56
   evaluation_episodes: 1
 
+tag: "default"
+
+wandb:
+  disabled: true
+  project: "grid_world_pain"
+  group: null
+  job_type: "training"
+  name: null
+
 

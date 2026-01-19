@@ -80,8 +80,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 
     # Environment
     env_data = {
-        "Grid Size": f"{config_dict.get('environment.height', 5)}x{config_dict.get('environment.width', 5)}",
-        "Food Position": str(config_dict.get('environment.food_pos', [4, 4])),
+        "Grid Size": f"{config_dict.get_mandatory('environment.height', int)}x{config_dict.get_mandatory('environment.width', int)}",
+        "Resource Position": str(config_dict.get_mandatory('environment.resource_pos')),
         "Max Steps": max_steps,
         "Mode": "Interoceptive (Homeostasis)" if with_satiation else "Conventional (Goal-driven)"
     }
@@ -94,8 +94,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
         env_data["Danger Prob"] = danger_prob
         env_data["Damage Amount"] = damage_amount
         
-    env_data["Food Prob"] = config_dict.get('environment.food_prob', 0.2)
-    env_data["Food Duration"] = config_dict.get('environment.food_duration', 10)
+    env_data["Food Prob"] = config_dict.get_mandatory('environment.food_prob', float)
+    env_data["Food Duration"] = config_dict.get_mandatory('environment.food_duration', int)
         
     print_section("Environment", env_data)
 
@@ -205,14 +205,15 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     import os 
     
     # Initialize WandB
-    if config_dict and not config_dict.get('wandb.disabled', False):
-        if quiet:
-             os.environ["WANDB_SILENT"] = "true"
+    # WandB Initialization
+    if config_dict and not config_dict.get_mandatory('wandb.disabled'):
+        wandb_enabled = True
         
-        wandb_project = config_dict.get('wandb.project', 'grid_world_pain')
-        wandb_group = config_dict.get('wandb.group', None)
-        wandb_job_type = config_dict.get('wandb.job_type', None)
-        wandb_name = config_dict.get('wandb.name', None)
+        # Load project-level config first
+        wandb_project = config_dict.get_mandatory('wandb.project')
+        wandb_group = config_dict.get_mandatory('wandb.group')
+        wandb_job_type = config_dict.get_mandatory('wandb.job_type')
+        wandb_name = config_dict.get_mandatory('wandb.name')
         
         wandb.init(
             project=wandb_project,
@@ -243,9 +244,17 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     if config_dict is None:
         raise ValueError("Strict Config: 'config_dict' must be provided to train_agent")
 
+    # Load Visualization Config (Optional)
+    viz_config_path = os.path.join(os.path.dirname(__file__), "configs", "visualization", "visualization.yaml")
+    if os.path.exists(viz_config_path):
+        with open(viz_config_path, 'r') as f:
+            viz_dict = yaml.safe_load(f)
+            config_dict.merge(viz_dict)
+    
     # Resolve Parameters (Argument > Config > Error)
     def resolve_param(arg_val, config_key):
         if arg_val is not None:
+            config_dict.set(config_key, arg_val) # Store back for strict lookups
             return arg_val
         return config_dict.get_mandatory(config_key)
 
@@ -302,12 +311,12 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
          model_name = "Tabular_Q_Learning"
          
     # Override from agent config if available
-    if config.get('agent.algorithm'):
-        model_name = config.get('agent.algorithm').replace(" ", "_")
+    if config_dict.get_mandatory('agent.algorithm'):
+        model_name = config_dict.get_mandatory('agent.algorithm').replace(" ", "_")
         
     import datetime
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    tag = config.get('tag', 'default') # Pass tag via config/arg
+    tag = config_dict.get_mandatory('tag')
     
     run_name = f"{timestamp}_{tag}"
     
@@ -332,10 +341,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         if not quiet:
             print(f"Resolved configuration saved to {config_save_path}")
 
-    # Set numpy/torch random seed
+    # Set numpy/torch    # Common Parameters
+    # Strict Migration: try resource_pos, if not found, use food_pos if available
     resource_pos = config_dict.get('environment.resource_pos')
     if resource_pos is None:
-         # Fallback to food_pos if resource_pos is missing (Migration)
          resource_pos = config_dict.get_mandatory('environment.food_pos')
          
     env = GridWorld(
@@ -414,7 +423,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
 
     # Initialize Agent
     agent = None
-    algorithm = config_dict.get('agent.algorithm', "Tabular Q-Learning")
+    algorithm = config_dict.get_mandatory('agent.algorithm')
     
     if algorithm == "DQN":
         # Calculate Input Dimension
@@ -818,7 +827,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         print(f"Training history saved to {history_filename}")
 
     # Generate learning curves
-    plot_learning_curves(history_filename, plots_dir, max_steps=max_steps, milestones=milestones)
+    plot_learning_curves(history_filename, plots_dir, config_dict, max_steps=max_steps, milestones=milestones)
     
     if not quiet:
         print("\nTraining complete.")
@@ -873,7 +882,8 @@ if __name__ == "__main__":
         config.merge(agent_config)
     
     # Set tag
-    config.set('tag', args.tag)
+    if args.tag:
+        config.set('tag', args.tag)
     
     # Ensure mode uses config if not disabled via CLI
     if not config.get('wandb.disabled'):

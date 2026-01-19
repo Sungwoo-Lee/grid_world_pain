@@ -81,10 +81,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     max_steps = config.get_mandatory('environment.max_steps', int)
     seed = config.get_mandatory('testing.seed', int)
     num_episodes = config.get_mandatory('testing.evaluation_episodes', int)
-    
+    # Common Parameters
     resource_pos = config.get('environment.resource_pos')
     if resource_pos is None:
-         # Fallback to food_pos if resource_pos missing (legacy compatibility or specific config)
+         # Fallback to food_pos if resource_pos missing (legacy compatibility)
          resource_pos = config.get_mandatory('environment.food_pos')
          
     height = config.get_mandatory('environment.height', int)
@@ -282,7 +282,14 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         )
         agent.load(checkpoint_path)
 
-    elif algorithm == "DreamerV3":
+    # Visualization Configuration
+    vis_enabled = config.get_mandatory('visualization.enabled')
+    vis_activations = config.get_mandatory('visualization.activations.enabled') and vis_enabled
+    vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
+    vis_fps = config.get_mandatory('visualization.fps', int)
+    save_h5 = config.get_mandatory('visualization.activations.save_h5') and vis_enabled
+
+    if algorithm == "DreamerV3":
         from src.models.dreamer_v3 import DreamerV3Agent
         agent = DreamerV3Agent(
             state_dim=input_dim,
@@ -327,7 +334,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     # Setup Activation Monitor
 
     monitor = None
-    if algorithm != "Tabular Q-Learning":
+    if algorithm != "Tabular Q-Learning" and vis_activations:
         model_to_monitor = None
         if isinstance(agent, torch.nn.Module):
             model_to_monitor = agent
@@ -454,14 +461,13 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                                  pass
 
                     # If still empty (warmup failed or no layers), visualize returns None
-                    # Use fixed ranges for stability and readability
+                    # Use configuration from config object
                     act_frame = visualize_activations(
                         acts, 
                         game_frame.shape[1], 
+                        config, 
                         input_structure=input_structure, 
-                        attributions=attributions,
-                        activation_range=(0, 4.0),     # Fixed ReLU range (Magma)
-                        attribution_range=(-1.0, 1.0)  # Fixed LRP range (Seismic)
+                        attributions=attributions
                     )
 
                 combined = combine_frame_and_activations(game_frame, act_frame)
@@ -476,8 +482,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             # Update append calls in loop
             # Initialize LRP monitor
             lrp_monitor = None
-            try:
-                if monitor:
+            if vis_lrp:
+                try:
                     if algorithm == "DQN":
                         lrp_monitor = LRPMonitor(model_to_monitor)
                     
@@ -510,10 +516,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                                 return self.model(x)[self.index]
                                 
                         lrp_monitor = LRPMonitor(OutputWrapper(model_to_monitor, 0))
-                        
-            except Exception as e:
-                print(f"Failed to initialize LRP for {algorithm}: {e}")
-                lrp_monitor = None
+                except Exception as e:
+                    print(f"Failed to initialize LRP for {algorithm}: {e}")
+                    lrp_monitor = None
 
     # 3. Run Evaluation Episodes (Collect Frames)
     agent.epsilon = 0 # No exploration during evaluation
@@ -629,22 +634,6 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 # Or is the frame showing `next_state`? 
                 # `env.render_rgb_array` usually shows current state of env. 
                 # After `env.step`, the env is in `next_state`.
-                # So we are visualizing `next_state` with `state`'s activations?
-                # Ideally, we want to visualize `state` with `state`'s activations.
-                # The generic loop above calls `append...` right after init (step 0).
-                # Then inside loop, after step, it calls `append...` with step+1.
-                # So frame 0 = State 0. Frame 1 = State 1.
-                # Activations captured during `choose_action` correspond to State 0 -> Action.
-                # So we should append frame 0 AFTER choose_action but BEFORE step?
-                # No, the existing code appends frame 0 BEFORE loop.
-                # Then inside loop, it steps, then appends frame 1.
-                # So Frame 0 has NO activations (empty).
-                # Frame 1 has activations from Step 0?
-                # `monitor` captures the LAST forward pass.
-                # If we rely on `monitor` having state from `choose_action` call above:
-                # We should append frame for `state` NOW, before `env.step` changes things?
-                # But `env.render` renders CURRENT env state.
-                # If we call render after `env.step`, it renders `next_state`.
                 # So we associate `state` activations with `next_state` frame. This is slight mismatch.
                 # However, changing this logic is big refactor.
                 # I will stick to existing pattern but pass `action` and `flat_state` (of current step).
@@ -697,18 +686,20 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     # Plot Q-Table (Tabular only)
     if not using_sensory and hasattr(agent, 'q_table'):
         plots_dir = os.path.join(results_dir, "plots")
-        os.makedirs(plots_dir, exist_ok=True)
-        vis_filename = os.path.join(plots_dir, f"q_table_vis_{pct}.png" if pct != "final" else "q_table_vis.png")
-        plot_q_table(agent.q_table, vis_filename, resource_pos)
+        os.makedirs(plots_dir, exist_ok=True) # Ensure directory exists
+       # Visualization Plotting
+    if algorithm == "Tabular Q-Learning":
+        vis_filename = os.path.join(plots_dir, f"q_table_{pct}.png" if pct != "final" else "q_table_final.png")
+        plot_q_table(agent.q_table, vis_filename, config, resource_pos)
     
     # Save Video
     videos_dir = os.path.join(results_dir, "videos")
     os.makedirs(videos_dir, exist_ok=True)
     video_filename = os.path.join(videos_dir, f"video_{pct}.mp4" if pct != "final" else "final_trained_agent.mp4")
-    save_video(frames, video_filename)
+    save_video(frames, video_filename, fps=vis_fps)
 
     # Save Activations
-    if monitor:
+    if monitor and save_h5:
         activations_file = os.path.join(data_dir, f"activations_{pct}.h5" if pct != "final" else "activations_final.h5")
         monitor.save_history(activations_file)
         monitor.close()
@@ -740,22 +731,22 @@ def main():
 
     # 2. Key Overrides (Allow user to change testing seed/episodes)
     global_config = get_default_config()
-    testing_seed = args.seed or global_config.get('testing.seed', 42)
-    eval_episodes = args.episodes or global_config.get('testing.evaluation_episodes', 1)
+    testing_seed = args.seed or global_config.get_mandatory('testing.seed', int)
+    eval_episodes = args.episodes or global_config.get_mandatory('testing.evaluation_episodes', int)
     
     config.set('testing.seed', testing_seed)
     config.set('testing.evaluation_episodes', eval_episodes)
     
     # 3. Print Summary
-    print("-" * 40)
-    print(f"Evaluation Mode: {'Interoceptive' if config.get('body.with_satiation') else 'Conventional'}")
-    print(f"Grid Size: {config.get('environment.height')}x{config.get('environment.width') if config.get('environment.width') else '?'}")
+    # Print Info
+    print(f"\nEvaluation Mode: {'Interoceptive' if config.get_mandatory('body.with_satiation') else 'Conventional'}")
+    print(f"Grid Size: {config.get_mandatory('environment.height')}x{config.get_mandatory('environment.width')}")
     print(f"Testing Seed: {testing_seed}")
     print(f"Num Episodes: {eval_episodes}")
     print("-" * 40)
 
     # 4. Find all checkpoints
-    algorithm = config.get('agent.algorithm', "Tabular Q-Learning")
+    algorithm = config.get_mandatory('agent.algorithm')
     
     if algorithm == "DQN":
         checkpoints = glob.glob(os.path.join(models_dir, "dqn_model_*.pth"))

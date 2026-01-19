@@ -1,0 +1,47 @@
+visualization:
+  # Global settings
+  enabled: true
+  font_family: "sans-serif"
+  
+  # Video settings
+  fps: 5
+  
+  # Activation / LRP Visualization
+  activations:
+    enabled: true
+    with_lrp: true
+    dpi: 100
+    row_height: 0.8
+    header_height: 0.6
+    bg_color: "#1A1A1A"
+    text_color: "#E0E0E0"
+    label_color: "#B0B0B0"
+    activation_cmap: "magma"
+    activation_range: [0.0, 4.0]
+    attribution_cmap: "seismic"
+    attribution_range: [-1.0, 1.0]
+    save_h5: true
+
+  # Q-Table Visualization
+  q_table:
+    dpi: 150
+    bg_color: "#F8F9FA"
+    title_color: "#343A40"
+    label_color: "#495057"
+    cmap: "viridis"
+    food_color: "#51CF66"
+    arrow_color_threshold: 0.7  # Switch white/black arrow at this value
+    
+  # Learning Curves Dashboard
+  learning_curves:
+    dpi: 150
+    figsize: [12, 12]
+    bg_color: "#F8F9FA"
+    window_divisor: 100  # Moving average window = total_episodes / window_divisor
+    colors:
+      reward_main: "#4C6EF5"
+      reward_raw: "#A5D8FF"
+      steps_main: "#20C997"
+      steps_raw: "#C3FAE8"
+      milestone: "#FA5252"
+      epsilon: "#FCC419"

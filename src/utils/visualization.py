@@ -11,18 +11,18 @@ import matplotlib.patheffects as PathEffects
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 
-def plot_q_table(q_table, save_path, food_pos=None):
+def plot_q_table(q_table, save_path, config, food_pos=None):
     """
     Visualizes the Q-table policy and values at different satiation levels.
     """
     # Dispatch to conventional plotter if q_table is 3D
     if len(q_table.shape) == 3:
-        return plot_q_table_conventional(q_table, save_path, food_pos)
+        return plot_q_table_conventional(q_table, save_path, config, food_pos)
         
     # Dispatch to 4D plotter if q_table is 5D (H, W, Sat, Health, Actions) or 4D depending on how we count
     # agent.py initialization: (height, width, max_sat+2, max_health+2, 5) -> 5 dimensions
     if len(q_table.shape) == 5:
-        return plot_q_table_health(q_table, save_path, food_pos)
+        return plot_q_table_health(q_table, save_path, config, food_pos)
 
     # Ensure output directory exists
     if save_path:
@@ -62,7 +62,8 @@ def plot_q_table(q_table, save_path, food_pos=None):
             v_norm = np.zeros_like(v_values)
             
         # Plot Heatmap
-        cax = ax.imshow(v_norm, cmap='viridis', interpolation='nearest', vmin=0, vmax=1)
+        cmap = config.get_mandatory('visualization.q_table.cmap')
+        cax = ax.imshow(v_norm, cmap=cmap, interpolation='nearest', vmin=0, vmax=1)
         
         labels = ["Low", "Mid", "High"]
         ax.set_title(f"{labels[idx]} Satiation (Sat={sat_level})")
@@ -79,7 +80,8 @@ def plot_q_table(q_table, save_path, food_pos=None):
         # Mark Food Location
         if food_pos is not None:
             fr, fc = food_pos
-            ax.text(fc, fr, 'F', ha='center', va='center', color='lime', fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
+            food_color = config.get_mandatory('visualization.q_table.food_color')
+            ax.text(fc, fr, 'F', ha='center', va='center', color=food_color, fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
                 
     # Add colorbar
     fig.subplots_adjust(right=0.9)
@@ -87,10 +89,10 @@ def plot_q_table(q_table, save_path, food_pos=None):
     fig.colorbar(cax, cax=cbar_ax, label='Max Q-Value (Normalized)')
     
     plt.suptitle("Learned Policy & Value at Different Satiation Levels", fontsize=16)
-    plt.savefig(save_path)
+    plt.savefig(save_path, dpi=config.get_mandatory('visualization.q_table.dpi'))
     plt.close(fig)
 
-def plot_q_table_health(q_table, save_path, food_pos=None):
+def plot_q_table_health(q_table, save_path, config, food_pos=None):
     """
     Visualizes representative slices of a 5D Q-table (Height, Width, Sat, Health, Actions) with fancy styling.
     """
@@ -112,10 +114,11 @@ def plot_q_table_health(q_table, save_path, food_pos=None):
     cols = len(sat_slices)
     
     # Global Font Settings for aesthetics
-    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['font.family'] = config.get_mandatory('visualization.font_family')
     
     fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows), constrained_layout=True)
-    fig.patch.set_facecolor('#F8F9FA') # Soft grey background for the whole figure
+    bg_color = config.get_mandatory('visualization.q_table.bg_color')
+    fig.patch.set_facecolor(bg_color) # Soft grey background for the whole figure
     
     for r_idx, h_level in enumerate(health_slices):
         for c_idx, s_level in enumerate(sat_slices):
@@ -135,7 +138,8 @@ def plot_q_table_health(q_table, save_path, food_pos=None):
                 v_norm = np.zeros_like(v_values)
             
             # Heatmap with white lines to separate grid cells
-            cax = ax.imshow(v_norm, cmap='viridis', interpolation='nearest', vmin=0, vmax=1)
+            cmap = config.get_mandatory('visualization.q_table.cmap')
+            cax = ax.imshow(v_norm, cmap=cmap, interpolation='nearest', vmin=0, vmax=1)
             
             # Grid lines (white for separation)
             ax.set_xticks(np.arange(width) - 0.5, minor=True)
@@ -149,7 +153,8 @@ def plot_q_table_health(q_table, save_path, food_pos=None):
                 ax.set_title(f"{sat_labels[c_idx]}\n(Satiation={s_level})", fontsize=12, fontweight='bold', color='#495057')
             
             if c_idx == 0:
-                ax.set_ylabel(f"{health_labels[r_idx]}\n(Health={h_level})", fontsize=12, fontweight='bold', color='#495057')
+                label_color = config.get_mandatory('visualization.q_table.label_color')
+                ax.set_ylabel(f"{health_labels[r_idx]}\n(Health={h_level})", fontsize=12, fontweight='bold', color=label_color)
 
             # Clean Axes
             ax.set_xticks([])
@@ -165,7 +170,8 @@ def plot_q_table_health(q_table, save_path, food_pos=None):
                     val = v_norm[r, c]
                     action = policy[r, c]
                     # Arrow color dynamic: White for dark cells, Black for light cells (simple heuristic)
-                    arrow_color = 'white' if val < 0.7 else 'black'
+                    threshold = config.get_mandatory('visualization.q_table.arrow_color_threshold')
+                    arrow_color = 'white' if val < threshold else 'black'
                     
                     arrow_char = ['\u2191', '\u2192', '\u2193', '\u2190', '\u2022'][action]
                     text = ax.text(c, r, arrow_char, ha='center', va='center', color=arrow_color, fontsize=14, weight='bold')
@@ -174,7 +180,8 @@ def plot_q_table_health(q_table, save_path, food_pos=None):
             # Food marker
             if food_pos is not None:
                 fr, fc = food_pos
-                ax.text(fc, fr, 'F', ha='center', va='center', color='#51CF66', fontsize=22, weight='bold', 
+                food_color = config.get_mandatory('visualization.q_table.food_color')
+                ax.text(fc, fr, 'F', ha='center', va='center', color=food_color, fontsize=22, weight='bold', 
                         path_effects=[PathEffects.withStroke(linewidth=4, foreground='white')])
 
     # Colorbar
@@ -184,11 +191,11 @@ def plot_q_table_health(q_table, save_path, food_pos=None):
     cb.set_label('Max Q-Value (Normalized)', fontsize=12, labelpad=10)
     cb.outline.set_visible(False)
     
-    plt.suptitle("Learned Policy: Health vs Satiation", fontsize=18, fontweight='bold', color='#343A40', y=1.02)
-    plt.savefig(save_path, bbox_inches='tight', dpi=150, facecolor='#F8F9FA')
+    plt.suptitle("Learned Policy: Health vs Satiation", fontsize=18, fontweight='bold', color=config.get_mandatory('visualization.q_table.title_color'), y=1.02)
+    plt.savefig(save_path, bbox_inches='tight', dpi=config.get_mandatory('visualization.q_table.dpi'), facecolor=bg_color)
     plt.close(fig)
 
-def plot_q_table_conventional(q_table, save_path, food_pos=None):
+def plot_q_table_conventional(q_table, save_path, config, food_pos=None):
     """
     Visualizes a 3D Q-table (Conventional Mode).
     """
@@ -209,7 +216,8 @@ def plot_q_table_conventional(q_table, save_path, food_pos=None):
     else:
         v_norm = np.zeros_like(v_values)
         
-    cax = ax.imshow(v_norm, cmap='viridis', interpolation='nearest', vmin=0, vmax=1)
+    cmap = config.get_mandatory('visualization.q_table.cmap')
+    cax = ax.imshow(v_norm, cmap=cmap, interpolation='nearest', vmin=0, vmax=1)
     ax.set_title("Learned Policy & Value (Conventional Mode)")
     ax.set_xticks(np.arange(width))
     ax.set_yticks(np.arange(height))
@@ -222,10 +230,11 @@ def plot_q_table_conventional(q_table, save_path, food_pos=None):
     
     if food_pos is not None:
         fr, fc = food_pos
-        ax.text(fc, fr, 'G', ha='center', va='center', color='lime', fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
+        food_color = config.get_mandatory('visualization.q_table.food_color')
+        ax.text(fc, fr, 'G', ha='center', va='center', color=food_color, fontsize=20, weight='bold', path_effects=[PathEffects.withStroke(linewidth=3, foreground='black')])
         
     fig.colorbar(cax, ax=ax, label='Max Q-Value (Normalized)')
-    plt.savefig(save_path)
+    plt.savefig(save_path, dpi=config.get_mandatory('visualization.q_table.dpi'))
     plt.close(fig)
 
 def save_video(frames, output_path, fps=5):
@@ -236,7 +245,7 @@ def save_video(frames, output_path, fps=5):
     imageio.mimsave(output_path, frames, fps=fps)
     print(f"Saved video to {output_path}")
 
-def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestones=None):
+def plot_learning_curves(history_csv_path, output_dir, config, max_steps=None, milestones=None):
     """
     Plots learning curves from a training history CSV file with a professional fancy theme.
     """
@@ -260,21 +269,23 @@ def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestone
 
     # --- Fancy Theme Configuration ---
     # Colors (Vibrant & Professional)
-    reward_color_main = '#4C6EF5'  # Royal Blue
-    reward_color_raw = '#A5D8FF'   # Lighter Blue
-    steps_color_main = '#20C997'   # Teal
-    steps_color_raw = '#C3FAE8'    # Lighter Teal
-    milestone_color = '#FA5252'    # Soft Red for badges
-    bg_color = '#F8F9FA'           # Soft Gray background
+    reward_color_main = config.get_mandatory('visualization.learning_curves.colors.reward_main')
+    reward_color_raw = config.get_mandatory('visualization.learning_curves.colors.reward_raw')
+    steps_color_main = config.get_mandatory('visualization.learning_curves.colors.steps_main')
+    steps_color_raw = config.get_mandatory('visualization.learning_curves.colors.steps_raw')
+    milestone_color = config.get_mandatory('visualization.learning_curves.colors.milestone')
+    bg_color = config.get_mandatory('visualization.learning_curves.bg_color')
     
     # Global Settings
-    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['font.family'] = config.get_mandatory('visualization.font_family')
     
     # 3 Subplots: Reward, Steps, Epsilon
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 12), sharex=True, facecolor=bg_color)
+    figsize = config.get_mandatory('visualization.learning_curves.figsize')
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=figsize, sharex=True, facecolor=bg_color)
     
     # --- Plot 1: Cumulative Reward ---
-    window = max(1, len(df) // 100)
+    divisor = config.get_mandatory('visualization.learning_curves.window_divisor')
+    window = max(1, len(df) // divisor)
     ax1.set_facecolor(bg_color)
     ax1.plot(df['episode'], df['reward'], color=reward_color_raw, alpha=0.5, label='Raw Reward', linewidth=1)
     ax1.plot(df['episode'], df['reward'].rolling(window=window).mean(), color=reward_color_main, linewidth=2.5, label=f'Moving Average (n={window})')
@@ -341,7 +352,7 @@ def plot_learning_curves(history_csv_path, output_dir, max_steps=None, milestone
     plt.suptitle("Interoceptive AI Training Dashboard", fontsize=20, fontweight='bold', y=0.98, color='#343A40')
     
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(save_path, facecolor=bg_color, dpi=150)
+    plt.savefig(save_path, facecolor=bg_color, dpi=config.get_mandatory('visualization.learning_curves.dpi'))
     plt.close(fig)
     # print(f"Saved fancy learning curves to {save_path}")
 
@@ -349,17 +360,16 @@ if __name__ == "__main__":
     print("This module is a utility library and should not be run directly.")
     
 
-def visualize_activations(activations, target_width, input_structure=None, attributions=None, activation_range=None, attribution_range=None):
+def visualize_activations(activations, target_width, config, input_structure=None, attributions=None):
     """
     Visualizes neural network activations and optional attributions (LRP).
     
     Args:
         activations (dict): {layer_name: numpy_array}
         target_width (int): Target width for the output image.
+        config (Config): Configuration object.
         input_structure (list, optional): List of (label, size) tuples for Input layer segmentation.
         attributions (dict, optional): {layer_name: numpy_array} - LRP scores
-        activation_range (tuple, optional): (min, max) for activation colorbar.
-        attribution_range (tuple, optional): (min, max) for attribution colorbar.
     """
     if not activations:
         return None
@@ -380,19 +390,19 @@ def visualize_activations(activations, target_width, input_structure=None, attri
         return None
 
     # Style Configuration
-    plt.rcParams['font.family'] = 'sans-serif'
+    plt.rcParams['font.family'] = config.get_mandatory('visualization.font_family')
     # text colors
-    text_color = '#E0E0E0'
-    label_color = '#B0B0B0'
-    bg_color = '#1A1A1A'
+    text_color = config.get_mandatory('visualization.activations.text_color')
+    label_color = config.get_mandatory('visualization.activations.label_color')
+    bg_color = config.get_mandatory('visualization.activations.bg_color')
     
     # Dimensions
-    dpi = 100
+    dpi = config.get_mandatory('visualization.activations.dpi')
     fig_width = target_width / dpi
     
     # Height calculation
-    row_height = 0.8
-    header_height = 0.6
+    row_height = config.get_mandatory('visualization.activations.row_height')
+    header_height = config.get_mandatory('visualization.activations.header_height')
     fig_height = header_height + (n_layers * row_height)
     
     # Grid: [Main Heatmap] [Spacer] [Colorbar]
@@ -436,11 +446,11 @@ def visualize_activations(activations, target_width, input_structure=None, attri
                  ax_attr = fig.add_axes([pos.x0, pos.y0, pos.width, h])
                  
                  # -- Plot Activation (Top) --
-                 vmin = activation_range[0] if activation_range else vals.min()
-                 vmax = activation_range[1] if activation_range else vals.max()
+                 activation_range = config.get_mandatory('visualization.activations.activation_range')
+                 vmin, vmax = activation_range
                  if vmin == vmax: vmax += 1e-5
                  
-                 cmap = 'magma' 
+                 cmap = config.get_mandatory('visualization.activations.activation_cmap')
                  im_act = plot_strip(ax_act, img, cmap, vmin, vmax)
                  ax_act.set_xticks([])
                  ax_act.set_yticks([])
@@ -451,14 +461,11 @@ def visualize_activations(activations, target_width, input_structure=None, attri
                              ha='right', va='center', fontsize=7, color=label_color, alpha=0.7)
 
                  # -- Plot Attribution (Bottom) --
-                 if attribution_range:
-                     limit_min, limit_max = attribution_range
-                 else:
-                     limit = np.max(np.abs(attribution))
-                     if limit == 0: limit = 1e-5
-                     limit_min, limit_max = -limit, limit
+                 attribution_range = config.get_mandatory('visualization.activations.attribution_range')
+                 limit_min, limit_max = attribution_range
                      
-                 im_attr = plot_strip(ax_attr, attribution, 'seismic', limit_min, limit_max)
+                 cmap_attr = config.get_mandatory('visualization.activations.attribution_cmap')
+                 im_attr = plot_strip(ax_attr, attribution, cmap_attr, limit_min, limit_max)
                  ax_attr.set_xticks([])
                  ax_attr.set_yticks([])
                  for spine in ax_attr.spines.values(): spine.set_visible(False)
@@ -494,11 +501,11 @@ def visualize_activations(activations, target_width, input_structure=None, attri
 
              else:
                  # Standard Plotting (Activations Only)
-                 vmin = activation_range[0] if activation_range else vals.min()
-                 vmax = activation_range[1] if activation_range else vals.max()
+                 activation_range = config.get_mandatory('visualization.activations.activation_range')
+                 vmin, vmax = activation_range
                  if vmin == vmax: vmax += 1e-5
                  
-                 cmap = 'magma' if vmin >= 0 else 'coolwarm'
+                 cmap = config.get_mandatory('visualization.activations.activation_cmap')
                  im = ax_map.imshow(img, cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax)
                  
                  # Label "Act"
