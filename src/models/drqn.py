@@ -118,6 +118,7 @@ class DRQNAgent:
         self.trace_length = trace_length
         self.burn_in_length = burn_in_length
         self.target_update_freq = target_update_freq
+        self.steps_done = 0
         
         self.epsilon = epsilon_start
         self.epsilon_end = epsilon_end

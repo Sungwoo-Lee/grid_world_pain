@@ -104,13 +104,14 @@ class ActorCriticRNN(nn.Module):
 
 class RecurrentPPOAgent:
     def __init__(self, state_dim, action_dim, lr_actor=0.0003, lr_critic=0.001, gamma=0.99, K_epochs=4, 
-                 eps_clip=0.2, update_timestep=2000, sequence_length=8, device="auto"):
+                 eps_clip=0.2, update_timestep=2000, sequence_length=8, entropy_coef=0.01, device="auto"):
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
         self.update_timestep = update_timestep
         self.sequence_length = sequence_length
         self.state_dim = state_dim
+        self.entropy_coef = entropy_coef
         
         self.buffer = RolloutBuffer()
         
@@ -275,7 +276,7 @@ class RecurrentPPOAgent:
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * advantages
             
-            loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, flat_rewards) - 0.01 * dist_entropy
+            loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, flat_rewards) - self.entropy_coef * dist_entropy
             
             self.optimizer.zero_grad()
             loss.mean().backward()

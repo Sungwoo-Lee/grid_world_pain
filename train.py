@@ -216,6 +216,10 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
             config=config_dict.to_dict(),
             reinit=True
         )
+        
+        # Log Source Code
+        # Explicitly log key files and src directory
+        wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py"))
     
     # Extract Sensory Config
     using_sensory = config_dict.get('sensory.using_sensory', False)
