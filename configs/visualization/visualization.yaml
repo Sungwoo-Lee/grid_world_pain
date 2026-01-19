@@ -8,8 +8,8 @@ visualization:
   
   # Activation / LRP Visualization
   activations:
-    enabled: true
-    with_lrp: true
+    enabled: false  
+    with_lrp: false 
     dpi: 100
     row_height: 0.8
     header_height: 0.6

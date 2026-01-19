@@ -61,7 +61,7 @@ def compute_lambda_values(
     
     # SheepRL implementation:
     vals = [values[-1:]]
-    interm = rewards + continues * values * (1 - lmbda)
+    interm = rewards + continues * values[1:] * (1 - lmbda)
     for t in reversed(range(len(continues))):
         vals.append(interm[t] + continues[t] * lmbda * vals[-1])
     ret = torch.cat(list(reversed(vals))[:-1])
@@ -790,6 +790,20 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         self.actor_opt.step()
         
         self.update_ema(self.target_critic, self.critic, 0.02)
+
+        # Return losses for logging
+        return {
+            "model_loss": model_loss.item(),
+            "recon_loss": recon_loss.item(),
+            "rew_loss": rew_loss.item(),
+            "cont_loss": cont_loss.item(),
+            "kl_loss": kl_loss.item(),
+            "dyn_loss": dyn_loss.item(),
+            "rep_loss": rep_loss.item(),
+            "critic_loss": critic_loss.item(),
+            "actor_loss": actor_loss.item(),
+            "entropy": entropy.mean().item()
+        }
 
     def save(self, checkpoint_path):
         torch.save(self.state_dict(), checkpoint_path)

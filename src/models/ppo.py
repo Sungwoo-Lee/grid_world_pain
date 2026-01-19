@@ -201,6 +201,8 @@ class PPOAgent:
         # clear buffer
         self.buffer.clear()
         self.time_step = 0
+
+        return {"loss": loss.mean().item()}
         
     def save(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)

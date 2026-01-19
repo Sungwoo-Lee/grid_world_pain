@@ -320,6 +320,8 @@ class RecurrentPPOAgent:
         self.policy_old.load_state_dict(self.policy.state_dict())
         self.buffer.clear()
         self.time_step = 0
+
+        return {"loss": loss.mean().item()}
         
     def save(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)

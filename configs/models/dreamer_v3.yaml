@@ -8,18 +8,34 @@ agent:
   value_lr: 8e-5
   
   # Network Configuration
-  # Network Configuration (XL Profile)
-  encoder_dim: 1024
-  encoder_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  encoder_dim: 128
+  encoder_fc_layers: [128, 128, 128, 128, 128]
   
-  rssm_deter_dim: 4096
+  rssm_deter_dim: 512
   rssm_stoch_dim: 32
   rssm_classes: 32
   
-  decoder_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  decoder_fc_layers: [128, 128, 128, 128, 128]
   
-  reward_fc_layers: [1024, 1024, 1024, 1024, 1024]
-  continue_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  reward_fc_layers: [128, 128, 128, 128, 128]
+  continue_fc_layers: [128, 128, 128, 128, 128]
   
-  actor_fc_layers: [1024, 1024, 1024, 1024, 1024]
-  critic_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  actor_fc_layers: [128, 128, 128, 128, 128]
+  critic_fc_layers: [128, 128, 128, 128, 128]
+
+
+  # # Network Configuration (XL Profile)
+  # encoder_dim: 1024
+  # encoder_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  
+  # rssm_deter_dim: 4096
+  # rssm_stoch_dim: 32
+  # rssm_classes: 32
+  
+  # decoder_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  
+  # reward_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  # continue_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  
+  # actor_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  # critic_fc_layers: [1024, 1024, 1024, 1024, 1024]

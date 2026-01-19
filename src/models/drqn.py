@@ -291,6 +291,8 @@ class DRQNAgent:
         # Update Target Network
         if self.steps_done % self.target_update_freq == 0:
             self.update_target_network()
+
+        return {"loss": loss.item()}
         
     def update_target_network(self):
         self.target_net.load_state_dict(self.policy_net.state_dict())

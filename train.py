@@ -53,6 +53,8 @@ import re
 import yaml
 import torch
 import random
+import csv
+from datetime import datetime
 import wandb
 
 import sys
@@ -198,7 +200,7 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=None, food_satiation_gain=None, max_steps=None, random_start_satiation=None, use_homeostatic_reward=None, satiation_setpoint=None, death_penalty=None, testing_seed=None, config_dict=None,
                 with_health=None, max_health=None, start_health=None, health_recovery=None, start_health_random=None,
                 danger_prob=None, danger_duration=None, damage_amount=None,
-                food_prob=None, food_duration=None, device="auto", quiet=False):
+                food_prob=None, food_duration=None, device="auto", quiet=False, debug=False):
     """
     Trains the RL Agent (Tabular Q-Learning, DQN, or PPO).
     """
@@ -636,8 +638,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     tabular_min_epsilon = 0.05
     
     # Progress Bar with tqdm
-    pbar = tqdm(range(episodes), desc="Training", unit="ep", disable=quiet)
+    pbar = tqdm(range(episodes), desc="Training", unit="ep", disable=quiet or debug)
     
+    losses = {} # Track latest losses for debug display
     for episode in pbar:
         # Reset External
         env_state = env.reset()
@@ -727,8 +730,29 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update
                 flat_next_state = preprocess_state(next_state)
                 agent.store_transition(flat_state, action, reward, flat_next_state, done)
-                agent.update()
                 
+                # Update and capture losses
+                start_upd = time.time()
+                update_result = agent.update()
+                upd_duration = (time.time() - start_upd) * 1000 # ms
+                
+                if isinstance(update_result, dict):
+                    losses = update_result # Store for debug display
+                    if wandb.run is not None:
+                        wandb.log(losses, commit=False) # Log losses but don't commit step yet
+                
+                # Dynamic Debug Print
+                if debug and not quiet:
+                    loss_str = ""
+                    if losses:
+                        # Extract key losses for display
+                        m_l = losses.get('model_loss', 0.123) # Placeholder if not dreamerv3
+                        a_l = losses.get('actor_loss', 0.123)
+                        c_l = losses.get('critic_loss', 0.123)
+                        loss_str = f"L:[M:{m_l:.2f} A:{a_l:.2f} C:{c_l:.2f}] "
+                    
+                    print(f"\rEp:{episode+1} St:{steps+1} Act:{action} R:{total_reward+reward:.1f} {loss_str}Time:{upd_duration:.1f}ms   ", end='', flush=True)
+
                 state = next_state # Tuple kept for logic
                 flat_state = flat_next_state # Flat for next iter
             else:
@@ -739,6 +763,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             total_reward += reward
             steps += 1
             
+        if debug and not quiet:
+            print() # Newline after dynamic status line
+        
         # End of Episode
         episode_epsilons.append(agent.epsilon if hasattr(agent, 'epsilon') else 0.0)
 
@@ -848,6 +875,7 @@ if __name__ == "__main__":
     parser.add_argument("--wandb-name", type=str, help="WandB Run Name")
     parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
     parser.add_argument("--quiet", action="store_true", help="Suppress output and progress bar")
+    parser.add_argument("--debug", action="store_true", help="Enable dynamic debug status and granular logging")
     args = parser.parse_args()
     
     # Load default config
@@ -924,4 +952,5 @@ if __name__ == "__main__":
                 food_prob=None, 
                 food_duration=None, 
                 device=args.device, 
-                quiet=args.quiet)
+                quiet=args.quiet,
+                debug=args.debug)
