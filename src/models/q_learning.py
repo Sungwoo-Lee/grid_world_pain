@@ -53,11 +53,11 @@ class QLearningAgent:
             
             if self.with_health and self.with_satiation:
                  # Height x Width x Satiation x Health x Actions
-                 self.q_table = np.zeros((self.env.height, self.env.width, self.env.max_satiation + 2, self.max_health + 2, 5))
+                 self.q_table = np.zeros((int(self.env.height), int(self.env.width), int(self.env.max_satiation) + 2, int(self.max_health) + 2, 5))
             elif self.with_satiation:
-                self.q_table = np.zeros((self.env.height, self.env.width, self.env.max_satiation + 2, 5))
+                 self.q_table = np.zeros((int(self.env.height), int(self.env.width), int(self.env.max_satiation) + 2, 5))
             else:
-                self.q_table = np.zeros((self.env.height, self.env.width, 5))
+                 self.q_table = np.zeros((int(self.env.height), int(self.env.width), 5))
 
     def choose_action(self, state):
         """

@@ -282,14 +282,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         )
         agent.load(checkpoint_path)
 
-    # Visualization Configuration
-    vis_enabled = config.get_mandatory('visualization.enabled')
-    vis_activations = config.get_mandatory('visualization.activations.enabled') and vis_enabled
-    vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
-    vis_fps = config.get_mandatory('visualization.fps', int)
-    save_h5 = config.get_mandatory('visualization.activations.save_h5') and vis_enabled
-
-    if algorithm == "DreamerV3":
+    elif algorithm == "DreamerV3":
         from src.models.dreamer_v3 import DreamerV3Agent
         agent = DreamerV3Agent(
             state_dim=input_dim,
@@ -331,9 +324,66 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             print(f"  Error loading checkpoint: {e}")
             return
 
-    # Setup Activation Monitor
+    # Visualization Configuration
+    vis_enabled = config.get_mandatory('visualization.enabled')
+    vis_activations = config.get_mandatory('visualization.activations.enabled') and vis_enabled
+    vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
+    vis_fps = config.get_mandatory('visualization.fps', int)
+    save_h5 = config.get_mandatory('visualization.activations.save_h5') and vis_enabled
 
+    # Setup Activation Monitor & LRP
     monitor = None
+    lrp_monitor = None
+    input_structure = []
+    
+    def append_frame_with_activations(game_frame, action=None, state=None):
+        nonlocal frames
+        act_frame = None
+        acts = None
+        if monitor:
+            acts = monitor.get_current_activations()
+            
+            # If empty (first frame), try to use template with zeros
+            if not acts and hasattr(monitor, 'template_activations') and monitor.template_activations:
+                    acts = {k: np.zeros_like(v) for k,v in monitor.template_activations.items()}
+            
+            # Compute Attributions if LRP monitor is active and we have an action
+            attributions = None
+            if lrp_monitor and action is not None and state is not None:
+                try:
+                    input_tensor = None
+                    if using_sensory:
+                        if isinstance(state, np.ndarray):
+                            input_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
+                    else:
+                        flat = preprocess_state(state)
+                        input_tensor = torch.FloatTensor(flat).unsqueeze(0).to(device)
+                        
+                    if algorithm in ["DRQN", "RecurrentPPO", "DreamerV3", "LSTM"]:
+                        if input_tensor is not None and input_tensor.ndim == 2:
+                            input_tensor = input_tensor.unsqueeze(1)
+
+                    if input_tensor is not None:
+                        attributions = lrp_monitor.compute_relevance(input_tensor, action)
+                except Exception as e:
+                    print(f"LRP Error: {e}")
+                    pass
+
+            # Visualize activations
+            act_frame = visualize_activations(
+                acts, 
+                game_frame.shape[1], 
+                config, 
+                input_structure=input_structure, 
+                attributions=attributions
+            )
+
+        combined = combine_frame_and_activations(game_frame, act_frame)
+        frames.append(combined)
+    
+        if acts and monitor and acts is not getattr(monitor, 'template_activations', None):
+                monitor.record_step()
+
     if algorithm != "Tabular Q-Learning" and vis_activations:
         model_to_monitor = None
         if isinstance(agent, torch.nn.Module):
@@ -401,124 +451,37 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 print(f"  Activation warm-up failed with error: {e}")
                 # Re-raise to stop execution and debug
                 raise e
-
-
-
-
-            # Define Input Structure for Visualization
-            input_structure = []
+            # Input Structure for Visualization
             if using_sensory:
                 input_structure.append(("Food", sensory_system.food_sensor.vector_size))
                 input_structure.append(("Danger", sensory_system.danger_sensor.vector_size))
             else:
-                input_structure.append(("Agent", 2)) # row, col
+                input_structure.append(("Agent", 2)) 
 
             if with_satiation:
                 input_structure.append(("Sat", 1))
                 if with_health:
-                     input_structure.append(("Hlth", 1))
-            
-            # Helper to process frame
-            def append_frame_with_activations(game_frame, action=None, state=None):
-                act_frame = None
-                if monitor:
-                    acts = monitor.get_current_activations()
-                    
-                    # If empty (first frame), try to use template with zeros
-                    if not acts and hasattr(monitor, 'template_activations') and monitor.template_activations:
-                         acts = {k: np.zeros_like(v) for k,v in monitor.template_activations.items()}
-                    
-                    # Compute Attributions if LRP monitor is active and we have an action
-                    attributions = None
-                    if lrp_monitor and action is not None and state is not None:
-                        # Convert state to tensor
-                        if not isinstance(state, torch.Tensor):
-                             # state is tuple or array. Preprocess logic duplication?
-                             # Reuse preprocess_state logic from checking inputs
-                             # We need the tensor that was passed to the model.
-                             # This is tricky because `choose_action` does preprocessing internally usually or we did it before.
-                             # In the loop below, `flat_state` is computed if sensory.
-                             # For non-sensory, `state` is tuple.
-                             # DQN `choose_action` takes numpy or tuple and converts to tensor internally.
-                             # We need to replicate that input tensor.
-                             try:
-                                 input_tensor = None
-                                 if using_sensory:
-                                      if isinstance(state, np.ndarray):
-                                          input_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
-                                 else:
-                                      flat = preprocess_state(state)
-                                      input_tensor = torch.FloatTensor(flat).unsqueeze(0).to(device)
-                                      
-                                 if algorithm in ["DRQN", "RecurrentPPO", "DreamerV3", "LSTM"]:
-                                     if input_tensor is not None and input_tensor.ndim == 2:
-                                         input_tensor = input_tensor.unsqueeze(1)
+                    input_structure.append(("Hlth", 1))
 
-                                 if input_tensor is not None:
-                                      attributions = lrp_monitor.compute_relevance(input_tensor, action)
-                             except Exception as e:
-                                 print(f"LRP Error: {e}")
-                                 pass
-
-                    # If still empty (warmup failed or no layers), visualize returns None
-                    # Use configuration from config object
-                    act_frame = visualize_activations(
-                        acts, 
-                        game_frame.shape[1], 
-                        config, 
-                        input_structure=input_structure, 
-                        attributions=attributions
-                    )
-
-                combined = combine_frame_and_activations(game_frame, act_frame)
-                frames.append(combined)
-            
-                if acts and acts is not getattr(monitor, 'template_activations', None):
-                     monitor.record_step()
-                else:
-                    pass # Don't record duplicate step if using template? Actually monitor logic handles it.
-
-            # Update append calls in loop
-            # Update append calls in loop
             # Initialize LRP monitor
-            lrp_monitor = None
             if vis_lrp:
                 try:
-                    if algorithm == "DQN":
-                        lrp_monitor = LRPMonitor(model_to_monitor)
+                    target_net = model_to_monitor
+                    if algorithm == "PPO":
+                        target_net = model_to_monitor.actor
+                    elif algorithm in ["DRQN", "DreamerV3"]:
+                        class OutputWrapper(torch.nn.Module):
+                            def __init__(self, model, index=0):
+                                super().__init__()
+                                self.model = model
+                                self.index = index
+                            def forward(self, x):
+                                return self.model(x)[self.index]
+                        target_net = OutputWrapper(model_to_monitor, 0)
                     
-                    elif algorithm == "PPO":
-                        # PPO: Monitor the Actor network
-                        # model_to_monitor is agent.policy (ActorCritic)
-                        lrp_monitor = LRPMonitor(model_to_monitor.actor)
-
-                    elif algorithm == "DRQN":
-                        # DRQN: Monitor policy_net (which IS model_to_monitor)
-                        # Wrapper needed for tuple return (q_values, hidden)
-                        class OutputWrapper(torch.nn.Module):
-                            def __init__(self, model, index=0):
-                                super().__init__()
-                                self.model = model
-                                self.index = index
-                            def forward(self, x):
-                                return self.model(x)[self.index]
-                        
-                        lrp_monitor = LRPMonitor(OutputWrapper(model_to_monitor, 0))
-
-                    elif algorithm == "DreamerV3":
-                        # DreamerV3: Monitor Agent forward pass (logits, post)
-                        class OutputWrapper(torch.nn.Module):
-                            def __init__(self, model, index=0):
-                                super().__init__()
-                                self.model = model
-                                self.index = index
-                            def forward(self, x):
-                                return self.model(x)[self.index]
-                                
-                        lrp_monitor = LRPMonitor(OutputWrapper(model_to_monitor, 0))
+                    lrp_monitor = LRPMonitor(target_net)
                 except Exception as e:
-                    print(f"Failed to initialize LRP for {algorithm}: {e}")
-                    lrp_monitor = None
+                    print(f"Failed to initialize LRP: {e}")
 
     # 3. Run Evaluation Episodes (Collect Frames)
     agent.epsilon = 0 # No exploration during evaluation
