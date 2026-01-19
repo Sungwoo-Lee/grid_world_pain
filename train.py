@@ -210,11 +210,13 @@ def train_agent(episodes=100000, seed=42, with_satiation=True, overeating_death=
         
         wandb_project = config_dict.get('wandb.project', 'grid_world_pain')
         wandb_group = config_dict.get('wandb.group', None)
+        wandb_job_type = config_dict.get('wandb.job_type', None)
         wandb_name = config_dict.get('wandb.name', None)
         
         wandb.init(
             project=wandb_project,
             group=wandb_group,
+            job_type=wandb_job_type,
             name=wandb_name,
             config=config_dict.to_dict(),
             reinit=True
@@ -785,6 +787,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
     parser.add_argument("--wandb-project", type=str, help="WandB Project Name")
     parser.add_argument("--wandb-group", type=str, help="WandB Group Name")
+    parser.add_argument("--wandb-job-type", type=str, help="WandB Job Type")
     parser.add_argument("--wandb-name", type=str, help="WandB Run Name")
     parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
     parser.add_argument("--quiet", action="store_true", help="Suppress output and progress bar")
@@ -798,9 +801,21 @@ if __name__ == "__main__":
     wandb_config_path = "configs/wandb.yaml"
     if os.path.exists(wandb_config_path):
         if not args.quiet:
-            print(f"Loading WandB config from: {wandb_config_path}")
-        wandb_config = Config.load_yaml(wandb_config_path)
-        config.merge(wandb_config)
+            print(f"Loading WandB config from {wandb_config_path}")
+        wandb_config = Config(wandb_config_path)
+        config.update(wandb_config._config)
+        
+    # Override WandB settings with CLI args
+    if args.wandb_project:
+        config.set('wandb.project', args.wandb_project)
+    if args.wandb_group:
+        config.set('wandb.group', args.wandb_group)
+    if args.wandb_job_type:
+        config.set('wandb.job_type', args.wandb_job_type)
+    if args.wandb_name:
+        config.set('wandb.name', args.wandb_name)
+    if args.no_wandb:
+        config.set('wandb.disabled', True)
 
     # Load and merge agent config
     if args.agent_config:
@@ -812,22 +827,10 @@ if __name__ == "__main__":
     # Set tag
     config.set('tag', args.tag)
     
-    # Set WandB Config - CLI overrides config file
-    if args.no_wandb:
-        config.set('wandb.disabled', True)
-    else:
-        # Only set if arg is provided
-        if args.wandb_project:
-             config.set('wandb.project', args.wandb_project)
-        
-        if args.wandb_group:
-            config.set('wandb.group', args.wandb_group)
-        if args.wandb_name:
-            config.set('wandb.name', args.wandb_name)
-            
-        # Ensure mode uses config if not disabled via CLI
-        if not config.get('wandb.disabled'):
-             config.set('wandb.disabled', config.get('wandb.mode') == 'disabled')
+    # Ensure mode uses config if not disabled via CLI
+    if not config.get('wandb.disabled'):
+         if config.get('wandb.mode') == 'disabled':
+             config.set('wandb.disabled', True)
         
     # Overrides
     # Prioritize Args > Config.

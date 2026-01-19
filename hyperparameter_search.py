@@ -128,7 +128,7 @@ def generate_config(base_config_path, params, output_path):
     with open(output_path, 'w') as f:
         yaml.dump(config, f)
 
-def run_single_combination(params, algorithm, episodes, seed, wandb_project, wandb_group, dry_run, index, total):
+def run_single_combination(params, algorithm, episodes, seed, wandb_project, wandb_group, wandb_job_type, dry_run, index, total):
     """
     Worker function to run a single hyperparameter combination.
     """
@@ -173,6 +173,10 @@ def run_single_combination(params, algorithm, episodes, seed, wandb_project, wan
         "--wandb-name", tag,
         "--quiet"
     ]
+    
+    if wandb_job_type:
+        cmd.extend(["--wandb-job-type", wandb_job_type])
+
 
     if dry_run:
         print(f"Dry Run Command: {' '.join(cmd)}")
@@ -193,7 +197,7 @@ def run_single_combination_wrapper(args):
     """Wrapper to unpack arguments for imap."""
     return run_single_combination(*args)
 
-def run_search(algorithm, episodes, seed, wandb_project, num_processes=1, dry_run=False):
+def run_search(algorithm, episodes, seed, wandb_project, num_processes=1, dry_run=False, wandb_job_type="hyperparameter_search"):
     if algorithm not in SEARCH_SPACES:
         print(f"Error: Algorithm '{algorithm}' not found in search spaces.")
         print(f"Available: {list(SEARCH_SPACES.keys())}")
@@ -216,7 +220,7 @@ def run_search(algorithm, episodes, seed, wandb_project, num_processes=1, dry_ru
     tasks = []
     for i, combo in enumerate(combinations):
         params = dict(zip(keys, combo))
-        tasks.append((params, algorithm, episodes, seed, wandb_project, wandb_group, dry_run, i+1, total_combinations))
+        tasks.append((params, algorithm, episodes, seed, wandb_project, wandb_group, wandb_job_type, dry_run, i+1, total_combinations))
     
     if num_processes > 1:
         with multiprocessing.Pool(processes=num_processes) as pool:
@@ -251,10 +255,11 @@ def main():
                 default_project = wc['wandb']['project']
 
     parser.add_argument("--wandb-project", type=str, default=default_project, help=f"WandB Project Name (default: {default_project})")
+    parser.add_argument("--wandb-job-type", type=str, default="hyperparameter_search", help="WandB Job Type (default: hyperparameter_search)")
     
     args = parser.parse_args()
     
-    run_search(args.algorithm, args.episodes, args.seed, args.wandb_project, args.num_processes, args.dry_run)
+    run_search(args.algorithm, args.episodes, args.seed, args.wandb_project, args.num_processes, args.dry_run, args.wandb_job_type)
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn", force=True) # Safe for pytorch/cuda
