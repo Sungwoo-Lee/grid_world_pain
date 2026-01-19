@@ -1,24 +1,25 @@
 agent:
   algorithm: "DreamerV3"
   batch_size: 16
-  batch_length: 16
+  batch_length: 64
   train_steps: 1
   model_lr: 1e-4
   actor_lr: 8e-5
   value_lr: 8e-5
   
   # Network Configuration
-  encoder_dim: 256
-  encoder_fc_layers: [256]
+  # Network Configuration (XL Profile)
+  encoder_dim: 1024
+  encoder_fc_layers: [1024, 1024, 1024, 1024, 1024]
   
-  rssm_deter_dim: 256
+  rssm_deter_dim: 4096
   rssm_stoch_dim: 32
   rssm_classes: 32
   
-  decoder_fc_layers: [256, 256]
+  decoder_fc_layers: [1024, 1024, 1024, 1024, 1024]
   
-  reward_fc_layers: [256, 256]
-  continue_fc_layers: [256, 256]
+  reward_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  continue_fc_layers: [1024, 1024, 1024, 1024, 1024]
   
-  actor_fc_layers: [256, 256]
-  critic_fc_layers: [256, 256]
+  actor_fc_layers: [1024, 1024, 1024, 1024, 1024]
+  critic_fc_layers: [1024, 1024, 1024, 1024, 1024]

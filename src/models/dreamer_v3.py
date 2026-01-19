@@ -19,6 +19,95 @@ class EMAMixin:
         for t, s in zip(target.parameters(), source.parameters()):
             t.data.mul_(rate).add_(s.data, alpha=1 - rate)
 
+class Moments(nn.Module):
+    def __init__(
+        self,
+        decay: float = 0.99,
+        max_: float = 1e8,
+        percentile_low: float = 0.05,
+        percentile_high: float = 0.95,
+    ) -> None:
+        super().__init__()
+        self._decay = decay
+        self._max = torch.tensor(max_)
+        self._percentile_low = percentile_low
+        self._percentile_high = percentile_high
+        self.register_buffer("low", torch.zeros((), dtype=torch.float32))
+        self.register_buffer("high", torch.zeros((), dtype=torch.float32))
+
+    def forward(self, x: torch.Tensor) -> Any:
+        # We don't have fabric, so we don't gather. Assuming single GPU/CPU for now.
+        # gathered_x = fabric.all_gather(x).float().detach() 
+        gathered_x = x.float().detach()
+        low = torch.quantile(gathered_x, self._percentile_low)
+        high = torch.quantile(gathered_x, self._percentile_high)
+        self.low = self._decay * self.low + (1 - self._decay) * low
+        self.high = self._decay * self.high + (1 - self._decay) * high
+        invscale = torch.max(1 / self._max, self.high - self.low)
+        return self.low.detach(), invscale.detach()
+
+def compute_lambda_values(
+    rewards: torch.Tensor,
+    values: torch.Tensor,
+    continues: torch.Tensor,
+    lmbda: float = 0.95,
+):
+    # ret = torch.zeros_like(values)
+    # ret[:, -1] = values[:, -1]
+    # for t in reversed(range(values.shape[1] - 1)):
+    #     ret[:, t] = rewards[:, t] + continues[:, t] * ((1 - lmbda) * values[:, t+1] + lmbda * ret[:, t+1])
+    # return ret
+    
+    # SheepRL implementation:
+    vals = [values[-1:]]
+    interm = rewards + continues * values * (1 - lmbda)
+    for t in reversed(range(len(continues))):
+        vals.append(interm[t] + continues[t] * lmbda * vals[-1])
+    ret = torch.cat(list(reversed(vals))[:-1])
+    return ret
+
+def init_weights(m):
+    if isinstance(m, nn.Linear):
+        in_num = m.in_features
+        out_num = m.out_features
+        denoms = (in_num + out_num) / 2.0
+        scale = 1.0 / denoms
+        std = np.sqrt(scale) / 0.87962566103423978
+        nn.init.trunc_normal_(m.weight.data, mean=0.0, std=std, a=-2.0 * std, b=2.0 * std)
+        if hasattr(m.bias, "data"):
+            m.bias.data.fill_(0.0)
+    elif isinstance(m, nn.Conv2d) or isinstance(m, nn.ConvTranspose2d):
+        space = m.kernel_size[0] * m.kernel_size[1]
+        in_num = space * m.in_channels
+        out_num = space * m.out_channels
+        denoms = (in_num + out_num) / 2.0
+        scale = 1.0 / denoms
+        std = np.sqrt(scale) / 0.87962566103423978
+        nn.init.trunc_normal_(m.weight.data, mean=0.0, std=std, a=-2.0, b=2.0)
+        if hasattr(m.bias, "data"):
+            m.bias.data.fill_(0.0)
+    elif isinstance(m, nn.LayerNorm):
+        m.weight.data.fill_(1.0)
+        if hasattr(m.bias, "data"):
+            m.bias.data.fill_(0.0)
+
+def uniform_init_weights(given_scale):
+    def f(m):
+        if isinstance(m, nn.Linear):
+            in_num = m.in_features
+            out_num = m.out_features
+            denoms = (in_num + out_num) / 2.0
+            scale = given_scale / denoms
+            limit = np.sqrt(3 * scale)
+            nn.init.uniform_(m.weight.data, a=-limit, b=limit)
+            if hasattr(m.bias, "data"):
+                m.bias.data.fill_(0.0)
+        elif isinstance(m, nn.LayerNorm):
+            m.weight.data.fill_(1.0)
+            if hasattr(m.bias, "data"):
+                m.bias.data.fill_(0.0)
+    return f
+
 class LayerNormGRUCell(nn.Module):
     def __init__(self, input_size, hidden_size):
         super().__init__()
@@ -401,6 +490,19 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         self.target_critic = MLP(feat_dim, 255, critic_fc_layers).to(self.device)
         self.target_critic.load_state_dict(self.critic.state_dict())
         
+        # [NEW] Moments for Return Normalization
+        self.moments = Moments(decay=0.99, max_=1.0, percentile_low=0.05, percentile_high=0.95).to(self.device)
+        
+        # [NEW] Initialization
+        self.encoder.apply(uniform_init_weights(1.0))
+        self.decoder.apply(uniform_init_weights(1.0))
+        self.rssm.apply(uniform_init_weights(1.0))
+        self.reward_pred.apply(uniform_init_weights(1.0))
+        self.continue_pred.apply(uniform_init_weights(1.0))
+        self.actor.apply(uniform_init_weights(1.0))
+        self.critic.apply(uniform_init_weights(1.0))
+        self.target_critic.load_state_dict(self.critic.state_dict())
+        
         # Optimizers
         self.model_opt = torch.optim.Adam([
             {'params': self.encoder.parameters()},
@@ -637,26 +739,21 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         
         imag_rews = torch.stack(imag_rews) # (H, B*T)
         imag_conts = torch.sigmoid(torch.stack(imag_conts).squeeze(-1))
-        imag_values = []
         
-        lambda_ = 0.95
-        R = next_values
-        for t in reversed(range(horizon)):
-            r = imag_rews[t]
-            c = imag_conts[t]
-            # [NEW] Decode V_pred for lambda return mixing
-            v_pred = from_twohot(self.target_critic(imag_feats[t]))
-            R = r + 0.997 * c * ((1 - lambda_) * v_pred + lambda_ * R)
-            imag_values.insert(0, R)
-            
-        imag_values = torch.stack(imag_values)
+        lambda_values = compute_lambda_values(
+             imag_rews,
+             next_values, 
+             imag_conts,
+             lmbda=0.95
+        )
+        
         imag_feats = torch.stack(imag_feats)
         imag_log_probs = torch.stack(imag_log_probs)
         
         # Critic Update
         v_pred_logits = self.critic(imag_feats.detach())
         # [NEW] Target TwoHot
-        target_value_twohot = to_twohot(imag_values.detach())
+        target_value_twohot = to_twohot(lambda_values.detach())
         critic_loss = -torch.mean(torch.sum(target_value_twohot * F.log_softmax(v_pred_logits, dim=-1), dim=-1))
         
         self.critic_opt.zero_grad()
@@ -664,18 +761,19 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         self.critic_opt.step()
         
         # Actor Update
-        # [NEW] Reinforce + Entropy
-        # Loss = - (R - V).detach * log_prob - entropy_scale * entropy
+        # [NEW] Reinforce + Entropy + Moments Normalization
         
         baseline = from_twohot(v_pred_logits.detach())
-        advantage = (imag_values - baseline).detach()
+        
+        # Update Moments
+        offset, invscale = self.moments(lambda_values.detach())
+        normed_lambda_values = (lambda_values - offset) / invscale
+        normed_baseline = (baseline - offset) / invscale
+        advantage = (normed_lambda_values - normed_baseline).detach()
         
         # Entropy
         act_dist_imag = D.Categorical(logits=torch.stack(imag_acts))
         entropy = act_dist_imag.entropy()
-        
-        # Normalize Advantage? Often helpful but V3 uses fixed scales usually. 
-        # Using raw advantage.
         
         actor_loss = -(advantage * imag_log_probs + 3e-4 * entropy).mean()
         
