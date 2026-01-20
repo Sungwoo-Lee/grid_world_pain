@@ -71,7 +71,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     if not match:
         match = re.search(r"dreamer_model_(\d+).pth", filename)
         
-    pct = match.group(1) if match else ("final" if "final" in filename or filename == "q_table.npy" else "unknown")
+    pct = match.group(1) if match else "unknown"
     
     print(f"Evaluating checkpoint: {filename} ({pct}%)")
 
@@ -650,18 +650,18 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         os.makedirs(plots_dir, exist_ok=True) # Ensure directory exists
        # Visualization Plotting
     if algorithm == "Tabular Q-Learning":
-        vis_filename = os.path.join(plots_dir, f"q_table_{pct}.png" if pct != "final" else "q_table_final.png")
+        vis_filename = os.path.join(plots_dir, f"q_table_{pct}.png")
         plot_q_table(agent.q_table, vis_filename, config, resource_pos)
     
     # Save Video
     videos_dir = os.path.join(results_dir, "videos")
     os.makedirs(videos_dir, exist_ok=True)
-    video_filename = os.path.join(videos_dir, f"video_{pct}.mp4" if pct != "final" else "final_trained_agent.mp4")
+    video_filename = os.path.join(videos_dir, f"video_{pct}.mp4")
     save_video(frames, video_filename, fps=vis_fps)
 
     # Save Activations
     if monitor and save_h5:
-        activations_file = os.path.join(data_dir, f"activations_{pct}.h5" if pct != "final" else "activations_final.h5")
+        activations_file = os.path.join(data_dir, f"activations_{pct}.h5")
         monitor.save_history(activations_file)
         monitor.close()
 
@@ -673,6 +673,8 @@ def main():
     parser.add_argument("--seed", type=int, help="Override testing seed")
     parser.add_argument("--episodes", type=int, help="Number of episodes to evaluate")
     parser.add_argument("--results_dir", type=str, required=True, help="Path to results directory (Required)")
+    parser.add_argument("--checkpoint", type=str, help="Specific checkpoint name or path to evaluate (e.g. 'model_100.pth' or full path)")
+    parser.add_argument("--all", action="store_true", help="Evaluate all checkpoints found in the directory")
     args = parser.parse_args()
 
     results_dir = args.results_dir
@@ -701,10 +703,12 @@ def main():
         
     # Determine params: CLI > Default Config > Hardcoded Fallback
     testing_seed = args.seed or eval_defaults.get('testing.seed')
-    if testing_seed is None: testing_seed = 56
+    if testing_seed is None:
+        raise ValueError("Strict Config: 'testing.seed' must be provided via CLI or configs/evaluation/default.yaml")
     
     eval_episodes = args.episodes or eval_defaults.get('testing.evaluation_episodes')
-    if eval_episodes is None: eval_episodes = 1
+    if eval_episodes is None:
+        raise ValueError("Strict Config: 'testing.evaluation_episodes' must be provided via CLI or configs/evaluation/default.yaml")
     
     config.set('testing.seed', testing_seed)
     config.set('testing.evaluation_episodes', eval_episodes)
@@ -718,55 +722,83 @@ def main():
     print("-" * 40)
 
     # 4. Find all checkpoints
+    # 4. Find checkpoints
     algorithm = config.get_mandatory('agent.algorithm')
     
-    if algorithm == "DQN":
-        checkpoints = glob.glob(os.path.join(models_dir, "dqn_model_*.pth"))
+    # Helper to clean model naming
+    prefix = ""
+    if algorithm == "DQN": prefix = "dqn_model_"
+    elif algorithm == "PPO": prefix = "ppo_model_"
+    elif algorithm == "DRQN": prefix = "drqn_model_"
+    elif algorithm == "RecurrentPPO": prefix = "recurrent_ppo_model_"
+    elif algorithm == "DreamerV3": prefix = "dreamer_model_"
+    else: prefix = "q_table_"
+
+    ext = ".npy" if algorithm == "Tabular Q-Learning" else ".pth"
+
+    checkpoints = []
+    
+    if args.checkpoint:
+        # User specified a specific checkpoint
+        ckpt_arg = args.checkpoint
+        
+        # Check 1: Is it a full path?
+        if os.path.exists(ckpt_arg):
+             checkpoints.append(ckpt_arg)
+        else:
+             # Check 2: specific name in models_dir
+             ckpt_path = os.path.join(models_dir, ckpt_arg)
+             if os.path.exists(ckpt_path):
+                 checkpoints.append(ckpt_path)
+             else:
+                 # Check 3: maybe just the number? e.g. "100"
+                 ckpt_name = f"{prefix}{ckpt_arg}{ext}"
+                 ckpt_path = os.path.join(models_dir, ckpt_name)
+                 if os.path.exists(ckpt_path):
+                     checkpoints.append(ckpt_path)
+                 else:
+                     print(f"Error: Specified checkpoint '{args.checkpoint}' not found.")
+                     return
+
+    elif args.all:
+        # Evaluate ALL found
+        if algorithm == "Tabular Q-Learning":
+            checkpoints = glob.glob(os.path.join(models_dir, f"{prefix}*{ext}"))
+        else:
+            checkpoints = glob.glob(os.path.join(models_dir, f"{prefix}*{ext}"))
+            
+        # Sort by number
         def extract_number(path):
-            match = re.search(r"dqn_model_(\d+).pth", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "dqn_model_final.pth")
-    elif algorithm == "PPO":
-        checkpoints = glob.glob(os.path.join(models_dir, "ppo_model_*.pth"))
-        def extract_number(path):
-            match = re.search(r"ppo_model_(\d+).pth", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "ppo_model_final.pth")
-    elif algorithm == "DRQN":
-        checkpoints = glob.glob(os.path.join(models_dir, "drqn_model_*.pth"))
-        def extract_number(path):
-            match = re.search(r"drqn_model_(\d+).pth", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "drqn_model_final.pth")
-    elif algorithm == "RecurrentPPO":
-        checkpoints = glob.glob(os.path.join(models_dir, "recurrent_ppo_model_*.pth"))
-        def extract_number(path):
-            match = re.search(r"recurrent_ppo_model_(\d+).pth", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "recurrent_ppo_model_final.pth")
-    elif algorithm == "DreamerV3":
-        checkpoints = glob.glob(os.path.join(models_dir, "dreamer_model_*.pth"))
-        def extract_number(path):
-            match = re.search(r"dreamer_model_(\d+).pth", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "dreamer_model_final.pth")
+            filename = os.path.basename(path)
+            # Match number
+            match = re.search(rf"{prefix}(\d+){ext}", filename)
+            if match:
+                return int(match.group(1))
+            return -1
+        
+        checkpoints.sort(key=extract_number)
+        
     else:
-        checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
-        def extract_number(path):
-            match = re.search(r"q_table_(\d+).npy", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "q_table.npy")
+        # Default: Evaluate LATEST numeric checkpoint
+        # Find latest numeric
+        all_ckpts = glob.glob(os.path.join(models_dir, f"{prefix}*{ext}"))
+        if all_ckpts:
+            def extract_number(path):
+                    match = re.search(rf"{prefix}(\d+){ext}", os.path.basename(path))
+                    return int(match.group(1)) if match else -1
+            
+            # Filter out any that didn't match (e.g. if some other file exists)
+            valid_ckpts = [c for c in all_ckpts if extract_number(c) != -1]
+            
+            if valid_ckpts:
+                latest = max(valid_ckpts, key=extract_number)
+                checkpoints.append(latest)
     
-    checkpoints.sort(key=extract_number)
-    
-    if os.path.exists(final_model):
-        checkpoints.append(final_model)
-
     if not checkpoints:
-        print(f"No model checkpoints found in {models_dir}")
-        return
-
-    print(f"Found {len(checkpoints)} checkpoints. Starting evaluation...")
+         print(f"No valid checkpoints found in {models_dir}")
+         return
+         
+    print(f"Found {len(checkpoints)} checkpoint(s). Starting evaluation...")
 
     # 5. Evaluate each checkpoint
     for checkpoint in checkpoints:

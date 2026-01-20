@@ -841,20 +841,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     if not quiet:
         print(f"Training completed in {training_time:.2f} seconds.")
     
-    # Final model save
-    if isinstance(agent, DQNAgent):
-         model_filename = os.path.join(models_dir, "dqn_model_final.pth")
-    elif isinstance(agent, DRQNAgent):
-         model_filename = os.path.join(models_dir, "drqn_model_final.pth")
-    elif isinstance(agent, PPOAgent):
-         model_filename = os.path.join(models_dir, "ppo_model_final.pth")
-    elif isinstance(agent, RecurrentPPOAgent):
-         model_filename = os.path.join(models_dir, "recurrent_ppo_model_final.pth")
-    elif isinstance(agent, DreamerV3Agent):
-         model_filename = os.path.join(models_dir, "dreamer_model_final.pth")
-    else:
-         model_filename = os.path.join(models_dir, "q_table.npy")
-    agent.save(model_filename)
+    # Final model save removed (redundant with frequency checkpointing)
+    # The last checkpoint is sufficient if frequency aligns or user can use latest.
+
     
     # Save training history
     import csv
