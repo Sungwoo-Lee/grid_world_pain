@@ -37,9 +37,9 @@ sensory:
   sensor_radius: 5 # Default: 2
   # Decay Formula: decay = 1.0 / (distance ** decay_power)
   decay_power: 1.0 
-  vector_size: 10
-  food_property: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-  danger_property: [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  vector_size: 5
+  food_property: [1.0, 0.0, 0.0, 0.0, 0.0]
+  danger_property: [0.0, 1.0, 0.0, 0.0, 0.0]
 
 training:
   training_episode: 100

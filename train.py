@@ -245,9 +245,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     if using_sensory:
         sensor_radius = config_dict.get_mandatory('sensory.sensor_radius')
         decay_power = config_dict.get('sensory.decay_power', 1.0)
+        vector_size = config_dict.get('sensory.vector_size', 10)
     else:
         sensor_radius = 1 # Dummy
         decay_power = 1.0 # Dummy
+        vector_size = 10 # Dummy
     
     # Professional Config Summary
     if config_dict is None:
@@ -368,7 +370,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         food_prob=food_prob,
         food_duration=food_duration,
         relocate_resource=config_dict.get_mandatory('environment.relocate_resource'),
-        relocation_steps=config_dict.get_mandatory('environment.relocation_steps')
+        relocation_steps=config_dict.get_mandatory('environment.relocation_steps'),
+        vector_size=config_dict.get('sensory.vector_size', 10),
+        food_property=config_dict.get('sensory.food_property', None),
+        danger_property=config_dict.get('sensory.danger_property', None)
     )
     
     body = InteroceptiveBody(
@@ -388,8 +393,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     sensory_system = None
     if using_sensory:
         if not quiet:
-            print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power})")
-        sensory_system = SensorySystem(sensor_radius=sensor_radius, decay_power=decay_power)
+            print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size})")
+        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power)
 
     # Define Preprocessor for DQN
     def preprocess_state(state_tuple):

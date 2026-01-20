@@ -128,7 +128,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     env = GridWorld(height=height, width=width, resource_pos=resource_pos, with_satiation=with_satiation, max_steps=max_steps,
                     danger_prob=pain_prob, danger_duration=pain_duration, damage_amount=damage_amount,
                     food_prob=food_prob, food_duration=food_duration,
-                    relocate_resource=relocate_resource, relocation_steps=relocation_steps)
+                    relocate_resource=relocate_resource, relocation_steps=relocation_steps,
+                    vector_size=config.get('sensory.vector_size', 10),
+                    food_property=config.get('sensory.food_property', None),
+                    danger_property=config.get('sensory.danger_property', None))
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
         start_satiation=start_satiation, 
@@ -151,7 +154,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     if using_sensory:
         sensor_radius = config.get_mandatory('sensory.sensor_radius', int)
         decay_power = config.get('sensory.decay_power', 1.0) # Not mandatory in old configs
-        sensory_system = SensorySystem(sensor_radius=sensor_radius, decay_power=decay_power)
+        vector_size = config.get('sensory.vector_size', 10)
+        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power)
 
     # Preprocessor for DQN
     def preprocess_state(state_tuple):
