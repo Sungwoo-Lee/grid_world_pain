@@ -498,11 +498,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         
         # Determine initial sensory state
         current_agent_pos = env.agent_pos
-        current_danger_pos_list = []
-        if env.is_danger:
-             current_danger_pos_list = [env.resource_pos]
+        
         if using_sensory:
-            sensory_state = sensory_system.sense(current_agent_pos, env.resource_pos, current_danger_pos_list)
+            resources = env.get_active_resources()
+            sensory_state = sensory_system.sense(current_agent_pos, resources)
 
         if with_satiation:
             body_return = body.reset()
@@ -560,12 +559,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             
             # Observations
             current_agent_pos = env.agent_pos
-            current_danger_pos_list = []
-            if env.is_danger:
-                 current_danger_pos_list = [env.resource_pos]
             
             if using_sensory:
-                 next_sensory_state = sensory_system.sense(current_agent_pos, env.resource_pos, current_danger_pos_list)
+                 resources = env.get_active_resources()
+                 next_sensory_state = sensory_system.sense(current_agent_pos, resources)
             
             if with_satiation:
                 body_return, _, body_done = body.step(info)

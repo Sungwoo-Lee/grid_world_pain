@@ -3,6 +3,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
 
+
+from collections import namedtuple
+
+# Define Resource: Position, Property Vector
+Resource = namedtuple('Resource', ['pos', 'property', 'name'])
+
 class GridWorld:
     """
     A simple 2D GridWorld environment for Reinforcement Learning.
@@ -33,7 +39,8 @@ class GridWorld:
     
     def __init__(self, height=5, width=5, start=(0, 0), resource_pos=(4, 4), with_satiation=True, max_steps=100,
                  danger_prob=0.1, danger_duration=5, damage_amount=5,
-                 food_prob=0.2, food_duration=10, relocate_resource=False, relocation_steps=20):
+                 food_prob=0.2, food_duration=10, relocate_resource=False, relocation_steps=20,
+                 vector_size=10, food_property=None, danger_property=None):
         """
         Initializes the GridWorld foraging environment.
 
@@ -59,6 +66,22 @@ class GridWorld:
         self.max_steps = max_steps
         self.current_step = 0
         
+        # Resource Property Vectors
+        self.vector_size = vector_size
+        
+        # Default Logic if None
+        if food_property is None:
+            self.food_property = np.zeros(self.vector_size)
+            self.food_property[0] = 1.0
+        else:
+             self.food_property = np.array(food_property, dtype=np.float32)
+
+        if danger_property is None:
+            self.danger_property = np.zeros(self.vector_size)
+            self.danger_property[1] = 1.0
+        else:
+             self.danger_property = np.array(danger_property, dtype=np.float32)
+        
         # Resource State Machine (Food <-> Danger)
         # Requirement: At least one is active.
         self.danger_prob = danger_prob
@@ -79,9 +102,22 @@ class GridWorld:
     def is_danger(self):
         return self.resource_state == 'danger'
         
+
     @property
     def is_food_active(self):
         return self.resource_state == 'food'
+        
+    def get_active_resources(self):
+        """
+        Returns a list of active Resource objects in the environment.
+        Used by the ResourceSensor.
+        """
+        resources = []
+        if self.is_food_active:
+            resources.append(Resource(self.resource_pos, self.food_property, 'Food'))
+        elif self.is_danger:
+            resources.append(Resource(self.resource_pos, self.danger_property, 'Danger'))
+        return resources
 
     def reset(self):
         """
@@ -363,61 +399,131 @@ class GridWorld:
             num_sensors = len(sensory_data)
             # We'll just place them manually
             
+
             for i, sensor in enumerate(sensory_data):
                 # Calculate center y position for this sensor
                 y_center = 0.75 - (i * 0.45) 
                 
                 # Sensor Label
                 name = sensor['name']
-                vector = sensor['vector']
+                # Check for new 'intensity' key, fallback to 'vector' for safety/legacy
+                intensity = sensor.get('intensity', None)
+                vector = sensor.get('vector', None)
                 radius = sensor['radius']
-                offsets = sensor['offsets']
                 color = sensor['color'] # Hex color
                 
                 ax_sensory.text(0.1, y_center + 0.15, name.upper(), color=text_color, fontsize=9, fontweight='bold', transform=ax_sensory.transAxes)
                 
-                # Draw Mini Grid centered at (0.5, y_center) in axes coords?
-                # Actually better to use inset axes or just plot scatter points in transform coordinates
-                # Let's try drawing simple circles for the relative grid
-                
-                # Center of this sensor display in Axes Coords
-                cx, cy = 0.5, y_center
-                
-                # Scale factor for dots
-                scale = 0.08
-                
-                # Draw Center (Agent)
-                agent_dot = plt.Circle((cx, cy), scale/1.5, color='grey', transform=ax_sensory.transAxes, alpha=0.5)
-                ax_sensory.add_patch(agent_dot)
-                
-                # Draw Offsets
-                # We map offsets (dx, dy) to (cx + dx*scale, cy - dy*scale) 
-                # Note: y is up in plot usually, grid row is down. dy>0 means Down. So y_plot - dy.
-                
-                # Create a set of active offsets for quick lookup
-                active_indices = [idx for idx, val in enumerate(vector) if val == 1]
-                
-                # We need to match offsets to vector indices. 
-                # SensoryModule sorts offsets. Assuming `offsets` list passed stands for vector indices order.
-                
-                for idx, (dr, dc) in enumerate(offsets):
-                    px = cx + dc * scale
-                    py = cy - dr * scale # Invert row for plot Y
+                if intensity is not None:
+                    # --- INTENSITY VISUALIZATION (Scalar) ---
+                    # 1. Text Value
+                    ax_sensory.text(0.8, y_center + 0.15, f"{intensity:.2f}", color=color, fontsize=9, fontweight='bold', ha='right', transform=ax_sensory.transAxes)
                     
-                    is_active = (idx in active_indices) or (vector[idx] == 1)
+                    # 2. Intensity Bar
+                    max_val = 2.0
+                    bar_width = 0.6
+                    bar_height = 0.05
+                    pct = min(1.0, intensity / max_val)
                     
-                    dot_color = color if is_active else '#DEE2E6' # Active vs Inactive Grey
-                    edge_color = 'white'
-                    alpha = 1.0 if is_active else 0.5
-                    size = scale
+                    rect_bg = plt.Rectangle((0.15, y_center), bar_width, bar_height, color='#F1F3F5', transform=ax_sensory.transAxes, ec='none')
+                    ax_sensory.add_patch(rect_bg)
                     
-                    dot = plt.Circle((px, py), size, facecolor=dot_color, edgecolor=edge_color, transform=ax_sensory.transAxes, alpha=alpha)
-                    ax_sensory.add_patch(dot)
+                    rect_fill = plt.Rectangle((0.15, y_center), bar_width * pct, bar_height, color=color, transform=ax_sensory.transAxes, ec='none', alpha=0.8)
+                    ax_sensory.add_patch(rect_fill)
                     
-                    # Optional: Add small ring if active to make it "glow"
-                    if is_active:
-                         glow = plt.Circle((px, py), size*1.3, facecolor='none', edgecolor=color, linewidth=1, transform=ax_sensory.transAxes, alpha=0.5)
-                         ax_sensory.add_patch(glow)
+                    # 3. Glow Orb
+                    cx, cy = 0.5, y_center - 0.15
+                    orb_radius = 0.12
+                    base_circle = plt.Circle((cx, cy), orb_radius, facecolor='none', edgecolor=color, alpha=0.3, transform=ax_sensory.transAxes, lw=1)
+                    ax_sensory.add_patch(base_circle)
+                    alpha = min(1.0, intensity * 0.8 + 0.1) if intensity > 0 else 0.05
+                    fill_circle = plt.Circle((cx, cy), orb_radius * 0.8, facecolor=color, edgecolor='none', alpha=alpha, transform=ax_sensory.transAxes)
+                    ax_sensory.add_patch(fill_circle)
+                    
+                elif vector is not None:
+                    # Check if Legacy or Spectrum
+                    if sensor.get('type') == 'spectrum' or 'offsets' not in sensor:
+                        # --- SPECTRUM VISUALIZATION (Vector Bar Chart) ---
+                        # Display a small bar chart of the vector components
+                        num_channels = len(vector)
+                        ax_sensory.text(0.8, y_center + 0.25, f"Vec[{num_channels}]", color='#868e96', fontsize=8, ha='right', transform=ax_sensory.transAxes)
+                        
+                        # Use Grid or Bars
+                        # Let's do horizontal bars for channels 0..N
+                        # Or vertical bars? Horizontal fits better in the slot.
+                        
+                        slot_width = 0.7
+                        slot_height = 0.25
+                        slot_x = 0.15
+                        slot_y = y_center - 0.1
+                        
+                        # Bar width depends on N
+                        bar_w = slot_width / num_channels
+                        bar_gap = bar_w * 0.2
+                        actual_bar_w = bar_w - bar_gap
+                        
+                        max_val = 2.0 # Cap for viz
+                        
+                        colors = ['#40C057', '#FA5252', '#339AF0', '#fab005', '#be4bdb', '#20c997'] 
+                        # Green(Food), Red(Danger), Blue, Yellow, Grape, Teal
+                        
+                        for idx, val in enumerate(vector):
+                            val = float(val) # ensure float
+                            bx = slot_x + (idx * bar_w)
+                            
+                            # Bg
+                            bg_h = slot_height
+                            rect_bg = plt.Rectangle((bx, slot_y), actual_bar_w, bg_h, color='#F1F3F5', transform=ax_sensory.transAxes, ec='none')
+                            ax_sensory.add_patch(rect_bg)
+                            
+                            # Fill
+                            pct = min(1.0, val / max_val)
+                            fill_h = bg_h * pct
+                            c = colors[idx % len(colors)]
+                            
+                            rect_fill = plt.Rectangle((bx, slot_y), actual_bar_w, fill_h, color=c, transform=ax_sensory.transAxes, ec='none', alpha=0.9)
+                            ax_sensory.add_patch(rect_fill)
+                            
+                            # Channel Label (tiny)
+                            ax_sensory.text(bx + actual_bar_w/2, slot_y - 0.05, str(idx), color='#adb5bd', fontsize=6, ha='center', transform=ax_sensory.transAxes)
+
+                    else:
+                        # --- LEGACY VECTOR VISUALIZATION (Grid) ---
+                        offsets = sensor['offsets']
+                        
+                        # Center of this sensor display in Axes Coords
+                        cx, cy = 0.5, y_center
+                        
+                        # Scale factor for dots
+                        scale = 0.08
+                        
+                        # Draw Center (Agent)
+                        agent_dot = plt.Circle((cx, cy), scale/1.5, color='grey', transform=ax_sensory.transAxes, alpha=0.5)
+                        ax_sensory.add_patch(agent_dot)
+                        
+                        # Create a set of active offsets for quick lookup
+                        active_indices = [idx for idx, val in enumerate(vector) if val == 1]
+                        
+                        for idx, (dr, dc) in enumerate(offsets):
+                            px = cx + dc * scale
+                            py = cy - dr * scale # Invert row for plot Y
+                            
+                            is_active = (idx in active_indices) or (vector[idx] == 1)
+                            
+                            dot_color = color if is_active else '#DEE2E6' # Active vs Inactive Grey
+                            edge_color = 'white'
+                            alpha = 1.0 if is_active else 0.5
+                            size = scale
+                            
+                            dot = plt.Circle((px, py), size, facecolor=dot_color, edgecolor=edge_color, transform=ax_sensory.transAxes, alpha=alpha)
+                            ax_sensory.add_patch(dot)
+                            
+                            # Optional: Add small ring if active to make it "glow"
+                            if is_active:
+                                 glow = plt.Circle((px, py), size*1.3, facecolor='none', edgecolor=color, linewidth=1, transform=ax_sensory.transAxes, alpha=0.5)
+                                 ax_sensory.add_patch(glow)
+
+
 
         # Footer
         ax_stats.text(0.5, 0.02, "GridWorld Env", color='#CED4DA', ha='center', fontsize=7, transform=fig.transFigure)

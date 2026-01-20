@@ -31,10 +31,14 @@ body:
   health_recovery: 1
   start_health_random: true
 
+
 sensory:
   using_sensory: true
   food_radius: 2
   danger_radius: 1
+  vector_size: 10
+  food_property: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  danger_property: [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 training:
   training_episode: 100

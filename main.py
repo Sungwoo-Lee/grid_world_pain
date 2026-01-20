@@ -98,7 +98,11 @@ def main():
     # Sensory Config
     using_sensory = config.get('sensory.using_sensory', False)
     food_radius = config.get('sensory.food_radius', 1)
+    food_radius = config.get('sensory.food_radius', 1)
     danger_radius = config.get('sensory.danger_radius', 1)
+    vector_size = config.get('sensory.vector_size', 10)
+    food_property = config.get('sensory.food_property', None)
+    danger_property = config.get('sensory.danger_property', None)
 
     # Setup paths
     # Save video directly to current directory for easy debugging access
@@ -124,7 +128,8 @@ def main():
     # Initialize Environment
     env = GridWorld(height=height, width=width, with_satiation=with_satiation, max_steps=max_steps,
                     danger_prob=danger_prob, danger_duration=danger_duration, damage_amount=damage_amount,
-                    food_prob=food_prob, food_duration=food_duration)
+                    food_prob=food_prob, food_duration=food_duration,
+                    vector_size=vector_size, food_property=food_property, danger_property=danger_property)
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
         start_satiation=start_satiation, 
@@ -146,8 +151,8 @@ def main():
     
     # Sensory System Init
     if using_sensory:
-        print(f"Initializing Sensory System (Food R={food_radius}, Danger R={danger_radius})")
-        sensory_system = SensorySystem(food_radius=food_radius, danger_radius=danger_radius)
+        print(f"Initializing Sensory System (Food R={food_radius}, Danger R={danger_radius}, VecSize={vector_size})")
+        sensory_system = SensorySystem(food_radius=food_radius, danger_radius=danger_radius, vector_size=vector_size)
         
         # Calculate State Dimensions
         # Sensory: (FoodStateSpace, DangerStateSpace)
@@ -183,24 +188,24 @@ def main():
         # Reset
         env_state = env.reset()
         
-        # Determine Initial OBSERVATION (State)
+        # Determining Initial OBSERVATION (State)
         current_agent_pos = env.agent_pos
         # Note: GridWorld danger overlays food when active
-        current_danger_pos_list = []
-        if env.is_danger:
-             current_danger_pos_list = [env.food_pos]
-             
-        if using_sensory:
-            sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
-            # sensory_state is (food_idx, danger_idx)
+        current_danger_pos_list = [] # Deprecated but keeping var for safety if needed
             
+        if using_sensory:
+                # NEW: Pass active resources list
+                resources = env.get_active_resources()
+                sensory_state = sensory_system.sense(current_agent_pos, resources)
+                # sensory_state is now vector (N,)
+        
         if with_satiation:
             body_state = body.reset()
             if using_sensory:
-                 if isinstance(body_state, tuple):
-                     state = (*sensory_state, *body_state)
-                 else:
-                     state = (*sensory_state, body_state)
+                    if isinstance(body_state, tuple):
+                        state = (*sensory_state, *body_state)
+                    else:
+                        state = (*sensory_state, body_state)
             else:
                 # FOMDP
                 if isinstance(body_state, tuple):
@@ -255,12 +260,10 @@ def main():
             
             # --- CALCULATE NEXT OBSERVATION (State) ---
             current_agent_pos = env.agent_pos # Updated pos
-            current_danger_pos_list = []
-            if env.is_danger:
-                 current_danger_pos_list = [env.food_pos]
-
+            
             if using_sensory:
-                 next_sensory_state = sensory_system.sense(current_agent_pos, env.food_pos, current_danger_pos_list)
+                 resources = env.get_active_resources()
+                 next_sensory_state = sensory_system.sense(current_agent_pos, resources)
 
             if with_satiation:
                 next_body_state, reward, body_done = body.step(info)
