@@ -97,9 +97,8 @@ def main():
 
     # Sensory Config
     using_sensory = config.get('sensory.using_sensory', False)
-    food_radius = config.get('sensory.food_radius', 1)
-    food_radius = config.get('sensory.food_radius', 1)
-    danger_radius = config.get('sensory.danger_radius', 1)
+    sensor_radius = config.get('sensory.sensor_radius', 2)
+    decay_power = config.get('sensory.decay_power', 1.0)
     vector_size = config.get('sensory.vector_size', 10)
     food_property = config.get('sensory.food_property', None)
     danger_property = config.get('sensory.danger_property', None)
@@ -151,8 +150,8 @@ def main():
     
     # Sensory System Init
     if using_sensory:
-        print(f"Initializing Sensory System (Food R={food_radius}, Danger R={danger_radius}, VecSize={vector_size})")
-        sensory_system = SensorySystem(food_radius=food_radius, danger_radius=danger_radius, vector_size=vector_size)
+        print(f"Initializing Sensory System (Radius={sensor_radius}, VecSize={vector_size}, DecayPower={decay_power})")
+        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power)
         
         # Calculate State Dimensions
         # Sensory: (FoodStateSpace, DangerStateSpace)

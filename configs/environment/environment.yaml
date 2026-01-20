@@ -34,8 +34,9 @@ body:
 
 sensory:
   using_sensory: true
-  food_radius: 2
-  danger_radius: 1
+  sensor_radius: 5 # Default: 2
+  # Decay Formula: decay = 1.0 / (distance ** decay_power)
+  decay_power: 1.0 
   vector_size: 10
   food_property: [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
   danger_property: [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

@@ -8,9 +8,10 @@ class ResourceSensor:
     It accumulates the property vectors of all resources within range, weighted by inverse distance.
     Output is a vector of size N (the resource property size).
     """
-    def __init__(self, radius=2, vector_size=10):
+    def __init__(self, radius=2, vector_size=10, decay_power=1.0):
         self.radius = radius
         self.vector_size = vector_size
+        self.decay_power = decay_power
 
     def sense(self, agent_pos, resources):
         """
@@ -39,7 +40,7 @@ class ResourceSensor:
             if dist < 0.001:
                 decay = 2.0 
             else:
-                decay = 1.0 / dist
+                decay = 1.0 / (dist ** self.decay_power)
                 
             # Accumulate
             observation += res.property * decay
@@ -51,10 +52,10 @@ class SensorySystem:
     Manager for the agent's sensors.
     Currently manages the unified ResourceSensor.
     """
-    def __init__(self, food_radius=2, danger_radius=2, vector_size=10):
-        # Unified radius: use the maximum of provided radii
-        radius = max(food_radius, danger_radius)
-        self.resource_sensor = ResourceSensor(radius=radius, vector_size=vector_size)
+    def __init__(self, sensor_radius=2, vector_size=10, decay_power=1.0):
+        # Unified radius
+        radius = sensor_radius
+        self.resource_sensor = ResourceSensor(radius=radius, vector_size=vector_size, decay_power=decay_power)
         self.vector_size = vector_size
         
         # State Dims: The output is now a SINGLE vector of size N.

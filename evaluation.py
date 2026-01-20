@@ -149,21 +149,20 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     using_sensory = config.get_mandatory('sensory.using_sensory')
     sensory_system = None
     if using_sensory:
-        food_radius = config.get_mandatory('sensory.food_radius', int)
-        danger_radius = config.get_mandatory('sensory.danger_radius', int)
-        sensory_system = SensorySystem(food_radius=food_radius, danger_radius=danger_radius)
+        sensor_radius = config.get_mandatory('sensory.sensor_radius', int)
+        decay_power = config.get('sensory.decay_power', 1.0) # Not mandatory in old configs
+        sensory_system = SensorySystem(sensor_radius=sensor_radius, decay_power=decay_power)
 
     # Preprocessor for DQN
     def preprocess_state(state_tuple):
         flat_list = []
         if using_sensory:
-            food_idx = state_tuple[0]
-            danger_idx = state_tuple[1]
-            food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
-            danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
-            flat_list.extend(food_vec)
-            flat_list.extend(danger_vec)
-            body_start_idx = 2
+            # New format: state_tuple is (*sensory_vector, *body_stats)
+            # sensory_vector is flat.
+            vec_size = sensory_system.vector_size
+            sensory_vec = state_tuple[:vec_size]
+            flat_list.extend(sensory_vec)
+            body_start_idx = vec_size
         else:
             # Coords
             row = state_tuple[0]
@@ -192,8 +191,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     # Determine Input Dim
     input_dim = 0
     if using_sensory:
-         input_dim += sensory_system.food_sensor.vector_size + \
-                      sensory_system.danger_sensor.vector_size
+         input_dim += sensory_system.vector_size
     else:
          input_dim += 2 # row, col
 
@@ -453,8 +451,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 raise e
             # Input Structure for Visualization
             if using_sensory:
-                input_structure.append(("Food", sensory_system.food_sensor.vector_size))
-                input_structure.append(("Danger", sensory_system.danger_sensor.vector_size))
+                input_structure.append(("Sensory", sensory_system.vector_size))
             else:
                 input_structure.append(("Agent", 2)) 
 

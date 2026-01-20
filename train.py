@@ -127,8 +127,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             "Batch Size": 64
         }
         if using_sensory:
-             agent_data["Food Radius"] = config_dict.get_mandatory('sensory.food_radius')
-             agent_data["Danger Radius"] = config_dict.get_mandatory('sensory.danger_radius')
+             agent_data["Sensor Radius"] = config_dict.get_mandatory('sensory.sensor_radius')
+             agent_data["Decay Power"] = config_dict.get('sensory.decay_power', 1.0)
              
     elif algorithm == "DRQN":
         agent_data = {
@@ -138,8 +138,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             "Trace Length": config_dict.get_mandatory('agent.trace_length')
         }
         if using_sensory:
-             agent_data["Food Radius"] = config_dict.get_mandatory('sensory.food_radius')
-             agent_data["Danger Radius"] = config_dict.get_mandatory('sensory.danger_radius')
+             agent_data["Sensor Radius"] = config_dict.get_mandatory('sensory.sensor_radius')
+             agent_data["Decay Power"] = config_dict.get('sensory.decay_power', 1.0)
 
     elif algorithm == "PPO":
         agent_data = {
@@ -151,8 +151,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             "Update Frequency": config_dict.get_mandatory('agent.update_timestep')
         }
         if using_sensory:
-             agent_data["Food Radius"] = config_dict.get_mandatory('sensory.food_radius')
-             agent_data["Danger Radius"] = config_dict.get_mandatory('sensory.danger_radius')
+             agent_data["Sensor Radius"] = config_dict.get_mandatory('sensory.sensor_radius')
+             agent_data["Decay Power"] = config_dict.get('sensory.decay_power', 1.0)
 
     elif algorithm == "DreamerV3":
         agent_data = {
@@ -162,8 +162,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             "Batch Length": config_dict.get_mandatory('agent.batch_length'),
         }
         if using_sensory:
-             agent_data["Food Radius"] = config_dict.get_mandatory('sensory.food_radius')
-             agent_data["Danger Radius"] = config_dict.get_mandatory('sensory.danger_radius')
+             agent_data["Sensor Radius"] = config_dict.get_mandatory('sensory.sensor_radius')
+             agent_data["Decay Power"] = config_dict.get('sensory.decay_power', 1.0)
 
     elif algorithm == "RecurrentPPO":
         agent_data = {
@@ -173,8 +173,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             "Update Timestep": config_dict.get_mandatory('agent.update_timestep')
         }
         if using_sensory:
-             agent_data["Food Radius"] = config_dict.get_mandatory('sensory.food_radius')
-             agent_data["Danger Radius"] = config_dict.get_mandatory('sensory.danger_radius')
+             agent_data["Sensor Radius"] = config_dict.get_mandatory('sensory.sensor_radius')
+             agent_data["Decay Power"] = config_dict.get('sensory.decay_power', 1.0)
 
     else:
         agent_data = {
@@ -243,11 +243,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     using_sensory = config_dict.get_mandatory('sensory.using_sensory')
          
     if using_sensory:
-        food_radius = config_dict.get_mandatory('sensory.food_radius')
-        danger_radius = config_dict.get_mandatory('sensory.danger_radius')
+        sensor_radius = config_dict.get_mandatory('sensory.sensor_radius')
+        decay_power = config_dict.get('sensory.decay_power', 1.0)
     else:
-        food_radius = 1 # Dummy
-        danger_radius = 1 # Dummy
+        sensor_radius = 1 # Dummy
+        decay_power = 1.0 # Dummy
     
     # Professional Config Summary
     if config_dict is None:
@@ -388,8 +388,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     sensory_system = None
     if using_sensory:
         if not quiet:
-            print(f"Initializing Sensory System (Food R={food_radius}, Danger R={danger_radius})")
-        sensory_system = SensorySystem(food_radius=food_radius, danger_radius=danger_radius)
+            print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power})")
+        sensory_system = SensorySystem(sensor_radius=sensor_radius, decay_power=decay_power)
 
     # Define Preprocessor for DQN
     def preprocess_state(state_tuple):
@@ -400,18 +400,19 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         flat_list = []
         
         if using_sensory:
-            food_idx = state_tuple[0]
-            danger_idx = state_tuple[1]
-            food_vec = sensory_system.food_sensor.index_to_vector(food_idx)
-            danger_vec = sensory_system.danger_sensor.index_to_vector(danger_idx)
-            flat_list.extend(food_vec)
-            flat_list.extend(danger_vec)
+            # sensory_state in state_tuple is ALREADY a vector of floats (from numpy array or tuple unpacking)
+            # The structure of state_tuple is: (*sensory_vector, *body_stats)
+            # We just need to separate them if we want to handle them differently, but for flattening we can just cast.
+            # However, we need to know where body stats start to normalize them properly.
             
-            # Body states follow sensory
-            body_start_idx = 2
+            # Sensory vector size is sensory_system.vector_size
+            vec_size = sensory_system.vector_size
+            sensory_vec = state_tuple[:vec_size]
+            flat_list.extend(sensory_vec)
+            
+            body_start_idx = vec_size
         else:
             # Conventional: (row, col)
-            # Normalize coordinates?
             row = state_tuple[0]
             col = state_tuple[1]
             flat_list.append(row / env.height)
@@ -438,8 +439,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         # Calculate Input Dimension
         input_dim = 0
         if using_sensory:
-             input_dim += sensory_system.food_sensor.vector_size + \
-                          sensory_system.danger_sensor.vector_size
+             input_dim += sensory_system.vector_size
         else:
              input_dim += 2 # row, col
              
@@ -448,8 +448,6 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             if with_health:
                  input_dim += 1
         
-        if not quiet:
-            print(f"Initializing DQN Agent (Input Dim: {input_dim})...")
         if not quiet:
             print(f"Initializing DQN Agent (Input Dim: {input_dim})...")
         agent = DQNAgent(
@@ -471,8 +469,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         # Calculate Input Dimension
         input_dim = 0
         if using_sensory:
-             input_dim += sensory_system.food_sensor.vector_size + \
-                          sensory_system.danger_sensor.vector_size
+             input_dim += sensory_system.vector_size
         else:
              input_dim += 2 # row, col
              
@@ -505,8 +502,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         # Calculate Input Dimension
         input_dim = 0
         if using_sensory:
-             input_dim += sensory_system.food_sensor.vector_size + \
-                          sensory_system.danger_sensor.vector_size
+             input_dim += sensory_system.vector_size
         else:
              input_dim += 2 # row, col
              
@@ -536,8 +532,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         # Calculate Input Dimension
         input_dim = 0
         if using_sensory:
-             input_dim += sensory_system.food_sensor.vector_size + \
-                          sensory_system.danger_sensor.vector_size
+             input_dim += sensory_system.vector_size
         else:
              input_dim += 2 # row, col
              
@@ -570,8 +565,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         # Calculate Input Dimension
         input_dim = 0
         if using_sensory:
-             input_dim += sensory_system.food_sensor.vector_size + \
-                          sensory_system.danger_sensor.vector_size
+             input_dim += sensory_system.vector_size
         else:
              input_dim += 2 # row, col
              
@@ -657,12 +651,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         
         # Determine internal start state
         current_agent_pos = env.agent_pos
-        current_danger_pos_list = []
-        if env.is_danger:
-             current_danger_pos_list = [env.resource_pos]
-
         if using_sensory:
-             sensory_state = sensory_system.sense(current_agent_pos, env.resource_pos, current_danger_pos_list)
+             resources = env.get_active_resources()
+             sensory_state = sensory_system.sense(current_agent_pos, resources)
 
         if with_satiation:
             body_return = body.reset()
@@ -703,13 +694,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             next_env_state, env_reward, env_done, info = env.step(action)
             
             # Update Observations
-            current_agent_pos = env.agent_pos
-            current_danger_pos_list = []
-            if env.is_danger:
-                 current_danger_pos_list = [env.resource_pos]
-
             if using_sensory:
-                 next_sensory_state = sensory_system.sense(current_agent_pos, env.resource_pos, current_danger_pos_list)
+                 resources = env.get_active_resources()
+                 next_sensory_state = sensory_system.sense(current_agent_pos, resources)
             
             if with_satiation:
                 body_return, reward, body_done = body.step(info)
