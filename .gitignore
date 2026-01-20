@@ -12,7 +12,7 @@
 results/
 dist/
 build/
-antigravity_instruction.txt
+*antigravity_instruction*
 sheeprl/
 evaaa/
 temp_configs/

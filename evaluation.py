@@ -691,9 +691,20 @@ def main():
         config = Config(saved_config_dict)
 
     # 2. Key Overrides (Allow user to change testing seed/episodes)
-    global_config = get_default_config()
-    testing_seed = args.seed or global_config.get_mandatory('testing.seed', int)
-    eval_episodes = args.episodes or global_config.get_mandatory('testing.evaluation_episodes', int)
+    # 2. Key Overrides (Allow user to change testing seed/episodes)
+    # Load evaluation defaults since environment.yaml no longer has them
+    eval_default_path = "configs/evaluation/default.yaml"
+    if os.path.exists(eval_default_path):
+        eval_defaults = Config.load_yaml(eval_default_path)
+    else:
+        eval_defaults = Config() # Empty if missing
+        
+    # Determine params: CLI > Default Config > Hardcoded Fallback
+    testing_seed = args.seed or eval_defaults.get('testing.seed')
+    if testing_seed is None: testing_seed = 56
+    
+    eval_episodes = args.episodes or eval_defaults.get('testing.evaluation_episodes')
+    if eval_episodes is None: eval_episodes = 1
     
     config.set('testing.seed', testing_seed)
     config.set('testing.evaluation_episodes', eval_episodes)

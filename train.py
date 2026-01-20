@@ -200,7 +200,7 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=None, food_satiation_gain=None, max_steps=None, random_start_satiation=None, use_homeostatic_reward=None, satiation_setpoint=None, death_penalty=None, testing_seed=None, config_dict=None,
                 with_health=None, max_health=None, start_health=None, health_recovery=None, start_health_random=None,
                 danger_prob=None, danger_duration=None, damage_amount=None,
-                food_prob=None, food_duration=None, device="auto", quiet=False, debug=False):
+                food_prob=None, food_duration=None, device="auto", checkpoint_frequency=None, quiet=False, debug=False):
     """
     Trains the RL Agent (Tabular Q-Learning, DQN, or PPO).
     """
@@ -630,7 +630,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     
     # We will sync to agent's epsilon
     
-    milestones = {int(episodes * p): int(p * 100) for p in [0.01, 0.1, 0.25, 0.5, 0.75, 1.0]}
+    # Checkpoint Frequency
+    checkpoint_freq = int(resolve_param(checkpoint_frequency, 'training.checkpoint_frequency'))
     
     episode_rewards = []
     episode_steps = []
@@ -810,8 +811,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         # Check milestones
             
         # Check milestones
-        if (episode + 1) in milestones:
-            pct = milestones[episode + 1]
+        # Checkpoint Saving
+        if (episode + 1) % checkpoint_freq == 0:
+            pct = episode + 1
             
             if isinstance(agent, DQNAgent):
                 model_snap_filename = os.path.join(models_dir, f"dqn_model_{pct}.pth")
@@ -867,6 +869,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         print(f"Training history saved to {history_filename}")
 
     # Generate learning curves
+    # Generate milestones for plotting
+    milestones = {ep: f"Ckpt" for ep in range(checkpoint_freq, episodes + 1, checkpoint_freq)}
     plot_learning_curves(history_filename, plots_dir, config_dict, max_steps=max_steps, milestones=milestones)
     
     if not quiet:
@@ -889,6 +893,7 @@ if __name__ == "__main__":
     parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
     parser.add_argument("--quiet", action="store_true", help="Suppress output and progress bar")
     parser.add_argument("--debug", action="store_true", help="Enable dynamic debug status and granular logging")
+    parser.add_argument("--checkpoint-frequency", type=int, help="Save checkpoint every N episodes")
     args = parser.parse_args()
     
     # Load default config
@@ -896,12 +901,29 @@ if __name__ == "__main__":
     from src.utils.config import Config
     
     # Load WandB config
-    wandb_config_path = "configs/wandb.yaml"
-    if os.path.exists(wandb_config_path):
+    # Load Train Config
+    train_config_path = "configs/train/default.yaml"
+    if os.path.exists(train_config_path):
         if not args.quiet:
-            print(f"Loading WandB config from {wandb_config_path}")
-        wandb_config = Config.load_yaml(wandb_config_path)
-        config.merge(wandb_config)
+            print(f"Loading train config from {train_config_path}")
+        train_config = Config.load_yaml(train_config_path)
+        config.merge(train_config)
+
+    # Load Eval Config
+    eval_config_path = "configs/evaluation/default.yaml"
+    if os.path.exists(eval_config_path):
+        if not args.quiet:
+            print(f"Loading eval config from {eval_config_path}")
+        eval_config = Config.load_yaml(eval_config_path)
+        config.merge(eval_config)
+
+    # Load Logger Config
+    logger_config_path = "configs/logger/wandb.yaml"
+    if os.path.exists(logger_config_path):
+        if not args.quiet:
+            print(f"Loading logger config from {logger_config_path}")
+        logger_config = Config.load_yaml(logger_config_path)
+        config.merge(logger_config)
         
     # Override WandB settings with CLI args
     if args.wandb_project:
@@ -964,6 +986,7 @@ if __name__ == "__main__":
                 damage_amount=None,
                 food_prob=None, 
                 food_duration=None, 
-                device=args.device, 
+                device=args.device,
+                checkpoint_frequency=args.checkpoint_frequency, 
                 quiet=args.quiet,
                 debug=args.debug)
