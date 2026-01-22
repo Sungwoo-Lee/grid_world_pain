@@ -17,6 +17,16 @@ Arguments:
 - `--wandb-group <str>`: WandB group name for grouping runs.
 - `--wandb-name <str>`: Specific name for the run.
 - `--no-wandb`: Disable WandB logging.
+- `--checkpoint-frequency <int>`: (Default: 1000) Frequency of saving model checkpoints (in episodes).
+- `--load-checkpoint <path>`: Path to checkpoint to resume from.
+- `--wandb-resume-id <str>`: WandB Run ID to resume logging to.
+
+
+Notes:
+- The script strictly enforces configuration loading. Missing required values will raise errors.
+- Models are saved as `model_X.pth` where X is the episode number.
+- There is no explicit "final" model save; the last scheduled checkpoint (or latest) serves as the final model.
+
 
 Usage Examples:
 
@@ -200,7 +210,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=None, food_satiation_gain=None, max_steps=None, random_start_satiation=None, use_homeostatic_reward=None, satiation_setpoint=None, death_penalty=None, testing_seed=None, config_dict=None,
                 with_health=None, max_health=None, start_health=None, health_recovery=None, start_health_random=None,
                 danger_prob=None, danger_duration=None, damage_amount=None,
-                food_prob=None, food_duration=None, device="auto", checkpoint_frequency=None, quiet=False, debug=False):
+                food_prob=None, food_duration=None, device="auto", checkpoint_frequency=None, quiet=False, debug=False,
+                start_episode=0, load_checkpoint_path=None):
     """
     Trains the RL Agent (Tabular Q-Learning, DQN, or PPO).
     """
@@ -210,21 +221,22 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     # WandB Initialization
     if config_dict and not config_dict.get_mandatory('wandb.disabled'):
         wandb_enabled = True
-        
-        # Load project-level config first
-        wandb_project = config_dict.get_mandatory('wandb.project')
-        wandb_group = config_dict.get_mandatory('wandb.group')
-        wandb_job_type = config_dict.get_mandatory('wandb.job_type')
-        wandb_name = config_dict.get_mandatory('wandb.name')
-        
-        wandb.init(
-            project=wandb_project,
-            group=wandb_group,
-            job_type=wandb_job_type,
-            name=wandb_name,
-            config=config_dict.to_dict(),
-            reinit=True
-        )
+    if not config_dict.get('wandb.disabled'):
+        wandb_kwargs = {
+            "project": config_dict.get('wandb.project'),
+            "entity": config_dict.get('wandb.entity'), # Might be None
+            "group": config_dict.get('wandb.group'),
+            "job_type": config_dict.get('wandb.job_type'),
+            "name": config_dict.get('wandb.name'),
+            "config": config_dict.to_dict(),
+            "reinit": True
+        }
+        # Check if we should resume
+        if config_dict.get('wandb.resume_id'):
+            wandb_kwargs['id'] = config_dict.get('wandb.resume_id')
+            wandb_kwargs['resume'] = "allow"
+            
+        wandb.init(**wandb_kwargs)
         
         # Log Source Code
         # Explicitly log key files and src directory
@@ -271,6 +283,12 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
 
     # Essential Training Params
     episodes = int(resolve_param(episodes, 'training.training_episode'))
+    
+    # Calculate target end episode
+    target_end_episode = start_episode + episodes
+    
+    if start_episode > 0:
+        print(f"Resuming training from episode {start_episode}. Target end: {target_end_episode}")
     seed = int(resolve_param(seed, 'training.seed'))
     testing_seed = int(resolve_param(testing_seed, 'testing.seed'))
     
@@ -618,6 +636,15 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         agent = QLearningAgent(composite_env, with_satiation=with_satiation)
         agent.epsilon = 1.0 # Start with full exploration
 
+    # Load checkpoint if provided
+    if load_checkpoint_path:
+        print(f"Loading checkpoint weights from {load_checkpoint_path}...")
+        try:
+            agent.load(load_checkpoint_path)
+            print("Checkpoint loaded successfully.")
+        except Exception as e:
+            print(f"Error loading checkpoint: {e}")
+            exit(1)
     
     if not quiet:
         print(f"Training agent (with_satiation={with_satiation}, with_health={with_health})...")
@@ -641,11 +668,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     tabular_decay_rate = 0.9995
     tabular_min_epsilon = 0.05
     
-    tabular_decay_rate = 0.9995
-    tabular_min_epsilon = 0.05
-    
-    # Progress Bar with tqdm
-    pbar = tqdm(range(episodes), desc="Training", unit="ep", disable=quiet or debug)
+    # Main Training Loop
+    pbar = tqdm(range(start_episode, target_end_episode), disable=quiet, desc="Training")
     
     losses = {} # Track latest losses for debug display
     global_step = 0 # Unified counter for WandB (Environment Interactions)
@@ -853,13 +877,14 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         writer = csv.writer(f)
         writer.writerow(['episode', 'reward', 'steps', 'epsilon'])
         for i in range(len(episode_rewards)):
-            writer.writerow([i + 1, episode_rewards[i], episode_steps[i], episode_epsilons[i]])
+            writer.writerow([start_episode + i + 1, episode_rewards[i], episode_steps[i], episode_epsilons[i]])
     if not quiet:
         print(f"Training history saved to {history_filename}")
 
     # Generate learning curves
     # Generate milestones for plotting
-    milestones = {ep: f"Ckpt" for ep in range(checkpoint_freq, episodes + 1, checkpoint_freq)}
+    # Generate milestones for plotting
+    milestones = {ep: f"Ckpt" for ep in range(start_episode + checkpoint_frequency, target_end_episode + 1, checkpoint_frequency)}
     plot_learning_curves(history_filename, plots_dir, config_dict, max_steps=max_steps, milestones=milestones)
     
     if not quiet:
@@ -883,6 +908,8 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true", help="Suppress output and progress bar")
     parser.add_argument("--debug", action="store_true", help="Enable dynamic debug status and granular logging")
     parser.add_argument("--checkpoint-frequency", type=int, help="Save checkpoint every N episodes")
+    parser.add_argument("--load-checkpoint", type=str, help="Path to checkpoint to resume from")
+    parser.add_argument("--wandb-resume-id", type=str, help="WandB Run ID to resume logging")
     args = parser.parse_args()
     
     # Load default config
@@ -953,6 +980,24 @@ if __name__ == "__main__":
     
     # For parameters not exposed in argparse, we pass None so train_agent enforces config.
     
+    # Continual Learning Parsing
+    start_episode = 0
+    if args.load_checkpoint:
+        import re
+        ckpt_filename = os.path.basename(args.load_checkpoint)
+        # Try to parse number from typical names: model_100.pth, dqn_model_50.pth
+        # Regex to find the last number properly
+        match = re.search(r"_(\d+)\.(pth|npy)$", ckpt_filename)
+        if match:
+            start_episode = int(match.group(1))
+        else:
+            print(f"Warning: Could not parse episode number from {ckpt_filename}. Starting from 0.")
+            start_episode = 0
+            
+    # Add wandb resume id to config if present
+    if args.wandb_resume_id:
+        config.set('wandb.resume_id', args.wandb_resume_id)
+    
     train_agent(episodes=args.episodes, 
                 seed=args.seed, 
                 with_satiation=arg_with_satiation, 
@@ -978,4 +1023,7 @@ if __name__ == "__main__":
                 device=args.device,
                 checkpoint_frequency=args.checkpoint_frequency, 
                 quiet=args.quiet,
-                debug=args.debug)
+                debug=args.debug,
+                start_episode=start_episode,
+                load_checkpoint_path=args.load_checkpoint)
+

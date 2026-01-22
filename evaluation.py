@@ -13,15 +13,27 @@ This script:
 
 
 
+Arguments:
+- `--results_dir <path>`: (Required) Path to the results directory of the run to evaluate.
+- `--episodes <int>`: Override the number of evaluation episodes.
+- `--seed <int>`: Override the random seed.
+- `--checkpoint <str/int>`: Specific checkpoint to evaluate (e.g., '50', 'model_50.pth').
+- `--all`: Evaluate ALL checkpoints found in the directory.
+
 Usage:
-    # Basic evaluation of a specific run
+    # Basic evaluation (Latest checkpoint)
     python evaluation.py --results_dir results/DQN/20260118-120000_my_run --episodes 5
 
-    # Override seed and episodes
-    python evaluation.py --results_dir results/PPO/20260118-130000_test --episodes 10 --seed 123
+    # Evaluate specific checkpoint (e.g., 500)
+    python evaluation.py --results_dir results/DQN/RunName --checkpoint 500
+
+    # Evaluate ALL checkpoints
+    python evaluation.py --results_dir results/DQN/RunName --all
 
 Notes:
 - Uses the configuration saved during training (`config.yaml`).
+- **Strict Configuration**: Raises errors if required parameters (seed, episodes) are not found (no safe defaults).
+- Default behavior (no args): Evaluates the *latest* numeric checkpoint found.
 - Supports CPU/GPU execution (auto-detected or inherited from config).
 - Ensures at least one resource (Food or Danger) is active at all times.
 """
