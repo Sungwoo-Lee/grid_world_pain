@@ -102,22 +102,25 @@ class SensorySystem:
             resources (list): List of Resource objects from GridWorld
             
         Returns:
-            np.array: The sensory observation vector (concatenated).
+            dict: Dictionary with 'olfactory' and 'nociception' keys.
         """
         olfactory = self.resource_sensor.sense(agent_pos, resources)
         nociception = self.nociceptor.sense(agent_pos, resources)
-        return np.concatenate([olfactory, nociception])
+        return {
+            'olfactory': olfactory, 
+            'nociception': nociception
+        }
         
     def get_visualization_data(self, observation):
         """
         Prepares data for visualization.
         
         Args:
-            observation (np.array): The resource sensor output vector.
+            observation (dict): The sensory observation dictionary.
         """
-        # Split observation back into Vector and Nociception for viz
-        olfactory_data = observation[:self.vector_size]
-        nociception_val = observation[self.vector_size]
+        # Dictionary Access
+        olfactory_data = observation.get('olfactory')
+        nociception_val = observation.get('nociception')
         
         return [
             {

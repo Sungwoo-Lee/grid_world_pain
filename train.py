@@ -422,42 +422,56 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
 
     # Define Preprocessor for DQN
-    def preprocess_state(state_tuple):
+    def preprocess_state(state):
         """
-        Flattens state tuple to float array.
-        Handles both Sensory (Vector) and Conventional (Coordinate) inputs.
+        Flattens state dictionary to float array.
+        Handles Dictionary-based inputs (Olfactory, Nociception) and Body states.
         """
         flat_list = []
         
         if using_sensory:
-            # sensory_state in state_tuple is ALREADY a vector of floats (from numpy array or tuple unpacking)
-            # The structure of state_tuple is: (*sensory_vector, *body_stats)
-            # We just need to separate them if we want to handle them differently, but for flattening we can just cast.
-            # However, we need to know where body stats start to normalize them properly.
-            
-            # Sensory vector size is sensory_system.vector_size
-            vec_size = sensory_system.vector_size
-            sensory_vec = state_tuple[:vec_size]
-            flat_list.extend(sensory_vec)
-            
-            body_start_idx = vec_size
+            # Inputs are in a dictionary now
+            if isinstance(state, dict):
+                 # Olfactory
+                 flat_list.extend(state['olfactory'])
+                 # Nociception
+                 flat_list.extend(state['nociception'])
+            else:
+                 # Initial state might be tuple from legacy or direct env usage? 
+                 # We enforcing dictionary now.
+                 # If tuple (sensory, body...), it's broken.
+                 raise ValueError(f"Expected dictionary state, got {type(state)}")
         else:
             # Conventional: (row, col)
-            row = state_tuple[0]
-            col = state_tuple[1]
-            flat_list.append(row / env.height)
-            flat_list.append(col / env.width)
-            
-            body_start_idx = 2
-            
-        # Append Body States if present
-        if len(state_tuple) > body_start_idx:
-            satiation = state_tuple[body_start_idx]
-            flat_list.append(satiation / body.max_satiation) 
-            
-        if len(state_tuple) > body_start_idx + 1:
-            health = state_tuple[body_start_idx + 1]
-            flat_list.append(health / body.max_health)
+            # This part remains tuple-based as env.reset returns pos?
+            # Or we standardize EVERYTHING to dict?
+            # For strict refactor, let's assume env.reset returns pos (tuple) if no sensory.
+            # But wait, body states?
+            # Let's check how state is constructed in loop.
+            if isinstance(state, tuple) or isinstance(state, list) or isinstance(state, np.ndarray):
+                # Legacy / Conventional position
+                # Assuming state[0], state[1] are coords
+                row = state[0]
+                col = state[1]
+                flat_list.append(row / env.height)
+                flat_list.append(col / env.width)
+            elif isinstance(state, dict) and 'loc' in state:
+                r, c = state['loc']
+                flat_list.append(r / env.height)
+                flat_list.append(c / env.width)
+
+        # Append Body States
+        # In dict mode, key access.
+        if isinstance(state, dict):
+            if with_satiation:
+                flat_list.append(state['satiation'] / body.max_satiation)
+            if with_health:
+                flat_list.append(state['health'] / body.max_health)
+        else:
+             # Legacy Tuple Fallback (ONLY if not using sensory dict)
+             # This path likely unused if we update the loop correctly.
+             # But keeping for safety if 'using_sensory' is False.
+             pass
             
         return np.array(flat_list, dtype=np.float32)
 
@@ -470,6 +484,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         input_dim = 0
         if using_sensory:
              input_dim += sensory_system.vector_size
+             input_dim += 1 # Nociceptor
         else:
              input_dim += 2 # row, col
              
@@ -500,6 +515,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         input_dim = 0
         if using_sensory:
              input_dim += sensory_system.vector_size
+             input_dim += 1 # Nociceptor
         else:
              input_dim += 2 # row, col
              
@@ -533,6 +549,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         input_dim = 0
         if using_sensory:
              input_dim += sensory_system.vector_size
+             input_dim += 1 # Nociceptor
         else:
              input_dim += 2 # row, col
              
@@ -563,6 +580,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         input_dim = 0
         if using_sensory:
              input_dim += sensory_system.vector_size
+             input_dim += 1 # Nociceptor
         else:
              input_dim += 2 # row, col
              
@@ -596,6 +614,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         input_dim = 0
         if using_sensory:
              input_dim += sensory_system.vector_size
+             input_dim += 1 # Nociceptor
         else:
              input_dim += 2 # row, col
              
@@ -690,27 +709,33 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         current_agent_pos = env.agent_pos
         if using_sensory:
              resources = env.get_active_resources()
-             sensory_state = sensory_system.sense(current_agent_pos, resources)
+             sensory_dict = sensory_system.sense(current_agent_pos, resources)
 
         if with_satiation:
             body_return = body.reset()
             if using_sensory:
-                 if isinstance(body_return, tuple):
-                     state = (*sensory_state, *body_return)
-                 else:
-                     state = (*sensory_state, body_return)
-            else:
-                if with_health:
-                    satiation, health = body_return
-                    state = (*env_state, satiation, health)
+                # Construct Dictionary State
+                state = {}
+                state.update(sensory_dict)
+                
+                if isinstance(body_return, tuple):
+                     state['satiation'] = body_return[0]
+                     state['health'] = body_return[1]
                 else:
-                    satiation = body_return
-                    state = (*env_state, satiation)
+                     state['satiation'] = body_return
+            else:
+                 state = {'loc': env_state}
+                 if isinstance(body_return, tuple):
+                     state['satiation'] = body_return[0]
+                     state['health'] = body_return[1]
+                 else:
+                     state['satiation'] = body_return
         else:
             if using_sensory:
-                state = sensory_state
+                # Direct dictionary (copy)
+                state = sensory_dict.copy()
             else:
-                state = env_state
+                state = {'loc': env_state}
         
         done = False
         total_reward = 0
@@ -731,31 +756,34 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             next_env_state, env_reward, env_done, info = env.step(action)
             
             # Update Observations
+            # Update Observations
             if using_sensory:
                  resources = env.get_active_resources()
-                 next_sensory_state = sensory_system.sense(current_agent_pos, resources)
+                 next_sensory_dict = sensory_system.sense(current_agent_pos, resources)
             
             if with_satiation:
                 body_return, reward, body_done = body.step(info)
                 done = env_done or body_done
                 
+                next_state = {}
                 if using_sensory:
-                     if isinstance(body_return, tuple):
-                         next_state = (*next_sensory_state, *body_return)
-                     else:
-                         next_state = (*next_sensory_state, body_return)
+                     next_state.update(next_sensory_dict)
                 else:
-                    if with_health:
-                        next_state = (*next_env_state, *body_return)
-                    else:
-                        next_state = (*next_env_state, body_return)
+                     next_state['loc'] = next_env_state
+                     
+                if isinstance(body_return, tuple):
+                     next_state['satiation'] = body_return[0]
+                     next_state['health'] = body_return[1]
+                else:
+                     next_state['satiation'] = body_return
             else:
                 reward = env_reward
                 done = env_done
+                
                 if using_sensory:
-                    next_state = next_sensory_state
+                    next_state = next_sensory_dict
                 else:
-                    next_state = next_env_state
+                    next_state = {'loc': next_env_state}
                     next_state = next_env_state
             
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):

@@ -172,29 +172,31 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
 
     # Preprocessor for DQN
-    def preprocess_state(state_tuple):
+    def preprocess_state(state):
         flat_list = []
         if using_sensory:
-            # New format: state_tuple is (*sensory_vector, *body_stats)
-            # sensory_vector is flat.
-            vec_size = sensory_system.vector_size
-            sensory_vec = state_tuple[:vec_size]
-            flat_list.extend(sensory_vec)
-            body_start_idx = vec_size
+            if isinstance(state, dict):
+                 flat_list.extend(state['olfactory'])
+                 flat_list.extend(state['nociception'])
+            else:
+                 raise ValueError("Expected dictionary state")
         else:
             # Coords
-            row = state_tuple[0]
-            col = state_tuple[1]
-            flat_list.append(row / height)
-            flat_list.append(col / width)
-            body_start_idx = 2
+            if isinstance(state, dict) and 'loc' in state:
+                r, c = state['loc']
+                flat_list.append(r / height)
+                flat_list.append(c / width)
+            elif isinstance(state, (tuple, list, np.ndarray)):
+                row = state[0]
+                col = state[1]
+                flat_list.append(row / height)
+                flat_list.append(col / width)
 
-        if len(state_tuple) > body_start_idx:
-            satiation = state_tuple[body_start_idx]
-            flat_list.append(satiation / body.max_satiation) 
-        if len(state_tuple) > body_start_idx + 1:
-            health = state_tuple[body_start_idx + 1]
-            flat_list.append(health / body.max_health)
+        if isinstance(state, dict):
+            if with_satiation and 'satiation' in state:
+                flat_list.append(state['satiation'] / body.max_satiation) 
+            if with_health and 'health' in state:
+                flat_list.append(state['health'] / body.max_health)
         return np.array(flat_list, dtype=np.float32)
 
     # Initialize Agent
@@ -210,6 +212,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     input_dim = 0
     if using_sensory:
          input_dim += sensory_system.vector_size
+         input_dim += 1 # Nociceptor
     else:
          input_dim += 2 # row, col
 
@@ -516,24 +519,33 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         
         if using_sensory:
             resources = env.get_active_resources()
-            sensory_state = sensory_system.sense(current_agent_pos, resources)
+            sensory_dict = sensory_system.sense(current_agent_pos, resources)
 
         if with_satiation:
             body_return = body.reset()
+            # Dictionary State
+            state = {}
             if using_sensory:
-                if isinstance(body_return, tuple):
-                     state = (*sensory_state, *body_return)
-                else:
-                     state = (*sensory_state, body_return)
+                state.update(sensory_dict)
             else:
-                if with_health:
-                    satiation, health = body_return
-                    state = (*env_state, satiation, health)
-                    append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, health, max_health, episode=ep_idx, step=0), state=state)
-                else:
-                    satiation = body_return
-                    state = (*env_state, satiation)
-                    append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, episode=ep_idx, step=0), state=state)
+                state['loc'] = env_state
+            
+            if isinstance(body_return, tuple):
+                 state['satiation'] = body_return[0]
+                 state['health'] = body_return[1]
+            else:
+                 state['satiation'] = body_return
+            
+            # Append Frame (Using helper which preprocesses automatically if needed)
+            if using_sensory:
+                # render_rgb logic mainly needs body vars
+                health = body.health if with_health else None
+                max_h = body.max_health if with_health else None
+                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_dict)), state=state)
+            else:
+                satiation = state['satiation']
+                health = state.get('health') if with_health else None
+                append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, health, max_health if with_health else None, episode=ep_idx, step=0), state=state)
             
             # Initial frame handling for POMDP?
             # Existing code only handled FOMDP rendering logic above for initial frame.
@@ -541,14 +553,14 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             if using_sensory and with_satiation:
                 health = body.health if with_health else None
                 max_h = body.max_health if with_health else None
-                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)), state=state)
+                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_dict)), state=state)
 
         else:
             if using_sensory:
-                state = sensory_state
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)), state=state)
+                state = sensory_dict.copy()
+                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_dict)), state=state)
             else:
-                state = env_state
+                state = {'loc': env_state}
                 append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0), state=state)
 
         
@@ -577,27 +589,31 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             
             if using_sensory:
                  resources = env.get_active_resources()
-                 next_sensory_state = sensory_system.sense(current_agent_pos, resources)
+                 next_sensory_dict = sensory_system.sense(current_agent_pos, resources)
             
             if with_satiation:
                 body_return, _, body_done = body.step(info)
                 done = env_done or body_done
                 
                 vis_data = None
+                next_state = {}
                 if using_sensory:
-                     vis_data = sensory_system.get_visualization_data(next_sensory_state)
-                     if isinstance(body_return, tuple):
-                         next_state = (*next_sensory_state, *body_return)
-                     else:
-                         next_state = (*next_sensory_state, body_return)
+                     vis_data = sensory_system.get_visualization_data(next_sensory_dict)
+                     next_state.update(next_sensory_dict)
                 else:
-                     # FOMDP logic
-                     if with_health:
-                        next_sat, next_health = body_return
-                        next_state = (*next_env_state, next_sat, next_health)
-                     else:
-                        next_sat = body_return
-                        next_state = (*next_env_state, next_sat)
+                     next_state['loc'] = next_env_state
+                     
+                if isinstance(body_return, tuple):
+                     next_state['satiation'] = body_return[0]
+                     next_state['health'] = body_return[1]
+                else:
+                     next_state['satiation'] = body_return
+                
+                # ... FOMDP logic removed/simplified as we use dictionary now ...
+                # Actually FOMDP logic in orig code was handling next_state construction for non-sensory.
+                # My above code handles it.
+                     
+
 
                 health = body.health if with_health else None
                 max_h = body.max_health if with_health else None
@@ -626,11 +642,12 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 done = env_done
                 vis_data = None
                 
+                next_state = {}
                 if using_sensory:
-                    next_state = next_sensory_state
-                    vis_data = sensory_system.get_visualization_data(next_sensory_state)
+                    vis_data = sensory_system.get_visualization_data(next_sensory_dict)
+                    next_state.update(next_sensory_dict)
                 else:
-                    next_state = next_env_state
+                    next_state['loc'] = next_env_state
                 
                 l_state = flat_state if using_sensory else state
                 append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data, action=action), action=action, state=l_state)
