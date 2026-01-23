@@ -9,6 +9,7 @@
 *.png
 *.csv
 *.pth
+*.log
 results/
 dist/
 build/
@@ -17,3 +18,4 @@ sheeprl/
 evaaa/
 temp_configs/
 wandb/
+logs/
