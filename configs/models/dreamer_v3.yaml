@@ -22,6 +22,7 @@ agent:
   
   actor_fc_layers: [128, 128, 128, 128, 128]
   critic_fc_layers: [128, 128, 128, 128, 128]
+  frame_stack: 1
 
 
   # # Network Configuration (XL Profile)

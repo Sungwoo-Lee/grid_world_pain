@@ -51,6 +51,7 @@ from src.utils.config import Config, get_default_config
 from src.utils.visualization import plot_q_table, save_video, visualize_activations, combine_frame_and_activations
 from src.utils.activation_monitor import ActivationMonitor
 from src.utils.lrp_monitor import LRPMonitor
+from src.utils.state_utils import FrameStacker
 import torch
 
 
@@ -220,6 +221,14 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         input_dim += 1
         if with_health:
              input_dim += 1
+
+    # Frame Stacking Logic
+    frame_stack = config.get('agent.frame_stack', 1)
+    base_input_dim = input_dim
+    input_dim = base_input_dim * frame_stack
+    print(f"Input Dimension: {input_dim} (Base={base_input_dim}, Stack={frame_stack})")
+    
+    stacker = FrameStacker(input_dim=base_input_dim, stack_size=frame_stack)
     
     if algorithm == "DQN":
         from src.models.dqn import DQNAgent
@@ -568,12 +577,19 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         step_count = 0
         
         # Preprocess if DQN
+        flat_state = None
+        state_array = None
+        
         if using_sensory:
             flat_state = preprocess_state(state)
+            # Reset stacker
+            state_array = stacker.reset(flat_state)
+        else:
+            state_array = state # Tabular (or coord based)
         
         while not done and step_count < max_steps:
             if using_sensory:
-                action = agent.choose_action(flat_state)
+                action = agent.choose_action(state_array)
             else:
                 action = agent.choose_action(state)
             
@@ -653,9 +669,17 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data, action=action), action=action, state=l_state)
 
             
-            state = next_state
+            # Advance state
             if using_sensory:
-                flat_state = preprocess_state(state)
+                 flat_next = preprocess_state(next_state)
+                 next_state_stacked = stacker.step(flat_next)
+                 state = next_state # Logic dict
+                 state_array = next_state_stacked # Stacked array for next iter
+                 flat_state = next_state_stacked # For logic below (render) or loop consistency
+            else:
+                 state = next_state.copy()
+                 state_array = state
+
             step_count += 1
             
             if done:

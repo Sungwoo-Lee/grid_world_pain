@@ -55,7 +55,9 @@ from src.models.recurrent_ppo import RecurrentPPOAgent
 from src.models.dreamer_v3 import DreamerV3Agent
 from src.environment.sensor import SensorySystem
 from src.utils.visualization import plot_q_table, plot_learning_curves
+from src.utils.visualization import plot_q_table, plot_learning_curves
 from src.utils.config import get_default_config
+from src.utils.state_utils import FrameStacker
 import time
 import numpy as np
 import os
@@ -503,6 +505,21 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
              
     input_details = f"{input_dim} ({', '.join(dims_breakdown)})"
     
+    # Frame Stacking Logic
+    frame_stack = config_dict.get('agent.frame_stack', 1)
+    
+    # Multiply input_dim by frame_stack for flattening
+    base_input_dim = input_dim
+    input_dim = base_input_dim * frame_stack
+    
+    if frame_stack > 1:
+        dims_breakdown.append(f"Stack={frame_stack}")
+        input_details = f"{input_dim} (Base={base_input_dim}, {', '.join(dims_breakdown)})"
+    else:
+        input_details = f"{input_dim} ({', '.join(dims_breakdown)})"
+        
+    stacker = FrameStacker(input_dim=base_input_dim, stack_size=frame_stack)
+    
     if algorithm == "DQN":
         if not quiet:
             print(f"Initializing DQN Agent (Input Dim: {input_details})...")
@@ -700,14 +717,22 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         total_reward = 0
         steps = 0
         
-        # Preprocess for DQN/PPO
+        # Preprocess logic
         flat_state = None
+        state_array = None
+        
         if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
             flat_state = preprocess_state(state)
+            # Stack the initial state
+            state_array = stacker.reset(flat_state)
+        else:
+            # Tabular
+            state_array = state
         
         while not done:
+            global_step += 1
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
-                action = agent.choose_action(flat_state)
+                action = agent.choose_action(state_array)
             else:
                 action = agent.choose_action(state)
             
@@ -747,8 +772,31 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update
-                flat_next_state = preprocess_state(next_state)
-                agent.store_transition(flat_state, action, reward, flat_next_state, done)
+                flat_next_state_raw = preprocess_state(next_state)
+                # Stack next state
+                next_state_stacked = stacker.step(flat_next_state_raw)
+                
+                # Store Transition (Use stacked states for non-recurrent agents if needed, 
+                # but usually recurrent agents manage their own history. 
+                # However, our design choice was stack at env level.
+                # So even DRQN receives stacked input? 
+                # Config says DRQN frame_stack=1, so it's identity. Correct.)
+                
+                # Check agent signature for store_transition
+                # PPO/RecurrentPPO: (state, action, log_prob, reward, done)
+                # DQN/DRQN: (state, action, next_state, reward, done)
+                # Dreamer: (state, action, reward, done) - likely adds to buffer
+                
+                if isinstance(agent, (PPOAgent, RecurrentPPOAgent)):
+                    # PPO stores current state, action, prob.
+                    # Reward/Done usually stored via separate method or batch update?
+                    # Let's check PPO implementation: store_transition(state, action, log_prob, reward, done)
+                    agent.store_transition(state_array, action, info.get('probs', None), reward, done)
+                elif isinstance(agent, DreamerV3Agent):
+                    agent.store_transition(state_array, action, reward, done)
+                else:
+                    # DQN / DRQN
+                    agent.store_transition(state_array, action, next_state_stacked, reward, done)
                 
                 # Update and capture losses
                 start_upd = time.time()
@@ -784,8 +832,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                     # Print as new line for granular history as requested
                     print(f"Ep:{episode+1} St:{steps+1} Act:{action} R:{total_reward+reward:.1f} {loss_str}Time:{upd_duration:.1f}ms")
 
+                # Advance State
                 state = next_state # Tuple kept for logic
-                flat_state = flat_next_state # Flat for next iter
+                state_array = next_state_stacked # Stacked for next iter
             else:
                 # Tabular Update
                 agent.update(state, action, reward, next_state)

@@ -10,5 +10,6 @@ agent:
   epsilon_end: 0.05
   epsilon_decay: 0.999 
   target_update_freq: 1000
+  frame_stack: 1
   fc_layers: [128]
   recurrent_layers: [128]
