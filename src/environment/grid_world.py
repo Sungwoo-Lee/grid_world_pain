@@ -38,8 +38,8 @@ class GridWorld:
     """
     
     def __init__(self, height=5, width=5, start=(0, 0), resource_pos=(4, 4), with_satiation=True, max_steps=100,
-                 danger_prob=0.1, danger_duration=5, damage_amount=5,
-                 food_prob=0.2, food_duration=10, relocate_resource=False, relocation_steps=20,
+                 prob_switch_to_danger=0.1, min_danger_duration=5, damage_amount=5,
+                 prob_switch_to_food=0.1, min_food_duration=10, relocate_resource=False, relocation_steps=20,
                  vector_size=10, food_property=None, danger_property=None):
         """
         Initializes the GridWorld foraging environment.
@@ -51,8 +51,8 @@ class GridWorld:
             resource_pos (tuple): Resource position (row, col).
             with_satiation (bool): Whether to include satiation/homeostasis.
             max_steps (int): Maximum steps allowed per episode.
-            danger_prob (float): Probability of food turning into danger.
-            danger_duration (int): How long danger persists.
+            prob_switch_to_danger (float): Probability of switching to danger AFTER min_food_duration.
+            min_danger_duration (int): Minimum steps danger persists.
             damage_amount (int): Amount of damage taken in danger state.
             relocate_resource (bool): Whether to randomly relocate resource.
             relocation_steps (int): Relocate every N steps.
@@ -84,14 +84,14 @@ class GridWorld:
         
         # Resource State Machine (Food <-> Danger)
         # Requirement: At least one is active.
-        self.danger_prob = danger_prob
-        self.danger_duration = danger_duration
+        self.prob_switch_to_danger = prob_switch_to_danger
+        self.min_danger_duration = min_danger_duration
         self.damage_amount = damage_amount
-        self.food_prob = food_prob # Used? Maybe redundant if we force toggle.
-        self.food_duration = food_duration
+        self.prob_switch_to_food = prob_switch_to_food
+        self.min_food_duration = min_food_duration
         
         self.resource_state = 'food' # 'food' or 'danger'
-        self.resource_timer = self.food_duration
+        self.resource_timer = self.min_food_duration
         
         # Relocation
         self.relocate_resource = relocate_resource
@@ -130,7 +130,8 @@ class GridWorld:
         
         # Reset Resource State
         self.resource_state = 'food'
-        self.resource_timer = self.food_duration
+        self.resource_state = 'food'
+        self.resource_timer = self.min_food_duration
         
         while True:
             row = np.random.randint(0, self.height)
@@ -171,28 +172,21 @@ class GridWorld:
         self.current_step += 1
         
         # --- Resource State Update ---
-        if self.resource_state == 'danger':
+        if self.resource_timer > 0:
+            # Locked State (Minimum Duration)
             self.resource_timer -= 1
-            if self.resource_timer < 0:
-                # Danger Expired -> Switch to Food
-                self.resource_state = 'food'
-                self.resource_timer = self.food_duration
-                
-        elif self.resource_state == 'food':
-            # Check for Danger Interrupt (Per Step)
-            if np.random.random() < self.danger_prob:
-                self.resource_state = 'danger'
-                self.resource_timer = self.danger_duration
-            else:
-                self.resource_timer -= 1
-                if self.resource_timer < 0:
-                    # Food Expired -> Renew Food (since "at least one" must be active)
-                    # Alternatively, we could force a Danger switch here, but random interrupt is smoother.
-                    self.resource_state = 'food'
-                    self.resource_timer = self.food_duration
+        else:
+            # Probabilistic Switch
+            if self.resource_state == 'danger':
+                 if np.random.random() < self.prob_switch_to_food:
+                     self.resource_state = 'food'
+                     self.resource_timer = self.min_food_duration
+            elif self.resource_state == 'food':
+                 if np.random.random() < self.prob_switch_to_danger:
+                     self.resource_state = 'danger'
+                     self.resource_timer = self.min_danger_duration
 
-                    self.resource_state = 'food'
-                    self.resource_timer = self.food_duration
+
 
         # --- Relocation Update ---
         if self.relocate_resource:

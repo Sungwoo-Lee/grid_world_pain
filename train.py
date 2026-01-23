@@ -211,8 +211,8 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 
 def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=None, food_satiation_gain=None, max_steps=None, random_start_satiation=None, use_homeostatic_reward=None, satiation_setpoint=None, death_penalty=None, testing_seed=None, config_dict=None,
                 with_health=None, max_health=None, start_health=None, health_recovery=None, start_health_random=None,
-                danger_prob=None, danger_duration=None, damage_amount=None,
-                food_prob=None, food_duration=None, device="auto", checkpoint_frequency=None, quiet=False, debug=False,
+                prob_switch_to_danger=None, min_danger_duration=None, damage_amount=None,
+                prob_switch_to_food=None, min_food_duration=None, device="auto", checkpoint_frequency=None, quiet=False, debug=False,
                 start_episode=0, load_checkpoint_path=None):
     """
     Trains the RL Agent (Tabular Q-Learning, DQN, or PPO).
@@ -303,11 +303,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     
     # Environment Params
     max_steps = int(resolve_param(max_steps, 'environment.max_steps'))
-    danger_prob = float(resolve_param(danger_prob, 'environment.danger_prob'))
-    danger_duration = int(resolve_param(danger_duration, 'environment.danger_duration'))
+    prob_switch_to_danger = float(resolve_param(prob_switch_to_danger, 'environment.prob_switch_to_danger'))
+    min_danger_duration = int(resolve_param(min_danger_duration, 'environment.min_danger_duration'))
     damage_amount = float(resolve_param(damage_amount, 'environment.damage_amount'))
-    food_prob = float(resolve_param(food_prob, 'environment.food_prob'))
-    food_duration = int(resolve_param(food_duration, 'environment.food_duration'))
+    prob_switch_to_food = float(resolve_param(prob_switch_to_food, 'environment.prob_switch_to_food'))
+    min_food_duration = int(resolve_param(min_food_duration, 'environment.min_food_duration'))
 
     # Body Params
     with_satiation = resolve_param(with_satiation, 'body.with_satiation')
@@ -391,11 +391,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         start=tuple(config_dict.get_mandatory('environment.start_pos')),
         resource_pos=tuple(resource_pos),
         max_steps=max_steps, # Resolved earlier
-        danger_prob=danger_prob, # Resolved earlier
-        danger_duration=danger_duration,
+        prob_switch_to_danger=prob_switch_to_danger, # Resolved earlier
+        min_danger_duration=min_danger_duration,
         damage_amount=damage_amount,
-        food_prob=food_prob,
-        food_duration=food_duration,
+        prob_switch_to_food=prob_switch_to_food,
+        min_food_duration=min_food_duration,
         relocate_resource=config_dict.get_mandatory('environment.relocate_resource'),
         relocation_steps=config_dict.get_mandatory('environment.relocation_steps'),
         vector_size=config_dict.get('sensory.vector_size', 10),
@@ -1068,11 +1068,11 @@ if __name__ == "__main__":
                 start_health=None, 
                 health_recovery=None, 
                 start_health_random=None,
-                danger_prob=None, 
-                danger_duration=None, 
+                prob_switch_to_danger=None, 
+                min_danger_duration=None, 
                 damage_amount=None,
-                food_prob=None, 
-                food_duration=None, 
+                prob_switch_to_food=None, 
+                min_food_duration=None, 
                 device=args.device,
                 checkpoint_frequency=args.checkpoint_frequency, 
                 quiet=args.quiet,

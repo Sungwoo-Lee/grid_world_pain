@@ -6,11 +6,11 @@ environment:
   start_pos: [0, 0]
   resource_pos: [3, 3]
   max_steps: 500
-  danger_prob: 0.1
-  danger_duration: 5
+  prob_switch_to_danger: 0.1
+  min_danger_duration: 5
   damage_amount: 5
-  food_prob: 0.1
-  food_duration: 5
+  prob_switch_to_food: 0.1
+  min_food_duration: 10
   relocate_resource: true
   relocation_steps: 20
 
@@ -26,7 +26,7 @@ body:
   overeating_death: false
   random_start_satiation: true
   start_satiation: 30
-  food_satiation_gain: 5
+  food_satiation_gain: 10
   
   # Health
   with_health: true
