@@ -24,7 +24,7 @@ Arguments:
 
 Notes:
 - The script strictly enforces configuration loading. Missing required values will raise errors.
-- Models are saved as `model_X.pth` where X is the episode number.
+- Models are saved as `model_X.ckpt` where X is the episode number.
 - There is no explicit "final" model save; the last scheduled checkpoint (or latest) serves as the final model.
 
 
@@ -834,19 +834,19 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             pct = episode + 1
             
             if isinstance(agent, DQNAgent):
-                model_snap_filename = os.path.join(models_dir, f"dqn_model_{pct}.pth")
+                model_snap_filename = os.path.join(models_dir, f"dqn_model_{pct}.ckpt")
                 agent.save(model_snap_filename)
             elif isinstance(agent, DRQNAgent):
-                model_snap_filename = os.path.join(models_dir, f"drqn_model_{pct}.pth")
+                model_snap_filename = os.path.join(models_dir, f"drqn_model_{pct}.ckpt")
                 agent.save(model_snap_filename)
             elif isinstance(agent, PPOAgent):
-                model_snap_filename = os.path.join(models_dir, f"ppo_model_{pct}.pth")
+                model_snap_filename = os.path.join(models_dir, f"ppo_model_{pct}.ckpt")
                 agent.save(model_snap_filename)
             elif isinstance(agent, RecurrentPPOAgent):
-                model_snap_filename = os.path.join(models_dir, f"recurrent_ppo_model_{pct}.pth")
+                model_snap_filename = os.path.join(models_dir, f"recurrent_ppo_model_{pct}.ckpt")
                 agent.save(model_snap_filename)
             elif isinstance(agent, DreamerV3Agent):
-                model_snap_filename = os.path.join(models_dir, f"dreamer_model_{pct}.pth")
+                model_snap_filename = os.path.join(models_dir, f"dreamer_model_{pct}.ckpt")
                 agent.save(model_snap_filename)
             else:
                 model_snap_filename = os.path.join(models_dir, f"q_table_{pct}.npy")
@@ -979,9 +979,9 @@ if __name__ == "__main__":
     if args.load_checkpoint:
         import re
         ckpt_filename = os.path.basename(args.load_checkpoint)
-        # Try to parse number from typical names: model_100.pth, dqn_model_50.pth
+        # Try to parse number from typical names: model_100.ckpt, dqn_model_50.ckpt
         # Regex to find the last number properly
-        match = re.search(r"_(\d+)\.(pth|npy)$", ckpt_filename)
+        match = re.search(r"_(\d+)\.(ckpt|pth|npy)$", ckpt_filename)
         if match:
             start_episode = int(match.group(1))
         else:

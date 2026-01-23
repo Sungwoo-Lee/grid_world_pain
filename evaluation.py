@@ -17,7 +17,7 @@ Arguments:
 - `--results_dir <path>`: (Required) Path to the results directory of the run to evaluate.
 - `--episodes <int>`: Override the number of evaluation episodes.
 - `--seed <int>`: Override the random seed.
-- `--checkpoint <str/int>`: Specific checkpoint to evaluate (e.g., '50', 'model_50.pth').
+- `--checkpoint <str/int>`: Specific checkpoint to evaluate (e.g., '50', 'model_50.ckpt').
 - `--all`: Evaluate ALL checkpoints found in the directory.
 
 Usage:
@@ -73,15 +73,15 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     # Try Q-table pattern
     match = re.search(r"q_table_(\d+).npy", filename)
     if not match:
-        match = re.search(r"dqn_model_(\d+).pth", filename)
+        match = re.search(r"dqn_model_(\d+).ckpt", filename)
     if not match:
-        match = re.search(r"ppo_model_(\d+).pth", filename)
+        match = re.search(r"ppo_model_(\d+).ckpt", filename)
     if not match:
-        match = re.search(r"drqn_model_(\d+).pth", filename)
+        match = re.search(r"drqn_model_(\d+).ckpt", filename)
     if not match:
-        match = re.search(r"recurrent_ppo_model_(\d+).pth", filename)
+        match = re.search(r"recurrent_ppo_model_(\d+).ckpt", filename)
     if not match:
-        match = re.search(r"dreamer_model_(\d+).pth", filename)
+        match = re.search(r"dreamer_model_(\d+).ckpt", filename)
         
     pct = match.group(1) if match else "unknown"
     
@@ -704,7 +704,7 @@ def main():
     parser.add_argument("--seed", type=int, help="Override testing seed")
     parser.add_argument("--episodes", type=int, help="Number of episodes to evaluate")
     parser.add_argument("--results_dir", type=str, required=True, help="Path to results directory (Required)")
-    parser.add_argument("--checkpoint", type=str, help="Specific checkpoint name or path to evaluate (e.g. 'model_100.pth' or full path)")
+    parser.add_argument("--checkpoint", type=str, help="Specific checkpoint name or path to evaluate (e.g. 'model_100.ckpt' or full path)")
     parser.add_argument("--all", action="store_true", help="Evaluate all checkpoints found in the directory")
     args = parser.parse_args()
 
@@ -765,7 +765,7 @@ def main():
     elif algorithm == "DreamerV3": prefix = "dreamer_model_"
     else: prefix = "q_table_"
 
-    ext = ".npy" if algorithm == "Tabular Q-Learning" else ".pth"
+    ext = ".npy" if algorithm == "Tabular Q-Learning" else ".ckpt"
 
     checkpoints = []
     
