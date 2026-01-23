@@ -508,13 +508,13 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     # Frame Stacking Logic
     frame_stack = config_dict.get('agent.frame_stack', 1)
     
-    # Multiply input_dim by frame_stack for flattening
+    # input_dim IS the base dimension. We do NOT multiply it here anymore.
     base_input_dim = input_dim
-    input_dim = base_input_dim * frame_stack
+    # input_dim = base_input_dim * frame_stack # REMOVED: Agent handles this internally now (DQN/PPO)
     
     breakdown_str = ', '.join(dims_breakdown)
     if frame_stack > 1:
-        input_details = f"{input_dim} (Base: {base_input_dim} [{breakdown_str}] x Stack: {frame_stack})"
+        input_details = f"Base: {base_input_dim} [{breakdown_str}] x Stack: {frame_stack}"
     else:
         input_details = f"{input_dim} ({breakdown_str})"
         
@@ -524,7 +524,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         if not quiet:
             print(f"Initializing DQN Agent (Input Dim: {input_details})...")
         agent = DQNAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, # Pass BASE dim
             action_dim=5, 
             lr=config_dict.get_mandatory('agent.learning_rate', float),
             gamma=config_dict.get_mandatory('agent.gamma', float),
@@ -535,14 +535,15 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             epsilon_decay=config_dict.get_mandatory('agent.epsilon_decay', float),
             target_update_freq=config_dict.get_mandatory('agent.target_update_freq', int),
             fc_layers=config_dict.get_mandatory('agent.fc_layers'),
-            device=device
+            device=device,
+            frame_stack=frame_stack # Pass frame_stack
         )
 
     elif algorithm == "DRQN":
         if not quiet:
             print(f"Initializing DRQN Agent (Input Dim: {input_details})...")
         agent = DRQNAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5, 
             lr=config_dict.get_mandatory('agent.learning_rate', float),
             gamma=config_dict.get_mandatory('agent.gamma', float),
@@ -563,7 +564,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         if not quiet:
             print(f"Initializing PPO Agent (Input Dim: {input_details})...")
         agent = PPOAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5,
             lr_actor=config_dict.get_mandatory('agent.lr_actor', float),
             lr_critic=config_dict.get_mandatory('agent.lr_critic', float),
@@ -574,14 +575,15 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             entropy_coef=config_dict.get_mandatory('agent.entropy_coef', float),
             actor_fc_layers=config_dict.get_mandatory('agent.actor_fc_layers'),
             critic_fc_layers=config_dict.get_mandatory('agent.critic_fc_layers'),
-            device=device
+            device=device,
+            frame_stack=frame_stack
         )
 
     elif algorithm == "RecurrentPPO":
         if not quiet:
             print(f"Initializing Recurrent PPO Agent (Input Dim: {input_details})...")
         agent = RecurrentPPOAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5,
             lr_actor=config_dict.get_mandatory('agent.lr_actor', float),
             lr_critic=config_dict.get_mandatory('agent.lr_critic', float),
@@ -602,7 +604,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         if not quiet:
             print(f"Initializing Dreamer V3 Agent (Input Dim: {input_details})...")
         agent = DreamerV3Agent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5,
             batch_size=config_dict.get_mandatory('agent.batch_size', int),
             batch_length=config_dict.get_mandatory('agent.batch_length', int),
@@ -728,6 +730,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             if global_step < 5:
                 print(f"DEBUG: Initial flat_state shape: {flat_state.shape}")
                 print(f"DEBUG: Initial state_array shape after stack: {state_array.shape}")
+
         else:
             # Tabular
             state_array = state
@@ -778,6 +781,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 flat_next_state_raw = preprocess_state(next_state)
                 # Stack next state
                 next_state_stacked = stacker.step(flat_next_state_raw)
+                if global_step < 5:
+                    print(f"DEBUG: Next flat_state shape: {flat_next_state_raw.shape}")
+                    print(f"DEBUG: Next state_array stacked shape: {next_state_stacked.shape}")
+
                 
                 # Store Transition (Use stacked states for non-recurrent agents if needed, 
                 # but usually recurrent agents manage their own history. 
@@ -799,7 +806,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                     agent.store_transition(state_array, action, reward, done)
                 else:
                     # DQN / DRQN
-                    agent.store_transition(state_array, action, next_state_stacked, reward, done)
+                    agent.store_transition(state_array, action, reward, next_state_stacked, done)
                 
                 # Update and capture losses
                 start_upd = time.time()

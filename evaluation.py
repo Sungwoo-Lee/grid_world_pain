@@ -233,11 +233,11 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     # Frame Stacking Logic
     frame_stack = config.get('agent.frame_stack', 1)
     base_input_dim = input_dim
-    input_dim = base_input_dim * frame_stack
+    # input_dim = base_input_dim * frame_stack # REMOVED: Managed internally by agents
     
     breakdown_str = ', '.join(dims_breakdown)
     if frame_stack > 1:
-        print(f"Input Dimension: {input_dim} (Base: {base_input_dim} [{breakdown_str}] x Stack: {frame_stack})")
+        print(f"Input Dimension: Base: {base_input_dim} [{breakdown_str}] x Stack: {frame_stack}")
     else:
         print(f"Input Dimension: {input_dim} ({breakdown_str})")
     
@@ -246,8 +246,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     if algorithm == "DQN":
         from src.models.dqn import DQNAgent
         agent = DQNAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5,
+            frame_stack=frame_stack,
             lr=config.get_mandatory('agent.learning_rate', float),
             gamma=config.get_mandatory('agent.gamma', float),
             buffer_size=config.get_mandatory('agent.buffer_size', int),
@@ -265,7 +266,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     elif algorithm == "DRQN":
         from src.models.drqn import DRQNAgent
         agent = DRQNAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5, 
             lr=config.get_mandatory('agent.learning_rate', float),
             gamma=config.get_mandatory('agent.gamma', float),
@@ -286,8 +287,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     elif algorithm == "PPO":
         from src.models.ppo import PPOAgent
         agent = PPOAgent(
-            state_dim=input_dim, 
-            action_dim=5, 
+            state_dim=base_input_dim, 
+            action_dim=5,
+            frame_stack=frame_stack, 
             lr_actor=config.get_mandatory('agent.lr_actor', float),
             lr_critic=config.get_mandatory('agent.lr_critic', float),
             gamma=config.get_mandatory('agent.gamma', float),
@@ -305,7 +307,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     elif algorithm == "RecurrentPPO":
         from src.models.recurrent_ppo import RecurrentPPOAgent
         agent = RecurrentPPOAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5, 
             lr_actor=config.get_mandatory('agent.lr_actor', float), 
             lr_critic=config.get_mandatory('agent.lr_critic', float), 
@@ -326,7 +328,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     elif algorithm == "DreamerV3":
         from src.models.dreamer_v3 import DreamerV3Agent
         agent = DreamerV3Agent(
-            state_dim=input_dim,
+            state_dim=base_input_dim,
             action_dim=5,
             device=device,
             batch_size=config.get_mandatory('agent.batch_size', int),

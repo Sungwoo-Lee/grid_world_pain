@@ -25,5 +25,5 @@ class FrameStacker:
         return self._get_stacked_state()
         
     def _get_stacked_state(self):
-        """Concatenate frames into single flat vector"""
-        return np.concatenate(list(self.frames), axis=0)
+        """Stack frames into (Stack, D) array"""
+        return np.stack(list(self.frames), axis=0)

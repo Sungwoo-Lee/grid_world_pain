@@ -47,11 +47,19 @@ class DQN(nn.Module):
         self.net = nn.Sequential(*layers)
         
     def forward(self, x):
+        # x shape: (Batch, Time, Obs) or (Batch, Obs) or (Obs)
+        if x.dim() == 3:
+             # (Batch, Time, Obs) -> Flatten Time * Obs
+             batch_size = x.size(0)
+             x = x.view(batch_size, -1)
+        # If x.dim() == 2, assume already flattened -> (Batch, Time*Obs)
+        # Note: If single step (1, Time, Obs) -> (1, Time*Obs)
         return self.net(x)
 
 class DQNAgent:
-    def __init__(self, state_dim, action_dim, lr=None, gamma=None, buffer_size=None, batch_size=None, epsilon_start=None, epsilon_end=None, epsilon_decay=None, target_update_freq=None, fc_layers=None, device="auto"):
-        self.state_dim = state_dim
+    def __init__(self, state_dim, action_dim, lr=None, gamma=None, buffer_size=None, batch_size=None, epsilon_start=None, epsilon_end=None, epsilon_decay=None, target_update_freq=None, fc_layers=None, device="auto", frame_stack=1):
+        self.state_dim = state_dim * frame_stack # Internal network input dim is flattened
+        self.frame_stack = frame_stack
         self.action_dim = action_dim
         
         # Validation for required config parameters
@@ -83,8 +91,10 @@ class DQNAgent:
         # print(f"DQN Agent using device: {self.device}")
         
         # Networks
-        self.policy_net = DQN(state_dim, action_dim, fc_layers).to(self.device)
-        self.target_net = DQN(state_dim, action_dim, fc_layers).to(self.device)
+        # Networks
+        # Use computed flattened dim for network construction
+        self.policy_net = DQN(self.state_dim, action_dim, fc_layers).to(self.device)
+        self.target_net = DQN(self.state_dim, action_dim, fc_layers).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         
@@ -113,6 +123,8 @@ class DQNAgent:
             return
         
         state, action, reward, next_state, done = self.memory.sample(self.batch_size)
+        
+
         
         state = torch.FloatTensor(state).to(self.device)
         next_state = torch.FloatTensor(next_state).to(self.device)
