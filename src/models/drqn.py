@@ -307,7 +307,7 @@ class DRQNAgent:
         torch.save(checkpoint, path)
         
     def load(self, path, weights_only=False):
-        checkpoint = torch.load(path)
+        checkpoint = torch.load(path, weights_only=False)
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             self.policy_net.load_state_dict(checkpoint['model_state_dict'])
             if not weights_only:

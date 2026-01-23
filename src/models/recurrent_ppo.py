@@ -332,7 +332,7 @@ class RecurrentPPOAgent:
         torch.save(checkpoint, checkpoint_path)
    
     def load(self, checkpoint_path, weights_only=False):
-        checkpoint = torch.load(checkpoint_path, map_location=lambda storage, loc: storage)
+        checkpoint = torch.load(checkpoint_path, map_location=lambda storage, loc: storage, weights_only=False)
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             self.policy.load_state_dict(checkpoint['model_state_dict'])
             self.policy_old.load_state_dict(checkpoint['model_state_dict'])

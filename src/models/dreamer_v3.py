@@ -848,7 +848,11 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         torch.save(checkpoint, checkpoint_path)
    
     def load(self, checkpoint_path, weights_only=False):
-        checkpoint = torch.load(checkpoint_path)
+        # We must set weights_only=False here because we are loading a dictionary 
+        # that might contain numpy arrays (buffer metadata) or other non-weight objects.
+        # The 'weights_only' argument to this method controls whether WE apply our own 
+        # filtering logic (skipping optimizer etc), NOT whether torch.load restricts types.
+        checkpoint = torch.load(checkpoint_path, weights_only=False)
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             self.load_state_dict(checkpoint['model_state_dict'])
             
