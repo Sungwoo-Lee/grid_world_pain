@@ -170,7 +170,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         vector_size = config.get('sensory.vector_size', 10)
         nociceptor_radius = config.get('sensory.nociceptor_radius', 0)
         sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
-        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
+
 
     # Preprocessor for DQN
     def preprocess_state(state):
@@ -210,23 +210,36 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     print(f"{algorithm} Agent using device: {device}")
 
     # Determine Input Dim
+    # Determine Input Dim
     input_dim = 0
+    dims_breakdown = []
+    
     if using_sensory:
          input_dim += sensory_system.vector_size
+         dims_breakdown.append(f"Sensory: {sensory_system.vector_size}")
          input_dim += 1 # Nociceptor
+         dims_breakdown.append("Nociceptor: 1")
     else:
          input_dim += 2 # row, col
+         dims_breakdown.append("Coordinates: 2")
 
     if with_satiation:
         input_dim += 1
+        dims_breakdown.append("Satiation: 1")
         if with_health:
              input_dim += 1
+             dims_breakdown.append("Health: 1")
 
     # Frame Stacking Logic
     frame_stack = config.get('agent.frame_stack', 1)
     base_input_dim = input_dim
     input_dim = base_input_dim * frame_stack
-    print(f"Input Dimension: {input_dim} (Base={base_input_dim}, Stack={frame_stack})")
+    
+    breakdown_str = ', '.join(dims_breakdown)
+    if frame_stack > 1:
+        print(f"Input Dimension: {input_dim} (Base: {base_input_dim} [{breakdown_str}] x Stack: {frame_stack})")
+    else:
+        print(f"Input Dimension: {input_dim} ({breakdown_str})")
     
     stacker = FrameStacker(input_dim=base_input_dim, stack_size=frame_stack)
     

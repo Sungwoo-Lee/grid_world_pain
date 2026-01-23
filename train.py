@@ -512,11 +512,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     base_input_dim = input_dim
     input_dim = base_input_dim * frame_stack
     
+    breakdown_str = ', '.join(dims_breakdown)
     if frame_stack > 1:
-        dims_breakdown.append(f"Stack={frame_stack}")
-        input_details = f"{input_dim} (Base={base_input_dim}, {', '.join(dims_breakdown)})"
+        input_details = f"{input_dim} (Base: {base_input_dim} [{breakdown_str}] x Stack: {frame_stack})"
     else:
-        input_details = f"{input_dim} ({', '.join(dims_breakdown)})"
+        input_details = f"{input_dim} ({breakdown_str})"
         
     stacker = FrameStacker(input_dim=base_input_dim, stack_size=frame_stack)
     
@@ -725,6 +725,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             flat_state = preprocess_state(state)
             # Stack the initial state
             state_array = stacker.reset(flat_state)
+            if global_step < 5:
+                print(f"DEBUG: Initial flat_state shape: {flat_state.shape}")
+                print(f"DEBUG: Initial state_array shape after stack: {state_array.shape}")
         else:
             # Tabular
             state_array = state
