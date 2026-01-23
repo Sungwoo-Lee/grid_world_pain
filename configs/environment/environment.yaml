@@ -21,11 +21,11 @@ body:
 
   # Satiation
   with_satiation: true
-  max_satiation: 20
-  satiation_setpoint: 20
+  max_satiation: 30
+  satiation_setpoint: 30
   overeating_death: false
   random_start_satiation: true
-  start_satiation: 10
+  start_satiation: 30
   food_satiation_gain: 5
   
   # Health

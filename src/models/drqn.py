@@ -306,15 +306,16 @@ class DRQNAgent:
         }
         torch.save(checkpoint, path)
         
-    def load(self, path):
+    def load(self, path, weights_only=False):
         checkpoint = torch.load(path)
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             self.policy_net.load_state_dict(checkpoint['model_state_dict'])
-            if 'optimizer_state_dict' in checkpoint:
-                self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            if 'epsilon' in checkpoint:
-                self.epsilon = checkpoint['epsilon']
-            if 'steps_done' in checkpoint:
-                self.steps_done = checkpoint['steps_done']
+            if not weights_only:
+                if 'optimizer_state_dict' in checkpoint:
+                    self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                if 'epsilon' in checkpoint:
+                    self.epsilon = checkpoint['epsilon']
+                if 'steps_done' in checkpoint:
+                    self.steps_done = checkpoint['steps_done']
         else:
             self.policy_net.load_state_dict(checkpoint)

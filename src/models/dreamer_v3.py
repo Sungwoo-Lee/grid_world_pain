@@ -847,25 +847,26 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         }
         torch.save(checkpoint, checkpoint_path)
    
-    def load(self, checkpoint_path):
+    def load(self, checkpoint_path, weights_only=False):
         checkpoint = torch.load(checkpoint_path)
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             self.load_state_dict(checkpoint['model_state_dict'])
             
-            # Load optimizers if available
-            if 'model_opt_state_dict' in checkpoint:
-                self.model_opt.load_state_dict(checkpoint['model_opt_state_dict'])
-            if 'actor_opt_state_dict' in checkpoint:
-                self.actor_opt.load_state_dict(checkpoint['actor_opt_state_dict'])
-            if 'critic_opt_state_dict' in checkpoint:
-                self.critic_opt.load_state_dict(checkpoint['critic_opt_state_dict'])
-                
-            # Load Buffer
-            if 'buffer_episodes' in checkpoint:
-                self.buffer.episodes = checkpoint['buffer_episodes']
-                self.buffer.total_steps = checkpoint['buffer_total_steps']
-            if 'current_episode' in checkpoint:
-                self.current_episode = checkpoint['current_episode']
+            if not weights_only:
+                # Load optimizers if available
+                if 'model_opt_state_dict' in checkpoint:
+                    self.model_opt.load_state_dict(checkpoint['model_opt_state_dict'])
+                if 'actor_opt_state_dict' in checkpoint:
+                    self.actor_opt.load_state_dict(checkpoint['actor_opt_state_dict'])
+                if 'critic_opt_state_dict' in checkpoint:
+                    self.critic_opt.load_state_dict(checkpoint['critic_opt_state_dict'])
+                    
+                # Load Buffer
+                if 'buffer_episodes' in checkpoint:
+                    self.buffer.episodes = checkpoint['buffer_episodes']
+                    self.buffer.total_steps = checkpoint['buffer_total_steps']
+                if 'current_episode' in checkpoint:
+                    self.current_episode = checkpoint['current_episode']
         else:
             self.load_state_dict(checkpoint)
 

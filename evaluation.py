@@ -238,7 +238,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             device=device
         )
         # Load weights
-        agent.load(checkpoint_path)
+        agent.load(checkpoint_path, weights_only=True)
 
     elif algorithm == "DRQN":
         from src.models.drqn import DRQNAgent
@@ -259,7 +259,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             recurrent_layers=config.get_mandatory('agent.recurrent_layers'),
             device=device
         )
-        agent.load(checkpoint_path)
+        agent.load(checkpoint_path, weights_only=True)
 
     elif algorithm == "PPO":
         from src.models.ppo import PPOAgent
@@ -277,7 +277,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             critic_fc_layers=config.get_mandatory('agent.critic_fc_layers'),
             device=device
         )
-        agent.load(checkpoint_path)
+        agent.load(checkpoint_path, weights_only=True)
 
 
     elif algorithm == "RecurrentPPO":
@@ -299,7 +299,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             critic_fc_layers=config.get_mandatory('agent.critic_fc_layers'),
             device=device
         )
-        agent.load(checkpoint_path)
+        agent.load(checkpoint_path, weights_only=True)
 
     elif algorithm == "DreamerV3":
         from src.models.dreamer_v3 import DreamerV3Agent
@@ -323,7 +323,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             actor_fc_layers=config.get_mandatory('agent.actor_fc_layers'),
             critic_fc_layers=config.get_mandatory('agent.critic_fc_layers')
         )
-        agent.load(checkpoint_path)
+        agent.load(checkpoint_path, weights_only=True)
 
     else:
         # Tabular
