@@ -123,12 +123,12 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     health_recovery = config.get_mandatory('body.health_recovery', float)
     start_health_random = config.get_mandatory('body.start_health_random')
     
-    pain_prob = config.get_mandatory('environment.danger_prob', float)
-    pain_duration = config.get_mandatory('environment.danger_duration', int)
+    prob_switch_to_danger = config.get_mandatory('environment.prob_switch_to_danger', float)
+    min_danger_duration = config.get_mandatory('environment.min_danger_duration', int)
     damage_amount = config.get_mandatory('environment.damage_amount', float)
     
-    food_prob = config.get_mandatory('environment.food_prob', float)
-    food_duration = config.get_mandatory('environment.food_duration', int)
+    prob_switch_to_food = config.get_mandatory('environment.prob_switch_to_food', float)
+    min_food_duration = config.get_mandatory('environment.min_food_duration', int)
     
     # Extract Relocation Config
     relocate_resource = config.get_mandatory('environment.relocate_resource')
@@ -139,8 +139,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     np.random.seed(seed)
     
     env = GridWorld(height=height, width=width, resource_pos=resource_pos, with_satiation=with_satiation, max_steps=max_steps,
-                    danger_prob=pain_prob, danger_duration=pain_duration, damage_amount=damage_amount,
-                    food_prob=food_prob, food_duration=food_duration,
+                    prob_switch_to_danger=prob_switch_to_danger, min_danger_duration=min_danger_duration, damage_amount=damage_amount,
+                    prob_switch_to_food=prob_switch_to_food, min_food_duration=min_food_duration,
                     relocate_resource=relocate_resource, relocation_steps=relocation_steps,
                     vector_size=config.get('sensory.vector_size', 10),
                     food_property=config.get('sensory.food_property', None),
