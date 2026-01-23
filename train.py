@@ -76,7 +76,7 @@ import argparse
 from tqdm import tqdm
 
 def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed,
-                         with_health, danger_prob, damage_amount, device="auto"):
+                         with_health, prob_switch_to_danger, damage_amount, device="auto"):
     """
     Prints a professional and fancy configuration summary.
     """
@@ -105,11 +105,11 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             env_data["Satiation Setpoint"] = satiation_setpoint
             
     if with_health:
-        env_data["Danger Prob"] = danger_prob
+        env_data["Switch to Danger Prob"] = prob_switch_to_danger
         env_data["Damage Amount"] = damage_amount
         
-    env_data["Food Prob"] = config_dict.get_mandatory('environment.food_prob', float)
-    env_data["Food Duration"] = config_dict.get_mandatory('environment.food_duration', int)
+    env_data["Switch to Food Prob"] = config_dict.get_mandatory('environment.prob_switch_to_food', float)
+    env_data["Min Food Duration"] = config_dict.get_mandatory('environment.min_food_duration', int)
         
     print_section("Environment", env_data)
 
@@ -337,7 +337,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     config_dict.set('training.device', device)
     
     if not quiet:
-         print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_health, danger_prob, damage_amount, device)
+         print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_health, prob_switch_to_danger, damage_amount, device)
     
     # Setup directories
     results_dir = "results"
@@ -725,22 +725,49 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         
         if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
             flat_state = preprocess_state(state)
-            # Stack the initial state
-            state_array = stacker.reset(flat_state)
+            # Stack the initial state and FLATTEN for agent compatibility (Seq vs Grid issues)
+            state_array = stacker.reset(flat_state).flatten() 
             if global_step < 5:
                 print(f"DEBUG: Initial flat_state shape: {flat_state.shape}")
-                print(f"DEBUG: Initial state_array shape after stack: {state_array.shape}")
+                print(f"DEBUG: Initial state_array shape after stack & flatten: {state_array.shape}")
 
         else:
-            # Tabular
-            state_array = state
+            # Tabular - Convert Dictionary to Tuple for Q-Table Indexing
+            # Structure: (row, col, satiation, health) -> ints
+            # Note: We rely on logic in QLearningAgent to extract logic, 
+            # OR we standardize here. QLearningAgent line 84: tuple(int(x) for x in state)
+            # This iterates keys if dict. We must provide values tuple.
+            
+            # Extract Location
+            if 'loc' in state:
+                r, c = state['loc']
+            else:
+                 # Should not happen based on preprocess logic, but strictly:
+                 # If using_sensory, keys are vectors. Tabular shouldn't use sensory really.
+                 # Assuming Tabular uses standard coords + body.
+                 # If using_sensory=True with Tabular, it will fail unless we define a discrete mapping.
+                 # For now, assume Tabular logic in repo handles (row, col, sat...)
+                 # Let's extract values in order.
+                 pass # Fallback to existing logic if not dict?
+                 
+            # Construct tuple
+            # If using_sensory=False (default for Tabular), state is {'loc': (r,c), 'satiation': s...}
+            tabular_list = []
+            if 'loc' in state:
+                tabular_list.extend(state['loc']) # r, c
+            if with_satiation:
+                tabular_list.append(state['satiation'])
+            if with_health:
+                tabular_list.append(state['health'])
+                
+            state_array = tuple(int(x) for x in tabular_list)
         
         while not done:
             global_step += 1
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 action = agent.choose_action(state_array)
             else:
-                action = agent.choose_action(state)
+                action = agent.choose_action(state_array) # Pass the tuple we created
             
             # Step External
             next_env_state, env_reward, env_done, info = env.step(action)
@@ -779,8 +806,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update
                 flat_next_state_raw = preprocess_state(next_state)
-                # Stack next state
-                next_state_stacked = stacker.step(flat_next_state_raw)
+                # Stack next state and Flatten
+                next_state_stacked = stacker.step(flat_next_state_raw).flatten()
                 if global_step < 5:
                     print(f"DEBUG: Next flat_state shape: {flat_next_state_raw.shape}")
                     print(f"DEBUG: Next state_array stacked shape: {next_state_stacked.shape}")
@@ -797,16 +824,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 # DQN/DRQN: (state, action, next_state, reward, done)
                 # Dreamer: (state, action, reward, done) - likely adds to buffer
                 
-                if isinstance(agent, (PPOAgent, RecurrentPPOAgent)):
-                    # PPO stores current state, action, prob.
-                    # Reward/Done usually stored via separate method or batch update?
-                    # Let's check PPO implementation: store_transition(state, action, log_prob, reward, done)
-                    agent.store_transition(state_array, action, info.get('probs', None), reward, done)
-                elif isinstance(agent, DreamerV3Agent):
-                    agent.store_transition(state_array, action, reward, done)
-                else:
-                    # DQN / DRQN
-                    agent.store_transition(state_array, action, reward, next_state_stacked, done)
+                # Unified Access: All agents support (state, action, reward, next_state, done)
+                # PPO/RecurrentPPO: internally ignores s,a,ns but expects r at pos 3.
+                # Dreamer: expects r at pos 3, ns at pos 4 (ignored?), d at pos 5.
+                agent.store_transition(state_array, action, reward, next_state_stacked, done)
                 
                 # Update and capture losses
                 start_upd = time.time()
@@ -847,7 +868,18 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 state_array = next_state_stacked # Stacked for next iter
             else:
                 # Tabular Update
-                agent.update(state, action, reward, next_state)
+                # Construct next tuple
+                tabular_next_list = []
+                if 'loc' in next_state:
+                    tabular_next_list.extend(next_state['loc'])
+                if with_satiation:
+                    tabular_next_list.append(next_state['satiation'])
+                if with_health:
+                    tabular_next_list.append(next_state['health'])
+                
+                next_state_array = tuple(int(x) for x in tabular_next_list)
+                
+                agent.update(state_array, action, reward, next_state_array) # Use tuples
                 state = next_state
                 
             total_reward += reward
