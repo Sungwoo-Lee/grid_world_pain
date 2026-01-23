@@ -836,8 +836,36 @@ class DreamerV3Agent(nn.Module, EMAMixin):
         return metrics
 
     def save(self, checkpoint_path):
-        torch.save(self.state_dict(), checkpoint_path)
+        checkpoint = {
+            'model_state_dict': self.state_dict(),
+            'model_opt_state_dict': self.model_opt.state_dict(),
+            'actor_opt_state_dict': self.actor_opt.state_dict(),
+            'critic_opt_state_dict': self.critic_opt.state_dict(),
+            'buffer_episodes': self.buffer.episodes,
+            'buffer_total_steps': self.buffer.total_steps,
+            'current_episode': self.current_episode
+        }
+        torch.save(checkpoint, checkpoint_path)
    
     def load(self, checkpoint_path):
-        self.load_state_dict(torch.load(checkpoint_path))
+        checkpoint = torch.load(checkpoint_path)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            self.load_state_dict(checkpoint['model_state_dict'])
+            
+            # Load optimizers if available
+            if 'model_opt_state_dict' in checkpoint:
+                self.model_opt.load_state_dict(checkpoint['model_opt_state_dict'])
+            if 'actor_opt_state_dict' in checkpoint:
+                self.actor_opt.load_state_dict(checkpoint['actor_opt_state_dict'])
+            if 'critic_opt_state_dict' in checkpoint:
+                self.critic_opt.load_state_dict(checkpoint['critic_opt_state_dict'])
+                
+            # Load Buffer
+            if 'buffer_episodes' in checkpoint:
+                self.buffer.episodes = checkpoint['buffer_episodes']
+                self.buffer.total_steps = checkpoint['buffer_total_steps']
+            if 'current_episode' in checkpoint:
+                self.current_episode = checkpoint['current_episode']
+        else:
+            self.load_state_dict(checkpoint)
 
