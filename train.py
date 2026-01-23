@@ -479,22 +479,33 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     agent = None
     algorithm = config_dict.get_mandatory('agent.algorithm')
     
-    if algorithm == "DQN":
-        # Calculate Input Dimension
-        input_dim = 0
-        if using_sensory:
-             input_dim += sensory_system.vector_size
-             input_dim += 1 # Nociceptor
-        else:
-             input_dim += 2 # row, col
+    # Calculate Input Dimension and Breakdown
+    input_dim = 0
+    dims_breakdown = []
+    
+    if using_sensory:
+         v_size = sensory_system.vector_size
+         input_dim += v_size
+         dims_breakdown.append(f"Sensory={v_size}")
+         
+         input_dim += 1 # Nociceptor
+         dims_breakdown.append("Nociceptor=1")
+    else:
+         input_dim += 2 # row, col
+         dims_breakdown.append("Loc=2")
+         
+    if with_satiation:
+        input_dim += 1
+        dims_breakdown.append("Sat=1")
+        if with_health:
+             input_dim += 1
+             dims_breakdown.append("Health=1")
              
-        if with_satiation:
-            input_dim += 1
-            if with_health:
-                 input_dim += 1
-        
+    input_details = f"{input_dim} ({', '.join(dims_breakdown)})"
+    
+    if algorithm == "DQN":
         if not quiet:
-            print(f"Initializing DQN Agent (Input Dim: {input_dim})...")
+            print(f"Initializing DQN Agent (Input Dim: {input_details})...")
         agent = DQNAgent(
             state_dim=input_dim, 
             action_dim=5, 
@@ -511,21 +522,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         )
 
     elif algorithm == "DRQN":
-        # Calculate Input Dimension
-        input_dim = 0
-        if using_sensory:
-             input_dim += sensory_system.vector_size
-             input_dim += 1 # Nociceptor
-        else:
-             input_dim += 2 # row, col
-             
-        if with_satiation:
-            input_dim += 1
-            if with_health:
-                 input_dim += 1
-        
         if not quiet:
-            print(f"Initializing DRQN Agent (Input Dim: {input_dim})...")
+            print(f"Initializing DRQN Agent (Input Dim: {input_details})...")
         agent = DRQNAgent(
             state_dim=input_dim, 
             action_dim=5, 
@@ -545,21 +543,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         )
         
     elif algorithm == "PPO":
-        # Calculate Input Dimension
-        input_dim = 0
-        if using_sensory:
-             input_dim += sensory_system.vector_size
-             input_dim += 1 # Nociceptor
-        else:
-             input_dim += 2 # row, col
-             
-        if with_satiation:
-            input_dim += 1
-            if with_health:
-                 input_dim += 1
-                 
         if not quiet:
-            print(f"Initializing PPO Agent (Input Dim: {input_dim})...")
+            print(f"Initializing PPO Agent (Input Dim: {input_details})...")
         agent = PPOAgent(
             state_dim=input_dim, 
             action_dim=5,
@@ -576,21 +561,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         )
 
     elif algorithm == "RecurrentPPO":
-        # Calculate Input Dimension
-        input_dim = 0
-        if using_sensory:
-             input_dim += sensory_system.vector_size
-             input_dim += 1 # Nociceptor
-        else:
-             input_dim += 2 # row, col
-             
-        if with_satiation:
-            input_dim += 1
-            if with_health:
-                 input_dim += 1
-                 
         if not quiet:
-            print(f"Initializing Recurrent PPO Agent (Input Dim: {input_dim})...")
+            print(f"Initializing Recurrent PPO Agent (Input Dim: {input_details})...")
         agent = RecurrentPPOAgent(
             state_dim=input_dim, 
             action_dim=5,
@@ -610,21 +582,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         )
 
     elif algorithm == "DreamerV3":
-        # Calculate Input Dimension
-        input_dim = 0
-        if using_sensory:
-             input_dim += sensory_system.vector_size
-             input_dim += 1 # Nociceptor
-        else:
-             input_dim += 2 # row, col
-             
-        if with_satiation:
-            input_dim += 1
-            if with_health:
-                 input_dim += 1
-                 
         if not quiet:
-            print(f"Initializing Dreamer V3 Agent (Input Dim: {input_dim})...")
+            print(f"Initializing Dreamer V3 Agent (Input Dim: {input_details})...")
         agent = DreamerV3Agent(
             state_dim=input_dim, 
             action_dim=5,
