@@ -167,7 +167,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         sensor_radius = config.get_mandatory('sensory.sensor_radius', int)
         decay_power = config.get('sensory.decay_power', 1.0) # Not mandatory in old configs
         vector_size = config.get('sensory.vector_size', 10)
-        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power)
+        nociceptor_radius = config.get('sensory.nociceptor_radius', 0)
+        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
+        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
 
     # Preprocessor for DQN
     def preprocess_state(state_tuple):
@@ -619,7 +621,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                 # Note: `flat_state` is available in loop scope.
                 
                 l_state = flat_state if using_sensory else state
-                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=step_count+1, sensory_data=vis_data), action=action, state=l_state)     
+                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=step_count+1, sensory_data=vis_data, action=action), action=action, state=l_state)     
             else:
                 done = env_done
                 vis_data = None
@@ -631,7 +633,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
                     next_state = next_env_state
                 
                 l_state = flat_state if using_sensory else state
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data), action=action, state=l_state)
+                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data, action=action), action=action, state=l_state)
 
             
             state = next_state

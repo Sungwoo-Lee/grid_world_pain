@@ -231,6 +231,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             "config": config_dict.to_dict(),
             "reinit": True
         }
+        
+        # Override name with tag if present (User Request)
+        if config_dict.get('tag'):
+             wandb_kwargs['name'] = config_dict.get('tag')
+
         # Check if we should resume
         if config_dict.get('wandb.resume_id'):
             wandb_kwargs['id'] = config_dict.get('wandb.resume_id')
@@ -258,10 +263,12 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         sensor_radius = config_dict.get_mandatory('sensory.sensor_radius')
         decay_power = config_dict.get('sensory.decay_power', 1.0)
         vector_size = config_dict.get('sensory.vector_size', 10)
+        nociceptor_radius = config_dict.get('sensory.nociceptor_radius', 0)
     else:
         sensor_radius = 1 # Dummy
         decay_power = 1.0 # Dummy
         vector_size = 10 # Dummy
+        nociceptor_radius = 0 # Dummy
     
     # Professional Config Summary
     if config_dict is None:
@@ -411,8 +418,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     sensory_system = None
     if using_sensory:
         if not quiet:
-            print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size})")
-        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power)
+            print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size}, NociceptorR={nociceptor_radius})")
+        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
 
     # Define Preprocessor for DQN
     def preprocess_state(state_tuple):
@@ -884,7 +891,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     # Generate learning curves
     # Generate milestones for plotting
     # Generate milestones for plotting
-    milestones = {ep: f"Ckpt" for ep in range(start_episode + checkpoint_frequency, target_end_episode + 1, checkpoint_frequency)}
+    milestones = {ep: f"Ckpt" for ep in range(start_episode + checkpoint_freq, target_end_episode + 1, checkpoint_freq)}
     plot_learning_curves(history_filename, plots_dir, config_dict, max_steps=max_steps, milestones=milestones)
     
     if not quiet:

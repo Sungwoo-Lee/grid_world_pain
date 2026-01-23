@@ -244,7 +244,7 @@ class GridWorld:
         if self.current_step >= self.max_steps:
             done = True
         
-        info = {'ate_food': ate_food, 'damage': damage}
+        info = {'ate_food': ate_food, 'damage': damage, 'rested': (action == 4)}
         
         return self.agent_pos, reward, done, info
 
@@ -270,7 +270,7 @@ class GridWorld:
         print(f"Step: {self.current_step}, Danger: {self.is_danger}, Food: {self.is_food_active}")
         print()
 
-    def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=None, step=None, sensory_data=None):
+    def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=None, step=None, sensory_data=None, action=None):
         """
         Renders the grid as an RGB image using Matplotlib with a professional Light Theme (Scientific/Apple Style).
         Supports visualizing sensory modules if data is provided.
@@ -344,20 +344,20 @@ class GridWorld:
         ax_stats.axis('off')
         
         # Clean Title
-        ax_stats.text(0.5, 0.90, "INTEROCEPTIVE AI", color=text_color, ha='center', fontsize=12, fontweight='bold', transform=ax_stats.transAxes)
-        ax_stats.plot([0.2, 0.8], [0.85, 0.85], color='#ADB5BD', transform=ax_stats.transAxes, linewidth=1)
+        ax_stats.text(0.5, 0.95, "INTEROCEPTIVE AI", color=text_color, ha='center', fontsize=12, fontweight='bold', transform=ax_stats.transAxes)
+        ax_stats.plot([0.2, 0.8], [0.92, 0.92], color='#ADB5BD', transform=ax_stats.transAxes, linewidth=1)
         
         # Episode / Step info
         ep_str = f"EPISODE: {episode}" if episode is not None else "EP: --"
         step_str = f"STEP:    {step}" if step is not None else "STEP: --"
-        ax_stats.text(0.1, 0.70, ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
-        ax_stats.text(0.1, 0.60, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        ax_stats.text(0.1, 0.80, ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        ax_stats.text(0.1, 0.75, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
         
         # Bars Helper (Flat Design)
         def draw_bar(y_pos, label, value, max_val, color):
             pct = max(0, min(1, value / max_val)) if max_val > 0 else 0
             # Label
-            ax_stats.text(0.1, y_pos + 0.1, f"{label}: {value:.1f}/{max_val}", color=text_color, fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
+            ax_stats.text(0.1, y_pos + 0.09, f"{label}: {value:.1f}/{max_val}", color=text_color, fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
             # Background Bar
             rect_bg = plt.Rectangle((0.1, y_pos), 0.8, 0.08, color='#F1F3F5', transform=ax_stats.transAxes, ec='none')
             ax_stats.add_patch(rect_bg)
@@ -383,9 +383,15 @@ class GridWorld:
         if not self.with_satiation:
              status_text = "FOOD" if not self.is_danger else "DANGER"
             
-        ax_stats.text(0.8, 0.70, status_text, color='white', ha='center', va='center', fontsize=8, fontweight='bold', 
+        ax_stats.text(0.8, 0.85, status_text, color='white', ha='center', va='center', fontsize=8, fontweight='bold', 
                       transform=ax_stats.transAxes,
                       bbox=dict(boxstyle='round,pad=0.3', facecolor=status_bg, edgecolor='none'))
+            
+        # Draw Action
+        if action is not None:
+             action_names = {0: "UP", 1: "RIGHT", 2: "DOWN", 3: "LEFT", 4: "STAY"}
+             act_str = action_names.get(action, "UNKNOWN")
+             ax_stats.text(0.5, 0.65, f"ACTION: {act_str}", color='#495057', ha='center', fontsize=12, weight='bold', transform=ax_stats.transAxes)
 
         # --- 3. Draw Sensory Modules ---
         if ax_sensory and sensory_data:

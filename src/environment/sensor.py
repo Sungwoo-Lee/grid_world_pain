@@ -47,19 +47,49 @@ class ResourceSensor:
             
         return observation
 
+class Nociceptor:
+    """
+    A contact sensor (range 0) that detects 'Danger' resources at the agent's exact location.
+    Behaves as a biological nociceptor: detecting immediate nociception.
+    """
+    def __init__(self, radius=0):
+        self.radius = radius 
+        
+    def sense(self, agent_pos, resources):
+        """
+        Returns 1.0 if the agent is within radius of a Danger resource, else 0.0.
+        
+        Args:
+            agent_pos (tuple): (row, col)
+            resources (list): List of Resource objects
+            
+        Returns:
+            np.array: Scalar float [1.0] or [0.0]
+        """
+        r0, c0 = agent_pos
+        for res in resources:
+            if res.name == 'Danger':
+                r1, c1 = res.pos
+                dist = np.sqrt((r1 - r0)**2 + (c1 - c0)**2)
+                if dist <= self.radius:
+                    return np.array([1.0], dtype=np.float32)
+                    
+        return np.array([0.0], dtype=np.float32)
+
 class SensorySystem:
     """
     Manager for the agent's sensors.
     Currently manages the unified ResourceSensor.
     """
-    def __init__(self, sensor_radius=2, vector_size=10, decay_power=1.0):
+    def __init__(self, sensor_radius=2, vector_size=10, decay_power=1.0, nociceptor_radius=0):
         # Unified radius
         radius = sensor_radius
         self.resource_sensor = ResourceSensor(radius=radius, vector_size=vector_size, decay_power=decay_power)
+        self.nociceptor = Nociceptor(radius=nociceptor_radius)
         self.vector_size = vector_size
         
-        # State Dims: The output is now a SINGLE vector of size N.
-        self.state_dims = (vector_size,)
+        # State Dims: Vector Size (Olfactory) + 1 (Nociceptor)
+        self.state_dims = (vector_size + 1,)
         
         # For compatibility/access
         self.food_sensor = self.resource_sensor
@@ -72,9 +102,11 @@ class SensorySystem:
             resources (list): List of Resource objects from GridWorld
             
         Returns:
-            np.array: The sensory observation vector.
+            np.array: The sensory observation vector (concatenated).
         """
-        return self.resource_sensor.sense(agent_pos, resources)
+        olfactory = self.resource_sensor.sense(agent_pos, resources)
+        nociception = self.nociceptor.sense(agent_pos, resources)
+        return np.concatenate([olfactory, nociception])
         
     def get_visualization_data(self, observation):
         """
@@ -83,13 +115,25 @@ class SensorySystem:
         Args:
             observation (np.array): The resource sensor output vector.
         """
+        # Split observation back into Vector and Nociception for viz
+        olfactory_data = observation[:self.vector_size]
+        nociception_val = observation[self.vector_size]
+        
         return [
             {
                 'name': 'Olfactory',
                 'color': '#8e44ad', # Purple for mixed/chemical
                 'radius': self.resource_sensor.radius,
-                'vector': observation, # Pass the vector data for legacy slot (though it's intensity vector now)
-                'intensity': None,     # Not a single scalar anymore
+                'vector': olfactory_data, 
+                'intensity': None,     
                 'type': 'spectrum' 
+            },
+            {
+                'name': 'Nociceptor',
+                'color': '#c0392b', # Dark Red
+                'radius': 0,
+                'vector': None,
+                'intensity': nociception_val[0] if isinstance(nociception_val, np.ndarray) else nociception_val,
+                'type': 'intensity'
             }
         ]

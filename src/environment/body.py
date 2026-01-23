@@ -107,7 +107,9 @@ class InteroceptiveBody:
             if damage > 0:
                 self.health -= damage
             else:
-                self.health = min(self.health + self.health_recovery, self.max_health)
+                # Recover ONLY if rested (Action 4)
+                if info.get('rested', False):
+                    self.health = min(self.health + self.health_recovery, self.max_health)
             
         # 3. Termination Checks (Death conditions)
         done = False

@@ -24,7 +24,6 @@ body:
   random_start_satiation: true
   start_satiation: 10
   food_satiation_gain: 5
-  
   with_health: true
   max_health: 20
   start_health: 10
@@ -35,6 +34,7 @@ body:
 sensory:
   using_sensory: true
   sensor_radius: 5 # Default: 2
+  nociceptor_radius: 0 # Default: 0 (Contact only)
   # Decay Formula: decay = 1.0 / (distance ** decay_power)
   decay_power: 1.0 
   vector_size: 5
