@@ -892,7 +892,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             if config_dict.get('evaluation.video_during_training') or config_dict.get('visualization.enabled'):
                 try:
                     if not quiet:
-                        print(f"Running evaluation for checkpoint {pct}...")
+                         # Using tqdm.write to avoid breaking progress bar
+                         tqdm.write(f"Running evaluation for checkpoint {pct}...")
                         
                     # Use evaluate_agent utility
                     # We pass the CURRENT agent and env (it resets env)
@@ -907,10 +908,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                         num_episodes=1, # Quick check
                         results_dir=output_dir, # Same output dir
                         checkpoint_pct=pct,
-                        wandb_run_path=None # Use active run
+                        wandb_run_path=None, # Use active run
+                        quiet=True # Suppress internal prints
                     )
                 except Exception as e:
-                    print(f"Warning: Evaluation failed during training: {e}")
+                    tqdm.write(f"Warning: Evaluation failed during training: {e}")
     
     if not quiet:
         print() # Newline after progress bar

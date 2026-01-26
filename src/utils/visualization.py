@@ -237,13 +237,48 @@ def plot_q_table_conventional(q_table, save_path, config, food_pos=None):
     plt.savefig(save_path, dpi=config.get_mandatory('visualization.q_table.dpi'))
     plt.close(fig)
 
-def save_video(frames, output_path, fps=5):
+def save_video(frames, output_path, fps=5, quiet=False):
     """
     Saves a list of RGB frames as an MP4 video.
     """
+    import sys
+    
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    imageio.mimsave(output_path, frames, fps=fps)
-    print(f"Saved video to {output_path}")
+    
+    if quiet:
+        # Redirect low-level file descriptors to silence C-level libraries (ffmpeg/openh264)
+        sys.stdout.flush()
+        sys.stderr.flush()
+        
+        # Save original file descriptors
+        old_stdout_fd = os.dup(sys.stdout.fileno())
+        old_stderr_fd = os.dup(sys.stderr.fileno())
+        
+        try:
+            # Open devnull
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            
+            # Replace stdout/stderr with devnull
+            os.dup2(devnull, sys.stdout.fileno())
+            os.dup2(devnull, sys.stderr.fileno())
+            
+            # Close devnull (it's duplicated now)
+            os.close(devnull)
+            
+            # Execute noisy function
+            imageio.mimsave(output_path, frames, fps=fps)
+            
+        finally:
+            # Restore
+            os.dup2(old_stdout_fd, sys.stdout.fileno())
+            os.dup2(old_stderr_fd, sys.stderr.fileno())
+            
+            # Close saved copies
+            os.close(old_stdout_fd)
+            os.close(old_stderr_fd)
+    else:
+        imageio.mimsave(output_path, frames, fps=fps)
+        print(f"Saved video to {output_path}")
 
 def plot_learning_curves(history_csv_path, output_dir, config, max_steps=None, milestones=None):
     """

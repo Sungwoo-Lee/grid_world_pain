@@ -1,7 +1,19 @@
 import wandb
 import os
+import contextlib
+import sys
 
-def upload_video(video_path, run_path=None, step=None, episode=None, caption="Evaluation Video", fps=4):
+# Context manager to suppress stdout/stderr
+@contextlib.contextmanager
+def suppress_output(suppress=False):
+    if suppress:
+        with open(os.devnull, 'w') as fnull:
+            with contextlib.redirect_stdout(fnull), contextlib.redirect_stderr(fnull):
+                yield
+    else:
+        yield
+
+def upload_video(video_path, run_path=None, step=None, episode=None, caption="Evaluation Video", fps=4, quiet=False):
     """
     Uploads a video to WandB.
     
@@ -15,15 +27,16 @@ def upload_video(video_path, run_path=None, step=None, episode=None, caption="Ev
         episode (int, optional): The episode number to log as a metric (eval/checkpoint_episode).
         caption (str): Caption for the video.
         fps (int): Frames per second.
+        quiet (bool): If True, suppresses print output.
     """
     if not os.path.exists(video_path):
-        print(f"Error: Video file not found at {video_path}")
+        if not quiet: print(f"Error: Video file not found at {video_path}")
         return
 
     # Case 1: Connect to specific external run (e.g. from evaluation.py trying to update training run)
     if run_path:
         try:
-            print(f"Uploading video to specific WandB run: {run_path}...")
+            if not quiet: print(f"Uploading video to specific WandB run: {run_path}...")
             
             # Allow active run to handle it if it matches? 
             # No, if run_path is provided, we assume we want to target THAT run specifically.
@@ -99,25 +112,29 @@ def upload_video(video_path, run_path=None, step=None, episode=None, caption="Ev
             
             if need_init:
                 wandb.finish()
-                print("  Upload complete (run finished).")
+                if not quiet: print("  Upload complete (run finished).")
             else:
-                print("  Upload complete (run active).")
+                if not quiet: print("  Upload complete (run active).")
 
         except Exception as e:
-            print(f"  Error uploading to WandB: {e}")
+            if not quiet: print(f"  Error uploading to WandB: {e}")
             
     # Case 2: Use currently active run (e.g. called from train.py)
     elif wandb.run is not None:
         try:
-            log_dict = {
-                "eval/video": wandb.Video(video_path, caption=caption, fps=fps, format="mp4")
-            }
-            if episode is not None:
-                 log_dict["eval/checkpoint_episode"] = int(episode)
-                 
-            wandb.log(log_dict, step=step)
-            print("  Video logged to active WandB run.")
+            # Note: fps is deprecated for file paths in wandb.Video, causing warnings.
+            # We remove it to silence the warning. formatting is handled by the file itself.
+            with suppress_output(quiet):
+                log_dict = {
+                    "eval/video": wandb.Video(video_path, caption=caption, format="mp4")
+                }
+                if episode is not None:
+                     log_dict["eval/checkpoint_episode"] = int(episode)
+                     
+                wandb.log(log_dict, step=step)
+            
+            if not quiet: print("  Video logged to active WandB run.")
         except Exception as e:
-            print(f"  Error logging to active WandB run: {e}")
+            if not quiet: print(f"  Error logging to active WandB run: {e}")
     else:
-        print("Error: No WandB run active and no run_path provided. Cannot upload.")
+        if not quiet: print("Error: No WandB run active and no run_path provided. Cannot upload.")

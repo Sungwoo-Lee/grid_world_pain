@@ -19,7 +19,8 @@ def evaluate_agent(
     device="cpu", 
     results_dir=None, 
     checkpoint_pct=None, 
-    wandb_run_path=None
+    wandb_run_path=None,
+    quiet=False
 ):
     """
     Evaluates the agent for a given number of episodes.
@@ -37,6 +38,7 @@ def evaluate_agent(
         results_dir: Directory to save videos/plots.
         checkpoint_pct: Checkpoint number/percentage/epoch (int or str) for labeling.
         wandb_run_path: Optional WandB run path to upload to.
+        quiet: If True, suppresses non-critical print output.
         
     Returns:
         video_filename (str): Path to generated video, or None.
@@ -126,7 +128,7 @@ def evaluate_agent(
             model_to_monitor = agent.policy
             
         if model_to_monitor:
-            print(f"  Monitoring activations for {type(model_to_monitor).__name__}...")
+            if not quiet: print(f"  Monitoring activations for {type(model_to_monitor).__name__}...")
             # We track Linear and Conv layers primarily
             monitor = ActivationMonitor(model_to_monitor, tracked_layers=[torch.nn.Linear, torch.nn.Conv2d, torch.nn.LSTM, torch.nn.GRU])
             
@@ -281,7 +283,13 @@ def evaluate_agent(
                  state_array = state # Tabular expects raw dict or tuple? evaluation.py passed dict.
                  
             while not done and step_count < max_steps:
-                action = agent.choose_action(state_array)
+                # Check if choose_action supports eval_mode
+                import inspect
+                sig = inspect.signature(agent.choose_action)
+                if 'eval_mode' in sig.parameters:
+                    action = agent.choose_action(state_array, eval_mode=True)
+                else:
+                    action = agent.choose_action(state_array)
                 
                 next_env_state, _, env_done, info = env.step(action)
                 current_agent_pos = env.agent_pos
@@ -373,9 +381,9 @@ def evaluate_agent(
          videos_dir = os.path.join(results_dir, "videos")
          os.makedirs(videos_dir, exist_ok=True)
          video_filename = os.path.join(videos_dir, f"video_{checkpoint_pct}.mp4")
-         save_video(frames, video_filename, fps=vis_fps)
+         save_video(frames, video_filename, fps=vis_fps, quiet=quiet)
          
          if wandb_run_path or wandb.run:
-             upload_video(video_filename, run_path=wandb_run_path, episode=checkpoint_pct, caption=f"Eval Video {checkpoint_pct}")
+             upload_video(video_filename, run_path=wandb_run_path, episode=checkpoint_pct, caption=f"Eval Video {checkpoint_pct}", quiet=quiet)
              
     return video_filename
