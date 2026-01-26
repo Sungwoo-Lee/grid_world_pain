@@ -180,7 +180,7 @@ def main():
                                         sys.executable, "evaluation.py",
                                         "--results_dir", results_dir,
                                         "--checkpoint", ckpt_name,
-                                        "--episodes", "5" # Default eval episodes
+                                        "--episodes", "10" # Default eval episodes
                                     ]
                                     
                                     eval_log_path = os.path.join(log_dir, f"{state['tag']}_eval.log")

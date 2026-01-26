@@ -19,6 +19,7 @@ Arguments:
 - `--seed <int>`: Override the random seed.
 - `--checkpoint <str/int>`: Specific checkpoint to evaluate (e.g., '50', 'model_50.ckpt').
 - `--all`: Evaluate ALL checkpoints found in the directory.
+- `--wandb-run-path <str>`: WandB run path (entity/project/run_id) to upload evaluation videos.
 
 Usage:
     # Basic evaluation (Latest checkpoint)
@@ -39,6 +40,7 @@ Notes:
 """
 import os
 import glob
+import wandb
 import re
 import yaml
 import numpy as np
@@ -55,18 +57,17 @@ from src.utils.state_utils import FrameStacker
 import torch
 
 
-def evaluate_checkpoint(checkpoint_path, results_dir, config):
+def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=None):
     """
     Evaluates a single checkpoint:
     - Sets up environment and body based on config.
     - Loads agent.
     - Runs evaluation episodes to collect frames.
     - Generates Q-table plot and performance video.
+    - Optionally uploads video to WandB.
     """
     import torch # Explicit import to fix UnboundLocalError
     filename = os.path.basename(checkpoint_path)
-    # Create Data Dir
-
     # Create Data Dir
     data_dir = os.path.join(results_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
@@ -735,6 +736,24 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
         monitor.save_history(activations_file)
         monitor.close()
 
+    # Upload video to WandB
+    # Upload video to WandB
+    if wandb_run_path and wandb.run:
+        try:
+            print(f"Uploading video for checkpoint {pct} to WandB run: {wandb_run_path}...")
+            
+            episode_val = int(pct) if pct.isdigit() else 0
+            
+            wandb.log({
+                "eval/video": wandb.Video(video_filename, caption=f"Evaluation Video Checkpoint {pct}", fps=vis_fps, format="mp4"),
+                "eval/checkpoint_episode": episode_val
+            })
+            
+            print("  Upload complete.")
+
+        except Exception as e:
+            print(f"  Error uploading to WandB: {e}")
+
 
 
 
@@ -745,6 +764,7 @@ def main():
     parser.add_argument("--results_dir", type=str, required=True, help="Path to results directory (Required)")
     parser.add_argument("--checkpoint", type=str, help="Specific checkpoint name or path to evaluate (e.g. 'model_100.ckpt' or full path)")
     parser.add_argument("--all", action="store_true", help="Evaluate all checkpoints found in the directory")
+    parser.add_argument("--wandb-run-path", type=str, help="WandB run path (e.g. 'entity/project/run_id') to upload evaluation videos")
     args = parser.parse_args()
 
     results_dir = args.results_dir
@@ -870,9 +890,45 @@ def main():
          
     print(f"Found {len(checkpoints)} checkpoint(s). Starting evaluation...")
 
-    # 5. Evaluate each checkpoint
+    
+    # 5. Initialize WandB if requested
+    if args.wandb_run_path:
+        try:
+            print(f"Initializing WandB run: {args.wandb_run_path}...")
+            path_parts = args.wandb_run_path.strip().split('/')
+            entity = None
+            project = None
+            run_id = None
+            
+            if len(path_parts) == 3:
+                entity, project, run_id = path_parts
+            elif len(path_parts) == 2:
+                project, run_id = path_parts
+            else:
+                run_id = path_parts[0]
+                
+            if run_id:
+                 wandb.init(
+                    entity=entity,
+                    project=project,
+                    id=run_id,
+                    resume="must",
+                    job_type="evaluation"
+                )
+            else:
+                print(f"Error: Could not parse run ID from {args.wandb_run_path}. Upload skipped.")
+                args.wandb_run_path = None # Disable upload
+                
+        except Exception as e:
+             print(f"Error initializing WandB: {e}")
+             args.wandb_run_path = None
+
+    # 6. Evaluate each checkpoint
     for checkpoint in checkpoints:
-        evaluate_checkpoint(checkpoint, results_dir, config)
+        evaluate_checkpoint(checkpoint, results_dir, config, wandb_run_path=args.wandb_run_path)
+    
+    if wandb.run:
+        wandb.finish()
 
     print("-" * 40)
     print(f"Evaluation complete! Visualizations are in {results_dir}/plots/ and {results_dir}/videos/")
