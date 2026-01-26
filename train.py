@@ -905,7 +905,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                         body=body,
                         sensory_system=sensory_system,
                         config=config_dict,
-                        num_episodes=1, # Quick check
+                        num_episodes=3, # Quick check
                         results_dir=output_dir, # Same output dir
                         checkpoint_pct=pct,
                         wandb_run_path=None, # Use active run

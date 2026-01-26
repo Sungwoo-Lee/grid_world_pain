@@ -4,6 +4,6 @@ wandb:
   entity: "sungwoolee"
   project: "grid_world_pain"
   group: "train"
-  job_type: "training"
+  job_type: "defualt"
   name: "default"
   mode: "online"
