@@ -3,7 +3,35 @@ import os
 import contextlib
 import sys
 
+def wandb_login(quiet=False):
+    """
+    Attempts to login to WandB using a shared API key file if available.
+    The file should be named '.wandb_api_key' in the project root.
+    """
+    # Find project root (where .wandb_api_key should be)
+    # We assume this script is in src/utils/
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.abspath(os.path.join(current_dir, "../../"))
+    key_path = os.path.join(project_root, ".wandb_api_key")
+
+    if os.path.exists(key_path):
+        try:
+            with open(key_path, 'r') as f:
+                key = f.read().strip()
+            
+            if key:
+                if not quiet: print(f"Logging into WandB using shared key from {key_path}...")
+                wandb.login(key=key)
+                return True
+        except Exception as e:
+            if not quiet: print(f"Warning: Failed to read WandB key from {key_path}: {e}")
+    
+    # Fallback to default login (uses environment or .netrc)
+    if not quiet: print("No shared WandB key found or failed to read. Using default environment/netrc login.")
+    return wandb.login()
+
 # Context manager to suppress stdout/stderr
+
 @contextlib.contextmanager
 def suppress_output(suppress=False):
     if suppress:

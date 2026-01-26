@@ -58,6 +58,8 @@ from src.utils.visualization import plot_q_table, plot_learning_curves
 from src.utils.config import get_default_config
 from src.utils.evaluation_core import evaluate_agent
 from src.utils.state_utils import FrameStacker, preprocess_state
+from src.utils.wandb_utils import wandb_login
+
 import time
 import numpy as np
 import os
@@ -243,7 +245,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             wandb_kwargs['id'] = config_dict.get('wandb.resume_id')
             wandb_kwargs['resume'] = "allow"
             
+        # Login to WandB using shared key if available
+        wandb_login(quiet=quiet)
         wandb.init(**wandb_kwargs)
+
         
         # Log Source Code
         # Explicitly log key files and src directory

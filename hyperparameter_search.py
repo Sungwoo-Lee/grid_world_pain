@@ -44,6 +44,8 @@ import time
 import sys
 from datetime import datetime
 import multiprocessing
+from src.utils.wandb_utils import wandb_login
+
 
 # Define Search Spaces
 SEARCH_SPACES = {
@@ -286,7 +288,12 @@ def main():
     if wandb_job_type is None:
         raise ValueError("Strict Config: 'wandb.job_type' must be specified in configs/wandb.yaml or via --wandb-job-type")
     
+    
+    # Ensure WandB login for the search runner
+    wandb_login(quiet=False)
+    
     run_search(args.algorithm, args.episodes, args.seed, wandb_project, args.num_processes, args.dry_run, wandb_job_type)
+
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn", force=True) # Safe for pytorch/cuda

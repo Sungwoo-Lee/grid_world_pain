@@ -36,10 +36,10 @@ import re
 # Algorithms to run with specific device assignment
 # Format: (Algorithm Name, Config Path, Device)
 ALGORITHMS = [
-    ("DQN", "configs/models/dqn.yaml", "cuda:1"),
-    ("PPO", "configs/models/ppo.yaml", "cuda:1"),
-    ("DRQN", "configs/models/drqn.yaml", "cuda:1"),
-    ("RecurrentPPO", "configs/models/recurrent_ppo.yaml", "cuda:1"),
+    ("DQN", "configs/models/dqn.yaml", "cuda:0"),
+    ("PPO", "configs/models/ppo.yaml", "cuda:0"),
+    ("DRQN", "configs/models/drqn.yaml", "cuda:0"),
+    ("RecurrentPPO", "configs/models/recurrent_ppo.yaml", "cuda:0"),
     # ("DreamerV3", "configs/models/dreamer_v3.yaml", "cuda:1"),
 ]
 
@@ -76,7 +76,8 @@ def main():
             "--agent_config", config_path,
             "--episodes", str(args.episodes),
             "--tag", full_tag,
-            "--device", device
+            "--device", device,
+            "--wandb-group", args.tag,
         ]
         
         print(f"[{algo_name}] Launching Training: {' '.join(cmd)}")

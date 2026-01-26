@@ -57,6 +57,7 @@ from src.utils.visualization import plot_q_table, save_video, visualize_activati
 from src.utils.activation_monitor import ActivationMonitor
 from src.utils.lrp_monitor import LRPMonitor
 from src.utils.state_utils import FrameStacker
+from src.utils.wandb_utils import wandb_login
 import torch
 
 
@@ -521,6 +522,7 @@ def main():
                 run_id = path_parts[0]
                 
             if run_id:
+                 wandb_login(quiet=False)
                  wandb.init(
                     entity=entity,
                     project=project,
