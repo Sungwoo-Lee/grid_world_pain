@@ -173,45 +173,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
 
 
-    # Preprocessor for DQN
-    def preprocess_state(state):
-        flat_list = []
-        if using_sensory:
-            if isinstance(state, dict):
-                 flat_list.extend(state['olfactory'])
-                 flat_list.extend(state['nociception'])
-            else:
-                 raise ValueError("Expected dictionary state")
-        else:
-            # Coords
-            if isinstance(state, dict) and 'loc' in state:
-                r, c = state['loc']
-                flat_list.append(r / height)
-                flat_list.append(c / width)
-            elif isinstance(state, (tuple, list, np.ndarray)):
-                row = state[0]
-                col = state[1]
-                flat_list.append(row / height)
-                flat_list.append(col / width)
-
-        if isinstance(state, dict):
-            if with_satiation and 'satiation' in state:
-                flat_list.append(state['satiation'] / body.max_satiation) 
-            if with_health and 'health' in state:
-                flat_list.append(state['health'] / body.max_health)
-        return np.array(flat_list, dtype=np.float32)
-
-    # Initialize Agent
-    agent = None
-    algorithm = config.get_mandatory('agent.algorithm')
-    
-    device = config.get_mandatory('training.device')
-    if device == "auto":
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"{algorithm} Agent using device: {device}")
-
-    # Determine Input Dim
-    # Determine Input Dim
+    # Determine Input Dimension
     input_dim = 0
     dims_breakdown = []
     
@@ -234,15 +196,20 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     # Frame Stacking Logic
     frame_stack = config.get('agent.frame_stack', 1)
     base_input_dim = input_dim
-    # input_dim = base_input_dim * frame_stack # REMOVED: Managed internally by agents
     
-    breakdown_str = ', '.join(dims_breakdown)
     if frame_stack > 1:
-        print(f"Input Dimension: Base: {base_input_dim} [{breakdown_str}] x Stack: {frame_stack}")
+        print(f"Input Dimension: Base: {base_input_dim} x Stack: {frame_stack}")
     else:
-        print(f"Input Dimension: {input_dim} ({breakdown_str})")
+        print(f"Input Dimension: {input_dim}")
     
-    stacker = FrameStacker(input_dim=base_input_dim, stack_size=frame_stack)
+    # Initialize Agent
+    agent = None
+    algorithm = config.get_mandatory('agent.algorithm')
+    
+    device = config.get_mandatory('training.device')
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"{algorithm} Agent using device: {device}")
     
     if algorithm == "DQN":
         from src.models.dqn import DQNAgent
@@ -261,7 +228,6 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
             fc_layers=config.get_mandatory('agent.fc_layers'),
             device=device
         )
-        # Load weights
         agent.load(checkpoint_path, weights_only=True)
 
     elif algorithm == "DRQN":
@@ -368,391 +334,35 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
             print(f"  Error loading checkpoint: {e}")
             return
 
-    # Visualization Configuration
-    vis_enabled = config.get_mandatory('visualization.enabled')
-    vis_activations = config.get_mandatory('visualization.activations.enabled') and vis_enabled
-    vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
-    vis_fps = config.get_mandatory('visualization.fps', int)
-    save_h5 = config.get_mandatory('visualization.activations.save_h5') and vis_enabled
-
-    # Setup Activation Monitor & LRP
-    monitor = None
-    lrp_monitor = None
-    input_structure = []
+    # 3. Run Evaluation via Core Utility
+    from src.utils.evaluation_core import evaluate_agent
     
-    def append_frame_with_activations(game_frame, action=None, state=None):
-        nonlocal frames
-        act_frame = None
-        acts = None
-        if monitor:
-            acts = monitor.get_current_activations()
-            
-            # If empty (first frame), try to use template with zeros
-            if not acts and hasattr(monitor, 'template_activations') and monitor.template_activations:
-                    acts = {k: np.zeros_like(v) for k,v in monitor.template_activations.items()}
-            
-            # Compute Attributions if LRP monitor is active and we have an action
-            attributions = None
-            if lrp_monitor and action is not None and state is not None:
-                try:
-                    input_tensor = None
-                    if using_sensory:
-                        if isinstance(state, np.ndarray):
-                            input_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
-                    else:
-                        flat = preprocess_state(state)
-                        input_tensor = torch.FloatTensor(flat).unsqueeze(0).to(device)
-                        
-                    if algorithm in ["DRQN", "RecurrentPPO", "DreamerV3", "LSTM"]:
-                        if input_tensor is not None and input_tensor.ndim == 2:
-                            input_tensor = input_tensor.unsqueeze(1)
+    evaluate_agent(
+        agent=agent,
+        env=env,
+        body=body,
+        sensory_system=sensory_system,
+        config=config,
+        num_episodes=num_episodes,
+        device=device,
+        results_dir=results_dir,
+        checkpoint_pct=pct,
+        wandb_run_path=wandb_run_path # Pass the path, or let it fallback to active run if main() inited it
+    )
 
-                    if input_tensor is not None:
-                        attributions = lrp_monitor.compute_relevance(input_tensor, action)
-                except Exception as e:
-                    print(f"LRP Error: {e}")
-                    pass
-
-            # Visualize activations
-            act_frame = visualize_activations(
-                acts, 
-                game_frame.shape[1], 
-                config, 
-                input_structure=input_structure, 
-                attributions=attributions
-            )
-
-        combined = combine_frame_and_activations(game_frame, act_frame)
-        frames.append(combined)
-    
-        if acts and monitor and acts is not getattr(monitor, 'template_activations', None):
-                monitor.record_step()
-
-    if algorithm != "Tabular Q-Learning" and vis_activations:
-        model_to_monitor = None
-        if isinstance(agent, torch.nn.Module):
-            model_to_monitor = agent
-        elif hasattr(agent, 'policy_net'):
-            model_to_monitor = agent.policy_net
-        elif hasattr(agent, 'policy'):
-            # For PPO, policy is ActorCritic which has actor and critic
-            model_to_monitor = agent.policy
-            
-        if model_to_monitor:
-            print(f"  Monitoring activations for {type(model_to_monitor).__name__}...")
-            # We track Linear and Conv layers primarily
-            monitor = ActivationMonitor(model_to_monitor, tracked_layers=[torch.nn.Linear, torch.nn.Conv2d, torch.nn.LSTM, torch.nn.GRU])
-            
-            # Warm-up to prompt monitor to capture layer structure and determine frame size
-            # Create a dummy input based on input_dim
-            # input_dim logic is complex above, but we can just use a zero tensor of approx shape?
-            # Or just wait for first frame? No, first frame is rendered BEFORE first step.
-            
-            # Helper to generate zero frame of correct size
-            # We need to know the dummy input shape.
-            # Reuse logic for `input_dim` or just one forward.
-            try:
-                # Construct dummy state
-                # We need input_dim from code above.
-                # Code above defines `input_dim` inside blocks (DQN, etc).
-                # We can access it if we move monitor setup AFTER agent init fully.
-                # Monitor setup IS after agent init.
-                # But `input_dim` variable is local to blocks.
-                # Let's try to infer from agent.policy_net first layer?
-                dummy_input = None
-                first_layer = None
-                for module in model_to_monitor.modules():
-                     if isinstance(module, torch.nn.Linear):
-                         dummy_input = torch.zeros(1, module.in_features).to(device)
-                         break
-                     elif isinstance(module, torch.nn.Conv2d):
-                         # Assuming square input? tough.
-                         pass
-                
-                if dummy_input is not None:
-                     # Run forward
-                     print("  Running warmup forward pass...")
-                     with torch.no_grad():
-                          if hasattr(agent, 'reset_hidden'): agent.reset_hidden()
-                          is_recurrent = "DRQN" in type(agent).__name__ or \
-                                         "Recurrent" in type(agent).__name__ or \
-                                         "Dreamer" in type(agent).__name__
-                          
-                          if is_recurrent:
-                               # Recurrent forward expects (batch, seq, dim)
-                               dummy_input = dummy_input.unsqueeze(0) 
-                               model_to_monitor(dummy_input)
-                               if hasattr(agent, 'reset_hidden'): agent.reset_hidden()
-                          else:
-                               model_to_monitor(dummy_input)
-                     
-                     monitor.template_activations = monitor.get_current_activations().copy()
-                     monitor.clear_history() # Clear the dummy record
-                     print(f"  Warmup successful. Captured {len(monitor.template_activations)} layers.")
-                else:
-                    raise RuntimeError("Warmup failed: No suitable input layer found (Linear/Conv2d) to infer input shape.")
-            except Exception as e:
-                print(f"  Activation warm-up failed with error: {e}")
-                # Re-raise to stop execution and debug
-                raise e
-            # Input Structure for Visualization
-            if using_sensory:
-                input_structure.append(("Sensory", sensory_system.vector_size))
-            else:
-                input_structure.append(("Agent", 2)) 
-
-            if with_satiation:
-                input_structure.append(("Sat", 1))
-                if with_health:
-                    input_structure.append(("Hlth", 1))
-
-            # Initialize LRP monitor
-            if vis_lrp:
-                try:
-                    target_net = model_to_monitor
-                    if algorithm == "PPO":
-                        target_net = model_to_monitor.actor
-                    elif algorithm in ["DRQN", "DreamerV3"]:
-                        class OutputWrapper(torch.nn.Module):
-                            def __init__(self, model, index=0):
-                                super().__init__()
-                                self.model = model
-                                self.index = index
-                            def forward(self, x):
-                                return self.model(x)[self.index]
-                        target_net = OutputWrapper(model_to_monitor, 0)
-                    
-                    lrp_monitor = LRPMonitor(target_net)
-                except Exception as e:
-                    print(f"Failed to initialize LRP: {e}")
-
-    # 3. Run Evaluation Episodes (Collect Frames)
-    agent.epsilon = 0 # No exploration during evaluation
-    frames = []
-    
-    for ep in range(num_episodes):
-        ep_idx = ep + 1
-        
-        # Reset environment
-        env_state = env.reset() # Returns (row, col)
-        
-        if hasattr(agent, 'reset_hidden'):
-            agent.reset_hidden()
-        
-        # Determine initial sensory state
-        current_agent_pos = env.agent_pos
-        
-        if using_sensory:
-            resources = env.get_active_resources()
-            sensory_dict = sensory_system.sense(current_agent_pos, resources)
-
-        if with_satiation:
-            body_return = body.reset()
-            # Dictionary State
-            state = {}
-            if using_sensory:
-                state.update(sensory_dict)
-            else:
-                state['loc'] = env_state
-            
-            if isinstance(body_return, tuple):
-                 state['satiation'] = body_return[0]
-                 state['health'] = body_return[1]
-            else:
-                 state['satiation'] = body_return
-            
-            # Append Frame (Using helper which preprocesses automatically if needed)
-            if using_sensory:
-                # render_rgb logic mainly needs body vars
-                health = body.health if with_health else None
-                max_h = body.max_health if with_health else None
-                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_dict)), state=state)
-            else:
-                satiation = state['satiation']
-                health = state.get('health') if with_health else None
-                append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, health, max_health if with_health else None, episode=ep_idx, step=0), state=state)
-            
-            # Initial frame handling for POMDP?
-            # Existing code only handled FOMDP rendering logic above for initial frame.
-            # POMDP initial frame logic:
-            if using_sensory and with_satiation:
-                health = body.health if with_health else None
-                max_h = body.max_health if with_health else None
-                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_dict)), state=state)
-
-        else:
-            if using_sensory:
-                state = sensory_dict.copy()
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_dict)), state=state)
-            else:
-                state = {'loc': env_state}
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0), state=state)
-
-        
-        done = False
-        step_count = 0
-        
-        # Preprocess if DQN
-        flat_state = None
-        state_array = None
-        
-        if using_sensory:
-            flat_state = preprocess_state(state)
-            # Reset stacker
-            state_array = stacker.reset(flat_state)
-        else:
-            state_array = state # Tabular (or coord based)
-        
-        while not done and step_count < max_steps:
-            if using_sensory:
-                action = agent.choose_action(state_array)
-            else:
-                action = agent.choose_action(state)
-            
-            # Pass action for LRP (using PREVIOUS state for LRP computation before step)
-            # The activation monitor captured activations during `choose_action` (forward pass).
-            # LRP needs the input and the action.
-            # `flat_state` or `state` is the input.
-            
-            next_env_state, _, env_done, info = env.step(action)
-            
-            # Observations
-            current_agent_pos = env.agent_pos
-            
-            if using_sensory:
-                 resources = env.get_active_resources()
-                 next_sensory_dict = sensory_system.sense(current_agent_pos, resources)
-            
-            if with_satiation:
-                body_return, _, body_done = body.step(info)
-                done = env_done or body_done
-                
-                vis_data = None
-                next_state = {}
-                if using_sensory:
-                     vis_data = sensory_system.get_visualization_data(next_sensory_dict)
-                     next_state.update(next_sensory_dict)
-                else:
-                     next_state['loc'] = next_env_state
-                     
-                if isinstance(body_return, tuple):
-                     next_state['satiation'] = body_return[0]
-                     next_state['health'] = body_return[1]
-                else:
-                     next_state['satiation'] = body_return
-                
-                # ... FOMDP logic removed/simplified as we use dictionary now ...
-                # Actually FOMDP logic in orig code was handling next_state construction for non-sensory.
-                # My above code handles it.
-                     
-
-
-                health = body.health if with_health else None
-                max_h = body.max_health if with_health else None
-                # Render using NEXT state?
-                # Usually we visualize the result of the action.
-                # But activations are from the PREVIOUS state.
-                # `append_frame_with_activations` uses `monitor.get_current_activations()`.
-                # If we call it here, we are attaching activations of `state` to the frame of `next_state`?
-                # Or is the frame showing `next_state`? 
-                # `env.render_rgb_array` usually shows current state of env. 
-                # After `env.step`, the env is in `next_state`.
-                # So we associate `state` activations with `next_state` frame. This is slight mismatch.
-                # However, changing this logic is big refactor.
-                # I will stick to existing pattern but pass `action` and `flat_state` (of current step).
-                # Wait, `append_frame_with_activations` is called at end of loop.
-                # So it attaches "activations from this step" to "frame of next step".
-                
-                # Correct logic for LRP:
-                # We need to explain `action` taken at `state`.
-                # Pass `action` and `flat_state` (or `state` if not flat) to `append_frame_with_activations`.
-                # Note: `flat_state` is available in loop scope.
-                
-                l_state = flat_state if using_sensory else state
-                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=step_count+1, sensory_data=vis_data, action=action), action=action, state=l_state)     
-            else:
-                done = env_done
-                vis_data = None
-                
-                next_state = {}
-                if using_sensory:
-                    vis_data = sensory_system.get_visualization_data(next_sensory_dict)
-                    next_state.update(next_sensory_dict)
-                else:
-                    next_state['loc'] = next_env_state
-                
-                l_state = flat_state if using_sensory else state
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data, action=action), action=action, state=l_state)
-
-            
-            # Advance state
-            if using_sensory:
-                 flat_next = preprocess_state(next_state)
-                 next_state_stacked = stacker.step(flat_next)
-                 state = next_state # Logic dict
-                 state_array = next_state_stacked # Stacked array for next iter
-                 flat_state = next_state_stacked # For logic below (render) or loop consistency
-            else:
-                 state = next_state.copy()
-                 state_array = state
-
-            step_count += 1
-            
-            if done:
-                # Buffer end frames
-                # Buffer end frames
-                for _ in range(5):
-                    if with_satiation:
-                        if with_health:
-                             # Use last known state values
-                             append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, body.health, max_health, episode=ep_idx, step=step_count, sensory_data=vis_data))
-                        else:
-                             append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, episode=ep_idx, step=step_count, sensory_data=vis_data))
-                    else:
-                        append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count, sensory_data=vis_data))
-
-                break
-
-    # 4. Generate Visual Artifacts
+    # 4. Generate Visual Artifacts (Tabular Q-Table only, Video handled by evaluate_agent)
     
     # Plot Q-Table (Tabular only)
     if not using_sensory and hasattr(agent, 'q_table'):
         plots_dir = os.path.join(results_dir, "plots")
         os.makedirs(plots_dir, exist_ok=True) # Ensure directory exists
-       # Visualization Plotting
-    if algorithm == "Tabular Q-Learning":
-        vis_filename = os.path.join(plots_dir, f"q_table_{pct}.png")
-        plot_q_table(agent.q_table, vis_filename, config, resource_pos)
-    
-    # Save Video
-    videos_dir = os.path.join(results_dir, "videos")
-    os.makedirs(videos_dir, exist_ok=True)
-    video_filename = os.path.join(videos_dir, f"video_{pct}.mp4")
-    save_video(frames, video_filename, fps=vis_fps)
-
-    # Save Activations
-    if monitor and save_h5:
-        activations_file = os.path.join(data_dir, f"activations_{pct}.h5")
-        monitor.save_history(activations_file)
-        monitor.close()
-
-    # Upload video to WandB
-    # Upload video to WandB
-    if wandb_run_path and wandb.run:
-        try:
-            print(f"Uploading video for checkpoint {pct} to WandB run: {wandb_run_path}...")
+        # Visualization Plotting
+        if algorithm == "Tabular Q-Learning":
+            vis_filename = os.path.join(plots_dir, f"q_table_{pct}.png")
+            plot_q_table(agent.q_table, vis_filename, config, resource_pos)
             
-            episode_val = int(pct) if pct.isdigit() else 0
-            
-            wandb.log({
-                "eval/video": wandb.Video(video_filename, caption=f"Evaluation Video Checkpoint {pct}", fps=vis_fps, format="mp4"),
-                "eval/checkpoint_episode": episode_val
-            })
-            
-            print("  Upload complete.")
-
-        except Exception as e:
-            print(f"  Error uploading to WandB: {e}")
+    # Video and Activations are handled by evaluate_agent now.
+    # LRP is handled by evaluate_agent now.
 
 
 

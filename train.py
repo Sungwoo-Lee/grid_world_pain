@@ -57,7 +57,8 @@ from src.environment.sensor import SensorySystem
 from src.utils.visualization import plot_q_table, plot_learning_curves
 from src.utils.visualization import plot_q_table, plot_learning_curves
 from src.utils.config import get_default_config
-from src.utils.state_utils import FrameStacker
+from src.utils.evaluation_core import evaluate_agent
+from src.utils.state_utils import FrameStacker, preprocess_state
 import time
 import numpy as np
 import os
@@ -253,8 +254,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         # Episode metrics use Episode/Number as x-axis
         wandb.define_metric("Episode/*", step_metric="Episode/Number")
         # Step metrics (losses) use global_step as x-axis
-        wandb.define_metric("global_step", step_metric="global_step") 
-        wandb.define_metric("*", step_metric="global_step")
+        wandb.define_metric("*", step_metric="global_step") 
+        wandb.define_metric("global_step", step_metric="global_step")
     
     # Extract Sensory Config
     # Strict retrieval for using_sensory?
@@ -423,59 +424,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size}, NociceptorR={nociceptor_radius})")
         sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
 
-    # Define Preprocessor for DQN
-    def preprocess_state(state):
-        """
-        Flattens state dictionary to float array.
-        Handles Dictionary-based inputs (Olfactory, Nociception) and Body states.
-        """
-        flat_list = []
-        
-        if using_sensory:
-            # Inputs are in a dictionary now
-            if isinstance(state, dict):
-                 # Olfactory
-                 flat_list.extend(state['olfactory'])
-                 # Nociception
-                 flat_list.extend(state['nociception'])
-            else:
-                 # Initial state might be tuple from legacy or direct env usage? 
-                 # We enforcing dictionary now.
-                 # If tuple (sensory, body...), it's broken.
-                 raise ValueError(f"Expected dictionary state, got {type(state)}")
-        else:
-            # Conventional: (row, col)
-            # This part remains tuple-based as env.reset returns pos?
-            # Or we standardize EVERYTHING to dict?
-            # For strict refactor, let's assume env.reset returns pos (tuple) if no sensory.
-            # But wait, body states?
-            # Let's check how state is constructed in loop.
-            if isinstance(state, tuple) or isinstance(state, list) or isinstance(state, np.ndarray):
-                # Legacy / Conventional position
-                # Assuming state[0], state[1] are coords
-                row = state[0]
-                col = state[1]
-                flat_list.append(row / env.height)
-                flat_list.append(col / env.width)
-            elif isinstance(state, dict) and 'loc' in state:
-                r, c = state['loc']
-                flat_list.append(r / env.height)
-                flat_list.append(c / env.width)
 
-        # Append Body States
-        # In dict mode, key access.
-        if isinstance(state, dict):
-            if with_satiation:
-                flat_list.append(state['satiation'] / body.max_satiation)
-            if with_health:
-                flat_list.append(state['health'] / body.max_health)
-        else:
-             # Legacy Tuple Fallback (ONLY if not using sensory dict)
-             # This path likely unused if we update the loop correctly.
-             # But keeping for safety if 'using_sensory' is False.
-             pass
-            
-        return np.array(flat_list, dtype=np.float32)
 
     # Initialize Agent
     agent = None
@@ -724,12 +673,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         state_array = None
         
         if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
-            flat_state = preprocess_state(state)
+            flat_state = preprocess_state(state, env.height, env.width, body.max_satiation, body.max_health)
             # Stack the initial state and FLATTEN for agent compatibility (Seq vs Grid issues)
             state_array = stacker.reset(flat_state).flatten() 
-            if global_step < 5:
-                print(f"DEBUG: Initial flat_state shape: {flat_state.shape}")
-                print(f"DEBUG: Initial state_array shape after stack & flatten: {state_array.shape}")
+
 
         else:
             # Tabular - Convert Dictionary to Tuple for Q-Table Indexing
@@ -805,12 +752,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update
-                flat_next_state_raw = preprocess_state(next_state)
+                flat_next_state_raw = preprocess_state(next_state, env.height, env.width, body.max_satiation, body.max_health)
                 # Stack next state and Flatten
                 next_state_stacked = stacker.step(flat_next_state_raw).flatten()
-                if global_step < 5:
-                    print(f"DEBUG: Next flat_state shape: {flat_next_state_raw.shape}")
-                    print(f"DEBUG: Next state_array stacked shape: {next_state_stacked.shape}")
+
 
                 
                 # Store Transition (Use stacked states for non-recurrent agents if needed, 
@@ -942,6 +887,30 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             else:
                 model_snap_filename = os.path.join(models_dir, f"q_table_{pct}.npy")
                 agent.save(model_snap_filename)
+            
+            # Integrated Evaluation and Video Generation (if enabled)
+            if config_dict.get('evaluation.video_during_training') or config_dict.get('visualization.enabled'):
+                try:
+                    if not quiet:
+                        print(f"Running evaluation for checkpoint {pct}...")
+                        
+                    # Use evaluate_agent utility
+                    # We pass the CURRENT agent and env (it resets env)
+                    # We pass 'wandb_run_path=None' so it uploads to currently active run (if wandb.run is set)
+                    # Note: evaluate_agent sets epsilon to 0 internally and restores it.
+                    evaluate_agent(
+                        agent=agent,
+                        env=env,
+                        body=body,
+                        sensory_system=sensory_system,
+                        config=config_dict,
+                        num_episodes=1, # Quick check
+                        results_dir=output_dir, # Same output dir
+                        checkpoint_pct=pct,
+                        wandb_run_path=None # Use active run
+                    )
+                except Exception as e:
+                    print(f"Warning: Evaluation failed during training: {e}")
     
     if not quiet:
         print() # Newline after progress bar
