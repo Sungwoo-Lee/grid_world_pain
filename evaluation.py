@@ -147,9 +147,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
                     prob_switch_to_danger=prob_switch_to_danger, min_danger_duration=min_danger_duration, damage_amount=damage_amount,
                     prob_switch_to_food=prob_switch_to_food, min_food_duration=min_food_duration,
                     relocate_resource=relocate_resource, relocation_steps=relocation_steps,
-                    vector_size=config.get('sensory.vector_size', 10),
-                    food_property=config.get('sensory.food_property', None),
-                    danger_property=config.get('sensory.danger_property', None))
+                    vector_size=config.get_mandatory('sensory.vector_size', int),
+                    food_property=config.get_mandatory('sensory.food_property'),
+                    danger_property=config.get_mandatory('sensory.danger_property'))
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
         start_satiation=start_satiation, 
@@ -171,9 +171,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     sensory_system = None
     if using_sensory:
         sensor_radius = config.get_mandatory('sensory.sensor_radius', int)
-        decay_power = config.get('sensory.decay_power', 1.0) # Not mandatory in old configs
-        vector_size = config.get('sensory.vector_size', 10)
-        nociceptor_radius = config.get('sensory.nociceptor_radius', 0)
+        decay_power = config.get_mandatory('sensory.decay_power', float)
+        vector_size = config.get_mandatory('sensory.vector_size', int)
+        nociceptor_radius = config.get_mandatory('sensory.nociceptor_radius', int)
         sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
 
 
@@ -198,7 +198,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
              dims_breakdown.append("Health: 1")
 
     # Frame Stacking Logic
-    frame_stack = config.get('agent.frame_stack', 1)
+    frame_stack = config.get_mandatory('agent.frame_stack', int)
     base_input_dim = input_dim
     
     if frame_stack > 1:

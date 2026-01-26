@@ -8,7 +8,7 @@ class ResourceSensor:
     It accumulates the property vectors of all resources within range, weighted by inverse distance.
     Output is a vector of size N (the resource property size).
     """
-    def __init__(self, radius=2, vector_size=10, decay_power=1.0):
+    def __init__(self, radius, vector_size, decay_power):
         self.radius = radius
         self.vector_size = vector_size
         self.decay_power = decay_power
@@ -52,7 +52,7 @@ class Nociceptor:
     A contact sensor (range 0) that detects 'Danger' resources at the agent's exact location.
     Behaves as a biological nociceptor: detecting immediate nociception.
     """
-    def __init__(self, radius=0):
+    def __init__(self, radius):
         self.radius = radius 
         
     def sense(self, agent_pos, resources):
@@ -81,7 +81,7 @@ class SensorySystem:
     Manager for the agent's sensors.
     Currently manages the unified ResourceSensor.
     """
-    def __init__(self, sensor_radius=2, vector_size=10, decay_power=1.0, nociceptor_radius=0):
+    def __init__(self, sensor_radius, vector_size, decay_power, nociceptor_radius):
         # Unified radius
         radius = sensor_radius
         self.resource_sensor = ResourceSensor(radius=radius, vector_size=vector_size, decay_power=decay_power)

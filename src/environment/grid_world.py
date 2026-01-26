@@ -37,10 +37,10 @@ class GridWorld:
       not the external world. The environment only provides signals (like 'ate_food').
     """
     
-    def __init__(self, height=5, width=5, start=(0, 0), resource_pos=(4, 4), with_satiation=True, max_steps=100,
-                 prob_switch_to_danger=0.1, min_danger_duration=5, damage_amount=5,
-                 prob_switch_to_food=0.1, min_food_duration=10, relocate_resource=False, relocation_steps=20,
-                 vector_size=10, food_property=None, danger_property=None):
+    def __init__(self, height, width, start, resource_pos, with_satiation, max_steps,
+                 prob_switch_to_danger, min_danger_duration, damage_amount,
+                 prob_switch_to_food, min_food_duration, relocate_resource, relocation_steps,
+                 vector_size, food_property, danger_property):
         """
         Initializes the GridWorld foraging environment.
 
@@ -69,18 +69,9 @@ class GridWorld:
         # Resource Property Vectors
         self.vector_size = vector_size
         
-        # Default Logic if None
-        if food_property is None:
-            self.food_property = np.zeros(self.vector_size)
-            self.food_property[0] = 1.0
-        else:
-             self.food_property = np.array(food_property, dtype=np.float32)
-
-        if danger_property is None:
-            self.danger_property = np.zeros(self.vector_size)
-            self.danger_property[1] = 1.0
-        else:
-             self.danger_property = np.array(danger_property, dtype=np.float32)
+        # Properties must be provided explicitly from config
+        self.food_property = np.array(food_property, dtype=np.float32)
+        self.danger_property = np.array(danger_property, dtype=np.float32)
         
         # Resource State Machine (Food <-> Danger)
         # Requirement: At least one is active.

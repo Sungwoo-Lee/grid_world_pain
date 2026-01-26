@@ -268,9 +268,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
          
     if using_sensory:
         sensor_radius = config_dict.get_mandatory('sensory.sensor_radius')
-        decay_power = config_dict.get('sensory.decay_power', 1.0)
-        vector_size = config_dict.get('sensory.vector_size', 10)
-        nociceptor_radius = config_dict.get('sensory.nociceptor_radius', 0)
+        decay_power = config_dict.get_mandatory('sensory.decay_power', float)
+        vector_size = config_dict.get_mandatory('sensory.vector_size', int)
+        nociceptor_radius = config_dict.get_mandatory('sensory.nociceptor_radius', int)
     else:
         sensor_radius = 1 # Dummy
         decay_power = 1.0 # Dummy
@@ -405,9 +405,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         min_food_duration=min_food_duration,
         relocate_resource=config_dict.get_mandatory('environment.relocate_resource'),
         relocation_steps=config_dict.get_mandatory('environment.relocation_steps'),
-        vector_size=config_dict.get('sensory.vector_size', 10),
-        food_property=config_dict.get('sensory.food_property', None),
-        danger_property=config_dict.get('sensory.danger_property', None)
+        vector_size=config_dict.get_mandatory('sensory.vector_size', int),
+        food_property=config_dict.get_mandatory('sensory.food_property'),
+        danger_property=config_dict.get_mandatory('sensory.danger_property')
     )
     
     body = InteroceptiveBody(
@@ -463,7 +463,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     input_details = f"{input_dim} ({', '.join(dims_breakdown)})"
     
     # Frame Stacking Logic
-    frame_stack = config_dict.get('agent.frame_stack', 1)
+    frame_stack = config_dict.get_mandatory('agent.frame_stack', int)
     
     # input_dim IS the base dimension. We do NOT multiply it here anymore.
     base_input_dim = input_dim
