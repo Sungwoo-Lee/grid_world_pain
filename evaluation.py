@@ -2,41 +2,44 @@
 Evaluation script for the GridWorld Reinforcement Learning agent.
 
 This script:
-1. Loads the configuration saved during training (results/.../models/config.yaml).
+1. Loads the configuration saved during training (`results/.../models/config.yaml`).
 2. Sets up the evaluation environment (Grid, Body, Sensory) to match training.
-3. Instantiates the appropriate agent (Tabular, DQN, or PPO).
+3. Instantiates the appropriate agent (Tabular, DQN, PPO, DRQN, RecurrentPPO, DreamerV3).
 4. Evaluates checkpoints:
    - Runs evaluation episodes (deterministic).
    - Collects frames for video generation.
    - Generates Q-table plots (if Tabular).
    - Saves artifacts to `results/.../RunName/`.
 
-
-
 Arguments:
 - `--results_dir <path>`: (Required) Path to the results directory of the run to evaluate.
 - `--episodes <int>`: Override the number of evaluation episodes.
 - `--seed <int>`: Override the random seed.
-- `--checkpoint <str/int>`: Specific checkpoint to evaluate (e.g., '50', 'model_50.ckpt').
+- `--checkpoint <str/int>`: Specific checkpoint to evaluate (e.g., `model_50.ckpt`, `50`).
 - `--all`: Evaluate ALL checkpoints found in the directory.
 - `--wandb-run-path <str>`: WandB run path (entity/project/run_id) to upload evaluation videos.
 
-Usage:
-    # Basic evaluation (Latest checkpoint)
-    python evaluation.py --results_dir results/DQN/20260118-120000_my_run --episodes 5
+Usage Examples:
 
-    # Evaluate specific checkpoint (e.g., 500)
-    python evaluation.py --results_dir results/DQN/RunName --checkpoint 500
+1. **Basic Evaluation (Latest Checkpoint)**:
+   ```bash
+   python evaluation.py --results_dir results/DQN/20260118-120000_my_run --episodes 5
+   ```
 
-    # Evaluate ALL checkpoints
-    python evaluation.py --results_dir results/DQN/RunName --all
+2. **Evaluate Specific Checkpoint**:
+   ```bash
+   python evaluation.py --results_dir results/DQN/RunName --checkpoint 500
+   ```
+
+3. **Evaluate All Checkpoints & Upload to WandB**:
+   ```bash
+   python evaluation.py --results_dir results/DQN/RunName --all --wandb-run-path my_entity/my_project/run_id
+   ```
 
 Notes:
 - Uses the configuration saved during training (`config.yaml`).
-- **Strict Configuration**: Raises errors if required parameters (seed, episodes) are not found (no safe defaults).
+- **Strict Configuration**: Raises errors if required parameters are missing.
 - Default behavior (no args): Evaluates the *latest* numeric checkpoint found.
-- Supports CPU/GPU execution (auto-detected or inherited from config).
-- Ensures at least one resource (Food or Danger) is active at all times.
 """
 import os
 import glob

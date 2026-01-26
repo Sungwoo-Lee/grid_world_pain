@@ -3,46 +3,46 @@ Training script for the GridWorld Reinforcement Learning agent.
 
 This script:
 1. Initializes the `GridWorld` environment (Conventional or Interoceptive) and `InteroceptiveBody`.
-2. Creates an RL Agent (Tabular Q-Learning, DQN, or PPO).
+2. Creates an RL Agent (Tabular Q-Learning, DQN, PPO, DRQN, RecurrentPPO, DreamerV3).
 3. Trains the agent for a specified number of episodes.
-4. Periodically saves checkpoints (models) and visualizations (learning curves) to `results/`.
+4. Periodically saves checkpoints (models) and visualizations.
+5. Supports Continual Learning (resuming from checkpoints).
 
 Arguments:
-- `--episodes <int>`: (Default: 100000) Total number of training episodes.
-- `--seed <int>`: (Default: 42) Random seed for reproducibility.
-- `--agent_config <path>`: Path to agent-specific config (e.g., `configs/models/ppo.yaml`).
-- `--tag <str>`: Tag for the training run directory.
-- `--device <str>`: Device to use for training (e.g., `cpu`, `cuda`, `cuda:0`, `auto`). Default: `auto`.
-- `--wandb-project <str>`: WandB project name (default: "grid_world_pain").
-- `--wandb-group <str>`: WandB group name for grouping runs.
-- `--wandb-name <str>`: Specific name for the run.
+- `--episodes <int>`: Total number of training episodes.
+- `--seed <int>`: Random seed for reproducibility.
+- `--agent_config <path>`: (Required) Path to agent-specific config (e.g., `configs/models/ppo.yaml`).
+- `--config <path>`: Path to base config YAML (overrides defaults).
+- `--tag <str>`: Tag for the training run directory and WandB run name.
+- `--device <str>`: Device to use (e.g., `cpu`, `cuda`, `cuda:0`, `auto`). Default: `auto`.
+- `--no-satiation`: Disable satiation (conventional mode).
+- `--no-overeating-death`: Disable death by overeating.
+- `--wandb-project <str>`: WandB project name.
+- `--wandb-group <str>`: WandB group name.
+- `--wandb-job-type <str>`: WandB job type.
+- `--wandb-name <str>`: Explicit WandB run name.
 - `--no-wandb`: Disable WandB logging.
-- `--checkpoint-frequency <int>`: (Default: 1000) Frequency of saving model checkpoints (in episodes).
-- `--load-checkpoint <path>`: Path to checkpoint to resume from.
-- `--wandb-resume-id <str>`: WandB Run ID to resume logging to.
-
-
-Notes:
-- The script strictly enforces configuration loading. Missing required values will raise errors.
-- Models are saved as `model_X.ckpt` where X is the episode number.
-- There is no explicit "final" model save; the last scheduled checkpoint (or latest) serves as the final model.
-
+- `--quiet`: Suppress output and progress bar.
+- `--debug`: Enable granular logging and debug info.
+- `--checkpoint-frequency <int>`: Frequency of saving checkpoints.
+- `--load-checkpoint <path>`: Path to checkpoint to resume training from.
+- `--wandb-resume-id <str>`: WandB Run ID to resume logging.
 
 Usage Examples:
 
 1. **Train DQN**:
    ```bash
-   python train.py --agent_config configs/models/dqn.yaml --episodes 1000 --wandb-project my_project
+   python train.py --agent_config configs/models/dqn.yaml --episodes 1000 --tag my_dqn_run
    ```
 
-2. **Train PPO**:
+2. **Train PPO with WandB**:
    ```bash
-   python train.py --agent_config configs/models/ppo.yaml --episodes 5000
+   python train.py --agent_config configs/models/ppo.yaml --episodes 5000 --wandb-project grid_world_pain
    ```
-   
-3. **Train Tabular**:
+
+3. **Resume Training**:
    ```bash
-   python train.py --agent_config configs/models/q_learning.yaml
+   python train.py --agent_config configs/models/dqn.yaml --load-checkpoint results/DQN/RunName/models/dqn_model_500.ckpt --episodes 500 --wandb-resume-id <run_id>
    ```
 """
 from src.environment import GridWorld
@@ -54,7 +54,6 @@ from src.models.ppo import PPOAgent
 from src.models.recurrent_ppo import RecurrentPPOAgent
 from src.models.dreamer_v3 import DreamerV3Agent
 from src.environment.sensor import SensorySystem
-from src.utils.visualization import plot_q_table, plot_learning_curves
 from src.utils.visualization import plot_q_table, plot_learning_curves
 from src.utils.config import get_default_config
 from src.utils.evaluation_core import evaluate_agent

@@ -1,3 +1,29 @@
+"""
+Parallel Execution Script for GridWorld RL Experiments.
+
+This script launches multiple training processes in parallel for different algorithms (DQN, PPO, DRQN, etc.).
+It manages the subprocesses, logs their output to `logs/`, and monitors their status.
+
+Arguments:
+- `--episodes <int>`: (Default: 10000) Number of training episodes per agent.
+- `--tag <str>`: (Required) Base tag for the experiment (e.g., `experiment_v1`).
+
+Usage Examples:
+
+1. **Run Experiments**:
+   ```bash
+   python run_all_experiments.py --tag baseline_run
+   ```
+
+2. **Long Run**:
+   ```bash
+   python run_all_experiments.py --episodes 50000 --tag long_run
+   ```
+
+Notes:
+- Ensure that the `ALGORITHMS` list in the script contains the desired models and config paths.
+- Each process is pinned to a specific device (e.g., `cuda:1`) as defined in `ALGORITHMS`.
+"""
 
 import subprocess
 import argparse
