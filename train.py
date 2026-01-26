@@ -317,6 +317,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     # Body Params
     with_satiation = resolve_param(with_satiation, 'body.with_satiation')
     if with_satiation:
+        max_satiation = int(resolve_param(None, 'body.max_satiation'))
+        start_satiation = int(resolve_param(None, 'body.start_satiation'))
         overeating_death = resolve_param(overeating_death, 'body.overeating_death')
         random_start_satiation = resolve_param(random_start_satiation, 'body.random_start_satiation')
         food_satiation_gain = float(resolve_param(food_satiation_gain, 'body.food_satiation_gain'))
@@ -409,6 +411,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     )
     
     body = InteroceptiveBody(
+        max_satiation=max_satiation,
+        start_satiation=start_satiation,
         overeating_death=overeating_death, 
         random_start_satiation=random_start_satiation, 
         food_satiation_gain=food_satiation_gain,
