@@ -270,6 +270,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         sensor_radius = config_dict.get_mandatory('sensory.sensor_radius')
         decay_power = config_dict.get_mandatory('sensory.decay_power', float)
         vector_size = config_dict.get_mandatory('sensory.vector_size', int)
+        nociception_enabled = config_dict.get_mandatory('sensory.nociception_enabled', bool)
         nociceptor_radius = config_dict.get_mandatory('sensory.nociceptor_radius', int)
         collision_sensor_enabled = config_dict.get_mandatory('sensory.collision_sensor_enabled', bool)
         # Size calculated from range automatically now
@@ -282,8 +283,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         collision_sensor_enabled = False
         collision_sensor_range = 0
     
-    # Previous Action Input Config
-    previous_action_input = config_dict.get_mandatory('sensory.previous_action_input', bool)
+    # Proprioception Config
+    proprioception_enabled = config_dict.get_mandatory('sensory.proprioception_enabled', bool)
     
     # Professional Config Summary
     if config_dict is None:
@@ -445,9 +446,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             vector_size=vector_size, 
             decay_power=decay_power, 
             nociceptor_radius=nociceptor_radius,
+            location_sensor=location_sensor,
+            nociception_enabled=nociception_enabled,
             collision_sensor_enabled=collision_sensor_enabled,
             collision_sensor_range=collision_sensor_range,
-            location_sensor=location_sensor
+            proprioception_enabled=proprioception_enabled
         )
 
 
@@ -493,12 +496,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
              input_dim += hlth_shape[0]
              dims_breakdown.append(f"Health={hlth_shape[0]}")
     
-    # Previous Action Input
-    if previous_action_input:
-        input_dim += 5  # One-hot encoding for 5 actions
-        dims_breakdown.append("PrevAction=5")
-    
-    print("-----------------------------\n")
+    print("--------------------------------------------\n")
 
     input_details = f"{input_dim} ({', '.join(dims_breakdown)})"
     
@@ -688,7 +686,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
              resources = env.get_active_resources()
              sensory_dict = sensory_system.sense(
                  current_agent_pos, resources,
-                 grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos
+                 grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos,
+                 previous_action=previous_action
              )
 
         if with_satiation:
@@ -722,14 +721,14 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         steps = 0
         
         # Initialize previous action (4 = Stay, representing initial stationary state)
-        previous_action = 4 if previous_action_input else None
+        previous_action = 4 if proprioception_enabled else None
         
         # Preprocess logic
         flat_state = None
         state_array = None
         
         if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
-            flat_state = preprocess_state(state, env.height, env.width, body.max_satiation, body.max_health, previous_action)
+            flat_state = preprocess_state(state, env.height, env.width, body.max_satiation, body.max_health)
             # Stack the initial state and FLATTEN for agent compatibility (Seq vs Grid issues)
             state_array = stacker.reset(flat_state).flatten() 
 
@@ -781,7 +780,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                  resources = env.get_active_resources()
                  next_sensory_dict = sensory_system.sense(
                      next_env_state, resources,
-                     grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos
+                     grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos,
+                     previous_action=action
                  )
             
             if with_satiation:
@@ -814,7 +814,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update
                 # Use current action as the "previous action" for the next state
-                flat_next_state_raw = preprocess_state(next_state, env.height, env.width, body.max_satiation, body.max_health, action if previous_action_input else None)
+                flat_next_state_raw = preprocess_state(next_state, env.height, env.width, body.max_satiation, body.max_health)
                 # Stack next state and Flatten
                 next_state_stacked = stacker.step(flat_next_state_raw).flatten()
 
@@ -890,7 +890,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 state = next_state
                 
             # Update previous action for next iteration
-            if previous_action_input:
+            if proprioception_enabled:
                 previous_action = action
                 
             total_reward += reward

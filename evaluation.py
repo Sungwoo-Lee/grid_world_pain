@@ -174,6 +174,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         sensor_radius = config.get_mandatory('sensory.sensor_radius', int)
         decay_power = config.get_mandatory('sensory.decay_power', float)
         vector_size = config.get_mandatory('sensory.vector_size', int)
+        nociception_enabled = config.get_mandatory('sensory.nociception_enabled', bool)
         nociceptor_radius = config.get_mandatory('sensory.nociceptor_radius', int)
         collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
         collision_sensor_range = config.get_mandatory('sensory.collision_sensor_range', int)
@@ -184,9 +185,10 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
             vector_size=vector_size, 
             decay_power=decay_power, 
             nociceptor_radius=nociceptor_radius,
+            location_sensor=location_sensor,
+            nociception_enabled=nociception_enabled,
             collision_sensor_enabled=collision_sensor_enabled,
-            collision_sensor_range=collision_sensor_range,
-            location_sensor=location_sensor
+            collision_sensor_range=collision_sensor_range
         )
 
 
@@ -225,7 +227,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
              input_dim += hlth_shape[0]
              dims_breakdown.append(f"Health={hlth_shape[0]}")
     
-    print("------------------------------------------\n")
+    print("--------------------------------------------\n")
 
 
     # Frame Stacking Logic

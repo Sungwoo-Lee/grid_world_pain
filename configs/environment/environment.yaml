@@ -46,13 +46,16 @@ sensory:
   food_property: [1.0, 0.0, 0.0, 0.0, 0.0]
   danger_property: [0.0, 1.0, 0.0, 0.0, 0.0]
   
+  # Nociception (Pain Detection)
+  nociception_enabled: true  # Enable pain/danger detection sensor
+  
   # Collision Sensor
-  collision_sensor_enabled: true
+  collision_sensor_enabled: false
   collision_sensor_range: 1  # Range of rays in grid cells
 
-  location_sensor: true # Include centered location even with sensors
+  location_sensor: false # Include centered location even with sensors
 
-  # Previous Action Input
-  previous_action_input: false  # Add previous action as one-hot input (5 dims: Up/Right/Down/Left/Stay)
+  # Proprioceptive Sensing (Motor Feedback)
+  proprioception_enabled: true  # Sense previous action as motor feedback (5 dims: one-hot)
 
 

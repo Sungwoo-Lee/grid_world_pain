@@ -48,7 +48,7 @@ def evaluate_agent(
     using_sensory = config.get_mandatory('sensory.using_sensory')
     with_satiation = config.get_mandatory('body.with_satiation')
     with_health = config.get_mandatory('body.with_health')
-    previous_action_input = config.get_mandatory('sensory.previous_action_input', bool)
+    proprioception_enabled = config.get_mandatory('sensory.proprioception_enabled', bool)
     
     max_satiation = config.get_mandatory('body.max_satiation', int) if with_satiation else None
     max_health = config.get_mandatory('body.max_health', float) if with_health else None
@@ -206,7 +206,6 @@ def evaluate_agent(
     else: input_dim += 2
     if with_satiation: input_dim += 1
     if with_health: input_dim += 1
-    if previous_action_input: input_dim += 5  # One-hot encoding for 5 actions
     
     frame_stack = config.get('agent.frame_stack', 1)
     # Important: FrameStacker expects base_input_dim
@@ -289,10 +288,10 @@ def evaluate_agent(
             step_count = 0
             
             # Initialize previous action (4 = Stay, representing initial stationary state)
-            previous_action = 4 if previous_action_input else None
+            previous_action = 4 if proprioception_enabled else None
             
             # Preprocess
-            flat_state = preprocess_state(state, env.height, env.width, max_satiation, max_health, previous_action)
+            flat_state = preprocess_state(state, env.height, env.width, max_satiation, max_health)
             state_array = stacker.reset(flat_state).flatten()
             
             # Tabular State Handling
@@ -376,10 +375,10 @@ def evaluate_agent(
                 
                 state = next_state
                 # Use current action as "previous action" for next state
-                flat_next = preprocess_state(next_state, env.height, env.width, max_satiation, max_health, action if previous_action_input else None)
+                flat_next = preprocess_state(next_state, env.height, env.width, max_satiation, max_health)
                 
                 # Update previous action for next iteration
-                if previous_action_input:
+                if proprioception_enabled:
                     previous_action = action
                 
                 if algorithm != "Tabular Q-Learning":

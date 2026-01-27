@@ -172,7 +172,7 @@ def main():
 
     # Setup paths
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    video_filename = os.path.join(current_dir, "gridworld_debug.mp4")
+    video_filename = os.path.join(current_dir, "gridworld_sandbox.mp4")
 
     print(f"Starting Debug Session")
     print(f"Video will be saved to: {video_filename}")
@@ -223,13 +223,15 @@ def main():
             vector_size=vector_size, 
             decay_power=decay_power, 
             nociceptor_radius=nociceptor_radius,
+            location_sensor=location_sensor,
+            nociception_enabled=config.get('sensory.nociception_enabled', True),
             collision_sensor_enabled=collision_sensor_enabled,
             collision_sensor_range=collision_sensor_range,
-            location_sensor=location_sensor
+            proprioception_enabled=config.get('sensory.proprioception_enabled', False)
         )
         
     # Log Specs
-    print("\n--- RL API Specifications (Debug) ---")
+    print("\n--- RL API Specifications (Sandbox) ---")
     observation_spec = env.observation_spec()
     action_spec = env.action_spec()
     print(f"Environment Action Spec: {action_spec}")
@@ -238,7 +240,7 @@ def main():
          print(f"Sensory System Spec: {sensory_spec}")
     else:
          print(f"Environment Observation Spec: {observation_spec}")
-    print("-------------------------------------\n")
+    print("--------------------------------------------\n")
         
     frames = []
     
