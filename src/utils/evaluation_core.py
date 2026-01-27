@@ -220,7 +220,10 @@ def evaluate_agent(
             current_agent_pos = env.agent_pos
             if using_sensory and sensory_system:
                 resources = env.get_active_resources()
-                sensory_dict = sensory_system.sense(current_agent_pos, resources)
+                sensory_dict = sensory_system.sense(
+                    current_agent_pos, resources,
+                    grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos
+                )
 
             if with_satiation:
                 body_return = body.reset()
@@ -296,7 +299,10 @@ def evaluate_agent(
                 
                 if using_sensory and sensory_system:
                      resources = env.get_active_resources()
-                     next_sensory_dict = sensory_system.sense(current_agent_pos, resources)
+                     next_sensory_dict = sensory_system.sense(
+                         current_agent_pos, resources,
+                         grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos
+                     )
                 
                 if with_satiation:
                     body_return, _, body_done = body.step(info)

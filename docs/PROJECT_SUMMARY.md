@@ -219,14 +219,15 @@ else:
 
 ### SensorySystem ([src/environment/sensor.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/environment/sensor.py))
 
-Biologically-inspired sensory inputs using gradient-based chemical detection.
+Biologically-inspired sensory inputs using gradient-based chemical detection and contact sensors.
 
 #### Components
 
 | Component | Class | Output | Description |
 |-----------|-------|--------|-------------|
 | **ResourceSensor** | Olfactory | `np.array[vector_size]` | Weighted sum of resource properties by distance |
-| **Nociceptor** | Pain | `np.array[1]` | Binary contact sensor (1.0 if in danger) |
+| **Nociceptor** | Pain | `np.array[1]` | Binary contact sensor (1.0 if in danger zone) |
+| **CollisionSensor** | Touch/Proprioception | `np.array[5]` | Detects walls and resource contact |
 
 #### ResourceSensor Formula
 ```python
@@ -242,11 +243,24 @@ for resource in resources:
 return observation
 ```
 
+#### CollisionSensor Output
+```python
+# Output: [wall_up, wall_right, wall_down, wall_left, on_resource]
+# Each value is 0.0 or 1.0
+
+observation[0] = 1.0 if row == 0 else 0.0                    # Up wall
+observation[1] = 1.0 if col == grid_width - 1 else 0.0       # Right wall
+observation[2] = 1.0 if row == grid_height - 1 else 0.0      # Down wall
+observation[3] = 1.0 if col == 0 else 0.0                    # Left wall
+observation[4] = 1.0 if agent_pos == resource_pos else 0.0   # On resource
+```
+
 #### SensorySystem.sense() Return Structure
 ```python
 {
-    'olfactory': np.array([...]),   # vector_size floats
-    'nociception': np.array([0.0])  # or [1.0] if in danger
+    'olfactory': np.array([...]),    # vector_size floats
+    'nociception': np.array([0.0]),  # or [1.0] if in danger
+    'collision': np.array([...])     # 5 floats (if enabled)
 }
 ```
 
@@ -438,6 +452,9 @@ def preprocess_state(state_dict):
         flat_list.extend(state['olfactory'])  # [vector_size]
         # Nociception
         flat_list.extend(state['nociception'])  # [1]
+        # Collision (if enabled)
+        if 'collision' in state:
+            flat_list.extend(state['collision'])  # [5]
     else:
         # Conventional: Normalize coordinates to [0,1]
         flat_list.append(state['loc'][0] / env.height)
@@ -457,6 +474,8 @@ input_dim = 0
 if using_sensory:
     input_dim += vector_size      # Olfactory
     input_dim += 1                # Nociceptor
+    if collision_sensor_enabled:
+        input_dim += 5            # Collision (walls + resource)
 else:
     input_dim += 2                # (row, col)
     
@@ -465,7 +484,7 @@ if with_satiation:
 if with_health:
     input_dim += 1
 
-# Example: Sensory(5) + Nociceptor(1) + Satiation(1) + Health(1) = 8
+# Example with collision: Olfactory(5) + Nociceptor(1) + Collision(5) + Satiation(1) + Health(1) = 13
 ```
 
 ### Training Loop Structure
@@ -576,6 +595,8 @@ configs/
 | `sensory.using_sensory` | bool | Yes | Enable vector observations |
 | `sensory.vector_size` | int | Yes* | Olfactory dimension |
 | `sensory.sensor_radius` | int | Yes* | Detection range |
+| `sensory.nociceptor_radius` | int | Yes* | Pain sensor range (0=contact) |
+| `sensory.collision_sensor_enabled` | bool | No | Enable wall/resource collision detection (default: true) |
 | `sensory.food_property` | list | Yes* | Food chemical signature |
 | `sensory.danger_property` | list | Yes* | Danger chemical signature |
 
@@ -787,6 +808,7 @@ results/{Algorithm}/{timestamp}_{tag}/
 | Vector Size | 5 |
 | Decay Power | 1.0 |
 | Nociceptor Radius | 0 |
+| Collision Sensor Enabled | true |
 | Food Property | [1,0,0,0,0] |
 | Danger Property | [0,1,0,0,0] |
 

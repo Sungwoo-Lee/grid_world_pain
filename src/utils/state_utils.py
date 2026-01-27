@@ -44,6 +44,9 @@ def preprocess_state(state, env_height, env_width, max_satiation=None, max_healt
         # Nociception
         if 'nociception' in state:
              flat_list.extend(state['nociception'])
+        # Collision (new)
+        if 'collision' in state:
+             flat_list.extend(state['collision'])
              
         # Coordinates (if not pure sensory, or combined)
         if 'loc' in state:

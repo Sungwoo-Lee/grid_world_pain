@@ -76,40 +76,105 @@ class Nociceptor:
                     
         return np.array([0.0], dtype=np.float32)
 
+class CollisionSensor:
+    """
+    A contact sensor that detects collisions with walls (grid boundaries) and resources.
+    Provides spatial awareness of the agent's immediate surroundings.
+    
+    Output: [wall_up, wall_right, wall_down, wall_left, on_resource]
+    Each value is 0.0 or 1.0.
+    """
+    def __init__(self, radius=0):
+        self.radius = radius
+        self.output_size = 5  # 4 directions + resource contact
+        
+    def sense(self, agent_pos, grid_height, grid_width, resource_pos=None):
+        """
+        Detects walls at grid boundaries and resource contact.
+        
+        Args:
+            agent_pos (tuple): (row, col)
+            grid_height (int): Grid height
+            grid_width (int): Grid width
+            resource_pos (tuple, optional): Current resource position
+            
+        Returns:
+            np.array: [wall_up, wall_right, wall_down, wall_left, on_resource]
+        """
+        row, col = agent_pos
+        observation = np.zeros(self.output_size, dtype=np.float32)
+        
+        # Wall detection (at boundary = wall)
+        observation[0] = 1.0 if row == 0 else 0.0                    # Up wall
+        observation[1] = 1.0 if col == grid_width - 1 else 0.0       # Right wall
+        observation[2] = 1.0 if row == grid_height - 1 else 0.0      # Down wall
+        observation[3] = 1.0 if col == 0 else 0.0                    # Left wall
+        
+        # Resource contact
+        if resource_pos is not None and agent_pos == resource_pos:
+            observation[4] = 1.0
+            
+        return observation
+
+
 class SensorySystem:
     """
-    Manager for the agent's sensors.
-    Currently manages the unified ResourceSensor.
+    Manager for the agent's sensors:
+    - ResourceSensor (olfactory): Gradient-based chemical detection
+    - Nociceptor: Pain/danger contact detection  
+    - CollisionSensor: Wall and resource collision detection
     """
-    def __init__(self, sensor_radius, vector_size, decay_power, nociceptor_radius):
-        # Unified radius
-        radius = sensor_radius
-        self.resource_sensor = ResourceSensor(radius=radius, vector_size=vector_size, decay_power=decay_power)
-        self.nociceptor = Nociceptor(radius=nociceptor_radius)
+    def __init__(self, sensor_radius, vector_size, decay_power, nociceptor_radius, 
+                 collision_sensor_enabled=True):
+        # Olfactory sensor
+        self.resource_sensor = ResourceSensor(
+            radius=sensor_radius, 
+            vector_size=vector_size, 
+            decay_power=decay_power
+        )
         self.vector_size = vector_size
         
-        # State Dims: Vector Size (Olfactory) + 1 (Nociceptor)
-        self.state_dims = (vector_size + 1,)
+        # Nociceptor
+        self.nociceptor = Nociceptor(radius=nociceptor_radius)
+        
+        # Collision sensor (new)
+        self.collision_sensor_enabled = collision_sensor_enabled
+        self.collision_sensor = CollisionSensor(radius=0) if collision_sensor_enabled else None
+        self.collision_output_size = 5 if collision_sensor_enabled else 0
+        
+        # Total output dimensions
+        # Olfactory (vector_size) + Nociceptor (1) + Collision (5 if enabled)
+        total_dim = vector_size + 1 + self.collision_output_size
+        self.state_dims = (total_dim,)
         
         # For compatibility/access
         self.food_sensor = self.resource_sensor
         self.danger_sensor = self.resource_sensor
 
-    def sense(self, agent_pos, resources):
+    def sense(self, agent_pos, resources, grid_height=None, grid_width=None, resource_pos=None):
         """
+        Returns dictionary with all sensor outputs.
+        
         Args:
-            agent_pos (tuple): Agent position
-            resources (list): List of Resource objects from GridWorld
+            agent_pos: Agent (row, col)
+            resources: List of Resource objects
+            grid_height, grid_width: Grid dimensions (for collision sensor)
+            resource_pos: Resource position (for collision sensor)
             
         Returns:
-            dict: Dictionary with 'olfactory' and 'nociception' keys.
+            dict: {'olfactory': np.array, 'nociception': np.array, 'collision': np.array (optional)}
         """
-        olfactory = self.resource_sensor.sense(agent_pos, resources)
-        nociception = self.nociceptor.sense(agent_pos, resources)
-        return {
-            'olfactory': olfactory, 
-            'nociception': nociception
+        result = {
+            'olfactory': self.resource_sensor.sense(agent_pos, resources),
+            'nociception': self.nociceptor.sense(agent_pos, resources)
         }
+        
+        if self.collision_sensor_enabled and grid_height is not None:
+            result['collision'] = self.collision_sensor.sense(
+                agent_pos, grid_height, grid_width, resource_pos
+            )
+        
+        return result
         
     def get_visualization_data(self, observation):
         """
@@ -118,14 +183,13 @@ class SensorySystem:
         Args:
             observation (dict): The sensory observation dictionary.
         """
-        # Dictionary Access
         olfactory_data = observation.get('olfactory')
         nociception_val = observation.get('nociception')
         
-        return [
+        data = [
             {
                 'name': 'Olfactory',
-                'color': '#8e44ad', # Purple for mixed/chemical
+                'color': '#8e44ad',  # Purple for mixed/chemical
                 'radius': self.resource_sensor.radius,
                 'vector': olfactory_data, 
                 'intensity': None,     
@@ -133,10 +197,23 @@ class SensorySystem:
             },
             {
                 'name': 'Nociceptor',
-                'color': '#c0392b', # Dark Red
+                'color': '#c0392b',  # Dark Red
                 'radius': 0,
                 'vector': None,
                 'intensity': nociception_val[0] if isinstance(nociception_val, np.ndarray) else nociception_val,
                 'type': 'intensity'
             }
         ]
+        
+        if self.collision_sensor_enabled and 'collision' in observation:
+            data.append({
+                'name': 'Collision',
+                'color': '#e67e22',  # Orange
+                'radius': 0,
+                'vector': observation.get('collision'),
+                'intensity': None,
+                'type': 'directional',
+                'labels': ['↑', '→', '↓', '←', '◆']  # Wall directions + resource
+            })
+        
+        return data

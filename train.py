@@ -271,11 +271,13 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         decay_power = config_dict.get_mandatory('sensory.decay_power', float)
         vector_size = config_dict.get_mandatory('sensory.vector_size', int)
         nociceptor_radius = config_dict.get_mandatory('sensory.nociceptor_radius', int)
+        collision_sensor_enabled = config_dict.get('sensory.collision_sensor_enabled', True)
     else:
         sensor_radius = 1 # Dummy
         decay_power = 1.0 # Dummy
         vector_size = 10 # Dummy
         nociceptor_radius = 0 # Dummy
+        collision_sensor_enabled = False
     
     # Professional Config Summary
     if config_dict is None:
@@ -430,8 +432,14 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     sensory_system = None
     if using_sensory:
         if not quiet:
-            print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size}, NociceptorR={nociceptor_radius})")
-        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
+            print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size}, NociceptorR={nociceptor_radius}, Collision={collision_sensor_enabled})")
+        sensory_system = SensorySystem(
+            sensor_radius=sensor_radius, 
+            vector_size=vector_size, 
+            decay_power=decay_power, 
+            nociceptor_radius=nociceptor_radius,
+            collision_sensor_enabled=collision_sensor_enabled
+        )
 
 
 
@@ -446,10 +454,15 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     if using_sensory:
          v_size = sensory_system.vector_size
          input_dim += v_size
-         dims_breakdown.append(f"Sensory={v_size}")
+         dims_breakdown.append(f"Olfactory={v_size}")
          
          input_dim += 1 # Nociceptor
          dims_breakdown.append("Nociceptor=1")
+         
+         # Collision sensor
+         if sensory_system.collision_sensor_enabled:
+             input_dim += sensory_system.collision_output_size
+             dims_breakdown.append(f"Collision={sensory_system.collision_output_size}")
     else:
          input_dim += 2 # row, col
          dims_breakdown.append("Loc=2")
@@ -645,7 +658,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         current_agent_pos = env.agent_pos
         if using_sensory:
              resources = env.get_active_resources()
-             sensory_dict = sensory_system.sense(current_agent_pos, resources)
+             sensory_dict = sensory_system.sense(
+                 current_agent_pos, resources,
+                 grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos
+             )
 
         if with_satiation:
             body_return = body.reset()
@@ -732,7 +748,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             # Update Observations
             if using_sensory:
                  resources = env.get_active_resources()
-                 next_sensory_dict = sensory_system.sense(current_agent_pos, resources)
+                 next_sensory_dict = sensory_system.sense(
+                     current_agent_pos, resources,
+                     grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos
+                 )
             
             if with_satiation:
                 body_return, reward, body_done = body.step(info)
