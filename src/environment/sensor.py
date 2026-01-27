@@ -78,42 +78,78 @@ class Nociceptor:
 
 class CollisionSensor:
     """
-    A contact sensor that detects collisions with walls (grid boundaries) and resources.
-    Provides spatial awareness of the agent's immediate surroundings.
+    Directional collision sensor with configurable sectors covering 360 degrees.
+    Casts rays outward from the agent and detects walls (grid boundaries).
     
-    Output: [wall_up, wall_right, wall_down, wall_left, on_resource]
-    Each value is 0.0 or 1.0.
+    Similar to EVAAA's collision sensor but adapted for discrete grid.
+    
+    Args:
+        num_sectors: Number of directional rays (e.g., 4, 8, 10)
+        sensor_range: How far each ray extends (in grid cells)
+    
+    Output: 1D array of size (num_sectors,)
+        - 0.0: No wall within range in that direction
+        - >0: Wall detected (value = 1 - (distance-1)/range, closer = higher)
     """
-    def __init__(self, radius=0):
-        self.radius = radius
-        self.output_size = 5  # 4 directions + resource contact
+    def __init__(self, sensor_range=2):
+        self.sensor_range = sensor_range
+        # Auto-calculate sectors: 8 rays per unit of range
+        self.num_sectors = sensor_range * 8
+        self.output_size = self.num_sectors
         
-    def sense(self, agent_pos, grid_height, grid_width, resource_pos=None):
+        # Precompute ray directions for each sector
+        # Sector 0 points "up" (-row direction), then clockwise
+        self.directions = self._compute_directions()
+        
+    def _compute_directions(self):
         """
-        Detects walls at grid boundaries and resource contact.
+        Returns list of (dr, dc) unit vectors for each sector.
+        Sector 0 = Up (0°), proceeds clockwise.
+        """
+        import math
+        directions = []
+        for i in range(self.num_sectors):
+            # Angle in radians, starting from "up" and going clockwise
+            angle = 2 * math.pi * i / self.num_sectors
+            # In grid coords: up = -row, right = +col
+            # Angle 0 = up = (-1, 0), angle π/2 = right = (0, 1)
+            dr = -math.cos(angle)  # Negative because up is -row
+            dc = math.sin(angle)   # Positive because right is +col
+            directions.append((dr, dc))
+        return directions
+    
+    def sense(self, agent_pos, grid_height, grid_width):
+        """
+        Cast rays in each sector direction and detect walls.
         
         Args:
-            agent_pos (tuple): (row, col)
+            agent_pos (tuple): (row, col) - Agent position
             grid_height (int): Grid height
             grid_width (int): Grid width
-            resource_pos (tuple, optional): Current resource position
             
         Returns:
-            np.array: [wall_up, wall_right, wall_down, wall_left, on_resource]
+            np.array: 1D array of shape (num_sectors,)
+                      Values: 0.0 (clear) to 1.0 (wall at distance 1)
         """
+        observation = np.zeros(self.num_sectors, dtype=np.float32)
         row, col = agent_pos
-        observation = np.zeros(self.output_size, dtype=np.float32)
         
-        # Wall detection (at boundary = wall)
-        observation[0] = 1.0 if row == 0 else 0.0                    # Up wall
-        observation[1] = 1.0 if col == grid_width - 1 else 0.0       # Right wall
-        observation[2] = 1.0 if row == grid_height - 1 else 0.0      # Down wall
-        observation[3] = 1.0 if col == 0 else 0.0                    # Left wall
+        for i, (dr, dc) in enumerate(self.directions):
+            # March along the ray up to range
+            for step in range(1, self.sensor_range + 1):
+                # Calculate target cell (round to nearest grid cell)
+                check_row = int(round(row + dr * step))
+                check_col = int(round(col + dc * step))
+                
+                # Check if out of bounds (wall detected)
+                if (check_row < 0 or check_row >= grid_height or
+                    check_col < 0 or check_col >= grid_width):
+                    # Wall detected - closer = higher value
+                    # Distance 1 → 1.0, Distance range → near 0
+                    observation[i] = 1.0 - (step - 1) / self.sensor_range
+                    break
+                # If no wall found within range, observation[i] stays 0.0
         
-        # Resource contact
-        if resource_pos is not None and agent_pos == resource_pos:
-            observation[4] = 1.0
-            
         return observation
 
 
@@ -125,7 +161,7 @@ class SensorySystem:
     - CollisionSensor: Wall and resource collision detection
     """
     def __init__(self, sensor_radius, vector_size, decay_power, nociceptor_radius, 
-                 collision_sensor_enabled=True):
+                 collision_sensor_enabled=True, collision_sensor_range=2):
         # Olfactory sensor
         self.resource_sensor = ResourceSensor(
             radius=sensor_radius, 
@@ -137,19 +173,33 @@ class SensorySystem:
         # Nociceptor
         self.nociceptor = Nociceptor(radius=nociceptor_radius)
         
-        # Collision sensor (new)
+        # Collision sensor
         self.collision_sensor_enabled = collision_sensor_enabled
-        self.collision_sensor = CollisionSensor(radius=0) if collision_sensor_enabled else None
-        self.collision_output_size = 5 if collision_sensor_enabled else 0
+        if collision_sensor_enabled:
+            self.collision_sensor = CollisionSensor(
+                sensor_range=collision_sensor_range
+            )
+            self.collision_output_size = self.collision_sensor.output_size
+        else:
+            self.collision_sensor = None
+            self.collision_output_size = 0
         
         # Total output dimensions
-        # Olfactory (vector_size) + Nociceptor (1) + Collision (5 if enabled)
+        # Olfactory (vector_size) + Nociceptor (1) + Collision (N if enabled)
         total_dim = vector_size + 1 + self.collision_output_size
         self.state_dims = (total_dim,)
         
         # For compatibility/access
         self.food_sensor = self.resource_sensor
         self.danger_sensor = self.resource_sensor
+
+    def observation_spec(self):
+        """
+        Returns the shape of the sensory output.
+        Returns:
+             tuple: (total_dimension,)
+        """
+        return self.state_dims
 
     def sense(self, agent_pos, resources, grid_height=None, grid_width=None, resource_pos=None):
         """
@@ -159,7 +209,7 @@ class SensorySystem:
             agent_pos: Agent (row, col)
             resources: List of Resource objects
             grid_height, grid_width: Grid dimensions (for collision sensor)
-            resource_pos: Resource position (for collision sensor)
+            resource_pos: Resource position (unused by ray sensor but kept for signature)
             
         Returns:
             dict: {'olfactory': np.array, 'nociception': np.array, 'collision': np.array (optional)}
@@ -171,7 +221,7 @@ class SensorySystem:
         
         if self.collision_sensor_enabled and grid_height is not None:
             result['collision'] = self.collision_sensor.sense(
-                agent_pos, grid_height, grid_width, resource_pos
+                agent_pos, grid_height, grid_width
             )
         
         return result
@@ -212,8 +262,7 @@ class SensorySystem:
                 'radius': 0,
                 'vector': observation.get('collision'),
                 'intensity': None,
-                'type': 'directional',
-                'labels': ['↑', '→', '↓', '←', '◆']  # Wall directions + resource
+                'type': 'radial'  # New visualization type for N-sector rays
             })
         
         return data

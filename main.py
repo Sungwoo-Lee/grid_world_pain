@@ -166,6 +166,8 @@ def main():
     food_property = config.get('sensory.food_property', None)
     danger_property = config.get('sensory.danger_property', None)
     nociceptor_radius = config.get('sensory.nociceptor_radius', 0)
+    collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
+    collision_sensor_range = config.get_mandatory('sensory.collision_sensor_range', int)
 
     # Setup paths
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -215,7 +217,25 @@ def main():
     sensory_system = None
     if using_sensory:
         print(f"Initializing Sensory System (Radius={sensor_radius}, VecSize={vector_size}, Decay={decay_power})")
-        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
+        sensory_system = SensorySystem(
+            sensor_radius=sensor_radius, 
+            vector_size=vector_size, 
+            decay_power=decay_power, 
+            nociceptor_radius=nociceptor_radius,
+            collision_sensor_enabled=collision_sensor_enabled,
+            collision_sensor_range=collision_sensor_range
+        )
+        
+    # Log Specs
+    print("\n--- RL API Specifications (Debug) ---")
+    observation_spec = env.observation_spec()
+    action_spec = env.action_spec()
+    print(f"Environment Action Spec: {action_spec}")
+    print(f"Environment Observation Spec: {observation_spec}")
+    if using_sensory:
+         sensory_spec = sensory_system.observation_spec()
+         print(f"Sensory System Spec: {sensory_spec}")
+    print("-------------------------------------\n")
         
     frames = []
     
@@ -230,7 +250,7 @@ def main():
         sensory_dict = {}
         if using_sensory:
              resources = env.get_active_resources()
-             sensory_dict = sensory_system.sense(current_agent_pos, resources)
+             sensory_dict = sensory_system.sense(current_agent_pos, resources, grid_height=height, grid_width=width)
         
         body_return = None
         if with_satiation:

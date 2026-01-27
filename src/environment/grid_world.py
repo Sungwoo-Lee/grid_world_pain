@@ -233,6 +233,27 @@ class GridWorld:
         
         return self.agent_pos, reward, done, info
 
+    def observation_spec(self):
+        """
+        Returns the observation specification.
+        Returns:
+            dict: Description of observation space.
+        """
+        spec = {
+            'loc': {'shape': (2,), 'dtype': int},
+            'satiation': {'shape': (1,), 'dtype': int},
+            'health': {'shape': (1,), 'dtype': float}
+        }
+        return spec
+
+    def action_spec(self):
+        """
+        Returns the action space specification.
+        Returns:
+            dict: {'type': 'discrete', 'n': 5}
+        """
+        return {'type': 'discrete', 'n': 5}
+
     def render(self):
         """
         Prints grid info.
@@ -478,6 +499,58 @@ class GridWorld:
                             # Channel Label (tiny)
                             ax_sensory.text(bx + actual_bar_w/2, slot_y - 0.05, str(idx), color='#adb5bd', fontsize=6, ha='center', transform=ax_sensory.transAxes)
 
+                elif sensor.get('type') == 'radial':
+                    # --- RADIAL VISUALIZATION (Directional Collision Sensor) ---
+                    # vector = [val_sec0, val_sec1, ..., val_secN]
+                    # Sector 0 = Up, then clockwise
+                    
+                    num_sectors = len(vector)
+                    cx, cy = 0.5, y_center
+                    max_ray_len = 0.18 # Maximum length of ray in axes coords
+                    
+                    # Draw center dot (agent)
+                    agent_dot = plt.Circle((cx, cy), 0.03, color='#868e96', transform=ax_sensory.transAxes, alpha=0.6)
+                    ax_sensory.add_patch(agent_dot)
+                    
+                    # Angles for N sectors
+                    import math
+                    for i in range(num_sectors):
+                        val = vector[i]
+                        
+                        # Calculate Angle: 0 = Up (-row), goes clockwise
+                        # Plot coords: Up is +y. 
+                        # Grid: Up is -row.
+                        # We need Sector 0 to point UP in the plot.
+                        
+                        # Angle in plot (radians): 
+                        # Sector 0 (Up) -> 90 degrees (pi/2)
+                        # Sector 1 (CW) -> 90 - (360/N)
+                        plot_angle = math.pi / 2 - (2 * math.pi * i / num_sectors)
+                        
+                        dx = math.cos(plot_angle) * max_ray_len
+                        dy = math.sin(plot_angle) * max_ray_len
+                        
+                        # Draw base ray (faint)
+                        ax_sensory.plot([cx, cx + dx], [cy, cy + dy], color='#DEE2E6', 
+                                       transform=ax_sensory.transAxes, lw=1, alpha=0.3)
+                        
+                        # Draw active ray (colored) if val > 0
+                        if val > 0.0:
+                            # Length proportional to val? Or full length with intensity color?
+                            # Let's do length proportional to val
+                            active_len = max_ray_len * val
+                            adx = math.cos(plot_angle) * active_len
+                            ady = math.sin(plot_angle) * active_len
+                            
+                            ax_sensory.plot([cx, cx + adx], [cy, cy + ady], color=color, 
+                                           transform=ax_sensory.transAxes, lw=2.5, alpha=0.9)
+                            
+                            # Add tip dot
+                            tip_x = cx + adx
+                            tip_y = cy + ady
+                            tip = plt.Circle((tip_x, tip_y), 0.015, color=color, transform=ax_sensory.transAxes)
+                            ax_sensory.add_patch(tip)
+                            
                     else:
                         # --- LEGACY VECTOR VISUALIZATION (Grid) ---
                         offsets = sensor['offsets']

@@ -589,6 +589,32 @@ configs/
 | `body.with_health` | bool | Yes | Enable health/pain |
 | `body.use_homeostatic_reward` | bool | Yes* | Drive reduction reward |
 
+#### Sensory System
+- **CollisionSensor**: Directional ray-casting sensor (RF-style). Detects walls/obstacles in N sectors around the agent. Output is a 1D vector of distance-based intensities.
+- **SensorySystem**: Integrates all sensors and produces the final observation vector.
+
+#### CollisionSensor (New)
+```python
+CollisionSensor(
+    num_sectors,     # Number of directional rays (e.g., 8) covering 360°
+    sensor_range     # Maximum distance of rays in grid cells
+)
+# Output: [s0, s1, ..., sN-1]
+# Values: 0.0 (Clear) -> 1.0 (Wall immediately adjacent)
+# Value = 1.0 - (distance - 1) / range
+```
+
+#### Configuration (`sensory` section)
+```yaml
+sensory:
+  using_sensory: true
+  sensor_radius: 2          # Resource sensor radius
+  vector_size: 5            # Resource sensor output size
+  collision_sensor_enabled: true
+  collision_sensor_size: 8  # Number of rays
+  collision_sensor_range: 2 # Ray length
+```
+
 #### Sensory
 | Key | Type | Required | Description |
 |-----|------|----------|-------------|
@@ -596,7 +622,9 @@ configs/
 | `sensory.vector_size` | int | Yes* | Olfactory dimension |
 | `sensory.sensor_radius` | int | Yes* | Detection range |
 | `sensory.nociceptor_radius` | int | Yes* | Pain sensor range (0=contact) |
-| `sensory.collision_sensor_enabled` | bool | No | Enable wall/resource collision detection (default: true) |
+| `sensory.collision_sensor_enabled` | bool | No | Enable directional collision detection (default: true) |
+| `sensory.collision_sensor_size` | int | Yes* | Number of rays for collision sensor |
+| `sensory.collision_sensor_range` | int | Yes* | Max range of collision sensor rays |
 | `sensory.food_property` | list | Yes* | Food chemical signature |
 | `sensory.danger_property` | list | Yes* | Danger chemical signature |
 

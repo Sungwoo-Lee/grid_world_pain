@@ -174,28 +174,53 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         decay_power = config.get_mandatory('sensory.decay_power', float)
         vector_size = config.get_mandatory('sensory.vector_size', int)
         nociceptor_radius = config.get_mandatory('sensory.nociceptor_radius', int)
-        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
+        collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
+        collision_sensor_range = config.get_mandatory('sensory.collision_sensor_range', int)
+        
+        sensory_system = SensorySystem(
+            sensor_radius=sensor_radius, 
+            vector_size=vector_size, 
+            decay_power=decay_power, 
+            nociceptor_radius=nociceptor_radius,
+            collision_sensor_enabled=collision_sensor_enabled,
+            collision_sensor_range=collision_sensor_range
+        )
 
 
-    # Determine Input Dimension
+    # Determine Input Dimension using Specs
     input_dim = 0
     dims_breakdown = []
-    
-    if using_sensory:
-         input_dim += sensory_system.vector_size
-         dims_breakdown.append(f"Sensory: {sensory_system.vector_size}")
-         input_dim += 1 # Nociceptor
-         dims_breakdown.append("Nociceptor: 1")
-    else:
-         input_dim += 2 # row, col
-         dims_breakdown.append("Coordinates: 2")
 
+    # Log Specs
+    print("\n--- RL API Specifications (Evaluation) ---")
+    observation_spec = env.observation_spec()
+    action_spec = env.action_spec()
+    print(f"Environment Action Spec: {action_spec}")
+    print(f"Environment Observation Spec: {observation_spec}")
+
+    if using_sensory:
+         sensory_spec = sensory_system.observation_spec()
+         print(f"Sensory System Spec: {sensory_spec}")
+         
+         v_size = sensory_spec[0]
+         input_dim += v_size
+         dims_breakdown.append(f"SensoryVec={v_size}")
+    else:
+         loc_shape = observation_spec['loc']['shape']
+         input_dim += loc_shape[0]
+         dims_breakdown.append(f"Loc={loc_shape[0]}")
+         
     if with_satiation:
-        input_dim += 1
-        dims_breakdown.append("Satiation: 1")
+        sat_shape = observation_spec['satiation']['shape']
+        input_dim += sat_shape[0]
+        dims_breakdown.append(f"Sat={sat_shape[0]}")
         if with_health:
-             input_dim += 1
-             dims_breakdown.append("Health: 1")
+             hlth_shape = observation_spec['health']['shape']
+             input_dim += hlth_shape[0]
+             dims_breakdown.append(f"Health={hlth_shape[0]}")
+    
+    print("------------------------------------------\n")
+
 
     # Frame Stacking Logic
     frame_stack = config.get_mandatory('agent.frame_stack', int)
