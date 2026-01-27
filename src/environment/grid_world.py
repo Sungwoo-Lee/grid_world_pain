@@ -291,25 +291,24 @@ class GridWorld:
         
         # Setup Figure
         # If sensory data exists, we need more space on the right
-        # CRITICAL: This must be consistent across all frames in a video. 
-        # Since we control main.py, we rely on it passing sensory_data if enabled.
         fig_width = 10 if sensory_data is not None else 8
         fig = plt.figure(figsize=(fig_width, 6), dpi=100)
         fig.patch.set_facecolor(bg_color)
         
         # GridSpec Layout
         if sensory_data is not None:
-            # Layout: [ Main Grid (2) ] [ Stats (1) ]
-            #                           [ Sensors (1) ]
-            gs = fig.add_gridspec(2, 2, width_ratios=[1.5, 1], height_ratios=[1, 1.5])
-            ax_grid = fig.add_subplot(gs[:, 0]) # Left column full height
-            ax_stats = fig.add_subplot(gs[0, 1]) # Top Right
-            ax_sensory = fig.add_subplot(gs[1, 1]) # Bottom Right
+             # Layout: [ Main Grid (2) ] [ Stats (Dynamic Height) ]
+             #                           [ Sensors (Dynamic Height) ]
+             # We allocate 40% height to Stats, 60% to Sensory (roughly)
+             gs = fig.add_gridspec(2, 2, width_ratios=[1.5, 1], height_ratios=[0.4, 0.6])
+             ax_grid = fig.add_subplot(gs[:, 0]) # Left column full height
+             ax_stats = fig.add_subplot(gs[0, 1]) # Top Right
+             ax_sensory = fig.add_subplot(gs[1, 1]) # Bottom Right
         else:
-            gs = fig.add_gridspec(1, 2, width_ratios=[2, 1])
-            ax_grid = fig.add_subplot(gs[0])
-            ax_stats = fig.add_subplot(gs[1])
-            ax_sensory = None
+             gs = fig.add_gridspec(1, 2, width_ratios=[2, 1])
+             ax_grid = fig.add_subplot(gs[0])
+             ax_stats = fig.add_subplot(gs[1])
+             ax_sensory = None
         
         # --- 1. Draw Grid World ---
         ax_grid.set_facecolor(bg_color)
@@ -345,261 +344,200 @@ class GridWorld:
         # Inner dot for agent
         ax_grid.plot(ac, ar, marker='o', markersize=5, color='white')
 
-        # --- 2. Draw Stats Dashboard ---
+        # --- 2. Draw Stats Dashboard (Dynamic Stack) ---
         ax_stats.set_facecolor(bg_color)
         ax_stats.axis('off')
+
+        # Cursor for vertical layout (0.0 to 1.0)
+        y_cursor = 1.0 
         
-        # Clean Title
-        ax_stats.text(0.5, 0.95, "INTEROCEPTIVE AI", color=text_color, ha='center', fontsize=12, fontweight='bold', transform=ax_stats.transAxes)
-        ax_stats.plot([0.2, 0.8], [0.92, 0.92], color='#ADB5BD', transform=ax_stats.transAxes, linewidth=1)
+        # 2.1 Title
+        y_cursor -= 0.15 
+        ax_stats.text(0.5, y_cursor, "INTEROCEPTIVE AI", color=text_color, ha='center', fontsize=12, fontweight='bold', transform=ax_stats.transAxes)
+        # Underscore line
+        ax_stats.plot([0.2, 0.8], [y_cursor - 0.05, y_cursor - 0.05], color='#ADB5BD', transform=ax_stats.transAxes, linewidth=1)
         
-        # Episode / Step info
+        # 2.2 Episode Info
+        y_cursor -= 0.15
         ep_str = f"EPISODE: {episode}" if episode is not None else "EP: --"
         step_str = f"STEP:    {step}" if step is not None else "STEP: --"
-        ax_stats.text(0.1, 0.80, ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
-        ax_stats.text(0.1, 0.75, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        ax_stats.text(0.1, y_cursor, ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        ax_stats.text(0.1, y_cursor - 0.08, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
         
-        # Bars Helper (Flat Design)
-        def draw_bar(y_pos, label, value, max_val, color):
+        y_cursor -= 0.1 # Gap
+        
+        # Helper for Bars
+        def draw_bar(ax, y_pos, label, value, max_val, color):
             pct = max(0, min(1, value / max_val)) if max_val > 0 else 0
             # Label
-            ax_stats.text(0.1, y_pos + 0.09, f"{label}: {value:.1f}/{max_val}", color=text_color, fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
+            ax.text(0.1, y_pos + 0.1, f"{label}: {value:.1f}/{max_val}", color=text_color, fontsize=8, fontweight='bold', transform=ax.transAxes)
             # Background Bar
-            rect_bg = plt.Rectangle((0.1, y_pos), 0.8, 0.08, color='#F1F3F5', transform=ax_stats.transAxes, ec='none')
-            ax_stats.add_patch(rect_bg)
+            rect_bg = plt.Rectangle((0.1, y_pos), 0.8, 0.08, color='#F1F3F5', transform=ax.transAxes, ec='none')
+            ax.add_patch(rect_bg)
             # Fill Bar
-            rect_fill = plt.Rectangle((0.1, y_pos), 0.8 * pct, 0.08, color=color, transform=ax_stats.transAxes, ec='none')
-            ax_stats.add_patch(rect_fill)
+            rect_fill = plt.Rectangle((0.1, y_pos), 0.8 * pct, 0.08, color=color, transform=ax.transAxes, ec='none')
+            ax.add_patch(rect_fill)
             
-        # Satiation Bar
+        # 2.3 Bars (Dynamic)
         if self.with_satiation and satiation is not None and max_satiation is not None:
-            draw_bar(0.40, "SATIATION", satiation, max_satiation, food_color)
-            
-        # Health Bar
+             y_cursor -= 0.15
+             draw_bar(ax_stats, y_cursor, "SATIATION", satiation, max_satiation, food_color)
+        
         if health is not None and max_health is not None:
-            draw_bar(0.20, "HEALTH", health, max_health, danger_color)
-            
-        # Status Text
+             y_cursor -= 0.15
+             draw_bar(ax_stats, y_cursor, "HEALTH", health, max_health, danger_color)
+             
+        # 2.4 Status Badge & Action (Fixed at Bottom of Stats Panel usually better, but let's stack)
+        y_cursor -= 0.20
+        
         if self.is_danger:
             status_text = "DANGER"
             status_bg = danger_color
         else:
-            status_text = "SAFE" # or FOOD?
+            status_text = "SAFE" 
             status_bg = food_color
         if not self.with_satiation:
              status_text = "FOOD" if not self.is_danger else "DANGER"
             
-        ax_stats.text(0.8, 0.85, status_text, color='white', ha='center', va='center', fontsize=8, fontweight='bold', 
+        ax_stats.text(0.8, y_cursor + 0.05, status_text, color='white', ha='center', va='center', fontsize=8, fontweight='bold', 
                       transform=ax_stats.transAxes,
                       bbox=dict(boxstyle='round,pad=0.3', facecolor=status_bg, edgecolor='none'))
-            
-        # Draw Action
+
         if action is not None:
              action_names = {0: "UP", 1: "RIGHT", 2: "DOWN", 3: "LEFT", 4: "STAY"}
              act_str = action_names.get(action, "UNKNOWN")
-             ax_stats.text(0.5, 0.65, f"ACTION: {act_str}", color='#495057', ha='center', fontsize=12, weight='bold', transform=ax_stats.transAxes)
+             # Draw action text centered
+             ax_stats.text(0.4, y_cursor + 0.05, f"ACTION: {act_str}", color='#495057', ha='center', fontsize=11, weight='bold', transform=ax_stats.transAxes)
 
-        # --- 3. Draw Sensory Modules ---
+        # --- 3. Draw Sensory Modules (Dynamic Slotting) ---
         if ax_sensory and sensory_data:
             ax_sensory.set_facecolor(bg_color)
             ax_sensory.axis('off')
             
-            # Title
+            # Header
             ax_sensory.text(0.5, 0.95, "SENSORY MODULES", color=text_color, ha='center', fontsize=10, fontweight='bold', transform=ax_sensory.transAxes)
             
-            # Divide into sub-areas for each sensor
             num_sensors = len(sensory_data)
-            # We'll just place them manually
-            
-
-            for i, sensor in enumerate(sensory_data):
-                # Calculate center y position for this sensor
-                y_center = 0.75 - (i * 0.45) 
+            if num_sensors > 0:
+                # Calculate Spacing
+                # Available Y range approx: 0.1 to 0.85 (0.75 height)
+                top_y = 0.85
+                bottom_y = 0.10
+                available_h = top_y - bottom_y
                 
-                # Sensor Label
-                name = sensor['name']
-                # Check for new 'intensity' key, fallback to 'vector' for safety/legacy
-                intensity = sensor.get('intensity', None)
-                vector = sensor.get('vector', None)
-                radius = sensor['radius']
-                color = sensor['color'] # Hex color
+                # Each slot height
+                slot_h = available_h / num_sensors
                 
-                ax_sensory.text(0.1, y_center + 0.15, name.upper(), color=text_color, fontsize=9, fontweight='bold', transform=ax_sensory.transAxes)
-                
-                if intensity is not None:
-                    # --- INTENSITY VISUALIZATION (Scalar) ---
-                    # 1. Text Value
-                    ax_sensory.text(0.8, y_center + 0.15, f"{intensity:.2f}", color=color, fontsize=9, fontweight='bold', ha='right', transform=ax_sensory.transAxes)
+                for i, sensor in enumerate(sensory_data):
+                    # Center of the slot
+                    y_center = top_y - (i * slot_h) - (slot_h / 2)
+                    # OR simple linspace:
+                    # y_centers = np.linspace(0.8, 0.2, num_sensors)
                     
-                    # 2. Intensity Bar
-                    max_val = 2.0
-                    bar_width = 0.6
-                    bar_height = 0.05
-                    pct = min(1.0, intensity / max_val)
+                    # Safer specific logic:
+                    # i=0 (Top) -> y = top_y - slot_h/2
+                    # i=N-1 (Bottom) -> ...
                     
-                    rect_bg = plt.Rectangle((0.15, y_center), bar_width, bar_height, color='#F1F3F5', transform=ax_sensory.transAxes, ec='none')
-                    ax_sensory.add_patch(rect_bg)
+                    # Sensor Label
+                    name = sensor['name']
+                    intensity = sensor.get('intensity', None)
+                    vector = sensor.get('vector', None)
+                    color = sensor['color'] # Hex color
                     
-                    rect_fill = plt.Rectangle((0.15, y_center), bar_width * pct, bar_height, color=color, transform=ax_sensory.transAxes, ec='none', alpha=0.8)
-                    ax_sensory.add_patch(rect_fill)
+                    ax_sensory.text(0.1, y_center + 0.12, name.upper(), color=text_color, fontsize=9, fontweight='bold', transform=ax_sensory.transAxes)
                     
-                    # 3. Glow Orb
-                    cx, cy = 0.5, y_center - 0.15
-                    orb_radius = 0.12
-                    base_circle = plt.Circle((cx, cy), orb_radius, facecolor='none', edgecolor=color, alpha=0.3, transform=ax_sensory.transAxes, lw=1)
-                    ax_sensory.add_patch(base_circle)
-                    alpha = min(1.0, intensity * 0.8 + 0.1) if intensity > 0 else 0.05
-                    fill_circle = plt.Circle((cx, cy), orb_radius * 0.8, facecolor=color, edgecolor='none', alpha=alpha, transform=ax_sensory.transAxes)
-                    ax_sensory.add_patch(fill_circle)
-                    
-                elif vector is not None:
-                    # Check if Legacy or Spectrum
-                    if sensor.get('type') == 'spectrum' or 'offsets' not in sensor:
-                        # --- SPECTRUM VISUALIZATION (Vector Bar Chart) ---
-                        # Display a small bar chart of the vector components
-                        num_channels = len(vector)
-                        ax_sensory.text(0.8, y_center + 0.25, f"Vec[{num_channels}]", color='#868e96', fontsize=8, ha='right', transform=ax_sensory.transAxes)
+                    # --- Draw Content based on Type ---
+                    if intensity is not None:
+                        # --- INTENSITY (Orb + Bar) ---
+                        # Value Text
+                        ax_sensory.text(0.85, y_center + 0.12, f"{intensity:.2f}", color=color, fontsize=9, fontweight='bold', ha='right', transform=ax_sensory.transAxes)
                         
-                        # Use Grid or Bars
-                        # Let's do horizontal bars for channels 0..N
-                        # Or vertical bars? Horizontal fits better in the slot.
+                        # Bar
+                        bar_w = 0.6
+                        bar_h = 0.05
+                        pct = min(1.0, intensity / 2.0)
                         
-                        slot_width = 0.7
-                        slot_height = 0.25
-                        slot_x = 0.15
-                        slot_y = y_center - 0.1
+                        rect_bg = plt.Rectangle((0.15, y_center), bar_w, bar_h, color='#F1F3F5', transform=ax_sensory.transAxes, ec='none')
+                        ax_sensory.add_patch(rect_bg)
+                        rect_fill = plt.Rectangle((0.15, y_center), bar_w * pct, bar_h, color=color, transform=ax_sensory.transAxes, ec='none', alpha=0.8)
+                        ax_sensory.add_patch(rect_fill)
                         
-                        # Bar width depends on N
-                        bar_w = slot_width / num_channels
-                        bar_gap = bar_w * 0.2
-                        actual_bar_w = bar_w - bar_gap
-                        
-                        max_val = 2.0 # Cap for viz
-                        
-                        colors = ['#40C057', '#FA5252', '#339AF0', '#fab005', '#be4bdb', '#20c997'] 
-                        # Green(Food), Red(Danger), Blue, Yellow, Grape, Teal
-                        
-                        for idx, val in enumerate(vector):
-                            val = float(val) # ensure float
-                            bx = slot_x + (idx * bar_w)
-                            
-                            # Bg
-                            bg_h = slot_height
-                            rect_bg = plt.Rectangle((bx, slot_y), actual_bar_w, bg_h, color='#F1F3F5', transform=ax_sensory.transAxes, ec='none')
-                            ax_sensory.add_patch(rect_bg)
-                            
-                            # Fill
-                            pct = min(1.0, val / max_val)
-                            fill_h = bg_h * pct
-                            c = colors[idx % len(colors)]
-                            
-                            rect_fill = plt.Rectangle((bx, slot_y), actual_bar_w, fill_h, color=c, transform=ax_sensory.transAxes, ec='none', alpha=0.9)
-                            ax_sensory.add_patch(rect_fill)
-                            
-                            # Channel Label (tiny)
-                            ax_sensory.text(bx + actual_bar_w/2, slot_y - 0.05, str(idx), color='#adb5bd', fontsize=6, ha='center', transform=ax_sensory.transAxes)
+                        # Orb (Small) - Positioned left of bar
+                        orb_r = 0.04
+                        cx, cy = 0.10, y_center + 0.025
+                        fill_c = plt.Circle((cx, cy), orb_r, facecolor=color, alpha=min(1.0, intensity+0.2), transform=ax_sensory.transAxes)
+                        ax_sensory.add_patch(fill_c)
 
-                elif sensor.get('type') == 'radial':
-                    # --- RADIAL VISUALIZATION (Directional Collision Sensor) ---
-                    # vector = [val_sec0, val_sec1, ..., val_secN]
-                    # Sector 0 = Up, then clockwise
-                    
-                    num_sectors = len(vector)
-                    cx, cy = 0.5, y_center
-                    max_ray_len = 0.18 # Maximum length of ray in axes coords
-                    
-                    # Draw center dot (agent)
-                    agent_dot = plt.Circle((cx, cy), 0.03, color='#868e96', transform=ax_sensory.transAxes, alpha=0.6)
-                    ax_sensory.add_patch(agent_dot)
-                    
-                    # Angles for N sectors
-                    import math
-                    for i in range(num_sectors):
-                        val = vector[i]
-                        
-                        # Calculate Angle: 0 = Up (-row), goes clockwise
-                        # Plot coords: Up is +y. 
-                        # Grid: Up is -row.
-                        # We need Sector 0 to point UP in the plot.
-                        
-                        # Angle in plot (radians): 
-                        # Sector 0 (Up) -> 90 degrees (pi/2)
-                        # Sector 1 (CW) -> 90 - (360/N)
-                        plot_angle = math.pi / 2 - (2 * math.pi * i / num_sectors)
-                        
-                        dx = math.cos(plot_angle) * max_ray_len
-                        dy = math.sin(plot_angle) * max_ray_len
-                        
-                        # Draw base ray (faint)
-                        ax_sensory.plot([cx, cx + dx], [cy, cy + dy], color='#DEE2E6', 
-                                       transform=ax_sensory.transAxes, lw=1, alpha=0.3)
-                        
-                        # Draw active ray (colored) if val > 0
-                        if val > 0.0:
-                            # Length proportional to val? Or full length with intensity color?
-                            # Let's do length proportional to val
-                            active_len = max_ray_len * val
-                            adx = math.cos(plot_angle) * active_len
-                            ady = math.sin(plot_angle) * active_len
-                            
-                            ax_sensory.plot([cx, cx + adx], [cy, cy + ady], color=color, 
-                                           transform=ax_sensory.transAxes, lw=2.5, alpha=0.9)
-                            
-                            # Add tip dot
-                            tip_x = cx + adx
-                            tip_y = cy + ady
-                            tip = plt.Circle((tip_x, tip_y), 0.015, color=color, transform=ax_sensory.transAxes)
-                            ax_sensory.add_patch(tip)
-                            
-                    else:
-                        # --- LEGACY VECTOR VISUALIZATION (Grid) ---
-                        offsets = sensor['offsets']
-                        
-                        # Center of this sensor display in Axes Coords
-                        cx, cy = 0.5, y_center
-                        
-                        # Scale factor for dots
-                        scale = 0.08
-                        
-                        # Draw Center (Agent)
-                        agent_dot = plt.Circle((cx, cy), scale/1.5, color='grey', transform=ax_sensory.transAxes, alpha=0.5)
-                        ax_sensory.add_patch(agent_dot)
-                        
-                        # Create a set of active offsets for quick lookup
-                        active_indices = [idx for idx, val in enumerate(vector) if val == 1]
-                        
-                        for idx, (dr, dc) in enumerate(offsets):
-                            px = cx + dc * scale
-                            py = cy - dr * scale # Invert row for plot Y
-                            
-                            is_active = (idx in active_indices) or (vector[idx] == 1)
-                            
-                            dot_color = color if is_active else '#DEE2E6' # Active vs Inactive Grey
-                            edge_color = 'white'
-                            alpha = 1.0 if is_active else 0.5
-                            size = scale
-                            
-                            dot = plt.Circle((px, py), size, facecolor=dot_color, edgecolor=edge_color, transform=ax_sensory.transAxes, alpha=alpha)
-                            ax_sensory.add_patch(dot)
-                            
-                            # Optional: Add small ring if active to make it "glow"
-                            if is_active:
-                                 glow = plt.Circle((px, py), size*1.3, facecolor='none', edgecolor=color, linewidth=1, transform=ax_sensory.transAxes, alpha=0.5)
-                                 ax_sensory.add_patch(glow)
+                    elif vector is not None:
+                         if sensor.get('type') == 'radial':
+                             # --- RADIAL (Collision) ---
+                             cx, cy = 0.5, y_center
+                             # Scale radius based on slot height to avoid overlap
+                             # If slot is small, ray must be small.
+                             # Base size 0.15. Cap at slot_h * 0.4
+                             max_ray_len = min(0.15, slot_h * 0.45)
+                             
+                             num_secs = len(vector)
+                             import math
+                             for si in range(num_secs):
+                                  val = vector[si]
+                                  # Angle: Sector 0 = Up (pi/2) - goes CW
+                                  angle = math.pi/2 - (2 * math.pi * si / num_secs)
+                                  
+                                  dx = math.cos(angle) * max_ray_len
+                                  dy = math.sin(angle) * max_ray_len
+                                  
+                                  # Base
+                                  ax_sensory.plot([cx, cx+dx], [cy, cy+dy], color='#DEE2E6', transform=ax_sensory.transAxes, lw=1)
+                                  
+                                  # Active
+                                  if val > 0:
+                                       act_len = max_ray_len * val
+                                       adx = math.cos(angle) * act_len
+                                       ady = math.sin(angle) * act_len
+                                       ax_sensory.plot([cx, cx+adx], [cy, cy+ady], color=color, transform=ax_sensory.transAxes, lw=2, alpha=0.9)
+                                       # Tip
+                                       tip = plt.Circle((cx+adx, cy+ady), 0.015, color=color, transform=ax_sensory.transAxes)
+                                       ax_sensory.add_patch(tip)
+                                       
+                             # Center Dot
+                             agent_dot = plt.Circle((cx, cy), 0.02, color='#868e96', transform=ax_sensory.transAxes)
+                             ax_sensory.add_patch(agent_dot)
 
-
+                         else:
+                             # --- SPECTRUM (Olfactory) ---
+                             # Horizontal Bars
+                             num_ch = len(vector)
+                             slot_w = 0.7
+                             slot_x = 0.15
+                             # Height constrained by slot
+                             bar_h = min(0.1, slot_h * 0.6)
+                             
+                             bar_w = slot_w / num_ch
+                             gap = bar_w * 0.2
+                             act_w = bar_w - gap
+                             
+                             cols = ['#40C057', '#FA5252', '#339AF0', '#fab005', '#be4bdb']
+                             
+                             for vi, val in enumerate(vector):
+                                  vx = slot_x + (vi * bar_w)
+                                  pct = min(1.0, float(val) / 2.0)
+                                  c = cols[vi % len(cols)]
+                                  
+                                  # BG
+                                  ax_sensory.add_patch(plt.Rectangle((vx, y_center - bar_h/2), act_w, bar_h, color='#F1F3F5', transform=ax_sensory.transAxes))
+                                  # Fill
+                                  fill_h = bar_h * pct
+                                  # Align bottom
+                                  ax_sensory.add_patch(plt.Rectangle((vx, y_center - bar_h/2), act_w, fill_h, color=c, transform=ax_sensory.transAxes, alpha=0.9))
 
         # Footer
         ax_stats.text(0.5, 0.02, "GridWorld Env", color='#CED4DA', ha='center', fontsize=7, transform=fig.transFigure)
 
-        # Convert to array
+        # Draw
         fig.canvas.draw()
-        
-        # Modern Matplotlib (buffer_rgba)
         buf = fig.canvas.buffer_rgba()
         data = np.asarray(buf)
         img = data[..., :3]
-        
         plt.close(fig)
-        
         return img

@@ -200,11 +200,14 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
 
     if using_sensory:
          sensory_spec = sensory_system.observation_spec()
+         # Pretty print
+         import json
          print(f"Sensory System Spec: {sensory_spec}")
          
-         v_size = sensory_spec[0]
-         input_dim += v_size
-         dims_breakdown.append(f"SensoryVec={v_size}")
+         for key, val in sensory_spec.items():
+             dim = val['shape'][0]
+             input_dim += dim
+             dims_breakdown.append(f"{key}={dim}")
     else:
          loc_shape = observation_spec['loc']['shape']
          input_dim += loc_shape[0]

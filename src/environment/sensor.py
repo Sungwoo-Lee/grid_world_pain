@@ -195,11 +195,26 @@ class SensorySystem:
 
     def observation_spec(self):
         """
-        Returns the shape of the sensory output.
+        Returns the shape of the sensory output components.
         Returns:
-             tuple: (total_dimension,)
+             dict: {
+                'olfactory': {'shape': (vector_size,), 'dtype': float},
+                'nociception': {'shape': (1,), 'dtype': float},
+                'collision': {'shape': (output_size,), 'dtype': float} (if enabled)
+             }
         """
-        return self.state_dims
+        spec = {
+            'olfactory': {'shape': (self.vector_size,), 'dtype': float},
+            'nociception': {'shape': (1,), 'dtype': float}
+        }
+        
+        if self.collision_sensor_enabled:
+            spec['collision'] = {
+                'shape': (self.collision_output_size,), 
+                'dtype': float
+            }
+            
+        return spec
 
     def sense(self, agent_pos, resources, grid_height=None, grid_width=None, resource_pos=None):
         """

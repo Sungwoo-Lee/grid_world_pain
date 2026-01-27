@@ -299,7 +299,7 @@ def main():
             
             if using_sensory:
                  resources = env.get_active_resources()
-                 sensory_dict = sensory_system.sense(current_agent_pos, resources)
+                 sensory_dict = sensory_system.sense(current_agent_pos, resources, grid_height=env.height, grid_width=env.width)
                  vis_data = sensory_system.get_visualization_data(sensory_dict)
 
             reward = env_reward

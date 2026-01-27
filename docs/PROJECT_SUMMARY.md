@@ -596,13 +596,19 @@ configs/
 #### CollisionSensor (New)
 ```python
 CollisionSensor(
-    num_sectors,     # Number of directional rays (e.g., 8) covering 360°
     sensor_range     # Maximum distance of rays in grid cells
 )
 # Output: [s0, s1, ..., sN-1]
+# Num Sectors = 8 * range (Auto-calculated)
 # Values: 0.0 (Clear) -> 1.0 (Wall immediately adjacent)
 # Value = 1.0 - (distance - 1) / range
 ```
+
+#### RL API (New)
+Both `GridWorld` and `SensorySystem` expose standard RL specification methods:
+- `observation_spec()`: Returns shape/dtype of observations.
+  - Sensory returns a dict: `{'olfactory': ..., 'nociception': ..., 'collision': ...}`
+- `action_spec()`: Returns action space (Discrete).
 
 #### Configuration (`sensory` section)
 ```yaml
@@ -611,8 +617,7 @@ sensory:
   sensor_radius: 2          # Resource sensor radius
   vector_size: 5            # Resource sensor output size
   collision_sensor_enabled: true
-  collision_sensor_size: 8  # Number of rays
-  collision_sensor_range: 2 # Ray length
+  collision_sensor_range: 2 # Ray length (Sectors = 8 * Range)
 ```
 
 #### Sensory
@@ -623,8 +628,7 @@ sensory:
 | `sensory.sensor_radius` | int | Yes* | Detection range |
 | `sensory.nociceptor_radius` | int | Yes* | Pain sensor range (0=contact) |
 | `sensory.collision_sensor_enabled` | bool | No | Enable directional collision detection (default: true) |
-| `sensory.collision_sensor_size` | int | Yes* | Number of rays for collision sensor |
-| `sensory.collision_sensor_range` | int | Yes* | Max range of collision sensor rays |
+| `sensory.collision_sensor_range` | int | Yes* | Max range of collision sensor rays (Sectors = 8 * Range) |
 | `sensory.food_property` | list | Yes* | Food chemical signature |
 | `sensory.danger_property` | list | Yes* | Danger chemical signature |
 

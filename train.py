@@ -464,11 +464,15 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     
     if using_sensory:
          sensory_spec = sensory_system.observation_spec()
+         # Pretty print the dictionary for detailed view
+         import json
+         # Convert shapes to list for json serialization support in printing if needed, or just print dict
          print(f"Sensory System Spec: {sensory_spec}")
          
-         v_size = sensory_spec[0]
-         input_dim += v_size
-         dims_breakdown.append(f"SensoryVec={v_size}")
+         for key, val in sensory_spec.items():
+             dim = val['shape'][0]
+             input_dim += dim
+             dims_breakdown.append(f"{key}={dim}")
     else:
          loc_shape = observation_spec['loc']['shape']
          input_dim += loc_shape[0]
