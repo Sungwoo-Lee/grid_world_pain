@@ -282,6 +282,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         collision_sensor_enabled = False
         collision_sensor_range = 0
     
+    # Previous Action Input Config
+    previous_action_input = config_dict.get_mandatory('sensory.previous_action_input', bool)
+    
     # Professional Config Summary
     if config_dict is None:
         raise ValueError("Strict Config: 'config_dict' must be provided to train_agent")
@@ -489,6 +492,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
              hlth_shape = observation_spec['health']['shape']
              input_dim += hlth_shape[0]
              dims_breakdown.append(f"Health={hlth_shape[0]}")
+    
+    # Previous Action Input
+    if previous_action_input:
+        input_dim += 5  # One-hot encoding for 5 actions
+        dims_breakdown.append("PrevAction=5")
     
     print("-----------------------------\n")
 
@@ -713,12 +721,15 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         total_reward = 0
         steps = 0
         
+        # Initialize previous action (4 = Stay, representing initial stationary state)
+        previous_action = 4 if previous_action_input else None
+        
         # Preprocess logic
         flat_state = None
         state_array = None
         
         if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
-            flat_state = preprocess_state(state, env.height, env.width, body.max_satiation, body.max_health)
+            flat_state = preprocess_state(state, env.height, env.width, body.max_satiation, body.max_health, previous_action)
             # Stack the initial state and FLATTEN for agent compatibility (Seq vs Grid issues)
             state_array = stacker.reset(flat_state).flatten() 
 
@@ -802,7 +813,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update
-                flat_next_state_raw = preprocess_state(next_state, env.height, env.width, body.max_satiation, body.max_health)
+                # Use current action as the "previous action" for the next state
+                flat_next_state_raw = preprocess_state(next_state, env.height, env.width, body.max_satiation, body.max_health, action if previous_action_input else None)
                 # Stack next state and Flatten
                 next_state_stacked = stacker.step(flat_next_state_raw).flatten()
 
@@ -876,6 +888,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 
                 agent.update(state_array, action, reward, next_state_array) # Use tuples
                 state = next_state
+                
+            # Update previous action for next iteration
+            if previous_action_input:
+                previous_action = action
                 
             total_reward += reward
             steps += 1

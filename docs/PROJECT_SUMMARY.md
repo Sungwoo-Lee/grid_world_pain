@@ -484,8 +484,34 @@ if with_satiation:
 if with_health:
     input_dim += 1
 
+if previous_action_input:
+    input_dim += 5                # Previous action (one-hot: Up/Right/Down/Left/Stay)
+
 # Example with collision: Olfactory(5) + Nociceptor(1) + Collision(5) + Satiation(1) + Health(1) = 13
+# Example with previous action enabled: 13 + PrevAction(5) = 18
 ```
+
+### Previous Action Input
+
+**Purpose**: Improves temporal credit assignment and action-conditional state modeling for interoceptive AI.
+
+**Encoding**: One-hot vector representing the previous action
+- Dimension: 5 (one per action: Up=0, Right=1, Down=2, Left=3, Stay=4)
+- Initial state: Action 4 (Stay) used at episode start, representing initial stationary state
+- Example: `[0, 0, 1, 0, 0]` indicates previous action was "Down"
+
+**Configuration**:
+```yaml
+sensory:
+  previous_action_input: true  # Enable feature (default: false)
+```
+
+**Research Motivation**:
+- **Partial Observability**: Helps disambiguate similar sensory readings
+- **Temporal Credit**: Improves credit assignment in sparse reward environments
+- **Interoceptive Context**: Previous movement affects satiation/health changes
+- **Action-Conditional Modeling**: Enables learning how actions influence state transitions
+
 
 ### Training Loop Structure
 ```python
@@ -631,6 +657,7 @@ sensory:
 | `sensory.collision_sensor_range` | int | Yes* | Max range of collision sensor rays (Sectors = 8 * Range) |
 | `sensory.food_property` | list | Yes* | Food chemical signature |
 | `sensory.danger_property` | list | Yes* | Danger chemical signature |
+| `sensory.previous_action_input` | bool | No | Add previous action as one-hot input (5 dims, default: false) |
 
 ---
 

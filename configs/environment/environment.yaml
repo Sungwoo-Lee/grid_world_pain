@@ -52,5 +52,7 @@ sensory:
 
   location_sensor: true # Include centered location even with sensors
 
+  # Previous Action Input
+  previous_action_input: false  # Add previous action as one-hot input (5 dims: Up/Right/Down/Left/Stay)
 
 
