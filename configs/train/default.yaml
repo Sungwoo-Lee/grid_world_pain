@@ -1,0 +1,7 @@
+# Default Training Configuration
+training:
+  training_episode: 100
+  seed: 42
+  device: "auto"
+  checkpoint_frequency: 2000 # Save model every N episodes
+tag: "default"

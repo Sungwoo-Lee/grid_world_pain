@@ -14,8 +14,8 @@ class InteroceptiveBody:
     This class acts as the "Internal Environment". Unlike standard RL where the external world
     defines the reward, here the *Body* defines the reward based on its needs.
     """
-    def __init__(self, max_satiation=20, start_satiation=10, overeating_death=True, random_start_satiation=True, food_satiation_gain=10, use_homeostatic_reward=False, satiation_setpoint=15, death_penalty=100,
-                 with_health=False, max_health=20, start_health=10, health_recovery=1, start_health_random=True):
+    def __init__(self, max_satiation, start_satiation, overeating_death, random_start_satiation, food_satiation_gain, use_homeostatic_reward, satiation_setpoint, death_penalty,
+                 with_health, max_health, start_health, health_recovery, start_health_random):
         """
         Initialize the body.
         
@@ -107,7 +107,9 @@ class InteroceptiveBody:
             if damage > 0:
                 self.health -= damage
             else:
-                self.health = min(self.health + self.health_recovery, self.max_health)
+                # Recover ONLY if rested (Action 4)
+                if info.get('rested', False):
+                    self.health = min(self.health + self.health_recovery, self.max_health)
             
         # 3. Termination Checks (Death conditions)
         done = False

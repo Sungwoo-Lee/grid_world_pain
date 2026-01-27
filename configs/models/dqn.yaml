@@ -8,4 +8,5 @@ agent:
   epsilon_start: 1.0
   epsilon_decay: 0.999
   epsilon_end: 0.05
+  frame_stack: 4
   fc_layers: [128,128]

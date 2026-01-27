@@ -1,62 +1,51 @@
 # Default Configuration for GridWorld Interoceptive AI
 
 environment:
-  height: 5
-  width: 5
+  height: 4
+  width: 4
   start_pos: [0, 0]
-  resource_pos: [4, 4]
+  resource_pos: [3, 3]
   max_steps: 500
-  danger_prob: 0.1
-  danger_duration: 3
+  prob_switch_to_danger: 0.1
+  min_danger_duration: 5
   damage_amount: 5
-  food_prob: 0.1
-  food_duration: 5
-  relocate_resource: true
-  relocation_steps: 20
+  prob_switch_to_food: 0.5
+  min_food_duration: 10
+  relocate_resource: true  
+  relocation_steps: 50
 
 body:
-  with_satiation: true
-  max_satiation: 20
-  satiation_setpoint: 20
-  overeating_death: false
-  use_homeostatic_reward: true
+  # Rewards
   death_penalty: 100
+  use_homeostatic_reward: false 
+
+  # Satiation
+  with_satiation: true
+  max_satiation: 30
+  satiation_setpoint: 30
+  overeating_death: false
   random_start_satiation: true
-  start_satiation: 10
-  food_satiation_gain: 5
+  start_satiation: 30
+  food_satiation_gain: 10
   
+  # Health
   with_health: true
   max_health: 20
-  start_health: 10
+  start_health_random: false
+  start_health: 20
   health_recovery: 1
-  start_health_random: true
 
 
 sensory:
   using_sensory: true
   sensor_radius: 5 # Default: 2
+  nociceptor_radius: 0 # Default: 0 (Contact only)
   # Decay Formula: decay = 1.0 / (distance ** decay_power)
   decay_power: 1.0 
   vector_size: 5
   food_property: [1.0, 0.0, 0.0, 0.0, 0.0]
   danger_property: [0.0, 1.0, 0.0, 0.0, 0.0]
 
-training:
-  training_episode: 100
-  seed: 42
-  device: "auto"
 
-testing:
-  seed: 56
-  evaluation_episodes: 1
-
-tag: "default"
-
-wandb:
-  disabled: false
-  project: "grid_world_pain"
-  group: null
-  job_type: "training"
-  name: null
 
 

@@ -44,6 +44,8 @@ import time
 import sys
 from datetime import datetime
 import multiprocessing
+from src.utils.wandb_utils import wandb_login
+
 
 # Define Search Spaces
 SEARCH_SPACES = {
@@ -51,24 +53,26 @@ SEARCH_SPACES = {
         "agent.learning_rate": [1e-4, 1e-3],
         "agent.batch_size": [64, 128],
         "agent.epsilon_decay": [0.995, 0.999],
-        "agent.target_update_freq": [100, 1000, 5000],
+        "agent.target_update_freq": [1000, 5000],
         "agent.fc_layers": [[256, 128, 64], [128, 128]],
         "agent.gamma": [0.95, 0.99],
         "agent.algorithm": ["DQN"]
     },
     "drqn": {
-        "agent.learning_rate": [1e-4, 3e-4, 1e-3],
+        "agent.learning_rate": [1e-4, 1e-3],
         "agent.batch_size": [32, 64],
         "agent.trace_length": [8, 16],
+        "agent.epsilon_decay": [0.995, 0.999],
         "agent.target_update_freq": [1000, 5000],
         "agent.fc_layers": [[64], [128]],
         "agent.recurrent_layers": [[64], [128]],
+        "agent.gamma": [0.95, 0.99],
         "agent.algorithm": ["DRQN"]
     },
     "ppo": {
         "agent.lr_actor": [1e-4, 3e-4],
         "agent.lr_critic": [5e-4, 1e-3],
-        "agent.clip_param": [0.1, 0.2],
+        # "agent.clip_param": [0.1, 0.2],
         "agent.entropy_coef": [0.001, 0.01],
         "agent.K_epochs": [4, 10],
         "agent.actor_fc_layers": [[64, 64], [128, 128]],
@@ -78,7 +82,7 @@ SEARCH_SPACES = {
     "recurrent_ppo": {
         "agent.lr_actor": [1e-4, 3e-4],
         "agent.lr_critic": [5e-4, 1e-3],
-        "agent.clip_param": [0.1, 0.2],
+        # "agent.clip_param": [0.1, 0.2],
         "agent.entropy_coef": [0.001, 0.01],
         "agent.K_epochs": [4, 10],
         "agent.sequence_length": [8, 16],
@@ -284,7 +288,12 @@ def main():
     if wandb_job_type is None:
         raise ValueError("Strict Config: 'wandb.job_type' must be specified in configs/wandb.yaml or via --wandb-job-type")
     
+    
+    # Ensure WandB login for the search runner
+    wandb_login(quiet=False)
+    
     run_search(args.algorithm, args.episodes, args.seed, wandb_project, args.num_processes, args.dry_run, wandb_job_type)
+
 
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn", force=True) # Safe for pytorch/cuda

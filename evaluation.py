@@ -2,31 +2,48 @@
 Evaluation script for the GridWorld Reinforcement Learning agent.
 
 This script:
-1. Loads the configuration saved during training (results/.../models/config.yaml).
+1. Loads the configuration saved during training (`results/.../models/config.yaml`).
 2. Sets up the evaluation environment (Grid, Body, Sensory) to match training.
-3. Instantiates the appropriate agent (Tabular, DQN, or PPO).
+3. Instantiates the appropriate agent (Tabular, DQN, PPO, DRQN, RecurrentPPO, DreamerV3).
 4. Evaluates checkpoints:
    - Runs evaluation episodes (deterministic).
    - Collects frames for video generation.
    - Generates Q-table plots (if Tabular).
    - Saves artifacts to `results/.../RunName/`.
 
+Arguments:
+- `--results_dir <path>`: (Required) Path to the results directory of the run to evaluate.
+- `--episodes <int>`: Override the number of evaluation episodes.
+- `--seed <int>`: Override the random seed.
+- `--checkpoint <str/int>`: Specific checkpoint to evaluate (e.g., `model_50.ckpt`, `50`).
+- `--all`: Evaluate ALL checkpoints found in the directory.
+- `--wandb-run-path <str>`: WandB run path (entity/project/run_id) to upload evaluation videos.
 
+Usage Examples:
 
-Usage:
-    # Basic evaluation of a specific run
-    python evaluation.py --results_dir results/DQN/20260118-120000_my_run --episodes 5
+1. **Basic Evaluation (Latest Checkpoint)**:
+   ```bash
+   python evaluation.py --results_dir results/DQN/20260118-120000_my_run --episodes 5
+   ```
 
-    # Override seed and episodes
-    python evaluation.py --results_dir results/PPO/20260118-130000_test --episodes 10 --seed 123
+2. **Evaluate Specific Checkpoint**:
+   ```bash
+   python evaluation.py --results_dir results/DQN/RunName --checkpoint 500
+   ```
+
+3. **Evaluate All Checkpoints & Upload to WandB**:
+   ```bash
+   python evaluation.py --results_dir results/DQN/RunName --all --wandb-run-path my_entity/my_project/run_id
+   ```
 
 Notes:
 - Uses the configuration saved during training (`config.yaml`).
-- Supports CPU/GPU execution (auto-detected or inherited from config).
-- Ensures at least one resource (Food or Danger) is active at all times.
+- **Strict Configuration**: Raises errors if required parameters are missing.
+- Default behavior (no args): Evaluates the *latest* numeric checkpoint found.
 """
 import os
 import glob
+import wandb
 import re
 import yaml
 import numpy as np
@@ -39,21 +56,22 @@ from src.utils.config import Config, get_default_config
 from src.utils.visualization import plot_q_table, save_video, visualize_activations, combine_frame_and_activations
 from src.utils.activation_monitor import ActivationMonitor
 from src.utils.lrp_monitor import LRPMonitor
+from src.utils.state_utils import FrameStacker
+from src.utils.wandb_utils import wandb_login
 import torch
 
 
-def evaluate_checkpoint(checkpoint_path, results_dir, config):
+def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=None):
     """
     Evaluates a single checkpoint:
     - Sets up environment and body based on config.
     - Loads agent.
     - Runs evaluation episodes to collect frames.
     - Generates Q-table plot and performance video.
+    - Optionally uploads video to WandB.
     """
     import torch # Explicit import to fix UnboundLocalError
     filename = os.path.basename(checkpoint_path)
-    # Create Data Dir
-
     # Create Data Dir
     data_dir = os.path.join(results_dir, "data")
     os.makedirs(data_dir, exist_ok=True)
@@ -61,17 +79,17 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     # Try Q-table pattern
     match = re.search(r"q_table_(\d+).npy", filename)
     if not match:
-        match = re.search(r"dqn_model_(\d+).pth", filename)
+        match = re.search(r"dqn_model_(\d+).ckpt", filename)
     if not match:
-        match = re.search(r"ppo_model_(\d+).pth", filename)
+        match = re.search(r"ppo_model_(\d+).ckpt", filename)
     if not match:
-        match = re.search(r"drqn_model_(\d+).pth", filename)
+        match = re.search(r"drqn_model_(\d+).ckpt", filename)
     if not match:
-        match = re.search(r"recurrent_ppo_model_(\d+).pth", filename)
+        match = re.search(r"recurrent_ppo_model_(\d+).ckpt", filename)
     if not match:
-        match = re.search(r"dreamer_model_(\d+).pth", filename)
+        match = re.search(r"dreamer_model_(\d+).ckpt", filename)
         
-    pct = match.group(1) if match else ("final" if "final" in filename or filename == "q_table.npy" else "unknown")
+    pct = match.group(1) if match else "unknown"
     
     print(f"Evaluating checkpoint: {filename} ({pct}%)")
 
@@ -110,12 +128,12 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     health_recovery = config.get_mandatory('body.health_recovery', float)
     start_health_random = config.get_mandatory('body.start_health_random')
     
-    pain_prob = config.get_mandatory('environment.danger_prob', float)
-    pain_duration = config.get_mandatory('environment.danger_duration', int)
+    prob_switch_to_danger = config.get_mandatory('environment.prob_switch_to_danger', float)
+    min_danger_duration = config.get_mandatory('environment.min_danger_duration', int)
     damage_amount = config.get_mandatory('environment.damage_amount', float)
     
-    food_prob = config.get_mandatory('environment.food_prob', float)
-    food_duration = config.get_mandatory('environment.food_duration', int)
+    prob_switch_to_food = config.get_mandatory('environment.prob_switch_to_food', float)
+    min_food_duration = config.get_mandatory('environment.min_food_duration', int)
     
     # Extract Relocation Config
     relocate_resource = config.get_mandatory('environment.relocate_resource')
@@ -126,12 +144,12 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     np.random.seed(seed)
     
     env = GridWorld(height=height, width=width, resource_pos=resource_pos, with_satiation=with_satiation, max_steps=max_steps,
-                    danger_prob=pain_prob, danger_duration=pain_duration, damage_amount=damage_amount,
-                    food_prob=food_prob, food_duration=food_duration,
+                    prob_switch_to_danger=prob_switch_to_danger, min_danger_duration=min_danger_duration, damage_amount=damage_amount,
+                    prob_switch_to_food=prob_switch_to_food, min_food_duration=min_food_duration,
                     relocate_resource=relocate_resource, relocation_steps=relocation_steps,
-                    vector_size=config.get('sensory.vector_size', 10),
-                    food_property=config.get('sensory.food_property', None),
-                    danger_property=config.get('sensory.danger_property', None))
+                    vector_size=config.get_mandatory('sensory.vector_size', int),
+                    food_property=config.get_mandatory('sensory.food_property'),
+                    danger_property=config.get_mandatory('sensory.danger_property'))
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
         start_satiation=start_satiation, 
@@ -153,36 +171,41 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     sensory_system = None
     if using_sensory:
         sensor_radius = config.get_mandatory('sensory.sensor_radius', int)
-        decay_power = config.get('sensory.decay_power', 1.0) # Not mandatory in old configs
-        vector_size = config.get('sensory.vector_size', 10)
-        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power)
+        decay_power = config.get_mandatory('sensory.decay_power', float)
+        vector_size = config.get_mandatory('sensory.vector_size', int)
+        nociceptor_radius = config.get_mandatory('sensory.nociceptor_radius', int)
+        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
 
-    # Preprocessor for DQN
-    def preprocess_state(state_tuple):
-        flat_list = []
-        if using_sensory:
-            # New format: state_tuple is (*sensory_vector, *body_stats)
-            # sensory_vector is flat.
-            vec_size = sensory_system.vector_size
-            sensory_vec = state_tuple[:vec_size]
-            flat_list.extend(sensory_vec)
-            body_start_idx = vec_size
-        else:
-            # Coords
-            row = state_tuple[0]
-            col = state_tuple[1]
-            flat_list.append(row / height)
-            flat_list.append(col / width)
-            body_start_idx = 2
 
-        if len(state_tuple) > body_start_idx:
-            satiation = state_tuple[body_start_idx]
-            flat_list.append(satiation / body.max_satiation) 
-        if len(state_tuple) > body_start_idx + 1:
-            health = state_tuple[body_start_idx + 1]
-            flat_list.append(health / body.max_health)
-        return np.array(flat_list, dtype=np.float32)
+    # Determine Input Dimension
+    input_dim = 0
+    dims_breakdown = []
+    
+    if using_sensory:
+         input_dim += sensory_system.vector_size
+         dims_breakdown.append(f"Sensory: {sensory_system.vector_size}")
+         input_dim += 1 # Nociceptor
+         dims_breakdown.append("Nociceptor: 1")
+    else:
+         input_dim += 2 # row, col
+         dims_breakdown.append("Coordinates: 2")
 
+    if with_satiation:
+        input_dim += 1
+        dims_breakdown.append("Satiation: 1")
+        if with_health:
+             input_dim += 1
+             dims_breakdown.append("Health: 1")
+
+    # Frame Stacking Logic
+    frame_stack = config.get_mandatory('agent.frame_stack', int)
+    base_input_dim = input_dim
+    
+    if frame_stack > 1:
+        print(f"Input Dimension: Base: {base_input_dim} x Stack: {frame_stack}")
+    else:
+        print(f"Input Dimension: {input_dim}")
+    
     # Initialize Agent
     agent = None
     algorithm = config.get_mandatory('agent.algorithm')
@@ -191,24 +214,13 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"{algorithm} Agent using device: {device}")
-
-    # Determine Input Dim
-    input_dim = 0
-    if using_sensory:
-         input_dim += sensory_system.vector_size
-    else:
-         input_dim += 2 # row, col
-
-    if with_satiation:
-        input_dim += 1
-        if with_health:
-             input_dim += 1
     
     if algorithm == "DQN":
         from src.models.dqn import DQNAgent
         agent = DQNAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5,
+            frame_stack=frame_stack,
             lr=config.get_mandatory('agent.learning_rate', float),
             gamma=config.get_mandatory('agent.gamma', float),
             buffer_size=config.get_mandatory('agent.buffer_size', int),
@@ -220,13 +232,12 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             fc_layers=config.get_mandatory('agent.fc_layers'),
             device=device
         )
-        # Load weights
-        agent.load(checkpoint_path)
+        agent.load(checkpoint_path, weights_only=True)
 
     elif algorithm == "DRQN":
         from src.models.drqn import DRQNAgent
         agent = DRQNAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5, 
             lr=config.get_mandatory('agent.learning_rate', float),
             gamma=config.get_mandatory('agent.gamma', float),
@@ -242,13 +253,14 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             recurrent_layers=config.get_mandatory('agent.recurrent_layers'),
             device=device
         )
-        agent.load(checkpoint_path)
+        agent.load(checkpoint_path, weights_only=True)
 
     elif algorithm == "PPO":
         from src.models.ppo import PPOAgent
         agent = PPOAgent(
-            state_dim=input_dim, 
-            action_dim=5, 
+            state_dim=base_input_dim, 
+            action_dim=5,
+            frame_stack=frame_stack, 
             lr_actor=config.get_mandatory('agent.lr_actor', float),
             lr_critic=config.get_mandatory('agent.lr_critic', float),
             gamma=config.get_mandatory('agent.gamma', float),
@@ -260,13 +272,13 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             critic_fc_layers=config.get_mandatory('agent.critic_fc_layers'),
             device=device
         )
-        agent.load(checkpoint_path)
+        agent.load(checkpoint_path, weights_only=True)
 
 
     elif algorithm == "RecurrentPPO":
         from src.models.recurrent_ppo import RecurrentPPOAgent
         agent = RecurrentPPOAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5, 
             lr_actor=config.get_mandatory('agent.lr_actor', float), 
             lr_critic=config.get_mandatory('agent.lr_critic', float), 
@@ -282,12 +294,12 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             critic_fc_layers=config.get_mandatory('agent.critic_fc_layers'),
             device=device
         )
-        agent.load(checkpoint_path)
+        agent.load(checkpoint_path, weights_only=True)
 
     elif algorithm == "DreamerV3":
         from src.models.dreamer_v3 import DreamerV3Agent
         agent = DreamerV3Agent(
-            state_dim=input_dim,
+            state_dim=base_input_dim,
             action_dim=5,
             device=device,
             batch_size=config.get_mandatory('agent.batch_size', int),
@@ -306,7 +318,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             actor_fc_layers=config.get_mandatory('agent.actor_fc_layers'),
             critic_fc_layers=config.get_mandatory('agent.critic_fc_layers')
         )
-        agent.load(checkpoint_path)
+        agent.load(checkpoint_path, weights_only=True)
 
     else:
         # Tabular
@@ -326,344 +338,35 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config):
             print(f"  Error loading checkpoint: {e}")
             return
 
-    # Visualization Configuration
-    vis_enabled = config.get_mandatory('visualization.enabled')
-    vis_activations = config.get_mandatory('visualization.activations.enabled') and vis_enabled
-    vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
-    vis_fps = config.get_mandatory('visualization.fps', int)
-    save_h5 = config.get_mandatory('visualization.activations.save_h5') and vis_enabled
-
-    # Setup Activation Monitor & LRP
-    monitor = None
-    lrp_monitor = None
-    input_structure = []
+    # 3. Run Evaluation via Core Utility
+    from src.utils.evaluation_core import evaluate_agent
     
-    def append_frame_with_activations(game_frame, action=None, state=None):
-        nonlocal frames
-        act_frame = None
-        acts = None
-        if monitor:
-            acts = monitor.get_current_activations()
-            
-            # If empty (first frame), try to use template with zeros
-            if not acts and hasattr(monitor, 'template_activations') and monitor.template_activations:
-                    acts = {k: np.zeros_like(v) for k,v in monitor.template_activations.items()}
-            
-            # Compute Attributions if LRP monitor is active and we have an action
-            attributions = None
-            if lrp_monitor and action is not None and state is not None:
-                try:
-                    input_tensor = None
-                    if using_sensory:
-                        if isinstance(state, np.ndarray):
-                            input_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
-                    else:
-                        flat = preprocess_state(state)
-                        input_tensor = torch.FloatTensor(flat).unsqueeze(0).to(device)
-                        
-                    if algorithm in ["DRQN", "RecurrentPPO", "DreamerV3", "LSTM"]:
-                        if input_tensor is not None and input_tensor.ndim == 2:
-                            input_tensor = input_tensor.unsqueeze(1)
+    evaluate_agent(
+        agent=agent,
+        env=env,
+        body=body,
+        sensory_system=sensory_system,
+        config=config,
+        num_episodes=num_episodes,
+        device=device,
+        results_dir=results_dir,
+        checkpoint_pct=pct,
+        wandb_run_path=wandb_run_path # Pass the path, or let it fallback to active run if main() inited it
+    )
 
-                    if input_tensor is not None:
-                        attributions = lrp_monitor.compute_relevance(input_tensor, action)
-                except Exception as e:
-                    print(f"LRP Error: {e}")
-                    pass
-
-            # Visualize activations
-            act_frame = visualize_activations(
-                acts, 
-                game_frame.shape[1], 
-                config, 
-                input_structure=input_structure, 
-                attributions=attributions
-            )
-
-        combined = combine_frame_and_activations(game_frame, act_frame)
-        frames.append(combined)
-    
-        if acts and monitor and acts is not getattr(monitor, 'template_activations', None):
-                monitor.record_step()
-
-    if algorithm != "Tabular Q-Learning" and vis_activations:
-        model_to_monitor = None
-        if isinstance(agent, torch.nn.Module):
-            model_to_monitor = agent
-        elif hasattr(agent, 'policy_net'):
-            model_to_monitor = agent.policy_net
-        elif hasattr(agent, 'policy'):
-            # For PPO, policy is ActorCritic which has actor and critic
-            model_to_monitor = agent.policy
-            
-        if model_to_monitor:
-            print(f"  Monitoring activations for {type(model_to_monitor).__name__}...")
-            # We track Linear and Conv layers primarily
-            monitor = ActivationMonitor(model_to_monitor, tracked_layers=[torch.nn.Linear, torch.nn.Conv2d, torch.nn.LSTM, torch.nn.GRU])
-            
-            # Warm-up to prompt monitor to capture layer structure and determine frame size
-            # Create a dummy input based on input_dim
-            # input_dim logic is complex above, but we can just use a zero tensor of approx shape?
-            # Or just wait for first frame? No, first frame is rendered BEFORE first step.
-            
-            # Helper to generate zero frame of correct size
-            # We need to know the dummy input shape.
-            # Reuse logic for `input_dim` or just one forward.
-            try:
-                # Construct dummy state
-                # We need input_dim from code above.
-                # Code above defines `input_dim` inside blocks (DQN, etc).
-                # We can access it if we move monitor setup AFTER agent init fully.
-                # Monitor setup IS after agent init.
-                # But `input_dim` variable is local to blocks.
-                # Let's try to infer from agent.policy_net first layer?
-                dummy_input = None
-                first_layer = None
-                for module in model_to_monitor.modules():
-                     if isinstance(module, torch.nn.Linear):
-                         dummy_input = torch.zeros(1, module.in_features).to(device)
-                         break
-                     elif isinstance(module, torch.nn.Conv2d):
-                         # Assuming square input? tough.
-                         pass
-                
-                if dummy_input is not None:
-                     # Run forward
-                     print("  Running warmup forward pass...")
-                     with torch.no_grad():
-                          if hasattr(agent, 'reset_hidden'): agent.reset_hidden()
-                          is_recurrent = "DRQN" in type(agent).__name__ or \
-                                         "Recurrent" in type(agent).__name__ or \
-                                         "Dreamer" in type(agent).__name__
-                          
-                          if is_recurrent:
-                               # Recurrent forward expects (batch, seq, dim)
-                               dummy_input = dummy_input.unsqueeze(0) 
-                               model_to_monitor(dummy_input)
-                               if hasattr(agent, 'reset_hidden'): agent.reset_hidden()
-                          else:
-                               model_to_monitor(dummy_input)
-                     
-                     monitor.template_activations = monitor.get_current_activations().copy()
-                     monitor.clear_history() # Clear the dummy record
-                     print(f"  Warmup successful. Captured {len(monitor.template_activations)} layers.")
-                else:
-                    raise RuntimeError("Warmup failed: No suitable input layer found (Linear/Conv2d) to infer input shape.")
-            except Exception as e:
-                print(f"  Activation warm-up failed with error: {e}")
-                # Re-raise to stop execution and debug
-                raise e
-            # Input Structure for Visualization
-            if using_sensory:
-                input_structure.append(("Sensory", sensory_system.vector_size))
-            else:
-                input_structure.append(("Agent", 2)) 
-
-            if with_satiation:
-                input_structure.append(("Sat", 1))
-                if with_health:
-                    input_structure.append(("Hlth", 1))
-
-            # Initialize LRP monitor
-            if vis_lrp:
-                try:
-                    target_net = model_to_monitor
-                    if algorithm == "PPO":
-                        target_net = model_to_monitor.actor
-                    elif algorithm in ["DRQN", "DreamerV3"]:
-                        class OutputWrapper(torch.nn.Module):
-                            def __init__(self, model, index=0):
-                                super().__init__()
-                                self.model = model
-                                self.index = index
-                            def forward(self, x):
-                                return self.model(x)[self.index]
-                        target_net = OutputWrapper(model_to_monitor, 0)
-                    
-                    lrp_monitor = LRPMonitor(target_net)
-                except Exception as e:
-                    print(f"Failed to initialize LRP: {e}")
-
-    # 3. Run Evaluation Episodes (Collect Frames)
-    agent.epsilon = 0 # No exploration during evaluation
-    frames = []
-    
-    for ep in range(num_episodes):
-        ep_idx = ep + 1
-        
-        # Reset environment
-        env_state = env.reset() # Returns (row, col)
-        
-        if hasattr(agent, 'reset_hidden'):
-            agent.reset_hidden()
-        
-        # Determine initial sensory state
-        current_agent_pos = env.agent_pos
-        
-        if using_sensory:
-            resources = env.get_active_resources()
-            sensory_state = sensory_system.sense(current_agent_pos, resources)
-
-        if with_satiation:
-            body_return = body.reset()
-            if using_sensory:
-                if isinstance(body_return, tuple):
-                     state = (*sensory_state, *body_return)
-                else:
-                     state = (*sensory_state, body_return)
-            else:
-                if with_health:
-                    satiation, health = body_return
-                    state = (*env_state, satiation, health)
-                    append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, health, max_health, episode=ep_idx, step=0), state=state)
-                else:
-                    satiation = body_return
-                    state = (*env_state, satiation)
-                    append_frame_with_activations(env.render_rgb_array(satiation, max_satiation, episode=ep_idx, step=0), state=state)
-            
-            # Initial frame handling for POMDP?
-            # Existing code only handled FOMDP rendering logic above for initial frame.
-            # POMDP initial frame logic:
-            if using_sensory and with_satiation:
-                health = body.health if with_health else None
-                max_h = body.max_health if with_health else None
-                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)), state=state)
-
-        else:
-            if using_sensory:
-                state = sensory_state
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0, sensory_data=sensory_system.get_visualization_data(sensory_state)), state=state)
-            else:
-                state = env_state
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=0), state=state)
-
-        
-        done = False
-        step_count = 0
-        
-        # Preprocess if DQN
-        if using_sensory:
-            flat_state = preprocess_state(state)
-        
-        while not done and step_count < max_steps:
-            if using_sensory:
-                action = agent.choose_action(flat_state)
-            else:
-                action = agent.choose_action(state)
-            
-            # Pass action for LRP (using PREVIOUS state for LRP computation before step)
-            # The activation monitor captured activations during `choose_action` (forward pass).
-            # LRP needs the input and the action.
-            # `flat_state` or `state` is the input.
-            
-            next_env_state, _, env_done, info = env.step(action)
-            
-            # Observations
-            current_agent_pos = env.agent_pos
-            
-            if using_sensory:
-                 resources = env.get_active_resources()
-                 next_sensory_state = sensory_system.sense(current_agent_pos, resources)
-            
-            if with_satiation:
-                body_return, _, body_done = body.step(info)
-                done = env_done or body_done
-                
-                vis_data = None
-                if using_sensory:
-                     vis_data = sensory_system.get_visualization_data(next_sensory_state)
-                     if isinstance(body_return, tuple):
-                         next_state = (*next_sensory_state, *body_return)
-                     else:
-                         next_state = (*next_sensory_state, body_return)
-                else:
-                     # FOMDP logic
-                     if with_health:
-                        next_sat, next_health = body_return
-                        next_state = (*next_env_state, next_sat, next_health)
-                     else:
-                        next_sat = body_return
-                        next_state = (*next_env_state, next_sat)
-
-                health = body.health if with_health else None
-                max_h = body.max_health if with_health else None
-                # Render using NEXT state?
-                # Usually we visualize the result of the action.
-                # But activations are from the PREVIOUS state.
-                # `append_frame_with_activations` uses `monitor.get_current_activations()`.
-                # If we call it here, we are attaching activations of `state` to the frame of `next_state`?
-                # Or is the frame showing `next_state`? 
-                # `env.render_rgb_array` usually shows current state of env. 
-                # After `env.step`, the env is in `next_state`.
-                # So we associate `state` activations with `next_state` frame. This is slight mismatch.
-                # However, changing this logic is big refactor.
-                # I will stick to existing pattern but pass `action` and `flat_state` (of current step).
-                # Wait, `append_frame_with_activations` is called at end of loop.
-                # So it attaches "activations from this step" to "frame of next step".
-                
-                # Correct logic for LRP:
-                # We need to explain `action` taken at `state`.
-                # Pass `action` and `flat_state` (or `state` if not flat) to `append_frame_with_activations`.
-                # Note: `flat_state` is available in loop scope.
-                
-                l_state = flat_state if using_sensory else state
-                append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, health, max_h, episode=ep_idx, step=step_count+1, sensory_data=vis_data), action=action, state=l_state)     
-            else:
-                done = env_done
-                vis_data = None
-                
-                if using_sensory:
-                    next_state = next_sensory_state
-                    vis_data = sensory_system.get_visualization_data(next_sensory_state)
-                else:
-                    next_state = next_env_state
-                
-                l_state = flat_state if using_sensory else state
-                append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count+1, sensory_data=vis_data), action=action, state=l_state)
-
-            
-            state = next_state
-            if using_sensory:
-                flat_state = preprocess_state(state)
-            step_count += 1
-            
-            if done:
-                # Buffer end frames
-                # Buffer end frames
-                for _ in range(5):
-                    if with_satiation:
-                        if with_health:
-                             # Use last known state values
-                             append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, body.health, max_health, episode=ep_idx, step=step_count, sensory_data=vis_data))
-                        else:
-                             append_frame_with_activations(env.render_rgb_array(body.satiation, max_satiation, episode=ep_idx, step=step_count, sensory_data=vis_data))
-                    else:
-                        append_frame_with_activations(env.render_rgb_array(episode=ep_idx, step=step_count, sensory_data=vis_data))
-
-                break
-
-    # 4. Generate Visual Artifacts
+    # 4. Generate Visual Artifacts (Tabular Q-Table only, Video handled by evaluate_agent)
     
     # Plot Q-Table (Tabular only)
     if not using_sensory and hasattr(agent, 'q_table'):
         plots_dir = os.path.join(results_dir, "plots")
         os.makedirs(plots_dir, exist_ok=True) # Ensure directory exists
-       # Visualization Plotting
-    if algorithm == "Tabular Q-Learning":
-        vis_filename = os.path.join(plots_dir, f"q_table_{pct}.png" if pct != "final" else "q_table_final.png")
-        plot_q_table(agent.q_table, vis_filename, config, resource_pos)
-    
-    # Save Video
-    videos_dir = os.path.join(results_dir, "videos")
-    os.makedirs(videos_dir, exist_ok=True)
-    video_filename = os.path.join(videos_dir, f"video_{pct}.mp4" if pct != "final" else "final_trained_agent.mp4")
-    save_video(frames, video_filename, fps=vis_fps)
-
-    # Save Activations
-    if monitor and save_h5:
-        activations_file = os.path.join(data_dir, f"activations_{pct}.h5" if pct != "final" else "activations_final.h5")
-        monitor.save_history(activations_file)
-        monitor.close()
+        # Visualization Plotting
+        if algorithm == "Tabular Q-Learning":
+            vis_filename = os.path.join(plots_dir, f"q_table_{pct}.png")
+            plot_q_table(agent.q_table, vis_filename, config, resource_pos)
+            
+    # Video and Activations are handled by evaluate_agent now.
+    # LRP is handled by evaluate_agent now.
 
 
 
@@ -673,6 +376,9 @@ def main():
     parser.add_argument("--seed", type=int, help="Override testing seed")
     parser.add_argument("--episodes", type=int, help="Number of episodes to evaluate")
     parser.add_argument("--results_dir", type=str, required=True, help="Path to results directory (Required)")
+    parser.add_argument("--checkpoint", type=str, help="Specific checkpoint name or path to evaluate (e.g. 'model_100.ckpt' or full path)")
+    parser.add_argument("--all", action="store_true", help="Evaluate all checkpoints found in the directory")
+    parser.add_argument("--wandb-run-path", type=str, help="WandB run path (e.g. 'entity/project/run_id') to upload evaluation videos")
     args = parser.parse_args()
 
     results_dir = args.results_dir
@@ -691,9 +397,22 @@ def main():
         config = Config(saved_config_dict)
 
     # 2. Key Overrides (Allow user to change testing seed/episodes)
-    global_config = get_default_config()
-    testing_seed = args.seed or global_config.get_mandatory('testing.seed', int)
-    eval_episodes = args.episodes or global_config.get_mandatory('testing.evaluation_episodes', int)
+    # 2. Key Overrides (Allow user to change testing seed/episodes)
+    # Load evaluation defaults since environment.yaml no longer has them
+    eval_default_path = "configs/evaluation/default.yaml"
+    if os.path.exists(eval_default_path):
+        eval_defaults = Config.load_yaml(eval_default_path)
+    else:
+        eval_defaults = Config() # Empty if missing
+        
+    # Determine params: CLI > Default Config > Hardcoded Fallback
+    testing_seed = args.seed or eval_defaults.get('testing.seed')
+    if testing_seed is None:
+        raise ValueError("Strict Config: 'testing.seed' must be provided via CLI or configs/evaluation/default.yaml")
+    
+    eval_episodes = args.episodes or eval_defaults.get('testing.evaluation_episodes')
+    if eval_episodes is None:
+        raise ValueError("Strict Config: 'testing.evaluation_episodes' must be provided via CLI or configs/evaluation/default.yaml")
     
     config.set('testing.seed', testing_seed)
     config.set('testing.evaluation_episodes', eval_episodes)
@@ -707,59 +426,124 @@ def main():
     print("-" * 40)
 
     # 4. Find all checkpoints
+    # 4. Find checkpoints
     algorithm = config.get_mandatory('agent.algorithm')
     
-    if algorithm == "DQN":
-        checkpoints = glob.glob(os.path.join(models_dir, "dqn_model_*.pth"))
+    # Helper to clean model naming
+    prefix = ""
+    if algorithm == "DQN": prefix = "dqn_model_"
+    elif algorithm == "PPO": prefix = "ppo_model_"
+    elif algorithm == "DRQN": prefix = "drqn_model_"
+    elif algorithm == "RecurrentPPO": prefix = "recurrent_ppo_model_"
+    elif algorithm == "DreamerV3": prefix = "dreamer_model_"
+    else: prefix = "q_table_"
+
+    ext = ".npy" if algorithm == "Tabular Q-Learning" else ".ckpt"
+
+    checkpoints = []
+    
+    if args.checkpoint:
+        # User specified a specific checkpoint
+        ckpt_arg = args.checkpoint
+        
+        # Check 1: Is it a full path?
+        if os.path.exists(ckpt_arg):
+             checkpoints.append(ckpt_arg)
+        else:
+             # Check 2: specific name in models_dir
+             ckpt_path = os.path.join(models_dir, ckpt_arg)
+             if os.path.exists(ckpt_path):
+                 checkpoints.append(ckpt_path)
+             else:
+                 # Check 3: maybe just the number? e.g. "100"
+                 ckpt_name = f"{prefix}{ckpt_arg}{ext}"
+                 ckpt_path = os.path.join(models_dir, ckpt_name)
+                 if os.path.exists(ckpt_path):
+                     checkpoints.append(ckpt_path)
+                 else:
+                     print(f"Error: Specified checkpoint '{args.checkpoint}' not found.")
+                     return
+
+    elif args.all:
+        # Evaluate ALL found
+        if algorithm == "Tabular Q-Learning":
+            checkpoints = glob.glob(os.path.join(models_dir, f"{prefix}*{ext}"))
+        else:
+            checkpoints = glob.glob(os.path.join(models_dir, f"{prefix}*{ext}"))
+            
+        # Sort by number
         def extract_number(path):
-            match = re.search(r"dqn_model_(\d+).pth", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "dqn_model_final.pth")
-    elif algorithm == "PPO":
-        checkpoints = glob.glob(os.path.join(models_dir, "ppo_model_*.pth"))
-        def extract_number(path):
-            match = re.search(r"ppo_model_(\d+).pth", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "ppo_model_final.pth")
-    elif algorithm == "DRQN":
-        checkpoints = glob.glob(os.path.join(models_dir, "drqn_model_*.pth"))
-        def extract_number(path):
-            match = re.search(r"drqn_model_(\d+).pth", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "drqn_model_final.pth")
-    elif algorithm == "RecurrentPPO":
-        checkpoints = glob.glob(os.path.join(models_dir, "recurrent_ppo_model_*.pth"))
-        def extract_number(path):
-            match = re.search(r"recurrent_ppo_model_(\d+).pth", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "recurrent_ppo_model_final.pth")
-    elif algorithm == "DreamerV3":
-        checkpoints = glob.glob(os.path.join(models_dir, "dreamer_model_*.pth"))
-        def extract_number(path):
-            match = re.search(r"dreamer_model_(\d+).pth", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "dreamer_model_final.pth")
+            filename = os.path.basename(path)
+            # Match number
+            match = re.search(rf"{prefix}(\d+){ext}", filename)
+            if match:
+                return int(match.group(1))
+            return -1
+        
+        checkpoints.sort(key=extract_number)
+        
     else:
-        checkpoints = glob.glob(os.path.join(models_dir, "q_table_*.npy"))
-        def extract_number(path):
-            match = re.search(r"q_table_(\d+).npy", path)
-            return int(match.group(1)) if match else -1
-        final_model = os.path.join(models_dir, "q_table.npy")
+        # Default: Evaluate LATEST numeric checkpoint
+        # Find latest numeric
+        all_ckpts = glob.glob(os.path.join(models_dir, f"{prefix}*{ext}"))
+        if all_ckpts:
+            def extract_number(path):
+                    match = re.search(rf"{prefix}(\d+){ext}", os.path.basename(path))
+                    return int(match.group(1)) if match else -1
+            
+            # Filter out any that didn't match (e.g. if some other file exists)
+            valid_ckpts = [c for c in all_ckpts if extract_number(c) != -1]
+            
+            if valid_ckpts:
+                latest = max(valid_ckpts, key=extract_number)
+                checkpoints.append(latest)
     
-    checkpoints.sort(key=extract_number)
-    
-    if os.path.exists(final_model):
-        checkpoints.append(final_model)
-
     if not checkpoints:
-        print(f"No model checkpoints found in {models_dir}")
-        return
+         print(f"No valid checkpoints found in {models_dir}")
+         return
+         
+    print(f"Found {len(checkpoints)} checkpoint(s). Starting evaluation...")
 
-    print(f"Found {len(checkpoints)} checkpoints. Starting evaluation...")
+    
+    # 5. Initialize WandB if requested
+    if args.wandb_run_path:
+        try:
+            print(f"Initializing WandB run: {args.wandb_run_path}...")
+            path_parts = args.wandb_run_path.strip().split('/')
+            entity = None
+            project = None
+            run_id = None
+            
+            if len(path_parts) == 3:
+                entity, project, run_id = path_parts
+            elif len(path_parts) == 2:
+                project, run_id = path_parts
+            else:
+                run_id = path_parts[0]
+                
+            if run_id:
+                 wandb_login(quiet=False)
+                 wandb.init(
+                    entity=entity,
+                    project=project,
+                    id=run_id,
+                    resume="must",
+                    job_type="evaluation"
+                )
+            else:
+                print(f"Error: Could not parse run ID from {args.wandb_run_path}. Upload skipped.")
+                args.wandb_run_path = None # Disable upload
+                
+        except Exception as e:
+             print(f"Error initializing WandB: {e}")
+             args.wandb_run_path = None
 
-    # 5. Evaluate each checkpoint
+    # 6. Evaluate each checkpoint
     for checkpoint in checkpoints:
-        evaluate_checkpoint(checkpoint, results_dir, config)
+        evaluate_checkpoint(checkpoint, results_dir, config, wandb_run_path=args.wandb_run_path)
+    
+    if wandb.run:
+        wandb.finish()
 
     print("-" * 40)
     print(f"Evaluation complete! Visualizations are in {results_dir}/plots/ and {results_dir}/videos/")

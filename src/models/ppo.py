@@ -50,18 +50,36 @@ class ActorCritic(nn.Module):
         self.critic = nn.Sequential(*layers)
         
     def forward(self, state):
+        # Flatten if (Batch, Time, Obs)
+        if state.dim() == 3:
+            b = state.size(0)
+            state = state.view(b, -1)
         return self.actor(state)
     
     def act(self, state):
+        # Flatten if (Batch, Time, Obs)
+        if state.dim() == 3:
+            b = state.size(0)
+            state = state.view(b, -1)
+            
         action_probs = self.actor(state)
         dist = Categorical(action_probs)
         action = dist.sample()
         action_logprob = dist.log_prob(action)
+        action_logprob = dist.log_prob(action)
+        
+        # Critic needs flattened state too. 
+        # State is already flattened above if needed.
         state_val = self.critic(state)
         
         return action.item(), action_logprob.item(), state_val.item()
     
     def evaluate(self, state, action):
+        # Flatten if (Batch, Time, Obs)
+        if state.dim() == 3:
+            b = state.size(0)
+            state = state.view(b, -1)
+            
         action_probs = self.actor(state)
         dist = Categorical(action_probs)
         
@@ -72,7 +90,7 @@ class ActorCritic(nn.Module):
         return action_logprobs, state_values, dist_entropy
 
 class PPOAgent:
-    def __init__(self, state_dim, action_dim, lr_actor=None, lr_critic=None, gamma=None, K_epochs=None, eps_clip=None, update_timestep=None, entropy_coef=None, actor_fc_layers=None, critic_fc_layers=None, device="auto"):
+    def __init__(self, state_dim, action_dim, lr_actor=None, lr_critic=None, gamma=None, K_epochs=None, eps_clip=None, update_timestep=None, entropy_coef=None, actor_fc_layers=None, critic_fc_layers=None, device="auto", frame_stack=1):
         # Validation for required config parameters
         if lr_actor is None: raise ValueError("PPOAgent: 'lr_actor' must be specified in config.")
         if lr_critic is None: raise ValueError("PPOAgent: 'lr_critic' must be specified in config.")
@@ -102,13 +120,19 @@ class PPOAgent:
              
         # print(f"PPO Agent using device: {self.device}")
         
-        self.policy = ActorCritic(state_dim, action_dim, actor_fc_layers, critic_fc_layers).to(self.device)
+        # print(f"PPO Agent using device: {self.device}")
+        
+        # Adjust state_dim for flattening
+        self.state_dim = state_dim * frame_stack
+        self.frame_stack = frame_stack
+        
+        self.policy = ActorCritic(self.state_dim, action_dim, actor_fc_layers, critic_fc_layers).to(self.device)
         self.optimizer = torch.optim.Adam([
             {'params': self.policy.actor.parameters(), 'lr': lr_actor},
             {'params': self.policy.critic.parameters(), 'lr': lr_critic}
         ])
         
-        self.policy_old = ActorCritic(state_dim, action_dim, actor_fc_layers, critic_fc_layers).to(self.device)
+        self.policy_old = ActorCritic(self.state_dim, action_dim, actor_fc_layers, critic_fc_layers).to(self.device)
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss()
@@ -124,6 +148,14 @@ class PPOAgent:
             state = torch.FloatTensor(state).to(self.device)
         else:
             state = torch.FloatTensor(np.array(state)).to(self.device)
+            
+        # Add batch dimension if needed
+        # (Stack, Obs) -> (1, Stack, Obs)
+        # (Obs) -> (1, Obs)
+        if state.dim() < 3 and self.frame_stack > 1:
+             state = state.unsqueeze(0)
+        elif state.dim() == 1:
+             state = state.unsqueeze(0)
             
         if eval_mode:
             with torch.no_grad():
@@ -205,8 +237,29 @@ class PPOAgent:
         return {"loss": loss.mean().item()}
         
     def save(self, checkpoint_path):
-        torch.save(self.policy_old.state_dict(), checkpoint_path)
+        checkpoint = {
+            'model_state_dict': self.policy.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'time_step': self.time_step
+        }
+        # Note: PPO typically saves 'policy_old' weights for inference, 
+        # but for resuming training, we need 'policy' (current weights) 
+        # plus optimizer. The separation is subtle.
+        # Standard PPO implementation often uses policy_old for sampling.
+        # But policy and policy_old are synced after update.
+        # Let's save policy state dict as 'model_state_dict'.
+        torch.save(checkpoint, checkpoint_path)
    
-    def load(self, checkpoint_path):
-        self.policy_old.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
-        self.policy.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
+    def load(self, checkpoint_path, weights_only=False):
+        checkpoint = torch.load(checkpoint_path, map_location=lambda storage, loc: storage, weights_only=False)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            self.policy.load_state_dict(checkpoint['model_state_dict'])
+            self.policy_old.load_state_dict(checkpoint['model_state_dict'])
+            if not weights_only:
+                if 'optimizer_state_dict' in checkpoint:
+                    self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                if 'time_step' in checkpoint:
+                    self.time_step = checkpoint['time_step']
+        else:
+            self.policy_old.load_state_dict(checkpoint)
+            self.policy.load_state_dict(checkpoint)

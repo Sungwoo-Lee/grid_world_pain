@@ -3,36 +3,46 @@ Training script for the GridWorld Reinforcement Learning agent.
 
 This script:
 1. Initializes the `GridWorld` environment (Conventional or Interoceptive) and `InteroceptiveBody`.
-2. Creates an RL Agent (Tabular Q-Learning, DQN, or PPO).
+2. Creates an RL Agent (Tabular Q-Learning, DQN, PPO, DRQN, RecurrentPPO, DreamerV3).
 3. Trains the agent for a specified number of episodes.
-4. Periodically saves checkpoints (models) and visualizations (learning curves) to `results/`.
+4. Periodically saves checkpoints (models) and visualizations.
+5. Supports Continual Learning (resuming from checkpoints).
 
 Arguments:
-- `--episodes <int>`: (Default: 100000) Total number of training episodes.
-- `--seed <int>`: (Default: 42) Random seed for reproducibility.
-- `--agent_config <path>`: Path to agent-specific config (e.g., `configs/models/ppo.yaml`).
-- `--tag <str>`: Tag for the training run directory.
-- `--device <str>`: Device to use for training (e.g., `cpu`, `cuda`, `cuda:0`, `auto`). Default: `auto`.
-- `--wandb-project <str>`: WandB project name (default: "grid_world_pain").
-- `--wandb-group <str>`: WandB group name for grouping runs.
-- `--wandb-name <str>`: Specific name for the run.
+- `--episodes <int>`: Total number of training episodes.
+- `--seed <int>`: Random seed for reproducibility.
+- `--agent_config <path>`: (Required) Path to agent-specific config (e.g., `configs/models/ppo.yaml`).
+- `--config <path>`: Path to base config YAML (overrides defaults).
+- `--tag <str>`: Tag for the training run directory and WandB run name.
+- `--device <str>`: Device to use (e.g., `cpu`, `cuda`, `cuda:0`, `auto`). Default: `auto`.
+- `--no-satiation`: Disable satiation (conventional mode).
+- `--no-overeating-death`: Disable death by overeating.
+- `--wandb-project <str>`: WandB project name.
+- `--wandb-group <str>`: WandB group name.
+- `--wandb-job-type <str>`: WandB job type.
+- `--wandb-name <str>`: Explicit WandB run name.
 - `--no-wandb`: Disable WandB logging.
+- `--quiet`: Suppress output and progress bar.
+- `--debug`: Enable granular logging and debug info.
+- `--checkpoint-frequency <int>`: Frequency of saving checkpoints.
+- `--load-checkpoint <path>`: Path to checkpoint to resume training from.
+- `--wandb-resume-id <str>`: WandB Run ID to resume logging.
 
 Usage Examples:
 
 1. **Train DQN**:
    ```bash
-   python train.py --agent_config configs/models/dqn.yaml --episodes 1000 --wandb-project my_project
+   python train.py --agent_config configs/models/dqn.yaml --episodes 1000 --tag my_dqn_run
    ```
 
-2. **Train PPO**:
+2. **Train PPO with WandB**:
    ```bash
-   python train.py --agent_config configs/models/ppo.yaml --episodes 5000
+   python train.py --agent_config configs/models/ppo.yaml --episodes 5000 --wandb-project grid_world_pain
    ```
-   
-3. **Train Tabular**:
+
+3. **Resume Training**:
    ```bash
-   python train.py --agent_config configs/models/q_learning.yaml
+   python train.py --agent_config configs/models/dqn.yaml --load-checkpoint results/DQN/RunName/models/dqn_model_500.ckpt --episodes 500 --wandb-resume-id <run_id>
    ```
 """
 from src.environment import GridWorld
@@ -46,6 +56,10 @@ from src.models.dreamer_v3 import DreamerV3Agent
 from src.environment.sensor import SensorySystem
 from src.utils.visualization import plot_q_table, plot_learning_curves
 from src.utils.config import get_default_config
+from src.utils.evaluation_core import evaluate_agent
+from src.utils.state_utils import FrameStacker, preprocess_state
+from src.utils.wandb_utils import wandb_login
+
 import time
 import numpy as np
 import os
@@ -64,7 +78,7 @@ import argparse
 from tqdm import tqdm
 
 def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed,
-                         with_health, danger_prob, damage_amount, device="auto"):
+                         with_health, prob_switch_to_danger, damage_amount, device="auto"):
     """
     Prints a professional and fancy configuration summary.
     """
@@ -93,11 +107,11 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             env_data["Satiation Setpoint"] = satiation_setpoint
             
     if with_health:
-        env_data["Danger Prob"] = danger_prob
+        env_data["Switch to Danger Prob"] = prob_switch_to_danger
         env_data["Damage Amount"] = damage_amount
         
-    env_data["Food Prob"] = config_dict.get_mandatory('environment.food_prob', float)
-    env_data["Food Duration"] = config_dict.get_mandatory('environment.food_duration', int)
+    env_data["Switch to Food Prob"] = config_dict.get_mandatory('environment.prob_switch_to_food', float)
+    env_data["Min Food Duration"] = config_dict.get_mandatory('environment.min_food_duration', int)
         
     print_section("Environment", env_data)
 
@@ -199,8 +213,9 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
 
 def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=None, food_satiation_gain=None, max_steps=None, random_start_satiation=None, use_homeostatic_reward=None, satiation_setpoint=None, death_penalty=None, testing_seed=None, config_dict=None,
                 with_health=None, max_health=None, start_health=None, health_recovery=None, start_health_random=None,
-                danger_prob=None, danger_duration=None, damage_amount=None,
-                food_prob=None, food_duration=None, device="auto", quiet=False, debug=False):
+                prob_switch_to_danger=None, min_danger_duration=None, damage_amount=None,
+                prob_switch_to_food=None, min_food_duration=None, device="auto", checkpoint_frequency=None, quiet=False, debug=False,
+                start_episode=0, load_checkpoint_path=None):
     """
     Trains the RL Agent (Tabular Q-Learning, DQN, or PPO).
     """
@@ -210,21 +225,30 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     # WandB Initialization
     if config_dict and not config_dict.get_mandatory('wandb.disabled'):
         wandb_enabled = True
+    if not config_dict.get('wandb.disabled'):
+        wandb_kwargs = {
+            "project": config_dict.get('wandb.project'),
+            "entity": config_dict.get('wandb.entity'), # Might be None
+            "group": config_dict.get('wandb.group'),
+            "job_type": config_dict.get('wandb.job_type'),
+            "name": config_dict.get('wandb.name'),
+            "config": config_dict.to_dict(),
+            "reinit": True
+        }
         
-        # Load project-level config first
-        wandb_project = config_dict.get_mandatory('wandb.project')
-        wandb_group = config_dict.get_mandatory('wandb.group')
-        wandb_job_type = config_dict.get_mandatory('wandb.job_type')
-        wandb_name = config_dict.get_mandatory('wandb.name')
-        
-        wandb.init(
-            project=wandb_project,
-            group=wandb_group,
-            job_type=wandb_job_type,
-            name=wandb_name,
-            config=config_dict.to_dict(),
-            reinit=True
-        )
+        # Override name with tag if present (User Request)
+        if config_dict.get('tag'):
+             wandb_kwargs['name'] = config_dict.get('tag')
+
+        # Check if we should resume
+        if config_dict.get('wandb.resume_id'):
+            wandb_kwargs['id'] = config_dict.get('wandb.resume_id')
+            wandb_kwargs['resume'] = "allow"
+            
+        # Login to WandB using shared key if available
+        wandb_login(quiet=quiet)
+        wandb.init(**wandb_kwargs)
+
         
         # Log Source Code
         # Explicitly log key files and src directory
@@ -234,8 +258,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         # Episode metrics use Episode/Number as x-axis
         wandb.define_metric("Episode/*", step_metric="Episode/Number")
         # Step metrics (losses) use global_step as x-axis
-        wandb.define_metric("global_step", step_metric="global_step") 
-        wandb.define_metric("*", step_metric="global_step")
+        wandb.define_metric("*", step_metric="global_step") 
+        wandb.define_metric("global_step", step_metric="global_step")
     
     # Extract Sensory Config
     # Strict retrieval for using_sensory?
@@ -244,12 +268,14 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
          
     if using_sensory:
         sensor_radius = config_dict.get_mandatory('sensory.sensor_radius')
-        decay_power = config_dict.get('sensory.decay_power', 1.0)
-        vector_size = config_dict.get('sensory.vector_size', 10)
+        decay_power = config_dict.get_mandatory('sensory.decay_power', float)
+        vector_size = config_dict.get_mandatory('sensory.vector_size', int)
+        nociceptor_radius = config_dict.get_mandatory('sensory.nociceptor_radius', int)
     else:
         sensor_radius = 1 # Dummy
         decay_power = 1.0 # Dummy
         vector_size = 10 # Dummy
+        nociceptor_radius = 0 # Dummy
     
     # Professional Config Summary
     if config_dict is None:
@@ -271,20 +297,28 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
 
     # Essential Training Params
     episodes = int(resolve_param(episodes, 'training.training_episode'))
+    
+    # Calculate target end episode
+    target_end_episode = start_episode + episodes
+    
+    if start_episode > 0:
+        print(f"Resuming training from episode {start_episode}. Target end: {target_end_episode}")
     seed = int(resolve_param(seed, 'training.seed'))
     testing_seed = int(resolve_param(testing_seed, 'testing.seed'))
     
     # Environment Params
     max_steps = int(resolve_param(max_steps, 'environment.max_steps'))
-    danger_prob = float(resolve_param(danger_prob, 'environment.danger_prob'))
-    danger_duration = int(resolve_param(danger_duration, 'environment.danger_duration'))
+    prob_switch_to_danger = float(resolve_param(prob_switch_to_danger, 'environment.prob_switch_to_danger'))
+    min_danger_duration = int(resolve_param(min_danger_duration, 'environment.min_danger_duration'))
     damage_amount = float(resolve_param(damage_amount, 'environment.damage_amount'))
-    food_prob = float(resolve_param(food_prob, 'environment.food_prob'))
-    food_duration = int(resolve_param(food_duration, 'environment.food_duration'))
+    prob_switch_to_food = float(resolve_param(prob_switch_to_food, 'environment.prob_switch_to_food'))
+    min_food_duration = int(resolve_param(min_food_duration, 'environment.min_food_duration'))
 
     # Body Params
     with_satiation = resolve_param(with_satiation, 'body.with_satiation')
     if with_satiation:
+        max_satiation = int(resolve_param(None, 'body.max_satiation'))
+        start_satiation = int(resolve_param(None, 'body.start_satiation'))
         overeating_death = resolve_param(overeating_death, 'body.overeating_death')
         random_start_satiation = resolve_param(random_start_satiation, 'body.random_start_satiation')
         food_satiation_gain = float(resolve_param(food_satiation_gain, 'body.food_satiation_gain'))
@@ -310,7 +344,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     config_dict.set('training.device', device)
     
     if not quiet:
-         print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_health, danger_prob, damage_amount, device)
+         print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_health, prob_switch_to_danger, damage_amount, device)
     
     # Setup directories
     results_dir = "results"
@@ -363,20 +397,23 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         width=config_dict.get_mandatory('environment.width'),
         start=tuple(config_dict.get_mandatory('environment.start_pos')),
         resource_pos=tuple(resource_pos),
+        with_satiation=with_satiation, # Resolved earlier
         max_steps=max_steps, # Resolved earlier
-        danger_prob=danger_prob, # Resolved earlier
-        danger_duration=danger_duration,
+        prob_switch_to_danger=prob_switch_to_danger, # Resolved earlier
+        min_danger_duration=min_danger_duration,
         damage_amount=damage_amount,
-        food_prob=food_prob,
-        food_duration=food_duration,
+        prob_switch_to_food=prob_switch_to_food,
+        min_food_duration=min_food_duration,
         relocate_resource=config_dict.get_mandatory('environment.relocate_resource'),
         relocation_steps=config_dict.get_mandatory('environment.relocation_steps'),
-        vector_size=config_dict.get('sensory.vector_size', 10),
-        food_property=config_dict.get('sensory.food_property', None),
-        danger_property=config_dict.get('sensory.danger_property', None)
+        vector_size=config_dict.get_mandatory('sensory.vector_size', int),
+        food_property=config_dict.get_mandatory('sensory.food_property'),
+        danger_property=config_dict.get_mandatory('sensory.danger_property')
     )
     
     body = InteroceptiveBody(
+        max_satiation=max_satiation,
+        start_satiation=start_satiation,
         overeating_death=overeating_death, 
         random_start_satiation=random_start_satiation, 
         food_satiation_gain=food_satiation_gain,
@@ -393,70 +430,59 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     sensory_system = None
     if using_sensory:
         if not quiet:
-            print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size})")
-        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power)
+            print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size}, NociceptorR={nociceptor_radius})")
+        sensory_system = SensorySystem(sensor_radius=sensor_radius, vector_size=vector_size, decay_power=decay_power, nociceptor_radius=nociceptor_radius)
 
-    # Define Preprocessor for DQN
-    def preprocess_state(state_tuple):
-        """
-        Flattens state tuple to float array.
-        Handles both Sensory (Vector) and Conventional (Coordinate) inputs.
-        """
-        flat_list = []
-        
-        if using_sensory:
-            # sensory_state in state_tuple is ALREADY a vector of floats (from numpy array or tuple unpacking)
-            # The structure of state_tuple is: (*sensory_vector, *body_stats)
-            # We just need to separate them if we want to handle them differently, but for flattening we can just cast.
-            # However, we need to know where body stats start to normalize them properly.
-            
-            # Sensory vector size is sensory_system.vector_size
-            vec_size = sensory_system.vector_size
-            sensory_vec = state_tuple[:vec_size]
-            flat_list.extend(sensory_vec)
-            
-            body_start_idx = vec_size
-        else:
-            # Conventional: (row, col)
-            row = state_tuple[0]
-            col = state_tuple[1]
-            flat_list.append(row / env.height)
-            flat_list.append(col / env.width)
-            
-            body_start_idx = 2
-            
-        # Append Body States if present
-        if len(state_tuple) > body_start_idx:
-            satiation = state_tuple[body_start_idx]
-            flat_list.append(satiation / body.max_satiation) 
-            
-        if len(state_tuple) > body_start_idx + 1:
-            health = state_tuple[body_start_idx + 1]
-            flat_list.append(health / body.max_health)
-            
-        return np.array(flat_list, dtype=np.float32)
+
 
     # Initialize Agent
     agent = None
     algorithm = config_dict.get_mandatory('agent.algorithm')
     
-    if algorithm == "DQN":
-        # Calculate Input Dimension
-        input_dim = 0
-        if using_sensory:
-             input_dim += sensory_system.vector_size
-        else:
-             input_dim += 2 # row, col
+    # Calculate Input Dimension and Breakdown
+    input_dim = 0
+    dims_breakdown = []
+    
+    if using_sensory:
+         v_size = sensory_system.vector_size
+         input_dim += v_size
+         dims_breakdown.append(f"Sensory={v_size}")
+         
+         input_dim += 1 # Nociceptor
+         dims_breakdown.append("Nociceptor=1")
+    else:
+         input_dim += 2 # row, col
+         dims_breakdown.append("Loc=2")
+         
+    if with_satiation:
+        input_dim += 1
+        dims_breakdown.append("Sat=1")
+        if with_health:
+             input_dim += 1
+             dims_breakdown.append("Health=1")
              
-        if with_satiation:
-            input_dim += 1
-            if with_health:
-                 input_dim += 1
+    input_details = f"{input_dim} ({', '.join(dims_breakdown)})"
+    
+    # Frame Stacking Logic
+    frame_stack = config_dict.get_mandatory('agent.frame_stack', int)
+    
+    # input_dim IS the base dimension. We do NOT multiply it here anymore.
+    base_input_dim = input_dim
+    # input_dim = base_input_dim * frame_stack # REMOVED: Agent handles this internally now (DQN/PPO)
+    
+    breakdown_str = ', '.join(dims_breakdown)
+    if frame_stack > 1:
+        input_details = f"Base: {base_input_dim} [{breakdown_str}] x Stack: {frame_stack}"
+    else:
+        input_details = f"{input_dim} ({breakdown_str})"
         
+    stacker = FrameStacker(input_dim=base_input_dim, stack_size=frame_stack)
+    
+    if algorithm == "DQN":
         if not quiet:
-            print(f"Initializing DQN Agent (Input Dim: {input_dim})...")
+            print(f"Initializing DQN Agent (Input Dim: {input_details})...")
         agent = DQNAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, # Pass BASE dim
             action_dim=5, 
             lr=config_dict.get_mandatory('agent.learning_rate', float),
             gamma=config_dict.get_mandatory('agent.gamma', float),
@@ -467,26 +493,15 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             epsilon_decay=config_dict.get_mandatory('agent.epsilon_decay', float),
             target_update_freq=config_dict.get_mandatory('agent.target_update_freq', int),
             fc_layers=config_dict.get_mandatory('agent.fc_layers'),
-            device=device
+            device=device,
+            frame_stack=frame_stack # Pass frame_stack
         )
 
     elif algorithm == "DRQN":
-        # Calculate Input Dimension
-        input_dim = 0
-        if using_sensory:
-             input_dim += sensory_system.vector_size
-        else:
-             input_dim += 2 # row, col
-             
-        if with_satiation:
-            input_dim += 1
-            if with_health:
-                 input_dim += 1
-        
         if not quiet:
-            print(f"Initializing DRQN Agent (Input Dim: {input_dim})...")
+            print(f"Initializing DRQN Agent (Input Dim: {input_details})...")
         agent = DRQNAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5, 
             lr=config_dict.get_mandatory('agent.learning_rate', float),
             gamma=config_dict.get_mandatory('agent.gamma', float),
@@ -504,22 +519,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         )
         
     elif algorithm == "PPO":
-        # Calculate Input Dimension
-        input_dim = 0
-        if using_sensory:
-             input_dim += sensory_system.vector_size
-        else:
-             input_dim += 2 # row, col
-             
-        if with_satiation:
-            input_dim += 1
-            if with_health:
-                 input_dim += 1
-                 
         if not quiet:
-            print(f"Initializing PPO Agent (Input Dim: {input_dim})...")
+            print(f"Initializing PPO Agent (Input Dim: {input_details})...")
         agent = PPOAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5,
             lr_actor=config_dict.get_mandatory('agent.lr_actor', float),
             lr_critic=config_dict.get_mandatory('agent.lr_critic', float),
@@ -530,26 +533,15 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             entropy_coef=config_dict.get_mandatory('agent.entropy_coef', float),
             actor_fc_layers=config_dict.get_mandatory('agent.actor_fc_layers'),
             critic_fc_layers=config_dict.get_mandatory('agent.critic_fc_layers'),
-            device=device
+            device=device,
+            frame_stack=frame_stack
         )
 
     elif algorithm == "RecurrentPPO":
-        # Calculate Input Dimension
-        input_dim = 0
-        if using_sensory:
-             input_dim += sensory_system.vector_size
-        else:
-             input_dim += 2 # row, col
-             
-        if with_satiation:
-            input_dim += 1
-            if with_health:
-                 input_dim += 1
-                 
         if not quiet:
-            print(f"Initializing Recurrent PPO Agent (Input Dim: {input_dim})...")
+            print(f"Initializing Recurrent PPO Agent (Input Dim: {input_details})...")
         agent = RecurrentPPOAgent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5,
             lr_actor=config_dict.get_mandatory('agent.lr_actor', float),
             lr_critic=config_dict.get_mandatory('agent.lr_critic', float),
@@ -567,22 +559,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         )
 
     elif algorithm == "DreamerV3":
-        # Calculate Input Dimension
-        input_dim = 0
-        if using_sensory:
-             input_dim += sensory_system.vector_size
-        else:
-             input_dim += 2 # row, col
-             
-        if with_satiation:
-            input_dim += 1
-            if with_health:
-                 input_dim += 1
-                 
         if not quiet:
-            print(f"Initializing Dreamer V3 Agent (Input Dim: {input_dim})...")
+            print(f"Initializing Dreamer V3 Agent (Input Dim: {input_details})...")
         agent = DreamerV3Agent(
-            state_dim=input_dim, 
+            state_dim=base_input_dim, 
             action_dim=5,
             batch_size=config_dict.get_mandatory('agent.batch_size', int),
             batch_length=config_dict.get_mandatory('agent.batch_length', int),
@@ -618,6 +598,15 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         agent = QLearningAgent(composite_env, with_satiation=with_satiation)
         agent.epsilon = 1.0 # Start with full exploration
 
+    # Load checkpoint if provided
+    if load_checkpoint_path:
+        print(f"Loading checkpoint weights from {load_checkpoint_path}...")
+        try:
+            agent.load(load_checkpoint_path)
+            print("Checkpoint loaded successfully.")
+        except Exception as e:
+            print(f"Error loading checkpoint: {e}")
+            exit(1)
     
     if not quiet:
         print(f"Training agent (with_satiation={with_satiation}, with_health={with_health})...")
@@ -630,7 +619,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     
     # We will sync to agent's epsilon
     
-    milestones = {int(episodes * p): int(p * 100) for p in [0.01, 0.1, 0.25, 0.5, 0.75, 1.0]}
+    # Checkpoint Frequency
+    checkpoint_freq = int(resolve_param(checkpoint_frequency, 'training.checkpoint_frequency'))
     
     episode_rewards = []
     episode_steps = []
@@ -640,11 +630,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     tabular_decay_rate = 0.9995
     tabular_min_epsilon = 0.05
     
-    tabular_decay_rate = 0.9995
-    tabular_min_epsilon = 0.05
-    
-    # Progress Bar with tqdm
-    pbar = tqdm(range(episodes), desc="Training", unit="ep", disable=quiet or debug)
+    # Main Training Loop
+    pbar = tqdm(range(start_episode, target_end_episode), disable=quiet, desc="Training")
     
     losses = {} # Track latest losses for debug display
     global_step = 0 # Unified counter for WandB (Environment Interactions)
@@ -658,78 +645,143 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         current_agent_pos = env.agent_pos
         if using_sensory:
              resources = env.get_active_resources()
-             sensory_state = sensory_system.sense(current_agent_pos, resources)
+             sensory_dict = sensory_system.sense(current_agent_pos, resources)
 
         if with_satiation:
             body_return = body.reset()
             if using_sensory:
-                 if isinstance(body_return, tuple):
-                     state = (*sensory_state, *body_return)
-                 else:
-                     state = (*sensory_state, body_return)
-            else:
-                if with_health:
-                    satiation, health = body_return
-                    state = (*env_state, satiation, health)
+                # Construct Dictionary State
+                state = {}
+                state.update(sensory_dict)
+                
+                if isinstance(body_return, tuple):
+                     state['satiation'] = body_return[0]
+                     state['health'] = body_return[1]
                 else:
-                    satiation = body_return
-                    state = (*env_state, satiation)
+                     state['satiation'] = body_return
+            else:
+                 state = {'loc': env_state}
+                 if isinstance(body_return, tuple):
+                     state['satiation'] = body_return[0]
+                     state['health'] = body_return[1]
+                 else:
+                     state['satiation'] = body_return
         else:
             if using_sensory:
-                state = sensory_state
+                # Direct dictionary (copy)
+                state = sensory_dict.copy()
             else:
-                state = env_state
+                state = {'loc': env_state}
         
         done = False
         total_reward = 0
         steps = 0
         
-        # Preprocess for DQN/PPO
+        # Preprocess logic
         flat_state = None
+        state_array = None
+        
         if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
-            flat_state = preprocess_state(state)
+            flat_state = preprocess_state(state, env.height, env.width, body.max_satiation, body.max_health)
+            # Stack the initial state and FLATTEN for agent compatibility (Seq vs Grid issues)
+            state_array = stacker.reset(flat_state).flatten() 
+
+
+        else:
+            # Tabular - Convert Dictionary to Tuple for Q-Table Indexing
+            # Structure: (row, col, satiation, health) -> ints
+            # Note: We rely on logic in QLearningAgent to extract logic, 
+            # OR we standardize here. QLearningAgent line 84: tuple(int(x) for x in state)
+            # This iterates keys if dict. We must provide values tuple.
+            
+            # Extract Location
+            if 'loc' in state:
+                r, c = state['loc']
+            else:
+                 # Should not happen based on preprocess logic, but strictly:
+                 # If using_sensory, keys are vectors. Tabular shouldn't use sensory really.
+                 # Assuming Tabular uses standard coords + body.
+                 # If using_sensory=True with Tabular, it will fail unless we define a discrete mapping.
+                 # For now, assume Tabular logic in repo handles (row, col, sat...)
+                 # Let's extract values in order.
+                 pass # Fallback to existing logic if not dict?
+                 
+            # Construct tuple
+            # If using_sensory=False (default for Tabular), state is {'loc': (r,c), 'satiation': s...}
+            tabular_list = []
+            if 'loc' in state:
+                tabular_list.extend(state['loc']) # r, c
+            if with_satiation:
+                tabular_list.append(state['satiation'])
+            if with_health:
+                tabular_list.append(state['health'])
+                
+            state_array = tuple(int(x) for x in tabular_list)
         
         while not done:
+            global_step += 1
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
-                action = agent.choose_action(flat_state)
+                action = agent.choose_action(state_array)
             else:
-                action = agent.choose_action(state)
+                action = agent.choose_action(state_array) # Pass the tuple we created
             
             # Step External
             next_env_state, env_reward, env_done, info = env.step(action)
             
             # Update Observations
+            # Update Observations
             if using_sensory:
                  resources = env.get_active_resources()
-                 next_sensory_state = sensory_system.sense(current_agent_pos, resources)
+                 next_sensory_dict = sensory_system.sense(current_agent_pos, resources)
             
             if with_satiation:
                 body_return, reward, body_done = body.step(info)
                 done = env_done or body_done
                 
+                next_state = {}
                 if using_sensory:
-                     if isinstance(body_return, tuple):
-                         next_state = (*next_sensory_state, *body_return)
-                     else:
-                         next_state = (*next_sensory_state, body_return)
+                     next_state.update(next_sensory_dict)
                 else:
-                    if with_health:
-                        next_state = (*next_env_state, *body_return)
-                    else:
-                        next_state = (*next_env_state, body_return)
+                     next_state['loc'] = next_env_state
+                     
+                if isinstance(body_return, tuple):
+                     next_state['satiation'] = body_return[0]
+                     next_state['health'] = body_return[1]
+                else:
+                     next_state['satiation'] = body_return
             else:
                 reward = env_reward
                 done = env_done
+                
                 if using_sensory:
-                    next_state = next_sensory_state
+                    next_state = next_sensory_dict
                 else:
-                    next_state = next_env_state
+                    next_state = {'loc': next_env_state}
                     next_state = next_env_state
             
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update
-                flat_next_state = preprocess_state(next_state)
-                agent.store_transition(flat_state, action, reward, flat_next_state, done)
+                flat_next_state_raw = preprocess_state(next_state, env.height, env.width, body.max_satiation, body.max_health)
+                # Stack next state and Flatten
+                next_state_stacked = stacker.step(flat_next_state_raw).flatten()
+
+
+                
+                # Store Transition (Use stacked states for non-recurrent agents if needed, 
+                # but usually recurrent agents manage their own history. 
+                # However, our design choice was stack at env level.
+                # So even DRQN receives stacked input? 
+                # Config says DRQN frame_stack=1, so it's identity. Correct.)
+                
+                # Check agent signature for store_transition
+                # PPO/RecurrentPPO: (state, action, log_prob, reward, done)
+                # DQN/DRQN: (state, action, next_state, reward, done)
+                # Dreamer: (state, action, reward, done) - likely adds to buffer
+                
+                # Unified Access: All agents support (state, action, reward, next_state, done)
+                # PPO/RecurrentPPO: internally ignores s,a,ns but expects r at pos 3.
+                # Dreamer: expects r at pos 3, ns at pos 4 (ignored?), d at pos 5.
+                agent.store_transition(state_array, action, reward, next_state_stacked, done)
                 
                 # Update and capture losses
                 start_upd = time.time()
@@ -765,11 +817,23 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                     # Print as new line for granular history as requested
                     print(f"Ep:{episode+1} St:{steps+1} Act:{action} R:{total_reward+reward:.1f} {loss_str}Time:{upd_duration:.1f}ms")
 
+                # Advance State
                 state = next_state # Tuple kept for logic
-                flat_state = flat_next_state # Flat for next iter
+                state_array = next_state_stacked # Stacked for next iter
             else:
                 # Tabular Update
-                agent.update(state, action, reward, next_state)
+                # Construct next tuple
+                tabular_next_list = []
+                if 'loc' in next_state:
+                    tabular_next_list.extend(next_state['loc'])
+                if with_satiation:
+                    tabular_next_list.append(next_state['satiation'])
+                if with_health:
+                    tabular_next_list.append(next_state['health'])
+                
+                next_state_array = tuple(int(x) for x in tabular_next_list)
+                
+                agent.update(state_array, action, reward, next_state_array) # Use tuples
                 state = next_state
                 
             total_reward += reward
@@ -810,27 +874,54 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         # Check milestones
             
         # Check milestones
-        if (episode + 1) in milestones:
-            pct = milestones[episode + 1]
+        # Checkpoint Saving
+        if (episode + 1) % checkpoint_freq == 0:
+            pct = episode + 1
             
             if isinstance(agent, DQNAgent):
-                model_snap_filename = os.path.join(models_dir, f"dqn_model_{pct}.pth")
+                model_snap_filename = os.path.join(models_dir, f"dqn_model_{pct}.ckpt")
                 agent.save(model_snap_filename)
             elif isinstance(agent, DRQNAgent):
-                model_snap_filename = os.path.join(models_dir, f"drqn_model_{pct}.pth")
+                model_snap_filename = os.path.join(models_dir, f"drqn_model_{pct}.ckpt")
                 agent.save(model_snap_filename)
             elif isinstance(agent, PPOAgent):
-                model_snap_filename = os.path.join(models_dir, f"ppo_model_{pct}.pth")
+                model_snap_filename = os.path.join(models_dir, f"ppo_model_{pct}.ckpt")
                 agent.save(model_snap_filename)
             elif isinstance(agent, RecurrentPPOAgent):
-                model_snap_filename = os.path.join(models_dir, f"recurrent_ppo_model_{pct}.pth")
+                model_snap_filename = os.path.join(models_dir, f"recurrent_ppo_model_{pct}.ckpt")
                 agent.save(model_snap_filename)
             elif isinstance(agent, DreamerV3Agent):
-                model_snap_filename = os.path.join(models_dir, f"dreamer_model_{pct}.pth")
+                model_snap_filename = os.path.join(models_dir, f"dreamer_model_{pct}.ckpt")
                 agent.save(model_snap_filename)
             else:
                 model_snap_filename = os.path.join(models_dir, f"q_table_{pct}.npy")
                 agent.save(model_snap_filename)
+            
+            # Integrated Evaluation and Video Generation (if enabled)
+            if config_dict.get('evaluation.video_during_training') or config_dict.get('visualization.enabled'):
+                try:
+                    if not quiet:
+                         # Using tqdm.write to avoid breaking progress bar
+                         tqdm.write(f"Running evaluation for checkpoint {pct}...")
+                        
+                    # Use evaluate_agent utility
+                    # We pass the CURRENT agent and env (it resets env)
+                    # We pass 'wandb_run_path=None' so it uploads to currently active run (if wandb.run is set)
+                    # Note: evaluate_agent sets epsilon to 0 internally and restores it.
+                    evaluate_agent(
+                        agent=agent,
+                        env=env,
+                        body=body,
+                        sensory_system=sensory_system,
+                        config=config_dict,
+                        num_episodes=3, # Quick check
+                        results_dir=output_dir, # Same output dir
+                        checkpoint_pct=pct,
+                        wandb_run_path=None, # Use active run
+                        quiet=True # Suppress internal prints
+                    )
+                except Exception as e:
+                    tqdm.write(f"Warning: Evaluation failed during training: {e}")
     
     if not quiet:
         print() # Newline after progress bar
@@ -839,20 +930,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     if not quiet:
         print(f"Training completed in {training_time:.2f} seconds.")
     
-    # Final model save
-    if isinstance(agent, DQNAgent):
-         model_filename = os.path.join(models_dir, "dqn_model_final.pth")
-    elif isinstance(agent, DRQNAgent):
-         model_filename = os.path.join(models_dir, "drqn_model_final.pth")
-    elif isinstance(agent, PPOAgent):
-         model_filename = os.path.join(models_dir, "ppo_model_final.pth")
-    elif isinstance(agent, RecurrentPPOAgent):
-         model_filename = os.path.join(models_dir, "recurrent_ppo_model_final.pth")
-    elif isinstance(agent, DreamerV3Agent):
-         model_filename = os.path.join(models_dir, "dreamer_model_final.pth")
-    else:
-         model_filename = os.path.join(models_dir, "q_table.npy")
-    agent.save(model_filename)
+    # Final model save removed (redundant with frequency checkpointing)
+    # The last checkpoint is sufficient if frequency aligns or user can use latest.
+
     
     # Save training history
     import csv
@@ -862,11 +942,14 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         writer = csv.writer(f)
         writer.writerow(['episode', 'reward', 'steps', 'epsilon'])
         for i in range(len(episode_rewards)):
-            writer.writerow([i + 1, episode_rewards[i], episode_steps[i], episode_epsilons[i]])
+            writer.writerow([start_episode + i + 1, episode_rewards[i], episode_steps[i], episode_epsilons[i]])
     if not quiet:
         print(f"Training history saved to {history_filename}")
 
     # Generate learning curves
+    # Generate milestones for plotting
+    # Generate milestones for plotting
+    milestones = {ep: f"Ckpt" for ep in range(start_episode + checkpoint_freq, target_end_episode + 1, checkpoint_freq)}
     plot_learning_curves(history_filename, plots_dir, config_dict, max_steps=max_steps, milestones=milestones)
     
     if not quiet:
@@ -889,6 +972,9 @@ if __name__ == "__main__":
     parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
     parser.add_argument("--quiet", action="store_true", help="Suppress output and progress bar")
     parser.add_argument("--debug", action="store_true", help="Enable dynamic debug status and granular logging")
+    parser.add_argument("--checkpoint-frequency", type=int, help="Save checkpoint every N episodes")
+    parser.add_argument("--load-checkpoint", type=str, help="Path to checkpoint to resume from")
+    parser.add_argument("--wandb-resume-id", type=str, help="WandB Run ID to resume logging")
     args = parser.parse_args()
     
     # Load default config
@@ -896,12 +982,29 @@ if __name__ == "__main__":
     from src.utils.config import Config
     
     # Load WandB config
-    wandb_config_path = "configs/wandb.yaml"
-    if os.path.exists(wandb_config_path):
+    # Load Train Config
+    train_config_path = "configs/train/default.yaml"
+    if os.path.exists(train_config_path):
         if not args.quiet:
-            print(f"Loading WandB config from {wandb_config_path}")
-        wandb_config = Config.load_yaml(wandb_config_path)
-        config.merge(wandb_config)
+            print(f"Loading train config from {train_config_path}")
+        train_config = Config.load_yaml(train_config_path)
+        config.merge(train_config)
+
+    # Load Eval Config
+    eval_config_path = "configs/evaluation/default.yaml"
+    if os.path.exists(eval_config_path):
+        if not args.quiet:
+            print(f"Loading eval config from {eval_config_path}")
+        eval_config = Config.load_yaml(eval_config_path)
+        config.merge(eval_config)
+
+    # Load Logger Config
+    logger_config_path = "configs/logger/wandb.yaml"
+    if os.path.exists(logger_config_path):
+        if not args.quiet:
+            print(f"Loading logger config from {logger_config_path}")
+        logger_config = Config.load_yaml(logger_config_path)
+        config.merge(logger_config)
         
     # Override WandB settings with CLI args
     if args.wandb_project:
@@ -942,6 +1045,24 @@ if __name__ == "__main__":
     
     # For parameters not exposed in argparse, we pass None so train_agent enforces config.
     
+    # Continual Learning Parsing
+    start_episode = 0
+    if args.load_checkpoint:
+        import re
+        ckpt_filename = os.path.basename(args.load_checkpoint)
+        # Try to parse number from typical names: model_100.ckpt, dqn_model_50.ckpt
+        # Regex to find the last number properly
+        match = re.search(r"_(\d+)\.(ckpt|pth|npy)$", ckpt_filename)
+        if match:
+            start_episode = int(match.group(1))
+        else:
+            print(f"Warning: Could not parse episode number from {ckpt_filename}. Starting from 0.")
+            start_episode = 0
+            
+    # Add wandb resume id to config if present
+    if args.wandb_resume_id:
+        config.set('wandb.resume_id', args.wandb_resume_id)
+    
     train_agent(episodes=args.episodes, 
                 seed=args.seed, 
                 with_satiation=arg_with_satiation, 
@@ -959,11 +1080,15 @@ if __name__ == "__main__":
                 start_health=None, 
                 health_recovery=None, 
                 start_health_random=None,
-                danger_prob=None, 
-                danger_duration=None, 
+                prob_switch_to_danger=None, 
+                min_danger_duration=None, 
                 damage_amount=None,
-                food_prob=None, 
-                food_duration=None, 
-                device=args.device, 
+                prob_switch_to_food=None, 
+                min_food_duration=None, 
+                device=args.device,
+                checkpoint_frequency=args.checkpoint_frequency, 
                 quiet=args.quiet,
-                debug=args.debug)
+                debug=args.debug,
+                start_episode=start_episode,
+                load_checkpoint_path=args.load_checkpoint)
+

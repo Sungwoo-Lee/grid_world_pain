@@ -9,14 +9,14 @@
 *.png
 *.csv
 *.pth
+*.log
 results/
 dist/
 build/
-antigravity_instruction.txt
+*antigravity_instruction*
 sheeprl/
 evaaa/
 temp_configs/
 wandb/
 logs/
-*.log
-*.wandb_api_key
+.wandb_api_key

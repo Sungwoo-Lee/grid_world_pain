@@ -37,10 +37,10 @@ class GridWorld:
       not the external world. The environment only provides signals (like 'ate_food').
     """
     
-    def __init__(self, height=5, width=5, start=(0, 0), resource_pos=(4, 4), with_satiation=True, max_steps=100,
-                 danger_prob=0.1, danger_duration=5, damage_amount=5,
-                 food_prob=0.2, food_duration=10, relocate_resource=False, relocation_steps=20,
-                 vector_size=10, food_property=None, danger_property=None):
+    def __init__(self, height, width, start, resource_pos, with_satiation, max_steps,
+                 prob_switch_to_danger, min_danger_duration, damage_amount,
+                 prob_switch_to_food, min_food_duration, relocate_resource, relocation_steps,
+                 vector_size, food_property, danger_property):
         """
         Initializes the GridWorld foraging environment.
 
@@ -51,8 +51,8 @@ class GridWorld:
             resource_pos (tuple): Resource position (row, col).
             with_satiation (bool): Whether to include satiation/homeostasis.
             max_steps (int): Maximum steps allowed per episode.
-            danger_prob (float): Probability of food turning into danger.
-            danger_duration (int): How long danger persists.
+            prob_switch_to_danger (float): Probability of switching to danger AFTER min_food_duration.
+            min_danger_duration (int): Minimum steps danger persists.
             damage_amount (int): Amount of damage taken in danger state.
             relocate_resource (bool): Whether to randomly relocate resource.
             relocation_steps (int): Relocate every N steps.
@@ -69,29 +69,20 @@ class GridWorld:
         # Resource Property Vectors
         self.vector_size = vector_size
         
-        # Default Logic if None
-        if food_property is None:
-            self.food_property = np.zeros(self.vector_size)
-            self.food_property[0] = 1.0
-        else:
-             self.food_property = np.array(food_property, dtype=np.float32)
-
-        if danger_property is None:
-            self.danger_property = np.zeros(self.vector_size)
-            self.danger_property[1] = 1.0
-        else:
-             self.danger_property = np.array(danger_property, dtype=np.float32)
+        # Properties must be provided explicitly from config
+        self.food_property = np.array(food_property, dtype=np.float32)
+        self.danger_property = np.array(danger_property, dtype=np.float32)
         
         # Resource State Machine (Food <-> Danger)
         # Requirement: At least one is active.
-        self.danger_prob = danger_prob
-        self.danger_duration = danger_duration
+        self.prob_switch_to_danger = prob_switch_to_danger
+        self.min_danger_duration = min_danger_duration
         self.damage_amount = damage_amount
-        self.food_prob = food_prob # Used? Maybe redundant if we force toggle.
-        self.food_duration = food_duration
+        self.prob_switch_to_food = prob_switch_to_food
+        self.min_food_duration = min_food_duration
         
         self.resource_state = 'food' # 'food' or 'danger'
-        self.resource_timer = self.food_duration
+        self.resource_timer = self.min_food_duration
         
         # Relocation
         self.relocate_resource = relocate_resource
@@ -130,7 +121,8 @@ class GridWorld:
         
         # Reset Resource State
         self.resource_state = 'food'
-        self.resource_timer = self.food_duration
+        self.resource_state = 'food'
+        self.resource_timer = self.min_food_duration
         
         while True:
             row = np.random.randint(0, self.height)
@@ -171,28 +163,21 @@ class GridWorld:
         self.current_step += 1
         
         # --- Resource State Update ---
-        if self.resource_state == 'danger':
+        if self.resource_timer > 0:
+            # Locked State (Minimum Duration)
             self.resource_timer -= 1
-            if self.resource_timer < 0:
-                # Danger Expired -> Switch to Food
-                self.resource_state = 'food'
-                self.resource_timer = self.food_duration
-                
-        elif self.resource_state == 'food':
-            # Check for Danger Interrupt (Per Step)
-            if np.random.random() < self.danger_prob:
-                self.resource_state = 'danger'
-                self.resource_timer = self.danger_duration
-            else:
-                self.resource_timer -= 1
-                if self.resource_timer < 0:
-                    # Food Expired -> Renew Food (since "at least one" must be active)
-                    # Alternatively, we could force a Danger switch here, but random interrupt is smoother.
-                    self.resource_state = 'food'
-                    self.resource_timer = self.food_duration
+        else:
+            # Probabilistic Switch
+            if self.resource_state == 'danger':
+                 if np.random.random() < self.prob_switch_to_food:
+                     self.resource_state = 'food'
+                     self.resource_timer = self.min_food_duration
+            elif self.resource_state == 'food':
+                 if np.random.random() < self.prob_switch_to_danger:
+                     self.resource_state = 'danger'
+                     self.resource_timer = self.min_danger_duration
 
-                    self.resource_state = 'food'
-                    self.resource_timer = self.food_duration
+
 
         # --- Relocation Update ---
         if self.relocate_resource:
@@ -244,7 +229,7 @@ class GridWorld:
         if self.current_step >= self.max_steps:
             done = True
         
-        info = {'ate_food': ate_food, 'damage': damage}
+        info = {'ate_food': ate_food, 'damage': damage, 'rested': (action == 4)}
         
         return self.agent_pos, reward, done, info
 
@@ -270,7 +255,7 @@ class GridWorld:
         print(f"Step: {self.current_step}, Danger: {self.is_danger}, Food: {self.is_food_active}")
         print()
 
-    def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=None, step=None, sensory_data=None):
+    def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=None, step=None, sensory_data=None, action=None):
         """
         Renders the grid as an RGB image using Matplotlib with a professional Light Theme (Scientific/Apple Style).
         Supports visualizing sensory modules if data is provided.
@@ -344,20 +329,20 @@ class GridWorld:
         ax_stats.axis('off')
         
         # Clean Title
-        ax_stats.text(0.5, 0.90, "INTEROCEPTIVE AI", color=text_color, ha='center', fontsize=12, fontweight='bold', transform=ax_stats.transAxes)
-        ax_stats.plot([0.2, 0.8], [0.85, 0.85], color='#ADB5BD', transform=ax_stats.transAxes, linewidth=1)
+        ax_stats.text(0.5, 0.95, "INTEROCEPTIVE AI", color=text_color, ha='center', fontsize=12, fontweight='bold', transform=ax_stats.transAxes)
+        ax_stats.plot([0.2, 0.8], [0.92, 0.92], color='#ADB5BD', transform=ax_stats.transAxes, linewidth=1)
         
         # Episode / Step info
         ep_str = f"EPISODE: {episode}" if episode is not None else "EP: --"
         step_str = f"STEP:    {step}" if step is not None else "STEP: --"
-        ax_stats.text(0.1, 0.70, ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
-        ax_stats.text(0.1, 0.60, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        ax_stats.text(0.1, 0.80, ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        ax_stats.text(0.1, 0.75, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
         
         # Bars Helper (Flat Design)
         def draw_bar(y_pos, label, value, max_val, color):
             pct = max(0, min(1, value / max_val)) if max_val > 0 else 0
             # Label
-            ax_stats.text(0.1, y_pos + 0.1, f"{label}: {value:.1f}/{max_val}", color=text_color, fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
+            ax_stats.text(0.1, y_pos + 0.09, f"{label}: {value:.1f}/{max_val}", color=text_color, fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
             # Background Bar
             rect_bg = plt.Rectangle((0.1, y_pos), 0.8, 0.08, color='#F1F3F5', transform=ax_stats.transAxes, ec='none')
             ax_stats.add_patch(rect_bg)
@@ -383,9 +368,15 @@ class GridWorld:
         if not self.with_satiation:
              status_text = "FOOD" if not self.is_danger else "DANGER"
             
-        ax_stats.text(0.8, 0.70, status_text, color='white', ha='center', va='center', fontsize=8, fontweight='bold', 
+        ax_stats.text(0.8, 0.85, status_text, color='white', ha='center', va='center', fontsize=8, fontweight='bold', 
                       transform=ax_stats.transAxes,
                       bbox=dict(boxstyle='round,pad=0.3', facecolor=status_bg, edgecolor='none'))
+            
+        # Draw Action
+        if action is not None:
+             action_names = {0: "UP", 1: "RIGHT", 2: "DOWN", 3: "LEFT", 4: "STAY"}
+             act_str = action_names.get(action, "UNKNOWN")
+             ax_stats.text(0.5, 0.65, f"ACTION: {act_str}", color='#495057', ha='center', fontsize=12, weight='bold', transform=ax_stats.transAxes)
 
         # --- 3. Draw Sensory Modules ---
         if ax_sensory and sensory_data:

@@ -16,8 +16,9 @@ dependencies = [
     "imageio-ffmpeg>=0.6.0",
     "h5py>=3.10.0",
     "captum>=0.7.0",
+    "wandb>=0.16.0",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.11.14"
 
 [build-system]
 requires = ["setuptools>=61.0"]

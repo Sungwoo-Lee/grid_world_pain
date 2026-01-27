@@ -324,8 +324,23 @@ class RecurrentPPOAgent:
         return {"loss": loss.mean().item()}
         
     def save(self, checkpoint_path):
-        torch.save(self.policy_old.state_dict(), checkpoint_path)
+        checkpoint = {
+            'model_state_dict': self.policy.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'time_step': self.time_step
+        }
+        torch.save(checkpoint, checkpoint_path)
    
-    def load(self, checkpoint_path):
-        self.policy_old.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
-        self.policy.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
+    def load(self, checkpoint_path, weights_only=False):
+        checkpoint = torch.load(checkpoint_path, map_location=lambda storage, loc: storage, weights_only=False)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            self.policy.load_state_dict(checkpoint['model_state_dict'])
+            self.policy_old.load_state_dict(checkpoint['model_state_dict'])
+            if not weights_only:
+                if 'optimizer_state_dict' in checkpoint:
+                    self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                if 'time_step' in checkpoint:
+                    self.time_step = checkpoint['time_step']
+        else:
+            self.policy_old.load_state_dict(checkpoint)
+            self.policy.load_state_dict(checkpoint)
