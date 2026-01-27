@@ -183,7 +183,7 @@ class SensorySystem:
     - CollisionSensor: Wall and resource collision detection
     """
     def __init__(self, sensor_radius, vector_size, decay_power, nociceptor_radius, 
-                 include_location, collision_sensor_enabled=True, collision_sensor_range=2):
+                 location_sensor, collision_sensor_enabled=True, collision_sensor_range=2):
         # Olfactory sensor
         self.resource_sensor = ResourceSensor(
             radius=sensor_radius, 
@@ -207,10 +207,10 @@ class SensorySystem:
             self.collision_output_size = 0
             
         # Location
-        self.include_location = include_location
-        self.location_size = 2 if include_location else 0
+        self.location_sensor_enabled = location_sensor
+        self.location_size = 2 if self.location_sensor_enabled else 0
         
-        if include_location:
+        if self.location_sensor_enabled:
             self.location_sensor = LocationSensor()
         else:
             self.location_sensor = None
@@ -247,7 +247,7 @@ class SensorySystem:
                 'dtype': float
             }
             
-        if self.include_location:
+        if self.location_sensor_enabled:
             spec['loc'] = {
                 'shape': (2,),
                 'dtype': float # Centered coordinates
@@ -281,7 +281,7 @@ class SensorySystem:
                 agent_pos, grid_height, grid_width
             )
             
-        if self.include_location:
+        if self.location_sensor_enabled:
             if grid_height is None or grid_width is None:
                 # Fallback or error?
                 # If we are training, we usually have dims. 
@@ -332,7 +332,7 @@ class SensorySystem:
                 'type': 'radial'  # New visualization type for N-sector rays
             })
             
-        if self.include_location and 'loc' in observation:
+        if self.location_sensor_enabled and 'loc' in observation:
             # Value is already centered float array
             val = observation['loc']
             val_text = f"({val[0]:.2f}, {val[1]:.2f})"

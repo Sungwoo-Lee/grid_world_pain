@@ -177,7 +177,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         nociceptor_radius = config.get_mandatory('sensory.nociceptor_radius', int)
         collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
         collision_sensor_range = config.get_mandatory('sensory.collision_sensor_range', int)
-        include_location = config.get_mandatory('sensory.include_location')
+        location_sensor = config.get_mandatory('sensory.location_sensor')
         
         sensory_system = SensorySystem(
             sensor_radius=sensor_radius, 
@@ -186,7 +186,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
             nociceptor_radius=nociceptor_radius,
             collision_sensor_enabled=collision_sensor_enabled,
             collision_sensor_range=collision_sensor_range,
-            include_location=include_location
+            location_sensor=location_sensor
         )
 
 

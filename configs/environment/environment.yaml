@@ -38,7 +38,7 @@ body:
 
 sensory:
   using_sensory: true
-  include_location: true # Include centered location even with sensors
+  location_sensor: true # Include centered location even with sensors
   sensor_radius: 5 # Default: 2
   nociceptor_radius: 0 # Default: 0 (Contact only)
   # Decay Formula: decay = 1.0 / (distance ** decay_power)

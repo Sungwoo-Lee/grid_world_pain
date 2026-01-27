@@ -60,7 +60,7 @@ def evaluate_agent(
     vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
     vis_fps = config.get_mandatory('visualization.fps', int)
     
-    include_location = config.get('sensory.include_location', False)
+    location_sensor = config.get('sensory.location_sensor', False)
     
     # Setup Activation/LRP Monitors
     monitor = None
@@ -165,7 +165,7 @@ def evaluate_agent(
                 input_structure.append(("Sensory", sensory_system.vector_size))
                 # Add Collision/Nociceptor placeholders if needed?
                 # But mostly adding Location if requested
-                if include_location:
+                if location_sensor:
                     input_structure.append(("Loc", 2))
             else:
                 input_structure.append(("Agent", 2)) 
@@ -239,7 +239,7 @@ def evaluate_agent(
                 if using_sensory:
                     if sensory_system: 
                         state.update(sensory_dict)
-                        if include_location:
+                        if location_sensor:
                             state['loc'] = current_agent_pos
                 else:
                     state['loc'] = env_state
@@ -252,7 +252,7 @@ def evaluate_agent(
             else:
                 if using_sensory and sensory_system:
                     state = sensory_dict.copy()
-                    if include_location:
+                    if location_sensor:
                         state['loc'] = current_agent_pos
                 else:
                     state = {'loc': env_state}
@@ -288,14 +288,18 @@ def evaluate_agent(
             
             # Preprocess
             flat_state = preprocess_state(state, env.height, env.width, max_satiation, max_health)
-            state_array = stacker.reset(flat_state).flatten() if using_sensory else stacker.reset(flat_state).flatten()
-            # Note: Tabular might need tuples.
+            state_array = stacker.reset(flat_state).flatten()
+            
+            # Tabular State Handling
             if algorithm == "Tabular Q-Learning":
-                 # Fallback to logic used in train.py or simple
-                 pass # Assuming agent handles it or we don't eval tabular via this generic loop easily without more logic.
-                 # Actually, tabular doesn't use stacker usually.
-                 # Let's trust the logic structure:
-                 state_array = state # Tabular expects raw dict or tuple? evaluation.py passed dict.
+                 tabular_list = []
+                 if 'loc' in state:
+                      tabular_list.extend(state['loc'])
+                 if with_satiation:
+                      tabular_list.append(state.get('satiation', 0))
+                 if with_health:
+                      tabular_list.append(state.get('health', 0))
+                 state_array = tuple(int(x) for x in tabular_list)
                  
             while not done and step_count < max_steps:
                 # Check if choose_action supports eval_mode
@@ -365,14 +369,21 @@ def evaluate_agent(
                 l_state = flat_state if using_sensory else state
                 append_frame_with_activations(frame, action=action, state=l_state)
                 
-                # Advance
                 state = next_state
                 flat_next = preprocess_state(next_state, env.height, env.width, max_satiation, max_health)
+                
                 if algorithm != "Tabular Q-Learning":
                      state_array = stacker.step(flat_next).flatten()
                      flat_state = flat_next
                 else:
-                     state_array = state
+                     tabular_list = []
+                     if 'loc' in next_state:
+                          tabular_list.extend(next_state['loc'])
+                     if with_satiation:
+                          tabular_list.append(next_state.get('satiation', 0))
+                     if with_health:
+                          tabular_list.append(next_state.get('health', 0))
+                     state_array = tuple(int(x) for x in tabular_list)
                      
                 step_count += 1
                 

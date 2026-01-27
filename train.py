@@ -436,6 +436,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     if using_sensory:
         if not quiet:
             print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size}, NociceptorR={nociceptor_radius}, Collision={collision_sensor_enabled})")
+        location_sensor = config_dict.get_mandatory('sensory.location_sensor')
         sensory_system = SensorySystem(
             sensor_radius=sensor_radius, 
             vector_size=vector_size, 
@@ -443,7 +444,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             nociceptor_radius=nociceptor_radius,
             collision_sensor_enabled=collision_sensor_enabled,
             collision_sensor_range=collision_sensor_range,
-            include_location=config_dict.get_mandatory('sensory.include_location')
+            location_sensor=location_sensor
         )
 
 
@@ -663,7 +664,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     # Main Training Loop
     pbar = tqdm(range(start_episode, target_end_episode), disable=quiet, desc="Training")
     
-    include_location = config_dict.get('sensory.include_location', False)
+    location_sensor = config_dict.get('sensory.location_sensor', False)
     
     losses = {} # Track latest losses for debug display
     global_step = 0 # Unified counter for WandB (Environment Interactions)
@@ -793,7 +794,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 
                 if using_sensory:
                     next_state = next_sensory_dict.copy()
-                    if include_location:
+                    if location_sensor:
                         next_state['loc'] = next_env_state
                 else:
                     next_state = {'loc': next_env_state}
