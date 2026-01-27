@@ -143,7 +143,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     # Set seed for deterministic evaluation
     np.random.seed(seed)
     
-    env = GridWorld(height=height, width=width, resource_pos=resource_pos, with_satiation=with_satiation, max_steps=max_steps,
+    env = GridWorld(height=height, width=width, start=tuple(config.get_mandatory('environment.start_pos')), 
+                    resource_pos=resource_pos, with_satiation=with_satiation, max_steps=max_steps,
                     prob_switch_to_danger=prob_switch_to_danger, min_danger_duration=min_danger_duration, damage_amount=damage_amount,
                     prob_switch_to_food=prob_switch_to_food, min_food_duration=min_food_duration,
                     relocate_resource=relocate_resource, relocation_steps=relocation_steps,
@@ -176,6 +177,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         nociceptor_radius = config.get_mandatory('sensory.nociceptor_radius', int)
         collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
         collision_sensor_range = config.get_mandatory('sensory.collision_sensor_range', int)
+        include_location = config.get_mandatory('sensory.include_location')
         
         sensory_system = SensorySystem(
             sensor_radius=sensor_radius, 
@@ -183,7 +185,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
             decay_power=decay_power, 
             nociceptor_radius=nociceptor_radius,
             collision_sensor_enabled=collision_sensor_enabled,
-            collision_sensor_range=collision_sensor_range
+            collision_sensor_range=collision_sensor_range,
+            include_location=include_location
         )
 
 
@@ -196,7 +199,6 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     observation_spec = env.observation_spec()
     action_spec = env.action_spec()
     print(f"Environment Action Spec: {action_spec}")
-    print(f"Environment Observation Spec: {observation_spec}")
 
     if using_sensory:
          sensory_spec = sensory_system.observation_spec()
@@ -209,6 +211,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
              input_dim += dim
              dims_breakdown.append(f"{key}={dim}")
     else:
+         print(f"Environment Observation Spec: {observation_spec}")
          loc_shape = observation_spec['loc']['shape']
          input_dim += loc_shape[0]
          dims_breakdown.append(f"Loc={loc_shape[0]}")

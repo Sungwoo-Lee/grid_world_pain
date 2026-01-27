@@ -50,9 +50,21 @@ def preprocess_state(state, env_height, env_width, max_satiation=None, max_healt
              
         # Coordinates (if not pure sensory, or combined)
         if 'loc' in state:
-            r, c = state['loc']
-            flat_list.append(r / env_height)
-            flat_list.append(c / env_width)
+            loc = state['loc']
+            # Check if likely pre-normalized (float array from SensorySystem)
+            is_pre_normalized = False
+            if isinstance(loc, np.ndarray) and np.issubdtype(loc.dtype, np.floating):
+                 is_pre_normalized = True
+            
+            if is_pre_normalized:
+                 flat_list.extend(loc)
+            else:
+                 r, c = loc
+                 # Centered Normalization [-1, 1]
+                 norm_r = 2.0 * (r / max(1, env_height - 1)) - 1.0
+                 norm_c = 2.0 * (c / max(1, env_width - 1)) - 1.0
+                 flat_list.append(norm_r)
+                 flat_list.append(norm_c)
             
         # Body States
         if max_satiation and 'satiation' in state:

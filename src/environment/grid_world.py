@@ -444,13 +444,15 @@ class GridWorld:
                     vector = sensor.get('vector', None)
                     color = sensor['color'] # Hex color
                     
-                    ax_sensory.text(0.1, y_center + 0.12, name.upper(), color=text_color, fontsize=9, fontweight='bold', transform=ax_sensory.transAxes)
+                    # Dynamic Label Position: Top of slot
+                    label_y_offset = slot_h * 0.35
+                    ax_sensory.text(0.1, y_center + label_y_offset, name.upper(), color=text_color, fontsize=9, fontweight='bold', transform=ax_sensory.transAxes)
                     
                     # --- Draw Content based on Type ---
                     if intensity is not None:
                         # --- INTENSITY (Orb + Bar) ---
                         # Value Text
-                        ax_sensory.text(0.85, y_center + 0.12, f"{intensity:.2f}", color=color, fontsize=9, fontweight='bold', ha='right', transform=ax_sensory.transAxes)
+                        ax_sensory.text(0.85, y_center + label_y_offset, f"{intensity:.2f}", color=color, fontsize=9, fontweight='bold', ha='right', transform=ax_sensory.transAxes)
                         
                         # Bar
                         bar_w = 0.6
@@ -468,14 +470,19 @@ class GridWorld:
                         fill_c = plt.Circle((cx, cy), orb_r, facecolor=color, alpha=min(1.0, intensity+0.2), transform=ax_sensory.transAxes)
                         ax_sensory.add_patch(fill_c)
 
+                    elif sensor.get('value_text'):
+                         # --- TEXT VALUE (Location, etc) ---
+                         v_txt = sensor['value_text']
+                         ax_sensory.text(0.5, y_center, v_txt, color=color, fontsize=11, fontweight='bold', ha='center', va='center', transform=ax_sensory.transAxes)
+
                     elif vector is not None:
                          if sensor.get('type') == 'radial':
                              # --- RADIAL (Collision) ---
                              cx, cy = 0.5, y_center
                              # Scale radius based on slot height to avoid overlap
                              # If slot is small, ray must be small.
-                             # Base size 0.15. Cap at slot_h * 0.4
-                             max_ray_len = min(0.15, slot_h * 0.45)
+                             # Base size 0.15. Cap at slot_h * 0.35
+                             max_ray_len = min(0.15, slot_h * 0.35)
                              
                              num_secs = len(vector)
                              import math

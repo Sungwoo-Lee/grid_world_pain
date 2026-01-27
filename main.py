@@ -168,6 +168,7 @@ def main():
     nociceptor_radius = config.get('sensory.nociceptor_radius', 0)
     collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
     collision_sensor_range = config.get_mandatory('sensory.collision_sensor_range', int)
+    include_location = config.get_mandatory('sensory.include_location')
 
     # Setup paths
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -223,18 +224,21 @@ def main():
             decay_power=decay_power, 
             nociceptor_radius=nociceptor_radius,
             collision_sensor_enabled=collision_sensor_enabled,
-            collision_sensor_range=collision_sensor_range
+            collision_sensor_range=collision_sensor_range,
+            include_location=include_location
         )
         
     # Log Specs
     print("\n--- RL API Specifications (Debug) ---")
-    observation_spec = env.observation_spec()
     action_spec = env.action_spec()
     print(f"Environment Action Spec: {action_spec}")
-    print(f"Environment Observation Spec: {observation_spec}")
+    
     if using_sensory:
          sensory_spec = sensory_system.observation_spec()
          print(f"Sensory System Spec: {sensory_spec}")
+    else:
+         observation_spec = env.observation_spec()
+         print(f"Environment Observation Spec: {observation_spec}")
     print("-------------------------------------\n")
         
     frames = []
@@ -265,8 +269,10 @@ def main():
         
         # Visualization Data
         vis_data = None
+        vis_data = None
         if using_sensory:
              vis_data = sensory_system.get_visualization_data(sensory_dict)
+
 
 
         # Capture Frame

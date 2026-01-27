@@ -153,6 +153,28 @@ class CollisionSensor:
         return observation
 
 
+        return observation
+
+
+class LocationSensor:
+    """
+    Sensor that returns the agent's location, normalized to centered coordinates [-1, 1].
+    Output is a vector of size 2.
+    """
+    def __init__(self):
+        self.vector_size = 2
+        
+    def sense(self, agent_pos, grid_height, grid_width):
+        """
+        Returns centered coordinates [-1, 1].
+        """
+        r, c = agent_pos
+        h, w = grid_height, grid_width
+        norm_r = 2.0 * (r / max(1, h - 1)) - 1.0
+        norm_c = 2.0 * (c / max(1, w - 1)) - 1.0
+        return np.array([norm_r, norm_c], dtype=np.float32)
+
+
 class SensorySystem:
     """
     Manager for the agent's sensors:
@@ -161,7 +183,7 @@ class SensorySystem:
     - CollisionSensor: Wall and resource collision detection
     """
     def __init__(self, sensor_radius, vector_size, decay_power, nociceptor_radius, 
-                 collision_sensor_enabled=True, collision_sensor_range=2):
+                 include_location, collision_sensor_enabled=True, collision_sensor_range=2):
         # Olfactory sensor
         self.resource_sensor = ResourceSensor(
             radius=sensor_radius, 
@@ -183,10 +205,21 @@ class SensorySystem:
         else:
             self.collision_sensor = None
             self.collision_output_size = 0
+            
+        # Location
+        self.include_location = include_location
+        self.location_size = 2 if include_location else 0
+        
+        if include_location:
+            self.location_sensor = LocationSensor()
+        else:
+            self.location_sensor = None
         
         # Total output dimensions
-        # Olfactory (vector_size) + Nociceptor (1) + Collision (N if enabled)
-        total_dim = vector_size + 1 + self.collision_output_size
+        
+        # Total output dimensions
+        # Olfactory (vector_size) + Nociceptor (1) + Collision (N if enabled) + Loc (2 if enabled)
+        total_dim = vector_size + 1 + self.collision_output_size + self.location_size
         self.state_dims = (total_dim,)
         
         # For compatibility/access
@@ -214,6 +247,12 @@ class SensorySystem:
                 'dtype': float
             }
             
+        if self.include_location:
+            spec['loc'] = {
+                'shape': (2,),
+                'dtype': float # Centered coordinates
+            }
+            
         return spec
 
     def sense(self, agent_pos, resources, grid_height=None, grid_width=None, resource_pos=None):
@@ -229,6 +268,9 @@ class SensorySystem:
         Returns:
             dict: {'olfactory': np.array, 'nociception': np.array, 'collision': np.array (optional)}
         """
+        if grid_height is not None and grid_width is not None:
+            self.grid_dims = (grid_height, grid_width)
+            
         result = {
             'olfactory': self.resource_sensor.sense(agent_pos, resources),
             'nociception': self.nociceptor.sense(agent_pos, resources)
@@ -238,6 +280,16 @@ class SensorySystem:
             result['collision'] = self.collision_sensor.sense(
                 agent_pos, grid_height, grid_width
             )
+            
+        if self.include_location:
+            if grid_height is None or grid_width is None:
+                # Fallback or error?
+                # If we are training, we usually have dims. 
+                # If not provided, we can't center.
+                # Assuming provided for now as checked in train.py/main.py
+                raise ValueError("Grid dimensions required for LocationSensor")
+                
+            result['loc'] = self.location_sensor.sense(agent_pos, grid_height, grid_width)
         
         return result
         
@@ -278,6 +330,21 @@ class SensorySystem:
                 'vector': observation.get('collision'),
                 'intensity': None,
                 'type': 'radial'  # New visualization type for N-sector rays
+            })
+            
+        if self.include_location and 'loc' in observation:
+            # Value is already centered float array
+            val = observation['loc']
+            val_text = f"({val[0]:.2f}, {val[1]:.2f})"
+                 
+            data.append({
+                'name': 'LOC',
+                'color': '#ADB5BD',
+                'value_text': val_text,
+                'radius': 0,
+                'vector': None,
+                'intensity': None,
+                'type': 'text'
             })
         
         return data

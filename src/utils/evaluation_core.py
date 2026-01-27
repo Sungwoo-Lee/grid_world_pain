@@ -57,7 +57,10 @@ def evaluate_agent(
     vis_enabled = config.get_mandatory('visualization.enabled')
     vis_activations = config.get_mandatory('visualization.activations.enabled') and vis_enabled
     vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
+    vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
     vis_fps = config.get_mandatory('visualization.fps', int)
+    
+    include_location = config.get('sensory.include_location', False)
     
     # Setup Activation/LRP Monitors
     monitor = None
@@ -160,6 +163,10 @@ def evaluate_agent(
             # Input Structure for Visualization Labeling
             if using_sensory and sensory_system:
                 input_structure.append(("Sensory", sensory_system.vector_size))
+                # Add Collision/Nociceptor placeholders if needed?
+                # But mostly adding Location if requested
+                if include_location:
+                    input_structure.append(("Loc", 2))
             else:
                 input_structure.append(("Agent", 2)) 
 
@@ -230,7 +237,10 @@ def evaluate_agent(
                 state = {}
                 # Strictly separate sensory and loc
                 if using_sensory:
-                    if sensory_system: state.update(sensory_dict)
+                    if sensory_system: 
+                        state.update(sensory_dict)
+                        if include_location:
+                            state['loc'] = current_agent_pos
                 else:
                     state['loc'] = env_state
                 
@@ -242,6 +252,8 @@ def evaluate_agent(
             else:
                 if using_sensory and sensory_system:
                     state = sensory_dict.copy()
+                    if include_location:
+                        state['loc'] = current_agent_pos
                 else:
                     state = {'loc': env_state}
             
@@ -310,7 +322,8 @@ def evaluate_agent(
                     
                     next_state = {}
                     if using_sensory:
-                        if sensory_system: next_state.update(next_sensory_dict)
+                        if sensory_system: 
+                            next_state.update(next_sensory_dict)
                     else:
                         next_state['loc'] = next_env_state
                         
@@ -330,6 +343,7 @@ def evaluate_agent(
                 vis_data = None
                 if using_sensory and sensory_system:
                      vis_data = sensory_system.get_visualization_data(next_sensory_dict)
+
                 
                 sat_val = next_state.get('satiation', 0)
                 health_val = next_state.get('health')

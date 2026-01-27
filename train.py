@@ -442,7 +442,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             decay_power=decay_power, 
             nociceptor_radius=nociceptor_radius,
             collision_sensor_enabled=collision_sensor_enabled,
-            collision_sensor_range=collision_sensor_range
+            collision_sensor_range=collision_sensor_range,
+            include_location=config_dict.get_mandatory('sensory.include_location')
         )
 
 
@@ -460,7 +461,6 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     observation_spec = env.observation_spec()
     action_spec = env.action_spec()
     print(f"Environment Action Spec: {action_spec}")
-    print(f"Environment Observation Spec: {observation_spec}")
     
     if using_sensory:
          sensory_spec = sensory_system.observation_spec()
@@ -473,7 +473,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
              dim = val['shape'][0]
              input_dim += dim
              dims_breakdown.append(f"{key}={dim}")
+
     else:
+         print(f"Environment Observation Spec: {observation_spec}")
          loc_shape = observation_spec['loc']['shape']
          input_dim += loc_shape[0]
          dims_breakdown.append(f"Loc={loc_shape[0]}")
@@ -661,6 +663,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     # Main Training Loop
     pbar = tqdm(range(start_episode, target_end_episode), disable=quiet, desc="Training")
     
+    include_location = config_dict.get('sensory.include_location', False)
+    
     losses = {} # Track latest losses for debug display
     global_step = 0 # Unified counter for WandB (Environment Interactions)
     for episode in pbar:
@@ -764,7 +768,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             if using_sensory:
                  resources = env.get_active_resources()
                  next_sensory_dict = sensory_system.sense(
-                     current_agent_pos, resources,
+                     next_env_state, resources,
                      grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos
                  )
             
@@ -788,7 +792,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 done = env_done
                 
                 if using_sensory:
-                    next_state = next_sensory_dict
+                    next_state = next_sensory_dict.copy()
+                    if include_location:
+                        next_state['loc'] = next_env_state
                 else:
                     next_state = {'loc': next_env_state}
                     next_state = next_env_state
