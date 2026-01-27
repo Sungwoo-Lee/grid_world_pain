@@ -17,3 +17,6 @@ sheeprl/
 evaaa/
 temp_configs/
 wandb/
+logs/
+*.log
+*.wandb_api_key
