@@ -17,7 +17,7 @@ environment:
 body:
   # Rewards
   death_penalty: 100
-  use_homeostatic_reward: false 
+  use_homeostatic_reward: true   
 
   # Satiation
   with_satiation: true
@@ -38,7 +38,6 @@ body:
 
 sensory:
   using_sensory: true
-  location_sensor: true # Include centered location even with sensors
   sensor_radius: 5 # Default: 2
   nociceptor_radius: 0 # Default: 0 (Contact only)
   # Decay Formula: decay = 1.0 / (distance ** decay_power)
@@ -51,6 +50,7 @@ sensory:
   collision_sensor_enabled: true
   collision_sensor_range: 1  # Range of rays in grid cells
 
+  location_sensor: true # Include centered location even with sensors
 
 
 
