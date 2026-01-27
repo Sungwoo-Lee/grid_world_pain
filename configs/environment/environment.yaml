@@ -11,13 +11,13 @@ environment:
   damage_amount: 5
   prob_switch_to_food: 0.5
   min_food_duration: 10
-  relocate_resource: true
+  relocate_resource: true  
   relocation_steps: 50
 
 body:
   # Rewards
   death_penalty: 100
-  use_homeostatic_reward: true
+  use_homeostatic_reward: false 
 
   # Satiation
   with_satiation: true

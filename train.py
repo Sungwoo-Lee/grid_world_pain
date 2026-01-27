@@ -397,6 +397,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         width=config_dict.get_mandatory('environment.width'),
         start=tuple(config_dict.get_mandatory('environment.start_pos')),
         resource_pos=tuple(resource_pos),
+        with_satiation=with_satiation, # Resolved earlier
         max_steps=max_steps, # Resolved earlier
         prob_switch_to_danger=prob_switch_to_danger, # Resolved earlier
         min_danger_duration=min_danger_duration,
