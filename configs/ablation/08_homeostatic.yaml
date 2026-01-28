@@ -1,20 +1,22 @@
-# Ablation Condition 8: Homeostatic (Full Interoception)
-# Complete interoceptive agent with homeostatic reward
-# All sensors except location
-
-environment:
-  max_steps: 200
-  eat_action_enabled: true
-  rest_action_enabled: true
-
+# Level 08: Homeostatic Reward
+# Focus: Motivation via internal state drive-reduction.
+# Milestone: Drive-reduction reward enabled.
 body:
   with_satiation: true
   with_health: true
-  use_homeostatic_reward: true  # Drive-reduction reward
+  use_homeostatic_reward: true
+  satiation_setpoint: 15.0
+
+environment:
+  max_steps: 500
+  relocate_resource: true
+  eat_action_enabled: true
+  rest_action_enabled: true
 
 sensory:
   using_sensory: true
   nociception_enabled: true
+  olfactory_enabled: true
+  proprioception_enabled: true
   collision_sensor_enabled: true
   location_sensor: false
-  proprioception_enabled: true

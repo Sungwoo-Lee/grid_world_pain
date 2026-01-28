@@ -1,18 +1,24 @@
-# Ablation Condition 1: Goal Only (Conventional GridWorld)
-# Overrides environment.yaml - episode terminates when reaching goal
-# No satiation, no health, no danger - pure goal-reaching task
-
+# Level 01: Goal Only
+# Focus: Baseline pathfinding. 
+# Dynamics: Fixed food location, no danger, moves only.
 environment:
-  max_steps: 100
-  prob_switch_to_danger: 0.0  # Never danger
+  max_steps: 200
+  prob_switch_to_danger: 0.0
+  prob_switch_to_food: 1.0
   damage_amount: 0.0
+  relocate_resource: false
   eat_action_enabled: false
   rest_action_enabled: false
 
 body:
-  with_satiation: false  # Enables goal-termination logic
+  with_satiation: false
   with_health: false
+  use_homeostatic_reward: false
 
 sensory:
-  using_sensory: false  # Location-based only
+  using_sensory: false
+  nociception_enabled: false
   olfactory_enabled: false
+  proprioception_enabled: false
+  collision_sensor_enabled: false
+  location_sensor: false

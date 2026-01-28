@@ -1,11 +1,12 @@
-# Level 06: +Proprioception
-# Focus: Reducing search oscillations via motor feedback.
+# Level 07: +Collision
+# Focus: Navigation in obstacle-rich environments.
 sensory:
   using_sensory: true
   nociception_enabled: true
   olfactory_enabled: true
   proprioception_enabled: true
-  collision_sensor_enabled: false
+  collision_sensor_enabled: true
+  collision_sensor_range: 2
   location_sensor: false
 
 environment:

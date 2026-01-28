@@ -1,11 +1,10 @@
-# Level 02: Danger Only
-# Focus: Health recovery baseline.
-# Dynamics: Fixed danger location, moves + Rest.
+# Level 03: Dynamic Fixed
+# Focus: State discrimination via reward history.
+# Dynamics: Switches between Food/Danger at FIXED location.
 environment:
   max_steps: 200
-  prob_switch_to_danger: 1.0
-  prob_switch_to_food: 0.0
-  min_danger_duration: 200
+  prob_switch_to_danger: 0.1
+  prob_switch_to_food: 0.5
   relocate_resource: false
   eat_action_enabled: false
   rest_action_enabled: true
