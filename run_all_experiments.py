@@ -43,122 +43,119 @@ ALGORITHMS = [
     # ("DreamerV3", "configs/models/dreamer_v3.yaml", "cuda:0"),
 ]
 
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Run all Deep RL algorithms in parallel.")
+    parser = argparse.ArgumentParser(description="Run Deep RL algorithms in parallel for ablation study.")
     parser.add_argument("--episodes", type=int, default=10000, help="Number of episodes per agent")
-    parser.add_argument("--tag", type=str, required=True, help="Base tag for WandB/Results (e.g. 'experiment_v1')")
-    parser.add_argument("--config", type=str, required=True, help="Config file for the experiment")
+    parser.add_argument("--tag", type=str, required=True, help="Base tag for WandB/Results (e.g. 'ablation_v1')")
+    parser.add_argument("--config", type=str, help="Specific config file to run (optional)")
     
     args = parser.parse_args()
     
-    # Process State:
-    # (Algorithm, Train_Process, Log_File, Status)
-    # Status: "TRAINING", "DONE", "FAILED"
-    process_states = []
+    # 1. Discover Configs
+    config_queue = []
+    if args.config:
+        config_queue.append(args.config)
+    else:
+        # Default: Full ablation sweep
+        base_dir = "configs/ablation"
+        for branch in ["survival", "homeostatic"]:
+            branch_dir = os.path.join(base_dir, branch)
+            if os.path.isdir(branch_dir):
+                files = sorted(glob.glob(os.path.join(branch_dir, "*.yaml")))
+                config_queue.extend(files)
     
-    print(f"Starting {len(ALGORITHMS)} experiments in parallel...")
+    if not config_queue:
+        print("No configurations found to run.")
+        return
+
+    print(f"Starting {len(config_queue)} experiment levels...")
+    print(f"Algorithms per level: {[a[0] for a in ALGORITHMS]}")
     print(f"Base Tag: {args.tag}")
     print(f"Episodes: {args.episodes}")
     print("-" * 50)
-    
-    # Create unique log directory for this run
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    log_dir = os.path.join("logs", f"{timestamp}_{args.tag}")
-    os.makedirs(log_dir, exist_ok=True)
-    
-    for algo_name, config_path, device in ALGORITHMS:
-        # Construct specific tag
-        full_tag = f"{args.tag}_{algo_name.lower()}"
+
+    # 2. Iterate through configs sequentially
+    for config_file in config_queue:
+        # Extract branch and level name for tagging
+        # Path format: configs/ablation/{branch}/{level}.yaml
+        parts = config_file.split(os.sep)
+        branch_name = parts[-2] if len(parts) >= 2 else "unknown"
+        level_name = os.path.basename(config_file).replace(".yaml", "")
         
-        cmd = [
-            sys.executable, "train.py",
-            "--agent_config", config_path,
-            "--episodes", str(args.episodes),
-            "--tag", full_tag,
-            "--device", device,
-            "--wandb-group", args.tag,
-            "--config", args.config,
-        ]
+        level_tag = f"{args.tag}_{branch_name}_{level_name}"
         
-        print(f"[{algo_name}] Launching Training: {' '.join(cmd)}")
+        print(f"\n>>> Running Level: {level_name} (Branch: {branch_name})")
+        print(f"    Config: {config_file}")
         
-        log_path = os.path.join(log_dir, f"{algo_name}_train.log")
-        log_file = open(log_path, "w")
+        # Process State for this set of algorithms
+        process_states = []
         
-        p = subprocess.Popen(
-            cmd,
-            stdout=log_file,
-            stderr=subprocess.STDOUT
-        )
-        # Store state
-        process_states.append({
-            "name": algo_name,
-            "tag": full_tag,
-            "train_process": p,
-            "train_log": log_file,
-            "status": "TRAINING"
-        })
+        # Create log directory for this level
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        log_dir = os.path.join("logs", f"{timestamp}_{level_tag}")
+        os.makedirs(log_dir, exist_ok=True)
         
-    print("-" * 50)
-    print("All training processes launched. Monitoring...")
-    print(f"Logs are being written to '{log_dir}/'")
-    
-    try:
-        while True:
-            all_complete = True
+        for algo_name, algo_config, device in ALGORITHMS:
+            full_tag = f"{level_tag}_{algo_name.lower()}"
             
-            for state in process_states:
-                status = state["status"]
-                name = state["name"]
+            cmd = [
+                sys.executable, "train.py",
+                "--agent_config", algo_config,
+                "--episodes", str(args.episodes),
+                "--tag", full_tag,
+                "--device", device,
+                "--wandb-group", level_tag,
+                "--config", config_file,
+            ]
+            
+            log_path = os.path.join(log_dir, f"{algo_name}_train.log")
+            log_file = open(log_path, "w")
+            
+            p = subprocess.Popen(
+                cmd,
+                stdout=log_file,
+                stderr=subprocess.STDOUT
+            )
+            
+            process_states.append({
+                "name": algo_name,
+                "process": p,
+                "log": log_file
+            })
+            
+        print(f"    Launched {len(ALGORITHMS)} agents. Monitoring...")
+        
+        # Wait for all processes in this level to finish
+        try:
+            while True:
+                all_complete = True
+                for state in process_states:
+                    if state["process"].poll() is None:
+                        all_complete = False
+                        break
                 
-                if status == "TRAINING":
-                    all_complete = False
-                    ret = state["train_process"].poll()
+                if all_complete:
+                    break
+                time.sleep(5)
+                
+            # Close logs
+            for state in process_states:
+                state["log"].close()
+                ret = state["process"].poll()
+                if ret != 0:
+                    print(f"    [!] {state['name']} FAILED with code {ret}")
+                else:
+                    print(f"    [+] {state['name']} DONE")
                     
-                    if ret is not None:
-                        # Training finished
-                        state["train_log"].close()
-                        
-                        if ret == 0:
-                            print(f"[{name}] Training finished successfully.")
-                            state["status"] = "DONE"
-                        else:
-                            print(f"[{name}] Training FAILED with code {ret}.")
-                            state["status"] = "FAILED"
-                            
-            if all_complete:
-                break
-            
-            time.sleep(5)
-            
-    except KeyboardInterrupt:
-        print("\nCaught KeyboardInterrupt! Terminating all processes...")
-        for state in process_states:
-            if state["train_process"] and state["train_process"].poll() is None:
-                print(f"[{state['name']}] Killing Training...")
-                state["train_process"].terminate()
-            
-            if state["train_log"] and not state["train_log"].closed: state["train_log"].close()
-            
-            if all_complete:
-                break
-            
-            time.sleep(5)
-            
-    except KeyboardInterrupt:
-        print("\nCaught KeyboardInterrupt! Terminating all processes...")
-        for state in process_states:
-            if state["train_process"] and state["train_process"].poll() is None:
-                print(f"[{state['name']}] Killing Training...")
-                state["train_process"].terminate()
-            if state["train_log"] and not state["train_log"].closed: state["train_log"].close()
-            
-    # Summary
-    print("\n--- Final Summary ---")
-    for state in process_states:
-        print(f"{state['name']}: {state['status']}")
+        except KeyboardInterrupt:
+            print("\nCaught KeyboardInterrupt! Terminating all processes...")
+            for state in process_states:
+                if state["process"].poll() is None:
+                    state["process"].terminate()
+                state["log"].close()
+            sys.exit(1)
+
+    print("\n--- All Ablation Levels Complete ---")
 
 if __name__ == "__main__":
     main()

@@ -1,6 +1,5 @@
-# Level 03: Dynamic Fixed
-# Focus: State discrimination via reward history.
-# Dynamics: Switches between Food/Danger at FIXED location.
+# Level 04: +Nociception (Survival)
+# Reward: Survival (+1 per step)
 environment:
   max_steps: 200
   prob_switch_to_danger: 0.1
@@ -16,8 +15,8 @@ body:
   use_homeostatic_reward: false
 
 sensory:
-  using_sensory: false
-  nociception_enabled: false
+  using_sensory: true
+  nociception_enabled: true
   olfactory_enabled: false
   proprioception_enabled: false
   collision_sensor_enabled: false
