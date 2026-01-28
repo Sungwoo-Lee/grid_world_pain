@@ -17,3 +17,4 @@ body:
 
 sensory:
   using_sensory: false  # FOMDP - no sensors
+  olfactory_enabled: false

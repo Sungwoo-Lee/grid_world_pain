@@ -17,9 +17,7 @@ body:
 sensory:
   using_sensory: true
   nociception_enabled: true
+  olfactory_enabled: false  # DISABLED
   collision_sensor_enabled: false
   location_sensor: false
   proprioception_enabled: false
-  vector_size: 1  # Minimal olfactory
-  food_property: [1]
-  danger_property: [1]

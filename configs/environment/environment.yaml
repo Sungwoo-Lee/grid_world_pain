@@ -53,6 +53,7 @@ sensory:
   nociception_enabled: true  # Enable pain/danger detection sensor
   nociceptor_radius: 0       # Default: 0 (Contact only)
   nociception_size: 1        # Output dimension of nociceptor
+  olfactory_enabled: true
   
   # Collision Sensor
   collision_sensor_enabled: true

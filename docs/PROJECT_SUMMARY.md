@@ -718,6 +718,7 @@ sensory:
 | `sensory.nociceptor_radius` | int | Yes* | Pain sensor range (0=contact) |
 | `sensory.nociception_enabled` | bool | No | Enable nociceptor sensor (default: true) |
 | `sensory.nociception_size` | int | No | Nociception output dimension (default: 1) |
+| `sensory.olfactory_enabled` | bool | No | Enable gradient-based chemical sensor (default: true) |
 | `sensory.collision_sensor_enabled` | bool | No | Enable directional collision detection (default: true) |
 | `sensory.collision_sensor_range` | int | Yes* | Max range of collision sensor rays (Sectors = 8 * Range) |
 | `sensory.location_sensor` | bool | No | Enable centered location coordinates (default: true) |

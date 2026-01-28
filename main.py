@@ -225,6 +225,7 @@ def main():
         print(f"Initializing Sensory System (Radius={sensor_radius}, VecSize={vector_size}, Decay={decay_power})")
         nociception_size = config.get('sensory.nociception_size', 1)
         location_size = config.get('sensory.location_size', 2)
+        olfactory_enabled = config.get('sensory.olfactory_enabled', True)
         sensory_system = SensorySystem(
             sensor_radius=sensor_radius, 
             vector_size=vector_size, 
@@ -232,6 +233,7 @@ def main():
             nociceptor_radius=nociceptor_radius,
             location_sensor=location_sensor,
             nociception_enabled=config.get('sensory.nociception_enabled', True),
+            olfactory_enabled=olfactory_enabled,
             collision_sensor_enabled=collision_sensor_enabled,
             collision_sensor_range=collision_sensor_range,
             proprioception_enabled=config.get('sensory.proprioception_enabled', False),

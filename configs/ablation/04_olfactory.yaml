@@ -17,7 +17,7 @@ body:
 sensory:
   using_sensory: true
   nociception_enabled: true
+  olfactory_enabled: true  # ENABLED
   collision_sensor_enabled: false
   location_sensor: false
   proprioception_enabled: false
-  # Olfactory enabled via vector_size > 1

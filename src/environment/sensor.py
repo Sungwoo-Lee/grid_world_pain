@@ -235,9 +235,10 @@ class SensorySystem:
     All sensor output sizes are configurable via constructor parameters.
     """
     def __init__(self, sensor_radius, vector_size, decay_power, nociceptor_radius, 
-                 location_sensor, nociception_enabled=True, collision_sensor_enabled=True, 
-                 collision_sensor_range=2, proprioception_enabled=False,
-                 nociception_size=1, location_size=2, num_actions=5):
+                 location_sensor, nociception_enabled=True, olfactory_enabled=True,
+                 collision_sensor_enabled=True, collision_sensor_range=2, 
+                 proprioception_enabled=False, nociception_size=1, 
+                 location_size=2, num_actions=5):
         """
         Args:
             sensor_radius: Olfactory sensor detection radius
@@ -246,6 +247,7 @@ class SensorySystem:
             nociceptor_radius: Nociceptor detection radius (0 = contact)
             location_sensor: Enable location sensor
             nociception_enabled: Enable nociceptor
+            olfactory_enabled: Enable olfactory sensor
             collision_sensor_enabled: Enable collision sensor
             collision_sensor_range: Collision ray length
             proprioception_enabled: Enable proprioceptive feedback
@@ -254,12 +256,17 @@ class SensorySystem:
             num_actions: Number of actions for proprioception (dynamic)
         """
         # Olfactory sensor
-        self.resource_sensor = ResourceSensor(
-            radius=sensor_radius, 
-            vector_size=vector_size, 
-            decay_power=decay_power
-        )
-        self.vector_size = vector_size
+        self.olfactory_enabled = olfactory_enabled
+        if olfactory_enabled:
+            self.resource_sensor = ResourceSensor(
+                radius=sensor_radius, 
+                vector_size=vector_size, 
+                decay_power=decay_power
+            )
+            self.vector_size = vector_size
+        else:
+            self.resource_sensor = None
+            self.vector_size = 0
         
         # Nociceptor (Pain Detection)
         self.nociception_enabled = nociception_enabled
@@ -322,9 +329,10 @@ class SensorySystem:
                 'proprioception': {'shape': (num_actions,), 'dtype': float} (if enabled)
              }
         """
-        spec = {
-            'olfactory': {'shape': (self.vector_size,), 'dtype': float}
-        }
+        spec = {}
+        
+        if self.olfactory_enabled:
+            spec['olfactory'] = {'shape': (self.vector_size,), 'dtype': float}
         
         if self.nociception_enabled:
             spec['nociception'] = {'shape': (self.nociception_size,), 'dtype': float}
@@ -367,9 +375,10 @@ class SensorySystem:
         if grid_height is not None and grid_width is not None:
             self.grid_dims = (grid_height, grid_width)
             
-        result = {
-            'olfactory': self.resource_sensor.sense(agent_pos, resources)
-        }
+        result = {}
+            
+        if self.olfactory_enabled:
+            result['olfactory'] = self.resource_sensor.sense(agent_pos, resources)
         
         if self.nociception_enabled:
             result['nociception'] = self.nociceptor.sense(agent_pos, resources)
@@ -404,24 +413,26 @@ class SensorySystem:
         olfactory_data = observation.get('olfactory')
         nociception_val = observation.get('nociception')
         
-        data = [
-            {
+        data = []
+        
+        if self.olfactory_enabled:
+            data.append({
                 'name': 'Olfactory',
                 'color': '#8e44ad',  # Purple for mixed/chemical
                 'radius': self.resource_sensor.radius,
                 'vector': olfactory_data, 
                 'intensity': None,     
                 'type': 'spectrum' 
-            },
-            {
-                'name': 'Nociceptor',
-                'color': '#c0392b',  # Dark Red
-                'radius': 0,
-                'vector': None,
-                'intensity': nociception_val[0] if isinstance(nociception_val, np.ndarray) else nociception_val,
-                'type': 'intensity'
-            }
-        ]
+            })
+
+        data.append({
+            'name': 'Nociceptor',
+            'color': '#c0392b',  # Dark Red
+            'radius': 0,
+            'vector': None,
+            'intensity': nociception_val[0] if isinstance(nociception_val, np.ndarray) else nociception_val,
+            'type': 'intensity'
+        })
         
         if self.collision_sensor_enabled and 'collision' in observation:
             data.append({

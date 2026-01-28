@@ -271,6 +271,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         decay_power = config_dict.get_mandatory('sensory.decay_power', float)
         vector_size = config_dict.get_mandatory('sensory.vector_size', int)
         nociception_enabled = config_dict.get_mandatory('sensory.nociception_enabled', bool)
+        olfactory_enabled = config_dict.get('sensory.olfactory_enabled', True)
         nociceptor_radius = config_dict.get_mandatory('sensory.nociceptor_radius', int)
         collision_sensor_enabled = config_dict.get_mandatory('sensory.collision_sensor_enabled', bool)
         # Size calculated from range automatically now
@@ -453,6 +454,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             nociceptor_radius=nociceptor_radius,
             location_sensor=location_sensor,
             nociception_enabled=nociception_enabled,
+            olfactory_enabled=olfactory_enabled,
             collision_sensor_enabled=collision_sensor_enabled,
             collision_sensor_range=collision_sensor_range,
             proprioception_enabled=proprioception_enabled,

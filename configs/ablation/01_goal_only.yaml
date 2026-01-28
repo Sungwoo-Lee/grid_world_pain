@@ -15,3 +15,4 @@ body:
 
 sensory:
   using_sensory: false  # Location-based only
+  olfactory_enabled: false
