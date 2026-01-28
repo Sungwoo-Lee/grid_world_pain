@@ -125,15 +125,28 @@ GridWorld(
     relocation_steps,                 # Steps between relocations
     vector_size,                      # Property vector dimension
     food_property,                    # Food chemical signature [N-dim]
-    danger_property                   # Danger chemical signature [N-dim]
+    danger_property,                  # Danger chemical signature [N-dim]
+    eat_action_enabled=True,          # Require explicit Eat action to consume food
+    rest_action_enabled=True          # Require explicit Rest action to recover health
 )
 ```
+
+#### Action Space (Dynamic)
+The action space varies based on configuration:
+
+| Configuration | Actions | Indices |
+|---------------|---------|----------|
+| Both enabled | 6 | 0-3: Move, 4: Rest, 5: Eat |
+| Eat only | 5 | 0-3: Move, 4: Eat |
+| Rest only | 5 | 0-3: Move, 4: Rest |
+| Neither | 4 | 0-3: Move only |
 
 #### Key Methods
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `reset()` | `(row, col)` | Resets agent to random position, returns initial state |
-| `step(action)` | `(next_state, reward, done, info)` | Executes action (0-4: Up/Right/Down/Left/Stay) |
+| `step(action)` | `(next_state, reward, done, info)` | Executes action (see Action Space above) |
+| `action_spec()` | `dict` | Returns `{'type': 'discrete', 'n': num_actions}` |
 | `get_active_resources()` | `List[Resource]` | Returns current resources for sensory system |
 | `render_rgb_array(...)` | `np.ndarray` | Generates visualization frame with UI elements |
 
@@ -150,11 +163,14 @@ stateDiagram-v2
 #### Info Dictionary Structure
 ```python
 info = {
-    'ate_food': bool,     # True if agent on food this step
+    'ate_food': bool,     # True if agent ate food (explicit Eat action OR auto-eat if disabled)
     'damage': int,        # Health damage taken (0 if not in danger)
-    'rested': bool        # True if action was Stay (4)
+    'rested': bool        # True if agent rested (explicit Rest action OR auto-rest if disabled)
 }
 ```
+
+> **Note**: When `eat_action_enabled=False`, `ate_food=True` automatically when on food.
+> When `rest_action_enabled=False`, `rested=True` every step (auto-recovery).
 
 ---
 
@@ -651,6 +667,8 @@ configs/
 | `environment.prob_switch_to_danger` | float | Yes | Transition probability |
 | `environment.min_danger_duration` | int | Yes | Minimum danger steps |
 | `environment.relocate_resource` | bool | Yes | Enable food relocation |
+| `environment.eat_action_enabled` | bool | Yes | Require explicit Eat action (default: true) |
+| `environment.rest_action_enabled` | bool | Yes | Require explicit Rest action (default: true) |
 
 #### Body
 | Key | Type | Required | Description |
@@ -699,12 +717,16 @@ sensory:
 | `sensory.sensor_radius` | int | Yes* | Detection range |
 | `sensory.nociceptor_radius` | int | Yes* | Pain sensor range (0=contact) |
 | `sensory.nociception_enabled` | bool | No | Enable nociceptor sensor (default: true) |
+| `sensory.nociception_size` | int | No | Nociception output dimension (default: 1) |
 | `sensory.collision_sensor_enabled` | bool | No | Enable directional collision detection (default: true) |
 | `sensory.collision_sensor_range` | int | Yes* | Max range of collision sensor rays (Sectors = 8 * Range) |
 | `sensory.location_sensor` | bool | No | Enable centered location coordinates (default: true) |
-| `sensory.proprioception_enabled` | bool | No | Enable previous action as one-hot input (5 dims, default: true) |
+| `sensory.location_size` | int | No | Location output dimension (default: 2) |
+| `sensory.proprioception_enabled` | bool | No | Enable previous action as one-hot input (default: true) |
 | `sensory.food_property` | list | Yes* | Food chemical signature |
 | `sensory.danger_property` | list | Yes* | Danger chemical signature |
+
+> **Note**: Proprioception dimension is automatically set to match `num_actions` from the environment.
 
 ---
 
