@@ -1,0 +1,20 @@
+# Ablation Condition 8: Homeostatic (Full Interoception)
+# Complete interoceptive agent with homeostatic reward
+# All sensors except location
+
+environment:
+  max_steps: 200
+  eat_action_enabled: true
+  rest_action_enabled: true
+
+body:
+  with_satiation: true
+  with_health: true
+  use_homeostatic_reward: true  # Drive-reduction reward
+
+sensory:
+  using_sensory: true
+  nociception_enabled: true
+  collision_sensor_enabled: true
+  location_sensor: false
+  proprioception_enabled: true

@@ -1,0 +1,23 @@
+# Ablation Condition 4: +Olfactory
+# Nociceptor + Olfactory gradient sensing
+
+environment:
+  max_steps: 100
+  prob_switch_to_danger: 1.0
+  min_danger_duration: 100
+  prob_switch_to_food: 0.0
+  eat_action_enabled: false
+  rest_action_enabled: true
+
+body:
+  with_satiation: false
+  with_health: true
+  health_recovery: 2.0
+
+sensory:
+  using_sensory: true
+  nociception_enabled: true
+  collision_sensor_enabled: false
+  location_sensor: false
+  proprioception_enabled: false
+  # Olfactory enabled via vector_size > 1

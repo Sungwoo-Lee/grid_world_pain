@@ -1,0 +1,20 @@
+# Ablation Condition 9: +Location (Full Observability Fallback)
+# All sensors including location
+# For when agent is not performing well
+
+environment:
+  max_steps: 200
+  eat_action_enabled: true
+  rest_action_enabled: true
+
+body:
+  with_satiation: true
+  with_health: true
+  use_homeostatic_reward: true
+
+sensory:
+  using_sensory: true
+  nociception_enabled: true
+  collision_sensor_enabled: true
+  location_sensor: true  # Full spatial awareness
+  proprioception_enabled: true

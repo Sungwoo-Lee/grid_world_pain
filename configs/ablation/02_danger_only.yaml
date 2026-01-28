@@ -1,0 +1,19 @@
+# Ablation Condition 2: Danger Only (FOMDP)
+# Always danger, health enabled with Rest recovery
+# No sensors - full observability
+
+environment:
+  max_steps: 100
+  prob_switch_to_danger: 1.0  # Always danger
+  min_danger_duration: 100
+  prob_switch_to_food: 0.0    # Never food
+  eat_action_enabled: false
+  rest_action_enabled: true   # Health recovery
+
+body:
+  with_satiation: false
+  with_health: true
+  health_recovery: 2.0
+
+sensory:
+  using_sensory: false  # FOMDP - no sensors

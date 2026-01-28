@@ -1,0 +1,17 @@
+# Ablation Condition 1: Goal Only (Conventional GridWorld)
+# Overrides environment.yaml - episode terminates when reaching goal
+# No satiation, no health, no danger - pure goal-reaching task
+
+environment:
+  max_steps: 100
+  prob_switch_to_danger: 0.0  # Never danger
+  damage_amount: 0.0
+  eat_action_enabled: false
+  rest_action_enabled: false
+
+body:
+  with_satiation: false  # Enables goal-termination logic
+  with_health: false
+
+sensory:
+  using_sensory: false  # Location-based only

@@ -325,22 +325,20 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
 
     # Body Params
     with_satiation = resolve_param(with_satiation, 'body.with_satiation')
-    if with_satiation:
-        max_satiation = int(resolve_param(None, 'body.max_satiation'))
-        start_satiation = int(resolve_param(None, 'body.start_satiation'))
-        overeating_death = resolve_param(overeating_death, 'body.overeating_death')
-        random_start_satiation = resolve_param(random_start_satiation, 'body.random_start_satiation')
-        food_satiation_gain = float(resolve_param(food_satiation_gain, 'body.food_satiation_gain'))
-        use_homeostatic_reward = resolve_param(use_homeostatic_reward, 'body.use_homeostatic_reward')
-        satiation_setpoint = float(resolve_param(satiation_setpoint, 'body.satiation_setpoint'))
-        death_penalty = float(resolve_param(death_penalty, 'body.death_penalty'))
+    max_satiation = int(resolve_param(None, 'body.max_satiation'))
+    start_satiation = int(resolve_param(None, 'body.start_satiation'))
+    overeating_death = resolve_param(overeating_death, 'body.overeating_death')
+    random_start_satiation = resolve_param(random_start_satiation, 'body.random_start_satiation')
+    food_satiation_gain = float(resolve_param(food_satiation_gain, 'body.food_satiation_gain'))
+    use_homeostatic_reward = resolve_param(use_homeostatic_reward, 'body.use_homeostatic_reward')
+    satiation_setpoint = float(resolve_param(satiation_setpoint, 'body.satiation_setpoint'))
+    death_penalty = float(resolve_param(death_penalty, 'body.death_penalty'))
         
     with_health = resolve_param(with_health, 'body.with_health')
-    if with_health:
-        max_health = float(resolve_param(max_health, 'body.max_health'))
-        start_health = float(resolve_param(start_health, 'body.start_health'))
-        health_recovery = float(resolve_param(health_recovery, 'body.health_recovery'))
-        start_health_random = resolve_param(start_health_random, 'body.start_health_random')
+    max_health = float(resolve_param(max_health, 'body.max_health'))
+    start_health = float(resolve_param(start_health, 'body.start_health'))
+    health_recovery = float(resolve_param(health_recovery, 'body.health_recovery'))
+    start_health_random = resolve_param(start_health_random, 'body.start_health_random')
     
     device = resolve_param(device, 'training.device')
 
@@ -1076,6 +1074,13 @@ if __name__ == "__main__":
             print(f"Loading logger config from {logger_config_path}")
         logger_config = Config.load_yaml(logger_config_path)
         config.merge(logger_config)
+    
+    # Load and merge user override config (e.g., ablation configs)
+    if args.config:
+        if not args.quiet:
+            print(f"Loading override config from: {args.config}")
+        user_config = Config.load_yaml(args.config)
+        config.merge(user_config)
         
     # Override WandB settings with CLI args
     if args.wandb_project:

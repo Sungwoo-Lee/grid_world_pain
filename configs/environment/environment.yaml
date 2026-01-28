@@ -15,8 +15,8 @@ environment:
   relocation_steps: 50
   
   # Action Configuration
-  eat_action_enabled: true    # If true: action 5 = Eat (must eat explicitly)
   rest_action_enabled: true   # If true: action 4 = Rest (must rest explicitly)
+  eat_action_enabled: true    # If true: action 5 = Eat (must eat explicitly)
 
 body:
   # Rewards
