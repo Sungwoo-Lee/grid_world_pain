@@ -1,8 +1,8 @@
 # 🎮 GridWorld Pain
 
-> **A robust, visualization-ready Reinforcement Learning environment.**
+> **A robust, visualization-ready Reinforcement Learning environment for Interoceptive AI research.**
 
-![Python Version](https://img.shields.io/badge/python-3.9%2B-blue?style=for-the-badge&logo=python)
+![Python Version](https://img.shields.io/badge/python-3.11%2B-blue?style=for-the-badge&logo=python)
 ![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
 ![Status](https://img.shields.io/badge/status-active-success?style=for-the-badge)
 
@@ -21,11 +21,13 @@ It supports both **Classic Tabular Methods** and **Deep Reinforcement Learning**
 ## ✨ Key Features
 
 - **🚀 Lightweight Core**: Built with pure Python and optimized for speed.
-- **🤖 Multi-Agent Support**: Includes implementations for **DQN, DRQN, PPO, RecurrentPPO**, and **DreamerV3**, alongside classic Q-Learning.
+- **🤖 Multi-Agent Support**: Includes implementations for **DQN, DRQN, PPO, RecurrentPPO**, **DreamerV3**, and classic Q-Learning.
 - **🧠 Interoception**: Simulation of internal body states (Satiation, Health) that drive reward signals (Homeostatic RL).
 - **🎥 Built-in Visualization**: Seamless integration with `matplotlib` and `imageio` for generating MP4 replays.
-- **🔍 Activation Monitoring**: Visualizes internal neural network activations (Layer-wise Heatmaps) and logs them for analysis.
+- **🔍 Activation Monitoring**: Visualizes internal neural network activations (Layer-wise Heatmaps) and LRP attributions.
 - **📦 Configuration Driven**: Fully YAML-based configuration for easy experimentation.
+- **🧪 Ablation Study Support**: 9 pre-defined ablation configurations for systematic research.
+- **📊 WandB Integration**: Experiment tracking, metrics logging, and video uploads.
 
 ---
 
@@ -33,11 +35,17 @@ It supports both **Classic Tabular Methods** and **Deep Reinforcement Learning**
 
 ```text
 grid_world_pain/
-├── configs/                    # ⚙️ Configuration YAMLs (Environment & Models)
-├── evaluation.py               # 🎬 Evaluation & Visualization Script
+├── configs/                    # ⚙️ Configuration YAMLs
+│   ├── ablation/               # 🧪 9 Ablation Study Configs (01-09)
+│   ├── environment/            # 🌍 Environment settings
+│   ├── models/                 # 🤖 Agent hyperparameters
+│   └── ...
+├── train.py                    # 🧠 RL Training Script (~1172 lines)
+├── evaluation.py               # 🎬 Evaluation & Visualization (~599 lines)
 ├── main.py                     # 🏃‍♂️ Console Demo Entry Point
-├── train.py                    # 🧠 RL Training Script
-├── README.md                   # 📄 Documentation
+├── run_all_experiments.py      # 🚀 Parallel Training Launcher
+├── hyperparameter_search.py    # 🔍 Grid Search Automation
+├── verify_ablation_levels.py   # ✅ Ablation Config Verification
 ├── results/                    # 📂 Training Results & Artifacts
 └── src/                        # 🐍 Source Code
     ├── environment/            # 🌍 Environment Logic (GridWorld, Body, Sensory)
@@ -51,14 +59,14 @@ grid_world_pain/
 
 ### Prerequisites
 
-- **Python**: 3.9 or higher
+- **Python**: 3.11 or higher
 - **Conda**: Recommended for environment management
 
 ### 💿 Installation
 
 1.  **Create and activate the Conda environment:**
     ```bash
-    conda create -n grid_world_pain python
+    conda create -n grid_world_pain python=3.11
     conda activate grid_world_pain
     ```
 
@@ -74,52 +82,58 @@ grid_world_pain/
 ### 1. Training Agents
 Train various RL agents using the `train.py` script. Configuration is handled via YAML files in `configs/`.
 
-**Train DQN:**
+**Train DQN with ablation config:**
 ```bash
-python train.py --agent_config configs/models/dqn.yaml --episodes 1000
+python train.py --agent_config configs/models/dqn.yaml --config configs/ablation/01_goal_only.yaml --episodes 1000
 ```
 
-**Train DRQN (Recurrent):**
+**Train with full interoception:**
 ```bash
-python train.py --agent_config configs/models/drqn.yaml --episodes 1000
-```
-
-**Train PPO:**
-```bash
-python train.py --agent_config configs/models/ppo.yaml --episodes 5000
+python train.py --agent_config configs/models/dqn.yaml --config configs/ablation/09_location.yaml --episodes 5000
 ```
 
 **Command Line Overrides:**
-You can override common parameters directly:
 ```bash
-python train.py --agent_config configs/models/dqn.yaml --episodes 500 --device cuda:0
+python train.py --agent_config configs/models/dqn.yaml --episodes 500 --device cuda:0 --tag my_experiment
 ```
 
 ### 2. Evaluating & Visualizing
-After training, use `evaluation.py` to generate videos and verify performance. This script automatically loads the configuration used during training.
+After training, use `evaluation.py` to generate videos and verify performance.
 
 ```bash
 python evaluation.py --results_dir results/DQN/20260117-141318_default --episodes 3
 ```
 
 **Outputs:**
-- Generates `.mp4` videos of the agent's performance in `results/.../videos/`.
-    - **Note:** For Deep RL agents, these videos include real-time visualizations of neural network layer activations.
-- If using Tabular Q-Learning, generates Q-table visualizations.
-- **Activation Data**: Saves neural activations as HDF5 files (`activations_*.h5`) in the `data/` directory for further analysis (Hierarchical Data: Input, Layers).
+- Generates `.mp4` videos with real-time neural network activation visualizations.
+- Saves activation data as HDF5 files for further analysis.
+- Optionally uploads videos to WandB.
 
-### 3. Simple Debugging Session
-Run the console-based simulation to see the agent move in the GridWorld with random behaviors.
+### 3. Ablation Study Experiments
+Run all algorithms in parallel with a specific ablation configuration:
 
 ```bash
-python main.py
+python run_all_experiments.py --tag ablation_01 --config configs/ablation/01_goal_only.yaml --episodes 10000
 ```
 
-### 4. Reproducing the Benchmark Demo
-You can automatically regenerate the training, evaluation, and visual assets (including the README GIF) using the provided script:
+**Available Ablation Levels (configs/ablation/):**
+| Level | File | Focus |
+|-------|------|-------|
+| 01 | `01_goal_only.yaml` | Baseline pathfinding, no dynamics |
+| 02 | `02_danger_only.yaml` | Static danger zone, health system |
+| 03 | `03_dynamic_fixed.yaml` | Dynamic food↔danger transitions |
+| 04 | `04_nociception.yaml` | +Pain sensor (nociceptor) |
+| 05 | `05_olfactory.yaml` | +Chemical gradient sensing |
+| 06 | `06_proprioception.yaml` | +Motor feedback |
+| 07 | `07_collision.yaml` | +Directional collision detection |
+| 08 | `08_homeostatic.yaml` | +Drive reduction reward |
+| 09 | `09_location.yaml` | +Spatial awareness (full model) |
+
+### 4. Verify Ablation Configurations
+Verify that all ablation configs are correctly set up:
 
 ```bash
-./generate_demo.sh
+python verify_ablation_levels.py
 ```
 
 ---
@@ -128,15 +142,29 @@ You can automatically regenerate the training, evaluation, and visual assets (in
 
 ### `GridWorld`
 The core environment (`src/environment/grid_world.py`) supports:
-- **Resource Relocation**: Food can periodically change location during an episode (`relocate_resource: true`).
-- **Random Initialization**: Agents and resources (if enabled) start at random positions on reset.
-- **Hazards**: Configurable danger zones (`danger_prob`, `danger_duration`) that affect health.
+- **Dynamic Resources**: Food can transition to Danger (and vice versa) with probabilistic gating.
+- **Resource Relocation**: Food periodically changes location during episodes.
+- **Configurable Actions**: Eat and Rest actions can be enabled/disabled.
 
 ### `InteroceptiveBody`
 Simulates the agent's physiological needs (`src/environment/body.py`):
-- **Satiation**: Hunger mechanics constrained by `max_satiation`.
-- **Health**: Physical health that degrades in danger zones and recovers over time.
-- **Homeostatic Reward**: Rewards are generated based on drive reduction (maintaining variables near setpoints) rather than simple external goals.
+- **Satiation**: Hunger mechanics with metabolism and overeating death.
+- **Health**: Physical health that degrades in danger zones.
+- **Homeostatic Reward**: Drive reduction towards setpoints.
+
+### `SensorySystem`
+Biologically-inspired sensory inputs (`src/environment/sensor.py`):
+- **Olfactory**: Gradient-based chemical detection
+- **Nociception**: Pain sensor for danger zones
+- **Collision**: Directional ray-based wall detection
+- **Location**: Centered spatial coordinates
+- **Proprioception**: Previous action as motor feedback
+
+---
+
+## 📖 Documentation
+
+For detailed system documentation, see [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md).
 
 ---
 

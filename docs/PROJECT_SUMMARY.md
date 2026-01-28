@@ -13,7 +13,7 @@
 ### Key Research Concepts
 - **Interoception**: Internal body-state awareness (satiation, health)
 - **Homeostatic RL**: Reward signals based on drive reduction (maintaining physiological setpoints)
-- **Sensory Integration**: Gradient-based olfactory sensors and nociceptors
+- **Sensory Integration**: Gradient-based olfactory sensors, nociceptors, and collision detection
 
 ---
 
@@ -22,11 +22,12 @@
 ```mermaid
 graph TB
     subgraph "Entry Points"
-        A[train.py<br/>~970 lines]
-        B[evaluation.py<br/>~553 lines]
+        A[train.py<br/>~1172 lines]
+        B[evaluation.py<br/>~599 lines]
         C[main.py<br/>Debug Sandbox]
         D[run_all_experiments.py]
         E[hyperparameter_search.py]
+        EA[verify_ablation_levels.py]
     end
     
     subgraph "Environment Layer"
@@ -50,13 +51,16 @@ graph TB
         Q[LRPMonitor]
         R[WandB Utils]
         S[Config System]
+        T[Evaluation Core]
     end
     
     A --> F & G & H
     A --> I & J & K & L & M & N
-    B --> O & P & Q & R
+    B --> T
+    T --> O & P & Q & R
     D --> A
     E --> A
+    EA --> F & H & S
 ```
 
 ---
@@ -65,40 +69,62 @@ graph TB
 
 | Path | Lines | Description |
 |------|-------|-------------|
-| [train.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/train.py) | ~1152 | Main training script with full RL loop |
-| [evaluation.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/evaluation.py) | ~585 | Evaluation and video generation |
-| [main.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/main.py) | ~374 | Debug sandbox with random agent |
-| [run_all_experiments.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/run_all_experiments.py) | ~162 | Parallel training launcher |
-| [hyperparameter_search.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/hyperparameter_search.py) | ~300 | Grid search automation |
+| [train.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/train.py) | 1172 | Main training script with full RL loop |
+| [evaluation.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/evaluation.py) | 599 | Evaluation and video generation entry point |
+| [main.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/main.py) | 390 | Debug sandbox with random agent |
+| [run_all_experiments.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/run_all_experiments.py) | 164 | Parallel training launcher |
+| [hyperparameter_search.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/hyperparameter_search.py) | 300 | Grid search automation |
+| [verify_ablation_levels.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/verify_ablation_levels.py) | 114 | Ablation configuration validator |
 
 ### Source Directory (`src/`)
 
 ```
 src/
 ├── environment/
-│   ├── __init__.py
-│   ├── grid_world.py      # GridWorld class (~550 lines)
-│   ├── body.py            # InteroceptiveBody class (~166 lines)
-│   └── sensor.py          # SensorySystem with 5 sensor types (~412 lines)
+│   ├── grid_world.py      # GridWorld class (598 lines)
+│   ├── body.py            # InteroceptiveBody class (166 lines)
+│   └── sensor.py          # SensorySystem with 5 sensor types (462 lines)
 │
 ├── models/
-│   ├── __init__.py
-│   ├── dqn.py             # DQNAgent, DQN network, ReplayBuffer (~188 lines)
-│   ├── drqn.py            # DRQNAgent with LSTM (~321 lines)
-│   ├── ppo.py             # PPOAgent, ActorCritic (~265 lines)
-│   ├── recurrent_ppo.py   # RecurrentPPOAgent with LSTM (~346 lines)
-│   ├── dreamer_v3.py      # DreamerV3Agent, RSSM world model (~876 lines)
-│   └── q_learning.py      # Tabular QLearningAgent (~148 lines)
+│   ├── dqn.py             # DQNAgent, DQN network (188 lines)
+│   ├── drqn.py            # DRQNAgent with LSTM (321 lines)
+│   ├── ppo.py             # PPOAgent, ActorCritic (265 lines)
+│   ├── recurrent_ppo.py   # RecurrentPPOAgent with LSTM (346 lines)
+│   ├── dreamer_v3.py      # DreamerV3Agent, RSSM world model (876 lines)
+│   └── q_learning.py      # Tabular QLearningAgent (148 lines)
 │
 └── utils/
-    ├── activation_monitor.py  # Hook-based activation capture (~134 lines)
-    ├── config.py              # Config class with strict validation (~82 lines)
-    ├── evaluation_core.py     # Core evaluation logic (~429 lines)
-    ├── lrp_monitor.py         # Layerwise Relevance Propagation (~78 lines)
-    ├── state_utils.py         # State preprocessing, frame stacking (~103 lines)
-    ├── visualization.py       # Video, Q-table, activation viz (~634 lines)
-    └── wandb_utils.py         # WandB login, video upload (~168 lines)
+    ├── activation_monitor.py  # Hook-based activation capture (134 lines)
+    ├── config.py              # Config class with strict validation (82 lines)
+    ├── evaluation_core.py     # Core evaluation logic (429 lines)
+    ├── lrp_monitor.py         # Layerwise Relevance Propagation (78 lines)
+    ├── state_utils.py         # State preprocessing, frame stacking (103 lines)
+    ├── visualization.py       # Video, Q-table, activation viz (634 lines)
+    └── wandb_utils.py         # WandB login, video upload (168 lines)
 ```
+
+---
+
+## 🧪 Ablation Study Framework
+
+The project includes a systematic ablation study framework with 9 pre-defined levels, allowing researchers to isolate the impact of different system components.
+
+### Ablation Levels (`configs/ablation/`)
+
+| Level | Config | Description | Key Features Enabled |
+|-------|--------|-------------|----------------------|
+| 01 | `01_goal_only.yaml` | Baseline pathfinding | Fixed food, No danger, No sensors |
+| 02 | `02_danger_only.yaml` | Static Hazard | +Health system, Static danger zone |
+| 03 | `03_dynamic_fixed.yaml` | Environmental Dynamics | +Food↔Danger probabilistic transitions |
+| 04 | `04_nociception.yaml` | Pain Perception | +Nociceptor sensor (distance=0) |
+| 05 | `05_olfactory.yaml` | Nutrient Gradient | +Olfactory sensor (gradient-based) |
+| 06 | `0proprioception` | Motor Feedback | +Proprioceptive sensor (prev action) |
+| 07 | `07_collision.yaml` | Spatial Obstacles | +Collision sensor (directional rays) |
+| 08 | `08_homeostatic.yaml` | Internal Motivation | +Homeostatic reward (drive reduction) |
+| 09 | `09_location.yaml` | Full Interoceptive Agent | +Location sensor (spatial coordinates) |
+
+### Verification Script
+`verify_ablation_levels.py` ensures that all ablation configurations correctly set the environment and sensor flags as intended for that research level.
 
 ---
 
@@ -126,14 +152,12 @@ GridWorld(
     vector_size,                      # Property vector dimension
     food_property,                    # Food chemical signature [N-dim]
     danger_property,                  # Danger chemical signature [N-dim]
-    eat_action_enabled=True,          # Require explicit Eat action to consume food
-    rest_action_enabled=True          # Require explicit Rest action to recover health
+    eat_action_enabled=True,          # Require explicit Eat action 
+    rest_action_enabled=True          # Require explicit Rest action 
 )
 ```
 
 #### Action Space (Dynamic)
-The action space varies based on configuration:
-
 | Configuration | Actions | Indices |
 |---------------|---------|----------|
 | Both enabled | 6 | 0-3: Move, 4: Rest, 5: Eat |
@@ -141,881 +165,54 @@ The action space varies based on configuration:
 | Rest only | 5 | 0-3: Move, 4: Rest |
 | Neither | 4 | 0-3: Move only |
 
-#### Key Methods
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `reset()` | `(row, col)` | Resets agent to random position, returns initial state |
-| `step(action)` | `(next_state, reward, done, info)` | Executes action (see Action Space above) |
-| `action_spec()` | `dict` | Returns `{'type': 'discrete', 'n': num_actions}` |
-| `get_active_resources()` | `List[Resource]` | Returns current resources for sensory system |
-| `render_rgb_array(...)` | `np.ndarray` | Generates visualization frame with UI elements |
-
-#### Resource State Machine
-```mermaid
-stateDiagram-v2
-    [*] --> Food: Initial
-    Food --> Food: prob < P_danger OR duration < min_danger
-    Food --> Danger: prob >= P_danger AND duration >= min_danger
-    Danger --> Danger: prob < P_food OR duration < min_food
-    Danger --> Food: prob >= P_food AND duration >= min_food
-```
-
-#### Info Dictionary Structure
-```python
-info = {
-    'ate_food': bool,     # True if agent ate food (explicit Eat action OR auto-eat if disabled)
-    'damage': int,        # Health damage taken (0 if not in danger)
-    'rested': bool        # True if agent rested (explicit Rest action OR auto-rest if disabled)
-}
-```
-
-> **Note**: When `eat_action_enabled=False`, `ate_food=True` automatically when on food.
-> When `rest_action_enabled=False`, `rested=True` every step (auto-recovery).
-
----
-
-### InteroceptiveBody ([src/environment/body.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/environment/body.py))
-
-Simulates the agent's internal physiological state with metabolism and homeostatic regulation.
-
-#### Constructor Parameters
-```python
-InteroceptiveBody(
-    max_satiation,              # Upper bound for satiation
-    start_satiation,            # Initial satiation value
-    overeating_death,           # If True, satiation >= max kills agent
-    random_start_satiation,     # Randomize start between max/2 and max
-    food_satiation_gain,        # Satiation increase from eating (+10 default)
-    use_homeostatic_reward,     # Use drive reduction vs survival reward
-    satiation_setpoint,         # Target satiation for homeostasis
-    death_penalty,              # Negative reward on death
-    with_health,                # Enable health/pain simulation
-    max_health,                 # Maximum health value
-    start_health,               # Initial health
-    health_recovery,            # Health gained per rest step
-    start_health_random         # Randomize starting health
-)
-```
-
-#### State Update Flow (per step)
-```python
-# 1. Metabolism
-satiation -= 1
-
-# 2. Food Consumption
-if ate_food:
-    satiation += food_satiation_gain
-    satiation = min(satiation, max_satiation + (1 if overeating_death else 0))
-
-# 3. Health Dynamics
-if damage > 0:
-    health -= damage
-elif rested:  # Action 4 (Stay)
-    health = min(health + health_recovery, max_health)
-
-# 4. Death Checks
-if satiation <= 0: death_type = "starvation"
-if overeating_death and satiation >= max_satiation: death_type = "overeating"
-if health <= 0: death_type = "injury"
-```
-
-#### Reward Calculation
-```python
-if use_homeostatic_reward:
-    # Euclidean distance to ideal state
-    target = [satiation_setpoint, max_health]  # if health enabled
-    prev_drive = np.linalg.norm(prev_state - target)
-    curr_drive = np.linalg.norm(curr_state - target)
-    reward = prev_drive - curr_drive  # Positive if moving toward setpoint
-    if done: reward -= death_penalty
-else:
-    # Survival reward
-    reward = 1 if alive else -death_penalty
-```
-
----
-
-### SensorySystem ([src/environment/sensor.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/environment/sensor.py))
-
-Biologically-inspired sensory inputs using gradient-based chemical detection, contact sensors, spatial awareness, and proprioception.
-
-#### Components
-
-| Component | Class | Output | Description |
-|-----------|-------|--------|-------------|
-| **ResourceSensor** | Olfactory | `np.array[vector_size]` | Weighted sum of resource properties by distance |
-| **Nociceptor** | Pain | `np.array[1]` | Binary contact sensor (1.0 if in danger zone) |
-| **CollisionSensor** | Touch | `np.array[N_sectors]` | Directional ray-based wall detection (N = 8 * range) |
-| **LocationSensor** | Spatial Awareness | `np.array[2]` | Centered coordinates [-1, 1] for row and column |
-| **ProprioceptiveSensor** | Proprioception | `np.array[5]` | One-hot encoding of previous action (motor feedback) |
-
-#### ResourceSensor Formula
-```python
-observation = np.zeros(vector_size)
-for resource in resources:
-    dist = euclidean_distance(agent_pos, resource.pos)
-    if dist <= radius:
-        if dist < 0.001:  # On top of resource
-            decay = 2.0
-        else:
-            decay = 1.0 / (dist ** decay_power)
-        observation += resource.property * decay
-return observation
-```
-
-#### CollisionSensor Output
-```python
-# Output: [sector_0, sector_1, ..., sector_N-1]
-# N_sectors = 8 * sensor_range (e.g., range=2 → 16 sectors)
-# Each value: 0.0 (clear) to 1.0 (wall at distance 1)
-# Sector 0 = Up, proceeds clockwise
-# Value = 1.0 - (distance - 1) / range if wall detected, else 0.0
-```
-
-#### LocationSensor Output
-```python
-# Output: [norm_row, norm_col]
-# Centered coordinates in range [-1, 1]
-# norm_row = 2.0 * (row / (height - 1)) - 1.0
-# norm_col = 2.0 * (col / (width - 1)) - 1.0
-```
-
-#### ProprioceptiveSensor Output
-```python
-# Output: [action_0, action_1, action_2, action_3, action_4]
-# One-hot encoding of previous action
-# [1,0,0,0,0] = Up, [0,1,0,0,0] = Right, [0,0,1,0,0] = Down,
-# [0,0,0,1,0] = Left, [0,0,0,0,1] = Stay
-# Default to Stay (action 4) at episode start
-```
-
-#### SensorySystem.sense() Return Structure
-```python
-{
-    'olfactory': np.array([...]),       # vector_size floats
-    'nociception': np.array([0.0]),     # or [1.0] if in danger (if enabled)
-    'collision': np.array([...]),       # N_sectors floats (if enabled)
-    'loc': np.array([...]),             # 2 floats: centered coordinates (if enabled)
-    'proprioception': np.array([...])   # 5 floats: one-hot previous action (if enabled)
-}
-```
-
 ---
 
 ## 🤖 Agent Implementations - Detailed
 
-### Common Agent Interface
-
-All agents implement:
-```python
-class Agent:
-    def __init__(self, state_dim, action_dim, **hyperparams)
-    def choose_action(self, state, eval_mode=False) -> int
-    def store_transition(self, state, action, reward, next_state, done)
-    def update(self) -> dict  # Returns loss metrics
-    def save(self, path)
-    def load(self, path, weights_only=False)
-    
-    # Properties
-    epsilon: float  # Exploration rate (DQN/DRQN/Q-Learning)
-```
-
 ### DQNAgent ([src/models/dqn.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/models/dqn.py))
-
-Standard Deep Q-Network with experience replay and target network.
-
-#### Architecture
-```
-Input → [Linear(in, fc[0])] → ReLU → [Linear(fc[0], fc[1])] → ReLU → ... → Linear(fc[-1], actions)
-```
-
-#### Key Configuration
-```yaml
-agent:
-  algorithm: "DQN"
-  learning_rate: 0.001
-  gamma: 0.99
-  buffer_size: 10000
-  batch_size: 128
-  target_update_freq: 5000
-  epsilon_start: 1.0
-  epsilon_decay: 0.999
-  epsilon_end: 0.05
-  frame_stack: 4
-  fc_layers: [128, 128]
-```
-
-#### Update Logic
-- Epsilon-greedy exploration with decay after each update
-- Target network soft update every `target_update_freq` steps
-- MSE loss between Q(s,a) and r + γ·max(Q_target(s',a'))
-
----
+Standard Deep Q-Network with experience replay and target networks.
 
 ### DRQNAgent ([src/models/drqn.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/models/drqn.py))
-
-Deep Recurrent Q-Network with LSTM for partial observability.
-
-#### Architecture
-```
-Input → FC Preprocessing → LSTM(hidden_size) → Linear(hidden, actions)
-```
-
-#### Key Configuration
-```yaml
-agent:
-  algorithm: "DRQN"
-  trace_length: 8        # Sequence length for training
-  burn_in_length: 4      # Initial steps to warm up hidden state
-  fc_layers: [128]       # Pre-LSTM layers
-  recurrent_layers: [128]
-```
-
-#### Special Methods
-- `reset_hidden()`: Must be called at episode start to reset LSTM state
-- Hidden state maintained across steps within episode
-
----
+Deep Recurrent Q-Network (LSTM) for handling partial observability in complex sensor environments.
 
 ### PPOAgent ([src/models/ppo.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/models/ppo.py))
-
-Proximal Policy Optimization with separate actor-critic networks.
-
-#### Architecture
-```
-Actor:  Input → FC → Tanh → FC → Tanh → Softmax(actions)
-Critic: Input → FC → Tanh → FC → Tanh → Linear(1)
-```
-
-#### Key Configuration
-```yaml
-agent:
-  algorithm: "PPO"
-  lr_actor: 0.0003
-  lr_critic: 0.001
-  gamma: 0.99
-  K_epochs: 4           # PPO update epochs per batch
-  eps_clip: 0.2         # Clipping parameter
-  update_timestep: 1000 # Steps before update
-  entropy_coef: 0.01
-  frame_stack: 4
-  actor_fc_layers: [64, 64]
-  critic_fc_layers: [64, 64]
-```
-
-#### Update Logic
-- Collects trajectories until `update_timestep` reached
-- Computes GAE advantages
-- Multiple epochs of clipped surrogate objective updates
-
----
+Proximal Policy Optimization with separate actor-critic MLP networks.
 
 ### RecurrentPPOAgent ([src/models/recurrent_ppo.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/models/recurrent_ppo.py))
-
-PPO with LSTM backbone for temporal dependencies.
-
-#### Architecture
-```
-Input → FC → LSTM → Actor_Head → Softmax(actions)
-                  → Critic_Head → Linear(1)
-```
-
-#### Special Methods
-- `reset_hidden()`: Reset LSTM state at episode start
-- Stores hidden states in rollout buffer for proper credit assignment
-
----
+PPO with an LSTM backbone, effective for high-temporal dependency scenarios.
 
 ### DreamerV3Agent ([src/models/dreamer_v3.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/models/dreamer_v3.py))
-
-Model-based RL with RSSM world model (Recurrent State Space Model).
-
-#### Components
-```
-Encoder:     Observation → Embedding
-RSSM:        World model (deterministic + stochastic state)
-Decoder:     Latent state → Observation reconstruction  
-RewardHead:  Latent state → Reward prediction
-ContinueHead: Latent state → Continue probability
-Actor:       Latent state → Action distribution
-Critic:      Latent state → Value estimate
-```
-
-#### Key Configuration
-```yaml
-agent:
-  algorithm: "DreamerV3"
-  batch_size: 16
-  batch_length: 64       # Imagination horizon
-  train_steps: 1
-  model_lr: 1e-4
-  actor_lr: 8e-5
-  value_lr: 8e-5
-  encoder_dim: 128
-  rssm_deter_dim: 512    # Deterministic state size
-  rssm_stoch_dim: 32     # Stochastic state size  
-  rssm_classes: 32       # Discrete latent classes
-```
-
----
-
-### QLearningAgent ([src/models/q_learning.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/models/q_learning.py))
-
-Classic tabular Q-learning for fully observable discrete states.
-
-#### Q-Table Shape
-```python
-# With health: (height, width, max_satiation+2, max_health+2, 5)
-# Without health: (height, width, max_satiation+2, 5)
-# No satiation: (height, width, 5)
-```
-
----
-
-## 🔄 Training Pipeline - Detailed
-
-### State Preprocessing Pipeline
-
-```python
-def preprocess_state(state_dict):
-    """
-    Converts dictionary state to flat normalized array for neural networks.
-    """
-    flat_list = []
-    
-    if using_sensory:
-        # Olfactory: Already normalized floats
-        flat_list.extend(state['olfactory'])  # [vector_size]
-        # Nociception
-        flat_list.extend(state['nociception'])  # [1]
-        # Collision (if enabled)
-        if 'collision' in state:
-            flat_list.extend(state['collision'])  # [5]
-    else:
-        # Conventional: Normalize coordinates to [0,1]
-        flat_list.append(state['loc'][0] / env.height)
-        flat_list.append(state['loc'][1] / env.width)
-    
-    if with_satiation:
-        flat_list.append(state['satiation'] / body.max_satiation)
-    if with_health:
-        flat_list.append(state['health'] / body.max_health)
-        
-    return np.array(flat_list, dtype=np.float32)
-```
-
-### Input Dimension Calculation
-```python
-input_dim = 0
-if using_sensory:
-    input_dim += vector_size      # Olfactory
-    input_dim += 1                # Nociceptor
-    if collision_sensor_enabled:
-        input_dim += 5            # Collision (walls + resource)
-else:
-    input_dim += 2                # (row, col)
-    
-if with_satiation:
-    input_dim += 1
-if with_health:
-    input_dim += 1
-
-if location_sensor_enabled:
-    input_dim += 2                # Location (centered coordinates)
-
-if proprioception_enabled:
-    input_dim += 5                # Proprioception (one-hot: Up/Right/Down/Left/Stay)
-
-# Example: Olfactory(5) + Nociceptor(1) + Collision(16) + Satiation(1) + Health(1) + Location(2) + Proprioception(5) = 31
-# Collision sectors = 8 * collision_sensor_range (e.g., range=2 → 16 sectors)
-```
-
-### LocationSensor Feature
-
-**Purpose**: Provides spatial awareness even when using gradient-based sensory observations.
-
-**Encoding**: Centered coordinates in range [-1, 1]
-- Dimension: 2 (row and column coordinates)
-- Normalization: `norm = 2.0 * (pos / (max - 1)) - 1.0`
-- Center of grid = (0, 0), corners = (±1, ±1)
-- Example: Agent at (0, 3) in 4×4 grid → `[-1.0, 1.0]`
-
-**Configuration**:
-```yaml
-sensory:
-  location_sensor: true  # Enable feature (default: true)
-```
-
-**Research Motivation**:
-- **Spatial Context**: Assists navigation even with rich sensory input
-- **Multi-Modal Integration**: Combines allocentric (location) with egocentric (sensors) awareness
-- **Convergence Speed**: Can accelerate learning in spatial tasks
-
-### Proprioceptive Sensing (Motor Feedback)
-
-**Purpose**: Provides awareness of recent motor actions, similar to biological proprioception.
-
-**Encoding**: One-hot vector representing the previous action
-- Dimension: 5 (one per action: Up=0, Right=1, Down=2, Left=3, Stay=4)
-- Initial state: Action 4 (Stay) used at episode start
-- Example: `[0, 0, 1, 0, 0]` indicates previous action was "Down"
-
-**Configuration**:
-```yaml
-sensory:
-  proprioception_enabled: true  # Enable feature (default: true)
-```
-
-**Research Motivation**:
-- **Partial Observability**: Disambiguates similar sensory states based on recent action
-- **Temporal Credit**: Improves credit assignment in sparse reward environments
-- **Interoceptive Context**: Movement affects satiation/health, making action history relevant
-- **Action-Conditional Modeling**: Enables learning how actions influence state transitions
-- **Biological Realism**: Models real proprioceptive feedback in animals
-
-
-### Training Loop Structure
-```python
-for episode in range(episodes):
-    env.reset()
-    body.reset()
-    if hasattr(agent, 'reset_hidden'):
-        agent.reset_hidden()
-    
-    state = get_initial_state()
-    flat_state = preprocess_state(state)
-    
-    while not done:
-        action = agent.choose_action(flat_state)
-        
-        next_env_state, _, env_done, info = env.step(action)
-        body_state, reward, body_done = body.step(info)
-        
-        next_state = construct_state(next_env_state, body_state)
-        flat_next = preprocess_state(next_state)
-        
-        agent.store_transition(flat_state, action, reward, flat_next, done)
-        agent.update()  # Returns loss dict for logging
-        
-        flat_state = flat_next
-        done = env_done or body_done
-    
-    # Log to WandB, save checkpoints at milestones
-```
-
-### Checkpointing Logic
-```python
-milestones = {int(episodes * p): int(p * 100) 
-              for p in [0.01, 0.1, 0.25, 0.5, 0.75, 1.0]}
-
-# Saves at 1%, 10%, 25%, 50%, 75%, 100% completion
-# Files: {agent}_model_{pct}.pth
-```
-
----
-
-## ⚙️ Configuration System - Detailed
-
-### Config Class ([src/utils/config.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/utils/config.py))
-
-```python
-class Config:
-    def get(key, default=None)          # Nested key access (e.g., 'body.max_satiation')
-    def get_mandatory(key, type_converter=None)  # Raises error if missing
-    def set(key, value)                 # Set nested key
-    def merge(other_config)             # Deep merge configs
-    def to_dict()                       # Export as dictionary
-```
-
-### Configuration Hierarchy
-```
-1. environment.yaml (base)      # Environment, body, sensory defaults
-2. agent_config.yaml (required) # Algorithm-specific params
-3. wandb.yaml (optional)        # WandB settings
-4. CLI arguments                # Highest priority overrides
-```
-
-### YAML File Locations
-```
-configs/
-├── environment/
-│   └── environment.yaml    # Grid, body, sensory configs
-├── train/
-│   └── default.yaml        # Training episodes, seed, device
-├── models/
-│   ├── dqn.yaml
-│   ├── drqn.yaml
-│   ├── ppo.yaml
-│   ├── recurrent_ppo.yaml
-│   ├── dreamer_v3.yaml
-│   └── q_learning.yaml
-├── evaluation/
-│   └── evaluation.yaml
-├── visualization/
-│   └── visualization.yaml
-└── wandb.yaml              # Optional WandB project settings
-```
-
-### Critical Configuration Keys
-
-#### Environment
-| Key | Type | Required | Description |
-|-----|------|----------|-------------|
-| `environment.height` | int | Yes | Grid height |
-| `environment.width` | int | Yes | Grid width |
-| `environment.max_steps` | int | Yes | Episode step limit |
-| `environment.prob_switch_to_danger` | float | Yes | Transition probability |
-| `environment.min_danger_duration` | int | Yes | Minimum danger steps |
-| `environment.relocate_resource` | bool | Yes | Enable food relocation |
-| `environment.eat_action_enabled` | bool | Yes | Require explicit Eat action (default: true) |
-| `environment.rest_action_enabled` | bool | Yes | Require explicit Rest action (default: true) |
-
-#### Body
-| Key | Type | Required | Description |
-|-----|------|----------|-------------|
-| `body.with_satiation` | bool | Yes | Enable hunger mechanics |
-| `body.max_satiation` | int | Yes* | Maximum satiation |
-| `body.with_health` | bool | Yes | Enable health/pain |
-| `body.use_homeostatic_reward` | bool | Yes* | Drive reduction reward |
-
-#### Sensory System
-- **CollisionSensor**: Directional ray-casting sensor (RF-style). Detects walls/obstacles in N sectors around the agent. Output is a 1D vector of distance-based intensities.
-- **SensorySystem**: Integrates all sensors and produces the final observation vector.
-
-#### CollisionSensor (New)
-```python
-CollisionSensor(
-    sensor_range     # Maximum distance of rays in grid cells
-)
-# Output: [s0, s1, ..., sN-1]
-# Num Sectors = 8 * range (Auto-calculated)
-# Values: 0.0 (Clear) -> 1.0 (Wall immediately adjacent)
-# Value = 1.0 - (distance - 1) / range
-```
-
-#### RL API (New)
-Both `GridWorld` and `SensorySystem` expose standard RL specification methods:
-- `observation_spec()`: Returns shape/dtype of observations.
-  - Sensory returns a dict: `{'olfactory': ..., 'nociception': ..., 'collision': ...}`
-- `action_spec()`: Returns action space (Discrete).
-
-#### Configuration (`sensory` section)
-```yaml
-sensory:
-  using_sensory: true
-  sensor_radius: 2          # Resource sensor radius
-  vector_size: 5            # Resource sensor output size
-  collision_sensor_enabled: true
-  collision_sensor_range: 2 # Ray length (Sectors = 8 * Range)
-```
-
-#### Sensory
-| Key | Type | Required | Description |
-|-----|------|----------|-------------|
-| `sensory.using_sensory` | bool | Yes | Enable vector observations |
-| `sensory.vector_size` | int | Yes* | Olfactory dimension |
-| `sensory.sensor_radius` | int | Yes* | Detection range |
-| `sensory.nociceptor_radius` | int | Yes* | Pain sensor range (0=contact) |
-| `sensory.nociception_enabled` | bool | No | Enable nociceptor sensor (default: true) |
-| `sensory.nociception_size` | int | No | Nociception output dimension (default: 1) |
-| `sensory.olfactory_enabled` | bool | No | Enable gradient-based chemical sensor (default: true) |
-| `sensory.collision_sensor_enabled` | bool | No | Enable directional collision detection (default: true) |
-| `sensory.collision_sensor_range` | int | Yes* | Max range of collision sensor rays (Sectors = 8 * Range) |
-| `sensory.location_sensor` | bool | No | Enable centered location coordinates (default: true) |
-| `sensory.location_size` | int | No | Location output dimension (default: 2) |
-| `sensory.proprioception_enabled` | bool | No | Enable previous action as one-hot input (default: true) |
-| `sensory.food_property` | list | Yes* | Food chemical signature |
-| `sensory.danger_property` | list | Yes* | Danger chemical signature |
-
-> **Note**: Proprioception dimension is automatically set to match `num_actions` from the environment.
-
----
-
-## 🔧 Utility Modules - Detailed
-
-### Visualization ([src/utils/visualization.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/utils/visualization.py))
-
-#### Key Functions
-```python
-def save_video(frames, output_path, fps=5, quiet=False)
-def plot_q_table(q_table, save_path, config, food_pos=None)
-def plot_q_table_health(q_table, save_path, config, food_pos=None)  # 5D table
-def plot_learning_curves(history_csv_path, output_dir, config, max_steps, milestones)
-def visualize_activations(activations, target_width, config, input_structure, attributions)
-def combine_frame_and_activations(game_frame, act_frame)
-```
-
-### ActivationMonitor ([src/utils/activation_monitor.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/utils/activation_monitor.py))
-
-```python
-class ActivationMonitor:
-    def __init__(model, tracked_layers=[nn.Linear, nn.Conv2d, nn.LSTM, nn.GRU])
-    def get_current_activations() -> dict  # {layer_name: np.array}
-    def record_step()                       # Save to history
-    def save_history(filepath)              # Export to HDF5
-    def close()                             # Remove hooks
-```
-
-### LRPMonitor ([src/utils/lrp_monitor.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/utils/lrp_monitor.py))
-
-```python
-class LRPMonitor:
-    def __init__(model, tracked_layers=[nn.Linear, nn.Conv2d])
-    def compute_relevance(input_tensor, target_action) -> dict
-        # Returns {layer_name: relevance_scores}
-```
-
-### WandB Utils ([src/utils/wandb_utils.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/utils/wandb_utils.py))
-
-```python
-def wandb_login(quiet=False)
-    # Uses .wandb_api_key file if present
-
-def upload_video(video_path, run_path=None, step=None, episode=None, 
-                 caption="Evaluation Video", fps=4, quiet=False)
-```
-
-### State Utils ([src/utils/state_utils.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/utils/state_utils.py))
-
-State preprocessing and temporal frame stacking utilities.
-
-```python
-class FrameStacker:
-    """Stacks K last frames for temporal context in MLPs."""
-    def __init__(input_dim, stack_size)
-    def reset(initial_frame) -> stacked_state
-    def step(frame) -> stacked_state
-    
-def preprocess_state(state, env_height, env_width, max_satiation, max_health):
-    """Converts dict/tuple state to flat normalized array.
-    
-    Handles:
-    - Sensory dict observations (olfactory, nociception, collision, loc, proprioception)
-    - Conventional tuple observations (row, col)
-    - Body states (satiation, health) with normalization
-    - Automatic detection of pre-normalized location coordinates
-    """
-```
-
-### Evaluation Core ([src/utils/evaluation_core.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/utils/evaluation_core.py))
-
-Core evaluation logic extracted from `evaluation.py` for reusability.
-
-```python
-def evaluate_agent(agent, env, body, sensory_system, config, 
-                   num_episodes=1, device="cpu", results_dir=None, 
-                   checkpoint_pct=None, wandb_run_path=None, quiet=False):
-    """Evaluates agent and generates videos with activation overlays.
-    
-    Features:
-    - Multi-episode evaluation with statistics
-    - Activation monitoring and LRP attribution
-    - Video generation with sensor/activation visualization
-    - Automatic WandB upload if configured
-    - Frame stacking support for temporal agents
-    """
-```
+State-of-the-art Model-Based RL using the RSSM (Recurrent State Space Model).
 
 ---
 
 ## 📦 Dependencies
 
-From [pyproject.toml](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/pyproject.toml):
-
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `torch` | ≥2.9.1 | Deep learning framework |
-| `numpy` | ≥2.4.1 | Numerical computing |
-| `matplotlib` | ≥3.10.8 | Visualization |
-| `imageio` | ≥2.37.2 | Video encoding |
-| `imageio-ffmpeg` | ≥0.6.0 | FFmpeg backend |
-| `h5py` | ≥3.10.0 | Activation data storage |
-| `captum` | ≥0.7.0 | LRP attribution |
-| `wandb` | ≥0.16.0 | Experiment tracking |
-| `pyyaml` | ≥6.0.3 | Config parsing |
-| `tqdm` | ≥4.67.1 | Progress bars |
-| `pandas` | ≥2.3.3 | Data manipulation |
-
-**Python Requirement**: ≥3.11.14
+| `torch` | ≥2.5.1 | Deep learning framework |
+| `numpy` | ≥2.1.2 | Numerical computing |
+| `matplotlib` | ≥3.9.2 | Visualization |
+| `wandb` | ≥0.18.5 | Experiment tracking |
+| `pyyaml` | ≥6.0.2 | Config parsing |
 
 ---
 
 ## 🚀 Usage Examples
 
-### Training Commands
-
+### Running an Ablation Experiment
 ```bash
-# DQN Training (10000 episodes)
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
     --agent_config configs/models/dqn.yaml \
-    --episodes 10000 \
-    --tag my_experiment \
-    --wandb-project grid_world_pain
-
-# PPO with custom device
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-    --agent_config configs/models/ppo.yaml \
+    --config configs/ablation/05_olfactory.yaml \
     --episodes 5000 \
-    --device cuda:1 \
-    --tag ppo_gpu1_run
-
-# DreamerV3 (model-based)
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-    --agent_config configs/models/dreamer_v3.yaml \
-    --episodes 20000 \
-    --debug
+    --tag ablation_run_5
 ```
 
-### Evaluation Commands
-
-```bash
-# Evaluate latest checkpoint
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python evaluation.py \
-    --results_dir results/DQN/20260127-120000_my_run \
-    --episodes 5
-
-# Evaluate specific checkpoint and upload to WandB
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python evaluation.py \
-    --results_dir results/PPO/run_name \
-    --checkpoint 50 \
-    --wandb-run-path entity/project/run_id
-
-# Evaluate all checkpoints
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python evaluation.py \
-    --results_dir results/DQN/run_name \
-    --all
-```
-
-### Parallel Experiments
-
+### Parallel Batch Execution
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python run_all_experiments.py \
-    --tag baseline_v1 \
+    --tag final_baseline \
+    --config configs/ablation/09_location.yaml \
     --episodes 10000
 ```
-
----
-
-## 📂 Output Structure
-
-```
-results/{Algorithm}/{timestamp}_{tag}/
-├── models/
-│   ├── config.yaml           # Saved configuration
-│   ├── {agent}_model_1.pth   # 1% checkpoint
-│   ├── {agent}_model_10.pth  # 10% checkpoint
-│   ├── {agent}_model_25.pth
-│   ├── {agent}_model_50.pth
-│   ├── {agent}_model_75.pth
-│   ├── {agent}_model_100.pth # Final (also saved as _final.pth)
-│   └── {agent}_model_final.pth
-├── plots/
-│   └── learning_curves.png
-├── data/
-│   ├── training_history.csv
-│   └── activations_*.h5      # If recorded during evaluation
-└── videos/
-    └── video_*.mp4           # Evaluation recordings
-```
-
----
-
-## ⚠️ Development Guidelines
-
-> [!CAUTION]
-> From [antigravity_instruction.txt](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/antigravity_instruction.txt):
-
-1. **Always use conda environment**:
-   ```bash
-   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python
-   # OR
-   conda run -n grid_world_pain python ...
-   ```
-
-2. **No hardcoded defaults** - Use `config.get_mandatory()` for required values
-
-3. **Update docstrings** when modifying `train.py` or `evaluation.py`
-
-4. **Update this document** when making significant changes
-
-5. **Clean up debugging artifacts** after verification
-
----
-
-## 📈 Default Configuration Values
-
-### Environment (4×4 Grid)
-| Parameter | Value |
-|-----------|-------|
-| Grid Size | 4×4 |
-| Max Steps | 500 |
-| Resource Position | (3, 3) |
-| Danger Switch Prob | 0.1 |
-| Food Switch Prob | 0.5 |
-| Min Danger Duration | 5 |
-| Min Food Duration | 10 |
-| Relocation Steps | 50 |
-
-### Body
-| Parameter | Value |
-|-----------|-------|
-| Max Satiation | 30 |
-| Start Satiation | 30 |
-| Satiation Setpoint | 30 |
-| Food Gain | +10 |
-| Max Health | 20 |
-| Start Health | 20 |
-| Damage Amount | 5 |
-| Health Recovery | 1 |
-| Death Penalty | 100 |
-| Use Homeostatic Reward | true |
-
-### Sensory
-| Parameter | Value |
-|-----------|-------|
-| Using Sensory | true |
-| Sensor Radius | 5 |
-| Vector Size | 5 |
-| Decay Power | 1.0 |
-| Nociception Enabled | true |
-| Nociceptor Radius | 0 |
-| Collision Sensor Enabled | true |
-| Collision Sensor Range | 1 |
-| Location Sensor | true |
-| Proprioception Enabled | true |
-| Food Property | [1,0,0,0,0] |
-| Danger Property | [0,1,0,0,0] |
-
----
-
-## 🔍 Troubleshooting
-
-### Common Issues
-
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| `ValueError: Strict Config: key missing` | Required config not set | Add to YAML or CLI |
-| CUDA out of memory | Model too large | Reduce batch_size, fc_layers, or use CPU |
-| LRP fails for recurrent | Captum limitation | Expected; non-fatal warning |
-| WandB login fails | Missing API key | Add key to `.wandb_api_key` |
-
-### Debug Mode
-```bash
-python train.py --agent_config configs/models/dqn.yaml --debug
-# Enables per-step logging with: Ep:X St:X Act:X R:X L:X Time:Xms
-```
-
----
-
-## 🎯 Summary
-
-**GridWorld Pain** is a mature, well-structured research platform for interoceptive RL with:
-
-✅ **6 RL algorithms** from tabular to world models  
-✅ **Comprehensive visualization** including activation and LRP overlays  
-✅ **Experiment tracking** via WandB  
-✅ **YAML-driven strict configuration**  
-✅ **Continual learning support**  
-✅ **Parallel experiment execution**  
-
-The codebase follows clean separation of concerns with environment, agent, and utility layers, making it extensible for future research directions.
