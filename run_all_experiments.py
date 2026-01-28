@@ -36,10 +36,10 @@ import re
 # Algorithms to run with specific device assignment
 # Format: (Algorithm Name, Config Path, Device)
 ALGORITHMS = [
-    ("DQN", "configs/models/dqn.yaml", "cuda:0"),
-    ("PPO", "configs/models/ppo.yaml", "cuda:0"),
-    ("DRQN", "configs/models/drqn.yaml", "cuda:0"),
-    ("RecurrentPPO", "configs/models/recurrent_ppo.yaml", "cuda:0"),
+    ("DQN", "configs/models/dqn.yaml", "cuda:1"),
+    ("PPO", "configs/models/ppo.yaml", "cuda:1"),
+    ("DRQN", "configs/models/drqn.yaml", "cuda:1"),
+    ("RecurrentPPO", "configs/models/recurrent_ppo.yaml", "cuda:1"),
     # ("DreamerV3", "configs/models/dreamer_v3.yaml", "cuda:0"),
 ]
 
@@ -49,6 +49,7 @@ def main():
     parser = argparse.ArgumentParser(description="Run all Deep RL algorithms in parallel.")
     parser.add_argument("--episodes", type=int, default=10000, help="Number of episodes per agent")
     parser.add_argument("--tag", type=str, required=True, help="Base tag for WandB/Results (e.g. 'experiment_v1')")
+    parser.add_argument("--config", type=str, required=True, help="Config file for the experiment")
     
     args = parser.parse_args()
     
@@ -78,6 +79,7 @@ def main():
             "--tag", full_tag,
             "--device", device,
             "--wandb-group", args.tag,
+            "--config", args.config,
         ]
         
         print(f"[{algo_name}] Launching Training: {' '.join(cmd)}")
