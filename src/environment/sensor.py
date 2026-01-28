@@ -51,9 +51,14 @@ class Nociceptor:
     """
     A contact sensor (range 0) that detects 'Danger' resources at the agent's exact location.
     Behaves as a biological nociceptor: detecting immediate nociception.
+    
+    Args:
+        radius: Detection radius (0 = contact only)
+        output_size: Output dimension (default 1 for binary)
     """
-    def __init__(self, radius):
-        self.radius = radius 
+    def __init__(self, radius, output_size=1):
+        self.radius = radius
+        self.output_size = output_size
         
     def sense(self, agent_pos, resources):
         """
@@ -64,17 +69,20 @@ class Nociceptor:
             resources (list): List of Resource objects
             
         Returns:
-            np.array: Scalar float [1.0] or [0.0]
+            np.array: Float array of shape (output_size,)
         """
         r0, c0 = agent_pos
+        activated = 0.0
         for res in resources:
             if res.name == 'Danger':
                 r1, c1 = res.pos
                 dist = np.sqrt((r1 - r0)**2 + (c1 - c0)**2)
                 if dist <= self.radius:
-                    return np.array([1.0], dtype=np.float32)
-                    
-        return np.array([0.0], dtype=np.float32)
+                    activated = 1.0
+                    break
+        
+        # Return array of output_size, all same value
+        return np.full(self.output_size, activated, dtype=np.float32)
 
 class CollisionSensor:
     """
@@ -161,47 +169,58 @@ class ProprioceptiveSensor:
     Proprioceptive sensor that encodes the previous action as motor feedback.
     Provides awareness of recent movement, similar to biological proprioception.
     
-    Returns one-hot encoding of the last action taken (5 actions).
+    Args:
+        num_actions: Number of possible actions (determines output size)
     """
-    def __init__(self):
-        self.vector_size = 5  # 5 actions: Up, Right, Down, Left, Stay
+    def __init__(self, num_actions=5):
+        self.vector_size = num_actions
+        self.num_actions = num_actions
         
     def sense(self, previous_action):
         """
         Returns one-hot encoding of previous action.
         
         Args:
-            previous_action (int): Action index (0-4), or None for initial state
+            previous_action (int): Action index, or None for initial state
             
         Returns:
-            np.array: One-hot vector [5] representing the previous action
-                     [1,0,0,0,0] = Up, [0,1,0,0,0] = Right, etc.
-                     Default to Stay (action 4) if None
+            np.array: One-hot vector [num_actions] representing the previous action
+                     Default to last action (Rest) if None
         """
         if previous_action is None:
-            previous_action = 4  # Default to Stay for initial state
+            previous_action = self.num_actions - 2 if self.num_actions > 4 else self.num_actions - 1  # Default to Rest (second to last)
         one_hot = np.zeros(self.vector_size, dtype=np.float32)
-        one_hot[previous_action] = 1.0
+        if 0 <= previous_action < self.vector_size:
+            one_hot[previous_action] = 1.0
         return one_hot
 
 
 class LocationSensor:
     """
     Sensor that returns the agent's location, normalized to centered coordinates [-1, 1].
-    Output is a vector of size 2.
+    
+    Args:
+        output_size: Output dimension (default 2 for row, col)
     """
-    def __init__(self):
-        self.vector_size = 2
+    def __init__(self, output_size=2):
+        self.vector_size = output_size
+        self.output_size = output_size
         
     def sense(self, agent_pos, grid_height, grid_width):
         """
         Returns centered coordinates [-1, 1].
+        If output_size > 2, additional dimensions are zeros (for future use).
         """
         r, c = agent_pos
         h, w = grid_height, grid_width
         norm_r = 2.0 * (r / max(1, h - 1)) - 1.0
         norm_c = 2.0 * (c / max(1, w - 1)) - 1.0
-        return np.array([norm_r, norm_c], dtype=np.float32)
+        
+        result = np.zeros(self.output_size, dtype=np.float32)
+        result[0] = norm_r
+        if self.output_size > 1:
+            result[1] = norm_c
+        return result
 
 
 class SensorySystem:
@@ -212,10 +231,28 @@ class SensorySystem:
     - CollisionSensor: Wall and resource collision detection (optional)
     - LocationSensor: Normalized position sensing (optional)
     - ProprioceptiveSensor: Previous action / motor feedback (optional)
+    
+    All sensor output sizes are configurable via constructor parameters.
     """
     def __init__(self, sensor_radius, vector_size, decay_power, nociceptor_radius, 
                  location_sensor, nociception_enabled=True, collision_sensor_enabled=True, 
-                 collision_sensor_range=2, proprioception_enabled=False):
+                 collision_sensor_range=2, proprioception_enabled=False,
+                 nociception_size=1, location_size=2, num_actions=5):
+        """
+        Args:
+            sensor_radius: Olfactory sensor detection radius
+            vector_size: Olfactory sensor output dimension
+            decay_power: Olfactory sensor decay power
+            nociceptor_radius: Nociceptor detection radius (0 = contact)
+            location_sensor: Enable location sensor
+            nociception_enabled: Enable nociceptor
+            collision_sensor_enabled: Enable collision sensor
+            collision_sensor_range: Collision ray length
+            proprioception_enabled: Enable proprioceptive feedback
+            nociception_size: Nociceptor output dimension (default 1)
+            location_size: Location sensor output dimension (default 2)
+            num_actions: Number of actions for proprioception (dynamic)
+        """
         # Olfactory sensor
         self.resource_sensor = ResourceSensor(
             radius=sensor_radius, 
@@ -227,8 +264,8 @@ class SensorySystem:
         # Nociceptor (Pain Detection)
         self.nociception_enabled = nociception_enabled
         if nociception_enabled:
-            self.nociceptor = Nociceptor(radius=nociceptor_radius)
-            self.nociception_size = 1
+            self.nociceptor = Nociceptor(radius=nociceptor_radius, output_size=nociception_size)
+            self.nociception_size = nociception_size
         else:
             self.nociceptor = None
             self.nociception_size = 0
@@ -246,24 +283,24 @@ class SensorySystem:
             
         # Location
         self.location_sensor_enabled = location_sensor
-        self.location_size = 2 if self.location_sensor_enabled else 0
+        self.location_size = location_size if self.location_sensor_enabled else 0
         
         if self.location_sensor_enabled:
-            self.location_sensor = LocationSensor()
+            self.location_sensor = LocationSensor(output_size=location_size)
         else:
             self.location_sensor = None
         
         # Proprioception (Motor Feedback)
         self.proprioception_enabled = proprioception_enabled
+        self.num_actions = num_actions
         if proprioception_enabled:
-            self.proprioceptor = ProprioceptiveSensor()
-            self.proprioception_size = 5
+            self.proprioceptor = ProprioceptiveSensor(num_actions=num_actions)
+            self.proprioception_size = num_actions
         else:
             self.proprioceptor = None
             self.proprioception_size = 0
         
         # Total output dimensions
-        # Olfactory (vector_size) + Nociceptor (1 if enabled) + Collision (N if enabled) + Loc (2 if enabled) + Proprioception (5 if enabled)
         total_dim = vector_size + self.nociception_size + self.collision_output_size + self.location_size + self.proprioception_size
         self.state_dims = (total_dim,)
         
@@ -274,13 +311,15 @@ class SensorySystem:
     def observation_spec(self):
         """
         Returns the shape of the sensory output components.
+        All sizes are determined by configuration.
+        
         Returns:
              dict: {
                 'olfactory': {'shape': (vector_size,), 'dtype': float},
-                'nociception': {'shape': (1,), 'dtype': float} (if enabled),
-                'collision': {'shape': (output_size,), 'dtype': float} (if enabled),
-                'loc': {'shape': (2,), 'dtype': float} (if enabled),
-                'proprioception': {'shape': (5,), 'dtype': float} (if enabled)
+                'nociception': {'shape': (nociception_size,), 'dtype': float} (if enabled),
+                'collision': {'shape': (collision_output_size,), 'dtype': float} (if enabled),
+                'loc': {'shape': (location_size,), 'dtype': float} (if enabled),
+                'proprioception': {'shape': (num_actions,), 'dtype': float} (if enabled)
              }
         """
         spec = {
@@ -288,7 +327,7 @@ class SensorySystem:
         }
         
         if self.nociception_enabled:
-            spec['nociception'] = {'shape': (1,), 'dtype': float}
+            spec['nociception'] = {'shape': (self.nociception_size,), 'dtype': float}
         
         if self.collision_sensor_enabled:
             spec['collision'] = {
@@ -298,14 +337,14 @@ class SensorySystem:
             
         if self.location_sensor_enabled:
             spec['loc'] = {
-                'shape': (2,),
-                'dtype': float # Centered coordinates
+                'shape': (self.location_size,),
+                'dtype': float
             }
         
         if self.proprioception_enabled:
             spec['proprioception'] = {
-                'shape': (5,),
-                'dtype': float  # One-hot action encoding
+                'shape': (self.proprioception_size,),
+                'dtype': float
             }
             
         return spec

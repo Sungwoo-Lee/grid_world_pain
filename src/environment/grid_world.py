@@ -25,11 +25,13 @@ class GridWorld:
     - Columns increase to the right.
     - (height-1, width-1) is the bottom-right corner.
     
-    Actions (Discrete):
+    Actions (Discrete, configurable):
     - 0: Up (Decreases row index)
     - 1: Right (Increases col index)
     - 2: Down (Increases row index)
     - 3: Left (Decreases col index)
+    - 4: Rest (if rest_action_enabled) - Recovers health
+    - 5: Eat (if eat_action_enabled) - Consumes food
     
     Rewards:
     - This external environment returns a reward of 0.
@@ -40,7 +42,8 @@ class GridWorld:
     def __init__(self, height, width, start, resource_pos, with_satiation, max_steps,
                  prob_switch_to_danger, min_danger_duration, damage_amount,
                  prob_switch_to_food, min_food_duration, relocate_resource, relocation_steps,
-                 vector_size, food_property, danger_property):
+                 vector_size, food_property, danger_property,
+                 eat_action_enabled=True, rest_action_enabled=True):
         """
         Initializes the GridWorld foraging environment.
 
@@ -56,6 +59,8 @@ class GridWorld:
             damage_amount (int): Amount of damage taken in danger state.
             relocate_resource (bool): Whether to randomly relocate resource.
             relocation_steps (int): Relocate every N steps.
+            eat_action_enabled (bool): If True, agent must use Eat action to consume food.
+            rest_action_enabled (bool): If True, agent must use Rest action to recover health.
         """
         self.height = height
         self.width = width
@@ -65,6 +70,24 @@ class GridWorld:
         self.with_satiation = with_satiation
         self.max_steps = max_steps
         self.current_step = 0
+        
+        # Action Configuration
+        self.eat_action_enabled = eat_action_enabled
+        self.rest_action_enabled = rest_action_enabled
+        
+        # Calculate action indices based on configuration
+        # Base: 0=Up, 1=Right, 2=Down, 3=Left
+        self._num_actions = 4
+        if rest_action_enabled:
+            self.REST_ACTION = self._num_actions
+            self._num_actions += 1
+        else:
+            self.REST_ACTION = None
+        if eat_action_enabled:
+            self.EAT_ACTION = self._num_actions
+            self._num_actions += 1
+        else:
+            self.EAT_ACTION = None
         
         # Resource Property Vectors
         self.vector_size = vector_size
@@ -194,7 +217,7 @@ class GridWorld:
 
         row, col = self.agent_pos
         
-        # Movement logic
+        # Movement logic (actions 0-3)
         if action == 0:   # Up
             row = max(0, row - 1)
         elif action == 1: # Right
@@ -203,20 +226,39 @@ class GridWorld:
             row = min(self.height - 1, row + 1)
         elif action == 3: # Left
             col = max(0, col - 1)
-        elif action == 4: # Stay
-            pass
+        # Rest (action 4) and Eat (action 5) don't move
             
         self.agent_pos = (row, col)
         
         # Check interactions
         ate_food = False
         damage = 0
+        rested = False
         
-        if self.agent_pos == self.resource_pos:
-            if self.is_danger:
-                damage = self.damage_amount
-            elif self.is_food_active:
+        # Determine if on resource
+        on_resource = (self.agent_pos == self.resource_pos)
+        
+        # Damage from danger (always applies when on danger)
+        if on_resource and self.is_danger:
+            damage = self.damage_amount
+        
+        # Eating logic
+        if self.eat_action_enabled:
+            # Must explicitly perform Eat action while on food
+            if on_resource and self.is_food_active and action == self.EAT_ACTION:
                 ate_food = True
+        else:
+            # Auto-eat when on food (legacy behavior)
+            if on_resource and self.is_food_active:
+                ate_food = True
+        
+        # Resting logic
+        if self.rest_action_enabled:
+            # Must explicitly perform Rest action
+            rested = (action == self.REST_ACTION)
+        else:
+            # Auto-recovery (legacy behavior) - always resting
+            rested = True
             
         # Reward/Done: Behavior depends on whether satiation is enabled.
         reward = 0
@@ -229,7 +271,7 @@ class GridWorld:
         if self.current_step >= self.max_steps:
             done = True
         
-        info = {'ate_food': ate_food, 'damage': damage, 'rested': (action == 4)}
+        info = {'ate_food': ate_food, 'damage': damage, 'rested': rested}
         
         return self.agent_pos, reward, done, info
 
@@ -249,10 +291,11 @@ class GridWorld:
     def action_spec(self):
         """
         Returns the action space specification.
+        Action count is dynamic based on eat/rest configuration.
         Returns:
-            dict: {'type': 'discrete', 'n': 5}
+            dict: {'type': 'discrete', 'n': N}
         """
-        return {'type': 'discrete', 'n': 5}
+        return {'type': 'discrete', 'n': self._num_actions}
 
     def render(self):
         """
@@ -404,7 +447,12 @@ class GridWorld:
                       bbox=dict(boxstyle='round,pad=0.3', facecolor=status_bg, edgecolor='none'))
 
         if action is not None:
-             action_names = {0: "UP", 1: "RIGHT", 2: "DOWN", 3: "LEFT", 4: "STAY"}
+             # Build action names dynamically based on configuration
+             action_names = {0: "UP", 1: "RIGHT", 2: "DOWN", 3: "LEFT"}
+             if self.REST_ACTION is not None:
+                 action_names[self.REST_ACTION] = "REST"
+             if self.EAT_ACTION is not None:
+                 action_names[self.EAT_ACTION] = "EAT"
              act_str = action_names.get(action, "UNKNOWN")
              # Draw action text centered
              ax_stats.text(0.4, y_cursor + 0.05, f"ACTION: {act_str}", color='#495057', ha='center', fontsize=11, weight='bold', transform=ax_stats.transAxes)

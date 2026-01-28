@@ -417,8 +417,13 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         relocation_steps=config_dict.get_mandatory('environment.relocation_steps'),
         vector_size=config_dict.get_mandatory('sensory.vector_size', int),
         food_property=config_dict.get_mandatory('sensory.food_property'),
-        danger_property=config_dict.get_mandatory('sensory.danger_property')
+        danger_property=config_dict.get_mandatory('sensory.danger_property'),
+        eat_action_enabled=config_dict.get_mandatory('environment.eat_action_enabled', bool),
+        rest_action_enabled=config_dict.get_mandatory('environment.rest_action_enabled', bool)
     )
+    
+    # Get action dimension from environment spec (dynamic based on eat/rest config)
+    action_dim = env.action_spec()['n']
     
     body = InteroceptiveBody(
         max_satiation=max_satiation,
@@ -441,6 +446,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         if not quiet:
             print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size}, NociceptorR={nociceptor_radius}, Collision={collision_sensor_enabled})")
         location_sensor = config_dict.get_mandatory('sensory.location_sensor')
+        nociception_size = config_dict.get('sensory.nociception_size', 1)
+        location_size = config_dict.get('sensory.location_size', 2)
         sensory_system = SensorySystem(
             sensor_radius=sensor_radius, 
             vector_size=vector_size, 
@@ -450,7 +457,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             nociception_enabled=nociception_enabled,
             collision_sensor_enabled=collision_sensor_enabled,
             collision_sensor_range=collision_sensor_range,
-            proprioception_enabled=proprioception_enabled
+            proprioception_enabled=proprioception_enabled,
+            nociception_size=nociception_size,
+            location_size=location_size,
+            num_actions=action_dim
         )
 
 
@@ -520,7 +530,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             print(f"Initializing DQN Agent (Input Dim: {input_details})...")
         agent = DQNAgent(
             state_dim=base_input_dim, # Pass BASE dim
-            action_dim=5, 
+            action_dim=action_dim, 
             lr=config_dict.get_mandatory('agent.learning_rate', float),
             gamma=config_dict.get_mandatory('agent.gamma', float),
             buffer_size=config_dict.get_mandatory('agent.buffer_size', int),
@@ -539,7 +549,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             print(f"Initializing DRQN Agent (Input Dim: {input_details})...")
         agent = DRQNAgent(
             state_dim=base_input_dim, 
-            action_dim=5, 
+            action_dim=action_dim, 
             lr=config_dict.get_mandatory('agent.learning_rate', float),
             gamma=config_dict.get_mandatory('agent.gamma', float),
             buffer_size=config_dict.get_mandatory('agent.buffer_size', int),
@@ -560,7 +570,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             print(f"Initializing PPO Agent (Input Dim: {input_details})...")
         agent = PPOAgent(
             state_dim=base_input_dim, 
-            action_dim=5,
+            action_dim=action_dim,
             lr_actor=config_dict.get_mandatory('agent.lr_actor', float),
             lr_critic=config_dict.get_mandatory('agent.lr_critic', float),
             gamma=config_dict.get_mandatory('agent.gamma', float),
@@ -579,7 +589,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             print(f"Initializing Recurrent PPO Agent (Input Dim: {input_details})...")
         agent = RecurrentPPOAgent(
             state_dim=base_input_dim, 
-            action_dim=5,
+            action_dim=action_dim,
             lr_actor=config_dict.get_mandatory('agent.lr_actor', float),
             lr_critic=config_dict.get_mandatory('agent.lr_critic', float),
             gamma=config_dict.get_mandatory('agent.gamma', float),
@@ -600,7 +610,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             print(f"Initializing Dreamer V3 Agent (Input Dim: {input_details})...")
         agent = DreamerV3Agent(
             state_dim=base_input_dim, 
-            action_dim=5,
+            action_dim=action_dim,
             batch_size=config_dict.get_mandatory('agent.batch_size', int),
             batch_length=config_dict.get_mandatory('agent.batch_length', int),
             model_lr=config_dict.get_mandatory('agent.model_lr', float),
@@ -680,9 +690,12 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         if hasattr(agent, 'reset_hidden'):
             agent.reset_hidden()
         
-        # Initialize previous action (4 = Stay, representing initial stationary state)
+        # Initialize previous action (REST if enabled, or 0=Up as default)
         # Must be initialized before first sense() call
-        previous_action = 4 if proprioception_enabled else None
+        if proprioception_enabled:
+            previous_action = env.REST_ACTION if env.REST_ACTION is not None else 0
+        else:
+            previous_action = None
         
         # Determine internal start state
         current_agent_pos = env.agent_pos

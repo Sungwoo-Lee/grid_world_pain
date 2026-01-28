@@ -150,7 +150,12 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
                     relocate_resource=relocate_resource, relocation_steps=relocation_steps,
                     vector_size=config.get_mandatory('sensory.vector_size', int),
                     food_property=config.get_mandatory('sensory.food_property'),
-                    danger_property=config.get_mandatory('sensory.danger_property'))
+                    danger_property=config.get_mandatory('sensory.danger_property'),
+                    eat_action_enabled=config.get('environment.eat_action_enabled', True),
+                    rest_action_enabled=config.get('environment.rest_action_enabled', True))
+    
+    # Get action dimension from environment spec (dynamic based on eat/rest config)
+    action_dim = env.action_spec()['n']
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
         start_satiation=start_satiation, 
@@ -179,6 +184,9 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
         collision_sensor_range = config.get_mandatory('sensory.collision_sensor_range', int)
         location_sensor = config.get_mandatory('sensory.location_sensor')
+        proprioception_enabled = config.get('sensory.proprioception_enabled', False)
+        nociception_size = config.get('sensory.nociception_size', 1)
+        location_size = config.get('sensory.location_size', 2)
         
         sensory_system = SensorySystem(
             sensor_radius=sensor_radius, 
@@ -188,7 +196,11 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
             location_sensor=location_sensor,
             nociception_enabled=nociception_enabled,
             collision_sensor_enabled=collision_sensor_enabled,
-            collision_sensor_range=collision_sensor_range
+            collision_sensor_range=collision_sensor_range,
+            proprioception_enabled=proprioception_enabled,
+            nociception_size=nociception_size,
+            location_size=location_size,
+            num_actions=action_dim
         )
 
 
@@ -252,7 +264,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         from src.models.dqn import DQNAgent
         agent = DQNAgent(
             state_dim=base_input_dim, 
-            action_dim=5,
+            action_dim=action_dim,
             frame_stack=frame_stack,
             lr=config.get_mandatory('agent.learning_rate', float),
             gamma=config.get_mandatory('agent.gamma', float),
@@ -271,7 +283,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         from src.models.drqn import DRQNAgent
         agent = DRQNAgent(
             state_dim=base_input_dim, 
-            action_dim=5, 
+            action_dim=action_dim, 
             lr=config.get_mandatory('agent.learning_rate', float),
             gamma=config.get_mandatory('agent.gamma', float),
             buffer_size=config.get_mandatory('agent.buffer_size', int),
@@ -292,7 +304,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         from src.models.ppo import PPOAgent
         agent = PPOAgent(
             state_dim=base_input_dim, 
-            action_dim=5,
+            action_dim=action_dim,
             frame_stack=frame_stack, 
             lr_actor=config.get_mandatory('agent.lr_actor', float),
             lr_critic=config.get_mandatory('agent.lr_critic', float),
@@ -312,7 +324,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         from src.models.recurrent_ppo import RecurrentPPOAgent
         agent = RecurrentPPOAgent(
             state_dim=base_input_dim, 
-            action_dim=5, 
+            action_dim=action_dim, 
             lr_actor=config.get_mandatory('agent.lr_actor', float), 
             lr_critic=config.get_mandatory('agent.lr_critic', float), 
             gamma=config.get_mandatory('agent.gamma', float), 
@@ -333,7 +345,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         from src.models.dreamer_v3 import DreamerV3Agent
         agent = DreamerV3Agent(
             state_dim=base_input_dim,
-            action_dim=5,
+            action_dim=action_dim,
             device=device,
             batch_size=config.get_mandatory('agent.batch_size', int),
             batch_length=config.get_mandatory('agent.batch_length', int),

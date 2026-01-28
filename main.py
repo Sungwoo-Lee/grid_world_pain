@@ -196,8 +196,13 @@ def main():
         relocation_steps=relocation_steps,
         vector_size=vector_size, 
         food_property=food_property, 
-        danger_property=danger_property
+        danger_property=danger_property,
+        eat_action_enabled=config.get('environment.eat_action_enabled', True),
+        rest_action_enabled=config.get('environment.rest_action_enabled', True)
     )
+    
+    # Get action dimension from environment spec (dynamic based on eat/rest config)
+    action_dim = env.action_spec()['n']
     
     body = InteroceptiveBody(
         max_satiation=max_satiation, 
@@ -218,6 +223,8 @@ def main():
     sensory_system = None
     if using_sensory:
         print(f"Initializing Sensory System (Radius={sensor_radius}, VecSize={vector_size}, Decay={decay_power})")
+        nociception_size = config.get('sensory.nociception_size', 1)
+        location_size = config.get('sensory.location_size', 2)
         sensory_system = SensorySystem(
             sensor_radius=sensor_radius, 
             vector_size=vector_size, 
@@ -227,7 +234,10 @@ def main():
             nociception_enabled=config.get('sensory.nociception_enabled', True),
             collision_sensor_enabled=collision_sensor_enabled,
             collision_sensor_range=collision_sensor_range,
-            proprioception_enabled=config.get('sensory.proprioception_enabled', False)
+            proprioception_enabled=config.get('sensory.proprioception_enabled', False),
+            nociception_size=nociception_size,
+            location_size=location_size,
+            num_actions=action_dim
         )
         
     # Log Specs
@@ -293,9 +303,13 @@ def main():
         step_count = 0
         
         while not done and step_count < max_steps:
-            # Action Selection: Random
-            action = np.random.randint(0, 5)
-            action_names = ["Up", "Right", "Down", "Left", "Stay"]
+            # Action Selection: Random from dynamic action space
+            action = np.random.randint(0, action_dim)
+            action_names = {0: "Up", 1: "Right", 2: "Down", 3: "Left"}
+            if env.REST_ACTION is not None:
+                action_names[env.REST_ACTION] = "Rest"
+            if env.EAT_ACTION is not None:
+                action_names[env.EAT_ACTION] = "Eat"
             
             # Step External
             next_env_state, env_reward, env_done, info = env.step(action)

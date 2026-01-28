@@ -13,6 +13,10 @@ environment:
   min_food_duration: 10
   relocate_resource: true  
   relocation_steps: 50
+  
+  # Action Configuration
+  eat_action_enabled: true    # If true: action 5 = Eat (must eat explicitly)
+  rest_action_enabled: true   # If true: action 4 = Rest (must rest explicitly)
 
 body:
   # Rewards
@@ -47,15 +51,18 @@ sensory:
   
   # Nociception (Pain Detection)
   nociception_enabled: true  # Enable pain/danger detection sensor
-  nociceptor_radius: 0 # Default: 0 (Contact only)
+  nociceptor_radius: 0       # Default: 0 (Contact only)
+  nociception_size: 1        # Output dimension of nociceptor
   
   # Collision Sensor
   collision_sensor_enabled: true
-  collision_sensor_range: 1  # Range of rays in grid cells
+  collision_sensor_range: 1  # Range of rays in grid cells (sectors = 8 * range)
 
-  location_sensor: true # Include centered location even with sensors
+  # Location Sensor
+  location_sensor: false     # Include centered location even with sensors
+  location_size: 2           # Output dimension of location sensor
 
   # Proprioceptive Sensing (Motor Feedback)
-  proprioception_enabled: true  # Sense previous action as motor feedback (5 dims: one-hot)
-
+  proprioception_enabled: true  # Sense previous action as motor feedback
+  # proprioception_size is dynamic based on num_actions
 
