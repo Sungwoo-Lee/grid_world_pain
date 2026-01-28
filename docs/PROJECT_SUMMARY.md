@@ -1,7 +1,7 @@
 # 🧠 GridWorld Pain Project - Comprehensive System Documentation
 
 > **Project Location**: `/media/nas01/projects/Interoceptive-AI/grid_world_pain`  
-> **Last Updated**: 2026-01-27  
+> **Last Updated**: 2026-01-28  
 > **Purpose**: LLM Agent Context Document
 
 ---
@@ -65,11 +65,11 @@ graph TB
 
 | Path | Lines | Description |
 |------|-------|-------------|
-| [train.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/train.py) | ~970 | Main training script with full RL loop |
-| [evaluation.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/evaluation.py) | ~553 | Evaluation and video generation |
-| [main.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/main.py) | ~348 | Debug sandbox with random agent |
-| [run_all_experiments.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/run_all_experiments.py) | ~163 | Parallel training launcher |
-| [hyperparameter_search.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/hyperparameter_search.py) | ~301 | Grid search automation |
+| [train.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/train.py) | ~1152 | Main training script with full RL loop |
+| [evaluation.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/evaluation.py) | ~585 | Evaluation and video generation |
+| [main.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/main.py) | ~374 | Debug sandbox with random agent |
+| [run_all_experiments.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/run_all_experiments.py) | ~162 | Parallel training launcher |
+| [hyperparameter_search.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/hyperparameter_search.py) | ~300 | Grid search automation |
 
 ### Source Directory (`src/`)
 
@@ -77,25 +77,27 @@ graph TB
 src/
 ├── environment/
 │   ├── __init__.py
-│   ├── grid_world.py      # GridWorld class (~533 lines)
-│   ├── body.py            # InteroceptiveBody class (~167 lines)
-│   └── sensor.py          # SensorySystem, ResourceSensor, Nociceptor (~143 lines)
+│   ├── grid_world.py      # GridWorld class (~550 lines)
+│   ├── body.py            # InteroceptiveBody class (~166 lines)
+│   └── sensor.py          # SensorySystem with 5 sensor types (~412 lines)
 │
 ├── models/
 │   ├── __init__.py
-│   ├── dqn.py             # DQNAgent, DQN network, ReplayBuffer (~189 lines)
-│   ├── drqn.py            # DRQNAgent with LSTM (~322 lines)
-│   ├── ppo.py             # PPOAgent, ActorCritic (~266 lines)
-│   ├── recurrent_ppo.py   # RecurrentPPOAgent with LSTM (~347 lines)
-│   ├── dreamer_v3.py      # DreamerV3Agent, RSSM world model (~877 lines)
-│   └── q_learning.py      # Tabular QLearningAgent (~149 lines)
+│   ├── dqn.py             # DQNAgent, DQN network, ReplayBuffer (~188 lines)
+│   ├── drqn.py            # DRQNAgent with LSTM (~321 lines)
+│   ├── ppo.py             # PPOAgent, ActorCritic (~265 lines)
+│   ├── recurrent_ppo.py   # RecurrentPPOAgent with LSTM (~346 lines)
+│   ├── dreamer_v3.py      # DreamerV3Agent, RSSM world model (~876 lines)
+│   └── q_learning.py      # Tabular QLearningAgent (~148 lines)
 │
 └── utils/
-    ├── activation_monitor.py  # Hook-based activation capture (~135 lines)
-    ├── config.py              # Config class with strict validation (~83 lines)
-    ├── lrp_monitor.py         # Layerwise Relevance Propagation (~79 lines)
-    ├── visualization.py       # Video, Q-table, activation viz (~635 lines)
-    └── wandb_utils.py         # WandB login, video upload (~169 lines)
+    ├── activation_monitor.py  # Hook-based activation capture (~134 lines)
+    ├── config.py              # Config class with strict validation (~82 lines)
+    ├── evaluation_core.py     # Core evaluation logic (~429 lines)
+    ├── lrp_monitor.py         # Layerwise Relevance Propagation (~78 lines)
+    ├── state_utils.py         # State preprocessing, frame stacking (~103 lines)
+    ├── visualization.py       # Video, Q-table, activation viz (~634 lines)
+    └── wandb_utils.py         # WandB login, video upload (~168 lines)
 ```
 
 ---
@@ -219,7 +221,7 @@ else:
 
 ### SensorySystem ([src/environment/sensor.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/environment/sensor.py))
 
-Biologically-inspired sensory inputs using gradient-based chemical detection and contact sensors.
+Biologically-inspired sensory inputs using gradient-based chemical detection, contact sensors, spatial awareness, and proprioception.
 
 #### Components
 
@@ -227,7 +229,9 @@ Biologically-inspired sensory inputs using gradient-based chemical detection and
 |-----------|-------|--------|-------------|
 | **ResourceSensor** | Olfactory | `np.array[vector_size]` | Weighted sum of resource properties by distance |
 | **Nociceptor** | Pain | `np.array[1]` | Binary contact sensor (1.0 if in danger zone) |
-| **CollisionSensor** | Touch/Proprioception | `np.array[5]` | Detects walls and resource contact |
+| **CollisionSensor** | Touch | `np.array[N_sectors]` | Directional ray-based wall detection (N = 8 * range) |
+| **LocationSensor** | Spatial Awareness | `np.array[2]` | Centered coordinates [-1, 1] for row and column |
+| **ProprioceptiveSensor** | Proprioception | `np.array[5]` | One-hot encoding of previous action (motor feedback) |
 
 #### ResourceSensor Formula
 ```python
@@ -245,22 +249,38 @@ return observation
 
 #### CollisionSensor Output
 ```python
-# Output: [wall_up, wall_right, wall_down, wall_left, on_resource]
-# Each value is 0.0 or 1.0
+# Output: [sector_0, sector_1, ..., sector_N-1]
+# N_sectors = 8 * sensor_range (e.g., range=2 → 16 sectors)
+# Each value: 0.0 (clear) to 1.0 (wall at distance 1)
+# Sector 0 = Up, proceeds clockwise
+# Value = 1.0 - (distance - 1) / range if wall detected, else 0.0
+```
 
-observation[0] = 1.0 if row == 0 else 0.0                    # Up wall
-observation[1] = 1.0 if col == grid_width - 1 else 0.0       # Right wall
-observation[2] = 1.0 if row == grid_height - 1 else 0.0      # Down wall
-observation[3] = 1.0 if col == 0 else 0.0                    # Left wall
-observation[4] = 1.0 if agent_pos == resource_pos else 0.0   # On resource
+#### LocationSensor Output
+```python
+# Output: [norm_row, norm_col]
+# Centered coordinates in range [-1, 1]
+# norm_row = 2.0 * (row / (height - 1)) - 1.0
+# norm_col = 2.0 * (col / (width - 1)) - 1.0
+```
+
+#### ProprioceptiveSensor Output
+```python
+# Output: [action_0, action_1, action_2, action_3, action_4]
+# One-hot encoding of previous action
+# [1,0,0,0,0] = Up, [0,1,0,0,0] = Right, [0,0,1,0,0] = Down,
+# [0,0,0,1,0] = Left, [0,0,0,0,1] = Stay
+# Default to Stay (action 4) at episode start
 ```
 
 #### SensorySystem.sense() Return Structure
 ```python
 {
-    'olfactory': np.array([...]),    # vector_size floats
-    'nociception': np.array([0.0]),  # or [1.0] if in danger
-    'collision': np.array([...])     # 5 floats (if enabled)
+    'olfactory': np.array([...]),       # vector_size floats
+    'nociception': np.array([0.0]),     # or [1.0] if in danger (if enabled)
+    'collision': np.array([...]),       # N_sectors floats (if enabled)
+    'loc': np.array([...]),             # 2 floats: centered coordinates (if enabled)
+    'proprioception': np.array([...])   # 5 floats: one-hot previous action (if enabled)
 }
 ```
 
@@ -484,33 +504,58 @@ if with_satiation:
 if with_health:
     input_dim += 1
 
-if previous_action_input:
-    input_dim += 5                # Previous action (one-hot: Up/Right/Down/Left/Stay)
+if location_sensor_enabled:
+    input_dim += 2                # Location (centered coordinates)
 
-# Example with collision: Olfactory(5) + Nociceptor(1) + Collision(5) + Satiation(1) + Health(1) = 13
-# Example with previous action enabled: 13 + PrevAction(5) = 18
+if proprioception_enabled:
+    input_dim += 5                # Proprioception (one-hot: Up/Right/Down/Left/Stay)
+
+# Example: Olfactory(5) + Nociceptor(1) + Collision(16) + Satiation(1) + Health(1) + Location(2) + Proprioception(5) = 31
+# Collision sectors = 8 * collision_sensor_range (e.g., range=2 → 16 sectors)
 ```
 
-### Previous Action Input
+### LocationSensor Feature
 
-**Purpose**: Improves temporal credit assignment and action-conditional state modeling for interoceptive AI.
+**Purpose**: Provides spatial awareness even when using gradient-based sensory observations.
+
+**Encoding**: Centered coordinates in range [-1, 1]
+- Dimension: 2 (row and column coordinates)
+- Normalization: `norm = 2.0 * (pos / (max - 1)) - 1.0`
+- Center of grid = (0, 0), corners = (±1, ±1)
+- Example: Agent at (0, 3) in 4×4 grid → `[-1.0, 1.0]`
+
+**Configuration**:
+```yaml
+sensory:
+  location_sensor: true  # Enable feature (default: true)
+```
+
+**Research Motivation**:
+- **Spatial Context**: Assists navigation even with rich sensory input
+- **Multi-Modal Integration**: Combines allocentric (location) with egocentric (sensors) awareness
+- **Convergence Speed**: Can accelerate learning in spatial tasks
+
+### Proprioceptive Sensing (Motor Feedback)
+
+**Purpose**: Provides awareness of recent motor actions, similar to biological proprioception.
 
 **Encoding**: One-hot vector representing the previous action
 - Dimension: 5 (one per action: Up=0, Right=1, Down=2, Left=3, Stay=4)
-- Initial state: Action 4 (Stay) used at episode start, representing initial stationary state
+- Initial state: Action 4 (Stay) used at episode start
 - Example: `[0, 0, 1, 0, 0]` indicates previous action was "Down"
 
 **Configuration**:
 ```yaml
 sensory:
-  previous_action_input: true  # Enable feature (default: false)
+  proprioception_enabled: true  # Enable feature (default: true)
 ```
 
 **Research Motivation**:
-- **Partial Observability**: Helps disambiguate similar sensory readings
+- **Partial Observability**: Disambiguates similar sensory states based on recent action
 - **Temporal Credit**: Improves credit assignment in sparse reward environments
-- **Interoceptive Context**: Previous movement affects satiation/health changes
+- **Interoceptive Context**: Movement affects satiation/health, making action history relevant
 - **Action-Conditional Modeling**: Enables learning how actions influence state transitions
+- **Biological Realism**: Models real proprioceptive feedback in animals
 
 
 ### Training Loop Structure
@@ -653,11 +698,13 @@ sensory:
 | `sensory.vector_size` | int | Yes* | Olfactory dimension |
 | `sensory.sensor_radius` | int | Yes* | Detection range |
 | `sensory.nociceptor_radius` | int | Yes* | Pain sensor range (0=contact) |
+| `sensory.nociception_enabled` | bool | No | Enable nociceptor sensor (default: true) |
 | `sensory.collision_sensor_enabled` | bool | No | Enable directional collision detection (default: true) |
 | `sensory.collision_sensor_range` | int | Yes* | Max range of collision sensor rays (Sectors = 8 * Range) |
+| `sensory.location_sensor` | bool | No | Enable centered location coordinates (default: true) |
+| `sensory.proprioception_enabled` | bool | No | Enable previous action as one-hot input (5 dims, default: true) |
 | `sensory.food_property` | list | Yes* | Food chemical signature |
 | `sensory.danger_property` | list | Yes* | Danger chemical signature |
-| `sensory.previous_action_input` | bool | No | Add previous action as one-hot input (5 dims, default: false) |
 
 ---
 
@@ -703,6 +750,47 @@ def wandb_login(quiet=False)
 
 def upload_video(video_path, run_path=None, step=None, episode=None, 
                  caption="Evaluation Video", fps=4, quiet=False)
+```
+
+### State Utils ([src/utils/state_utils.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/utils/state_utils.py))
+
+State preprocessing and temporal frame stacking utilities.
+
+```python
+class FrameStacker:
+    """Stacks K last frames for temporal context in MLPs."""
+    def __init__(input_dim, stack_size)
+    def reset(initial_frame) -> stacked_state
+    def step(frame) -> stacked_state
+    
+def preprocess_state(state, env_height, env_width, max_satiation, max_health):
+    """Converts dict/tuple state to flat normalized array.
+    
+    Handles:
+    - Sensory dict observations (olfactory, nociception, collision, loc, proprioception)
+    - Conventional tuple observations (row, col)
+    - Body states (satiation, health) with normalization
+    - Automatic detection of pre-normalized location coordinates
+    """
+```
+
+### Evaluation Core ([src/utils/evaluation_core.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/utils/evaluation_core.py))
+
+Core evaluation logic extracted from `evaluation.py` for reusability.
+
+```python
+def evaluate_agent(agent, env, body, sensory_system, config, 
+                   num_episodes=1, device="cpu", results_dir=None, 
+                   checkpoint_pct=None, wandb_run_path=None, quiet=False):
+    """Evaluates agent and generates videos with activation overlays.
+    
+    Features:
+    - Multi-episode evaluation with statistics
+    - Activation monitoring and LRP attribution
+    - Video generation with sensor/activation visualization
+    - Automatic WandB upload if configured
+    - Frame stacking support for temporal agents
+    """
 ```
 
 ---
@@ -857,7 +945,7 @@ results/{Algorithm}/{timestamp}_{tag}/
 | Damage Amount | 5 |
 | Health Recovery | 1 |
 | Death Penalty | 100 |
-| Use Homeostatic Reward | false |
+| Use Homeostatic Reward | true |
 
 ### Sensory
 | Parameter | Value |
@@ -866,8 +954,12 @@ results/{Algorithm}/{timestamp}_{tag}/
 | Sensor Radius | 5 |
 | Vector Size | 5 |
 | Decay Power | 1.0 |
+| Nociception Enabled | true |
 | Nociceptor Radius | 0 |
 | Collision Sensor Enabled | true |
+| Collision Sensor Range | 1 |
+| Location Sensor | true |
+| Proprioception Enabled | true |
 | Food Property | [1,0,0,0,0] |
 | Danger Property | [0,1,0,0,0] |
 

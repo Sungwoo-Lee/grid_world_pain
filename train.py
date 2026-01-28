@@ -680,6 +680,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         if hasattr(agent, 'reset_hidden'):
             agent.reset_hidden()
         
+        # Initialize previous action (4 = Stay, representing initial stationary state)
+        # Must be initialized before first sense() call
+        previous_action = 4 if proprioception_enabled else None
+        
         # Determine internal start state
         current_agent_pos = env.agent_pos
         if using_sensory:
@@ -719,9 +723,6 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         done = False
         total_reward = 0
         steps = 0
-        
-        # Initialize previous action (4 = Stay, representing initial stationary state)
-        previous_action = 4 if proprioception_enabled else None
         
         # Preprocess logic
         flat_state = None

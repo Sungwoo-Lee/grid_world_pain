@@ -12,7 +12,7 @@ environment:
   prob_switch_to_food: 0.5
   min_food_duration: 10
   relocate_resource: true  
-  relocation_steps: 1000
+  relocation_steps: 50
 
 body:
   # Rewards
@@ -39,7 +39,6 @@ body:
 sensory:
   using_sensory: true
   sensor_radius: 5 # Default: 2
-  nociceptor_radius: 0 # Default: 0 (Contact only)
   # Decay Formula: decay = 1.0 / (distance ** decay_power)
   decay_power: 1.0 
   vector_size: 5
@@ -48,12 +47,13 @@ sensory:
   
   # Nociception (Pain Detection)
   nociception_enabled: true  # Enable pain/danger detection sensor
+  nociceptor_radius: 0 # Default: 0 (Contact only)
   
   # Collision Sensor
-  collision_sensor_enabled: false
+  collision_sensor_enabled: true
   collision_sensor_range: 1  # Range of rays in grid cells
 
-  location_sensor: false # Include centered location even with sensors
+  location_sensor: true # Include centered location even with sensors
 
   # Proprioceptive Sensing (Motor Feedback)
   proprioception_enabled: true  # Sense previous action as motor feedback (5 dims: one-hot)
