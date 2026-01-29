@@ -45,6 +45,8 @@ Usage Examples:
    python train.py --agent_config configs/models/dqn.yaml --load-checkpoint results/DQN/RunName/models/dqn_model_500.ckpt --episodes 500 --wandb-resume-id <run_id>
    ```
 """
+import matplotlib
+matplotlib.use('Agg')
 from src.environment import GridWorld
 from src.environment.body import InteroceptiveBody
 from src.models.q_learning import QLearningAgent

@@ -22,6 +22,8 @@ import time
 import datetime
 import imageio
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import re
 import yaml
 

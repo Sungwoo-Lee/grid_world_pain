@@ -1,5 +1,7 @@
 
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox

@@ -25,18 +25,18 @@ body:
 
   # Satiation
   with_satiation: true
-  max_satiation: 30
-  satiation_setpoint: 30
+  max_satiation: 50
+  satiation_setpoint: 50
   overeating_death: false
-  random_start_satiation: true
-  start_satiation: 30
-  food_satiation_gain: 10
+  random_start_satiation: false
+  start_satiation: 50
+  food_satiation_gain: 20
   
   # Health
   with_health: true
-  max_health: 20
+  max_health: 30
   start_health_random: false
-  start_health: 20
+  start_health: 30
   health_recovery: 1
   injury_smoothing_duration: 3
 

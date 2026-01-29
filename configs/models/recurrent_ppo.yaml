@@ -6,7 +6,7 @@ agent:
   K_epochs: 4
   eps_clip: 0.2
   update_timestep: 2000
-  sequence_length: 8
+  sequence_length: 64
   frame_stack: 1
   fc_layers: [64]
   recurrent_layers: [64]

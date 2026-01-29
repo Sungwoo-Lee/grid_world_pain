@@ -41,6 +41,8 @@ Notes:
 - **Strict Configuration**: Raises errors if required parameters are missing.
 - Default behavior (no args): Evaluates the *latest* numeric checkpoint found.
 """
+import matplotlib
+matplotlib.use('Agg')
 import os
 import glob
 import wandb

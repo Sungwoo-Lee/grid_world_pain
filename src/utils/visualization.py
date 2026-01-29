@@ -6,6 +6,8 @@ Includes Q-table plotting and video rendering logic.
 import os
 import imageio
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
