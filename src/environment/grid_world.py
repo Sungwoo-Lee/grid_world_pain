@@ -2,6 +2,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as PathEffects
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+import os
 
 
 from collections import namedtuple
@@ -124,6 +126,23 @@ class GridWorld:
         
         self.predator_pos = self.predator_default_start_pos
         self.predator_timer = self.predator_move_interval
+        
+        # Load Visual Assets
+        self.assets_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'assets')
+        self.icons = {}
+        icon_files = {
+            'agent': 'agent.jpg',
+            'food': 'food.jpg',
+            'danger': 'danger.jpg',
+            'predator': 'predator.jpg'
+        }
+        
+        for key, filename in icon_files.items():
+            path = os.path.join(self.assets_path, filename)
+            if os.path.exists(path):
+                self.icons[key] = plt.imread(path)
+            else:
+                self.icons[key] = None
         
     @property
     def is_danger(self):
@@ -423,36 +442,43 @@ class GridWorld:
         # Use simple subtle shadow effect
         shadow_effect = [PathEffects.SimpleLineShadow(offset=(2, -2), shadow_color='grey', alpha=0.3), PathEffects.Normal()]
         
-        # Draw Custom Grid Lines
+        # Draw Custom Grid Lines (Subtle & Professional)
         for x in range(self.width + 1):
-            ax_grid.vlines(x - 0.5, -0.5, self.height - 0.5, colors=grid_color, linestyles='-', linewidth=1.5)
+            ax_grid.vlines(x - 0.5, -0.5, self.height - 0.5, colors='#DEE2E6', linestyles='-', linewidth=0.8, alpha=0.5)
         for y in range(self.height + 1):
-            ax_grid.hlines(y - 0.5, -0.5, self.width - 0.5, colors=grid_color, linestyles='-', linewidth=1.5)
+            ax_grid.hlines(y - 0.5, -0.5, self.width - 0.5, colors='#DEE2E6', linestyles='-', linewidth=0.8, alpha=0.5)
             
+        # Helper for icon rendering
+        def draw_icon(ax, pos, icon_key, zoom=0.038):
+            r, c = pos
+            img = self.icons.get(icon_key)
+            if img is not None:
+                imagebox = OffsetImage(img, zoom=zoom)
+                # Subtle offset to avoid overlapping grid lines exactly
+                ab = AnnotationBbox(imagebox, (c, r), frameon=False, pad=0)
+                ax.add_artist(ab)
+            else:
+                # Fallback to marker if image missing
+                markers = {'agent': ('o', agent_color), 'food': ('D', food_color), 
+                           'danger': ('X', danger_color), 'predator': ('v', '#212529')}
+                m, color = markers.get(icon_key, ('s', 'grey'))
+                ax.plot(c, r, marker=m, markersize=14, color=color, markeredgecolor='white', markeredgewidth=1.5)
+
         # Draw Food / Danger
         fr, fc = self.resource_pos
         if self.is_danger:
-            # Danger: Cross / Skull representation
-            ax_grid.plot(fc, fr, marker='X', markersize=20, color=danger_color, markeredgecolor='white', markeredgewidth=2, path_effects=shadow_effect)
+            draw_icon(ax_grid, (fr, fc), 'danger', zoom=0.035)
         elif self.is_food_active:
-            # Food: Diamond representation
-            ax_grid.plot(fc, fr, marker='D', markersize=18, color=food_color, markeredgecolor='white', markeredgewidth=2, path_effects=shadow_effect)
+            draw_icon(ax_grid, (fr, fc), 'food', zoom=0.035)
             
         # Draw Predator
         if self.predator_enabled:
             pr, pc = self.predator_pos
-            # Use 'v' (triangle down) or '8' or 'X' for predator
-            ax_grid.plot(pc, pr, marker='v', markersize=16, color='#212529', markeredgecolor='white', markeredgewidth=1.5, path_effects=shadow_effect)
-            # Add a small red dot in the middle of predator to make it look "angry"
-            ax_grid.plot(pc, pr, marker='.', markersize=4, color=danger_color)
+            draw_icon(ax_grid, (pr, pc), 'predator', zoom=0.045)
             
         # Draw Agent
         ar, ac = self.agent_pos
-        # Agent: Circle with thick border
-        agent_circle = plt.Circle((ac, ar), 0.35, color=agent_color, path_effects=shadow_effect)
-        ax_grid.add_patch(agent_circle)
-        # Inner dot for agent
-        ax_grid.plot(ac, ar, marker='o', markersize=5, color='white')
+        draw_icon(ax_grid, (ar, ac), 'agent', zoom=0.035)
 
         # --- 2. Draw Stats Dashboard (Dynamic Stack) ---
         ax_stats.set_facecolor(bg_color)
