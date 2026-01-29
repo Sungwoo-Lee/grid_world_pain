@@ -324,6 +324,22 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     prob_switch_to_food = float(resolve_param(prob_switch_to_food, 'environment.prob_switch_to_food'))
     min_food_duration = int(resolve_param(min_food_duration, 'environment.min_food_duration'))
 
+    # Predator Params
+    predator_enabled = config_dict.get_mandatory('predator.enabled', bool)
+    
+    if predator_enabled:
+        predator_move_interval = config_dict.get_mandatory('predator.move_interval', int)
+        predator_damage = config_dict.get_mandatory('predator.damage', float)
+        predator_start_pos = config_dict.get_mandatory('predator.start_pos')
+        predator_random_start_pos = config_dict.get_mandatory('predator.random_start_pos', bool)
+        predator_property = config_dict.get_mandatory('predator.property')
+    else:
+        predator_move_interval = 2
+        predator_damage = 0.0
+        predator_start_pos = (0, 0)
+        predator_random_start_pos = False
+        predator_property = None
+
     # Body Params
     with_satiation = resolve_param(with_satiation, 'body.with_satiation')
     max_satiation = int(resolve_param(None, 'body.max_satiation'))
@@ -418,7 +434,13 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         food_property=config_dict.get_mandatory('sensory.food_property'),
         danger_property=config_dict.get_mandatory('sensory.danger_property'),
         eat_action_enabled=config_dict.get_mandatory('environment.eat_action_enabled', bool),
-        rest_action_enabled=config_dict.get_mandatory('environment.rest_action_enabled', bool)
+        rest_action_enabled=config_dict.get_mandatory('environment.rest_action_enabled', bool),
+        predator_enabled=predator_enabled,
+        predator_move_interval=predator_move_interval,
+        predator_damage=predator_damage,
+        predator_start_pos=tuple(predator_start_pos),
+        predator_random_start_pos=predator_random_start_pos,
+        predator_property=predator_property
     )
     
     # Get action dimension from environment spec (dynamic based on eat/rest config)

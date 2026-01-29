@@ -139,6 +139,22 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     relocate_resource = config.get_mandatory('environment.relocate_resource')
     relocation_steps = config.get_mandatory('environment.relocation_steps', int)
 
+    # Predator Params (Evaluation extracts from saved config)
+    predator_enabled = config.get_mandatory('predator.enabled', bool)
+    
+    if predator_enabled:
+        predator_move_interval = config.get_mandatory('predator.move_interval', int)
+        predator_damage = config.get_mandatory('predator.damage', float)
+        predator_start_pos = config.get_mandatory('predator.start_pos')
+        predator_random_start_pos = config.get_mandatory('predator.random_start_pos', bool)
+        predator_property = config.get_mandatory('predator.property')
+    else:
+        predator_move_interval = 2
+        predator_damage = 0.0
+        predator_start_pos = (0, 0)
+        predator_random_start_pos = False
+        predator_property = None
+
     # 2. Environment & Body Setup
     # Set seed for deterministic evaluation
     np.random.seed(seed)
@@ -152,7 +168,13 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
                     food_property=config.get_mandatory('sensory.food_property'),
                     danger_property=config.get_mandatory('sensory.danger_property'),
                     eat_action_enabled=config.get('environment.eat_action_enabled', True),
-                    rest_action_enabled=config.get('environment.rest_action_enabled', True))
+                    rest_action_enabled=config.get('environment.rest_action_enabled', True),
+                    predator_enabled=predator_enabled,
+                    predator_move_interval=predator_move_interval,
+                    predator_damage=predator_damage,
+                    predator_start_pos=tuple(predator_start_pos),
+                    predator_random_start_pos=predator_random_start_pos,
+                    predator_property=predator_property)
     
     # Get action dimension from environment spec (dynamic based on eat/rest config)
     action_dim = env.action_spec()['n']

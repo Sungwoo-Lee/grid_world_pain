@@ -153,7 +153,13 @@ GridWorld(
     food_property,                    # Food chemical signature [N-dim]
     danger_property,                  # Danger chemical signature [N-dim]
     eat_action_enabled=True,          # Require explicit Eat action 
-    rest_action_enabled=True          # Require explicit Rest action 
+    rest_action_enabled=True,         # Require explicit Rest action 
+    predator_enabled=False,           # Enable moving predator
+    predator_move_interval=2,         # Predator moves every N steps
+    predator_damage=3.0,              # Contact damage from predator
+    predator_start_pos=(3, 0),        # Default predator position
+    predator_random_start_pos=True,   # Randomize predator on reset
+    predator_property=None            # Custom predator chemical signature
 )
 ```
 

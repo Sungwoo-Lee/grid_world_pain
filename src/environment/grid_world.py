@@ -43,7 +43,9 @@ class GridWorld:
                  prob_switch_to_danger, min_danger_duration, damage_amount,
                  prob_switch_to_food, min_food_duration, relocate_resource, relocation_steps,
                  vector_size, food_property, danger_property,
-                 eat_action_enabled=True, rest_action_enabled=True):
+                 eat_action_enabled=True, rest_action_enabled=True,
+                 predator_enabled=False, predator_move_interval=2, predator_damage=3.0,
+                 predator_start_pos=(3, 0), predator_random_start_pos=True, predator_property=None):
         """
         Initializes the GridWorld foraging environment.
 
@@ -112,6 +114,17 @@ class GridWorld:
         self.relocation_steps = relocation_steps
         self.relocation_timer = relocation_steps
         
+        # Predator configuration
+        self.predator_enabled = predator_enabled
+        self.predator_move_interval = predator_move_interval
+        self.predator_damage = predator_damage
+        self.predator_default_start_pos = tuple(predator_start_pos)
+        self.predator_random_start_pos = predator_random_start_pos
+        self.predator_property = np.array(predator_property, dtype=np.float32) if predator_property is not None else self.danger_property
+        
+        self.predator_pos = self.predator_default_start_pos
+        self.predator_timer = self.predator_move_interval
+        
     @property
     def is_danger(self):
         return self.resource_state == 'danger'
@@ -131,6 +144,9 @@ class GridWorld:
             resources.append(Resource(self.resource_pos, self.food_property, 'Food'))
         elif self.is_danger:
             resources.append(Resource(self.resource_pos, self.danger_property, 'Danger'))
+            
+        if self.predator_enabled:
+            resources.append(Resource(self.predator_pos, self.predator_property, 'Danger'))
         return resources
 
     def reset(self):
@@ -166,6 +182,19 @@ class GridWorld:
                     self.resource_pos = (rr, rc)
                     break
              
+        # Reset Predator
+        if self.predator_enabled:
+            if self.predator_random_start_pos:
+                while True:
+                    pr = np.random.randint(0, self.height)
+                    pc = np.random.randint(0, self.width)
+                    if (pr, pc) != self.agent_pos and (pr, pc) != self.resource_pos:
+                        self.predator_pos = (pr, pc)
+                        break
+            else:
+                self.predator_pos = self.predator_default_start_pos
+            self.predator_timer = self.predator_move_interval
+
         self.relocation_timer = self.relocation_steps
         return self.agent_pos
     
@@ -199,9 +228,6 @@ class GridWorld:
                  if np.random.random() < self.prob_switch_to_danger:
                      self.resource_state = 'danger'
                      self.resource_timer = self.min_danger_duration
-
-
-
         # --- Relocation Update ---
         if self.relocate_resource:
             self.relocation_timer -= 1
@@ -214,6 +240,31 @@ class GridWorld:
                         self.resource_pos = (rr, rc)
                         break
                 self.relocation_timer = self.relocation_steps
+
+        # --- Predator Update ---
+        if self.predator_enabled:
+            self.predator_timer -= 1
+            if self.predator_timer <= 0:
+                # Move predator towards agent
+                pr, pc = self.predator_pos
+                ar, ac = self.agent_pos
+                
+                dr = ar - pr
+                dc = ac - pc
+                
+                if dr != 0 and dc != 0:
+                    # Diagonal: Randomly choose row or column
+                    if np.random.random() < 0.5:
+                        pr += np.sign(dr)
+                    else:
+                        pc += np.sign(dc)
+                elif dr != 0:
+                    pr += np.sign(dr)
+                elif dc != 0:
+                    pc += np.sign(dc)
+                
+                self.predator_pos = (int(pr), int(pc))
+                self.predator_timer = self.predator_move_interval
 
         row, col = self.agent_pos
         
@@ -241,6 +292,10 @@ class GridWorld:
         # Damage from danger (always applies when on danger)
         if on_resource and self.is_danger:
             damage = self.damage_amount
+        
+        # Damage from predator
+        if self.predator_enabled and self.agent_pos == self.predator_pos:
+            damage += self.predator_damage
         
         # Eating logic
         if self.eat_action_enabled:
@@ -313,10 +368,14 @@ class GridWorld:
                         line += "F "
                     else:
                         line += ". "
+                elif (r, c) == self.predator_pos and self.predator_enabled:
+                    line += "P " # Predator
                 else:
                     line += ". "
             print(line)
         print(f"Step: {self.current_step}, Danger: {self.is_danger}, Food: {self.is_food_active}")
+        if self.predator_enabled:
+            print(f"Predator Pos: {self.predator_pos}")
         print()
 
     def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=None, step=None, sensory_data=None, action=None):
@@ -378,6 +437,14 @@ class GridWorld:
         elif self.is_food_active:
             # Food: Diamond representation
             ax_grid.plot(fc, fr, marker='D', markersize=18, color=food_color, markeredgecolor='white', markeredgewidth=2, path_effects=shadow_effect)
+            
+        # Draw Predator
+        if self.predator_enabled:
+            pr, pc = self.predator_pos
+            # Use 'v' (triangle down) or '8' or 'X' for predator
+            ax_grid.plot(pc, pr, marker='v', markersize=16, color='#212529', markeredgecolor='white', markeredgewidth=1.5, path_effects=shadow_effect)
+            # Add a small red dot in the middle of predator to make it look "angry"
+            ax_grid.plot(pc, pr, marker='.', markersize=4, color=danger_color)
             
         # Draw Agent
         ar, ac = self.agent_pos

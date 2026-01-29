@@ -12,17 +12,8 @@ Arguments:
 - `--seed <int>`: (Default: 42) Random seed for reproducibility.
 - `--config <path>`: Path to config YAML (optional).
 
-Usage Examples:
-
-1. **Short Video** (Default):
-   ```bash
-   python main.py
-   ```
-
-2. **Longer Observation**:
-   ```bash
-   python main.py --episodes 5 --max_steps 50 --seed 123
-   ```
+Changelog:
+- 2026-01-29: Added Predator System support with strict configuration enforcement.
 """
 
 import os
@@ -158,6 +149,23 @@ def main():
     relocate_resource = config.get_mandatory('environment.relocate_resource')
     relocation_steps = config.get_mandatory('environment.relocation_steps', int)
     
+    # Predator Config
+    predator_enabled = config.get_mandatory('predator.enabled', bool)
+    
+    if predator_enabled:
+        predator_move_interval = config.get_mandatory('predator.move_interval', int)
+        predator_damage = config.get_mandatory('predator.damage', float)
+        predator_start_pos = config.get_mandatory('predator.start_pos')
+        predator_random_start_pos = config.get_mandatory('predator.random_start_pos', bool)
+        predator_property = config.get_mandatory('predator.property')
+    else:
+        # Defaults for disabled state (not used by GridWorld if enabled=False)
+        predator_move_interval = 2
+        predator_damage = 0.0
+        predator_start_pos = (0, 0)
+        predator_random_start_pos = False
+        predator_property = None
+    
     # Sensory Config
     using_sensory = config.get_mandatory('sensory.using_sensory')
     sensor_radius = config.get_mandatory('sensory.sensor_radius', int)
@@ -198,7 +206,13 @@ def main():
         food_property=food_property, 
         danger_property=danger_property,
         eat_action_enabled=config.get('environment.eat_action_enabled', True),
-        rest_action_enabled=config.get('environment.rest_action_enabled', True)
+        rest_action_enabled=config.get('environment.rest_action_enabled', True),
+        predator_enabled=predator_enabled,
+        predator_move_interval=predator_move_interval,
+        predator_damage=predator_damage,
+        predator_start_pos=tuple(predator_start_pos),
+        predator_random_start_pos=predator_random_start_pos,
+        predator_property=predator_property
     )
     
     # Get action dimension from environment spec (dynamic based on eat/rest config)
@@ -278,6 +292,9 @@ def main():
             if with_health:
                 print(f"Health: {body.health}/{body.max_health}")
         
+        if predator_enabled:
+            print(f"Predator Pos: {env.predator_pos}")
+        
         print(f"Agent Pos: {env.agent_pos}")
         
         # Visualization Data
@@ -334,6 +351,8 @@ def main():
                 print(f"  Satiation: {body.satiation}/{body.max_satiation}")
                 if with_health:
                     print(f"  Health: {body.health}/{body.max_health}")
+                if predator_enabled:
+                    print(f"  Predator Pos: {env.predator_pos}")
                 print(f"  Reward: {reward}, Done: {done}")
             else:
                 done = env_done

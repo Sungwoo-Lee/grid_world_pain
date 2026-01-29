@@ -67,3 +67,11 @@ sensory:
   proprioception_enabled: true  # Sense previous action as motor feedback
   # proprioception_size is dynamic based on num_actions
 
+predator:
+  enabled: true
+  move_interval: 2      # Moves every N steps
+  damage: 3.0           # Damage dealt on contact
+  start_pos: [3, 0]     # Default start position
+  random_start_pos: true
+  property: [0.0, 1.0, 0.0, 0.0, 0.0] # Identified as "Danger"
+
