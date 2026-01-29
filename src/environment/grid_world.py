@@ -134,7 +134,10 @@ class GridWorld:
             'agent': 'agent.jpg',
             'food': 'food.jpg',
             'danger': 'danger.jpg',
-            'predator': 'predator.jpg'
+            'predator': 'predator.jpg',
+            'agent_food': 'agent_food.jpg',
+            'agent_danger': 'agent_danger.jpg',
+            'agent_predator': 'agent_predator.jpg'
         }
         
         for key, filename in icon_files.items():
@@ -464,21 +467,51 @@ class GridWorld:
                 m, color = markers.get(icon_key, ('s', 'grey'))
                 ax.plot(c, r, marker=m, markersize=14, color=color, markeredgecolor='white', markeredgewidth=1.5)
 
-        # Draw Food / Danger
-        fr, fc = self.resource_pos
-        if self.is_danger:
-            draw_icon(ax_grid, (fr, fc), 'danger', zoom=0.035)
-        elif self.is_food_active:
-            draw_icon(ax_grid, (fr, fc), 'food', zoom=0.035)
-            
-        # Draw Predator
-        if self.predator_enabled:
-            pr, pc = self.predator_pos
-            draw_icon(ax_grid, (pr, pc), 'predator', zoom=0.045)
-            
-        # Draw Agent
+        # Coordinate data for overlap detection
         ar, ac = self.agent_pos
-        draw_icon(ax_grid, (ar, ac), 'agent', zoom=0.035)
+        fr, fc = self.resource_pos
+        pr, pc = self.predator_pos if self.predator_enabled else (None, None)
+        
+        # Track if agent has already been drawn as part of an overlap
+        drawn_agent = False
+        
+        # 1. Overlap Check (Agent + Resource or Agent + Predator)
+        if (ar, ac) == (fr, fc):
+            if self.is_food_active:
+                draw_icon(ax_grid, (ar, ac), 'agent_food', zoom=0.048)
+                drawn_agent = True
+            elif self.is_danger:
+                draw_icon(ax_grid, (ar, ac), 'agent_danger', zoom=0.048)
+                drawn_agent = True
+        elif self.predator_enabled and (ar, ac) == (pr, pc):
+            draw_icon(ax_grid, (ar, ac), 'agent_predator', zoom=0.055)
+            drawn_agent = True
+            
+        # 2. Independent drawing for things not already drawn at agent's position
+        if not drawn_agent:
+            # Draw Resource if one is active
+            if self.is_danger:
+                draw_icon(ax_grid, (fr, fc), 'danger', zoom=0.035)
+            elif self.is_food_active:
+                draw_icon(ax_grid, (fr, fc), 'food', zoom=0.035)
+            
+            # Draw Predator
+            if self.predator_enabled:
+                draw_icon(ax_grid, (pr, pc), 'predator', zoom=0.045)
+                
+            # Draw Agent
+            draw_icon(ax_grid, (ar, ac), 'agent', zoom=0.035)
+        else:
+            # Agent already drawn as part of an overlap.
+            # Still need to draw other entities if they are at different positions.
+            if (fr, fc) != (ar, ac):
+                if self.is_danger:
+                    draw_icon(ax_grid, (fr, fc), 'danger', zoom=0.035)
+                elif self.is_food_active:
+                    draw_icon(ax_grid, (fr, fc), 'food', zoom=0.035)
+            
+            if self.predator_enabled and (pr, pc) != (ar, ac):
+                draw_icon(ax_grid, (pr, pc), 'predator', zoom=0.045)
 
         # --- 2. Draw Stats Dashboard (Dynamic Stack) ---
         ax_stats.set_facecolor(bg_color)
