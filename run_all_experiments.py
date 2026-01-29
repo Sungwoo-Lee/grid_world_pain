@@ -40,7 +40,7 @@ ALGORITHMS = [
     # ("PPO", "configs/models/ppo.yaml", "cuda:1"),
     # ("DRQN", "configs/models/drqn.yaml", "cuda:1"),
     # ("RecurrentPPO", "configs/models/recurrent_ppo.yaml", "cuda:1"),
-    ("DreamerV3", "configs/models/dreamer_v3.yaml", "cuda:0"),
+    ("DreamerV3", "configs/models/dreamer_v3.yaml", "cuda:3"),
 ]
 
 def main():

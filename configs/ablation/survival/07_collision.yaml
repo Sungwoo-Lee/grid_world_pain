@@ -17,5 +17,4 @@ sensory:
   olfactory_enabled: true
   proprioception_enabled: true
   collision_sensor_enabled: true
-  collision_sensor_range: 2
   location_sensor: false
