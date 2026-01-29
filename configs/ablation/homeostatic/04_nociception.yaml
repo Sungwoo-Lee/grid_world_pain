@@ -1,24 +1,14 @@
-# Level 04: +Nociception (Homeostatic)
-# Reward: Homeostatic (Drive Reduction)
+# Level 04: Nociception (Homeostatic - Smooth Injury)
 environment:
-  max_steps: 200
-  prob_switch_to_danger: 0.1
-  prob_switch_to_food: 0.5
+  prob_switch_to_danger: 0.0
+  prob_switch_to_food: 0.0
   relocate_resource: false
   eat_action_enabled: false
-  rest_action_enabled: true
 
 body:
   with_satiation: false
-  with_health: true
-  health_recovery: 2.0
-  use_homeostatic_reward: true
-  injury_smoothing_duration: 3
 
 sensory:
-  using_sensory: true
-  nociception_enabled: true
-  nociception_size: 1
   olfactory_enabled: false
   proprioception_enabled: false
   collision_sensor_enabled: false

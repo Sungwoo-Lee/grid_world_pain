@@ -1,5 +1,4 @@
-# Level 01: Goal Only (Shared Baseline)
-# Reward: External (Survival)
+# Level 01: Goal Only
 environment:
   max_steps: 200
   prob_switch_to_danger: 0.0
@@ -12,7 +11,9 @@ body:
   with_satiation: false
   with_health: false
   use_homeostatic_reward: false
-  injury_smoothing_duration: 3
 
 sensory:
   using_sensory: false
+
+predator:
+  enabled: false

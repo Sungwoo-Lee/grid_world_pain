@@ -234,7 +234,8 @@ def main():
         start_health=start_health,
         health_recovery=health_recovery,
         start_health_random=start_health_random,
-        injury_smoothing_duration=injury_smoothing_duration
+        injury_smoothing_duration=injury_smoothing_duration,
+        with_satiation=with_satiation
     )
     
     sensory_system = None
@@ -344,27 +345,32 @@ def main():
             
             if using_sensory:
                  resources = env.get_active_resources()
-                 extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
-                               'max_injury': body.max_injury if with_satiation else 1}
+                 extra_data = {'injury_level': body.injury_level if body.with_health else 0, 
+                               'max_injury': body.max_injury if body.with_health else 1}
                  sensory_dict = sensory_system.sense(current_agent_pos, resources, grid_height=env.height, grid_width=env.width, extra_data=extra_data)
                  vis_data = sensory_system.get_visualization_data(sensory_dict)
 
             reward = env_reward
-            if with_satiation:
-                body_return, reward, body_done = body.step(info)
-                done = env_done or body_done
-                
-                print(f"  Info: {info}")
-                print(f"  Satiation: {body.satiation}/{body.max_satiation}")
-                if with_health:
-                    print(f"  Injury: {body.injury_level}/{body.max_injury}")
-                if predator_enabled:
-                    print(f"  Predator Pos: {env.predator_pos}")
-                print(f"  Reward: {reward}, Done: {done}")
+            # Step Body / Physiology
+            body_state, body_reward, body_done = body.step(info)
+
+            # Logic: If using homeostatic reward, use body_reward.
+            # Otherwise (conventional), use env_reward and env_done, but allow body to trigger death.
+            if config.get('body.use_homeostatic_reward', True):
+                 reward = body_reward
+                 done = env_done or body_done
             else:
-                done = env_done
-                print(f"  Info: {info}")
-                print(f"  Reward: {reward}, Done: {done}")
+                 reward = env_reward
+                 done = env_done or body_done
+
+            print(f"  Info: {info}")
+            if with_satiation:
+                print(f"  Satiation: {body.satiation}/{body.max_satiation}")
+            if with_health:
+                print(f"  Injury: {body.injury_level}/{body.max_injury}")
+            if predator_enabled:
+                print(f"  Predator Pos: {env.predator_pos}")
+            print(f"  Reward: {reward}, Done: {done}")
 
             # Capture Frame
             injury = body.injury_level if body.with_health else None

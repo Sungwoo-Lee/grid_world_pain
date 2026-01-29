@@ -462,7 +462,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         start_health=start_health,
         health_recovery=health_recovery,
         start_health_random=start_health_random,
-        injury_smoothing_duration=injury_smoothing_duration
+        injury_smoothing_duration=injury_smoothing_duration,
+        with_satiation=with_satiation
     )
     
     sensory_system = None
@@ -829,32 +830,31 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                      extra_data=extra_data
                  )
             
-            if with_satiation:
-                body_return, reward, body_done = body.step(info)
+            # Step Body / Physiology
+            body_return, body_reward, body_done = body.step(info)
+            
+            # Reward/Done Logic:
+            # If interoceptive (homeostatic reward), body is the primary source.
+            # If conventional (survival branch), env is primary but body can kill.
+            if use_homeostatic_reward:
+                reward = body_reward
                 done = env_done or body_done
-                
-                next_state = {}
-                if using_sensory:
-                     next_state.update(next_sensory_dict)
-                else:
-                     next_state['loc'] = next_env_state
-                     
-                if isinstance(body_return, tuple):
-                     next_state['satiation'] = body_return[0]
-                     next_state['injury'] = body_return[1]
-                else:
-                     next_state['satiation'] = body_return
             else:
                 reward = env_reward
-                done = env_done
-                
-                if using_sensory:
-                    next_state = next_sensory_dict.copy()
-                    if location_sensor:
-                        next_state['loc'] = next_env_state
-                else:
-                    next_state = {'loc': next_env_state}
-                    next_state = next_env_state
+                done = env_done or body_done
+            
+            # Prepare next state dictionary
+            next_state = {}
+            if using_sensory:
+                 next_state.update(next_sensory_dict)
+            else:
+                 next_state['loc'] = next_env_state
+                 
+            if isinstance(body_return, tuple):
+                 next_state['satiation'] = body_return[0]
+                 next_state['injury'] = body_return[1]
+            else:
+                 next_state['satiation'] = body_return
             
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update

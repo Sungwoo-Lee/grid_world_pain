@@ -1,5 +1,4 @@
-# Level 01: Goal Only (Shared Baseline)
-# Reward: Homeostatic (Drive Reduction)
+# Level 01: Goal Only (Homeostatic)
 environment:
   max_steps: 200
   prob_switch_to_danger: 0.0
@@ -11,8 +10,9 @@ environment:
 body:
   with_satiation: false
   with_health: false
-  use_homeostatic_reward: true
-  injury_smoothing_duration: 3
 
 sensory:
   using_sensory: false
+
+predator:
+  enabled: false

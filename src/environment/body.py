@@ -16,7 +16,7 @@ class InteroceptiveBody:
     """
     def __init__(self, max_satiation, start_satiation, overeating_death, random_start_satiation, food_satiation_gain, use_homeostatic_reward, satiation_setpoint, death_penalty,
                  with_health, max_health, start_health, health_recovery, start_health_random,
-                 injury_smoothing_duration=3):
+                 injury_smoothing_duration=3, with_satiation=True):
         """
         Initialize the body.
         
@@ -35,6 +35,7 @@ class InteroceptiveBody:
             health_recovery (int): Injury reduction per step when resting.
             start_health_random (bool): Whether to randomize start injury.
             injury_smoothing_duration (int): Duration to spread damage over.
+            with_satiation (bool): Whether to simulate satiation/hunger.
         """
         self.max_satiation = max_satiation
         self.start_satiation = start_satiation
@@ -44,6 +45,7 @@ class InteroceptiveBody:
         self.use_homeostatic_reward = use_homeostatic_reward
         self.satiation_setpoint = satiation_setpoint
         self.death_penalty = death_penalty
+        self.with_satiation = with_satiation
         self.satiation = start_satiation
         
         # Injury / Interoceptive Nociception Mechanism
@@ -93,13 +95,17 @@ class InteroceptiveBody:
         prev_injury = self.injury_level
         
         # --- Satiation Dynamics ---
-        self.satiation -= 1
-        if info.get('ate_food', False):
-            self.satiation += self.food_satiation_gain
-            if not self.overeating_death:
-                self.satiation = min(self.satiation, self.max_satiation)
-            else:
-                self.satiation = min(self.satiation, self.max_satiation + 1)
+        if self.with_satiation:
+            self.satiation -= 1
+            if info.get('ate_food', False):
+                self.satiation += self.food_satiation_gain
+                if not self.overeating_death:
+                    self.satiation = min(self.satiation, self.max_satiation)
+                else:
+                    self.satiation = min(self.satiation, self.max_satiation + 1)
+        else:
+            # Maintain fixed satiation if disabled (so starvation death doesn't trigger)
+            self.satiation = self.start_satiation
                 
         # --- Injury Dynamics (Interoceptive Nociception) ---
         if self.with_health:
@@ -130,16 +136,21 @@ class InteroceptiveBody:
         done = False
         death_type = None
         
-        if self.satiation <= 0:
-            done = True 
-            death_type = "starvation"
-        elif self.overeating_death and self.satiation >= self.max_satiation:
-            done = True
-            death_type = "overeating"
+        if self.with_satiation:
+            if self.satiation <= 0:
+                done = True 
+                death_type = "starvation"
+            elif self.overeating_death and self.satiation >= self.max_satiation:
+                done = True
+                death_type = "overeating"
             
         if self.with_health and self.injury_level >= self.max_injury:
             done = True
             death_type = "injury"
+        elif not self.with_health and info.get('damage', 0) > 0:
+            # Instant death logic for levels without health system (e.g. L03)
+            done = True
+            death_type = "instant_damage"
             
         # 4. Generate Reward signal
         reward = 0
