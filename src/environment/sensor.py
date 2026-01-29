@@ -47,14 +47,14 @@ class ResourceSensor:
             
         return observation
 
-class Nociceptor:
+class ExteroceptiveNociceptor:
     """
     A contact sensor (range 0) that detects 'Danger' resources at the agent's exact location.
-    Behaves as a biological nociceptor: detecting immediate nociception.
+    Behaves as a biological exteroceptive nociceptor: detecting immediate external threat.
     
     Args:
         radius: Detection radius (0 = contact only)
-        output_size: Output dimension (default 1 for binary)
+        output_size: Output dimension
     """
     def __init__(self, radius, output_size=1):
         self.radius = radius
@@ -63,13 +63,6 @@ class Nociceptor:
     def sense(self, agent_pos, resources):
         """
         Returns 1.0 if the agent is within radius of a Danger resource, else 0.0.
-        
-        Args:
-            agent_pos (tuple): (row, col)
-            resources (list): List of Resource objects
-            
-        Returns:
-            np.array: Float array of shape (output_size,)
         """
         r0, c0 = agent_pos
         activated = 0.0
@@ -81,8 +74,25 @@ class Nociceptor:
                     activated = 1.0
                     break
         
-        # Return array of output_size, all same value
         return np.full(self.output_size, activated, dtype=np.float32)
+
+class InteroceptiveNociceptor:
+    """
+    A sensor that monitors the internal injury level of the body.
+    Output is the current injury level, usually scaled [0, 1].
+    
+    Args:
+        output_size: Output dimension
+    """
+    def __init__(self, output_size=1):
+        self.output_size = output_size
+        
+    def sense(self, injury_level, max_injury):
+        """
+        Returns the normalized injury level [0, 1].
+        """
+        val = injury_level / max_injury if max_injury > 0 else 0
+        return np.full(self.output_size, val, dtype=np.float32)
 
 class CollisionSensor:
     """
@@ -268,13 +278,16 @@ class SensorySystem:
             self.resource_sensor = None
             self.vector_size = 0
         
-        # Nociceptor (Pain Detection)
+        # Nociception (Pain Detection)
         self.nociception_enabled = nociception_enabled
         if nociception_enabled:
-            self.nociceptor = Nociceptor(radius=nociceptor_radius, output_size=nociception_size)
-            self.nociception_size = nociception_size
+            # Split into Extero (Phasic) and Intero (Smooth Injury)
+            self.extero_nociceptor = ExteroceptiveNociceptor(radius=nociceptor_radius, output_size=nociception_size)
+            self.intero_nociceptor = InteroceptiveNociceptor(output_size=nociception_size)
+            self.nociception_size = nociception_size * 2 # Combined size
         else:
-            self.nociceptor = None
+            self.extero_nociceptor = None
+            self.intero_nociceptor = None
             self.nociception_size = 0
         
         # Collision sensor
@@ -357,20 +370,16 @@ class SensorySystem:
             
         return spec
 
-    def sense(self, agent_pos, resources, grid_height=None, grid_width=None, resource_pos=None, previous_action=None):
+    def sense(self, agent_pos, resources, grid_height=None, grid_width=None, previous_action=None, extra_data=None):
         """
         Returns dictionary with all sensor outputs.
         
         Args:
             agent_pos: Agent (row, col)
             resources: List of Resource objects
-            grid_height, grid_width: Grid dimensions (for collision sensor)
-            resource_pos: Resource position (unused by ray sensor but kept for signature)
-            previous_action: Previous action index (0-4) for proprioceptive sensing
-            
-        Returns:
-            dict: {'olfactory': np.array, 'nociception': np.array, 'collision': np.array (optional), 
-                   'loc': np.array (optional), 'proprioception': np.array (optional)}
+            grid_height, grid_width: Grid dimensions
+            previous_action: Previous action index
+            extra_data: Dictionary for additional telemetry (e.g. {'injury_level': x, 'max_injury': y})
         """
         if grid_height is not None and grid_width is not None:
             self.grid_dims = (grid_height, grid_width)
@@ -381,7 +390,13 @@ class SensorySystem:
             result['olfactory'] = self.resource_sensor.sense(agent_pos, resources)
         
         if self.nociception_enabled:
-            result['nociception'] = self.nociceptor.sense(agent_pos, resources)
+            extero = self.extero_nociceptor.sense(agent_pos, resources)
+            # intero sense needs injury level, which must be passed in extra_data or explicitly
+            # Let's adjust the signature or assume it's in a dict
+            injury_level = extra_data.get('injury_level', 0) if isinstance(extra_data, dict) else 0
+            max_injury = extra_data.get('max_injury', 1) if isinstance(extra_data, dict) else 1
+            intero = self.intero_nociceptor.sense(injury_level, max_injury)
+            result['nociception'] = np.concatenate([extero, intero])
         
         if self.collision_sensor_enabled and grid_height is not None:
             result['collision'] = self.collision_sensor.sense(
@@ -425,14 +440,18 @@ class SensorySystem:
                 'type': 'spectrum' 
             })
 
-        data.append({
-            'name': 'Nociceptor',
-            'color': '#c0392b',  # Dark Red
-            'radius': 0,
-            'vector': None,
-            'intensity': nociception_val[0] if isinstance(nociception_val, np.ndarray) else nociception_val,
-            'type': 'intensity'
-        })
+        if self.nociception_enabled:
+            # Combined vector is [extero, intero]
+            extero_val = nociception_val[0] if len(nociception_val) > 0 else 0
+            
+            data.append({
+                'name': 'Extero Nociception',
+                'color': '#c0392b',  # Dark Red
+                'radius': 0,
+                'vector': None,
+                'intensity': extero_val,
+                'type': 'intensity'
+            })
         
         if self.collision_sensor_enabled and 'collision' in observation:
             data.append({

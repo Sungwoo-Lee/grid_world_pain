@@ -6,6 +6,7 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import os
 
 
+from src.environment.body import InteroceptiveBody
 from collections import namedtuple
 
 # Define Resource: Position, Property Vector
@@ -47,7 +48,8 @@ class GridWorld:
                  vector_size, food_property, danger_property,
                  eat_action_enabled=True, rest_action_enabled=True,
                  predator_enabled=False, predator_move_interval=2, predator_damage=3.0,
-                 predator_start_pos=(3, 0), predator_random_start_pos=True, predator_property=None):
+                 predator_start_pos=(3, 0), predator_random_start_pos=True, predator_property=None,
+                 injury_smoothing_duration=3):
         """
         Initializes the GridWorld foraging environment.
 
@@ -110,6 +112,7 @@ class GridWorld:
         
         self.resource_state = 'food' # 'food' or 'danger'
         self.resource_timer = self.min_food_duration
+        self.injury_smoothing_duration = injury_smoothing_duration
         
         # Relocation
         self.relocate_resource = relocate_resource
@@ -361,7 +364,7 @@ class GridWorld:
         spec = {
             'loc': {'shape': (2,), 'dtype': int},
             'satiation': {'shape': (1,), 'dtype': int},
-            'health': {'shape': (1,), 'dtype': float}
+            'injury': {'shape': (1,), 'dtype': float}
         }
         return spec
 
@@ -400,7 +403,7 @@ class GridWorld:
             print(f"Predator Pos: {self.predator_pos}")
         print()
 
-    def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=None, step=None, sensory_data=None, action=None):
+    def render_rgb_array(self, satiation=None, max_satiation=None, injury=None, max_injury=None, episode=None, step=None, sensory_data=None, action=None):
         """
         Renders the grid as an RGB image using Matplotlib with a professional Light Theme (Scientific/Apple Style).
         Supports visualizing sensory modules if data is provided.
@@ -533,7 +536,13 @@ class GridWorld:
         ax_stats.text(0.1, y_cursor, ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
         ax_stats.text(0.1, y_cursor - 0.08, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
         
-        y_cursor -= 0.1 # Gap
+        y_cursor -= 0.12 # Gap
+        
+        # 2.3 Interoception Section
+        if (self.with_satiation and satiation is not None) or (injury is not None):
+            y_cursor -= 0.05
+            ax_stats.text(0.1, y_cursor, "INTEROCEPTION", color='#868E96', fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
+            y_cursor -= 0.05
         
         # Helper for Bars
         def draw_bar(ax, y_pos, label, value, max_val, color):
@@ -552,9 +561,9 @@ class GridWorld:
              y_cursor -= 0.15
              draw_bar(ax_stats, y_cursor, "SATIATION", satiation, max_satiation, food_color)
         
-        if health is not None and max_health is not None:
+        if injury is not None and max_injury is not None:
              y_cursor -= 0.15
-             draw_bar(ax_stats, y_cursor, "HEALTH", health, max_health, danger_color)
+             draw_bar(ax_stats, y_cursor, "INTERO NOCICEPTOR", injury, max_injury, danger_color)
              
         # 2.4 Status Badge & Action (Fixed at Bottom of Stats Panel usually better, but let's stack)
         y_cursor -= 0.20

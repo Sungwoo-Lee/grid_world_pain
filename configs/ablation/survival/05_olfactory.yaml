@@ -1,22 +1,24 @@
-# Level 05: +Olfactory / Forage (Survival)
-# Reward: Survival (+1 per step)
+# Level 05: +Olfactory (Survival)
+# Reward: External (Survival)
 environment:
-  max_steps: 500
-  relocate_resource: true
+  max_steps: 200
   prob_switch_to_danger: 0.1
   prob_switch_to_food: 0.5
-  eat_action_enabled: true
+  relocate_resource: false
+  eat_action_enabled: false
   rest_action_enabled: true
 
 body:
-  with_satiation: true
+  with_satiation: false
   with_health: true
-  random_start_satiation: true
+  health_recovery: 2.0
   use_homeostatic_reward: false
+  injury_smoothing_duration: 3
 
 sensory:
   using_sensory: true
   nociception_enabled: true
+  nociception_size: 1
   olfactory_enabled: true
   proprioception_enabled: false
   collision_sensor_enabled: false

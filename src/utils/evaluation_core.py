@@ -51,7 +51,7 @@ def evaluate_agent(
     proprioception_enabled = config.get_mandatory('sensory.proprioception_enabled', bool)
     
     max_satiation = config.get_mandatory('body.max_satiation', int) if with_satiation else None
-    max_health = config.get_mandatory('body.max_health', float) if with_health else None
+    max_injury = config.get_mandatory('body.max_health', float) if with_health else None
     max_steps = config.get_mandatory('environment.max_steps', int)
     
     # Visualization Config
@@ -91,7 +91,7 @@ def evaluate_agent(
                         if isinstance(state, np.ndarray):
                             input_tensor = torch.FloatTensor(state).unsqueeze(0).to(device)
                     else:
-                        flat = preprocess_state(state, env.height, env.width, max_satiation, max_health)
+                        flat = preprocess_state(state, env.height, env.width, max_satiation, max_injury)
                         input_tensor = torch.FloatTensor(flat).unsqueeze(0).to(device)
                         
                     algorithm_name = type(agent).__name__
@@ -174,7 +174,7 @@ def evaluate_agent(
             if with_satiation:
                 input_structure.append(("Sat", 1))
                 if with_health:
-                    input_structure.append(("Hlth", 1))
+                    input_structure.append(("Inj", 1))
 
             # Initialize LRP
             if vis_lrp:
@@ -228,9 +228,12 @@ def evaluate_agent(
             current_agent_pos = env.agent_pos
             if using_sensory and sensory_system:
                 resources = env.get_active_resources()
+                extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
+                              'max_injury': body.max_injury if with_satiation else 1}
                 sensory_dict = sensory_system.sense(
                     current_agent_pos, resources,
-                    grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos
+                    grid_height=env.height, grid_width=env.width,
+                    extra_data=extra_data
                 )
 
             if with_satiation:
@@ -247,7 +250,7 @@ def evaluate_agent(
                 
                 if isinstance(body_return, tuple):
                      state['satiation'] = body_return[0]
-                     state['health'] = body_return[1]
+                     state['injury'] = body_return[1]
                 else:
                      state['satiation'] = body_return
             else:
@@ -266,7 +269,7 @@ def evaluate_agent(
             # Render Helper
             # Need to extract body state for render
             sat_val = state.get('satiation', 0)
-            health_val = state.get('health')
+            injury_val = state.get('injury')
             
             # Arg, render_rgb_array signature varies based on satiation?
             # env.render_rgb_array signature:
@@ -275,8 +278,8 @@ def evaluate_agent(
             frame = env.render_rgb_array(
                 satiation=sat_val if with_satiation else None, 
                 max_satiation=max_satiation, 
-                health=health_val, 
-                max_health=max_health, 
+                injury=injury_val, 
+                max_injury=max_injury, 
                 episode=ep_idx, 
                 step=0, 
                 sensory_data=vis_data
@@ -291,7 +294,7 @@ def evaluate_agent(
             previous_action = 4 if proprioception_enabled else None
             
             # Preprocess
-            flat_state = preprocess_state(state, env.height, env.width, max_satiation, max_health)
+            flat_state = preprocess_state(state, env.height, env.width, max_satiation, max_injury)
             state_array = stacker.reset(flat_state).flatten()
             
             # Tabular State Handling
@@ -302,7 +305,7 @@ def evaluate_agent(
                  if with_satiation:
                       tabular_list.append(state.get('satiation', 0))
                  if with_health:
-                      tabular_list.append(state.get('health', 0))
+                      tabular_list.append(state.get('injury', 0))
                  state_array = tuple(int(x) for x in tabular_list)
                  
             while not done and step_count < max_steps:
@@ -319,9 +322,12 @@ def evaluate_agent(
                 
                 if using_sensory and sensory_system:
                      resources = env.get_active_resources()
+                     extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
+                                   'max_injury': body.max_injury if with_satiation else 1}
                      next_sensory_dict = sensory_system.sense(
                          current_agent_pos, resources,
-                         grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos
+                         grid_height=env.height, grid_width=env.width,
+                         extra_data=extra_data
                      )
                 
                 if with_satiation:
@@ -337,7 +343,7 @@ def evaluate_agent(
                         
                     if isinstance(body_return, tuple):
                          next_state['satiation'] = body_return[0]
-                         next_state['health'] = body_return[1]
+                         next_state['injury'] = body_return[1]
                     else:
                          next_state['satiation'] = body_return
                 else:
@@ -354,13 +360,13 @@ def evaluate_agent(
 
                 
                 sat_val = next_state.get('satiation', 0)
-                health_val = next_state.get('health')
+                injury_val = next_state.get('injury')
                 
                 frame = env.render_rgb_array(
                     satiation=sat_val if with_satiation else None,
                     max_satiation=max_satiation,
-                    health=health_val,
-                    max_health=max_health,
+                    injury=injury_val,
+                    max_injury=max_injury,
                     episode=ep_idx,
                     step=step_count+1,
                     sensory_data=vis_data,
@@ -375,7 +381,7 @@ def evaluate_agent(
                 
                 state = next_state
                 # Use current action as "previous action" for next state
-                flat_next = preprocess_state(next_state, env.height, env.width, max_satiation, max_health)
+                flat_next = preprocess_state(next_state, env.height, env.width, max_satiation, max_injury)
                 
                 # Update previous action for next iteration
                 if proprioception_enabled:
@@ -391,7 +397,7 @@ def evaluate_agent(
                      if with_satiation:
                           tabular_list.append(next_state.get('satiation', 0))
                      if with_health:
-                          tabular_list.append(next_state.get('health', 0))
+                          tabular_list.append(next_state.get('injury', 0))
                      state_array = tuple(int(x) for x in tabular_list)
                      
                 step_count += 1
@@ -402,8 +408,8 @@ def evaluate_agent(
                         frame = env.render_rgb_array(
                             satiation=sat_val if with_satiation else None,
                             max_satiation=max_satiation,
-                            health=health_val,
-                            max_health=max_health,
+                            injury=injury_val,
+                            max_injury=max_injury,
                             episode=ep_idx,
                             step=step_count,
                             sensory_data=vis_data

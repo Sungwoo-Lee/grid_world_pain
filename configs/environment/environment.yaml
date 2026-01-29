@@ -38,6 +38,7 @@ body:
   start_health_random: false
   start_health: 20
   health_recovery: 1
+  injury_smoothing_duration: 3
 
 
 sensory:

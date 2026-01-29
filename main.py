@@ -177,6 +177,7 @@ def main():
     collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
     collision_sensor_range = config.get_mandatory('sensory.collision_sensor_range', int)
     location_sensor = config.get_mandatory('sensory.location_sensor')
+    injury_smoothing_duration = config.get('body.injury_smoothing_duration', 3)
 
     # Setup paths
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -212,7 +213,8 @@ def main():
         predator_damage=predator_damage,
         predator_start_pos=tuple(predator_start_pos),
         predator_random_start_pos=predator_random_start_pos,
-        predator_property=predator_property
+        predator_property=predator_property,
+        injury_smoothing_duration=injury_smoothing_duration
     )
     
     # Get action dimension from environment spec (dynamic based on eat/rest config)
@@ -231,7 +233,8 @@ def main():
         max_health=max_health,
         start_health=start_health,
         health_recovery=health_recovery,
-        start_health_random=start_health_random
+        start_health_random=start_health_random,
+        injury_smoothing_duration=injury_smoothing_duration
     )
     
     sensory_system = None
@@ -281,7 +284,9 @@ def main():
         sensory_dict = {}
         if using_sensory:
              resources = env.get_active_resources()
-             sensory_dict = sensory_system.sense(current_agent_pos, resources, grid_height=height, grid_width=width)
+             extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
+                           'max_injury': body.max_injury if with_satiation else 1}
+             sensory_dict = sensory_system.sense(current_agent_pos, resources, grid_height=height, grid_width=width, extra_data=extra_data)
         
         body_return = None
         if with_satiation:
@@ -290,7 +295,7 @@ def main():
             print("Start State:")
             print(f"Satiation: {body.satiation}/{body.max_satiation}")
             if with_health:
-                print(f"Health: {body.health}/{body.max_health}")
+                print(f"Injury (Intero Nociceptor): {body.injury_level}/{body.max_injury}")
         
         if predator_enabled:
             print(f"Predator Pos: {env.predator_pos}")
@@ -306,13 +311,13 @@ def main():
 
 
         # Capture Frame
-        health = body.health if body.with_health else None
-        max_health = body.max_health if body.with_health else None
+        injury = body.injury_level if body.with_health else None
+        max_injury = body.max_injury if body.with_health else None
         frames.append(env.render_rgb_array(
             satiation=body.satiation if with_satiation else None, 
             max_satiation=body.max_satiation if with_satiation else None, 
-            health=health, 
-            max_health=max_health, 
+            injury=injury, 
+            max_injury=max_injury, 
             episode=ep_num, 
             step=0, 
             sensory_data=vis_data
@@ -339,7 +344,9 @@ def main():
             
             if using_sensory:
                  resources = env.get_active_resources()
-                 sensory_dict = sensory_system.sense(current_agent_pos, resources, grid_height=env.height, grid_width=env.width)
+                 extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
+                               'max_injury': body.max_injury if with_satiation else 1}
+                 sensory_dict = sensory_system.sense(current_agent_pos, resources, grid_height=env.height, grid_width=env.width, extra_data=extra_data)
                  vis_data = sensory_system.get_visualization_data(sensory_dict)
 
             reward = env_reward
@@ -350,7 +357,7 @@ def main():
                 print(f"  Info: {info}")
                 print(f"  Satiation: {body.satiation}/{body.max_satiation}")
                 if with_health:
-                    print(f"  Health: {body.health}/{body.max_health}")
+                    print(f"  Injury: {body.injury_level}/{body.max_injury}")
                 if predator_enabled:
                     print(f"  Predator Pos: {env.predator_pos}")
                 print(f"  Reward: {reward}, Done: {done}")
@@ -360,13 +367,13 @@ def main():
                 print(f"  Reward: {reward}, Done: {done}")
 
             # Capture Frame
-            health = body.health if body.with_health else None
-            max_health = body.max_health if body.with_health else None
+            injury = body.injury_level if body.with_health else None
+            max_injury = body.max_injury if body.with_health else None
             frames.append(env.render_rgb_array(
                 satiation=body.satiation if with_satiation else None, 
                 max_satiation=body.max_satiation if with_satiation else None, 
-                health=health, 
-                max_health=max_health, 
+                injury=injury, 
+                max_injury=max_injury, 
                 episode=ep_num, 
                 step=step_count+1, 
                 sensory_data=vis_data
@@ -381,8 +388,8 @@ def main():
                      frames.append(env.render_rgb_array(
                         satiation=body.satiation if with_satiation else None, 
                         max_satiation=body.max_satiation if with_satiation else None, 
-                        health=health, 
-                        max_health=max_health, 
+                        injury=injury, 
+                        max_injury=max_injury, 
                         episode=ep_num, 
                         step=step_count, 
                         sensory_data=vis_data
@@ -395,8 +402,8 @@ def main():
                  frames.append(env.render_rgb_array(
                     satiation=body.satiation if with_satiation else None, 
                     max_satiation=body.max_satiation if with_satiation else None, 
-                    health=health, 
-                    max_health=max_health, 
+                    injury=injury, 
+                    max_injury=max_injury, 
                     episode=ep_num, 
                     step=step_count, 
                     sensory_data=vis_data

@@ -356,6 +356,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     start_health = float(resolve_param(start_health, 'body.start_health'))
     health_recovery = float(resolve_param(health_recovery, 'body.health_recovery'))
     start_health_random = resolve_param(start_health_random, 'body.start_health_random')
+    injury_smoothing_duration = int(resolve_param(None, 'body.injury_smoothing_duration'))
     
     device = resolve_param(device, 'training.device')
 
@@ -440,7 +441,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         predator_damage=predator_damage,
         predator_start_pos=tuple(predator_start_pos),
         predator_random_start_pos=predator_random_start_pos,
-        predator_property=predator_property
+        predator_property=predator_property,
+        injury_smoothing_duration=injury_smoothing_duration
     )
     
     # Get action dimension from environment spec (dynamic based on eat/rest config)
@@ -459,7 +461,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         max_health=max_health,
         start_health=start_health,
         health_recovery=health_recovery,
-        start_health_random=start_health_random
+        start_health_random=start_health_random,
+        injury_smoothing_duration=injury_smoothing_duration
     )
     
     sensory_system = None
@@ -524,7 +527,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         input_dim += sat_shape[0]
         dims_breakdown.append(f"Sat={sat_shape[0]}")
         if with_health:
-             hlth_shape = observation_spec['health']['shape']
+             hlth_shape = observation_spec['injury']['shape']
              input_dim += hlth_shape[0]
              dims_breakdown.append(f"Health={hlth_shape[0]}")
     
@@ -661,7 +664,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 self.width = env.width
                 self.max_satiation = body.max_satiation
                 self.with_health = body.with_health
-                self.max_health = body.max_health
+                self.max_health = body.max_injury # Standardize
                 
         composite_env = CompositeEnv(env, body)
         agent = QLearningAgent(composite_env, with_satiation=with_satiation)
@@ -723,10 +726,13 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         current_agent_pos = env.agent_pos
         if using_sensory:
              resources = env.get_active_resources()
+             extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
+                           'max_injury': body.max_injury if with_satiation else 1}
              sensory_dict = sensory_system.sense(
                  current_agent_pos, resources,
-                 grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos,
-                 previous_action=previous_action
+                 grid_height=env.height, grid_width=env.width,
+                 previous_action=previous_action,
+                 extra_data=extra_data
              )
 
         if with_satiation:
@@ -738,14 +744,14 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 
                 if isinstance(body_return, tuple):
                      state['satiation'] = body_return[0]
-                     state['health'] = body_return[1]
+                     state['injury'] = body_return[1]
                 else:
                      state['satiation'] = body_return
             else:
                  state = {'loc': env_state}
                  if isinstance(body_return, tuple):
                      state['satiation'] = body_return[0]
-                     state['health'] = body_return[1]
+                     state['injury'] = body_return[1]
                  else:
                      state['satiation'] = body_return
         else:
@@ -764,7 +770,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         state_array = None
         
         if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
-            flat_state = preprocess_state(state, env.height, env.width, body.max_satiation, body.max_health)
+            flat_state = preprocess_state(state, env.height, env.width, body.max_satiation, body.max_injury)
             # Stack the initial state and FLATTEN for agent compatibility (Seq vs Grid issues)
             state_array = stacker.reset(flat_state).flatten() 
 
@@ -796,7 +802,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             if with_satiation:
                 tabular_list.append(state['satiation'])
             if with_health:
-                tabular_list.append(state['health'])
+                tabular_list.append(state.get('injury', state.get('health', 0))) # Support both during transition
                 
             state_array = tuple(int(x) for x in tabular_list)
         
@@ -814,10 +820,13 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             # Update Observations
             if using_sensory:
                  resources = env.get_active_resources()
+                 extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
+                               'max_injury': body.max_injury if with_satiation else 1}
                  next_sensory_dict = sensory_system.sense(
                      next_env_state, resources,
-                     grid_height=env.height, grid_width=env.width, resource_pos=env.resource_pos,
-                     previous_action=action
+                     grid_height=env.height, grid_width=env.width,
+                     previous_action=action,
+                     extra_data=extra_data
                  )
             
             if with_satiation:
@@ -832,7 +841,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                      
                 if isinstance(body_return, tuple):
                      next_state['satiation'] = body_return[0]
-                     next_state['health'] = body_return[1]
+                     next_state['injury'] = body_return[1]
                 else:
                      next_state['satiation'] = body_return
             else:
@@ -850,7 +859,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update
                 # Use current action as the "previous action" for the next state
-                flat_next_state_raw = preprocess_state(next_state, env.height, env.width, body.max_satiation, body.max_health)
+                flat_next_state_raw = preprocess_state(next_state, env.height, env.width, body.max_satiation, body.max_injury)
                 # Stack next state and Flatten
                 next_state_stacked = stacker.step(flat_next_state_raw).flatten()
 
@@ -918,7 +927,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 if with_satiation:
                     tabular_next_list.append(next_state['satiation'])
                 if with_health:
-                    tabular_next_list.append(next_state['health'])
+                    tabular_next_list.append(next_state['injury'])
                 
                 next_state_array = tuple(int(x) for x in tabular_next_list)
                 

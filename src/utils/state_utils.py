@@ -28,7 +28,7 @@ class FrameStacker:
         """Stack frames into (Stack, D) array"""
         return np.stack(list(self.frames), axis=0)
 
-def preprocess_state(state, env_height, env_width, max_satiation=None, max_health=None):
+def preprocess_state(state, env_height, env_width, max_satiation=None, max_injury=None):
     """
     Converts raw state information (from environment + body + sensors) into a flat, normalized array for agent input.
     Handles both sensory dictionary observations and conventional state tuples.
@@ -39,7 +39,7 @@ def preprocess_state(state, env_height, env_width, max_satiation=None, max_healt
             - tuple: Conventional (row, col) coordinates
         env_height, env_width (int): Grid dimensions for normalization
         max_satiation (int, optional): Max satiation for normalization
-        max_health (float, optional): Max health for normalization
+        max_injury (float, optional): Max injury for normalization
         
     Returns:
         np.array: Flat 1D float array with all state components concatenated and normalized
@@ -86,8 +86,10 @@ def preprocess_state(state, env_height, env_width, max_satiation=None, max_healt
         # Body States
         if max_satiation and 'satiation' in state:
              flat_list.append(state['satiation'] / max_satiation)
-        if max_health and 'health' in state:
-             flat_list.append(state['health'] / max_health)
+        if max_injury and 'injury' in state:
+             flat_list.append(state['injury'] / max_injury)
+        elif max_injury and 'health' in state: # Backwards compatibility
+             flat_list.append(state['health'] / max_injury)
 
     else:
         # Tuple/List/Array (Legacy or Conventional)

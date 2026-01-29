@@ -13,10 +13,12 @@ body:
   with_health: true
   health_recovery: 2.0
   use_homeostatic_reward: true
+  injury_smoothing_duration: 3
 
 sensory:
   using_sensory: true
   nociception_enabled: true
+  nociception_size: 1
   olfactory_enabled: false
   proprioception_enabled: false
   collision_sensor_enabled: false

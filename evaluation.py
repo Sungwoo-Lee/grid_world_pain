@@ -127,6 +127,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     start_health = config.get_mandatory('body.start_health', float)
     health_recovery = config.get_mandatory('body.health_recovery', float)
     start_health_random = config.get_mandatory('body.start_health_random')
+    injury_smoothing_duration = int(config.get('body.injury_smoothing_duration', 3))
     
     prob_switch_to_danger = config.get_mandatory('environment.prob_switch_to_danger', float)
     min_danger_duration = config.get_mandatory('environment.min_danger_duration', int)
@@ -174,7 +175,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
                     predator_damage=predator_damage,
                     predator_start_pos=tuple(predator_start_pos),
                     predator_random_start_pos=predator_random_start_pos,
-                    predator_property=predator_property)
+                    predator_property=predator_property,
+                    injury_smoothing_duration=injury_smoothing_duration)
     
     # Get action dimension from environment spec (dynamic based on eat/rest config)
     action_dim = env.action_spec()['n']
@@ -191,7 +193,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         max_health=max_health,
         start_health=start_health,
         health_recovery=health_recovery,
-        start_health_random=start_health_random
+        start_health_random=start_health_random,
+        injury_smoothing_duration=injury_smoothing_duration
     )
     
     # Sensory System
@@ -397,7 +400,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
                 self.width = env.width
                 self.max_satiation = body.max_satiation
                 self.with_health = body.with_health
-                self.max_health = body.max_health
+                self.max_health = body.max_injury # Standardize on interoceptive terminology
                 
         agent = QLearningAgent(CompositeEnv(env, body), with_satiation=with_satiation)
         try:
