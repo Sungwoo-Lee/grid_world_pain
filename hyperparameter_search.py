@@ -22,7 +22,9 @@ Arguments:
 - `--episodes <int>`: Number of episodes per run (default: 1000).
 - `--seed <int>`: Random seed (default: 42).
 - `--num-processes <int>`: Number of parallel processes to run (default: 1).
-- `--wandb-project <str>`: WandB project name (default: "grid_world_pain").
+- `--device <str>`: Device to use for training (e.g., 'cpu', 'cuda', 'cuda:0', 'auto').
+- `--config <str>`: Path to base training configuration file.
+- `--wandb-project <str>`: WandB project name.
 - `--dry-run`: Print commands without executing.
 
 Usage:
@@ -80,16 +82,16 @@ SEARCH_SPACES = {
         "agent.algorithm": ["PPO"]
     },
     "recurrent_ppo": {
-        "agent.lr_actor": [1e-4, 3e-4],
-        "agent.lr_critic": [5e-4, 1e-3],
+        # "agent.lr_actor": [1e-4, 3e-4],
+        # "agent.lr_critic": [5e-4, 1e-3],
         # "agent.clip_param": [0.1, 0.2],
-        "agent.entropy_coef": [0.001, 0.01],
-        "agent.K_epochs": [4, 10],
-        "agent.sequence_length": [8, 16],
-        "agent.fc_layers": [[64], [128]],
-        "agent.recurrent_layers": [[64], [128]],
-        "agent.actor_fc_layers": [[64], [128]],
-        "agent.critic_fc_layers": [[64], [128]],
+        # "agent.entropy_coef": [0.001, 0.01],
+        # "agent.K_epochs": [4, 10],
+        "agent.sequence_length": [8, 16, 32, 64, 128],
+        # "agent.fc_layers": [[64], [128]],
+        # "agent.recurrent_layers": [[64], [128]],
+        # "agent.actor_fc_layers": [[64], [128]],
+        # "agent.critic_fc_layers": [[64], [128]],
         "agent.algorithm": ["RecurrentPPO"]
     },
     "dreamer_v3": {
@@ -132,7 +134,7 @@ def generate_config(base_config_path, params, output_path):
     with open(output_path, 'w') as f:
         yaml.dump(config, f)
 
-def run_single_combination(params, algorithm, episodes, seed, wandb_project, wandb_group, wandb_job_type, dry_run, index, total):
+def run_single_combination(params, algorithm, episodes, seed, config, wandb_project, wandb_group, wandb_job_type, dry_run, index, total, log_dir, device):
     """
     Worker function to run a single hyperparameter combination.
     """
@@ -151,7 +153,8 @@ def run_single_combination(params, algorithm, episodes, seed, wandb_project, wan
         tag = tag[:200]
         
     print(f"\n--- Run {index}/{total}: {tag} ---")
-    if not dry_run: # Reduce clutter in dry run
+    if not dry_run:
+        print(f"Log: {os.path.join(log_dir, f'run_{index}.log')}")
         print(f"Params: {params}")
 
     ensure_dir(TEMP_CONFIG_DIR)
@@ -175,20 +178,24 @@ def run_single_combination(params, algorithm, episodes, seed, wandb_project, wan
         "--wandb-project", wandb_project,
         "--wandb-group", wandb_group,
         "--wandb-name", tag,
+        "--wandb-job-type", wandb_job_type,
         "--quiet"
     ]
     
-    if wandb_job_type:
-        cmd.extend(["--wandb-job-type", wandb_job_type])
-
+    if config:
+        cmd.extend(["--config", config])
+    if device:
+        cmd.extend(["--device", device])
 
     if dry_run:
         print(f"Dry Run Command: {' '.join(cmd)}")
         if os.path.exists(temp_config_path):
             os.remove(temp_config_path)
     else:
+        log_path = os.path.join(log_dir, f"run_{index}.log")
         try:
-            subprocess.run(cmd, check=True)
+            with open(log_path, "w") as log_file:
+                subprocess.run(cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as e:
             print(f"Error running training for {tag}: {e}")
         finally:
@@ -201,7 +208,7 @@ def run_single_combination_wrapper(args):
     """Wrapper to unpack arguments for imap."""
     return run_single_combination(*args)
 
-def run_search(algorithm, episodes, seed, wandb_project, num_processes, dry_run, wandb_job_type):
+def run_search(algorithm, episodes, seed, config, wandb_project, num_processes, dry_run, wandb_job_type, device):
     if algorithm not in SEARCH_SPACES:
         print(f"Error: Algorithm '{algorithm}' not found in search spaces.")
         print(f"Available: {list(SEARCH_SPACES.keys())}")
@@ -218,23 +225,38 @@ def run_search(algorithm, episodes, seed, wandb_project, num_processes, dry_run,
     
     ensure_dir(TEMP_CONFIG_DIR)
     
-    wandb_group = f"search_{algorithm}_{int(time.time())}"
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    wandb_group = f"search_{algorithm}_{timestamp}"
+    log_dir = os.path.join("logs", f"{timestamp}_search_{algorithm}")
+    ensure_dir(log_dir)
+    
+    print(f"Logs will be saved to: {log_dir}")
     
     # Prepare arguments for each task
     tasks = []
     for i, combo in enumerate(combinations):
         params = dict(zip(keys, combo))
-        tasks.append((params, algorithm, episodes, seed, wandb_project, wandb_group, wandb_job_type, dry_run, i+1, total_combinations))
+        tasks.append((params, algorithm, episodes, seed, config, wandb_project, wandb_group, wandb_job_type, dry_run, i+1, total_combinations, log_dir, device))
     
     if num_processes > 1:
         with multiprocessing.Pool(processes=num_processes) as pool:
-            # Use imap_unordered to update progress bar as tasks complete
-            for _ in tqdm(pool.imap_unordered(run_single_combination_wrapper, tasks), total=len(tasks), desc="Hyperparameter Search"):
-                pass
+            try:
+                # Use imap_unordered to update progress bar as tasks complete
+                for _ in tqdm(pool.imap_unordered(run_single_combination_wrapper, tasks), total=len(tasks), desc="Hyperparameter Search"):
+                    pass
+            except KeyboardInterrupt:
+                print("\nInterrupted! Terminating parallel processes...")
+                pool.terminate()
+                pool.join()
+                sys.exit(1)
     else:
         # Sequential execution
-        for task in tqdm(tasks, desc="Hyperparameter Search"):
-            run_single_combination(*task)
+        try:
+            for task in tqdm(tasks, desc="Hyperparameter Search"):
+                run_single_combination(*task)
+        except KeyboardInterrupt:
+            print("\nInterrupted! Terminating search...")
+            sys.exit(1)
 
     print("\nSearch complete.")
     try:
@@ -248,9 +270,11 @@ def main():
     parser.add_argument("--episodes", type=int, help="Number of episodes per run (Required)")
     parser.add_argument("--seed", type=int, help="Random seed (Required)")
     parser.add_argument("--num-processes", type=int, required=True, help="Number of parallel processes (Required)")
+    parser.add_argument("--config", type=str, help="Path to config file (Optional)")
+    parser.add_argument("--device", type=str, help="Device to use for training (e.g., 'cpu', 'cuda', 'auto')")
     parser.add_argument("--dry-run", action="store_true", help="Print commands without executing")
     parser.add_argument("--wandb-project", type=str, help="WandB Project Name")
-    parser.add_argument("--wandb-job-type", type=str, help="WandB Job Type")
+
     
     args = parser.parse_args()
     
@@ -261,22 +285,19 @@ def main():
 
     # Load defaults from WandB config
     wandb_project = None
-    wandb_job_type = None
+    wandb_job_type = "hyperparameter search"
     
-    wandb_config_path = "configs/wandb.yaml"
+    wandb_config_path = "configs/logger/wandb.yaml"
     if os.path.exists(wandb_config_path):
         try:
             wc = Config.load_yaml(wandb_config_path)
             wandb_project = wc.get('wandb.project')
-            wandb_job_type = wc.get('wandb.job_type')
         except Exception as e:
             print(f"Warning: Failed to load {wandb_config_path}: {e}")
 
     # Override with CLI args
     if args.wandb_project:
         wandb_project = args.wandb_project
-    if args.wandb_job_type:
-        wandb_job_type = args.wandb_job_type
         
     # Strict Validation
     if args.episodes is None:
@@ -285,14 +306,12 @@ def main():
         raise ValueError("Strict Config: '--seed' is a required argument.")
     if wandb_project is None:
         raise ValueError("Strict Config: 'wandb.project' must be specified in configs/wandb.yaml or via --wandb-project")
-    if wandb_job_type is None:
-        raise ValueError("Strict Config: 'wandb.job_type' must be specified in configs/wandb.yaml or via --wandb-job-type")
     
     
     # Ensure WandB login for the search runner
     wandb_login(quiet=False)
     
-    run_search(args.algorithm, args.episodes, args.seed, wandb_project, args.num_processes, args.dry_run, wandb_job_type)
+    run_search(args.algorithm, args.episodes, args.seed, args.config, wandb_project, args.num_processes, args.dry_run, wandb_job_type, args.device)
 
 
 if __name__ == "__main__":
