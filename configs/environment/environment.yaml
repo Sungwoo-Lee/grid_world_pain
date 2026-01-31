@@ -70,7 +70,7 @@ sensory:
 
 predator:
   enabled: true
-  move_interval: 4      # Moves every N steps
+  move_interval: 6      # Moves every N steps
   damage: 3.0           # Damage dealt on contact
   start_pos: [3, 0]     # Default start position
   random_start_pos: true

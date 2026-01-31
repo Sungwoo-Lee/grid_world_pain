@@ -321,7 +321,15 @@ class SensorySystem:
             self.proprioception_size = 0
         
         # Total output dimensions
-        total_dim = vector_size + self.nociception_size + self.collision_output_size + self.location_size + self.proprioception_size
+        self.exteroception_size = (self.vector_size + 
+                                   (nociception_size if nociception_enabled else 0) + 
+                                   self.collision_output_size + 
+                                   self.location_size)
+        
+        self.interoception_size = (nociception_size if nociception_enabled else 0) + 1 # +1 for Satiation
+        self.proprioception_size = self.proprioception_size # Already computed
+        
+        total_dim = self.exteroception_size + self.interoception_size + self.proprioception_size
         self.state_dims = (total_dim,)
         
         # For compatibility/access
@@ -330,91 +338,115 @@ class SensorySystem:
 
     def observation_spec(self):
         """
-        Returns the shape of the sensory output components.
-        All sizes are determined by configuration.
+        Returns the shape of the grouped sensory output.
         
         Returns:
              dict: {
-                'olfactory': {'shape': (vector_size,), 'dtype': float},
-                'nociception': {'shape': (nociception_size,), 'dtype': float} (if enabled),
-                'collision': {'shape': (collision_output_size,), 'dtype': float} (if enabled),
-                'loc': {'shape': (location_size,), 'dtype': float} (if enabled),
-                'proprioception': {'shape': (num_actions,), 'dtype': float} (if enabled)
+                'exteroception': {'shape': (exteroception_size,), 'dtype': float},
+                'interoception': {'shape': (interoception_size,), 'dtype': float},
+                'proprioception': {'shape': (proprioception_size,), 'dtype': float}
              }
         """
-        spec = {}
-        
-        if self.olfactory_enabled:
-            spec['olfactory'] = {'shape': (self.vector_size,), 'dtype': float}
-        
-        if self.nociception_enabled:
-            spec['nociception'] = {'shape': (self.nociception_size,), 'dtype': float}
-        
-        if self.collision_sensor_enabled:
-            spec['collision'] = {
-                'shape': (self.collision_output_size,), 
-                'dtype': float
-            }
-            
-        if self.location_sensor_enabled:
-            spec['loc'] = {
-                'shape': (self.location_size,),
-                'dtype': float
-            }
-        
-        if self.proprioception_enabled:
-            spec['proprioception'] = {
-                'shape': (self.proprioception_size,),
-                'dtype': float
-            }
-            
+        spec = {
+            'exteroception': {'shape': (self.exteroception_size,), 'dtype': float},
+            'interoception': {'shape': (self.interoception_size,), 'dtype': float},
+            'proprioception': {'shape': (self.proprioception_size,), 'dtype': float}
+        }
         return spec
+            
+    def get_dimension_breakdown(self):
+        """Returns a string describing the calculation of each dimension group."""
+        extero_parts = []
+        if self.olfactory_enabled: extero_parts.append(f"Olf={self.vector_size}")
+        if self.nociception_enabled: extero_parts.append(f"ExteroNoc={self.extero_nociceptor.output_size}")
+        if self.collision_sensor_enabled: extero_parts.append(f"Col={self.collision_output_size}")
+        if self.location_sensor_enabled: extero_parts.append(f"Loc={self.location_size}")
+        
+        extero_str = f"Extero({self.exteroception_size}) = " + " + ".join(extero_parts)
+        
+        intero_parts = []
+        if self.nociception_enabled: intero_parts.append(f"InteroNoc={self.intero_nociceptor.output_size}")
+        intero_parts.append(f"Sat=1")
+        
+        intero_str = f"Intero({self.interoception_size}) = " + " + ".join(intero_parts)
+        
+        prop_str = f"Proprio({self.proprioception_size}) = Actions({self.num_actions})"
+        
+        return f"{extero_str}\n  {intero_str}\n  {prop_str}"
 
     def sense(self, agent_pos, resources, grid_height=None, grid_width=None, previous_action=None, extra_data=None):
         """
-        Returns dictionary with all sensor outputs.
+        Returns dictionary with grouped sensor outputs.
         
         Args:
             agent_pos: Agent (row, col)
             resources: List of Resource objects
             grid_height, grid_width: Grid dimensions
             previous_action: Previous action index
-            extra_data: Dictionary for additional telemetry (e.g. {'injury_level': x, 'max_injury': y})
+            extra_data: Dictionary for additional telemetry 
+                       Ex: {'injury_level': x, 'max_injury': y, 'satiation': z, 'max_satiation': s}
         """
         if grid_height is not None and grid_width is not None:
             self.grid_dims = (grid_height, grid_width)
             
         result = {}
+        extero_parts = []
+        intero_parts = []
+        prop_parts = []
             
+        # --- Exteroception ---
         if self.olfactory_enabled:
-            result['olfactory'] = self.resource_sensor.sense(agent_pos, resources)
+            olf = self.resource_sensor.sense(agent_pos, resources)
+            result['olfactory'] = olf
+            extero_parts.append(olf)
         
         if self.nociception_enabled:
-            extero = self.extero_nociceptor.sense(agent_pos, resources)
-            # intero sense needs injury level, which must be passed in extra_data or explicitly
-            # Let's adjust the signature or assume it's in a dict
+            extero_noc = self.extero_nociceptor.sense(agent_pos, resources)
+            result['extero_nociception'] = extero_noc
+            extero_parts.append(extero_noc)
+            
+            # Intero Nociception (Injury)
             injury_level = extra_data.get('injury_level', 0) if isinstance(extra_data, dict) else 0
             max_injury = extra_data.get('max_injury', 1) if isinstance(extra_data, dict) else 1
-            intero = self.intero_nociceptor.sense(injury_level, max_injury)
-            result['nociception'] = np.concatenate([extero, intero])
+            intero_noc = self.intero_nociceptor.sense(injury_level, max_injury)
+            result['intero_nociception'] = intero_noc
+            intero_parts.append(intero_noc)
+            
+            # For backward compatibility/legacy visualization
+            result['nociception'] = np.concatenate([extero_noc, intero_noc])
         
         if self.collision_sensor_enabled and grid_height is not None:
-            result['collision'] = self.collision_sensor.sense(
-                agent_pos, grid_height, grid_width
-            )
+            col = self.collision_sensor.sense(agent_pos, grid_height, grid_width)
+            result['collision'] = col
+            extero_parts.append(col)
             
         if self.location_sensor_enabled:
             if grid_height is None or grid_width is None:
-                # Fallback or error?
-                # If we are training, we usually have dims. 
-                # If not provided, we can't center.
-                # Assuming provided for now as checked in train.py/main.py
                 raise ValueError("Grid dimensions required for LocationSensor")
-                
-            result['loc'] = self.location_sensor.sense(agent_pos, grid_height, grid_width)
+            loc = self.location_sensor.sense(agent_pos, grid_height, grid_width)
+            result['loc'] = loc
+            extero_parts.append(loc)
         
+        # --- Proprioception ---
         if self.proprioception_enabled:
-            result['proprioception'] = self.proprioceptor.sense(previous_action)
+            prop = self.proprioceptor.sense(previous_action)
+            result['proprioception'] = prop
+            prop_parts.append(prop)
+            
+        # --- Interoception ---
+        # Satiation
+        satiation = extra_data.get('satiation', 0) if isinstance(extra_data, dict) else 0
+        max_satiation = extra_data.get('max_satiation', 1) if isinstance(extra_data, dict) else 1
+        sat_val = np.array([satiation / max_satiation], dtype=np.float32)
+        result['satiation_sensor'] = sat_val
+        intero_parts.append(sat_val)
+        
+        # Construct grouped results
+        result['exteroception'] = np.concatenate(extero_parts) if extero_parts else np.zeros(0, dtype=np.float32)
+        result['interoception'] = np.concatenate(intero_parts) if intero_parts else np.zeros(0, dtype=np.float32)
+        result['proprioception_out'] = np.concatenate(prop_parts) if prop_parts else np.zeros(0, dtype=np.float32)
+        # Note: 'proprioception' key is used for the individual sensor output already
+        result['proprioception_vector'] = result['proprioception_out'] 
         
         return result
         

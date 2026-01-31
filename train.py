@@ -509,10 +509,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     
     if using_sensory:
          sensory_spec = sensory_system.observation_spec()
-         # Pretty print the dictionary for detailed view
-         import json
-         # Convert shapes to list for json serialization support in printing if needed, or just print dict
          print(f"Sensory System Spec: {sensory_spec}")
+         print(f"Dimension Breakdown:\n  {sensory_system.get_dimension_breakdown()}")
          
          for key, val in sensory_spec.items():
              dim = val['shape'][0]
@@ -525,14 +523,14 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
          input_dim += loc_shape[0]
          dims_breakdown.append(f"Loc={loc_shape[0]}")
          
-    if with_satiation:
-        sat_shape = observation_spec['satiation']['shape']
-        input_dim += sat_shape[0]
-        dims_breakdown.append(f"Sat={sat_shape[0]}")
-        if with_health:
-             hlth_shape = observation_spec['injury']['shape']
-             input_dim += hlth_shape[0]
-             dims_breakdown.append(f"Health={hlth_shape[0]}")
+         if with_satiation:
+            sat_shape = observation_spec['satiation']['shape']
+            input_dim += sat_shape[0]
+            dims_breakdown.append(f"Sat={sat_shape[0]}")
+            if with_health:
+                 hlth_shape = observation_spec['injury']['shape']
+                 input_dim += hlth_shape[0]
+                 dims_breakdown.append(f"Health={hlth_shape[0]}")
     
     print("--------------------------------------------\n")
 
@@ -729,8 +727,12 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         current_agent_pos = env.agent_pos
         if using_sensory:
              resources = env.get_active_resources()
-             extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
-                           'max_injury': body.max_injury if with_satiation else 1}
+             extra_data = {
+                 'injury_level': body.injury_level, 
+                 'max_injury': body.max_injury,
+                 'satiation': body.satiation,
+                 'max_satiation': body.max_satiation
+             }
              sensory_dict = sensory_system.sense(
                  current_agent_pos, resources,
                  grid_height=env.height, grid_width=env.width,
@@ -823,8 +825,12 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             # Update Observations
             if using_sensory:
                  resources = env.get_active_resources()
-                 extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
-                               'max_injury': body.max_injury if with_satiation else 1}
+                 extra_data = {
+                     'injury_level': body.injury_level, 
+                     'max_injury': body.max_injury,
+                     'satiation': body.satiation,
+                     'max_satiation': body.max_satiation
+                 }
                  next_sensory_dict = sensory_system.sense(
                      next_env_state, resources,
                      grid_height=env.height, grid_width=env.width,

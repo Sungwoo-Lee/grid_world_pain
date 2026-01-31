@@ -228,8 +228,12 @@ def evaluate_agent(
             current_agent_pos = env.agent_pos
             if using_sensory and sensory_system:
                 resources = env.get_active_resources()
-                extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
-                              'max_injury': body.max_injury if with_satiation else 1}
+                extra_data = {
+                    'injury_level': body.injury_level if with_satiation else 0, 
+                    'max_injury': body.max_injury if with_satiation else 1,
+                    'satiation': body.satiation if with_satiation else 0,
+                    'max_satiation': body.max_satiation if with_satiation else 1
+                }
                 sensory_dict = sensory_system.sense(
                     current_agent_pos, resources,
                     grid_height=env.height, grid_width=env.width,
@@ -322,8 +326,12 @@ def evaluate_agent(
                 
                 if using_sensory and sensory_system:
                      resources = env.get_active_resources()
-                     extra_data = {'injury_level': body.injury_level if with_satiation else 0, 
-                                   'max_injury': body.max_injury if with_satiation else 1}
+                     extra_data = {
+                         'injury_level': body.injury_level if with_satiation else 0, 
+                         'max_injury': body.max_injury if with_satiation else 1,
+                         'satiation': body.satiation if with_satiation else 0,
+                         'max_satiation': body.max_satiation if with_satiation else 1
+                     }
                      next_sensory_dict = sensory_system.sense(
                          current_agent_pos, resources,
                          grid_height=env.height, grid_width=env.width,

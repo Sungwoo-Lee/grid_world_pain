@@ -52,44 +52,41 @@ def preprocess_state(state, env_height, env_width, max_satiation=None, max_injur
     
     # Sensory Inputs (Dict)
     if isinstance(state, dict):
-        # Olfactory
-        if 'olfactory' in state:
-             flat_list.extend(state['olfactory'])
-        # Nociception
-        if 'nociception' in state:
-             flat_list.extend(state['nociception'])
-        # Collision
-        if 'collision' in state:
-             flat_list.extend(state['collision'])
-         # Proprioception (Motor Feedback)
-        if 'proprioception' in state:
-             flat_list.extend(state['proprioception'])
+        # 3-Way Biological Grouping (Preferred)
+        if 'exteroception' in state:
+             flat_list.extend(state['exteroception'])
+        if 'interoception' in state:
+             flat_list.extend(state['interoception'])
+        if 'proprioception_vector' in state:
+             flat_list.extend(state['proprioception_vector'])
              
-        # Coordinates (if not pure sensory, or combined)
-        if 'loc' in state:
-            loc = state['loc']
-            # Check if likely pre-normalized (float array from SensorySystem)
-            is_pre_normalized = False
-            if isinstance(loc, np.ndarray) and np.issubdtype(loc.dtype, np.floating):
-                 is_pre_normalized = True
+        # Individual keys (Fallback/Legacy)
+        elif any(k in state for k in ['olfactory', 'collision', 'loc', 'proprioception']):
+            if 'olfactory' in state:
+                 flat_list.extend(state['olfactory'])
+            if 'nociception' in state:
+                 flat_list.extend(state['nociception'])
+            if 'collision' in state:
+                 flat_list.extend(state['collision'])
+            if 'loc' in state:
+                loc = state['loc']
+                if isinstance(loc, np.ndarray) and np.issubdtype(loc.dtype, np.floating):
+                     flat_list.extend(loc)
+                else:
+                     r, c = loc
+                     norm_r = 2.0 * (r / max(1, env_height - 1)) - 1.0
+                     norm_c = 2.0 * (c / max(1, env_width - 1)) - 1.0
+                     flat_list.append(norm_r)
+                     flat_list.append(norm_c)
+            if 'proprioception' in state:
+                 flat_list.extend(state['proprioception'])
             
-            if is_pre_normalized:
-                 flat_list.extend(loc)
-            else:
-                 r, c = loc
-                 # Centered Normalization [-1, 1]
-                 norm_r = 2.0 * (r / max(1, env_height - 1)) - 1.0
-                 norm_c = 2.0 * (c / max(1, env_width - 1)) - 1.0
-                 flat_list.append(norm_r)
-                 flat_list.append(norm_c)
-            
-        # Body States
-        if max_satiation and 'satiation' in state:
-             flat_list.append(state['satiation'] / max_satiation)
-        if max_injury and 'injury' in state:
-             flat_list.append(state['injury'] / max_injury)
-        elif max_injury and 'health' in state: # Backwards compatibility
-             flat_list.append(state['health'] / max_injury)
+            # Legacy Body States (only if not already in interoception)
+            if 'interoception' not in state:
+                if max_satiation and 'satiation' in state:
+                     flat_list.append(state['satiation'] / max_satiation)
+                if max_injury and 'injury' in state:
+                     flat_list.append(state['injury'] / max_injury)
 
     else:
         # Tuple/List/Array (Legacy or Conventional)
