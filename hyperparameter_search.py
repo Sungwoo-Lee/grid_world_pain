@@ -82,15 +82,15 @@ SEARCH_SPACES = {
         "agent.algorithm": ["PPO"]
     },
     "recurrent_ppo": {
-        # "agent.lr_actor": [1e-4, 3e-4],
-        # "agent.lr_critic": [5e-4, 1e-3],
-        # "agent.clip_param": [0.1, 0.2],
-        # "agent.entropy_coef": [0.001, 0.01],
-        # "agent.K_epochs": [4, 10],
-        "agent.sequence_length": [8, 16, 32, 64, 128],
+        "agent.lr_actor": [1e-4, 3e-4],
+        "agent.lr_critic": [5e-4, 1e-3],
+        "agent.clip_param": [0.1, 0.2],
+        "agent.entropy_coef": [0.001, 0.01],
+        "agent.K_epochs": [4, 10],
+        # "agent.sequence_length": [64, 128],
         # "agent.fc_layers": [[64], [128]],
-        # "agent.recurrent_layers": [[64], [128]],
-        # "agent.actor_fc_layers": [[64], [128]],
+        "agent.recurrent_layers": [[64], [128]],
+        "agent.actor_fc_layers": [[64], [64, 64], [128], [128, 128]],
         # "agent.critic_fc_layers": [[64], [128]],
         "agent.algorithm": ["RecurrentPPO"]
     },
@@ -103,6 +103,17 @@ SEARCH_SPACES = {
         "agent.encoder_dim": [256],
         "agent.algorithm": ["DreamerV3"]
     }
+}
+
+# Define Synchronized Groups
+# Parameters in the same group will always share the same value (from the first parameter in the group)
+SYNC_GROUPS = {
+    "ppo": [
+        ("agent.actor_fc_layers", "agent.critic_fc_layers"),
+    ],
+    "recurrent_ppo": [
+        ("agent.actor_fc_layers", "agent.critic_fc_layers", "agent.fc_layers"),
+    ],
 }
 
 TEMP_CONFIG_DIR = "temp_configs"
@@ -215,9 +226,50 @@ def run_search(algorithm, episodes, seed, config, wandb_project, num_processes, 
         return
 
     space = SEARCH_SPACES[algorithm]
-    keys = list(space.keys())
-    values = list(space.values())
-    combinations = list(itertools.product(*values))
+    sync_groups = SYNC_GROUPS.get(algorithm, [])
+    
+    # Identify synced and independent parameters
+    synced_params = set()
+    for group in sync_groups:
+        synced_params.update(group)
+    
+    independent_keys = [k for k in space.keys() if k not in synced_params]
+    
+    # Define leaders and followers for sync groups
+    leaders = []
+    followers = {} # leader -> list of followers
+    for group in sync_groups:
+        leader = group[0]
+        leaders.append(leader)
+        followers[leader] = list(group[1:])
+    
+    # Build product keys and values
+    product_keys = independent_keys + leaders
+    product_values = [space[k] for k in product_keys]
+    
+    raw_combinations = list(itertools.product(*product_values))
+    
+    # Generate full parameter dictionaries
+    combinations = []
+    for raw_combo in raw_combinations:
+        params = {}
+        # Set independent and leader values
+        for k, v in zip(product_keys, raw_combo):
+            params[k] = v
+        
+        # Sync followers with leaders
+        for leader, group_followers in followers.items():
+            val = params[leader]
+            for f in group_followers:
+                params[f] = val
+        
+        # Add a placeholder for agent.algorithm if not present in the combination itself
+        # (though it usually is in SEARCH_SPACES)
+        if "agent.algorithm" not in params and "agent.algorithm" in space:
+             params["agent.algorithm"] = space["agent.algorithm"][0]
+
+        combinations.append(params)
+
     total_combinations = len(combinations)
 
     print(f"Starting search for {algorithm} with {total_combinations} combinations.")
@@ -234,8 +286,7 @@ def run_search(algorithm, episodes, seed, config, wandb_project, num_processes, 
     
     # Prepare arguments for each task
     tasks = []
-    for i, combo in enumerate(combinations):
-        params = dict(zip(keys, combo))
+    for i, params in enumerate(combinations):
         tasks.append((params, algorithm, episodes, seed, config, wandb_project, wandb_group, wandb_job_type, dry_run, i+1, total_combinations, log_dir, device))
     
     if num_processes > 1:
