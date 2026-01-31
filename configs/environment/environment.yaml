@@ -32,12 +32,12 @@ body:
   start_satiation: 50
   food_satiation_gain: 20
   
-  # Health
-  with_health: true
-  max_health: 30
-  start_health_random: false
-  start_health: 30
-  health_recovery: 1
+  # Injury / Injury
+  with_injury: true
+  max_injury: 30
+  random_start_injury: false
+  start_injury: 0
+  injury_recovery: 1
   injury_smoothing_duration: 3
 
 

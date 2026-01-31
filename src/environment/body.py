@@ -15,7 +15,7 @@ class InteroceptiveBody:
     defines the reward, here the *Body* defines the reward based on its needs.
     """
     def __init__(self, max_satiation, start_satiation, overeating_death, random_start_satiation, food_satiation_gain, use_homeostatic_reward, satiation_setpoint, death_penalty,
-                 with_health, max_health, start_health, health_recovery, start_health_random,
+                 with_injury, max_injury, start_injury, injury_recovery, random_start_injury,
                  injury_smoothing_duration=3, with_satiation=True):
         """
         Initialize the body.
@@ -29,11 +29,11 @@ class InteroceptiveBody:
             use_homeostatic_reward (bool): Whether to use drive reduction reward.
             satiation_setpoint (int): Ideal satiation level for homeostasis.
             death_penalty (float): Penalty subtracted from reward upon death.
-            with_health (bool): Whether to simulate health/pain.
-            max_health (int): Maximum injury level (critically injured/dead).
-            start_health (int): Starting injury level (0 = healthy).
-            health_recovery (int): Injury reduction per step when resting.
-            start_health_random (bool): Whether to randomize start injury.
+            with_injury (bool): Whether to simulate injury/pain.
+            max_injury (int): Maximum injury level (critically injured/dead).
+            start_injury (int): Starting injury level (0 = healthy).
+            injury_recovery (int): Injury reduction per step when resting.
+            random_start_injury (bool): Whether to randomize start injury.
             injury_smoothing_duration (int): Duration to spread damage over.
             with_satiation (bool): Whether to simulate satiation/hunger.
         """
@@ -48,13 +48,13 @@ class InteroceptiveBody:
         self.with_satiation = with_satiation
         self.satiation = start_satiation
         
-        # Injury / Interoceptive Nociception Mechanism
-        # Note: 'injury' replaces 'health'. Logic is inverted: 0 is good, max is bad.
-        self.with_health = with_health
-        self.max_injury = max_health      # renamed conceptually
-        self.start_injury = 0             # healthy start by default
-        self.injury_recovery = health_recovery
-        self.start_injury_random = start_health_random
+        # Injury / Injury Mechanism
+        # Note: Logic is: 0 is healthy, max_injury is dead.
+        self.with_injury = with_injury
+        self.max_injury = max_injury
+        self.start_injury = start_injury
+        self.injury_recovery = injury_recovery
+        self.random_start_injury = random_start_injury
         self.injury_smoothing_duration = injury_smoothing_duration
         
         self.injury_level = self.start_injury
@@ -70,8 +70,8 @@ class InteroceptiveBody:
         else:
             self.satiation = self.start_satiation
             
-        if self.with_health:
-            if self.start_injury_random:
+        if self.with_injury:
+            if self.random_start_injury:
                 self.injury_level = np.random.randint(0, self.max_injury // 2)
             else:
                 self.injury_level = self.start_injury
@@ -107,8 +107,8 @@ class InteroceptiveBody:
             # Maintain fixed satiation if disabled (so starvation death doesn't trigger)
             self.satiation = self.start_satiation
                 
-        # --- Injury Dynamics (Interoceptive Nociception) ---
-        if self.with_health:
+        # --- Injury Dynamics (Injury) ---
+        if self.with_injury:
             damage = info.get('damage', 0)
             if damage > 0:
                 # Spread damage over future steps
@@ -144,10 +144,10 @@ class InteroceptiveBody:
                 done = True
                 death_type = "overeating"
             
-        if self.with_health and self.injury_level >= self.max_injury:
+        if self.with_injury and self.injury_level >= self.max_injury:
             done = True
             death_type = "injury"
-        elif not self.with_health and info.get('damage', 0) > 0:
+        elif not self.with_injury and info.get('damage', 0) > 0:
             # Instant death logic for levels without health system (e.g. L03)
             done = True
             death_type = "instant_damage"
@@ -156,7 +156,7 @@ class InteroceptiveBody:
         reward = 0
         if self.use_homeostatic_reward:
             # Goal state: (satiation_setpoint, 0 injury)
-            if self.with_health:
+            if self.with_injury:
                 target_vec = np.array([self.satiation_setpoint, 0.0])
                 prev_vec = np.array([prev_satiation, prev_injury])
                 curr_vec = np.array([self.satiation, self.injury_level])
@@ -178,7 +178,7 @@ class InteroceptiveBody:
             reward = 1 if not done else -self.death_penalty
         
         # Construct Return State
-        if self.with_health:
+        if self.with_injury:
             state = (self.satiation, self.injury_level)
         else:
             state = self.satiation

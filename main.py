@@ -43,7 +43,7 @@ def main():
     
     # Optional flags for quick overrides (will override config if present)
     parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
-    parser.add_argument("--no-health", action="store_true", help="Disable health")
+    parser.add_argument("--no-injury", action="store_true", help="Disable health")
     parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
 
     args = parser.parse_args()
@@ -92,9 +92,9 @@ def main():
     if args.no_satiation:
         with_satiation = False
     
-    with_health = config.get('body.with_health', False)
-    if args.no_health:
-        with_health = False
+    with_injury = config.get('body.with_injury', False)
+    if args.no_injury:
+        with_injury = False
         
     overeating_death = config.get('body.overeating_death', True)
     if args.no_overeating_death:
@@ -119,16 +119,16 @@ def main():
         satiation_setpoint = 15
         death_penalty = 100
 
-    if with_health:
-        max_health = config.get_mandatory('body.max_health', float)
-        start_health = config.get_mandatory('body.start_health', float)
-        health_recovery = config.get_mandatory('body.health_recovery', float)
-        start_health_random = config.get_mandatory('body.start_health_random')
+    if with_injury:
+        max_injury = config.get_mandatory('body.max_injury', float)
+        start_injury = config.get_mandatory('body.start_injury', float)
+        injury_recovery = config.get_mandatory('body.injury_recovery', float)
+        random_start_injury = config.get_mandatory('body.random_start_injury')
     else:
-        max_health = 20
-        start_health = 10
-        health_recovery = 1
-        start_health_random = False
+        max_injury = 20
+        start_injury = 10
+        injury_recovery = 1
+        random_start_injury = False
 
     # 3. Environment Config
     height = config.get_mandatory('environment.height', int)
@@ -188,7 +188,7 @@ def main():
     print(f"Starting Debug Session")
     print(f"Video will be saved to: {video_filename}")
     print(f"Mode: {'Interoceptive' if with_satiation else 'Conventional'}")
-    print(f"Health: {'Enabled' if with_health else 'Disabled'}")
+    print(f"Injury: {'Enabled' if with_injury else 'Disabled'}")
 
     # Initialize Environment
     env = GridWorld(
@@ -231,11 +231,11 @@ def main():
         use_homeostatic_reward=use_homeostatic_reward,
         satiation_setpoint=satiation_setpoint,
         death_penalty=death_penalty,
-        with_health=with_health,
-        max_health=max_health,
-        start_health=start_health,
-        health_recovery=health_recovery,
-        start_health_random=start_health_random,
+        with_injury=with_injury,
+        max_injury=max_injury,
+        start_injury=start_injury,
+        injury_recovery=injury_recovery,
+        random_start_injury=random_start_injury,
         injury_smoothing_duration=injury_smoothing_duration,
         with_satiation=with_satiation
     )
@@ -297,7 +297,7 @@ def main():
             
             print("Start State:")
             print(f"Satiation: {body.satiation}/{body.max_satiation}")
-            if with_health:
+            if with_injury:
                 print(f"Injury (Intero Nociceptor): {body.injury_level}/{body.max_injury}")
         
         if predator_enabled:
@@ -314,8 +314,8 @@ def main():
 
 
         # Capture Frame
-        injury = body.injury_level if body.with_health else None
-        max_injury = body.max_injury if body.with_health else None
+        injury = body.injury_level if body.with_injury else None
+        max_injury = body.max_injury if body.with_injury else None
         frames.append(env.render_rgb_array(
             satiation=body.satiation if with_satiation else None, 
             max_satiation=body.max_satiation if with_satiation else None, 
@@ -347,8 +347,8 @@ def main():
             
             if using_sensory:
                  resources = env.get_active_resources()
-                 extra_data = {'injury_level': body.injury_level if body.with_health else 0, 
-                               'max_injury': body.max_injury if body.with_health else 1}
+                 extra_data = {'injury_level': body.injury_level if body.with_injury else 0, 
+                               'max_injury': body.max_injury if body.with_injury else 1}
                  sensory_dict = sensory_system.sense(current_agent_pos, resources, grid_height=env.height, grid_width=env.width, extra_data=extra_data)
                  vis_data = sensory_system.get_visualization_data(sensory_dict)
 
@@ -368,15 +368,15 @@ def main():
             print(f"  Info: {info}")
             if with_satiation:
                 print(f"  Satiation: {body.satiation}/{body.max_satiation}")
-            if with_health:
+            if with_injury:
                 print(f"  Injury: {body.injury_level}/{body.max_injury}")
             if predator_enabled:
                 print(f"  Predator Pos: {env.predator_pos}")
             print(f"  Reward: {reward}, Done: {done}")
 
             # Capture Frame
-            injury = body.injury_level if body.with_health else None
-            max_injury = body.max_injury if body.with_health else None
+            injury = body.injury_level if body.with_injury else None
+            max_injury = body.max_injury if body.with_injury else None
             frames.append(env.render_rgb_array(
                 satiation=body.satiation if with_satiation else None, 
                 max_satiation=body.max_satiation if with_satiation else None, 

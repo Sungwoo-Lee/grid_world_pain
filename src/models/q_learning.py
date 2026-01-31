@@ -35,9 +35,9 @@ class QLearningAgent:
         self.epsilon = epsilon
         self.with_satiation = with_satiation
         
-        # Check if environment supports health
-        self.with_health = getattr(env, 'with_health', False)
-        self.max_health = getattr(env, 'max_health', 20)
+        # Check if environment supports injury
+        self.with_injury = getattr(env, 'with_injury', False)
+        self.max_injury = getattr(env, 'max_injury', 20)
         
         # Q-Table Initialization:
         # We append (5,) for the 5 actions (Up, Right, Down, Left, Stay)
@@ -47,13 +47,13 @@ class QLearningAgent:
             self.q_table = np.zeros(state_dims + (5,))
         else:
             # FOMDP (Default Grid World logic)
-            # If with_health: 4D Array [Height, Width, Satiation, Health, Actions]
+            # If with_injury: 4D Array [Height, Width, Satiation, Injury, Actions]
             # If with_satiation: 3D Array [Height, Width, Satiation, Actions] 
             # If not with_satiation: 2D Array [Height, Width, Actions] (Actually 3D including actions)
             
-            if self.with_health and self.with_satiation:
-                 # Height x Width x Satiation x Health x Actions
-                 self.q_table = np.zeros((int(self.env.height), int(self.env.width), int(self.env.max_satiation) + 2, int(self.max_health) + 2, 5))
+            if self.with_injury and self.with_satiation:
+                 # Height x Width x Satiation x Injury x Actions
+                 self.q_table = np.zeros((int(self.env.height), int(self.env.width), int(self.env.max_satiation) + 2, int(self.max_injury) + 2, 5))
             elif self.with_satiation:
                  self.q_table = np.zeros((int(self.env.height), int(self.env.width), int(self.env.max_satiation) + 2, 5))
             else:

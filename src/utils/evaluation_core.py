@@ -47,11 +47,11 @@ def evaluate_agent(
     # Unpack Key Configs
     using_sensory = config.get_mandatory('sensory.using_sensory')
     with_satiation = config.get_mandatory('body.with_satiation')
-    with_health = config.get_mandatory('body.with_health')
+    with_injury = config.get_mandatory('body.with_injury')
     proprioception_enabled = config.get_mandatory('sensory.proprioception_enabled', bool)
     
     max_satiation = config.get_mandatory('body.max_satiation', int) if with_satiation else None
-    max_injury = config.get_mandatory('body.max_health', float) if with_health else None
+    max_injury = config.get_mandatory('body.max_injury', float) if with_injury else None
     max_steps = config.get_mandatory('environment.max_steps', int)
     
     # Visualization Config
@@ -173,7 +173,7 @@ def evaluate_agent(
 
             if with_satiation:
                 input_structure.append(("Sat", 1))
-                if with_health:
+                if with_injury:
                     input_structure.append(("Inj", 1))
 
             # Initialize LRP
@@ -205,7 +205,7 @@ def evaluate_agent(
     if using_sensory and sensory_system: input_dim += sensory_system.vector_size + 1
     else: input_dim += 2
     if with_satiation: input_dim += 1
-    if with_health: input_dim += 1
+    if with_injury: input_dim += 1
     
     frame_stack = config.get('agent.frame_stack', 1)
     # Important: FrameStacker expects base_input_dim
@@ -277,7 +277,7 @@ def evaluate_agent(
             
             # Arg, render_rgb_array signature varies based on satiation?
             # env.render_rgb_array signature:
-            # def render_rgb_array(self, satiation=None, max_satiation=None, health=None, max_health=None, episode=0, step=0, sensory_data=None, action=None):
+            # def render_rgb_array(self, satiation=None, max_satiation=None, injury=None, max_injury=None, episode=0, step=0, sensory_data=None, action=None):
             
             frame = env.render_rgb_array(
                 satiation=sat_val if with_satiation else None, 
@@ -308,7 +308,7 @@ def evaluate_agent(
                       tabular_list.extend(state['loc'])
                  if with_satiation:
                       tabular_list.append(state.get('satiation', 0))
-                 if with_health:
+                 if with_injury:
                       tabular_list.append(state.get('injury', 0))
                  state_array = tuple(int(x) for x in tabular_list)
                  
@@ -404,7 +404,7 @@ def evaluate_agent(
                           tabular_list.extend(next_state['loc'])
                      if with_satiation:
                           tabular_list.append(next_state.get('satiation', 0))
-                     if with_health:
+                     if with_injury:
                           tabular_list.append(next_state.get('injury', 0))
                      state_array = tuple(int(x) for x in tabular_list)
                      

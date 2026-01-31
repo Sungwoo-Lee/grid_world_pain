@@ -9,7 +9,7 @@ environment:
 
 body:
   with_satiation: false
-  with_health: false
+  with_injury: false
 
 sensory:
   using_sensory: false

@@ -21,10 +21,10 @@ def plot_q_table(q_table, save_path, config, food_pos=None):
     if len(q_table.shape) == 3:
         return plot_q_table_conventional(q_table, save_path, config, food_pos)
         
-    # Dispatch to 4D plotter if q_table is 5D (H, W, Sat, Health, Actions) or 4D depending on how we count
-    # agent.py initialization: (height, width, max_sat+2, max_health+2, 5) -> 5 dimensions
+    # Dispatch to 4D plotter if q_table is 5D (H, W, Sat, Injury, Actions) or 4D depending on how we count
+    # agent.py initialization: (height, width, max_sat+2, max_injury+2, 5) -> 5 dimensions
     if len(q_table.shape) == 5:
-        return plot_q_table_health(q_table, save_path, config, food_pos)
+        return plot_q_table_injury(q_table, save_path, config, food_pos)
 
     # Ensure output directory exists
     if save_path:
@@ -94,25 +94,25 @@ def plot_q_table(q_table, save_path, config, food_pos=None):
     plt.savefig(save_path, dpi=config.get_mandatory('visualization.q_table.dpi'))
     plt.close(fig)
 
-def plot_q_table_health(q_table, save_path, config, food_pos=None):
+def plot_q_table_injury(q_table, save_path, config, food_pos=None):
     """
-    Visualizes representative slices of a 5D Q-table (Height, Width, Sat, Health, Actions) with fancy styling.
+    Visualizes representative slices of a 5D Q-table (Height, Width, Sat, Injury, Actions) with fancy styling.
     """
     if save_path:
         os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
         
-    height, width, sat_dim, health_dim, _ = q_table.shape
+    height, width, sat_dim, injury_dim, _ = q_table.shape
     max_satiation = sat_dim - 2
-    max_health = health_dim - 2
+    max_injury = injury_dim - 2
     
     # Slices
     sat_slices = [max_satiation // 4, max_satiation // 2, int(max_satiation * 0.9)]
     sat_labels = ["Low Sat", "Mid Sat", "High Sat"]
     
-    health_slices = [max_health // 4, int(max_health * 0.9)] 
-    health_labels = ["Injured", "Healthy"]
+    injury_slices = [max_injury // 4, int(max_injury * 0.9)] 
+    injury_labels = ["Injured", "Injuryy"]
     
-    rows = len(health_slices)
+    rows = len(injury_slices)
     cols = len(sat_slices)
     
     # Global Font Settings for aesthetics
@@ -122,7 +122,7 @@ def plot_q_table_health(q_table, save_path, config, food_pos=None):
     bg_color = config.get_mandatory('visualization.q_table.bg_color')
     fig.patch.set_facecolor(bg_color) # Soft grey background for the whole figure
     
-    for r_idx, h_level in enumerate(health_slices):
+    for r_idx, h_level in enumerate(injury_slices):
         for c_idx, s_level in enumerate(sat_slices):
             ax = axes[r_idx, c_idx]
             
@@ -150,13 +150,13 @@ def plot_q_table_health(q_table, save_path, config, food_pos=None):
             ax.tick_params(which="minor", bottom=False, left=False)
             
             # Title with consistent padding
-            title_str = f"{health_labels[r_idx]}\n(Health={h_level})" if c_idx == 0 else ""
+            title_str = f"{injury_labels[r_idx]}\n(Injury={h_level})" if c_idx == 0 else ""
             if r_idx == 0:
                 ax.set_title(f"{sat_labels[c_idx]}\n(Satiation={s_level})", fontsize=12, fontweight='bold', color='#495057')
             
             if c_idx == 0:
                 label_color = config.get_mandatory('visualization.q_table.label_color')
-                ax.set_ylabel(f"{health_labels[r_idx]}\n(Health={h_level})", fontsize=12, fontweight='bold', color=label_color)
+                ax.set_ylabel(f"{injury_labels[r_idx]}\n(Injury={h_level})", fontsize=12, fontweight='bold', color=label_color)
 
             # Clean Axes
             ax.set_xticks([])
@@ -193,7 +193,7 @@ def plot_q_table_health(q_table, save_path, config, food_pos=None):
     cb.set_label('Max Q-Value (Normalized)', fontsize=12, labelpad=10)
     cb.outline.set_visible(False)
     
-    plt.suptitle("Learned Policy: Health vs Satiation", fontsize=18, fontweight='bold', color=config.get_mandatory('visualization.q_table.title_color'), y=1.02)
+    plt.suptitle("Learned Policy: Injury vs Satiation", fontsize=18, fontweight='bold', color=config.get_mandatory('visualization.q_table.title_color'), y=1.02)
     plt.savefig(save_path, bbox_inches='tight', dpi=config.get_mandatory('visualization.q_table.dpi'), facecolor=bg_color)
     plt.close(fig)
 

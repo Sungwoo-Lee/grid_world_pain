@@ -80,7 +80,7 @@ import argparse
 from tqdm import tqdm
 
 def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed,
-                         with_health, prob_switch_to_danger, damage_amount, device="auto"):
+                         with_injury, prob_switch_to_danger, damage_amount, device="auto"):
     """
     Prints a professional and fancy configuration summary.
     """
@@ -108,7 +108,7 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
         if use_homeostatic_reward:
             env_data["Satiation Setpoint"] = satiation_setpoint
             
-    if with_health:
+    if with_injury:
         env_data["Switch to Danger Prob"] = prob_switch_to_danger
         env_data["Damage Amount"] = damage_amount
         
@@ -125,9 +125,9 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             "Random Start Sat": "ENABLED" if random_start_satiation else "DISABLED",
             "Overeating Death": "ENABLED" if overeating_death else "DISABLED"
         }
-        if with_health:
-             body_data["Max Health"] = config_dict.get_mandatory('body.max_health')
-             body_data["Health Recovery"] = config_dict.get_mandatory('body.health_recovery')
+        if with_injury:
+             body_data["Max Injury"] = config_dict.get_mandatory('body.max_injury')
+             body_data["Injury Recovery"] = config_dict.get_mandatory('body.injury_recovery')
              
         print_section("Body (Internal States)", body_data)
 
@@ -214,7 +214,7 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
     print("\n" + "=" * width + "\n")
 
 def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=None, food_satiation_gain=None, max_steps=None, random_start_satiation=None, use_homeostatic_reward=None, satiation_setpoint=None, death_penalty=None, testing_seed=None, config_dict=None,
-                with_health=None, max_health=None, start_health=None, health_recovery=None, start_health_random=None,
+                with_injury=None, max_injury=None, start_injury=None, injury_recovery=None, random_start_injury=None,
                 prob_switch_to_danger=None, min_danger_duration=None, damage_amount=None,
                 prob_switch_to_food=None, min_food_duration=None, device="auto", checkpoint_frequency=None, quiet=False, debug=False,
                 start_episode=0, load_checkpoint_path=None):
@@ -353,11 +353,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     satiation_setpoint = float(resolve_param(satiation_setpoint, 'body.satiation_setpoint'))
     death_penalty = float(resolve_param(death_penalty, 'body.death_penalty'))
         
-    with_health = resolve_param(with_health, 'body.with_health')
-    max_health = float(resolve_param(max_health, 'body.max_health'))
-    start_health = float(resolve_param(start_health, 'body.start_health'))
-    health_recovery = float(resolve_param(health_recovery, 'body.health_recovery'))
-    start_health_random = resolve_param(start_health_random, 'body.start_health_random')
+    with_injury = resolve_param(with_injury, 'body.with_injury')
+    max_injury = float(resolve_param(max_injury, 'body.max_injury'))
+    start_injury = float(resolve_param(start_injury, 'body.start_injury'))
+    injury_recovery = float(resolve_param(injury_recovery, 'body.injury_recovery'))
+    random_start_injury = resolve_param(random_start_injury, 'body.random_start_injury')
     injury_smoothing_duration = int(resolve_param(None, 'body.injury_smoothing_duration'))
     
     device = resolve_param(device, 'training.device')
@@ -371,7 +371,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     config_dict.set('training.device', device)
     
     if not quiet:
-         print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_health, prob_switch_to_danger, damage_amount, device)
+         print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_injury, prob_switch_to_danger, damage_amount, device)
     
     # Setup directories
     results_dir = "results"
@@ -459,11 +459,11 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         use_homeostatic_reward=use_homeostatic_reward,
         satiation_setpoint=satiation_setpoint,
         death_penalty=death_penalty,
-        with_health=with_health,
-        max_health=max_health,
-        start_health=start_health,
-        health_recovery=health_recovery,
-        start_health_random=start_health_random,
+        with_injury=with_injury,
+        max_injury=max_injury,
+        start_injury=start_injury,
+        injury_recovery=injury_recovery,
+        random_start_injury=random_start_injury,
         injury_smoothing_duration=injury_smoothing_duration,
         with_satiation=with_satiation
     )
@@ -527,10 +527,10 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             sat_shape = observation_spec['satiation']['shape']
             input_dim += sat_shape[0]
             dims_breakdown.append(f"Sat={sat_shape[0]}")
-            if with_health:
+            if with_injury:
                  hlth_shape = observation_spec['injury']['shape']
                  input_dim += hlth_shape[0]
-                 dims_breakdown.append(f"Health={hlth_shape[0]}")
+                 dims_breakdown.append(f"Injury={hlth_shape[0]}")
     
     print("--------------------------------------------\n")
 
@@ -664,8 +664,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 self.height = env.height
                 self.width = env.width
                 self.max_satiation = body.max_satiation
-                self.with_health = body.with_health
-                self.max_health = body.max_injury # Standardize
+                self.with_injury = body.with_injury
+                self.max_injury = body.max_injury # Standardize
                 
         composite_env = CompositeEnv(env, body)
         agent = QLearningAgent(composite_env, with_satiation=with_satiation)
@@ -682,7 +682,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             exit(1)
     
     if not quiet:
-        print(f"Training agent (with_satiation={with_satiation}, with_health={with_health})...")
+        print(f"Training agent (with_satiation={with_satiation}, with_injury={with_injury})...")
     start_time = time.time()
     
     # Common Epsilon Params (Agent handles its own, but we track for logs)
@@ -806,8 +806,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 tabular_list.extend(state['loc']) # r, c
             if with_satiation:
                 tabular_list.append(state['satiation'])
-            if with_health:
-                tabular_list.append(state.get('injury', state.get('health', 0))) # Support both during transition
+            if with_injury:
+                tabular_list.append(state.get('injury', state.get('injury', 0))) # Support both during transition
                 
             state_array = tuple(int(x) for x in tabular_list)
         
@@ -934,7 +934,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                     tabular_next_list.extend(next_state['loc'])
                 if with_satiation:
                     tabular_next_list.append(next_state['satiation'])
-                if with_health:
+                if with_injury:
                     tabular_next_list.append(next_state['injury'])
                 
                 next_state_array = tuple(int(x) for x in tabular_next_list)
@@ -1192,11 +1192,11 @@ if __name__ == "__main__":
                 death_penalty=None, 
                 testing_seed=None, 
                 config_dict=config,
-                with_health=None, 
-                max_health=None, 
-                start_health=None, 
-                health_recovery=None, 
-                start_health_random=None,
+                with_injury=None, 
+                max_injury=None, 
+                start_injury=None, 
+                injury_recovery=None, 
+                random_start_injury=None,
                 prob_switch_to_danger=None, 
                 min_danger_duration=None, 
                 damage_amount=None,

@@ -73,11 +73,11 @@ def verify_rendering():
             use_homeostatic_reward=config.get_mandatory('body.use_homeostatic_reward'),
             satiation_setpoint=config.get_mandatory('body.satiation_setpoint'),
             death_penalty=config.get_mandatory('body.death_penalty'),
-            with_health=config.get_mandatory('body.with_health'),
-            max_health=config.get_mandatory('body.max_health'),
-            start_health=config.get_mandatory('body.start_health'),
-            health_recovery=config.get_mandatory('body.health_recovery'),
-            start_health_random=config.get_mandatory('body.start_health_random')
+            with_injury=config.get_mandatory('body.with_injury'),
+            max_injury=config.get_mandatory('body.max_injury'),
+            start_injury=config.get_mandatory('body.start_injury'),
+            injury_recovery=config.get_mandatory('body.injury_recovery'),
+            start_injury_random=config.get_mandatory('body.start_injury_random')
         )
         
         sensory_system = None
@@ -125,8 +125,8 @@ def verify_rendering():
         frame = env.render_rgb_array(
             satiation=body.satiation if with_satiation else None,
             max_satiation=body.max_satiation if with_satiation else None,
-            health=body.health if body.with_health else None,
-            max_health=body.max_health if body.with_health else None,
+            injury=body.injury if body.with_injury else None,
+            max_injury=body.max_injury if body.with_injury else None,
             episode=1,
             step=env.current_step,
             sensory_data=vis_data

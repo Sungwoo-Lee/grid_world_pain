@@ -35,7 +35,7 @@ class GridWorld:
     - 1: Right (Increases col index)
     - 2: Down (Increases row index)
     - 3: Left (Decreases col index)
-    - 4: Rest (if rest_action_enabled) - Recovers health
+    - 4: Rest (if rest_action_enabled) - Recovers injury
     - 5: Eat (if eat_action_enabled) - Consumes food
     
     Rewards:
@@ -68,7 +68,7 @@ class GridWorld:
             relocate_resource (bool): Whether to randomly relocate resource.
             relocation_steps (int): Relocate every N steps.
             eat_action_enabled (bool): If True, agent must use Eat action to consume food.
-            rest_action_enabled (bool): If True, agent must use Rest action to recover health.
+            rest_action_enabled (bool): If True, agent must use Rest action to recover injury.
         """
         self.height = height
         self.width = width
@@ -565,7 +565,7 @@ class GridWorld:
         
         if injury is not None and max_injury is not None:
              y_cursor -= 0.15
-             draw_bar(ax_stats, y_cursor, "INTERO NOCICEPTOR", injury, max_injury, danger_color)
+             draw_bar(ax_stats, y_cursor, "INJURY", injury, max_injury, danger_color)
              
         # 2.4 Status Badge & Action (Fixed at Bottom of Stats Panel usually better, but let's stack)
         y_cursor -= 0.20

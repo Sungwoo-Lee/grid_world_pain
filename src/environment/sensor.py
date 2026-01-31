@@ -365,7 +365,7 @@ class SensorySystem:
         extero_str = f"Extero({self.exteroception_size}) = " + " + ".join(extero_parts)
         
         intero_parts = []
-        if self.nociception_enabled: intero_parts.append(f"InteroNoc={self.intero_nociceptor.output_size}")
+        if self.nociception_enabled: intero_parts.append(f"Injury={self.intero_nociceptor.output_size}")
         intero_parts.append(f"Sat=1")
         
         intero_str = f"Intero({self.interoception_size}) = " + " + ".join(intero_parts)
@@ -405,11 +405,11 @@ class SensorySystem:
             result['extero_nociception'] = extero_noc
             extero_parts.append(extero_noc)
             
-            # Intero Nociception (Injury)
+            # Injury
             injury_level = extra_data.get('injury_level', 0) if isinstance(extra_data, dict) else 0
             max_injury = extra_data.get('max_injury', 1) if isinstance(extra_data, dict) else 1
             intero_noc = self.intero_nociceptor.sense(injury_level, max_injury)
-            result['intero_nociception'] = intero_noc
+            result['injury'] = intero_noc
             intero_parts.append(intero_noc)
             
             # For backward compatibility/legacy visualization
