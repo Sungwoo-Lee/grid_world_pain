@@ -84,9 +84,17 @@ def preprocess_state(state, env_height, env_width, max_satiation=None, max_injur
             # Legacy Body States (only if not already in interoception)
             if 'interoception' not in state:
                 if max_satiation and 'satiation' in state:
-                     flat_list.append(state['satiation'] / max_satiation)
+                     val = state['satiation']
+                     if isinstance(val, (np.ndarray, list)):
+                          flat_list.extend(np.array(val) / max_satiation)
+                     else:
+                          flat_list.append(val / max_satiation)
                 if max_injury and 'injury' in state:
-                     flat_list.append(state['injury'] / max_injury)
+                     val = state['injury']
+                     if isinstance(val, (np.ndarray, list)):
+                          flat_list.extend(np.array(val) / max_injury)
+                     else:
+                          flat_list.append(val / max_injury)
 
     else:
         # Tuple/List/Array (Legacy or Conventional)

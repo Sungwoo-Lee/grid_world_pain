@@ -270,10 +270,14 @@ def evaluate_agent(
             if using_sensory and sensory_system:
                  vis_data = sensory_system.get_visualization_data(sensory_dict)
             
-            # Render Helper
-            # Need to extract body state for render
-            sat_val = state.get('satiation', 0)
-            injury_val = state.get('injury')
+            # Extract body state for render (Ensuring scalars for f-string formatting)
+            def to_scalar(v):
+                if isinstance(v, np.ndarray):
+                    return v.item() if v.size == 1 else float(v[0])
+                return v if v is not None else 0
+            
+            sat_val = to_scalar(state.get('satiation', 0))
+            injury_val = to_scalar(state.get('injury'))
             
             # Arg, render_rgb_array signature varies based on satiation?
             # env.render_rgb_array signature:
@@ -372,8 +376,8 @@ def evaluate_agent(
                      vis_data = sensory_system.get_visualization_data(next_sensory_dict)
 
                 
-                sat_val = next_state.get('satiation', 0)
-                injury_val = next_state.get('injury')
+                sat_val = to_scalar(next_state.get('satiation', 0))
+                injury_val = to_scalar(next_state.get('injury'))
                 
                 frame = env.render_rgb_array(
                     satiation=sat_val if with_satiation else None,
