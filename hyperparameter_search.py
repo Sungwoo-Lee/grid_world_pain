@@ -82,16 +82,17 @@ SEARCH_SPACES = {
         "agent.algorithm": ["PPO"]
     },
     "recurrent_ppo": {
-        "agent.lr_actor": [1e-4, 3e-4],
-        "agent.lr_critic": [5e-4, 1e-3],
-        "agent.clip_param": [0.1, 0.2],
+        # "agent.lr_actor": [1e-4, 3e-4],
+        # "agent.lr_critic": [5e-4, 1e-3],
+        # "agent.clip_param": [0.1, 0.2],
         "agent.entropy_coef": [0.001, 0.01],
-        "agent.K_epochs": [4, 10],
-        # "agent.sequence_length": [64, 128],
+        # "agent.K_epochs": [4, 10],
+        "agent.sequence_length": [64, 128],
         # "agent.fc_layers": [[64], [128]],
-        "agent.recurrent_layers": [[64], [128]],
-        "agent.actor_fc_layers": [[64], [64, 64], [128], [128, 128]],
+        # "agent.recurrent_layers": [[64]],
+        "agent.actor_fc_layers": [[128, 128]],
         # "agent.critic_fc_layers": [[64], [128]],
+        "agent.gamma": [0.95, 0.99],
         "agent.algorithm": ["RecurrentPPO"]
     },
     "dreamer_v3": {

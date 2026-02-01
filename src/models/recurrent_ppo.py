@@ -188,8 +188,10 @@ class RecurrentPPOAgent:
         else:
             state = torch.FloatTensor(np.array(state)).to(self.device)
             
+        # print(f"DEBUG: RecurrentPPO state before view: {state.shape}")
         # Add batch dim: (state_dim) -> (1, state_dim)
         state = state.view(1, -1) 
+        # print(f"DEBUG: RecurrentPPO state after view: {state.shape}")
             
         if eval_mode:
             with torch.no_grad():

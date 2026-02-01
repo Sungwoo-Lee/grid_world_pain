@@ -777,7 +777,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
             flat_state = preprocess_state(state, env.height, env.width, body.max_satiation, body.max_injury)
             # Stack the initial state and FLATTEN for agent compatibility (Seq vs Grid issues)
-            state_array = stacker.reset(flat_state).flatten() 
+            state_array = stacker.reset(flat_state).flatten()
 
 
         else:
@@ -859,10 +859,16 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                  next_state['loc'] = next_env_state
                  
             if isinstance(body_return, tuple):
-                 next_state['satiation'] = body_return[0]
-                 next_state['injury'] = body_return[1]
+                 if with_satiation:
+                     next_state['satiation'] = body_return[0]
+                 if with_injury:
+                     next_state['injury'] = body_return[1]
             else:
-                 next_state['satiation'] = body_return
+                 if with_satiation:
+                     next_state['satiation'] = body_return
+                 elif with_injury:
+                     # This case: body only returns one value, and it must be injury if satiation is off
+                     next_state['injury'] = body_return
             
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 # DQN/PPO/DRQN/RecurrentPPO/Dreamer Update
