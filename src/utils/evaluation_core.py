@@ -350,10 +350,15 @@ def evaluate_agent(
                         next_state['loc'] = next_env_state
                         
                     if isinstance(body_return, tuple):
-                         next_state['satiation'] = body_return[0]
-                         next_state['injury'] = body_return[1]
+                         if with_satiation:
+                             next_state['satiation'] = body_return[0]
+                         if with_injury:
+                             next_state['injury'] = body_return[1]
                     else:
-                         next_state['satiation'] = body_return
+                         if with_satiation:
+                             next_state['satiation'] = body_return
+                         elif with_injury:
+                             next_state['injury'] = body_return
                 else:
                     done = env_done
                     if using_sensory and sensory_system:

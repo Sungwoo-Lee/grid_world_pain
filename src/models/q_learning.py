@@ -52,11 +52,16 @@ class QLearningAgent:
             # If not with_satiation: 2D Array [Height, Width, Actions] (Actually 3D including actions)
             
             if self.with_injury and self.with_satiation:
-                 # Height x Width x Satiation x Injury x Actions
+                 # [Height, Width, Satiation, Injury, Actions]
                  self.q_table = np.zeros((int(self.env.height), int(self.env.width), int(self.env.max_satiation) + 2, int(self.max_injury) + 2, 5))
             elif self.with_satiation:
+                 # [Height, Width, Satiation, Actions]
                  self.q_table = np.zeros((int(self.env.height), int(self.env.width), int(self.env.max_satiation) + 2, 5))
+            elif self.with_injury:
+                 # [Height, Width, Injury, Actions]
+                 self.q_table = np.zeros((int(self.env.height), int(self.env.width), int(self.max_injury) + 2, 5))
             else:
+                 # [Height, Width, Actions]
                  self.q_table = np.zeros((int(self.env.height), int(self.env.width), 5))
 
     def choose_action(self, state):
