@@ -488,7 +488,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
             proprioception_enabled=proprioception_enabled,
             nociception_size=nociception_size,
             location_size=location_size,
-            num_actions=action_dim
+            num_actions=action_dim,
+            with_satiation=with_satiation
         )
 
 

@@ -1,16 +1,25 @@
 # Level 04: Nociception (Smooth Injury)
 environment:
+  max_steps: 200
+  resource_pos: [-1, -1] # No Food/Danger on grid
   prob_switch_to_danger: 0.0
   prob_switch_to_food: 0.0
   relocate_resource: false
   eat_action_enabled: false
+  rest_action_enabled: false
 
 body:
   with_satiation: false
+  with_injury: true
   use_homeostatic_reward: false
 
 sensory:
+  using_sensory: true # Nociception requires sensors
   olfactory_enabled: false
   proprioception_enabled: false
   collision_sensor_enabled: false
   location_sensor: false
+
+predator:
+  enabled: true
+  damage: 3.0 # Smooth damage

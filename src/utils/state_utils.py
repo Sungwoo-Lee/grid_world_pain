@@ -57,8 +57,8 @@ def preprocess_state(state, env_height, env_width, max_satiation=None, max_injur
              flat_list.extend(state['exteroception'])
         if 'interoception' in state:
              flat_list.extend(state['interoception'])
-        if 'proprioception_vector' in state:
-             flat_list.extend(state['proprioception_vector'])
+        if 'proprioception' in state:
+             flat_list.extend(state['proprioception'])
              
         # Individual keys (Fallback/Legacy)
         elif any(k in state for k in ['olfactory', 'collision', 'loc', 'proprioception']):

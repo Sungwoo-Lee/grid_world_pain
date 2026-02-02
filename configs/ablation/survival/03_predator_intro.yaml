@@ -1,6 +1,7 @@
 # Level 03: Predator Intro (Instant Death)
 environment:
   max_steps: 200
+  resource_pos: [-1, -1] # No Food/Danger on grid
   prob_switch_to_danger: 0.0
   prob_switch_to_food: 0.0
   relocate_resource: false
@@ -16,4 +17,5 @@ sensory:
   using_sensory: false
 
 predator:
+  enabled: true
   damage: 20.0

@@ -185,10 +185,19 @@ class GridWorld:
         """
         self.current_step = 0
         
-        # Reset Resource State
-        self.resource_state = 'food'
-        self.resource_state = 'food'
-        self.resource_timer = self.min_food_duration
+        # Reset Resource State probabilistically
+        if self.prob_switch_to_food > 0 and self.prob_switch_to_danger == 0:
+             self.resource_state = 'food'
+        elif self.prob_switch_to_danger > 0 and self.prob_switch_to_food == 0:
+             self.resource_state = 'danger'
+        elif self.prob_switch_to_food > 0 and self.prob_switch_to_danger > 0:
+             # Default to food if both possible
+             self.resource_state = 'food'
+        else:
+             # Both zero: No resource branch
+             self.resource_state = None
+        
+        self.resource_timer = self.min_food_duration if self.resource_state == 'food' else self.min_danger_duration
         
         while True:
             row = np.random.randint(0, self.height)
@@ -570,14 +579,15 @@ class GridWorld:
         # 2.4 Status Badge & Action (Fixed at Bottom of Stats Panel usually better, but let's stack)
         y_cursor -= 0.20
         
-        if self.is_danger:
+        if self.resource_state == 'danger':
             status_text = "DANGER"
             status_bg = danger_color
-        else:
-            status_text = "SAFE" 
+        elif self.resource_state == 'food':
+            status_text = "FOOD" if not self.with_satiation else "SAFE"
             status_bg = food_color
-        if not self.with_satiation:
-             status_text = "FOOD" if not self.is_danger else "DANGER"
+        else:
+            status_text = "CLEAR" # No active resources
+            status_bg = '#ADB5BD' # Grey
             
         ax_stats.text(0.8, y_cursor + 0.05, status_text, color='white', ha='center', va='center', fontsize=8, fontweight='bold', 
                       transform=ax_stats.transAxes,

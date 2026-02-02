@@ -298,8 +298,8 @@ def evaluate_agent(
             done = False
             step_count = 0
             
-            # Initialize previous action (4 = Stay, representing initial stationary state)
-            previous_action = 4 if proprioception_enabled else None
+            # Initialize previous action (REST if enabled, or 0=Up as default)
+            previous_action = (env.REST_ACTION if env.REST_ACTION is not None else 0) if proprioception_enabled else None
             
             # Preprocess
             flat_state = preprocess_state(state, env.height, env.width, max_satiation, max_injury)

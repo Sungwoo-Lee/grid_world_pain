@@ -248,7 +248,7 @@ class SensorySystem:
                  location_sensor, nociception_enabled=True, olfactory_enabled=True,
                  collision_sensor_enabled=True, collision_sensor_range=2, 
                  proprioception_enabled=False, nociception_size=1, 
-                 location_size=2, num_actions=5):
+                 location_size=2, num_actions=5, with_satiation=True):
         """
         Args:
             sensor_radius: Olfactory sensor detection radius
@@ -264,7 +264,9 @@ class SensorySystem:
             nociception_size: Nociceptor output dimension (default 1)
             location_size: Location sensor output dimension (default 2)
             num_actions: Number of actions for proprioception (dynamic)
+            with_satiation: Whether satiation system is enabled (affects dimension)
         """
+        self.with_satiation = with_satiation
         # Olfactory sensor
         self.olfactory_enabled = olfactory_enabled
         if olfactory_enabled:
@@ -326,7 +328,7 @@ class SensorySystem:
                                    self.collision_output_size + 
                                    self.location_size)
         
-        self.interoception_size = (nociception_size if nociception_enabled else 0) + 1 # +1 for Satiation
+        self.interoception_size = (nociception_size if nociception_enabled else 0) + (1 if with_satiation else 0)
         self.proprioception_size = self.proprioception_size # Already computed
         
         total_dim = self.exteroception_size + self.interoception_size + self.proprioception_size
@@ -366,7 +368,7 @@ class SensorySystem:
         
         intero_parts = []
         if self.nociception_enabled: intero_parts.append(f"Injury={self.intero_nociceptor.output_size}")
-        intero_parts.append(f"Sat=1")
+        if self.with_satiation: intero_parts.append(f"Sat=1")
         
         intero_str = f"Intero({self.interoception_size}) = " + " + ".join(intero_parts)
         
@@ -434,19 +436,18 @@ class SensorySystem:
             prop_parts.append(prop)
             
         # --- Interoception ---
-        # Satiation
-        satiation = extra_data.get('satiation', 0) if isinstance(extra_data, dict) else 0
-        max_satiation = extra_data.get('max_satiation', 1) if isinstance(extra_data, dict) else 1
-        sat_val = np.array([satiation / max_satiation], dtype=np.float32)
-        result['satiation_sensor'] = sat_val
-        intero_parts.append(sat_val)
+        # Satiation (Only if enabled)
+        if self.with_satiation:
+            satiation = extra_data.get('satiation', 0) if isinstance(extra_data, dict) else 0
+            max_satiation = extra_data.get('max_satiation', 1) if isinstance(extra_data, dict) else 1
+            sat_val = np.array([satiation / max_satiation], dtype=np.float32)
+            result['satiation_sensor'] = sat_val
+            intero_parts.append(sat_val)
         
         # Construct grouped results
         result['exteroception'] = np.concatenate(extero_parts) if extero_parts else np.zeros(0, dtype=np.float32)
         result['interoception'] = np.concatenate(intero_parts) if intero_parts else np.zeros(0, dtype=np.float32)
-        result['proprioception_out'] = np.concatenate(prop_parts) if prop_parts else np.zeros(0, dtype=np.float32)
-        # Note: 'proprioception' key is used for the individual sensor output already
-        result['proprioception_vector'] = result['proprioception_out'] 
+        result['proprioception'] = np.concatenate(prop_parts) if prop_parts else np.zeros(0, dtype=np.float32)
         
         return result
         

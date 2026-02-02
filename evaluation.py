@@ -229,7 +229,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
             proprioception_enabled=proprioception_enabled,
             nociception_size=nociception_size,
             location_size=location_size,
-            num_actions=action_dim
+            num_actions=action_dim,
+            with_satiation=with_satiation
         )
 
 
