@@ -814,6 +814,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         
         while not done:
             global_step += 1
+            if debug and global_step % 100 == 0:
+                print(f"[DEBUG Heartbeat] Global Step: {global_step}, Episode: {episode+1}, Step: {steps+1}")
             if isinstance(agent, (DQNAgent, PPOAgent, DRQNAgent, RecurrentPPOAgent, DreamerV3Agent)):
                 action = agent.choose_action(state_array)
             else:
@@ -897,8 +899,12 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 agent.store_transition(state_array, action, reward, next_state_stacked, done)
                 
                 # Update and capture losses
+                if debug:
+                    print(f"[DEBUG Update Start] Ep:{episode+1} St:{steps+1}")
                 start_upd = time.time()
                 update_result = agent.update()
+                if debug:
+                    print(f"[DEBUG Update End] Ep:{episode+1} St:{steps+1} (Took {(time.time() - start_upd):.3f}s)")
                 upd_duration = (time.time() - start_upd) * 1000 # ms
                 
                 if isinstance(update_result, dict):
