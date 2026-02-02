@@ -60,6 +60,7 @@ def evaluate_agent(
     vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
     vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
     vis_fps = config.get_mandatory('visualization.fps', int)
+    vis_dpi = config.get_mandatory('visualization.video_dpi', int)
     
     location_sensor = config.get('sensory.location_sensor', False)
     
@@ -229,10 +230,10 @@ def evaluate_agent(
             if using_sensory and sensory_system:
                 resources = env.get_active_resources()
                 extra_data = {
-                    'injury_level': body.injury_level if with_satiation else 0, 
-                    'max_injury': body.max_injury if with_satiation else 1,
-                    'satiation': body.satiation if with_satiation else 0,
-                    'max_satiation': body.max_satiation if with_satiation else 1
+                    'injury_level': body.injury_level, 
+                    'max_injury': body.max_injury,
+                    'satiation': body.satiation,
+                    'max_satiation': body.max_satiation
                 }
                 sensory_dict = sensory_system.sense(
                     current_agent_pos, resources,
@@ -240,30 +241,28 @@ def evaluate_agent(
                     extra_data=extra_data
                 )
 
-            if with_satiation:
-                body_return = body.reset()
-                state = {}
-                # Strictly separate sensory and loc
-                if using_sensory:
-                    if sensory_system: 
-                        state.update(sensory_dict)
-                        if location_sensor:
-                            state['loc'] = current_agent_pos
-                else:
-                    state['loc'] = env_state
-                
-                if isinstance(body_return, tuple):
-                     state['satiation'] = body_return[0]
-                     state['injury'] = body_return[1]
-                else:
-                     state['satiation'] = body_return
+            # Process Body (always reset to get initial state, even if with_satiation is False)
+            body_return = body.reset()
+            
+            # Construct State Dictionary
+            if using_sensory:
+                state = sensory_dict.copy()
+                if location_sensor:
+                    state['loc'] = current_agent_pos
             else:
-                if using_sensory and sensory_system:
-                    state = sensory_dict.copy()
-                    if location_sensor:
-                        state['loc'] = current_agent_pos
-                else:
-                    state = {'loc': env_state}
+                state = {'loc': env_state}
+            
+            # Unconditionally add interoceptive data from Body
+            if isinstance(body_return, tuple):
+                 if with_satiation:
+                     state['satiation'] = body_return[0]
+                 if with_injury:
+                     state['injury'] = body_return[1]
+            else:
+                 if with_satiation:
+                     state['satiation'] = body_return
+                 elif with_injury:
+                     state['injury'] = body_return
             
             # Initial Frame
             vis_data = None
@@ -290,7 +289,8 @@ def evaluate_agent(
                 max_injury=max_injury, 
                 episode=ep_idx, 
                 step=0, 
-                sensory_data=vis_data
+                sensory_data=vis_data,
+                dpi=vis_dpi
             )
             append_frame_with_activations(frame, state=state)
             
@@ -331,10 +331,10 @@ def evaluate_agent(
                 if using_sensory and sensory_system:
                      resources = env.get_active_resources()
                      extra_data = {
-                         'injury_level': body.injury_level if with_satiation else 0, 
-                         'max_injury': body.max_injury if with_satiation else 1,
-                         'satiation': body.satiation if with_satiation else 0,
-                         'max_satiation': body.max_satiation if with_satiation else 1
+                         'injury_level': body.injury_level, 
+                         'max_injury': body.max_injury,
+                         'satiation': body.satiation,
+                         'max_satiation': body.max_satiation
                      }
                      next_sensory_dict = sensory_system.sense(
                          current_agent_pos, resources,
@@ -342,33 +342,29 @@ def evaluate_agent(
                          extra_data=extra_data
                      )
                 
-                if with_satiation:
-                    body_return, _, body_done = body.step(info)
-                    done = env_done or body_done
-                    
-                    next_state = {}
-                    if using_sensory:
-                        if sensory_system: 
-                            next_state.update(next_sensory_dict)
-                    else:
+                # Body Step (Always process damage/recovery)
+                body_return, _, body_done = body.step(info)
+                done = env_done or body_done
+                
+                # Prepare next state dictionary
+                if using_sensory:
+                    next_state = next_sensory_dict.copy()
+                    if location_sensor:
                         next_state['loc'] = next_env_state
-                        
-                    if isinstance(body_return, tuple):
-                         if with_satiation:
-                             next_state['satiation'] = body_return[0]
-                         if with_injury:
-                             next_state['injury'] = body_return[1]
-                    else:
-                         if with_satiation:
-                             next_state['satiation'] = body_return
-                         elif with_injury:
-                             next_state['injury'] = body_return
                 else:
-                    done = env_done
-                    if using_sensory and sensory_system:
-                        next_state = next_sensory_dict.copy()
-                    else:
-                        next_state = {'loc': next_env_state}
+                    next_state = {'loc': next_env_state}
+                
+                # Unconditionally add interoceptive data from Body
+                if isinstance(body_return, tuple):
+                     if with_satiation:
+                         next_state['satiation'] = body_return[0]
+                     if with_injury:
+                         next_state['injury'] = body_return[1]
+                else:
+                     if with_satiation:
+                         next_state['satiation'] = body_return
+                     elif with_injury:
+                         next_state['injury'] = body_return
                         
                 # Render
                 vis_data = None
@@ -387,7 +383,8 @@ def evaluate_agent(
                     episode=ep_idx,
                     step=step_count+1,
                     sensory_data=vis_data,
-                    action=action
+                    action=action,
+                    dpi=vis_dpi
                 )
                 
                 # We explain the action taken at `state` (inputs used to generate action)
@@ -429,7 +426,8 @@ def evaluate_agent(
                             max_injury=max_injury,
                             episode=ep_idx,
                             step=step_count,
-                            sensory_data=vis_data
+                            sensory_data=vis_data,
+                            dpi=vis_dpi
                         )
                         append_frame_with_activations(frame)
                     break

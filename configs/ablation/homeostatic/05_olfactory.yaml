@@ -2,7 +2,19 @@
 environment:
   prob_switch_to_danger: 0.0
 
+body:
+  with_satiation: true
+  with_injury: true
+  use_homeostatic_reward: true
+
 sensory:
+  using_sensory: true
+  olfactory_enabled: true
   proprioception_enabled: false
   collision_sensor_enabled: false
   location_sensor: false
+  nociception_enabled: true
+
+predator:
+  enabled: true
+  damage: 3.0

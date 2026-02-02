@@ -414,11 +414,15 @@ class GridWorld:
             print(f"Predator Pos: {self.predator_pos}")
         print()
 
-    def render_rgb_array(self, satiation=None, max_satiation=None, injury=None, max_injury=None, episode=None, step=None, sensory_data=None, action=None):
+    def render_rgb_array(self, satiation=None, max_satiation=None, injury=None, max_injury=None, episode=None, step=None, sensory_data=None, action=None, dpi=None):
         """
         Renders the grid as an RGB image using Matplotlib with a professional Light Theme (Scientific/Apple Style).
         Supports visualizing sensory modules if data is provided.
         """
+        # Fallback to default if not provided
+        if dpi is None:
+            dpi = 100
+            
         # --- Theme Settings ---
         bg_color = '#FFFFFF'       # White Background
         grid_color = '#E9ECEF'     # Very light grey for grid
@@ -430,7 +434,7 @@ class GridWorld:
         # Setup Figure
         # If sensory data exists, we need more space on the right
         fig_width = 10 if sensory_data is not None else 8
-        fig = plt.figure(figsize=(fig_width, 6), dpi=100)
+        fig = plt.figure(figsize=(fig_width, 6), dpi=dpi)
         fig.patch.set_facecolor(bg_color)
         
         # GridSpec Layout

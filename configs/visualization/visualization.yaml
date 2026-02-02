@@ -4,7 +4,11 @@ visualization:
   font_family: "sans-serif"
   
   # Video settings
-  fps: 5
+  # fps: 5
+  # video_dpi: 100
+
+  fps: 2
+  video_dpi: 300
   
   # Activation / LRP Visualization
   activations:

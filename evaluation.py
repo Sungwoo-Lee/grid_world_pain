@@ -273,19 +273,20 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
              input_dim += dim
              dims_breakdown.append(f"{key}={dim}")
     else:
-         print(f"Environment Observation Spec: {observation_spec}")
-         loc_shape = observation_spec['loc']['shape']
-         input_dim += loc_shape[0]
-         dims_breakdown.append(f"Loc={loc_shape[0]}")
-         
-    if with_satiation:
-        sat_shape = observation_spec['satiation']['shape']
-        input_dim += sat_shape[0]
-        dims_breakdown.append(f"Sat={sat_shape[0]}")
+        print(f"Environment Observation Spec: {observation_spec}")
+        loc_shape = observation_spec['loc']['shape']
+        input_dim += loc_shape[0]
+        dims_breakdown.append(f"Loc={loc_shape[0]}")
+        
+        if with_satiation:
+            sat_shape = observation_spec['satiation']['shape']
+            input_dim += sat_shape[0]
+            dims_breakdown.append(f"Sat={sat_shape[0]}")
+            
         if with_injury:
-             hlth_shape = observation_spec['injury']['shape']
-             input_dim += hlth_shape[0]
-             dims_breakdown.append(f"Injury={hlth_shape[0]}")
+            hlth_shape = observation_spec['injury']['shape']
+            input_dim += hlth_shape[0]
+            dims_breakdown.append(f"Injury={hlth_shape[0]}")
     
     print("--------------------------------------------\n")
 
@@ -488,6 +489,14 @@ def main():
     with open(config_path, 'r') as f:
         saved_config_dict = yaml.safe_load(f)
         config = Config(saved_config_dict)
+
+    # 1.1 Merge current visualization settings (Allows tweaking resolution/FPS without retraining)
+    viz_config_path = "configs/visualization/visualization.yaml"
+    if os.path.exists(viz_config_path):
+        with open(viz_config_path, 'r') as f:
+            viz_dict = yaml.safe_load(f)
+            config.merge(viz_dict)
+            print(f"Merged visualization settings from {viz_config_path}")
 
     # 2. Key Overrides (Allow user to change testing seed/episodes)
     # 2. Key Overrides (Allow user to change testing seed/episodes)

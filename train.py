@@ -519,19 +519,20 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
              dims_breakdown.append(f"{key}={dim}")
 
     else:
-         print(f"Environment Observation Spec: {observation_spec}")
-         loc_shape = observation_spec['loc']['shape']
-         input_dim += loc_shape[0]
-         dims_breakdown.append(f"Loc={loc_shape[0]}")
-         
-         if with_satiation:
+        print(f"Environment Observation Spec: {observation_spec}")
+        loc_shape = observation_spec['loc']['shape']
+        input_dim += loc_shape[0]
+        dims_breakdown.append(f"Loc={loc_shape[0]}")
+        
+        if with_satiation:
             sat_shape = observation_spec['satiation']['shape']
             input_dim += sat_shape[0]
             dims_breakdown.append(f"Sat={sat_shape[0]}")
-            if with_injury:
-                 hlth_shape = observation_spec['injury']['shape']
-                 input_dim += hlth_shape[0]
-                 dims_breakdown.append(f"Injury={hlth_shape[0]}")
+            
+        if with_injury:
+            hlth_shape = observation_spec['injury']['shape']
+            input_dim += hlth_shape[0]
+            dims_breakdown.append(f"Injury={hlth_shape[0]}")
     
     print("--------------------------------------------\n")
 
@@ -741,31 +742,34 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                  extra_data=extra_data
              )
 
-        if with_satiation:
-            body_return = body.reset()
-            if using_sensory:
-                # Construct Dictionary State
-                state = {}
-                state.update(sensory_dict)
-                
-                if isinstance(body_return, tuple):
+        # Reset Body (Always reset to clear injury buffers/randomize state)
+        body_return = body.reset()
+        
+        if using_sensory:
+            # Construct Dictionary State
+            state = sensory_dict.copy()
+            if isinstance(body_return, tuple):
+                 if with_satiation:
                      state['satiation'] = body_return[0]
+                 if with_injury:
                      state['injury'] = body_return[1]
-                else:
-                     state['satiation'] = body_return
             else:
-                 state = {'loc': env_state}
-                 if isinstance(body_return, tuple):
-                     state['satiation'] = body_return[0]
-                     state['injury'] = body_return[1]
-                 else:
+                 if with_satiation:
                      state['satiation'] = body_return
+                 elif with_injury:
+                     state['injury'] = body_return
         else:
-            if using_sensory:
-                # Direct dictionary (copy)
-                state = sensory_dict.copy()
-            else:
-                state = {'loc': env_state}
+             state = {'loc': env_state}
+             if isinstance(body_return, tuple):
+                 if with_satiation:
+                     state['satiation'] = body_return[0]
+                 if with_injury:
+                     state['injury'] = body_return[1]
+             else:
+                 if with_satiation:
+                     state['satiation'] = body_return
+                 elif with_injury:
+                     state['injury'] = body_return
         
         done = False
         total_reward = 0
