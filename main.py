@@ -133,23 +133,7 @@ def main():
     # 3. Environment Config
     height = config.get_mandatory('environment.height', int)
     width = config.get_mandatory('environment.width', int)
-    
-    # Resource Pos fallback logic
-    resource_pos = config.get('environment.resource_pos')
-    if resource_pos is None:
-         resource_pos = config.get_mandatory('environment.food_pos')
-    
     start_pos = config.get_mandatory('environment.start_pos')
-    
-    prob_switch_to_danger = config.get_mandatory('environment.prob_switch_to_danger', float)
-    min_danger_duration = config.get_mandatory('environment.min_danger_duration', int)
-    damage_amount = config.get_mandatory('environment.damage_amount', float)
-    
-    prob_switch_to_food = config.get_mandatory('environment.prob_switch_to_food', float)
-    min_food_duration = config.get_mandatory('environment.min_food_duration', int)
-    
-    relocate_resource = config.get_mandatory('environment.relocate_resource')
-    relocation_steps = config.get_mandatory('environment.relocation_steps', int)
     
     # Predator Config
     predator_enabled = config.get_mandatory('predator.enabled', bool)
@@ -171,15 +155,13 @@ def main():
     # Sensory Config
     using_sensory = config.get_mandatory('sensory.using_sensory')
     sensor_radius = config.get_mandatory('sensory.sensor_radius', int)
-    decay_power = config.get('sensory.decay_power', 1.0)
-    vector_size = config.get('sensory.vector_size', 10)
-    food_property = config.get('sensory.food_property', None)
-    danger_property = config.get('sensory.danger_property', None)
-    nociceptor_radius = config.get('sensory.nociceptor_radius', 0)
+    decay_power = config.get_mandatory('sensory.decay_power', float)
+    vector_size = config.get_mandatory('sensory.vector_size', int)
+    nociceptor_radius = config.get_mandatory('sensory.nociceptor_radius', int)
     collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
     collision_sensor_range = config.get_mandatory('sensory.collision_sensor_range', int)
     location_sensor = config.get_mandatory('sensory.location_sensor')
-    injury_smoothing_duration = config.get('body.injury_smoothing_duration', 3)
+    injury_smoothing_duration = config.get_mandatory('body.injury_smoothing_duration', int)
 
     # Setup paths
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -195,25 +177,15 @@ def main():
         height=height, 
         width=width, 
         start=tuple(start_pos),
-        resource_pos=tuple(resource_pos),
+        resources=config.get_mandatory('environment.resources'),
         with_satiation=with_satiation, 
         max_steps=max_steps,
-        prob_switch_to_danger=prob_switch_to_danger, 
-        min_danger_duration=min_danger_duration, 
-        damage_amount=damage_amount,
-        prob_switch_to_food=prob_switch_to_food, 
-        min_food_duration=min_food_duration,
-        relocate_resource=relocate_resource, 
-        relocation_steps=relocation_steps,
-        vector_size=vector_size, 
-        food_property=food_property, 
-        danger_property=danger_property,
-        eat_action_enabled=config.get('environment.eat_action_enabled', True),
-        rest_action_enabled=config.get('environment.rest_action_enabled', True),
+        eat_action_enabled=config.get_mandatory('environment.eat_action_enabled', bool),
+        rest_action_enabled=config.get_mandatory('environment.rest_action_enabled', bool),
         predator_enabled=predator_enabled,
         predator_move_interval=predator_move_interval,
         predator_damage=predator_damage,
-        predator_start_pos=tuple(predator_start_pos),
+        predator_start_pos=predator_start_pos,
         predator_random_start_pos=predator_random_start_pos,
         predator_property=predator_property,
         injury_smoothing_duration=injury_smoothing_duration

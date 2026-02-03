@@ -80,7 +80,7 @@ import argparse
 from tqdm import tqdm
 
 def print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed,
-                         with_injury, prob_switch_to_danger, damage_amount, device="auto"):
+                         with_injury, device="auto"):
     """
     Prints a professional and fancy configuration summary.
     """
@@ -97,9 +97,12 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             print(f"  \u25cf {key:.<25} {value}")
 
     # Environment
+    resources = config_dict.get_mandatory('environment.resources')
+    resource_names = [f"{r.get('count', 1)}x {r['name']} ({r['type']})" for r in resources]
+    
     env_data = {
         "Grid Size": f"{config_dict.get_mandatory('environment.height', int)}x{config_dict.get_mandatory('environment.width', int)}",
-        "Resource Position": str(config_dict.get_mandatory('environment.resource_pos')),
+        "Resources": ", ".join(resource_names),
         "Max Steps": max_steps,
         "Mode": "Interoceptive (Homeostasis)" if with_satiation else "Conventional (Goal-driven)"
     }
@@ -109,11 +112,9 @@ def print_config_summary(config_dict, episodes, seed, with_satiation, overeating
             env_data["Satiation Setpoint"] = satiation_setpoint
             
     if with_injury:
-        env_data["Switch to Danger Prob"] = prob_switch_to_danger
-        env_data["Damage Amount"] = damage_amount
+        env_data["Injury System"] = "ENABLED"
         
-    env_data["Switch to Food Prob"] = config_dict.get_mandatory('environment.prob_switch_to_food', float)
-    env_data["Min Food Duration"] = config_dict.get_mandatory('environment.min_food_duration', int)
+    print_section("Environment", env_data)
         
     print_section("Environment", env_data)
 
@@ -273,7 +274,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         decay_power = config_dict.get_mandatory('sensory.decay_power', float)
         vector_size = config_dict.get_mandatory('sensory.vector_size', int)
         nociception_enabled = config_dict.get_mandatory('sensory.nociception_enabled', bool)
-        olfactory_enabled = config_dict.get('sensory.olfactory_enabled', True)
+        olfactory_enabled = config_dict.get_mandatory('sensory.olfactory_enabled', bool)
         nociceptor_radius = config_dict.get_mandatory('sensory.nociceptor_radius', int)
         collision_sensor_enabled = config_dict.get_mandatory('sensory.collision_sensor_enabled', bool)
         # Size calculated from range automatically now
@@ -320,11 +321,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     
     # Environment Params
     max_steps = int(resolve_param(max_steps, 'environment.max_steps'))
-    prob_switch_to_danger = float(resolve_param(prob_switch_to_danger, 'environment.prob_switch_to_danger'))
-    min_danger_duration = int(resolve_param(min_danger_duration, 'environment.min_danger_duration'))
-    damage_amount = float(resolve_param(damage_amount, 'environment.damage_amount'))
-    prob_switch_to_food = float(resolve_param(prob_switch_to_food, 'environment.prob_switch_to_food'))
-    min_food_duration = int(resolve_param(min_food_duration, 'environment.min_food_duration'))
+    eat_action_enabled = resolve_param(None, 'environment.eat_action_enabled')
+    rest_action_enabled = resolve_param(None, 'environment.rest_action_enabled')
+    resources_config = config_dict.get_mandatory('environment.resources')
 
     # Predator Params
     predator_enabled = config_dict.get_mandatory('predator.enabled', bool)
@@ -371,7 +370,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     config_dict.set('training.device', device)
     
     if not quiet:
-         print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_injury, prob_switch_to_danger, damage_amount, device)
+         print_config_summary(config_dict, episodes, seed, with_satiation, overeating_death, max_steps, random_start_satiation, use_homeostatic_reward, satiation_setpoint, testing_seed, with_injury, device)
     
     # Setup directories
     results_dir = "results"
@@ -417,31 +416,21 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     # Strict Migration: try resource_pos, if not found, use food_pos if available
     resource_pos = config_dict.get('environment.resource_pos')
     if resource_pos is None:
-         resource_pos = config_dict.get_mandatory('environment.food_pos')
+         resource_pos = config_dict.get('environment.food_pos', (0, 0))
          
     env = GridWorld(
-        height=config_dict.get_mandatory('environment.height'),
-        width=config_dict.get_mandatory('environment.width'),
-        start=tuple(config_dict.get_mandatory('environment.start_pos')),
-        resource_pos=tuple(resource_pos),
-        with_satiation=with_satiation, # Resolved earlier
-        max_steps=max_steps, # Resolved earlier
-        prob_switch_to_danger=prob_switch_to_danger, # Resolved earlier
-        min_danger_duration=min_danger_duration,
-        damage_amount=damage_amount,
-        prob_switch_to_food=prob_switch_to_food,
-        min_food_duration=min_food_duration,
-        relocate_resource=config_dict.get_mandatory('environment.relocate_resource'),
-        relocation_steps=config_dict.get_mandatory('environment.relocation_steps'),
-        vector_size=config_dict.get_mandatory('sensory.vector_size', int),
-        food_property=config_dict.get_mandatory('sensory.food_property'),
-        danger_property=config_dict.get_mandatory('sensory.danger_property'),
-        eat_action_enabled=config_dict.get_mandatory('environment.eat_action_enabled', bool),
-        rest_action_enabled=config_dict.get_mandatory('environment.rest_action_enabled', bool),
+        height=int(resolve_param(None, 'environment.height')),
+        width=int(resolve_param(None, 'environment.width')),
+        start=tuple(resolve_param(None, 'environment.start_pos')),
+        resources=resources_config,
+        with_satiation=with_satiation,
+        max_steps=max_steps,
+        eat_action_enabled=eat_action_enabled,
+        rest_action_enabled=rest_action_enabled,
         predator_enabled=predator_enabled,
         predator_move_interval=predator_move_interval,
         predator_damage=predator_damage,
-        predator_start_pos=tuple(predator_start_pos),
+        predator_start_pos=predator_start_pos,
         predator_random_start_pos=predator_random_start_pos,
         predator_property=predator_property,
         injury_smoothing_duration=injury_smoothing_duration
@@ -473,8 +462,8 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         if not quiet:
             print(f"Initializing Sensory System (Radius={sensor_radius}, Decay={decay_power}, VecSize={vector_size}, NociceptorR={nociceptor_radius}, Collision={collision_sensor_enabled})")
         location_sensor = config_dict.get_mandatory('sensory.location_sensor')
-        nociception_size = config_dict.get('sensory.nociception_size', 1)
-        location_size = config_dict.get('sensory.location_size', 2)
+        nociception_size = config_dict.get_mandatory('sensory.nociception_size', int)
+        location_size = config_dict.get_mandatory('sensory.location_size', int)
         sensory_system = SensorySystem(
             sensor_radius=sensor_radius, 
             vector_size=vector_size, 

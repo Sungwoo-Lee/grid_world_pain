@@ -105,7 +105,7 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     resource_pos = config.get('environment.resource_pos')
     if resource_pos is None:
          # Fallback to food_pos if resource_pos missing (legacy compatibility)
-         resource_pos = config.get_mandatory('environment.food_pos')
+         resource_pos = config.get('environment.food_pos', (0, 0))
          
     height = config.get_mandatory('environment.height', int)
     width = config.get_mandatory('environment.width', int)
@@ -147,28 +147,18 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     start_injury = float(start_injury) if start_injury is not None else 1.0
     injury_recovery = float(injury_recovery) if injury_recovery is not None else 0.0
     
-    injury_smoothing_duration = int(config.get('body.injury_smoothing_duration', 3))
+    # Body Params
+    injury_smoothing_duration = int(config.get_mandatory('body.injury_smoothing_duration', int))
     
-    prob_switch_to_danger = config.get_mandatory('environment.prob_switch_to_danger', float)
-    min_danger_duration = config.get_mandatory('environment.min_danger_duration', int)
-    damage_amount = config.get_mandatory('environment.damage_amount', float)
-    
-    prob_switch_to_food = config.get_mandatory('environment.prob_switch_to_food', float)
-    min_food_duration = config.get_mandatory('environment.min_food_duration', int)
-    
-    # Extract Relocation Config
-    relocate_resource = config.get('environment.relocate_resource', False)
-    relocation_steps = config.get('environment.relocation_steps', 50)
-
     # Predator Params (Evaluation extracts from saved config)
-    predator_enabled = config.get('predator.enabled', False)
+    predator_enabled = config.get_mandatory('predator.enabled', bool)
     
     if predator_enabled:
-        predator_move_interval = config.get('predator.move_interval', 2)
-        predator_damage = config.get('predator.damage', 5.0)
-        predator_start_pos = config.get('predator.start_pos', [0, 0])
-        predator_random_start_pos = config.get('predator.random_start_pos', False)
-        predator_property = config.get('predator.property', [0.0, 0.0, 0.0, 0.0, 1.0])
+        predator_move_interval = config.get_mandatory('predator.move_interval', int)
+        predator_damage = config.get_mandatory('predator.damage', float)
+        predator_start_pos = config.get_mandatory('predator.start_pos')
+        predator_random_start_pos = config.get_mandatory('predator.random_start_pos', bool)
+        predator_property = config.get_mandatory('predator.property')
     else:
         predator_move_interval = 2
         predator_damage = 0.0
@@ -180,24 +170,24 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     # Set seed for deterministic evaluation
     np.random.seed(seed)
     
-    env = GridWorld(height=height, width=width, start=tuple(config.get('environment.start_pos', [0, 0])), 
-                    resource_pos=resource_pos, with_satiation=with_satiation, max_steps=max_steps,
-                    prob_switch_to_danger=prob_switch_to_danger, min_danger_duration=min_danger_duration, damage_amount=damage_amount,
-                    prob_switch_to_food=prob_switch_to_food, min_food_duration=min_food_duration,
-                    relocate_resource=relocate_resource, relocation_steps=relocation_steps,
-                    vector_size=config.get('sensory.vector_size', 5),
-                    food_property=config.get('sensory.food_property', [1.0, 0.0, 0.0, 0.0, 0.0]),
-                    danger_property=config.get('sensory.danger_property', [0.0, 1.0, 0.0, 0.0, 0.0]),
-                    eat_action_enabled=config.get('environment.eat_action_enabled', True),
-                    rest_action_enabled=config.get('environment.rest_action_enabled', True),
-                    predator_enabled=predator_enabled,
-                    predator_move_interval=predator_move_interval,
-                    predator_damage=predator_damage,
-                    predator_start_pos=tuple(predator_start_pos),
-                    predator_random_start_pos=predator_random_start_pos,
-                    predator_property=predator_property,
-                    injury_smoothing_duration=injury_smoothing_duration)
-    
+    env = GridWorld(
+        height=int(config.get_mandatory('environment.height', int)),
+        width=int(config.get_mandatory('environment.width', int)),
+        start=tuple(config.get_mandatory('environment.start_pos')),
+        resources=config.get_mandatory('environment.resources'),
+        with_satiation=with_satiation,
+        max_steps=int(config.get_mandatory('environment.max_steps', int)),
+        eat_action_enabled=config.get_mandatory('environment.eat_action_enabled', bool),
+        rest_action_enabled=config.get_mandatory('environment.rest_action_enabled', bool),
+        predator_enabled=predator_enabled,
+        predator_move_interval=predator_move_interval,
+        predator_damage=predator_damage,
+        predator_start_pos=predator_start_pos,
+        predator_random_start_pos=predator_random_start_pos,
+        predator_property=predator_property,
+        vector_size=int(config.get_mandatory('sensory.vector_size', int)),
+        injury_smoothing_duration=injury_smoothing_duration
+    )
     # Get action dimension from environment spec (dynamic based on eat/rest config)
     action_dim = env.action_spec()['n']
     body = InteroceptiveBody(
@@ -218,16 +208,21 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     )
     
     # Sensory System
-    using_sensory = config.get('sensory.using_sensory', False)
+    using_sensory = config.get_mandatory('sensory.using_sensory', bool)
     sensory_system = None
     if using_sensory:
-        sensor_radius = config.get('sensory.sensor_radius', 5)
-        decay_power = config.get('sensory.decay_power', 1.0)
-        vector_size = config.get('sensory.vector_size', 5)
-        nociception_enabled = config.get('sensory.nociception_enabled', True)
-        nociceptor_radius = config.get('sensory.nociceptor_radius', 0)
-        collision_sensor_enabled = config.get('sensory.collision_sensor_enabled', True)
-        collision_sensor_range = config.get('sensory.collision_sensor_range', 2)
+        sensor_radius = int(config.get_mandatory('sensory.sensor_radius', int))
+        decay_power = float(config.get_mandatory('sensory.decay_power', float))
+        vector_size = int(config.get_mandatory('sensory.vector_size', int))
+        nociception_enabled = config.get_mandatory('sensory.nociception_enabled', bool)
+        nociceptor_radius = int(config.get_mandatory('sensory.nociceptor_radius', int))
+        collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
+        collision_sensor_range = int(config.get_mandatory('sensory.collision_sensor_range', int))
+        olfactory_enabled = config.get_mandatory('sensory.olfactory_enabled', bool)
+        proprioception_enabled = config.get_mandatory('sensory.proprioception_enabled', bool)
+        nociception_size = int(config.get_mandatory('sensory.nociception_size', int))
+        location_size = int(config.get_mandatory('sensory.location_size', int))
+        location_sensor = config.get_mandatory('sensory.location_sensor', bool)
         location_sensor = config.get('sensory.location_sensor', False)
         olfactory_enabled = config.get('sensory.olfactory_enabled', True)
         proprioception_enabled = config.get('sensory.proprioception_enabled', False)

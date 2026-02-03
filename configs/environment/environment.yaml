@@ -1,18 +1,67 @@
 # Default Configuration for GridWorld Interoceptive AI
 
 environment:
-  height: 4
-  width: 4
+  height: 20
+  width: 20
   start_pos: [0, 0]
-  resource_pos: [3, 3]
   max_steps: 500
-  prob_switch_to_danger: 0.1
-  min_danger_duration: 5
-  damage_amount: 5
-  prob_switch_to_food: 0.5
-  min_food_duration: 10
-  relocate_resource: true  
-  relocation_steps: 50
+  resources:
+    - name: "Food Source A"
+      type: "food"
+      count: 1
+      spawn_area: [[0, 0], [5, 5]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 3
+      regeneration_delay: 50
+      damage: 0.0
+
+    - name: "Food Source B"
+      type: "food"
+      count: 1
+      spawn_area: [[15, 15], [20, 20]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 3
+      regeneration_delay: 50
+      damage: 0.0
+    
+    - name: "Food Source C"
+      type: "food"
+      count: 1
+      spawn_area: [[0, 15], [5, 20]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 3
+      regeneration_delay: 50
+      damage: 0.0
+    
+    - name: "Food Source D"
+      type: "food"
+      count: 1
+      spawn_area: [[15, 0], [20, 5]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 3
+      regeneration_delay: 50
+      damage: 0.0
+
+    - name: "Food Source E"
+      type: "food"
+      count: 1
+      spawn_area: [[7, 7], [13, 13]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 3
+      regeneration_delay: 50
+      damage: 0.0
+      
+    - name: "Danger Zone"
+      type: "danger"
+      count: 10
+      spawn_area: [[0, 0], [20, 20]]
+      properties: [0.0, 0.0, 1.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: 10
+      regeneration_delay: 20
+      
+  # Legacy config removed (prob_switch, durations, etc)
+
   
   # Action Configuration
   rest_action_enabled: true   # If true: action 4 = Rest (must rest explicitly)
@@ -43,7 +92,7 @@ body:
 
 sensory:
   using_sensory: true
-  sensor_radius: 5 # Default: 2
+  sensor_radius: 20 # Default: 2
   # Decay Formula: decay = 1.0 / (distance ** decay_power)
   decay_power: 1.0 
   vector_size: 5
@@ -63,6 +112,7 @@ sensory:
   # Location Sensor
   location_sensor: false     # Include centered location even with sensors
   location_size: 2           # Output dimension of location sensor
+  nociception_size: 1        # Output dimension of nociceptor
 
   # Proprioceptive Sensing (Motor Feedback)
   proprioception_enabled: true  # Sense previous action as motor feedback
@@ -70,7 +120,7 @@ sensory:
 
 predator:
   enabled: true
-  move_interval: 6      # Moves every N steps
+  move_interval: 3      # Moves every N steps
   damage: 3.0           # Damage dealt on contact
   start_pos: [3, 0]     # Default start position
   random_start_pos: true
