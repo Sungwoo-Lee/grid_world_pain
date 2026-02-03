@@ -285,6 +285,14 @@ def main():
 
 
 
+        # Load icon_scale from visualization config
+        viz_config_path = os.path.join(os.path.dirname(__file__), "configs", "visualization", "visualization.yaml")
+        icon_scale = 1.0
+        if os.path.exists(viz_config_path):
+            with open(viz_config_path, 'r') as f:
+                viz_data = yaml.safe_load(f).get('visualization', {})
+                icon_scale = viz_data.get('icon_scale', 1.0)
+
         # Capture Frame
         injury = body.injury_level if body.with_injury else None
         max_injury = body.max_injury if body.with_injury else None
@@ -295,7 +303,8 @@ def main():
             max_injury=max_injury, 
             episode=ep_num, 
             step=0, 
-            sensory_data=vis_data
+            sensory_data=vis_data,
+            icon_scale=icon_scale
         ))
         
         done = False
@@ -356,7 +365,8 @@ def main():
                 max_injury=max_injury, 
                 episode=ep_num, 
                 step=step_count+1, 
-                sensory_data=vis_data
+                sensory_data=vis_data,
+                icon_scale=icon_scale
             ))
             
             step_count += 1
@@ -372,7 +382,8 @@ def main():
                         max_injury=max_injury, 
                         episode=ep_num, 
                         step=step_count, 
-                        sensory_data=vis_data
+                        sensory_data=vis_data,
+                        icon_scale=icon_scale
                     ))
                 break
         
@@ -386,7 +397,8 @@ def main():
                     max_injury=max_injury, 
                     episode=ep_num, 
                     step=step_count, 
-                    sensory_data=vis_data
+                    sensory_data=vis_data,
+                    icon_scale=icon_scale
                 ))
 
     save_video(frames, video_filename)

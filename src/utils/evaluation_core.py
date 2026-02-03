@@ -61,6 +61,7 @@ def evaluate_agent(
     vis_lrp = config.get_mandatory('visualization.activations.with_lrp') and vis_enabled
     vis_fps = config.get_mandatory('visualization.fps', int)
     vis_dpi = config.get_mandatory('visualization.video_dpi', int)
+    icon_scale = config.get('visualization.icon_scale', 1.0)
     
     location_sensor = config.get('sensory.location_sensor', False)
     
@@ -290,7 +291,8 @@ def evaluate_agent(
                 episode=ep_idx, 
                 step=0, 
                 sensory_data=vis_data,
-                dpi=vis_dpi
+                dpi=vis_dpi,
+                icon_scale=icon_scale
             )
             append_frame_with_activations(frame, state=state)
             
@@ -384,7 +386,8 @@ def evaluate_agent(
                     step=step_count+1,
                     sensory_data=vis_data,
                     action=action,
-                    dpi=vis_dpi
+                    dpi=vis_dpi,
+                    icon_scale=icon_scale
                 )
                 
                 # We explain the action taken at `state` (inputs used to generate action)
@@ -427,7 +430,8 @@ def evaluate_agent(
                             episode=ep_idx,
                             step=step_count,
                             sensory_data=vis_data,
-                            dpi=vis_dpi
+                            dpi=vis_dpi,
+                            icon_scale=icon_scale
                         )
                         append_frame_with_activations(frame)
                     break

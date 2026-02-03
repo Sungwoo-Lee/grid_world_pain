@@ -515,7 +515,7 @@ class GridWorld:
             print(line)
         print(f"Step: {self.current_step}")
 
-    def render_rgb_array(self, satiation=None, max_satiation=None, injury=None, max_injury=None, episode=None, step=None, sensory_data=None, action=None, dpi=None):
+    def render_rgb_array(self, satiation=None, max_satiation=None, injury=None, max_injury=None, episode=None, step=None, sensory_data=None, action=None, dpi=None, icon_scale=1.0):
         if dpi is None: dpi = 100
         
         bg_color = '#FFFFFF'
@@ -549,7 +549,7 @@ class GridWorld:
         ax_grid.axis('off')
         
         # Scaling factor based on baseline 4x4 grid
-        scale_factor = 4.0 / max(self.width, self.height)
+        scale_factor = (4.0 / max(self.width, self.height)) * icon_scale
         
         for x in range(self.width + 1):
             ax_grid.vlines(x - 0.5, -0.5, self.height - 0.5, colors='#DEE2E6', linestyles='-', linewidth=0.8, alpha=0.5)
