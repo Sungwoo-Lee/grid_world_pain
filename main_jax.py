@@ -89,14 +89,22 @@ def main():
     if args.config:
         params = load_env_params(args.config)
     else:
-        raise ValueError("--config is required for JAX sandbox")
+        # Fallback to default environment config
+        default_env_config = os.path.join(os.path.dirname(__file__), "configs", "environment", "environment.yaml")
+        if os.path.exists(default_env_config):
+            print(f"No config provided. Using default: {default_env_config}")
+            params = load_env_params(default_env_config)
+        else:
+            raise ValueError(f"--config not provided and default config not found at {default_env_config}")
 
     # Setup video output directory
     if args.render_video:
         from src.environment.jax_env.renderer import render_jax_state, save_jax_video
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         output_dir = args.output_dir or os.path.join("results", "JAX_Sandbox", f"{args.tag}_{timestamp}")
-        os.makedirs(output_dir, exist_ok=True)
+        # Only create if using default path or specific non-existing path
+        if not args.output_dir or not os.path.exists(output_dir):
+             os.makedirs(output_dir, exist_ok=True)
         print(f"Video output: {output_dir}")
 
     # Initialize JAX
