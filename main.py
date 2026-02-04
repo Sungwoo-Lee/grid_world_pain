@@ -7,13 +7,14 @@ Purpose:
 - Checks if "Eating" works, if "Satiation" changes, and if "Death" occurs correctly.
 
 Arguments:
-- `--episodes <int>`: (Default: 3) Number of episodes to record in the video.
-- `--max_steps <int>`: (Default: 30) Maximum steps to record per episode.
-- `--seed <int>`: (Default: 42) Random seed for reproducibility.
+- `--episodes <int>`: Number of episodes to record in the video.
+- `--max_steps <int>`: Maximum steps to record per episode.
+- `--seed <int>`: Random seed for reproducibility.
 - `--config <path>`: Path to config YAML (optional).
 
 Changelog:
 - 2026-01-29: Added Predator System support with strict configuration enforcement.
+- 2026-02-03: Synchronized with train.py strict configuration logic.
 """
 
 import os
@@ -57,6 +58,14 @@ def main():
         user_config = Config.load_yaml(args.config)
         config.merge(user_config)
 
+    # Load Visualization Config Early
+    viz_config_path = os.path.join(os.path.dirname(__file__), "configs", "visualization", "visualization.yaml")
+    if os.path.exists(viz_config_path):
+        with open(viz_config_path, 'r') as f:
+            viz_dict = yaml.safe_load(f)
+            config.merge(viz_dict)
+            print(f"Merged visualization settings from {viz_config_path}")
+
     # Resolve Parameters (Argument > Config > Error)
     def resolve_param(arg_val, config_key, type_converter=None):
         if arg_val is not None:
@@ -66,69 +75,41 @@ def main():
         return config.get_mandatory(config_key, type_converter)
 
     # 1. Essential Params
-    episodes = resolve_param(args.episodes, 'testing.evaluation_episodes', int) if args.episodes else (args.episodes or 3)
-    # Note: 'testing.evaluation_episodes' might not be in environment.yaml default, so fallback to args or hard default
-    # Currently args.episodes defaults to None. 
-    # Let's be strict but allow fallback if config missing.
-    try:
-        episodes = resolve_param(args.episodes, 'testing.evaluation_episodes', int)
-    except ValueError:
-        episodes = args.episodes if args.episodes is not None else 3
-    
-    try:
-        max_steps = resolve_param(args.max_steps, 'environment.max_steps', int)
-    except ValueError:
-        max_steps = args.max_steps if args.max_steps is not None else 30
-
-    try:
-        seed = resolve_param(args.seed, 'training.seed', int)
-    except ValueError:
-        seed = args.seed if args.seed is not None else 42
-        
+    episodes = int(resolve_param(args.episodes, 'testing.evaluation_episodes'))
+    max_steps = int(resolve_param(args.max_steps, 'environment.max_steps'))
+    seed = int(resolve_param(args.seed, 'training.seed'))
     np.random.seed(seed)
 
     # 2. Body Config
-    with_satiation = config.get('body.with_satiation', True)
+    with_satiation = resolve_param(None, 'body.with_satiation')
     if args.no_satiation:
         with_satiation = False
+        config.set('body.with_satiation', False)
     
-    with_injury = config.get('body.with_injury', False)
+    with_injury = resolve_param(None, 'body.with_injury')
     if args.no_injury:
         with_injury = False
+        config.set('body.with_injury', False)
         
-    overeating_death = config.get('body.overeating_death', True)
+    overeating_death = resolve_param(None, 'body.overeating_death')
     if args.no_overeating_death:
         overeating_death = False
+        config.set('body.overeating_death', False)
 
-    # Extract Body Params
-    if with_satiation:
-        max_satiation = config.get_mandatory('body.max_satiation', int)
-        start_satiation = config.get_mandatory('body.start_satiation', int)
-        random_start_satiation = config.get_mandatory('body.random_start_satiation')
-        food_satiation_gain = config.get_mandatory('body.food_satiation_gain', float)
-        use_homeostatic_reward = config.get_mandatory('body.use_homeostatic_reward')
-        satiation_setpoint = config.get_mandatory('body.satiation_setpoint', float)
-        death_penalty = config.get_mandatory('body.death_penalty', float)
-    else:
-        # Dummy values if disabled, though Body handles it
-        max_satiation = 20
-        start_satiation = 10
-        random_start_satiation = False
-        food_satiation_gain = 10
-        use_homeostatic_reward = False
-        satiation_setpoint = 15
-        death_penalty = 100
+    # Extract Body Params (Mandatory regardless of flags to ensure strictness)
+    max_satiation = config.get_mandatory('body.max_satiation', int)
+    start_satiation = config.get_mandatory('body.start_satiation', int)
+    random_start_satiation = config.get_mandatory('body.random_start_satiation')
+    food_satiation_gain = config.get_mandatory('body.food_satiation_gain', float)
+    use_homeostatic_reward = config.get_mandatory('body.use_homeostatic_reward')
+    satiation_setpoint = config.get_mandatory('body.satiation_setpoint', float)
+    death_penalty = config.get_mandatory('body.death_penalty', float)
 
-    if with_injury:
-        max_injury = config.get_mandatory('body.max_injury', float)
-        start_injury = config.get_mandatory('body.start_injury', float)
-        injury_recovery = config.get_mandatory('body.injury_recovery', float)
-        random_start_injury = config.get_mandatory('body.random_start_injury')
-    else:
-        max_injury = 20
-        start_injury = 10
-        injury_recovery = 1
-        random_start_injury = False
+    max_injury = config.get_mandatory('body.max_injury', float)
+    start_injury = config.get_mandatory('body.start_injury', float)
+    injury_recovery = config.get_mandatory('body.injury_recovery', float)
+    random_start_injury = config.get_mandatory('body.random_start_injury')
+    injury_smoothing_duration = config.get_mandatory('body.injury_smoothing_duration', int)
 
     # 3. Environment Config
     height = config.get_mandatory('environment.height', int)
@@ -161,7 +142,7 @@ def main():
     collision_sensor_enabled = config.get_mandatory('sensory.collision_sensor_enabled', bool)
     collision_sensor_range = config.get_mandatory('sensory.collision_sensor_range', int)
     location_sensor = config.get_mandatory('sensory.location_sensor')
-    injury_smoothing_duration = config.get_mandatory('body.injury_smoothing_duration', int)
+    icon_scale = config.get_mandatory('visualization.icon_scale', float)
 
     # Setup paths
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -215,20 +196,20 @@ def main():
     sensory_system = None
     if using_sensory:
         print(f"Initializing Sensory System (Radius={sensor_radius}, VecSize={vector_size}, Decay={decay_power})")
-        nociception_size = config.get('sensory.nociception_size', 1)
-        location_size = config.get('sensory.location_size', 2)
-        olfactory_enabled = config.get('sensory.olfactory_enabled', True)
+        nociception_size = config.get_mandatory('sensory.nociception_size', int)
+        location_size = config.get_mandatory('sensory.location_size', int)
+        olfactory_enabled = config.get_mandatory('sensory.olfactory_enabled', bool)
         sensory_system = SensorySystem(
             sensor_radius=sensor_radius, 
             vector_size=vector_size, 
             decay_power=decay_power, 
             nociceptor_radius=nociceptor_radius,
             location_sensor=location_sensor,
-            nociception_enabled=config.get('sensory.nociception_enabled', True),
+            nociception_enabled=config.get_mandatory('sensory.nociception_enabled', bool),
             olfactory_enabled=olfactory_enabled,
             collision_sensor_enabled=collision_sensor_enabled,
             collision_sensor_range=collision_sensor_range,
-            proprioception_enabled=config.get('sensory.proprioception_enabled', False),
+            proprioception_enabled=config.get_mandatory('sensory.proprioception_enabled', bool),
             nociception_size=nociception_size,
             location_size=location_size,
             num_actions=action_dim
@@ -253,7 +234,7 @@ def main():
         print(f"\n--- Starting Episode {ep_num}/{episodes} ---")
         
         # Reset
-        env_state = env.reset()
+        env.reset()
         current_agent_pos = env.agent_pos
         
         sensory_dict = {}
@@ -263,9 +244,8 @@ def main():
                            'max_injury': body.max_injury if with_satiation else 1}
              sensory_dict = sensory_system.sense(current_agent_pos, resources, grid_height=height, grid_width=width, extra_data=extra_data)
         
-        body_return = None
         if with_satiation:
-            body_return = body.reset()
+            body.reset()
             
             print("Start State:")
             print(f"Satiation: {body.satiation}/{body.max_satiation}")
@@ -279,19 +259,8 @@ def main():
         
         # Visualization Data
         vis_data = None
-        vis_data = None
         if using_sensory:
              vis_data = sensory_system.get_visualization_data(sensory_dict)
-
-
-
-        # Load icon_scale from visualization config
-        viz_config_path = os.path.join(os.path.dirname(__file__), "configs", "visualization", "visualization.yaml")
-        icon_scale = 1.0
-        if os.path.exists(viz_config_path):
-            with open(viz_config_path, 'r') as f:
-                viz_data = yaml.safe_load(f).get('visualization', {})
-                icon_scale = viz_data.get('icon_scale', 1.0)
 
         # Capture Frame
         injury = body.injury_level if body.with_injury else None

@@ -6,7 +6,7 @@ visualization:
   # Video settings
   fps: 5
   video_dpi: 100
-  icon_scale: 1.0
+  icon_scale: 2.0
 
   # fps: 2
   # video_dpi: 300

@@ -107,60 +107,57 @@ src/
 
 ## 🧪 Ablation Study Framework
 
-The project includes a systematic ablation study framework with 9 pre-defined levels, allowing researchers to isolate the impact of different system components.
+The project includes a systematic ablation study framework with 8 progressive levels, branching into two distinct research paths at Level 04.
 
-### Ablation Levels (`configs/ablation/`)
+### Ablation Structure (`configs/ablation/`)
 
-| Level | Config | Description | Key Features Enabled |
-|-------|--------|-------------|----------------------|
-| 01 | `01_goal_only.yaml` | Baseline pathfinding | Fixed food, No danger, No sensors |
-| 02 | `02_danger_only.yaml` | Static Hazard | +Health system, Static danger zone |
-| 03 | `03_dynamic_fixed.yaml` | Environmental Dynamics | +Food↔Danger probabilistic transitions |
-| 04 | `04_nociception.yaml` | Pain Perception | +Nociceptor sensor (distance=0) |
-| 05 | `05_olfactory.yaml` | Nutrient Gradient | +Olfactory sensor (gradient-based) |
-| 06 | `0proprioception` | Motor Feedback | +Proprioceptive sensor (prev action) |
-| 07 | `07_collision.yaml` | Spatial Obstacles | +Collision sensor (directional rays) |
-| 08 | `08_homeostatic.yaml` | Internal Motivation | +Homeostatic reward (drive reduction) |
-| 09 | `09_location.yaml` | Full Interoceptive Agent | +Location sensor (spatial coordinates) |
+| Level | Name | Motivation/Changes | Branch Availability |
+| :--- | :--- | :--- | :--- |
+| **01** | Goal Only | Baseline pathfinding: navigate to food. | Survival Only |
+| **02** | Danger Only | Introduction of static hazard zones (instant death). | Survival Only |
+| **03** | Predator Intro | Introduction of an active predator (instant death). | Survival Only |
+| **04** | Nociception | **Branch Point.** Intro of Injury system & Nociceptor sensor. | Both |
+| **05** | Olfactory | Intro of Satiation system (Homeostatic branch) & Olfactory sensor. | Both |
+| **06** | Proprioception | Addition of Proprioception sensor. | Both |
+| **07** | Collision | Addition of Collision sensor. | Both |
+| **08** | Location | Addition of Location sensor. | Both |
 
-### Verification Script
-`verify_ablation_levels.py` ensures that all ablation configurations correctly set the environment and sensor flags as intended for that research level.
+### Research Branches
+1.  **Survival branch**: Focuses on survival without explicit homeostatic drive-reduction rewards (`use_homeostatic_reward: false`).
+2.  **Homeostatic branch**: Focuses on internal state maintenance using drive-reduction rewards (`use_homeostatic_reward: true`).
 
 ---
 
-## 🌍 Environment Module - Detailed
+## 🌍 Environment Module - Multi-Resource System
+
+The environment has transitioned from a single-resource legacy system to a flexible **Multi-Resource Entity System**.
+
+### Resource Entity Model
+Each resource is an object with its own lifecycle:
+- **Type**: `food` or `danger`.
+- **Properties**: N-dimensional chemical/sensory signatures.
+- **Lifecycle**: `max_consumption` (depletion) and `regeneration_delay` (respawning).
+- **Spatial**: Configurable `spawn_area` [[min_r, min_c], [max_r, max_c]].
 
 ### GridWorld ([src/environment/grid_world.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/environment/grid_world.py))
 
-The core navigation environment implementing a 2D grid with dynamic food/danger resources.
-
-#### Constructor Parameters
-```python
-GridWorld(
-    height, width,                    # Grid dimensions
-    start,                            # Agent start position (row, col)
-    resource_pos,                     # Initial resource position
-    with_satiation,                   # Enable interoceptive mode
-    max_steps,                        # Episode step limit
-    prob_switch_to_danger,            # P(Food→Danger) per step
-    min_danger_duration,              # Minimum steps before Danger can switch
-    prob_switch_to_food,              # P(Danger→Food) per step  
-    min_food_duration,                # Minimum steps before Food can switch
-    damage_amount,                    # Health damage in danger zone
-    relocate_resource,                # Enable periodic relocation
-    relocation_steps,                 # Steps between relocations
-    vector_size,                      # Property vector dimension
-    food_property,                    # Food chemical signature [N-dim]
-    danger_property,                  # Danger chemical signature [N-dim]
-    eat_action_enabled=True,          # Require explicit Eat action 
-    rest_action_enabled=True,         # Require explicit Rest action 
-    predator_enabled=False,           # Enable moving predator
-    predator_move_interval=2,         # Predator moves every N steps
-    predator_damage=3.0,              # Contact damage from predator
-    predator_start_pos=(3, 0),        # Default predator position
-    predator_random_start_pos=True,   # Randomize predator on reset
-    predator_property=None            # Custom predator chemical signature
-)
+#### Configurable Resources
+Instead of fixed positions, the environment now loads a list of resource templates:
+```yaml
+environment:
+  resources:
+    - name: "Food Source A"
+      type: "food"
+      count: 1
+      spawn_area: [[0, 0], [5, 5]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 3
+      regeneration_delay: 50
+    - name: "Danger Zone"
+      type: "danger"
+      count: 10
+      spawn_area: [[0, 0], [20, 20]]
+      damage: 10
 ```
 
 #### Action Space (Dynamic)
@@ -210,7 +207,7 @@ State-of-the-art Model-Based RL using the RSSM (Recurrent State Space Model).
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
     --agent_config configs/models/dqn.yaml \
-    --config configs/ablation/05_olfactory.yaml \
+    --config configs/ablation/homeostatic/05_olfactory.yaml \
     --episodes 5000 \
     --tag ablation_run_5
 ```
@@ -219,6 +216,6 @@ State-of-the-art Model-Based RL using the RSSM (Recurrent State Space Model).
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python run_all_experiments.py \
     --tag final_baseline \
-    --config configs/ablation/09_location.yaml \
+    --config configs/ablation/survival/08_location.yaml \
     --episodes 10000
 ```
