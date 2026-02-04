@@ -13,6 +13,7 @@ from typing import NamedTuple
 
 from src.environment.jax_env.state import EnvParams
 from src.environment.jax_env.wrapper import ParallelEnv
+from src.environment.jax_env.config_loader import load_env_params
 from src.models.jax_models.recurrent_ppo_network import ActorCriticRNN
 from src.models.jax_models.recurrent_ppo_trainer import train_iteration
 
@@ -70,6 +71,7 @@ def load_env_params_from_config(config_path: str) -> EnvParams:
     )
 
 def train_jax_ppo(
+    config_path: str = None,
     num_envs: int = 256,
     total_timesteps: int = 100_000,
     num_steps: int = 128,
@@ -91,29 +93,34 @@ def train_jax_ppo(
     timesteps_per_iter = num_steps * num_envs
     num_iterations = total_timesteps // timesteps_per_iter
     
-    # Create minimal EnvParams for testing
-    params = EnvParams(
-        height=10, width=10, max_steps=500,
-        res_type=jnp.zeros(0, dtype=jnp.int32),
-        res_property=jnp.zeros((0, 5)),
-        res_spawn_area=jnp.zeros((0, 4)),
-        res_max_cons=jnp.zeros(0, dtype=jnp.int32),
-        res_reg_delay=jnp.zeros(0, dtype=jnp.int32),
-        res_damage=jnp.zeros(0),
-        pred_property=jnp.zeros((0, 5)),
-        pred_move_int=jnp.zeros(0, dtype=jnp.int32),
-        pred_damage=jnp.zeros(0),
-        pred_patrol=jnp.zeros((0, 4)),
-        pred_detect=jnp.zeros(0),
-        pred_max_stamina=jnp.zeros(0),
-        pred_recovery=jnp.zeros(0),
-        pred_hunt_thresh=jnp.zeros(0),
-        max_satiation=100.0, max_injury=20.0, food_gain=10.0, setpoint=50.0,
-        injury_recovery=1.0, smoothing_duration=3, death_penalty=10.0,
-        overeating_death=False, use_homeostatic_reward=True,
-        with_satiation=False, with_injury=True,
-        sensor_radius=10.0, sensor_decay=2.0, sensor_range=3
-    )
+    # Load EnvParams from config or use defaults
+    if config_path:
+        print(f"Loading config from: {config_path}")
+        params = load_env_params(config_path)
+    else:
+        print("Using default minimal environment")
+        params = EnvParams(
+            height=10, width=10, max_steps=500,
+            res_type=jnp.zeros(0, dtype=jnp.int32),
+            res_property=jnp.zeros((0, 5)),
+            res_spawn_area=jnp.zeros((0, 4)),
+            res_max_cons=jnp.zeros(0, dtype=jnp.int32),
+            res_reg_delay=jnp.zeros(0, dtype=jnp.int32),
+            res_damage=jnp.zeros(0),
+            pred_property=jnp.zeros((0, 5)),
+            pred_move_int=jnp.zeros(0, dtype=jnp.int32),
+            pred_damage=jnp.zeros(0),
+            pred_patrol=jnp.zeros((0, 4)),
+            pred_detect=jnp.zeros(0),
+            pred_max_stamina=jnp.zeros(0),
+            pred_recovery=jnp.zeros(0),
+            pred_hunt_thresh=jnp.zeros(0),
+            max_satiation=100.0, max_injury=20.0, food_gain=10.0, setpoint=50.0,
+            injury_recovery=1.0, smoothing_duration=3, death_penalty=10.0,
+            overeating_death=False, use_homeostatic_reward=True,
+            with_satiation=False, with_injury=True,
+            sensor_radius=10.0, sensor_decay=2.0, sensor_range=3
+        )
     
     # Initialize ParallelEnv
     env = ParallelEnv(params)
@@ -171,6 +178,7 @@ def train_jax_ppo(
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Train JAX RecurrentPPO")
+    parser.add_argument("--config", type=str, default=None, help="Path to environment config YAML")
     parser.add_argument("--num-envs", type=int, default=256)
     parser.add_argument("--total-timesteps", type=int, default=100_000)
     parser.add_argument("--num-steps", type=int, default=128)
@@ -181,6 +189,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     train_jax_ppo(
+        config_path=args.config,
         num_envs=args.num_envs,
         total_timesteps=args.total_timesteps,
         num_steps=args.num_steps,

@@ -293,7 +293,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         res_reg_timer=jnp.zeros(num_res, dtype=jnp.int32),
         pred_pos=pred_pos,
         pred_state=jnp.zeros(num_pred, dtype=jnp.int32), # PATROL
-        pred_stamina=jnp.full(num_pred, params.pred_max_stamina),
+        pred_stamina=jnp.full(num_pred, params.pred_max_stamina, dtype=jnp.float32),
         pred_move_timer=jnp.zeros(num_pred, dtype=jnp.int32),
         satiation=jnp.array(satiation, dtype=jnp.float32),
         injury_level=jnp.array(injury, dtype=jnp.float32),
