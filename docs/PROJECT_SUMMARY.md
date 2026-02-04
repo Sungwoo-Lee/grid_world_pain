@@ -139,9 +139,10 @@ Each resource is an object with its own lifecycle:
 - **Lifecycle**: `max_consumption` (depletion) and `regeneration_delay` (respawning).
 - **Spatial**: Configurable `spawn_area` [[min_r, min_c], [max_r, max_c]].
 
-### GridWorld ([src/environment/grid_world.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/environment/grid_world.py))
+### GridWorld Implementation
+The core environment logic resides in [src/environment/grid_world.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/environment/grid_world.py).
 
-#### Configurable Resources
+#### Configurable Multi-Resource System
 Instead of fixed positions, the environment now loads a list of resource templates:
 ```yaml
 environment:
@@ -158,6 +159,27 @@ environment:
       count: 10
       spawn_area: [[0, 0], [20, 20]]
       damage: 10
+```
+
+### Multi-Predator AI System
+GridWorld now supports multiple active predators with complex behaviors:
+- **State Machine**: Predators transition between `PATROL`, `HUNT`, `RETURN`, and `IDLE`.
+- **Stamina Dynamics**: Predators consume stamina while hunting and must recover before hunting again.
+- **Zone Constraints**: Predators can be restricted to specific `spawn_area` and `patrol_area`.
+- **Detection Range**: Hunting is triggered when the agent enters a configurable `detection_range`.
+
+```yaml
+environment:
+  predator_enabled: true
+  predators:
+    - name: "Alpha Predator"
+      count: 1
+      move_interval: 3
+      damage: 3.0
+      detection_range: 5
+      max_stamina: 20
+      stamina_recovery_rate: 0.1
+      hunt_stamina_threshold: 0.5
 ```
 
 #### Action Space (Dynamic)

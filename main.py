@@ -67,7 +67,14 @@ def main():
             config.merge(viz_dict)
             print(f"Merged visualization settings from {viz_config_path}")
 
-    # 4. Merge User / Ablation Config (Overrides everything)
+    # 4. Merge Evaluation Defaults
+    eval_config_path = os.path.join(os.path.dirname(__file__), "configs", "evaluation", "default.yaml")
+    if os.path.exists(eval_config_path):
+        eval_defaults = Config.load_yaml(eval_config_path)
+        config.merge(eval_defaults)
+        print(f"Loaded evaluation defaults from {eval_config_path}")
+
+    # 5. Merge User / Ablation Config (Overrides everything)
     if args.config:
         print(f"Loading user/ablation config from: {args.config}")
         user_config = Config.load_yaml(args.config)
@@ -124,20 +131,7 @@ def main():
     start_pos = config.get_mandatory('environment.start_pos')
     
     # Predator Config
-    predator_enabled = config.get_mandatory('predator.enabled', bool)
-    
-    if predator_enabled:
-        predator_move_interval = config.get_mandatory('predator.move_interval', int)
-        predator_damage = config.get_mandatory('predator.damage', float)
-        predator_start_pos = config.get_mandatory('predator.start_pos')
-        predator_random_start_pos = config.get_mandatory('predator.random_start_pos', bool)
-        predator_property = config.get_mandatory('predator.property')
-    else:
-        predator_move_interval = 2
-        predator_damage = 0.0
-        predator_start_pos = (0, 0)
-        predator_random_start_pos = False
-        predator_property = None
+    predator_enabled = config.get_mandatory('environment.predator_enabled', bool)
     
     # Sensory Config
     using_sensory = config.get_mandatory('sensory.using_sensory')
@@ -165,18 +159,15 @@ def main():
         width=width, 
         start=tuple(start_pos),
         resources=config.get_mandatory('environment.resources'),
+        predators=config.get_mandatory('environment.predators'), # New Mandatory
         with_satiation=with_satiation, 
         max_steps=max_steps,
         eat_action_enabled=config.get_mandatory('environment.eat_action_enabled', bool),
         rest_action_enabled=config.get_mandatory('environment.rest_action_enabled', bool),
         predator_enabled=predator_enabled,
-        predator_move_interval=predator_move_interval,
-        predator_damage=predator_damage,
-        predator_start_pos=predator_start_pos,
-        predator_random_start_pos=predator_random_start_pos,
-        predator_property=predator_property,
         injury_smoothing_duration=injury_smoothing_duration,
         vector_size=vector_size
+        # Legacy/Extra arguments (move_interval, etc.) are now in the 'predators' list config
     )
     
     # Get action dimension from environment spec (dynamic based on eat/rest config)
@@ -260,7 +251,8 @@ def main():
                 print(f"Injury (Intero Nociceptor): {body.injury_level}/{body.max_injury}")
         
         if predator_enabled:
-            print(f"Predator Pos: {env.predator_pos}")
+            for i, p in enumerate(env.predators):
+                print(f"Predator {i} Pos: {p.pos} | State: {p.state}")
         
         print(f"Agent Pos: {env.agent_pos}")
         
@@ -328,7 +320,8 @@ def main():
             if with_injury:
                 print(f"  Injury: {body.injury_level}/{body.max_injury}")
             if predator_enabled:
-                print(f"  Predator Pos: {env.predator_pos}")
+                for i, p in enumerate(env.predators):
+                    print(f"  Predator {i} Pos: {p.pos} | State: {p.state}")
             print(f"  Reward: {reward}, Done: {done}")
 
             # Capture Frame

@@ -155,6 +155,159 @@ class ResourceEntity:
                 return True # respawn needed
         return False
 
+class PredatorEntity:
+    """
+    Represents a single predator with autonomous behavior states: PATROL, HUNT, RETURN, IDLE.
+    """
+    def __init__(self, uid: int, config: dict):
+        self.id = uid
+        if 'name' not in config: raise ValueError("Strict Config: Predator 'name' is required.")
+        self.name = config['name']
+        
+        # Identity / Sensory Properties
+        if 'property' not in config: raise ValueError(f"Strict Config: Predator 'property' (sensory signature) is required.")
+        self.property = np.array(config['property'], dtype=np.float32)
+
+        # Basic Stats
+        if 'move_interval' not in config: raise ValueError("Strict Config: Predator 'move_interval' is required.")
+        self.move_interval = config['move_interval'] # Higher = slower
+        
+        if 'damage' not in config: raise ValueError("Strict Config: Predator 'damage' is required.")
+        self.damage = config['damage']
+        
+        # Spatial constraints
+        # [[min_r, min_c], [max_r, max_c]]
+        if 'spawn_area' not in config: raise ValueError("Strict Config: Predator 'spawn_area' is required.")
+        self.spawn_area = config['spawn_area'] 
+        
+        if 'patrol_area' not in config: raise ValueError("Strict Config: Predator 'patrol_area' is required.")
+        self.patrol_area = config['patrol_area'] 
+        
+        # AI Logic parameters
+        if 'detection_range' not in config: raise ValueError("Strict Config: Predator 'detection_range' is required.")
+        self.detection_range = config['detection_range'] # Manhattan distance
+        
+        # Stamina System
+        if 'max_stamina' not in config: raise ValueError("Strict Config: Predator 'max_stamina' is required.")
+        self.max_stamina = config['max_stamina']
+        self.stamina = self.max_stamina
+        
+        if 'stamina_recovery_rate' not in config: raise ValueError("Strict Config: Predator 'stamina_recovery_rate' is required.")
+        self.stamina_recovery_rate = config['stamina_recovery_rate']
+        
+        if 'hunt_stamina_threshold' not in config: raise ValueError("Strict Config: Predator 'hunt_stamina_threshold' is required.")
+        self.hunt_stamina_threshold = config['hunt_stamina_threshold'] # Needs X% stamina to start hunt
+        
+        # Runtime State
+        self.pos = (0, 0)
+        self.state = "PATROL" # "PATROL", "HUNT", "RETURN", "IDLE"
+        self.move_timer = self.move_interval
+        
+    def reset(self, grid_height: int, grid_width: int, existing_positions_to_avoid: list = None):
+        """Reset predator state for new episode."""
+        self.stamina = self.max_stamina
+        self.state = "PATROL"
+        self.move_timer = self.move_interval
+        self.respawn(grid_height, grid_width, existing_positions_to_avoid)
+        
+    def respawn(self, grid_height: int, grid_width: int, existing_positions_to_avoid: list = None):
+        """Finds a valid starting position within allowed areas."""
+        if existing_positions_to_avoid is None: existing_positions_to_avoid = []
+        
+        # Area precedence: spawn_area > patrol_area > full grid
+        area = self.spawn_area or self.patrol_area
+        if area:
+            min_r, min_c = area[0]
+            max_r, max_c = area[1]
+            min_r, min_c = max(0, min_r), max(0, min_c)
+            max_r, max_c = min(grid_height - 1, max_r), min(grid_width - 1, max_c)
+        else:
+            min_r, min_c = 0, 0
+            max_r, max_c = grid_height - 1, grid_width - 1
+            
+        for _ in range(100):
+            r = np.random.randint(min_r, max_r + 1)
+            c = np.random.randint(min_c, max_c + 1)
+            if (r, c) not in existing_positions_to_avoid:
+                self.pos = (int(r), int(c))
+                return
+        self.pos = (int(r), int(c)) # Fallback
+
+    def update_state(self, agent_pos: tuple):
+        """Decision logic for state transitions."""
+        pr, pc = self.pos
+        ar, ac = agent_pos
+        dist = abs(pr - ar) + abs(pc - ac)
+        
+        if self.state == "HUNT":
+            # Lose interest if agent is too far or predator is tired
+            if dist > self.detection_range * 2 or self.stamina <= 0:
+                self.state = "RETURN" if self.patrol_area else "PATROL"
+        else:
+            # Check if agent enters detection range and predator is rested enough
+            if dist <= self.detection_range and self.stamina >= (self.max_stamina * self.hunt_stamina_threshold):
+                self.state = "HUNT"
+        
+        # If returning, check if back in patrol zone
+        if self.state == "RETURN" and self.patrol_area:
+            min_r, min_c = self.patrol_area[0]
+            max_r, max_c = self.patrol_area[1]
+            if min_r <= pr <= max_r and min_c <= pc <= max_c:
+                self.state = "PATROL"
+
+    def step(self, agent_pos: tuple, grid_height: int, grid_width: int):
+        """Performs one step of movement and stamina update."""
+        self.move_timer -= 1
+        
+        # Stamina Recovery
+        if self.state != "HUNT":
+            self.stamina = min(self.max_stamina, self.stamina + self.stamina_recovery_rate)
+
+        if self.move_timer <= 0:
+            self.move_timer = self.move_interval
+            self.update_state(agent_pos)
+            
+            pr, pc = self.pos
+            ar, ac = agent_pos
+            target_r, target_c = pr, pc
+            
+            if self.state == "HUNT":
+                # Pursue agent
+                self.stamina -= 1
+                dr, dc = ar - pr, ac - pc
+            elif self.state == "RETURN" and self.patrol_area:
+                # Target center of patrol area
+                min_r, min_c = self.patrol_area[0]
+                max_r, max_c = self.patrol_area[1]
+                tr, tc = (min_r + max_r) // 2, (min_c + max_c) // 2
+                dr, dc = tr - pr, tc - pc
+            elif self.state == "PATROL":
+                # Drunken walk within patrol zone (idle jitter)
+                dr, dc = np.random.randint(-1, 2), np.random.randint(-1, 2)
+            else: # IDLE
+                dr, dc = 0, 0
+                
+            # Perform atomic move towards target
+            if dr != 0 and dc != 0:
+                if np.random.random() < 0.5: target_r += np.sign(dr)
+                else: target_c += np.sign(dc)
+            elif dr != 0: target_r += np.sign(dr)
+            elif dc != 0: target_c += np.sign(dc)
+            
+            # Constraints:
+            # 1. Respect Patrol Area (even during HUNT)
+            if self.patrol_area:
+                min_r, min_c = self.patrol_area[0]
+                max_r, max_c = self.patrol_area[1]
+                target_r = max(min_r, min(max_r, target_r))
+                target_c = max(min_c, min(max_c, target_c))
+            
+            # 2. Hard Grid Boundaries
+            target_r = max(0, min(grid_height - 1, target_r))
+            target_c = max(0, min(grid_width - 1, target_c))
+            
+            self.pos = (int(target_r), int(target_c))
+
 class GridWorld:
     """
     A simple 2D GridWorld environment for Reinforcement Learning.
@@ -185,15 +338,18 @@ class GridWorld:
       not the external world. The environment only provides signals (like 'ate_food').
     """
     
-    def __init__(self, height, width, start, resources, 
-                 with_satiation, max_steps,
+    def __init__(self, height: int, width: int, start: tuple, resources: list, predators: list,
+                 with_satiation: bool, max_steps: int,
+                 eat_action_enabled: bool, rest_action_enabled: bool,
+                 predator_enabled: bool,
+                 injury_smoothing_duration: int,
+                 vector_size: int,
+                 # Legacy arguments preserved for backward compatibility
                  prob_switch_to_danger=None, min_danger_duration=None, damage_amount=None,
-                 prob_switch_to_food=None, min_food_duration=None, relocate_resource=None, relocation_steps=None, # Legacy args
-                 vector_size=None, food_property=None, danger_property=None, # Legacy args
-                 eat_action_enabled=True, rest_action_enabled=True,
-                 predator_enabled=False, predator_move_interval=2, predator_damage=3.0,
-                 predator_start_pos=(3, 0), predator_random_start_pos=True, predator_property=None,
-                 injury_smoothing_duration=3):
+                 prob_switch_to_food=None, min_food_duration=None, relocate_resource=None, relocation_steps=None,
+                 food_property=None, danger_property=None,
+                 predator_move_interval=None, predator_damage=None,
+                 predator_start_pos=None, predator_random_start_pos=None, predator_property=None):
         """
         Initializes the GridWorld foraging environment.
 
@@ -277,16 +433,46 @@ class GridWorld:
              # This prevents breaking if config isn't fully updated or passed correctly
              pass
 
-        # Predator configuration
-        self.predator_enabled = predator_enabled
-        self.predator_move_interval = predator_move_interval
-        self.predator_damage = predator_damage
-        self.predator_default_start_pos = tuple(predator_start_pos)
-        self.predator_random_start_pos = predator_random_start_pos
-        self.predator_property = np.array(predator_property if predator_property is not None else [0.0]*vector_size, dtype=np.float32)
-        
-        self.predator_pos = self.predator_default_start_pos
-        self.predator_timer = self.predator_move_interval
+        # --- 2. Predator Initialization ---
+        self.predators = []
+        p_uid_counter = 0
+
+        if predators:
+            # Modern Multi-Predator System
+            self.predator_enabled = True
+            for p_config in predators:
+                count = p_config.get('count', 1)
+                for _ in range(count):
+                    new_pred = PredatorEntity(p_uid_counter, p_config)
+                    # Avoid agent, resources, and previously placed predators
+                    occupied = [self.agent_pos] + \
+                               [r.pos for r in self.resources if r.pos is not None] + \
+                               [p.pos for p in self.predators if p.pos is not None]
+                    new_pred.respawn(self.height, self.width, occupied)
+                    self.predators.append(new_pred)
+                    p_uid_counter += 1
+        elif predator_enabled:
+            # Legacy Single Predator Fallback
+            self.predator_enabled = True
+            legacy_p_config = {
+                'name': "Alpha_Predator",
+                'property': predator_property if predator_property is not None else [0.0]*vector_size,
+                'move_interval': predator_move_interval,
+                'damage': predator_damage,
+                'spawn_area': None,
+                'patrol_area': None,
+                'detection_range': max(self.height, self.width) * 2,
+                'max_stamina': self.max_steps * 2 
+            }
+            new_pred = PredatorEntity(0, legacy_p_config)
+            if predator_random_start_pos:
+                # Use legacy logic to find a free spot
+                new_pred.respawn(self.height, self.width, [self.agent_pos])
+            else:
+                new_pred.pos = tuple(predator_start_pos)
+            self.predators.append(new_pred)
+        else:
+            self.predator_enabled = False
         
         # Load Visual Assets
         self.assets_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'assets')
@@ -319,8 +505,9 @@ class GridWorld:
                 active_list.append(ResourceInfo(res.pos, res.property, res.name))
                 
         if self.predator_enabled:
-            active_list.append(ResourceInfo(self.predator_pos, self.predator_property, 'Danger'))
-            
+            for p in self.predators:
+                active_list.append(ResourceInfo(p.pos, p.property, p.name))
+                
         return active_list
 
     def reset(self):
@@ -339,25 +526,17 @@ class GridWorld:
         
         # Reset Resources
         for res in self.resources:
-            # Pass all occupied positions to avoid overlaps?
-            # Ideally avoid agent, predator, and other resources.
             occupied = [self.agent_pos] + [r.pos for r in self.resources if r.pos is not None and r is not res]
             res.reset(self.height, self.width, occupied)
              
-        # Reset Predator
+        # Reset Predators
         if self.predator_enabled:
-            if self.predator_random_start_pos:
-                while True:
-                    pr = np.random.randint(0, self.height)
-                    pc = np.random.randint(0, self.width)
-                    # Avoid agent and resources?
-                    occupied = [self.agent_pos]
-                    if (pr, pc) not in occupied:
-                        self.predator_pos = (pr, pc)
-                        break
-            else:
-                self.predator_pos = self.predator_default_start_pos
-            self.predator_timer = self.predator_move_interval
+            for p in self.predators:
+                # Avoid agent, resources, and other predators
+                occupied = [self.agent_pos] + \
+                           [r.pos for r in self.resources if r.pos is not None] + \
+                           [p2.pos for p2 in self.predators if p2 is not p and p2.pos is not None]
+                p.reset(self.height, self.width, occupied)
 
         return self.agent_pos
     
@@ -386,21 +565,8 @@ class GridWorld:
 
         # 2. Predator Update
         if self.predator_enabled:
-            self.predator_timer -= 1
-            if self.predator_timer <= 0:
-                pr, pc = self.predator_pos
-                ar, ac = self.agent_pos
-                dr = ar - pr
-                dc = ac - pc
-                
-                if dr != 0 and dc != 0:
-                    if np.random.random() < 0.5: pr += np.sign(dr)
-                    else: pc += np.sign(dc)
-                elif dr != 0: pr += np.sign(dr)
-                elif dc != 0: pc += np.sign(dc)
-                
-                self.predator_pos = (int(pr), int(pc))
-                self.predator_timer = self.predator_move_interval
+            for p in self.predators:
+                p.step(self.agent_pos, self.height, self.width)
 
         # 3. Agent Movement
         row, col = self.agent_pos
@@ -445,9 +611,11 @@ class GridWorld:
                      if consumed:
                          ate_food = True
         
-        # Damage from predator
-        if self.predator_enabled and self.agent_pos == self.predator_pos:
-            damage += self.predator_damage
+        # Damage from predators
+        if self.predator_enabled:
+            for p in self.predators:
+                if self.agent_pos == p.pos:
+                    damage += p.damage
         
         # Resting logic
         if self.rest_action_enabled:
@@ -502,15 +670,23 @@ class GridWorld:
                 char = ". "
                 if (r, c) == self.agent_pos:
                     char = "A "
-                elif self.predator_enabled and (r, c) == self.predator_pos:
-                    char = "P "
                 else:
-                    # Check resources
-                    for res in self.resources:
-                        if res.active and res.pos == (r, c):
-                            if res.type == 'danger': char = "X "
-                            elif res.type == 'food': char = "F "
-                            break
+                    # 1. Check predators
+                    found_p = False
+                    if self.predator_enabled:
+                        for p in self.predators:
+                            if p.pos == (r, c):
+                                char = "P "
+                                found_p = True
+                                break
+                    
+                    if not found_p:
+                        # Check resources
+                        for res in self.resources:
+                            if res.active and res.pos == (r, c):
+                                if res.type == 'danger': char = "X "
+                                elif res.type == 'food': char = "F "
+                                break
                 line += char
             print(line)
         print(f"Step: {self.current_step}")
@@ -570,7 +746,6 @@ class GridWorld:
                 ax.plot(c, r, marker=m, markersize=14 * scale_factor, color=color, markeredgecolor='white', markeredgewidth=1.5)
 
         ar, ac = self.agent_pos
-        pr, pc = self.predator_pos if self.predator_enabled else (None, None)
         
         # 1. Draw Resources
         any_danger_here = False
@@ -589,13 +764,15 @@ class GridWorld:
                 if is_here: any_food_here = True
                 else: draw_icon(ax_grid, (fr, fc), 'food', zoom=0.035)
                 
-        # 2. Draw Predator
+        # 2. Draw Predators
         predator_here = False
         if self.predator_enabled:
-            if pr == ar and pc == ac:
-                predator_here = True
-            else:
-                draw_icon(ax_grid, (pr, pc), 'predator', zoom=0.045)
+            for p in self.predators:
+                pr, pc = p.pos
+                if pr == ar and pc == ac:
+                    predator_here = True
+                else:
+                    draw_icon(ax_grid, (pr, pc), 'predator', zoom=0.045)
                 
         # 3. Draw Agent (handling overlaps)
         if predator_here:

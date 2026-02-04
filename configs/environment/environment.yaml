@@ -60,6 +60,32 @@ environment:
       damage: 10
       regeneration_delay: 20
       
+  predator_enabled: true
+  predators:
+    - name: "Alpha Predator"
+      count: 1
+      property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      move_interval: 3
+      damage: 3.0
+      spawn_area: [[0, 0], [10, 10]]
+      patrol_area: [[0, 0], [10, 10]]
+      detection_range: 5
+      max_stamina: 20
+      stamina_recovery_rate: 0.1
+      hunt_stamina_threshold: 0.5
+
+    - name: "Beta Predator"
+      count: 1
+      property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      move_interval: 3
+      damage: 3.0
+      spawn_area: [[10, 10], [20, 20]]
+      patrol_area: [[10, 10], [20, 20]]
+      detection_range: 5
+      max_stamina: 20
+      stamina_recovery_rate: 0.1
+      hunt_stamina_threshold: 0.5
+      
   # Legacy config removed (prob_switch, durations, etc)
 
   
@@ -96,8 +122,6 @@ sensory:
   # Decay Formula: decay = 1.0 / (distance ** decay_power)
   decay_power: 1.0 
   vector_size: 5
-  food_property: [1.0, 0.0, 0.0, 0.0, 0.0]
-  danger_property: [0.0, 1.0, 0.0, 0.0, 0.0]
   
   # Nociception (Pain Detection)
   nociception_enabled: true  # Enable pain/danger detection sensor
@@ -118,11 +142,4 @@ sensory:
   proprioception_enabled: true  # Sense previous action as motor feedback
   # proprioception_size is dynamic based on num_actions
 
-predator:
-  enabled: true
-  move_interval: 3      # Moves every N steps
-  damage: 3.0           # Damage dealt on contact
-  start_pos: [3, 0]     # Default start position
-  random_start_pos: true
-  property: [0.0, 1.0, 0.0, 0.0, 0.0] # Identified as "Danger"
 

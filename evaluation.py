@@ -151,20 +151,8 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
     injury_smoothing_duration = int(config.get_mandatory('body.injury_smoothing_duration', int))
     
     # Predator Params (Evaluation extracts from saved config)
-    predator_enabled = config.get_mandatory('predator.enabled', bool)
-    
-    if predator_enabled:
-        predator_move_interval = config.get_mandatory('predator.move_interval', int)
-        predator_damage = config.get_mandatory('predator.damage', float)
-        predator_start_pos = config.get_mandatory('predator.start_pos')
-        predator_random_start_pos = config.get_mandatory('predator.random_start_pos', bool)
-        predator_property = config.get_mandatory('predator.property')
-    else:
-        predator_move_interval = 2
-        predator_damage = 0.0
-        predator_start_pos = (0, 0)
-        predator_random_start_pos = False
-        predator_property = None
+    predators_config = config.get_mandatory('environment.predators')
+    predator_enabled = config.get_mandatory('environment.predator_enabled', bool)
 
     # 2. Environment & Body Setup
     # Set seed for deterministic evaluation
@@ -175,16 +163,12 @@ def evaluate_checkpoint(checkpoint_path, results_dir, config, wandb_run_path=Non
         width=int(config.get_mandatory('environment.width', int)),
         start=tuple(config.get_mandatory('environment.start_pos')),
         resources=config.get_mandatory('environment.resources'),
+        predators=predators_config,
         with_satiation=with_satiation,
         max_steps=int(config.get_mandatory('environment.max_steps', int)),
         eat_action_enabled=config.get_mandatory('environment.eat_action_enabled', bool),
         rest_action_enabled=config.get_mandatory('environment.rest_action_enabled', bool),
         predator_enabled=predator_enabled,
-        predator_move_interval=predator_move_interval,
-        predator_damage=predator_damage,
-        predator_start_pos=predator_start_pos,
-        predator_random_start_pos=predator_random_start_pos,
-        predator_property=predator_property,
         vector_size=int(config.get_mandatory('sensory.vector_size', int)),
         injury_smoothing_duration=injury_smoothing_duration
     )

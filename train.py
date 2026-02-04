@@ -325,21 +325,9 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
     rest_action_enabled = resolve_param(None, 'environment.rest_action_enabled')
     resources_config = config_dict.get_mandatory('environment.resources')
 
-    # Predator Params
-    predator_enabled = config_dict.get_mandatory('predator.enabled', bool)
-    
-    if predator_enabled:
-        predator_move_interval = config_dict.get_mandatory('predator.move_interval', int)
-        predator_damage = config_dict.get_mandatory('predator.damage', float)
-        predator_start_pos = config_dict.get_mandatory('predator.start_pos')
-        predator_random_start_pos = config_dict.get_mandatory('predator.random_start_pos', bool)
-        predator_property = config_dict.get_mandatory('predator.property')
-    else:
-        predator_move_interval = 2
-        predator_damage = 0.0
-        predator_start_pos = (0, 0)
-        predator_random_start_pos = False
-        predator_property = None
+    # Predator Params (Now part of environment list)
+    predators_config = config_dict.get_mandatory('environment.predators')
+    predator_enabled = config_dict.get_mandatory('environment.predator_enabled', bool)
 
     # Body Params
     with_satiation = resolve_param(with_satiation, 'body.with_satiation')
@@ -423,17 +411,14 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         width=int(resolve_param(None, 'environment.width')),
         start=tuple(resolve_param(None, 'environment.start_pos')),
         resources=resources_config,
+        predators=predators_config,
         with_satiation=with_satiation,
         max_steps=max_steps,
         eat_action_enabled=eat_action_enabled,
         rest_action_enabled=rest_action_enabled,
         predator_enabled=predator_enabled,
-        predator_move_interval=predator_move_interval,
-        predator_damage=predator_damage,
-        predator_start_pos=predator_start_pos,
-        predator_random_start_pos=predator_random_start_pos,
-        predator_property=predator_property,
-        injury_smoothing_duration=injury_smoothing_duration
+        injury_smoothing_duration=injury_smoothing_duration,
+        vector_size=vector_size
     )
     
     # Get action dimension from environment spec (dynamic based on eat/rest config)
