@@ -184,7 +184,7 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
         loss, aux = update_step(model, optimizer, batch, config)
         epoch_losses.append((loss, aux))
     
-    # 4. Count completed episodes in this rollout for progress tracking
+    # 4. Count completed episodes and return per-step rewards/dones for metrics
     num_completed = jnp.sum(trajectories.done)
     
-    return next_env_state, next_h_state, key, epoch_losses, num_completed
+    return next_env_state, next_h_state, key, epoch_losses, num_completed, trajectories.reward, trajectories.done

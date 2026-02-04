@@ -162,8 +162,12 @@ def main():
     
     # Strictly Resolve Parameters (No Safe Defaults)
     episodes = args.episodes or config.get_mandatory('episodes')
-    total_timesteps = args.total_timesteps or (episodes * config.get_mandatory('environment.max_steps'))
+    env_max_steps = config.get_mandatory('environment.max_steps')
     num_envs = args.num_envs or config.get_mandatory('training.num_envs')
+    
+    # Budget scales with parallelization: episodes * steps per episode * num environments
+    total_timesteps = args.total_timesteps or (episodes * env_max_steps * num_envs)
+    
     num_steps = args.num_steps or config.get_mandatory('agent.num_steps')
     hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
     seed = args.seed if args.seed is not None else config.get_mandatory('seed')
@@ -233,9 +237,11 @@ def main():
         
         wandb.init(**wandb_kwargs)
         
-        # Define metrics
+        # Define metrics (matching train.py)
         wandb.define_metric("iteration")
         wandb.define_metric("timesteps")
+        wandb.define_metric("Episode/Number")
+        wandb.define_metric("Episode/*", step_metric="Episode/Number")
         wandb.define_metric("loss/*", step_metric="iteration")
         wandb.define_metric("*", step_metric="timesteps")
         
@@ -359,7 +365,7 @@ def main():
             
             if algorithm == "RecurrentPPO":
                 # PPO Iteration
-                env_state, h_state, key, losses, num_completed = jit_train(
+                env_state, h_state, key, losses, num_completed, rollout_rew, rollout_done = jit_train(
                     model, optimizer, params, env_state, h_state, key, ppo_config
                 )
                 
@@ -367,11 +373,40 @@ def main():
                 steps_this_iter = num_steps * num_envs
                 global_step += steps_this_iter
                 
-                # Update progress bar with completed episodes
-                pbar.update(int(num_completed))
-                completed_episodes += int(num_completed)
+                # Update progress bar with fractional "average episode" progress
+                pbar.update(steps_this_iter / (num_envs * env_max_steps))
                 
-                # Logging
+                # --- Process Rollout Metrics (T, B) ---
+                rew_np = np.array(rollout_rew)
+                done_np = np.array(rollout_done)
+                
+                for t in range(num_steps):
+                    episode_returns += rew_np[t]
+                    episode_lengths += 1
+                    
+                    dones_t = done_np[t].astype(bool)
+                    if np.any(dones_t):
+                        for i in range(num_envs):
+                            if dones_t[i]:
+                                completed_episodes += 1
+                                ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
+                                
+                                # Log episode metrics to WandB (Consistent with train.py)
+                                if wandb_enabled:
+                                    wandb.log({
+                                        "Episode/Reward": float(episode_returns[i]),
+                                        "Episode/Reward_Mean": np.mean([ep['r'] for ep in ep_info_buffer]),
+                                        "Episode/Steps": int(episode_lengths[i]),
+                                        "Episode/Steps_Mean": np.mean([ep['l'] for ep in ep_info_buffer]),
+                                        "Episode/Number": completed_episodes,
+                                        "timesteps": global_step # Use current global_step or more precise? global_step is at end of iter
+                                    })
+                                
+                                # Reset per-env buffers
+                                episode_returns[i] = 0.0
+                                episode_lengths[i] = 0
+                
+                # Update PPO Loss Metrics
                 avg_policy_loss = jnp.mean(jnp.array([l[1][0] for l in losses]))
                 avg_value_loss = jnp.mean(jnp.array([l[1][1] for l in losses]))
                 avg_ent_loss = jnp.mean(jnp.array([l[1][2] for l in losses]))
@@ -428,6 +463,9 @@ def main():
                 env_state = next_env_state
                 global_step += num_envs
                 
+                # Update progress bar with fractional "average episode" progress
+                pbar.update(num_envs / (num_envs * env_max_steps))
+                
                 # Episode Metric Tracking
                 episode_returns += rew_np
                 episode_lengths += 1
@@ -435,8 +473,8 @@ def main():
                 # Check for completions
                 dones = done_np.astype(bool)
                 if np.any(dones):
-                    num_just_completed = np.sum(dones)
-                    pbar.update(int(num_just_completed))
+                    # For Dreamer (step-based update), we only increment the discrete completed_episodes counter here.
+                    # The progress bar is handled continuously above using fractional increments.
                     for i in range(num_envs):
                         if dones[i]:
                             completed_episodes += 1
