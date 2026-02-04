@@ -12,10 +12,10 @@ def move_agent(pos: jnp.ndarray, action: int, params: EnvParams) -> jnp.ndarray:
         [0, -1], # Left
         [0, 0],  # Rest/Stay
         [0, 0],  # Eat/Stay
-    ])
+    ], dtype=jnp.int32)
     
     # Clip action to valid range [0, 5]
-    action = jnp.clip(action, 0, 5)
+    action = jnp.clip(action, 0, 5).astype(jnp.int32)
     move = moves[action]
     
     new_pos = pos + move

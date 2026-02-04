@@ -25,6 +25,7 @@ Usage:
 import os
 import argparse
 import yaml
+import numpy as np
 from datetime import datetime
 import jax
 import jax.numpy as jnp
@@ -34,9 +35,14 @@ from typing import NamedTuple
 
 from src.environment.jax_env.config_loader import load_env_params
 from src.environment.jax_env.wrapper import ParallelEnv
+from src.environment.jax_env.sensor import get_observation
+from src.environment.jax_env.core import jax_step
 from src.models.jax_models.recurrent_ppo_network import ActorCriticRNN
 from src.models.jax_models.recurrent_ppo_trainer import train_iteration
 from src.utils.config import get_default_config, Config
+
+# Orbax
+import orbax.checkpoint as ocp
 
 # Optional WandB
 try:
@@ -121,6 +127,10 @@ def main():
     
     models_dir = os.path.join(results_dir, "models")
     os.makedirs(models_dir, exist_ok=True)
+    
+    # Orbax Setup
+    options = ocp.CheckpointManagerOptions(max_to_keep=5, create=True)
+    checkpointer = ocp.CheckpointManager(os.path.abspath(models_dir), ocp.PyTreeCheckpointer(), options=options)
 
     # Save config
     config_save_path = os.path.join(models_dir, "config.yaml")
@@ -181,10 +191,6 @@ def main():
     print(f"{'='*60}\n")
 
     # 5. Training Setup
-    timesteps_per_iter = args.num_steps * args.num_envs
-    num_iterations = args.total_timesteps // timesteps_per_iter
-    checkpoint_interval = max(1, num_iterations * args.checkpoint_frequency // 100)
-
     # Initialize ParallelEnv
     env = ParallelEnv(params)
 
@@ -198,76 +204,263 @@ def main():
     action_dim = 4  # UP, DOWN, LEFT, RIGHT
 
     print(f"Observation dim: {input_dim}, Action dim: {action_dim}")
-
-    # Initialize Model and Optimizer
+    
+    # 6. Algorithm Initialization
     if args.algorithm == "RecurrentPPO":
-        rngs = nnx.Rngs(model_key)
-        model = ActorCriticRNN(
-            input_dim=input_dim,
-            action_dim=action_dim,
-            hidden_size=args.hidden_size,
-            rngs=rngs
-        )
+        # RecurrentPPO Setup
+        
+        # Init params
+        key, init_key = jax.random.split(key)
+        
+        # Initialize NNX model state
+        model = ActorCriticRNN(action_dim=action_dim, hidden_size=args.hidden_size, rngs=nnx.Rngs(init_key))
+        
+        # Optimizer
         optimizer = nnx.Optimizer(model, optax.adam(args.lr), wrt=nnx.Param)
-        h_state = model.initial_state(batch_size=args.num_envs)
-
+        
+        # PPO Config
         ppo_config = PPOConfig(
             num_steps=args.num_steps,
             num_epochs=args.num_epochs,
-            gamma=0.99,
-            gae_lambda=0.95,
-            clip_eps=0.2,
-            ent_coef=0.01,
-            vf_coef=0.5,
+            gamma=config.get('gamma', 0.99),
+            gae_lambda=config.get('gae_lambda', 0.95),
+            clip_eps=config.get('clip_eps', 0.2),
+            ent_coef=config.get('ent_coef', 0.01),
+            vf_coef=config.get('vf_coef', 0.5),
             lr=args.lr
         )
+        
+        # Initialize Hidden State
+        h_state = jnp.zeros((args.num_envs, args.hidden_size))
 
         # JIT compile
         print("JIT compiling train_iteration...")
         jit_train = nnx.jit(train_iteration, static_argnums=(6,))
-
-        # 6. Training Loop
-        print(f"Starting training for {num_iterations} iterations...")
-        for i in range(num_iterations):
-            env_state, h_state, key, epoch_logs = jit_train(
-                model, optimizer, params, env_state, h_state, key, ppo_config
-            )
-
-            # Extract metrics
-            final_loss, (p_loss, v_loss, e_loss) = epoch_logs[-1]
-            timesteps_done = (i + 1) * timesteps_per_iter
-
-            # Log to WandB
-            if wandb_enabled:
-                wandb.log({
-                    "iteration": i + 1,
-                    "timesteps": timesteps_done,
-                    "loss/total": float(final_loss),
-                    "loss/policy": float(p_loss),
-                    "loss/value": float(v_loss),
-                    "loss/entropy": float(e_loss)
-                })
-
-            # Console output
-            if (i + 1) % 10 == 0 or i == 0:
-                print(f"Iter {i+1}/{num_iterations} | Timesteps: {timesteps_done:,} | "
-                      f"Loss: {final_loss:.4f} | Policy: {p_loss:.4f} | Value: {v_loss:.4f}")
+        
+    elif args.algorithm == "DreamerV3":
+        from src.models.jax_models.dreamer_v3_trainer import DreamerTrainer, ReplayBuffer
+        
+        # Dreamer Config
+        dreamer_config = {
+            'model_lr': config.get('model_lr', 1e-4),
+            'actor_lr': config.get('actor_lr', 3e-5),
+            'value_lr': config.get('value_lr', 8e-5),
+            'batch_size': config.get('batch_size', 16),
+            'batch_length': config.get('batch_length', 16), # Horizon
+        }
+        
+        key, init_key = jax.random.split(key)
+        trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=nnx.Rngs(init_key))
+        
+        buffer = ReplayBuffer(
+            capacity=int(1e5), 
+            sequence_length=dreamer_config['batch_length'], 
+            obs_dim=input_dim, 
+            action_dim=action_dim
+        )
+        
+        # Dreamer State
+        # Prev State (RSSM) - Init for each env
+        # We need to track this per env.
+        # trainer.get_action handles initialization if None, but strict batch size?
+        # trainer.get_action expects (B, O).
+        dreamer_state = None # Will be init on first call
+        
+    # 7. Training Loop
+    global_step = 0
+    iteration = 0
+    
+    start_time = datetime.now()
+    
+    try:
+        while global_step < args.total_timesteps:
+            iteration += 1
+            
+            if args.algorithm == "RecurrentPPO":
+                # PPO Iteration
+                env_state, h_state, key, losses = jit_train(
+                    model, optimizer, params, env_state, h_state, key, ppo_config
+                )
+                
+                # Update globals
+                steps_this_iter = args.num_steps * args.num_envs
+                global_step += steps_this_iter
+                
+                # Logging
+                # PPO returns list of epoch losses. Take mean.
+                avg_policy_loss = jnp.mean(jnp.array([l[1][0] for l in losses]))
+                avg_value_loss = jnp.mean(jnp.array([l[1][1] for l in losses]))
+                avg_ent_loss = jnp.mean(jnp.array([l[1][2] for l in losses]))
+                total_loss = jnp.mean(jnp.array([l[0] for l in losses]))
+                
+                if wandb_enabled:
+                    wandb.log({
+                        "loss/total": total_loss,
+                        "loss/policy": avg_policy_loss,
+                        "loss/value": avg_value_loss,
+                        "loss/entropy": avg_ent_loss,
+                        "timesteps": global_step,
+                        "iteration": iteration
+                    })
+                    print(f"Iter {iteration} | Step {global_step} | Loss: {total_loss:.4f}")
+                    
+            elif args.algorithm == "DreamerV3":
+                # Dreamer Iteration (Step-based loop inside, or we do generic loop)
+                # Dreamer typically alternates collection and training.
+                # Train every K steps, or every step?
+                # Let's collect 'num_steps' first, then train 'num_steps' times?
+                # Or 1 step collect, 1 step train (standard Dreamer).
+                
+                # Since we have parallel envs, we collect 'num_envs' steps at once.
+                # So we add 'num_envs' transitions.
+                # Then we train 'num_envs' times? Ratio usually 1:1 or 1:0.x.
+                # Let's train 1 batch per env step.
+                
+                # 1. Action Selection
+                obs_arr = jax.vmap(get_observation, in_axes=(0, None))(env_state, params) # (B, 33)
+                
+                # get_action uses JAX, we pass JAX array
+                # Returns action_idx (B,) and updated dreamer_state
+                key, act_key = jax.random.split(key)
+                
+                # We need to wrap get_action? It's inside nnx module.
+                # We can call it directly.
+                action_idx, dreamer_state = trainer.get_action(obs_arr, dreamer_state, eval_mode=False, rng=act_key)
+                
+                # Ensure action is integer for indexing
+                action_idx = action_idx.astype(jnp.int32)
+                
+                # Convert to OneHot for Environment?
+                # Environment expects ONEHOT action?
+                # jax_env/core.py step takes 'action'
+                # Check main_jax.py:
+                #    action = jax.random.randint(key, (args.num_envs,), 0, 4)
+                #    action_onehot = jax.nn.one_hot(action, 4)
+                #    state, ... = jax.vmap(jax_step)(state, action_onehot, ...)
+                # Yes, expects onehot.
+                
+                action_onehot = jax.nn.one_hot(action_idx, action_dim)
+                # Convert to OneHot for Environment?
+                # Environment expects ONEHOT action?
+                # jax_env/core.py step takes 'action'
+                
+                # Check Debug print above
+                
+                # Vmap step
+                # Use lambda to be safe about arguments
+                step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
+                next_env_state, reward, done, info = step_fn(env_state, action_idx)
+                
+                # 3. Add to Buffer
+                # We need to move data to CPU for numpy buffer
+                # And handle 'is_first' (if done, next is first)
+                
+                # Current 'done' means THIS step was terminal.
+                # Next step 'is_first' will be True.
+                # We track is_first externally?
+                # Or just use 'done' signal.
+                # Dreamer: store (obs, act, reward, discount). 
+                # If done, discount=0.
+                
+                obs_np = np.array(obs_arr) # Force sync?
+                act_np = np.array(action_onehot)
+                rew_np = np.array(reward)
+                done_np = np.array(done)
+                # is_first for THIS step.
+                # If previous step was done, this step is first.
+                # We need 'prev_dones'.
+                if iteration == 1:
+                     is_first_np = np.ones((args.num_envs,), dtype=bool)
+                else:
+                     # How to track? 'prev_dones'
+                     pass 
+                
+                # Let's persistent var
+                if not hasattr(main, 'prev_dones'):
+                    main.prev_dones = np.zeros((args.num_envs,), dtype=bool) # assume not first except iter 1
+                    if iteration == 1: main.prev_dones[:] = True
+                
+                is_first_np = main.prev_dones
+                
+                for i in range(args.num_envs):
+                    buffer.add(obs_np[i], act_np[i], rew_np[i], done_np[i], is_first_np[i])
+                    
+                main.prev_dones = done_np
+                
+                # Handle auto-reset is done inside jax_step?
+                # jax_step returns next_state RESETTED if done.
+                # So next_env_state is valid start of new episode.
+                
+                env_state = next_env_state
+                global_step += args.num_envs
+                
+                # 4. Train Step
+                metrics = {}
+                loss_msg = ""
+                # Train only if buffer has enough data
+                if buffer.size > dreamer_config['batch_size'] * dreamer_config['batch_length'] and global_step > 1000:
+                    train_key = jax.random.split(key)[0] # Split?
+                    # Sample batch
+                    batch_np = buffer.sample(dreamer_config['batch_size'])
+                    # To JAX
+                    batch_jax = {k: jnp.array(v) for k, v in batch_np.items()}
+                    
+                    # Train
+                    metrics = trainer.train_step(batch_jax, train_key)
+                    loss_msg = f"| M_Loss: {metrics.get('loss_model', 0):.2f} | A_Loss: {metrics.get('loss_actor', 0):.2f}"
+                
+                # Log
+                if wandb_enabled and iteration % 10 == 0:
+                    wandb.log({
+                        "timesteps": global_step,
+                        "iteration": iteration,
+                        **metrics
+                    })
+                
+                if iteration % 100 == 0:
+                     print(f"Iter {iteration} | Step {global_step} {loss_msg}")
 
             # Checkpoint
-            if (i + 1) % checkpoint_interval == 0:
-                pct = int((i + 1) / num_iterations * 100)
-                ckpt_path = os.path.join(models_dir, f"jax_rppo_{pct}.ckpt")
-                # TODO: Implement proper NNX checkpoint saving
-                print(f"  [Checkpoint saved at {pct}%]")
+            checkpoint_interval = args.checkpoint_frequency
+            if iteration % checkpoint_interval == 0:
+                print(f"Saving checkpoint to {models_dir} at step {global_step}...")
+                
+                ckpt_data = {}
+                if args.algorithm == "RecurrentPPO":
+                    # Save PPO state
+                    ckpt_data = {
+                         'model': nnx.state(model, nnx.Param),
+                         'optimizer': optimizer.state_dict() if hasattr(optimizer, 'state_dict') else opt_state,
+                         'h_state': h_state,
+                         'env_state': env_state,
+                         'key': key,
+                         'iteration': iteration,
+                         'step': global_step
+                    }
+                elif args.algorithm == "DreamerV3":
+                    # Save Dreamer state
+                    ckpt_data = {
+                         'wm': nnx.state(trainer.agent.wm, nnx.Param),
+                         'actor': nnx.state(trainer.agent.ac.actor, nnx.Param),
+                         'critic': nnx.state(trainer.agent.ac.critic, nnx.Param),
+                         'model_opt': nnx.state(trainer.model_opt),
+                         'actor_opt': nnx.state(trainer.actor_opt),
+                         'critic_opt': nnx.state(trainer.critic_opt),
+                         'key': key,
+                         'iteration': iteration,
+                         'step': global_step
+                    }
+                
+                checkpointer.save(iteration, ckpt_data)
 
-    elif args.algorithm == "DreamerV3":
-        print("DreamerV3 not yet implemented in JAX. Coming soon!")
-        return
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user.")
+        
+    print(f"Training complete. Results saved to {results_dir}")
 
     # 7. Save Final Model
-    final_ckpt = os.path.join(models_dir, "jax_rppo_100.ckpt")
-    # TODO: Implement proper NNX checkpoint saving
-    print(f"\nTraining complete! Final model saved to: {final_ckpt}")
+    checkpointer.save(iteration, ckpt_data)
+    print(f"\nTraining complete! Final model saved to: {models_dir}")
 
     if wandb_enabled:
         wandb.finish()
