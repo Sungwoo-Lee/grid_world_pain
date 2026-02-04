@@ -76,10 +76,10 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             frames.append(render_jax_state(state, params, episode=ep+1, step=0))
         
         while not done and step_count < max_steps:
-            # Model inference (deterministic: use argmax instead of sampling)
+            # Model inference (deterministic in eval_mode)
             obs_batch = obs[None, :]  # Add batch dim
-            logits, value, h_new = get_action_and_value_nnx(model, obs_batch, h_state)
-            action = jnp.argmax(logits, axis=-1)[0]  # Deterministic action
+            action, log_prob, value, h_new = get_action_and_value_nnx(model, obs_batch, h_state, eval_mode=True)
+            action = int(action)  # Extract from 0-dim array
             
             # Step
             next_state, reward, done, info = jax_step(state, action, params)
@@ -121,12 +121,12 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
 
 def main():
     parser = argparse.ArgumentParser(description="JAX GridWorld Evaluation")
-    parser.add_argument("--results_dir", type=str, required=True, help="Path to results directory")
-    parser.add_argument("--episodes", type=int, help="Number of evaluation episodes")
+    parser.add_argument("--results_dir", type=str, required=True, help="Path to results directory (Required)")
+    parser.add_argument("--episodes", type=int, help="Number of episodes to evaluate")
     parser.add_argument("--seed", type=int, help="Override testing seed")
-    parser.add_argument("--checkpoint", type=str, help="Specific checkpoint to evaluate")
-    parser.add_argument("--all", action="store_true", help="Evaluate all checkpoints")
-    parser.add_argument("--wandb-run-path", type=str, help="WandB run path for uploads")
+    parser.add_argument("--checkpoint", type=str, help="Specific checkpoint name or path to evaluate")
+    parser.add_argument("--all", action="store_true", help="Evaluate all checkpoints found in the directory")
+    parser.add_argument("--wandb-run-path", type=str, help="WandB run path (e.g. 'entity/project/run_id') for uploads")
     parser.add_argument("--render-video", action="store_true", help="Enable video recording")
     args = parser.parse_args()
 
@@ -136,73 +136,35 @@ def main():
 
     # 1. Load saved configuration
     if not os.path.exists(config_path):
-        print(f"Error: Configuration not found at {config_path}")
-        print("Please run train_jax.py first to generate a model.")
+        print(f"Error: Training configuration file not found at {config_path}")
         return
 
-    print(f"Loading configuration from {config_path}...")
+    print(f"Loading training configuration from {config_path}...")
     with open(config_path, 'r') as f:
         saved_config_dict = yaml.safe_load(f)
         config = Config(saved_config_dict)
 
-    # Merge evaluation defaults
+    # 1.1 Merge evaluation defaults (Strictly)
     eval_default_path = "configs/evaluation/default.yaml"
     if os.path.exists(eval_default_path):
         eval_defaults = Config.load_yaml(eval_default_path)
         config.merge(eval_defaults)
+    else:
+        # If missing, we must have them via CLI or saved config
+        pass
 
-    # 2. Resolve Parameters
-    seed = args.seed or config.get('testing.seed', 42)
-    num_episodes = args.episodes or config.get('testing.evaluation_episodes', 10)
+    # 2. Resolve Parameters (No Safe Defaults)
+    seed = args.seed or config.get_mandatory('testing.seed')
+    num_episodes = args.episodes or config.get_mandatory('testing.evaluation_episodes')
+    algorithm = config.get_mandatory('agent.algorithm')
     
-    # Load JAX EnvParams from saved config
-    # We need to extract the original config path or rebuild params
-    # For now, rebuild from saved config
-    try:
-        source_config = config.get('_source_config', args.results_dir)
-        # Attempt to reconstruct path if it was relative
-        params = load_env_params(config_path.replace("models/config.yaml", "").rstrip("/") + "/../" + source_config)
-    except Exception as e:
-        print(f"Warning: Could not load source config params: {e}")
-        # Fallback: Use minimal params from saved config
-        from src.environment.jax_env.state import EnvParams
-        params = EnvParams(
-            height=config.get('environment.height', 10),
-            width=config.get('environment.width', 10),
-            max_steps=config.get('environment.max_steps', 500),
-            res_type=jnp.zeros(0, dtype=jnp.int32),
-            res_property=jnp.zeros((0, 5)),
-            res_spawn_area=jnp.zeros((0, 4)),
-            res_max_cons=jnp.zeros(0, dtype=jnp.int32),
-            res_reg_delay=jnp.zeros(0, dtype=jnp.int32),
-            res_damage=jnp.zeros(0),
-            pred_property=jnp.zeros((0, 5)),
-            pred_move_int=jnp.zeros(0, dtype=jnp.int32),
-            pred_damage=jnp.zeros(0),
-            pred_patrol=jnp.zeros((0, 4)),
-            pred_detect=jnp.zeros(0),
-            pred_max_stamina=jnp.zeros(0),
-            pred_recovery=jnp.zeros(0),
-            pred_hunt_thresh=jnp.zeros(0),
-            max_satiation=config.get('body.max_satiation', 100.0),
-            max_injury=config.get('body.max_injury', 20.0),
-            food_gain=config.get('body.food_gain', 10.0),
-            setpoint=config.get('body.setpoint', 50.0),
-            injury_recovery=config.get('body.injury_recovery', 1.0),
-            smoothing_duration=config.get('body.smoothing_duration', 3),
-            death_penalty=config.get('body.death_penalty', 10.0),
-            overeating_death=config.get('body.overeating_death', False),
-            use_homeostatic_reward=config.get('body.use_homeostatic_reward', True),
-            with_satiation=config.get('body.with_satiation', False),
-            with_injury=config.get('body.with_injury', True),
-            sensor_radius=config.get('sensory.sensor_radius', 10.0),
-            sensor_decay=config.get('sensory.sensor_decay', 2.0),
-            sensor_range=config.get('sensory.sensor_range', 3)
-        )
+    # Reconstruct JAX EnvParams from saved configuration
+    # Note: load_env_params handles the mapping from YAML structure to JAX arrays
+    params = load_env_params(config_path)
 
     # 3. Print Summary
     print(f"\n{'='*50}")
-    print(f"JAX Evaluation")
+    print(f"JAX Evaluation: {algorithm}")
     print(f"{'='*50}")
     print(f"Grid: {params.height}x{params.width}")
     print(f"Episodes: {num_episodes}")
@@ -211,84 +173,101 @@ def main():
     print(f"{'='*50}\n")
 
     # 4. Find checkpoints
-    prefix = "jax_rppo_"
-    ext = ".ckpt"
+    # Note: Modern Orbax just uses iteration numbers as folder names.
     checkpoints = []
-
+    
     if args.checkpoint:
+        # Explicit path or numeric iteration
         ckpt_path = os.path.join(models_dir, args.checkpoint)
-        if os.path.exists(ckpt_path):
+        if os.path.isdir(ckpt_path):
             checkpoints.append(ckpt_path)
         else:
-            # Try adding prefix/ext
-            ckpt_path = os.path.join(models_dir, f"{prefix}{args.checkpoint}{ext}")
-            if os.path.exists(ckpt_path):
-                checkpoints.append(ckpt_path)
-            else:
-                print(f"Error: Checkpoint '{args.checkpoint}' not found.")
-                return
+            print(f"Error: Checkpoint '{args.checkpoint}' not found at {ckpt_path}")
+            return
     elif args.all:
-        checkpoints = sorted(glob.glob(os.path.join(models_dir, f"{prefix}*{ext}")))
+        # Find all iteration subdirectories
+        subdirs = [d for d in os.listdir(models_dir) if os.path.isdir(os.path.join(models_dir, d)) and d.isdigit()]
+        checkpoints = [os.path.join(models_dir, d) for d in sorted(subdirs, key=int)]
     else:
-        # Latest checkpoint
-        all_ckpts = glob.glob(os.path.join(models_dir, f"{prefix}*{ext}"))
-        if all_ckpts:
-            def extract_pct(path):
-                match = re.search(rf"{prefix}(\d+){ext}", os.path.basename(path))
-                return int(match.group(1)) if match else -1
-            checkpoints = [max(all_ckpts, key=extract_pct)]
+        # Latest numeric subdirectory
+        subdirs = [d for d in os.listdir(models_dir) if os.path.isdir(os.path.join(models_dir, d)) and d.isdigit()]
+        if subdirs:
+            latest = max(subdirs, key=int)
+            checkpoints = [os.path.join(models_dir, latest)]
 
     if not checkpoints:
-        print(f"No checkpoints found in {models_dir}")
-        print("Note: JAX checkpoint saving is not yet fully implemented.")
-        print("Running evaluation with a fresh model for testing...")
-        
-        # Initialize fresh model for testing
-        key = jax.random.PRNGKey(seed)
-        key, model_key = jax.random.split(key)
-        
-        # Get input dim from a reset
-        test_state = jax_reset(params, key)
-        obs = get_observation(test_state, params)
-        input_dim = obs.shape[0]
-        action_dim = 4
-        
-        rngs = nnx.Rngs(model_key)
-        model = ActorCriticRNN(
-            input_dim=input_dim,
-            action_dim=action_dim,
-            hidden_size=64,
-            rngs=rngs
-        )
-        
-        evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, "fresh", render_video=args.render_video)
+        print(f"No valid checkpoints found in {models_dir}")
         return
 
     # 5. Initialize WandB if requested
     if args.wandb_run_path and WANDB_AVAILABLE:
         try:
+            wandb_login(quiet=True)
             path_parts = args.wandb_run_path.strip().split('/')
             if len(path_parts) == 3:
-                entity, project, run_id = path_parts
-            elif len(path_parts) == 2:
-                entity, project = None, path_parts[0]
-                run_id = path_parts[1]
+                wandb.init(entity=path_parts[0], project=path_parts[1], id=path_parts[2], resume="must", job_type="evaluation")
             else:
-                run_id = path_parts[0]
-                entity, project = None, None
-            
-            wandb_login(quiet=True)
-            wandb.init(entity=entity, project=project, id=run_id, resume="must", job_type="evaluation")
+                wandb.init(id=args.wandb_run_path, resume="must", job_type="evaluation")
         except Exception as e:
             print(f"WandB init failed: {e}")
-            args.wandb_run_path = None
 
     # 6. Evaluate each checkpoint
-    # TODO: Implement actual checkpoint loading when NNX serialization is ready
-    print("\nNote: Full checkpoint loading not yet implemented.")
-    print("Evaluation will use a fresh model for demonstration.\n")
+    import orbax.checkpoint as ocp
+    
+    # Matching CheckpointManager setup
+    checkpointer = ocp.CheckpointManager(
+        os.path.abspath(models_dir),
+        checkpointers=ocp.StandardCheckpointer()
+    )
+    
+    for ckpt_path in checkpoints:
+        iteration_str = os.path.basename(ckpt_path)
+        iteration = int(iteration_str)
+        print(f"\nEvaluating Iteration: {iteration}")
+        
+        # Reconstruct Model based on algorithm
+        test_state = jax_reset(params, jax.random.PRNGKey(seed))
+        obs = get_observation(test_state, params)
+        input_dim = obs.shape[0]
+        action_dim = 4
+        
+        rngs = nnx.Rngs(jax.random.PRNGKey(seed))
+        
+        if algorithm == "RecurrentPPO":
+            model = ActorCriticRNN(
+                input_dim=input_dim,
+                action_dim=action_dim,
+                hidden_size=config.get_mandatory('agent.hidden_size'),
+                rngs=rngs
+            )
+            # Restore via manager (returns item named 'default' if used as single checkpointer)
+            restored = checkpointer.restore(iteration)
+            nnx.update(model, restored) # restored is already the Pytree if single item
+            
+        elif algorithm == "DreamerV3":
+            from src.models.jax_models.dreamer_v3_trainer import DreamerTrainer
+            dreamer_config = {
+                'model_lr': config.get_mandatory('agent.model_lr'),
+                'actor_lr': config.get_mandatory('agent.actor_lr'),
+                'value_lr': config.get_mandatory('agent.value_lr'),
+                'batch_size': config.get_mandatory('agent.batch_size'),
+                'batch_length': config.get_mandatory('agent.batch_length'),
+            }
+            trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=rngs)
+            restored = checkpointer.restore(iteration)
+            # restored is a dict/pytree
+            nnx.update(trainer.agent.wm, restored['wm'])
+            nnx.update(trainer.agent.ac.actor, restored['actor'])
+            nnx.update(trainer.agent.ac.critic, restored['critic'])
+            model = trainer.agent 
+        else:
+            raise ValueError(f"Unsupported algorithm for JAX evaluation: {algorithm}")
+            
+        evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, iteration, render_video=args.render_video)
 
-    if wandb.run:
+    checkpointer.close()
+
+    if WANDB_AVAILABLE and wandb.run:
         wandb.finish()
 
     print(f"\n{'='*50}")

@@ -179,10 +179,12 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
     )
     
     # 3. Update epochs - Use a simple for loop (epochs are small, ~4)
-    # jax.lax.scan is incompatible with nnx.value_and_grad due to trace levels
     epoch_losses = []
     for _ in range(config.num_epochs):
         loss, aux = update_step(model, optimizer, batch, config)
         epoch_losses.append((loss, aux))
     
-    return next_env_state, next_h_state, key, epoch_losses
+    # 4. Count completed episodes in this rollout for progress tracking
+    num_completed = jnp.sum(trajectories.done)
+    
+    return next_env_state, next_h_state, key, epoch_losses, num_completed

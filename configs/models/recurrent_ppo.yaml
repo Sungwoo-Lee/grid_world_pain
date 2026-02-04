@@ -12,4 +12,8 @@ agent:
   recurrent_layers: [64]
   actor_fc_layers: [128,128]
   critic_fc_layers: [128,128]
+  num_steps: 128
+  hidden_size: 64
   entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5

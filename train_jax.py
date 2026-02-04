@@ -33,6 +33,7 @@ import yaml
 import numpy as np
 from datetime import datetime
 from collections import deque
+from tqdm import tqdm
 import jax
 import jax.numpy as jnp
 import optax
@@ -68,72 +69,121 @@ class PPOConfig(NamedTuple):
     vf_coef: float
     lr: float
 
+# Defaults
+DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "configs", "environment", "environment.yaml")
+
 def main():
     parser = argparse.ArgumentParser(description="Train JAX RL Agents")
     
-    # Required
-    parser.add_argument("--config", type=str, required=True, help="Path to environment/ablation config YAML")
-    
-    # Training params
-    parser.add_argument("--algorithm", type=str, default="RecurrentPPO", choices=["RecurrentPPO", "DreamerV3"])
-    parser.add_argument("--total-timesteps", type=int, default=100_000, help="Total training timesteps")
-    parser.add_argument("--num-envs", type=int, default=256, help="Number of parallel environments")
-    parser.add_argument("--num-steps", type=int, default=128, help="Steps per iteration (rollout length)")
-    parser.add_argument("--num-epochs", type=int, default=4, help="PPO update epochs per iteration")
-    parser.add_argument("--lr", type=float, default=2.5e-4, help="Learning rate")
-    parser.add_argument("--hidden-size", type=int, default=64, help="Hidden layer size")
-    parser.add_argument("--seed", type=int, default=0, help="Random seed")
-    
-    # WandB
-    parser.add_argument("--wandb-name", type=str, help="WandB run name")
-    parser.add_argument("--wandb-project", type=str, help="WandB project name (overrides config)")
-    parser.add_argument("--wandb-group", type=str, help="WandB group name")
-    parser.add_argument("--wandb-entity", type=str, help="WandB entity/team name")
-    parser.add_argument("--wandb-resume-id", type=str, help="WandB run ID to resume")
-    parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
-    
-    # Checkpointing
-    parser.add_argument("--checkpoint-frequency", type=int, default=25, help="Checkpoint save frequency (% of total)")
-    parser.add_argument("--results-dir", type=str, help="Custom results directory")
+    # Matching train.py flags
+    parser.add_argument("--episodes", type=int, help="Number of episodes to train")
+    parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
+    parser.add_argument("--config", type=str, help="Path to base config YAML (Environment/Ablation)")
+    parser.add_argument("--agent_config", type=str, required=True, help="Path to agent config YAML (Required)")
     parser.add_argument("--tag", type=str, help="Tag for the training run")
+    parser.add_argument("--device", type=str, help="Device to use (JAX handles this; kept for parity)")
+    parser.add_argument("--no-satiation", action="store_true", help="Disable satiation (conventional mode)")
+    parser.add_argument("--no-overeating-death", action="store_true", help="Disable death by overeating")
+    parser.add_argument("--wandb-project", type=str, help="WandB Project Name")
+    parser.add_argument("--wandb-group", type=str, help="WandB Group Name")
+    parser.add_argument("--wandb-job-type", type=str, help="WandB Job Type")
+    parser.add_argument("--wandb-name", type=str, help="WandB Run Name")
+    parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
+    parser.add_argument("--quiet", action="store_true", help="Suppress output and progress bar")
     parser.add_argument("--debug", action="store_true", help="Show verbose step-by-step progress logging")
+    parser.add_argument("--checkpoint-frequency", type=int, help="Save checkpoint every N episodes/evals")
+    parser.add_argument("--load-checkpoint", type=str, help="Path to checkpoint to resume from")
+    parser.add_argument("--wandb-resume-id", type=str, help="WandB Run ID to resume logging")
+
+    # JAX-specific but useful flags
+    parser.add_argument("--total-timesteps", type=int, help="Total training timesteps (overrides episodes if provided)")
+    parser.add_argument("--num-envs", type=int, help="Number of parallel environments")
+    parser.add_argument("--num-steps", type=int, help="Steps per iteration (rollout length)")
+    parser.add_argument("--hidden-size", type=int, help="Hidden layer size")
+    parser.add_argument("--lr", type=float, help="Learning rate (overrides agent config if provided)")
+    parser.add_argument("--results-dir", type=str, help="Custom results directory")
+    parser.add_argument("--wandb-entity", type=str, help="WandB Entity Name")
     
     args = parser.parse_args()
 
-    # 1. Load Config (similar to train.py hierarchy)
+    # 1. Load Config Hierarchy (Synchronized with train.py)
     config = get_default_config()
 
     # Merge Training Defaults
     train_config_path = os.path.join(os.path.dirname(__file__), "configs", "train", "default.yaml")
     if os.path.exists(train_config_path):
+        if not args.quiet:
+            print(f"Loading train config from {train_config_path}")
         train_defaults = Config.load_yaml(train_config_path)
         config.merge(train_defaults)
+
+    # Merge Evaluation Defaults
+    eval_config_path = os.path.join(os.path.dirname(__file__), "configs", "evaluation", "default.yaml")
+    if os.path.exists(eval_config_path):
+        if not args.quiet:
+            print(f"Loading eval config from {eval_config_path}")
+        eval_defaults = Config.load_yaml(eval_config_path)
+        config.merge(eval_defaults)
 
     # Merge Logger Config (WandB settings)
     logger_config_path = os.path.join(os.path.dirname(__file__), "configs", "logger", "wandb.yaml")
     if os.path.exists(logger_config_path):
+        if not args.quiet:
+            print(f"Loading logger config from {logger_config_path}")
         logger_config = Config.load_yaml(logger_config_path)
         config.merge(logger_config)
 
-    # Merge User / Ablation Config
-    print(f"Loading config from: {args.config}")
-    user_config = Config.load_yaml(args.config)
-    config.merge(user_config)
+    # Merge Base/User/Ablation Config (--config)
+    if args.config:
+        if not args.quiet:
+            print(f"Loading override config from: {args.config}")
+        user_config = Config.load_yaml(args.config)
+        config.merge(user_config)
 
-    if args.debug:
-        print(f"DEBUG: Loading JAX EnvParams from {args.config}...", flush=True)
-    params = load_env_params(args.config)
-    if args.debug:
-        print("DEBUG: JAX EnvParams loaded.", flush=True)
+    # Merge Agent Config (--agent_config) - REQUIRED
+    if not args.quiet:
+        print(f"Loading agent config from: {args.agent_config}")
+    agent_config = Config.load_yaml(args.agent_config)
+    config.merge(agent_config)
+
+    # CLI Overrides (Synchronized with train.py)
+    if args.wandb_project: config.set('wandb.project', args.wandb_project)
+    if args.wandb_group: config.set('wandb.group', args.wandb_group)
+    if args.wandb_job_type: config.set('wandb.job_type', args.wandb_job_type)
+    if args.wandb_name: config.set('wandb.name', args.wandb_name)
+    if args.no_wandb: config.set('wandb.disabled', True)
+    if args.tag: config.set('tag', args.tag)
+    if args.seed is not None: config.set('seed', args.seed)
+    if args.no_satiation: config.set('environment.with_satiation', False)
+    if args.no_overeating_death: config.set('environment.overeating_death', False)
+
+    # Determine Algorithm
+    algorithm = config.get_mandatory('agent.algorithm')
+    
+    # Strictly Resolve Parameters (No Safe Defaults)
+    episodes = args.episodes or config.get_mandatory('episodes')
+    total_timesteps = args.total_timesteps or (episodes * config.get_mandatory('environment.max_steps'))
+    num_envs = args.num_envs or config.get_mandatory('training.num_envs')
+    num_steps = args.num_steps or config.get_mandatory('agent.num_steps')
+    hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
+    seed = args.seed if args.seed is not None else config.get_mandatory('seed')
+    lr = args.lr or config.get_mandatory('agent.lr_actor') # or model_lr for dreamer... will handle below
+    
+    # Re-load EnvParams with full merged config for JAX core
+    params = load_env_params(args.config or DEFAULT_CONFIG_PATH)
+    
+    # Apply CLI overrides to params if they exist in params
+    if args.no_satiation: params = params.replace(with_satiation=False)
+    if args.no_overeating_death: params = params.replace(overeating_death=False)
 
     # 2. Setup Results Directory
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_name = args.wandb_name or args.tag or f"jax_{args.algorithm}_{timestamp}"
+    run_name = args.wandb_name or args.tag or f"jax_{algorithm}_{timestamp}"
     
     if args.results_dir:
         results_dir = args.results_dir
     else:
-        results_dir = os.path.join("results", f"JAX_{args.algorithm}", run_name)
+        results_dir = os.path.join("results", f"JAX_{algorithm}", run_name)
     
     models_dir = os.path.join(results_dir, "models")
     os.makedirs(models_dir, exist_ok=True)
@@ -149,27 +199,28 @@ def main():
     config_save_path = os.path.join(models_dir, "config.yaml")
     with open(config_save_path, 'w') as f:
         yaml.dump(config.to_dict(), f, default_flow_style=False)
-    print(f"Config saved to: {config_save_path}")
+    if not args.quiet:
+        print(f"Config saved to: {config_save_path}")
 
     # 3. Initialize WandB with full options
-    wandb_enabled = WANDB_AVAILABLE and not args.no_wandb and not config.get('wandb.disabled', False)
+    wandb_enabled = WANDB_AVAILABLE and not args.no_wandb and not config.get_mandatory('wandb.disabled')
     if wandb_enabled:
         wandb_login(quiet=True)
         
         wandb_kwargs = {
-            "project": args.wandb_project or config.get('wandb.project', 'gridworld-jax'),
-            "entity": args.wandb_entity or config.get('wandb.entity'),
-            "group": args.wandb_group or config.get('wandb.group'),
+            "project": args.wandb_project or config.get_mandatory('wandb.project'),
+            "entity": args.wandb_entity or config.get('wandb.entity'), # entity can be None
+            "group": args.wandb_group or config.get('wandb.group'), # group can be None
             "name": run_name,
             "config": {
-                "algorithm": args.algorithm,
+                "algorithm": algorithm,
                 "framework": "JAX/Flax NNX",
-                "total_timesteps": args.total_timesteps,
-                "num_envs": args.num_envs,
-                "num_steps": args.num_steps,
-                "lr": args.lr,
-                "hidden_size": args.hidden_size,
-                "seed": args.seed,
+                "total_timesteps": total_timesteps,
+                "num_envs": num_envs,
+                "num_steps": num_steps,
+                "lr": lr,
+                "hidden_size": hidden_size,
+                "seed": seed,
                 **config.to_dict()
             },
             "reinit": True
@@ -191,75 +242,77 @@ def main():
         # Log source code
         wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py"))
 
-    # 4. Print Summary
-    print(f"\n{'='*60}")
-    print(f"JAX Training: {args.algorithm}")
-    print(f"{'='*60}")
-    print(f"Grid: {params.height}x{params.width}")
-    print(f"Total Timesteps: {args.total_timesteps:,}")
-    print(f"Parallel Envs: {args.num_envs}")
-    print(f"Steps/Iter: {args.num_steps}")
-    print(f"Results: {results_dir}")
-    print(f"WandB: {'Enabled' if wandb_enabled else 'Disabled'}")
-    print(f"{'='*60}\n")
+    # 3. Print Summary
+    if not args.quiet:
+        print(f"\n{'='*60}")
+        print(f"JAX Training: {algorithm}")
+        print(f"{'='*60}")
+        print(f"Grid: {params.height}x{params.width}")
+        print(f"Total Timesteps: {total_timesteps:,}")
+        print(f"Parallel Envs: {num_envs}")
+        print(f"Steps/Iter: {num_steps}")
+        print(f"Results: {results_dir}")
+        print(f"WandB: {'Enabled' if wandb_enabled else 'Disabled'}")
+        print(f"{'='*60}\n")
 
     # 5. Training Setup
     # Initialize ParallelEnv
     env = ParallelEnv(params)
 
     # Initialize RNG
-    key = jax.random.PRNGKey(args.seed)
+    key = jax.random.PRNGKey(seed)
     key, model_key, env_key = jax.random.split(key, 3)
 
     # Initialize environment states
-    env_state, obs = env.reset(env_key, args.num_envs)
+    env_state, obs = env.reset(env_key, num_envs)
     input_dim = obs.shape[-1]
     action_dim = 4  # UP, DOWN, LEFT, RIGHT
 
     print(f"Observation dim: {input_dim}, Action dim: {action_dim}")
     
     # 6. Algorithm Initialization
-    if args.algorithm == "RecurrentPPO":
+    if algorithm == "RecurrentPPO":
         # RecurrentPPO Setup
         
         # Init params
         key, init_key = jax.random.split(key)
         
         # Initialize NNX model state
-        model = ActorCriticRNN(input_dim=input_dim, action_dim=action_dim, hidden_size=args.hidden_size, rngs=nnx.Rngs(init_key))
+        model = ActorCriticRNN(input_dim=input_dim, action_dim=action_dim, hidden_size=hidden_size, rngs=nnx.Rngs(init_key))
         
         # Optimizer
-        optimizer = nnx.Optimizer(model, optax.adam(args.lr), wrt=nnx.Param)
+        optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
         
-        # PPO Config
+        # PPO Config (prioritize agent.* from model config)
         ppo_config = PPOConfig(
-            num_steps=args.num_steps,
-            num_epochs=args.num_epochs,
-            gamma=config.get('gamma', 0.99),
-            gae_lambda=config.get('gae_lambda', 0.95),
-            clip_eps=config.get('clip_eps', 0.2),
-            ent_coef=config.get('ent_coef', 0.01),
-            vf_coef=config.get('vf_coef', 0.5),
-            lr=args.lr
+            num_steps=num_steps,
+            num_epochs=config.get_mandatory('agent.K_epochs'),
+            gamma=config.get_mandatory('agent.gamma'),
+            gae_lambda=config.get_mandatory('agent.gae_lambda'),
+            clip_eps=config.get_mandatory('agent.eps_clip'),
+            ent_coef=config.get_mandatory('agent.entropy_coef'),
+            vf_coef=config.get_mandatory('agent.vf_coef'),
+            lr=lr
         )
         
         # Initialize Hidden State
-        h_state = jnp.zeros((args.num_envs, args.hidden_size))
+        h_state = jnp.zeros((num_envs, hidden_size))
 
         # JIT compile
-        print("JIT compiling train_iteration...")
+        if not args.quiet:
+            print("JIT compiling train_iteration...")
         jit_train = nnx.jit(train_iteration, static_argnums=(6,))
         
-    elif args.algorithm == "DreamerV3":
+    elif algorithm == "DreamerV3":
         from src.models.jax_models.dreamer_v3_trainer import DreamerTrainer, ReplayBuffer
         
-        # Dreamer Config
+        # Dreamer Config (Strict)
         dreamer_config = {
-            'model_lr': config.get('model_lr', 1e-4),
-            'actor_lr': config.get('actor_lr', 3e-5),
-            'value_lr': config.get('value_lr', 8e-5),
-            'batch_size': config.get('batch_size', 16),
-            'batch_length': config.get('batch_length', 16), # Horizon
+            'model_lr': config.get_mandatory('agent.model_lr'),
+            'actor_lr': config.get_mandatory('agent.actor_lr'),
+            'value_lr': config.get_mandatory('agent.value_lr'),
+            'batch_size': config.get_mandatory('agent.batch_size'),
+            'batch_length': config.get_mandatory('agent.batch_length'),
         }
         
         if args.debug:
@@ -289,30 +342,36 @@ def main():
     global_step = 0
     iteration = 0
     
-    # Episode Metrics Tracking (Vectorized for Parallel Envs)
-    episode_returns = np.zeros(args.num_envs, dtype=np.float32)
-    episode_lengths = np.zeros(args.num_envs, dtype=np.int32)
+    # Episode Metrics Tracking
+    episode_returns = np.zeros(num_envs, dtype=np.float32)
+    episode_lengths = np.zeros(num_envs, dtype=np.int32)
     completed_episodes = 0
     ep_info_buffer = deque(maxlen=100)
     
     start_time = datetime.now()
     
+    # Initialize Progress Bar (Episode-based as requested)
+    pbar = tqdm(total=episodes, disable=args.quiet, desc="Training")
+    
     try:
-        while global_step < args.total_timesteps:
+        while global_step < total_timesteps:
             iteration += 1
             
-            if args.algorithm == "RecurrentPPO":
+            if algorithm == "RecurrentPPO":
                 # PPO Iteration
-                env_state, h_state, key, losses = jit_train(
+                env_state, h_state, key, losses, num_completed = jit_train(
                     model, optimizer, params, env_state, h_state, key, ppo_config
                 )
                 
                 # Update globals
-                steps_this_iter = args.num_steps * args.num_envs
+                steps_this_iter = num_steps * num_envs
                 global_step += steps_this_iter
                 
+                # Update progress bar with completed episodes
+                pbar.update(int(num_completed))
+                completed_episodes += int(num_completed)
+                
                 # Logging
-                # PPO returns list of epoch losses. Take mean.
                 avg_policy_loss = jnp.mean(jnp.array([l[1][0] for l in losses]))
                 avg_value_loss = jnp.mean(jnp.array([l[1][1] for l in losses]))
                 avg_ent_loss = jnp.mean(jnp.array([l[1][2] for l in losses]))
@@ -327,116 +386,62 @@ def main():
                         "timesteps": global_step,
                         "iteration": iteration
                     })
-                print(f"Iter {iteration} | Step {global_step} | Loss: {total_loss:.4f}", flush=True)
+                
+                pbar.set_postfix({
+                    "Iter": iteration,
+                    "Loss": f"{total_loss:.4f}",
+                    "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"
+                })
                     
-            elif args.algorithm == "DreamerV3":
-                # Dreamer Iteration (Step-based loop inside, or we do generic loop)
-                # Dreamer typically alternates collection and training.
-                # Train every K steps, or every step?
-                # Let's collect 'num_steps' first, then train 'num_steps' times?
-                # Or 1 step collect, 1 step train (standard Dreamer).
-                
-                # Since we have parallel envs, we collect 'num_envs' steps at once.
-                # So we add 'num_envs' transitions.
-                # Then we train 'num_envs' times? Ratio usually 1:1 or 1:0.x.
-                # Let's train 1 batch per env step.
-                
-                # 1. Action Selection
+            elif algorithm == "DreamerV3":
+                # Action Selection
                 if args.debug:
-                    print(f"DEBUG: Iter {iteration}/{args.num_steps} | Step {global_step} - Selecting Action...", end="\r", flush=True)
-                obs_arr = jax.vmap(get_observation, in_axes=(0, None))(env_state, params) # (B, 33)
+                    pbar.set_description(f"Iter {iteration} | Selecting Action")
+                obs_arr = jax.vmap(get_observation, in_axes=(0, None))(env_state, params)
                 
-                # get_action uses JAX, we pass JAX array
-                # Returns action_idx (B,) and updated dreamer_state
                 key, act_key = jax.random.split(key)
-                
-                # We need to wrap get_action? It's inside nnx module.
-                # We can call it directly.
                 action_idx, dreamer_state = trainer.get_action(obs_arr, dreamer_state, eval_mode=False, rng=act_key)
-                
-                # Ensure action is integer for indexing
                 action_idx = action_idx.astype(jnp.int32)
                 
-                # Convert to OneHot for Environment?
-                # Environment expects ONEHOT action?
-                # jax_env/core.py step takes 'action'
-                # Check main_jax.py:
-                #    action = jax.random.randint(key, (args.num_envs,), 0, 4)
-                #    action_onehot = jax.nn.one_hot(action, 4)
-                #    state, ... = jax.vmap(jax_step)(state, action_onehot, ...)
-                # Yes, expects onehot.
-                
                 action_onehot = jax.nn.one_hot(action_idx, action_dim)
-                # Convert to OneHot for Environment?
-                # Environment expects ONEHOT action?
-                # jax_env/core.py step takes 'action'
-                
-                # Check Debug print above
                 
                 # Vmap step
                 if args.debug:
-                    print(f"DEBUG: Iter {iteration}/{args.num_steps} | Step {global_step} - Stepping Env...", end="\r", flush=True)
+                    pbar.set_description(f"Iter {iteration} | Stepping Env")
                 step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
                 next_env_state, reward, done, info = step_fn(env_state, action_idx)
                 
-                # 3. Add to Buffer
-                # We need to move data to CPU for numpy buffer
-                # And handle 'is_first' (if done, next is first)
-                
-                # Current 'done' means THIS step was terminal.
-                # Next step 'is_first' will be True.
-                # We track is_first externally?
-                # Or just use 'done' signal.
-                # Dreamer: store (obs, act, reward, discount). 
-                # If done, discount=0.
-                
-                obs_np = np.array(obs_arr) # Force sync?
+                obs_np = np.array(obs_arr)
                 act_np = np.array(action_onehot)
                 rew_np = np.array(reward)
                 done_np = np.array(done)
-                # is_first for THIS step.
-                # If previous step was done, this step is first.
-                # We need 'prev_dones'.
-                if iteration == 1:
-                     is_first_np = np.ones((args.num_envs,), dtype=bool)
-                else:
-                     # How to track? 'prev_dones'
-                     pass 
                 
-                # Let's persistent var
                 if not hasattr(main, 'prev_dones'):
-                    main.prev_dones = np.zeros((args.num_envs,), dtype=bool) # assume not first except iter 1
+                    main.prev_dones = np.zeros((num_envs,), dtype=bool)
                     if iteration == 1: main.prev_dones[:] = True
                 
                 is_first_np = main.prev_dones
-                
-                for i in range(args.num_envs):
+                for i in range(num_envs):
                     buffer.add(obs_np[i], act_np[i], rew_np[i], done_np[i], is_first_np[i])
-                    
+                
                 main.prev_dones = done_np
-                
-                # Handle auto-reset is done inside jax_step?
-                # jax_step returns next_state RESETTED if done.
-                # So next_env_state is valid start of new episode.
-                
                 env_state = next_env_state
-                global_step += args.num_envs
+                global_step += num_envs
                 
-                # --- Episode Metric Tracking ---
-                # Update counters
+                # Episode Metric Tracking
                 episode_returns += rew_np
                 episode_lengths += 1
                 
                 # Check for completions
                 dones = done_np.astype(bool)
                 if np.any(dones):
-                    for i in range(args.num_envs):
+                    num_just_completed = np.sum(dones)
+                    pbar.update(int(num_just_completed))
+                    for i in range(num_envs):
                         if dones[i]:
                             completed_episodes += 1
-                            # Add to buffer
                             ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
                             
-                            # Log aggregated stats if buffer is full enough or occasional
                             if len(ep_info_buffer) > 0 and completed_episodes % 5 == 0:
                                 mean_rew = np.mean([ep['r'] for ep in ep_info_buffer])
                                 mean_len = np.mean([ep['l'] for ep in ep_info_buffer])
@@ -447,27 +452,19 @@ def main():
                                         "Episode/Steps_Mean": mean_len,
                                         "Episode/Number": completed_episodes
                                     }, step=global_step)
-                                
-                                # Log to console occasionally
-                                if completed_episodes % 10 == 0:
-                                    print(f"Episode {completed_episodes} | Mean Reward: {mean_rew:.2f} | Mean Steps: {mean_len:.1f}")
 
-                            # Reset
                             episode_returns[i] = 0.0
                             episode_lengths[i] = 0
-                # -------------------------------
                 
-                # 4. Train Step
+                # Train Step
                 metrics = {}
                 loss_msg = ""
-                # Train only if buffer has enough data
                 if buffer.size > dreamer_config['batch_size'] * 2:
                     if args.debug:
-                        print(f"DEBUG: Iter {iteration}/{args.num_steps} | Step {global_step} - Updating Models...", end="\r", flush=True)
+                        pbar.set_description(f"Iter {iteration} | Updating Models")
                     metrics = trainer.train_step(batch_jax, key)
-                    loss_msg = f"| Loss: {metrics.get('loss_model', 0):.2f}"
+                    loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
                 
-                # Log
                 if wandb_enabled and iteration % 10 == 0:
                     wandb.log({
                         "timesteps": global_step,
@@ -475,41 +472,42 @@ def main():
                         **metrics
                     })
                 
-                if iteration % 1 == 0:
-                     print(f"Iter {iteration}/{args.num_steps} | Step {global_step} {loss_msg}", flush=True)
-                else:
-                     print(f"Iter {iteration} | Step {global_step}", end="\r", flush=True)
+                pbar.set_postfix({
+                    "Iter": iteration,
+                    "Loss": loss_msg,
+                    "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"
+                })
 
             # Checkpoint
-            checkpoint_interval = args.checkpoint_frequency
-            if iteration % checkpoint_interval == 0:
-                print(f"Saving checkpoint to {models_dir} at step {global_step}...")
-                
+            checkpoint_interval = args.checkpoint_frequency or config.get_mandatory('training.checkpoint_frequency')
+            
+            # Populate ckpt_data for potential saving
+            if algorithm == "RecurrentPPO":
+                ckpt_data = {
+                    'model': nnx.state(model, nnx.Param),
+                    'optimizer': nnx.state(optimizer),
+                    'h_state': h_state,
+                    'key': key,
+                    'iteration': iteration,
+                    'step': global_step
+                }
+            elif algorithm == "DreamerV3" and 'trainer' in locals():
+                ckpt_data = {
+                     'wm': nnx.state(trainer.agent.wm, nnx.Param),
+                     'actor': nnx.state(trainer.agent.ac.actor, nnx.Param),
+                     'critic': nnx.state(trainer.agent.ac.critic, nnx.Param),
+                     'model_opt': nnx.state(trainer.model_opt),
+                     'actor_opt': nnx.state(trainer.actor_opt),
+                     'critic_opt': nnx.state(trainer.critic_opt),
+                     'key': key,
+                     'iteration': iteration,
+                     'step': global_step
+                }
+            else:
                 ckpt_data = {}
-                if args.algorithm == "RecurrentPPO":
-                    # Save PPO state
-                    ckpt_data = {
-                        'model': nnx.state(model, nnx.Param),
-                        'optimizer': nnx.state(optimizer),
-                        'h_state': h_state,
-                        'key': key,
-                        'iteration': iteration,
-                        'step': global_step
-                    }
-                elif args.algorithm == "DreamerV3":
-                    # Save Dreamer state
-                    ckpt_data = {
-                         'wm': nnx.state(trainer.agent.wm, nnx.Param),
-                         'actor': nnx.state(trainer.agent.ac.actor, nnx.Param),
-                         'critic': nnx.state(trainer.agent.ac.critic, nnx.Param),
-                         'model_opt': nnx.state(trainer.model_opt),
-                         'actor_opt': nnx.state(trainer.actor_opt),
-                         'critic_opt': nnx.state(trainer.critic_opt),
-                         'key': key,
-                         'iteration': iteration,
-                         'step': global_step
-                    }
-                
+
+            if iteration % checkpoint_interval == 0 and ckpt_data:
+                print(f"Saving checkpoint to {models_dir} at step {global_step}...")
                 checkpointer.save(iteration, args=ocp.args.StandardSave(ckpt_data))
 
     except KeyboardInterrupt:
@@ -519,6 +517,7 @@ def main():
 
     # 7. Save Final Model
     checkpointer.save(iteration, args=ocp.args.StandardSave(ckpt_data))
+    checkpointer.wait_until_finished()
     print(f"\nTraining complete! Final model saved to: {models_dir}")
 
     if wandb_enabled:
@@ -527,6 +526,9 @@ def main():
     print(f"\n{'='*60}")
     print(f"Results saved to: {results_dir}")
     print(f"{'='*60}")
+    
+    # Clean up Orbax
+    checkpointer.close()
 
 if __name__ == "__main__":
     main()
