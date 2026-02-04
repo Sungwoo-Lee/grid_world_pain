@@ -226,7 +226,7 @@ def main():
         key, init_key = jax.random.split(key)
         
         # Initialize NNX model state
-        model = ActorCriticRNN(action_dim=action_dim, hidden_size=args.hidden_size, rngs=nnx.Rngs(init_key))
+        model = ActorCriticRNN(input_dim=input_dim, action_dim=action_dim, hidden_size=args.hidden_size, rngs=nnx.Rngs(init_key))
         
         # Optimizer
         optimizer = nnx.Optimizer(model, optax.adam(args.lr), wrt=nnx.Param)
@@ -489,13 +489,12 @@ def main():
                 if args.algorithm == "RecurrentPPO":
                     # Save PPO state
                     ckpt_data = {
-                         'model': nnx.state(model, nnx.Param),
-                         'optimizer': optimizer.state_dict() if hasattr(optimizer, 'state_dict') else opt_state,
-                         'h_state': h_state,
-                         'env_state': env_state,
-                         'key': key,
-                         'iteration': iteration,
-                         'step': global_step
+                        'model': nnx.state(model, nnx.Param),
+                        'optimizer': nnx.state(optimizer),
+                        'h_state': h_state,
+                        'key': key,
+                        'iteration': iteration,
+                        'step': global_step
                     }
                 elif args.algorithm == "DreamerV3":
                     # Save Dreamer state
