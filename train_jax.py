@@ -42,7 +42,7 @@ from typing import NamedTuple
 
 from src.environment.jax_env.config_loader import load_env_params
 from src.environment.jax_env.wrapper import ParallelEnv
-from src.environment.jax_env.sensor import get_observation
+from src.environment.jax_env.sensor import get_observation, get_observation_breakdown
 from src.environment.jax_env.core import jax_step
 from src.models.jax_models.recurrent_ppo_network import ActorCriticRNN
 from src.models.jax_models.recurrent_ppo_trainer import train_iteration
@@ -248,18 +248,48 @@ def main():
         # Log source code
         wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py"))
 
-    # 3. Print Summary
+    # 3. Print Summary (matching train.py format)
     if not args.quiet:
-        print(f"\n{'='*60}")
-        print(f"JAX Training: {algorithm}")
-        print(f"{'='*60}")
-        print(f"Grid: {params.height}x{params.width}")
-        print(f"Total Timesteps: {total_timesteps:,}")
-        print(f"Parallel Envs: {num_envs}")
-        print(f"Steps/Iter: {num_steps}")
-        print(f"Results: {results_dir}")
-        print(f"WandB: {'Enabled' if wandb_enabled else 'Disabled'}")
-        print(f"{'='*60}\n")
+        width = 60
+        header = " JAX/FLAX RL CONFIGURATION "
+        print("\n" + "=" * width)
+        print(header.center(width, "="))
+        print("=" * width)
+        
+        def print_section(title, data):
+            print(f"\n[{title}]")
+            for k, value in data.items():
+                print(f"  \u25cf {k:.<25} {value}")
+        
+        # Environment Section
+        with_satiation = config.get_mandatory('body.with_satiation')
+        with_injury = config.get_mandatory('body.with_injury')
+        use_homeostatic_reward = config.get_mandatory('body.use_homeostatic_reward')
+        
+        env_data = {
+            "Grid Size": f"{params.height}x{params.width}",
+            "Max Steps": env_max_steps,
+            "Mode": "Interoceptive (Homeostasis)" if with_satiation else "Conventional (Goal-driven)",
+        }
+        if with_satiation:
+            env_data["Reward Logic"] = "Homeostatic (Drive Reduction)" if use_homeostatic_reward else "Survival Step"
+        if with_injury:
+            env_data["Injury System"] = "ENABLED"
+        print_section("Environment", env_data)
+        
+        # Training Section
+        train_data = {
+            "Framework": "JAX/Flax NNX",
+            "Total Timesteps": f"{total_timesteps:,}",
+            "Parallel Envs": num_envs,
+            "Steps/Iteration": num_steps,
+            "Seed": seed,
+            "Results": results_dir,
+            "WandB": "Enabled" if wandb_enabled else "Disabled"
+        }
+        print_section("Training", train_data)
+        
+        # Agent Section (populated after model init)
 
     # 5. Training Setup
     # Initialize ParallelEnv
@@ -274,7 +304,23 @@ def main():
     input_dim = obs.shape[-1]
     action_dim = 4  # UP, DOWN, LEFT, RIGHT
 
-    print(f"Observation dim: {input_dim}, Action dim: {action_dim}")
+    # Print Observation Specs (matching train.py)
+    if not args.quiet:
+        print("\n--- RL API Specifications ---")
+        print(f"Action Dim: {action_dim}")
+        
+        # Get detailed dimension breakdown
+        obs_breakdown = get_observation_breakdown(params)
+        breakdown_str = ", ".join([f"{k}={v}" for k, v in obs_breakdown.items()])
+        total_dim = sum(obs_breakdown.values())
+        
+        print(f"Observation Dim: {total_dim} ({breakdown_str})")
+        print(f"Dimension Breakdown:")
+        for sensor_name, dim in obs_breakdown.items():
+            print(f"  {sensor_name:.<20} {dim}")
+        print(f"Hidden Size: {hidden_size}")
+        print(f"Learning Rate: {lr}")
+        print("--------------------------------------------\n")
     
     # 6. Algorithm Initialization
     if algorithm == "RecurrentPPO":
@@ -348,10 +394,20 @@ def main():
     global_step = 0
     iteration = 0
     
-    # Episode Metrics Tracking
+    # Episode Metrics Tracking (Per-Environment Episode Depth)
     episode_returns = np.zeros(num_envs, dtype=np.float32)
     episode_lengths = np.zeros(num_envs, dtype=np.int32)
-    completed_episodes = 0
+    
+    # Per-environment episode counters (how many episodes each env has completed)
+    env_episode_counts = np.zeros(num_envs, dtype=np.int32)
+    
+    # Buffer for completed episodes at each depth: {episode_depth: {'rewards': [...], 'steps': [...]}}
+    episode_depth_buffer = {}
+    
+    # Track the current "synchronized episode" (minimum across all envs, logged to WandB)
+    logged_episode_depth = 0
+    
+    # Legacy buffer for running mean (used in progress bar postfix)
     ep_info_buffer = deque(maxlen=100)
     
     start_time = datetime.now()
@@ -388,23 +444,46 @@ def main():
                     if np.any(dones_t):
                         for i in range(num_envs):
                             if dones_t[i]:
-                                completed_episodes += 1
-                                ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
+                                # Increment this environment's episode count
+                                env_episode_counts[i] += 1
+                                current_depth = int(env_episode_counts[i])
                                 
-                                # Log episode metrics to WandB (Consistent with train.py)
-                                if wandb_enabled:
-                                    wandb.log({
-                                        "Episode/Reward": float(episode_returns[i]),
-                                        "Episode/Reward_Mean": np.mean([ep['r'] for ep in ep_info_buffer]),
-                                        "Episode/Steps": int(episode_lengths[i]),
-                                        "Episode/Steps_Mean": np.mean([ep['l'] for ep in ep_info_buffer]),
-                                        "Episode/Number": completed_episodes,
-                                        "timesteps": global_step # Use current global_step or more precise? global_step is at end of iter
-                                    })
+                                # Store in buffer for this depth
+                                if current_depth not in episode_depth_buffer:
+                                    episode_depth_buffer[current_depth] = {'rewards': [], 'steps': []}
+                                episode_depth_buffer[current_depth]['rewards'].append(episode_returns[i])
+                                episode_depth_buffer[current_depth]['steps'].append(episode_lengths[i])
+                                
+                                # Also add to legacy buffer for progress bar
+                                ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
                                 
                                 # Reset per-env buffers
                                 episode_returns[i] = 0.0
                                 episode_lengths[i] = 0
+                                
+                                # Check if all environments have reached a new synchronized depth
+                                min_depth = int(np.min(env_episode_counts))
+                                while logged_episode_depth < min_depth:
+                                    logged_episode_depth += 1
+                                    depth = logged_episode_depth
+                                    
+                                    # Calculate averaged metrics for this depth
+                                    if depth in episode_depth_buffer:
+                                        avg_reward = np.mean(episode_depth_buffer[depth]['rewards'])
+                                        avg_steps = np.mean(episode_depth_buffer[depth]['steps'])
+                                        
+                                        # Log to WandB with episode depth as X-axis
+                                        if wandb_enabled:
+                                            wandb.log({
+                                                "Episode/Reward": float(avg_reward),
+                                                "Episode/Steps": float(avg_steps),
+                                                "Episode/Number": depth,
+                                                "timesteps": global_step
+                                            })
+                                        
+                                        # Optional: Clear buffer for this depth to save memory
+                                        del episode_depth_buffer[depth]
+
                 
                 # Update PPO Loss Metrics
                 avg_policy_loss = jnp.mean(jnp.array([l[1][0] for l in losses]))
@@ -473,26 +552,47 @@ def main():
                 # Check for completions
                 dones = done_np.astype(bool)
                 if np.any(dones):
-                    # For Dreamer (step-based update), we only increment the discrete completed_episodes counter here.
-                    # The progress bar is handled continuously above using fractional increments.
                     for i in range(num_envs):
                         if dones[i]:
-                            completed_episodes += 1
+                            # Increment this environment's episode count
+                            env_episode_counts[i] += 1
+                            current_depth = int(env_episode_counts[i])
+                            
+                            # Store in buffer for this depth
+                            if current_depth not in episode_depth_buffer:
+                                episode_depth_buffer[current_depth] = {'rewards': [], 'steps': []}
+                            episode_depth_buffer[current_depth]['rewards'].append(episode_returns[i])
+                            episode_depth_buffer[current_depth]['steps'].append(episode_lengths[i])
+                            
+                            # Also add to legacy buffer for progress bar
                             ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
                             
-                            if len(ep_info_buffer) > 0 and completed_episodes % 5 == 0:
-                                mean_rew = np.mean([ep['r'] for ep in ep_info_buffer])
-                                mean_len = np.mean([ep['l'] for ep in ep_info_buffer])
-                                
-                                if wandb_enabled:
-                                    wandb.log({
-                                        "Episode/Reward_Mean": mean_rew,
-                                        "Episode/Steps_Mean": mean_len,
-                                        "Episode/Number": completed_episodes
-                                    }, step=global_step)
-
+                            # Reset per-env buffers
                             episode_returns[i] = 0.0
                             episode_lengths[i] = 0
+                            
+                            # Check if all environments have reached a new synchronized depth
+                            min_depth = int(np.min(env_episode_counts))
+                            while logged_episode_depth < min_depth:
+                                logged_episode_depth += 1
+                                depth = logged_episode_depth
+                                
+                                # Calculate averaged metrics for this depth
+                                if depth in episode_depth_buffer:
+                                    avg_reward = np.mean(episode_depth_buffer[depth]['rewards'])
+                                    avg_steps = np.mean(episode_depth_buffer[depth]['steps'])
+                                    
+                                    # Log to WandB with episode depth as X-axis
+                                    if wandb_enabled:
+                                        wandb.log({
+                                            "Episode/Reward": float(avg_reward),
+                                            "Episode/Steps": float(avg_steps),
+                                            "Episode/Number": depth,
+                                            "timesteps": global_step
+                                        })
+                                    
+                                    # Clear buffer for this depth to save memory
+                                    del episode_depth_buffer[depth]
                 
                 # Train Step
                 metrics = {}

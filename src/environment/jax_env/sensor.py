@@ -85,3 +85,26 @@ def get_observation(state: EnvState, params: EnvParams):
     
     # Concatenate all
     return jnp.concatenate([chem_obs, coll_obs, loc_obs, intero_obs])
+
+def get_observation_breakdown(params: EnvParams):
+    """Returns a dict of {sensor_name: dimension} for observation components."""
+    # Component dimensions based on sensor.py logic:
+    # 1. Chemical: vector_size from resource properties
+    chem_dim = int(params.res_property.shape[-1])
+    
+    # 2. Collision: sensor_range * 8 rays
+    coll_dim = int(params.sensor_range) * 8
+    
+    # 3. Location: 2 (normalized row, col)
+    loc_dim = 2
+    
+    # 4. Interoception: 2 (satiation, injury)
+    intero_dim = 2
+    
+    return {
+        "Chemical": chem_dim,
+        "Collision": coll_dim,
+        "Location": loc_dim,
+        "Interoception": intero_dim
+    }
+
