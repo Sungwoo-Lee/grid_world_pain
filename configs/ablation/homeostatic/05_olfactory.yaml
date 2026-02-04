@@ -1,6 +1,28 @@
-# Level 05: Homeostasis (Homeostatic + Olfactory)
+# Level 05: Olfactory (Homeostatic - Smooth Injury + Satiation)
 environment:
-  prob_switch_to_danger: 0.0
+  height: 4
+  width: 4
+  start_pos: [0, 0]
+  max_steps: 200
+  eat_action_enabled: true
+  rest_action_enabled: true
+  resources:
+    - name: "Food Source"
+      type: "food"
+      count: 1
+      spawn_area: [[3, 3], [3, 3]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      regeneration_delay: 0
+      damage: 0.0
+    - name: "Danger Zone"
+      type: "danger"
+      count: 1
+      spawn_area: [[0, 3], [0, 3]]
+      properties: [0.0, 1.0, 0.0, 0.0, 0.0]
+      damage: 1.0
+      max_consumption: -1
+      regeneration_delay: 0
 
 body:
   with_satiation: true
@@ -9,12 +31,16 @@ body:
 
 sensory:
   using_sensory: true
+  nociception_enabled: true
   olfactory_enabled: true
   proprioception_enabled: false
   collision_sensor_enabled: false
   location_sensor: false
-  nociception_enabled: true
 
 predator:
   enabled: true
+  move_interval: 3
   damage: 3.0
+  start_pos: [3, 0]
+  random_start_pos: true
+  property: [0.0, 1.0, 0.0, 0.0, 0.0]

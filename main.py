@@ -49,22 +49,29 @@ def main():
 
     args = parser.parse_args()
 
-    # Load default config
+    # 1. Start with Base Config (Environment Defaults)
     config = get_default_config()
 
-    # Merge user config if provided
-    if args.config:
-        print(f"Loading main config from: {args.config}")
-        user_config = Config.load_yaml(args.config)
-        config.merge(user_config)
+    # 2. Merge Training Defaults
+    train_config_path = os.path.join(os.path.dirname(__file__), "configs", "train", "default.yaml")
+    if os.path.exists(train_config_path):
+        train_defaults = Config.load_yaml(train_config_path)
+        config.merge(train_defaults)
+        print(f"Loaded training defaults from {train_config_path}")
 
-    # Load Visualization Config Early
+    # 3. Merge Visualization Defaults
     viz_config_path = os.path.join(os.path.dirname(__file__), "configs", "visualization", "visualization.yaml")
     if os.path.exists(viz_config_path):
         with open(viz_config_path, 'r') as f:
             viz_dict = yaml.safe_load(f)
             config.merge(viz_dict)
             print(f"Merged visualization settings from {viz_config_path}")
+
+    # 4. Merge User / Ablation Config (Overrides everything)
+    if args.config:
+        print(f"Loading user/ablation config from: {args.config}")
+        user_config = Config.load_yaml(args.config)
+        config.merge(user_config)
 
     # Resolve Parameters (Argument > Config > Error)
     def resolve_param(arg_val, config_key, type_converter=None):
@@ -96,7 +103,7 @@ def main():
         overeating_death = False
         config.set('body.overeating_death', False)
 
-    # Extract Body Params (Mandatory regardless of flags to ensure strictness)
+    # Extract Body Params
     max_satiation = config.get_mandatory('body.max_satiation', int)
     start_satiation = config.get_mandatory('body.start_satiation', int)
     random_start_satiation = config.get_mandatory('body.random_start_satiation')
@@ -126,7 +133,6 @@ def main():
         predator_random_start_pos = config.get_mandatory('predator.random_start_pos', bool)
         predator_property = config.get_mandatory('predator.property')
     else:
-        # Defaults for disabled state (not used by GridWorld if enabled=False)
         predator_move_interval = 2
         predator_damage = 0.0
         predator_start_pos = (0, 0)
@@ -169,7 +175,8 @@ def main():
         predator_start_pos=predator_start_pos,
         predator_random_start_pos=predator_random_start_pos,
         predator_property=predator_property,
-        injury_smoothing_duration=injury_smoothing_duration
+        injury_smoothing_duration=injury_smoothing_duration,
+        vector_size=vector_size
     )
     
     # Get action dimension from environment spec (dynamic based on eat/rest config)

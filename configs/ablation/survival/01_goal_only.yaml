@@ -1,11 +1,20 @@
 # Level 01: Goal Only
 environment:
+  height: 4
+  width: 4
+  start_pos: [0, 0]
   max_steps: 50
-  prob_switch_to_danger: 0.0
-  prob_switch_to_food: 1.0 # Static Food
-  relocate_resource: false
   eat_action_enabled: false
   rest_action_enabled: false
+  resources:
+    - name: "Goal (Food)"
+      type: "food"
+      count: 1
+      spawn_area: [[3, 3], [3, 3]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      regeneration_delay: 0
+      damage: 0.0
 
 body:
   with_satiation: false
