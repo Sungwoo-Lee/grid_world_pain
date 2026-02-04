@@ -19,6 +19,11 @@ Arguments:
 - `--checkpoint-frequency <int>`: Save frequency (as % of total).
 - `--results-dir <path>`: Custom results directory.
 
+GPU Memory Management:
+- Set `XLA_PYTHON_CLIENT_PREALLOCATE=false` to prevent JAX from taking 90% VRAM per process.
+- Use `CUDA_VISIBLE_DEVICES` to isolate processes on specific GPUs.
+- Example: `XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=0 python train_jax.py ...`
+
 Usage:
     python train_jax.py --config configs/ablation/homeostatic/04_nociception.yaml --total-timesteps 100000
 """
@@ -91,6 +96,7 @@ def main():
     parser.add_argument("--checkpoint-frequency", type=int, default=25, help="Checkpoint save frequency (% of total)")
     parser.add_argument("--results-dir", type=str, help="Custom results directory")
     parser.add_argument("--tag", type=str, help="Tag for the training run")
+    parser.add_argument("--debug", action="store_true", help="Show verbose step-by-step progress logging")
     
     args = parser.parse_args()
 
@@ -114,8 +120,11 @@ def main():
     user_config = Config.load_yaml(args.config)
     config.merge(user_config)
 
-    # Load JAX EnvParams
+    if args.debug:
+        print(f"DEBUG: Loading JAX EnvParams from {args.config}...", flush=True)
     params = load_env_params(args.config)
+    if args.debug:
+        print("DEBUG: JAX EnvParams loaded.", flush=True)
 
     # 2. Setup Results Directory
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -130,7 +139,6 @@ def main():
     os.makedirs(models_dir, exist_ok=True)
     
     # Orbax Setup (New API)
-    # Use StandardCheckpointer which handles common JAX types including NNX states
     checkpointer = ocp.CheckpointManager(
         os.path.abspath(models_dir),
         checkpointers=ocp.StandardCheckpointer(),
@@ -254,8 +262,12 @@ def main():
             'batch_length': config.get('batch_length', 16), # Horizon
         }
         
+        if args.debug:
+            print("DEBUG: Initializing DreamerTrainer...", flush=True)
         key, init_key = jax.random.split(key)
         trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=nnx.Rngs(init_key))
+        if args.debug:
+            print("DEBUG: DreamerTrainer initialized.", flush=True)
         
         buffer = ReplayBuffer(
             capacity=int(1e5), 
@@ -271,6 +283,8 @@ def main():
         # trainer.get_action expects (B, O).
         dreamer_state = None # Will be init on first call
         
+    if args.debug:
+        print(f"DEBUG: Entering Training Loop ({args.num_steps} iterations)...", flush=True)
     # 7. Training Loop
     global_step = 0
     iteration = 0
@@ -313,7 +327,7 @@ def main():
                         "timesteps": global_step,
                         "iteration": iteration
                     })
-                    print(f"Iter {iteration} | Step {global_step} | Loss: {total_loss:.4f}")
+                print(f"Iter {iteration} | Step {global_step} | Loss: {total_loss:.4f}", flush=True)
                     
             elif args.algorithm == "DreamerV3":
                 # Dreamer Iteration (Step-based loop inside, or we do generic loop)
@@ -328,6 +342,8 @@ def main():
                 # Let's train 1 batch per env step.
                 
                 # 1. Action Selection
+                if args.debug:
+                    print(f"DEBUG: Iter {iteration}/{args.num_steps} | Step {global_step} - Selecting Action...", end="\r", flush=True)
                 obs_arr = jax.vmap(get_observation, in_axes=(0, None))(env_state, params) # (B, 33)
                 
                 # get_action uses JAX, we pass JAX array
@@ -358,7 +374,8 @@ def main():
                 # Check Debug print above
                 
                 # Vmap step
-                # Use lambda to be safe about arguments
+                if args.debug:
+                    print(f"DEBUG: Iter {iteration}/{args.num_steps} | Step {global_step} - Stepping Env...", end="\r", flush=True)
                 step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
                 next_env_state, reward, done, info = step_fn(env_state, action_idx)
                 
@@ -403,7 +420,6 @@ def main():
                 # So next_env_state is valid start of new episode.
                 
                 env_state = next_env_state
-                env_state = next_env_state
                 global_step += args.num_envs
                 
                 # --- Episode Metric Tracking ---
@@ -446,15 +462,10 @@ def main():
                 loss_msg = ""
                 # Train only if buffer has enough data
                 if buffer.size > dreamer_config['batch_size'] * 2:
-                    if iteration % 10 == 0:
-                        print(f"DEBUG: iteration {iteration}, buffer size {buffer.size}, sampling...")
-                    batch_np = buffer.sample(dreamer_config['batch_size'])
-                    batch_jax = jax.tree.map(jnp.array, batch_np)
-                    
-                    if iteration % 10 == 0:
-                        print(f"DEBUG: calling train_step with batch keys {batch_jax.keys()}")
-                    
-                    metrics, loss_msg = trainer.train_step(batch_jax, key)
+                    if args.debug:
+                        print(f"DEBUG: Iter {iteration}/{args.num_steps} | Step {global_step} - Updating Models...", end="\r", flush=True)
+                    metrics = trainer.train_step(batch_jax, key)
+                    loss_msg = f"| Loss: {metrics.get('loss_model', 0):.2f}"
                 
                 # Log
                 if wandb_enabled and iteration % 10 == 0:
@@ -464,8 +475,10 @@ def main():
                         **metrics
                     })
                 
-                if iteration % 100 == 0:
-                     print(f"Iter {iteration} | Step {global_step} {loss_msg}")
+                if iteration % 1 == 0:
+                     print(f"Iter {iteration}/{args.num_steps} | Step {global_step} {loss_msg}", flush=True)
+                else:
+                     print(f"Iter {iteration} | Step {global_step}", end="\r", flush=True)
 
             # Checkpoint
             checkpoint_interval = args.checkpoint_frequency

@@ -228,6 +228,8 @@ class DreamerTrainer(nnx.Module):
                 
                 # Predictions (using updated WM heads but static target critic)
                 rew = from_twohot(self.agent.wm.reward_head(next_feat))
+                # CRITICAL: Squeeze -1 is required to keep 'cont' at shape (B,) 
+                # Preventing broadcasting to (B,B) in returns calculation
                 cont = nnx.sigmoid(self.agent.wm.continue_head(next_feat)).squeeze(-1)
                 val = from_twohot(self.target_critic(next_feat))
                 

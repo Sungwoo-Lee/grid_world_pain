@@ -89,7 +89,8 @@ class RSSM(nnx.Module):
     def step(self, prev_state, embed, action, is_first, key):
         # Single step transition
         # Mask state if first step
-        # is_first: (B,) or (B, 1) -> (B, 1)
+        # CRITICAL: Use .reshape((-1, 1)) to be robust to is_first shape (B,) or (B, 1)
+        # Failure to reshape causes broadcasting that results in Rank-3 states.
         mask = (1.0 - is_first).astype(jnp.float32).reshape((-1, 1))
         deter = prev_state['deter'] * mask
         stoch = prev_state['stoch'] * mask
