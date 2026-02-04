@@ -27,6 +27,7 @@ import argparse
 import yaml
 import numpy as np
 from datetime import datetime
+from collections import deque
 import jax
 import jax.numpy as jnp
 import optax
@@ -128,9 +129,13 @@ def main():
     models_dir = os.path.join(results_dir, "models")
     os.makedirs(models_dir, exist_ok=True)
     
-    # Orbax Setup
-    options = ocp.CheckpointManagerOptions(max_to_keep=5, create=True)
-    checkpointer = ocp.CheckpointManager(os.path.abspath(models_dir), ocp.PyTreeCheckpointer(), options=options)
+    # Orbax Setup (New API)
+    # Use StandardCheckpointer which handles common JAX types including NNX states
+    checkpointer = ocp.CheckpointManager(
+        os.path.abspath(models_dir),
+        checkpointers=ocp.StandardCheckpointer(),
+        options=ocp.CheckpointManagerOptions(max_to_keep=5, create=True)
+    )
 
     # Save config
     config_save_path = os.path.join(models_dir, "config.yaml")
@@ -270,6 +275,12 @@ def main():
     global_step = 0
     iteration = 0
     
+    # Episode Metrics Tracking (Vectorized for Parallel Envs)
+    episode_returns = np.zeros(args.num_envs, dtype=np.float32)
+    episode_lengths = np.zeros(args.num_envs, dtype=np.int32)
+    completed_episodes = 0
+    ep_info_buffer = deque(maxlen=100)
+    
     start_time = datetime.now()
     
     try:
@@ -392,22 +403,58 @@ def main():
                 # So next_env_state is valid start of new episode.
                 
                 env_state = next_env_state
+                env_state = next_env_state
                 global_step += args.num_envs
+                
+                # --- Episode Metric Tracking ---
+                # Update counters
+                episode_returns += rew_np
+                episode_lengths += 1
+                
+                # Check for completions
+                dones = done_np.astype(bool)
+                if np.any(dones):
+                    for i in range(args.num_envs):
+                        if dones[i]:
+                            completed_episodes += 1
+                            # Add to buffer
+                            ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
+                            
+                            # Log aggregated stats if buffer is full enough or occasional
+                            if len(ep_info_buffer) > 0 and completed_episodes % 5 == 0:
+                                mean_rew = np.mean([ep['r'] for ep in ep_info_buffer])
+                                mean_len = np.mean([ep['l'] for ep in ep_info_buffer])
+                                
+                                if wandb_enabled:
+                                    wandb.log({
+                                        "Episode/Reward_Mean": mean_rew,
+                                        "Episode/Steps_Mean": mean_len,
+                                        "Episode/Number": completed_episodes
+                                    }, step=global_step)
+                                
+                                # Log to console occasionally
+                                if completed_episodes % 10 == 0:
+                                    print(f"Episode {completed_episodes} | Mean Reward: {mean_rew:.2f} | Mean Steps: {mean_len:.1f}")
+
+                            # Reset
+                            episode_returns[i] = 0.0
+                            episode_lengths[i] = 0
+                # -------------------------------
                 
                 # 4. Train Step
                 metrics = {}
                 loss_msg = ""
                 # Train only if buffer has enough data
-                if buffer.size > dreamer_config['batch_size'] * dreamer_config['batch_length'] and global_step > 1000:
-                    train_key = jax.random.split(key)[0] # Split?
-                    # Sample batch
+                if buffer.size > dreamer_config['batch_size'] * 2:
+                    if iteration % 10 == 0:
+                        print(f"DEBUG: iteration {iteration}, buffer size {buffer.size}, sampling...")
                     batch_np = buffer.sample(dreamer_config['batch_size'])
-                    # To JAX
-                    batch_jax = {k: jnp.array(v) for k, v in batch_np.items()}
+                    batch_jax = jax.tree.map(jnp.array, batch_np)
                     
-                    # Train
-                    metrics = trainer.train_step(batch_jax, train_key)
-                    loss_msg = f"| M_Loss: {metrics.get('loss_model', 0):.2f} | A_Loss: {metrics.get('loss_actor', 0):.2f}"
+                    if iteration % 10 == 0:
+                        print(f"DEBUG: calling train_step with batch keys {batch_jax.keys()}")
+                    
+                    metrics, loss_msg = trainer.train_step(batch_jax, key)
                 
                 # Log
                 if wandb_enabled and iteration % 10 == 0:
@@ -451,7 +498,7 @@ def main():
                          'step': global_step
                     }
                 
-                checkpointer.save(iteration, ckpt_data)
+                checkpointer.save(iteration, args=ocp.args.StandardSave(ckpt_data))
 
     except KeyboardInterrupt:
         print("\nTraining interrupted by user.")
@@ -459,7 +506,7 @@ def main():
     print(f"Training complete. Results saved to {results_dir}")
 
     # 7. Save Final Model
-    checkpointer.save(iteration, ckpt_data)
+    checkpointer.save(iteration, args=ocp.args.StandardSave(ckpt_data))
     print(f"\nTraining complete! Final model saved to: {models_dir}")
 
     if wandb_enabled:

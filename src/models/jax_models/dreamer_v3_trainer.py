@@ -137,25 +137,26 @@ class DreamerTrainer(nnx.Module):
         B, T, _ = obs.shape
         
         # --- 1. World Model Learning ---
-        def model_loss_fn(wm):
+        def model_loss_fn(wm, rng):
             # Unroll RSSM using scan
             def scan_step(prev_state, inputs):
                 o, a, f, k = inputs
                 embed = wm.encoder(o)
-                # Note: wm context (self.agent.wm) is passed as 'wm' argument by nnx.grad
                 post, prior = wm.rssm.step(prev_state, embed, a, f, k)
                 return post, (post, prior, embed)
                 
             init_state = wm.rssm.initial(B)
             rng, scan_rng = random.split(rng)
-            # Scan RNGs: We need (T, B, 2) after swap, so generate (B, T, 2)
-            scan_rngs = random.split(scan_rng, B * T).reshape(B, T, 2)
+            scan_rngs = random.split(scan_rng, T)
             
             inputs = (obs, action, is_first, scan_rngs)
             
-            # Transpose for scan
-            inputs_T = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), inputs)
+            # Transpose only the batched inputs (obs, action, is_first)
+            env_inputs = (obs, action, is_first)
+            env_inputs_T = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), env_inputs)
             
+            inputs_T = (*env_inputs_T, scan_rngs)
+
             _, (posts_T, priors_T, embeds_T) = jax.lax.scan(scan_step, init_state, inputs_T)
             
             posts = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), posts_T)
@@ -207,30 +208,27 @@ class DreamerTrainer(nnx.Module):
             }
             return total_loss, (metrics, posts)
 
-        grads_model, (model_metrics, posts) = nnx.grad(model_loss_fn, has_aux=True)(self.agent.wm)
-        self.model_opt.update(grads_model)
+        grads_model, (model_metrics, posts) = nnx.grad(model_loss_fn, has_aux=True)(self.agent.wm, rng)
+        self.model_opt.update(self.agent.wm, grads_model)
         
         # --- 2. Behavior Learning (Imagination) ---
         start_state = jax.tree.map(lambda x: x.reshape((-1,) + x.shape[2:]), posts)
         start_state = jax.lax.stop_gradient(start_state)
         
-        def behavior_loss_fn(actor, critic):
+        def behavior_loss_fn(actor, critic, rng):
             # Rollout
             def scan_imag(prev_state, key):
-                feat = self.agent.wm.get_feat(prev_state) # Use WorldModel from self (frozen here effectively?)
-                # Actually, self.agent.wm was updated above. It has new params.
-                
+                feat = self.agent.wm.get_feat(prev_state)
                 actor_out = actor(feat)
                 dist = OneHotDist(actor_out)
                 action = dist.sample(key)
-                
                 prior = self.agent.wm.rssm.imagine_step(prev_state, action, key)
                 
                 next_feat = self.agent.wm.get_feat(prior)
                 
-                # Predictions (using updated WM)
+                # Predictions (using updated WM heads but static target critic)
                 rew = from_twohot(self.agent.wm.reward_head(next_feat))
-                cont = nnx.sigmoid(self.agent.wm.continue_head(next_feat))
+                cont = nnx.sigmoid(self.agent.wm.continue_head(next_feat)).squeeze(-1)
                 val = from_twohot(self.target_critic(next_feat))
                 
                 step_info = {'reward': rew, 'continue': cont, 'value': val, 'feat': feat, 'action_dist': actor_out, 'action': action}
@@ -250,12 +248,12 @@ class DreamerTrainer(nnx.Module):
             
             lambda_returns = compute_lambda_values(rews, all_vals, conts)
             
-            # Critic
+            # Critic Loss
             v_pred_logits = critic(rollouts['feat'])
             target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns))
             loss_critic = -jnp.mean(jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1))
             
-            # Actor
+            # Actor Loss
             baseline = from_twohot(v_pred_logits)
             advantage = jax.lax.stop_gradient(lambda_returns - baseline)
             advantage = (advantage - jnp.mean(advantage)) / (jnp.std(advantage) + 1e-8)
@@ -270,17 +268,23 @@ class DreamerTrainer(nnx.Module):
             loss_actor_ent = -3e-4 * jnp.mean(entropy)
             loss_actor = loss_actor_policy + loss_actor_ent
             
-            metrics = {'loss_critic': loss_critic, 'loss_actor': loss_actor, 'mean_return': jnp.mean(lambda_returns)}
-            return (loss_actor, loss_critic), metrics
+            metrics = {
+                'loss_critic': loss_critic, 
+                'loss_actor': loss_actor, 
+                'mean_return': jnp.mean(lambda_returns),
+                'mean_advantage': jnp.mean(advantage)
+            }
+            return (loss_actor + loss_critic), metrics
 
         grads_ac, behavior_metrics = nnx.grad(behavior_loss_fn, argnums=(0,1), has_aux=True)(
             self.agent.ac.actor,
-            self.agent.ac.critic
+            self.agent.ac.critic,
+            rng
         )
         
         grads_actor, grads_critic = grads_ac
-        self.actor_opt.update(grads_actor)
-        self.critic_opt.update(grads_critic)
+        self.actor_opt.update(self.agent.ac.actor, grads_actor)
+        self.critic_opt.update(self.agent.ac.critic, grads_critic)
         
         # EMA Update
         current_st = nnx.state(self.agent.ac.critic, nnx.Param)

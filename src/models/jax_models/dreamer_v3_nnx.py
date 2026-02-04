@@ -67,7 +67,8 @@ class RSSM(nnx.Module):
         return {
             'deter': jnp.zeros((batch_size, self.deter_dim)),
             'stoch': jnp.zeros((batch_size, self.stoch_dim * self.discrete)), # One-hot flat
-            'logits': jnp.zeros((batch_size, self.stoch_dim * self.discrete))
+            'logits': jnp.zeros((batch_size, self.stoch_dim, self.discrete)),
+            'prev_action': jnp.zeros((batch_size, self.action_dim))
         }
 
     def observe(self, embed, action, is_first, state=None, rngs: nnx.Rngs = None):
@@ -88,8 +89,8 @@ class RSSM(nnx.Module):
     def step(self, prev_state, embed, action, is_first, key):
         # Single step transition
         # Mask state if first step
-        # is_first: (B, 1)
-        mask = (1.0 - is_first).astype(jnp.float32)
+        # is_first: (B,) or (B, 1) -> (B, 1)
+        mask = (1.0 - is_first).astype(jnp.float32).reshape((-1, 1))
         deter = prev_state['deter'] * mask
         stoch = prev_state['stoch'] * mask
         
@@ -117,8 +118,8 @@ class RSSM(nnx.Module):
         stoch = dist.sample(key) # (B, S, D)
         stoch = stoch.reshape(stoch.shape[:-2] + (-1,)) # Flatten
         
-        post = {'deter': deter, 'stoch': stoch, 'logits': post_logits}
-        prior = {'deter': deter, 'stoch': None, 'logits': prior_logits} # Stoch sampled later if needed
+        post = {'deter': deter, 'stoch': stoch, 'logits': post_logits, 'prev_action': action}
+        prior = {'deter': deter, 'stoch': None, 'logits': prior_logits, 'prev_action': action} # Stoch sampled later if needed
         
         return post, prior
 
@@ -139,7 +140,7 @@ class RSSM(nnx.Module):
         stoch = dist.sample(key)
         stoch = stoch.reshape(stoch.shape[:-2] + (-1,))
         
-        prior = {'deter': deter, 'stoch': stoch, 'logits': prior_logits}
+        prior = {'deter': deter, 'stoch': stoch, 'logits': prior_logits, 'prev_action': action}
         return prior
 
 class Encoder(nnx.Module):
