@@ -7,6 +7,19 @@ environment:
   eat_action_enabled: false
   rest_action_enabled: false
   resources: []
+  predator_enabled: true
+  predators:
+    - name: "Survival Predator"
+      count: 1
+      property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      move_interval: 2
+      damage: 100.0
+      spawn_area: [[3, 3], [3, 3]]
+      patrol_area: [[0, 0], [4, 4]]
+      detection_range: 10
+      max_stamina: 500
+      stamina_recovery_rate: 1.0
+      hunt_stamina_threshold: 0.0
 
 body:
   with_satiation: false
@@ -15,11 +28,3 @@ body:
 
 sensory:
   using_sensory: false
-
-predator:
-  enabled: true
-  move_interval: 2
-  damage: 100.0
-  start_pos: [3, 3]
-  random_start_pos: false
-  property: [0.0, 1.0, 0.0, 0.0, 0.0]
