@@ -58,9 +58,29 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         
         def get_sensory_viz(obs_vec):
             # Internal helper to slice flat obs into renderer-friendly format
+            ptr = 0
+            
+            chem_end = ptr + breakdown['Chemical']
+            chem_vec = obs_vec[ptr:chem_end]
+            ptr = chem_end
+            
+            noc_end = ptr + breakdown['Extero Nociception']
+            noc_val = float(obs_vec[ptr]) if breakdown['Extero Nociception'] > 0 else 0.0
+            ptr = noc_end
+            
+            coll_end = ptr + breakdown['Collision']
+            coll_vec = obs_vec[ptr:coll_end]
+            ptr = coll_end
+            
+            loc_end = ptr + breakdown['Location']
+            loc_vec = obs_vec[ptr:loc_end]
+            ptr = loc_end
+            
             viz = [
-                {'name': 'Chemical', 'vector': obs_vec[0:breakdown['Chemical']], 'color': '#40C057', 'type': 'spectrum'},
-                {'name': 'Collision', 'vector': obs_vec[breakdown['Chemical']:breakdown['Chemical']+breakdown['Collision']], 'color': '#FA5252', 'type': 'radial'}
+                {'name': 'Olfactory', 'vector': chem_vec, 'type': 'spectrum'},
+                {'name': 'Extero Nociception', 'intensity': noc_val, 'color': '#c0392b', 'type': 'intensity'},
+                {'name': 'Collision', 'vector': coll_vec, 'color': '#e67e22', 'type': 'radial'},
+                {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'}
             ]
             return viz
 

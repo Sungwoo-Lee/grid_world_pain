@@ -61,6 +61,20 @@ def sense_location(agent_pos, height, width):
     norm_c = (agent_pos[1] / (width - 1)) * 2 - 1
     return jnp.array([norm_r, norm_c])
 
+def sense_extero_nociception(agent_pos, res_pos, res_active, res_type):
+    """Phasic Nociceptor: Detects immediate contact with danger resources."""
+    # res_type 0=food, 1=danger
+    is_danger = (res_type == 1)
+    # Contact check: dist == 0 (expressed as dist < 0.1 for safety on grid)
+    diff = res_pos - agent_pos
+    dist = jnp.linalg.norm(diff, axis=-1)
+    
+    # Active danger on current cell
+    contact = jnp.logical_and(jnp.logical_and(res_active, is_danger), dist < 0.1)
+    # Result is 1.0 if any danger contact
+    activated = jnp.any(contact).astype(jnp.float32)
+    return jnp.array([activated])
+
 def get_observation(state: EnvState, params: EnvParams):
     """Assembles the full observation vector."""
     # 1. Chemical Sensor
@@ -69,22 +83,27 @@ def get_observation(state: EnvState, params: EnvParams):
         radius=params.sensor_radius, decay_power=params.sensor_decay
     )
     
-    # 2. Collision
+    # 2. Extero Nociception (Phasic)
+    noc_obs = sense_extero_nociception(
+        state.agent_pos, state.res_pos, state.res_active, params.res_type
+    )
+    
+    # 3. Collision
     coll_obs = sense_collision(
         state.agent_pos, params.height, params.width, params.sensor_range
     )
     
-    # 3. Location
+    # 4. Location
     loc_obs = sense_location(state.agent_pos, params.height, params.width)
     
-    # 4. Interoception
+    # 5. Interoception
     intero_obs = jnp.array([
         state.satiation / params.max_satiation,
         state.injury_level / params.max_injury
     ])
     
     # Concatenate all
-    return jnp.concatenate([chem_obs, coll_obs, loc_obs, intero_obs])
+    return jnp.concatenate([chem_obs, noc_obs, coll_obs, loc_obs, intero_obs])
 
 def get_observation_breakdown(params: EnvParams):
     """Returns a dict of {sensor_name: dimension} for observation components."""
@@ -92,17 +111,21 @@ def get_observation_breakdown(params: EnvParams):
     # 1. Chemical: vector_size from resource properties
     chem_dim = int(params.res_property.shape[-1])
     
-    # 2. Collision: sensor_range * 8 rays
+    # 2. Extero Nociception: 1 (contact)
+    noc_dim = 1
+    
+    # 3. Collision: sensor_range * 8 rays
     coll_dim = int(params.sensor_range) * 8
     
-    # 3. Location: 2 (normalized row, col)
+    # 4. Location: 2 (normalized row, col)
     loc_dim = 2
     
-    # 4. Interoception: 2 (satiation, injury)
+    # 5. Interoception: 2 (satiation, injury)
     intero_dim = 2
     
     return {
         "Chemical": chem_dim,
+        "Extero Nociception": noc_dim,
         "Collision": coll_dim,
         "Location": loc_dim,
         "Interoception": intero_dim

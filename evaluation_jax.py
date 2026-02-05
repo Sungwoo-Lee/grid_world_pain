@@ -25,8 +25,15 @@ import yaml
 import jax
 import jax.numpy as jnp
 from flax import nnx
+from src.utils.config import Config
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
 
 from src.environment.jax_env.config_loader import load_env_params
+from src.models.jax_models.recurrent_ppo_network import ActorCriticRNN
 from src.environment.jax_env.wrapper import ParallelEnv
 from src.environment.jax_env.core import jax_step, jax_reset
 from src.environment.jax_env.sensor import get_observation

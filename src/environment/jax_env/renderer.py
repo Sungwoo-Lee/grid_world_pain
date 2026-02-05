@@ -302,23 +302,43 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
                            ax_sensory.plot([cx, cx+adx], [cy, cy+ady], color=color, transform=ax_sensory.transAxes, lw=2, alpha=0.9)
                            ax_sensory.add_patch(plt.Circle((cx+adx, cy+ady), 0.015, color=color, transform=ax_sensory.transAxes))
                  ax_sensory.add_patch(plt.Circle((cx, cy), 0.02, color='#868e96', transform=ax_sensory.transAxes))
+
+            elif sensor_type == 'intensity':
+                 # --- INTENSITY (Nociception Orb) ---
+                 intensity = sensor.get('intensity', 0)
+                 orb_r = 0.04
+                 cx, cy = 0.5, y_center
+                 ax_sensory.add_patch(plt.Circle((cx, cy), orb_r, color='#F1F3F5', transform=ax_sensory.transAxes))
+                 if intensity > 0:
+                      fill_c = plt.Circle((cx, cy), orb_r, facecolor=color, alpha=min(1.0, float(intensity)+0.2), transform=ax_sensory.transAxes)
+                      ax_sensory.add_patch(fill_c)
+            
+            elif sensor_type == 'text':
+                 # --- TEXT VALUE (Location) ---
+                 v_txt = sensor.get('value_text', '')
+                 ax_sensory.text(0.5, y_center, v_txt, color=color, fontsize=10, fontweight='bold', ha='center', va='center', transform=ax_sensory.transAxes)
                  
             else:
                  # --- SPECTRUM (Chemical/Olfactory) ---
                  num_ch = len(vector)
                  slot_w, slot_x = 0.7, 0.15
                  bar_h = min(0.08, slot_h * 0.5)
-                 bar_w = slot_w / num_ch
+                 bar_w = slot_w / max(1, num_ch)
                  gap = bar_w * 0.2
                  act_w = bar_w - gap
                  
+                 # PyTorch Palette
+                 palette = ['#40C057', '#FA5252', '#339AF0', '#fab005', '#be4bdb']
+                 
                  for ci in range(num_ch):
-                      val = max(0, min(1.0, vector[ci] / 2.0)) # Normalized for viz
+                      val = max(0, min(1.0, float(vector[ci]) / 2.0))
                       bx = slot_x + ci * bar_w
+                      c = palette[ci % len(palette)]
+                      
                       ax_sensory.add_patch(plt.Rectangle((bx, y_center - bar_h/2), act_w, bar_h, color='#F1F3F5', transform=ax_sensory.transAxes))
                       if val > 0:
                            sh = bar_h * val
-                           ax_sensory.add_patch(plt.Rectangle((bx, y_center - bar_h/2), act_w, sh, color=color, transform=ax_sensory.transAxes))
+                           ax_sensory.add_patch(plt.Rectangle((bx, y_center - bar_h/2), act_w, sh, color=c, transform=ax_sensory.transAxes, alpha=0.9))
 
     # Render to array
     plt.tight_layout()
