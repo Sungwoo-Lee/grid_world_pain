@@ -85,6 +85,8 @@ def load_env_params(config_path: str) -> EnvParams:
         use_homeostatic_reward=body_cfg.get('use_homeostatic_reward', True),
         with_satiation=body_cfg.get('with_satiation', False),
         with_injury=body_cfg.get('with_injury', True),
+        rest_action_enabled=env_cfg.get('rest_action_enabled', True),
+        eat_action_enabled=env_cfg.get('eat_action_enabled', True),
         sensor_radius=sensory_cfg.get('sensor_radius', 10.0),
         sensor_decay=sensory_cfg.get('sensor_decay', 2.0),
         sensor_range=sensory_cfg.get('sensor_range', 3)

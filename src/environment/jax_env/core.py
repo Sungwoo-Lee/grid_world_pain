@@ -188,14 +188,30 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     
     # Food interaction (Action-based or Auto)
     is_food = params.res_type == 0
-    eat_action = 5 
-    eat_triggered = jnp.logical_and(action == eat_action, is_food)
+    
+    # Determine if eat action was triggered based on config
+    eat_action_idx = jnp.where(params.rest_action_enabled, 5, 4)
+    eat_action_triggered = jnp.logical_and(params.eat_action_enabled, action == eat_action_idx)
+    
+    # Auto-eat occurs if eat action is disabled and agent is on food
+    ate_food_auto = jnp.logical_and(jnp.logical_not(params.eat_action_enabled), 
+                                   jnp.logical_and(interact_resource, is_food))
+    
+    # Final 'ate_food' flag (used for satiation and lifecycle)
+    ate_food = jnp.any(jnp.logical_or(
+        ate_food_auto,
+        jnp.logical_and(jnp.logical_and(interact_resource, is_food), eat_action_triggered)
+    ))
+    
+    # Fix eat_triggered for lifecycle update (both auto and action)
+    eat_lifecycle_triggered = jnp.logical_and(interact_resource, is_food)
+    eat_lifecycle_triggered = jnp.logical_and(eat_lifecycle_triggered, 
+                                             jnp.logical_or(jnp.logical_not(params.eat_action_enabled), eat_action_triggered))
     
     # Final interact mask for lifecycle update
-    # Note: Danger is auto-interact, Food is action-interact
     interacted_this_step = jnp.logical_or(
         jnp.logical_and(interact_resource, is_danger),
-        jnp.logical_and(interact_resource, eat_triggered)
+        eat_lifecycle_triggered
     )
     
     # Update Resource Lifecycle (Consumption)
@@ -206,7 +222,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # Set reg timer
     next_reg_timer = jnp.where(should_deactivate, params.res_reg_delay, new_reg_timer)
     
-    ate_food = jnp.any(jnp.logical_and(interact_resource, eat_triggered))
+    # ate_food is already calculated above
     
     # Predator Damage
     at_predator = jnp.all(new_pred_pos == new_agent_pos, axis=-1)
@@ -215,13 +231,21 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     total_damage = damage_res + damage_pred
     
     # 5. Body Update
+    # rested is always action 4 if enabled
+    rested = jnp.logical_and(params.rest_action_enabled, action == 4)
+    
     info = {
         'ate_food': ate_food,
         'damage': total_damage,
-        'rested': action == 4 # REST_ACTION
+        'rested': rested
     }
     
     new_satiation, new_injury, next_injury_buffer, done = update_body(state, info, params)
+    
+    # Max Steps Truncation
+    next_step = state.current_step + 1
+    truncated = next_step >= params.max_steps
+    done = jnp.logical_or(done, truncated)
     
     # 6. Reward (Homeostatic)
     reward = 0.0
@@ -237,7 +261,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # 7. Final State
     new_state = state._replace(
         agent_pos=new_agent_pos,
-        current_step=state.current_step + 1,
+        current_step=next_step,
         res_active=final_active,
         res_reg_timer=next_reg_timer,
         res_cons_count=next_cons_count,

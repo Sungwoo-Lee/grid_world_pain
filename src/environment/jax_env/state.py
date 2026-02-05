@@ -71,6 +71,8 @@ class EnvParams:
     use_homeostatic_reward: bool = struct.field(pytree_node=False)
     with_satiation: bool = struct.field(pytree_node=False)
     with_injury: bool = struct.field(pytree_node=False)
+    rest_action_enabled: bool = struct.field(pytree_node=False)
+    eat_action_enabled: bool = struct.field(pytree_node=False)
     
     # Sensory
     sensor_radius: float

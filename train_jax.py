@@ -302,7 +302,11 @@ def main():
     # Initialize environment states
     env_state, obs = env.reset(env_key, num_envs)
     input_dim = obs.shape[-1]
-    action_dim = 4  # UP, DOWN, LEFT, RIGHT
+    # Calculate action_dim dynamically based on config
+    # 0-3: Directions, 4: Rest (if enabled), 4 or 5: Eat (if enabled)
+    rest_enabled = params.rest_action_enabled
+    eat_enabled = params.eat_action_enabled
+    action_dim = 4 + int(rest_enabled) + int(eat_enabled)
 
     # Print Observation Specs (matching train.py)
     if not args.quiet:
@@ -394,25 +398,24 @@ def main():
     global_step = 0
     iteration = 0
     
-    # Episode Metrics Tracking (Per-Environment Episode Depth)
+    # Episode Metrics Tracking
     episode_returns = np.zeros(num_envs, dtype=np.float32)
     episode_lengths = np.zeros(num_envs, dtype=np.int32)
     
-    # Per-environment episode counters (how many episodes each env has completed)
-    env_episode_counts = np.zeros(num_envs, dtype=np.int32)
+    # Buffer for completed episodes (we'll log when we have num_envs worth of episodes)
+    recent_episodes_buffer = deque(maxlen=num_envs * 10)  # Keep last 10 virtual episodes worth
     
-    # Buffer for completed episodes at each depth: {episode_depth: {'rewards': [...], 'steps': [...]}}
-    episode_depth_buffer = {}
-    
-    # Track the current "synchronized episode" (minimum across all envs, logged to WandB)
-    logged_episode_depth = 0
+    # Virtual episode counter: increments every num_envs completed episodes
+    total_episodes_completed = 0
+    virtual_episode = 0  # This is the X-axis for WandB and tqdm
+    prev_virtual_episode = 0  # For calculating tqdm delta
     
     # Legacy buffer for running mean (used in progress bar postfix)
     ep_info_buffer = deque(maxlen=100)
     
     start_time = datetime.now()
     
-    # Initialize Progress Bar (Episode-based as requested)
+    # Initialize Progress Bar (Virtual Episode-based)
     pbar = tqdm(total=episodes, disable=args.quiet, desc="Training")
     
     try:
@@ -429,9 +432,6 @@ def main():
                 steps_this_iter = num_steps * num_envs
                 global_step += steps_this_iter
                 
-                # Update progress bar with fractional "average episode" progress
-                pbar.update(steps_this_iter / (num_envs * env_max_steps))
-                
                 # --- Process Rollout Metrics (T, B) ---
                 rew_np = np.array(rollout_rew)
                 done_np = np.array(rollout_done)
@@ -444,46 +444,44 @@ def main():
                     if np.any(dones_t):
                         for i in range(num_envs):
                             if dones_t[i]:
-                                # Increment this environment's episode count
-                                env_episode_counts[i] += 1
-                                current_depth = int(env_episode_counts[i])
-                                
-                                # Store in buffer for this depth
-                                if current_depth not in episode_depth_buffer:
-                                    episode_depth_buffer[current_depth] = {'rewards': [], 'steps': []}
-                                episode_depth_buffer[current_depth]['rewards'].append(episode_returns[i])
-                                episode_depth_buffer[current_depth]['steps'].append(episode_lengths[i])
-                                
-                                # Also add to legacy buffer for progress bar
+                                # Store completed episode info
+                                recent_episodes_buffer.append({
+                                    'r': episode_returns[i], 
+                                    'l': episode_lengths[i]
+                                })
                                 ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
+                                total_episodes_completed += 1
                                 
                                 # Reset per-env buffers
                                 episode_returns[i] = 0.0
                                 episode_lengths[i] = 0
                                 
-                                # Check if all environments have reached a new synchronized depth
-                                min_depth = int(np.min(env_episode_counts))
-                                while logged_episode_depth < min_depth:
-                                    logged_episode_depth += 1
-                                    depth = logged_episode_depth
+                                # Check if we've completed another "virtual episode" worth of episodes
+                                # Virtual episode = num_envs completed episodes (1 per env on average)
+                                new_virtual_episode = total_episodes_completed // num_envs
+                                while virtual_episode < new_virtual_episode:
+                                    virtual_episode += 1
                                     
-                                    # Calculate averaged metrics for this depth
-                                    if depth in episode_depth_buffer:
-                                        avg_reward = np.mean(episode_depth_buffer[depth]['rewards'])
-                                        avg_steps = np.mean(episode_depth_buffer[depth]['steps'])
+                                    # Calculate the average of the last num_envs completed episodes
+                                    if len(recent_episodes_buffer) >= num_envs:
+                                        last_n = list(recent_episodes_buffer)[-num_envs:]
+                                        avg_reward = np.mean([ep['r'] for ep in last_n])
+                                        avg_steps = np.mean([ep['l'] for ep in last_n])
                                         
-                                        # Log to WandB with episode depth as X-axis
+                                        # Log to WandB with virtual episode as X-axis
                                         if wandb_enabled:
                                             wandb.log({
                                                 "Episode/Reward": float(avg_reward),
                                                 "Episode/Steps": float(avg_steps),
-                                                "Episode/Number": depth,
+                                                "Episode/Number": virtual_episode,
                                                 "timesteps": global_step
                                             })
-                                        
-                                        # Optional: Clear buffer for this depth to save memory
-                                        del episode_depth_buffer[depth]
-
+                
+                # Update progress bar based on virtual episode changes
+                episode_delta = virtual_episode - prev_virtual_episode
+                if episode_delta > 0:
+                    pbar.update(episode_delta)
+                    prev_virtual_episode = virtual_episode
                 
                 # Update PPO Loss Metrics
                 avg_policy_loss = jnp.mean(jnp.array([l[1][0] for l in losses]))
@@ -542,9 +540,6 @@ def main():
                 env_state = next_env_state
                 global_step += num_envs
                 
-                # Update progress bar with fractional "average episode" progress
-                pbar.update(num_envs / (num_envs * env_max_steps))
-                
                 # Episode Metric Tracking
                 episode_returns += rew_np
                 episode_lengths += 1
@@ -554,45 +549,44 @@ def main():
                 if np.any(dones):
                     for i in range(num_envs):
                         if dones[i]:
-                            # Increment this environment's episode count
-                            env_episode_counts[i] += 1
-                            current_depth = int(env_episode_counts[i])
-                            
-                            # Store in buffer for this depth
-                            if current_depth not in episode_depth_buffer:
-                                episode_depth_buffer[current_depth] = {'rewards': [], 'steps': []}
-                            episode_depth_buffer[current_depth]['rewards'].append(episode_returns[i])
-                            episode_depth_buffer[current_depth]['steps'].append(episode_lengths[i])
-                            
-                            # Also add to legacy buffer for progress bar
+                            # Store completed episode info
+                            recent_episodes_buffer.append({
+                                'r': episode_returns[i], 
+                                'l': episode_lengths[i]
+                            })
                             ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
+                            total_episodes_completed += 1
                             
                             # Reset per-env buffers
                             episode_returns[i] = 0.0
                             episode_lengths[i] = 0
                             
-                            # Check if all environments have reached a new synchronized depth
-                            min_depth = int(np.min(env_episode_counts))
-                            while logged_episode_depth < min_depth:
-                                logged_episode_depth += 1
-                                depth = logged_episode_depth
+                            # Check if we've completed another "virtual episode" worth of episodes
+                            new_virtual_episode = total_episodes_completed // num_envs
+                            while virtual_episode < new_virtual_episode:
+                                virtual_episode += 1
                                 
-                                # Calculate averaged metrics for this depth
-                                if depth in episode_depth_buffer:
-                                    avg_reward = np.mean(episode_depth_buffer[depth]['rewards'])
-                                    avg_steps = np.mean(episode_depth_buffer[depth]['steps'])
+                                # Calculate the average of the last num_envs completed episodes
+                                if len(recent_episodes_buffer) >= num_envs:
+                                    last_n = list(recent_episodes_buffer)[-num_envs:]
+                                    avg_reward = np.mean([ep['r'] for ep in last_n])
+                                    avg_steps = np.mean([ep['l'] for ep in last_n])
                                     
-                                    # Log to WandB with episode depth as X-axis
+                                    # Log to WandB with virtual episode as X-axis
                                     if wandb_enabled:
                                         wandb.log({
                                             "Episode/Reward": float(avg_reward),
                                             "Episode/Steps": float(avg_steps),
-                                            "Episode/Number": depth,
+                                            "Episode/Number": virtual_episode,
                                             "timesteps": global_step
                                         })
-                                    
-                                    # Clear buffer for this depth to save memory
-                                    del episode_depth_buffer[depth]
+                
+                # Update progress bar based on virtual episode changes
+                episode_delta = virtual_episode - prev_virtual_episode
+                if episode_delta > 0:
+                    pbar.update(episode_delta)
+                    prev_virtual_episode = virtual_episode
+
                 
                 # Train Step
                 metrics = {}
