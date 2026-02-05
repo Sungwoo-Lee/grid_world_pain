@@ -108,9 +108,9 @@ class DreamerTrainer(nnx.Module):
         self.moments = Moments(decay=0.99, max_=1.0, percentile_low=0.05, percentile_high=0.95)
         
         # Optimizers (nnx.Optimizer manages state)
-        self.model_opt = nnx.Optimizer(self.agent.wm, optax.adam(config.get('model_lr', 1e-4)), wrt=nnx.Param)
-        self.actor_opt = nnx.Optimizer(self.agent.ac.actor, optax.adam(config.get('actor_lr', 3e-5)), wrt=nnx.Param)
-        self.critic_opt = nnx.Optimizer(self.agent.ac.critic, optax.adam(config.get('value_lr', 8e-5)), wrt=nnx.Param)
+        self.model_opt = nnx.Optimizer(self.agent.wm, optax.adam(float(config.get('model_lr', 1e-4))), wrt=nnx.Param)
+        self.actor_opt = nnx.Optimizer(self.agent.ac.actor, optax.adam(float(config.get('actor_lr', 3e-5))), wrt=nnx.Param)
+        self.critic_opt = nnx.Optimizer(self.agent.ac.critic, optax.adam(float(config.get('value_lr', 8e-5))), wrt=nnx.Param)
         
         self.step_count = jnp.array(0, dtype=jnp.int32)
 
@@ -239,15 +239,23 @@ class DreamerTrainer(nnx.Module):
             
             lambda_returns = compute_lambda_values(rews, all_vals, conts)
             
+            # Normalize returns using Moments (percentile-based EMA)
+            norm_returns = self.moments.normalize(lambda_returns)
+            
             # Critic Loss
+
             v_pred_logits = critic(rollouts['feat'])
-            target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns))
+            target_twohot = to_twohot(jax.lax.stop_gradient(norm_returns))
             loss_critic = -jnp.mean(jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1))
             
             # Actor Loss
             baseline = from_twohot(v_pred_logits)
-            advantage = jax.lax.stop_gradient(lambda_returns - baseline)
+            advantage = jax.lax.stop_gradient(norm_returns - baseline)
+            # Standard normalization is also applied for advantage in some implementations
+            # but usually DreamerV3 relies heavily on the return normalization.
+            # PyTorch's advantage calculation also subtracts mean/std of advantage.
             advantage = (advantage - jnp.mean(advantage)) / (jnp.std(advantage) + 1e-8)
+
             
             actions = rollouts['action']
             logits = rollouts['action_dist']
@@ -265,13 +273,20 @@ class DreamerTrainer(nnx.Module):
                 'mean_return': jnp.mean(lambda_returns),
                 'mean_advantage': jnp.mean(advantage)
             }
-            return (loss_actor + loss_critic), metrics
+            return (loss_actor + loss_critic), (metrics, lambda_returns)
 
-        grads_ac, behavior_metrics = nnx.grad(behavior_loss_fn, argnums=(0,1), has_aux=True)(
+        grads_ac, (behavior_metrics, lambda_returns) = nnx.grad(behavior_loss_fn, argnums=(0,1), has_aux=True)(
             self.agent.ac.actor,
             self.agent.ac.critic,
             rng
         )
+        
+        # --- 3. Update Moments (Outside Grad/Trace) ---
+        # Update moments with the returns computed during rollout
+        # Note: In PyTorch, we use returns from current iteration to update moments for NEXT iteration
+        # or use returns from current iteration to update and then use. 
+        # Here we just update them so they are ready for next call. 
+        self.moments.update(lambda_returns)
         
         grads_actor, grads_critic = grads_ac
         self.actor_opt.update(self.agent.ac.actor, grads_actor)

@@ -47,7 +47,7 @@ class LayerNormGRUCell(nnx.Module):
         return h_new
 
 class RSSM(nnx.Module):
-    def __init__(self, action_dim: int, deter_dim: int = 512, stoch_dim: int = 32, discrete: int = 32, rngs: nnx.Rngs = None):
+    def __init__(self, action_dim: int, deter_dim: int = 512, stoch_dim: int = 32, discrete: int = 32, embed_dim: int = 512, rngs: nnx.Rngs = None):
         self.deter_dim = deter_dim
         self.stoch_dim = stoch_dim
         self.discrete = discrete
@@ -61,7 +61,8 @@ class RSSM(nnx.Module):
         self.img_out = nnx.Linear(deter_dim, stoch_dim * discrete, rngs=rngs)
         
         # Posterior: deter + embed -> stoch_logits
-        self.obs_out = nnx.Linear(deter_dim + deter_dim, stoch_dim * discrete, rngs=rngs) # Assuming embed is deter_dim
+        self.obs_out = nnx.Linear(deter_dim + embed_dim, stoch_dim * discrete, rngs=rngs)
+
 
     def initial(self, batch_size: int):
         return {
@@ -238,7 +239,8 @@ class WorldModel(nnx.Module):
         continue_fc = config.get('continue_fc_layers', [128, 128])
         
         self.encoder = Encoder(obs_dim, encoder_dim, encoder_fc, rngs=rngs)
-        self.rssm = RSSM(act_dim, self.deter_dim, self.stoch_dim, self.discrete, rngs=rngs)
+        self.rssm = RSSM(act_dim, self.deter_dim, self.stoch_dim, self.discrete, embed_dim=encoder_dim, rngs=rngs)
+
         
         feat_dim = self.deter_dim + self.stoch_dim * self.discrete
         

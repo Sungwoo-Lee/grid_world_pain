@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 from jax import random
+from flax import nnx
 
 def symlog(x):
     """
@@ -105,16 +106,12 @@ class OneHotDist:
         return jax.nn.one_hot(sample_idx, self.num_classes)
 
 
-class Moments:
+class Moments(nnx.Module):
     """
     Exponential Moving Average (EMA) of percentile-based moments for return normalization.
     Matches PyTorch DreamerV3 implementation.
     
-    Usage:
-        moments = Moments()
-        for batch in data:
-            low, invscale = moments.update(returns)
-            normalized = (returns - low) / invscale
+    Now an NNX Module for correct state management in JIT.
     """
     def __init__(
         self,
@@ -127,40 +124,33 @@ class Moments:
         self.max_ = max_
         self.percentile_low = percentile_low
         self.percentile_high = percentile_high
-        # State: EMA of low and high percentiles
-        self.low = 0.0
-        self.high = 0.0
+        
+        # State: EMA of low and high percentiles (init as jnp arrays for NNX)
+        self.low = nnx.Variable(jnp.array(0.0))
+        self.high = nnx.Variable(jnp.array(1.0))
         
     def update(self, x):
         """
         Update moments with new data and return normalization parameters.
-        
-        Args:
-            x: Array of values to normalize (e.g., lambda returns)
-            
-        Returns:
-            low: EMA of low percentile (offset for normalization)
-            invscale: EMA of scale (high - low, clamped)
         """
         x_flat = jnp.ravel(x).astype(jnp.float32)
         
         # Compute percentiles
-        low = jnp.percentile(x_flat, self.percentile_low * 100)
-        high = jnp.percentile(x_flat, self.percentile_high * 100)
+        low_p = jnp.percentile(x_flat, self.percentile_low * 100)
+        high_p = jnp.percentile(x_flat, self.percentile_high * 100)
         
-        # EMA update
-        self.low = self.decay * self.low + (1 - self.decay) * low
-        self.high = self.decay * self.high + (1 - self.decay) * high
+        # EMA update (NNX handles attribute assignment in jit)
+        self.low.value = self.decay * self.low.value + (1.0 - self.decay) * low_p
+        self.high.value = self.decay * self.high.value + (1.0 - self.decay) * high_p
         
-        # Compute inverse scale (clamped to avoid division by zero)
-        invscale = jnp.maximum(1.0 / self.max_, self.high - self.low)
-        
-        return self.low, invscale
+        # Compute inverse scale (clamped as in PyTorch)
+        invscale = jnp.maximum(1.0 / self.max_, self.high.value - self.low.value)
+        return self.low.value, invscale
     
     def normalize(self, x):
         """
         Normalize values using current moments.
         """
-        invscale = jnp.maximum(1.0 / self.max_, self.high - self.low)
-        return (x - self.low) / invscale
+        invscale = jnp.maximum(1.0 / self.max_, self.high.value - self.low.value)
+        return (x - self.low.value) / invscale
 

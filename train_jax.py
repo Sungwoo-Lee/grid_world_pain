@@ -223,10 +223,23 @@ def main():
     # Budget scales with parallelization: episodes * steps per episode * num environments
     total_timesteps = args.total_timesteps or (episodes * env_max_steps * num_envs)
     
-    num_steps = args.num_steps or config.get_mandatory('agent.sequence_length')
-    hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
+    if algorithm == "RecurrentPPO":
+        num_steps = args.num_steps or config.get_mandatory('agent.sequence_length')
+        hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
+        lr = args.lr or config.get_mandatory('agent.lr_actor')
+    elif algorithm == "DreamerV3":
+        # Dreamer doesn't use a single sequence_length for rollout collection (usually 1 step)
+        num_steps = args.num_steps or 1 
+        # Dreamer has many hidden sizes; using rssm_deter_dim as a proxy for summary/logging
+        hidden_size = args.hidden_size or config.get('agent.rssm_deter_dim', 512)
+        lr = args.lr or config.get_mandatory('agent.actor_lr')
+    else:
+        num_steps = args.num_steps or 1
+        hidden_size = args.hidden_size or 128
+        lr = args.lr or 1e-4
+
     seed = args.seed if args.seed is not None else config.get_mandatory('seed')
-    lr = args.lr or config.get_mandatory('agent.lr_actor') # or model_lr for dreamer... will handle below
+
     
     # Re-load EnvParams with full merged config for JAX core
     params = load_env_params(config)
@@ -419,15 +432,17 @@ def main():
         
     elif algorithm == "DreamerV3":
         from src.models.jax_models.dreamer_v3_trainer import DreamerTrainer, ReplayBuffer
-        dreamer_config = {
-            'model_lr': config.get_mandatory('agent.model_lr'),
-            'actor_lr': config.get_mandatory('agent.actor_lr'),
-            'value_lr': config.get_mandatory('agent.value_lr'),
-            'batch_size': config.get_mandatory('agent.batch_size'),
-            'batch_length': config.get_mandatory('agent.batch_length'),
-        }
+        
+        # Pass the 'agent' section to the trainer
+        dreamer_config = agent_config.get('agent')
+        if dreamer_config is None:
+            # Fallback if the YAML doesn't have a top-level 'agent' key (already merged into config)
+            dreamer_config = config.get('agent')
+        
         key, init_key = jax.random.split(key)
         trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=nnx.Rngs(init_key))
+
+
         buffer = ReplayBuffer(
             capacity=int(1e5), 
             sequence_length=dreamer_config['batch_length'], 
@@ -451,9 +466,11 @@ def main():
     start_time = datetime.now()
     if args.debug: print(f"[DEBUG] Loop start time: {start_time.strftime('%H:%M:%S')}", flush=True)
 
-    with tqdm(total=args.episodes, disable=args.quiet, desc="Training") as pbar:
+    with tqdm(total=episodes, disable=args.quiet, desc="Training") as pbar:
+
         try:
-            while (virtual_episode < args.episodes) if args.episodes > 0 else (global_step < total_timesteps):
+            while (virtual_episode < episodes) if episodes > 0 else (global_step < total_timesteps):
+
                 iteration += 1
                 if args.debug: print(f"\n[DEBUG] --- Iteration {iteration} Start (Step: {global_step}) ---", flush=True)
                 
@@ -584,7 +601,8 @@ def main():
     
                     metrics = {}
                     loss_msg = ""
-                    if buffer.size > dreamer_config['batch_size'] * 2:
+                    if buffer.size > max(dreamer_config['batch_size'] * 2, dreamer_config['batch_length']):
+
                         batch_jax = buffer.sample(dreamer_config['batch_size'])
                         metrics = trainer.train_step(batch_jax, key)
                         loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
