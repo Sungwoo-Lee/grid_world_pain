@@ -64,6 +64,7 @@ class EnvParams:
     max_injury: float
     food_gain: float
     setpoint: float
+    start_satiation: float              # For non-random start
     injury_recovery: float
     smoothing_duration: int = struct.field(pytree_node=False)
     death_penalty: float
@@ -71,8 +72,11 @@ class EnvParams:
     use_homeostatic_reward: bool = struct.field(pytree_node=False)
     with_satiation: bool = struct.field(pytree_node=False)
     with_injury: bool = struct.field(pytree_node=False)
+    random_start_satiation: bool = struct.field(pytree_node=False)
+    random_start_injury: bool = struct.field(pytree_node=False)
     rest_action_enabled: bool = struct.field(pytree_node=False)
     eat_action_enabled: bool = struct.field(pytree_node=False)
+
     
     # Sensory
     sensor_radius: float

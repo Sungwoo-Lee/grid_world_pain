@@ -21,13 +21,13 @@ It supports both **Classic Tabular Methods** and **Deep Reinforcement Learning**
 ## ✨ Key Features
 
 - **🚀 Lightweight Core**: Built with pure Python and optimized for speed.
-- **🤖 Multi-Agent Support**: Includes implementations for **DQN, DRQN, PPO, RecurrentPPO**, **DreamerV3**, and classic Q-Learning.
-- **🧠 Interoception**: Simulation of internal body states (Satiation, Health) that drive reward signals (Homeostatic RL).
-- **🎥 Built-in Visualization**: Seamless integration with `matplotlib` and `imageio` for generating MP4 replays.
-- **🔍 Activation Monitoring**: Visualizes internal neural network activations (Layer-wise Heatmaps) and LRP attributions.
-- **📦 Configuration Driven**: Fully YAML-based configuration for easy experimentation.
-- **🧪 Ablation Study Support**: 9 pre-defined ablation configurations for systematic research.
-- **📊 WandB Integration**: Experiment tracking, metrics logging, and video uploads.
+- **⚡ JAX-Native Parallelization**: Fully vectorizable JAX environment supporting thousands of parallel envs on GPU.
+- **🤖 Multi-Agent Support**: Includes implementations for **DQN, DRQN, PPO, RecurrentPPO**, **DreamerV3** (Torch), and **RecurrentPPO** (JAX/Flax).
+- **🧠 Interoception**: Simulation of internal body states (Satiation, Injury) that drive reward signals (Homeostatic RL).
+- **🎥 Professional Visualization**: High-speed rendering in JAX and activation monitoring in PyTorch.
+- **🔍 Activation Monitoring**: Visualizes internal neural network activations (Torch) and LRP attributions.
+- **📦 Configuration Driven**: Fully YAML-based configuration with strict validation.
+- **🧪 Ablation Study Support**: 13+ ablation configurations for systematic research.
 
 ---
 
@@ -36,21 +36,19 @@ It supports both **Classic Tabular Methods** and **Deep Reinforcement Learning**
 ```text
 grid_world_pain/
 ├── configs/                    # ⚙️ Configuration YAMLs
-│   ├── ablation/               # 🧪 9 Ablation Study Configs (01-09)
+│   ├── ablation/               # 🧪 Homeostatic & Survival Branches
 │   ├── environment/            # 🌍 Environment settings
 │   ├── models/                 # 🤖 Agent hyperparameters
-│   └── ...
-├── train.py                    # 🧠 RL Training Script (~1172 lines)
-├── evaluation.py               # 🎬 Evaluation & Visualization (~599 lines)
-├── main.py                     # 🏃‍♂️ Console Demo Entry Point
+├── train.py                    # 🧠 Torch Training Script
+├── train_jax.py                # ⚡ JAX Parallel Training Script
+├── evaluation.py               # 🎬 Torch Evaluation & Visualization
+├── evaluation_jax.py           # 🎬 JAX Evaluation script
+├── main_jax.py                 # 🏃‍♂️ JAX Console Demo
 ├── run_all_experiments.py      # 🚀 Parallel Training Launcher
-├── hyperparameter_search.py    # 🔍 Grid Search Automation
-├── verify_ablation_levels.py   # ✅ Ablation Config Verification
-├── results/                    # 📂 Training Results & Artifacts
-└── src/                        # 🐍 Source Code
-    ├── environment/            # 🌍 Environment Logic (GridWorld, Body, Sensory)
-    ├── models/                 # 🤖 Agent Implementations (DQN, PPO, etc.)
-    └── utils/                  # 🛠️ Utilities (Config, Visualization)
+├── src/                        # 🐍 Source Code
+│   ├── environment/            # 🌍 GridWorld & JAX-native core
+│   ├── models/                 # 🤖 Agent Implementations (Torch & JAX)
+│   └── utils/                  # 🛠️ Utilities (Config, Visualization)
 ```
 
 ---
@@ -79,34 +77,38 @@ grid_world_pain/
 
 ## 🛠️ Usage
 
-### 1. Training Agents
+### 1. Training Agents (PyTorch)
 Train various RL agents using the `train.py` script. Configuration is handled via YAML files in `configs/`.
 
 **Train DQN with ablation config:**
 ```bash
-python train.py --agent_config configs/models/dqn.yaml --config configs/ablation/01_goal_only.yaml --episodes 1000
+python train.py --agent_config configs/models/dqn.yaml --config configs/ablation/survival/01_goal_only.yaml --episodes 1000
 ```
 
-**Train with full interoception:**
+### 2. High-Performance Training (JAX)
+For massive parallelization and GPU acceleration, use the JAX-native pipeline.
+
+**Train RecurrentPPO with 128 parallel envs:**
 ```bash
-python train.py --agent_config configs/models/dqn.yaml --config configs/ablation/09_location.yaml --episodes 5000
+python train_jax.py --agent_config configs/models/recurrent_ppo.yaml --config configs/ablation/homeostatic/08_homeostatic.yaml --num-envs 128
 ```
 
-**Command Line Overrides:**
+### 3. Evaluating & Visualizing
+After training, generate high-quality videos and verify performance.
+
+**PyTorch Evaluation:**
 ```bash
-python train.py --agent_config configs/models/dqn.yaml --episodes 500 --device cuda:0 --tag my_experiment
+python evaluation.py --results_dir results/DQN/my_run --episodes 3
 ```
 
-### 2. Evaluating & Visualizing
-After training, use `evaluation.py` to generate videos and verify performance.
-
+**JAX Evaluation:**
 ```bash
-python evaluation.py --results_dir results/DQN/20260117-141318_default --episodes 3
+python evaluation_jax.py --results_dir results/JAX_RecurrentPPO/my_run --episodes 3 --render-video
 ```
 
 **Outputs:**
-- Generates `.mp4` videos with real-time neural network activation visualizations.
-- Saves activation data as HDF5 files for further analysis.
+- Generates `.mp4` videos with real-time sensory visualizations.
+- JAX renderer optimized for speed using figure/icon caching.
 - Optionally uploads videos to WandB.
 
 ### 3. Ablation Study Experiments

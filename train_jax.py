@@ -68,6 +68,9 @@ class PPOConfig(NamedTuple):
     ent_coef: float
     vf_coef: float
     lr: float
+    rnn_type: str = "LSTM"
+    activation: str = "tanh"
+    return_mode: str = "MC"
 
 # Defaults
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "configs", "environment", "environment.yaml")
@@ -370,7 +373,23 @@ def main():
     if args.debug: print(f"[DEBUG] Phase 6: Algorithm Initialization ({algorithm})...", flush=True)
     if algorithm == "RecurrentPPO":
         key, init_key = jax.random.split(key)
-        model = ActorCriticRNN(input_dim=input_dim, action_dim=action_dim, hidden_size=hidden_size, rngs=nnx.Rngs(init_key))
+        
+        # Read parity options from config
+        rnn_type = config.get('agent.rnn_type', 'LSTM')
+        activation = config.get('agent.activation', 'tanh')
+        return_mode = config.get('agent.return_mode', 'MC')
+        
+        if not args.quiet:
+            print(f"RNN Type: {rnn_type}, Activation: {activation}, Return Mode: {return_mode}")
+        
+        model = ActorCriticRNN(
+            input_dim=input_dim, 
+            action_dim=action_dim, 
+            hidden_size=hidden_size, 
+            rngs=nnx.Rngs(init_key),
+            rnn_type=rnn_type,
+            activation=activation
+        )
         optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
         
         ppo_config = PPOConfig(
@@ -381,13 +400,22 @@ def main():
             clip_eps=config.get_mandatory('agent.eps_clip'),
             ent_coef=config.get_mandatory('agent.entropy_coef'),
             vf_coef=config.get_mandatory('agent.vf_coef'),
-            lr=lr
+            lr=lr,
+            rnn_type=rnn_type,
+            activation=activation,
+            return_mode=return_mode
         )
-        h_state = jnp.zeros((num_envs, hidden_size))
+        
+        # Initialize hidden state (LSTM uses tuple, GRU uses array)
+        if rnn_type.upper() == "LSTM":
+            h_state = (jnp.zeros((num_envs, hidden_size)), jnp.zeros((num_envs, hidden_size)))
+        else:
+            h_state = jnp.zeros((num_envs, hidden_size))
 
         if not args.quiet:
             print("JIT compiling train_iteration...")
         jit_train = nnx.jit(train_iteration, static_argnums=(6,))
+
         
     elif algorithm == "DreamerV3":
         from src.models.jax_models.dreamer_v3_trainer import DreamerTrainer, ReplayBuffer

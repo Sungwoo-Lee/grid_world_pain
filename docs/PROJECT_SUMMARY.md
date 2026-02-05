@@ -21,46 +21,42 @@
 
 ```mermaid
 graph TB
-    subgraph "Entry Points"
-        A[train.py<br/>~1172 lines]
-        B[evaluation.py<br/>~599 lines]
-        C[main.py<br/>Debug Sandbox]
+subgraph "Entry Points"
+        A[train.py<br/>Torch RL Loop]
+        AJ[train_jax.py<br/>JAX Parallel Loop]
+        B[evaluation.py<br/>Torch Viz]
+        BJ[evaluation_jax.py<br/>JAX Evaluation]
+        C[main_jax.py<br/>JAX Demo]
         D[run_all_experiments.py]
-        E[hyperparameter_search.py]
-        EA[verify_ablation_levels.py]
     end
     
     subgraph "Environment Layer"
-        F[GridWorld<br/>grid_world.py]
-        G[InteroceptiveBody<br/>body.py]
-        H[SensorySystem<br/>sensor.py]
+        F[GridWorld<br/>Torch-friendly]
+        FJ[JAX-native Core<br/>jax_env/]
+        G[InteroceptiveBody]
+        H[SensorySystem]
     end
     
     subgraph "Agent Layer"
-        I[DQNAgent]
-        J[PPOAgent]
-        K[DRQNAgent]
-        L[RecurrentPPOAgent]
-        M[DreamerV3Agent]
-        N[QLearningAgent]
+        I[Torch Agents<br/>DQN, PPO, etc.]
+        IJ[JAX Agents<br/>RecurrentPPO]
     end
     
     subgraph "Utilities"
         O[Visualization]
-        P[ActivationMonitor]
-        Q[LRPMonitor]
         R[WandB Utils]
         S[Config System]
         T[Evaluation Core]
     end
     
     A --> F & G & H
-    A --> I & J & K & L & M & N
+    AJ --> FJ
+    A --> I
+    AJ --> IJ
     B --> T
-    T --> O & P & Q & R
+    BJ --> T
+    T --> O & R
     D --> A
-    E --> A
-    EA --> F & H & S
 ```
 
 ---
@@ -69,29 +65,32 @@ graph TB
 
 | Path | Lines | Description |
 |------|-------|-------------|
-| [train.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/train.py) | 1172 | Main training script with full RL loop |
-| [evaluation.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/evaluation.py) | 599 | Evaluation and video generation entry point |
-| [main.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/main.py) | 390 | Debug sandbox with random agent |
+| [train.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/train.py) | 1172 | Torch training with activation capture |
+| [train_jax.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/train_jax.py) | 570 | JAX training with massive parallelization |
+| [evaluation_jax.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/evaluation_jax.py) | 200 | JAX evaluation and high-speed viz |
+| [main_jax.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/main_jax.py) | 150 | JAX-native interactive sandbox |
 | [run_all_experiments.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/run_all_experiments.py) | 164 | Parallel training launcher |
-| [hyperparameter_search.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/hyperparameter_search.py) | 300 | Grid search automation |
-| [verify_ablation_levels.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/verify_ablation_levels.py) | 114 | Ablation configuration validator |
 
 ### Source Directory (`src/`)
 
 ```
 src/
 ├── environment/
-│   ├── grid_world.py      # GridWorld class (598 lines)
-│   ├── body.py            # InteroceptiveBody class (166 lines)
-│   └── sensor.py          # SensorySystem with 5 sensor types (462 lines)
+│   ├── grid_world.py      # Torch-friendly implementation
+│   ├── jax_env/           # JAX-native core
+│   │   ├── core.py        # Vectorized GridWorld (Pure JAX)
+│   │   ├── sensor.py      # Vectorized sensory logic
+│   │   ├── renderer.py    # High-performance JAX renderer
+│   │   └── wrapper.py     # ParallelEnv JAX wrapper
+│   ├── body.py            # Physio dynamics logic
+│   └── sensor.py          # Torch-friendly sensory logic
 │
 ├── models/
-│   ├── dqn.py             # DQNAgent, DQN network (188 lines)
-│   ├── drqn.py            # DRQNAgent with LSTM (321 lines)
-│   ├── ppo.py             # PPOAgent, ActorCritic (265 lines)
-│   ├── recurrent_ppo.py   # RecurrentPPOAgent with LSTM (346 lines)
-│   ├── dreamer_v3.py      # DreamerV3Agent, RSSM world model (876 lines)
-│   └── q_learning.py      # Tabular QLearningAgent (148 lines)
+│   ├── dqn.py             # Torch DQNAgent
+│   ├── ppo.py             # Torch PPOAgent
+│   ├── jax_models/        # JAX/Flax NNX models
+│   │   └── recurrent_ppo_network.py # ActorCriticRNN
+│   └── ...
 │
 └── utils/
     ├── activation_monitor.py  # Hook-based activation capture (134 lines)

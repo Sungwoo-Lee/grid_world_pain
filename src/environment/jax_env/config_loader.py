@@ -75,6 +75,7 @@ def load_env_params(config: Config) -> EnvParams:
         max_injury=config.get_mandatory('body.max_injury'),
         food_gain=config.get_mandatory('body.food_satiation_gain'),
         setpoint=config.get_mandatory('body.satiation_setpoint'),
+        start_satiation=config.get_mandatory('body.start_satiation'),
         injury_recovery=config.get_mandatory('body.injury_recovery'),
         smoothing_duration=config.get_mandatory('body.injury_smoothing_duration'),
         death_penalty=config.get_mandatory('body.death_penalty'),
@@ -82,11 +83,14 @@ def load_env_params(config: Config) -> EnvParams:
         use_homeostatic_reward=config.get_mandatory('body.use_homeostatic_reward'),
         with_satiation=config.get_mandatory('body.with_satiation'),
         with_injury=config.get_mandatory('body.with_injury'),
+        random_start_satiation=config.get_mandatory('body.random_start_satiation'),
+        random_start_injury=config.get_mandatory('body.random_start_injury'),
         rest_action_enabled=config.get_mandatory('environment.rest_action_enabled'),
         eat_action_enabled=config.get_mandatory('environment.eat_action_enabled'),
         sensor_radius=config.get_mandatory('sensory.sensor_radius'),
         sensor_decay=config.get_mandatory('sensory.decay_power'),
         sensor_range=config.get_mandatory('sensory.collision_sensor_range')
     )
+
     
     return params

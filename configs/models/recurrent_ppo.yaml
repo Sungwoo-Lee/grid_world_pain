@@ -17,3 +17,8 @@ agent:
   entropy_coef: 0.01
   gae_lambda: 0.95
   vf_coef: 0.5
+  
+  # Parity Options
+  rnn_type: "LSTM"       # "LSTM" (PyTorch parity) or "GRU" (original JAX)
+  activation: "tanh"     # "tanh" (PyTorch parity) or "relu" (original JAX)
+  return_mode: "MC"      # "MC" (PyTorch parity) or "GAE" (original JAX)

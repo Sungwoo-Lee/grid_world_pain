@@ -280,7 +280,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
 
 def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     """Functional reset for the JAX environment."""
-    key, agent_key, res_key, pred_key = jax.random.split(key, 4)
+    key, agent_key, res_key, pred_key, body_key = jax.random.split(key, 5)
     
     # 1. Agent Position (Random)
     agent_pos = jax.random.randint(agent_key, (2,), 0, jnp.array([params.height, params.width]))
@@ -303,9 +303,21 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         
     pred_pos = jax.vmap(sample_pred_pos)(pred_spawn_keys, params.pred_patrol)
     
-    # 4. Body
-    satiation = params.setpoint # Start at setpoint for simplicity
-    injury = 0.0
+    # 4. Body (Random start support)
+    body_key1, body_key2 = jax.random.split(body_key)
+    
+    if params.random_start_satiation:
+        min_start = params.max_satiation / 2.0
+        satiation = jax.random.uniform(body_key1, (), minval=min_start, maxval=params.max_satiation)
+    else:
+        satiation = params.start_satiation
+    
+    if params.random_start_injury:
+        max_start_injury = params.max_injury / 2.0
+        injury = jax.random.uniform(body_key2, (), minval=0.0, maxval=max_start_injury)
+    else:
+        injury = 0.0
+        
     injury_buffer = jnp.zeros(params.smoothing_duration)
     
     state = EnvState(
@@ -327,3 +339,4 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     )
     
     return state
+
