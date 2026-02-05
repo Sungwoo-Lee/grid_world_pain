@@ -456,11 +456,8 @@ def main():
     global_step = 0
     iteration = 0
     total_episodes_completed = 0
-    virtual_episode = 0
-    prev_virtual_episode = 0
     episode_returns = np.zeros(num_envs, dtype=np.float32)
     episode_lengths = np.zeros(num_envs, dtype=np.int32)
-    recent_episodes_buffer = deque(maxlen=num_envs * 10)
     ep_info_buffer = deque(maxlen=100)
     
     start_time = datetime.now()
@@ -469,7 +466,7 @@ def main():
     with tqdm(total=episodes, disable=args.quiet, desc="Training") as pbar:
 
         try:
-            while (virtual_episode < episodes) if episodes > 0 else (global_step < total_timesteps):
+            while (total_episodes_completed < episodes) if episodes > 0 else (global_step < total_timesteps):
 
                 iteration += 1
                 if args.debug: print(f"\n[DEBUG] --- Iteration {iteration} Start (Step: {global_step}) ---", flush=True)
@@ -491,33 +488,39 @@ def main():
                         episode_returns += rew_np[t]
                         episode_lengths += 1
                         dones_t = done_np[t].astype(bool)
+                        
                         if np.any(dones_t):
-                            for i in range(num_envs):
-                                if dones_t[i]:
-                                    recent_episodes_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
-                                    ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
-                                    total_episodes_completed += 1
-                                    episode_returns[i] = 0.0
-                                    episode_lengths[i] = 0
-                                    new_virtual_episode = total_episodes_completed // num_envs
-                                    while virtual_episode < new_virtual_episode:
-                                        virtual_episode += 1
-                                        if len(recent_episodes_buffer) >= num_envs:
-                                            last_n = list(recent_episodes_buffer)[-num_envs:]
-                                            avg_reward = np.mean([ep['r'] for ep in last_n])
-                                            avg_steps = np.mean([ep['l'] for ep in last_n])
-                                            if wandb_enabled:
-                                                wandb.log({
-                                                    "Episode/Reward": float(avg_reward),
-                                                    "Episode/Steps": float(avg_steps),
-                                                    "Episode/Number": virtual_episode,
-                                                    "timesteps": global_step
-                                                })
+                            completed_indices = np.where(dones_t)[0]
+                            for i in completed_indices:
+                                total_episodes_completed += 1
+                                ep_reward = float(episode_returns[i])
+                                ep_length = int(episode_lengths[i])
+                                
+                                # Store for moving average (tqdm)
+                                ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
+                                
+                                # Log individual episode as it happens
+                                if wandb_enabled:
+                                    wandb.log({
+                                        "Episode/Reward": ep_reward,
+                                        "Episode/Steps": ep_length,
+                                        "Episode/Number": total_episodes_completed,
+                                        "timesteps": global_step + (t * num_envs) # Precise step matching
+                                    })
+                                
+                                # Reset for next episode in this slot
+                                episode_returns[i] = 0.0
+                                episode_lengths[i] = 0
                     
-                    episode_delta = virtual_episode - prev_virtual_episode
-                    if episode_delta > 0:
-                        pbar.update(episode_delta)
-                        prev_virtual_episode = virtual_episode
+                    # Log aggregate stats for the iteration to track environment spread
+                    if wandb_enabled and np.any(done_np):
+                        # Get rewards of all environments that finished during this iteration
+                        # (Note: we already logged them individually, but iteration-level stats are good for variance)
+                        pass 
+
+                    # Update progress bar based on total episodes completed
+                    pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
+                    pbar.refresh()
                     
                     avg_policy_loss = jnp.mean(jnp.array([l[1][0] for l in losses]))
                     avg_value_loss = jnp.mean(jnp.array([l[1][1] for l in losses]))
@@ -572,32 +575,28 @@ def main():
                     episode_lengths += 1
                     dones = done_np.astype(bool)
                     if np.any(dones):
-                        for i in range(num_envs):
-                            if dones[i]:
-                                recent_episodes_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
-                                ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
-                                total_episodes_completed += 1
-                                episode_returns[i] = 0.0
-                                episode_lengths[i] = 0
-                                new_virtual_episode = total_episodes_completed // num_envs
-                                while virtual_episode < new_virtual_episode:
-                                    virtual_episode += 1
-                                    if len(recent_episodes_buffer) >= num_envs:
-                                        last_n = list(recent_episodes_buffer)[-num_envs:]
-                                        avg_reward = np.mean([ep['r'] for ep in last_n])
-                                        avg_steps = np.mean([ep['l'] for ep in last_n])
-                                        if wandb_enabled:
-                                            wandb.log({
-                                                "Episode/Reward": float(avg_reward),
-                                                "Episode/Steps": float(avg_steps),
-                                                "Episode/Number": virtual_episode,
-                                                "timesteps": global_step
-                                            })
-                    
-                    episode_delta = virtual_episode - prev_virtual_episode
-                    if episode_delta > 0:
-                        pbar.update(episode_delta)
-                        prev_virtual_episode = virtual_episode
+                        completed_indices = np.where(dones)[0]
+                        for i in completed_indices:
+                            total_episodes_completed += 1
+                            ep_reward = float(episode_returns[i])
+                            ep_length = int(episode_lengths[i])
+                            
+                            ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
+                            
+                            if wandb_enabled:
+                                wandb.log({
+                                    "Episode/Reward": ep_reward,
+                                    "Episode/Steps": ep_length,
+                                    "Episode/Number": total_episodes_completed,
+                                    "timesteps": global_step
+                                })
+                            
+                            episode_returns[i] = 0.0
+                            episode_lengths[i] = 0
+
+                        # Update progress bar
+                        pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
+                        pbar.refresh()
     
                     metrics = {}
                     loss_msg = ""
@@ -614,19 +613,46 @@ def main():
                     if args.debug: print(f" Done.", flush=True)
 
                 # Checkpoint Logic
-                checkpoint_interval = args.checkpoint_frequency or config.get_mandatory('training.checkpoint_frequency')
-                ckpt_data = {}
-                if algorithm == "RecurrentPPO":
-                    ckpt_data = {'model': nnx.state(model, nnx.Param), 'optimizer': nnx.state(optimizer), 'h_state': h_state, 'key': key, 'iteration': iteration, 'step': global_step}
-                elif algorithm == "DreamerV3":
-                    ckpt_data = {'wm': nnx.state(trainer.agent.wm, nnx.Param), 'actor': nnx.state(trainer.agent.ac.actor, nnx.Param), 'critic': nnx.state(trainer.agent.ac.critic, nnx.Param), 'key': key, 'iteration': iteration, 'step': global_step}
-
-                if iteration % checkpoint_interval == 0 and ckpt_data:
-                    if args.debug:
-                        print(f"  [DEBUG] Saving checkpoint at step {global_step}...", flush=True)
-                    checkpointer.save(iteration, args=ocp.args.StandardSave(ckpt_data))
+                checkpoint_freq = args.checkpoint_frequency or config.get_mandatory('training.checkpoint_frequency')
+                
+                # Check if we've crossed an episode boundary for checkpointing
+                # We save if the current episode count has reached the next checkpoint milestone
+                if not hasattr(main, 'last_checkpoint_save'):
+                    main.last_checkpoint_save = 0
+                
+                should_checkpoint = (total_episodes_completed >= main.last_checkpoint_save + checkpoint_freq)
+                
+                if should_checkpoint:
+                    main.last_checkpoint_save = (total_episodes_completed // checkpoint_freq) * checkpoint_freq
                     
-                    vis_flag = config.get('visualization.enabled')
+                    ckpt_data = {}
+                    if algorithm == "RecurrentPPO":
+                        ckpt_data = {
+                            'model': nnx.state(model, nnx.Param), 
+                            'optimizer': nnx.state(optimizer), 
+                            'h_state': h_state, 
+                            'key': key, 
+                            'iteration': iteration, 
+                            'step': global_step,
+                            'episode': total_episodes_completed
+                        }
+                    elif algorithm == "DreamerV3":
+                        ckpt_data = {
+                            'wm': nnx.state(trainer.agent.wm, nnx.Param), 
+                            'actor': nnx.state(trainer.agent.ac.actor, nnx.Param), 
+                            'critic': nnx.state(trainer.agent.ac.critic, nnx.Param), 
+                            'key': key, 
+                            'iteration': iteration, 
+                            'step': global_step,
+                            'episode': total_episodes_completed
+                        }
+
+                    if ckpt_data:
+                        print(f"\n[CHECKPOINT] Saving model at episode {total_episodes_completed} (Iteration {iteration})...")
+                        checkpointer.save(total_episodes_completed, args=ocp.args.StandardSave(ckpt_data))
+                        
+                        # Trigger evaluation after checkpoint
+                        vis_flag = config.get('visualization.enabled')
                     eval_v_flag = config.get('training.video_during_training')
                     if vis_flag or eval_v_flag:
                         if args.debug:

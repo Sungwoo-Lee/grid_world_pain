@@ -1,54 +1,0 @@
-E0205 14:41:06.794475  881172 platform_util.cc:250] Failed to create stream executor for device CUDA:0: : CUDA_ERROR_OUT_OF_MEMORY: out of memory
-WARNING:absl:Configured `CheckpointManager` using deprecated legacy API. Please follow the instructions at https://orbax.readthedocs.io/en/latest/guides/checkpoint/api_refactor.html to migrate.
-Loading train config from /media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/train/default.yaml
-Loading eval config from /media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/evaluation/default.yaml
-Loading logger config from /media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/logger/wandb.yaml
-Loading override config from: configs/visualization/visualization.yaml
-Loading agent config from: configs/models/recurrent_ppo.yaml
-Config saved to: results/JAX_RecurrentPPO/jax_RecurrentPPO_20260205-144106/models/config.yaml
-
-============================================================
-================ JAX/FLAX RL CONFIGURATION =================
-============================================================
-
-[Environment]
-  ● Grid Size................ 10x10
-  ● Max Steps................ 500
-  ● Mode..................... Interoceptive (Homeostasis)
-  ● Reward Logic............. Homeostatic (Drive Reduction)
-  ● Injury System............ ENABLED
-
-[Training]
-  ● Framework................ JAX/Flax NNX
-  ● Total Timesteps.......... 500
-  ● Parallel Envs............ 1
-  ● Steps/Iteration.......... 128
-  ● Seed..................... 42
-  ● Results.................. results/JAX_RecurrentPPO/jax_RecurrentPPO_20260205-144106
-  ● WandB.................... Disabled
-
---- RL API Specifications ---
-Action Dim: 6
-Observation Dim: 33 (Chemical=5, Collision=24, Location=2, Interoception=2)
-Dimension Breakdown:
-  Chemical............ 5
-  Collision........... 24
-  Location............ 2
-  Interoception....... 2
-Hidden Size: 64
-Learning Rate: 0.0005
---------------------------------------------
-
-JIT compiling train_iteration...
-Training:   0%|          | 0/1 [00:00<?, ?it/s]Training:   0%|          | 0/1 [00:03<?, ?it/s, Iter=1, Loss=-0.0302, Rew=0.00]DEBUG: iter=1, ckpt_interval=1, vis_enabled=True, eval_video=None
-DEBUG: Triggering checDEBUG: iter=2, ckpt_interval=1, vis_enabled=True, eval_video=None
-Training:   0%|          | 0/1 [02:47<?, ?it/s, Iter=2, Loss=-0.0228, Rew=0.00]DEBUG: iTraining:   0%|          | 0/1 [08:50<?, ?it/s, Iter=3, Loss=-0.0275, Rew=0.00]DEBUG: iter=3, ckpt_interval=1, vis_enabled=True, eval_video=None
-Training:   0%|          | 0/1 [05:32<?, ?it/s, Iter=3, Loss=-0.0275, Rew=0.00]DEBUG: iTraining: 100%|██████████| 1/1 [12:20<00:00, 740.79s/it, Iter=3, Loss=-0.0275, Rew=0.00]Training: 100%|███████Training: 100%|██████████| 1/1 [08:16<00:00, 496.61s/it, Iter=3, Loss=-0.0275, Rew=0.00]Training: 100%|██████████| 1/1 [08:16<00:00, 496.61s/it, Iter=4, Loss=1.1065, Rew=-10.00]DEBUG: iTraining: 100%|██████████| 1/1 [15:38<00:00, 938.65s/it, Iter=4, Loss=1.1065, Rew=-10.00]
-Training complete. Results saved toTraining: 100%|██████████| 1/1 [10:50<00:00, 650.64s/it, Iter=4, Loss=1.1065, Rew=-10.00]
-Training complete. Results saved to results/JAX_RecurrentPPO/jax_RecurrentPPO_20260205-144106
-
-Training complete! Final model saved to: results/JAX_RecurrentPPO/jax_RecurrentPPO_20260205-144106/models
-
-============================================================
-Results saved to: results/JAX_RecurrentPPO/jax_RecurrentPPO_20260205-144106
-============================================================
