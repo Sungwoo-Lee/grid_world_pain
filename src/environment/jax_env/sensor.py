@@ -77,11 +77,16 @@ def sense_extero_nociception(agent_pos, res_pos, res_active, res_type):
 
 def get_observation(state: EnvState, params: EnvParams):
     """Assembles the full observation vector."""
-    # 1. Chemical Sensor
-    chem_obs = sense_resource(
+    # 1. Chemical Sensor (Resources + Predators)
+    res_chem = sense_resource(
         state.agent_pos, state.res_pos, state.res_active, params.res_property,
         radius=params.sensor_radius, decay_power=params.sensor_decay
     )
+    pred_chem = sense_resource(
+        state.agent_pos, state.pred_pos, jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_), params.pred_property,
+        radius=params.sensor_radius, decay_power=params.sensor_decay
+    )
+    chem_obs = res_chem + pred_chem
     
     # 2. Extero Nociception (Phasic)
     noc_obs = sense_extero_nociception(
