@@ -162,13 +162,26 @@ def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_
 def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState, jnp.ndarray, jnp.ndarray, dict]:
     """Orchestrates a full environment step in JAX."""
     
+    # 0. Split key for random events (regeneration, predators)
+    key, respawn_key, predator_key = jax.random.split(state.key, 3)
+
     # 1. Resource Regeneration (before agent moves)
-    new_active, new_reg_timer, new_cons_count, _ = update_resources(
+    new_active, new_reg_timer, new_cons_count, respawn_mask = update_resources(
         state.res_active, state.res_reg_timer, state.res_cons_count, params
     )
     
+    # Displace resources that just respawned
+    num_res = params.res_type.shape[0]
+    res_keys = jax.random.split(respawn_key, num_res)
+    
+    def sample_res_pos(rk, area):
+        return jax.random.randint(rk, (2,), area[:2], area[2:])
+        
+    new_potential_pos = jax.vmap(sample_res_pos)(res_keys, params.res_spawn_area)
+    # Only update position IF respawn_mask is true for that resource
+    res_pos_after_reg = jnp.where(respawn_mask[:, None], new_potential_pos, state.res_pos)
+    
     # 2. Predator Update
-    key, predator_key = jax.random.split(state.key)
     new_pred_pos, new_pred_state, new_pred_stamina, new_pred_move_timer, _ = update_predators(
         state.pred_pos, state.pred_state, state.pred_stamina, state.pred_move_timer, 
         state.agent_pos, params, predator_key
@@ -178,8 +191,8 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     new_agent_pos = move_agent(state.agent_pos, action, params)
     
     # 4. Interaction Logic
-    # Check overlaps with resources
-    at_resource = jnp.all(state.res_pos == new_agent_pos, axis=-1)
+    # Check overlaps with resources (using positions AFTER regeneration)
+    at_resource = jnp.all(res_pos_after_reg == new_agent_pos, axis=-1)
     interact_resource = jnp.logical_and(at_resource, new_active)
     
     # Danger interaction (Auto)
@@ -217,10 +230,13 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # Update Resource Lifecycle (Consumption)
     next_cons_count = new_cons_count + jnp.where(interacted_this_step, 1, 0)
     # Deactivate if exceeded max_cons (if max_cons > 0)
-    should_deactivate = jnp.logical_and(params.res_max_cons > 0, next_cons_count >= params.res_max_cons)
+    # CRITICAL FIX: Only deactivate if it was active to avoid resetting timer during deactivation phase
+    should_deactivate = jnp.logical_and(new_active, 
+                                        jnp.logical_and(params.res_max_cons > 0, next_cons_count >= params.res_max_cons))
     final_active = jnp.where(should_deactivate, False, new_active)
     # Set reg timer
     next_reg_timer = jnp.where(should_deactivate, params.res_reg_delay, new_reg_timer)
+
     
     # ate_food is already calculated above
     
@@ -262,6 +278,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     new_state = state._replace(
         agent_pos=new_agent_pos,
         current_step=next_step,
+        res_pos=res_pos_after_reg,
         res_active=final_active,
         res_reg_timer=next_reg_timer,
         res_cons_count=next_cons_count,
@@ -277,6 +294,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     )
     
     return new_state, reward, done, info
+
 
 def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     """Functional reset for the JAX environment."""

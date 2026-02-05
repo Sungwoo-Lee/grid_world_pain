@@ -13,16 +13,22 @@ def load_env_params(config: Config) -> EnvParams:
     """Loads environment parameters from a Config object with strict retrieval."""
     
     # Build resource arrays
-    resources = config.get('environment.resources', [])
-    if resources:
-        res_type = jnp.array([0 if r.get('type') == 'food' else 1 for r in resources], dtype=jnp.int32)
-        # Note: 'property' in YAML vs 'res_property' in JAX
-        res_property = jnp.array([r.get('properties', [0,0,0,0,0]) for r in resources])
+    raw_resources = config.get('environment.resources', [])
+    expanded_resources = []
+    if raw_resources:
+        for r in raw_resources:
+            count = r.get('count', 1)
+            for _ in range(count):
+                expanded_resources.append(r)
+    
+    if expanded_resources:
+        res_type = jnp.array([0 if r.get('type') == 'food' else 1 for r in expanded_resources], dtype=jnp.int32)
+        res_property = jnp.array([r.get('properties', [0,0,0,0,0]) for r in expanded_resources])
         res_spawn_area = jnp.array([[*r.get('spawn_area', [[0,0],[10,10]])[0], 
-                                     *r.get('spawn_area', [[0,0],[10,10]])[1]] for r in resources])
-        res_max_cons = jnp.array([r.get('max_consumption', 999) for r in resources], dtype=jnp.int32)
-        res_reg_delay = jnp.array([r.get('regeneration_delay', 0) for r in resources], dtype=jnp.int32)
-        res_damage = jnp.array([r.get('damage', 0.0) for r in resources])
+                                     *r.get('spawn_area', [[0,0],[10,10]])[1]] for r in expanded_resources])
+        res_max_cons = jnp.array([r.get('max_consumption', 999) for r in expanded_resources], dtype=jnp.int32)
+        res_reg_delay = jnp.array([r.get('regeneration_delay', 0) for r in expanded_resources], dtype=jnp.int32)
+        res_damage = jnp.array([r.get('damage', 0.0) for r in expanded_resources])
     else:
         res_type = jnp.zeros(0, dtype=jnp.int32)
         res_property = jnp.zeros((0, 5))
@@ -30,6 +36,7 @@ def load_env_params(config: Config) -> EnvParams:
         res_max_cons = jnp.zeros(0, dtype=jnp.int32)
         res_reg_delay = jnp.zeros(0, dtype=jnp.int32)
         res_damage = jnp.zeros(0)
+
     
     # Build predator arrays
     predators = config.get('environment.predators', [])
