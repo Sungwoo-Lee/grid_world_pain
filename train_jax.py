@@ -169,11 +169,45 @@ def main():
 
     # 1.5 Print Combined Configuration (Always)
     if not args.quiet:
-        print("\n" + "=" * 60)
-        print(" COMBINED CONFIGURATION ".center(60, "="))
-        print("=" * 60)
-        print(yaml.dump(config.to_dict(), default_flow_style=False))
-        print("=" * 60 + "\n")
+        def print_pretty_config(config_dict):
+            """Stylized configuration audit log."""
+            width = 64
+            print("\n" + "=" * width)
+            print(" SYSTEM CONFIGURATION AUDIT ".center(width, "="))
+            print("=" * width)
+            
+            def print_recursive(d, indent=0):
+                keys = sorted(d.keys())
+                for k in keys:
+                    v = d[k]
+                    prefix = "  " * indent
+                    if isinstance(v, dict):
+                        print(f"\n{prefix}[ {k.upper()} ]")
+                        print_recursive(v, indent + 1)
+                    elif isinstance(v, list):
+                        if len(v) > 0 and isinstance(v[0], dict):
+                            # List of dicts (like predators/resources)
+                            names = [item.get('name', 'unnamed') for item in v]
+                            print(f"{prefix}● {k: <20} : {len(v)} items ({', '.join(names[:3])}{'...' if len(names) > 3 else ''})")
+                        elif len(v) > 5:
+                            print(f"{prefix}● {k: <20} : [List of {len(v)} items]")
+                        else:
+                            print(f"{prefix}● {k: <20} : {v}")
+                    else:
+                        print(f"{prefix}● {k: <20} : {v}")
+            
+            # Separate dicts from non-dicts at top level for grouping
+            top_dicts = {k: v for k, v in config_dict.items() if isinstance(v, dict)}
+            top_leafs = {k: v for k, v in config_dict.items() if not isinstance(v, dict)}
+            
+            if top_leafs:
+                print("\n[ GLOBAL SETTINGS ]")
+                print_recursive(top_leafs, indent=1)
+            
+            print_recursive(top_dicts, indent=0)
+            print("\n" + "=" * width + "\n")
+
+        print_pretty_config(config.to_dict())
 
     # Determine Algorithm
     algorithm = config.get_mandatory('agent.algorithm')
