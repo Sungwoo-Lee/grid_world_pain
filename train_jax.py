@@ -167,6 +167,14 @@ def main():
     if args.no_satiation: config.set('environment.with_satiation', False)
     if args.no_overeating_death: config.set('environment.overeating_death', False)
 
+    # 1.5 Print Combined Configuration (Always)
+    if not args.quiet:
+        print("\n" + "=" * 60)
+        print(" COMBINED CONFIGURATION ".center(60, "="))
+        print("=" * 60)
+        print(yaml.dump(config.to_dict(), default_flow_style=False))
+        print("=" * 60 + "\n")
+
     # Determine Algorithm
     algorithm = config.get_mandatory('agent.algorithm')
     
@@ -184,9 +192,9 @@ def main():
     lr = args.lr or config.get_mandatory('agent.lr_actor') # or model_lr for dreamer... will handle below
     
     # Re-load EnvParams with full merged config for JAX core
-    params = load_env_params(args.config or DEFAULT_CONFIG_PATH)
+    params = load_env_params(config)
     
-    # Apply CLI overrides to params if they exist in params
+    # Apply CLI overrides to params if they exist in params (redundant now but safe)
     if args.no_satiation: params = params.replace(with_satiation=False)
     if args.no_overeating_death: params = params.replace(overeating_death=False)
 
@@ -534,14 +542,14 @@ def main():
                     ckpt_data = {'wm': nnx.state(trainer.agent.wm, nnx.Param), 'actor': nnx.state(trainer.agent.ac.actor, nnx.Param), 'critic': nnx.state(trainer.agent.ac.critic, nnx.Param), 'key': key, 'iteration': iteration, 'step': global_step}
 
                 if iteration % checkpoint_interval == 0 and ckpt_data:
-                    if args.debug or not args.quiet:
+                    if args.debug:
                         print(f"  [DEBUG] Saving checkpoint at step {global_step}...", flush=True)
                     checkpointer.save(iteration, args=ocp.args.StandardSave(ckpt_data))
                     
                     vis_flag = config.get('visualization.enabled')
-                    eval_v_flag = config.get('evaluation.video_during_training')
+                    eval_v_flag = config.get('training.video_during_training')
                     if vis_flag or eval_v_flag:
-                        if args.debug or not args.quiet:
+                        if args.debug:
                             print(f"  [DEBUG] Starting evaluation and video saving...", flush=True)
                         try:
                             from src.utils.evaluation_jax_core import evaluate_jax_checkpoint

@@ -7,23 +7,20 @@ import yaml
 import jax.numpy as jnp
 from src.environment.jax_env.state import EnvParams
 
-def load_env_params(config_path: str) -> EnvParams:
-    """Loads environment parameters from a YAML config file."""
-    with open(config_path, 'r') as f:
-        cfg = yaml.safe_load(f)
-    
-    env_cfg = cfg.get('environment', {})
-    body_cfg = cfg.get('body', {})
-    sensory_cfg = cfg.get('sensory', {})
+from src.utils.config import Config
+
+def load_env_params(config: Config) -> EnvParams:
+    """Loads environment parameters from a Config object with strict retrieval."""
     
     # Build resource arrays
-    resources = env_cfg.get('resources', [])
+    resources = config.get('environment.resources', [])
     if resources:
         res_type = jnp.array([0 if r.get('type') == 'food' else 1 for r in resources], dtype=jnp.int32)
-        res_property = jnp.array([r.get('property', [0,0,0,0,0]) for r in resources])
+        # Note: 'property' in YAML vs 'res_property' in JAX
+        res_property = jnp.array([r.get('properties', [0,0,0,0,0]) for r in resources])
         res_spawn_area = jnp.array([[*r.get('spawn_area', [[0,0],[10,10]])[0], 
                                      *r.get('spawn_area', [[0,0],[10,10]])[1]] for r in resources])
-        res_max_cons = jnp.array([r.get('max_consecutive', 999) for r in resources], dtype=jnp.int32)
+        res_max_cons = jnp.array([r.get('max_consumption', 999) for r in resources], dtype=jnp.int32)
         res_reg_delay = jnp.array([r.get('regeneration_delay', 0) for r in resources], dtype=jnp.int32)
         res_damage = jnp.array([r.get('damage', 0.0) for r in resources])
     else:
@@ -35,7 +32,7 @@ def load_env_params(config_path: str) -> EnvParams:
         res_damage = jnp.zeros(0)
     
     # Build predator arrays
-    predators = env_cfg.get('predators', [])
+    predators = config.get('environment.predators', [])
     if predators:
         pred_property = jnp.array([p.get('property', [0,0,0,0,0]) for p in predators])
         pred_move_int = jnp.array([p.get('move_interval', 1) for p in predators], dtype=jnp.int32)
@@ -57,9 +54,9 @@ def load_env_params(config_path: str) -> EnvParams:
         pred_hunt_thresh = jnp.zeros(0)
     
     return EnvParams(
-        height=env_cfg.get('height', 10),
-        width=env_cfg.get('width', 10),
-        max_steps=env_cfg.get('max_steps', 500),
+        height=config.get_mandatory('environment.height'),
+        width=config.get_mandatory('environment.width'),
+        max_steps=config.get_mandatory('environment.max_steps'),
         res_type=res_type,
         res_property=res_property,
         res_spawn_area=res_spawn_area,
@@ -74,20 +71,22 @@ def load_env_params(config_path: str) -> EnvParams:
         pred_max_stamina=pred_max_stamina,
         pred_recovery=pred_recovery,
         pred_hunt_thresh=pred_hunt_thresh,
-        max_satiation=body_cfg.get('max_satiation', 100.0),
-        max_injury=body_cfg.get('max_injury', 20.0),
-        food_gain=body_cfg.get('food_gain', 10.0),
-        setpoint=body_cfg.get('setpoint', 50.0),
-        injury_recovery=body_cfg.get('injury_recovery', 1.0),
-        smoothing_duration=body_cfg.get('smoothing_duration', 3),
-        death_penalty=body_cfg.get('death_penalty', 10.0),
-        overeating_death=body_cfg.get('overeating_death', False),
-        use_homeostatic_reward=body_cfg.get('use_homeostatic_reward', True),
-        with_satiation=body_cfg.get('with_satiation', False),
-        with_injury=body_cfg.get('with_injury', True),
-        rest_action_enabled=env_cfg.get('rest_action_enabled', True),
-        eat_action_enabled=env_cfg.get('eat_action_enabled', True),
-        sensor_radius=sensory_cfg.get('sensor_radius', 10.0),
-        sensor_decay=sensory_cfg.get('sensor_decay', 2.0),
-        sensor_range=sensory_cfg.get('sensor_range', 3)
+        max_satiation=config.get_mandatory('body.max_satiation'),
+        max_injury=config.get_mandatory('body.max_injury'),
+        food_gain=config.get_mandatory('body.food_satiation_gain'),
+        setpoint=config.get_mandatory('body.satiation_setpoint'),
+        injury_recovery=config.get_mandatory('body.injury_recovery'),
+        smoothing_duration=config.get_mandatory('body.injury_smoothing_duration'),
+        death_penalty=config.get_mandatory('body.death_penalty'),
+        overeating_death=config.get_mandatory('body.overeating_death'),
+        use_homeostatic_reward=config.get_mandatory('body.use_homeostatic_reward'),
+        with_satiation=config.get_mandatory('body.with_satiation'),
+        with_injury=config.get_mandatory('body.with_injury'),
+        rest_action_enabled=config.get_mandatory('environment.rest_action_enabled'),
+        eat_action_enabled=config.get_mandatory('environment.eat_action_enabled'),
+        sensor_radius=config.get_mandatory('sensory.sensor_radius'),
+        sensor_decay=config.get_mandatory('sensory.decay_power'),
+        sensor_range=config.get_mandatory('sensory.collision_sensor_range')
     )
+    
+    return params

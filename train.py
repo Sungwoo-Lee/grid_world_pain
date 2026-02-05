@@ -999,7 +999,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
                 agent.save(model_snap_filename)
             
             # Integrated Evaluation and Video Generation (if enabled)
-            if config_dict.get('evaluation.video_during_training') or config_dict.get('visualization.enabled'):
+            if config_dict.get('training.video_during_training') or config_dict.get('visualization.enabled'):
                 try:
                     if not quiet:
                          # Using tqdm.write to avoid breaking progress bar

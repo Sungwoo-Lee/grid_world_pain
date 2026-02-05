@@ -74,7 +74,7 @@ def main():
     
     # Reconstruct JAX EnvParams from saved configuration
     # Note: load_env_params handles the mapping from YAML structure to JAX arrays
-    params = load_env_params(config_path)
+    params = load_env_params(config)
 
     # 3. Print Summary
     print(f"\n{'='*50}")
