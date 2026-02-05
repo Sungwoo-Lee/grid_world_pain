@@ -470,6 +470,9 @@ def main():
 
                 iteration += 1
                 if args.debug: print(f"\n[DEBUG] --- Iteration {iteration} Start (Step: {global_step}) ---", flush=True)
+
+                # Buffer for episodes that finish DURING THIS ITERATION
+                iteration_episodes = []
                 
                 if algorithm == "RecurrentPPO":
                     if args.debug: print(f"  [DEBUG] Collecting {num_steps * num_envs} steps of experience...", end="", flush=True)
@@ -498,25 +501,26 @@ def main():
                                 
                                 # Store for moving average (tqdm)
                                 ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
-                                
-                                # Log individual episode as it happens
-                                if wandb_enabled:
-                                    wandb.log({
-                                        "Episode/Reward": ep_reward,
-                                        "Episode/Steps": ep_length,
-                                        "Episode/Number": total_episodes_completed,
-                                        "timesteps": global_step + (t * num_envs) # Precise step matching
-                                    })
+                                # Store for iteration-level logging (Stage 3)
+                                iteration_episodes.append({'r': ep_reward, 'l': ep_length})
                                 
                                 # Reset for next episode in this slot
                                 episode_returns[i] = 0.0
                                 episode_lengths[i] = 0
                     
-                    # Log aggregate stats for the iteration to track environment spread
-                    if wandb_enabled and np.any(done_np):
-                        # Get rewards of all environments that finished during this iteration
-                        # (Note: we already logged them individually, but iteration-level stats are good for variance)
-                        pass 
+                    # Log AGGREGATED stats for the iteration (Stage 3)
+                    if wandb_enabled and iteration_episodes:
+                        rewards = [ep['r'] for ep in iteration_episodes]
+                        lengths = [ep['l'] for ep in iteration_episodes]
+                        wandb.log({
+                            "Episode/Reward": np.mean(rewards),
+                            "Episode/Reward_Min": np.min(rewards),
+                            "Episode/Reward_Max": np.max(rewards),
+                            "Episode/Steps": np.mean(lengths),
+                            "Episode/Number": total_episodes_completed,
+                            "timesteps": global_step,
+                            "iteration": iteration
+                        })
 
                     # Update progress bar based on total episodes completed
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
@@ -544,64 +548,72 @@ def main():
                     })
                         
                 elif algorithm == "DreamerV3":
-                    if args.debug: print(f"  [DEBUG] DreamerV3 Step...", end="", flush=True)
-                    obs_arr = jax.vmap(get_observation, in_axes=(0, None))(env_state, params)
-                    key, act_key = jax.random.split(key)
-                    action_idx, dreamer_state = trainer.get_action(obs_arr, dreamer_state, eval_mode=False, rng=act_key)
-                    action_idx = action_idx.astype(jnp.int32)
-                    action_onehot = jax.nn.one_hot(action_idx, action_dim)
-                    
-                    step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
-                    next_env_state, reward, done, info = step_fn(env_state, action_idx)
-                    
-                    obs_np = np.array(obs_arr)
-                    act_np = np.array(action_onehot)
-                    rew_np = np.array(reward)
-                    done_np = np.array(done)
-                    
-                    if not hasattr(main, 'prev_dones'):
-                        main.prev_dones = np.zeros((num_envs,), dtype=bool)
-                        if iteration == 1: main.prev_dones[:] = True
-                    
-                    is_first_np = main.prev_dones
-                    for i in range(num_envs):
-                        buffer.add(obs_np[i], act_np[i], rew_np[i], done_np[i], is_first_np[i])
-                    
-                    main.prev_dones = done_np
-                    env_state = next_env_state
-                    global_step += num_envs
-                    
-                    episode_returns += rew_np
-                    episode_lengths += 1
-                    dones = done_np.astype(bool)
-                    if np.any(dones):
-                        completed_indices = np.where(dones)[0]
-                        for i in completed_indices:
-                            total_episodes_completed += 1
-                            ep_reward = float(episode_returns[i])
-                            ep_length = int(episode_lengths[i])
-                            
-                            ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
-                            
-                            if wandb_enabled:
-                                wandb.log({
-                                    "Episode/Reward": ep_reward,
-                                    "Episode/Steps": ep_length,
-                                    "Episode/Number": total_episodes_completed,
-                                    "timesteps": global_step
-                                })
-                            
-                            episode_returns[i] = 0.0
-                            episode_lengths[i] = 0
+                    # Collect a batch of steps to match PPO's iteration rhythm
+                    for _ in range(num_steps):
+                        if args.debug: print(f".", end="", flush=True)
+                        obs_arr = jax.vmap(get_observation, in_axes=(0, None))(env_state, params)
+                        key, act_key = jax.random.split(key)
+                        action_idx, dreamer_state = trainer.get_action(obs_arr, dreamer_state, eval_mode=False, rng=act_key)
+                        action_idx = action_idx.astype(jnp.int32)
+                        action_onehot = jax.nn.one_hot(action_idx, action_dim)
+                        
+                        step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
+                        next_env_state, reward, done, info = step_fn(env_state, action_idx)
+                        
+                        obs_np = np.array(obs_arr)
+                        act_np = np.array(action_onehot)
+                        rew_np = np.array(reward)
+                        done_np = np.array(done)
+                        
+                        if not hasattr(main, 'prev_dones'):
+                            main.prev_dones = np.zeros((num_envs,), dtype=bool)
+                            if iteration == 1: main.prev_dones[:] = True
+                        
+                        is_first_np = main.prev_dones
+                        for i in range(num_envs):
+                            buffer.add(obs_np[i], act_np[i], rew_np[i], done_np[i], is_first_np[i])
+                        
+                        main.prev_dones = done_np
+                        env_state = next_env_state
+                        global_step += num_envs
+                        
+                        episode_returns += rew_np
+                        episode_lengths += 1
+                        dones = done_np.astype(bool)
+                        if np.any(dones):
+                            completed_indices = np.where(dones)[0]
+                            for i in completed_indices:
+                                total_episodes_completed += 1
+                                ep_reward = float(episode_returns[i])
+                                ep_length = int(episode_lengths[i])
+                                
+                                ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
+                                iteration_episodes.append({'r': ep_reward, 'l': ep_length})
+                                
+                                episode_returns[i] = 0.0
+                                episode_lengths[i] = 0
 
-                        # Update progress bar
-                        pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
-                        pbar.refresh()
+                    if wandb_enabled and iteration_episodes:
+                        rewards = [ep['r'] for ep in iteration_episodes]
+                        lengths = [ep['l'] for ep in iteration_episodes]
+                        wandb.log({
+                            "Episode/Reward": np.mean(rewards),
+                            "Episode/Reward_Min": np.min(rewards),
+                            "Episode/Reward_Max": np.max(rewards),
+                            "Episode/Steps": np.mean(lengths),
+                            "Episode/Number": total_episodes_completed,
+                            "timesteps": global_step,
+                            "iteration": iteration
+                        })
+
+                    # Update progress bar
+                    pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
+                    pbar.refresh()
     
                     metrics = {}
                     loss_msg = ""
                     if buffer.size > max(dreamer_config['batch_size'] * 2, dreamer_config['batch_length']):
-
+                        if args.debug: print(f"  [DEBUG] DreamerV3 Training Update...", end="", flush=True)
                         batch_jax = buffer.sample(dreamer_config['batch_size'])
                         metrics = trainer.train_step(batch_jax, key)
                         loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
