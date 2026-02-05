@@ -145,34 +145,60 @@ class RSSM(nnx.Module):
         return prior
 
 class Encoder(nnx.Module):
-    def __init__(self, input_dim: int, embed_dim: int, rngs: nnx.Rngs):
-        self.net = nnx.Sequential(
-            nnx.Linear(input_dim, embed_dim, rngs=rngs),
-            nnx.LayerNorm(embed_dim, rngs=rngs),
-            SiLU(),
-            nnx.Linear(embed_dim, embed_dim, rngs=rngs),
-            nnx.LayerNorm(embed_dim, rngs=rngs),
-            SiLU(),
-        )
+    def __init__(self, input_dim: int, embed_dim: int, fc_layers: list, rngs: nnx.Rngs):
+        """
+        Configurable Encoder matching PyTorch architecture.
+        Args:
+            input_dim: Input observation dimension
+            embed_dim: Output embedding dimension
+            fc_layers: List of hidden layer sizes (e.g., [128, 128, 128, 128, 128])
+        """
+        layers = []
+        in_d = input_dim
+        for h in fc_layers:
+            layers.append(nnx.Linear(in_d, h, rngs=rngs))
+            layers.append(nnx.LayerNorm(h, rngs=rngs))
+            layers.append(SiLU())
+            in_d = h
+        layers.append(nnx.Linear(in_d, embed_dim, rngs=rngs))
+        layers.append(nnx.LayerNorm(embed_dim, rngs=rngs))
+        layers.append(SiLU())
+        self.net = nnx.Sequential(*layers)
+        
     def __call__(self, x):
         return self.net(x)
 
 class Decoder(nnx.Module):
-    def __init__(self, input_dim: int, output_dim: int, rngs: nnx.Rngs):
-        self.net = nnx.Sequential(
-            nnx.Linear(input_dim, 256, rngs=rngs),
-            nnx.LayerNorm(256, rngs=rngs),
-            SiLU(),
-            nnx.Linear(256, 256, rngs=rngs),
-            nnx.LayerNorm(256, rngs=rngs),
-            SiLU(),
-            nnx.Linear(256, output_dim, rngs=rngs)
-        )
+    def __init__(self, input_dim: int, output_dim: int, fc_layers: list, rngs: nnx.Rngs):
+        """
+        Configurable Decoder matching PyTorch architecture.
+        Args:
+            input_dim: Input feature dimension (deter + stoch*discrete)
+            output_dim: Output observation dimension
+            fc_layers: List of hidden layer sizes (e.g., [128, 128, 128, 128, 128])
+        """
+        layers = []
+        in_d = input_dim
+        for h in fc_layers:
+            layers.append(nnx.Linear(in_d, h, rngs=rngs))
+            layers.append(nnx.LayerNorm(h, rngs=rngs))
+            layers.append(SiLU())
+            in_d = h
+        layers.append(nnx.Linear(in_d, output_dim, rngs=rngs))
+        self.net = nnx.Sequential(*layers)
+        
     def __call__(self, x):
         return self.net(x)
 
 class MLP(nnx.Module):
-    def __init__(self, input_dim, output_dim, hidden=[256, 256], rngs: nnx.Rngs = None):
+    def __init__(self, input_dim, output_dim, hidden: list = None, rngs: nnx.Rngs = None):
+        """
+        Configurable MLP with LayerNorm + SiLU.
+        Args:
+            hidden: List of hidden layer sizes (default: [256, 256])
+        """
+        if hidden is None:
+            hidden = [256, 256]
         layers = []
         in_d = input_dim
         for h in hidden:
@@ -187,33 +213,68 @@ class MLP(nnx.Module):
         return self.net(x)
 
 class WorldModel(nnx.Module):
-    def __init__(self, obs_dim, act_dim, rngs: nnx.Rngs):
-        self.deter_dim = 512
-        self.stoch_dim = 32
-        self.discrete = 32
+    def __init__(self, obs_dim, act_dim, config: dict, rngs: nnx.Rngs):
+        """
+        Configurable World Model matching PyTorch architecture.
+        Args:
+            config: Dictionary containing:
+                - encoder_dim: Embedding dimension
+                - encoder_fc_layers: Encoder hidden layers
+                - rssm_deter_dim: Deterministic state dimension
+                - rssm_stoch_dim: Number of stochastic classes
+                - rssm_classes: Number of discrete classes per stoch unit
+                - decoder_fc_layers: Decoder hidden layers
+                - reward_fc_layers: Reward head hidden layers
+                - continue_fc_layers: Continue head hidden layers
+        """
+        self.deter_dim = config.get('rssm_deter_dim', 512)
+        self.stoch_dim = config.get('rssm_stoch_dim', 32)
+        self.discrete = config.get('rssm_classes', 32)
+        encoder_dim = config.get('encoder_dim', self.deter_dim)
         
-        self.encoder = Encoder(obs_dim, self.deter_dim, rngs=rngs)
+        encoder_fc = config.get('encoder_fc_layers', [128, 128])
+        decoder_fc = config.get('decoder_fc_layers', [128, 128])
+        reward_fc = config.get('reward_fc_layers', [128, 128])
+        continue_fc = config.get('continue_fc_layers', [128, 128])
+        
+        self.encoder = Encoder(obs_dim, encoder_dim, encoder_fc, rngs=rngs)
         self.rssm = RSSM(act_dim, self.deter_dim, self.stoch_dim, self.discrete, rngs=rngs)
         
         feat_dim = self.deter_dim + self.stoch_dim * self.discrete
         
-        self.decoder = Decoder(feat_dim, obs_dim, rngs=rngs)
-        self.reward_head = MLP(feat_dim, 255, rngs=rngs) # TwoHot buckets
-        self.continue_head = MLP(feat_dim, 1, rngs=rngs)
+        self.decoder = Decoder(feat_dim, obs_dim, decoder_fc, rngs=rngs)
+        self.reward_head = MLP(feat_dim, 255, reward_fc, rngs=rngs)
+        self.continue_head = MLP(feat_dim, 1, continue_fc, rngs=rngs)
 
     def get_feat(self, state):
         return jnp.concatenate([state['deter'], state['stoch']], axis=-1)
 
 class ActorCritic(nnx.Module):
-    def __init__(self, feat_dim, act_dim, rngs: nnx.Rngs):
-        self.actor = MLP(feat_dim, act_dim, rngs=rngs)
-        self.critic = MLP(feat_dim, 255, rngs=rngs) # TwoHot buckets
-        # Target critic needed? Usually separate module instance managed by trainer with EMA.
+    def __init__(self, feat_dim, act_dim, config: dict, rngs: nnx.Rngs):
+        """
+        Configurable Actor-Critic matching PyTorch architecture.
+        Args:
+            config: Dictionary containing:
+                - actor_fc_layers: Actor hidden layers
+                - critic_fc_layers: Critic hidden layers
+        """
+        actor_fc = config.get('actor_fc_layers', [256, 256])
+        critic_fc = config.get('critic_fc_layers', [256, 256])
+        
+        self.actor = MLP(feat_dim, act_dim, actor_fc, rngs=rngs)
+        self.critic = MLP(feat_dim, 255, critic_fc, rngs=rngs)
 
 class DreamerV3Agent(nnx.Module):
     """
-    Container for the full agent.
+    Container for the full agent with configurable architecture.
     """
-    def __init__(self, obs_dim, act_dim, rngs: nnx.Rngs):
-        self.wm = WorldModel(obs_dim, act_dim, rngs=rngs)
-        self.ac = ActorCritic(self.wm.deter_dim + self.wm.stoch_dim * self.wm.discrete, act_dim, rngs=rngs)
+    def __init__(self, obs_dim, act_dim, config: dict, rngs: nnx.Rngs):
+        """
+        Args:
+            config: Full agent config dictionary from YAML
+        """
+        self.config = config
+        self.wm = WorldModel(obs_dim, act_dim, config, rngs=rngs)
+        feat_dim = self.wm.deter_dim + self.wm.stoch_dim * self.wm.discrete
+        self.ac = ActorCritic(feat_dim, act_dim, config, rngs=rngs)
+

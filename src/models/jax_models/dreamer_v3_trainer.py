@@ -82,42 +82,30 @@ def compute_lambda_values(rewards, values, continues):
 class DreamerTrainer(nnx.Module):
     def __init__(self, obs_dim, act_dim, config, rngs: nnx.Rngs):
         self.config = config
-        self.agent = DreamerV3Agent(obs_dim, act_dim, rngs=rngs)
-        self.target_critic = nnx.Linear(1, 1, rngs=rngs) # Placeholder, will copy structure
-        # Actually need deep copy of critic structure for target
-        # nnx.merge/split makes this easy? Or just creating another ActorCritic?
-        # Let's create another separate Critic module matching structure
-        wm_feat_dim = self.agent.wm.deter_dim + self.agent.wm.stoch_dim * self.agent.wm.discrete
-        self.target_critic_net = self.agent.ac.critic # We will wrap this?
-        # NNX target handling: typically manual param update.
-        # We need a separate set of variables.
-        # Let's clone:
-        self.target_critic_state = nnx.state(self.agent.ac.critic) # Snapshot?
         
-        # Optimizers
-        self.model_opt = optax.adam(config.get('model_lr', 1e-4))
-        self.actor_opt = optax.adam(config.get('actor_lr', 3e-5))
-        self.critic_opt = optax.adam(config.get('value_lr', 8e-5))
+        # Create agent config dict for network architecture
+        agent_config = {
+            'encoder_dim': config.get('encoder_dim', 128),
+            'encoder_fc_layers': config.get('encoder_fc_layers', [128, 128]),
+            'rssm_deter_dim': config.get('rssm_deter_dim', 512),
+            'rssm_stoch_dim': config.get('rssm_stoch_dim', 32),
+            'rssm_classes': config.get('rssm_classes', 32),
+            'decoder_fc_layers': config.get('decoder_fc_layers', [128, 128]),
+            'reward_fc_layers': config.get('reward_fc_layers', [128, 128]),
+            'continue_fc_layers': config.get('continue_fc_layers', [128, 128]),
+            'actor_fc_layers': config.get('actor_fc_layers', [256, 256]),
+            'critic_fc_layers': config.get('critic_fc_layers', [256, 256]),
+        }
         
-        # Optimizer States (managed by NNX? No, standard optax)
-        self.params_model = nnx.state(self.agent.wm)
-        self.params_actor = nnx.state(self.agent.ac.actor)
-        self.params_critic = nnx.state(self.agent.ac.critic)
-        
-        self.opt_state_model = self.model_opt.init(self.params_model)
-        self.opt_state_actor = self.actor_opt.init(self.params_actor)
-        self.opt_state_critic = self.critic_opt.init(self.params_critic)
-        
-        # Step counter
-        self.step_count = jnp.array(0, dtype=jnp.int32)
-        
-class DreamerTrainer(nnx.Module):
-    def __init__(self, obs_dim, act_dim, config, rngs: nnx.Rngs):
-        self.config = config
-        self.agent = DreamerV3Agent(obs_dim, act_dim, rngs=rngs)
+        self.agent = DreamerV3Agent(obs_dim, act_dim, agent_config, rngs=rngs)
         
         # Target Critic (separate network for EMA)
-        self.target_critic = ActorCritic(self.agent.wm.deter_dim + self.agent.wm.stoch_dim * self.agent.wm.discrete, act_dim, rngs=rngs).critic
+        feat_dim = self.agent.wm.deter_dim + self.agent.wm.stoch_dim * self.agent.wm.discrete
+        self.target_critic = ActorCritic(feat_dim, act_dim, agent_config, rngs=rngs).critic
+        
+        # Moments for return normalization (matching PyTorch)
+        from src.models.jax_models.dreamer_v3_util import Moments
+        self.moments = Moments(decay=0.99, max_=1.0, percentile_low=0.05, percentile_high=0.95)
         
         # Optimizers (nnx.Optimizer manages state)
         self.model_opt = nnx.Optimizer(self.agent.wm, optax.adam(config.get('model_lr', 1e-4)), wrt=nnx.Param)
@@ -125,6 +113,7 @@ class DreamerTrainer(nnx.Module):
         self.critic_opt = nnx.Optimizer(self.agent.ac.critic, optax.adam(config.get('value_lr', 8e-5)), wrt=nnx.Param)
         
         self.step_count = jnp.array(0, dtype=jnp.int32)
+
 
     def train_step(self, batch, rng):
         # batch: obs (B,T,O), action (B,T,A), reward (B,T), terminal (B,T), is_first (B,T)

@@ -223,7 +223,7 @@ def main():
     # Budget scales with parallelization: episodes * steps per episode * num environments
     total_timesteps = args.total_timesteps or (episodes * env_max_steps * num_envs)
     
-    num_steps = args.num_steps or config.get_mandatory('agent.num_steps')
+    num_steps = args.num_steps or config.get_mandatory('agent.sequence_length')
     hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
     seed = args.seed if args.seed is not None else config.get_mandatory('seed')
     lr = args.lr or config.get_mandatory('agent.lr_actor') # or model_lr for dreamer... will handle below

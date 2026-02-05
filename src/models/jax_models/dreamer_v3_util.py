@@ -103,3 +103,64 @@ class OneHotDist:
     def mode(self):
         sample_idx = jnp.argmax(self.logits, axis=-1)
         return jax.nn.one_hot(sample_idx, self.num_classes)
+
+
+class Moments:
+    """
+    Exponential Moving Average (EMA) of percentile-based moments for return normalization.
+    Matches PyTorch DreamerV3 implementation.
+    
+    Usage:
+        moments = Moments()
+        for batch in data:
+            low, invscale = moments.update(returns)
+            normalized = (returns - low) / invscale
+    """
+    def __init__(
+        self,
+        decay: float = 0.99,
+        max_: float = 1.0,
+        percentile_low: float = 0.05,
+        percentile_high: float = 0.95,
+    ):
+        self.decay = decay
+        self.max_ = max_
+        self.percentile_low = percentile_low
+        self.percentile_high = percentile_high
+        # State: EMA of low and high percentiles
+        self.low = 0.0
+        self.high = 0.0
+        
+    def update(self, x):
+        """
+        Update moments with new data and return normalization parameters.
+        
+        Args:
+            x: Array of values to normalize (e.g., lambda returns)
+            
+        Returns:
+            low: EMA of low percentile (offset for normalization)
+            invscale: EMA of scale (high - low, clamped)
+        """
+        x_flat = jnp.ravel(x).astype(jnp.float32)
+        
+        # Compute percentiles
+        low = jnp.percentile(x_flat, self.percentile_low * 100)
+        high = jnp.percentile(x_flat, self.percentile_high * 100)
+        
+        # EMA update
+        self.low = self.decay * self.low + (1 - self.decay) * low
+        self.high = self.decay * self.high + (1 - self.decay) * high
+        
+        # Compute inverse scale (clamped to avoid division by zero)
+        invscale = jnp.maximum(1.0 / self.max_, self.high - self.low)
+        
+        return self.low, invscale
+    
+    def normalize(self, x):
+        """
+        Normalize values using current moments.
+        """
+        invscale = jnp.maximum(1.0 / self.max_, self.high - self.low)
+        return (x - self.low) / invscale
+
