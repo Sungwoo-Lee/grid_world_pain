@@ -1,4 +1,5 @@
-# Default Evaluation Configuration
 testing:
   seed: 56
   evaluation_episodes: 1
+evaluation:
+  video_during_training: true

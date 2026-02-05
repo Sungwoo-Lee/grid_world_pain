@@ -105,8 +105,16 @@ def main():
     parser.add_argument("--wandb-entity", type=str, help="WandB Entity Name")
     
     args = parser.parse_args()
+    
+    if args.debug:
+        print(f"[DEBUG] Script started. CLI arguments: {args}", flush=True)
 
-    # 1. Load Config Hierarchy (Synchronized with train.py)
+    # 1. Configuration Loading
+    if args.debug: print(f"[DEBUG] Phase 1: Configuration Loading...", flush=True)
+    
+    # Matching train.py logic (Strictly no safe defaults)
+    base_config_path = args.config or DEFAULT_CONFIG_PATH
+    if args.debug: print(f"[DEBUG] Loading base config from {base_config_path}", flush=True)
     config = get_default_config()
 
     # Merge Training Defaults
@@ -141,9 +149,11 @@ def main():
         config.merge(user_config)
 
     # Merge Agent Config (--agent_config) - REQUIRED
+    agent_config_path = args.agent_config
+    if args.debug: print(f"[DEBUG] Loading agent config from {agent_config_path}", flush=True)
     if not args.quiet:
-        print(f"Loading agent config from: {args.agent_config}")
-    agent_config = Config.load_yaml(args.agent_config)
+        print(f"Loading agent config from: {agent_config_path}")
+    agent_config = Config.load_yaml(agent_config_path)
     config.merge(agent_config)
 
     # CLI Overrides (Synchronized with train.py)
@@ -181,6 +191,7 @@ def main():
     if args.no_overeating_death: params = params.replace(overeating_death=False)
 
     # 2. Setup Results Directory
+    if args.debug: print(f"[DEBUG] Phase 2: Results Directory Setup...", flush=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_name = args.wandb_name or args.tag or f"jax_{algorithm}_{timestamp}"
     
@@ -206,15 +217,16 @@ def main():
     if not args.quiet:
         print(f"Config saved to: {config_save_path}")
 
-    # 3. Initialize WandB with full options
+    # 3. Initialize WandB
+    if args.debug: print(f"[DEBUG] Phase 3: WandB Initialization...", flush=True)
     wandb_enabled = WANDB_AVAILABLE and not args.no_wandb and not config.get_mandatory('wandb.disabled')
     if wandb_enabled:
         wandb_login(quiet=True)
         
         wandb_kwargs = {
             "project": args.wandb_project or config.get_mandatory('wandb.project'),
-            "entity": args.wandb_entity or config.get('wandb.entity'), # entity can be None
-            "group": args.wandb_group or config.get('wandb.group'), # group can be None
+            "entity": args.wandb_entity or config.get('wandb.entity'),
+            "group": args.wandb_group or config.get('wandb.group'),
             "name": run_name,
             "config": {
                 "algorithm": algorithm,
@@ -230,14 +242,12 @@ def main():
             "reinit": True
         }
         
-        # Resume support
         if args.wandb_resume_id:
             wandb_kwargs['id'] = args.wandb_resume_id
             wandb_kwargs['resume'] = "allow"
         
         wandb.init(**wandb_kwargs)
         
-        # Define metrics (matching train.py)
         wandb.define_metric("iteration")
         wandb.define_metric("timesteps")
         wandb.define_metric("Episode/Number")
@@ -245,10 +255,9 @@ def main():
         wandb.define_metric("loss/*", step_metric="iteration")
         wandb.define_metric("*", step_metric="timesteps")
         
-        # Log source code
         wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py"))
 
-    # 3. Print Summary (matching train.py format)
+    # 4. Print Summary
     if not args.quiet:
         width = 60
         header = " JAX/FLAX RL CONFIGURATION "
@@ -261,7 +270,6 @@ def main():
             for k, value in data.items():
                 print(f"  \u25cf {k:.<25} {value}")
         
-        # Environment Section
         with_satiation = config.get_mandatory('body.with_satiation')
         with_injury = config.get_mandatory('body.with_injury')
         use_homeostatic_reward = config.get_mandatory('body.use_homeostatic_reward')
@@ -277,7 +285,6 @@ def main():
             env_data["Injury System"] = "ENABLED"
         print_section("Environment", env_data)
         
-        # Training Section
         train_data = {
             "Framework": "JAX/Flax NNX",
             "Total Timesteps": f"{total_timesteps:,}",
@@ -288,36 +295,27 @@ def main():
             "WandB": "Enabled" if wandb_enabled else "Disabled"
         }
         print_section("Training", train_data)
-        
-        # Agent Section (populated after model init)
 
     # 5. Training Setup
-    # Initialize ParallelEnv
+    if args.debug: print(f"[DEBUG] Phase 5: Training Setup...", flush=True)
     env = ParallelEnv(params)
-
-    # Initialize RNG
     key = jax.random.PRNGKey(seed)
     key, model_key, env_key = jax.random.split(key, 3)
 
-    # Initialize environment states
+    if args.debug: print(f"[DEBUG] Performing initial environment reset for {num_envs} envs...", flush=True)
     env_state, obs = env.reset(env_key, num_envs)
     input_dim = obs.shape[-1]
-    # Calculate action_dim dynamically based on config
-    # 0-3: Directions, 4: Rest (if enabled), 4 or 5: Eat (if enabled)
+    
     rest_enabled = params.rest_action_enabled
     eat_enabled = params.eat_action_enabled
     action_dim = 4 + int(rest_enabled) + int(eat_enabled)
 
-    # Print Observation Specs (matching train.py)
     if not args.quiet:
         print("\n--- RL API Specifications ---")
         print(f"Action Dim: {action_dim}")
-        
-        # Get detailed dimension breakdown
         obs_breakdown = get_observation_breakdown(params)
         breakdown_str = ", ".join([f"{k}={v}" for k, v in obs_breakdown.items()])
         total_dim = sum(obs_breakdown.values())
-        
         print(f"Observation Dim: {total_dim} ({breakdown_str})")
         print(f"Dimension Breakdown:")
         for sensor_name, dim in obs_breakdown.items():
@@ -327,19 +325,12 @@ def main():
         print("--------------------------------------------\n")
     
     # 6. Algorithm Initialization
+    if args.debug: print(f"[DEBUG] Phase 6: Algorithm Initialization ({algorithm})...", flush=True)
     if algorithm == "RecurrentPPO":
-        # RecurrentPPO Setup
-        
-        # Init params
         key, init_key = jax.random.split(key)
-        
-        # Initialize NNX model state
         model = ActorCriticRNN(input_dim=input_dim, action_dim=action_dim, hidden_size=hidden_size, rngs=nnx.Rngs(init_key))
-        
-        # Optimizer
         optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
         
-        # PPO Config (prioritize agent.* from model config)
         ppo_config = PPOConfig(
             num_steps=num_steps,
             num_epochs=config.get_mandatory('agent.K_epochs'),
@@ -350,19 +341,14 @@ def main():
             vf_coef=config.get_mandatory('agent.vf_coef'),
             lr=lr
         )
-        
-        # Initialize Hidden State
         h_state = jnp.zeros((num_envs, hidden_size))
 
-        # JIT compile
         if not args.quiet:
             print("JIT compiling train_iteration...")
         jit_train = nnx.jit(train_iteration, static_argnums=(6,))
         
     elif algorithm == "DreamerV3":
         from src.models.jax_models.dreamer_v3_trainer import DreamerTrainer, ReplayBuffer
-        
-        # Dreamer Config (Strict)
         dreamer_config = {
             'model_lr': config.get_mandatory('agent.model_lr'),
             'actor_lr': config.get_mandatory('agent.actor_lr'),
@@ -370,105 +356,149 @@ def main():
             'batch_size': config.get_mandatory('agent.batch_size'),
             'batch_length': config.get_mandatory('agent.batch_length'),
         }
-        
-        if args.debug:
-            print("DEBUG: Initializing DreamerTrainer...", flush=True)
         key, init_key = jax.random.split(key)
         trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=nnx.Rngs(init_key))
-        if args.debug:
-            print("DEBUG: DreamerTrainer initialized.", flush=True)
-        
         buffer = ReplayBuffer(
             capacity=int(1e5), 
             sequence_length=dreamer_config['batch_length'], 
             obs_dim=input_dim, 
             action_dim=action_dim
         )
+        dreamer_state = None 
         
-        # Dreamer State
-        # Prev State (RSSM) - Init for each env
-        # We need to track this per env.
-        # trainer.get_action handles initialization if None, but strict batch size?
-        # trainer.get_action expects (B, O).
-        dreamer_state = None # Will be init on first call
-        
-    if args.debug:
-        print(f"DEBUG: Entering Training Loop ({args.num_steps} iterations)...", flush=True)
     # 7. Training Loop
+    if args.debug: print(f"[DEBUG] Phase 7: Entering Training Loop...", flush=True)
     global_step = 0
     iteration = 0
-    
-    # Episode Metrics Tracking
+    total_episodes_completed = 0
+    virtual_episode = 0
+    prev_virtual_episode = 0
     episode_returns = np.zeros(num_envs, dtype=np.float32)
     episode_lengths = np.zeros(num_envs, dtype=np.int32)
-    
-    # Buffer for completed episodes (we'll log when we have num_envs worth of episodes)
-    recent_episodes_buffer = deque(maxlen=num_envs * 10)  # Keep last 10 virtual episodes worth
-    
-    # Virtual episode counter: increments every num_envs completed episodes
-    total_episodes_completed = 0
-    virtual_episode = 0  # This is the X-axis for WandB and tqdm
-    prev_virtual_episode = 0  # For calculating tqdm delta
-    
-    # Legacy buffer for running mean (used in progress bar postfix)
+    recent_episodes_buffer = deque(maxlen=num_envs * 10)
     ep_info_buffer = deque(maxlen=100)
     
     start_time = datetime.now()
-    
-    # Initialize Progress Bar (Virtual Episode-based)
-    pbar = tqdm(total=episodes, disable=args.quiet, desc="Training")
-    
-    try:
-        while global_step < total_timesteps:
-            iteration += 1
-            
-            if algorithm == "RecurrentPPO":
-                # PPO Iteration
-                env_state, h_state, key, losses, num_completed, rollout_rew, rollout_done = jit_train(
-                    model, optimizer, params, env_state, h_state, key, ppo_config
-                )
+    if args.debug: print(f"[DEBUG] Loop start time: {start_time.strftime('%H:%M:%S')}", flush=True)
+
+    with tqdm(total=args.episodes, disable=args.quiet, desc="Training") as pbar:
+        try:
+            while (virtual_episode < args.episodes) if args.episodes > 0 else (global_step < total_timesteps):
+                iteration += 1
+                if args.debug: print(f"\n[DEBUG] --- Iteration {iteration} Start (Step: {global_step}) ---", flush=True)
                 
-                # Update globals
-                steps_this_iter = num_steps * num_envs
-                global_step += steps_this_iter
-                
-                # --- Process Rollout Metrics (T, B) ---
-                rew_np = np.array(rollout_rew)
-                done_np = np.array(rollout_done)
-                
-                for t in range(num_steps):
-                    episode_returns += rew_np[t]
-                    episode_lengths += 1
+                if algorithm == "RecurrentPPO":
+                    if args.debug: print(f"  [DEBUG] Collecting {num_steps * num_envs} steps of experience...", end="", flush=True)
+                    env_state, h_state, key, losses, num_completed, rollout_rew, rollout_done = jit_train(
+                        model, optimizer, params, env_state, h_state, key, ppo_config
+                    )
+                    if args.debug: print(f" Done.", flush=True)
                     
-                    dones_t = done_np[t].astype(bool)
-                    if np.any(dones_t):
+                    steps_this_iter = num_steps * num_envs
+                    global_step += steps_this_iter
+                    
+                    rew_np = np.array(rollout_rew)
+                    done_np = np.array(rollout_done)
+                    
+                    for t in range(num_steps):
+                        episode_returns += rew_np[t]
+                        episode_lengths += 1
+                        dones_t = done_np[t].astype(bool)
+                        if np.any(dones_t):
+                            for i in range(num_envs):
+                                if dones_t[i]:
+                                    recent_episodes_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
+                                    ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
+                                    total_episodes_completed += 1
+                                    episode_returns[i] = 0.0
+                                    episode_lengths[i] = 0
+                                    new_virtual_episode = total_episodes_completed // num_envs
+                                    while virtual_episode < new_virtual_episode:
+                                        virtual_episode += 1
+                                        if len(recent_episodes_buffer) >= num_envs:
+                                            last_n = list(recent_episodes_buffer)[-num_envs:]
+                                            avg_reward = np.mean([ep['r'] for ep in last_n])
+                                            avg_steps = np.mean([ep['l'] for ep in last_n])
+                                            if wandb_enabled:
+                                                wandb.log({
+                                                    "Episode/Reward": float(avg_reward),
+                                                    "Episode/Steps": float(avg_steps),
+                                                    "Episode/Number": virtual_episode,
+                                                    "timesteps": global_step
+                                                })
+                    
+                    episode_delta = virtual_episode - prev_virtual_episode
+                    if episode_delta > 0:
+                        pbar.update(episode_delta)
+                        prev_virtual_episode = virtual_episode
+                    
+                    avg_policy_loss = jnp.mean(jnp.array([l[1][0] for l in losses]))
+                    avg_value_loss = jnp.mean(jnp.array([l[1][1] for l in losses]))
+                    avg_ent_loss = jnp.mean(jnp.array([l[1][2] for l in losses]))
+                    total_loss = jnp.mean(jnp.array([l[0] for l in losses]))
+                    
+                    if wandb_enabled:
+                        wandb.log({
+                            "loss/total": total_loss,
+                            "loss/policy": avg_policy_loss,
+                            "loss/value": avg_value_loss,
+                            "loss/entropy": avg_ent_loss,
+                            "timesteps": global_step,
+                            "iteration": iteration
+                        })
+                    
+                    pbar.set_postfix({
+                        "Iter": iteration,
+                        "Loss": f"{total_loss:.4f}",
+                        "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"
+                    })
+                        
+                elif algorithm == "DreamerV3":
+                    if args.debug: print(f"  [DEBUG] DreamerV3 Step...", end="", flush=True)
+                    obs_arr = jax.vmap(get_observation, in_axes=(0, None))(env_state, params)
+                    key, act_key = jax.random.split(key)
+                    action_idx, dreamer_state = trainer.get_action(obs_arr, dreamer_state, eval_mode=False, rng=act_key)
+                    action_idx = action_idx.astype(jnp.int32)
+                    action_onehot = jax.nn.one_hot(action_idx, action_dim)
+                    
+                    step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
+                    next_env_state, reward, done, info = step_fn(env_state, action_idx)
+                    
+                    obs_np = np.array(obs_arr)
+                    act_np = np.array(action_onehot)
+                    rew_np = np.array(reward)
+                    done_np = np.array(done)
+                    
+                    if not hasattr(main, 'prev_dones'):
+                        main.prev_dones = np.zeros((num_envs,), dtype=bool)
+                        if iteration == 1: main.prev_dones[:] = True
+                    
+                    is_first_np = main.prev_dones
+                    for i in range(num_envs):
+                        buffer.add(obs_np[i], act_np[i], rew_np[i], done_np[i], is_first_np[i])
+                    
+                    main.prev_dones = done_np
+                    env_state = next_env_state
+                    global_step += num_envs
+                    
+                    episode_returns += rew_np
+                    episode_lengths += 1
+                    dones = done_np.astype(bool)
+                    if np.any(dones):
                         for i in range(num_envs):
-                            if dones_t[i]:
-                                # Store completed episode info
-                                recent_episodes_buffer.append({
-                                    'r': episode_returns[i], 
-                                    'l': episode_lengths[i]
-                                })
+                            if dones[i]:
+                                recent_episodes_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
                                 ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
                                 total_episodes_completed += 1
-                                
-                                # Reset per-env buffers
                                 episode_returns[i] = 0.0
                                 episode_lengths[i] = 0
-                                
-                                # Check if we've completed another "virtual episode" worth of episodes
-                                # Virtual episode = num_envs completed episodes (1 per env on average)
                                 new_virtual_episode = total_episodes_completed // num_envs
                                 while virtual_episode < new_virtual_episode:
                                     virtual_episode += 1
-                                    
-                                    # Calculate the average of the last num_envs completed episodes
                                     if len(recent_episodes_buffer) >= num_envs:
                                         last_n = list(recent_episodes_buffer)[-num_envs:]
                                         avg_reward = np.mean([ep['r'] for ep in last_n])
                                         avg_steps = np.mean([ep['l'] for ep in last_n])
-                                        
-                                        # Log to WandB with virtual episode as X-axis
                                         if wandb_enabled:
                                             wandb.log({
                                                 "Episode/Reward": float(avg_reward),
@@ -476,190 +506,63 @@ def main():
                                                 "Episode/Number": virtual_episode,
                                                 "timesteps": global_step
                                             })
-                
-                # Update progress bar based on virtual episode changes
-                episode_delta = virtual_episode - prev_virtual_episode
-                if episode_delta > 0:
-                    pbar.update(episode_delta)
-                    prev_virtual_episode = virtual_episode
-                
-                # Update PPO Loss Metrics
-                avg_policy_loss = jnp.mean(jnp.array([l[1][0] for l in losses]))
-                avg_value_loss = jnp.mean(jnp.array([l[1][1] for l in losses]))
-                avg_ent_loss = jnp.mean(jnp.array([l[1][2] for l in losses]))
-                total_loss = jnp.mean(jnp.array([l[0] for l in losses]))
-                
-                if wandb_enabled:
-                    wandb.log({
-                        "loss/total": total_loss,
-                        "loss/policy": avg_policy_loss,
-                        "loss/value": avg_value_loss,
-                        "loss/entropy": avg_ent_loss,
-                        "timesteps": global_step,
-                        "iteration": iteration
-                    })
-                
-                pbar.set_postfix({
-                    "Iter": iteration,
-                    "Loss": f"{total_loss:.4f}",
-                    "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"
-                })
                     
-            elif algorithm == "DreamerV3":
-                # Action Selection
-                if args.debug:
-                    pbar.set_description(f"Iter {iteration} | Selecting Action")
-                obs_arr = jax.vmap(get_observation, in_axes=(0, None))(env_state, params)
-                
-                key, act_key = jax.random.split(key)
-                action_idx, dreamer_state = trainer.get_action(obs_arr, dreamer_state, eval_mode=False, rng=act_key)
-                action_idx = action_idx.astype(jnp.int32)
-                
-                action_onehot = jax.nn.one_hot(action_idx, action_dim)
-                
-                # Vmap step
-                if args.debug:
-                    pbar.set_description(f"Iter {iteration} | Stepping Env")
-                step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
-                next_env_state, reward, done, info = step_fn(env_state, action_idx)
-                
-                obs_np = np.array(obs_arr)
-                act_np = np.array(action_onehot)
-                rew_np = np.array(reward)
-                done_np = np.array(done)
-                
-                if not hasattr(main, 'prev_dones'):
-                    main.prev_dones = np.zeros((num_envs,), dtype=bool)
-                    if iteration == 1: main.prev_dones[:] = True
-                
-                is_first_np = main.prev_dones
-                for i in range(num_envs):
-                    buffer.add(obs_np[i], act_np[i], rew_np[i], done_np[i], is_first_np[i])
-                
-                main.prev_dones = done_np
-                env_state = next_env_state
-                global_step += num_envs
-                
-                # Episode Metric Tracking
-                episode_returns += rew_np
-                episode_lengths += 1
-                
-                # Check for completions
-                dones = done_np.astype(bool)
-                if np.any(dones):
-                    for i in range(num_envs):
-                        if dones[i]:
-                            # Store completed episode info
-                            recent_episodes_buffer.append({
-                                'r': episode_returns[i], 
-                                'l': episode_lengths[i]
-                            })
-                            ep_info_buffer.append({'r': episode_returns[i], 'l': episode_lengths[i]})
-                            total_episodes_completed += 1
-                            
-                            # Reset per-env buffers
-                            episode_returns[i] = 0.0
-                            episode_lengths[i] = 0
-                            
-                            # Check if we've completed another "virtual episode" worth of episodes
-                            new_virtual_episode = total_episodes_completed // num_envs
-                            while virtual_episode < new_virtual_episode:
-                                virtual_episode += 1
-                                
-                                # Calculate the average of the last num_envs completed episodes
-                                if len(recent_episodes_buffer) >= num_envs:
-                                    last_n = list(recent_episodes_buffer)[-num_envs:]
-                                    avg_reward = np.mean([ep['r'] for ep in last_n])
-                                    avg_steps = np.mean([ep['l'] for ep in last_n])
-                                    
-                                    # Log to WandB with virtual episode as X-axis
-                                    if wandb_enabled:
-                                        wandb.log({
-                                            "Episode/Reward": float(avg_reward),
-                                            "Episode/Steps": float(avg_steps),
-                                            "Episode/Number": virtual_episode,
-                                            "timesteps": global_step
-                                        })
-                
-                # Update progress bar based on virtual episode changes
-                episode_delta = virtual_episode - prev_virtual_episode
-                if episode_delta > 0:
-                    pbar.update(episode_delta)
-                    prev_virtual_episode = virtual_episode
+                    episode_delta = virtual_episode - prev_virtual_episode
+                    if episode_delta > 0:
+                        pbar.update(episode_delta)
+                        prev_virtual_episode = virtual_episode
+    
+                    metrics = {}
+                    loss_msg = ""
+                    if buffer.size > dreamer_config['batch_size'] * 2:
+                        batch_jax = buffer.sample(dreamer_config['batch_size'])
+                        metrics = trainer.train_step(batch_jax, key)
+                        loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
+                    
+                    if wandb_enabled and iteration % 10 == 0:
+                        wandb.log({"timesteps": global_step, "iteration": iteration, **metrics})
+                    
+                    pbar.set_postfix({"Iter": iteration, "Loss": loss_msg, "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"})
+                    if args.debug: print(f" Done.", flush=True)
 
-                
-                # Train Step
-                metrics = {}
-                loss_msg = ""
-                if buffer.size > dreamer_config['batch_size'] * 2:
-                    if args.debug:
-                        pbar.set_description(f"Iter {iteration} | Updating Models")
-                    metrics = trainer.train_step(batch_jax, key)
-                    loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
-                
-                if wandb_enabled and iteration % 10 == 0:
-                    wandb.log({
-                        "timesteps": global_step,
-                        "iteration": iteration,
-                        **metrics
-                    })
-                
-                pbar.set_postfix({
-                    "Iter": iteration,
-                    "Loss": loss_msg,
-                    "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"
-                })
-
-            # Checkpoint
-            checkpoint_interval = args.checkpoint_frequency or config.get_mandatory('training.checkpoint_frequency')
-            
-            # Populate ckpt_data for potential saving
-            if algorithm == "RecurrentPPO":
-                ckpt_data = {
-                    'model': nnx.state(model, nnx.Param),
-                    'optimizer': nnx.state(optimizer),
-                    'h_state': h_state,
-                    'key': key,
-                    'iteration': iteration,
-                    'step': global_step
-                }
-            elif algorithm == "DreamerV3" and 'trainer' in locals():
-                ckpt_data = {
-                     'wm': nnx.state(trainer.agent.wm, nnx.Param),
-                     'actor': nnx.state(trainer.agent.ac.actor, nnx.Param),
-                     'critic': nnx.state(trainer.agent.ac.critic, nnx.Param),
-                     'model_opt': nnx.state(trainer.model_opt),
-                     'actor_opt': nnx.state(trainer.actor_opt),
-                     'critic_opt': nnx.state(trainer.critic_opt),
-                     'key': key,
-                     'iteration': iteration,
-                     'step': global_step
-                }
-            else:
+                # Checkpoint Logic
+                checkpoint_interval = args.checkpoint_frequency or config.get_mandatory('training.checkpoint_frequency')
                 ckpt_data = {}
+                if algorithm == "RecurrentPPO":
+                    ckpt_data = {'model': nnx.state(model, nnx.Param), 'optimizer': nnx.state(optimizer), 'h_state': h_state, 'key': key, 'iteration': iteration, 'step': global_step}
+                elif algorithm == "DreamerV3":
+                    ckpt_data = {'wm': nnx.state(trainer.agent.wm, nnx.Param), 'actor': nnx.state(trainer.agent.ac.actor, nnx.Param), 'critic': nnx.state(trainer.agent.ac.critic, nnx.Param), 'key': key, 'iteration': iteration, 'step': global_step}
 
-            if iteration % checkpoint_interval == 0 and ckpt_data:
-                print(f"Saving checkpoint to {models_dir} at step {global_step}...")
-                checkpointer.save(iteration, args=ocp.args.StandardSave(ckpt_data))
+                if iteration % checkpoint_interval == 0 and ckpt_data:
+                    if args.debug or not args.quiet:
+                        print(f"  [DEBUG] Saving checkpoint at step {global_step}...", flush=True)
+                    checkpointer.save(iteration, args=ocp.args.StandardSave(ckpt_data))
+                    
+                    vis_flag = config.get('visualization.enabled')
+                    eval_v_flag = config.get('evaluation.video_during_training')
+                    if vis_flag or eval_v_flag:
+                        if args.debug or not args.quiet:
+                            print(f"  [DEBUG] Starting evaluation and video saving...", flush=True)
+                        try:
+                            from src.utils.evaluation_jax_core import evaluate_jax_checkpoint
+                            eval_results = evaluate_jax_checkpoint(
+                                model=model if algorithm == "RecurrentPPO" else trainer.agent,
+                                params=params, config=config, num_episodes=3, seed=seed,
+                                results_dir=results_dir, checkpoint_pct=iteration,
+                                render_video=True, wandb_enabled=wandb_enabled, debug=args.debug
+                            )
+                            if wandb_enabled:
+                                wandb.log({"Eval/MeanReward": eval_results["mean_reward"], "Eval/MeanLength": eval_results["mean_length"], "iteration": iteration, "timesteps": global_step})
+                        except Exception as e:
+                            print(f"Warning: Evaluation failed: {e}")
 
-    except KeyboardInterrupt:
-        print("\nTraining interrupted by user.")
-        
+        except KeyboardInterrupt:
+            print("\nTraining interrupted by user.")
+            
+    # Final cleanup
     print(f"Training complete. Results saved to {results_dir}")
-
-    # 7. Save Final Model
-    checkpointer.save(iteration, args=ocp.args.StandardSave(ckpt_data))
-    checkpointer.wait_until_finished()
-    print(f"\nTraining complete! Final model saved to: {models_dir}")
-
     if wandb_enabled:
         wandb.finish()
-
-    print(f"\n{'='*60}")
-    print(f"Results saved to: {results_dir}")
-    print(f"{'='*60}")
-    
-    # Clean up Orbax
     checkpointer.close()
 
 if __name__ == "__main__":

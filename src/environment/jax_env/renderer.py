@@ -52,7 +52,10 @@ def _load_icons():
     return icons
 
 
-def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale=1.0):
+# Global cache for figure and axes to avoid recreating them every frame
+_FIG_CACHE = None
+
+def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale=1.0, action=None, sensory_data=None):
     """
     Render a JAX EnvState to an RGB numpy array.
     
@@ -63,28 +66,64 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
         step: Optional step number for display
         dpi: Resolution (default 100)
         icon_scale: Scale factor for icons
+        action: Optional action index taken
+        sensory_data: Optional list of sensory component dicts:
+            [{'name': str, 'vector': ndarray, 'color': str, 'type': 'radial'|'spectrum'}, ...]
         
     Returns:
         numpy array of shape (H, W, 3) representing the RGB frame
     """
     icons = _load_icons()
+    global _FIG_CACHE
     
     # Colors
     bg_color = '#FFFFFF'
     text_color = '#343A40'
     grid_lines = '#DEE2E6'
+    agent_color = '#339AF0'
+    food_color = '#40C057'
+    danger_color = '#FA5252'
     
     # Grid dimensions
     height = int(params.height)
     width = int(params.width)
     
-    # Figure setup
-    fig = plt.figure(figsize=(8, 6), dpi=dpi)
-    fig.patch.set_facecolor(bg_color)
+    # Figure setup (Reuse if possible, but handle sensory_data presence changes)
+    has_sensory = sensory_data is not None and len(sensory_data) > 0
     
-    gs = fig.add_gridspec(1, 2, width_ratios=[2, 1])
-    ax_grid = fig.add_subplot(gs[0])
-    ax_stats = fig.add_subplot(gs[1])
+    # We check if the cached figure matches the current layout requirement
+    need_new_fig = False
+    if _FIG_CACHE is not None:
+        cached_fig, cached_grid, cached_stats, cached_sensory = _FIG_CACHE
+        # If the number of subplots changed, we need to rebuild
+        if (has_sensory and cached_sensory is None) or (not has_sensory and cached_sensory is not None):
+            need_new_fig = True
+            plt.close(cached_fig)
+    else:
+        need_new_fig = True
+
+    if need_new_fig:
+        fig_width = 10 if has_sensory else 8
+        fig = plt.figure(figsize=(fig_width, 6), dpi=dpi)
+        fig.patch.set_facecolor(bg_color)
+        
+        if has_sensory:
+             gs = fig.add_gridspec(2, 2, width_ratios=[1.5, 1], height_ratios=[0.4, 0.6])
+             ax_grid = fig.add_subplot(gs[:, 0])
+             ax_stats = fig.add_subplot(gs[0, 1])
+             ax_sensory = fig.add_subplot(gs[1, 1])
+        else:
+             gs = fig.add_gridspec(1, 2, width_ratios=[2, 1])
+             ax_grid = fig.add_subplot(gs[0])
+             ax_stats = fig.add_subplot(gs[1])
+             ax_sensory = None
+             
+        _FIG_CACHE = (fig, ax_grid, ax_stats, ax_sensory)
+    else:
+        fig, ax_grid, ax_stats, ax_sensory = _FIG_CACHE
+        ax_grid.clear()
+        ax_stats.clear()
+        if ax_sensory: ax_sensory.clear()
     
     # --- 1. Draw Grid ---
     ax_grid.set_facecolor(bg_color)
@@ -111,8 +150,8 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
             ax.add_artist(ab)
         else:
             # Fallback markers
-            markers = {'agent': ('o', '#339AF0'), 'food': ('D', '#40C057'), 
-                       'danger': ('X', '#FA5252'), 'predator': ('v', '#212529')}
+            markers = {'agent': ('o', agent_color), 'food': ('D', food_color), 
+                       'danger': ('X', danger_color), 'predator': ('v', '#212529')}
             m, color = markers.get(icon_key, ('s', 'grey'))
             ax.plot(c, r, marker=m, markersize=14 * scale_factor, color=color, markeredgecolor='white', markeredgewidth=1.5)
 
@@ -181,43 +220,106 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     ax_stats.text(0.1, y_cursor - 0.08, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
     
     # Satiation bar
-    y_cursor -= 0.20
-    satiation = float(state.satiation)
-    max_satiation = float(params.max_satiation)
-    sat_pct = max(0, min(1, satiation / max_satiation)) if max_satiation > 0 else 0
-    
-    ax_stats.text(0.1, y_cursor, f"Satiation:", color='#495057', fontsize=9, transform=ax_stats.transAxes, fontweight='bold')
-    ax_stats.text(0.9, y_cursor, f"{satiation:.0f}/{max_satiation:.0f}", color='#495057', fontsize=9, transform=ax_stats.transAxes, ha='right')
-    
-    # Bar background
-    bar_y = y_cursor - 0.06
-    ax_stats.add_patch(plt.Rectangle((0.1, bar_y), 0.8, 0.04, facecolor='#E9ECEF', edgecolor='#ADB5BD', transform=ax_stats.transAxes, lw=0.5))
-    # Bar fill
-    ax_stats.add_patch(plt.Rectangle((0.1, bar_y), 0.8 * sat_pct, 0.04, facecolor='#40C057', transform=ax_stats.transAxes))
+    y_cursor -= 0.12 # Reduced gap
+    if params.max_satiation > 0:
+        y_cursor -= 0.08
+        satiation = float(state.satiation)
+        max_sat = float(params.max_satiation)
+        sat_pct = max(0, min(1, satiation / max_sat))
+        
+        ax_stats.text(0.1, y_cursor + 0.08, f"SATIATION: {satiation:.1f}/{max_sat:.0f}", color=text_color, fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
+        ax_stats.add_patch(plt.Rectangle((0.1, y_cursor), 0.8, 0.06, facecolor='#F1F3F5', transform=ax_stats.transAxes))
+        ax_stats.add_patch(plt.Rectangle((0.1, y_cursor), 0.8 * sat_pct, 0.06, facecolor=food_color, transform=ax_stats.transAxes))
     
     # Injury bar
-    y_cursor -= 0.18
-    injury = float(state.injury_level)
-    max_injury = float(params.max_injury)
-    inj_pct = max(0, min(1, injury / max_injury)) if max_injury > 0 else 0
+    if params.max_injury > 0:
+        y_cursor -= 0.15
+        injury = float(state.injury_level)
+        max_inj = float(params.max_injury)
+        inj_pct = max(0, min(1, injury / max_inj))
+        
+        ax_stats.text(0.1, y_cursor + 0.08, f"INJURY: {injury:.1f}/{max_inj:.0f}", color=text_color, fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
+        ax_stats.add_patch(plt.Rectangle((0.1, y_cursor), 0.8, 0.06, facecolor='#F1F3F5', transform=ax_stats.transAxes))
+        ax_stats.add_patch(plt.Rectangle((0.1, y_cursor), 0.8 * inj_pct, 0.06, facecolor=danger_color, transform=ax_stats.transAxes))
     
-    ax_stats.text(0.1, y_cursor, f"Injury:", color='#495057', fontsize=9, transform=ax_stats.transAxes, fontweight='bold')
-    ax_stats.text(0.9, y_cursor, f"{injury:.0f}/{max_injury:.0f}", color='#495057', fontsize=9, transform=ax_stats.transAxes, ha='right')
+    # Status Badge and Action
+    y_cursor -= 0.20
     
-    # Bar background
-    bar_y = y_cursor - 0.06
-    ax_stats.add_patch(plt.Rectangle((0.1, bar_y), 0.8, 0.04, facecolor='#E9ECEF', edgecolor='#ADB5BD', transform=ax_stats.transAxes, lw=0.5))
-    # Bar fill (red for injury)
-    ax_stats.add_patch(plt.Rectangle((0.1, bar_y), 0.8 * inj_pct, 0.04, facecolor='#FA5252', transform=ax_stats.transAxes))
-    
-    # Action legend
-    y_cursor -= 0.22
-    ax_stats.text(0.5, y_cursor, "Actions: ↑↓←→", color='#868E96', fontsize=9, ha='center', transform=ax_stats.transAxes)
-    
-    # Grid info
-    y_cursor -= 0.12
-    ax_stats.text(0.5, y_cursor, f"Grid: {height}x{width}", color='#868E96', fontsize=8, ha='center', transform=ax_stats.transAxes)
-    
+    if predator_here or any_danger_here:
+        status_text, status_bg = "DANGER", danger_color
+    elif any_food_here:
+        status_text, status_bg = "FOOD", food_color
+    else:
+        status_text, status_bg = "CLEAR", '#ADB5BD'
+        
+    ax_stats.text(0.8, y_cursor + 0.05, status_text, color='white', ha='center', va='center', fontsize=8, fontweight='bold', 
+                  transform=ax_stats.transAxes,
+                  bbox=dict(boxstyle='round,pad=0.3', facecolor=status_bg, edgecolor='none'))
+
+    if action is not None:
+         # Action names indexing (JAX env standard: 0-3 directions, 4: Rest, 5: Eat)
+         action_names = {0: "UP", 1: "RIGHT", 2: "DOWN", 3: "LEFT"}
+         if params.rest_action_enabled: action_names[4] = "REST"
+         if params.eat_action_enabled: action_names[4 + int(params.rest_action_enabled)] = "EAT"
+         
+         act_str = action_names.get(int(action), f"ACT {action}")
+         ax_stats.text(0.4, y_cursor + 0.05, f"ACTION: {act_str}", color='#495057', ha='center', fontsize=11, weight='bold', transform=ax_stats.transAxes)
+
+    # --- 3. Draw Sensory Modules ---
+    if ax_sensory and has_sensory:
+        import math
+        ax_sensory.set_facecolor(bg_color)
+        ax_sensory.axis('off')
+        ax_sensory.text(0.5, 0.95, "SENSORY MODULES", color=text_color, ha='center', fontsize=10, fontweight='bold', transform=ax_sensory.transAxes)
+        
+        num_sensors = len(sensory_data)
+        top_y, bottom_y = 0.85, 0.10
+        available_h = top_y - bottom_y
+        slot_h = available_h / num_sensors
+        
+        for i, sensor in enumerate(sensory_data):
+            y_center = top_y - (i * slot_h) - (slot_h / 2)
+            name = sensor['name']
+            vector = np.array(sensor.get('vector', []))
+            color = sensor.get('color', '#339AF0')
+            sensor_type = sensor.get('type', 'spectrum')
+            
+            label_y_offset = slot_h * 0.35
+            ax_sensory.text(0.1, y_center + label_y_offset, name.upper(), color=text_color, fontsize=9, fontweight='bold', transform=ax_sensory.transAxes)
+            
+            if sensor_type == 'radial':
+                 # --- RADIAL (Collision) ---
+                 cx, cy = 0.5, y_center
+                 max_ray_len = min(0.15, slot_h * 0.35)
+                 num_secs = len(vector)
+                 for si in range(num_secs):
+                      val = vector[si]
+                      angle = math.pi/2 - (2 * math.pi * si / num_secs)
+                      dx, dy = math.cos(angle) * max_ray_len, math.sin(angle) * max_ray_len
+                      ax_sensory.plot([cx, cx+dx], [cy, cy+dy], color='#DEE2E6', transform=ax_sensory.transAxes, lw=1)
+                      if val > 0:
+                           adx, ady = math.cos(angle) * max_ray_len * val, math.sin(angle) * max_ray_len * val
+                           ax_sensory.plot([cx, cx+adx], [cy, cy+ady], color=color, transform=ax_sensory.transAxes, lw=2, alpha=0.9)
+                           ax_sensory.add_patch(plt.Circle((cx+adx, cy+ady), 0.015, color=color, transform=ax_sensory.transAxes))
+                 ax_sensory.add_patch(plt.Circle((cx, cy), 0.02, color='#868e96', transform=ax_sensory.transAxes))
+                 
+            else:
+                 # --- SPECTRUM (Chemical/Olfactory) ---
+                 num_ch = len(vector)
+                 slot_w, slot_x = 0.7, 0.15
+                 bar_h = min(0.08, slot_h * 0.5)
+                 bar_w = slot_w / num_ch
+                 gap = bar_w * 0.2
+                 act_w = bar_w - gap
+                 
+                 for ci in range(num_ch):
+                      val = max(0, min(1.0, vector[ci] / 2.0)) # Normalized for viz
+                      bx = slot_x + ci * bar_w
+                      ax_sensory.add_patch(plt.Rectangle((bx, y_center - bar_h/2), act_w, bar_h, color='#F1F3F5', transform=ax_sensory.transAxes))
+                      if val > 0:
+                           sh = bar_h * val
+                           ax_sensory.add_patch(plt.Rectangle((bx, y_center - bar_h/2), act_w, sh, color=color, transform=ax_sensory.transAxes))
+
     # Render to array
     plt.tight_layout()
     canvas = FigureCanvas(fig)
@@ -228,8 +330,6 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     
     # Convert RGBA to RGB
     rgb = image[:, :, :3]
-    
-    plt.close(fig)
     
     return rgb
 
