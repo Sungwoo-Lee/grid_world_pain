@@ -70,8 +70,8 @@ environment:
       spawn_area: [[0, 0], [10, 10]]
       patrol_area: [[0, 0], [10, 10]]
       detection_range: 15
-      max_stamina: 20
-      stamina_recovery_rate: 0.1
+      max_stamina: 50
+      stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.5
 
     - name: "Beta Predator"
@@ -82,8 +82,8 @@ environment:
       spawn_area: [[10, 10], [20, 20]]
       patrol_area: [[10, 10], [20, 20]]
       detection_range: 15
-      max_stamina: 20
-      stamina_recovery_rate: 0.1
+      max_stamina: 50
+      stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.5
       
   # Legacy config removed (prob_switch, durations, etc)

@@ -251,7 +251,8 @@ def main():
     # 2. Setup Results Directory
     if args.debug: print(f"[DEBUG] Phase 2: Results Directory Setup...", flush=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_name = args.wandb_name or args.tag or f"jax_{algorithm}_{timestamp}"
+    tag = args.tag or config.get('tag', algorithm)
+    run_name = f"{timestamp}_{tag}"
     
     if args.results_dir:
         results_dir = args.results_dir
