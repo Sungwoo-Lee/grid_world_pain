@@ -28,6 +28,7 @@ Usage:
     python train_jax.py --config configs/ablation/homeostatic/04_nociception.yaml --total-timesteps 100000
 """
 import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import argparse
 import yaml
 import numpy as np
@@ -676,7 +677,8 @@ def main():
                                 model=model if algorithm == "RecurrentPPO" else trainer.agent,
                                 params=params, config=config, num_episodes=3, seed=seed,
                                 results_dir=results_dir, checkpoint_pct=iteration,
-                                render_video=True, wandb_enabled=wandb_enabled, debug=args.debug
+                                render_video=True, wandb_enabled=wandb_enabled, debug=args.debug,
+                                quiet=True
                             )
                             if wandb_enabled:
                                 wandb.log({"Eval/MeanReward": eval_results["mean_reward"], "Eval/MeanLength": eval_results["mean_length"], "iteration": iteration, "timesteps": global_step})

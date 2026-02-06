@@ -18,6 +18,7 @@ Usage:
     python evaluation_jax.py --results_dir results/JAX_RecurrentPPO/my_run --episodes 10
 """
 import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import argparse
 import glob
 import re
@@ -39,6 +40,18 @@ from src.environment.jax_env.core import jax_step, jax_reset
 from src.environment.jax_env.sensor import get_observation
 from src.utils.evaluation_jax_core import evaluate_jax_checkpoint
 
+def peel_nnx_state(st):
+    """
+    Recursively removes 'value' keys from restored NNX states.
+    Orbax often saves Param objects as {'value': array}.
+    NNX expects the nested dict structure without the 'value' leaf if updating from a dict.
+    """
+    if isinstance(st, dict):
+        if 'value' in st:
+            # If it's a leaf Param-like dict, return the value
+            return st['value']
+        return {k: peel_nnx_state(v) for k, v in st.items()}
+    return st
 
 def main():
     parser = argparse.ArgumentParser(description="JAX GridWorld Evaluation")
@@ -83,6 +96,9 @@ def main():
     # Note: load_env_params handles the mapping from YAML structure to JAX arrays
     params = load_env_params(config)
 
+    # Determine if video rendering should be enabled (CLI flag or config default)
+    render_video = args.render_video or config.get('testing.render_video', False)
+
     # 3. Print Summary
     print(f"\n{'='*50}")
     print(f"JAX Evaluation: {algorithm}")
@@ -90,7 +106,7 @@ def main():
     print(f"Grid: {params.height}x{params.width}")
     print(f"Episodes: {num_episodes}")
     print(f"Seed: {seed}")
-    print(f"Video Rendering: {'Enabled' if args.render_video else 'Disabled'}")
+    print(f"Video Rendering: {'Enabled' if render_video else 'Disabled'}")
     print(f"{'='*50}\n")
 
     # 4. Find checkpoints
@@ -150,7 +166,13 @@ def main():
         test_state = jax_reset(params, jax.random.PRNGKey(seed))
         obs = get_observation(test_state, params)
         input_dim = obs.shape[0]
-        action_dim = 4
+        
+        # Dynamic action dimension (matching train_jax.py)
+        rest_enabled = params.rest_action_enabled
+        eat_enabled = params.eat_action_enabled
+        action_dim = 4 + int(rest_enabled) + int(eat_enabled)
+        
+        print(f"  [Model] Input Dim: {input_dim}, Action Dim: {action_dim}")
         
         rngs = nnx.Rngs(jax.random.PRNGKey(seed))
         
@@ -161,9 +183,18 @@ def main():
                 hidden_size=config.get_mandatory('agent.hidden_size'),
                 rngs=rngs
             )
-            # Restore via manager (returns item named 'default' if used as single checkpointer)
+            
+            # Restore via manager (returns the raw dict)
             restored = checkpointer.restore(iteration)
-            nnx.update(model, restored) # restored is already the Pytree if single item
+            
+            # Use the 'model' key as saved in train_jax.py
+            if 'model' in restored:
+                model_state = restored['model']
+                peeled_state = peel_nnx_state(model_state)
+                nnx.update(model, peeled_state)
+                print(f"  [Success] Restored RecurrentPPO model weights from iteration {iteration}")
+            else:
+                print(f"  [Warning] 'model' key not found in restored checkpoint. Keys: {list(restored.keys())}")
             
         elif algorithm == "DreamerV3":
             from src.models.jax_models.dreamer_v3_trainer import DreamerTrainer
@@ -175,16 +206,21 @@ def main():
                 'batch_length': config.get_mandatory('agent.batch_length'),
             }
             trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=rngs)
+            
             restored = checkpointer.restore(iteration)
-            # restored is a dict/pytree
-            nnx.update(trainer.agent.wm, restored['wm'])
-            nnx.update(trainer.agent.ac.actor, restored['actor'])
-            nnx.update(trainer.agent.ac.critic, restored['critic'])
+            
+            # Peel and update each component
+            nnx.update(trainer.agent.wm, peel_nnx_state(restored['wm']))
+            nnx.update(trainer.agent.ac.actor, peel_nnx_state(restored['actor']))
+            nnx.update(trainer.agent.ac.critic, peel_nnx_state(restored['critic']))
             model = trainer.agent 
         else:
             raise ValueError(f"Unsupported algorithm for JAX evaluation: {algorithm}")
             
-        evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, iteration, render_video=args.render_video)
+        evaluate_jax_checkpoint(
+            model, params, config, num_episodes, seed, results_dir, iteration, 
+            render_video=render_video, quiet=False
+        )
 
     checkpointer.close()
 

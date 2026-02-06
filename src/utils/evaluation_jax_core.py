@@ -3,6 +3,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from flax import nnx
+from tqdm import tqdm
 
 from src.environment.jax_env.core import jax_step, jax_reset
 from src.environment.jax_env.sensor import get_observation
@@ -16,7 +17,8 @@ try:
 except ImportError:
     WANDB_AVAILABLE = False
 
-def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, checkpoint_pct, render_video=False, wandb_enabled=False, debug=False):
+def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, checkpoint_pct, 
+                            render_video=False, wandb_enabled=False, debug=False, quiet=True):
     """
     Runs deterministic evaluation episodes using the JAX model.
     """
@@ -37,7 +39,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     episode_lengths = []
     all_frames = []
     
-    for ep in range(num_episodes):
+    # Progress bar for episodes
+    ep_pbar = tqdm(range(num_episodes), desc="Evaluating Episodes", disable=quiet)
+    for ep in ep_pbar:
         if debug:
             print(f"  --- Starting Evaluation Episode {ep+1}/{num_episodes} ---", flush=True)
             
@@ -92,6 +96,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             ))
             if debug: print(" Done", flush=True)
         
+        # Progress bar for steps if rendering video
+        step_pbar = tqdm(total=max_steps, desc=f"Episode {ep+1} Steps", leave=False, disable=quiet or not render_video)
+        
         while not done and step_count < max_steps:
             if debug:
                 print(f"    [Step {step_count}] Inferencing...", end="", flush=True)
@@ -132,6 +139,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 if debug: print(" Done", flush=True)
             
             obs = next_obs
+            step_pbar.update(1)
+        
+        step_pbar.close()
         
         episode_rewards.append(total_reward)
         episode_lengths.append(step_count)
@@ -150,7 +160,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         video_path = os.path.join(video_dir, f"eval_{checkpoint_pct}.mp4")
         fps = config.get('visualization.fps', 5)
         if debug: print(f"    [Video] Saving {len(all_frames)} frames to {video_path}...", end="", flush=True)
-        save_jax_video(all_frames, video_path, fps=fps, quiet=True)
+        save_jax_video(all_frames, video_path, fps=fps, quiet=quiet)
         if debug: print(" Done", flush=True)
         last_video_path = video_path
         print(f"  --- Consolidated Evaluation Video saved to: {video_path} ---", flush=True)

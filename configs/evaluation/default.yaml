@@ -1,4 +1,4 @@
 testing:
   seed: 56
   evaluation_episodes: 1
-evaluation: {}
+  render_video: true

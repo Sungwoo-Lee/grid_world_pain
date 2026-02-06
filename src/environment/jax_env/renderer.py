@@ -11,6 +11,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+import time
 
 # Imports for JAX EnvState
 import jax.numpy as jnp
@@ -52,7 +53,7 @@ def _load_icons():
     return icons
 
 
-# Global cache for figure and axes to avoid recreating them every frame
+# Global cache for figure, axes, and canvas to avoid recreating them every frame
 _FIG_CACHE = None
 
 def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale=1.0, action=None, sensory_data=None):
@@ -73,6 +74,7 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     Returns:
         numpy array of shape (H, W, 3) representing the RGB frame
     """
+    start_time = time.time()
     icons = _load_icons()
     global _FIG_CACHE
     
@@ -94,7 +96,7 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     # We check if the cached figure matches the current layout requirement
     need_new_fig = False
     if _FIG_CACHE is not None:
-        cached_fig, cached_grid, cached_stats, cached_sensory = _FIG_CACHE
+        cached_fig, cached_grid, cached_stats, cached_sensory, cached_canvas = _FIG_CACHE
         # If the number of subplots changed, we need to rebuild
         if (has_sensory and cached_sensory is None) or (not has_sensory and cached_sensory is not None):
             need_new_fig = True
@@ -118,9 +120,10 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
              ax_stats = fig.add_subplot(gs[1])
              ax_sensory = None
              
-        _FIG_CACHE = (fig, ax_grid, ax_stats, ax_sensory)
+        canvas = FigureCanvas(fig)
+        _FIG_CACHE = (fig, ax_grid, ax_stats, ax_sensory, canvas)
     else:
-        fig, ax_grid, ax_stats, ax_sensory = _FIG_CACHE
+        fig, ax_grid, ax_stats, ax_sensory, canvas = _FIG_CACHE
         ax_grid.clear()
         ax_stats.clear()
         if ax_sensory: ax_sensory.clear()
@@ -294,59 +297,48 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
         available_h = top_y - bottom_y
         slot_h = available_h / num_sensors
         
+        # Use fixed coordinates and spacing (much faster than tight_layout)
         for i, sensor in enumerate(sensory_data):
             y_center = top_y - (i * slot_h) - (slot_h / 2)
             name = sensor['name']
             vector = np.array(sensor.get('vector', []))
-            color = sensor.get('color', '#339AF0')
-            sensor_type = sensor.get('type', 'spectrum')
             
-            label_y_offset = slot_h * 0.35
-            ax_sensory.text(0.1, y_center + label_y_offset, name.upper(), color=text_color, fontsize=9, fontweight='bold', transform=ax_sensory.transAxes)
+            # Label - Fixed color for better visibility
+            ax_sensory.text(0.1, y_center + 0.08, name.upper(), color='#868E96', fontsize=7, fontweight='bold', transform=ax_sensory.transAxes)
             
-            if sensor_type == 'radial':
-                 # --- RADIAL (Collision) ---
-                 cx, cy = 0.5, y_center
-                 max_ray_len = min(0.15, slot_h * 0.35)
-                 num_secs = len(vector)
-                 for si in range(num_secs):
-                      val = vector[si]
-                      angle = math.pi/2 - (2 * math.pi * si / num_secs)
-                      dx, dy = math.cos(angle) * max_ray_len, math.sin(angle) * max_ray_len
-                      ax_sensory.plot([cx, cx+dx], [cy, cy+dy], color='#DEE2E6', transform=ax_sensory.transAxes, lw=1)
-                      if val > 0:
-                           adx, ady = math.cos(angle) * max_ray_len * val, math.sin(angle) * max_ray_len * val
-                           ax_sensory.plot([cx, cx+adx], [cy, cy+ady], color=color, transform=ax_sensory.transAxes, lw=2, alpha=0.9)
-                           ax_sensory.add_patch(plt.Circle((cx+adx, cy+ady), 0.015, color=color, transform=ax_sensory.transAxes))
-                 ax_sensory.add_patch(plt.Circle((cx, cy), 0.02, color='#868e96', transform=ax_sensory.transAxes))
-
-            elif sensor_type == 'intensity':
-                 # --- INTENSITY (Nociception Orb) ---
-                 intensity = sensor.get('intensity', 0)
-                 orb_r = 0.04
-                 cx, cy = 0.5, y_center
-                 ax_sensory.add_patch(plt.Circle((cx, cy), orb_r, color='#F1F3F5', transform=ax_sensory.transAxes))
-                 if intensity > 0:
-                      fill_c = plt.Circle((cx, cy), orb_r, facecolor=color, alpha=min(1.0, float(intensity)+0.2), transform=ax_sensory.transAxes)
-                      ax_sensory.add_patch(fill_c)
+            # Container for the sensor bar(s)
+            slot_x = 0.1
+            slot_w = 0.8
+            bar_h = min(0.06, slot_h * 0.4)
             
-            elif sensor_type == 'text':
-                 # --- TEXT VALUE (Location) ---
-                 v_txt = sensor.get('value_text', '')
-                 ax_sensory.text(0.5, y_center, v_txt, color=color, fontsize=10, fontweight='bold', ha='center', va='center', transform=ax_sensory.transAxes)
-                 
-            else:
-                 # --- SPECTRUM (Chemical/Olfactory) ---
+            if sensor['type'] == 'intensity':
+                val = float(sensor.get('intensity', 0))
+                color = sensor.get('color', '#339AF0')
+                ax_sensory.add_patch(plt.Rectangle((slot_x, y_center - bar_h/2), slot_w, bar_h, color='#F1F3F5', transform=ax_sensory.transAxes))
+                ax_sensory.add_patch(plt.Rectangle((slot_x, y_center - bar_h/2), slot_w * min(1.0, val), bar_h, color=color, transform=ax_sensory.transAxes))
+            
+            elif sensor['type'] == 'radial':
+                 # Draw small radial bars
                  num_ch = len(vector)
-                 slot_w, slot_x = 0.7, 0.15
-                 bar_h = min(0.08, slot_h * 0.5)
-                 bar_w = slot_w / max(1, num_ch)
+                 bar_w = slot_w / num_ch
+                 gap = bar_w * 0.2
+                 act_w = bar_w - gap
+                 color = sensor.get('color', '#339AF0')
+                 for ci in range(num_ch):
+                      val = max(0, min(1.0, float(vector[ci])))
+                      bx = slot_x + ci * bar_w
+                      ax_sensory.add_patch(plt.Rectangle((bx, y_center - bar_h/2), act_w, bar_h, color='#F1F3F5', transform=ax_sensory.transAxes))
+                      if val > 0:
+                           sh = bar_h * val
+                           ax_sensory.add_patch(plt.Rectangle((bx, y_center - bar_h/2), act_w, sh, color=color, transform=ax_sensory.transAxes, alpha=0.9))
+            
+            elif sensor['type'] == 'spectrum':
+                 num_ch = len(vector)
+                 bar_w = slot_w / num_ch
                  gap = bar_w * 0.2
                  act_w = bar_w - gap
                  
-                 # PyTorch Palette
-                 palette = ['#40C057', '#FA5252', '#339AF0', '#fab005', '#be4bdb']
-                 
+                 palette = ['#40C057', '#FA5252', '#339AF0', '#fab005', '#be4bdb', '#15aabf']
                  for ci in range(num_ch):
                       val = max(0, min(1.0, float(vector[ci]) / 2.0))
                       bx = slot_x + ci * bar_w
@@ -356,18 +348,23 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
                       if val > 0:
                            sh = bar_h * val
                            ax_sensory.add_patch(plt.Rectangle((bx, y_center - bar_h/2), act_w, sh, color=c, transform=ax_sensory.transAxes, alpha=0.9))
+            
+            elif sensor['type'] == 'text':
+                val_text = sensor.get('value_text', '')
+                color = sensor.get('color', '#343A40')
+                ax_sensory.text(0.1, y_center - 0.02, val_text, color=color, fontsize=8, weight='bold', transform=ax_sensory.transAxes, fontfamily='monospace')
 
-    # Render to array
-    plt.tight_layout()
-    canvas = FigureCanvas(fig)
+    # Render directly from canvas (removing tight_layout)
     canvas.draw()
     
+    # print_to_buffer is the Agg-native way to get the array
     s, (w, h) = canvas.print_to_buffer()
     image = np.frombuffer(s, dtype='uint8').reshape((int(h), int(w), 4))
     
     # Convert RGBA to RGB
     rgb = image[:, :, :3]
     
+    # print(f"      [Profile] Render took {time.time() - start_time:.4f}s")
     return rgb
 
 
