@@ -661,7 +661,7 @@ def main():
                         }
 
                     if ckpt_data:
-                        print(f"\n[CHECKPOINT] Saving model at episode {total_episodes_completed} (Iteration {iteration})...")
+                        pbar.write(f"[CHECKPOINT] Saving model at episode {total_episodes_completed} (Iteration {iteration})...")
                         checkpointer.save(total_episodes_completed, args=ocp.args.StandardSave(ckpt_data))
                         
                         # Trigger evaluation after checkpoint

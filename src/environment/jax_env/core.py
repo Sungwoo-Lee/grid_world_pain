@@ -106,6 +106,13 @@ def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_
     # Manhattan distance
     dist = jnp.sum(jnp.abs(pred_pos - agent_pos), axis=-1)
     
+    # Check if back in patrol area
+    # params.pred_patrol is [num_pred, 4] -> [min_r, min_c, max_r, max_c]
+    in_zone = jnp.logical_and(
+        jnp.logical_and(pred_pos[:, 0] >= params.pred_patrol[:, 0], pred_pos[:, 0] <= params.pred_patrol[:, 2]),
+        jnp.logical_and(pred_pos[:, 1] >= params.pred_patrol[:, 1], pred_pos[:, 1] <= params.pred_patrol[:, 3])
+    )
+    
     # 2. State Transitions (Only when move_timer <= 0)
     # HUNT transitions
     rested_enough = pred_stamina >= (params.pred_max_stamina * params.pred_hunt_thresh)
@@ -116,39 +123,66 @@ def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_
     
     # New State logic
     next_state = pred_state
-    next_state = jnp.where(jnp.logical_and(pred_state != 1, become_hunt), 1, next_state) # 1 = HUNT
-    next_state = jnp.where(jnp.logical_and(pred_state == 1, lose_interest), 2, next_state) # 2 = RETURN (or 0 PATROL)
+    # Transition to HUNT (1)
+    next_state = jnp.where(jnp.logical_and(pred_state != 1, become_hunt), 1, next_state)
+    # Transition to RETURN (2) (if patrol area exists) or PATROL (0)
+    next_state = jnp.where(jnp.logical_and(pred_state == 1, lose_interest), 2, next_state)
+    # Transition to PATROL (0) when in zone and in RETURN state (or if no patrol area)
+    next_state = jnp.where(jnp.logical_and(next_state == 2, in_zone), 0, next_state)
     
     # 3. Movement (Only when move_timer <= 0)
-    # Simple deterministic pursuit for HUNT, return to center for RETURN
     should_move = new_move_timer <= 0
     
-    # Pursuit vector
-    dr = agent_pos[0] - pred_pos[:, 0]
-    dc = agent_pos[1] - pred_pos[:, 1]
+    # Target calculations for different states
+    # RETURN: Target center of patrol zone
+    tr_return = (params.pred_patrol[:, 0] + params.pred_patrol[:, 2]) // 2
+    tc_return = (params.pred_patrol[:, 1] + params.pred_patrol[:, 3]) // 2
     
-    # JAX stochasticity for diagonal moves
-    key, subkey = jax.random.split(key)
-    rand_choice = jax.random.uniform(subkey, (pred_pos.shape[0],)) < 0.5
+    # PATROL: Random jitter (-1, 0, 1)
+    key, subkey1, subkey2 = jax.random.split(key, 3)
+    jitter_r = jax.random.randint(subkey1, (pred_pos.shape[0],), -1, 2)
+    jitter_c = jax.random.randint(subkey2, (pred_pos.shape[0],), -1, 2)
     
+    # Determine directional diff based on state
+    # dr, dc = goal - current
+    dr = jnp.zeros_like(pred_pos[:, 0])
+    dc = jnp.zeros_like(pred_pos[:, 1])
+    
+    # HUNT (1) vectors
+    dr = jnp.where(next_state == 1, agent_pos[0] - pred_pos[:, 0], dr)
+    dc = jnp.where(next_state == 1, agent_pos[1] - pred_pos[:, 1], dc)
+    
+    # RETURN (2) vectors
+    dr = jnp.where(next_state == 2, tr_return - pred_pos[:, 0], dr)
+    dc = jnp.where(next_state == 2, tc_return - pred_pos[:, 1], dc)
+    
+    # PATROL (0) vectors (jitter)
+    dr = jnp.where(next_state == 0, jitter_r, dr)
+    dc = jnp.where(next_state == 0, jitter_c, dc)
+    
+    # Resolve step
     step_r = jnp.sign(dr)
     step_c = jnp.sign(dc)
     
-    # Move priority
-    move_r = jnp.where(dr != 0, step_r, 0)
-    move_c = jnp.where(dc != 0, step_c, 0)
+    # JAX stochasticity for diagonal moves
+    key, subkey3 = jax.random.split(key)
+    rand_choice = jax.random.uniform(subkey3, (pred_pos.shape[0],)) < 0.5
     
-    # Resolve diagonal (simplified: use rand_choice)
-    final_move_r = jnp.where(jnp.logical_and(dr != 0, dc != 0), jnp.where(rand_choice, move_r, 0), move_r)
-    final_move_c = jnp.where(jnp.logical_and(dr != 0, dc != 0), jnp.where(jnp.logical_not(rand_choice), move_c, 0), move_c)
+    # Resolve diagonal (pick one axis to move along)
+    final_move_r = jnp.where(jnp.logical_and(dr != 0, dc != 0), jnp.where(rand_choice, step_r, 0), step_r)
+    final_move_c = jnp.where(jnp.logical_and(dr != 0, dc != 0), jnp.where(jnp.logical_not(rand_choice), step_c, 0), step_c)
     
-    # Apply move only if in HUNT state (simplified logic for now)
-    new_pos = pred_pos
     move_vec = jnp.stack([final_move_r, final_move_c], axis=-1)
-    new_pos = jnp.where(jnp.logical_and(should_move, next_state == 1)[:, None], pred_pos + move_vec, new_pos)
+    new_pos = jnp.where(should_move[:, None], pred_pos + move_vec, pred_pos)
     
-    # Clamp to grid
-    new_pos = jnp.clip(new_pos, 0, jnp.array([params.height - 1, params.width - 1]))
+    # 4. Spatial Bounds Clipping (Strictly enforce pred_patrol)
+    new_pos = jnp.stack([
+        jnp.clip(new_pos[:, 0], params.pred_patrol[:, 0], params.pred_patrol[:, 2]),
+        jnp.clip(new_pos[:, 1], params.pred_patrol[:, 1], params.pred_patrol[:, 3])
+    ], axis=-1)
+    
+    # Hard Grid Boundaries
+    new_pos = jnp.clip(new_pos, 0, jnp.stack([params.height - 1, params.width - 1]))
     
     # Reset timer
     new_move_timer = jnp.where(should_move, params.pred_move_int, new_move_timer)

@@ -184,11 +184,28 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     
     # Predators
     pred_positions = np.array(state.pred_pos)  # [num_pred, 2]
+    pred_stamina = np.array(state.pred_stamina) # [num_pred]
+    pred_max_stamina = np.array(params.pred_max_stamina) # [num_pred]
     num_pred = pred_positions.shape[0]
     
     predator_here = False
     for i in range(num_pred):
         pr, pc = int(pred_positions[i, 0]), int(pred_positions[i, 1])
+        
+        # Draw stamina bar above predator
+        if pred_max_stamina[i] > 0:
+            stamina_pct = max(0.0, min(1.0, float(pred_stamina[i]) / float(pred_max_stamina[i])))
+            # Bar dimensions scaled by grid size
+            bar_w = 0.6 * scale_factor
+            bar_h = 0.1 * scale_factor
+            bar_x = pc - bar_w / 2
+            bar_y = pr - 0.4 * scale_factor # Position above icon
+            
+            # Background
+            ax_grid.add_patch(plt.Rectangle((bar_x, bar_y), bar_w, bar_h, color='#F1F3F5', alpha=0.7, ec='none'))
+            # Foreground (Stamina) - Use orange for stamina
+            ax_grid.add_patch(plt.Rectangle((bar_x, bar_y), bar_w * stamina_pct, bar_h, color='#FD7E14', alpha=0.9, ec='none'))
+
         if pr == ar and pc == ac:
             predator_here = True
         else:

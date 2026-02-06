@@ -153,6 +153,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         save_jax_video(all_frames, video_path, fps=fps, quiet=True)
         if debug: print(" Done", flush=True)
         last_video_path = video_path
+        print(f"  --- Consolidated Evaluation Video saved to: {video_path} ---", flush=True)
         
         # Upload to WandB if enabled
         if wandb_enabled and WANDB_AVAILABLE and wandb.run:

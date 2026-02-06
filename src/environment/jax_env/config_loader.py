@@ -17,18 +17,22 @@ def load_env_params(config: Config) -> EnvParams:
     expanded_resources = []
     if raw_resources:
         for r in raw_resources:
-            count = r.get('count', 1)
+            count = r.get('count', 1) 
             for _ in range(count):
                 expanded_resources.append(r)
     
     if expanded_resources:
-        res_type = jnp.array([0 if r.get('type') == 'food' else 1 for r in expanded_resources], dtype=jnp.int32)
-        res_property = jnp.array([r.get('properties', [0,0,0,0,0]) for r in expanded_resources])
-        res_spawn_area = jnp.array([[*r.get('spawn_area', [[0,0],[10,10]])[0], 
-                                     *r.get('spawn_area', [[0,0],[10,10]])[1]] for r in expanded_resources])
-        res_max_cons = jnp.array([r.get('max_consumption', 999) for r in expanded_resources], dtype=jnp.int32)
-        res_reg_delay = jnp.array([r.get('regeneration_delay', 0) for r in expanded_resources], dtype=jnp.int32)
-        res_damage = jnp.array([r.get('damage', 0.0) for r in expanded_resources])
+        def r_get(r, key):
+            val = r.get(key)
+            if val is None: raise ValueError(f"Strict Config: Resource field '{key}' is required.")
+            return val
+
+        res_type = jnp.array([0 if r_get(r, 'type') == 'food' else 1 for r in expanded_resources], dtype=jnp.int32)
+        res_property = jnp.array([r_get(r, 'properties') for r in expanded_resources])
+        res_spawn_area = jnp.array([[*r_get(r, 'spawn_area')[0], *r_get(r, 'spawn_area')[1]] for r in expanded_resources])
+        res_max_cons = jnp.array([r_get(r, 'max_consumption') for r in expanded_resources], dtype=jnp.int32)
+        res_reg_delay = jnp.array([r_get(r, 'regeneration_delay') for r in expanded_resources], dtype=jnp.int32)
+        res_damage = jnp.array([r_get(r, 'damage') for r in expanded_resources])
     else:
         res_type = jnp.zeros(0, dtype=jnp.int32)
         res_property = jnp.zeros((0, 5))
@@ -37,19 +41,25 @@ def load_env_params(config: Config) -> EnvParams:
         res_reg_delay = jnp.zeros(0, dtype=jnp.int32)
         res_damage = jnp.zeros(0)
 
-    
     # Build predator arrays
     predators = config.get('environment.predators', [])
     if predators:
-        pred_property = jnp.array([p.get('property', [0,0,0,0,0]) for p in predators])
-        pred_move_int = jnp.array([p.get('move_interval', 1) for p in predators], dtype=jnp.int32)
-        pred_damage = jnp.array([p.get('damage', 1.0) for p in predators])
-        pred_patrol = jnp.array([[*p.get('patrol_area', [[0,0],[10,10]])[0],
-                                  *p.get('patrol_area', [[0,0],[10,10]])[1]] for p in predators])
-        pred_detect = jnp.array([p.get('detection_range', 5.0) for p in predators])
-        pred_max_stamina = jnp.array([p.get('max_stamina', 100.0) for p in predators])
-        pred_recovery = jnp.array([p.get('stamina_recovery_rate', 1.0) for p in predators])
-        pred_hunt_thresh = jnp.array([p.get('hunt_stamina_threshold', 0.0) for p in predators])
+        def p_get(p, key):
+            val = p.get(key)
+            if val is None: raise ValueError(f"Strict Config: Predator field '{key}' is required.")
+            return val
+
+        pred_property = jnp.array([p_get(p, 'property') for p in predators])
+        pred_move_int = jnp.array([p_get(p, 'move_interval') for p in predators], dtype=jnp.int32)
+        pred_damage = jnp.array([p_get(p, 'damage') for p in predators])
+        h = config.get_mandatory('environment.height')
+        w = config.get_mandatory('environment.width')
+        pred_patrol = jnp.array([[*p.get('patrol_area', [[0,0],[h-1,w-1]])[0],
+                                  *p.get('patrol_area', [[0,0],[h-1,w-1]])[1]] for p in predators])
+        pred_detect = jnp.array([p_get(p, 'detection_range') for p in predators])
+        pred_max_stamina = jnp.array([p_get(p, 'max_stamina') for p in predators])
+        pred_recovery = jnp.array([p_get(p, 'stamina_recovery_rate') for p in predators])
+        pred_hunt_thresh = jnp.array([p_get(p, 'hunt_stamina_threshold') for p in predators])
     else:
         pred_property = jnp.zeros((0, 5))
         pred_move_int = jnp.zeros(0, dtype=jnp.int32)
