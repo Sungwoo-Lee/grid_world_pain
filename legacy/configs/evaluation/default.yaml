@@ -1,4 +1,0 @@
-testing:
-  seed: 56
-  evaluation_episodes: 1
-  render_video: true

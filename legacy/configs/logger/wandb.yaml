@@ -1,9 +1,0 @@
-# WandB Logger Configuration
-wandb:
-  disabled: false
-  entity: "sungwoolee"
-  project: "grid_world_pain"
-  group: "default"
-  job_type: "defualt"
-  name: "default"
-  mode: "online"
