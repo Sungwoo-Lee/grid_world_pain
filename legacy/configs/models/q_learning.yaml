@@ -1,0 +1,10 @@
+agent:
+  algorithm: "Tabular Q-Learning"
+  alpha: 0.1
+  gamma: 0.99
+  epsilon_start: 1.0
+  epsilon_decay: 0.995
+  epsilon_min: 0.05
+  frame_stack: 1
+sensory:
+  using_sensory: false

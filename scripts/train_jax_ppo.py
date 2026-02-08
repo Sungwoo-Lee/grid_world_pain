@@ -11,11 +11,11 @@ import yaml
 from flax import nnx
 from typing import NamedTuple
 
-from src.environment.jax_env.state import EnvParams
-from src.environment.jax_env.wrapper import ParallelEnv
-from src.environment.jax_env.config_loader import load_env_params
-from src.models.jax_models.recurrent_ppo_network import ActorCriticRNN
-from src.models.jax_models.recurrent_ppo_trainer import train_iteration
+from src.environment.state import EnvParams
+from src.environment.wrapper import ParallelEnv
+from src.environment.config_loader import load_env_params
+from src.models.recurrent_ppo_network import ActorCriticRNN
+from src.models.recurrent_ppo_trainer import train_iteration
 
 class PPOConfig(NamedTuple):
     num_steps: int

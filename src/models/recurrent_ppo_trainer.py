@@ -93,8 +93,8 @@ def ppo_loss_fn(model, batch, clip_eps, ent_coef, vf_coef):
 
 def collect_trajectories(model, env_params, last_state, last_h_state, last_key, num_steps, rnn_type="LSTM"):
     """Collects parallel trajectories using jax.lax.scan and NNX model."""
-    from src.environment.jax_env.core import jax_step
-    from src.environment.jax_env.sensor import get_observation
+    from src.environment.core import jax_step
+    from src.environment.sensor import get_observation
 
     is_lstm = rnn_type.upper() == "LSTM"
     
@@ -123,7 +123,7 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
         
         # 3. Handle Auto-Reset
         reset_key, _ = jax.random.split(key)
-        from src.environment.jax_env.core import jax_reset
+        from src.environment.core import jax_reset
         reset_state = jax.vmap(jax_reset, in_axes=(None, 0))(env_params, jax.random.split(reset_key, state.agent_pos.shape[0]))
         
         def select_done(d, r, n):
@@ -176,7 +176,7 @@ def update_step(model, optimizer, batch, config):
 
 def train_iteration(model, optimizer, env_params, env_state, h_state, key, config):
     """Performs one full PPO iteration (collect + N epochs) with NNX."""
-    from src.environment.jax_env.sensor import get_observation
+    from src.environment.sensor import get_observation
     
     rnn_type = getattr(config, 'rnn_type', 'GRU')
     return_mode = getattr(config, 'return_mode', 'GAE')

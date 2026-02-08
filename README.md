@@ -39,11 +39,10 @@ grid_world_pain/
 │   ├── ablation/               # 🧪 Homeostatic & Survival Branches
 │   ├── environment/            # 🌍 Environment settings
 │   ├── models/                 # 🤖 Agent hyperparameters
-├── train.py                    # 🧠 Torch Training Script
-├── train_jax.py                # ⚡ JAX Parallel Training Script
-├── evaluation.py               # 🎬 Torch Evaluation & Visualization
-├── evaluation_jax.py           # 🎬 JAX Evaluation script
-├── main_jax.py                 # 🏃‍♂️ JAX Console Demo
+├── train.py                    # 🧠 Main JAX Training Script
+├── train.py                    # 🧠 Main JAX Training Script
+├── evaluation.py               # 🎬 Main JAX Evaluation Script
+├── evaluation.py               # 🎬 Main JAX Evaluation Script
 ├── run_all_experiments.py      # 🚀 Parallel Training Launcher
 ├── src/                        # 🐍 Source Code
 │   ├── environment/            # 🌍 GridWorld & JAX-native core
@@ -90,7 +89,7 @@ For massive parallelization and GPU acceleration, use the JAX-native pipeline.
 
 **Train RecurrentPPO with 128 parallel envs:**
 ```bash
-python train_jax.py --agent_config configs/models/recurrent_ppo.yaml --config configs/ablation/homeostatic/08_homeostatic.yaml --num-envs 128
+python train.py --agent_config configs/models/recurrent_ppo.yaml --config configs/ablation/homeostatic/08_homeostatic.yaml --num-envs 128
 ```
 
 ### 3. Evaluating & Visualizing
@@ -103,7 +102,7 @@ python evaluation.py --results_dir results/DQN/my_run --episodes 3
 
 **JAX Evaluation:**
 ```bash
-python evaluation_jax.py --results_dir results/JAX_RecurrentPPO/my_run --episodes 3 --render-video
+python evaluation.py --results_dir results/JAX_RecurrentPPO/my_run --episodes 3 --render-video
 ```
 
 **Outputs:**

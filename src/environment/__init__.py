@@ -1,1 +1,2 @@
-from .grid_world import GridWorld
+# Init file for jax_env
+from .state import EnvState, EnvParams

@@ -2,10 +2,10 @@ import jax
 import jax.numpy as jnp
 import optax
 from flax import nnx
-from src.environment.jax_env.state import EnvParams
-from src.environment.jax_env.core import jax_reset
-from src.models.jax_models.recurrent_ppo_network import ActorCriticRNN
-from src.models.jax_models.recurrent_ppo_trainer import train_iteration
+from src.environment.state import EnvParams
+from src.environment.core import jax_reset
+from src.models.recurrent_ppo_network import ActorCriticRNN
+from src.models.recurrent_ppo_trainer import train_iteration
 from typing import NamedTuple
 
 class PPOConfig(NamedTuple):

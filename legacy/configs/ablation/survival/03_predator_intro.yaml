@@ -1,0 +1,30 @@
+# Level 03: Predator Intro (Instant Death)
+environment:
+  height: 4
+  width: 4
+  start_pos: [0, 0]
+  max_steps: 100
+  eat_action_enabled: false
+  rest_action_enabled: false
+  resources: []
+  predator_enabled: true
+  predators:
+    - name: "Survival Predator"
+      count: 1
+      property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      move_interval: 2
+      damage: 100.0
+      spawn_area: [[3, 3], [3, 3]]
+      patrol_area: [[0, 0], [4, 4]]
+      detection_range: 10
+      max_stamina: 500
+      stamina_recovery_rate: 1.0
+      hunt_stamina_threshold: 0.0
+
+body:
+  with_satiation: false
+  with_injury: false
+  use_homeostatic_reward: false
+
+sensory:
+  using_sensory: false

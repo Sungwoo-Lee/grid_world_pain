@@ -1,0 +1,52 @@
+# Level 06: +Proprioception (Homeostatic)
+environment:
+  height: 4
+  width: 4
+  start_pos: [0, 0]
+  max_steps: 200
+  eat_action_enabled: true
+  rest_action_enabled: true
+  resources:
+    - name: "Food Source"
+      type: "food"
+      count: 1
+      spawn_area: [[3, 3], [3, 3]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      regeneration_delay: 0
+      damage: 0.0
+    - name: "Danger Zone"
+      type: "danger"
+      count: 1
+      spawn_area: [[0, 3], [0, 3]]
+      properties: [0.0, 1.0, 0.0, 0.0, 0.0]
+      damage: 1.0
+      max_consumption: -1
+      regeneration_delay: 0
+  predator_enabled: true
+  predators:
+    - name: "Homeostatic Predator"
+      count: 1
+      property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      move_interval: 3
+      damage: 3.0
+      spawn_area: [[0, 0], [4, 4]]
+      patrol_area: [[0, 0], [4, 4]]
+      detection_range: 10
+      max_stamina: 500
+      stamina_recovery_rate: 1.0
+      hunt_stamina_threshold: 0.0
+
+body:
+  with_satiation: true
+  with_injury: true
+  use_homeostatic_reward: true
+
+sensory:
+  using_sensory: true
+  nociception_enabled: true
+  olfactory_enabled: true
+  proprioception_enabled: true
+  collision_sensor_enabled: false
+  location_sensor: false
+

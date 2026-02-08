@@ -5,9 +5,9 @@ import yaml
 import os
 from src.environment.grid_world import GridWorld, ResourceEntity
 from src.environment.body import InteroceptiveBody
-from src.environment.jax_env.state import EnvState, EnvParams
-from src.environment.jax_env.core import jax_step, jax_reset
-from src.environment.jax_env.sensor import get_observation
+from src.environment.state import EnvState, EnvParams
+from src.environment.core import jax_step, jax_reset
+from src.environment.sensor import get_observation
 from src.environment.sensor import ResourceSensor, CollisionSensor, LocationSensor, InteroceptiveNociceptor
 
 def compare_states(np_env, np_body, jax_state, jax_params, step_num):

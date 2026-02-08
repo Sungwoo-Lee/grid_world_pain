@@ -2,8 +2,8 @@ import jax
 import jax.numpy as jnp
 import time
 import yaml
-from src.environment.jax_env.state import EnvParams, EnvState
-from src.environment.jax_env.wrapper import ParallelEnv, auto_reset_step
+from src.environment.state import EnvParams, EnvState
+from src.environment.wrapper import ParallelEnv, auto_reset_step
 
 def run_benchmark(num_envs=1024, num_steps=100):
     # Setup dummy params (L04 Homeostatic)

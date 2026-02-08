@@ -6,8 +6,8 @@ from typing import NamedTuple, Tuple, Any
 from jax import random
 from functools import partial
 
-from src.models.jax_models.dreamer_v3_nnx import DreamerV3Agent, RSSM, WorldModel, ActorCritic
-from src.models.jax_models.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist
+from src.models.dreamer_v3_nnx import DreamerV3Agent, RSSM, WorldModel, ActorCritic
+from src.models.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist
 
 # -----------------------------------------------------------------------------
 # Constants
@@ -104,7 +104,7 @@ class DreamerTrainer(nnx.Module):
         self.target_critic = ActorCritic(feat_dim, act_dim, agent_config, rngs=rngs).critic
         
         # Moments for return normalization (matching PyTorch)
-        from src.models.jax_models.dreamer_v3_util import Moments
+        from src.models.dreamer_v3_util import Moments
         self.moments = Moments(decay=0.99, max_=1.0, percentile_low=0.05, percentile_high=0.95)
         
         # Optimizers (nnx.Optimizer manages state)

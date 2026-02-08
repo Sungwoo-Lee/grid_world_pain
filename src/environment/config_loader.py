@@ -5,7 +5,7 @@ Translates YAML config files into JAX-compatible EnvParams.
 """
 import yaml
 import jax.numpy as jnp
-from src.environment.jax_env.state import EnvParams
+from src.environment.state import EnvParams
 
 from src.utils.config import Config
 

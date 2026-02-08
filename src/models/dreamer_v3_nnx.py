@@ -4,7 +4,7 @@ from jax import random
 from flax import nnx
 from typing import Tuple, Dict, Any, Optional
 
-from src.models.jax_models.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist
+from src.models.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist
 
 # -----------------------------------------------------------------------------
 # Core Modules

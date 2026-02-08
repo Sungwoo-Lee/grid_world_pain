@@ -1,0 +1,36 @@
+# Level 04: Nociception (Survival - Smooth Injury)
+environment:
+  height: 4
+  width: 4
+  start_pos: [0, 0]
+  max_steps: 200
+  eat_action_enabled: false
+  rest_action_enabled: true
+  resources: []
+  predator_enabled: true
+  predators:
+    - name: "Survival Predator"
+      count: 1
+      property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      move_interval: 3
+      damage: 3.0
+      spawn_area: [[0, 0], [4, 4]]
+      patrol_area: [[0, 0], [4, 4]]
+      detection_range: 10
+      max_stamina: 500
+      stamina_recovery_rate: 1.0
+      hunt_stamina_threshold: 0.0
+
+body:
+  with_satiation: false
+  with_injury: true
+  use_homeostatic_reward: false
+
+sensory:
+  using_sensory: true
+  nociception_enabled: true
+  olfactory_enabled: false
+  proprioception_enabled: false
+  collision_sensor_enabled: false
+  location_sensor: false
+
