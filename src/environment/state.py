@@ -19,6 +19,9 @@ class EnvState:
     pred_state: jnp.ndarray      # [num_pred] int
     pred_stamina: jnp.ndarray    # [num_pred] float
     pred_move_timer: jnp.ndarray # [num_pred] int
+
+    # Obstacles
+    obs_pos: jnp.ndarray        # [num_obs, 2]
     
     # Body
     satiation: jnp.ndarray       # [] float
@@ -40,6 +43,7 @@ class EnvParams:
     height: int = struct.field(pytree_node=False)
     width: int = struct.field(pytree_node=False)
     max_steps: int = struct.field(pytree_node=False)
+    grid_location_type: jnp.ndarray # [height, width] (0:plain, 1:grass, 2:sand)
     
     # Resources (Constant attributes)
     res_type: jnp.ndarray       # [num_res] int (0:food, 1:danger)
@@ -58,6 +62,10 @@ class EnvParams:
     pred_max_stamina: jnp.ndarray
     pred_recovery: jnp.ndarray
     pred_hunt_thresh: jnp.ndarray
+
+    # Obstacles
+    obs_blocking: jnp.ndarray   # [num_obs] bool
+    obs_spawn_area: jnp.ndarray # [num_obs, 4] (min_r, min_c, max_r, max_c)
     
     # Body
     max_satiation: float

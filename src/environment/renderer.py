@@ -37,7 +37,8 @@ def _load_icons():
         'predator': 'predator.jpg',
         'agent_food': 'agent_food.jpg',
         'agent_danger': 'agent_danger.jpg',
-        'agent_predator': 'agent_predator.jpg'
+        'agent_predator': 'agent_predator.jpg',
+        'rock': 'rock.jpg'
     }
     
     icons = {}
@@ -139,7 +140,17 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     # Scaling factor based on baseline 4x4 grid (matching grid_world.py)
     scale_factor = (4.0 / max(width, height)) * icon_scale
     
-    # Grid lines
+    # Grid lines and Background Tiles
+    # Location types: 0: Plain, 1: Grass, 2: Sand
+    location_colors = {0: bg_color, 1: '#D3F9D8', 2: '#FFF4E6'} # Light green for grass, Light wheat/sand
+    loc_grid = np.array(params.grid_location_type)
+    
+    for r in range(height):
+        for c in range(width):
+            l_type = int(loc_grid[r, c])
+            if l_type != 0:
+                ax_grid.add_patch(plt.Rectangle((c - 0.5, r - 0.5), 1, 1, color=location_colors.get(l_type, bg_color), ec='none', zorder=0))
+
     for x in range(width + 1):
         ax_grid.vlines(x - 0.5, -0.5, height - 0.5, colors=grid_lines, linestyles='-', linewidth=0.8, alpha=0.5)
     for y in range(height + 1):
@@ -213,6 +224,15 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
             predator_here = True
         else:
             draw_icon(ax_grid, pr, pc, 'predator', zoom=0.045)
+    
+    # Obstacles
+    obs_positions = np.array(state.obs_pos)
+    num_obs = obs_positions.shape[0]
+    for i in range(num_obs):
+        or_, oc = int(obs_positions[i, 0]), int(obs_positions[i, 1])
+        # If agent is here, they overlap (agent drawn later)
+        if not (or_ == ar and oc == ac):
+            draw_icon(ax_grid, or_, oc, 'rock', zoom=0.035)
     
     # Draw Agent (handling overlaps)
     if predator_here:

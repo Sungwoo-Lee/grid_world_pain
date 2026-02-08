@@ -70,10 +70,45 @@ def load_env_params(config: Config) -> EnvParams:
         pred_recovery = jnp.zeros(0)
         pred_hunt_thresh = jnp.zeros(0)
     
+    # Build Obstacle arrays
+    raw_obstacles = config.get('environment.obstacles', [])
+    expanded_obstacles = []
+    for o in raw_obstacles:
+        count = o.get('count', 1)
+        for _ in range(count):
+            expanded_obstacles.append(o)
+            
+    if expanded_obstacles:
+        def obs_get(o, key):
+            val = o.get(key)
+            if val is None: raise ValueError(f"Strict Config: Obstacle field '{key}' is required.")
+            return val
+        obs_blocking = jnp.array([o.get('blocking', True) for o in expanded_obstacles], dtype=jnp.bool_)
+        obs_spawn_area = jnp.array([[*obs_get(o, 'area')[0], *obs_get(o, 'area')[1]] for o in expanded_obstacles])
+    else:
+        obs_blocking = jnp.zeros(0, dtype=jnp.bool_)
+        obs_spawn_area = jnp.zeros((0, 4))
+
+    # Build Grid Location Types
+    import numpy as np
+    height = config.get_mandatory('environment.height')
+    width = config.get_mandatory('environment.width')
+    grid_np = np.zeros((height, width), dtype=np.int32)
+    location_areas = config.get('environment.location_areas', [])
+    for area_config in location_areas:
+        a_type = area_config.get('type')
+        type_idx = 1 if a_type == 'grass' else 2 if a_type == 'sand' else 0
+        area = area_config.get('area')
+        if area:
+            r1, c1, r2, c2 = area[0][0], area[0][1], area[1][0], area[1][1]
+            grid_np[r1:r2+1, c1:c2+1] = type_idx
+    grid_location_type = jnp.array(grid_np)
+    
     return EnvParams(
-        height=config.get_mandatory('environment.height'),
-        width=config.get_mandatory('environment.width'),
+        height=height,
+        width=width,
         max_steps=config.get_mandatory('environment.max_steps'),
+        grid_location_type=grid_location_type,
         res_type=res_type,
         res_property=res_property,
         res_spawn_area=res_spawn_area,
@@ -88,6 +123,8 @@ def load_env_params(config: Config) -> EnvParams:
         pred_max_stamina=pred_max_stamina,
         pred_recovery=pred_recovery,
         pred_hunt_thresh=pred_hunt_thresh,
+        obs_blocking=obs_blocking,
+        obs_spawn_area=obs_spawn_area,
         max_satiation=config.get_mandatory('body.max_satiation'),
         max_injury=config.get_mandatory('body.max_injury'),
         food_gain=config.get_mandatory('body.food_satiation_gain'),

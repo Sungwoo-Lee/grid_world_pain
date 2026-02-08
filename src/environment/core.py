@@ -2,8 +2,8 @@ import jax
 import jax.numpy as jnp
 from .state import EnvState, EnvParams
 
-def move_agent(pos: jnp.ndarray, action: int, params: EnvParams) -> jnp.ndarray:
-    """Calculates New Agent position based on action."""
+def move_agent(pos: jnp.ndarray, action: int, obs_pos: jnp.ndarray, obs_blocking: jnp.ndarray, params: EnvParams) -> jnp.ndarray:
+    """Calculates New Agent position based on action, considering obstacles."""
     # 0: Up, 1: Right, 2: Down, 3: Left, 4+: Stay
     moves = jnp.array([
         [-1, 0], # Up
@@ -24,7 +24,16 @@ def move_agent(pos: jnp.ndarray, action: int, params: EnvParams) -> jnp.ndarray:
         jnp.clip(new_pos[0], 0, params.height - 1),
         jnp.clip(new_pos[1], 0, params.width - 1)
     ])
-    return new_pos
+    
+    # Obstacle collision check
+    is_collision = jnp.any(jnp.logical_and(
+        jnp.all(obs_pos == new_pos, axis=-1),
+        obs_blocking
+    ))
+    
+    # If collision, stay at current position
+    final_pos = jnp.where(is_collision, pos, new_pos)
+    return final_pos
 
 def calculate_drive(satiation, injury, params):
     """Calculates homeostatic drive (Euclidean distance to setpoint)."""
@@ -98,8 +107,8 @@ def update_resources(res_active, res_reg_timer, res_cons_count, params):
     
     return new_active, new_reg_timer, new_cons_count, respawn_mask
 
-def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_pos, params, key):
-    """Updates predator states and positions."""
+def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_pos, obs_pos, obs_blocking, params, key):
+    """Updates predator states and positions, considering obstacles."""
     # 1. Timers
     new_move_timer = pred_move_timer - 1
     
@@ -184,6 +193,15 @@ def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_
     # Hard Grid Boundaries
     new_pos = jnp.clip(new_pos, 0, jnp.stack([params.height - 1, params.width - 1]))
     
+    # 4.5 Obstacle Collision for Predators
+    def check_collision(p_pos, old_p_pos):
+        # p_pos: [2], old_p_pos: [2]
+        is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), obs_blocking))
+        return jnp.where(is_coll, old_p_pos, p_pos)
+    
+    # Check collision for each predator
+    new_pos = jax.vmap(check_collision)(new_pos, pred_pos)
+    
     # Reset timer
     new_move_timer = jnp.where(should_move, params.pred_move_int, new_move_timer)
     
@@ -218,11 +236,11 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # 2. Predator Update
     new_pred_pos, new_pred_state, new_pred_stamina, new_pred_move_timer, _ = update_predators(
         state.pred_pos, state.pred_state, state.pred_stamina, state.pred_move_timer, 
-        state.agent_pos, params, predator_key
+        state.agent_pos, state.obs_pos, params.obs_blocking, params, predator_key
     )
     
     # 3. Agent Movement
-    new_agent_pos = move_agent(state.agent_pos, action, params)
+    new_agent_pos = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)
     
     # 4. Interaction Logic
     # Check overlaps with resources (using positions AFTER regeneration)
@@ -368,7 +386,16 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         
     pred_pos = jax.vmap(sample_pred_pos)(pred_spawn_keys, params.pred_patrol)
     
-    # 4. Body (Random start support)
+    # 4. Obstacles
+    num_obs = params.obs_blocking.shape[0]
+    obs_keys = jax.random.split(key, num_obs)
+    
+    def sample_obs_pos(ok, area):
+        return jax.random.randint(ok, (2,), area[:2], area[2:])
+        
+    obs_pos = jax.vmap(sample_obs_pos)(obs_keys, params.obs_spawn_area)
+    
+    # 5. Body (Random start support)
     body_key1, body_key2 = jax.random.split(body_key)
     
     if params.random_start_satiation:
@@ -396,6 +423,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         pred_state=jnp.zeros(num_pred, dtype=jnp.int32), # PATROL
         pred_stamina=jnp.full(num_pred, params.pred_max_stamina, dtype=jnp.float32),
         pred_move_timer=jnp.zeros(num_pred, dtype=jnp.int32),
+        obs_pos=obs_pos,
         satiation=jnp.array(satiation, dtype=jnp.float32),
         injury_level=jnp.array(injury, dtype=jnp.float32),
         injury_buffer=injury_buffer,
