@@ -240,7 +240,7 @@ def train_agent(episodes=None, seed=None, with_satiation=None, overeating_death=
         }
         
         # Override name with tag if present (User Request)
-        if config_dict.get('tag'):
+        if not wandb_kwargs.get('name') and config_dict.get('tag'):
              wandb_kwargs['name'] = config_dict.get('tag')
 
         # Check if we should resume

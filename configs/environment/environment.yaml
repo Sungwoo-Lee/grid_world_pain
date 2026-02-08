@@ -65,24 +65,24 @@ environment:
     - name: "Alpha Predator"
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
-      move_interval: 3
+      move_interval: 2
       damage: 3.0
       spawn_area: [[0, 0], [10, 10]]
       patrol_area: [[0, 0], [10, 10]]
       detection_range: 15
-      max_stamina: 50
+      max_stamina: 5000
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.5
 
     - name: "Beta Predator"
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
-      move_interval: 3
+      move_interval: 2
       damage: 3.0
-      spawn_area: [[10, 10], [20, 20]]
-      patrol_area: [[10, 10], [20, 20]]
+      spawn_area: [[11, 11], [20, 20]]
+      patrol_area: [[11, 11], [20, 20]]
       detection_range: 15
-      max_stamina: 50
+      max_stamina: 5000
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.5
       

@@ -287,7 +287,7 @@ def main():
             "project": args.wandb_project or config.get_mandatory('wandb.project'),
             "entity": args.wandb_entity or config.get('wandb.entity'),
             "group": args.wandb_group or config.get('wandb.group'),
-            "name": run_name,
+            "name": args.wandb_name or tag,
             "config": {
                 "algorithm": algorithm,
                 "framework": "JAX/Flax NNX",
