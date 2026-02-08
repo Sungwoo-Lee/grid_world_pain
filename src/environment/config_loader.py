@@ -33,9 +33,11 @@ def load_env_params(config: Config) -> EnvParams:
         res_max_cons = jnp.array([r_get(r, 'max_consumption') for r in expanded_resources], dtype=jnp.int32)
         res_reg_delay = jnp.array([r_get(r, 'regeneration_delay') for r in expanded_resources], dtype=jnp.int32)
         res_damage = jnp.array([r_get(r, 'damage') for r in expanded_resources])
+        res_nociception = jnp.array([r.get('nociception_intensity', 0.9 if r_get(r, 'type') == 'danger' else 0.0) for r in expanded_resources])
     else:
         res_type = jnp.zeros(0, dtype=jnp.int32)
         res_property = jnp.zeros((0, 5))
+        res_nociception = jnp.zeros(0)
         res_spawn_area = jnp.zeros((0, 4))
         res_max_cons = jnp.zeros(0, dtype=jnp.int32)
         res_reg_delay = jnp.zeros(0, dtype=jnp.int32)
@@ -50,6 +52,7 @@ def load_env_params(config: Config) -> EnvParams:
             return val
 
         pred_property = jnp.array([p_get(p, 'property') for p in predators])
+        pred_nociception = jnp.array([p.get('nociception_intensity', 0.9) for p in predators])
         pred_move_int = jnp.array([p_get(p, 'move_interval') for p in predators], dtype=jnp.int32)
         pred_damage = jnp.array([p_get(p, 'damage') for p in predators])
         h = config.get_mandatory('environment.height')
@@ -62,6 +65,7 @@ def load_env_params(config: Config) -> EnvParams:
         pred_hunt_thresh = jnp.array([p_get(p, 'hunt_stamina_threshold') for p in predators])
     else:
         pred_property = jnp.zeros((0, 5))
+        pred_nociception = jnp.zeros(0)
         pred_move_int = jnp.zeros(0, dtype=jnp.int32)
         pred_damage = jnp.zeros(0)
         pred_patrol = jnp.zeros((0, 4))
@@ -84,9 +88,18 @@ def load_env_params(config: Config) -> EnvParams:
             if val is None: raise ValueError(f"Strict Config: Obstacle field '{key}' is required.")
             return val
         obs_blocking = jnp.array([o.get('blocking', True) for o in expanded_obstacles], dtype=jnp.bool_)
+        obs_damage = jnp.array([o.get('damage', 0.0) for o in expanded_obstacles], dtype=jnp.float32)
+        obs_nociception = jnp.array([o.get('nociception_intensity', 0.3) for o in expanded_obstacles], dtype=jnp.float32)
+        # Unified: Obstacles can have properties too
+        chem_dim = res_property.shape[-1]
+        obs_property = jnp.array([o.get('properties', [0.0]*chem_dim) for o in expanded_obstacles])
         obs_spawn_area = jnp.array([[*obs_get(o, 'area')[0], *obs_get(o, 'area')[1]] for o in expanded_obstacles])
     else:
         obs_blocking = jnp.zeros(0, dtype=jnp.bool_)
+        obs_damage = jnp.zeros(0, dtype=jnp.float32)
+        obs_nociception = jnp.zeros(0, dtype=jnp.float32)
+        chem_dim = res_property.shape[-1]
+        obs_property = jnp.zeros((0, chem_dim))
         obs_spawn_area = jnp.zeros((0, 4))
 
     # Build Grid Location Types
@@ -111,11 +124,13 @@ def load_env_params(config: Config) -> EnvParams:
         grid_location_type=grid_location_type,
         res_type=res_type,
         res_property=res_property,
+        res_nociception=res_nociception,
         res_spawn_area=res_spawn_area,
         res_max_cons=res_max_cons,
         res_reg_delay=res_reg_delay,
         res_damage=res_damage,
         pred_property=pred_property,
+        pred_nociception=pred_nociception,
         pred_move_int=pred_move_int,
         pred_damage=pred_damage,
         pred_patrol=pred_patrol,
@@ -124,6 +139,9 @@ def load_env_params(config: Config) -> EnvParams:
         pred_recovery=pred_recovery,
         pred_hunt_thresh=pred_hunt_thresh,
         obs_blocking=obs_blocking,
+        obs_damage=obs_damage,
+        obs_property=obs_property,
+        obs_nociception=obs_nociception,
         obs_spawn_area=obs_spawn_area,
         max_satiation=config.get_mandatory('body.max_satiation'),
         max_injury=config.get_mandatory('body.max_injury'),

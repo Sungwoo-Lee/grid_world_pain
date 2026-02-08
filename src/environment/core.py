@@ -33,7 +33,7 @@ def move_agent(pos: jnp.ndarray, action: int, obs_pos: jnp.ndarray, obs_blocking
     
     # If collision, stay at current position
     final_pos = jnp.where(is_collision, pos, new_pos)
-    return final_pos
+    return final_pos, is_collision
 
 def calculate_drive(satiation, injury, params):
     """Calculates homeostatic drive (Euclidean distance to setpoint)."""
@@ -240,7 +240,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     )
     
     # 3. Agent Movement
-    new_agent_pos = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)
+    new_agent_pos, just_collided = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)
     
     # 4. Interaction Logic
     # Check overlaps with resources (using positions AFTER regeneration)
@@ -296,7 +296,18 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     at_predator = jnp.all(new_pred_pos == new_agent_pos, axis=-1)
     damage_pred = jnp.sum(jnp.where(at_predator, params.pred_damage, 0.0))
     
-    total_damage = damage_res + damage_pred
+    # Rock/Obstacle Damage
+    # 1. Overlap damage (non-blocking rocks at current pos)
+    at_obs = jnp.all(state.obs_pos == new_agent_pos, axis=-1)
+    damage_obs_overlap = jnp.sum(jnp.where(jnp.logical_and(at_obs, jnp.logical_not(params.obs_blocking)), params.obs_damage, 0.0))
+    
+    # 2. Collision damage (bumping into blocking rocks)
+    damage_obs_collision = jnp.where(just_collided, jnp.max(params.obs_damage, where=params.obs_blocking, initial=0.0), 0.0)
+    
+    # Calculate collision NOC intensity for sensing
+    collision_noc = jnp.where(just_collided, jnp.max(params.obs_nociception, where=params.obs_blocking, initial=0.0), 0.0)
+    
+    total_damage = damage_res + damage_pred + damage_obs_overlap + damage_obs_collision
     
     # 5. Body Update
     # rested is always action 4 if enabled
@@ -354,6 +365,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         satiation=new_satiation,
         injury_level=new_injury,
         injury_buffer=next_injury_buffer,
+        last_collision_noc=collision_noc,
         terminated=done,
         key=key
     )
@@ -427,6 +439,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         satiation=jnp.array(satiation, dtype=jnp.float32),
         injury_level=jnp.array(injury, dtype=jnp.float32),
         injury_buffer=injury_buffer,
+        last_collision_noc=jnp.array(0.0, dtype=jnp.float32),
         terminated=jnp.array(False, dtype=jnp.bool_),
         key=key
     )

@@ -8,26 +8,26 @@ environment:
   resources:
     - name: "Food Source A"
       type: "food"
-      count: 1
-      spawn_area: [[0, 0], [5, 5]]
+      count: 3
+      spawn_area: [[0, 0], [10, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      max_consumption: 3
+      max_consumption: 5
       regeneration_delay: 150
       damage: 0.0
 
     - name: "Food Source B"
       type: "food"
-      count: 1
-      spawn_area: [[15, 15], [20, 20]]
+      count: 3
+      spawn_area: [[10, 10], [20, 20]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      max_consumption: 3
+      max_consumption: 5
       regeneration_delay: 150
       damage: 0.0
     
     - name: "Food Source C"
       type: "food"
       count: 1
-      spawn_area: [[0, 15], [5, 20]]
+      spawn_area: [[0, 10], [10, 20]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 3
       regeneration_delay: 150
@@ -36,16 +36,7 @@ environment:
     - name: "Food Source D"
       type: "food"
       count: 1
-      spawn_area: [[15, 0], [20, 5]]
-      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      max_consumption: 3
-      regeneration_delay: 150
-      damage: 0.0
-
-    - name: "Food Source E"
-      type: "food"
-      count: 1
-      spawn_area: [[7, 7], [13, 13]]
+      spawn_area: [[10, 0], [20, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 3
       regeneration_delay: 150
@@ -59,6 +50,7 @@ environment:
       max_consumption: -1
       damage: 10
       regeneration_delay: 20
+      nociception_intensity: 0.9
       
   predator_enabled: true
   predators:
@@ -67,9 +59,10 @@ environment:
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 2
       damage: 3.0
+      nociception_intensity: 0.9
       spawn_area: [[0, 0], [10, 10]]
       patrol_area: [[0, 0], [10, 10]]
-      detection_range: 15
+      detection_range: 7
       max_stamina: 5000
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.5
@@ -79,9 +72,10 @@ environment:
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 2
       damage: 3.0
+      nociception_intensity: 0.9
       spawn_area: [[11, 11], [20, 20]]
       patrol_area: [[11, 11], [20, 20]]
-      detection_range: 15
+      detection_range: 7
       max_stamina: 5000
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.5
@@ -90,20 +84,21 @@ environment:
   location_areas:
     - type: grass
       area: [[0, 0], [10, 10]]
-    - type: sand
+    - type: grass
       area: [[11, 11], [19, 19]]
+    - type: sand
+      area: [[0, 10], [10, 20]]
+    - type: sand
+      area: [[10, 0], [20, 10]]
   
   # Obstacles (Rocks)
   obstacles:
-    - area: [[5, 5], [5, 5]]
-      count: 1
-      blocking: true
-    - area: [[8, 12], [8, 12]]
-      count: 1
-      blocking: true
-    - area: [[15, 6], [15, 6]]
-      count: 1
+    - area: [[0, 0], [20, 20]]
+      count: 10
       blocking: false
+      damage: 0.1
+      nociception_intensity: 0.3
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       
   # Legacy config removed (prob_switch, durations, etc)
 
@@ -153,7 +148,7 @@ sensory:
   collision_sensor_range: 1  # Range of rays in grid cells (sectors = 8 * range)
 
   # Location Sensor
-  location_sensor: false     # Include centered location even with sensors
+  location_sensor: true     # Include centered location even with sensors
   location_size: 2           # Output dimension of location sensor
   nociception_size: 1        # Output dimension of nociceptor
 
@@ -162,9 +157,8 @@ sensory:
   # proprioception_size is dynamic based on num_actions
 
   # Visual Sensor (One-Hot)
-  # Visual Sensor (One-Hot)
   visual_sensor_enabled: true
-  visual_sensor_range: 1     # range 1 = 5 cells (Center, Up, Right, Down, Left)
+  visual_sensor_range: 0     # range 1 = 5 cells (Center, Up, Right, Down, Left)
 
 visualization:
   local_view_size: 5          # Size of the agent-centric local view window

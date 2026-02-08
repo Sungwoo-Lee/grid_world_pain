@@ -56,19 +56,35 @@ def sense_location(agent_pos, height, width):
     norm_c = (agent_pos[1] / (width - 1)) * 2 - 1
     return jnp.array([norm_r, norm_c])
 
-def sense_extero_nociception(agent_pos, res_pos, res_active, res_type):
-    """Phasic Nociceptor: Detects immediate contact with danger resources."""
-    # res_type 0=food, 1=danger
-    is_danger = (res_type == 1)
-    # Contact check: dist == 0 (expressed as dist < 0.1 for safety on grid)
-    diff = res_pos - agent_pos
-    dist = jnp.linalg.norm(diff, axis=-1)
+def sense_extero_nociception(agent_pos, state: EnvState, params: EnvParams):
+    """
+    Continuous Phasic Nociceptor: Detects contact with danger, predators, and rocks.
+    Returns the maximum intensity among all current painful contacts.
+    """
+    # 1. Danger Resource Contact
+    dist_res = jnp.linalg.norm(state.res_pos - agent_pos, axis=-1)
+    # Intensity = intensity from params if at position and active
+    res_intensities = jnp.where(jnp.logical_and(state.res_active, dist_res < 0.1), params.res_nociception, 0.0)
+    max_res = jnp.max(res_intensities, initial=0.0)
+
+    # 2. Predator Contact
+    dist_pred = jnp.linalg.norm(state.pred_pos - agent_pos, axis=-1)
+    # All predators are active
+    pred_intensities = jnp.where(dist_pred < 0.1, params.pred_nociception, 0.0)
+    max_pred = jnp.max(pred_intensities, initial=0.0)
+
+    # 3. Rock Overlap Contact (Non-blocking)
+    dist_obs = jnp.linalg.norm(state.obs_pos - agent_pos, axis=-1)
+    obs_intensities = jnp.where(dist_obs < 0.1, params.obs_nociception, 0.0)
+    max_obs_overlap = jnp.max(obs_intensities, initial=0.0)
     
-    # Active danger on current cell
-    contact = jnp.logical_and(jnp.logical_and(res_active, is_danger), dist < 0.1)
-    # Result is 1.0 if any danger contact
-    activated = jnp.any(contact).astype(jnp.float32)
-    return jnp.array([activated])
+    # 4. Rock Collision Contact (Bumping)
+    # Stored in state from jax_step
+    max_collision = state.last_collision_noc
+
+    # Result is the maximum intensity
+    final_noc = jnp.max(jnp.array([max_res, max_pred, max_obs_overlap, max_collision]), initial=0.0)
+    return jnp.array([final_noc])
 
 def get_visual_offsets(sensor_range):
     """Generates Manhattan diamond offsets in a consistent order."""
@@ -178,7 +194,7 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
 
 def get_observation(state: EnvState, params: EnvParams):
     """Assembles the full observation vector."""
-    # 1. Chemical Sensor (Resources + Predators)
+    # 1. Chemical Sensor (Resources + Predators + Obstacles)
     res_chem = sense_resource(
         state.agent_pos, state.res_pos, state.res_active, params.res_property,
         radius=params.sensor_radius, decay_power=params.sensor_decay
@@ -187,11 +203,15 @@ def get_observation(state: EnvState, params: EnvParams):
         state.agent_pos, state.pred_pos, jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_), params.pred_property,
         radius=params.sensor_radius, decay_power=params.sensor_decay
     )
-    chem_obs = res_chem + pred_chem
+    obs_chem = sense_resource(
+        state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), params.obs_property,
+        radius=params.sensor_radius, decay_power=params.sensor_decay
+    )
+    chem_obs = res_chem + pred_chem + obs_chem
     
-    # 2. Extero Nociception (Phasic)
+    # 2. Extero Nociception (Phasic - Multi-source)
     noc_obs = sense_extero_nociception(
-        state.agent_pos, state.res_pos, state.res_active, params.res_type
+        state.agent_pos, state, params
     )
     
     # 3. Collision

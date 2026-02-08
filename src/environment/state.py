@@ -27,6 +27,7 @@ class EnvState:
     satiation: jnp.ndarray       # [] float
     injury_level: jnp.ndarray    # [] float
     injury_buffer: jnp.ndarray   # [smoothing_duration] float
+    last_collision_noc: jnp.ndarray # float (intensity of last collision)
     
     # Environment status
     terminated: jnp.ndarray      # bool
@@ -48,6 +49,7 @@ class EnvParams:
     # Resources (Constant attributes)
     res_type: jnp.ndarray       # [num_res] int (0:food, 1:danger)
     res_property: jnp.ndarray   # [num_res, vector_size]
+    res_nociception: jnp.ndarray # [num_res]
     res_spawn_area: jnp.ndarray # [num_res, 4] (min_r, min_c, max_r, max_c)
     res_max_cons: jnp.ndarray   # [num_res]
     res_reg_delay: jnp.ndarray  # [num_res]
@@ -55,6 +57,7 @@ class EnvParams:
     
     # Predators (Constant attributes)
     pred_property: jnp.ndarray  # [num_pred, vector_size]
+    pred_nociception: jnp.ndarray # [num_pred]
     pred_move_int: jnp.ndarray  # [num_pred]
     pred_damage: jnp.ndarray    # [num_pred]
     pred_patrol: jnp.ndarray    # [num_pred, 4] (min_r, min_c, max_r, max_c)
@@ -66,6 +69,9 @@ class EnvParams:
     # Obstacles
     obs_blocking: jnp.ndarray   # [num_obs] bool
     obs_spawn_area: jnp.ndarray # [num_obs, 4] (min_r, min_c, max_r, max_c)
+    obs_damage: jnp.ndarray     # [num_obs]
+    obs_property: jnp.ndarray   # [num_obs, vector_size]
+    obs_nociception: jnp.ndarray # [num_obs]
     
     # Body
     max_satiation: float

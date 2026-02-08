@@ -258,6 +258,24 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     # Draw agent on minimap
     ax_minimap.plot(ac, ar, marker='o', markersize=3, color=agent_color, markeredgecolor='white', markeredgewidth=0.5, zorder=10)
     
+    # Draw Rocks on minimap
+    obs_x = obs_positions[:, 1]
+    obs_y = obs_positions[:, 0]
+    ax_minimap.scatter(obs_x, obs_y, s=1, c='#868E96', marker='s', zorder=5)
+    
+    # Draw Resources on minimap
+    food_mask = jnp.logical_and(res_active, res_types == 0)
+    danger_mask = jnp.logical_and(res_active, res_types == 1)
+    
+    if jnp.any(food_mask):
+        ax_minimap.scatter(res_positions[food_mask, 1], res_positions[food_mask, 0], s=1, c=food_color, marker='o', zorder=6)
+    if jnp.any(danger_mask):
+        ax_minimap.scatter(res_positions[danger_mask, 1], res_positions[danger_mask, 0], s=1, c=danger_color, marker='x', zorder=6)
+        
+    # Draw Predators on minimap
+    if num_pred > 0:
+        ax_minimap.scatter(pred_positions[:, 1], pred_positions[:, 0], s=2, c='#212529', marker='v', zorder=7)
+    
 
     
     # --- 2. Draw Stats Panel ---
