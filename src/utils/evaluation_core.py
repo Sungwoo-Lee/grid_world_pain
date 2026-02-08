@@ -99,20 +99,30 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         # Progress bar for steps if rendering video
         step_pbar = tqdm(total=max_steps, desc=f"Episode {ep+1} Steps", leave=False, disable=quiet or not render_video)
         
+        # Determine action space dimensions
+        rest_enabled = params.rest_action_enabled
+        eat_enabled = params.eat_action_enabled
+        action_dim = 4 + int(rest_enabled) + int(eat_enabled)
+        
         while not done and step_count < max_steps:
             if debug:
                 print(f"    [Step {step_count}] Inferencing...", end="", flush=True)
             
-            # Model inference (deterministic in eval_mode)
-            obs_batch = obs[None, :]  # Add batch dim
-            
-            if h_state is not None:
-                action, log_prob, value, h_new = get_action_and_value_nnx(model, obs_batch, h_state, eval_mode=True)
-                h_state = h_new
+            if model is not None:
+                # Model inference (deterministic in eval_mode)
+                obs_batch = obs[None, :]  # Add batch dim
+                
+                if h_state is not None:
+                    action, log_prob, value, h_new = get_action_and_value_nnx(model, obs_batch, h_state, eval_mode=True)
+                    h_state = h_new
+                else:
+                    action, _, _, _ = get_action_and_value_nnx(model, obs_batch, None, eval_mode=True)
+                
+                action_idx = int(action)
             else:
-                action, _, _, _ = get_action_and_value_nnx(model, obs_batch, None, eval_mode=True)
-            
-            action_idx = int(action)
+                # Random action if no model provided
+                key, action_key = jax.random.split(key)
+                action_idx = int(jax.random.randint(action_key, (), 0, action_dim))
             
             if debug:
                 print(f" Done (Action: {action_idx}). Stepping env...", end="", flush=True)

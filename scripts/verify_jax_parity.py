@@ -3,8 +3,8 @@ import jax.numpy as jnp
 import numpy as np
 import yaml
 import os
-from src.environment.grid_world import GridWorld, ResourceEntity
-from src.environment.body import InteroceptiveBody
+from legacy.src.environment.grid_world import GridWorld, ResourceEntity
+from legacy.src.environment.body import InteroceptiveBody
 from src.environment.state import EnvState, EnvParams
 from src.environment.core import jax_step, jax_reset
 from src.environment.sensor import get_observation

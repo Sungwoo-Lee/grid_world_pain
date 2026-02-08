@@ -26,8 +26,8 @@ def _load_icons():
         return _ICON_CACHE
         
     # Calculate assets path relative to this file
-    # src/environment/jax_env/renderer.py -> ... -> assets/
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    # src/environment/renderer.py -> src/ -> root -> assets/
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     assets_path = os.path.join(base_dir, 'assets')
     
     icon_files = {
