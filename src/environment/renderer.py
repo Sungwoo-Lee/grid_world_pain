@@ -90,15 +90,29 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     # Grid dimensions
     height = int(params.height)
     width = int(params.width)
+    view_size = int(params.local_view_size)
     
-    # Figure setup (Reuse if possible, but handle sensory_data presence changes)
+    # Calculate local window bounds centered at agent
+    agent_pos = np.array(state.agent_pos)
+    ar, ac = int(agent_pos[0]), int(agent_pos[1])
+    
+    half_view = view_size // 2
+    r_start = max(0, ar - half_view)
+    r_end = min(height, r_start + view_size)
+    # Adjust r_start if window hit the bottom edge
+    r_start = max(0, r_end - view_size)
+    
+    c_start = max(0, ac - half_view)
+    c_end = min(width, c_start + view_size)
+    # Adjust c_start if window hit the right edge
+    c_start = max(0, c_end - view_size)
+    
+    # Figure setup
     has_sensory = sensory_data is not None and len(sensory_data) > 0
     
-    # We check if the cached figure matches the current layout requirement
     need_new_fig = False
     if _FIG_CACHE is not None:
-        cached_fig, cached_grid, cached_stats, cached_sensory, cached_canvas = _FIG_CACHE
-        # If the number of subplots changed, we need to rebuild
+        cached_fig, cached_grid, cached_stats, cached_sensory, cached_canvas, cached_minimap = _FIG_CACHE
         if (has_sensory and cached_sensory is None) or (not has_sensory and cached_sensory is not None):
             need_new_fig = True
             plt.close(cached_fig)
@@ -106,143 +120,145 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
         need_new_fig = True
 
     if need_new_fig:
-        fig_width = 10 if has_sensory else 8
-        fig = plt.figure(figsize=(fig_width, 6), dpi=dpi)
+        # Layout: [Grid (L)] [Stats (TR)] [Sensory (BR)] [Minimap (BL)]
+        # We'll use a 3x2 grid spec
+        fig_width = 11 if has_sensory else 9
+        fig = plt.figure(figsize=(fig_width, 7), dpi=dpi)
         fig.patch.set_facecolor(bg_color)
         
-        if has_sensory:
-             gs = fig.add_gridspec(2, 2, width_ratios=[1.5, 1], height_ratios=[0.4, 0.6])
-             ax_grid = fig.add_subplot(gs[:, 0])
-             ax_stats = fig.add_subplot(gs[0, 1])
-             ax_sensory = fig.add_subplot(gs[1, 1])
-        else:
-             gs = fig.add_gridspec(1, 2, width_ratios=[2, 1])
-             ax_grid = fig.add_subplot(gs[0])
-             ax_stats = fig.add_subplot(gs[1])
-             ax_sensory = None
+        gs = fig.add_gridspec(3, 3, width_ratios=[1.8, 0.6, 0.6], height_ratios=[0.4, 0.3, 0.3])
+        
+        ax_grid = fig.add_subplot(gs[:, 0]) # Large local view
+        ax_stats = fig.add_subplot(gs[0, 1:]) # Top stats
+        ax_sensory = fig.add_subplot(gs[1:, 1]) # Sensory modules
+        ax_minimap = fig.add_subplot(gs[1:, 2]) # Global minimap
              
         canvas = FigureCanvas(fig)
-        _FIG_CACHE = (fig, ax_grid, ax_stats, ax_sensory, canvas)
+        _FIG_CACHE = (fig, ax_grid, ax_stats, ax_sensory, canvas, ax_minimap)
     else:
-        fig, ax_grid, ax_stats, ax_sensory, canvas = _FIG_CACHE
+        fig, ax_grid, ax_stats, ax_sensory, canvas, ax_minimap = _FIG_CACHE
         ax_grid.clear()
         ax_stats.clear()
+        ax_minimap.clear()
         if ax_sensory: ax_sensory.clear()
     
-    # --- 1. Draw Grid ---
+    # --- 1. Draw Local Grid ---
     ax_grid.set_facecolor(bg_color)
-    ax_grid.set_xlim(-0.5, width - 0.5)
-    ax_grid.set_ylim(-0.5, height - 0.5)
+    ax_grid.set_xlim(c_start - 0.5, c_end - 0.5)
+    ax_grid.set_ylim(r_start - 0.5, r_end - 0.5)
     ax_grid.invert_yaxis()
     ax_grid.set_aspect('equal')
     ax_grid.axis('off')
+    ax_grid.set_title("LOCAL VIEW", color='#868E96', fontsize=10, fontweight='bold', pad=10)
     
-    # Scaling factor based on baseline 4x4 grid (matching grid_world.py)
-    scale_factor = (4.0 / max(width, height)) * icon_scale
+    # Scaling factor for icons (based on visible window)
+    scale_factor = (4.0 / view_size) * icon_scale
     
-    # Grid lines and Background Tiles
-    # Location types: 0: Plain, 1: Grass, 2: Sand
-    location_colors = {0: bg_color, 1: '#D3F9D8', 2: '#FFF4E6'} # Light green for grass, Light wheat/sand
+    # Grid lines and Background Tiles (Slicing)
+    location_colors = {0: bg_color, 1: '#D3F9D8', 2: '#FFF4E6'}
     loc_grid = np.array(params.grid_location_type)
     
-    for r in range(height):
-        for c in range(width):
+    for r in range(r_start, r_end):
+        for c in range(c_start, c_end):
             l_type = int(loc_grid[r, c])
             if l_type != 0:
                 ax_grid.add_patch(plt.Rectangle((c - 0.5, r - 0.5), 1, 1, color=location_colors.get(l_type, bg_color), ec='none', zorder=0))
 
-    for x in range(width + 1):
-        ax_grid.vlines(x - 0.5, -0.5, height - 0.5, colors=grid_lines, linestyles='-', linewidth=0.8, alpha=0.5)
-    for y in range(height + 1):
-        ax_grid.hlines(y - 0.5, -0.5, width - 0.5, colors=grid_lines, linestyles='-', linewidth=0.8, alpha=0.5)
+    # Grid lines for the visible area
+    for x in range(c_start, c_end + 1):
+        ax_grid.vlines(x - 0.5, r_start - 0.5, r_end - 0.5, colors=grid_lines, linestyles='-', linewidth=0.8, alpha=0.5)
+    for y in range(r_start, r_end + 1):
+        ax_grid.hlines(y - 0.5, c_start - 0.5, c_end - 0.5, colors=grid_lines, linestyles='-', linewidth=0.8, alpha=0.5)
     
-    def draw_icon(ax, r, c, icon_key, zoom=0.038):
+    def draw_icon(ax, r, c, icon_key, zoom=0.038, s_fac=1.0):
         img = icons.get(icon_key)
         if img is not None:
-            imagebox = OffsetImage(img, zoom=zoom * scale_factor)
+            imagebox = OffsetImage(img, zoom=zoom * s_fac)
             ab = AnnotationBbox(imagebox, (c, r), frameon=False, pad=0)
             ax.add_artist(ab)
         else:
-            # Fallback markers
             markers = {'agent': ('o', agent_color), 'food': ('D', food_color), 
                        'danger': ('X', danger_color), 'predator': ('v', '#212529')}
             m, color = markers.get(icon_key, ('s', 'grey'))
-            ax.plot(c, r, marker=m, markersize=14 * scale_factor, color=color, markeredgecolor='white', markeredgewidth=1.5)
+            ax.plot(c, r, marker=m, markersize=14 * s_fac, color=color, markeredgecolor='white', markeredgewidth=1.5)
 
-    # Agent position
-    agent_pos = np.array(state.agent_pos)
-    ar, ac = int(agent_pos[0]), int(agent_pos[1])
-    
+    # Filter and draw entities
+    def is_visible(r, c):
+        return r_start <= r < r_end and c_start <= c < c_end
+
     # Resources
-    res_positions = np.array(state.res_pos)   # [num_res, 2]
-    res_types = np.array(params.res_type)     # [num_res] - from params
-    res_active = np.array(state.res_active)   # [num_res]
+    res_positions = np.array(state.res_pos)
+    res_types = np.array(params.res_type)
+    res_active = np.array(state.res_active)
     
-    any_danger_here = False
-    any_food_here = False
-    
-    num_res = len(res_active)
-    for i in range(num_res):
-        if not res_active[i]:
-            continue
+    any_danger_here, any_food_here = False, False
+    for i in range(len(res_active)):
+        if not res_active[i]: continue
         rr, rc = int(res_positions[i, 0]), int(res_positions[i, 1])
-        
         is_here = (rr == ar and rc == ac)
-        
-        if res_types[i] == 0:  # Food
-            if is_here: any_food_here = True
-            else: draw_icon(ax_grid, rr, rc, 'food', zoom=0.035)
-        else:  # Danger
-            if is_here: any_danger_here = True
-            else: draw_icon(ax_grid, rr, rc, 'danger', zoom=0.035)
+        if is_here:
+            if res_types[i] == 0: any_food_here = True
+            else: any_danger_here = True
+        elif is_visible(rr, rc):
+            draw_icon(ax_grid, rr, rc, 'food' if res_types[i]==0 else 'danger', zoom=0.035, s_fac=scale_factor)
     
     # Predators
-    pred_positions = np.array(state.pred_pos)  # [num_pred, 2]
-    pred_stamina = np.array(state.pred_stamina) # [num_pred]
-    pred_max_stamina = np.array(params.pred_max_stamina) # [num_pred]
+    pred_positions = np.array(state.pred_pos)
     num_pred = pred_positions.shape[0]
-    
     predator_here = False
     for i in range(num_pred):
         pr, pc = int(pred_positions[i, 0]), int(pred_positions[i, 1])
-        
-        # Draw stamina bar above predator
-        if pred_max_stamina[i] > 0:
-            stamina_pct = max(0.0, min(1.0, float(pred_stamina[i]) / float(pred_max_stamina[i])))
-            # Bar dimensions scaled by grid size
-            bar_w = 0.6 * scale_factor
-            bar_h = 0.1 * scale_factor
-            bar_x = pc - bar_w / 2
-            bar_y = pr - 0.4 * scale_factor # Position above icon
-            
-            # Background
-            ax_grid.add_patch(plt.Rectangle((bar_x, bar_y), bar_w, bar_h, color='#F1F3F5', alpha=0.7, ec='none'))
-            # Foreground (Stamina) - Use orange for stamina
-            ax_grid.add_patch(plt.Rectangle((bar_x, bar_y), bar_w * stamina_pct, bar_h, color='#FD7E14', alpha=0.9, ec='none'))
+        if pr == ar and pc == ac: predator_here = True
+        elif is_visible(pr, pc):
+            draw_icon(ax_grid, pr, pc, 'predator', zoom=0.045, s_fac=scale_factor)
+            # Stamina bar logic simplified for speed
+            if float(params.pred_max_stamina[i]) > 0:
+                st_pct = float(state.pred_stamina[i]) / float(params.pred_max_stamina[i])
+                ax_grid.add_patch(plt.Rectangle((pc-0.3*scale_factor, pr-0.4*scale_factor), 0.6*scale_factor, 0.08*scale_factor, color='#F1F3F5', alpha=0.5))
+                ax_grid.add_patch(plt.Rectangle((pc-0.3*scale_factor, pr-0.4*scale_factor), 0.6*scale_factor*st_pct, 0.08*scale_factor, color='#FD7E14', alpha=0.8))
 
-        if pr == ar and pc == ac:
-            predator_here = True
-        else:
-            draw_icon(ax_grid, pr, pc, 'predator', zoom=0.045)
-    
-    # Obstacles
+    # Rocks
     obs_positions = np.array(state.obs_pos)
-    num_obs = obs_positions.shape[0]
-    for i in range(num_obs):
+    for i in range(obs_positions.shape[0]):
         or_, oc = int(obs_positions[i, 0]), int(obs_positions[i, 1])
-        # If agent is here, they overlap (agent drawn later)
-        if not (or_ == ar and oc == ac):
-            draw_icon(ax_grid, or_, oc, 'rock', zoom=0.035)
+        if is_visible(or_, oc) and not (or_ == ar and oc == ac):
+            draw_icon(ax_grid, or_, oc, 'rock', zoom=0.035, s_fac=scale_factor)
+
+    # Agent
+    if predator_here: draw_icon(ax_grid, ar, ac, 'agent_predator', zoom=0.055, s_fac=scale_factor)
+    elif any_danger_here: draw_icon(ax_grid, ar, ac, 'agent_danger', zoom=0.048, s_fac=scale_factor)
+    elif any_food_here: draw_icon(ax_grid, ar, ac, 'agent_food', zoom=0.048, s_fac=scale_factor)
+    else: draw_icon(ax_grid, ar, ac, 'agent', zoom=0.035, s_fac=scale_factor)
     
-    # Draw Agent (handling overlaps)
-    if predator_here:
-         draw_icon(ax_grid, ar, ac, 'agent_predator', zoom=0.055)
-    elif any_danger_here:
-         draw_icon(ax_grid, ar, ac, 'agent_danger', zoom=0.048)
-    elif any_food_here:
-         draw_icon(ax_grid, ar, ac, 'agent_food', zoom=0.048)
-    else:
-         draw_icon(ax_grid, ar, ac, 'agent', zoom=0.035)
+    # --- 1.5. Draw Minimap ---
+    ax_minimap.set_facecolor('#F8F9FA')
+    ax_minimap.set_xlim(-0.5, width - 0.5)
+    ax_minimap.set_ylim(-0.5, height - 0.5)
+    ax_minimap.invert_yaxis()
+    ax_minimap.set_aspect('equal')
+    ax_minimap.axis('off')
+    ax_minimap.set_title("MINIMAP", color='#868E96', fontsize=8, fontweight='bold', pad=5)
+    
+    # Show full grid background
+    minimap_img = np.zeros((height, width, 3))
+    # Fill with base color
+    minimap_img[:, :] = [1, 1, 1] # White
+    for l_id, color_hex in location_colors.items():
+        if l_id == 0: continue
+        # Convert hex to RGB 0-1
+        from matplotlib.colors import to_rgb
+        minimap_img[loc_grid == l_id] = to_rgb(color_hex)
+    
+    ax_minimap.imshow(minimap_img, extent=(-0.5, width-0.5, height-0.5, -0.5), zorder=1)
+    
+    # Draw local view rectangle
+    rect = plt.Rectangle((c_start - 0.5, r_start - 0.5), view_size, view_size, linewidth=1, edgecolor='#228BE6', facecolor='none', alpha=0.8, zorder=5)
+    ax_minimap.add_patch(rect)
+    
+    # Draw agent on minimap
+    ax_minimap.plot(ac, ar, marker='o', markersize=3, color=agent_color, markeredgecolor='white', markeredgewidth=0.5, zorder=10)
+    
+
     
     # --- 2. Draw Stats Panel ---
     ax_stats.set_facecolor(bg_color)
@@ -312,24 +328,47 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
         ax_sensory.axis('off')
         ax_sensory.text(0.5, 0.95, "SENSORY MODULES", color=text_color, ha='center', fontsize=10, fontweight='bold', transform=ax_sensory.transAxes)
         
-        num_sensors = len(sensory_data)
+        # Use a dynamic layout engine for slots
+        sensor_weights = []
+        for s in sensory_data:
+            sensor_weights.append(0.5 if s.get('side_by_side', False) else 1.0)
+            
+        # Calculate row counts (a row is full when weight sums to 1.0)
+        rows = []
+        current_row = []
+        acc_w = 0.0
+        for i, s in enumerate(sensory_data):
+            w = sensor_weights[i]
+            if acc_w + w > 1.05: # Float safety
+                rows.append(current_row)
+                current_row = [s]
+                acc_w = w
+            else:
+                current_row.append(s)
+                acc_w += w
+        if current_row:
+            rows.append(current_row)
+            
+        num_rows = len(rows)
         top_y, bottom_y = 0.85, 0.10
         available_h = top_y - bottom_y
-        slot_h = available_h / num_sensors
+        row_h = available_h / max(1, num_rows)
         
-        # Use fixed coordinates and spacing (much faster than tight_layout)
-        for i, sensor in enumerate(sensory_data):
-            y_center = top_y - (i * slot_h) - (slot_h / 2)
-            name = sensor['name']
-            vector = np.array(sensor.get('vector', []))
+        for r_idx, row_sensors in enumerate(rows):
+            y_center = top_y - (r_idx * row_h) - (row_h / 2)
+            num_in_row = len(row_sensors)
+            row_slot_w = 0.8 / num_in_row
             
-            # Label - Fixed color for better visibility
-            ax_sensory.text(0.1, y_center + 0.08, name.upper(), color='#868E96', fontsize=7, fontweight='bold', transform=ax_sensory.transAxes)
-            
-            # Container for the sensor bar(s)
-            slot_x = 0.1
-            slot_w = 0.8
-            bar_h = min(0.06, slot_h * 0.4)
+            for c_idx, sensor in enumerate(row_sensors):
+                slot_x = 0.1 + c_idx * (0.8 / num_in_row)
+                slot_w = row_slot_w * 0.9 # Small gap
+                bar_h = min(0.06, row_h * 0.4)
+                
+                name = sensor['name']
+                vector = np.array(sensor.get('vector', []))
+                
+                # Label
+                ax_sensory.text(slot_x, y_center + 0.08, name.upper(), color='#868E96', fontsize=7, fontweight='bold', transform=ax_sensory.transAxes)
             
             if sensor['type'] == 'intensity':
                 val = float(sensor.get('intensity', 0))
@@ -372,34 +411,93 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
             elif sensor['type'] == 'text':
                 val_text = sensor.get('value_text', '')
                 color = sensor.get('color', '#343A40')
-                ax_sensory.text(0.1, y_center - 0.02, val_text, color=color, fontsize=8, weight='bold', transform=ax_sensory.transAxes, fontfamily='monospace')
+                ax_sensory.text(slot_x, y_center - 0.02, val_text, color=color, fontsize=8, weight='bold', transform=ax_sensory.transAxes, fontfamily='monospace')
             
-            elif sensor['type'] == 'grid':
-                # For Visual Sensor (Manhattan diamond)
-                # vector is flattened [num_cells * 7]
-                num_features = 7
+            elif sensor['type'] == 'diamond':
+                # Manhattan Spatial Layout with Icons
+                r = sensor.get('range', 0)
+                num_features = sensor.get('num_features', 1)
                 num_cells = len(vector) // num_features
                 grid_data = vector.reshape(num_cells, num_features)
                 
-                # Draw small colored squares for each cell
-                # We arrange them horizontally for now, but grouped by feature
-                cell_w = slot_w / num_cells
-                feat_h = bar_h / num_features
+                def get_local_offsets(sr):
+                    off = []
+                    for d in range(sr + 1):
+                        if d == 0: off.append([0, 0])
+                        else:
+                            for dr in range(-d, d + 1):
+                                dc_abs = d - abs(dr)
+                                if dc_abs == 0: off.append([dr, 0])
+                                else:
+                                    off.append([dr, dc_abs])
+                                    off.append([dr, -dc_abs])
+                    return np.array(off)
                 
-                # Feature colors matching common themes
-                # [Grass, Sand, Plain, Food, Danger, Predator, Rock]
-                f_colors = ['#40C057', '#fab005', '#ADB5BD', '#40C057', '#FA5252', '#212529', '#868E96']
+                cell_offsets = get_local_offsets(r)
                 
-                for ci in range(num_cells):
-                    cx = slot_x + ci * cell_w
-                    for fi in range(num_features):
-                        val = float(grid_data[ci, fi])
-                        fy = y_center - bar_h/2 + fi * feat_h
-                        # Base background
-                        ax_sensory.add_patch(plt.Rectangle((cx, fy), cell_w*0.9, feat_h*0.9, color='#F1F3F5', transform=ax_sensory.transAxes, alpha=0.3))
-                        if val > 0:
-                            # If val > 0, show the feature color
-                            ax_sensory.add_patch(plt.Rectangle((cx, fy), cell_w*0.9, feat_h*0.9, color=f_colors[fi], transform=ax_sensory.transAxes, alpha=min(1.0, val)))
+                # Scale within slot_w and row_h
+                max_span = 2 * r + 1
+                # Adjust cell size to fit the slot
+                cell_size = min(slot_w / max_span, row_h * 0.6 / max_span)
+                
+                origin_x = slot_x + slot_w / 2
+                origin_y = y_center
+                
+                for ci in range(min(num_cells, len(cell_offsets))):
+                    dr, dc = cell_offsets[ci]
+                    cx = origin_x + dc * cell_size
+                    cy = origin_y - dr * cell_size # dr positive is Up
+                    
+                    # Draw cell background
+                    ax_sensory.add_patch(plt.Rectangle((cx - cell_size*0.45, cy - cell_size*0.45), cell_size*0.9, cell_size*0.9, color='#F1F3F5', transform=ax_sensory.transAxes, alpha=0.5))
+                    
+                    if num_features == 1:
+                        # Collision style (binary)
+                        val = float(grid_data[ci, 0])
+                        if val > 0.5:
+                            ax_sensory.add_patch(plt.Rectangle((cx - cell_size*0.4, cy - cell_size*0.4), cell_size*0.8, cell_size*0.8, color='#FA5252', transform=ax_sensory.transAxes, alpha=0.8))
+                    else:
+                        # Visual style - Icons or Colors
+                        active_indices = np.where(grid_data[ci] > 0)[0]
+                        if len(active_indices) > 0:
+                            num_active = len(active_indices)
+                            # Separate location features (0,1,2) from objects (3,4,5,6)
+                            loc_indices = [i for i in active_indices if i < 3]
+                            obj_indices = [i for i in active_indices if i >= 3]
+                            
+                            # Draw background color for location
+                            bg_map = {0:'#D3F9D8', 1:'#FFF4E6', 2:'#FFFFFF'} # Grass, Sand, Plain
+                            if loc_indices:
+                                # Prioritize most dominant or just last one for simplicity
+                                ax_sensory.add_patch(plt.Rectangle((cx - cell_size*0.45, cy - cell_size*0.45), cell_size*0.9, cell_size*0.9, color=bg_map.get(loc_indices[-1], '#FFFFFF'), transform=ax_sensory.transAxes, zorder=0))
+
+                            if obj_indices:
+                                num_obj = len(obj_indices)
+                                m_rows = int(np.ceil(np.sqrt(num_obj)))
+                                m_cols = int(np.ceil(num_obj / m_rows))
+                                m_size = cell_size * 0.8 / max(m_rows, m_cols)
+                                
+                                icon_map = {3:'food', 4:'danger', 5:'predator', 6:'rock'}
+                                
+                                for mi, idx in enumerate(obj_indices):
+                                    m_r = mi // m_cols
+                                    m_c = mi % m_cols
+                                    mx = cx - (m_cols*m_size)/2 + (m_c + 0.5)*m_size
+                                    my = cy + (m_rows*m_size)/2 - (m_r + 0.5)*m_size
+                                    
+                                    icon_key = icon_map.get(idx)
+                                    if icon_key and icons.get(icon_key) is not None:
+                                        img = icons[icon_key]
+                                        # Zoom factor needs to be small
+                                        zoom_val = 0.0125 * (cell_size / 0.1) * (1.0 / max(m_rows, m_cols))
+                                        imagebox = OffsetImage(img, zoom=zoom_val)
+                                        ab = AnnotationBbox(imagebox, (mx, my), frameon=False, pad=0, xycoords=ax_sensory.transAxes)
+                                        ax_sensory.add_artist(ab)
+                                    else:
+                                        # Fallback
+                                        fallback_colors = ['#40C057', '#FA5252', '#212529', '#868E96'] # Food, Danger, Predator, Rock
+                                        c = fallback_colors[idx-3] if (idx-3) < len(fallback_colors) else '#ADB5BD'
+                                        ax_sensory.add_patch(plt.Circle((mx, my), m_size*0.4, color=c, transform=ax_sensory.transAxes))
 
     # Render directly from canvas (removing tight_layout)
     canvas.draw()

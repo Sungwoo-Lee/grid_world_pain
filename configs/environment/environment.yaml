@@ -162,7 +162,11 @@ sensory:
   # proprioception_size is dynamic based on num_actions
 
   # Visual Sensor (One-Hot)
+  # Visual Sensor (One-Hot)
   visual_sensor_enabled: true
-  visual_sensor_range: 0     # range 1 = 5 cells (Center, Up, Right, Down, Left)
+  visual_sensor_range: 1     # range 1 = 5 cells (Center, Up, Right, Down, Left)
+
+visualization:
+  local_view_size: 5          # Size of the agent-centric local view window
 
 

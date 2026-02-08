@@ -86,13 +86,13 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             viz = [
                 {'name': 'Olfactory', 'vector': chem_vec, 'type': 'spectrum'},
                 {'name': 'Extero Nociception', 'intensity': noc_val, 'color': '#c0392b', 'type': 'intensity'},
-                {'name': 'Collision', 'vector': coll_vec, 'color': '#e67e22', 'type': 'radial'},
+                {'name': 'Collision', 'vector': coll_vec, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1, 'side_by_side': True},
                 {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'}
             ]
             
             if 'Visual' in breakdown:
                 vis_vec = obs_vec[ptr:]
-                viz.append({'name': 'Visual (One-Hot)', 'vector': vis_vec, 'type': 'grid'})
+                viz.insert(3, {'name': 'Visual (One-Hot)', 'vector': vis_vec, 'type': 'diamond', 'range': params.visual_sensor_range, 'num_features': 7, 'side_by_side': True})
             
             return viz
 

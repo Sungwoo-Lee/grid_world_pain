@@ -92,6 +92,7 @@ class EnvParams:
     sensor_range: int = struct.field(pytree_node=False)
     visual_sensor_enabled: bool = struct.field(pytree_node=False)
     visual_sensor_range: int = struct.field(pytree_node=False)
+    local_view_size: int = struct.field(pytree_node=False)
 
     def _replace(self, **kwargs):
         return self.replace(**kwargs)

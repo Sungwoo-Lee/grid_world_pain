@@ -21,38 +21,33 @@ def sense_resource(agent_pos, res_pos, res_active, res_property, radius, decay_p
     obs = jnp.sum(weighted_props, axis=0)
     return obs
 
-def sense_collision(agent_pos, height, width, sensor_range):
-    """Radial Collision Sensor with high resolution (8 rays per unit range)."""
-    num_sectors = sensor_range * 8
-    angles = 2 * jnp.pi * jnp.arange(num_sectors) / num_sectors
-    dr = -jnp.cos(angles)
-    dc = jnp.sin(angles)
-    directions = jnp.stack([dr, dc], axis=-1) # [num_sectors, 2]
+def sense_collision(agent_pos, state: EnvState, params: EnvParams):
+    """Manhattan Collision Sensor (checks OOB and blocking obstacles)."""
+    sensor_range = params.sensor_range
+    offsets = get_visual_offsets(sensor_range) # [num_cells, 2]
+    num_cells = offsets.shape[0]
+    cell_coords = agent_pos + offsets # [num_cells, 2]
     
-    steps = jnp.arange(1, sensor_range + 1)
-    
-    # Check positions for all rays and steps: [num_sectors, sensor_range, 2]
-    check_pos = agent_pos[None, None, :] + directions[:, None, :] * steps[None, :, None]
-    check_pos = jnp.round(check_pos).astype(jnp.int32)
-    
-    # Bounds check: [num_sectors, sensor_range]
-    is_out = jnp.any(jnp.logical_or(
-        check_pos < 0,
-        check_pos >= jnp.array([height, width])
+    # 1. Bounds check
+    is_out_of_bounds = jnp.any(jnp.logical_or(
+        cell_coords < 0,
+        cell_coords >= jnp.array([params.height, params.width])
     ), axis=-1)
     
-    # Find first OOB index for each ray
-    # Use indices where True, else a safe high value
-    indices = jnp.where(is_out, jnp.arange(sensor_range), sensor_range + 1)
-    first_hit_idx = jnp.min(indices, axis=1)
+    # 2. Blocking Obstacles (Rocks)
+    def check_blocking_rock(coord):
+        # coord: [2]
+        is_here = jnp.all(state.obs_pos == coord, axis=-1)
+        # Check if any rock at this position is blocking
+        is_blocking = jnp.logical_and(is_here, params.obs_blocking)
+        return jnp.any(is_blocking)
+        
+    is_blocked_by_rock = jax.vmap(check_blocking_rock)(cell_coords)
     
-    hit_mask = first_hit_idx < sensor_range
-    # Proximity: 1.0 at distance 1 (idx 0), 0.0 at range
-    # Formula from original: 1.0 - (step - 1) / sensor_range
-    proximity = 1.0 - (first_hit_idx) / sensor_range
-    proximity = jnp.where(hit_mask, proximity, 0.0)
+    # Total collision: OOB or Blocking Rock
+    collision = jnp.logical_or(is_out_of_bounds, is_blocked_by_rock).astype(jnp.float32)
     
-    return proximity
+    return collision
 
 def sense_location(agent_pos, height, width):
     """Normalized Agent Location Sensor."""
@@ -201,7 +196,7 @@ def get_observation(state: EnvState, params: EnvParams):
     
     # 3. Collision
     coll_obs = sense_collision(
-        state.agent_pos, params.height, params.width, params.sensor_range
+        state.agent_pos, state, params
     )
     
     # 4. Location
@@ -230,8 +225,9 @@ def get_observation_breakdown(params: EnvParams):
     # 2. Extero Nociception: 1 (contact)
     noc_dim = 1
     
-    # 3. Collision: sensor_range * 8 rays
-    coll_dim = int(params.sensor_range) * 8
+    # 3. Collision: Manhattan range
+    num_coll_cells = 2 * (params.sensor_range**2) + 2 * params.sensor_range + 1
+    coll_dim = int(num_coll_cells)
     
     # 4. Location: 2 (normalized row, col)
     loc_dim = 2

@@ -145,7 +145,8 @@ def load_env_params(config: Config) -> EnvParams:
         sensor_decay=config.get_mandatory('sensory.decay_power'),
         sensor_range=config.get_mandatory('sensory.collision_sensor_range'),
         visual_sensor_enabled=config.get('sensory.visual_sensor_enabled', False),
-        visual_sensor_range=config.get('sensory.visual_sensor_range', 0)
+        visual_sensor_range=config.get('sensory.visual_sensor_range', 0),
+        local_view_size=config.get('visualization.local_view_size', 9)
     )
 
     
