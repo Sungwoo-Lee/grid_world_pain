@@ -86,6 +86,25 @@ environment:
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.5
       
+  # Location types
+  location_areas:
+    - type: grass
+      area: [[0, 0], [10, 10]]
+    - type: sand
+      area: [[11, 11], [19, 19]]
+  
+  # Obstacles (Rocks)
+  obstacles:
+    - area: [[5, 5], [5, 5]]
+      count: 1
+      blocking: true
+    - area: [[8, 12], [8, 12]]
+      count: 1
+      blocking: true
+    - area: [[15, 6], [15, 6]]
+      count: 1
+      blocking: false
+      
   # Legacy config removed (prob_switch, durations, etc)
 
   
@@ -141,5 +160,9 @@ sensory:
   # Proprioceptive Sensing (Motor Feedback)
   proprioception_enabled: true  # Sense previous action as motor feedback
   # proprioception_size is dynamic based on num_actions
+
+  # Visual Sensor (One-Hot)
+  visual_sensor_enabled: true
+  visual_sensor_range: 0     # range 1 = 5 cells (Center, Up, Right, Down, Left)
 
 

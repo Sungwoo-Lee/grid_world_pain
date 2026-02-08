@@ -373,6 +373,33 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
                 val_text = sensor.get('value_text', '')
                 color = sensor.get('color', '#343A40')
                 ax_sensory.text(0.1, y_center - 0.02, val_text, color=color, fontsize=8, weight='bold', transform=ax_sensory.transAxes, fontfamily='monospace')
+            
+            elif sensor['type'] == 'grid':
+                # For Visual Sensor (Manhattan diamond)
+                # vector is flattened [num_cells * 7]
+                num_features = 7
+                num_cells = len(vector) // num_features
+                grid_data = vector.reshape(num_cells, num_features)
+                
+                # Draw small colored squares for each cell
+                # We arrange them horizontally for now, but grouped by feature
+                cell_w = slot_w / num_cells
+                feat_h = bar_h / num_features
+                
+                # Feature colors matching common themes
+                # [Grass, Sand, Plain, Food, Danger, Predator, Rock]
+                f_colors = ['#40C057', '#fab005', '#ADB5BD', '#40C057', '#FA5252', '#212529', '#868E96']
+                
+                for ci in range(num_cells):
+                    cx = slot_x + ci * cell_w
+                    for fi in range(num_features):
+                        val = float(grid_data[ci, fi])
+                        fy = y_center - bar_h/2 + fi * feat_h
+                        # Base background
+                        ax_sensory.add_patch(plt.Rectangle((cx, fy), cell_w*0.9, feat_h*0.9, color='#F1F3F5', transform=ax_sensory.transAxes, alpha=0.3))
+                        if val > 0:
+                            # If val > 0, show the feature color
+                            ax_sensory.add_patch(plt.Rectangle((cx, fy), cell_w*0.9, feat_h*0.9, color=f_colors[fi], transform=ax_sensory.transAxes, alpha=min(1.0, val)))
 
     # Render directly from canvas (removing tight_layout)
     canvas.draw()

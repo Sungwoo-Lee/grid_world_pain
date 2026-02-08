@@ -143,7 +143,9 @@ def load_env_params(config: Config) -> EnvParams:
         eat_action_enabled=config.get_mandatory('environment.eat_action_enabled'),
         sensor_radius=config.get_mandatory('sensory.sensor_radius'),
         sensor_decay=config.get_mandatory('sensory.decay_power'),
-        sensor_range=config.get_mandatory('sensory.collision_sensor_range')
+        sensor_range=config.get_mandatory('sensory.collision_sensor_range'),
+        visual_sensor_enabled=config.get('sensory.visual_sensor_enabled', False),
+        visual_sensor_range=config.get('sensory.visual_sensor_range', 0)
     )
 
     

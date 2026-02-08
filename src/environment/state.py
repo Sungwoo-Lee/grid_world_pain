@@ -90,6 +90,8 @@ class EnvParams:
     sensor_radius: float
     sensor_decay: float
     sensor_range: int = struct.field(pytree_node=False)
+    visual_sensor_enabled: bool = struct.field(pytree_node=False)
+    visual_sensor_range: int = struct.field(pytree_node=False)
 
     def _replace(self, **kwargs):
         return self.replace(**kwargs)

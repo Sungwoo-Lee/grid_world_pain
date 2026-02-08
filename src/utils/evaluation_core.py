@@ -80,12 +80,20 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             loc_vec = obs_vec[ptr:loc_end]
             ptr = loc_end
             
+            intero_end = ptr + breakdown['Interoception']
+            ptr = intero_end
+            
             viz = [
                 {'name': 'Olfactory', 'vector': chem_vec, 'type': 'spectrum'},
                 {'name': 'Extero Nociception', 'intensity': noc_val, 'color': '#c0392b', 'type': 'intensity'},
                 {'name': 'Collision', 'vector': coll_vec, 'color': '#e67e22', 'type': 'radial'},
                 {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'}
             ]
+            
+            if 'Visual' in breakdown:
+                vis_vec = obs_vec[ptr:]
+                viz.append({'name': 'Visual (One-Hot)', 'vector': vis_vec, 'type': 'grid'})
+            
             return viz
 
         if render_video:
