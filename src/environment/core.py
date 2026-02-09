@@ -233,14 +233,14 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # Only update position IF respawn_mask is true for that resource
     res_pos_after_reg = jnp.where(respawn_mask[:, None], new_potential_pos, state.res_pos)
     
-    # 2. Predator Update
+    # 2. Agent Movement
+    new_agent_pos, just_collided = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)
+
+    # 3. Predator Update (Using the NEW agent position)
     new_pred_pos, new_pred_state, new_pred_stamina, new_pred_move_timer, _ = update_predators(
         state.pred_pos, state.pred_state, state.pred_stamina, state.pred_move_timer, 
-        state.agent_pos, state.obs_pos, params.obs_blocking, params, predator_key
+        new_agent_pos, state.obs_pos, params.obs_blocking, params, predator_key
     )
-    
-    # 3. Agent Movement
-    new_agent_pos, just_collided = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)
     
     # 4. Interaction Logic
     # Check overlaps with resources (using positions AFTER regeneration)

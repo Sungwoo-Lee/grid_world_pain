@@ -57,7 +57,7 @@ environment:
     - name: "Alpha Predator"
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
-      move_interval: 2
+      move_interval: 1
       damage: 3.0
       nociception_intensity: 0.9
       spawn_area: [[0, 0], [10, 10]]
@@ -70,7 +70,7 @@ environment:
     - name: "Beta Predator"
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
-      move_interval: 2
+      move_interval: 1
       damage: 3.0
       nociception_intensity: 0.9
       spawn_area: [[11, 11], [20, 20]]
