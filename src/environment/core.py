@@ -367,7 +367,8 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         injury_buffer=next_injury_buffer,
         last_collision_noc=collision_noc,
         terminated=done,
-        key=key
+        key=key,
+        last_action=jnp.array(action, dtype=jnp.int32)
     )
     
     return new_state, reward, done, info
@@ -441,7 +442,8 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         injury_buffer=injury_buffer,
         last_collision_noc=jnp.array(0.0, dtype=jnp.float32),
         terminated=jnp.array(False, dtype=jnp.bool_),
-        key=key
+        key=key,
+        last_action=jnp.array(4 if params.rest_action_enabled else 5, dtype=jnp.int32) # Default to Rest/Stay
     )
     
     return state

@@ -35,6 +35,9 @@ class EnvState:
     # Random State
     key: jax.random.PRNGKey      # PRNGKey
 
+    # Proprioception
+    last_action: jnp.ndarray      # [] (int32 action index)
+
     def _replace(self, **kwargs):
         return self.replace(**kwargs)
 
@@ -99,6 +102,10 @@ class EnvParams:
     visual_sensor_enabled: bool = struct.field(pytree_node=False)
     visual_sensor_range: int = struct.field(pytree_node=False)
     local_view_size: int = struct.field(pytree_node=False)
+
+    # Proprioception
+    proprioception_enabled: bool = struct.field(pytree_node=False)
+    action_dim: int = struct.field(pytree_node=False)
 
     def _replace(self, **kwargs):
         return self.replace(**kwargs)

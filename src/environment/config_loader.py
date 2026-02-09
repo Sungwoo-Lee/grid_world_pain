@@ -162,9 +162,11 @@ def load_env_params(config: Config) -> EnvParams:
         sensor_radius=config.get_mandatory('sensory.sensor_radius'),
         sensor_decay=config.get_mandatory('sensory.decay_power'),
         sensor_range=config.get_mandatory('sensory.collision_sensor_range'),
-        visual_sensor_enabled=config.get('sensory.visual_sensor_enabled', False),
-        visual_sensor_range=config.get('sensory.visual_sensor_range', 0),
-        local_view_size=config.get('visualization.local_view_size', 9)
+        visual_sensor_enabled=config.get_mandatory('sensory.visual_sensor_enabled'),
+        visual_sensor_range=config.get_mandatory('sensory.visual_sensor_range'),
+        local_view_size=config.get_mandatory('visualization.local_view_size'),
+        proprioception_enabled=config.get_mandatory('sensory.proprioception_enabled'),
+        action_dim=4 + int(config.get_mandatory('environment.rest_action_enabled')) + int(config.get_mandatory('environment.eat_action_enabled'))
     )
 
     

@@ -154,7 +154,7 @@ sensory:
 
   # Proprioceptive Sensing (Motor Feedback)
   proprioception_enabled: true  # Sense previous action as motor feedback
-  # proprioception_size is dynamic based on num_actions
+  action_dim: 6                # 4 move + 1 rest + 1 eat
 
   # Visual Sensor (One-Hot)
   visual_sensor_enabled: true

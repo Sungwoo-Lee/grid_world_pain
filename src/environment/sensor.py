@@ -231,10 +231,16 @@ def get_observation(state: EnvState, params: EnvParams):
     # 6. Visual Sensor
     if params.visual_sensor_enabled:
         vis_obs = sense_visual(state.agent_pos, state, params)
-        return jnp.concatenate([chem_obs, noc_obs, coll_obs, loc_obs, intero_obs, vis_obs])
+        obs = jnp.concatenate([chem_obs, noc_obs, coll_obs, loc_obs, intero_obs, vis_obs])
+    else:
+        obs = jnp.concatenate([chem_obs, noc_obs, coll_obs, loc_obs, intero_obs])
     
-    # Concatenate all
-    return jnp.concatenate([chem_obs, noc_obs, coll_obs, loc_obs, intero_obs])
+    # 7. Proprioception (Previous Action)
+    if params.proprioception_enabled:
+        proprio_obs = jax.nn.one_hot(state.last_action, params.action_dim)
+        obs = jnp.concatenate([obs, proprio_obs])
+    
+    return obs
 
 def get_observation_breakdown(params: EnvParams):
     """Returns a dict of {sensor_name: dimension} for observation components."""
@@ -263,11 +269,14 @@ def get_observation_breakdown(params: EnvParams):
         "Interoception": intero_dim
     }
     
-    # 6. Visual Sensor
     if params.visual_sensor_enabled:
         # Range r -> 2r^2 + 2r + 1 cells
         num_cells = 2 * (params.visual_sensor_range**2) + 2 * params.visual_sensor_range + 1
         breakdown["Visual"] = int(num_cells * 7)
+    
+    # 7. Proprioception
+    if params.proprioception_enabled:
+        breakdown["Proprioception"] = int(params.action_dim)
         
     return breakdown
 
