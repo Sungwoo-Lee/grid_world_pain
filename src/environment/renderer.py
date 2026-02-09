@@ -12,6 +12,14 @@ import matplotlib.pyplot as plt
 from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import time
+from io import BytesIO
+from PIL import Image
+
+try:
+    import cairosvg
+    CAIROSVG_AVAILABLE = True
+except ImportError:
+    CAIROSVG_AVAILABLE = False
 
 # Imports for JAX EnvState
 import jax.numpy as jnp
@@ -19,35 +27,61 @@ import jax.numpy as jnp
 # Global cache for icons to avoid reloading every frame
 _ICON_CACHE = None
 
-def _load_icons():
-    """Lengths icons from assets directory."""
+def _load_icons(icon_config=None):
+    """Loads icons from assets directory based on config."""
     global _ICON_CACHE
     if _ICON_CACHE is not None:
         return _ICON_CACHE
         
     # Calculate assets path relative to this file
-    # src/environment/renderer.py -> src/ -> root -> assets/
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     assets_path = os.path.join(base_dir, 'assets')
     
-    icon_files = {
-        'agent': 'agent.jpg',
-        'food': 'food.jpg',
-        'danger': 'danger.jpg',
-        'predator': 'predator.jpg',
-        'agent_food': 'agent_food.jpg',
-        'agent_danger': 'agent_danger.jpg',
-        'agent_predator': 'agent_predator.jpg',
-        'rock': 'rock.jpg'
-    }
+    # Default icons mapping if not provided
+    if icon_config is None:
+        icon_config = {
+            'agent': 'agent',
+            'food': 'food',
+            'danger': 'danger',
+            'predator': 'predator',
+            'agent_food': 'agent_food',
+            'agent_danger': 'agent_danger',
+            'agent_predator': 'agent_predator',
+            'rock': 'rock'
+        }
+    
+    supported_extensions = ['.png', '.jpg', '.jpeg', '.svg', '.gif', '.webp']
     
     icons = {}
-    for key, filename in icon_files.items():
-        path = os.path.join(assets_path, filename)
-        if os.path.exists(path):
-            icons[key] = plt.imread(path)
-        else:
-            # print(f"Warning: Icon not found at {path}")
+    for key, base_filename in icon_config.items():
+        found = False
+        for ext in supported_extensions:
+            filename = f"{base_filename}{ext}" if not base_filename.endswith(ext) else base_filename
+            path = os.path.join(assets_path, filename)
+            
+            if os.path.exists(path):
+                try:
+                    if ext.lower() == '.svg':
+                        if CAIROSVG_AVAILABLE:
+                            # Convert SVG to PNG in memory then to numpy array
+                            png_data = cairosvg.svg2png(url=path)
+                            icons[key] = np.array(Image.open(BytesIO(png_data)))
+                            found = True
+                        else:
+                            # print(f"Warning: cairosvg not available for {path}")
+                            pass
+                    else:
+                        icons[key] = plt.imread(path)
+                        found = True
+                    
+                    if found:
+                        break
+                except Exception as e:
+                    # print(f"Error loading icon {path}: {e}")
+                    pass
+        
+        if not found:
+            # print(f"Warning: Icon not found for key '{key}' with extensions {supported_extensions}")
             icons[key] = None
             
     _ICON_CACHE = icons
@@ -57,7 +91,7 @@ def _load_icons():
 # Global cache for figure, axes, and canvas to avoid recreating them every frame
 _FIG_CACHE = None
 
-def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale=1.0, action=None, sensory_data=None):
+def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale=1.0, action=None, sensory_data=None, icon_config=None):
     """
     Render a JAX EnvState to an RGB numpy array.
     
@@ -71,12 +105,10 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
         action: Optional action index taken
         sensory_data: Optional list of sensory component dicts:
             [{'name': str, 'vector': ndarray, 'color': str, 'type': 'radial'|'spectrum'}, ...]
-        
-    Returns:
-        numpy array of shape (H, W, 3) representing the RGB frame
+        icon_config: Optional dict mapping entity keys to filenames
     """
     start_time = time.time()
-    icons = _load_icons()
+    icons = _load_icons(icon_config)
     global _FIG_CACHE
     
     # Colors

@@ -4,12 +4,23 @@ visualization:
   font_family: "sans-serif"
   
   # Video settings
-  # fps: 5
-  # video_dpi: 100
-  icon_scale: 2.0
+  fps: 5
+  video_dpi: 100
+  icon_scale: 1.0
+  
+  # Icons mapping (filename without extension to search dynamically)
+  icons:
+    agent: "agent"
+    food: "food"
+    danger: "danger"
+    predator: "predator"
+    agent_food: "agent_food"
+    agent_danger: "agent_danger"
+    agent_predator: "agent_predator"
+    rock: "rock"
 
-  fps: 2
-  video_dpi: 300
+  # fps: 2
+  # video_dpi: 300
   
   # Activation / LRP Visualization
   activations:

@@ -34,6 +34,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     
     # Breakdown for sensory visualization
     breakdown = get_observation_breakdown(params)
+    icon_config = config.get('visualization.icons', None)
     
     episode_rewards = []
     episode_lengths = []
@@ -100,7 +101,8 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             if debug: print(f"    [Render] Initial frame...", end="", flush=True)
             all_frames.append(render_jax_state(
                 state, params, episode=ep+1, step=0, 
-                sensory_data=get_sensory_viz(obs)
+                sensory_data=get_sensory_viz(obs),
+                icon_config=icon_config
             ))
             if debug: print(" Done", flush=True)
         
@@ -152,7 +154,8 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 # PyTorch baseline shows the state result of the action.
                 all_frames.append(render_jax_state(
                     state, params, episode=ep+1, step=step_count, 
-                    action=action_idx, sensory_data=get_sensory_viz(next_obs)
+                    action=action_idx, sensory_data=get_sensory_viz(next_obs),
+                    icon_config=icon_config
                 ))
                 if debug: print(" Done", flush=True)
             
