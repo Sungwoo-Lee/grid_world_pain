@@ -20,3 +20,5 @@ temp_configs/
 wandb/
 logs/
 .wandb_api_key
+legacy/
+*legacy*
