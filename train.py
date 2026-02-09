@@ -47,6 +47,12 @@ from src.environment.sensor import get_observation, get_observation_breakdown
 from src.environment.core import jax_step
 from src.models.recurrent_ppo_network import ActorCriticRNN
 from src.models.recurrent_ppo_trainer import train_iteration
+from src.models.dqn_network import DQNNetwork, get_action_dqn_nnx
+from src.models.dqn_trainer import ReplayBuffer as DQNReplayBuffer, update_step_dqn
+from src.models.drqn_network import DRQNNetwork, get_action_drqn_nnx
+from src.models.drqn_trainer import RecurrentReplayBuffer as DRQNReplayBuffer, update_step_drqn
+from src.models.ppo_network import ActorCriticMLP, get_action_and_value_ppo_nnx
+from src.models.ppo_trainer import train_iteration_ppo
 from src.utils.config import get_default_config, Config
 
 # Orbax
@@ -452,6 +458,101 @@ def main():
             action_dim=action_dim
         )
         dreamer_state = None 
+
+    elif algorithm == "DQN":
+        key, init_key = jax.random.split(key)
+        fc_layers = config.get_mandatory('agent.fc_layers')
+        model = DQNNetwork(input_dim, action_dim, fc_layers, rngs=nnx.Rngs(init_key))
+        target_model = DQNNetwork(input_dim, action_dim, fc_layers, rngs=nnx.Rngs(init_key))
+        # NNX state sync
+        nnx.update(target_model, nnx.state(model))
+        
+        optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
+        
+        buffer_capacity = config.get_mandatory('agent.buffer_size')
+        dqn_buffer = DQNReplayBuffer(capacity=buffer_capacity, obs_dim=input_dim)
+        
+        epsilon = config.get_mandatory('agent.epsilon_start')
+        epsilon_end = config.get_mandatory('agent.epsilon_end')
+        epsilon_decay = config.get_mandatory('agent.epsilon_decay')
+        target_update_freq = config.get_mandatory('agent.target_update_freq')
+        batch_size = config.get_mandatory('agent.batch_size')
+        
+        # Reuse num_steps as "collection steps per iteration"
+        num_steps = args.num_steps or 1 # Standard DQN explores 1 step per env per iter
+
+    elif algorithm == "DRQN":
+        key, init_key = jax.random.split(key)
+        fc_layers = config.get_mandatory('agent.fc_layers')
+        recurrent_layers = config.get_mandatory('agent.recurrent_layers')
+        hidden_size = recurrent_layers[0] # NNX LSTM/GRU use single hidden size
+        rnn_type = config.get('agent.rnn_type', 'LSTM')
+        
+        model = DRQNNetwork(input_dim, action_dim, hidden_size, rnn_type, fc_layers, rngs=nnx.Rngs(init_key))
+        target_model = DRQNNetwork(input_dim, action_dim, hidden_size, rnn_type, fc_layers, rngs=nnx.Rngs(init_key))
+        nnx.update(target_model, nnx.state(model))
+        
+        optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
+        
+        buffer_capacity = config.get_mandatory('agent.buffer_size')
+        drqn_buffer = DRQNReplayBuffer(capacity=buffer_capacity, obs_dim=input_dim)
+        
+        epsilon = config.get_mandatory('agent.epsilon_start')
+        epsilon_end = config.get_mandatory('agent.epsilon_end')
+        epsilon_decay = config.get_mandatory('agent.epsilon_decay')
+        target_update_freq = config.get_mandatory('agent.target_update_freq')
+        batch_size = config.get_mandatory('agent.batch_size')
+        trace_length = config.get_mandatory('agent.trace_length')
+        burn_in_length = config.get_mandatory('agent.burn_in_length')
+        
+        # Hidden state for collection
+        h_state = model.initial_state(num_envs)
+        
+        # Reuse num_steps as "collection steps per iteration"
+        num_steps = args.num_steps or 1
+
+    elif algorithm == "PPO":
+        key, init_key = jax.random.split(key)
+        
+        activation = config.get('agent.activation', 'tanh')
+        return_mode = config.get('agent.return_mode', 'MC')
+        actor_fc_layers = config.get_mandatory('agent.actor_fc_layers')
+        critic_fc_layers = config.get_mandatory('agent.critic_fc_layers')
+        
+        # We can support dual LR by choosing one or using a complex optimizer
+        # For now, let's use lr_actor as primary
+        lr_actor = config.get('agent.lr_actor', lr)
+        
+        if not args.quiet:
+            print(f"Activation: {activation}, Return Mode: {return_mode}")
+            print(f"Actor Layers: {actor_fc_layers}, Critic Layers: {critic_fc_layers}")
+        
+        model = ActorCriticMLP(
+            input_dim=input_dim, 
+            action_dim=action_dim, 
+            actor_fc_layers=actor_fc_layers,
+            critic_fc_layers=critic_fc_layers,
+            rngs=nnx.Rngs(init_key),
+            activation=activation
+        )
+        optimizer = nnx.Optimizer(model, optax.adam(lr_actor), wrt=nnx.Param)
+        
+        ppo_config = PPOConfig(
+            num_steps=num_steps,
+            num_epochs=config.get_mandatory('agent.K_epochs'),
+            gamma=config.get_mandatory('agent.gamma'),
+            gae_lambda=config.get('agent.gae_lambda', 0.95),
+            clip_eps=config.get_mandatory('agent.eps_clip'),
+            ent_coef=config.get('agent.entropy_coef', 0.01),
+            vf_coef=config.get('agent.vf_coef', 0.5),
+            lr=lr_actor,
+            activation=activation,
+            return_mode=return_mode
+        )
+        
+        if not args.quiet:
+            print("JIT compiling train_iteration_ppo...")
+        jit_train = nnx.jit(train_iteration_ppo, static_argnums=(5,))
         
     # 7. Training Loop
     if args.debug: print(f"[DEBUG] Phase 7: Entering Training Loop...", flush=True)
@@ -625,6 +726,273 @@ def main():
                     
                     pbar.set_postfix({"Iter": iteration, "Loss": loss_msg, "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"})
                     if args.debug: print(f" Done.", flush=True)
+
+                elif algorithm == "DQN":
+                    if args.debug: print(f"  [DEBUG] DQN Step Collection...", end="", flush=True)
+                    
+                    # 1. Collect Step
+                    key, act_key = jax.random.split(key)
+                    # vmapped action selection
+                    action = jax.vmap(get_action_dqn_nnx, in_axes=(None, 0, 0, None))(
+                        model, obs, jax.random.split(act_key, num_envs), epsilon
+                    )
+                    
+                    from src.environment.core import jax_step
+                    step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
+                    next_env_state, reward, done, info = step_fn(env_state, action)
+                    
+                    next_obs = jax.vmap(get_observation, in_axes=(0, None))(next_env_state, params)
+                    
+                    # 2. Add to Buffer
+                    dqn_buffer.add(
+                        obs=np.array(obs),
+                        action=np.array(action),
+                        reward=np.array(reward),
+                        next_obs=np.array(next_obs),
+                        done=np.array(done)
+                    )
+                    
+                    # 3. Auto-Reset and state transition
+                    from src.environment.core import jax_reset
+                    reset_key, key = jax.random.split(key)
+                    reset_state = jax.vmap(jax_reset, in_axes=(None, 0))(params, jax.random.split(reset_key, num_envs))
+                    
+                    def select_done(d, r, n):
+                        d_expanded = d.reshape((d.shape[0],) + (1,) * (r.ndim - 1))
+                        return jnp.where(d_expanded, r, n)
+                        
+                    env_state = jax.tree_util.tree_map(
+                        lambda r, n: select_done(done, r, n),
+                        reset_state, next_env_state
+                    )
+                    obs = jax.vmap(get_observation, in_axes=(0, None))(env_state, params)
+                    
+                    global_step += num_envs
+                    iteration_episodes = []
+                    
+                    # Stats tracking
+                    episode_returns += np.array(reward)
+                    episode_lengths += 1
+                    dones_np = np.array(done).astype(bool)
+                    if np.any(dones_np):
+                        completed_indices = np.where(dones_np)[0]
+                        for i in completed_indices:
+                            total_episodes_completed += 1
+                            ep_reward = float(episode_returns[i])
+                            ep_length = int(episode_lengths[i])
+                            ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
+                            iteration_episodes.append({'r': ep_reward, 'l': ep_length})
+                            episode_returns[i] = 0.0
+                            episode_lengths[i] = 0
+                            
+                    # 4. Update Step
+                    loss_val = 0.0
+                    if dqn_buffer.size > batch_size:
+                        key, sample_key = jax.random.split(key)
+                        batch = dqn_buffer.sample(batch_size, sample_key)
+                        loss_val = update_step_dqn(model, target_model, optimizer, batch, config.get_mandatory('agent.gamma'))
+                        
+                        # Epsilon Decay
+                        epsilon = max(epsilon_end, epsilon * epsilon_decay)
+                        
+                        # Target Sync
+                        if iteration % target_update_freq == 0:
+                            nnx.update(target_model, nnx.state(model))
+                    
+                    if wandb_enabled:
+                        logs = {
+                            "iteration": iteration,
+                            "timesteps": global_step,
+                            "train/epsilon": float(epsilon),
+                            "loss/dqn": float(loss_val)
+                        }
+                        if iteration_episodes:
+                            rewards_list = [ep['r'] for ep in iteration_episodes]
+                            logs.update({
+                                "Episode/Reward": np.mean(rewards_list),
+                                "Episode/Number": total_episodes_completed
+                            })
+                        wandb.log(logs)
+
+                    pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
+                    pbar.set_postfix({
+                        "Iter": iteration,
+                        "Loss": f"{float(loss_val):.4f}",
+                        "Eps": f"{float(epsilon):.2f}",
+                        "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"
+                    })
+                    pbar.refresh()
+
+                elif algorithm == "DRQN":
+                    if args.debug: print(f"  [DEBUG] DRQN Step Collection...", end="", flush=True)
+                    
+                    # 1. Collect Step
+                    key, act_key = jax.random.split(key)
+                    # vmapped action selection
+                    # h_state is a PyTree (B, H) or ((B, H), (B, H))
+                    # we vmap over first dimension (which is B)
+                    if rnn_type.upper() == "LSTM":
+                        action, h_state_new = jax.vmap(get_action_drqn_nnx, in_axes=(None, 0, (0, 0), 0, None))(
+                            model, obs, h_state, jax.random.split(act_key, num_envs), epsilon
+                        )
+                    else:
+                        action, h_state_new = jax.vmap(get_action_drqn_nnx, in_axes=(None, 0, 0, 0, None))(
+                            model, obs, h_state, jax.random.split(act_key, num_envs), epsilon
+                        )
+                    
+                    from src.environment.core import jax_step
+                    step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
+                    next_env_state, reward, done, info = step_fn(env_state, action)
+                    
+                    # 2. Add to Buffer
+                    drqn_buffer.add(
+                        obs=np.array(obs),
+                        action=np.array(action),
+                        reward=np.array(reward),
+                        done=np.array(done)
+                    )
+                    
+                    # 3. Auto-Reset and state transition
+                    from src.environment.core import jax_reset
+                    reset_key, key = jax.random.split(key)
+                    reset_state = jax.vmap(jax_reset, in_axes=(None, 0))(params, jax.random.split(reset_key, num_envs))
+                    
+                    def select_done(d, r, n):
+                        d_expanded = d.reshape((d.shape[0],) + (1,) * (r.ndim - 1))
+                        return jnp.where(d_expanded, r, n)
+                        
+                    env_state = jax.tree_util.tree_map(
+                        lambda r, n: select_done(done, r, n),
+                        reset_state, next_env_state
+                    )
+                    obs = jax.vmap(get_observation, in_axes=(0, None))(env_state, params)
+                    
+                    # Reset hidden state for completed envs
+                    if rnn_type.upper() == "LSTM":
+                        h_state = (
+                            jnp.where(done[:, None], 0.0, h_state_new[0]),
+                            jnp.where(done[:, None], 0.0, h_state_new[1])
+                        )
+                    else:
+                        h_state = jnp.where(done[:, None], 0.0, h_state_new)
+                    
+                    global_step += num_envs
+                    iteration_episodes = []
+                    
+                    # Stats tracking
+                    episode_returns += np.array(reward)
+                    episode_lengths += 1
+                    dones_np = np.array(done).astype(bool)
+                    if np.any(dones_np):
+                        completed_indices = np.where(dones_np)[0]
+                        for i in completed_indices:
+                            total_episodes_completed += 1
+                            ep_reward = float(episode_returns[i])
+                            ep_length = int(episode_lengths[i])
+                            ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
+                            iteration_episodes.append({'r': ep_reward, 'l': ep_length})
+                            episode_returns[i] = 0.0
+                            episode_lengths[i] = 0
+                            
+                    # 4. Update Step
+                    loss_val = 0.0
+                    if drqn_buffer.size > (trace_length + burn_in_length + batch_size):
+                        key, sample_key = jax.random.split(key)
+                        obs_seq, actions, rewards, next_obs_seq, dones = drqn_buffer.sample_sequences(
+                            batch_size, trace_length + burn_in_length, sample_key
+                        )
+                        loss_val = update_step_drqn(
+                            model, target_model, optimizer, 
+                            obs_seq, actions, rewards, next_obs_seq, dones, 
+                            config.get_mandatory('agent.gamma'), 
+                            burn_in_length
+                        )
+                        
+                        # Epsilon Decay
+                        epsilon = max(epsilon_end, epsilon * epsilon_decay)
+                        
+                        # Target Sync
+                        if iteration % target_update_freq == 0:
+                            nnx.update(target_model, nnx.state(model))
+                    
+                    if wandb_enabled:
+                        logs = {
+                            "iteration": iteration,
+                            "timesteps": global_step,
+                            "train/epsilon": float(epsilon),
+                            "loss/drqn": float(loss_val)
+                        }
+                        if iteration_episodes:
+                            rewards_list = [ep['r'] for ep in iteration_episodes]
+                            logs.update({
+                                "Episode/Reward": np.mean(rewards_list),
+                                "Episode/Number": total_episodes_completed
+                            })
+                        wandb.log(logs)
+
+                    pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
+                    pbar.set_postfix({
+                        "Iter": iteration,
+                        "Loss": f"{float(loss_val):.4f}",
+                        "Eps": f"{float(epsilon):.2f}",
+                        "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"
+                    })
+                    pbar.refresh()
+
+                elif algorithm == "PPO":
+                    if args.debug: print(f"  [DEBUG] Collecting {num_steps * num_envs} steps of experience...", end="", flush=True)
+                    env_state, key, losses, num_completed, rollout_rew, rollout_done = jit_train(
+                        model, optimizer, params, env_state, key, ppo_config
+                    )
+                    if args.debug: print(f" Done.", flush=True)
+                    
+                    steps_this_iter = num_steps * num_envs
+                    global_step += steps_this_iter
+                    
+                    rew_np = np.array(rollout_rew)
+                    done_np = np.array(rollout_done)
+                    
+                    for t in range(num_steps):
+                        episode_returns += rew_np[t]
+                        episode_lengths += 1
+                        dones_t = done_np[t].astype(bool)
+                        
+                        if np.any(dones_t):
+                            completed_indices = np.where(dones_t)[0]
+                            for i in completed_indices:
+                                total_episodes_completed += 1
+                                ep_reward = float(episode_returns[i])
+                                ep_length = int(episode_lengths[i])
+                                ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
+                                iteration_episodes.append({'r': ep_reward, 'l': ep_length})
+                                episode_returns[i] = 0.0
+                                episode_lengths[i] = 0
+                    
+                    if wandb_enabled:
+                        logs = {
+                            "iteration": iteration,
+                            "timesteps": global_step,
+                        }
+                        if iteration_episodes:
+                            rewards_list = [ep['r'] for ep in iteration_episodes]
+                            logs.update({
+                                "Episode/Reward": np.mean(rewards_list),
+                                "Episode/Number": total_episodes_completed
+                            })
+                        if losses:
+                            # losses is a list of (total_loss, (p_loss, v_loss, e_loss))
+                            avg_total = np.mean([l[0] for l in losses])
+                            logs.update({"loss/ppo_total": float(avg_total)})
+                        wandb.log(logs)
+
+                    pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
+                    loss_msg = f"L: {float(losses[-1][0]):.2f}" if losses else ""
+                    pbar.set_postfix({
+                        "Iter": iteration,
+                        "Loss": loss_msg,
+                        "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"
+                    })
+                    pbar.refresh()
 
                 # Checkpoint Logic
                 checkpoint_freq = args.checkpoint_frequency or config.get_mandatory('training.checkpoint_frequency')
