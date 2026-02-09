@@ -19,6 +19,10 @@ class EnvState:
     pred_state: jnp.ndarray      # [num_pred] int
     pred_stamina: jnp.ndarray    # [num_pred] float
     pred_move_timer: jnp.ndarray # [num_pred] int
+    
+    # Neutral Animals (Olfactory Decoys)
+    neutral_pos: jnp.ndarray     # [num_neutral, 2]
+    neutral_move_timer: jnp.ndarray # [num_neutral] int
 
     # Obstacles
     obs_pos: jnp.ndarray        # [num_obs, 2]
@@ -75,6 +79,13 @@ class EnvParams:
     obs_damage: jnp.ndarray     # [num_obs]
     obs_property: jnp.ndarray   # [num_obs, vector_size]
     obs_nociception: jnp.ndarray # [num_obs]
+    
+    # Neutral Animals
+    neutral_property: jnp.ndarray   # [num_neutral, vector_size]
+    neutral_nociception: jnp.ndarray # [num_neutral]
+    neutral_move_int: jnp.ndarray    # [num_neutral]
+    neutral_patrol: jnp.ndarray      # [num_neutral, 4]
+    neutral_spawn_area: jnp.ndarray  # [num_neutral, 4]
     
     # Body
     max_satiation: float

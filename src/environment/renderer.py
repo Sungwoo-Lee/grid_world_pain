@@ -47,7 +47,8 @@ def _load_icons(icon_config=None):
             'agent_food': 'agent_food',
             'agent_danger': 'agent_danger',
             'agent_predator': 'agent_predator',
-            'rock': 'rock'
+            'rock': 'rock',
+            'neutral': 'neutral'
         }
     
     supported_extensions = ['.png', '.jpg', '.jpeg', '.svg', '.gif', '.webp']
@@ -255,6 +256,13 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
         or_, oc = int(obs_positions[i, 0]), int(obs_positions[i, 1])
         if is_visible(or_, oc) and not (or_ == ar and oc == ac):
             draw_icon(ax_grid, or_, oc, 'rock', zoom=0.035, s_fac=scale_factor)
+            
+    # Neutral Animals
+    neutral_positions = np.array(state.neutral_pos)
+    for i in range(neutral_positions.shape[0]):
+        nr, nc = int(neutral_positions[i, 0]), int(neutral_positions[i, 1])
+        if is_visible(nr, nc) and not (nr == ar and nc == ac):
+            draw_icon(ax_grid, nr, nc, 'neutral', zoom=0.035, s_fac=scale_factor)
 
     # Agent
     if predator_here: draw_icon(ax_grid, ar, ac, 'agent_predator', zoom=0.055, s_fac=scale_factor)
@@ -307,6 +315,10 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     # Draw Predators on minimap
     if num_pred > 0:
         ax_minimap.scatter(pred_positions[:, 1], pred_positions[:, 0], s=2, c='#212529', marker='v', zorder=7)
+        
+    # Draw Neutral Animals on minimap
+    if neutral_positions.shape[0] > 0:
+        ax_minimap.scatter(neutral_positions[:, 1], neutral_positions[:, 0], s=1.5, c='#15aabf', marker='o', zorder=7)
     
 
     
@@ -527,7 +539,7 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
                                 m_cols = int(np.ceil(num_obj / m_rows))
                                 m_size = cell_size * 0.8 / max(m_rows, m_cols)
                                 
-                                icon_map = {3:'food', 4:'danger', 5:'predator', 6:'rock'}
+                                icon_map = {3:'food', 4:'danger', 5:'predator', 6:'rock', 7:'neutral'}
                                 
                                 for mi, idx in enumerate(obj_indices):
                                     m_r = mi // m_cols
@@ -545,7 +557,7 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
                                         ax_sensory.add_artist(ab)
                                     else:
                                         # Fallback
-                                        fallback_colors = ['#40C057', '#FA5252', '#212529', '#868E96'] # Food, Danger, Predator, Rock
+                                        fallback_colors = ['#40C057', '#FA5252', '#212529', '#868E96', '#15aabf'] # Food, Danger, Predator, Rock, Neutral
                                         c = fallback_colors[idx-3] if (idx-3) < len(fallback_colors) else '#ADB5BD'
                                         ax_sensory.add_patch(plt.Circle((mx, my), m_size*0.4, color=c, transform=ax_sensory.transAxes))
 

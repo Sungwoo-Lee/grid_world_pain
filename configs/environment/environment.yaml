@@ -62,6 +62,15 @@ environment:
       regeneration_delay: 20
       nociception_intensity: 0.9
       
+  neutral_animals:
+    - name: "Decoy Rabbit"
+      count: 5
+      property: [0.0, 0.8, 0.0, 0.0, 0.0]
+      move_interval: 1
+      nociception_intensity: 0.1
+      spawn_area: [[3, 3], [18, 18]]
+      patrol_area: [[3, 0], [18, 18]]
+
   predator_enabled: true
   predators:
     - name: "Alpha Predator"
@@ -89,95 +98,61 @@ environment:
       max_stamina: 5000
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.5
-      
-  # Location types
+
   location_areas:
-    - type: grass
+    - type: "grass"
       area: [[0, 0], [10, 10]]
-    - type: grass
-      area: [[11, 11], [20, 20]]
-    - type: sand
+    - type: "grass"
+      area: [[11, 11], [19, 19]]
+    - type: "sand"
       area: [[0, 10], [10, 20]]
-    - type: sand
+    - type: "sand"
       area: [[10, 0], [20, 10]]
-  
-  # Obstacles (Rocks)
+
   obstacles:
-    - area: [[0, 0], [10, 10]]
-      count: 10
+    - count: 10
+      area: [[0, 0], [20, 20]]
       blocking: false
-      damage: 0.5
+      damage: 0.1
       nociception_intensity: 0.3
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-
-    - area: [[11, 11], [20, 20]]
-      count: 10
-      blocking: false
+    - count: 5
+      area: [[0,0], [20,20]]
+      blocking: true
       damage: 0.5
-      nociception_intensity: 0.3
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-      
-  # Legacy config removed (prob_switch, durations, etc)
+      nociception_intensity: 0.8
 
-  
-  # Action Configuration
-  rest_action_enabled: true   # If true: action 4 = Rest (must rest explicitly)
-  eat_action_enabled: true    # If true: action 5 = Eat (must eat explicitly)
+  rest_action_enabled: true
+  eat_action_enabled: true
 
 body:
-  # Rewards
-  death_penalty: 100
-  use_homeostatic_reward: true   
-
-  # Satiation
-  with_satiation: true
   max_satiation: 100
-  satiation_setpoint: 100
-  overeating_death: false
-  random_start_satiation: false
-  start_satiation: 50
-  food_satiation_gain: 30
-  
-  # Injury / Injury
-  with_injury: true
   max_injury: 30
-  random_start_injury: false
-  start_injury: 0
+  food_satiation_gain: 30
+  satiation_setpoint: 100
+  start_satiation: 100
   injury_recovery: 1
   injury_smoothing_duration: 3
-
+  death_penalty: 100
+  overeating_death: false
+  use_homeostatic_reward: true
+  with_satiation: true
+  with_injury: true
+  random_start_satiation: false
+  random_start_injury: false
 
 sensory:
   using_sensory: true
-  sensor_radius: 20 # Default: 2
-  # Decay Formula: decay = 1.0 / (distance ** decay_power)
-  decay_power: 1.0 
-  vector_size: 5
-  
-  # Nociception (Pain Detection)
-  nociception_enabled: true  # Enable pain/danger detection sensor
-  nociceptor_radius: 0       # Default: 0 (Contact only)
-  nociception_size: 1        # Output dimension of nociceptor
+  sensor_radius: 20
+  decay_power: 1.0
+  collision_sensor_range: 1
+  location_sensor: true
+  nociception_enabled: true
+  nociception_size: 1
   olfactory_enabled: true
-  
-  # Collision Sensor
-  collision_sensor_enabled: true
-  collision_sensor_range: 1  # Range of rays in grid cells (sectors = 8 * range)
-
-  # Location Sensor
-  location_sensor: true     # Include centered location even with sensors
-  location_size: 2           # Output dimension of location sensor
-  nociception_size: 1        # Output dimension of nociceptor
-
-  # Proprioceptive Sensing (Motor Feedback)
-  proprioception_enabled: false  # Sense previous action as motor feedback
-  action_dim: 6                # 4 move + 1 rest + 1 eat
-
-  # Visual Sensor (One-Hot)
+  vector_size: 5
   visual_sensor_enabled: true
-  visual_sensor_range: 0     # range 1 = 5 cells (Center, Up, Right, Down, Left)
+  visual_sensor_range: 0
+  proprioception_enabled: false
 
 visualization:
-  local_view_size: 5          # Size of the agent-centric local view window
-
-
+  local_view_size: 5

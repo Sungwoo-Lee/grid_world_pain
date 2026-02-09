@@ -96,7 +96,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 vis_end = ptr + breakdown['Visual']
                 vis_vec = obs_vec[ptr:vis_end]
                 ptr = vis_end
-                viz.insert(3, {'name': 'Visual (One-Hot)', 'vector': vis_vec, 'type': 'diamond', 'range': params.visual_sensor_range, 'num_features': 7, 'side_by_side': True})
+                viz.insert(3, {'name': 'Visual (One-Hot)', 'vector': vis_vec, 'type': 'diamond', 'range': params.visual_sensor_range, 'num_features': 8, 'side_by_side': True})
             
             if 'Proprioception' in breakdown:
                 proprio_end = ptr + breakdown['Proprioception']

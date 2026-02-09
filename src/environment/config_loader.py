@@ -101,6 +101,37 @@ def load_env_params(config: Config) -> EnvParams:
         chem_dim = res_property.shape[-1]
         obs_property = jnp.zeros((0, chem_dim))
         obs_spawn_area = jnp.zeros((0, 4))
+    
+    # Build Neutral Animal arrays (Decoys)
+    raw_neutral = config.get('environment.neutral_animals', [])
+    expanded_neutral = []
+    if raw_neutral:
+        for n in raw_neutral:
+            count = n.get('count', 1)
+            for _ in range(count):
+                expanded_neutral.append(n)
+                
+    if expanded_neutral:
+        def n_get(n, key):
+            val = n.get(key)
+            if val is None: raise ValueError(f"Strict Config: Neutral Animal field '{key}' is required.")
+            return val
+        
+        neutral_property = jnp.array([n_get(n, 'property') for n in expanded_neutral])
+        neutral_nociception = jnp.array([n.get('nociception_intensity', 0.0) for n in expanded_neutral])
+        neutral_move_int = jnp.array([n_get(n, 'move_interval') for n in expanded_neutral], dtype=jnp.int32)
+        h = config.get_mandatory('environment.height')
+        w = config.get_mandatory('environment.width')
+        neutral_patrol = jnp.array([[*n.get('patrol_area', [[0,0],[h-1,w-1]])[0],
+                                     *n.get('patrol_area', [[0,0],[h-1,w-1]])[1]] for n in expanded_neutral])
+        neutral_spawn_area = jnp.array([[*n.get('spawn_area', [[0,0],[h-1,w-1]])[0],
+                                         *n.get('spawn_area', [[0,0],[h-1,w-1]])[1]] for n in expanded_neutral])
+    else:
+        neutral_property = jnp.zeros((0, 5))
+        neutral_nociception = jnp.zeros(0)
+        neutral_move_int = jnp.zeros(0, dtype=jnp.int32)
+        neutral_patrol = jnp.zeros((0, 4))
+        neutral_spawn_area = jnp.zeros((0, 4))
 
     # Build Grid Location Types
     import numpy as np
@@ -143,6 +174,11 @@ def load_env_params(config: Config) -> EnvParams:
         obs_property=obs_property,
         obs_nociception=obs_nociception,
         obs_spawn_area=obs_spawn_area,
+        neutral_property=neutral_property,
+        neutral_nociception=neutral_nociception,
+        neutral_move_int=neutral_move_int,
+        neutral_patrol=neutral_patrol,
+        neutral_spawn_area=neutral_spawn_area,
         max_satiation=config.get_mandatory('body.max_satiation'),
         max_injury=config.get_mandatory('body.max_injury'),
         food_gain=config.get_mandatory('body.food_satiation_gain'),

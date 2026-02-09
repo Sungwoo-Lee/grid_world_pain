@@ -178,14 +178,48 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
         # coord: [2]
         is_here = jnp.all(state.obs_pos == coord, axis=-1)
         # Rock (vis 6)
-        contrib = jnp.zeros(7)
+        contrib = jnp.zeros(8)
         contrib = contrib.at[6].add(jnp.sum(is_here.astype(jnp.float32)))
         return contrib
         
     obs_vis = jax.vmap(get_obs_contrib)(cell_coords)
+
+    # 5. Neutral Animals
+    def get_neutral_contrib(coord):
+        is_here = jnp.all(state.neutral_pos == coord, axis=-1)
+        # Neutral Animal (vis 7)
+        contrib = jnp.zeros(8)
+        contrib = contrib.at[7].add(jnp.sum(is_here.astype(jnp.float32)))
+        return contrib
+    
+    neutral_vis = jax.vmap(get_neutral_contrib)(cell_coords)
+    
+    # Update loc_vis, res_vis, pred_vis to use 8 slots
+    # 1. Location properties
+    loc_vis = jax.nn.one_hot(jnp.where(loc_types == 1, 0, jnp.where(loc_types == 2, 1, 2)), 8)
+    
+    # 2. Resources (update to 8)
+    def get_res_contrib_8(coord):
+        is_here = jnp.all(state.res_pos == coord, axis=-1)
+        active_here = jnp.logical_and(is_here, state.res_active)
+        is_food = jnp.logical_and(active_here, params.res_type == 0)
+        is_danger = jnp.logical_and(active_here, params.res_type == 1)
+        contrib = jnp.zeros(8)
+        contrib = contrib.at[3].add(jnp.sum(is_food.astype(jnp.float32)))
+        contrib = contrib.at[4].add(jnp.sum(is_danger.astype(jnp.float32)))
+        return contrib
+    res_vis = jax.vmap(get_res_contrib_8)(cell_coords)
+
+    # 3. Predators (update to 8)
+    def get_pred_contrib_8(coord):
+        is_here = jnp.all(state.pred_pos == coord, axis=-1)
+        contrib = jnp.zeros(8)
+        contrib = contrib.at[5].add(jnp.sum(is_here.astype(jnp.float32)))
+        return contrib
+    pred_vis = jax.vmap(get_pred_contrib_8)(cell_coords)
     
     # Sum all contributions
-    total_vis = loc_vis + res_vis + pred_vis + obs_vis
+    total_vis = loc_vis + res_vis + pred_vis + obs_vis + neutral_vis
     
     # Mask out-of-bounds cells
     total_vis = total_vis * is_in_bounds[:, None]
@@ -207,7 +241,11 @@ def get_observation(state: EnvState, params: EnvParams):
         state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), params.obs_property,
         radius=params.sensor_radius, decay_power=params.sensor_decay
     )
-    chem_obs = res_chem + pred_chem + obs_chem
+    neutral_chem = sense_resource(
+        state.agent_pos, state.neutral_pos, jnp.ones(state.neutral_pos.shape[0], dtype=jnp.bool_), params.neutral_property,
+        radius=params.sensor_radius, decay_power=params.sensor_decay
+    )
+    chem_obs = res_chem + pred_chem + obs_chem + neutral_chem
     
     # 2. Extero Nociception (Phasic - Multi-source)
     noc_obs = sense_extero_nociception(
@@ -272,7 +310,7 @@ def get_observation_breakdown(params: EnvParams):
     if params.visual_sensor_enabled:
         # Range r -> 2r^2 + 2r + 1 cells
         num_cells = 2 * (params.visual_sensor_range**2) + 2 * params.visual_sensor_range + 1
-        breakdown["Visual"] = int(num_cells * 7)
+        breakdown["Visual"] = int(num_cells * 8)
     
     # 7. Proprioception
     if params.proprioception_enabled:

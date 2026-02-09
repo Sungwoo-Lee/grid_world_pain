@@ -18,6 +18,7 @@ visualization:
     agent_danger: "agent_danger"
     agent_predator: "agent_predator"
     rock: "rock"
+    neutral: "neutral"
 
   # fps: 2
   # video_dpi: 300

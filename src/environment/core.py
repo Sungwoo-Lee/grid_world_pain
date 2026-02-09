@@ -211,11 +211,46 @@ def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_
     
     return new_pos, next_state, new_stamina, new_move_timer, key
 
+def update_neutral_animals(neutral_pos, neutral_move_timer, obs_pos, obs_blocking, params, key):
+    """Updates neutral animal positions (random patrol)."""
+    # 1. Timers
+    new_move_timer = neutral_move_timer - 1
+    should_move = new_move_timer <= 0
+    
+    # 2. Random Movement (Jitter)
+    key, subkey1, subkey2 = jax.random.split(key, 3)
+    jitter_r = jax.random.randint(subkey1, (neutral_pos.shape[0],), -1, 2)
+    jitter_c = jax.random.randint(subkey2, (neutral_pos.shape[0],), -1, 2)
+    
+    move_vec = jnp.stack([jitter_r, jitter_c], axis=-1)
+    new_pos = jnp.where(should_move[:, None], neutral_pos + move_vec, neutral_pos)
+    
+    # 3. Spatial Bounds Clipping (Patrol Area)
+    new_pos = jnp.stack([
+        jnp.clip(new_pos[:, 0], params.neutral_patrol[:, 0], params.neutral_patrol[:, 2]),
+        jnp.clip(new_pos[:, 1], params.neutral_patrol[:, 1], params.neutral_patrol[:, 3])
+    ], axis=-1)
+    
+    # Hard Grid Boundaries
+    new_pos = jnp.clip(new_pos, 0, jnp.stack([params.height - 1, params.width - 1]))
+    
+    # Obstacle Collision
+    def check_collision(p_pos, old_p_pos):
+        is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), obs_blocking))
+        return jnp.where(is_coll, old_p_pos, p_pos)
+    
+    new_pos = jax.vmap(check_collision)(new_pos, neutral_pos)
+    
+    # Reset timer
+    new_move_timer = jnp.where(should_move, params.neutral_move_int, new_move_timer)
+    
+    return new_pos, new_move_timer, key
+
 def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState, jnp.ndarray, jnp.ndarray, dict]:
     """Orchestrates a full environment step in JAX."""
     
-    # 0. Split key for random events (regeneration, predators)
-    key, respawn_key, predator_key = jax.random.split(state.key, 3)
+    # 0. Split key for random events
+    key, respawn_key, predator_key, neutral_key = jax.random.split(state.key, 4)
 
     # 1. Resource Regeneration (before agent moves)
     new_active, new_reg_timer, new_cons_count, respawn_mask = update_resources(
@@ -240,6 +275,11 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     new_pred_pos, new_pred_state, new_pred_stamina, new_pred_move_timer, _ = update_predators(
         state.pred_pos, state.pred_state, state.pred_stamina, state.pred_move_timer, 
         new_agent_pos, state.obs_pos, params.obs_blocking, params, predator_key
+    )
+    
+    # 3.5 Neutral Animal Update
+    new_neutral_pos, new_neutral_move_timer, _ = update_neutral_animals(
+        state.neutral_pos, state.neutral_move_timer, state.obs_pos, params.obs_blocking, params, neutral_key
     )
     
     # 4. Interaction Logic
@@ -368,7 +408,9 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         last_collision_noc=collision_noc,
         terminated=done,
         key=key,
-        last_action=jnp.array(action, dtype=jnp.int32)
+        last_action=jnp.array(action, dtype=jnp.int32),
+        neutral_pos=new_neutral_pos,
+        neutral_move_timer=new_neutral_move_timer
     )
     
     return new_state, reward, done, info
@@ -376,7 +418,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
 
 def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     """Functional reset for the JAX environment."""
-    key, agent_key, res_key, pred_key, body_key = jax.random.split(key, 5)
+    key, agent_key, res_key, pred_key, body_key, neutral_key = jax.random.split(key, 6)
     
     # 1. Agent Position (Random)
     agent_pos = jax.random.randint(agent_key, (2,), 0, jnp.array([params.height, params.width]))
@@ -407,6 +449,13 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         return jax.random.randint(ok, (2,), area[:2], area[2:])
         
     obs_pos = jax.vmap(sample_obs_pos)(obs_keys, params.obs_spawn_area)
+    
+    # 4.5 Neutral Animals
+    num_neutral = params.neutral_property.shape[0]
+    neutral_keys = jax.random.split(neutral_key, num_neutral)
+    def sample_neutral_pos(nk, area):
+        return jax.random.randint(nk, (2,), area[:2], area[2:])
+    neutral_pos = jax.vmap(sample_neutral_pos)(neutral_keys, params.neutral_spawn_area)
     
     # 5. Body (Random start support)
     body_key1, body_key2 = jax.random.split(body_key)
@@ -443,7 +492,9 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         last_collision_noc=jnp.array(0.0, dtype=jnp.float32),
         terminated=jnp.array(False, dtype=jnp.bool_),
         key=key,
-        last_action=jnp.array(4 if params.rest_action_enabled else 5, dtype=jnp.int32) # Default to Rest/Stay
+        last_action=jnp.array(4 if params.rest_action_enabled else 5, dtype=jnp.int32), # Default to Rest/Stay
+        neutral_pos=neutral_pos,
+        neutral_move_timer=jnp.zeros(num_neutral, dtype=jnp.int32)
     )
     
     return state
