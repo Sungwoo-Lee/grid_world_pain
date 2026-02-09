@@ -82,6 +82,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             ptr = loc_end
             
             intero_end = ptr + breakdown['Interoception']
+            # intero_vec = obs_vec[ptr:intero_end] # Not explicitly used currently
             ptr = intero_end
             
             viz = [
@@ -92,9 +93,17 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             ]
             
             if 'Visual' in breakdown:
-                vis_vec = obs_vec[ptr:]
+                vis_end = ptr + breakdown['Visual']
+                vis_vec = obs_vec[ptr:vis_end]
+                ptr = vis_end
                 viz.insert(3, {'name': 'Visual (One-Hot)', 'vector': vis_vec, 'type': 'diamond', 'range': params.visual_sensor_range, 'num_features': 7, 'side_by_side': True})
             
+            if 'Proprioception' in breakdown:
+                proprio_end = ptr + breakdown['Proprioception']
+                proprio_vec = obs_vec[ptr:proprio_end]
+                ptr = proprio_end
+                viz.append({'name': 'Proprioception', 'vector': proprio_vec, 'type': 'radial', 'color': '#be4bdb'})
+
             return viz
 
         if render_video:

@@ -42,10 +42,20 @@ environment:
       regeneration_delay: 150
       damage: 0.0
       
-    - name: "Danger Zone"
+    - name: "Alpha Danger Zone"
       type: "danger"
       count: 10
-      spawn_area: [[0, 0], [20, 20]]
+      spawn_area: [[0, 0], [10, 10]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: 10
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+    - name: "Beta Danger Zone"
+      type: "danger"
+      count: 10
+      spawn_area: [[11, 11], [20, 20]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: 10
@@ -85,7 +95,7 @@ environment:
     - type: grass
       area: [[0, 0], [10, 10]]
     - type: grass
-      area: [[11, 11], [19, 19]]
+      area: [[11, 11], [20, 20]]
     - type: sand
       area: [[0, 10], [10, 20]]
     - type: sand
@@ -93,10 +103,17 @@ environment:
   
   # Obstacles (Rocks)
   obstacles:
-    - area: [[0, 0], [20, 20]]
+    - area: [[0, 0], [10, 10]]
       count: 10
       blocking: false
-      damage: 0.1
+      damage: 0.5
+      nociception_intensity: 0.3
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+
+    - area: [[11, 11], [20, 20]]
+      count: 10
+      blocking: false
+      damage: 0.5
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       
@@ -114,8 +131,8 @@ body:
 
   # Satiation
   with_satiation: true
-  max_satiation: 50
-  satiation_setpoint: 50
+  max_satiation: 100
+  satiation_setpoint: 100
   overeating_death: false
   random_start_satiation: false
   start_satiation: 50
@@ -153,7 +170,7 @@ sensory:
   nociception_size: 1        # Output dimension of nociceptor
 
   # Proprioceptive Sensing (Motor Feedback)
-  proprioception_enabled: true  # Sense previous action as motor feedback
+  proprioception_enabled: false  # Sense previous action as motor feedback
   action_dim: 6                # 4 move + 1 rest + 1 eat
 
   # Visual Sensor (One-Hot)
