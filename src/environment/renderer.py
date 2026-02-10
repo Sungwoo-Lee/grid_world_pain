@@ -347,7 +347,18 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
         
         ax_stats.text(0.1, y_cursor + 0.08, f"SATIATION: {satiation:.1f}/{max_sat:.0f}", color=text_color, fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
         ax_stats.add_patch(plt.Rectangle((0.1, y_cursor), 0.8, 0.06, facecolor='#F1F3F5', transform=ax_stats.transAxes))
-        ax_stats.add_patch(plt.Rectangle((0.1, y_cursor), 0.8 * sat_pct, 0.06, facecolor=food_color, transform=ax_stats.transAxes))
+        ax_stats.add_patch(plt.Rectangle((0.1, y_cursor), 0.8 * sat_pct, 0.06, facecolor='#40C057', transform=ax_stats.transAxes))
+
+    # Nutrition bar
+    if params.max_nutrition > 0:
+        y_cursor -= 0.15
+        nutrition = float(state.nutrition)
+        max_nutr = float(params.max_nutrition)
+        nutr_pct = max(0, min(1, nutrition / max_nutr))
+        
+        ax_stats.text(0.1, y_cursor + 0.08, f"NUTRITION: {nutrition:.1f}/{max_nutr:.0f}", color=text_color, fontsize=8, fontweight='bold', transform=ax_stats.transAxes)
+        ax_stats.add_patch(plt.Rectangle((0.1, y_cursor), 0.8, 0.06, facecolor='#F1F3F5', transform=ax_stats.transAxes))
+        ax_stats.add_patch(plt.Rectangle((0.1, y_cursor), 0.8 * nutr_pct, 0.06, facecolor='#228BE6', transform=ax_stats.transAxes))
     
     # Injury bar
     if params.max_injury > 0:
@@ -373,6 +384,11 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     ax_stats.text(0.8, y_cursor + 0.05, status_text, color='white', ha='center', va='center', fontsize=8, fontweight='bold', 
                   transform=ax_stats.transAxes,
                   bbox=dict(boxstyle='round,pad=0.3', facecolor=status_bg, edgecolor='none'))
+
+    # Rest Streak
+    if params.rest_action_enabled and int(state.rest_streak) > 0:
+        streak = int(state.rest_streak)
+        ax_stats.text(0.8, y_cursor - 0.08, f"REST: {streak}x", color='#339AF0', ha='center', fontsize=9, fontweight='bold', transform=ax_stats.transAxes)
 
     if action is not None:
          # Action names indexing (JAX env standard: 0-3 directions, 4: Rest, 5: Eat)

@@ -41,15 +41,19 @@ def calculate_drive(satiation, injury, params):
     current = jnp.stack([satiation, injury], axis=-1)
     return jnp.linalg.norm(current - target, axis=-1)
 
-def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, bool]:
-    """Updates satiation and injury levels."""
+def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, bool]:
+    """Updates satiation, nutrition, and injury levels with streak-based recovery."""
     prev_satiation = state.satiation
+    prev_nutrition = state.nutrition
     prev_injury = state.injury_level
+    prev_rest_streak = state.rest_streak
     
-    # --- Satiation Dynamics ---
+    # --- Satiation Dynamics (Exponential Decay) ---
     if params.with_satiation:
-        new_satiation = prev_satiation - 1.0
-        new_satiation = jnp.where(info['ate_food'], new_satiation + params.food_gain, new_satiation)
+        # Satiation decays exponentially
+        new_satiation = prev_satiation * (1.0 - params.satiation_decay_rate)
+        # Refill from food
+        new_satiation = jnp.where(info['ate_food'], new_satiation + params.food_satiation_gain, new_satiation)
         
         if not params.overeating_death:
             new_satiation = jnp.clip(new_satiation, 0.0, params.max_satiation)
@@ -57,34 +61,55 @@ def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.nda
             new_satiation = jnp.clip(new_satiation, 0.0, params.max_satiation + 1.0)
     else:
         new_satiation = prev_satiation
+
+    # --- Nutrition Dynamics (Linear Decay) ---
+    if params.with_nutrition:
+        # Nutrition decays linearly
+        new_nutrition = prev_nutrition - params.nutrition_decay_rate
+        # Refill from food (immediate)
+        new_nutrition = jnp.where(info['ate_food'], new_nutrition + params.food_nutrition_gain, new_nutrition)
+        new_nutrition = jnp.clip(new_nutrition, 0.0, params.max_nutrition)
+    else:
+        new_nutrition = prev_nutrition
                 
-    # --- Injury Dynamics ---
+    # --- Injury Dynamics (Exponential recovery based on rest streak) ---
+    damage = info['damage']
     if params.with_injury:
-        damage = info['damage']
         inc = damage / params.smoothing_duration
-        new_buffer = jnp.roll(state.injury_buffer, -1).at[-1].set(0.0)
-        new_buffer = new_buffer + inc
-        
-        applied_inc = new_buffer[0]
+        applied_inc = state.injury_buffer[0]
         new_injury = prev_injury + applied_inc
+        # The buffer for the NEXT step
+        new_buffer = jnp.roll(state.injury_buffer, -1).at[-1].set(inc)
         
-        # Recovery
-        new_injury = jnp.where(jnp.logical_and(info['rested'], applied_inc <= 0), 
-                               jnp.maximum(new_injury - params.injury_recovery, 0.0), 
-                               new_injury)
+        # Update rest streak
+        new_rest_streak = jnp.where(info['rested'], prev_rest_streak + 1, 0)
+        
+        # Calculate exponential recovery: base * (1 + accel)^(streak-1)
+        # streak 1 -> mult 1.0 (base)
+        # streak 2 -> mult 1.5 (base * 1.5)
+        recovery_mult = jnp.power(1.0 + params.recovery_accel_rate, (jnp.maximum(new_rest_streak, 1) - 1).astype(jnp.float32))
+        recovery_amount = params.recovery_base_rate * recovery_mult
+        
+        # Recovery only applies if resting and not currently taking net damage
+        can_recover = jnp.logical_and(info['rested'], applied_inc <= 0)
+        new_injury = jnp.where(can_recover, new_injury - recovery_amount, new_injury)
         
         new_injury = jnp.clip(new_injury, 0.0, params.max_injury)
     else:
         new_injury = prev_injury
         new_buffer = state.injury_buffer
-        damage = info['damage']
+        new_rest_streak = prev_rest_streak
         
-    # Termination check
+    # Termination check (Based on Nutrition and Injury)
     done = False
-    if params.with_satiation:
+    if params.with_nutrition:
+        done = jnp.where(new_nutrition <= 0.0, True, done)
+    elif params.with_satiation:
+        # Fallback if nutrition is disabled but satiation is enabled
         done = jnp.where(new_satiation <= 0.0, True, done)
-        if params.overeating_death:
-            done = jnp.where(new_satiation >= params.max_satiation, True, done)
+        
+    if params.overeating_death and params.with_satiation:
+        done = jnp.where(new_satiation >= params.max_satiation, True, done)
             
     if params.with_injury:
         done = jnp.where(new_injury >= params.max_injury, True, done)
@@ -92,7 +117,7 @@ def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.nda
         # Instant death logic for levels without health system
         done = jnp.where(damage > 0, True, done)
     
-    return new_satiation, new_injury, new_buffer, done 
+    return new_satiation, new_nutrition, new_injury, new_buffer, new_rest_streak, done 
 
 def update_resources(res_active, res_reg_timer, res_cons_count, params):
     """Updates resource timers and regeneration."""
@@ -107,10 +132,11 @@ def update_resources(res_active, res_reg_timer, res_cons_count, params):
     
     return new_active, new_reg_timer, new_cons_count, respawn_mask
 
-def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_pos, obs_pos, obs_blocking, params, key):
+def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, pred_attack_timer, agent_pos, obs_pos, obs_blocking, params, key):
     """Updates predator states and positions, considering obstacles."""
     # 1. Timers
     new_move_timer = pred_move_timer - 1
+    new_attack_timer = jnp.maximum(pred_attack_timer - 1, 0)
     
     # Manhattan distance
     dist = jnp.sum(jnp.abs(pred_pos - agent_pos), axis=-1)
@@ -136,16 +162,21 @@ def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_
     next_state = jnp.where(jnp.logical_and(pred_state != 1, become_hunt), 1, next_state)
     # Transition to RETURN (2) (if patrol area exists) or PATROL (0)
     next_state = jnp.where(jnp.logical_and(pred_state == 1, lose_interest), 2, next_state)
-    # Transition to PATROL (0) when in zone and in RETURN state (or if no patrol area)
-    next_state = jnp.where(jnp.logical_and(next_state == 2, in_zone), 0, next_state)
     
-    # 3. Movement (Only when move_timer <= 0)
-    should_move = new_move_timer <= 0
-    
-    # Target calculations for different states
-    # RETURN: Target center of patrol zone
+    # Target center for RETURN state logic
     tr_return = (params.pred_patrol[:, 0] + params.pred_patrol[:, 2]) // 2
     tc_return = (params.pred_patrol[:, 1] + params.pred_patrol[:, 3]) // 2
+    
+    # Transition to PATROL (0) when close to center and in RETURN state
+    dist_to_center = jnp.sum(jnp.abs(pred_pos - jnp.stack([tr_return, tc_return], axis=-1)), axis=-1)
+    reentered_home = jnp.logical_and(next_state == 2, dist_to_center <= 2)
+    next_state = jnp.where(reentered_home, 0, next_state)
+    
+    # 3. Movement (Only when move_timer <= 0 and not attacking/delayed)
+    should_move = jnp.logical_and(new_move_timer <= 0, new_attack_timer <= 0)
+    
+    # Target calculations for different states
+    # tr_return and tc_return moved up
     
     # PATROL: Random jitter (-1, 0, 1)
     key, subkey1, subkey2 = jax.random.split(key, 3)
@@ -184,13 +215,16 @@ def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_
     move_vec = jnp.stack([final_move_r, final_move_c], axis=-1)
     new_pos = jnp.where(should_move[:, None], pred_pos + move_vec, pred_pos)
     
-    # 4. Spatial Bounds Clipping (Strictly enforce pred_patrol)
-    new_pos = jnp.stack([
+    # 4. Spatial Bounds Clipping
+    # Only clip to patrol area if NOT hunting
+    pos_patrol = jnp.stack([
         jnp.clip(new_pos[:, 0], params.pred_patrol[:, 0], params.pred_patrol[:, 2]),
         jnp.clip(new_pos[:, 1], params.pred_patrol[:, 1], params.pred_patrol[:, 3])
     ], axis=-1)
     
-    # Hard Grid Boundaries
+    new_pos = jnp.where((next_state == 1)[:, None], new_pos, pos_patrol)
+    
+    # Hard Grid Boundaries (Always enforced)
     new_pos = jnp.clip(new_pos, 0, jnp.stack([params.height - 1, params.width - 1]))
     
     # 4.5 Obstacle Collision for Predators
@@ -205,11 +239,10 @@ def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, agent_
     # Reset timer
     new_move_timer = jnp.where(should_move, params.pred_move_int, new_move_timer)
     
-    # Stamina
     new_stamina = jnp.where(next_state == 1, pred_stamina - 1.0, pred_stamina + params.pred_recovery)
     new_stamina = jnp.clip(new_stamina, 0.0, params.pred_max_stamina)
     
-    return new_pos, next_state, new_stamina, new_move_timer, key
+    return new_pos, next_state, new_stamina, new_move_timer, new_attack_timer, key
 
 def update_neutral_animals(neutral_pos, neutral_move_timer, obs_pos, obs_blocking, params, key):
     """Updates neutral animal positions (random patrol)."""
@@ -272,8 +305,8 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     new_agent_pos, just_collided = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)
 
     # 3. Predator Update (Using the NEW agent position)
-    new_pred_pos, new_pred_state, new_pred_stamina, new_pred_move_timer, _ = update_predators(
-        state.pred_pos, state.pred_state, state.pred_stamina, state.pred_move_timer, 
+    new_pred_pos, new_pred_state, new_pred_stamina, new_pred_move_timer, new_pred_attack_timer, _ = update_predators(
+        state.pred_pos, state.pred_state, state.pred_stamina, state.pred_move_timer, state.pred_attack_timer,
         new_agent_pos, state.obs_pos, params.obs_blocking, params, predator_key
     )
     
@@ -336,6 +369,9 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     at_predator = jnp.all(new_pred_pos == new_agent_pos, axis=-1)
     damage_pred = jnp.sum(jnp.where(at_predator, params.pred_damage, 0.0))
     
+    # Trigger Attack Delay for predators that hit the agent
+    new_pred_attack_timer = jnp.where(at_predator, params.pred_attack_delay, new_pred_attack_timer)
+    
     # Rock/Obstacle Damage
     # 1. Overlap damage (non-blocking rocks at current pos)
     at_obs = jnp.all(state.obs_pos == new_agent_pos, axis=-1)
@@ -361,7 +397,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         'hit_predator': jnp.any(at_predator),
     }
     
-    new_satiation, new_injury, next_injury_buffer, done = update_body(state, info, params)
+    new_satiation, new_nutrition, new_injury, next_injury_buffer, new_rest_streak, done = update_body(state, info, params)
     
     # Max Steps Truncation
     next_step = state.current_step + 1
@@ -371,7 +407,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # 0: active, 1: max_steps, 2: starvation, 3: overeating, 4: injury
     reason = jnp.array(0, dtype=jnp.int32)
     reason = jnp.where(truncated, 1, reason)
-    reason = jnp.where(new_satiation <= 0.0, 2, reason)
+    reason = jnp.where(new_nutrition <= 0.0, 2, reason)
     if params.overeating_death:
         reason = jnp.where(new_satiation >= params.max_satiation, 3, reason)
     reason = jnp.where(new_injury >= params.max_injury, 4, reason)
@@ -379,16 +415,33 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     info['termination_reason'] = reason
     done = jnp.logical_or(done, truncated)
     
-    # 6. Reward (Homeostatic)
-    reward = 0.0
+    # 6. Reward (Homeostatic driven by Satiation)
+    reward_homeostatic = 0.0
+    reward_extrinsic = 0.0
+    
+    # Calculate components for analysis
+    # drive = (1 - satiation/100)^2 + (injury/100)^2
+    drive_hunger = jnp.power(1.0 - (new_satiation / params.max_satiation), 2)
+    drive_injury = jnp.power(new_injury / params.max_injury, 2)
+    
     if params.use_homeostatic_reward:
         prev_drive = calculate_drive(state.satiation, state.injury_level, params)
         curr_drive = calculate_drive(new_satiation, new_injury, params)
-        reward = prev_drive - curr_drive
-        reward = jnp.where(done, reward - params.death_penalty, reward)
+        reward_homeostatic = prev_drive - curr_drive
+        # Death penalty based on Nutrition starvation
+        reward_homeostatic = jnp.where(done, reward_homeostatic - params.death_penalty, reward_homeostatic)
     else:
-        reward = jnp.where(ate_food, 1.0, 0.0)
-        reward = jnp.where(done, -params.death_penalty, reward)
+        reward_extrinsic = jnp.where(ate_food, 1.0, 0.0)
+        reward_extrinsic = jnp.where(done, -params.death_penalty, reward_extrinsic)
+    
+    reward = reward_homeostatic + reward_extrinsic
+    
+    info['reward_homeostatic'] = reward_homeostatic
+    info['reward_extrinsic'] = reward_extrinsic
+    info['drive_hunger'] = drive_hunger
+    info['drive_injury'] = drive_injury
+    info['metabolic_drain'] = params.nutrition_decay_rate
+    info['event_collided'] = just_collided
 
     # 7. Final State
     new_state = state._replace(
@@ -402,10 +455,13 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         pred_state=new_pred_state,
         pred_stamina=new_pred_stamina,
         pred_move_timer=new_pred_move_timer,
+        pred_attack_timer=new_pred_attack_timer,
         satiation=new_satiation,
+        nutrition=new_nutrition,
         injury_level=new_injury,
         injury_buffer=next_injury_buffer,
         last_collision_noc=collision_noc,
+        rest_streak=new_rest_streak,
         terminated=done,
         key=key,
         last_action=jnp.array(action, dtype=jnp.int32),
@@ -458,7 +514,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     neutral_pos = jax.vmap(sample_neutral_pos)(neutral_keys, params.neutral_spawn_area)
     
     # 5. Body (Random start support)
-    body_key1, body_key2 = jax.random.split(body_key)
+    body_key1, body_key2, body_key3 = jax.random.split(body_key, 3)
     
     if params.random_start_satiation:
         min_start = params.max_satiation / 2.0
@@ -466,9 +522,15 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     else:
         satiation = params.start_satiation
     
+    if params.random_start_nutrition:
+        min_start_nutr = params.max_nutrition / 2.0
+        nutrition = jax.random.uniform(body_key2, (), minval=min_start_nutr, maxval=params.max_nutrition)
+    else:
+        nutrition = params.start_nutrition
+
     if params.random_start_injury:
         max_start_injury = params.max_injury / 2.0
-        injury = jax.random.uniform(body_key2, (), minval=0.0, maxval=max_start_injury)
+        injury = jax.random.uniform(body_key3, (), minval=0.0, maxval=max_start_injury)
     else:
         injury = 0.0
         
@@ -485,11 +547,14 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         pred_state=jnp.zeros(num_pred, dtype=jnp.int32), # PATROL
         pred_stamina=jnp.full(num_pred, params.pred_max_stamina, dtype=jnp.float32),
         pred_move_timer=jnp.zeros(num_pred, dtype=jnp.int32),
+        pred_attack_timer=jnp.zeros(num_pred, dtype=jnp.int32),
         obs_pos=obs_pos,
         satiation=jnp.array(satiation, dtype=jnp.float32),
+        nutrition=jnp.array(nutrition, dtype=jnp.float32),
         injury_level=jnp.array(injury, dtype=jnp.float32),
         injury_buffer=injury_buffer,
         last_collision_noc=jnp.array(0.0, dtype=jnp.float32),
+        rest_streak=jnp.array(0, dtype=jnp.int32),
         terminated=jnp.array(False, dtype=jnp.bool_),
         key=key,
         last_action=jnp.array(4 if params.rest_action_enabled else 5, dtype=jnp.int32), # Default to Rest/Stay

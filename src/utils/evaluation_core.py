@@ -5,7 +5,7 @@ import numpy as np
 from flax import nnx
 from tqdm import tqdm
 
-from src.environment.core import jax_step, jax_reset
+from src.environment.core import jax_step, jax_reset, calculate_drive
 from src.environment.sensor import get_observation
 from src.models.recurrent_ppo_network import get_action_and_value_nnx
 from src.utils.wandb_utils import upload_video
@@ -40,6 +40,12 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     episode_lengths = []
     all_frames = []
     
+    # Stats recording
+    record_stats = config.get('testing.record_stats', False)
+    stats_dir = os.path.join(results_dir, "stats")
+    if record_stats:
+        os.makedirs(stats_dir, exist_ok=True)
+    
     # Progress bar for episodes
     ep_pbar = tqdm(range(num_episodes), desc="Evaluating Episodes", disable=quiet)
     for ep in ep_pbar:
@@ -60,6 +66,38 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         step_count = 0
         done = False
         max_steps = params.max_steps
+        
+        # Per-episode stats
+        ep_stats = []
+        if record_stats:
+            ep_stats.append({
+                'step': 0,
+                'satiation': float(state.satiation),
+                'nutrition': float(state.nutrition),
+                'injury': float(state.injury_level),
+                'rest_streak': int(state.rest_streak),
+                'pos_r': int(state.agent_pos[0]),
+                'pos_c': int(state.agent_pos[1]),
+                'drive': float(calculate_drive(state.satiation, state.injury_level, params)),
+                'drive_hunger': 0.0,
+                'drive_injury': 0.0,
+                # New "Full Spectrum" metrics
+                'event_ate': False,
+                'event_damage': 0.0,
+                'event_collided': False,
+                'event_rested': False,
+                'sense_nociception': 0.0,
+                'dist_to_food': 99.0,
+                'dist_to_pred': 99.0,
+                'reward_homeostatic': 0.0,
+                'reward_extrinsic': 0.0,
+                'metabolic_drain': 0.0,
+                'termination_reason': 0,
+                'max_satiation': float(params.max_satiation),
+                'max_injury': float(params.max_injury),
+                'action': -1,
+                'reward': 0.0
+            })
         
         def get_sensory_viz(obs_vec):
             # Internal helper to slice flat obs into renderer-friendly format
@@ -168,9 +206,46 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 ))
                 if debug: print(" Done", flush=True)
             
+            if record_stats:
+                ep_stats.append({
+                    'step': step_count,
+                    'satiation': float(state.satiation),
+                    'nutrition': float(state.nutrition),
+                    'injury': float(state.injury_level),
+                    'rest_streak': int(state.rest_streak),
+                    'pos_r': int(state.agent_pos[0]),
+                    'pos_c': int(state.agent_pos[1]),
+                    'drive': float(calculate_drive(state.satiation, state.injury_level, params)),
+                    'drive_hunger': float(info.get('drive_hunger', 0.0)),
+                    'drive_injury': float(info.get('drive_injury', 0.0)),
+                    # New "Full Spectrum" metrics
+                    'event_ate': bool(info.get('ate_food', False)),
+                    'event_damage': float(info.get('damage', 0.0)),
+                    'event_collided': bool(info.get('event_collided', False)),
+                    'event_rested': bool(info.get('rested', False)),
+                    'sense_nociception': float(next_obs[breakdown['Chemical']]),
+                    'dist_to_food': float(jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 0), jnp.linalg.norm(state.res_pos - state.agent_pos, axis=-1), 99.0))),
+                    'dist_to_pred': float(jnp.min(jnp.linalg.norm(state.pred_pos - state.agent_pos, axis=-1))),
+                    'reward_homeostatic': float(info.get('reward_homeostatic', 0.0)),
+                    'reward_extrinsic': float(info.get('reward_extrinsic', 0.0)),
+                    'metabolic_drain': float(info.get('metabolic_drain', 0.0)),
+                    'termination_reason': int(info.get('termination_reason', 0)),
+                    'max_satiation': float(params.max_satiation),
+                    'max_injury': float(params.max_injury),
+                    'action': action_idx,
+                    'reward': float(reward)
+                })
+            
             obs = next_obs
             step_pbar.update(1)
         
+        # Save stats to CSV
+        if record_stats and ep_stats:
+            import pandas as pd
+            stats_path = os.path.join(stats_dir, f"ep_{ep+1}_stats.csv")
+            pd.DataFrame(ep_stats).to_csv(stats_path, index=False)
+            if debug: print(f"    [Stats] Saved to {stats_path}")
+
         step_pbar.close()
         
         episode_rewards.append(total_reward)

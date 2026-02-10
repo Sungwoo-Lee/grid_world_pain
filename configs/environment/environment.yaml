@@ -3,13 +3,13 @@
 environment:
   height: 20
   width: 20
-  start_pos: [0, 0]
+  start_pos: [1, 1]
   max_steps: 500
   resources:
     - name: "Food Source A"
       type: "food"
       count: 3
-      spawn_area: [[0, 0], [10, 10]]
+      spawn_area: [[1, 1], [10, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 5
       regeneration_delay: 150
@@ -18,7 +18,7 @@ environment:
     - name: "Food Source B"
       type: "food"
       count: 3
-      spawn_area: [[10, 10], [20, 20]]
+      spawn_area: [[11, 11], [20, 20]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 5
       regeneration_delay: 150
@@ -27,7 +27,7 @@ environment:
     - name: "Food Source C"
       type: "food"
       count: 1
-      spawn_area: [[0, 10], [10, 20]]
+      spawn_area: [[1, 11], [10, 20]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 3
       regeneration_delay: 150
@@ -36,7 +36,7 @@ environment:
     - name: "Food Source D"
       type: "food"
       count: 1
-      spawn_area: [[10, 0], [20, 10]]
+      spawn_area: [[11, 1], [20, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 3
       regeneration_delay: 150
@@ -45,7 +45,7 @@ environment:
     - name: "Alpha Danger Zone"
       type: "danger"
       count: 10
-      spawn_area: [[0, 0], [10, 10]]
+      spawn_area: [[1, 1], [10, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: 10
@@ -55,7 +55,7 @@ environment:
     - name: "Beta Danger Zone"
       type: "danger"
       count: 10
-      spawn_area: [[10, 10], [20, 20]]
+      spawn_area: [[11, 11], [20, 20]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: 10
@@ -68,8 +68,8 @@ environment:
       property: [0.0, 0.8, 0.0, 0.0, 0.0]
       move_interval: 1
       nociception_intensity: 0.1
-      spawn_area: [[3, 3], [18, 18]]
-      patrol_area: [[3, 0], [18, 18]]
+      spawn_area: [[1, 1], [20, 20]]
+      patrol_area: [[1, 1], [20, 20]]
 
   predator_enabled: true
   predators:
@@ -79,12 +79,13 @@ environment:
       move_interval: 1
       damage: 5.0
       nociception_intensity: 0.9
-      spawn_area: [[0, 0], [10, 10]]
-      patrol_area: [[0, 0], [10, 10]]
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
       detection_range: 5
       max_stamina: 20
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.3
+      attack_delay: 5
 
     - name: "Beta Predator"
       count: 1
@@ -92,31 +93,32 @@ environment:
       move_interval: 1
       damage: 5.0
       nociception_intensity: 0.9
-      spawn_area: [[10, 10], [20, 20]]
-      patrol_area: [[10, 10], [20, 20]]
+      spawn_area: [[11, 11], [20, 20]]
+      patrol_area: [[11, 11], [20, 20]]
       detection_range: 5
       max_stamina: 20
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.3
+      attack_delay: 5
 
   location_areas:
     - type: "grass"
-      area: [[0, 0], [10, 10]]
+      area: [[1, 1], [10, 10]]
     - type: "grass"
-      area: [[10, 10], [20, 20]]
+      area: [[11, 11], [20, 20]]
     - type: "sand"
-      area: [[0, 11], [10, 20]]
+      area: [[1, 11], [10, 20]]
     - type: "sand"
-      area: [[11, 0], [20, 10]]
+      area: [[11, 1], [20, 10]]
 
   obstacles:
     - count: 10
-      area: [[0, 11], [10, 20]]
+      area: [[1, 11], [10, 20]]
       blocking: false
       damage: 0.1
       nociception_intensity: 0.3
     - count: 10
-      area: [[11,0], [20,10]]
+      area: [[11, 1], [20, 10]]
       blocking: false
       damage: 0.1
       nociception_intensity: 0.3
@@ -126,18 +128,26 @@ environment:
 
 body:
   max_satiation: 100
+  max_nutrition: 100
   max_injury: 30
   food_satiation_gain: 30
+  food_nutrition_gain: 20
   satiation_setpoint: 100
   start_satiation: 100
-  injury_recovery: 1
+  start_nutrition: 100
+  satiation_decay_rate: 0.1
+  nutrition_decay_rate: 0.5
+  recovery_base_rate: 0.1
+  recovery_accel_rate: 0.5
   injury_smoothing_duration: 3
   death_penalty: 100
   overeating_death: false
   use_homeostatic_reward: true
   with_satiation: true
+  with_nutrition: true
   with_injury: true
   random_start_satiation: false
+  random_start_nutrition: false
   random_start_injury: false
 
 sensory:

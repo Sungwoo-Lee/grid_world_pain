@@ -19,6 +19,7 @@ class EnvState:
     pred_state: jnp.ndarray      # [num_pred] int
     pred_stamina: jnp.ndarray    # [num_pred] float
     pred_move_timer: jnp.ndarray # [num_pred] int
+    pred_attack_timer: jnp.ndarray # [num_pred] int
     
     # Neutral Animals (Olfactory Decoys)
     neutral_pos: jnp.ndarray     # [num_neutral, 2]
@@ -29,9 +30,11 @@ class EnvState:
     
     # Body
     satiation: jnp.ndarray       # [] float
+    nutrition: jnp.ndarray       # [] float
     injury_level: jnp.ndarray    # [] float
     injury_buffer: jnp.ndarray   # [smoothing_duration] float
     last_collision_noc: jnp.ndarray # float (intensity of last collision)
+    rest_streak: jnp.ndarray     # [] int
     
     # Environment status
     terminated: jnp.ndarray      # bool
@@ -72,6 +75,8 @@ class EnvParams:
     pred_max_stamina: jnp.ndarray
     pred_recovery: jnp.ndarray
     pred_hunt_thresh: jnp.ndarray
+    pred_attack_delay: jnp.ndarray
+
 
     # Obstacles
     obs_blocking: jnp.ndarray   # [num_obs] bool
@@ -89,18 +94,26 @@ class EnvParams:
     
     # Body
     max_satiation: float
+    max_nutrition: float
     max_injury: float
-    food_gain: float
+    food_satiation_gain: float
+    food_nutrition_gain: float
     setpoint: float
     start_satiation: float              # For non-random start
-    injury_recovery: float
+    start_nutrition: float
+    satiation_decay_rate: float
+    nutrition_decay_rate: float
+    recovery_base_rate: float
+    recovery_accel_rate: float
     smoothing_duration: int = struct.field(pytree_node=False)
     death_penalty: float
     overeating_death: bool = struct.field(pytree_node=False)
     use_homeostatic_reward: bool = struct.field(pytree_node=False)
     with_satiation: bool = struct.field(pytree_node=False)
+    with_nutrition: bool = struct.field(pytree_node=False)
     with_injury: bool = struct.field(pytree_node=False)
     random_start_satiation: bool = struct.field(pytree_node=False)
+    random_start_nutrition: bool = struct.field(pytree_node=False)
     random_start_injury: bool = struct.field(pytree_node=False)
     rest_action_enabled: bool = struct.field(pytree_node=False)
     eat_action_enabled: bool = struct.field(pytree_node=False)

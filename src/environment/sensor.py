@@ -263,6 +263,7 @@ def get_observation(state: EnvState, params: EnvParams):
     # 5. Interoception
     intero_obs = jnp.array([
         state.satiation / params.max_satiation,
+        state.nutrition / params.max_nutrition,
         state.injury_level / params.max_injury
     ])
     
@@ -296,8 +297,8 @@ def get_observation_breakdown(params: EnvParams):
     # 4. Location: 2 (normalized row, col)
     loc_dim = 2
     
-    # 5. Interoception: 2 (satiation, injury)
-    intero_dim = 2
+    # 5. Interoception: 3 (satiation, nutrition, injury)
+    intero_dim = 3
     
     breakdown = {
         "Chemical": chem_dim,

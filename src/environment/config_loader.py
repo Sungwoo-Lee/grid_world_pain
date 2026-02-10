@@ -29,7 +29,8 @@ def load_env_params(config: Config) -> EnvParams:
 
         res_type = jnp.array([0 if r_get(r, 'type') == 'food' else 1 for r in expanded_resources], dtype=jnp.int32)
         res_property = jnp.array([r_get(r, 'properties') for r in expanded_resources])
-        res_spawn_area = jnp.array([[*r_get(r, 'spawn_area')[0], *r_get(r, 'spawn_area')[1]] for r in expanded_resources])
+        # Subtract 1 for 1-based to 0-based conversion
+        res_spawn_area = jnp.array([[*r_get(r, 'spawn_area')[0], *r_get(r, 'spawn_area')[1]] for r in expanded_resources]) - 1
         res_max_cons = jnp.array([r_get(r, 'max_consumption') for r in expanded_resources], dtype=jnp.int32)
         res_reg_delay = jnp.array([r_get(r, 'regeneration_delay') for r in expanded_resources], dtype=jnp.int32)
         res_damage = jnp.array([r_get(r, 'damage') for r in expanded_resources])
@@ -57,12 +58,14 @@ def load_env_params(config: Config) -> EnvParams:
         pred_damage = jnp.array([p_get(p, 'damage') for p in predators])
         h = config.get_mandatory('environment.height')
         w = config.get_mandatory('environment.width')
-        pred_patrol = jnp.array([[*p.get('patrol_area', [[0,0],[h-1,w-1]])[0],
-                                  *p.get('patrol_area', [[0,0],[h-1,w-1]])[1]] for p in predators])
+        # Subtract 1 for 1-based to 0-based conversion
+        pred_patrol = jnp.array([[*p.get('patrol_area', [[1,1],[h,w]])[0],
+                                  *p.get('patrol_area', [[1,1],[h,w]])[1]] for p in predators]) - 1
         pred_detect = jnp.array([p_get(p, 'detection_range') for p in predators])
         pred_max_stamina = jnp.array([p_get(p, 'max_stamina') for p in predators])
         pred_recovery = jnp.array([p_get(p, 'stamina_recovery_rate') for p in predators])
         pred_hunt_thresh = jnp.array([p_get(p, 'hunt_stamina_threshold') for p in predators])
+        pred_attack_delay = jnp.array([p_get(p, 'attack_delay') for p in predators], dtype=jnp.int32)
     else:
         pred_property = jnp.zeros((0, 5))
         pred_nociception = jnp.zeros(0)
@@ -73,6 +76,7 @@ def load_env_params(config: Config) -> EnvParams:
         pred_max_stamina = jnp.zeros(0)
         pred_recovery = jnp.zeros(0)
         pred_hunt_thresh = jnp.zeros(0)
+        pred_attack_delay = jnp.zeros(0, dtype=jnp.int32)
     
     # Build Obstacle arrays
     raw_obstacles = config.get('environment.obstacles', [])
@@ -93,7 +97,8 @@ def load_env_params(config: Config) -> EnvParams:
         # Unified: Obstacles can have properties too
         chem_dim = res_property.shape[-1]
         obs_property = jnp.array([o.get('properties', [0.0]*chem_dim) for o in expanded_obstacles])
-        obs_spawn_area = jnp.array([[*obs_get(o, 'area')[0], *obs_get(o, 'area')[1]] for o in expanded_obstacles])
+        # Subtract 1 for 1-based to 0-based conversion
+        obs_spawn_area = jnp.array([[*obs_get(o, 'area')[0], *obs_get(o, 'area')[1]] for o in expanded_obstacles]) - 1
     else:
         obs_blocking = jnp.zeros(0, dtype=jnp.bool_)
         obs_damage = jnp.zeros(0, dtype=jnp.float32)
@@ -122,10 +127,11 @@ def load_env_params(config: Config) -> EnvParams:
         neutral_move_int = jnp.array([n_get(n, 'move_interval') for n in expanded_neutral], dtype=jnp.int32)
         h = config.get_mandatory('environment.height')
         w = config.get_mandatory('environment.width')
-        neutral_patrol = jnp.array([[*n.get('patrol_area', [[0,0],[h-1,w-1]])[0],
-                                     *n.get('patrol_area', [[0,0],[h-1,w-1]])[1]] for n in expanded_neutral])
-        neutral_spawn_area = jnp.array([[*n.get('spawn_area', [[0,0],[h-1,w-1]])[0],
-                                         *n.get('spawn_area', [[0,0],[h-1,w-1]])[1]] for n in expanded_neutral])
+        # Subtract 1 for 1-based to 0-based conversion
+        neutral_patrol = jnp.array([[*n.get('patrol_area', [[1,1],[h,w]])[0],
+                                     *n.get('patrol_area', [[1,1],[h,w]])[1]] for n in expanded_neutral]) - 1
+        neutral_spawn_area = jnp.array([[*n.get('spawn_area', [[1,1],[h,w]])[0],
+                                         *n.get('spawn_area', [[1,1],[h,w]])[1]] for n in expanded_neutral]) - 1
     else:
         neutral_property = jnp.zeros((0, 5))
         neutral_nociception = jnp.zeros(0)
@@ -144,8 +150,9 @@ def load_env_params(config: Config) -> EnvParams:
         type_idx = 1 if a_type == 'grass' else 2 if a_type == 'sand' else 0
         area = area_config.get('area')
         if area:
+            # 1-based conversion: [r1, c1] to [r2, c2] inclusive maps to grid[r1-1:r2, c1-1:c2]
             r1, c1, r2, c2 = area[0][0], area[0][1], area[1][0], area[1][1]
-            grid_np[r1:r2+1, c1:c2+1] = type_idx
+            grid_np[r1-1:r2, c1-1:c2] = type_idx
     grid_location_type = jnp.array(grid_np)
     
     return EnvParams(
@@ -169,6 +176,7 @@ def load_env_params(config: Config) -> EnvParams:
         pred_max_stamina=pred_max_stamina,
         pred_recovery=pred_recovery,
         pred_hunt_thresh=pred_hunt_thresh,
+        pred_attack_delay=pred_attack_delay,
         obs_blocking=obs_blocking,
         obs_damage=obs_damage,
         obs_property=obs_property,
@@ -180,18 +188,26 @@ def load_env_params(config: Config) -> EnvParams:
         neutral_patrol=neutral_patrol,
         neutral_spawn_area=neutral_spawn_area,
         max_satiation=config.get_mandatory('body.max_satiation'),
+        max_nutrition=config.get_mandatory('body.max_nutrition'),
         max_injury=config.get_mandatory('body.max_injury'),
-        food_gain=config.get_mandatory('body.food_satiation_gain'),
+        food_satiation_gain=config.get_mandatory('body.food_satiation_gain'),
+        food_nutrition_gain=config.get_mandatory('body.food_nutrition_gain'),
         setpoint=config.get_mandatory('body.satiation_setpoint'),
         start_satiation=config.get_mandatory('body.start_satiation'),
-        injury_recovery=config.get_mandatory('body.injury_recovery'),
+        start_nutrition=config.get_mandatory('body.start_nutrition'),
+        satiation_decay_rate=config.get_mandatory('body.satiation_decay_rate'),
+        nutrition_decay_rate=config.get_mandatory('body.nutrition_decay_rate'),
+        recovery_base_rate=config.get_mandatory('body.recovery_base_rate'),
+        recovery_accel_rate=config.get_mandatory('body.recovery_accel_rate'),
         smoothing_duration=config.get_mandatory('body.injury_smoothing_duration'),
         death_penalty=config.get_mandatory('body.death_penalty'),
         overeating_death=config.get_mandatory('body.overeating_death'),
         use_homeostatic_reward=config.get_mandatory('body.use_homeostatic_reward'),
         with_satiation=config.get_mandatory('body.with_satiation'),
+        with_nutrition=config.get_mandatory('body.with_nutrition'),
         with_injury=config.get_mandatory('body.with_injury'),
         random_start_satiation=config.get_mandatory('body.random_start_satiation'),
+        random_start_nutrition=config.get_mandatory('body.random_start_nutrition'),
         random_start_injury=config.get_mandatory('body.random_start_injury'),
         rest_action_enabled=config.get_mandatory('environment.rest_action_enabled'),
         eat_action_enabled=config.get_mandatory('environment.eat_action_enabled'),
