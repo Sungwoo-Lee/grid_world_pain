@@ -9,19 +9,19 @@ environment:
     # --- GRASS QUADRANTS (High Risk, High Reward) ---
     - name: "Food Grass TL"
       type: "food"
-      count: 6
+      count: 3
       spawn_area: [[1, 1], [10, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      max_consumption: 15
+      max_consumption: 5
       regeneration_delay: 100
       damage: 0.0
 
     - name: "Food Grass BR"
       type: "food"
-      count: 6
+      count: 3
       spawn_area: [[11, 11], [20, 20]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      max_consumption: 15
+      max_consumption: 5
       regeneration_delay: 100
       damage: 0.0
 
@@ -80,7 +80,7 @@ environment:
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 1
-      damage: 5.0
+      damage: 15.0
       nociception_intensity: 0.9
       spawn_area: [[1, 1], [10, 10]]
       patrol_area: [[1, 1], [10, 10]]
@@ -94,7 +94,7 @@ environment:
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 1
-      damage: 5.0
+      damage: 15.0
       nociception_intensity: 0.9
       spawn_area: [[11, 11], [20, 20]]
       patrol_area: [[11, 11], [20, 20]]

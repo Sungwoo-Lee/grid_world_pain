@@ -1043,7 +1043,7 @@ def main():
                             from src.utils.evaluation_core import evaluate_jax_checkpoint
                             eval_results = evaluate_jax_checkpoint(
                                 model=model if algorithm == "RecurrentPPO" else trainer.agent,
-                                params=params, config=config, num_episodes=3, seed=seed,
+                                params=params, config=config, num_episodes=1, seed=seed,
                                 results_dir=results_dir, checkpoint_pct=total_episodes_completed,
                                 render_video=True, wandb_enabled=wandb_enabled, debug=args.debug,
                                 quiet=True

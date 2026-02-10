@@ -64,15 +64,21 @@ def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.nda
     else:
         new_satiation = state.satiation
 
-    # --- Injury Dynamics (Exponential recovery based on rest streak) ---
+    # --- Injury Dynamics (Instant-start smoothing) ---
     damage = info['damage']
     if params.with_injury:
+        # 1. Spread new damage across the buffer
         inc = damage / params.smoothing_duration
-        applied_inc = state.injury_buffer[0]
-        new_injury = prev_injury + applied_inc
-        # The buffer for the NEXT step
-        new_buffer = jnp.roll(state.injury_buffer, -1).at[-1].set(inc)
+        temp_buffer = state.injury_buffer + inc
         
+        # 2. Apply the first slice immediately
+        applied_inc = temp_buffer[0]
+        new_injury = prev_injury + applied_inc
+        
+        # 3. Shift the rest of the buffer for future steps
+        new_buffer = jnp.roll(temp_buffer, -1).at[-1].set(0.0)
+        
+        # --- Recovery Dynamics (Exponential recovery based on rest streak) ---
         # Update rest streak
         new_rest_streak = jnp.where(info['rested'], prev_rest_streak + 1, 0)
         
