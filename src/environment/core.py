@@ -43,35 +43,27 @@ def calculate_drive(satiation, injury, params):
 
 def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, bool]:
     """Updates satiation, nutrition, and injury levels with streak-based recovery."""
-    prev_satiation = state.satiation
     prev_nutrition = state.nutrition
     prev_injury = state.injury_level
     prev_rest_streak = state.rest_streak
-    
-    # --- Satiation Dynamics (Exponential Decay) ---
-    if params.with_satiation:
-        # Satiation decays exponentially
-        new_satiation = prev_satiation * (1.0 - params.satiation_decay_rate)
-        # Refill from food
-        new_satiation = jnp.where(info['ate_food'], new_satiation + params.food_satiation_gain, new_satiation)
-        
-        if not params.overeating_death:
-            new_satiation = jnp.clip(new_satiation, 0.0, params.max_satiation)
-        else:
-            new_satiation = jnp.clip(new_satiation, 0.0, params.max_satiation + 1.0)
-    else:
-        new_satiation = prev_satiation
-
     # --- Nutrition Dynamics (Linear Decay) ---
     if params.with_nutrition:
         # Nutrition decays linearly
-        new_nutrition = prev_nutrition - params.nutrition_decay_rate
+        new_nutrition = prev_nutrition - params.metabolic_cost
         # Refill from food (immediate)
         new_nutrition = jnp.where(info['ate_food'], new_nutrition + params.food_nutrition_gain, new_nutrition)
         new_nutrition = jnp.clip(new_nutrition, 0.0, params.max_nutrition)
     else:
         new_nutrition = prev_nutrition
-                
+
+    # --- Satiation Dynamics (Derived Non-linearly from Nutrition) ---
+    if params.with_satiation:
+        # Subjective fullness S = Max * (N/MaxN)^k
+        fullness_ratio = jnp.clip(new_nutrition / params.max_nutrition, 0.0, 1.0)
+        new_satiation = params.max_satiation * jnp.power(fullness_ratio, params.nutrition_to_satiation_scaling_factor)
+    else:
+        new_satiation = state.satiation
+
     # --- Injury Dynamics (Exponential recovery based on rest streak) ---
     damage = info['damage']
     if params.with_injury:
@@ -104,13 +96,7 @@ def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.nda
     done = False
     if params.with_nutrition:
         done = jnp.where(new_nutrition <= 0.0, True, done)
-    elif params.with_satiation:
-        # Fallback if nutrition is disabled but satiation is enabled
-        done = jnp.where(new_satiation <= 0.0, True, done)
         
-    if params.overeating_death and params.with_satiation:
-        done = jnp.where(new_satiation >= params.max_satiation, True, done)
-            
     if params.with_injury:
         done = jnp.where(new_injury >= params.max_injury, True, done)
     else:
@@ -215,14 +201,11 @@ def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, pred_a
     move_vec = jnp.stack([final_move_r, final_move_c], axis=-1)
     new_pos = jnp.where(should_move[:, None], pred_pos + move_vec, pred_pos)
     
-    # 4. Spatial Bounds Clipping
-    # Only clip to patrol area if NOT hunting
-    pos_patrol = jnp.stack([
+    # 4. Spatial Bounds Clipping (Strict enforcement for all states)
+    new_pos = jnp.stack([
         jnp.clip(new_pos[:, 0], params.pred_patrol[:, 0], params.pred_patrol[:, 2]),
         jnp.clip(new_pos[:, 1], params.pred_patrol[:, 1], params.pred_patrol[:, 3])
     ], axis=-1)
-    
-    new_pos = jnp.where((next_state == 1)[:, None], new_pos, pos_patrol)
     
     # Hard Grid Boundaries (Always enforced)
     new_pos = jnp.clip(new_pos, 0, jnp.stack([params.height - 1, params.width - 1]))
@@ -440,7 +423,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     info['reward_extrinsic'] = reward_extrinsic
     info['drive_hunger'] = drive_hunger
     info['drive_injury'] = drive_injury
-    info['metabolic_drain'] = params.nutrition_decay_rate
+    info['metabolic_drain'] = params.metabolic_cost
     info['event_collided'] = just_collided
 
     # 7. Final State
@@ -517,17 +500,15 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     # 5. Body (Random start support)
     body_key1, body_key2, body_key3 = jax.random.split(body_key, 3)
     
-    if params.random_start_satiation:
-        min_start = params.max_satiation / 2.0
-        satiation = jax.random.uniform(body_key1, (), minval=min_start, maxval=params.max_satiation)
-    else:
-        satiation = params.start_satiation
-    
     if params.random_start_nutrition:
         min_start_nutr = params.max_nutrition / 2.0
         nutrition = jax.random.uniform(body_key2, (), minval=min_start_nutr, maxval=params.max_nutrition)
     else:
         nutrition = params.start_nutrition
+
+    # Satiation is derived from nutrition
+    fullness_ratio = jnp.clip(nutrition / params.max_nutrition, 0.0, 1.0)
+    satiation = params.max_satiation * jnp.power(fullness_ratio, params.nutrition_to_satiation_scaling_factor)
 
     if params.random_start_injury:
         max_start_injury = params.max_injury / 2.0

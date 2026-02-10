@@ -96,13 +96,12 @@ class EnvParams:
     max_satiation: float
     max_nutrition: float
     max_injury: float
-    food_satiation_gain: float
     food_nutrition_gain: float
     setpoint: float
     start_satiation: float              # For non-random start
     start_nutrition: float
-    satiation_decay_rate: float
-    nutrition_decay_rate: float
+    metabolic_cost: float
+    nutrition_to_satiation_scaling_factor: float
     recovery_base_rate: float
     recovery_accel_rate: float
     smoothing_duration: int = struct.field(pytree_node=False)

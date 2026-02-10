@@ -29,8 +29,8 @@ def load_env_params(config: Config) -> EnvParams:
 
         res_type = jnp.array([0 if r_get(r, 'type') == 'food' else 1 for r in expanded_resources], dtype=jnp.int32)
         res_property = jnp.array([r_get(r, 'properties') for r in expanded_resources])
-        # Subtract 1 for 1-based to 0-based conversion
-        res_spawn_area = jnp.array([[*r_get(r, 'spawn_area')[0], *r_get(r, 'spawn_area')[1]] for r in expanded_resources]) - 1
+        # Subtract 1 for minval (0-based) but keep maxval as is for JAX's exclusive upper bound
+        res_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [r_get(r, 'spawn_area') for r in expanded_resources]])
         res_max_cons = jnp.array([r_get(r, 'max_consumption') for r in expanded_resources], dtype=jnp.int32)
         res_reg_delay = jnp.array([r_get(r, 'regeneration_delay') for r in expanded_resources], dtype=jnp.int32)
         res_damage = jnp.array([r_get(r, 'damage') for r in expanded_resources])
@@ -58,9 +58,8 @@ def load_env_params(config: Config) -> EnvParams:
         pred_damage = jnp.array([p_get(p, 'damage') for p in predators])
         h = config.get_mandatory('environment.height')
         w = config.get_mandatory('environment.width')
-        # Subtract 1 for 1-based to 0-based conversion
-        pred_patrol = jnp.array([[*p.get('patrol_area', [[1,1],[h,w]])[0],
-                                  *p.get('patrol_area', [[1,1],[h,w]])[1]] for p in predators]) - 1
+        # Adjust for 0-based min and exclusive max
+        pred_patrol = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [p.get('patrol_area', [[1,1],[h,w]]) for p in predators]])
         pred_detect = jnp.array([p_get(p, 'detection_range') for p in predators])
         pred_max_stamina = jnp.array([p_get(p, 'max_stamina') for p in predators])
         pred_recovery = jnp.array([p_get(p, 'stamina_recovery_rate') for p in predators])
@@ -97,8 +96,8 @@ def load_env_params(config: Config) -> EnvParams:
         # Unified: Obstacles can have properties too
         chem_dim = res_property.shape[-1]
         obs_property = jnp.array([o.get('properties', [0.0]*chem_dim) for o in expanded_obstacles])
-        # Subtract 1 for 1-based to 0-based conversion
-        obs_spawn_area = jnp.array([[*obs_get(o, 'area')[0], *obs_get(o, 'area')[1]] for o in expanded_obstacles]) - 1
+        # Adjust for 0-based min and exclusive max
+        obs_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [obs_get(o, 'area') for o in expanded_obstacles]])
     else:
         obs_blocking = jnp.zeros(0, dtype=jnp.bool_)
         obs_damage = jnp.zeros(0, dtype=jnp.float32)
@@ -127,11 +126,9 @@ def load_env_params(config: Config) -> EnvParams:
         neutral_move_int = jnp.array([n_get(n, 'move_interval') for n in expanded_neutral], dtype=jnp.int32)
         h = config.get_mandatory('environment.height')
         w = config.get_mandatory('environment.width')
-        # Subtract 1 for 1-based to 0-based conversion
-        neutral_patrol = jnp.array([[*n.get('patrol_area', [[1,1],[h,w]])[0],
-                                     *n.get('patrol_area', [[1,1],[h,w]])[1]] for n in expanded_neutral]) - 1
-        neutral_spawn_area = jnp.array([[*n.get('spawn_area', [[1,1],[h,w]])[0],
-                                         *n.get('spawn_area', [[1,1],[h,w]])[1]] for n in expanded_neutral]) - 1
+        # Adjust for 0-based min and exclusive max
+        neutral_patrol = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('patrol_area', [[1,1],[h,w]]) for n in expanded_neutral]])
+        neutral_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('spawn_area', [[1,1],[h,w]]) for n in expanded_neutral]])
     else:
         neutral_property = jnp.zeros((0, 5))
         neutral_nociception = jnp.zeros(0)
@@ -190,13 +187,12 @@ def load_env_params(config: Config) -> EnvParams:
         max_satiation=config.get_mandatory('body.max_satiation'),
         max_nutrition=config.get_mandatory('body.max_nutrition'),
         max_injury=config.get_mandatory('body.max_injury'),
-        food_satiation_gain=config.get_mandatory('body.food_satiation_gain'),
         food_nutrition_gain=config.get_mandatory('body.food_nutrition_gain'),
         setpoint=config.get_mandatory('body.satiation_setpoint'),
         start_satiation=config.get_mandatory('body.start_satiation'),
         start_nutrition=config.get_mandatory('body.start_nutrition'),
-        satiation_decay_rate=config.get_mandatory('body.satiation_decay_rate'),
-        nutrition_decay_rate=config.get_mandatory('body.nutrition_decay_rate'),
+        metabolic_cost=config.get_mandatory('body.metabolic_cost'),
+        nutrition_to_satiation_scaling_factor=config.get_mandatory('body.nutrition_to_satiation_scaling_factor'),
         recovery_base_rate=config.get_mandatory('body.recovery_base_rate'),
         recovery_accel_rate=config.get_mandatory('body.recovery_accel_rate'),
         smoothing_duration=config.get_mandatory('body.injury_smoothing_duration'),
