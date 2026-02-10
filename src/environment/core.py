@@ -476,8 +476,9 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     """Functional reset for the JAX environment."""
     key, agent_key, res_key, pred_key, body_key, neutral_key = jax.random.split(key, 6)
     
-    # 1. Agent Position (Random)
-    agent_pos = jax.random.randint(agent_key, (2,), 0, jnp.array([params.height, params.width]))
+    # 1. Agent Position
+    random_pos = jax.random.randint(agent_key, (2,), 0, jnp.array([params.height, params.width]))
+    agent_pos = jnp.where(params.random_start_pos, random_pos, params.start_pos)
     
     # 2. Resources (Simplified: Random placement within spawn_area)
     num_res = params.res_type.shape[0]

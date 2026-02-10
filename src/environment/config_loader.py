@@ -209,6 +209,8 @@ def load_env_params(config: Config) -> EnvParams:
         random_start_satiation=config.get_mandatory('body.random_start_satiation'),
         random_start_nutrition=config.get_mandatory('body.random_start_nutrition'),
         random_start_injury=config.get_mandatory('body.random_start_injury'),
+        random_start_pos=config.get('environment.random_start_pos', False),
+        start_pos=jnp.array(config.get('environment.start_pos', [1, 1])) - 1,
         rest_action_enabled=config.get_mandatory('environment.rest_action_enabled'),
         eat_action_enabled=config.get_mandatory('environment.eat_action_enabled'),
         sensor_radius=config.get_mandatory('sensory.sensor_radius'),

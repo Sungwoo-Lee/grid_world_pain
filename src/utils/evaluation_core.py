@@ -48,6 +48,13 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     
     # Progress bar for episodes
     ep_pbar = tqdm(range(num_episodes), desc="Evaluating Episodes", disable=quiet)
+    # Create action name mapping
+    action_map = ["Up", "Right", "Down", "Left"]
+    if params.rest_action_enabled:
+        action_map.append("Rest")
+    if params.eat_action_enabled:
+        action_map.append("Eat")
+
     for ep in ep_pbar:
         if debug:
             print(f"  --- Starting Evaluation Episode {ep+1}/{num_episodes} ---", flush=True)
@@ -91,11 +98,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 'dist_to_pred': 99.0,
                 'reward_homeostatic': 0.0,
                 'reward_extrinsic': 0.0,
-                'metabolic_drain': 0.0,
-                'termination_reason': 0,
                 'max_satiation': float(params.max_satiation),
                 'max_injury': float(params.max_injury),
-                'action': -1,
+                'action': "None",
                 'reward': 0.0
             })
         
@@ -232,7 +237,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                     'termination_reason': int(info.get('termination_reason', 0)),
                     'max_satiation': float(params.max_satiation),
                     'max_injury': float(params.max_injury),
-                    'action': action_idx,
+                    'action': action_map[action_idx] if 0 <= action_idx < len(action_map) else "Unknown",
                     'reward': float(reward)
                 })
             

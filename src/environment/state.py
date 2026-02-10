@@ -115,6 +115,8 @@ class EnvParams:
     random_start_satiation: bool = struct.field(pytree_node=False)
     random_start_nutrition: bool = struct.field(pytree_node=False)
     random_start_injury: bool = struct.field(pytree_node=False)
+    random_start_pos: bool = struct.field(pytree_node=False)
+    start_pos: jnp.ndarray  # [2]
     rest_action_enabled: bool = struct.field(pytree_node=False)
     eat_action_enabled: bool = struct.field(pytree_node=False)
 
