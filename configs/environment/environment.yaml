@@ -55,7 +55,7 @@ environment:
     - name: "Beta Danger Zone"
       type: "danger"
       count: 10
-      spawn_area: [[11, 11], [20, 20]]
+      spawn_area: [[10, 10], [20, 20]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: 10
@@ -77,49 +77,49 @@ environment:
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 1
-      damage: 3.0
+      damage: 5.0
       nociception_intensity: 0.9
       spawn_area: [[0, 0], [10, 10]]
       patrol_area: [[0, 0], [10, 10]]
-      detection_range: 7
-      max_stamina: 5000
+      detection_range: 5
+      max_stamina: 20
       stamina_recovery_rate: 1
-      hunt_stamina_threshold: 0.5
+      hunt_stamina_threshold: 0.3
 
     - name: "Beta Predator"
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 1
-      damage: 3.0
+      damage: 5.0
       nociception_intensity: 0.9
-      spawn_area: [[11, 11], [20, 20]]
-      patrol_area: [[11, 11], [20, 20]]
-      detection_range: 7
-      max_stamina: 5000
+      spawn_area: [[10, 10], [20, 20]]
+      patrol_area: [[10, 10], [20, 20]]
+      detection_range: 5
+      max_stamina: 20
       stamina_recovery_rate: 1
-      hunt_stamina_threshold: 0.5
+      hunt_stamina_threshold: 0.3
 
   location_areas:
     - type: "grass"
       area: [[0, 0], [10, 10]]
     - type: "grass"
-      area: [[11, 11], [19, 19]]
+      area: [[10, 10], [20, 20]]
     - type: "sand"
-      area: [[0, 10], [10, 20]]
+      area: [[0, 11], [10, 20]]
     - type: "sand"
-      area: [[10, 0], [20, 10]]
+      area: [[11, 0], [20, 10]]
 
   obstacles:
     - count: 10
-      area: [[0, 0], [20, 20]]
+      area: [[0, 11], [10, 20]]
       blocking: false
       damage: 0.1
       nociception_intensity: 0.3
-    - count: 5
-      area: [[0,0], [20,20]]
-      blocking: true
-      damage: 0.5
-      nociception_intensity: 0.8
+    - count: 10
+      area: [[11,0], [20,10]]
+      blocking: false
+      damage: 0.1
+      nociception_intensity: 0.3
 
   rest_action_enabled: true
   eat_action_enabled: true

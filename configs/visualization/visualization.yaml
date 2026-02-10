@@ -5,7 +5,9 @@ visualization:
   
   # Video settings
   fps: 5
-  video_dpi: 100
+  # fps: 2
+  # video_dpi: 100
+  video_dpi: 300
   icon_scale: 1.0
   
   # Icons mapping (filename without extension to search dynamically)
@@ -19,9 +21,6 @@ visualization:
     agent_predator: "agent_predator"
     rock: "rock"
     neutral: "neutral"
-
-  # fps: 2
-  # video_dpi: 300
   
   # Activation / LRP Visualization
   activations:
