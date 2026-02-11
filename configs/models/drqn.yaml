@@ -1,6 +1,6 @@
 agent:
   algorithm: "DRQN"
-  learning_rate: 0.001
+  lr: 0.001
   gamma: 0.99
   buffer_size: 10000
   batch_size: 32
@@ -13,3 +13,5 @@ agent:
   frame_stack: 1
   fc_layers: [128]
   recurrent_layers: [128]
+  hidden_size: 128
+  rnn_type: "LSTM"

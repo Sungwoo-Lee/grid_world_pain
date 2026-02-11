@@ -13,7 +13,7 @@ def load_env_params(config: Config) -> EnvParams:
     """Loads environment parameters from a Config object with strict retrieval."""
     
     # Build resource arrays
-    raw_resources = config.get('environment.resources', [])
+    raw_resources = config.get_mandatory('environment.resources')
     expanded_resources = []
     if raw_resources:
         for r in raw_resources:
@@ -45,7 +45,7 @@ def load_env_params(config: Config) -> EnvParams:
         res_damage = jnp.zeros(0)
 
     # Build predator arrays
-    predators = config.get('environment.predators', [])
+    predators = config.get_mandatory('environment.predators')
     if predators:
         def p_get(p, key):
             val = p.get(key)
@@ -78,7 +78,7 @@ def load_env_params(config: Config) -> EnvParams:
         pred_attack_delay = jnp.zeros(0, dtype=jnp.int32)
     
     # Build Obstacle arrays
-    raw_obstacles = config.get('environment.obstacles', [])
+    raw_obstacles = config.get_mandatory('environment.obstacles')
     expanded_obstacles = []
     for o in raw_obstacles:
         count = o.get('count', 1)
@@ -107,7 +107,7 @@ def load_env_params(config: Config) -> EnvParams:
         obs_spawn_area = jnp.zeros((0, 4))
     
     # Build Neutral Animal arrays (Decoys)
-    raw_neutral = config.get('environment.neutral_animals', [])
+    raw_neutral = config.get_mandatory('environment.neutral_animals')
     expanded_neutral = []
     if raw_neutral:
         for n in raw_neutral:
@@ -141,7 +141,7 @@ def load_env_params(config: Config) -> EnvParams:
     height = config.get_mandatory('environment.height')
     width = config.get_mandatory('environment.width')
     grid_np = np.zeros((height, width), dtype=np.int32)
-    location_areas = config.get('environment.location_areas', [])
+    location_areas = config.get_mandatory('environment.location_areas')
     for area_config in location_areas:
         a_type = area_config.get('type')
         type_idx = 1 if a_type == 'grass' else 2 if a_type == 'sand' else 0
@@ -205,8 +205,8 @@ def load_env_params(config: Config) -> EnvParams:
         random_start_satiation=config.get_mandatory('body.random_start_satiation'),
         random_start_nutrition=config.get_mandatory('body.random_start_nutrition'),
         random_start_injury=config.get_mandatory('body.random_start_injury'),
-        random_start_pos=config.get('environment.random_start_pos', False),
-        start_pos=jnp.array(config.get('environment.start_pos', [1, 1])) - 1,
+        random_start_pos=config.get_mandatory('environment.random_start_pos'),
+        start_pos=jnp.array(config.get_mandatory('environment.start_pos')) - 1,
         rest_action_enabled=config.get_mandatory('environment.rest_action_enabled'),
         eat_action_enabled=config.get_mandatory('environment.eat_action_enabled'),
         sensor_radius=config.get_mandatory('sensory.sensor_radius'),

@@ -10,3 +10,8 @@ agent:
   actor_fc_layers: [64, 64]
   critic_fc_layers: [64, 64]
   entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  activation: "tanh"
+  return_mode: "MC"
+  hidden_size: 64

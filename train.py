@@ -238,12 +238,12 @@ def main():
         # Dreamer doesn't use a single sequence_length for rollout collection (usually 1 step)
         num_steps = args.num_steps or 1 
         # Dreamer has many hidden sizes; using rssm_deter_dim as a proxy for summary/logging
-        hidden_size = args.hidden_size or config.get('agent.rssm_deter_dim', 512)
+        hidden_size = args.hidden_size or config.get_mandatory('agent.rssm_deter_dim')
         lr = args.lr or config.get_mandatory('agent.actor_lr')
     else:
         num_steps = args.num_steps or 1
-        hidden_size = args.hidden_size or 128
-        lr = args.lr or 1e-4
+        hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
+        lr = args.lr or config.get_mandatory('agent.lr')
 
     seed = args.seed if args.seed is not None else config.get_mandatory('seed')
 
@@ -291,8 +291,8 @@ def main():
         
         wandb_kwargs = {
             "project": args.wandb_project or config.get_mandatory('wandb.project'),
-            "entity": args.wandb_entity or config.get('wandb.entity'),
-            "group": args.wandb_group or config.get('wandb.group'),
+            "entity": args.wandb_entity or config.get_mandatory('wandb.entity'),
+            "group": args.wandb_group or config.get_mandatory('wandb.group'),
             "name": args.wandb_name or tag,
             "config": {
                 "algorithm": algorithm,
@@ -396,9 +396,9 @@ def main():
         key, init_key = jax.random.split(key)
         
         # Read parity options from config
-        rnn_type = config.get('agent.rnn_type', 'LSTM')
-        activation = config.get('agent.activation', 'tanh')
-        return_mode = config.get('agent.return_mode', 'MC')
+        rnn_type = config.get_mandatory('agent.rnn_type')
+        activation = config.get_mandatory('agent.activation')
+        return_mode = config.get_mandatory('agent.return_mode')
         
         if not args.quiet:
             print(f"RNN Type: {rnn_type}, Activation: {activation}, Return Mode: {return_mode}")
@@ -442,10 +442,10 @@ def main():
         from src.models.dreamer_v3_trainer import DreamerTrainer, ReplayBuffer
         
         # Pass the 'agent' section to the trainer
-        dreamer_config = agent_config.get('agent')
+        dreamer_config = agent_config.get_mandatory('agent')
         if dreamer_config is None:
             # Fallback if the YAML doesn't have a top-level 'agent' key (already merged into config)
-            dreamer_config = config.get('agent')
+            dreamer_config = config.get_mandatory('agent')
         
         key, init_key = jax.random.split(key)
         trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=nnx.Rngs(init_key))
@@ -486,7 +486,7 @@ def main():
         fc_layers = config.get_mandatory('agent.fc_layers')
         recurrent_layers = config.get_mandatory('agent.recurrent_layers')
         hidden_size = recurrent_layers[0] # NNX LSTM/GRU use single hidden size
-        rnn_type = config.get('agent.rnn_type', 'LSTM')
+        rnn_type = config.get_mandatory('agent.rnn_type')
         
         model = DRQNNetwork(input_dim, action_dim, hidden_size, rnn_type, fc_layers, rngs=nnx.Rngs(init_key))
         target_model = DRQNNetwork(input_dim, action_dim, hidden_size, rnn_type, fc_layers, rngs=nnx.Rngs(init_key))
@@ -514,14 +514,14 @@ def main():
     elif algorithm == "PPO":
         key, init_key = jax.random.split(key)
         
-        activation = config.get('agent.activation', 'tanh')
-        return_mode = config.get('agent.return_mode', 'MC')
+        activation = config.get_mandatory('agent.activation')
+        return_mode = config.get_mandatory('agent.return_mode')
         actor_fc_layers = config.get_mandatory('agent.actor_fc_layers')
         critic_fc_layers = config.get_mandatory('agent.critic_fc_layers')
         
         # We can support dual LR by choosing one or using a complex optimizer
         # For now, let's use lr_actor as primary
-        lr_actor = config.get('agent.lr_actor', lr)
+        lr_actor = config.get_mandatory('agent.lr_actor')
         
         if not args.quiet:
             print(f"Activation: {activation}, Return Mode: {return_mode}")
@@ -541,10 +541,10 @@ def main():
             num_steps=num_steps,
             num_epochs=config.get_mandatory('agent.K_epochs'),
             gamma=config.get_mandatory('agent.gamma'),
-            gae_lambda=config.get('agent.gae_lambda', 0.95),
+            gae_lambda=config.get_mandatory('agent.gae_lambda'),
             clip_eps=config.get_mandatory('agent.eps_clip'),
-            ent_coef=config.get('agent.entropy_coef', 0.01),
-            vf_coef=config.get('agent.vf_coef', 0.5),
+            ent_coef=config.get_mandatory('agent.entropy_coef'),
+            vf_coef=config.get_mandatory('agent.vf_coef'),
             lr=lr_actor,
             activation=activation,
             return_mode=return_mode
@@ -1034,8 +1034,8 @@ def main():
                         checkpointer.save(total_episodes_completed, args=ocp.args.StandardSave(ckpt_data))
                         
                         # Trigger evaluation after checkpoint
-                        vis_flag = config.get('visualization.enabled')
-                    eval_v_flag = config.get('training.video_during_training')
+                        vis_flag = config.get_mandatory('visualization.enabled')
+                        eval_v_flag = config.get_mandatory('training.video_during_training')
                     if vis_flag or eval_v_flag:
                         if args.debug:
                             print(f"  [DEBUG] Starting evaluation and video saving...", flush=True)
@@ -1043,7 +1043,7 @@ def main():
                             from src.utils.evaluation_core import evaluate_jax_checkpoint
                             eval_results = evaluate_jax_checkpoint(
                                 model=model if algorithm == "RecurrentPPO" else trainer.agent,
-                                params=params, config=config, num_episodes=1, seed=seed,
+                                params=params, config=config, num_episodes=config.get_mandatory('testing.evaluation_episodes'), seed=seed,
                                 results_dir=results_dir, checkpoint_pct=total_episodes_completed,
                                 render_video=True, wandb_enabled=wandb_enabled, debug=args.debug,
                                 quiet=True
