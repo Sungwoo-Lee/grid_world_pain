@@ -50,6 +50,25 @@ grid_world_pain/
 
 ---
 
+## 🌍 Environment Architecture (POMDP)
+
+The environment follows a **Partially Observable Markov Decision Process (POMDP)** framework. Below is a mapping of the **Ground Truth State** ($S$) to the **Agent Observations** ($O$).
+
+| State Category | State Component | Observation Modality | Mapping Description |
+| :--- | :--- | :--- | :--- |
+| **Agent** | `agent_pos`, `last_action` | **Location**, **Collision**, **Proprioception*** | Normalized $(r, c)$, occupancy, and motor feedback. |
+| **Body** | `satiation`, `nutrition`, `injury_level` | **Interoception**, **Nociception** | Subjective energy/fullness and phasic pain contacts. |
+| **Resources** | `res_pos`, `res_active` | **Chemical**, **Visual*** | Olfactory signatures and visual object IDs. |
+| **Predators** | `pred_pos`, `pred_state` | **Chemical**, **Visual***, **Nociception** | Movement tracking and physical contact damage. |
+| **Neutral** | `neutral_pos` | **Chemical**, **Visual*** | Olfactory decoys and visual identification. |
+| **Obstacles** | `obs_pos` | **Chemical**, **Collision**, **Visual*** | Proximity, blocking tiles, and contact/bumps. |
+
+*\* Optional: Enabled via configuration.*
+
+---
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites

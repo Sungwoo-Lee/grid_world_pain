@@ -216,7 +216,44 @@ def load_env_params(config: Config) -> EnvParams:
         visual_sensor_range=config.get_mandatory('sensory.visual_sensor_range'),
         local_view_size=config.get_mandatory('visualization.local_view_size'),
         proprioception_enabled=config.get_mandatory('sensory.proprioception_enabled'),
-        action_dim=4 + int(config.get_mandatory('environment.rest_action_enabled')) + int(config.get_mandatory('environment.eat_action_enabled'))
+        action_dim=4 + int(config.get_mandatory('environment.rest_action_enabled')) + int(config.get_mandatory('environment.eat_action_enabled')),
+
+        # Perceptual Noise Configuration
+        # Modalities: Olfaction, Extero Nociception, Collision, Location, Satiation, Nutrition, Injury, Visual, Proprioception
+        perceptual_noise_enabled=config.get('perceptual_noise.enabled', False),
+        noise_modes=jnp.pad(jnp.array([
+            0 if config.get('perceptual_noise.modalities.olfaction.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.olfaction.mode') == 'constant' else 2,
+            0 if config.get('perceptual_noise.modalities.extero_nociception.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.extero_nociception.mode') == 'constant' else 2,
+            0 if config.get('perceptual_noise.modalities.collision.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.collision.mode') == 'constant' else 2,
+            0 if config.get('perceptual_noise.modalities.location.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.location.mode') == 'constant' else 2,
+            0 if config.get('perceptual_noise.modalities.satiation.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.satiation.mode') == 'constant' else 2,
+            0 if config.get('perceptual_noise.modalities.nutrition.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.nutrition.mode') == 'constant' else 2,
+            0 if config.get('perceptual_noise.modalities.injury.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.injury.mode') == 'constant' else 2,
+            0 if config.get('perceptual_noise.modalities.visual.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.visual.mode') == 'constant' else 2,
+            0 if config.get('perceptual_noise.modalities.proprioception.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.proprioception.mode') == 'constant' else 2,
+        ], dtype=jnp.int32), (0, 3)),
+        noise_sigmas=jnp.pad(jnp.array([
+            config.get('perceptual_noise.modalities.olfaction.sigma', 0.0),
+            config.get('perceptual_noise.modalities.extero_nociception.sigma', 0.0),
+            config.get('perceptual_noise.modalities.collision.sigma', 0.0),
+            config.get('perceptual_noise.modalities.location.sigma', 0.0),
+            config.get('perceptual_noise.modalities.satiation.sigma', 0.0),
+            config.get('perceptual_noise.modalities.nutrition.sigma', 0.0),
+            config.get('perceptual_noise.modalities.injury.sigma', 0.0),
+            config.get('perceptual_noise.modalities.visual.sigma', 0.0),
+            config.get('perceptual_noise.modalities.proprioception.sigma', 0.0),
+        ], dtype=jnp.float32), (0, 3)),
+        noise_injury_scales=jnp.pad(jnp.array([
+            config.get('perceptual_noise.modalities.olfaction.injury_noise_scale', 0.0),
+            config.get('perceptual_noise.modalities.extero_nociception.injury_noise_scale', 0.0),
+            config.get('perceptual_noise.modalities.collision.injury_noise_scale', 0.0),
+            config.get('perceptual_noise.modalities.location.injury_noise_scale', 0.0),
+            config.get('perceptual_noise.modalities.satiation.injury_noise_scale', 0.0),
+            config.get('perceptual_noise.modalities.nutrition.injury_noise_scale', 0.0),
+            config.get('perceptual_noise.modalities.injury.injury_noise_scale', 0.0),
+            config.get('perceptual_noise.modalities.visual.injury_noise_scale', 0.0),
+            config.get('perceptual_noise.modalities.proprioception.injury_noise_scale', 0.0),
+        ], dtype=jnp.float32), (0, 3))
     )
 
     

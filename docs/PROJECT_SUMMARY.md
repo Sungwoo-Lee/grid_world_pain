@@ -64,14 +64,23 @@ graph TB
 
 ---
 
-## 📦 Sensory Modalities
+## 📦 Sensory Modalities & POMDP Mapping
 
-1. **Olfactory (Chemical)**: Detects entity properties using $1/\text{dist}^d$ decay.
-2. **Nociception (Pain)**: Detects contact with harmful entities (Predators/Danger).
-3. **Collision**: Manhattan diamond directional detection for obstacles.
-4. **Proprioception**: One-hot feedback of the agent's **previous action**.
-5. **Interoception**: Normalized status of Satiation and Injury.
-6. **Location**: Normalized spatial coordinates $[-1, 1]$.
+The agent perceives the environment through a multi-modal observation space that maps subjective sensors to objective state variables.
+
+| State Category | State Component | Observation Modality | Obs. Component | Mapping Description |
+| :--- | :--- | :--- | :--- | :--- |
+| **Agent** | `agent_pos` | **Location**, **Collision**, **Visual*** | `loc_obs`, `coll_obs`, `vis_obs` | Normalized $(r, c)$ and relative occupancy. |
+| | `last_action` | **Proprioception*** | `proprio_obs` | Previous action index (one-hot). |
+| **Body** | `satiation` | **Interoception** | `intero_obs[0]` | Subjective fullness ratio. |
+| | `nutrition` | **Interoception** | `intero_obs[1]` | Subjective energy ratio. |
+| | `injury_level` | **Interoception**, **Nociception** | `intero_obs[2]`, `noc_obs` | Tonic (level) and Phasic (contact) sensing. |
+| **Resources** | `res_pos`, `res_active` | **Chemical**, **Visual*** | `chem_obs`, `vis_obs` | Olfactory signature and object ID. |
+| **Predators** | `pred_pos`, `pred_state`| **Chemical**, **Visual***, **Nociception** | `chem_obs`, `vis_obs`, `noc_obs` | Movement tracking and physical contact. |
+| **Neutral** | `neutral_pos` | **Chemical**, **Visual*** | `chem_obs`, `vis_obs` | Olfactory decoys and visual identification. |
+| **Obstacles** | `obs_pos` | **Chemical**, **Collision**, **Visual*** | `chem_obs`, `coll_obs`, `vis_obs` | Proximity, blocking tiles, and contact. |
+
+*\* Optional: Enabled via configuration.*
 
 ---
 

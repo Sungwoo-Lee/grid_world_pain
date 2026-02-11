@@ -132,5 +132,12 @@ class EnvParams:
     proprioception_enabled: bool = struct.field(pytree_node=False)
     action_dim: int = struct.field(pytree_node=False)
 
+    # Perceptual Noise Parameters (Vectorized across modalities)
+    perceptual_noise_enabled: bool = struct.field(pytree_node=False)
+    # Modalities: Olfaction, Extero Nociception, Collision, Location, Satiation, Nutrition, Injury, Visual, Proprioception (+3 buffer)
+    noise_modes: jnp.ndarray          # [12] int32 (0: None, 1: Constant, 2: State-Dependent)
+    noise_sigmas: jnp.ndarray         # [12] float32 (Base Sigma)
+    noise_injury_scales: jnp.ndarray   # [12] float32 (Injury Noise Scale)
+
     def _replace(self, **kwargs):
         return self.replace(**kwargs)

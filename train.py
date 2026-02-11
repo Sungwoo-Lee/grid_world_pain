@@ -660,6 +660,7 @@ def main():
                         action_idx = action_idx.astype(jnp.int32)
                         action_onehot = jax.nn.one_hot(action_idx, action_dim)
                         
+                        from src.environment.core import jax_step
                         step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
                         next_env_state, reward, done, info = step_fn(env_state, action_idx)
                         

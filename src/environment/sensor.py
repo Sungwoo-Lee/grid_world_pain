@@ -226,36 +226,75 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     
     return total_vis.flatten()
 
+def apply_perceptual_noise(obs: jnp.ndarray, state: EnvState, params: EnvParams, key: jax.random.PRNGKey):
+    """Applies vectorized, state-dependent Gaussian noise based on modality-specific modes."""
+    if not params.perceptual_noise_enabled:
+        return obs
+        
+    breakdown = get_observation_breakdown(params)
+    
+    # Mapping Sensor names to indices in params.noise_modes/sigmas/scales
+    # Sync with config_loader.py ordering
+    modality_map = {
+        "Olfaction": 0,
+        "Extero Nociception": 1,
+        "Collision": 2,
+        "Location": 3,
+        "Satiation": 4,
+        "Nutrition": 5,
+        "Injury": 6,
+        "Visual": 7,
+        "Proprioception": 8
+    }
+    
+    sigma_base_list = []
+    alpha_list = []
+    mode_list = []
+    
+    for sensor_name, dim in breakdown.items():
+        idx = modality_map[sensor_name]
+        sigma_base_list.append(jnp.full((dim,), params.noise_sigmas[idx]))
+        alpha_list.append(jnp.full((dim,), params.noise_injury_scales[idx]))
+        mode_list.append(jnp.full((dim,), params.noise_modes[idx]))
+        
+    sigma_base = jnp.concatenate(sigma_base_list)
+    alpha = jnp.concatenate(alpha_list)
+    mode = jnp.concatenate(mode_list)
+    
+    # Normalized injury (0.0 to 1.0)
+    norm_injury = state.injury_level / jnp.maximum(params.max_injury, 1e-6)
+    
+    # Effective Sigma calculation:
+    # Mode 0: None (0.0)
+    # Mode 1: Constant (sigma_base)
+    # Mode 2: State-Dependent (sigma_base * (1 + alpha * injury))
+    sigma_eff = jnp.where(
+        mode == 2,
+        sigma_base * (1.0 + alpha * norm_injury),
+        jnp.where(mode == 1, sigma_base, 0.0)
+    )
+    
+    noise = jax.random.normal(key, obs.shape) * sigma_eff
+    return obs + noise
+
 def get_observation(state: EnvState, params: EnvParams):
-    """Assembles the full observation vector."""
-    # 1. Chemical Sensor (Resources + Predators + Obstacles)
-    res_chem = sense_resource(
-        state.agent_pos, state.res_pos, state.res_active, params.res_property,
-        radius=params.sensor_radius, decay_power=params.sensor_decay
-    )
-    pred_chem = sense_resource(
-        state.agent_pos, state.pred_pos, jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_), params.pred_property,
-        radius=params.sensor_radius, decay_power=params.sensor_decay
-    )
-    obs_chem = sense_resource(
-        state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), params.obs_property,
-        radius=params.sensor_radius, decay_power=params.sensor_decay
-    )
-    neutral_chem = sense_resource(
-        state.agent_pos, state.neutral_pos, jnp.ones(state.neutral_pos.shape[0], dtype=jnp.bool_), params.neutral_property,
-        radius=params.sensor_radius, decay_power=params.sensor_decay
-    )
-    chem_obs = res_chem + pred_chem + obs_chem + neutral_chem
+    """Assembles the full observation vector, including noise if enabled."""
+    # Salt the state key to get a deterministic but unique key for observation noise
+    obs_key = jax.random.fold_in(state.key, 999)
+    
+    # 1. Olfaction Sensor (Resources + Predators + Obstacles + Neutral)
+    # Renamed from chemical for consistency with documentation
+    res_chem = sense_resource(state.agent_pos, state.res_pos, state.res_active, params.res_property, params.sensor_radius, params.sensor_decay)
+    pred_chem = sense_resource(state.agent_pos, state.pred_pos, jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_), params.pred_property, params.sensor_radius, params.sensor_decay)
+    obs_chem = sense_resource(state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), params.obs_property, params.sensor_radius, params.sensor_decay)
+    neutral_chem = sense_resource(state.agent_pos, state.neutral_pos, jnp.ones(state.neutral_pos.shape[0], dtype=jnp.bool_), params.neutral_property, params.sensor_radius, params.sensor_decay)
+    olf_obs = res_chem + pred_chem + obs_chem + neutral_chem
     
     # 2. Extero Nociception (Phasic - Multi-source)
-    noc_obs = sense_extero_nociception(
-        state.agent_pos, state, params
-    )
+    noc_obs = sense_extero_nociception(state.agent_pos, state, params)
     
     # 3. Collision
-    coll_obs = sense_collision(
-        state.agent_pos, state, params
-    )
+    coll_obs = sense_collision(state.agent_pos, state, params)
     
     # 4. Location
     loc_obs = sense_location(state.agent_pos, params.height, params.width)
@@ -270,21 +309,22 @@ def get_observation(state: EnvState, params: EnvParams):
     # 6. Visual Sensor
     if params.visual_sensor_enabled:
         vis_obs = sense_visual(state.agent_pos, state, params)
-        obs = jnp.concatenate([chem_obs, noc_obs, coll_obs, loc_obs, intero_obs, vis_obs])
+        obs = jnp.concatenate([olf_obs, noc_obs, coll_obs, loc_obs, intero_obs, vis_obs])
     else:
-        obs = jnp.concatenate([chem_obs, noc_obs, coll_obs, loc_obs, intero_obs])
+        obs = jnp.concatenate([olf_obs, noc_obs, coll_obs, loc_obs, intero_obs])
     
     # 7. Proprioception (Previous Action)
     if params.proprioception_enabled:
         proprio_obs = jax.nn.one_hot(state.last_action, params.action_dim)
         obs = jnp.concatenate([obs, proprio_obs])
     
-    return obs
+    # Apply Perceptual Precision Modulation
+    return apply_perceptual_noise(obs, state, params, obs_key)
 
 def get_observation_breakdown(params: EnvParams):
     """Returns a dict of {sensor_name: dimension} for observation components."""
     # Component dimensions based on sensor.py logic:
-    # 1. Chemical: vector_size from resource properties
+    # 1. Olfaction: vector_size from resource properties
     chem_dim = int(params.res_property.shape[-1])
     
     # 2. Extero Nociception: 1 (contact)
@@ -301,11 +341,13 @@ def get_observation_breakdown(params: EnvParams):
     intero_dim = 3
     
     breakdown = {
-        "Chemical": chem_dim,
+        "Olfaction": chem_dim,
         "Extero Nociception": noc_dim,
         "Collision": coll_dim,
         "Location": loc_dim,
-        "Interoception": intero_dim
+        "Satiation": 1,
+        "Nutrition": 1,
+        "Injury": 1
     }
     
     if params.visual_sensor_enabled:

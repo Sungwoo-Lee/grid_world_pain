@@ -108,9 +108,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             # Internal helper to slice flat obs into renderer-friendly format
             ptr = 0
             
-            chem_end = ptr + breakdown['Chemical']
-            chem_vec = obs_vec[ptr:chem_end]
-            ptr = chem_end
+            olf_end = ptr + breakdown['Olfaction']
+            olf_vec = obs_vec[ptr:olf_end]
+            ptr = olf_end
             
             noc_end = ptr + breakdown['Extero Nociception']
             noc_val = float(obs_vec[ptr]) if breakdown['Extero Nociception'] > 0 else 0.0
@@ -129,7 +129,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             ptr = intero_end
             
             viz = [
-                {'name': 'Olfactory', 'vector': chem_vec, 'type': 'spectrum'},
+                {'name': 'Olfactory', 'vector': olf_vec, 'type': 'spectrum'},
                 {'name': 'Extero Nociception', 'intensity': noc_val, 'color': '#c0392b', 'type': 'intensity'},
                 {'name': 'Collision', 'vector': coll_vec, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1, 'side_by_side': True},
                 {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'}
@@ -228,9 +228,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                     'event_damage': float(info.get('damage', 0.0)),
                     'event_collided': bool(info.get('event_collided', False)),
                     'event_rested': bool(info.get('rested', False)),
-                    'sense_nociception': float(next_obs[breakdown['Chemical']]),
-                    'dist_to_food': float(jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 0), jnp.linalg.norm(state.res_pos - state.agent_pos, axis=-1), 99.0))),
-                    'dist_to_pred': float(jnp.min(jnp.linalg.norm(state.pred_pos - state.agent_pos, axis=-1))),
+                    'sense_nociception': float(next_obs[breakdown['Olfaction']]),
+                    'dist_to_food': float(jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 0), jnp.linalg.norm(state.res_pos - state.agent_pos, axis=-1), 99.0))) if state.res_pos.shape[0] > 0 else 99.0,
+                    'dist_to_pred': float(jnp.min(jnp.linalg.norm(state.pred_pos - state.agent_pos, axis=-1))) if state.pred_pos.shape[0] > 0 else 99.0,
                     'reward_homeostatic': float(info.get('reward_homeostatic', 0.0)),
                     'reward_extrinsic': float(info.get('reward_extrinsic', 0.0)),
                     'metabolic_drain': float(info.get('metabolic_drain', 0.0)),
