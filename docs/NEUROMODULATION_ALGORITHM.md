@@ -268,39 +268,112 @@ This section covers domain-specific implementations that translate modulatory pr
 
 ---
 
-# Final Synthesis: The Simplistic Perceptual Modulation (SPM) Architecture
+---
 
-Based on the 31-paper review, we propose a **Simplistic Perceptual Modulation (SPM)** system for the grid-world agent. This architecture decouples *Observation Encoding* from *Regulatory Gain Control*.
+# Implementation Discussion: Critique of Simplistic Gating (Vecoven/Ben-Iwhiwhu Style)
 
-## 1. The SPM Architectural Blueprint
+Based on our recent review, here is the critical feedback regarding the implementation of the "Simplistic" neuromodulation style in the current project environment.
 
-The agent is composed of four interlocking modulatory loops:
+## 1. The "Identity Collapse" Concern (Context vs. Sensory)
+In the Vecoven style, the Modulator $G(c)$ outputs a gain $z$. The primary risk is that if $c \equiv x$ (sensory input), the modulation becomes a simple feature extractor. 
 
-### A. The Sensory Gate (Disinhibitory Gating)
-*   **Mechanism**: A hierarchical CNN/SNN encoder where the output is gated by a "Salience Signal" $z_{sal}$.
-*   **Equation**: $Obs_{eff} = \text{ReLU}(z_{sal} \odot \text{Encoder}(x) - \theta_{noise})$.
-*   **Modulation**: If "Surprisal" (Prediction Error) is low, $z_{sal}$ is small, filtering out background details. If Surprisal spikes, $z_{sal} \uparrow$, revealing high-resolution cues like subtle trap indicators.
+### Integrated Observation (Full Observability per $c$ and $x$)
+We acknowledge that in a practical RL implementation, **$c$ and $x$ can both be derived from the full observation set**. The model is expected to autonomously learn to extract regulatory features (for $c$) and task-specific features (for $x$). Furthermore, ablation experiments can be conducted to determine which specific combinations of information (e.g., visual vs. interoceptive) are sufficient to drive effective perceptual modulation and adaptive behavior.
 
-### B. The Attractor Manager (Manifold Destabilization)
-*   **Mechanism**: The RNN hidden state $h_t$ is modulated by a global gain factor $g(t)$ (analogous to Noradrenaline).
-*   **Equation**: $h_{t+1} = \tanh(g(t) \cdot (W h_t + U Obs_{eff}))$.
-*   **Modulation**: Phasic bursts of $g(t)$ upon high TD-error "liquify" the current behavior, shaking the agent out of repetitive loops (attractor reset) and forcing it to explore.
+The "Identity Collapse" is prevented not by *restricting* inputs, but by **Architectural Bottlenecking**:
+*   **Context $c$ (The Modulator Path)**: Processes the full observation (Visual + Interoceptive + Proprioceptive) through a high-compression bottleneck (e.g., a small MLP or low-rank layer) to extract slowly-varying metabolic or environmental states.
+*   **Sensory $x$ (The Task Path)**: Processes the same observation through the high-capacity feature encoder (MLP or RNN).
 
-### C. The Precision Controller (Active Inference)
-*   **Mechanism**: An interoceptive branch predicts "Aleatoric Uncertainty" $\sigma^2$ (sensor noise).
-*   **Equation**: Belief Update $\Delta \mu \propto (1/\sigma^2) \cdot (Obs - \text{Pred})$.
-*   **Modulation**: In the "Fog of War" or high-smoke areas, the agent lowers its Sensory Precision $\Pi_s$, ignoring noisy pixels and relying on its internal "Prior" (path integration) to move toward the goal.
+By forcing the Modulator to output a global coordination signal $z$ derived from all available information, we allow the agent to learn complex cross-modal modulations (e.g., "Mute Visual Noise because Interoceptive Pain is rising") without manual input partitioning.
 
-### D. The Hyper-Regulator (Doya's Meta-Controller)
-*   **Mechanism**: A "Brainstem" module that outputs the agent's hyperparameters $\{\alpha, \gamma, \beta\}$.
-*   **Mapping**:
-    - **Serotonin ($\gamma$)**: High "Energy/Homeostasis" $\rightarrow$ High $\gamma$ (long-term planning). Low Energy $\rightarrow$ Low $\gamma$ (myopic survival).
-    - **Acetylcholine ($\alpha$)**: High Surprisal $\rightarrow$ High $\alpha$ (fast map updating).
-    - **Noradrenaline ($\beta$)**: Constant failure $\rightarrow$ Low $\beta$ (increase action randomness).
+### Branched Modulatory Targets (The Proposed Solution)
+To resolve this while embracing the multifunctional role of neuromodulators (Doya, 2002), we propose a **Branched Modulator Head**. A single neuromodulatory network $G$ processes context $c$ and emits a high-dimensional vector $\mathbf{z}$, which is partitioned to control distinct functional blocks:
 
-## 2. Implementation Roadmap
-1.  **Module I (Sensory)**: Implement the Disinhibitory Gate in `src/models/encoders.py`.
-2.  **Module II (Memory)**: Add slope modulation $g(t)$ to the RecurrentPPO actor network.
-3.  **Module III (Regulator)**: Implement a small Hypernetwork that emits $\gamma$ and $\beta$ based on the agent's internal `injury` and `homeostatic` state.
+1.  **$z_{percept}$ (Early-stage Gating)**: Multiplicatively scales the input layer or first MLP hidden layer activations. This allows the model to "shut off" or "sensitize" specific input features (e.g., ignoring noisy sensory dimensions).
+2.  **$z_{memory}$ (RNN Recurrence)**: Modulates the hidden-state decay or the 'forget gate' of the recurrent module (e.g., GRU or LSTM).
+3.  **$z_{action}$ (Policy Temperature)**: Modulates the actor/critic heads, effectively controlling action entropy or value-certainty without changing the underlying percept.
+4.  **$z_{reward}$ (Intrinsic Interpretation)**: Modulates the reward predictor, adjusting how "painfully" the agent interprets external reward signals or nociceptive inputs.
 
-This system guarantees that the agent's *perception* is not fixed, but is instead a dynamic function of its internal needs and environmental uncertainty.
+By having different modulatory targets for different outputs, we preserve the structural identity of the "Neuromodulator" as a global coordinator that reconciles internal states (Doya's metalevels) with specialized task subunits.
+
+## 2. Gradient Sparsity (The "Shut-Off" Problem)
+Multiplicative gating $z \odot h(x)$ is powerful but dangerous during early learning. If the modulator network predicts $z \approx 0$ for a specific sensory channel (e.g., "Ignore Blue Cells"), the task network's weights for that channel receive **zero gradient**.
+*   **Potential Solution**: Implement a "Leaky Gate" (e.g., $z_{eff} = 0.1 + 0.9z$) to ensure base learning continues even during sensory suppression.
+
+## 3. Perception vs. Action Arbitration
+The Ben-Iwhiwhu model often applies modulation at the **hidden layers** of the policy. For a true study of "Perceptual Modulation," we should strictly separate functional layers:
+*   **Encoder Modulation**: "I see the wall differently" (Strictly Perceptual).
+*   **Policy Modulation**: "I react to the wall differently" (Strictly Behavioral).
+*   **Recommendation**: Apply Vecoven gates early in the MLP encoder or input projection layer to validate perceptual claims.
+
+## 4. The Recurrent Modulator (RNN-style Modulatory Path)
+Instead of a feedforward $G(c)$, we propose making the Modulator network itself **Recurrent** (GRU or LSTM). This provides several critical advantages for studying perceptual modulation:
+
+*   **Endogenous Affective State**: Biological neuromodulation (e.g., a persistent state of arousal or anxiety) doesn't just "switch off" the moment a stimulus vanishes; it decays slowly. An RNN modulator can maintain a "mood" across several time steps, sensitizing the agent to noise even after a painful event has ended.
+*   **Timescale Separation**: We can design the Modulator-RNN to have a high recurrent "inertia" (slower decay) compared to the Task-RNN. This represents the distinction between **State** (slow, affective) and **Computation** (fast, reactive).
+*   **Integration of History**: An RNN modulator can integrate a "History of Pain" to trigger a transition into a "Chronic Survival Mode," which a feedforward network would struggle to represent without manual feature engineering.
+
+### Design Consideration: Latent Modification
+With two coupled RNNs (Modulator and Task), we must decide if the modulation is:
+1.  **Multiplicative (Gate)**: $h_{task} = \sigma(z_{mod}) \odot f(x)$. (Stable, prevents drift).
+2.  **Additive (Bias)**: $h_{task} = f(x) + z_{mod}$. (Bio-inspired "Landscape Shift", more expressive but prone to instability).
+
+---
+
+# Implementation Details: Prototype Design for Grid-World RL
+
+This section outlines the concrete software architecture for the neuromodulation prototype.
+
+## 1. The Neuromodulator Module (`NeuromodulatorRNN`)
+A standalone recurrent module designed for high "affective inertia."
+
+*   **Input ($c_t$)**: Full concatenated observation vector $[Visual, Interoceptive, Proprioceptive]$.
+*   **Core**: 1-layer GRU with 64 hidden units.
+*   **Heads (Branched)**:
+    - `head_percept`: Linear $\to$ Sigmoid (Size: CNN/MLP output feature dim).
+    - `head_memory`: Linear $\to$ Sigmoid (Size: Task-RNN hidden dim).
+    - `head_action`: Linear $\to$ Softplus (Size: 1, scales entropy/temperature).
+    - `head_reward`: Linear $\to$ Identity (Size: 1, scales intrinsic reward).
+
+## 2. Integration with RL Agents
+
+### A. Recurrent PPO: The Bi-Recurrent Actor-Critic
+In this setup, two GRUs run in parallel, coupled by the modulatory signal.
+
+```python
+# Iteration step t
+# 1. Modulator Update
+h_mod_next = Modulator_GRU(obs_t, h_mod_prev)
+z_percept, z_memory, z_action = Modulator_Heads(h_mod_next)
+
+# 2. Perceptual Gating (Early Stage)
+x_feat = Input_Projection(obs_t)
+x_mod = x_feat * (1.0 + z_percept) # Multiplicative gain
+
+# 3. Task Recurrence (Memory Modulation)
+# Modulating the hidden state directly (Slope/Stability modulation)
+# or modulating the GRU's Internal Gates
+h_task_next = Task_GRU(x_mod, h_task_prev * torch.sigmoid(z_memory))
+
+# 4. Behavioral Modulation
+logits = Actor_Head(h_task_next)
+probs = Softmax(logits / torch.exp(z_action)) # Temperature modulation
+```
+
+### B. DreamerV3: Modulating the World Model (RSSM)
+Dreamer provides deeper hooks for modulation because it explicitly models state uncertainty.
+
+1.  **RSSM Deterministic Update**: The Modulator controls the "forgetting rate" of the $h_t$ state in the RSSM.
+    - $h_t = \text{GRU}(h_{t-1} \cdot \mathbf{z}_{mem}, \hat{s}_{t-1}, a_{t-1})$
+2.  **Stochastic Precision**: The Modulator scales the variance $\sigma$ of the posterior $q(s_t | s_{t-1}, a_{t-1}, x_t)$.
+    - High Arousal $\rightarrow$ Lower $\sigma$ $\rightarrow$ "High Precision" belief.
+3.  **Intrinsic Reward Interpretation**: The reward predictor head is gated by $z_{reward}$.
+    - $Reward_{eff} = z_{reward} \odot \text{RewardPredictor}(h_t, s_t)$
+    - This allows the modulator to effectively "turn up the volume" on nociceptive penalty when the agent's internal "Injury" is critical.
+
+## 3. Training Loop & Synergy
+*   **Shared Objective**: Both the Task-RNN and the Modulator-RNN are trained to minimize the global RL loss (PPO loss or Dreamer's variational loss).
+*   **Decoupled Learning**: To prevent the modulator from over-fitting to task features, we can apply a **lower learning rate** or a **timescale penalty** to the Modulator-RNN, forcing it to focus on slow-moving regulatory trends.
+*   **Ablation Hooks**:
+    - `modulation.perceptual_only`: Disable memory/action heads.
+    - `modulation.static_context`: Use a feedforward modulator as a baseline.
