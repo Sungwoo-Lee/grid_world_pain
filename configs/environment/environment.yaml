@@ -171,41 +171,41 @@ visualization:
   local_view_size: 5
 
 perceptual_noise:
-  enabled: false
+  enabled: true
   modalities:
     olfaction:
-      mode: "none"
-      sigma: 0.0
-      injury_noise_scale: 0.0
+      mode: "state_dependent"
+      sigma: 0.15
+      injury_noise_scale: 2.0
     extero_nociception:
-      mode: "none"
-      sigma: 0.0
+      mode: "constant"
+      sigma: 0.01
       injury_noise_scale: 0.0
     collision:
-      mode: "none"
-      sigma: 0.0
+      mode: "constant"
+      sigma: 0.01
       injury_noise_scale: 0.0
     location:
-      mode: "none"
-      sigma: 0.0
+      mode: "constant"
+      sigma: 0.01
       injury_noise_scale: 0.0
     satiation:
-      mode: "none"
-      sigma: 0.0
+      mode: "constant"
+      sigma: 0.1
       injury_noise_scale: 0.0
     nutrition:
-      mode: "none"
-      sigma: 0.0
+      mode: "constant"
+      sigma: 0.1
       injury_noise_scale: 0.0
     injury:
-      mode: "none"
-      sigma: 0.0
-      injury_noise_scale: 0.0
+      mode: "state_dependent"
+      sigma: 0.05
+      injury_noise_scale: 1.5
     visual:
-      mode: "none"
-      sigma: 0.0
-      injury_noise_scale: 0.0
+      mode: "state_dependent"
+      sigma: 0.05
+      injury_noise_scale: 3.0
     proprioception:
-      mode: "none"
-      sigma: 0.0
+      mode: "constant"
+      sigma: 0.05
       injury_noise_scale: 0.0

@@ -161,13 +161,35 @@ This section focuses on computationally efficient scaling and gating of features
     Where $s_k(t)$ is the modulatory gain for the $k$-th dynamical motif (rank-1).
 *   **Project Insight**: **Programmable Memory Windows.** Scaling $s_k(t)$ can change the decay constant of the RNN's hidden state, effectively allowing the agent to "choose" how long to remember a specific sensory cue (e.g., 5s for a short-term trap vs. 60s for a goal location).
 
-### 12. Biophysical Parameter Control (AlKilany & Goodman, 2025)
-*   **Biological Mechanism**: Rapid adjustment of threshold $v_{th}$ and membrane time constants $\tau_m$ in SNNs.
-*   **Mathematical Formalism**:
+### 12. Biophysical Parameter Control & Spatial Grouping (AlKilany & Goodman, 2025)
+*   **Biological Mechanism**: Rapid adjustment of threshold $v_{th}$ and membrane time constants $\tau_m$ in SNNs, via a separate Modulator Network that outputs dynamic biophysical adjustments.
+*   **Mathematical Formalism (LIF Dynamics)**:
     $$\tau_m(t) \frac{dv}{dt} = -(v - v_{rest}) + R \cdot I(t)$$
     $$\text{Spike if } v(t) \geq v_{th}(t)$$
     Where $\tau_m(t)$ and $v_{th}(t)$ are dynamic outputs of a controller.
-*   **Project Insight**: Implementation of **Signal-to-Noise Pumping**. In a high-noise environment (e.g., Grid World "Storm"), the agent can increase $v_{th}$ to "filter" low-intensity sensory noise, effectively "listening in the dips" of the background activity.
+
+#### Spatial Grouping (Dimensionality Reduction for Modulation)
+A key contribution is **Spatial Grouping**: instead of the Modulator producing a unique signal per neuron (G=1), neurons in the primary SNN are partitioned into sequential groups of size $G$. The modulator output dimension is reduced from $N_{hidden}$ to $N_{hidden}/G$.
+
+*   **Additive Modulation (Preserving Heterogeneity)**:
+    $$\Psi_i(t+1) = \text{Clip}\left(\Psi_i(0) + m_{\lfloor i/G \rfloor}(t)\right)$$
+    Where:
+    -   $\Psi_i(0)$ is the **initial, independently learned baseline** parameter for neuron $i$ (unique per neuron).
+    -   $m_{\lfloor i/G \rfloor}(t)$ is the dynamic adjustment from the modulator for the group containing neuron $i$.
+    -   $\text{Clip}(\cdot)$ bounds the parameter to biologically valid ranges.
+
+    This is critically distinct from **Substitution** ($\Psi_i(t) = m_{\lfloor i/G \rfloor}(t)$), which would collapse all neurons in a group to identical states. Additive modulation preserves neuronal diversity through the unique baselines while correlating their *dynamics* within a group.
+
+*   **Granularity Spectrum**:
+    | Regime | $G$ Value | Modulator Output | Analogy |
+    |---|---|---|---|
+    | Fine-Grained | $G = 1$ | $N_{hidden}$ | Synaptic precision |
+    | Spatial Grouping | $1 < G < N$ | $N_{hidden}/G$ | Volume transmission (mesoscale) |
+    | Global | $G = N$ | $1$ | Uniform neuromodulatory bath |
+
+*   **Key Empirical Finding**: Spatially extended modulation ($G=10$ or $G=20$) was **equally effective** as fine-grained modulation ($G=1$) across all tested tasks. This suggests that the computational benefit of neuromodulation comes from regulating the **macroscopic regime** of the network (global excitability, integration windows) rather than micromanaging individual neurons.
+
+*   **Project Insight**: Implementation of **Signal-to-Noise Pumping**. In a high-noise environment (e.g., Grid World "Storm"), the agent can increase $v_{th}$ to "filter" low-intensity sensory noise. The spatial grouping finding is particularly relevant for our project: our Modulator's $z_{percept}$ head can output a **low-dimensional** vector (e.g., one gain per sensory modality group rather than per feature) without losing expressiveness.
 
 ---
 
@@ -322,58 +344,178 @@ With two coupled RNNs (Modulator and Task), we must decide if the modulation is:
 
 # Implementation Details: Prototype Design for Grid-World RL
 
-This section outlines the concrete software architecture for the neuromodulation prototype.
+This section outlines the concrete software architecture for the neuromodulation prototype, derived from the actual codebase.
 
-## 1. The Neuromodulator Module (`NeuromodulatorRNN`)
+## 0. Current Observation Space (from `sensor.py`)
+The observation is a **flat 1D vector** (not an image). Its composition is:
+
+| Modality | Sensor Function | Dim | Description |
+|---|---|---|---|
+| Olfaction | `sense_resource()` | `property_vec_size` | Chemical gradient sum from Resources + Predators + Obstacles + Neutrals |
+| Extero Nociception | `sense_extero_nociception()` | 1 | Max pain intensity from contact (Danger, Predator, Rock) |
+| Collision | `sense_collision()` | $2r^2+2r+1$ | Manhattan-diamond binary map of blocking obstacles |
+| Location | `sense_location()` | 2 | Normalized agent $(row, col)$ in $[-1, 1]$ |
+| Satiation | (interoceptive) | 1 | $satiation / max\_satiation$ |
+| Nutrition | (interoceptive) | 1 | $nutrition / max\_nutrition$ |
+| Injury | (interoceptive) | 1 | $injury / max\_injury$ |
+| Visual | `sense_visual()` | $N_{cells} \times 8$ | One-hot grid: [Grass, Sand, Plain, Food, Danger, Predator, Rock, Neutral] |
+| Proprioception | (one-hot) | `action_dim` | One-hot encoding of previous action |
+
+Total observation dim is variable based on config (sensor ranges, enabled flags). **Perceptual noise** (`apply_perceptual_noise`) adds state-dependent Gaussian noise per modality, scaled by injury level.
+
+## 1. Current Agent Architectures
+
+### A. Recurrent PPO (`ActorCriticRNN` in `recurrent_ppo_network.py`)
+A single-file, compact architecture using Flax NNX:
+
+```
+obs (flat vector, dim=input_dim)
+  │
+  ├─► input_proj: Linear(input_dim → hidden_size) + ReLU
+  │       │
+  │       ▼
+  │   rnn_cell: GRUCell(hidden_size → hidden_size) or LSTMCell
+  │       │       ◄── h_prev (carry state)
+  │       │
+  │       ▼  x_h (RNN output)
+  │       ├─► actor_fc1: Linear(hidden → hidden) + tanh/relu
+  │       │       └─► actor_fc2: Linear(hidden → action_dim) → logits
+  │       │
+  │       └─► critic_fc1: Linear(hidden → hidden) + tanh/relu
+  │               └─► critic_fc2: Linear(hidden → 1) → value
+```
+
+**Key properties**:
+- Framework: **Flax NNX** (JAX)
+- RNN type: Configurable (`LSTM` or `GRU`)
+- Activation: Configurable (`tanh` or `relu`)
+- Single hidden size for all layers
+- No separate encoder — `input_proj` is the only feature transform
+
+### B. DreamerV3 (`DreamerV3Agent` in `dreamer_v3_nnx.py`)
+A world-model agent with explicit state decomposition:
+
+```
+obs (flat vector, dim=obs_dim)
+  │
+  ├─► Encoder: Sequential MLP [Linear → LayerNorm → SiLU] × N → embed (embed_dim)
+  │
+  ▼
+RSSM (Recurrent State-Space Model):
+  ┌──────────────────────────────────────────────┐
+  │ img_in: Linear(stoch*discrete + action_dim   │
+  │            → deter_dim) + ELU                │
+  │     │                                        │
+  │     ▼                                        │
+  │ cell: LayerNormGRUCell(deter_dim)            │
+  │     │    ◄── deter_prev (deterministic h)    │
+  │     │                                        │
+  │     ├─► img_out: Linear(deter → S*D)         │
+  │     │       → prior_logits (S×D)             │
+  │     │                                        │
+  │     └─► obs_out: Linear(deter+embed → S*D)   │
+  │             → post_logits (S×D)              │
+  │             → OneHotDist → stoch sample      │
+  └──────────────────────────────────────────────┘
+  │
+  ▼ feat = concat(deter, stoch_flat)  (feat_dim = deter + S*D)
+  │
+  ├─► Decoder:  MLP(feat_dim → obs_dim)   [LayerNorm + SiLU]
+  ├─► Reward:   MLP(feat_dim → 255)        [TwoHot symlog]
+  ├─► Continue: MLP(feat_dim → 1)          [Bernoulli]
+  │
+  ├─► Actor:    MLP(feat_dim → action_dim) [LayerNorm + SiLU]
+  └─► Critic:   MLP(feat_dim → 255)        [TwoHot symlog]
+```
+
+**Key properties**:
+- Framework: **Flax NNX** (JAX)
+- GRU variant: Custom `LayerNormGRUCell` with separate LayerNorms on input/hidden gates
+- Stochastic state: Categorical (S classes × D discrete), sampled via `OneHotDist` with straight-through gradients
+- All MLPs use `Linear → LayerNorm → SiLU` blocks
+- Reward/Critic use **TwoHot symlog** encoding (255 bins)
+- Layer sizes fully configurable via YAML
+
+## 2. The Neuromodulator Module (`NeuromodulatorRNN`)
 A standalone recurrent module designed for high "affective inertia."
 
-*   **Input ($c_t$)**: Full concatenated observation vector $[Visual, Interoceptive, Proprioceptive]$.
-*   **Core**: 1-layer GRU with 64 hidden units.
+*   **Input ($c_t$)**: Full concatenated observation vector (same as task network input).
+*   **Core**: 1-layer GRU (Flax `nnx.GRUCell`) with configurable hidden units (default: 64).
 *   **Heads (Branched)**:
-    - `head_percept`: Linear $\to$ Sigmoid (Size: CNN/MLP output feature dim).
-    - `head_memory`: Linear $\to$ Sigmoid (Size: Task-RNN hidden dim).
-    - `head_action`: Linear $\to$ Softplus (Size: 1, scales entropy/temperature).
-    - `head_reward`: Linear $\to$ Identity (Size: 1, scales intrinsic reward).
+    - `head_percept`: Linear → Sigmoid (Size: `hidden_size` of Task network, gates the input projection output).
+    - `head_memory`: Linear → Sigmoid (Size: `hidden_size` of Task-RNN, gates the carry state).
+    - `head_action`: Linear → Softplus (Size: 1, scales policy temperature).
+    - `head_reward`: Linear → Identity (Size: 1, scales reward signal).
 
-## 2. Integration with RL Agents
+## 3. Modulatory Injection Points
 
 ### A. Recurrent PPO: The Bi-Recurrent Actor-Critic
-In this setup, two GRUs run in parallel, coupled by the modulatory signal.
+Two GRU/LSTMs run in parallel, coupled by the modulatory signal.
 
 ```python
-# Iteration step t
-# 1. Modulator Update
-h_mod_next = Modulator_GRU(obs_t, h_mod_prev)
-z_percept, z_memory, z_action = Modulator_Heads(h_mod_next)
+# ── Modulator Path ──
+h_mod_new = Modulator_GRU(obs_t, h_mod_prev)        # Slow affective state
+z_perc, z_mem, z_act = Modulator_Heads(h_mod_new)
 
-# 2. Perceptual Gating (Early Stage)
-x_feat = Input_Projection(obs_t)
-x_mod = x_feat * (1.0 + z_percept) # Multiplicative gain
+# ── Task Path (mirrors ActorCriticRNN.__call__) ──
+# Layer 1: input_proj  (Linear: input_dim → hidden_size)
+x_proj = relu(input_proj(obs_t))
 
-# 3. Task Recurrence (Memory Modulation)
-# Modulating the hidden state directly (Slope/Stability modulation)
-# or modulating the GRU's Internal Gates
-h_task_next = Task_GRU(x_mod, h_task_prev * torch.sigmoid(z_memory))
+# ◄◄ INJECTION A: Perceptual Gate ►►
+x_proj = x_proj * sigmoid(z_perc)           # Gate input features
 
-# 4. Behavioral Modulation
-logits = Actor_Head(h_task_next)
-probs = Softmax(logits / torch.exp(z_action)) # Temperature modulation
+# Layer 2: rnn_cell  (GRUCell or LSTMCell: hidden → hidden)
+# ◄◄ INJECTION B: Memory Gate ►►
+h_gated = h_prev * sigmoid(z_mem)           # Gate carry state
+h_new, x_h = rnn_cell(h_gated, x_proj)
+
+# Layer 3: Actor/Critic Heads
+logits = actor_fc2(activate(actor_fc1(x_h)))
+# ◄◄ INJECTION C: Temperature ►►
+logits = logits / jnp.exp(z_act)            # Scale exploration
+
+value = critic_fc2(activate(critic_fc1(x_h)))
 ```
 
 ### B. DreamerV3: Modulating the World Model (RSSM)
-Dreamer provides deeper hooks for modulation because it explicitly models state uncertainty.
+The RSSM offers three structurally distinct injection sites.
 
-1.  **RSSM Deterministic Update**: The Modulator controls the "forgetting rate" of the $h_t$ state in the RSSM.
-    - $h_t = \text{GRU}(h_{t-1} \cdot \mathbf{z}_{mem}, \hat{s}_{t-1}, a_{t-1})$
-2.  **Stochastic Precision**: The Modulator scales the variance $\sigma$ of the posterior $q(s_t | s_{t-1}, a_{t-1}, x_t)$.
-    - High Arousal $\rightarrow$ Lower $\sigma$ $\rightarrow$ "High Precision" belief.
-3.  **Intrinsic Reward Interpretation**: The reward predictor head is gated by $z_{reward}$.
-    - $Reward_{eff} = z_{reward} \odot \text{RewardPredictor}(h_t, s_t)$
-    - This allows the modulator to effectively "turn up the volume" on nociceptive penalty when the agent's internal "Injury" is critical.
+```python
+# ── Modulator Path ──
+h_mod_new = Modulator_GRU(obs_t, h_mod_prev)
+z_perc, z_mem, z_act, z_rew = Modulator_Heads(h_mod_new)
 
-## 3. Training Loop & Synergy
-*   **Shared Objective**: Both the Task-RNN and the Modulator-RNN are trained to minimize the global RL loss (PPO loss or Dreamer's variational loss).
+# ── World Model Path (mirrors RSSM.step) ──
+# Layer 1: Encoder  (MLP: obs_dim → embed_dim)
+embed = Encoder(obs_t)
+
+# ◄◄ INJECTION A: Perceptual Gate ►►
+embed = embed * sigmoid(z_perc)              # Gate encoded features
+
+# Layer 2: img_in  (Linear: stoch*D + action → deter_dim)
+x = elu(img_in(concat(stoch_prev, action)))
+
+# Layer 3: LayerNormGRUCell  (deter_dim → deter_dim)
+# ◄◄ INJECTION B: Memory Gate ►►
+deter_gated = deter_prev * sigmoid(z_mem)    # Gate deterministic state
+deter_new = cell(x, deter_gated)
+
+# Layer 4: Posterior / Prior heads
+post_logits = obs_out(concat(deter_new, embed))
+# ... sample stoch from post_logits ...
+
+# Layer 5: Reward Head  (MLP: feat_dim → 255)
+feat = concat(deter_new, stoch)
+reward_pred = reward_head(feat)
+# ◄◄ INJECTION C: Reward Modulation ►►
+reward_pred = reward_pred * sigmoid(z_rew)   # Scale nociceptive interpretation
+```
+
+## 4. Training Loop & Synergy
+*   **Shared Objective**: Both the Task-RNN and the Modulator-RNN are trained end-to-end to minimize the global RL loss (PPO loss or Dreamer's variational loss).
 *   **Decoupled Learning**: To prevent the modulator from over-fitting to task features, we can apply a **lower learning rate** or a **timescale penalty** to the Modulator-RNN, forcing it to focus on slow-moving regulatory trends.
 *   **Ablation Hooks**:
-    - `modulation.perceptual_only`: Disable memory/action heads.
-    - `modulation.static_context`: Use a feedforward modulator as a baseline.
+    - `modulation.perceptual_only`: Disable memory/action/reward heads.
+    - `modulation.static_context`: Use a feedforward modulator (MLP) as a baseline.
+    - `modulation.type`: [None, 'Multiplicative', 'Additive', 'Affine'].
+    - `modulation.context`: ['Full', 'VisualOnly', 'InteroOnly'].

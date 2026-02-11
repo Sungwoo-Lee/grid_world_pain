@@ -20,6 +20,7 @@ environment:
       max_stamina: 500
       stamina_recovery_rate: 1.0
       hunt_stamina_threshold: 0.0
+      attack_delay: 2
 
 body:
   with_satiation: false

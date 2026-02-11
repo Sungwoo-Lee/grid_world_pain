@@ -4,8 +4,8 @@ visualization:
   font_family: "sans-serif"
   
   # Video settings
-  fps: 5
-  # fps: 2
+  fps: 2
+  # fps: 5
   # video_dpi: 100
   video_dpi: 300
   icon_scale: 1.0
