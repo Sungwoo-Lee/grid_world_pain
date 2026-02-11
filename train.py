@@ -151,6 +151,14 @@ def main():
         logger_config = Config.load_yaml(logger_config_path)
         config.merge(logger_config)
 
+    # Merge Visualization Defaults
+    vis_config_path = os.path.join(os.path.dirname(__file__), "configs", "visualization", "visualization.yaml")
+    if os.path.exists(vis_config_path):
+        if not args.quiet:
+            print(f"Loading visualization config from {vis_config_path}")
+        vis_defaults = Config.load_yaml(vis_config_path)
+        config.merge(vis_defaults)
+
     # Merge Base/User/Ablation Config (--config)
     if args.config:
         if not args.quiet:
@@ -1033,26 +1041,28 @@ def main():
                     if ckpt_data:
                         pbar.write(f"[CHECKPOINT] Saving model at episode {total_episodes_completed} (Iteration {iteration})...")
                         checkpointer.save(total_episodes_completed, args=ocp.args.StandardSave(ckpt_data))
+                        checkpointer.wait_until_finished()  # Ensure sync for stability
                         
                         # Trigger evaluation after checkpoint
                         vis_flag = config.get_mandatory('visualization.enabled')
                         eval_v_flag = config.get_mandatory('training.video_during_training')
-                    if vis_flag or eval_v_flag:
-                        if args.debug:
-                            print(f"  [DEBUG] Starting evaluation and video saving...", flush=True)
-                        try:
-                            from src.utils.evaluation_core import evaluate_jax_checkpoint
-                            eval_results = evaluate_jax_checkpoint(
-                                model=model if algorithm == "RecurrentPPO" else trainer.agent,
-                                params=params, config=config, num_episodes=config.get_mandatory('testing.evaluation_episodes'), seed=seed,
-                                results_dir=results_dir, checkpoint_pct=total_episodes_completed,
-                                render_video=True, wandb_enabled=wandb_enabled, debug=args.debug,
-                                quiet=True
-                            )
-                            if wandb_enabled:
-                                wandb.log({"Eval/MeanReward": eval_results["mean_reward"], "Eval/MeanLength": eval_results["mean_length"], "iteration": iteration, "timesteps": global_step})
-                        except Exception as e:
-                            print(f"Warning: Evaluation failed: {e}")
+
+                        if vis_flag or eval_v_flag:
+                            if args.debug:
+                                print(f"  [DEBUG] Starting evaluation and video saving...", flush=True)
+                            try:
+                                from src.utils.evaluation_core import evaluate_jax_checkpoint
+                                eval_results = evaluate_jax_checkpoint(
+                                    model=model if algorithm == "RecurrentPPO" else trainer.agent,
+                                    params=params, config=config, num_episodes=config.get_mandatory('testing.evaluation_episodes'), seed=seed,
+                                    results_dir=results_dir, checkpoint_pct=total_episodes_completed,
+                                    render_video=True, wandb_enabled=wandb_enabled, debug=args.debug,
+                                    quiet=True
+                                )
+                                if wandb_enabled:
+                                    wandb.log({"Eval/MeanReward": eval_results["mean_reward"], "Eval/MeanLength": eval_results["mean_length"], "iteration": iteration, "timesteps": global_step})
+                            except Exception as e:
+                                print(f"Warning: Evaluation failed: {e}")
 
         except KeyboardInterrupt:
             print("\nTraining interrupted by user.")

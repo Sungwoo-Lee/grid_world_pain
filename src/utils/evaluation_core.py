@@ -124,15 +124,26 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             loc_vec = obs_vec[ptr:loc_end]
             ptr = loc_end
             
-            intero_end = ptr + breakdown['Interoception']
-            # intero_vec = obs_vec[ptr:intero_end] # Not explicitly used currently
-            ptr = intero_end
+            sat_end = ptr + breakdown['Satiation']
+            sat_val = float(obs_vec[ptr]) if breakdown['Satiation'] > 0 else 0.0
+            ptr = sat_end
+            
+            nut_end = ptr + breakdown['Nutrition']
+            nut_val = float(obs_vec[ptr]) if breakdown['Nutrition'] > 0 else 0.0
+            ptr = nut_end
+            
+            inj_end = ptr + breakdown['Injury']
+            inj_val = float(obs_vec[ptr]) if breakdown['Injury'] > 0 else 0.0
+            ptr = inj_end
             
             viz = [
                 {'name': 'Olfactory', 'vector': olf_vec, 'type': 'spectrum'},
                 {'name': 'Extero Nociception', 'intensity': noc_val, 'color': '#c0392b', 'type': 'intensity'},
                 {'name': 'Collision', 'vector': coll_vec, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1, 'side_by_side': True},
-                {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'}
+                {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'},
+                {'name': 'Satiation', 'intensity': sat_val, 'color': '#27ae60', 'type': 'intensity'},
+                {'name': 'Nutrition', 'intensity': nut_val, 'color': '#f39c12', 'type': 'intensity'},
+                {'name': 'Injury (Modulated)', 'intensity': inj_val, 'color': '#8e44ad', 'type': 'intensity'},
             ]
             
             if 'Visual' in breakdown:
@@ -153,6 +164,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             if debug: print(f"    [Render] Initial frame...", end="", flush=True)
             all_frames.append(render_jax_state(
                 state, params, episode=ep+1, step=0, 
+                train_episode=checkpoint_pct,
                 sensory_data=get_sensory_viz(obs),
                 icon_config=icon_config
             ))
@@ -206,6 +218,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 # PyTorch baseline shows the state result of the action.
                 all_frames.append(render_jax_state(
                     state, params, episode=ep+1, step=step_count, 
+                    train_episode=checkpoint_pct,
                     action=action_idx, sensory_data=get_sensory_viz(next_obs),
                     icon_config=icon_config
                 ))
@@ -278,7 +291,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         # Upload to WandB if enabled
         if wandb_enabled and WANDB_AVAILABLE and wandb.run:
             from src.utils.wandb_utils import upload_video
-            upload_video(video_path, episode=checkpoint_pct, caption=f"Eval Video {checkpoint_pct}", quiet=True)
+            upload_video(video_path, episode=checkpoint_pct, step=checkpoint_pct, caption=f"Episode {checkpoint_pct}", quiet=True)
     
     # Statistics
     mean_reward = float(np.mean(episode_rewards))

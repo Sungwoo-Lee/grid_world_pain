@@ -92,7 +92,7 @@ def _load_icons(icon_config=None):
 # Global cache for figure, axes, and canvas to avoid recreating them every frame
 _FIG_CACHE = None
 
-def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale=1.0, action=None, sensory_data=None, icon_config=None):
+def render_jax_state(state, params, episode=None, step=None, train_episode=None, dpi=100, icon_scale=1.0, action=None, sensory_data=None, icon_config=None):
     """
     Render a JAX EnvState to an RGB numpy array.
     
@@ -332,10 +332,18 @@ def render_jax_state(state, params, episode=None, step=None, dpi=100, icon_scale
     ax_stats.plot([0.2, 0.8], [y_cursor - 0.05, y_cursor - 0.05], color='#ADB5BD', transform=ax_stats.transAxes, linewidth=1)
     
     y_cursor -= 0.15
-    ep_str = f"EPISODE: {episode}" if episode is not None else "EP: --"
-    step_str = f"STEP:    {step}" if step is not None else "STEP: --"
-    ax_stats.text(0.1, y_cursor, ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
-    ax_stats.text(0.1, y_cursor - 0.08, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+    if train_episode is not None:
+        # User requested to represent training episode instead of steps
+        main_ep_str = f"TRAIN EPISODE: {train_episode}"
+        sub_ep_str = f"EVAL EPISODE:  {episode}" if episode is not None else ""
+        ax_stats.text(0.1, y_cursor, main_ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        if sub_ep_str:
+            ax_stats.text(0.1, y_cursor - 0.08, sub_ep_str, color='#868E96', fontsize=8, transform=ax_stats.transAxes, fontfamily='monospace')
+    else:
+        ep_str = f"EPISODE: {episode}" if episode is not None else "EP: --"
+        step_str = f"STEP:    {step}" if step is not None else "STEP: --"
+        ax_stats.text(0.1, y_cursor, ep_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
+        ax_stats.text(0.1, y_cursor - 0.08, step_str, color='#495057', fontsize=9, transform=ax_stats.transAxes, fontfamily='monospace', weight='bold')
     
     # Satiation bar
     y_cursor -= 0.12 # Reduced gap

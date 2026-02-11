@@ -340,6 +340,78 @@ With two coupled RNNs (Modulator and Task), we must decide if the modulation is:
 1.  **Multiplicative (Gate)**: $h_{task} = \sigma(z_{mod}) \odot f(x)$. (Stable, prevents drift).
 2.  **Additive (Bias)**: $h_{task} = f(x) + z_{mod}$. (Bio-inspired "Landscape Shift", more expressive but prone to instability).
 
+## 5. Training Stability Analysis for the Bi-Recurrent Architecture
+
+The bi-recurrent design (Modulator-RNN + Task-RNN) introduces four concrete training stability risks that must be addressed before implementation.
+
+### 5.1 🔴 Double-Gating the GRU Carry State (Critical)
+The proposed Memory Injection externally gates the carry state before the GRU processes it:
+
+```python
+h_gated = h_prev * sigmoid(z_mem)           # External gate
+h_new, x_h = rnn_cell(h_gated, x_proj)      # GRU's own update/reset gates
+```
+
+The GRU already has an internal update gate $u_t$ that controls memory retention:
+$$h_t = (1 - u_t) \cdot h_{t-1} + u_t \cdot \tilde{h}_t$$
+
+Adding an external multiplicative gate compounds the **vanishing gradient** problem. During BPTT, the gradient for timestep $t-k$ passes through:
+$$\frac{\partial \mathcal{L}}{\partial h_{t-k}} \propto \prod_{j=0}^{k-1} \underbrace{(1 - u_{t-j})}_{\text{GRU gate}} \cdot \underbrace{\sigma(z_{mem,t-j})}_{\text{Modulator gate}}$$
+
+This is a product of two numbers in $(0, 1)$ at every step — directly undermining the GRU's gradient highway.
+
+**Recommendations** (choose one):
+-   **(a) Internal Gate-Bias Injection** (Preferred, consistent with Ben-Iwhiwhu): Inject $z_{mem}$ as an additive bias to the GRU's reset or update gate *before* the sigmoid:
+    $$u_t = \sigma(W_u x + U_u h_{t-1} + z_{mem})$$
+    This shifts the gate's operating point without adding a second multiplicative bottleneck.
+-   **(b) Switch to LSTM**: The LSTM separates cell state $c_t$ (long-term memory) from hidden output $h_t$. Externally gating $c_t$ is architecturally cleaner and analogous to modulating the forget gate, which has direct biological parallels with neuromodulatory memory persistence control.
+
+### 5.2 🟠 Gate Initialization at 0.5 (Unfair Baseline Comparison)
+All gates use `sigmoid(z)`. At initialization, $z \approx 0 \Rightarrow \sigma(z) = 0.5$.
+
+**Consequence**: Every feature starts at 50% strength and every carry state at 50% retention. The baseline (non-modulated) network has no such attenuation, making comparison unfair and causing a slow training start as the network must first learn to "open" all gates.
+
+**Recommendation**: Initialize gate head biases so that $\sigma(z) \approx 1.0$ (pass-through at start):
+```python
+# sigmoid(2.0) ≈ 0.88, sigmoid(3.0) ≈ 0.95
+head_percept = Linear(mod_hidden, output_dim, bias_init=initializers.constant(2.0))
+head_memory  = Linear(mod_hidden, output_dim, bias_init=initializers.constant(3.0))
+```
+The modulator starts as a **no-op** and gradually learns to deviate. This is consistent with residual gating best practices and the "Leaky Gate" concept from Section 2.
+
+### 5.3 🟠 Unbounded Temperature Modulation (Policy Collapse Risk)
+The current temperature injection is:
+```python
+logits = logits / jnp.exp(z_act)
+```
+-   If `z_act` → $+5$: temperature $= e^5 \approx 148$ → uniform random → no learning signal.
+-   If `z_act` → $-5$: temperature $= e^{-5} \approx 0.007$ → deterministic → zero entropy → policy collapse.
+
+PPO's entropy bonus provides some protection, but early in training `z_act` has no reason to stay bounded.
+
+**Recommendations** (choose one):
+-   **(a) Hard Clip**: `temp = jnp.clip(jnp.exp(z_act), 0.1, 10.0)`
+-   **(b) Bounded Softplus**: `temp = 0.5 + softplus(z_act)` (always $\geq 0.5$)
+-   **(c) Warmup Schedule**: Detach $z_{act}$ from the task loss for the first $N$ episodes, allowing the rest of the network to stabilize first.
+
+### 5.4 🟡 Credit Assignment for Slow Modulator Under Truncated BPTT
+In typical Recurrent PPO, rollouts are truncated to $T = 128$–$256$ steps. If the modulator is truly "slow" (high inertia GRU), the relevant credit assignment horizon might be $500+$ steps (e.g., "I was injured 200 steps ago, so I should still be cautious").
+
+BPTT only backpropagates through $T$ steps. If the modulator's recurrent dynamics are too slow, gradients from early timesteps will be vanishingly small, and it will effectively learn nothing.
+
+**Recommendations**:
+-   **(a) Match Timescale to Truncation**: Ensure the modulator's effective temporal window fits within the truncation length.
+-   **(b) Auxiliary Loss**: Add a self-supervised objective for the modulator that doesn't depend on long BPTT chains — e.g., predicting future interoceptive state from the current modulator hidden state. This is biologically plausible as interoceptive prediction.
+
+### Summary of Risks
+
+| Issue | Severity | Fix Effort | Recommendation |
+|---|---|---|---|
+| Double-gating GRU carry | 🔴 High | Medium | Inject as gate bias (5.1a), or switch to LSTM (5.1b) |
+| Gate init at 0.5 | 🟠 Medium | Easy | Init biases to +2/+3 for pass-through (5.2) |
+| Unbounded temperature | 🟠 Medium | Easy | Clip or softplus bound (5.3a/b) |
+| Credit assignment | 🟡 Low-Med | Design | Match timescale to truncation (5.4a), or auxiliary loss (5.4b) |
+
 ---
 
 # Implementation Details: Prototype Design for Grid-World RL
@@ -441,10 +513,16 @@ A standalone recurrent module designed for high "affective inertia."
 
 *   **Input ($c_t$)**: Full concatenated observation vector (same as task network input).
 *   **Core**: 1-layer GRU (Flax `nnx.GRUCell`) with configurable hidden units (default: 64).
+*   **Spatial Grouping** (AlKilany & Goodman, 2025):
+    - Configurable grouping size $G$ (set via `modulation.grouping_size` in config).
+    - Each head outputs $\lceil D_{target} / G \rceil$ values instead of $D_{target}$.
+    - Each output is **broadcast** to $G$ consecutive units in the target layer.
+    - Uses **Additive Modulation** to preserve heterogeneity: $z_{eff,i} = z_{baseline,i} + m_{\lfloor i/G \rfloor}$, where $z_{baseline,i}$ is a per-unit learned bias.
+    - $G=1$: Fine-grained (per-neuron). $G=D_{target}$: Global (single scalar). Default: $G=1$.
 *   **Heads (Branched)**:
-    - `head_percept`: Linear → Sigmoid (Size: `hidden_size` of Task network, gates the input projection output).
-    - `head_memory`: Linear → Sigmoid (Size: `hidden_size` of Task-RNN, gates the carry state).
-    - `head_action`: Linear → Softplus (Size: 1, scales policy temperature).
+    - `head_percept`: Linear → Sigmoid (Output: $\lceil hidden\_size / G \rceil$, broadcast to gate input projection). **Bias init: +2.0** (§5.2: pass-through at start, $\sigma(2) \approx 0.88$).
+    - `head_memory`: Linear (Output: $\lceil hidden\_size / G \rceil$, broadcast as additive bias to GRU update gate). **No sigmoid** — injected pre-activation into the GRU's own gate (§5.1a). **Bias init: 0.0** (neutral).
+    - `head_action`: Linear → Softplus (Size: 1, scales policy temperature). Output **clipped to [0.1, 10.0]** (§5.3a).
     - `head_reward`: Linear → Identity (Size: 1, scales reward signal).
 
 ## 3. Modulatory Injection Points
@@ -455,24 +533,35 @@ Two GRU/LSTMs run in parallel, coupled by the modulatory signal.
 ```python
 # ── Modulator Path ──
 h_mod_new = Modulator_GRU(obs_t, h_mod_prev)        # Slow affective state
-z_perc, z_mem, z_act = Modulator_Heads(h_mod_new)
+z_perc_raw, z_mem_raw, z_act_raw = Modulator_Heads(h_mod_new)
+
+# ── Spatial Grouping (broadcast from ceil(H/G) → H) ──
+z_perc = jnp.repeat(z_perc_raw, G)[:hidden_size]    # Broadcast groups
+z_mem  = jnp.repeat(z_mem_raw,  G)[:hidden_size]
+z_perc = z_perc_baseline + z_perc                    # Additive: preserve heterogeneity
+z_mem  = z_mem_baseline  + z_mem
+
+# ── Temperature Bounding (§5.3a) ──
+temp = jnp.clip(jnp.exp(z_act_raw), 0.1, 10.0)      # Prevent collapse
 
 # ── Task Path (mirrors ActorCriticRNN.__call__) ──
 # Layer 1: input_proj  (Linear: input_dim → hidden_size)
 x_proj = relu(input_proj(obs_t))
 
-# ◄◄ INJECTION A: Perceptual Gate ►►
+# ◄◄ INJECTION A: Perceptual Gate (§5.2: bias init +2.0 → pass-through) ►►
 x_proj = x_proj * sigmoid(z_perc)           # Gate input features
 
 # Layer 2: rnn_cell  (GRUCell or LSTMCell: hidden → hidden)
-# ◄◄ INJECTION B: Memory Gate ►►
-h_gated = h_prev * sigmoid(z_mem)           # Gate carry state
-h_new, x_h = rnn_cell(h_gated, x_proj)
+# ◄◄ INJECTION B: Internal Gate-Bias (§5.1a) ►►
+# z_mem is injected INSIDE the GRU as additive bias to the update gate:
+#   u_t = sigmoid(W_u @ x + U_u @ h_prev + z_mem)  ← shifted operating point
+# This preserves the GRU's gradient highway (no double-gating).
+h_new, x_h = modulated_rnn_cell(h_prev, x_proj, gate_bias=z_mem)
 
 # Layer 3: Actor/Critic Heads
 logits = actor_fc2(activate(actor_fc1(x_h)))
-# ◄◄ INJECTION C: Temperature ►►
-logits = logits / jnp.exp(z_act)            # Scale exploration
+# ◄◄ INJECTION C: Bounded Temperature (§5.3a) ►►
+logits = logits / temp                      # Scale exploration (clipped)
 
 value = critic_fc2(activate(critic_fc1(x_h)))
 ```
@@ -483,22 +572,30 @@ The RSSM offers three structurally distinct injection sites.
 ```python
 # ── Modulator Path ──
 h_mod_new = Modulator_GRU(obs_t, h_mod_prev)
-z_perc, z_mem, z_act, z_rew = Modulator_Heads(h_mod_new)
+z_perc_raw, z_mem_raw, z_act, z_rew = Modulator_Heads(h_mod_new)
+
+# ── Spatial Grouping (broadcast from ceil(D/G) → D) ──
+z_perc = jnp.repeat(z_perc_raw, G)[:embed_dim]      # Broadcast groups
+z_mem  = jnp.repeat(z_mem_raw,  G)[:deter_dim]
+z_perc = z_perc_baseline + z_perc                    # Additive: preserve heterogeneity
+z_mem  = z_mem_baseline  + z_mem
 
 # ── World Model Path (mirrors RSSM.step) ──
 # Layer 1: Encoder  (MLP: obs_dim → embed_dim)
 embed = Encoder(obs_t)
 
-# ◄◄ INJECTION A: Perceptual Gate ►►
+# ◄◄ INJECTION A: Perceptual Gate (§5.2: bias init +2.0 → pass-through) ►►
 embed = embed * sigmoid(z_perc)              # Gate encoded features
 
 # Layer 2: img_in  (Linear: stoch*D + action → deter_dim)
 x = elu(img_in(concat(stoch_prev, action)))
 
 # Layer 3: LayerNormGRUCell  (deter_dim → deter_dim)
-# ◄◄ INJECTION B: Memory Gate ►►
-deter_gated = deter_prev * sigmoid(z_mem)    # Gate deterministic state
-deter_new = cell(x, deter_gated)
+# ◄◄ INJECTION B: Internal Gate-Bias (§5.1a) ►►
+# z_mem is injected INSIDE the LayerNormGRUCell as additive bias to the update gate:
+#   u_t = sigmoid(LN(W_u @ x) + LN(U_u @ deter_prev) + z_mem)
+# This preserves the GRU's gradient highway (no double-gating).
+deter_new = modulated_cell(x, deter_prev, gate_bias=z_mem)
 
 # Layer 4: Posterior / Prior heads
 post_logits = obs_out(concat(deter_new, embed))
@@ -514,8 +611,17 @@ reward_pred = reward_pred * sigmoid(z_rew)   # Scale nociceptive interpretation
 ## 4. Training Loop & Synergy
 *   **Shared Objective**: Both the Task-RNN and the Modulator-RNN are trained end-to-end to minimize the global RL loss (PPO loss or Dreamer's variational loss).
 *   **Decoupled Learning**: To prevent the modulator from over-fitting to task features, we can apply a **lower learning rate** or a **timescale penalty** to the Modulator-RNN, forcing it to focus on slow-moving regulatory trends.
+*   **Timescale Matching** (§5.4a): The modulator's effective temporal window must fit within the BPTT truncation length $T$. If $T=128$, the modulator should not need >128 steps to express its useful patterns. A modulator GRU with hidden size 64 and standard initialization naturally has an effective timescale of ~50–100 steps, which is suitable.
+*   **Auxiliary Interoceptive Prediction Loss** (§5.4b, optional): To improve credit assignment without relying on long BPTT chains, add a self-supervised loss:
+    $$\mathcal{L}_{aux} = \| \hat{s}_{t+k} - s_{t+k} \|^2$$
+    Where $\hat{s}_{t+k} = f_{pred}(h_{mod,t})$ predicts the interoceptive state $k$ steps ahead from the current modulator hidden state. This is biologically plausible as interoceptive prediction and provides a direct gradient signal to the modulator without requiring task-reward credit assignment.
 *   **Ablation Hooks**:
     - `modulation.perceptual_only`: Disable memory/action/reward heads.
     - `modulation.static_context`: Use a feedforward modulator (MLP) as a baseline.
     - `modulation.type`: [None, 'Multiplicative', 'Additive', 'Affine'].
     - `modulation.context`: ['Full', 'VisualOnly', 'InteroOnly'].
+    - `modulation.grouping_size`: Integer $G$ controlling spatial grouping granularity (1 = per-neuron, $N$ = global scalar). Experiment sweep: [1, 8, 16, 32, hidden_size].
+    - `modulation.temp_clip`: [min, max] bounds for temperature modulation (default: [0.1, 10.0]).
+    - `modulation.aux_loss`: Enable/disable auxiliary interoceptive prediction loss.
+    - `modulation.aux_loss_weight`: Weight $\lambda_{aux}$ for the auxiliary loss term (default: 0.1).
+    - `modulation.aux_loss_horizon`: Prediction horizon $k$ for future interoceptive state (default: 10).
