@@ -274,6 +274,63 @@ def draw_boresight_diamond(ax, x, y, size, vec, r, num_features, true_vec=None, 
     # Center markers removed to reduce visual clutter as requested
     pass
 
+def draw_categorical_visual(ax, x, y, w, h, obs_vec, r, num_features, true_vec=None, transform=None):
+    """Draws a categorical bar chart for visual observations (V7).
+    y: bottom of the pod frame
+    h: total height of the pod frame
+    """
+    obs_grid = np.array(obs_vec).reshape(-1, num_features)
+    true_grid = np.array(true_vec).reshape(-1, num_features) if true_vec is not None else obs_grid
+    num_cells = obs_grid.shape[0]
+    
+    # 8-channel names and colors
+    feature_labels = ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'RCK', 'NEU']
+    feature_colors = [
+        '#A1DFA1', '#F2D7D5', '#FFFFFF', COLORS['food'], COLORS['danger'], 
+        COLORS['predator'], COLORS['rock'], COLORS['neutral']
+    ]
+    
+    # Cell labels for spatial context (Center, Up, Right, Down, Left)
+    cell_labels = ['C', 'U', 'R', 'D', 'L'] if num_cells == 5 else [f'C{i}' for i in range(num_cells)]
+    if num_cells <= 1: cell_labels = ['']
+
+    # Internal Margins (Percent of pod height h)
+    margin_bottom = 0.04 
+    margin_top = 0.02
+    
+    bar_y = y + margin_bottom
+    bar_h = h - (margin_bottom + margin_top)
+
+    # Calculate horizontal distribution
+    cell_gap_ratio = 1.15
+    unit_w = w / (num_cells * num_features + max(num_cells - 1, 0) * cell_gap_ratio)
+    
+    for c_idx in range(num_cells):
+        start_x = x + c_idx * (num_features + cell_gap_ratio) * unit_w
+        
+        # Group Label for Spatial Orientation
+        if num_cells > 1:
+            ax.text(start_x + (num_features * unit_w)/2, bar_y + bar_h + 0.002, cell_labels[c_idx], 
+                    color=COLORS['text_label'], fontsize=5.5, fontweight='bold', ha='center', transform=transform)
+            
+        for f_idx in range(num_features):
+            bx = start_x + f_idx * unit_w
+            bw = unit_w * 0.8
+            color = feature_colors[f_idx % len(feature_colors)]
+            
+            # Ground Truth (Ghosted)
+            true_val = float(true_grid[c_idx, f_idx])
+            ax.add_patch(plt.Rectangle((bx, bar_y), bw, bar_h * true_val, facecolor=color, alpha=0.15, transform=transform, zorder=1))
+            
+            # Perception (Solid)
+            obs_val = float(obs_grid[c_idx, f_idx])
+            ax.add_patch(plt.Rectangle((bx + bw*0.1, bar_y), bw*0.8, bar_h * obs_val, facecolor=color, alpha=0.9, transform=transform, zorder=2))
+            
+            # Categorical Labels inside frame
+            if (num_cells == 1 or c_idx == 0) and num_features >= 4:
+                ax.text(bx + bw*1.1/2, y + 0.002, feature_labels[f_idx], color=COLORS['text_label'], 
+                        fontsize=4.0, ha='center', va='bottom', rotation=90, transform=transform)
+
 def render_jax_state(state, params, episode=None, step=None, train_episode=None, dpi=100, icon_scale=1.0, action=None, sensory_data=None, icon_config=None):
     """
     Render a JAX EnvState to an RGB numpy array (Industrial White V2).
@@ -297,8 +354,8 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
     # Force creation to ensure V2 aesthetics
     plt.close('all')
     
-    # Figure setup: Wide layout for presentation
-    fig = plt.figure(figsize=(14, 8), dpi=dpi)
+    # Figure setup: Wide layout for presentation (Now 10in tall for V7)
+    fig = plt.figure(figsize=(14, 10), dpi=dpi)
     fig.patch.set_facecolor(COLORS['bg'])
     
     # GridSpec: [Left Telemetry] [Ultimate Arena] [Right Telemetry]
@@ -495,20 +552,27 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
 
     # --- 3. Right Panel: Sensory Telemetry (Observations) ---
     y_cursor = 0.95
-    ax_right.text(0.05, y_cursor, "EXTEROCEPTION", color=COLORS['text_main'], fontsize=10, fontweight='black', transform=ax_right.transAxes)
-    y_cursor -= 0.08
-    pod_h = 0.16
-    pod_spacing = 0.18
+    ax_right.text(0.05, y_cursor, "EXTEROCEPTION", color=COLORS['text_main'], fontsize=11, fontweight='black', transform=ax_right.transAxes)
+    y_cursor -= 0.05
+    pod_h_default = 0.11
     
     known_sensors = ['Olfactory', 'Extero Nociception', 'Collision', 'Visual', 'LOC']
     
     for s_name in known_sensors:
         s_data = sensor_map.get(s_name)
         offline = s_data is None
-        draw_pod_frame(ax_right, 0.05, y_cursor - pod_h, 0.9, pod_h, s_name, offline=offline, transform=ax_right.transAxes)
+        
+        # Dynamic pod height: Visual/Diamond pods get more room for bars + labels
+        if not offline and s_data.get('type') in ('diamond', 'visual_grid'):
+            pod_h = 0.20
+        else:
+            pod_h = pod_h_default
+        
+        y_frame_bottom = y_cursor - pod_h
+        draw_pod_frame(ax_right, 0.05, y_frame_bottom, 0.9, pod_h, s_name, offline=offline, transform=ax_right.transAxes)
         
         if not offline:
-            px, py, pw, ph = 0.15, y_cursor - pod_h + 0.04, 0.7, 0.03
+            px, py, pw, ph = 0.15, y_frame_bottom + 0.02, 0.7, 0.07
             if s_data['type'] == 'intensity':
                 # Dual Capsule Bar for Intensity Sensors (e.g. Nociception)
                 true_v = float(s_data.get('true_intensity', s_data['intensity']))
@@ -528,20 +592,28 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
                     # Show Observed (Solid)
                     ax_right.add_patch(plt.Rectangle((vx, py), sw*0.8, ph*obs_vec[i], color=COLORS['action'], alpha=0.9, transform=ax_right.transAxes))
             elif s_data['type'] == 'diamond' or s_data['type'] == 'visual_grid':
-                # V3 Spatial Aware Boresight Upgrade (Dual View)
+                # V7 Categorical Spectrum Upgrade (Dual View Distribution)
                 r = int(s_data.get('range', 1))
                 num_features = int(s_data.get('num_features', 1))
                 obs_v = np.array(s_data['vector'])
                 true_v = np.array(s_data.get('true_vector', obs_v))
                 
-                origin_x, origin_y = 0.5, y_cursor - pod_h/2
-                cell_size = 0.12 / (2*r + 1)
+                # Distribution Plot Geometry
+                px, py, pw, ph = 0.1, y_cursor - pod_h + 0.05, 0.8, 0.08
                 
-                draw_boresight_diamond(ax_right, origin_x, origin_y, cell_size, obs_v, r, num_features, 
-                                       true_vec=true_v, icons=icons, transform=ax_right.transAxes)
+                # If range > 1, we fallback to schematic diamond (too many bars)
+                # But for research standard r=0,1 we use the categorical spectrum
+                if r <= 1:
+                    draw_categorical_visual(ax_right, 0.08, y_frame_bottom, 0.84, pod_h, obs_v, r, num_features, 
+                                           true_vec=true_v, transform=ax_right.transAxes)
+                else:
+                    origin_x, origin_y = 0.5, y_cursor - pod_h/2
+                    cell_size = 0.12 / (2*r + 1)
+                    draw_boresight_diamond(ax_right, origin_x, origin_y, cell_size, obs_v, r, num_features, 
+                                           true_vec=true_v, icons=icons, transform=ax_right.transAxes)
                 
                 if not np.any(obs_v > 0.1) and not np.any(true_v > 0.1):
-                    ax_right.text(origin_x, origin_y + (r+1)*cell_size, "NO SIGNALS", color=COLORS['text_offline'], 
+                    ax_right.text(0.5, y_cursor - pod_h/2, "NO SIGNALS", color=COLORS['text_offline'], 
                                   fontsize=6, ha='center', transform=ax_right.transAxes)
             elif s_data['type'] == 'text':
                 # Text-based display (e.g. coordinates or state labels)
@@ -549,20 +621,21 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
                               color=COLORS['text_main'], fontsize=10, fontweight='bold', 
                               ha='center', va='center', transform=ax_right.transAxes, fontfamily='monospace')
 
-        y_cursor -= pod_spacing
-        if y_cursor < 0.2: break # Save space for Action Pod at bottom
+        y_cursor -= (pod_h + 0.03)  # 0.03 gap for next pod title
+        if y_cursor < 0.20: break # Save space for Action Pod
 
-    # --- 4. Action Pod (V5 Sidebar Integration) ---
+    # --- 4. Action Pod (Fixed Position bottom floor for V7.3) ---
+    action_y = 0.03
     if action is not None:
-        draw_pod_frame(ax_right, 0.05, 0.05, 0.9, 0.12, "Current Action", transform=ax_right.transAxes)
+        draw_pod_frame(ax_right, 0.05, action_y, 0.9, 0.13, "Current Action", transform=ax_right.transAxes)
         action_names = {0: "UP", 1: "RIGHT", 2: "DOWN", 3: "LEFT", 4: "REST", 5: "EAT"}
         arrows = {0: "↑", 1: "→", 2: "↓", 3: "←", 4: "⊝", 5: "✙"}
         act_name, arrow = action_names.get(int(action), f"{action}"), arrows.get(int(action), "•")
         
-        ax_right.text(0.5, 0.13, act_name, color=COLORS['text_main'], 
+        ax_right.text(0.5, action_y + 0.085, act_name, color=COLORS['text_main'], 
                       fontsize=10, fontweight='black', ha='center', transform=ax_right.transAxes)
-        ax_right.text(0.5, 0.08, arrow, color=COLORS['action'], 
-                      fontsize=16, fontweight='black', ha='center', transform=ax_right.transAxes)
+        ax_right.text(0.5, action_y + 0.025, arrow, color=COLORS['action'], 
+                      fontsize=18, fontweight='black', ha='center', transform=ax_right.transAxes)
 
     canvas.draw()
     s, (w, h) = canvas.print_to_buffer()

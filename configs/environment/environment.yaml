@@ -5,6 +5,10 @@ environment:
   width: 20
   start_pos: [1, 1]
   max_steps: 500
+  rest_action_enabled: true
+  eat_action_enabled: true
+  random_start_pos: true
+
   resources:
     # --- GRASS QUADRANTS (High Risk, High Reward) ---
     - name: "Food Grass TL"
@@ -126,9 +130,6 @@ environment:
       damage: 0.1
       nociception_intensity: 0.3
 
-  rest_action_enabled: true
-  eat_action_enabled: true
-  random_start_pos: false
 
 body:
   max_satiation: 100
