@@ -11,6 +11,7 @@ class Transition(NamedTuple):
     done: jnp.ndarray
     log_prob: jnp.ndarray
     value: jnp.ndarray
+    mod_info: Any  # Neuromodulator outputs (z_percept, z_memory, temperature)
     # h_state can be an array (GRU) or a tuple of arrays (LSTM)
     # We store it as a PyTree
 
@@ -78,7 +79,7 @@ def ppo_loss_fn(model, batch, clip_eps, ent_coef, vf_coef):
     
     def scan_fn(h, x):
         obs, action = x
-        logits, value, h_new = model(obs, h)
+        logits, value, h_new, _ = model(obs, h)
         
         log_probs = jax.nn.log_softmax(logits)
         new_log_prob = log_probs[action]
@@ -125,7 +126,7 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
         from .recurrent_ppo_network import get_action_and_value_nnx
         
         # Generic vmap over batch — h_axes handles any PyTree structure
-        action, log_prob, value, h_new = jax.vmap(
+        action, log_prob, value, h_new, mod_info = jax.vmap(
             get_action_and_value_nnx, in_axes=(None, 0, h_axes, 0)
         )(model, obs, h_state, act_keys)
         
@@ -151,7 +152,7 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
         
         trans = Transition(
             obs=obs, action=action, reward=reward, done=done,
-            log_prob=log_prob, value=value
+            log_prob=log_prob, value=value, mod_info=mod_info
         )
         
         return (final_state, final_h, key), (trans, h_state)
@@ -175,9 +176,26 @@ def update_step(model, optimizer, batch, config):
     
     (loss, aux), grads = nnx.value_and_grad(batch_loss_wrapped, has_aux=True)(model)
     
+    # 4. Calculate Gradient Norms
+    grad_norm = optax.global_norm(grads)
+    
+    # Try to extract modulator-specific gradient norm if visible in the State
+    mod_grad_norm = 0.0
+    try:
+        # NNX stats are nested; we look for the modulator key
+        if hasattr(model, 'modulation_enabled') and model.modulation_enabled:
+            # Note: The structure of 'grads' matches the structure of 'model'
+            # We can use jax.tree_util to find sub-trees, but a simple check often works for Param states
+            if 'modulator' in grads:
+                mod_grad_norm = optax.global_norm(grads['modulator'])
+    except:
+        pass
+    
     optimizer.update(model, grads)
     
-    return loss, aux
+    # Combine aux info with grad norms
+    ppo_loss, v_loss, ent_loss = aux
+    return loss, (ppo_loss, v_loss, ent_loss, grad_norm, mod_grad_norm)
 
 def train_iteration(model, optimizer, env_params, env_state, h_state, key, config):
     """Performs one full PPO iteration (collect + N epochs) with NNX."""
@@ -237,4 +255,4 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
     # 4. Count completed episodes
     num_completed = jnp.sum(trajectories.done)
     
-    return next_env_state, next_h_state, key, epoch_losses, num_completed, trajectories.reward, trajectories.done
+    return next_env_state, next_h_state, key, epoch_losses, num_completed, trajectories

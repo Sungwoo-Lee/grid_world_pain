@@ -187,10 +187,10 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 obs_batch = obs[None, :]  # Add batch dim
                 
                 if h_state is not None:
-                    action, log_prob, value, h_new = get_action_and_value_nnx(model, obs_batch, h_state, eval_mode=True)
+                    action, log_prob, value, h_new, _ = get_action_and_value_nnx(model, obs_batch, h_state, eval_mode=True)
                     h_state = h_new
                 else:
-                    action, _, _, _ = get_action_and_value_nnx(model, obs_batch, None, eval_mode=True)
+                    action, _, _, _, _ = get_action_and_value_nnx(model, obs_batch, None, eval_mode=True)
                 
                 action_idx = int(action)
             else:

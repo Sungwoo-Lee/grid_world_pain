@@ -1,0 +1,34 @@
+agent:
+  algorithm: "RecurrentPPO"
+  lr_actor: 0.0005
+  lr_critic: 0.0001
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  update_timestep: 2000
+  sequence_length: 128     # Steps per rollout/sequence (shared by PyTorch & JAX)
+  frame_stack: 1
+  fc_layers: [128,128]
+  recurrent_layers: [64]
+  actor_fc_layers: [128,128]
+  critic_fc_layers: [128,128]
+  hidden_size: 64
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+
+  # Parity Options
+  # GRU is required for gate-bias injection (§5.1a) — LSTM gate-bias not yet supported
+  rnn_type: "GRU"          # GRU required for full modulation support
+  activation: "tanh"       # "tanh" (PyTorch parity) or "relu" (original JAX)
+  return_mode: "MC"        # "MC" (PyTorch parity) or "GAE" (original JAX)
+
+  # Neuromodulation (§5 in NEUROMODULATION_ALGORITHM.md)
+  # Bi-Recurrent Modulator: NeuromodulatorRNN + ModulatedGRUCell
+  modulation:
+    type: "Multiplicative"       # Modulation style (§4: ablation hook)
+    mod_hidden_size: 64          # GRU hidden units for modulator
+    grouping_size: 1             # Spatial grouping G (1 = per-neuron, §12)
+    percept_bias_init: 2.0       # Perceptual gate bias init (§5.2: pass-through)
+    memory_bias_init: 0.0        # Memory gate-bias init (§5.1a: neutral)
+    temp_clip: [0.1, 10.0]       # Temperature bounds (§5.3a: prevent collapse)

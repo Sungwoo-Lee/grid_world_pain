@@ -587,9 +587,13 @@ def main():
                 
                 if algorithm == "RecurrentPPO":
                     if args.debug: print(f"  [DEBUG] Collecting {num_steps * num_envs} steps of experience...", end="", flush=True)
-                    env_state, h_state, key, losses, num_completed, rollout_rew, rollout_done = jit_train(
+                    env_state, h_state, key, losses, num_completed, trajectories = jit_train(
                         model, optimizer, params, env_state, h_state, key, ppo_config
                     )
+                    
+                    rollout_rew = trajectories.reward
+                    rollout_done = trajectories.done
+                    mod_info = trajectories.mod_info
                     if args.debug: print(f" Done.", flush=True)
                     
                     steps_this_iter = num_steps * num_envs
@@ -640,17 +644,38 @@ def main():
                     avg_policy_loss = jnp.mean(jnp.array([l[1][0] for l in losses]))
                     avg_value_loss = jnp.mean(jnp.array([l[1][1] for l in losses]))
                     avg_ent_loss = jnp.mean(jnp.array([l[1][2] for l in losses]))
+                    avg_grad_norm = jnp.mean(jnp.array([l[1][3] for l in losses]))
+                    avg_mod_grad_norm = jnp.mean(jnp.array([l[1][4] for l in losses]))
                     total_loss = jnp.mean(jnp.array([l[0] for l in losses]))
                     
                     if wandb_enabled:
-                        wandb.log({
+                        wandb_logs = {
                             "loss/total": total_loss,
                             "loss/policy": avg_policy_loss,
                             "loss/value": avg_value_loss,
                             "loss/entropy": avg_ent_loss,
+                            "loss/grad_norm": avg_grad_norm,
+                        }
+
+                        # Add Modulator metrics if enabled
+                        if mod_info is not None:
+                            # mod_info is a stacked ModulatorOutput (num_steps, num_envs, ...)
+                            wandb_logs.update({
+                                "modulator/grad_norm": avg_mod_grad_norm,
+                                "modulator/z_percept_mean": jnp.mean(mod_info.z_percept),
+                                "modulator/z_percept_std": jnp.std(mod_info.z_percept),
+                                "modulator/z_memory_mean": jnp.mean(mod_info.z_memory),
+                                "modulator/z_memory_std": jnp.std(mod_info.z_memory),
+                                "modulator/temperature_mean": jnp.mean(mod_info.temperature),
+                                "modulator/temperature_min": jnp.min(mod_info.temperature),
+                                "modulator/temperature_max": jnp.max(mod_info.temperature),
+                            })
+                        
+                        wandb_logs.update({
                             "timesteps": global_step,
                             "iteration": iteration
                         })
+                        wandb.log(wandb_logs)
                     
                     pbar.set_postfix({
                         "Iter": iteration,

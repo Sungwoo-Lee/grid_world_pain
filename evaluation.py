@@ -177,11 +177,31 @@ def main():
         rngs = nnx.Rngs(jax.random.PRNGKey(seed))
         
         if algorithm == "RecurrentPPO":
+            rnn_type = config.get_mandatory('agent.rnn_type')
+            activation = config.get_mandatory('agent.activation')
+            
+            # Read modulation config (type can be null = disabled baseline)
+            mod_type = config.get('agent.modulation.type')
+            if mod_type is not None:
+                modulation_config = {
+                    'type': mod_type,
+                    'mod_hidden_size': config.get_mandatory('agent.modulation.mod_hidden_size'),
+                    'grouping_size': config.get_mandatory('agent.modulation.grouping_size'),
+                    'percept_bias_init': config.get_mandatory('agent.modulation.percept_bias_init'),
+                    'memory_bias_init': config.get_mandatory('agent.modulation.memory_bias_init'),
+                    'temp_clip': config.get_mandatory('agent.modulation.temp_clip'),
+                }
+            else:
+                modulation_config = None
+            
             model = ActorCriticRNN(
                 input_dim=input_dim,
                 action_dim=action_dim,
                 hidden_size=config.get_mandatory('agent.hidden_size'),
-                rngs=rngs
+                rngs=rngs,
+                rnn_type=rnn_type,
+                activation=activation,
+                modulation_config=modulation_config
             )
             
             # Restore via manager (returns the raw dict)

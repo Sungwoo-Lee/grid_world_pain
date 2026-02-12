@@ -120,7 +120,7 @@ class ActorCriticRNN(nnx.Module):
 
             # Pack combined hidden state
             h_combined_new = (h_new, mod_h_new)
-            return logits, value, h_combined_new
+            return logits, value, h_combined_new, mod_output
 
         else:
             # --- Original unmodulated path (exact baseline) ---
@@ -137,7 +137,7 @@ class ActorCriticRNN(nnx.Module):
             c_h = self._activate(self.critic_fc1(x_h))
             value = self.critic_fc2(c_h)
 
-            return logits, value, h_new
+            return logits, value, h_new, None
 
     def initial_state(self, batch_size: int = None):
         """Returns the initial hidden state for the RNN."""
@@ -161,7 +161,7 @@ class ActorCriticRNN(nnx.Module):
 
 def get_action_and_value_nnx(model, x, h, key=None, eval_mode=False):
     """Helper for inference with NNX."""
-    logits, value, h_new = model(x, h)
+    logits, value, h_new, mod_info = model(x, h)
 
     if eval_mode:
         action = jnp.argmax(logits)
@@ -170,4 +170,4 @@ def get_action_and_value_nnx(model, x, h, key=None, eval_mode=False):
         action = jax.random.categorical(key, logits)
         log_prob = jax.nn.log_softmax(logits)[action]
 
-    return action, log_prob, value.squeeze(), h_new
+    return action, log_prob, value.squeeze(), h_new, mod_info

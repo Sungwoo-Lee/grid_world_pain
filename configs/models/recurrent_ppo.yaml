@@ -18,16 +18,11 @@ agent:
   vf_coef: 0.5
   
   # Parity Options
-  rnn_type: "LSTM"       # "LSTM" (PyTorch parity) or "GRU" (original JAX)
+  rnn_type: "GRU"       # "LSTM" (PyTorch parity) or "GRU" (original JAX)
   activation: "tanh"     # "tanh" (PyTorch parity) or "relu" (original JAX)
   return_mode: "MC"      # "MC" (PyTorch parity) or "GAE" (original JAX)
 
-  # Neuromodulation (§5 in NEUROMODULATION_ALGORITHM.md)
-  # type: null disables modulation entirely (true baseline, §5.2)
+  # Neuromodulation: DISABLED (true baseline, §5.2)
+  # For neuromodulated variant, use: configs/models/neuromodulated_ppo.yaml
   modulation:
     type: null
-    mod_hidden_size: 64
-    grouping_size: 1
-    percept_bias_init: 2.0
-    memory_bias_init: 0.0
-    temp_clip: [0.1, 10.0]
