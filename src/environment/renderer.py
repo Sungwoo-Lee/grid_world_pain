@@ -72,7 +72,11 @@ def _load_icons(icon_config=None):
                             # print(f"Warning: cairosvg not available for {path}")
                             pass
                     else:
-                        icons[key] = plt.imread(path)
+                        # Use PIL to ensure alpha channels (transparency) are correctly handled for all formats
+                        img = Image.open(path)
+                        if img.mode != 'RGBA':
+                             img = img.convert('RGBA')
+                        icons[key] = np.array(img)
                         found = True
                     
                     if found:
@@ -358,31 +362,55 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
 
     # Entities
     res_pos, res_type, res_active = np.array(state.res_pos), np.array(params.res_type), np.array(state.res_active)
+    # Entities at agent position (for composite visualization)
+    at_agent = []
+
+    # Entities
+    res_pos, res_type, res_active = np.array(state.res_pos), np.array(params.res_type), np.array(state.res_active)
     for i in range(len(res_active)):
         if not res_active[i]: continue
         rr, rc = int(res_pos[i, 0]), int(res_pos[i, 1])
-        if r_start <= rr < r_end and c_start <= rc < c_end and not (rr==ar and rc==ac):
-            draw_icon(ax_grid, rr, rc, 'food' if res_type[i]==0 else 'danger', zoom=0.035, s_fac=scale_factor)
+        if rr == ar and rc == ac:
+            at_agent.append('food' if res_type[i] == 0 else 'danger')
+        elif r_start <= rr < r_end and c_start <= rc < c_end:
+            draw_icon(ax_grid, rr, rc, 'food' if res_type[i] == 0 else 'danger', zoom=0.035, s_fac=scale_factor)
             
     p_pos = np.array(state.pred_pos)
     for i in range(p_pos.shape[0]):
         pr, pc = int(p_pos[i, 0]), int(p_pos[i, 1])
-        if r_start <= pr < r_end and c_start <= pc < c_end and not (pr==ar and pc==ac):
+        if pr == ar and pc == ac:
+            at_agent.append('predator')
+        elif r_start <= pr < r_end and c_start <= pc < c_end:
             draw_icon(ax_grid, pr, pc, 'predator', zoom=0.045, s_fac=scale_factor)
             
     o_pos = np.array(state.obs_pos)
     for i in range(o_pos.shape[0]):
         or_, oc = int(o_pos[i, 0]), int(o_pos[i, 1])
-        if r_start <= or_ < r_end and c_start <= oc < c_end and not (or_==ar and oc==ac):
+        # Rocks don't have composite icons, they usually don't overlap in logic but to be safe:
+        if r_start <= or_ < r_end and c_start <= oc < c_end and not (or_ == ar and oc == ac):
             draw_icon(ax_grid, or_, oc, 'rock', zoom=0.035, s_fac=scale_factor)
             
     n_pos = np.array(state.neutral_pos)
     for i in range(n_pos.shape[0]):
         nr, nc = int(n_pos[i, 0]), int(n_pos[i, 1])
-        if r_start <= nr < r_end and c_start <= nc < c_end and not (nr==ar and nc==ac):
+        if nr == ar and nc == ac:
+            at_agent.append('neutral')
+        elif r_start <= nr < r_end and c_start <= nc < c_end:
             draw_icon(ax_grid, nr, nc, 'neutral', zoom=0.035, s_fac=scale_factor)
 
-    draw_icon(ax_grid, ar, ac, 'agent', zoom=0.035, s_fac=scale_factor)
+    # Determine Agent Icon (Normal vs Composite Overlap)
+    agent_icon = 'agent'
+    if 'predator' in at_agent:
+        agent_icon = 'agent_predator'
+    elif 'danger' in at_agent:
+        agent_icon = 'agent_danger'
+    elif 'food' in at_agent:
+        agent_icon = 'agent_food'
+    elif 'neutral' in at_agent:
+        # Fallback to normal agent if no neutral-composite exists, but could be added later
+        agent_icon = 'agent'
+        
+    draw_icon(ax_grid, ar, ac, agent_icon, zoom=0.035, s_fac=scale_factor)
     
     # -- Sidebar Minimap (Integrated into ax_left) --
     # In V4, the minimap moves to the bottom of the left panel
