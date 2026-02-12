@@ -22,4 +22,12 @@ agent:
   activation: "tanh"     # "tanh" (PyTorch parity) or "relu" (original JAX)
   return_mode: "MC"      # "MC" (PyTorch parity) or "GAE" (original JAX)
 
-
+  # Neuromodulation (§5 in NEUROMODULATION_ALGORITHM.md)
+  # type: null disables modulation entirely (true baseline, §5.2)
+  modulation:
+    type: null
+    mod_hidden_size: 64
+    grouping_size: 1
+    percept_bias_init: 2.0
+    memory_bias_init: 0.0
+    temp_clip: [0.1, 10.0]

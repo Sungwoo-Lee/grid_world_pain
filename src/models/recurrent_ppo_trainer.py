@@ -58,6 +58,21 @@ def compute_mc_returns(rewards, dones, gamma):
     )
     return returns
 
+def _h_vmap_axes(h_state):
+    """Infer vmap in_axes for a hidden state PyTree (batch dim = 0 for all leaves)."""
+    return jax.tree_util.tree_map(lambda _: 0, h_state)
+
+def _h_reset_on_done(h_state, done):
+    """Reset all leaves of a hidden state PyTree to zero where done=True."""
+    return jax.tree_util.tree_map(
+        lambda h: jnp.where(done[:, None], 0.0, h),
+        h_state
+    )
+
+def _h_get_first_timestep(h_states):
+    """Extract the first timestep from stacked hidden states (scan output)."""
+    return jax.tree_util.tree_map(lambda h: h[0], h_states)
+
 def ppo_loss_fn(model, batch, clip_eps, ent_coef, vf_coef):
     """PPO loss function for a trajectory batch using an NNX model."""
     
@@ -96,7 +111,8 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
     from src.environment.core import jax_step
     from src.environment.sensor import get_observation
 
-    is_lstm = rnn_type.upper() == "LSTM"
+    # Infer vmap axes from the hidden state structure (handles any PyTree)
+    h_axes = _h_vmap_axes(last_h_state)
     
     def scan_fn(carry, _):
         state, h_state, key = carry
@@ -108,15 +124,10 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
         
         from .recurrent_ppo_network import get_action_and_value_nnx
         
-        # vmap over batch for h_state (handle LSTM tuple vs GRU array)
-        if is_lstm:
-            action, log_prob, value, h_new = jax.vmap(
-                get_action_and_value_nnx, in_axes=(None, 0, (0, 0), 0)
-            )(model, obs, h_state, act_keys)
-        else:
-            action, log_prob, value, h_new = jax.vmap(
-                get_action_and_value_nnx, in_axes=(None, 0, 0, 0)
-            )(model, obs, h_state, act_keys)
+        # Generic vmap over batch — h_axes handles any PyTree structure
+        action, log_prob, value, h_new = jax.vmap(
+            get_action_and_value_nnx, in_axes=(None, 0, h_axes, 0)
+        )(model, obs, h_state, act_keys)
         
         # 2. Step Env
         next_state, reward, done, _ = jax.vmap(jax_step, in_axes=(0, 0, None))(state, action, env_params)
@@ -135,14 +146,8 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
             reset_state, next_state
         )
         
-        # Reset hidden state on done
-        if is_lstm:
-            final_h = (
-                jnp.where(done[:, None], 0.0, h_new[0]),
-                jnp.where(done[:, None], 0.0, h_new[1])
-            )
-        else:
-            final_h = jnp.where(done[:, None], 0.0, h_new)
+        # Reset hidden state on done (generic PyTree reset)
+        final_h = _h_reset_on_done(h_new, done)
         
         trans = Transition(
             obs=obs, action=action, reward=reward, done=done,
@@ -178,8 +183,8 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
     """Performs one full PPO iteration (collect + N epochs) with NNX."""
     from src.environment.sensor import get_observation
     
-    rnn_type = getattr(config, 'rnn_type', 'GRU')
-    return_mode = getattr(config, 'return_mode', 'GAE')
+    rnn_type = config.rnn_type
+    return_mode = config.return_mode
     
     # 1. Collect rollouts
     trajectories, h_states, next_env_state, next_h_state, key = collect_trajectories(
@@ -210,11 +215,8 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
         targets = advantages + trajectories.value
         advantages = (advantages - jnp.mean(advantages)) / (jnp.std(advantages) + 1e-8)
     
-    # Get initial h_state for loss computation
-    if rnn_type.upper() == "LSTM":
-        h_init = (h_states[0][0], h_states[1][0])
-    else:
-        h_init = h_states[0]
+    # Get initial h_state for loss computation (generic PyTree extraction)
+    h_init = _h_get_first_timestep(h_states)
     
     batch = PPOBatch(
         obs=trajectories.obs,
