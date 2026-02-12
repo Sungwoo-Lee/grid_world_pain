@@ -226,6 +226,7 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     
     return total_vis.flatten()
 
+@jax.jit
 def apply_perceptual_noise(obs: jnp.ndarray, state: EnvState, params: EnvParams, key: jax.random.PRNGKey):
     """Applies vectorized, state-dependent Gaussian noise based on modality-specific modes."""
     if not params.perceptual_noise_enabled:
@@ -251,6 +252,7 @@ def apply_perceptual_noise(obs: jnp.ndarray, state: EnvState, params: EnvParams,
     alpha_list = []
     mode_list = []
     
+    # Static iteration over breakdown (which depends on EnvParams/struct)
     for sensor_name, dim in breakdown.items():
         idx = modality_map[sensor_name]
         sigma_base_list.append(jnp.full((dim,), params.noise_sigmas[idx]))
@@ -277,6 +279,7 @@ def apply_perceptual_noise(obs: jnp.ndarray, state: EnvState, params: EnvParams,
     noise = jax.random.normal(key, obs.shape) * sigma_eff
     return obs + noise
 
+@jax.jit(static_argnames=['apply_noise'])
 def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
     """Assembles the full observation vector, including noise if enabled."""
     # Salt the state key to get a deterministic but unique key for observation noise

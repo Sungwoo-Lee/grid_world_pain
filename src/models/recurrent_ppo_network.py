@@ -159,6 +159,7 @@ class ActorCriticRNN(nnx.Module):
             return task_h
 
 
+@nnx.jit(static_argnames="eval_mode")
 def get_action_and_value_nnx(model, x, h, key=None, eval_mode=False):
     """Helper for inference with NNX."""
     logits, value, h_new, mod_info = model(x, h)

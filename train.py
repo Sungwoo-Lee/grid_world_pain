@@ -27,9 +27,26 @@ GPU Memory Management:
 Usage:
     python train_jax.py --config configs/ablation/homeostatic/04_nociception.yaml --total-timesteps 100000
 """
-import os
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import argparse
+import os
+
+# --- Pre-parse arguments for Device Selection ---
+# To properly set JAX_PLATFORMS, we must do this BEFORE importing jax.
+_pre_parser = argparse.ArgumentParser(add_help=False)
+_pre_parser.add_argument("--device", type=str, default="gpu")
+_args, _ = _pre_parser.parse_known_args()
+
+# Disable JAX memory pre-allocation (crucial for shared GPU environments)
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
+if _args.device.lower().startswith("cpu"):
+    os.environ["JAX_PLATFORMS"] = "cpu"
+elif ":" in _args.device:
+    backend, index = _args.device.lower().split(":")
+    if backend in ["gpu", "cuda"]:
+        os.environ["CUDA_VISIBLE_DEVICES"] = index
+        os.environ["JAX_PLATFORMS"] = "cuda"
+
 import yaml
 import numpy as np
 from datetime import datetime
@@ -118,6 +135,22 @@ def main():
     
     if args.debug:
         print(f"[DEBUG] Script started. CLI arguments: {args}", flush=True)
+
+    # --- Finalize Device Selection ---
+    try:
+        device_str = (args.device or _args.device).lower()
+        if ":" in device_str or device_str in ["gpu", "cuda"]:
+            # If we set CUDA_VISIBLE_DEVICES, JAX sees the target GPU as index 0
+            jax.config.update("jax_default_device", jax.devices("cuda")[0])
+            if not args.quiet:
+                print(f"Device: gpu ({jax.devices('cuda')[0]})")
+        elif device_str == "cpu":
+            jax.config.update("jax_default_device", jax.devices("cpu")[0])
+            if not args.quiet:
+                print(f"Device: cpu")
+    except Exception as e:
+        if not args.quiet:
+            print(f"Warning: Device configuration for '{args.device}' failed ({e}). Using JAX default: {jax.devices()[0]}")
 
     # 1. Configuration Loading
     if args.debug: print(f"[DEBUG] Phase 1: Configuration Loading...", flush=True)

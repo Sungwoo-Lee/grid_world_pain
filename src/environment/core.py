@@ -268,6 +268,7 @@ def update_neutral_animals(neutral_pos, neutral_move_timer, obs_pos, obs_blockin
     
     return new_pos, new_move_timer, key
 
+@jax.jit
 def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState, jnp.ndarray, jnp.ndarray, dict]:
     """Orchestrates a full environment step in JAX."""
     
@@ -431,6 +432,12 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     info['drive_injury'] = drive_injury
     info['metabolic_drain'] = params.metabolic_cost
     info['event_collided'] = just_collided
+    
+    # GPU-side distance calculations for stats
+    dist_to_food = jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 0), jnp.linalg.norm(state.res_pos - new_agent_pos, axis=-1), 99.0)) if state.res_pos.shape[0] > 0 else 99.0
+    dist_to_pred = jnp.min(jnp.linalg.norm(state.pred_pos - new_agent_pos, axis=-1)) if state.pred_pos.shape[0] > 0 else 99.0
+    info['dist_to_food'] = dist_to_food
+    info['dist_to_pred'] = dist_to_pred
 
     # 7. Final State
     new_state = state._replace(
@@ -461,6 +468,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     return new_state, reward, done, info
 
 
+@jax.jit
 def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     """Functional reset for the JAX environment."""
     key, agent_key, res_key, pred_key, body_key, neutral_key = jax.random.split(key, 6)

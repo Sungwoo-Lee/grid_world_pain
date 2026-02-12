@@ -11,15 +11,36 @@ Arguments:
 - `--results_dir <path>`: (Required) Path to results directory of the run.
 - `--episodes <int>`: Number of evaluation episodes.
 - `--seed <int>`: Override testing seed.
-- `--checkpoint <str>`: Specific checkpoint to evaluate.
+- `--checkpoint <str>`: Specific checkpoint name or path.
 - `--wandb-run-path <str>`: WandB run path for uploads.
+- `--render / --no-render`: Toggle video rendering (BooleanOptionalAction).
+- `--device <str>`: Device to use: 'cpu', 'gpu', or specific ID like 'cuda:1', 'gpu:0'.
 
 Usage:
-    python evaluation_jax.py --results_dir results/JAX_RecurrentPPO/my_run --episodes 10
+    python evaluation.py --results_dir results/JAX_RecurrentPPO/my_run --episodes 10
+    python evaluation.py --results_dir results/JAX_RecurrentPPO/my_run --no-render --device cuda:1
 """
 import os
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import argparse
+
+# --- Pre-parse arguments for Device Selection ---
+# To properly set JAX_PLATFORMS, we must do this BEFORE importing jax.
+_pre_parser = argparse.ArgumentParser(add_help=False)
+_pre_parser.add_argument("--device", type=str, default="gpu")
+_args, _ = _pre_parser.parse_known_args()
+
+# Disable JAX memory pre-allocation (crucial for shared GPU environments)
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
+if _args.device.lower().startswith("cpu"):
+    os.environ["JAX_PLATFORMS"] = "cpu"
+elif ":" in _args.device:
+    backend, index = _args.device.lower().split(":")
+    if backend in ["gpu", "cuda"]:
+        os.environ["CUDA_VISIBLE_DEVICES"] = index
+        os.environ["JAX_PLATFORMS"] = "cuda"
+# For default gpu/cuda, we allow JAX discovery but still with no preallocation
+
 import glob
 import re
 import yaml
@@ -61,10 +82,23 @@ def main():
     parser.add_argument("--checkpoint", type=str, help="Specific checkpoint name or path to evaluate")
     parser.add_argument("--all", action="store_true", help="Evaluate all checkpoints found in the directory")
     parser.add_argument("--wandb-run-path", type=str, help="WandB run path (e.g. 'entity/project/run_id') for uploads")
-    parser.add_argument("--render-video", action="store_true", help="Enable video recording")
+    parser.add_argument("--render", action=argparse.BooleanOptionalAction, help="Toggle video recording (adds --no-render)")
+    parser.add_argument("--device", type=str, default="gpu", help="Device to use for evaluation (e.g. cpu, gpu, cuda:0, gpu:1)")
     args = parser.parse_args()
 
     results_dir = args.results_dir
+    
+    # --- Finalize Device Selection ---
+    try:
+        device_str = args.device.lower()
+        if ":" in device_str or device_str in ["gpu", "cuda"]:
+            # If we set CUDA_VISIBLE_DEVICES, JAX sees the target GPU as index 0
+            jax.config.update("jax_default_device", jax.devices("cuda")[0])
+        elif device_str == "cpu":
+            jax.config.update("jax_default_device", jax.devices("cpu")[0])
+    except Exception as e:
+        print(f"Warning: Device configuration for '{args.device}' failed ({e}). Using JAX default: {jax.devices()[0]}")
+
     models_dir = os.path.join(results_dir, "models")
     config_path = os.path.join(models_dir, "config.yaml")
 
@@ -96,8 +130,12 @@ def main():
     # Note: load_env_params handles the mapping from YAML structure to JAX arrays
     params = load_env_params(config)
 
-    # Determine if video rendering should be enabled (CLI flag or config default)
-    render_video = args.render_video or config.get('testing.render_video', False)
+    # Determine if video rendering should be enabled
+    # We prioritize CLI argument if provided, otherwise fallback to config
+    if args.render is not None:
+        render_video = args.render
+    else:
+        render_video = config.get('testing.render_video', False)
 
     # 3. Print Summary
     print(f"\n{'='*50}")
@@ -106,6 +144,9 @@ def main():
     print(f"Grid: {params.height}x{params.width}")
     print(f"Episodes: {num_episodes}")
     print(f"Seed: {seed}")
+    # Show default device if set, else first available
+    actual_device = jax.config.values.get("jax_default_device") or jax.devices()[0]
+    print(f"Device: {jax.default_backend()} ({actual_device})")
     print(f"Video Rendering: {'Enabled' if render_video else 'Disabled'}")
     print(f"{'='*50}\n")
 

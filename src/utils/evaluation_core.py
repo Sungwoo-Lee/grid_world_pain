@@ -42,7 +42,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     
     # Stats recording
     record_stats = config.get('testing.record_stats', False)
-    stats_dir = os.path.join(results_dir, "stats")
+    stats_dir = os.path.join(results_dir, "stats", str(checkpoint_pct))
     if record_stats:
         os.makedirs(stats_dir, exist_ok=True)
     
@@ -231,33 +231,58 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 if debug: print(" Done", flush=True)
             
             if record_stats:
+                # BATCH TRANSFER: Fetch all required data from GPU once per step
+                # This is much faster than multiple individual transfers
+                stats_data = jax.device_get({
+                    'satiation': state.satiation,
+                    'nutrition': state.nutrition,
+                    'injury': state.injury_level,
+                    'rest_streak': state.rest_streak,
+                    'pos_r': state.agent_pos[0],
+                    'pos_c': state.agent_pos[1],
+                    'drive': calculate_drive(state.satiation, state.injury_level, params),
+                    'drive_hunger': info.get('drive_hunger', 0.0),
+                    'drive_injury': info.get('drive_injury', 0.0),
+                    'ate_food': info.get('ate_food', False),
+                    'damage': info.get('damage', 0.0),
+                    'event_collided': info.get('event_collided', False),
+                    'event_rested': info.get('rested', False),
+                    'reward_homeostatic': info.get('reward_homeostatic', 0.0),
+                    'reward_extrinsic': info.get('reward_extrinsic', 0.0),
+                    'metabolic_drain': info.get('metabolic_drain', 0.0),
+                    'termination_reason': info.get('termination_reason', 0),
+                    'dist_to_food': info.get('dist_to_food', 99.0),
+                    'dist_to_pred': info.get('dist_to_pred', 99.0),
+                    'reward': reward,
+                    'last_noc': next_obs[breakdown['Olfaction']] if 'Olfaction' in breakdown else 0.0
+                })
+
                 ep_stats.append({
                     'step': step_count,
-                    'satiation': float(state.satiation),
-                    'nutrition': float(state.nutrition),
-                    'injury': float(state.injury_level),
-                    'rest_streak': int(state.rest_streak),
-                    'pos_r': int(state.agent_pos[0]),
-                    'pos_c': int(state.agent_pos[1]),
-                    'drive': float(calculate_drive(state.satiation, state.injury_level, params)),
-                    'drive_hunger': float(info.get('drive_hunger', 0.0)),
-                    'drive_injury': float(info.get('drive_injury', 0.0)),
-                    # New "Full Spectrum" metrics
-                    'event_ate': bool(info.get('ate_food', False)),
-                    'event_damage': float(info.get('damage', 0.0)),
-                    'event_collided': bool(info.get('event_collided', False)),
-                    'event_rested': bool(info.get('rested', False)),
-                    'sense_nociception': float(next_obs[breakdown['Olfaction']]),
-                    'dist_to_food': float(jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 0), jnp.linalg.norm(state.res_pos - state.agent_pos, axis=-1), 99.0))) if state.res_pos.shape[0] > 0 else 99.0,
-                    'dist_to_pred': float(jnp.min(jnp.linalg.norm(state.pred_pos - state.agent_pos, axis=-1))) if state.pred_pos.shape[0] > 0 else 99.0,
-                    'reward_homeostatic': float(info.get('reward_homeostatic', 0.0)),
-                    'reward_extrinsic': float(info.get('reward_extrinsic', 0.0)),
-                    'metabolic_drain': float(info.get('metabolic_drain', 0.0)),
-                    'termination_reason': int(info.get('termination_reason', 0)),
+                    'satiation': float(stats_data['satiation']),
+                    'nutrition': float(stats_data['nutrition']),
+                    'injury': float(stats_data['injury']),
+                    'rest_streak': int(stats_data['rest_streak']),
+                    'pos_r': int(stats_data['pos_r']),
+                    'pos_c': int(stats_data['pos_c']),
+                    'drive': float(stats_data['drive']),
+                    'drive_hunger': float(stats_data['drive_hunger']),
+                    'drive_injury': float(stats_data['drive_injury']),
+                    'event_ate': bool(stats_data['ate_food']),
+                    'event_damage': float(stats_data['damage']),
+                    'event_collided': bool(stats_data['event_collided']),
+                    'event_rested': bool(stats_data['event_rested']),
+                    'sense_nociception': float(stats_data['last_noc']),
+                    'dist_to_food': float(stats_data['dist_to_food']),
+                    'dist_to_pred': float(stats_data['dist_to_pred']),
+                    'reward_homeostatic': float(stats_data['reward_homeostatic']),
+                    'reward_extrinsic': float(stats_data['reward_extrinsic']),
+                    'metabolic_drain': float(stats_data['metabolic_drain']),
+                    'termination_reason': int(stats_data['termination_reason']),
                     'max_satiation': float(params.max_satiation),
                     'max_injury': float(params.max_injury),
                     'action': action_map[action_idx] if 0 <= action_idx < len(action_map) else "Unknown",
-                    'reward': float(reward)
+                    'reward': float(stats_data['reward'])
                 })
             
             obs = next_obs
