@@ -596,6 +596,9 @@ def main():
                     mod_info = trajectories.mod_info
                     if args.debug: print(f" Done.", flush=True)
                     
+                    if not args.quiet and mod_info is not None:
+                        print(f"  [Modulator] Mean Percept: {float(jnp.mean(mod_info.z_percept)):.3f}, Mean Memory: {float(jnp.mean(mod_info.z_memory)):.3f}, Temp: {float(jnp.mean(mod_info.temperature)):.2f}")
+                    
                     steps_this_iter = num_steps * num_envs
                     global_step += steps_this_iter
                     
@@ -661,14 +664,14 @@ def main():
                         if mod_info is not None:
                             # mod_info is a stacked ModulatorOutput (num_steps, num_envs, ...)
                             wandb_logs.update({
-                                "modulator/grad_norm": avg_mod_grad_norm,
-                                "modulator/z_percept_mean": jnp.mean(mod_info.z_percept),
-                                "modulator/z_percept_std": jnp.std(mod_info.z_percept),
-                                "modulator/z_memory_mean": jnp.mean(mod_info.z_memory),
-                                "modulator/z_memory_std": jnp.std(mod_info.z_memory),
-                                "modulator/temperature_mean": jnp.mean(mod_info.temperature),
-                                "modulator/temperature_min": jnp.min(mod_info.temperature),
-                                "modulator/temperature_max": jnp.max(mod_info.temperature),
+                                "modulator/grad_norm": float(avg_mod_grad_norm),
+                                "modulator/z_percept_mean": float(jnp.mean(mod_info.z_percept)),
+                                "modulator/z_percept_std": float(jnp.std(mod_info.z_percept)),
+                                "modulator/z_memory_mean": float(jnp.mean(mod_info.z_memory)),
+                                "modulator/z_memory_std": float(jnp.std(mod_info.z_memory)),
+                                "modulator/temperature_mean": float(jnp.mean(mod_info.temperature)),
+                                "modulator/temperature_min": float(jnp.min(mod_info.temperature)),
+                                "modulator/temperature_max": float(jnp.max(mod_info.temperature)),
                             })
                         
                         wandb_logs.update({
