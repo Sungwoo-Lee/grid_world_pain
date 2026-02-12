@@ -553,8 +553,8 @@ x_proj = x_proj * sigmoid(z_perc)           # Gate input features
 
 # Layer 2: rnn_cell  (GRUCell or LSTMCell: hidden → hidden)
 # ◄◄ INJECTION B: Internal Gate-Bias (§5.1a) ►►
-# z_mem is injected INSIDE the GRU as additive bias to the update gate:
-#   u_t = sigmoid(W_u @ x + U_u @ h_prev + z_mem)  ← shifted operating point
+# z_mem is injected INSIDE a custom ModulatedGRUCell (see §5 below).
+# Internally: u_t = sigmoid(W_u @ x + U_u @ h_prev + z_mem)
 # This preserves the GRU's gradient highway (no double-gating).
 h_new, x_h = modulated_rnn_cell(h_prev, x_proj, gate_bias=z_mem)
 
@@ -592,8 +592,8 @@ x = elu(img_in(concat(stoch_prev, action)))
 
 # Layer 3: LayerNormGRUCell  (deter_dim → deter_dim)
 # ◄◄ INJECTION B: Internal Gate-Bias (§5.1a) ►►
-# z_mem is injected INSIDE the LayerNormGRUCell as additive bias to the update gate:
-#   u_t = sigmoid(LN(W_u @ x) + LN(U_u @ deter_prev) + z_mem)
+# z_mem is injected INSIDE a custom ModulatedLayerNormGRUCell (see §5 below).
+# Internally: u_t = sigmoid(LN(W_u @ x) + LN(U_u @ deter_prev) + z_mem)
 # This preserves the GRU's gradient highway (no double-gating).
 deter_new = modulated_cell(x, deter_prev, gate_bias=z_mem)
 
@@ -612,9 +612,6 @@ reward_pred = reward_pred * sigmoid(z_rew)   # Scale nociceptive interpretation
 *   **Shared Objective**: Both the Task-RNN and the Modulator-RNN are trained end-to-end to minimize the global RL loss (PPO loss or Dreamer's variational loss).
 *   **Decoupled Learning**: To prevent the modulator from over-fitting to task features, we can apply a **lower learning rate** or a **timescale penalty** to the Modulator-RNN, forcing it to focus on slow-moving regulatory trends.
 *   **Timescale Matching** (§5.4a): The modulator's effective temporal window must fit within the BPTT truncation length $T$. If $T=128$, the modulator should not need >128 steps to express its useful patterns. A modulator GRU with hidden size 64 and standard initialization naturally has an effective timescale of ~50–100 steps, which is suitable.
-*   **Auxiliary Interoceptive Prediction Loss** (§5.4b, optional): To improve credit assignment without relying on long BPTT chains, add a self-supervised loss:
-    $$\mathcal{L}_{aux} = \| \hat{s}_{t+k} - s_{t+k} \|^2$$
-    Where $\hat{s}_{t+k} = f_{pred}(h_{mod,t})$ predicts the interoceptive state $k$ steps ahead from the current modulator hidden state. This is biologically plausible as interoceptive prediction and provides a direct gradient signal to the modulator without requiring task-reward credit assignment.
 *   **Ablation Hooks**:
     - `modulation.perceptual_only`: Disable memory/action/reward heads.
     - `modulation.static_context`: Use a feedforward modulator (MLP) as a baseline.
@@ -622,6 +619,38 @@ reward_pred = reward_pred * sigmoid(z_rew)   # Scale nociceptive interpretation
     - `modulation.context`: ['Full', 'VisualOnly', 'InteroOnly'].
     - `modulation.grouping_size`: Integer $G$ controlling spatial grouping granularity (1 = per-neuron, $N$ = global scalar). Experiment sweep: [1, 8, 16, 32, hidden_size].
     - `modulation.temp_clip`: [min, max] bounds for temperature modulation (default: [0.1, 10.0]).
-    - `modulation.aux_loss`: Enable/disable auxiliary interoceptive prediction loss.
-    - `modulation.aux_loss_weight`: Weight $\lambda_{aux}$ for the auxiliary loss term (default: 0.1).
-    - `modulation.aux_loss_horizon`: Prediction horizon $k$ for future interoceptive state (default: 10).
+
+## 5. Pre-Implementation Decisions (Resolved)
+
+### 5.1 Custom Modulated GRU Cells
+Flax NNX's built-in `nnx.GRUCell` does not accept a `gate_bias` argument. **Decision**: Write two custom Flax NNX modules:
+
+1.  **`ModulatedGRUCell`** (for Recurrent PPO): Reimplements the standard GRU equations with an additional `gate_bias` input that is added to the update gate pre-activation:
+    ```python
+    u_t = sigmoid(W_u @ x + U_u @ h_prev + gate_bias)   # ← modulated
+    r_t = sigmoid(W_r @ x + U_r @ h_prev)
+    h_hat = tanh(W_h @ x + U_h @ (r_t * h_prev))
+    h_new = (1 - u_t) * h_prev + u_t * h_hat
+    ```
+    Approximately ~30 lines of code. When `gate_bias = 0`, this is functionally identical to `nnx.GRUCell`.
+
+2.  **`ModulatedLayerNormGRUCell`** (for DreamerV3): Extends the existing custom `LayerNormGRUCell` in `dreamer_v3_nnx.py` with the same `gate_bias` parameter, applied after the LayerNorm steps.
+
+### 5.2 Baseline Control Condition (`modulation.type = None`)
+When `modulation.type` is set to `None` in config:
+-   The `NeuromodulatorRNN` module is **not constructed** — no extra parameters, no extra compute.
+-   The `ActorCriticRNN.__call__` (or `RSSM.step`) executes the **exact same code path** as the current unmodified agent.
+-   This is the **true control condition** for ablation studies. Even a "no-op" modulator (initialized to pass-through) would add parameters and introduce numerical differences, making it unsuitable as a rigorous baseline.
+
+### 5.3 Phased Implementation Strategy
+**Phase 1: Recurrent PPO only.**
+-   Implement `NeuromodulatorRNN`, `ModulatedGRUCell`, and the modulated `ActorCriticRNN` variant.
+-   Integrate into `train.py` with full config/ablation support.
+-   Validate: (a) `modulation.type = None` reproduces baseline performance exactly, (b) modulated agent trains stably, (c) gate activations are interpretable.
+
+**Phase 2: DreamerV3 (after PPO is validated).**
+-   Implement `ModulatedLayerNormGRUCell` and the modulated `WorldModel` variant.
+-   Integrate into `train_jax.py`.
+-   Validate against DreamerV3 baseline.
+
+**Rationale**: PPO's architecture is compact (single `ActorCriticRNN`) and its training loop is much simpler than DreamerV3's world-model + actor-critic pipeline. Debugging modulator interactions is easier in this setting.
