@@ -104,68 +104,75 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 'reward': 0.0
             })
         
-        def get_sensory_viz(obs_vec):
+        def get_sensory_viz(obs_vec, true_obs_vec=None):
             # Internal helper to slice flat obs into renderer-friendly format
             ptr = 0
+            t_ptr = 0
             
-            olf_end = ptr + breakdown['Olfaction']
-            olf_vec = obs_vec[ptr:olf_end]
-            ptr = olf_end
+            # Slices
+            olf_dim = breakdown['Olfaction']
+            olf_obs = obs_vec[ptr:ptr+olf_dim]
+            olf_true = true_obs_vec[t_ptr:t_ptr+olf_dim] if true_obs_vec is not None else olf_obs
+            ptr += olf_dim; t_ptr += olf_dim
             
-            noc_end = ptr + breakdown['Extero Nociception']
-            noc_val = float(obs_vec[ptr]) if breakdown['Extero Nociception'] > 0 else 0.0
-            ptr = noc_end
+            noc_dim = breakdown['Extero Nociception']
+            noc_obs = float(obs_vec[ptr]) if noc_dim > 0 else 0.0
+            noc_true = float(true_obs_vec[t_ptr]) if true_obs_vec is not None and noc_dim > 0 else noc_obs
+            ptr += noc_dim; t_ptr += noc_dim
             
-            coll_end = ptr + breakdown['Collision']
-            coll_vec = obs_vec[ptr:coll_end]
-            ptr = coll_end
+            coll_dim = breakdown['Collision']
+            coll_obs = obs_vec[ptr:ptr+coll_dim]
+            coll_true = true_obs_vec[t_ptr:t_ptr+coll_dim] if true_obs_vec is not None else coll_obs
+            ptr += coll_dim; t_ptr += coll_dim
             
-            loc_end = ptr + breakdown['Location']
-            loc_vec = obs_vec[ptr:loc_end]
-            ptr = loc_end
+            loc_dim = breakdown['Location']
+            loc_vec = obs_vec[ptr:ptr+loc_dim]
+            ptr += loc_dim; t_ptr += loc_dim
             
-            sat_end = ptr + breakdown['Satiation']
-            sat_val = float(obs_vec[ptr]) if breakdown['Satiation'] > 0 else 0.0
-            ptr = sat_end
+            sat_dim = breakdown['Satiation']
+            sat_obs = float(obs_vec[ptr]) if sat_dim > 0 else 0.0
+            ptr += sat_dim; t_ptr += sat_dim
             
-            nut_end = ptr + breakdown['Nutrition']
-            nut_val = float(obs_vec[ptr]) if breakdown['Nutrition'] > 0 else 0.0
-            ptr = nut_end
+            nut_dim = breakdown['Nutrition']
+            nut_obs = float(obs_vec[ptr]) if nut_dim > 0 else 0.0
+            ptr += nut_dim; t_ptr += nut_dim
             
-            inj_end = ptr + breakdown['Injury']
-            inj_val = float(obs_vec[ptr]) if breakdown['Injury'] > 0 else 0.0
-            ptr = inj_end
+            inj_dim = breakdown['Injury']
+            inj_obs = float(obs_vec[ptr]) if inj_dim > 0 else 0.0
+            ptr += inj_dim; t_ptr += inj_dim
             
             viz = [
-                {'name': 'Olfactory', 'vector': olf_vec, 'type': 'spectrum'},
-                {'name': 'Extero Nociception', 'intensity': noc_val, 'color': '#c0392b', 'type': 'intensity'},
-                {'name': 'Collision', 'vector': coll_vec, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1, 'side_by_side': True},
+                {'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true, 'type': 'spectrum'},
+                {'name': 'Extero Nociception', 'intensity': noc_obs, 'true_intensity': noc_true, 'color': '#c0392b', 'type': 'intensity'},
+                {'name': 'Collision', 'vector': coll_obs, 'true_vector': coll_true, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1},
                 {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'},
-                {'name': 'Satiation', 'intensity': sat_val, 'color': '#27ae60', 'type': 'intensity'},
-                {'name': 'Nutrition', 'intensity': nut_val, 'color': '#f39c12', 'type': 'intensity'},
-                {'name': 'Injury (Modulated)', 'intensity': inj_val, 'color': '#8e44ad', 'type': 'intensity'},
+                {'name': 'Satiation', 'intensity': sat_obs, 'type': 'intensity'},
+                {'name': 'Nutrition', 'intensity': nut_obs, 'type': 'intensity'},
+                {'name': 'Injury', 'intensity': inj_obs, 'type': 'intensity'},
             ]
             
             if 'Visual' in breakdown:
-                vis_end = ptr + breakdown['Visual']
-                vis_vec = obs_vec[ptr:vis_end]
-                ptr = vis_end
-                viz.insert(3, {'name': 'Visual (One-Hot)', 'vector': vis_vec, 'type': 'diamond', 'range': params.visual_sensor_range, 'num_features': 8, 'side_by_side': True})
+                vis_dim = breakdown['Visual']
+                vis_obs = obs_vec[ptr:ptr+vis_dim]
+                vis_true = true_obs_vec[t_ptr:t_ptr+vis_dim] if true_obs_vec is not None else vis_obs
+                ptr += vis_dim; t_ptr += vis_dim
+                viz.append({'name': 'Visual', 'vector': vis_obs, 'true_vector': vis_true, 'type': 'visual_grid', 'num_features': 8, 'range': params.visual_sensor_range})
             
             if 'Proprioception' in breakdown:
-                proprio_end = ptr + breakdown['Proprioception']
-                proprio_vec = obs_vec[ptr:proprio_end]
-                ptr = proprio_end
+                proprio_dim = breakdown['Proprioception']
+                proprio_vec = obs_vec[ptr:ptr+proprio_dim]
+                ptr += proprio_dim; t_ptr += proprio_dim
                 viz.append({'name': 'Proprioception', 'vector': proprio_vec, 'type': 'radial', 'color': '#be4bdb'})
 
             return viz
 
         if render_video:
             if debug: print(f"    [Render] Initial frame...", end="", flush=True)
+            true_obs = get_observation(state, params, apply_noise=False)
             all_frames.append(render_jax_state(
                 state, params, episode=ep+1, step=0, 
                 train_episode=checkpoint_pct,
-                sensory_data=get_sensory_viz(obs),
+                sensory_data=get_sensory_viz(obs, true_obs),
                 icon_config=icon_config
             ))
             if debug: print(" Done", flush=True)
@@ -214,12 +221,11 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             
             if render_video:
                 if debug: print(f"    [Step {step_count}] Rendering...", end="", flush=True)
-                # We show the sensory data that CAUSED the action (obs) or the result?
-                # PyTorch baseline shows the state result of the action.
+                true_obs = get_observation(state, params, apply_noise=False)
                 all_frames.append(render_jax_state(
                     state, params, episode=ep+1, step=step_count, 
                     train_episode=checkpoint_pct,
-                    action=action_idx, sensory_data=get_sensory_viz(next_obs),
+                    action=action_idx, sensory_data=get_sensory_viz(next_obs, true_obs),
                     icon_config=icon_config
                 ))
                 if debug: print(" Done", flush=True)

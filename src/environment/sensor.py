@@ -277,7 +277,7 @@ def apply_perceptual_noise(obs: jnp.ndarray, state: EnvState, params: EnvParams,
     noise = jax.random.normal(key, obs.shape) * sigma_eff
     return obs + noise
 
-def get_observation(state: EnvState, params: EnvParams):
+def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
     """Assembles the full observation vector, including noise if enabled."""
     # Salt the state key to get a deterministic but unique key for observation noise
     obs_key = jax.random.fold_in(state.key, 999)
@@ -319,7 +319,9 @@ def get_observation(state: EnvState, params: EnvParams):
         obs = jnp.concatenate([obs, proprio_obs])
     
     # Apply Perceptual Precision Modulation
-    return apply_perceptual_noise(obs, state, params, obs_key)
+    if apply_noise:
+        return apply_perceptual_noise(obs, state, params, obs_key)
+    return obs
 
 def get_observation_breakdown(params: EnvParams):
     """Returns a dict of {sensor_name: dimension} for observation components."""
