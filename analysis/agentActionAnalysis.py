@@ -53,7 +53,8 @@ print("\nGenerating scatter plot for 'Rest' and 'Eat' actions...")
 
 # Filter for Rest and Eat actions
 # Using 'Rest' and 'Eat' based on previous inspection
-actions_to_plot = ["Rest", "Eat"]
+# actions_to_plot = ["Rest", "Eat"]
+actions_to_plot = ["Rest"]
 filtered_stats = full_stats[full_stats['action'].isin(actions_to_plot)].copy()
 
 if filtered_stats.empty:
@@ -66,11 +67,12 @@ else:
     sns.set_theme(style="whitegrid")
     
     sns.scatterplot(
+        # data=filtered_stats[filtered_stats['episode']==1],
         data=filtered_stats,
-        x='satiation',
+        x='nutrition',
         y='injury',
-        hue='action',
-        palette={'Eat': 'green', 'Rest': 'blue'},
+        # hue='action',
+        # palette={'Eat': 'green', 'Rest': 'blue'},
         alpha=0.6,
         s=50,
         edgecolor='w',
