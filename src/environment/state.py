@@ -63,13 +63,13 @@ class EnvParams:
     res_spawn_area: jnp.ndarray # [num_res, 4] (min_r, min_c, max_r, max_c)
     res_max_cons: jnp.ndarray   # [num_res]
     res_reg_delay: jnp.ndarray  # [num_res]
-    res_damage: jnp.ndarray     # [num_res]
+    res_damage: jnp.ndarray     # [num_res, 2] [min, max]
     
     # Predators (Constant attributes)
     pred_property: jnp.ndarray  # [num_pred, vector_size]
     pred_nociception: jnp.ndarray # [num_pred]
     pred_move_int: jnp.ndarray  # [num_pred]
-    pred_damage: jnp.ndarray    # [num_pred]
+    pred_damage: jnp.ndarray    # [num_pred, 2] [min, max]
     pred_patrol: jnp.ndarray    # [num_pred, 4] (min_r, min_c, max_r, max_c)
     pred_detect: jnp.ndarray    # [num_pred]
     pred_max_stamina: jnp.ndarray
@@ -83,7 +83,7 @@ class EnvParams:
     # Obstacles
     obs_blocking: jnp.ndarray   # [num_obs] bool
     obs_spawn_area: jnp.ndarray # [num_obs, 4] (min_r, min_c, max_r, max_c)
-    obs_damage: jnp.ndarray     # [num_obs]
+    obs_damage: jnp.ndarray     # [num_obs, 2] [min, max]
     obs_property: jnp.ndarray   # [num_obs, vector_size]
     obs_nociception: jnp.ndarray # [num_obs]
     obs_type: jnp.ndarray       # [num_obs] int32 index for names

@@ -273,7 +273,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     """Orchestrates a full environment step in JAX."""
     
     # 0. Split key for random events
-    key, respawn_key, predator_key, neutral_key = jax.random.split(state.key, 4)
+    key, respawn_key, predator_key, neutral_key, damage_key = jax.random.split(state.key, 5)
 
     # 1. Resource Regeneration (before agent moves)
     new_active, new_reg_timer, new_cons_count, respawn_mask = update_resources(
@@ -310,9 +310,22 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     at_resource = jnp.all(res_pos_after_reg == new_agent_pos, axis=-1)
     interact_resource = jnp.logical_and(at_resource, new_active)
     
+    # Calculate attempted position for collision damage targeting
+    moves_map = jnp.array([[-1, 0], [0, 1], [1, 0], [0, -1], [0, 0], [0, 0]], dtype=jnp.int32)
+    attempted_pos = state.agent_pos + moves_map[jnp.clip(action, 0, 5).astype(jnp.int32)]
+    # Clamp to grid boundaries
+    attempted_pos = jnp.array([
+        jnp.clip(attempted_pos[0], 0, params.height - 1),
+        jnp.clip(attempted_pos[1], 0, params.width - 1)
+    ])
+    
     # Danger interaction (Auto)
     is_danger = params.res_type == 1
-    damage_res = jnp.sum(jnp.where(jnp.logical_and(interact_resource, is_danger), params.res_damage[:, 0], 0.0))
+    # Sample damage for each resource interaction
+    sampled_res_damage = jax.random.uniform(damage_key, (params.res_type.shape[0],), 
+                                           minval=params.res_damage[:, 0], 
+                                           maxval=params.res_damage[:, 1])
+    damage_res = jnp.sum(jnp.where(jnp.logical_and(interact_resource, is_danger), sampled_res_damage, 0.0))
     
     # Food interaction (Action-based or Auto)
     is_food = params.res_type == 0
@@ -357,7 +370,11 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     
     # Predator Damage
     at_predator = jnp.all(new_pred_pos == new_agent_pos, axis=-1)
-    damage_pred = jnp.sum(jnp.where(at_predator, params.pred_damage[:, 0], 0.0))
+    # Sample predator damage
+    sampled_pred_damage = jax.random.uniform(damage_key, (params.pred_damage.shape[0],),
+                                            minval=params.pred_damage[:, 0],
+                                            maxval=params.pred_damage[:, 1])
+    damage_pred = jnp.sum(jnp.where(at_predator, sampled_pred_damage, 0.0))
     
     # Trigger Attack Delay for predators that hit the agent
     new_pred_attack_timer = jnp.where(at_predator, params.pred_attack_delay, new_pred_attack_timer)
@@ -365,14 +382,19 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # Rock/Obstacle Damage
     # 1. Overlap damage (non-blocking rocks at current pos)
     at_obs = jnp.all(state.obs_pos == new_agent_pos, axis=-1)
-    damage_obs_overlap = jnp.sum(jnp.where(jnp.logical_and(at_obs, jnp.logical_not(params.obs_blocking)), params.obs_damage[:, 0], 0.0))
+    # Sample obstacle damage
+    sampled_obs_damage = jax.random.uniform(damage_key, (params.obs_damage.shape[0],),
+                                           minval=params.obs_damage[:, 0],
+                                           maxval=params.obs_damage[:, 1])
+    damage_obs_overlap = jnp.sum(jnp.where(jnp.logical_and(at_obs, jnp.logical_not(params.obs_blocking)), sampled_obs_damage, 0.0))
     
     # 2. Collision damage (blocking rocks)
-    # Damage only if we actually hit a blocking obstacle
-    damage_obs_collision = jnp.where(just_collided, jnp.max(params.obs_damage[:, 0]), 0.0)
+    # Target the specific obstacle we hit
+    at_attempted_obs = jnp.all(state.obs_pos == attempted_pos, axis=-1)
+    damage_obs_collision = jnp.where(just_collided, jnp.max(jnp.where(at_attempted_obs, sampled_obs_damage, 0.0)), 0.0)
     
     # Calculate collision NOC intensity for sensing
-    collision_noc = jnp.where(just_collided, jnp.max(params.obs_nociception, where=params.obs_blocking, initial=0.0), 0.0)
+    collision_noc = jnp.where(just_collided, jnp.max(jnp.where(at_attempted_obs, params.obs_nociception, 0.0)), 0.0)
     
     total_damage = damage_res + damage_pred + damage_obs_overlap + damage_obs_collision
     
