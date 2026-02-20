@@ -33,7 +33,11 @@ def load_env_params(config: Config) -> EnvParams:
         res_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [r_get(r, 'spawn_area') for r in expanded_resources]])
         res_max_cons = jnp.array([r_get(r, 'max_consumption') for r in expanded_resources], dtype=jnp.int32)
         res_reg_delay = jnp.array([r_get(r, 'regeneration_delay') for r in expanded_resources], dtype=jnp.int32)
-        res_damage = jnp.array([r_get(r, 'damage') for r in expanded_resources])
+        
+        # Damage can be scalar (Feb 12) or range [min, max] (tuningEnv)
+        raw_damage = [r_get(r, 'damage') for r in expanded_resources]
+        res_damage = jnp.array([d if isinstance(d, list) else [d, d] for d in raw_damage])
+        
         res_nociception = jnp.array([r.get('nociception_intensity', 0.9 if r_get(r, 'type') == 'danger' else 0.0) for r in expanded_resources])
     else:
         res_type = jnp.zeros(0, dtype=jnp.int32)
@@ -42,7 +46,7 @@ def load_env_params(config: Config) -> EnvParams:
         res_spawn_area = jnp.zeros((0, 4))
         res_max_cons = jnp.zeros(0, dtype=jnp.int32)
         res_reg_delay = jnp.zeros(0, dtype=jnp.int32)
-        res_damage = jnp.zeros(0)
+        res_damage = jnp.zeros((0, 2))
 
     # Build predator arrays
     predators = config.get_mandatory('environment.predators')
@@ -55,27 +59,35 @@ def load_env_params(config: Config) -> EnvParams:
         pred_property = jnp.array([p_get(p, 'property') for p in predators])
         pred_nociception = jnp.array([p.get('nociception_intensity', 0.9) for p in predators])
         pred_move_int = jnp.array([p_get(p, 'move_interval') for p in predators], dtype=jnp.int32)
-        pred_damage = jnp.array([p_get(p, 'damage') for p in predators])
+        
+        # Predator damage ranges
+        raw_p_damage = [p_get(p, 'damage') for p in predators]
+        pred_damage = jnp.array([d if isinstance(d, list) else [d, d] for d in raw_p_damage])
+        
         h = config.get_mandatory('environment.height')
         w = config.get_mandatory('environment.width')
         # Adjust for 0-based min and exclusive max
         pred_patrol = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [p.get('patrol_area', [[1,1],[h,w]]) for p in predators]])
+        pred_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [p.get('spawn_area', [[1,1],[h,w]]) for p in predators]])
         pred_detect = jnp.array([p_get(p, 'detection_range') for p in predators])
         pred_max_stamina = jnp.array([p_get(p, 'max_stamina') for p in predators])
         pred_recovery = jnp.array([p_get(p, 'stamina_recovery_rate') for p in predators])
         pred_hunt_thresh = jnp.array([p_get(p, 'hunt_stamina_threshold') for p in predators])
         pred_attack_delay = jnp.array([p_get(p, 'attack_delay') for p in predators], dtype=jnp.int32)
+        predator_enabled = config.get_mandatory('environment.predator_enabled')
     else:
         pred_property = jnp.zeros((0, 5))
         pred_nociception = jnp.zeros(0)
         pred_move_int = jnp.zeros(0, dtype=jnp.int32)
-        pred_damage = jnp.zeros(0)
+        pred_damage = jnp.zeros((0, 2))
         pred_patrol = jnp.zeros((0, 4))
+        pred_spawn_area = jnp.zeros((0, 4))
         pred_detect = jnp.zeros(0)
         pred_max_stamina = jnp.zeros(0)
         pred_recovery = jnp.zeros(0)
         pred_hunt_thresh = jnp.zeros(0)
         pred_attack_delay = jnp.zeros(0, dtype=jnp.int32)
+        predator_enabled = config.get_mandatory('environment.predator_enabled')
     
     # Build Obstacle arrays
     raw_obstacles = config.get_mandatory('environment.obstacles')
@@ -91,20 +103,31 @@ def load_env_params(config: Config) -> EnvParams:
             if val is None: raise ValueError(f"Strict Config: Obstacle field '{key}' is required.")
             return val
         obs_blocking = jnp.array([o.get('blocking', True) for o in expanded_obstacles], dtype=jnp.bool_)
-        obs_damage = jnp.array([o.get('damage', 0.0) for o in expanded_obstacles], dtype=jnp.float32)
+        
+        # Obstacle damage ranges
+        raw_obs_damage = [o.get('damage', 0.0) for o in expanded_obstacles]
+        obs_damage = jnp.array([d if isinstance(d, list) else [d, d] for d in raw_obs_damage])
+        
         obs_nociception = jnp.array([o.get('nociception_intensity', 0.3) for o in expanded_obstacles], dtype=jnp.float32)
         # Unified: Obstacles can have properties too
         chem_dim = res_property.shape[-1]
         obs_property = jnp.array([o.get('properties', [0.0]*chem_dim) for o in expanded_obstacles])
         # Adjust for 0-based min and exclusive max
         obs_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [obs_get(o, 'area') for o in expanded_obstacles]])
+        
+        # Obstacle types for visual sensor
+        obstacle_names = tuple(sorted(list(set([o.get('name', 'rock') for o in expanded_obstacles]))))
+        name_to_idx = {name: i for i, name in enumerate(obstacle_names)}
+        obs_type = jnp.array([name_to_idx[o.get('name', 'rock')] for o in expanded_obstacles], dtype=jnp.int32)
     else:
         obs_blocking = jnp.zeros(0, dtype=jnp.bool_)
-        obs_damage = jnp.zeros(0, dtype=jnp.float32)
+        obs_damage = jnp.zeros((0, 2), dtype=jnp.float32)
         obs_nociception = jnp.zeros(0, dtype=jnp.float32)
         chem_dim = res_property.shape[-1]
         obs_property = jnp.zeros((0, chem_dim))
         obs_spawn_area = jnp.zeros((0, 4))
+        obs_type = jnp.zeros(0, dtype=jnp.int32)
+        obstacle_names = ("rock",)
     
     # Build Neutral Animal arrays (Decoys)
     raw_neutral = config.get_mandatory('environment.neutral_animals')
@@ -174,11 +197,15 @@ def load_env_params(config: Config) -> EnvParams:
         pred_recovery=pred_recovery,
         pred_hunt_thresh=pred_hunt_thresh,
         pred_attack_delay=pred_attack_delay,
+        predator_enabled=predator_enabled,
+        pred_spawn_area=pred_spawn_area,
         obs_blocking=obs_blocking,
         obs_damage=obs_damage,
         obs_property=obs_property,
         obs_nociception=obs_nociception,
         obs_spawn_area=obs_spawn_area,
+        obs_type=obs_type,
+        obstacle_names=obstacle_names,
         neutral_property=neutral_property,
         neutral_nociception=neutral_nociception,
         neutral_move_int=neutral_move_int,
@@ -209,6 +236,8 @@ def load_env_params(config: Config) -> EnvParams:
         start_pos=jnp.array(config.get_mandatory('environment.start_pos')) - 1,
         rest_action_enabled=config.get_mandatory('environment.rest_action_enabled'),
         eat_action_enabled=config.get_mandatory('environment.eat_action_enabled'),
+        eating_nutrition_cost=config.get_mandatory('body.eating_nutrition_cost'),
+        eating_reward_penalty=config.get_mandatory('body.eating_reward_penalty'),
         sensor_radius=config.get_mandatory('sensory.sensor_radius'),
         sensor_decay=config.get_mandatory('sensory.decay_power'),
         sensor_range=config.get_mandatory('sensory.collision_sensor_range'),
@@ -216,6 +245,11 @@ def load_env_params(config: Config) -> EnvParams:
         visual_sensor_range=config.get_mandatory('sensory.visual_sensor_range'),
         local_view_size=config.get_mandatory('visualization.local_view_size'),
         proprioception_enabled=config.get_mandatory('sensory.proprioception_enabled'),
+        olfactory_enabled=config.get_mandatory('sensory.olfactory_enabled'),
+        nociception_enabled=config.get_mandatory('sensory.nociception_enabled'),
+        location_sensor_enabled=config.get_mandatory('sensory.location_sensor'),
+        olfactory_vector_size=config.get_mandatory('sensory.vector_size'),
+        nociception_size=config.get_mandatory('sensory.nociception_size'),
         action_dim=4 + int(config.get_mandatory('environment.rest_action_enabled')) + int(config.get_mandatory('environment.eat_action_enabled')),
 
         # Perceptual Noise Configuration
@@ -253,6 +287,28 @@ def load_env_params(config: Config) -> EnvParams:
             config.get('perceptual_noise.modalities.injury.injury_noise_scale', 0.0),
             config.get('perceptual_noise.modalities.visual.injury_noise_scale', 0.0),
             config.get('perceptual_noise.modalities.proprioception.injury_noise_scale', 0.0),
+        ], dtype=jnp.float32), (0, 3)),
+        noise_clip_min=jnp.pad(jnp.array([
+            config.get('perceptual_noise.modalities.olfaction.clip_min', -100.0),
+            config.get('perceptual_noise.modalities.extero_nociception.clip_min', -100.0),
+            config.get('perceptual_noise.modalities.collision.clip_min', -100.0),
+            config.get('perceptual_noise.modalities.location.clip_min', -100.0),
+            config.get('perceptual_noise.modalities.satiation.clip_min', -100.0),
+            config.get('perceptual_noise.modalities.nutrition.clip_min', -100.0),
+            config.get('perceptual_noise.modalities.injury.clip_min', -100.0),
+            config.get('perceptual_noise.modalities.visual.clip_min', -100.0),
+            config.get('perceptual_noise.modalities.proprioception.clip_min', -100.0),
+        ], dtype=jnp.float32), (0, 3)),
+        noise_clip_max=jnp.pad(jnp.array([
+            config.get('perceptual_noise.modalities.olfaction.clip_max', 100.0),
+            config.get('perceptual_noise.modalities.extero_nociception.clip_max', 100.0),
+            config.get('perceptual_noise.modalities.collision.clip_max', 100.0),
+            config.get('perceptual_noise.modalities.location.clip_max', 100.0),
+            config.get('perceptual_noise.modalities.satiation.clip_max', 100.0),
+            config.get('perceptual_noise.modalities.nutrition.clip_max', 100.0),
+            config.get('perceptual_noise.modalities.injury.clip_max', 100.0),
+            config.get('perceptual_noise.modalities.visual.clip_max', 100.0),
+            config.get('perceptual_noise.modalities.proprioception.clip_max', 100.0),
         ], dtype=jnp.float32), (0, 3))
     )
 

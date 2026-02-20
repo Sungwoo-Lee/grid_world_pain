@@ -76,6 +76,8 @@ class EnvParams:
     pred_recovery: jnp.ndarray
     pred_hunt_thresh: jnp.ndarray
     pred_attack_delay: jnp.ndarray
+    predator_enabled: bool = struct.field(pytree_node=False)
+    pred_spawn_area: jnp.ndarray # [num_pred, 4]
 
 
     # Obstacles
@@ -84,6 +86,8 @@ class EnvParams:
     obs_damage: jnp.ndarray     # [num_obs]
     obs_property: jnp.ndarray   # [num_obs, vector_size]
     obs_nociception: jnp.ndarray # [num_obs]
+    obs_type: jnp.ndarray       # [num_obs] int32 index for names
+    obstacle_names: tuple[str, ...] = struct.field(pytree_node=False)
     
     # Neutral Animals
     neutral_property: jnp.ndarray   # [num_neutral, vector_size]
@@ -118,6 +122,8 @@ class EnvParams:
     start_pos: jnp.ndarray  # [2]
     rest_action_enabled: bool = struct.field(pytree_node=False)
     eat_action_enabled: bool = struct.field(pytree_node=False)
+    eating_nutrition_cost: float
+    eating_reward_penalty: float
 
     
     # Sensory
@@ -127,17 +133,24 @@ class EnvParams:
     visual_sensor_enabled: bool = struct.field(pytree_node=False)
     visual_sensor_range: int = struct.field(pytree_node=False)
     local_view_size: int = struct.field(pytree_node=False)
+    olfactory_enabled: bool = struct.field(pytree_node=False)
+    nociception_enabled: bool = struct.field(pytree_node=False)
+    location_sensor_enabled: bool = struct.field(pytree_node=False)
 
     # Proprioception
     proprioception_enabled: bool = struct.field(pytree_node=False)
     action_dim: int = struct.field(pytree_node=False)
+    olfactory_vector_size: int = struct.field(pytree_node=False)
+    nociception_size: int = struct.field(pytree_node=False)
 
     # Perceptual Noise Parameters (Vectorized across modalities)
     perceptual_noise_enabled: bool = struct.field(pytree_node=False)
     # Modalities: Olfaction, Extero Nociception, Collision, Location, Satiation, Nutrition, Injury, Visual, Proprioception (+3 buffer)
     noise_modes: jnp.ndarray          # [12] int32 (0: None, 1: Constant, 2: State-Dependent)
     noise_sigmas: jnp.ndarray         # [12] float32 (Base Sigma)
-    noise_injury_scales: jnp.ndarray   # [12] float32 (Injury Noise Scale)
+    noise_injury_scales: jnp.ndarray  # [12] float32 (Injury Noise Scale)
+    noise_clip_min: jnp.ndarray       # [12] float32 (Per-modality observation lower bound)
+    noise_clip_max: jnp.ndarray       # [12] float32 (Per-modality observation upper bound)
 
     def _replace(self, **kwargs):
         return self.replace(**kwargs)

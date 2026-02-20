@@ -312,7 +312,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     
     # Danger interaction (Auto)
     is_danger = params.res_type == 1
-    damage_res = jnp.sum(jnp.where(jnp.logical_and(interact_resource, is_danger), params.res_damage, 0.0))
+    damage_res = jnp.sum(jnp.where(jnp.logical_and(interact_resource, is_danger), params.res_damage[:, 0], 0.0))
     
     # Food interaction (Action-based or Auto)
     is_food = params.res_type == 0
@@ -357,7 +357,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     
     # Predator Damage
     at_predator = jnp.all(new_pred_pos == new_agent_pos, axis=-1)
-    damage_pred = jnp.sum(jnp.where(at_predator, params.pred_damage, 0.0))
+    damage_pred = jnp.sum(jnp.where(at_predator, params.pred_damage[:, 0], 0.0))
     
     # Trigger Attack Delay for predators that hit the agent
     new_pred_attack_timer = jnp.where(at_predator, params.pred_attack_delay, new_pred_attack_timer)
@@ -365,10 +365,11 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # Rock/Obstacle Damage
     # 1. Overlap damage (non-blocking rocks at current pos)
     at_obs = jnp.all(state.obs_pos == new_agent_pos, axis=-1)
-    damage_obs_overlap = jnp.sum(jnp.where(jnp.logical_and(at_obs, jnp.logical_not(params.obs_blocking)), params.obs_damage, 0.0))
+    damage_obs_overlap = jnp.sum(jnp.where(jnp.logical_and(at_obs, jnp.logical_not(params.obs_blocking)), params.obs_damage[:, 0], 0.0))
     
-    # 2. Collision damage (bumping into blocking rocks)
-    damage_obs_collision = jnp.where(just_collided, jnp.max(params.obs_damage, where=params.obs_blocking, initial=0.0), 0.0)
+    # 2. Collision damage (blocking rocks)
+    # Damage only if we actually hit a blocking obstacle
+    damage_obs_collision = jnp.where(just_collided, jnp.max(params.obs_damage[:, 0]), 0.0)
     
     # Calculate collision NOC intensity for sensing
     collision_noc = jnp.where(just_collided, jnp.max(params.obs_nociception, where=params.obs_blocking, initial=0.0), 0.0)

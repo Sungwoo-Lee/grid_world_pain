@@ -9,10 +9,10 @@ import seaborn as sns
 print("Loading stats data from the results directory...")
 
 MODEL_TYPE = "JAX_RecurrentPPO"
-MODEL_ID = "20260212-202012_rppo_128env_gru"
-CHECKPOINT = 5000009
+MODEL_ID = "20260213-170405_rppo_128env_NoLoc"
+CHECKPOINT = 1000003
 
-files = sorted(glob.glob(f"./results/{MODEL_TYPE}/{MODEL_ID}/stats/{CHECKPOINT}/ep*.csv"))
+files = sorted(glob.glob(f"./results/{MODEL_TYPE}/{MODEL_ID}/stats/{CHECKPOINT}/*ep_stats.csv"))
 
 if not files:
     print("No stats files found.")
@@ -20,13 +20,20 @@ if not files:
 
 all_stats = []
 for file in files:
-    # Extract episode number from filename (e.g., ep_1_stats.csv)
     filename = os.path.basename(file)
-    try:
-        episode_num = int(filename.split('_')[1])
-    except (IndexError, ValueError):
-        print(f"Warning: Could not extract episode number from {filename}. Skipping.")
-        continue
+    # Extract episode number from filename (e.g., 000001ep_stats.csv or ep_1_stats.csv)
+    import re
+    match = re.search(r'(\d+)ep', filename)
+    if match:
+        episode_num = int(match.group(1))
+    else:
+        # Fallback for old format ep_1_stats.csv
+        match = re.search(r'ep_(\d+)', filename)
+        if match:
+            episode_num = int(match.group(1))
+        else:
+            print(f"Warning: Could not extract episode number from {filename}. Skipping.")
+            continue
     
     df = pd.read_csv(file)
     df['episode'] = episode_num
@@ -45,16 +52,21 @@ print(full_stats.head())
 print("\nLast 5 rows:")
 print(full_stats.tail())
 
-print("\nUnique episode numbers:")
-print(sorted(full_stats['episode'].unique()))
+# print all keys properly as there are many keys
+print("\nAll keys:")
+for key in full_stats.keys():
+    print(key)
+
+# print("\nUnique episode numbers:")
+# print(sorted(full_stats['episode'].unique()))
 
 # --- Scatter Plot for Rest and Eat Actions ---
 print("\nGenerating scatter plot for 'Rest' and 'Eat' actions...")
 
 # Filter for Rest and Eat actions
 # Using 'Rest' and 'Eat' based on previous inspection
-# actions_to_plot = ["Rest", "Eat"]
-actions_to_plot = ["Rest"]
+actions_to_plot = ["Rest", "Eat"]
+# actions_to_plot = ["Rest"]
 filtered_stats = full_stats[full_stats['action'].isin(actions_to_plot)].copy()
 
 if filtered_stats.empty:
@@ -67,12 +79,11 @@ else:
     sns.set_theme(style="whitegrid")
     
     sns.scatterplot(
-        # data=filtered_stats[filtered_stats['episode']==1],
         data=filtered_stats,
         x='nutrition',
         y='injury',
-        # hue='action',
-        # palette={'Eat': 'green', 'Rest': 'blue'},
+        hue='action',
+        palette={'Eat': 'green', 'Rest': 'blue'},
         alpha=0.6,
         s=50,
         edgecolor='w',
