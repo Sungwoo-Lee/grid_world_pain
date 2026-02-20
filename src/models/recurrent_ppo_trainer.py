@@ -22,6 +22,7 @@ class PPOBatch(NamedTuple):
     values: jnp.ndarray
     advantages: jnp.ndarray
     targets: jnp.ndarray
+    dones: jnp.ndarray
     h_init: Any  # Can be tuple or array
 
 def compute_gae(rewards, values_next, dones, gamma, lmbda):
@@ -64,9 +65,12 @@ def _h_vmap_axes(h_state):
     return jax.tree_util.tree_map(lambda _: 0, h_state)
 
 def _h_reset_on_done(h_state, done):
-    """Reset all leaves of a hidden state PyTree to zero where done=True."""
+    """Reset all leaves of a hidden state PyTree to zero where done=True.
+    
+    Uses efficient broadcasting that works for both scalar and vector 'done'.
+    """
     return jax.tree_util.tree_map(
-        lambda h: jnp.where(done[:, None], 0.0, h),
+        lambda h: jnp.where(jnp.reshape(done, (done.shape + (1,) * (h.ndim - done.ndim))), 0.0, h),
         h_state
     )
 
@@ -78,17 +82,21 @@ def ppo_loss_fn(model, batch, clip_eps, ent_coef, vf_coef):
     """PPO loss function for a trajectory batch using an NNX model."""
     
     def scan_fn(h, x):
-        obs, action = x
+        obs, action, done = x
         logits, value, h_new, _ = model(obs, h)
         
         log_probs = jax.nn.log_softmax(logits)
         new_log_prob = log_probs[action]
         entropy = -jnp.sum(jax.nn.softmax(logits) * log_probs)
         
-        return h_new, (new_log_prob, value.squeeze(), entropy)
+        # RNN Fix: Reset hidden state for the NEXT step if this step is DONE
+        # This prevents Episode 2 from seeing Episode 1's history
+        h_reset = _h_reset_on_done(h_new, done)
+        
+        return h_reset, (new_log_prob, value.squeeze(), entropy)
 
     _, (new_log_probs, new_values, entropies) = jax.lax.scan(
-        scan_fn, batch.h_init, (batch.obs, batch.actions)
+        scan_fn, batch.h_init, (batch.obs, batch.actions, batch.dones)
     )
     
     # 1. Policy Loss
@@ -170,7 +178,7 @@ def update_step(model, optimizer, batch, config):
         def compute_loss(m, obs_b):
             return ppo_loss_fn(m, obs_b, config.clip_eps, config.ent_coef, config.vf_coef)
         
-        b_axes = PPOBatch(obs=1, actions=1, log_probs=1, values=1, advantages=1, targets=1, h_init=0)
+        b_axes = PPOBatch(obs=1, actions=1, log_probs=1, values=1, advantages=1, targets=1, dones=1, h_init=0)
         losses, aux = jax.vmap(compute_loss, in_axes=(None, b_axes))(model, batch)
         return jnp.mean(losses), jax.tree_util.tree_map(jnp.mean, aux)
     
@@ -243,6 +251,7 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
         values=trajectories.value,
         advantages=advantages,
         targets=targets,
+        dones=trajectories.done,
         h_init=h_init
     )
     
