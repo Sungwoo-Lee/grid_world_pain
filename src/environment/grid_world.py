@@ -296,6 +296,7 @@ def draw_categorical_visual(ax, x, y, w, h, obs_vec, r, num_features, true_vec=N
     # Rotate colors if we have more features
     while len(feature_colors) < num_features:
         feature_colors += feature_colors
+
     # Cell labels for spatial context (Center, Up, Right, Down, Left)
     cell_labels = ['C', 'U', 'R', 'D', 'L'] if num_cells == 5 else [f'C{i}' for i in range(num_cells)]
     if num_cells <= 1: cell_labels = ['']
@@ -583,6 +584,7 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
             seg_w = 0.8
             seg_h = 0.04
             
+            # Use real values if available, otherwise just use the breakdown
             max_d = max(d_dang + d_pred + d_obst, 1.0)
             
             # Draw Segmented Bar
@@ -597,7 +599,7 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
             
             ax_right.text(0.9, seg_y + seg_h + 0.01, f"TOTAL: {dmg_total:.2f}", color=COLORS['injury'], fontsize=7, fontweight='bold', ha='right', transform=ax_right.transAxes)
             y_cursor -= (pod_h_dmg + 0.03)
-
+    
     known_sensors = ['Olfactory', 'Extero Nociception', 'Collision', 'Visual', 'LOC']
     
     for s_name in known_sensors:

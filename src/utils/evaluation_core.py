@@ -91,6 +91,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 # New "Full Spectrum" metrics
                 'event_ate': False,
                 'event_damage': 0.0,
+                'damage_danger': 0.0,
+                'damage_predator': 0.0,
+                'damage_obstacle': 0.0,
                 'event_collided': False,
                 'event_rested': False,
                 'sense_nociception': 0.0,
@@ -107,62 +110,68 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         def get_sensory_viz(obs_vec, true_obs_vec=None):
             # Internal helper to slice flat obs into renderer-friendly format
             ptr = 0
-            t_ptr = 0
             
-            # Slices
-            olf_dim = breakdown['Olfaction']
-            olf_obs = obs_vec[ptr:ptr+olf_dim]
-            olf_true = true_obs_vec[t_ptr:t_ptr+olf_dim] if true_obs_vec is not None else olf_obs
-            ptr += olf_dim; t_ptr += olf_dim
+            viz = []
             
-            noc_dim = breakdown['Extero Nociception']
-            noc_obs = float(obs_vec[ptr]) if noc_dim > 0 else 0.0
-            noc_true = float(true_obs_vec[t_ptr]) if true_obs_vec is not None and noc_dim > 0 else noc_obs
-            ptr += noc_dim; t_ptr += noc_dim
+            # 1. Olfaction
+            if 'Olfaction' in breakdown:
+                olf_dim = breakdown['Olfaction']
+                olf_obs = obs_vec[ptr:ptr+olf_dim]
+                olf_true = true_obs_vec[ptr:ptr+olf_dim] if true_obs_vec is not None else olf_obs
+                viz.append({'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true, 'type': 'spectrum', 'labels': ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'NEU', 'RCK']})
+                ptr += olf_dim
             
-            coll_dim = breakdown['Collision']
-            coll_obs = obs_vec[ptr:ptr+coll_dim]
-            coll_true = true_obs_vec[t_ptr:t_ptr+coll_dim] if true_obs_vec is not None else coll_obs
-            ptr += coll_dim; t_ptr += coll_dim
+            # 2. Extero Nociception
+            if 'Extero Nociception' in breakdown:
+                noc_dim = breakdown['Extero Nociception']
+                noc_obs = float(obs_vec[ptr])
+                noc_true = float(true_obs_vec[ptr]) if true_obs_vec is not None else noc_obs
+                viz.append({'name': 'Extero Nociception', 'intensity': noc_obs, 'true_intensity': noc_true, 'color': '#c0392b', 'type': 'intensity'})
+                ptr += noc_dim
             
-            loc_dim = breakdown['Location']
-            loc_vec = obs_vec[ptr:ptr+loc_dim]
-            ptr += loc_dim; t_ptr += loc_dim
+            # 3. Collision
+            if 'Collision' in breakdown:
+                coll_dim = breakdown['Collision']
+                coll_obs = obs_vec[ptr:ptr+coll_dim]
+                coll_true = true_obs_vec[ptr:ptr+coll_dim] if true_obs_vec is not None else coll_obs
+                viz.append({'name': 'Collision', 'vector': coll_obs, 'true_vector': coll_true, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1})
+                ptr += coll_dim
             
-            sat_dim = breakdown['Satiation']
-            sat_obs = float(obs_vec[ptr]) if sat_dim > 0 else 0.0
-            ptr += sat_dim; t_ptr += sat_dim
+            # 4. Location
+            if 'Location' in breakdown:
+                loc_dim = breakdown['Location']
+                loc_vec = obs_vec[ptr:ptr+loc_dim]
+                viz.append({'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'})
+                ptr += loc_dim
             
-            nut_dim = breakdown['Nutrition']
-            nut_obs = float(obs_vec[ptr]) if nut_dim > 0 else 0.0
-            ptr += nut_dim; t_ptr += nut_dim
+            # 5. Interoception
+            if 'Satiation' in breakdown:
+                sat_obs = float(obs_vec[ptr])
+                viz.append({'name': 'Satiation', 'intensity': sat_obs, 'type': 'intensity'})
+                ptr += breakdown['Satiation']
+            if 'Nutrition' in breakdown:
+                nut_obs = float(obs_vec[ptr])
+                viz.append({'name': 'Nutrition', 'intensity': nut_obs, 'type': 'intensity'})
+                ptr += breakdown['Nutrition']
+            if 'Injury' in breakdown:
+                inj_obs = float(obs_vec[ptr])
+                viz.append({'name': 'Injury', 'intensity': inj_obs, 'type': 'intensity'})
+                ptr += breakdown['Injury']
             
-            inj_dim = breakdown['Injury']
-            inj_obs = float(obs_vec[ptr]) if inj_dim > 0 else 0.0
-            ptr += inj_dim; t_ptr += inj_dim
-            
-            viz = [
-                {'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true, 'type': 'spectrum'},
-                {'name': 'Extero Nociception', 'intensity': noc_obs, 'true_intensity': noc_true, 'color': '#c0392b', 'type': 'intensity'},
-                {'name': 'Collision', 'vector': coll_obs, 'true_vector': coll_true, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1},
-                {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'},
-                {'name': 'Satiation', 'intensity': sat_obs, 'type': 'intensity'},
-                {'name': 'Nutrition', 'intensity': nut_obs, 'type': 'intensity'},
-                {'name': 'Injury', 'intensity': inj_obs, 'type': 'intensity'},
-            ]
-            
+            # 6. Visual
             if 'Visual' in breakdown:
                 vis_dim = breakdown['Visual']
                 vis_obs = obs_vec[ptr:ptr+vis_dim]
-                vis_true = true_obs_vec[t_ptr:t_ptr+vis_dim] if true_obs_vec is not None else vis_obs
-                ptr += vis_dim; t_ptr += vis_dim
-                viz.append({'name': 'Visual', 'vector': vis_obs, 'true_vector': vis_true, 'type': 'visual_grid', 'num_features': 8, 'range': params.visual_sensor_range})
+                vis_true = true_obs_vec[ptr:ptr+vis_dim] if true_obs_vec is not None else vis_obs
+                viz.append({'name': 'Visual', 'vector': vis_obs, 'true_vector': vis_true, 'type': 'visual_grid', 'num_features': 8, 'range': params.visual_sensor_range, 'labels': ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'NEU', 'RCK']})
+                ptr += vis_dim
             
+            # 7. Proprioception
             if 'Proprioception' in breakdown:
                 proprio_dim = breakdown['Proprioception']
                 proprio_vec = obs_vec[ptr:ptr+proprio_dim]
-                ptr += proprio_dim; t_ptr += proprio_dim
                 viz.append({'name': 'Proprioception', 'vector': proprio_vec, 'type': 'radial', 'color': '#be4bdb'})
+                ptr += proprio_dim
 
             return viz
 
@@ -173,6 +182,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 state, params, episode=ep+1, step=0, 
                 train_episode=checkpoint_pct,
                 sensory_data=get_sensory_viz(obs, true_obs),
+                info=None,
                 icon_config=icon_config
             ))
             if debug: print(" Done", flush=True)
@@ -226,6 +236,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                     state, params, episode=ep+1, step=step_count, 
                     train_episode=checkpoint_pct,
                     action=action_idx, sensory_data=get_sensory_viz(next_obs, true_obs),
+                    info=jax.device_get(info),
                     icon_config=icon_config
                 ))
                 if debug: print(" Done", flush=True)
@@ -245,6 +256,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                     'drive_injury': info.get('drive_injury', 0.0),
                     'ate_food': info.get('ate_food', False),
                     'damage': info.get('damage', 0.0),
+                    'damage_danger': info.get('damage_danger', 0.0),
+                    'damage_predator': info.get('damage_predator', 0.0),
+                    'damage_obstacle': info.get('damage_obstacle', 0.0),
                     'event_collided': info.get('event_collided', False),
                     'event_rested': info.get('rested', False),
                     'reward_homeostatic': info.get('reward_homeostatic', 0.0),
@@ -270,6 +284,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                     'drive_injury': float(stats_data['drive_injury']),
                     'event_ate': bool(stats_data['ate_food']),
                     'event_damage': float(stats_data['damage']),
+                    'damage_danger': float(stats_data['damage_danger']),
+                    'damage_predator': float(stats_data['damage_predator']),
+                    'damage_obstacle': float(stats_data['damage_obstacle']),
                     'event_collided': bool(stats_data['event_collided']),
                     'event_rested': bool(stats_data['event_rested']),
                     'sense_nociception': float(stats_data['last_noc']),
@@ -335,3 +352,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         "episode_lengths": episode_lengths,
         "last_video_path": last_video_path
     }
+
+def main():
+    pass
+
+if __name__ == "__main__":
+    main()
