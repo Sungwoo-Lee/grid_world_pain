@@ -39,7 +39,6 @@ elif ":" in _args.device:
     if backend in ["gpu", "cuda"]:
         os.environ["CUDA_VISIBLE_DEVICES"] = index
         os.environ["JAX_PLATFORMS"] = "cuda"
-# For default gpu/cuda, we allow JAX discovery but still with no preallocation
 
 import glob
 import re
