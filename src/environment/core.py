@@ -50,8 +50,9 @@ def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.nda
     if params.with_nutrition:
         # Nutrition decays linearly
         new_nutrition = prev_nutrition - params.metabolic_cost
-        # Refill from food (immediate)
-        new_nutrition = jnp.where(info['ate_food'], new_nutrition + params.food_nutrition_gain, new_nutrition)
+        # Refill from food (immediate) - with consumption cost
+        ate_food_gain = params.food_nutrition_gain - params.eating_nutrition_cost
+        new_nutrition = jnp.where(info['ate_food'], new_nutrition + ate_food_gain, new_nutrition)
         new_nutrition = jnp.clip(new_nutrition, 0.0, params.max_nutrition)
     else:
         new_nutrition = prev_nutrition
@@ -448,6 +449,8 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         reward_extrinsic = jnp.where(done, -params.death_penalty, reward_extrinsic)
     
     reward = reward_homeostatic + reward_extrinsic
+    # Apply eating penalty if ate food
+    reward = jnp.where(ate_food, reward - params.eating_reward_penalty, reward)
     
     info['reward_homeostatic'] = reward_homeostatic
     info['reward_extrinsic'] = reward_extrinsic
