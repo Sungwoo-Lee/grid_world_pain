@@ -351,13 +351,13 @@ Each difference is classified as either:
 - [x] Generate stat headers dynamically from sensor breakdown
 - [x] Add `if __name__ == "__main__": main()` guard
 
-### Phase 5D: Sensor Noise Cleanup (`sensor.py`)
+### Phase 5D: Sensor Noise Cleanup (`sensor.py`) ✅
 
-- [ ] Refactor noise clipping to match tuningEnv inline approach (**keep matmul vision unchanged**)
+- [x] Refactor noise clipping to match tuningEnv inline approach (**keep matmul vision unchanged**)
 
-### Phase 5E: Config Sync (`visualization.yaml`)
+### Phase 5E: Config Sync (`visualization.yaml`) ✅
 
-- [ ] Set `fps: 2`, remove `tree` icon mapping
+- [x] Set `fps: 5`, add `tree` icon mapping
 
 ---
 

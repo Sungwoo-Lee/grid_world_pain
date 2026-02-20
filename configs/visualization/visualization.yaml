@@ -4,9 +4,7 @@ visualization:
   font_family: "sans-serif"
   
   # Video settings
-  fps: 2
-  # fps: 5
-  # video_dpi: 100
+  fps: 5
   video_dpi: 300
   icon_scale: 1.0
   
@@ -20,6 +18,7 @@ visualization:
     agent_danger: "agent_danger"
     agent_predator: "agent_predator"
     rock: "rock"
+    tree: "tree"
     neutral: "neutral"
   
   # Activation / LRP Visualization
