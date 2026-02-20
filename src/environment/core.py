@@ -403,9 +403,14 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # rested is always action 4 if enabled
     rested = jnp.logical_and(params.rest_action_enabled, action == 4)
     
+    damage_danger = damage_res
+    
     info = {
         'ate_food': ate_food,
         'damage': total_damage,
+        'damage_danger': damage_danger,
+        'damage_predator': damage_pred,
+        'damage_obstacle': damage_obs_overlap + damage_obs_collision,
         'rested': rested,
         'hit_danger': jnp.any(jnp.logical_and(interact_resource, is_danger)),
         'hit_predator': jnp.any(at_predator),
