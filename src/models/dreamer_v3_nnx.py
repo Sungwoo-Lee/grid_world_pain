@@ -5,6 +5,7 @@ from flax import nnx
 from typing import Tuple, Dict, Any, Optional
 
 from src.models.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist
+from src.models.modulated_layer_norm_gru_cell import ModulatedLayerNormGRUCell
 
 # -----------------------------------------------------------------------------
 # Core Modules
@@ -17,131 +18,123 @@ class SiLU(nnx.Module):
 class LayerNormGRUCell(nnx.Module):
     def __init__(self, hidden_size: int, rngs: nnx.Rngs):
         self.hidden_size = hidden_size
-        # GRU Gates: Reset, Update, Candidate
-        # Combined Linear layer for input -> 3*hidden
         self.dense_ih = nnx.Linear(hidden_size, 3 * hidden_size, use_bias=False, rngs=rngs)
         self.dense_hh = nnx.Linear(hidden_size, 3 * hidden_size, use_bias=False, rngs=rngs)
-        
+
         self.ln_ih = nnx.LayerNorm(3 * hidden_size, rngs=rngs)
         self.ln_hh = nnx.LayerNorm(3 * hidden_size, rngs=rngs)
 
     def __call__(self, x, h):
-        # x is assumed to be projected to hidden_size already? 
-        # No, typically input z is projected before GRU. 
-        # Here we assume x matches shape or dense_ih handles it.
-        # But dense_ih is hidden->3*hidden. So x must be hidden_size? 
-        # Standard GRUCell takes (input_size, hidden_size).
-        # We'll assume external projection for now to match 'deter_dim'.
-        
         gates_ih = self.ln_ih(self.dense_ih(x))
         gates_hh = self.ln_hh(self.dense_hh(h))
         gates = gates_ih + gates_hh
-        
+
         reset, update, cand = jnp.split(gates, 3, axis=-1)
-        
+
         reset = nnx.sigmoid(reset)
         update = nnx.sigmoid(update)
         cand = jnp.tanh(cand)
-        
+
         h_new = (1 - update) * h + update * cand
         return h_new
 
 class RSSM(nnx.Module):
-    def __init__(self, action_dim: int, deter_dim: int = 512, stoch_dim: int = 32, discrete: int = 32, embed_dim: int = 512, rngs: nnx.Rngs = None):
+    def __init__(self, action_dim: int, deter_dim: int = 512, stoch_dim: int = 32,
+                 discrete: int = 32, embed_dim: int = 512,
+                 modulation_enabled: bool = False, rngs: nnx.Rngs = None):
         self.deter_dim = deter_dim
         self.stoch_dim = stoch_dim
         self.discrete = discrete
         self.action_dim = action_dim
-        
-        # Cell Input: stoch + action -> deter_dim
-        self.img_in = nnx.Linear(stoch_dim * discrete + action_dim, deter_dim, rngs=rngs)
-        self.cell = LayerNormGRUCell(deter_dim, rngs=rngs)
-        
-        # Prior: deter -> stoch_logits
-        self.img_out = nnx.Linear(deter_dim, stoch_dim * discrete, rngs=rngs)
-        
-        # Posterior: deter + embed -> stoch_logits
-        self.obs_out = nnx.Linear(deter_dim + embed_dim, stoch_dim * discrete, rngs=rngs)
+        self.modulation_enabled = modulation_enabled
 
+        self.img_in = nnx.Linear(stoch_dim * discrete + action_dim, deter_dim, rngs=rngs)
+
+        if modulation_enabled:
+            self.cell = ModulatedLayerNormGRUCell(deter_dim, rngs=rngs)
+        else:
+            self.cell = LayerNormGRUCell(deter_dim, rngs=rngs)
+
+        self.img_out = nnx.Linear(deter_dim, stoch_dim * discrete, rngs=rngs)
+        self.obs_out = nnx.Linear(deter_dim + embed_dim, stoch_dim * discrete, rngs=rngs)
 
     def initial(self, batch_size: int):
         return {
             'deter': jnp.zeros((batch_size, self.deter_dim)),
-            'stoch': jnp.zeros((batch_size, self.stoch_dim * self.discrete)), # One-hot flat
+            'stoch': jnp.zeros((batch_size, self.stoch_dim * self.discrete)),
             'logits': jnp.zeros((batch_size, self.stoch_dim, self.discrete)),
             'prev_action': jnp.zeros((batch_size, self.action_dim))
         }
 
-    def observe(self, embed, action, is_first, state=None, rngs: nnx.Rngs = None):
-        # embed: (B, T, E)
-        # action: (B, T, A)
-        # is_first: (B, T)
-        
-        B, T, _ = embed.shape
-        if state is None:
-            state = self.initial(B)
-            
-        # Unroll loop
-        # We can use scan, but for now manual loop or scan wrapper.
-        # For simplicity inside Module, let's look at structure.
-        # It's better to expose single step and use scan in call/external.
-        pass # To be implemented in __call__ or scan method
+    def step(self, prev_state, embed, action, is_first, key, gate_bias=None):
+        """Single step transition with optional neuromodulation.
 
-    def step(self, prev_state, embed, action, is_first, key):
-        # Single step transition
-        # Mask state if first step
-        # CRITICAL: Use .reshape((-1, 1)) to be robust to is_first shape (B,) or (B, 1)
-        # Failure to reshape causes broadcasting that results in Rank-3 states.
+        Args:
+            prev_state: RSSM state dict.
+            embed: Encoded observation, shape (B, embed_dim).
+            action: One-hot action, shape (B, action_dim).
+            is_first: Episode boundary flag, shape (B,) or (B, 1).
+            key: PRNG key for stochastic sampling.
+            gate_bias: Optional gate-bias from modulator for GRU update gate,
+                       shape (B, deter_dim). None = no modulation.
+        """
         mask = (1.0 - is_first).astype(jnp.float32).reshape((-1, 1))
         deter = prev_state['deter'] * mask
         stoch = prev_state['stoch'] * mask
-        
-        # 1. Deterministic Step
-        x = jnp.concatenate([stoch, action], axis=-1)
-        x = self.img_in(x)
-        x = nnx.elu(x) # Activation before GRU typically? DreamerV3 uses SiLU/ELU
-        deter = self.cell(x, deter)
-        
-        # 2. Prior
-        prior_logits = self.img_out(deter)
-        prior_logits = prior_logits.reshape(prior_logits.shape[:-1] + (self.stoch_dim, self.discrete))
-        
-        # Sample Prior (for imagination usually, but here just computing logits)
-        # We don't sample prior for posterior calculation usually, unless for KL.
-        
-        # 3. Posterior
-        # Embed is input here
-        post_input = jnp.concatenate([deter, embed], axis=-1)
-        post_logits = self.obs_out(post_input)
-        post_logits = post_logits.reshape(post_logits.shape[:-1] + (self.stoch_dim, self.discrete))
-        
-        # Sample Posterior
-        dist = OneHotDist(post_logits)
-        stoch = dist.sample(key) # (B, S, D)
-        stoch = stoch.reshape(stoch.shape[:-2] + (-1,)) # Flatten
-        
-        post = {'deter': deter, 'stoch': stoch, 'logits': post_logits, 'prev_action': action}
-        prior = {'deter': deter, 'stoch': None, 'logits': prior_logits, 'prev_action': action} # Stoch sampled later if needed
-        
-        return post, prior
 
-    def imagine_step(self, prev_state, action, key):
-        # Dynamics only
-        deter = prev_state['deter']
-        stoch = prev_state['stoch']
-        
         x = jnp.concatenate([stoch, action], axis=-1)
         x = self.img_in(x)
         x = nnx.elu(x)
-        deter = self.cell(x, deter)
-        
+
+        if self.modulation_enabled and gate_bias is not None:
+            deter = self.cell(x, deter, gate_bias=gate_bias)
+        else:
+            deter = self.cell(x, deter)
+
         prior_logits = self.img_out(deter)
         prior_logits = prior_logits.reshape(prior_logits.shape[:-1] + (self.stoch_dim, self.discrete))
-        
+
+        post_input = jnp.concatenate([deter, embed], axis=-1)
+        post_logits = self.obs_out(post_input)
+        post_logits = post_logits.reshape(post_logits.shape[:-1] + (self.stoch_dim, self.discrete))
+
+        dist = OneHotDist(post_logits)
+        stoch = dist.sample(key)
+        stoch = stoch.reshape(stoch.shape[:-2] + (-1,))
+
+        post = {'deter': deter, 'stoch': stoch, 'logits': post_logits, 'prev_action': action}
+        prior = {'deter': deter, 'stoch': None, 'logits': prior_logits, 'prev_action': action}
+
+        return post, prior
+
+    def imagine_step(self, prev_state, action, key, gate_bias=None):
+        """Dynamics-only step with optional neuromodulation (for imagination).
+
+        Args:
+            prev_state: RSSM state dict.
+            action: One-hot action, shape (B, action_dim).
+            key: PRNG key for stochastic sampling.
+            gate_bias: Optional gate-bias from modulator, shape (B, deter_dim).
+        """
+        deter = prev_state['deter']
+        stoch = prev_state['stoch']
+
+        x = jnp.concatenate([stoch, action], axis=-1)
+        x = self.img_in(x)
+        x = nnx.elu(x)
+
+        if self.modulation_enabled and gate_bias is not None:
+            deter = self.cell(x, deter, gate_bias=gate_bias)
+        else:
+            deter = self.cell(x, deter)
+
+        prior_logits = self.img_out(deter)
+        prior_logits = prior_logits.reshape(prior_logits.shape[:-1] + (self.stoch_dim, self.discrete))
+
         dist = OneHotDist(prior_logits)
         stoch = dist.sample(key)
         stoch = stoch.reshape(stoch.shape[:-2] + (-1,))
-        
+
         prior = {'deter': deter, 'stoch': stoch, 'logits': prior_logits, 'prev_action': action}
         return prior
 
@@ -149,25 +142,58 @@ class Encoder(nnx.Module):
     def __init__(self, input_dim: int, embed_dim: int, fc_layers: list, rngs: nnx.Rngs):
         """
         Configurable Encoder matching PyTorch architecture.
+
+        The body produces a pre-activation embedding, and final_act applies SiLU.
+        This split allows neuromodulation (Injection A) to be applied between
+        the body and final activation (PreActivation style).
+
         Args:
             input_dim: Input observation dimension
             embed_dim: Output embedding dimension
             fc_layers: List of hidden layer sizes (e.g., [128, 128, 128, 128, 128])
         """
-        layers = []
+        self.embed_dim = embed_dim
+
+        body_layers = []
         in_d = input_dim
         for h in fc_layers:
-            layers.append(nnx.Linear(in_d, h, rngs=rngs))
-            layers.append(nnx.LayerNorm(h, rngs=rngs))
-            layers.append(SiLU())
+            body_layers.append(nnx.Linear(in_d, h, rngs=rngs))
+            body_layers.append(nnx.LayerNorm(h, rngs=rngs))
+            body_layers.append(SiLU())
             in_d = h
-        layers.append(nnx.Linear(in_d, embed_dim, rngs=rngs))
-        layers.append(nnx.LayerNorm(embed_dim, rngs=rngs))
-        layers.append(SiLU())
-        self.net = nnx.Sequential(*layers)
-        
+        body_layers.append(nnx.Linear(in_d, embed_dim, rngs=rngs))
+        body_layers.append(nnx.LayerNorm(embed_dim, rngs=rngs))
+        self.body = nnx.Sequential(*body_layers)
+
+        # Final activation (separate for modulation injection point)
+        self.final_act = SiLU()
+
     def __call__(self, x):
-        return self.net(x)
+        """Standard forward pass (no modulation)."""
+        return self.final_act(self.body(x))
+
+    def forward_with_modulation(self, x, mod_output, modulation_type: str):
+        """Forward pass with neuromodulation (Injection A).
+
+        Applies modulation between body (pre-activation) and final activation.
+
+        Args:
+            x: Observation vector, shape (..., input_dim).
+            mod_output: DreamerModulatorOutput with z_percept (gamma) and
+                        z_percept_add (beta) fields.
+            modulation_type: "Multiplicative" or "PreActivation".
+
+        Returns:
+            Modulated embedding, shape (..., embed_dim).
+        """
+        x_pre = self.body(x)
+
+        if modulation_type == "PreActivation":
+            gamma = jax.nn.sigmoid(mod_output.z_percept)
+            beta = mod_output.z_percept_add
+            return self.final_act(x_pre * gamma + beta)
+        else:
+            return self.final_act(x_pre) * jax.nn.sigmoid(mod_output.z_percept)
 
 class Decoder(nnx.Module):
     def __init__(self, input_dim: int, output_dim: int, fc_layers: list, rngs: nnx.Rngs):
@@ -187,7 +213,7 @@ class Decoder(nnx.Module):
             in_d = h
         layers.append(nnx.Linear(in_d, output_dim, rngs=rngs))
         self.net = nnx.Sequential(*layers)
-        
+
     def __call__(self, x):
         return self.net(x)
 
@@ -209,44 +235,82 @@ class MLP(nnx.Module):
             in_d = h
         layers.append(nnx.Linear(in_d, output_dim, rngs=rngs))
         self.net = nnx.Sequential(*layers)
-        
+
     def __call__(self, x):
         return self.net(x)
 
 class WorldModel(nnx.Module):
-    def __init__(self, obs_dim, act_dim, config: dict, rngs: nnx.Rngs):
+    def __init__(self, obs_dim, act_dim, config: dict, rngs: nnx.Rngs,
+                 modulation_config: Optional[dict] = None):
         """
         Configurable World Model matching PyTorch architecture.
+
         Args:
-            config: Dictionary containing:
-                - encoder_dim: Embedding dimension
-                - encoder_fc_layers: Encoder hidden layers
-                - rssm_deter_dim: Deterministic state dimension
-                - rssm_stoch_dim: Number of stochastic classes
-                - rssm_classes: Number of discrete classes per stoch unit
-                - decoder_fc_layers: Decoder hidden layers
-                - reward_fc_layers: Reward head hidden layers
-                - continue_fc_layers: Continue head hidden layers
+            obs_dim: Observation vector dimension.
+            act_dim: Action space dimension.
+            config: Dictionary containing model hyperparameters.
+            rngs: Flax NNX random number generators.
+            modulation_config: Optional neuromodulation config dict.
+                When not None and type is not None, constructs a
+                DreamerNeuromodulatorRNN and uses ModulatedLayerNormGRUCell.
         """
         self.deter_dim = config.get('rssm_deter_dim', 512)
         self.stoch_dim = config.get('rssm_stoch_dim', 32)
         self.discrete = config.get('rssm_classes', 32)
         encoder_dim = config.get('encoder_dim', self.deter_dim)
-        
+        self.obs_dim = obs_dim
+        self.act_dim = act_dim
+
         encoder_fc = config.get('encoder_fc_layers', [128, 128])
         decoder_fc = config.get('decoder_fc_layers', [128, 128])
         reward_fc = config.get('reward_fc_layers', [128, 128])
         continue_fc = config.get('continue_fc_layers', [128, 128])
-        
-        self.encoder = Encoder(obs_dim, encoder_dim, encoder_fc, rngs=rngs)
-        self.rssm = RSSM(act_dim, self.deter_dim, self.stoch_dim, self.discrete, embed_dim=encoder_dim, rngs=rngs)
 
-        
+        # --- Neuromodulation ---
+        self.modulation_enabled = (modulation_config is not None
+                                   and modulation_config.get('type') is not None)
+        self.modulation_type = modulation_config['type'] if self.modulation_enabled else None
+
+        self.encoder = Encoder(obs_dim, encoder_dim, encoder_fc, rngs=rngs)
+        self.rssm = RSSM(
+            act_dim, self.deter_dim, self.stoch_dim, self.discrete,
+            embed_dim=encoder_dim,
+            modulation_enabled=self.modulation_enabled,
+            rngs=rngs,
+        )
+
         feat_dim = self.deter_dim + self.stoch_dim * self.discrete
-        
+        self.feat_dim = feat_dim
+
         self.decoder = Decoder(feat_dim, obs_dim, decoder_fc, rngs=rngs)
         self.reward_head = MLP(feat_dim, 255, reward_fc, rngs=rngs)
         self.continue_head = MLP(feat_dim, 1, continue_fc, rngs=rngs)
+
+        # --- Construct modulator when enabled ---
+        if self.modulation_enabled:
+            from src.models.neuromodulator import DreamerNeuromodulatorRNN
+            mod_hidden = modulation_config.get('mod_hidden_size', 64)
+            grouping = modulation_config.get('grouping_size', 1)
+            percept_bias = modulation_config.get('percept_bias_init', 2.0)
+            percept_add_bias = modulation_config.get('percept_add_bias_init', 0.0)
+            memory_bias = modulation_config.get('memory_bias_init', 0.0)
+            reward_bias = modulation_config.get('reward_bias_init', 2.0)
+
+            self.modulator = DreamerNeuromodulatorRNN(
+                obs_dim=obs_dim,
+                embed_dim=encoder_dim,
+                deter_dim=self.deter_dim,
+                action_dim=act_dim,
+                mod_hidden_size=mod_hidden,
+                modulation_type=modulation_config['type'],
+                grouping_size=grouping,
+                percept_bias_init=percept_bias,
+                percept_add_bias_init=percept_add_bias,
+                memory_bias_init=memory_bias,
+                reward_bias_init=reward_bias,
+                rngs=rngs,
+            )
+            self.modulator.set_imagine_input_dim(feat_dim + act_dim, rngs)
 
     def get_feat(self, state):
         return jnp.concatenate([state['deter'], state['stoch']], axis=-1)
@@ -262,7 +326,7 @@ class ActorCritic(nnx.Module):
         """
         actor_fc = config.get('actor_fc_layers', [256, 256])
         critic_fc = config.get('critic_fc_layers', [256, 256])
-        
+
         self.actor = MLP(feat_dim, act_dim, actor_fc, rngs=rngs)
         self.critic = MLP(feat_dim, 255, critic_fc, rngs=rngs)
 
@@ -270,13 +334,19 @@ class DreamerV3Agent(nnx.Module):
     """
     Container for the full agent with configurable architecture.
     """
-    def __init__(self, obs_dim, act_dim, config: dict, rngs: nnx.Rngs):
+    def __init__(self, obs_dim, act_dim, config: dict, rngs: nnx.Rngs,
+                 modulation_config: Optional[dict] = None):
         """
         Args:
-            config: Full agent config dictionary from YAML
+            obs_dim: Observation vector dimension.
+            act_dim: Action space dimension.
+            config: Full agent config dictionary from YAML.
+            rngs: Flax NNX random number generators.
+            modulation_config: Optional neuromodulation config dict.
         """
         self.config = config
-        self.wm = WorldModel(obs_dim, act_dim, config, rngs=rngs)
+        self.modulation_config = modulation_config
+        self.wm = WorldModel(obs_dim, act_dim, config, rngs=rngs,
+                             modulation_config=modulation_config)
         feat_dim = self.wm.deter_dim + self.wm.stoch_dim * self.wm.discrete
         self.ac = ActorCritic(feat_dim, act_dim, config, rngs=rngs)
-

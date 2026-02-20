@@ -1,0 +1,49 @@
+agent:
+  algorithm: "DreamerV3"
+  batch_size: 16
+  batch_length: 64
+  train_steps: 1
+  model_lr: 1e-4
+  actor_lr: 8e-5
+  value_lr: 8e-5
+
+  # Network Configuration
+  encoder_dim: 128
+  encoder_fc_layers: [128, 128, 128, 128, 128]
+
+  rssm_deter_dim: 512
+  rssm_stoch_dim: 32
+  rssm_classes: 32
+
+  decoder_fc_layers: [128, 128, 128, 128, 128]
+
+  reward_fc_layers: [128, 128, 128, 128, 128]
+  continue_fc_layers: [128, 128, 128, 128, 128]
+
+  actor_fc_layers: [128, 128, 128, 128, 128]
+  critic_fc_layers: [128, 128, 128, 128, 128]
+  frame_stack: 1
+
+  # Neuromodulation (§5 in NEUROMODULATION_ALGORITHM.md)
+  # DreamerNeuromodulatorRNN with dual input projections (obs + imagine)
+  #
+  # Three injection points:
+  #   Injection A (Perceptual): Modulates encoder output (observation mode only)
+  #     "Multiplicative"  — Post-activation gating: embed = SiLU(body(x)) * sigmoid(gamma)
+  #     "PreActivation"   — Pre-activation gain + shift: embed = SiLU(body(x)*sigmoid(gamma) + beta)
+  #   Injection B (Memory): gate_bias on RSSM GRU update gate (both step & imagine)
+  #   Injection C (Reward): Scales imagined reward: rew = rew * sigmoid(z_reward) (imagine only)
+  #
+  # During imagination, the modulator receives concat(feat, action) and produces
+  # Injections B and C. Modulator hidden state flows from real observations into
+  # imagination, so "affective state" persists and evolves during planning.
+  #
+  # Set type to null for unmodulated baseline.
+  modulation:
+    type: "Multiplicative"       # "Multiplicative", "PreActivation", or null
+    mod_hidden_size: 64          # GRU hidden units for modulator
+    grouping_size: 1             # Spatial grouping G (1 = per-neuron, §12)
+    percept_bias_init: 2.0       # Gain head (gamma) bias init (§5.2: sigmoid(2.0)≈0.88)
+    percept_add_bias_init: 0.0   # Threshold-shift head (beta) bias init (PreActivation only)
+    memory_bias_init: 0.0        # Memory gate-bias init (§5.1a: neutral)
+    reward_bias_init: 2.0        # Reward head bias init (sigmoid(2.0)≈0.88 → near pass-through)

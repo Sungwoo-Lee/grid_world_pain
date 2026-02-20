@@ -12,6 +12,10 @@ class ActorCriticRNN(nnx.Module):
 
     When modulation_config is None, this behaves identically to the original
     unmodulated network (true baseline control, §5.2).
+
+    Supports two perceptual modulation styles via modulation_config['type']:
+    - "Multiplicative": Post-activation gating (Ben-Iwhiwhu style, original).
+    - "PreActivation": Pre-activation gain + threshold shift (Ferguson & Cardin style).
     """
     def __init__(self, input_dim: int, action_dim: int, hidden_size: int, rngs: nnx.Rngs,
                  rnn_type: str = "LSTM", activation: str = "tanh",
@@ -21,6 +25,7 @@ class ActorCriticRNN(nnx.Module):
         self.rnn_type = rnn_type.upper()
         self.activation = activation.lower()
         self.modulation_enabled = modulation_config is not None and modulation_config.get('type') is not None
+        self.modulation_type = modulation_config['type'] if self.modulation_enabled else None
 
         # Input projection
         self.input_proj = nnx.Linear(input_dim, hidden_size, rngs=rngs)
@@ -30,7 +35,6 @@ class ActorCriticRNN(nnx.Module):
             self.rnn_cell = nnx.LSTMCell(hidden_size, hidden_size, rngs=rngs)
         else:
             if self.modulation_enabled:
-                # Use custom GRU with gate-bias support
                 self.rnn_cell = ModulatedGRUCell(hidden_size, hidden_size, rngs=rngs)
             else:
                 self.rnn_cell = nnx.GRUCell(hidden_size, hidden_size, rngs=rngs)
@@ -45,10 +49,11 @@ class ActorCriticRNN(nnx.Module):
 
         # Neuromodulator (only constructed when enabled — §5.2 baseline control)
         if self.modulation_enabled:
-            # All values must be explicitly set in config (no safe defaults)
             mod_hidden = modulation_config['mod_hidden_size']
+            mod_type = modulation_config['type']
             grouping = modulation_config['grouping_size']
             percept_bias = modulation_config['percept_bias_init']
+            percept_add_bias = modulation_config.get('percept_add_bias_init', 0.0)
             memory_bias = modulation_config['memory_bias_init']
             temp_clip = tuple(modulation_config['temp_clip'])
 
@@ -56,8 +61,10 @@ class ActorCriticRNN(nnx.Module):
                 input_dim=input_dim,
                 target_hidden_size=hidden_size,
                 mod_hidden_size=mod_hidden,
+                modulation_type=mod_type,
                 grouping_size=grouping,
                 percept_bias_init=percept_bias,
+                percept_add_bias_init=percept_add_bias,
                 memory_bias_init=memory_bias,
                 temp_clip=temp_clip,
                 rngs=rngs,
@@ -87,22 +94,26 @@ class ActorCriticRNN(nnx.Module):
             (logits, value, h_new): Policy logits, value estimate, and new hidden state.
         """
         if self.modulation_enabled:
-            # Unpack combined hidden state
             task_h, mod_h = h
 
             # --- Modulator forward pass ---
             mod_output, mod_h_new = self.modulator(x, mod_h)
 
             # --- Task path with modulation ---
-            # Layer 1: Input projection
-            x_proj = jax.nn.relu(self.input_proj(x))
-
-            # INJECTION A: Perceptual Gate (§5.2)
-            x_proj = x_proj * jax.nn.sigmoid(mod_output.z_percept)
+            # INJECTION A: Perceptual modulation (type-dependent)
+            if self.modulation_type == "PreActivation":
+                # Ferguson & Cardin style: gain + threshold shift INSIDE activation
+                x_linear = self.input_proj(x)
+                gamma = jax.nn.sigmoid(mod_output.z_percept)
+                beta = mod_output.z_percept_add
+                x_proj = jax.nn.relu(x_linear * gamma + beta)
+            else:
+                # Multiplicative (original): post-activation gating
+                x_proj = jax.nn.relu(self.input_proj(x))
+                x_proj = x_proj * jax.nn.sigmoid(mod_output.z_percept)
 
             # Layer 2: RNN forward with gate-bias injection
             if self.rnn_type == "LSTM":
-                # For LSTM, gate_bias not yet supported — pass through normally
                 h_new, x_h = self.rnn_cell(task_h, x_proj)
             else:
                 # INJECTION B: Internal Gate-Bias (§5.1a)
@@ -118,7 +129,6 @@ class ActorCriticRNN(nnx.Module):
             c_h = self._activate(self.critic_fc1(x_h))
             value = self.critic_fc2(c_h)
 
-            # Pack combined hidden state
             h_combined_new = (h_new, mod_h_new)
             return logits, value, h_combined_new, mod_output
 

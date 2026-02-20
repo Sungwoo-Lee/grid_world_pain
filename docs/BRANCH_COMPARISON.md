@@ -418,3 +418,205 @@ Body state →  random or fixed nutrition/injury
 | `neuromodulated_dreamer_v3.yaml` | ➕ DreamerV3 config |
 | `grid_world.py` duplicate renderer | ➕ Backward compatibility |
 
+---
+
+## Neuromodulation Algorithm Comparison
+
+> **Date**: 2026-02-20
+> **Reference Document**: `docs/NEUROMODULATION_ALGORITHM.md`
+
+This section provides a detailed comparison of the neuromodulation implementations across both branches. The `feature/tuningEnv` branch implements the **full architecture** described in `NEUROMODULATION_ALGORITHM.md`, while `feature/fixSensorFlag` has a **simplified subset**.
+
+### High-Level Summary
+
+| Capability | `fixSensorFlag` (current) | `tuningEnv` |
+|------------|--------------------------|-------------|
+| **PPO Neuromodulation** | ✅ Multiplicative only | ✅ Multiplicative + PreActivation |
+| **DreamerV3 Neuromodulation** | ❌ Not implemented | ✅ Fully implemented |
+| **Perceptual Modulation Modes** | 1 (Multiplicative) | 2 (Multiplicative + PreActivation) |
+| **ModulatorOutput Fields** | 3 (`z_percept`, `z_memory`, `temperature`) | 4 (`z_percept`, `z_percept_add`, `z_memory`, `temperature`) |
+| **Injection Sites (PPO)** | A (Percept), B (Memory), C (Temperature) | A (Percept), B (Memory), C (Temperature) |
+| **Injection Sites (DreamerV3)** | None | A (Percept), B (Memory), C (Reward) |
+| **ModulatedLayerNormGRUCell** | ❌ Does not exist | ✅ 84 lines — LayerNorm GRU with gate_bias |
+| **DreamerV3 Config** | ❌ Does not exist | ✅ `neuromodulated_dreamer_v3.yaml` (49 lines) |
+
+---
+
+### 1. `neuromodulator.py` — Modulator Architecture
+
+#### 1A. ModulatorOutput (PPO)
+
+| Field | `fixSensorFlag` | `tuningEnv` |
+|-------|-----------------|-------------|
+| `z_percept` | ✅ Perceptual gate signal | ✅ Perceptual gain signal (gamma) |
+| `z_percept_add` | ❌ Not present | ✅ Perceptual additive signal (beta, threshold shift) |
+| `z_memory` | ✅ Memory gate-bias | ✅ Memory gate-bias |
+| `temperature` | ✅ Bounded scalar | ✅ Bounded scalar |
+
+#### 1B. NeuromodulatorRNN (PPO Modulator)
+
+| Aspect | `fixSensorFlag` | `tuningEnv` |
+|--------|-----------------|-------------|
+| `modulation_type` parameter | ❌ Not accepted | ✅ Accepts `"Multiplicative"` or `"PreActivation"` |
+| `percept_add_bias_init` parameter | ❌ Not accepted | ✅ Bias init for beta head (default 0.0) |
+| `head_percept` (gamma) | ✅ Linear → spatial grouping | ✅ Identical |
+| `head_percept_add` (beta) | ❌ Not constructed | ✅ Constructed when `type = "PreActivation"` |
+| `head_memory` | ✅ Linear → spatial grouping | ✅ Identical |
+| `head_action` (temperature) | ✅ Softplus + clip | ✅ Identical |
+| `z_perc_add_baseline` | ❌ Not present | ✅ Per-neuron learned baseline for beta |
+| `z_percept_add` output | ❌ Not in NamedTuple | ✅ Returns beta signal (zeros if Multiplicative) |
+| Docstring terminology | "Perceptual gate" | "Perceptual gain (gamma)" (matches algorithm doc) |
+
+#### 1C. DreamerNeuromodulatorRNN (DreamerV3 Modulator)
+
+| Aspect | `fixSensorFlag` | `tuningEnv` |
+|--------|-----------------|-------------|
+| Class existence | ❌ **Does not exist** | ✅ Full implementation (~150 lines) |
+| `DreamerModulatorOutput` | ❌ Not defined | ✅ 4 fields: `z_percept`, `z_percept_add`, `z_memory`, `z_reward` |
+| Dual input projections | ❌ N/A | ✅ `proj_obs` (obs mode) + `proj_imagine` (imagination mode) |
+| `forward_obs()` | ❌ N/A | ✅ Observation mode — all heads active |
+| `forward_imagine()` | ❌ N/A | ✅ Imagination mode — memory + reward active, percept zeroed |
+| `_compute_heads()` | ❌ N/A | ✅ Shared head computation with `include_percept` flag |
+| `head_reward` | ❌ N/A | ✅ Sigmoid-bounded reward interpretation (bias init +2.0) |
+| `set_imagine_input_dim()` | ❌ N/A | ✅ Lazy init for imagination projection (feat_dim depends on RSSM config) |
+| Per-head target dims | ❌ N/A | ✅ `embed_dim` for percept, `deter_dim` for memory, 1 for reward |
+| Spatial grouping per head | ❌ N/A | ✅ `num_groups_percept` and `num_groups_memory` computed separately |
+
+---
+
+### 2. `recurrent_ppo_network.py` — PPO Injection Points
+
+| Aspect | `fixSensorFlag` | `tuningEnv` |
+|--------|-----------------|-------------|
+| `modulation_type` attribute | ❌ Not stored | ✅ Stored as `self.modulation_type` |
+| **Injection A routing** | Multiplicative only | Multiplicative vs PreActivation conditional |
+| Multiplicative equation | `relu(Wx+b) * sigmoid(z_percept)` | `relu(Wx+b) * sigmoid(z_percept)` (identical) |
+| PreActivation equation | ❌ Not implemented | ✅ `relu(gamma * (Wx+b) + beta)` |
+| `percept_add_bias_init` passed to modulator | ❌ Not passed | ✅ Passed from config |
+| `modulation_type` passed to modulator | ❌ Not passed (Multiplicative implicit) | ✅ Passed as `mod_type` |
+| Injection B (Memory) | ✅ `gate_bias=mod_output.z_memory` | ✅ Identical |
+| Injection C (Temperature) | ✅ `logits / mod_output.temperature` | ✅ Identical |
+
+#### PreActivation Mode (Ferguson & Cardin Style) — tuningEnv Only
+
+The `tuningEnv` branch implements the full pre-activation modulation from `NEUROMODULATION_ALGORITHM.md` §3A:
+
+```python
+# gamma = sigmoid(z_percept) → multiplicative neural gain (Shine et al., 2021)
+# beta  = z_percept_add      → additive threshold shift (Ferguson & Cardin, 2020)
+x_linear = self.input_proj(x)           # Raw pre-activation
+gamma = sigmoid(mod_output.z_percept)   # Gain
+beta = mod_output.z_percept_add         # Threshold shift
+x_proj = relu(x_linear * gamma + beta)  # Modulated activation
+```
+
+This provides a richer affine transformation of the neuron's I/O curve compared to simple post-activation scaling:
+- **Gain control** (gamma): Rescales the energy landscape (Shine et al., 2021)
+- **Threshold shifting** (beta): Disinhibitory gating — positive beta lowers the activation threshold, negative raises it (Ferguson & Cardin, 2020)
+
+---
+
+### 3. DreamerV3 Integration — tuningEnv Only
+
+The entire DreamerV3 neuromodulation pipeline exists **only in `tuningEnv`**. The `fixSensorFlag` branch has no modulation support in any DreamerV3 file.
+
+#### 3A. `dreamer_v3_nnx.py` Modifications (tuningEnv)
+
+| Component | Change |
+|-----------|--------|
+| `RSSM.__init__` | Accepts `modulation_enabled` flag; constructs `ModulatedLayerNormGRUCell` when True |
+| `RSSM.step()` | Accepts optional `gate_bias` for Injection B |
+| `RSSM.imagine_step()` | Accepts optional `gate_bias` for Injection B during planning |
+| `Encoder` | Split into `body` (pre-activation MLP) and `final_act` (SiLU) for modulation injection point |
+| `Encoder.forward_with_modulation()` | Supports both Multiplicative and PreActivation on encoder output |
+| `WorldModel.__init__` | Accepts `modulation_config`; conditionally constructs `DreamerNeuromodulatorRNN` |
+| `WorldModel` attributes | `modulation_enabled`, `modulation_type`, `modulator` |
+
+#### 3B. `dreamer_v3_trainer.py` Modifications (tuningEnv)
+
+| Component | Change |
+|-----------|--------|
+| **World Model Scan** | Carries `h_mod` alongside `prev_state`; runs `modulator.forward_obs()` per step |
+| **Injection A** | `encoder.forward_with_modulation(obs, mod_output, type)` during WM training |
+| **Injection B (WM)** | `rssm.step(..., gate_bias=mod_output.z_memory)` during WM training |
+| **Hidden State Flow** | `h_mods_all` from WM scan → reshape to `(B*T, mod_hidden)` → `stop_gradient` → `h_mod_start` for imagination |
+| **Imagination Scan** | Carries `h_mod`; runs `modulator.forward_imagine(concat(feat, action), h_mod)` per horizon step |
+| **Injection B (Imag)** | `rssm.imagine_step(..., gate_bias=mod_output.z_memory)` during imagination |
+| **Injection C (Reward)** | `rew = rew * mod_output.z_reward` — scales imagined reward (imagination only) |
+| **get_action()** | Runs modulator in observation mode; carries `mod_h` in state dict |
+| **WandB Metrics** | Logs `mod_gamma_mean/std`, `mod_memory_mean/std`, `mod_z_reward_mean`, `mod_beta_mean/std` (PreActivation) |
+
+#### 3C. `modulated_layer_norm_gru_cell.py` (tuningEnv Only)
+
+84-line custom Flax NNX module implementing `NEUROMODULATION_ALGORITHM.md` §5.1 for DreamerV3's RSSM:
+
+```python
+gates_ih = LN(W_ih @ x)
+gates_hh = LN(W_hh @ h)
+gates = gates_ih + gates_hh
+reset, update, cand = split(gates, 3)
+update = sigmoid(update + gate_bias)   # ← modulated when gate_bias provided
+h_new = (1 - update) * h + update * tanh(cand)
+```
+
+When `gate_bias = None`, functionally identical to the original `LayerNormGRUCell`.
+
+#### 3D. `neuromodulated_dreamer_v3.yaml` (tuningEnv Only)
+
+Full DreamerV3 config with modulation block:
+- `type: "Multiplicative"` / `"PreActivation"` / `null`
+- `mod_hidden_size: 64`, `grouping_size: 1`
+- `percept_bias_init: 2.0`, `percept_add_bias_init: 0.0`
+- `memory_bias_init: 0.0`, `reward_bias_init: 2.0`
+
+---
+
+### 4. `neuromodulated_ppo.yaml` — Config Differences
+
+| Field | `fixSensorFlag` | `tuningEnv` |
+|-------|-----------------|-------------|
+| `type` comment | "Modulation style (§4: ablation hook)" | Full multi-line with Multiplicative, PreActivation, null |
+| `percept_bias_init` comment | "Perceptual gate bias init" | "Gain head (gamma) bias init" |
+| `percept_add_bias_init` | ❌ Not present | ✅ `0.0` — threshold-shift head bias (PreActivation only) |
+
+---
+
+### 5. Alignment with `NEUROMODULATION_ALGORITHM.md`
+
+| Algorithm Doc Section | `fixSensorFlag` | `tuningEnv` |
+|-----------------------|-----------------|-------------|
+| §2A — `NeuromodulatorRNN` (PPO) | ✅ Partial (Multiplicative only) | ✅ **Full** (Multiplicative + PreActivation) |
+| §2B — `DreamerNeuromodulatorRNN` | ❌ Not implemented | ✅ **Full** (dual projections, reward head) |
+| §3A — Injection A: Multiplicative | ✅ Implemented | ✅ Implemented |
+| §3A — Injection A: PreActivation | ❌ Not implemented | ✅ Implemented (gamma + beta) |
+| §3A — Injection B: Memory Gate-Bias | ✅ `ModulatedGRUCell` | ✅ `ModulatedGRUCell` + `ModulatedLayerNormGRUCell` |
+| §3A — Injection C: Temperature (PPO) | ✅ Implemented | ✅ Implemented |
+| §3B — DreamerV3 Observation Mode | ❌ Not implemented | ✅ Injections A + B |
+| §3B — DreamerV3 Imagination Mode | ❌ Not implemented | ✅ Injections B + C |
+| §3B — Hidden State Flow (WM → Imagination) | ❌ Not implemented | ✅ `h_mod` carry through both scans |
+| §5.1 — `ModulatedGRUCell` (PPO) | ✅ Exists | ✅ Identical |
+| §5.1 — `ModulatedLayerNormGRUCell` (DreamerV3) | ❌ Does not exist | ✅ 84 lines |
+| §5.2 — Pass-Through Init (bias +2.0) | ✅ Percept head | ✅ Percept + reward heads |
+| §5.2 — Baseline Control (`type: null`) | ✅ Works | ✅ Works |
+| §5.3 — Bounded Temperature | ✅ Softplus + clip [0.1, 10.0] | ✅ Identical |
+| Ablation: `modulation.type` | ✅ Multiplicative or null | ✅ Multiplicative, PreActivation, or null |
+| WandB Modulator Metrics (PPO) | ✅ Logged | ✅ Logged |
+| WandB Modulator Metrics (DreamerV3) | ❌ N/A | ✅ Logged (gamma, memory, z_reward, beta) |
+
+---
+
+### 6. What Needs Porting to Reach Full Parity
+
+| Priority | Item | Files Affected | Effort |
+|----------|------|---------------|--------|
+| 🔴 High | Add PreActivation mode to PPO modulator | `neuromodulator.py`, `recurrent_ppo_network.py`, `neuromodulated_ppo.yaml` | Medium |
+| 🔴 High | Port `DreamerNeuromodulatorRNN` class | `neuromodulator.py` | Medium |
+| 🔴 High | Port `ModulatedLayerNormGRUCell` | New file: `src/models/modulated_layer_norm_gru_cell.py` | Easy (84 lines) |
+| 🔴 High | Port DreamerV3 modulation integration | `dreamer_v3_nnx.py` (RSSM, Encoder, WorldModel) | Large |
+| 🔴 High | Port DreamerV3 trainer modulation | `dreamer_v3_trainer.py` (WM scan, imagination scan, get_action) | Large |
+| 🟡 Medium | Port DreamerV3 neuromod config | New file: `configs/models/neuromodulated_dreamer_v3.yaml` | Easy |
+| 🟢 Low | Align terminology ("gate" → "gain/gamma") | `neuromodulator.py` docstrings | Trivial |
+
+> [!NOTE]
+> The `tuningEnv` branch is the **reference implementation** for the full neuromodulation architecture described in `NEUROMODULATION_ALGORITHM.md`. The `fixSensorFlag` branch implements only the Multiplicative PPO subset. All DreamerV3 neuromodulation and the PreActivation perceptual mode are missing from `fixSensorFlag`.
+

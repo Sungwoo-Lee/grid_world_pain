@@ -154,7 +154,7 @@ environment:
       nociception_intensity: 0.1
       properties: [0.0, 0.0, 0.0, 0.0, 1.0]
     - name: "bush"
-      count: 2
+      count: 5
       area: [[1, 1], [10, 10]]
       blocking: false
       damage: [0.0, 0.0]
@@ -162,7 +162,7 @@ environment:
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
     - name: "bush"
-      count: 2
+      count: 5
       area: [[11, 11], [20, 20]]
       blocking: false
       damage: [0.0, 0.0]
