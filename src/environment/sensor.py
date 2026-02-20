@@ -117,111 +117,78 @@ def get_visual_offsets(sensor_range):
     return offsets_arr
 
 def sense_visual(agent_pos, state: EnvState, params: EnvParams):
-    """One-hot Visual Sensor (simplified object recognition)."""
-    # [Grass, Sand, Plain, Food, Danger, Predator, Rock]
-    # Location mapping: 0: Plain, 1: Grass, 2: Sand
-    # Resource mapping: 0: Food, 1: Danger
+    """Matmul-optimized Visual Sensor (simplified object recognition)."""
+    # Channel mapping:
+    # 0: Grass (loc 1), 1: Sand (loc 2), 2: Plain (loc 0)
+    # 3: Food (res_type 0), 4: Danger (res_type 1)
+    # 5: Predator, 6: Rock, 7: Neutral Animal
     
     vis_range = params.visual_sensor_range
     offsets = get_visual_offsets(vis_range) # [num_cells, 2]
     num_cells = offsets.shape[0]
     cell_coords = agent_pos + offsets # [num_cells, 2]
     
-    # Bounds check
-    is_in_bounds = jnp.logical_and(
-        jnp.logical_and(cell_coords[:, 0] >= 0, cell_coords[:, 0] < params.height),
-        jnp.logical_and(cell_coords[:, 1] >= 0, cell_coords[:, 1] < params.width)
-    )
+    # 1. Bounds check
+    is_in_bounds = jnp.all(jnp.logical_and(
+        cell_coords >= 0,
+        cell_coords < jnp.array([params.height, params.width])
+    ), axis=-1)
     
-    # Safe coordinates for indexing
+    # Safe coordinates for indexing background
     safe_coords = jnp.where(is_in_bounds[:, None], cell_coords, 0)
     
-    # 1. Location properties
-    # grid_location_type is [H, W]
+    # 2. Background (Grid Properties) - Vectorized Indexing
     loc_types = params.grid_location_type[safe_coords[:, 0], safe_coords[:, 1]]
-    # Index 0: Grass (loc 1), 1: Sand (loc 2), 2: Plain (loc 0)
-    loc_vis = jax.nn.one_hot(jnp.where(loc_types == 1, 0, jnp.where(loc_types == 2, 1, 2)), 7)
+    # Mapping: loc 1 -> channel 0, loc 2 -> channel 1, loc 0 -> channel 2
+    vis_background = jax.nn.one_hot(jnp.where(loc_types == 1, 0, jnp.where(loc_types == 2, 1, 2)), 8)
+    # Mask OOB background
+    vis_background = vis_background * is_in_bounds[:, None]
     
-    # 2. Resources
-    # state.res_pos: [num_res, 2], state.res_active: [num_res], params.res_type: [num_res]
-    # We need to map across all num_cells and all num_res... 
-    # Or just iterate over resources and add to their cells.
+    # 3. Dynamic Entities (Resources, Predators, Rocks, Neutrals) - Matmul Optimized
     
-    def get_res_contrib(coord):
-        # coord: [2]
-        is_here = jnp.all(state.res_pos == coord, axis=-1)
-        active_here = jnp.logical_and(is_here, state.res_active)
-        # res_type 0: Food (vis 3), 1: Danger (vis 4)
-        is_food = jnp.logical_and(active_here, params.res_type == 0)
-        is_danger = jnp.logical_and(active_here, params.res_type == 1)
-        
-        contrib = jnp.zeros(7)
-        contrib = contrib.at[3].add(jnp.sum(is_food.astype(jnp.float32)))
-        contrib = contrib.at[4].add(jnp.sum(is_danger.astype(jnp.float32)))
-        return contrib
-
-    res_vis = jax.vmap(get_res_contrib)(cell_coords)
-
-    # 3. Predators
-    def get_pred_contrib(coord):
-        # coord: [2]
-        is_here = jnp.all(state.pred_pos == coord, axis=-1)
-        # Predator (vis 5)
-        contrib = jnp.zeros(7)
-        contrib = contrib.at[5].add(jnp.sum(is_here.astype(jnp.float32)))
-        return contrib
+    # Combine all dynamic entity positions
+    all_pos = jnp.concatenate([
+        state.res_pos,
+        state.pred_pos,
+        state.obs_pos,
+        state.neutral_pos
+    ], axis=0) # [Total_E, 2]
     
-    pred_vis = jax.vmap(get_pred_contrib)(cell_coords)
-
-    # 4. Rocks (Obstacles)
-    def get_obs_contrib(coord):
-        # coord: [2]
-        is_here = jnp.all(state.obs_pos == coord, axis=-1)
-        # Rock (vis 6)
-        contrib = jnp.zeros(8)
-        contrib = contrib.at[6].add(jnp.sum(is_here.astype(jnp.float32)))
-        return contrib
-        
-    obs_vis = jax.vmap(get_obs_contrib)(cell_coords)
-
-    # 5. Neutral Animals
-    def get_neutral_contrib(coord):
-        is_here = jnp.all(state.neutral_pos == coord, axis=-1)
-        # Neutral Animal (vis 7)
-        contrib = jnp.zeros(8)
-        contrib = contrib.at[7].add(jnp.sum(is_here.astype(jnp.float32)))
-        return contrib
+    # Combine activity status (Predators/Rocks/Neutrals always active)
+    all_active = jnp.concatenate([
+        state.res_active,
+        jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_),
+        jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_),
+        jnp.ones(state.neutral_pos.shape[0], dtype=jnp.bool_)
+    ], axis=0) # [Total_E]
     
-    neutral_vis = jax.vmap(get_neutral_contrib)(cell_coords)
+    # Create Visual Property Matrix [Total_E, 8]
+    # Channels 3: Food, 4: Danger, 5: Predator, 6: Rock, 7: Neutral
+    num_res = state.res_pos.shape[0]
+    num_pred = state.pred_pos.shape[0]
+    num_obs = state.obs_pos.shape[0]
+    num_neutral = state.neutral_pos.shape[0]
     
-    # Update loc_vis, res_vis, pred_vis to use 8 slots
-    # 1. Location properties
-    loc_vis = jax.nn.one_hot(jnp.where(loc_types == 1, 0, jnp.where(loc_types == 2, 1, 2)), 8)
+    res_props = jax.nn.one_hot(jnp.where(params.res_type == 0, 3, 4), 8)
+    pred_props = jax.nn.one_hot(jnp.full((num_pred,), 5), 8)
+    obs_props = jax.nn.one_hot(jnp.full((num_obs,), 6), 8)
+    neutral_props = jax.nn.one_hot(jnp.full((num_neutral,), 7), 8)
     
-    # 2. Resources (update to 8)
-    def get_res_contrib_8(coord):
-        is_here = jnp.all(state.res_pos == coord, axis=-1)
-        active_here = jnp.logical_and(is_here, state.res_active)
-        is_food = jnp.logical_and(active_here, params.res_type == 0)
-        is_danger = jnp.logical_and(active_here, params.res_type == 1)
-        contrib = jnp.zeros(8)
-        contrib = contrib.at[3].add(jnp.sum(is_food.astype(jnp.float32)))
-        contrib = contrib.at[4].add(jnp.sum(is_danger.astype(jnp.float32)))
-        return contrib
-    res_vis = jax.vmap(get_res_contrib_8)(cell_coords)
-
-    # 3. Predators (update to 8)
-    def get_pred_contrib_8(coord):
-        is_here = jnp.all(state.pred_pos == coord, axis=-1)
-        contrib = jnp.zeros(8)
-        contrib = contrib.at[5].add(jnp.sum(is_here.astype(jnp.float32)))
-        return contrib
-    pred_vis = jax.vmap(get_pred_contrib_8)(cell_coords)
+    all_props = jnp.concatenate([res_props, pred_props, obs_props, neutral_props], axis=0)
     
-    # Sum all contributions
-    total_vis = loc_vis + res_vis + pred_vis + obs_vis + neutral_vis
+    # Apply activity mask
+    all_props = all_props * all_active[:, None]
     
-    # Mask out-of-bounds cells
+    # Compute Matches [num_cells, Total_E]
+    # (num_cells, 1, 2) == (1, Total_E, 2)
+    matches = jnp.all(cell_coords[:, None, :] == all_pos[None, :, :], axis=-1)
+    
+    # Sum properties using Matmul: [num_cells, Total_E] @ [Total_E, 8] -> [num_cells, 8]
+    vis_entities = jnp.matmul(matches.astype(jnp.float32), all_props)
+    
+    # Final assembly
+    total_vis = vis_background + vis_entities
+    # Mask out-of-bounds cells (entities at [0,0] might match safe_coords if OOB)
     total_vis = total_vis * is_in_bounds[:, None]
     
     return total_vis.flatten()
