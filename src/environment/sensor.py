@@ -276,50 +276,57 @@ def apply_perceptual_noise(obs: jnp.ndarray, state: EnvState, params: EnvParams,
         jnp.where(mode == 1, sigma_base, 0.0)
     )
     
+    # Clip ranges (Vectorized)
+    clip_min = jnp.concatenate([jnp.full((dim,), params.noise_clip_min[modality_map[name]]) for name, dim in breakdown.items()])
+    clip_max = jnp.concatenate([jnp.full((dim,), params.noise_clip_max[modality_map[name]]) for name, dim in breakdown.items()])
+    
     noise = jax.random.normal(key, obs.shape) * sigma_eff
-    return obs + noise
+    return jnp.clip(obs + noise, clip_min, clip_max)
 
 @jax.jit(static_argnames=['apply_noise'])
 def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
     """Assembles the full observation vector, including noise if enabled."""
-    # Salt the state key to get a deterministic but unique key for observation noise
+    # Salt the state key for observation noise
     obs_key = jax.random.fold_in(state.key, 999)
     
+    obs_parts = []
+    
     # 1. Olfaction Sensor (Resources + Predators + Obstacles + Neutral)
-    # Renamed from chemical for consistency with documentation
-    res_chem = sense_resource(state.agent_pos, state.res_pos, state.res_active, params.res_property, params.sensor_radius, params.sensor_decay)
-    pred_chem = sense_resource(state.agent_pos, state.pred_pos, jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_), params.pred_property, params.sensor_radius, params.sensor_decay)
-    obs_chem = sense_resource(state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), params.obs_property, params.sensor_radius, params.sensor_decay)
-    neutral_chem = sense_resource(state.agent_pos, state.neutral_pos, jnp.ones(state.neutral_pos.shape[0], dtype=jnp.bool_), params.neutral_property, params.sensor_radius, params.sensor_decay)
-    olf_obs = res_chem + pred_chem + obs_chem + neutral_chem
+    if params.olfactory_enabled:
+        res_chem = sense_resource(state.agent_pos, state.res_pos, state.res_active, params.res_property, params.sensor_radius, params.sensor_decay)
+        pred_chem = sense_resource(state.agent_pos, state.pred_pos, jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_), params.pred_property, params.sensor_radius, params.sensor_decay)
+        obs_chem = sense_resource(state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), params.obs_property, params.sensor_radius, params.sensor_decay)
+        neutral_chem = sense_resource(state.agent_pos, state.neutral_pos, jnp.ones(state.neutral_pos.shape[0], dtype=jnp.bool_), params.neutral_property, params.sensor_radius, params.sensor_decay)
+        obs_parts.append(res_chem + pred_chem + obs_chem + neutral_chem)
     
     # 2. Extero Nociception (Phasic - Multi-source)
-    noc_obs = sense_extero_nociception(state.agent_pos, state, params)
+    if params.nociception_enabled:
+        obs_parts.append(sense_extero_nociception(state.agent_pos, state, params))
     
     # 3. Collision
-    coll_obs = sense_collision(state.agent_pos, state, params)
+    obs_parts.append(sense_collision(state.agent_pos, state, params))
     
     # 4. Location
-    loc_obs = sense_location(state.agent_pos, params.height, params.width)
+    if params.location_sensor_enabled:
+        obs_parts.append(sense_location(state.agent_pos, params.height, params.width))
     
     # 5. Interoception
-    intero_obs = jnp.array([
+    obs_parts.append(jnp.array([
         state.satiation / params.max_satiation,
         state.nutrition / params.max_nutrition,
         state.injury_level / params.max_injury
-    ])
+    ]))
     
     # 6. Visual Sensor
     if params.visual_sensor_enabled:
-        vis_obs = sense_visual(state.agent_pos, state, params)
-        obs = jnp.concatenate([olf_obs, noc_obs, coll_obs, loc_obs, intero_obs, vis_obs])
-    else:
-        obs = jnp.concatenate([olf_obs, noc_obs, coll_obs, loc_obs, intero_obs])
+        obs_parts.append(sense_visual(state.agent_pos, state, params))
     
     # 7. Proprioception (Previous Action)
     if params.proprioception_enabled:
-        proprio_obs = jax.nn.one_hot(state.last_action, params.action_dim)
-        obs = jnp.concatenate([obs, proprio_obs])
+        obs_parts.append(jax.nn.one_hot(state.last_action, params.action_dim))
+    
+    # Assemble final vector
+    obs = jnp.concatenate(obs_parts)
     
     # Apply Perceptual Precision Modulation
     if apply_noise:
@@ -328,35 +335,31 @@ def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
 
 def get_observation_breakdown(params: EnvParams):
     """Returns a dict of {sensor_name: dimension} for observation components."""
-    # Component dimensions based on sensor.py logic:
-    # 1. Olfaction: vector_size from resource properties
-    chem_dim = int(params.res_property.shape[-1])
+    breakdown = {}
     
-    # 2. Extero Nociception: 1 (contact)
-    noc_dim = 1
+    # 1. Olfaction
+    if params.olfactory_enabled:
+        breakdown["Olfaction"] = int(params.res_property.shape[-1])
     
-    # 3. Collision: Manhattan range
+    # 2. Extero Nociception
+    if params.nociception_enabled:
+        breakdown["Extero Nociception"] = 1
+    
+    # 3. Collision
     num_coll_cells = 2 * (params.sensor_range**2) + 2 * params.sensor_range + 1
-    coll_dim = int(num_coll_cells)
+    breakdown["Collision"] = int(num_coll_cells)
     
-    # 4. Location: 2 (normalized row, col)
-    loc_dim = 2
+    # 4. Location
+    if params.location_sensor_enabled:
+        breakdown["Location"] = 2
     
-    # 5. Interoception: 3 (satiation, nutrition, injury)
-    intero_dim = 3
+    # 5. Interoception (Satiation, Nutrition, Injury)
+    breakdown["Satiation"] = 1
+    breakdown["Nutrition"] = 1
+    breakdown["Injury"] = 1
     
-    breakdown = {
-        "Olfaction": chem_dim,
-        "Extero Nociception": noc_dim,
-        "Collision": coll_dim,
-        "Location": loc_dim,
-        "Satiation": 1,
-        "Nutrition": 1,
-        "Injury": 1
-    }
-    
+    # 6. Visual
     if params.visual_sensor_enabled:
-        # Range r -> 2r^2 + 2r + 1 cells
         num_cells = 2 * (params.visual_sensor_range**2) + 2 * params.visual_sensor_range + 1
         breakdown["Visual"] = int(num_cells * 8)
     
