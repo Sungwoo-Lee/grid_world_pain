@@ -48,6 +48,8 @@ def _load_icons(icon_config=None):
             'agent_danger': 'agent_danger',
             'agent_predator': 'agent_predator',
             'rock': 'rock',
+            'bush': 'bush',
+            'agent_bush': 'bush_agent',
             'neutral': 'neutral'
         }
     
@@ -449,10 +451,14 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
             
     o_pos = np.array(state.obs_pos)
     obs_types = np.array(params.obs_type)
+    obs_hides = np.array(params.obs_hides_agent) if hasattr(params, 'obs_hides_agent') else np.zeros(o_pos.shape[0], dtype=bool)
     for i in range(o_pos.shape[0]):
         or_, oc = int(o_pos[i, 0]), int(o_pos[i, 1])
-        if r_start <= or_ < r_end and c_start <= oc < c_end and not (or_ == ar and oc == ac):
-            # Dynamic look up of icon name based on obs_type
+        if or_ == ar and oc == ac:
+            obs_icon_name = params.obstacle_names[obs_types[i]]
+            if obs_hides[i]:
+                at_agent.append('bush')
+        elif r_start <= or_ < r_end and c_start <= oc < c_end:
             obs_icon = params.obstacle_names[obs_types[i]]
             draw_icon(ax_grid, or_, oc, obs_icon, zoom=0.035, s_fac=scale_factor)
             
@@ -470,10 +476,11 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
         agent_icon = 'agent_predator'
     elif 'danger' in at_agent:
         agent_icon = 'agent_danger'
+    elif 'bush' in at_agent:
+        agent_icon = 'agent_bush'
     elif 'food' in at_agent:
         agent_icon = 'agent_food'
     elif 'neutral' in at_agent:
-        # Fallback to normal agent if no neutral-composite exists, but could be added later
         agent_icon = 'agent'
         
     draw_icon(ax_grid, ar, ac, agent_icon, zoom=0.035, s_fac=scale_factor)

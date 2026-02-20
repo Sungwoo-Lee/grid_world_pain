@@ -76,12 +76,14 @@ class EnvParams:
     pred_recovery: jnp.ndarray
     pred_hunt_thresh: jnp.ndarray
     pred_attack_delay: jnp.ndarray
+    pred_lose_interest_mult: jnp.ndarray # [num_pred]
     predator_enabled: bool = struct.field(pytree_node=False)
     pred_spawn_area: jnp.ndarray # [num_pred, 4]
 
 
     # Obstacles
     obs_blocking: jnp.ndarray   # [num_obs] bool
+    obs_hides_agent: jnp.ndarray # [num_obs] bool (bush-type concealment)
     obs_spawn_area: jnp.ndarray # [num_obs, 4] (min_r, min_c, max_r, max_c)
     obs_damage: jnp.ndarray     # [num_obs, 2] [min, max]
     obs_property: jnp.ndarray   # [num_obs, vector_size]

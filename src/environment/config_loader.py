@@ -74,6 +74,7 @@ def load_env_params(config: Config) -> EnvParams:
         pred_recovery = jnp.array([p_get(p, 'stamina_recovery_rate') for p in predators])
         pred_hunt_thresh = jnp.array([p_get(p, 'hunt_stamina_threshold') for p in predators])
         pred_attack_delay = jnp.array([p_get(p, 'attack_delay') for p in predators], dtype=jnp.int32)
+        pred_lose_interest_mult = jnp.array([p.get('lose_interest_multiplier', 2.0) for p in predators], dtype=jnp.float32)
         predator_enabled = config.get_mandatory('environment.predator_enabled')
     else:
         pred_property = jnp.zeros((0, 5))
@@ -87,6 +88,7 @@ def load_env_params(config: Config) -> EnvParams:
         pred_recovery = jnp.zeros(0)
         pred_hunt_thresh = jnp.zeros(0)
         pred_attack_delay = jnp.zeros(0, dtype=jnp.int32)
+        pred_lose_interest_mult = jnp.zeros(0, dtype=jnp.float32)
         predator_enabled = config.get_mandatory('environment.predator_enabled')
     
     # Build Obstacle arrays
@@ -103,6 +105,7 @@ def load_env_params(config: Config) -> EnvParams:
             if val is None: raise ValueError(f"Strict Config: Obstacle field '{key}' is required.")
             return val
         obs_blocking = jnp.array([o.get('blocking', True) for o in expanded_obstacles], dtype=jnp.bool_)
+        obs_hides_agent = jnp.array([o.get('hides_agent', False) for o in expanded_obstacles], dtype=jnp.bool_)
         
         # Obstacle damage ranges
         raw_obs_damage = [o.get('damage', 0.0) for o in expanded_obstacles]
@@ -121,6 +124,7 @@ def load_env_params(config: Config) -> EnvParams:
         obs_type = jnp.array([name_to_idx[o.get('name', 'rock')] for o in expanded_obstacles], dtype=jnp.int32)
     else:
         obs_blocking = jnp.zeros(0, dtype=jnp.bool_)
+        obs_hides_agent = jnp.zeros(0, dtype=jnp.bool_)
         obs_damage = jnp.zeros((0, 2), dtype=jnp.float32)
         obs_nociception = jnp.zeros(0, dtype=jnp.float32)
         chem_dim = res_property.shape[-1]
@@ -197,9 +201,11 @@ def load_env_params(config: Config) -> EnvParams:
         pred_recovery=pred_recovery,
         pred_hunt_thresh=pred_hunt_thresh,
         pred_attack_delay=pred_attack_delay,
+        pred_lose_interest_mult=pred_lose_interest_mult,
         predator_enabled=predator_enabled,
         pred_spawn_area=pred_spawn_area,
         obs_blocking=obs_blocking,
+        obs_hides_agent=obs_hides_agent,
         obs_damage=obs_damage,
         obs_property=obs_property,
         obs_nociception=obs_nociception,

@@ -97,6 +97,7 @@ environment:
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.5
       attack_delay: 3
+      lose_interest_multiplier: 2.0
 
     - name: "Forest Predator BR"
       count: 1
@@ -111,6 +112,7 @@ environment:
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.5
       attack_delay: 3
+      lose_interest_multiplier: 2.0
 
   location_areas:
     - type: "grass"
@@ -151,6 +153,22 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.1
       properties: [0.0, 0.0, 0.0, 0.0, 1.0]
+    - name: "bush"
+      count: 2
+      area: [[1, 1], [10, 10]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+    - name: "bush"
+      count: 2
+      area: [[11, 11], [20, 20]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
 
 
 body:

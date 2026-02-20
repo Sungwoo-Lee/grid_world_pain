@@ -19,6 +19,8 @@ visualization:
     agent_predator: "agent_predator"
     rock: "rock"
     tree: "tree"
+    bush: "bush"
+    agent_bush: "bush_agent"
     neutral: "neutral"
   
   # Activation / LRP Visualization
