@@ -9,8 +9,8 @@ import seaborn as sns
 print("Loading stats data from the results directory...")
 
 MODEL_TYPE = "JAX_RecurrentPPO"
-MODEL_ID = "20260213-170405_rppo_128env_NoLoc"
-CHECKPOINT = 1000003
+MODEL_ID = "20260221-154412_rppoNMN_128env_Multip_G40"
+CHECKPOINT = 9000030
 
 files = sorted(glob.glob(f"./results/{MODEL_TYPE}/{MODEL_ID}/stats/{CHECKPOINT}/*ep_stats.csv"))
 

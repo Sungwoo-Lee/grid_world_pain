@@ -26,7 +26,10 @@ Headers are built once when `record_stats` is true (lines 66–111 in `evaluatio
 - **Observation columns:**  
   From `get_observation_breakdown(params)` and `get_visual_offsets(params)`: e.g. `obs_olf_*`, `obs_noc`, `obs_coll_*`, `obs_loc_r`, `obs_loc_c`
 - **World state (per step):**  
-  `agent_x`, `agent_y`; then for each resource/predator/neutral/obstacle type: position (and for resources, `*_active`)
+  `res_i_r`, `res_i_c`, `res_i_active` (for each resource);  
+  `pred_i_r`, `pred_i_c` (for each predator);  
+  `neutral_i_r`, `neutral_i_c` (for each neutral);  
+  `obs_entity_i_r`, `obs_entity_i_c` (for each obstacle).
 - **End of row:**  
   `termination_reason`, `max_satiation`, `max_injury`
 
@@ -193,14 +196,15 @@ This section summarizes the design and implementation decisions from the convers
 1. **Single-env action shape:** With `obs_batch` shape `(1, obs_dim)`, `generic_inference` returns `action` of shape `(1,)`. Using `int(action)` raised (only scalar arrays convertible to Python scalars). **Fix:** `action_idx = int(jnp.squeeze(action))` in `_run_single_env_eval`.
 2. **Parallel obs update:** Code used `jax.lax.dynamic_update_index` (does not exist in JAX). **Fix:** `obs = obs.at[i].set(new_obs)` when resetting slot `i`.
 3. **Final message:** When the step loop exits due to safety cap before completing all episodes, the message must not say “all tickets used”. **Fix:** If `completed_episodes >= num_episodes` print “all tickets used”; else print “X/Y episodes (safety cap or early exit).”
+4. **Ticket over-issuing (Refined):** The initial parallel loop used `completed_episodes` to guard refills. This over-issued tickets because `completed_episodes` only increments *after* an episode finishes, while multiple envs might be running. **Fix:** Introduced `issued_tickets` counter. Refills only happen if `issued_tickets < num_episodes`.
+5. **Multiple `dones` data loss:** The `dones` loop contained a `break` that could trigger before all finished episodes in a single step were recorded. **Fix:** Removed premature `break` and replaced with `continue` for slot deactivation.
+6. **Ghost episodes/Double counting:** Finished environments that were not reset continued to report `done=True`, leading to "ghost" completions. **Fix:** Introduced `slot_active` mask to track which slots hold a valid ticket and ignore `dones` from inactive slots.
 
-### Debug messages (ticket lifecycle)
+### Verification (Episode-Ticket Design)
 
-- **Always (when not quiet), parallel path only:** At start: “Started: X envs running, Y tickets.” At end: “Done: Z episodes completed (all tickets used).” or “Done: Z/Y episodes (safety cap or early exit).”
-- **When `--debug`:** Per-env finish: “Env i finished → episode K/Y written (reward=…, steps=…); tickets_left=….” When refilling: “Giving new ticket to slot i (reset).” When not refilling: “All tickets used; not refilling slot i.” On step-loop exit: “Exiting step loop (completed_episodes=…).”
+The fix was verified using a simulation script that modeled parallel environments finishing at different rates and simultaneously.
 
-### Verification notes
-
-- Ticket logic: Only refill when `completed_episodes < num_episodes` (reset block is after the `if completed_episodes >= num_episodes: break`).
-- Multiple dones in one step: Loop over all `i`; for each `dones[i]` we use one ticket and optionally reset slot `i`; `states`/`obs` are updated in the same loop so all resets apply.
-- When `record_stats` is False, `_write_episode_stats` is never called (guarded by `record_stats and slot_states[i]`); `stat_headers` can be empty when not recording.
+**Reproduction results:**
+- **Goal**: Exactly 10 episodes from 5 environments.
+- **Outcome**: Exactly 10 tickets issued, 10 episodes recorded. No over-issuing, no double-counting.
+- **Exhaustion**: Environments correctly deactivate once `issued_tickets == num_episodes`, and the loop waits for the remaining active environments to finish.

@@ -171,6 +171,30 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             stat_headers.append(f"obs_coll_r{dr}c{dc}")
         if 'Location' in breakdown:
             stat_headers += ["obs_loc_r", "obs_loc_c"]
+        
+        # Add headers for world entities (matching _write_episode_stats loop)
+        # 1. Resources
+        for i in range(params.res_type.shape[0]):
+            res_name = f"res_{i}"
+            stat_headers += [f"{res_name}_r", f"{res_name}_c", f"{res_name}_active"]
+        
+        # 2. Predators
+        for i in range(params.pred_damage.shape[0]):
+            pred_name = f"pred_{i}"
+            stat_headers += [f"{pred_name}_r", f"{pred_name}_c"]
+        
+        # 3. Neutrals
+        for i in range(params.neutral_property.shape[0]):
+            neu_name = f"neutral_{i}"
+            stat_headers += [f"{neu_name}_r", f"{neu_name}_c"]
+        
+        # 4. Obstacles
+        for i in range(params.obs_blocking.shape[0]):
+            obs_name = f"obs_entity_{i}"
+            stat_headers += [f"{obs_name}_r", f"{obs_name}_c"]
+            
+        # End of row
+        stat_headers += ["termination_reason", "max_satiation", "max_injury"]
     
     if not quiet:
         print(f"  [DEBUG] Starting Evaluation: {num_episodes} episodes, num_envs={num_envs}, effective={effective_num_envs}, Render={render_video}", flush=True)
@@ -489,6 +513,8 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
     
     h_state = model.initial_state(batch_size=effective_num_envs) if model is not None and hasattr(model, 'initial_state') else None
     completed_episodes = 0
+    issued_tickets = effective_num_envs
+    slot_active = [True] * effective_num_envs
     ep_pbar = tqdm(total=num_episodes, desc="Evaluating Episodes (parallel)", disable=quiet)
     safety_cap = max_steps * num_episodes * 2
 
@@ -512,6 +538,8 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
         next_obs = jnp.array(next_obs)
         
         for i in range(effective_num_envs):
+            if not slot_active[i]:
+                continue
             slot_states[i].append({
                 'agent_pos': next_states.agent_pos[i], 'satiation': next_states.satiation[i],
                 'nutrition': next_states.nutrition[i], 'injury_level': next_states.injury_level[i],
@@ -528,7 +556,7 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
         obs = next_obs
         
         for i in range(effective_num_envs):
-            if dones[i]:
+            if dones[i] and slot_active[i]:
                 completed_episodes += 1
                 total_r = sum(slot_rewards[i])
                 episode_rewards.append(total_r)
@@ -542,13 +570,26 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
                                          slot_actions[i], slot_rewards[i], slot_obs[i],
                                          stat_headers, action_map, params_ref, debug)
                 ep_pbar.update(1)
-                # Ticket used. Only give a new ticket (reset) if more episodes remain.
-                if completed_episodes >= num_episodes:
+
+                # Reset the slot buffer immediately
+                slot_states[i] = []
+                slot_infos[i] = []
+                slot_actions[i] = []
+                slot_rewards[i] = []
+                slot_obs[i] = []
+                # Deactivate until reset
+                slot_active[i] = False
+
+                # Ticket used. Only give a new ticket (reset) if more tickets remain to be issued.
+                if issued_tickets >= num_episodes:
                     if debug:
-                        print(f"  [Ticket] All tickets used; not refilling slot {i}.", flush=True)
-                    break
+                        print(f"  [Ticket] All tickets issued; slot {i} remains inactive.", flush=True)
+                    continue 
+                
                 if debug:
-                    print(f"  [Ticket] Giving new ticket to slot {i} (reset).", flush=True)
+                    print(f"  [Ticket] Giving new ticket to slot {i} (reset). total_issued={issued_tickets+1}", flush=True)
+                
+                issued_tickets += 1
                 key, reset_key = jax.random.split(key)
                 new_state = jax_reset(params_ref, reset_key)
                 states = jax.tree_util.tree_map(lambda x, y: x.at[i].set(y), states, new_state)
@@ -557,6 +598,9 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
                 if h_state is not None:
                     h_one = model.initial_state(batch_size=1)
                     h_state = jax.tree_util.tree_map(lambda a, b: a.at[i].set(b.squeeze(0)), h_state, h_one)
+                
+                # Reactivate and seed the buffer for the new episode (step 0)
+                slot_active[i] = True
                 slot_states[i] = [{'agent_pos': new_state.agent_pos, 'satiation': new_state.satiation, 'nutrition': new_state.nutrition,
                                    'injury_level': new_state.injury_level, 'rest_streak': new_state.rest_streak,
                                    'res_pos': new_state.res_pos, 'res_active': new_state.res_active,
