@@ -8,6 +8,8 @@ from functools import partial
 
 from src.models.dreamer_v3_nnx import DreamerV3Agent, RSSM, WorldModel, ActorCritic
 from src.models.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist
+from src.environment.core import jax_step, jax_reset
+from src.environment.sensor import get_observation
 
 # -----------------------------------------------------------------------------
 # Constants
@@ -23,18 +25,18 @@ LAMBDA = 0.95
 # -----------------------------------------------------------------------------
 # Utilities
 # -----------------------------------------------------------------------------
-def compute_lambda_values(rewards, values, continues):
+def compute_lambda_values(rewards, values, continues, LAMBDA=0.95):
     """
-    Lambda-return calculation.
+    Lambda-return calculation with global GAMMA.
     rewards: (H, B)
     values: (H+1, B)
-    continues: (H, B)
+    continues: (H, B) - should include both Head output and global discount
     """
-    pass
-
-    vals = values[:-1]
     next_vals = values[1:]
-
+    
+    # We incorporate GAMMA here if not already in continues
+    # In DreamerV3, 'continues' usually comes from the head * global_discount
+    
     def scan_fn(next_return, inputs):
         r, v, c = inputs
         bootstrap = (1 - LAMBDA) * v + LAMBDA * next_return
@@ -80,13 +82,35 @@ class DreamerTrainer(nnx.Module):
         from src.models.dreamer_v3_util import Moments
         self.moments = Moments(decay=0.99, max_=1.0, percentile_low=0.05, percentile_high=0.95)
 
-        self.model_opt = nnx.Optimizer(self.agent.wm, optax.adam(float(config.get('model_lr', 1e-4))), wrt=nnx.Param)
-        self.actor_opt = nnx.Optimizer(self.agent.ac.actor, optax.adam(float(config.get('actor_lr', 3e-5))), wrt=nnx.Param)
-        self.critic_opt = nnx.Optimizer(self.agent.ac.critic, optax.adam(float(config.get('value_lr', 8e-5))), wrt=nnx.Param)
+        self.model_opt = nnx.Optimizer(
+            self.agent.wm,
+            optax.chain(
+                optax.clip_by_global_norm(1000.0),
+                optax.adam(float(config.get('model_lr', 1e-4)))
+            ),
+            wrt=nnx.Param
+        )
+        self.actor_opt = nnx.Optimizer(
+            self.agent.ac.actor,
+            optax.chain(
+                optax.clip_by_global_norm(100.0),  # Actor usually clipped more strictly
+                optax.adam(float(config.get('actor_lr', 3e-5)))
+            ),
+            wrt=nnx.Param
+        )
+        self.critic_opt = nnx.Optimizer(
+            self.agent.ac.critic,
+            optax.chain(
+                optax.clip_by_global_norm(100.0),
+                optax.adam(float(config.get('value_lr', 8e-5)))
+            ),
+            wrt=nnx.Param
+        )
 
         self.step_count = jnp.array(0, dtype=jnp.int32)
 
 
+    @nnx.jit
     def train_step(self, batch, rng):
         obs = symlog(batch['obs'])
         action = batch['action']
@@ -99,42 +123,66 @@ class DreamerTrainer(nnx.Module):
 
         # --- 1. World Model Learning ---
         def model_loss_fn(wm, rng):
+            # OPTIMIZATION: Pre-compute encoder embeddings for all timesteps (outside scan)
+            # This enables batched parallel encoding instead of sequential per-timestep encoding
+            # Expected speedup: 2-5x on world model training step
             if modulation_enabled:
-                def scan_step(carry, inputs):
-                    prev_state, h_mod = carry
-                    o, a, f, k = inputs
+                # For modulated path, we need modulator outputs for both encoding AND memory gate
+                # We do one scan for modulator+encoder, then main RSSM scan
+                def mod_scan(h_mod, o):
                     mod_output, h_mod_new = wm.modulator.forward_obs(o, h_mod)
-                    embed = wm.encoder.forward_with_modulation(
-                        o, mod_output, wm.modulation_type)
+                    return h_mod_new, (mod_output, h_mod_new)
+
+                obs_T = jnp.swapaxes(obs, 0, 1)  # (T, B, obs_dim)
+                h_mod_init = wm.modulator.initial_state(B)
+                _, (mod_outputs_T, h_mods_T) = jax.lax.scan(mod_scan, h_mod_init, obs_T)
+
+                # Vectorized encoder call
+                mod_outputs = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), mod_outputs_T)
+                embeds = wm.encoder.forward_with_modulation(obs, mod_outputs, wm.modulation_type)
+                embeds_T = jnp.swapaxes(embeds, 0, 1)
+
+                # Now main RSSM scan uses pre-computed embeddings and modulator outputs
+                def scan_step(prev_state, inputs):
+                    embed, a, f, k, mod_output = inputs
                     post, prior = wm.rssm.step(
                         prev_state, embed, a, f, k,
                         gate_bias=mod_output.z_memory)
-                    return (post, h_mod_new), (post, prior, embed, h_mod_new, mod_output)
+                    return post, (post, prior)
 
-                init_carry = (wm.rssm.initial(B), wm.modulator.initial_state(B))
+                init_carry = wm.rssm.initial(B)
             else:
+                # Non-modulated: Simple batch encoding (fully vectorized)
+                embeds = wm.encoder(obs)  # (B, T, embed_dim) - Single batched call!
+                embeds_T = jnp.swapaxes(embeds, 0, 1)  # (T, B, embed_dim)
+
                 def scan_step(prev_state, inputs):
-                    o, a, f, k = inputs
-                    embed = wm.encoder(o)
+                    embed, a, f, k = inputs
                     post, prior = wm.rssm.step(prev_state, embed, a, f, k)
-                    return post, (post, prior, embed)
+                    return post, (post, prior)
 
                 init_carry = wm.rssm.initial(B)
 
             rng, scan_rng = random.split(rng)
             scan_rngs = random.split(scan_rng, T)
 
-            env_inputs = (obs, action, is_first)
+            env_inputs = (action, is_first)
             env_inputs_T = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), env_inputs)
-            inputs_T = (*env_inputs_T, scan_rngs)
+
+            if modulation_enabled:
+                inputs_T = (embeds_T, *env_inputs_T, scan_rngs, mod_outputs_T)
+            else:
+                inputs_T = (embeds_T, *env_inputs_T, scan_rngs)
 
             _, scan_outputs = jax.lax.scan(scan_step, init_carry, inputs_T)
 
+            # Extract posts and priors from scan outputs
             if modulation_enabled:
-                posts_T, priors_T, embeds_T, h_mods_T, mod_outputs_T = scan_outputs
+                posts_T, priors_T = scan_outputs
+                # h_mods_T already computed in encode_scan
                 h_mods_all = jnp.swapaxes(h_mods_T, 0, 1)
             else:
-                posts_T, priors_T, embeds_T = scan_outputs
+                posts_T, priors_T = scan_outputs
                 h_mods_all = None
 
             posts = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), posts_T)
@@ -282,29 +330,37 @@ class DreamerTrainer(nnx.Module):
 
             all_vals = jnp.concatenate([v_start[None], vals], axis=0)
 
-            lambda_returns = compute_lambda_values(rews, all_vals, conts)
+            # Lambda returns with global discount
+            lambda_returns = compute_lambda_values(rews, all_vals, conts * GAMMA)
 
             norm_returns = self.moments.normalize(lambda_returns)
+            
+            # Cumulative Discount Weighting
+            # weights[t] = \prod_{i=0}^{t-1} (conts[i] * GAMMA)
+            discount_weights = jnp.concatenate([jnp.ones_like(conts[:1]), conts[:-1] * GAMMA], axis=0)
+            discount_weights = jnp.cumprod(discount_weights, axis=0)
+            discount_weights = jax.lax.stop_gradient(discount_weights)
 
             # Critic Loss
             v_pred_logits = critic(rollouts['feat'])
             target_twohot = to_twohot(jax.lax.stop_gradient(norm_returns))
-            loss_critic = -jnp.mean(jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1))
+            loss_critic_step = -jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1)
+            loss_critic = jnp.mean(loss_critic_step * discount_weights)
 
             # Actor Loss
             baseline = from_twohot(v_pred_logits)
             advantage = jax.lax.stop_gradient(norm_returns - baseline)
-            advantage = (advantage - jnp.mean(advantage)) / (jnp.std(advantage) + 1e-8)
-
+            # advantage = (advantage - jnp.mean(advantage)) / (jnp.std(advantage) + 1e-8)
+            
             actions = rollouts['action']
             logits = rollouts['action_dist']
             log_probs = jnp.sum(actions * jax.nn.log_softmax(logits), axis=-1)
-            loss_actor_policy = -jnp.mean(log_probs * advantage)
-
-            probs = jax.nn.softmax(logits)
-            entropy = -jnp.sum(probs * jax.nn.log_softmax(logits), axis=-1)
-            loss_actor_ent = -3e-4 * jnp.mean(entropy)
-            loss_actor = loss_actor_policy + loss_actor_ent
+            
+            ENTROPY_SCALE = 3e-4 # DreamerV3 default actor entropy scale
+            entropy = -jnp.sum(jax.nn.softmax(logits) * jax.nn.log_softmax(logits), axis=-1)
+            
+            loss_actor_step = -(log_probs * advantage + ENTROPY_SCALE * entropy)
+            loss_actor = jnp.mean(loss_actor_step * discount_weights)
 
             metrics = {
                 'loss_critic': loss_critic,
@@ -401,6 +457,74 @@ class DreamerTrainer(nnx.Module):
 
         return action_idx, next_state
 
+    @nnx.jit(static_argnums=(3,))
+    def collect_sequence(self, env_state, params, num_steps, key, dreamer_state=None):
+        """Collects a sequence of transitions using jax.lax.scan.
+        Includes auto-reset on done.
+        """
+        B = env_state.agent_pos.shape[0]
+        if dreamer_state is None:
+            dreamer_state = self.agent.wm.rssm.initial(B)
+            # Add prev_action for consistency if not present
+            if 'prev_action' not in dreamer_state:
+                dreamer_state['prev_action'] = jnp.zeros(
+                    (B, self.agent.ac.actor.net.layers[-1].out_features))
+            # Initial step is always 'first'
+            dreamer_state['is_first'] = jnp.ones((B, 1))
+        
+        def scan_fn(carry, _):
+            state, d_state, current_key = carry
+            
+            # 1. Sensing
+            obs = jax.vmap(get_observation, in_axes=(0, None))(state, params)
+            
+            # 2. Action selection
+            current_key, act_key = jax.random.split(current_key)
+            action_idx, next_d_state = self.get_action(
+                obs, d_state, eval_mode=False, rng=act_key)
+            
+            # 3. Step Environment
+            action_idx = action_idx.astype(jnp.int32)
+            next_state_raw, reward, done, _ = jax.vmap(
+                jax_step, in_axes=(0, 0, None))(state, action_idx, params)
+            
+            # 4. Auto-Reset
+            current_key, reset_key = jax.random.split(current_key)
+            reset_state = jax.vmap(jax_reset, in_axes=(None, 0))(
+                params, jax.random.split(reset_key, B))
+            
+            def select_done(d, r, n):
+                d_expanded = d.reshape((d.shape[0],) + (1,) * (r.ndim - 1))
+                return jnp.where(d_expanded, r, n)
+                
+            final_env_state = jax.tree_util.tree_map(
+                lambda r, n: select_done(done, r, n),
+                reset_state, next_state_raw
+            )
+            
+            # 5. Prepare Dreamer state for NEXT step
+            # On reset, we should reset RSSM state too? 
+            # Dreamer typically handles this via 'is_first' flag in RSSM.step
+            # but here get_action handles it. 
+            # We need to set 'is_first' for the NEXT get_action call.
+            next_d_state['is_first'] = done[..., None].astype(jnp.float32)
+            
+            # Record transition
+            transition = {
+                'obs': obs,
+                'action': jax.nn.one_hot(action_idx, self.agent.ac.actor.net.layers[-1].out_features),
+                'reward': reward,
+                'terminal': done,
+                'is_first': d_state.get('is_first', jnp.zeros((B, 1)))
+            }
+            
+            return (final_env_state, next_d_state, current_key), transition
+
+        (final_env_state, final_d_state, final_key), transitions = jax.lax.scan(
+            scan_fn, (env_state, dreamer_state, key), None, length=num_steps)
+        
+        return final_env_state, final_d_state, final_key, transitions
+
 # -----------------------------------------------------------------------------
 # Replay Buffer
 # -----------------------------------------------------------------------------
@@ -434,24 +558,22 @@ class ReplayBuffer:
             self.ep_start_idx = self.idx
 
     def sample(self, batch_size):
-        obs_b, act_b, rew_b, done_b, first_b = [], [], [], [], []
-
-        for _ in range(batch_size):
-            while True:
-                start = np.random.randint(0, self.size - self.sequence_length)
-                indices = np.arange(start, start + self.sequence_length) % self.capacity
-                break
-
-            obs_b.append(self.obs[indices])
-            act_b.append(self.actions[indices])
-            rew_b.append(self.rewards[indices])
-            done_b.append(self.dones[indices])
-            first_b.append(self.is_first[indices])
+        # Sample all start indices at once
+        # Ensure we don't pick indices that would go out of bounds before the buffer is full
+        if self.size <= self.sequence_length:
+            return None # Not enough data
+            
+        starts = np.random.randint(0, self.size - self.sequence_length, size=batch_size)
+        
+        # Create full sequence indices using broadcasting
+        # indices shape: (batch_size, sequence_length)
+        seq_range = np.arange(self.sequence_length)
+        indices = (starts[:, None] + seq_range[None, :]) % self.capacity
 
         return {
-            'obs': np.array(obs_b),
-            'action': np.array(act_b),
-            'reward': np.array(rew_b),
-            'terminal': np.array(done_b),
-            'is_first': np.array(first_b)
+            'obs': self.obs[indices],
+            'action': self.actions[indices],
+            'reward': self.rewards[indices],
+            'terminal': self.dones[indices],
+            'is_first': self.is_first[indices].astype(np.float32)
         }

@@ -77,27 +77,25 @@ def from_twohot(logits, min_v=-20.0, max_v=20.0, num_buckets=255):
 
 class OneHotDist:
     """
-    One-Hot Categorical Distribution with Straight-Through Estimator.
+    One-Hot Categorical Distribution with Straight-Through Estimator and Unimix.
     Used for Stochastic State (z) in RSSM.
     """
-    def __init__(self, logits):
+    def __init__(self, logits, unimix=0.01):
         self.logits = logits
-        self.probs = jax.nn.softmax(logits, axis=-1)
         self.num_classes = logits.shape[-1]
+        probs = jax.nn.softmax(logits, axis=-1)
+        if unimix > 0:
+            probs = (1.0 - unimix) * probs + unimix / self.num_classes
+        self.probs = probs
         
     def sample(self, key):
-        # Gumbel-Max trick
-        u = random.uniform(key, self.logits.shape)
-        gumbel = -jnp.log(-jnp.log(u + 1e-10) + 1e-10)
-        # Add temperature if needed, but standard is argmax
-        sample_idx = jnp.argmax(self.logits + gumbel, axis=-1)
+        # Sample from probabilities (equivalent to categorical sampling)
+        sample_idx = random.categorical(key, jnp.log(self.probs + 1e-10))
         sample_onehot = jax.nn.one_hot(sample_idx, self.num_classes)
         
         # Straight-Through Estimator
         # Forward: One-hot sample
         # Backward: Gradients flow through softmax probs
-        sample_st = sample_onehot + self.probs - self.probs # No stop_gradient needed here explicitly in JAX if we do it right?
-        # Typically: y = y_hard - y_soft.stop_gradient() + y_soft
         sample_st = sample_onehot - jax.lax.stop_gradient(self.probs) + self.probs
         return sample_st
     

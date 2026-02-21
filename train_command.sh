@@ -12,4 +12,4 @@ python train.py \
   --episodes 10000000 \
   --checkpoint-frequency 1000000  \
   --device cuda:1 \
-  --tag "rppoNMN_128env"
+  --tag "rppoNMN_128env_Multip_G40"

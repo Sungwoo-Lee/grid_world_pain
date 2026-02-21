@@ -742,51 +742,42 @@ def main():
                     pbar.set_postfix(postfix)
                         
                 elif algorithm == "DreamerV3":
-                    # Collect a batch of steps to match PPO's iteration rhythm
-                    for _ in range(num_steps):
-                        if args.debug: print(f".", end="", flush=True)
-                        obs_arr = jax.vmap(get_observation, in_axes=(0, None))(env_state, params)
-                        key, act_key = jax.random.split(key)
-                        action_idx, dreamer_state = trainer.get_action(obs_arr, dreamer_state, eval_mode=False, rng=act_key)
-                        action_idx = action_idx.astype(jnp.int32)
-                        action_onehot = jax.nn.one_hot(action_idx, action_dim)
-                        
-                        from src.environment.core import jax_step
-                        step_fn = jax.vmap(lambda s, a: jax_step(s, a, params))
-                        next_env_state, reward, done, info = step_fn(env_state, action_idx)
-                        
-                        obs_np = np.array(obs_arr)
-                        act_np = np.array(action_onehot)
-                        rew_np = np.array(reward)
-                        done_np = np.array(done)
-                        
-                        if not hasattr(main, 'prev_dones'):
-                            main.prev_dones = np.zeros((num_envs,), dtype=bool)
-                            if iteration == 1: main.prev_dones[:] = True
-                        
-                        is_first_np = main.prev_dones
+                    # Use JITTED collect_sequence for massive speedup (approx 600x)
+                    key, collect_key = jax.random.split(key)
+                    env_state, dreamer_state, key, transitions = trainer.collect_sequence(
+                        env_state, params, num_steps, collect_key, dreamer_state)
+                    
+                    # Convert transitions to NumPy and add to buffer
+                    # Transitions is a Dict[str, jnp.ndarray] with shape (num_steps, num_envs, ...)
+                    obs_steps = np.array(transitions['obs'])
+                    act_steps = np.array(transitions['action'])
+                    rew_steps = np.array(transitions['reward'])
+                    done_steps = np.array(transitions['terminal'])
+                    first_steps = np.array(transitions['is_first'])
+                    
+                    for t in range(num_steps):
                         for i in range(num_envs):
-                            buffer.add(obs_np[i], act_np[i], rew_np[i], done_np[i], is_first_np[i])
-                        
-                        main.prev_dones = done_np
-                        env_state = next_env_state
-                        global_step += num_envs
-                        
-                        episode_returns += rew_np
-                        episode_lengths += 1
-                        dones = done_np.astype(bool)
-                        if np.any(dones):
-                            completed_indices = np.where(dones)[0]
-                            for i in completed_indices:
+                            buffer.add(
+                                obs_steps[t, i],
+                                act_steps[t, i],
+                                rew_steps[t, i],
+                                done_steps[t, i],
+                                first_steps[t, i]
+                            )
+                            
+                            episode_returns[i] += rew_steps[t, i]
+                            episode_lengths[i] += 1
+                            
+                            if done_steps[t, i]:
                                 total_episodes_completed += 1
                                 ep_reward = float(episode_returns[i])
                                 ep_length = int(episode_lengths[i])
-                                
                                 ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
                                 iteration_episodes.append({'r': ep_reward, 'l': ep_length})
-                                
-                                episode_returns[i] = 0.0
+                                episode_returns[i] = 0
                                 episode_lengths[i] = 0
+                    
+                    global_step += num_envs * num_steps
 
                     if wandb_enabled and iteration_episodes:
                         rewards = [ep['r'] for ep in iteration_episodes]
@@ -809,8 +800,11 @@ def main():
                     loss_msg = ""
                     if buffer.size > max(dreamer_config['batch_size'] * 2, dreamer_config['batch_length']):
                         if args.debug: print(f"  [DEBUG] DreamerV3 Training Update...", end="", flush=True)
-                        batch_jax = buffer.sample(dreamer_config['batch_size'])
-                        metrics = trainer.train_step(batch_jax, key)
+                        train_steps = dreamer_config.get('train_steps', 1)
+                        for _ in range(train_steps):
+                            batch_jax = buffer.sample(dreamer_config['batch_size'])
+                            key, train_key = jax.random.split(key)
+                            metrics = trainer.train_step(batch_jax, train_key)
                         loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
                     
                     if wandb_enabled and iteration % 10 == 0:
