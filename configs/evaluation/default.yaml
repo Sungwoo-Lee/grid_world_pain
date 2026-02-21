@@ -1,5 +1,6 @@
 testing:
   seed: 56
   evaluation_episodes: 1
+  num_envs: 1
   render_video: true
   record_stats: true

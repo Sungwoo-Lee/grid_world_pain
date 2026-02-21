@@ -20,14 +20,18 @@ except ImportError:
 
 @nnx.jit(static_argnames="eval_mode")
 def generic_inference(model, x, h, key=None, eval_mode=False):
-    """Generic inference helper that works with both RecurrentPPO and DreamerV3 NNX models."""
+    """Generic inference helper that works with both RecurrentPPO and DreamerV3 NNX models.
+    Supports single sample x [obs_dim] or [1, obs_dim], and batch x [N, obs_dim]."""
     # Standard signature for both models:
     # (logits, value, h_new, mod_info) = model(x, h)
     logits, value, h_new, mod_info = model(x, h)
 
     if eval_mode:
-        action = jnp.argmax(logits)
-        log_prob = 0.0
+        action = jnp.argmax(logits, axis=-1)  # (A,) or (N,) when batched
+        if logits.ndim == 1:
+            log_prob = 0.0
+        else:
+            log_prob = jnp.zeros(logits.shape[0])
     else:
         # Note: key must be provided if not eval_mode
         action = jax.random.categorical(key, logits)
@@ -35,13 +39,95 @@ def generic_inference(model, x, h, key=None, eval_mode=False):
 
     return action, log_prob, value.squeeze(), h_new, mod_info
 
-def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, checkpoint_pct, 
-                            render_video=False, wandb_enabled=False, debug=False, quiet=True):
+
+def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos, ep_actions,
+                         ep_rewards, ep_obs, stat_headers, action_map, params, debug=False):
+    """Write one episode's stats to CSV. Uses one batched device_get then writes rows."""
+    info_keys = ['ate_food', 'event_collided', 'rested', 'damage',
+                 'damage_danger', 'damage_predator', 'damage_obstacle', 'termination_reason']
+    batched_state = jax.device_get({
+        'agent_pos': jnp.stack([s['agent_pos'] for s in ep_jax_states]),
+        'satiation': jnp.stack([s['satiation'] for s in ep_jax_states]),
+        'nutrition': jnp.stack([s['nutrition'] for s in ep_jax_states]),
+        'injury_level': jnp.stack([s['injury_level'] for s in ep_jax_states]),
+        'rest_streak': jnp.stack([s['rest_streak'] for s in ep_jax_states]),
+        'res_pos': jnp.stack([s['res_pos'] for s in ep_jax_states]),
+        'res_active': jnp.stack([s['res_active'] for s in ep_jax_states]),
+        'pred_pos': jnp.stack([s['pred_pos'] for s in ep_jax_states]),
+        'neutral_pos': jnp.stack([s['neutral_pos'] for s in ep_jax_states]),
+        'obs_pos': jnp.stack([s['obs_pos'] for s in ep_jax_states]),
+    })
+    batched_info = {}
+    for ik in info_keys:
+        vals = [inf.get(ik, 0) for inf in ep_jax_infos]
+        batched_info[ik] = np.array(jax.device_get(vals))
+    batched_obs = np.array(jax.device_get(jnp.stack(ep_obs)))
+    obs_header_indices = [i for i, h in enumerate(stat_headers) if h.startswith("obs_")]
+    num_obs_headers = len(obs_header_indices)
+    num_steps = len(ep_jax_states)
+    stats_path = os.path.join(stats_dir, f"{episode_number:06d}ep_stats.csv")
+    with open(stats_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(stat_headers)
+        for t in range(num_steps):
+            action_name = "None" if ep_actions[t] < 0 else (
+                action_map[ep_actions[t]] if 0 <= ep_actions[t] < len(action_map) else "Unknown")
+            row = [
+                t,
+                int(batched_state['agent_pos'][t, 0]),
+                int(batched_state['agent_pos'][t, 1]),
+                action_name,
+                ep_rewards[t],
+                float(batched_state['satiation'][t]),
+                float(batched_state['nutrition'][t]),
+                float(batched_state['injury_level'][t]),
+                int(batched_state['rest_streak'][t]),
+                bool(batched_info['ate_food'][t]),
+                bool(batched_info['event_collided'][t]),
+                bool(batched_info['rested'][t]),
+                float(batched_info['damage'][t]),
+                float(batched_info['damage_danger'][t]),
+                float(batched_info['damage_predator'][t]),
+                float(batched_info['damage_obstacle'][t]),
+            ]
+            obs_vec = batched_obs[t]
+            for i in range(min(num_obs_headers, len(obs_vec))):
+                row.append(float(obs_vec[i]))
+            res_pos = batched_state['res_pos'][t]
+            res_active = batched_state['res_active'][t]
+            for i in range(res_pos.shape[0]):
+                row.append(int(res_pos[i, 0]))
+                row.append(int(res_pos[i, 1]))
+                row.append(bool(res_active[i]))
+            pred_pos = batched_state['pred_pos'][t]
+            for i in range(pred_pos.shape[0]):
+                row.append(int(pred_pos[i, 0]))
+                row.append(int(pred_pos[i, 1]))
+            neutral_pos = batched_state['neutral_pos'][t]
+            for i in range(neutral_pos.shape[0]):
+                row.append(int(neutral_pos[i, 0]))
+                row.append(int(neutral_pos[i, 1]))
+            obs_pos = batched_state['obs_pos'][t]
+            for i in range(obs_pos.shape[0]):
+                row.append(int(obs_pos[i, 0]))
+                row.append(int(obs_pos[i, 1]))
+            row.append(int(batched_info['termination_reason'][t]))
+            row.append(float(params.max_satiation))
+            row.append(float(params.max_injury))
+            writer.writerow(row)
+    if debug:
+        print(f"    [Stats] Saved to {stats_path}")
+
+
+def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
+                            render_video=False, wandb_enabled=False, debug=False, quiet=True, num_envs=1):
     """
     Runs deterministic evaluation episodes using the JAX model.
+    When num_envs > 1, runs min(num_episodes, num_envs) envs in parallel (episode-ticket design).
     """
     from src.environment.sensor import get_observation_breakdown
-    
+
+    effective_num_envs = min(num_episodes, num_envs)
     key = jax.random.PRNGKey(seed)
     
     # Video output setup
@@ -61,60 +147,89 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     # Stats recording
     record_stats = config.get('testing.record_stats', False)
     stats_dir = os.path.join(results_dir, "stats", str(checkpoint_pct))
+    # Build stat_headers and action_map whenever we might record (single or parallel path)
+    stat_headers = []
+    action_map = ["Up", "Right", "Down", "Left"]
+    if params.rest_action_enabled:
+        action_map.append("Rest")
+    if params.eat_action_enabled:
+        action_map.append("Eat")
     if record_stats:
         os.makedirs(stats_dir, exist_ok=True)
-        
-        # --- Pre-calculate headers for consistent CSV structure ---
         stat_headers = ['step', 'pos_r', 'pos_c', 'action', 'reward', 
                        'satiation', 'nutrition', 'injury', 'rest_streak']
         stat_headers += ['event_ate', 'event_collided', 'event_rested',
                         'damage_total', 'damage_danger', 'damage_predator', 'damage_obstacle']
-        
-        # 1. Olfaction
         if 'Olfaction' in breakdown:
             for i in range(breakdown['Olfaction']): 
                 stat_headers.append(f"obs_olf_{i}")
-        # 2. Extero Nociception
         if 'Extero Nociception' in breakdown:
             stat_headers.append("obs_noc")
-        # 3. Collision
         coll_offsets = get_visual_offsets(params.sensor_range)
         for i in range(coll_offsets.shape[0]):
             dr, dc = coll_offsets[i]
             stat_headers.append(f"obs_coll_r{dr}c{dc}")
-            
-        # 4. Location
         if 'Location' in breakdown:
             stat_headers += ["obs_loc_r", "obs_loc_c"]
-        # Get chemical dimension from params
-        chem_dim = breakdown.get('Olfaction', 0)
-        num_resources = params.res_type.shape[0]
-        num_predators = params.pred_property.shape[0] if params.predator_enabled else 0
-        num_neutral = params.neutral_property.shape[0]
-        num_obstacles = params.obs_blocking.shape[0]
-        
-        # Action names: 0=Up, 1=Right, 2=Down, 3=Left, then Rest, Eat (core.py ACTION_DELTAS)
-        action_map = ["Up", "Right", "Down", "Left"]
-        if params.rest_action_enabled:
-            action_map.append("Rest")
-        if params.eat_action_enabled:
-            action_map.append("Eat")
-        
-        headers = [
-            'episode', 'step', 'action', 'reward', 'satiation', 'nutrition', 'injury', 'rest_streak',
-            'agent_x', 'agent_y'
-        ]
-        for i in range(num_resources): headers += [f'res_{i}_x', f'res_{i}_y', f'res_{i}_active']
-        for i in range(num_predators): headers += [f'pred_{i}_x', f'pred_{i}_y']
-        for i in range(num_neutral):   headers += [f'neutral_{i}_x', f'neutral_{i}_y']
-        for i in range(num_obstacles): headers += [f'obs_{i}_x', f'obs_{i}_y']
-        headers.append('termination_reason')
-        headers += ['max_satiation', 'max_injury']
     
     if not quiet:
-        print(f"  [DEBUG] Starting Evaluation: {num_episodes} episodes, Render={render_video}", flush=True)
+        print(f"  [DEBUG] Starting Evaluation: {num_episodes} episodes, num_envs={num_envs}, effective={effective_num_envs}, Render={render_video}", flush=True)
 
-    # Main loop over episodes
+    # --- Single-env path (num_envs==1 or effective_num_envs==1) ---
+    if effective_num_envs == 1:
+        _run_single_env_eval(
+            model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
+            key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths, all_frames,
+            record_stats, stats_dir, stat_headers, action_map, params, max_steps=None,
+            render_video=render_video, wandb_enabled=wandb_enabled, debug=debug, quiet=quiet,
+        )
+    else:
+        # --- Parallel-env path (episode-ticket design) ---
+        _run_parallel_env_eval(
+            model, params, config, num_episodes, effective_num_envs, seed, results_dir, checkpoint_pct,
+            key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths,
+            record_stats, stats_dir, stat_headers, action_map, params,
+            render_video=render_video, wandb_enabled=wandb_enabled, debug=debug, quiet=quiet,
+        )
+
+    # Save Consolidated Video (single-env path fills all_frames; parallel path leaves it empty for now)
+    last_video_path = None
+    if render_video and all_frames:
+        video_path = os.path.join(video_dir, f"eval_{checkpoint_pct}.mp4")
+        fps = config.get('visualization.fps', 5)
+        if debug:
+            print(f"    [Video] Saving {len(all_frames)} frames to {video_path}...", end="", flush=True)
+        from src.environment.renderer import save_jax_video
+        save_jax_video(all_frames, video_path, fps=fps, quiet=quiet)
+        if debug:
+            print(" Done", flush=True)
+        last_video_path = video_path
+        if not quiet:
+            print(f"  --- Consolidated Evaluation Video saved to: {video_path} ---", flush=True)
+        if wandb_enabled and WANDB_AVAILABLE and wandb.run:
+            from src.utils.wandb_utils import upload_video
+            upload_video(video_path, episode=checkpoint_pct, step=checkpoint_pct, caption=f"Episode {checkpoint_pct}", quiet=True)
+
+    mean_reward = float(np.mean(episode_rewards)) if episode_rewards else 0.0
+    mean_length = float(np.mean(episode_lengths)) if episode_lengths else 0.0
+    return {
+        "mean_reward": mean_reward,
+        "mean_length": mean_length,
+        "episode_rewards": episode_rewards,
+        "episode_lengths": episode_lengths,
+        "last_video_path": last_video_path
+    }
+
+
+def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
+                         key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths, all_frames,
+                         record_stats, stats_dir, stat_headers, action_map, params_ref, max_steps,
+                         render_video=False, wandb_enabled=False, debug=False, quiet=True):
+    """Original single-env loop: one episode at a time."""
+    from src.environment.sensor import get_observation_breakdown
+    if render_video:
+        from src.environment.renderer import render_jax_state
+    max_steps = params_ref.max_steps if max_steps is None else max_steps
     ep_pbar = tqdm(total=num_episodes, desc="Evaluating Episodes", disable=quiet)
     for ep in range(num_episodes):
         if not quiet and debug:
@@ -122,9 +237,8 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             
         # Reset env
         key, reset_key = jax.random.split(key)
-        # CRITICAL FIX: Signature is jax_reset(params, key)
-        state = jax_reset(params, reset_key)
-        obs = get_observation(state, params)
+        state = jax_reset(params_ref, reset_key)
+        obs = get_observation(state, params_ref)
         
         done = False
         total_reward = 0.0
@@ -135,8 +249,6 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             h_state = model.initial_state(batch_size=None)
         else:
             h_state = None
-            
-        max_steps = params.max_steps
         
         # Lists for deferred stats collection
         ep_jax_states = []
@@ -235,9 +347,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         if render_video:
             if debug: print(f"    [Render] Initial frame...", end="", flush=True)
             state_for_render = jax.device_get(state)
-            true_obs = get_observation(state, params, apply_noise=False)
+            true_obs = get_observation(state, params_ref, apply_noise=False)
             all_frames.append(render_jax_state(
-                state_for_render, params, episode=ep+1, step=0, 
+                state_for_render, params_ref, episode=ep+1, step=0, 
                 train_episode=checkpoint_pct,
                 sensory_data=get_sensory_viz(obs, true_obs),
                 info=None,
@@ -264,8 +376,8 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 # Use algorithm-agnostic generic_inference
                 action, log_prob, value, h_new, _ = generic_inference(model, obs_batch, h_state, eval_mode=True)
                 h_state = h_new
-                
-                action_idx = int(action)
+                # Single-env: obs_batch is (1, D), so action can be (1,) — squeeze to scalar for int()
+                action_idx = int(jnp.squeeze(action))
             else:
                 # Random action if no model provided
                 key, action_key = jax.random.split(key)
@@ -275,23 +387,22 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 print(f" Done (Action: {action_idx}). Stepping env...", end="", flush=True)
             
             # Step
-            next_state, reward, done, info = jax_step(state, action_idx, params)
+            next_state, reward, done, info = jax_step(state, action_idx, params_ref)
             total_reward += float(reward)
             step_count += 1
             
             state = next_state
-            next_obs = get_observation(state, params)
+            next_obs = get_observation(state, params_ref)
             
             if debug:
                 print(f" Done. Reward: {reward:.2f}", flush=True)
             
             if render_video:
                 if debug: print(f"    [Step {step_count}] Rendering...", end="", flush=True)
-                # Materialize state on host so renderer sees updated agent_pos (fixes "agent not moving" in video)
                 state_for_render = jax.device_get(state)
-                true_obs = get_observation(state, params, apply_noise=False)
+                true_obs = get_observation(state, params_ref, apply_noise=False)
                 all_frames.append(render_jax_state(
-                    state_for_render, params, episode=ep+1, step=step_count, 
+                    state_for_render, params_ref, episode=ep+1, step=step_count, 
                     train_episode=checkpoint_pct,
                     action=action_idx, sensory_data=get_sensory_viz(next_obs, true_obs),
                     info=jax.device_get(info),
@@ -321,110 +432,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             obs = next_obs
             step_pbar.update(1)
         
-        # === BATCH TRANSFER: Single GPU→CPU sync per episode ===
         if record_stats and ep_jax_states:
-            # Stack all per-step JAX arrays into batched tensors for one device_get
-            batched_state = jax.device_get({
-                'agent_pos': jnp.stack([s['agent_pos'] for s in ep_jax_states]),
-                'satiation': jnp.stack([s['satiation'] for s in ep_jax_states]),
-                'nutrition': jnp.stack([s['nutrition'] for s in ep_jax_states]),
-                'injury_level': jnp.stack([s['injury_level'] for s in ep_jax_states]),
-                'rest_streak': jnp.stack([s['rest_streak'] for s in ep_jax_states]),
-                'res_pos': jnp.stack([s['res_pos'] for s in ep_jax_states]),
-                'res_active': jnp.stack([s['res_active'] for s in ep_jax_states]),
-                'pred_pos': jnp.stack([s['pred_pos'] for s in ep_jax_states]),
-                'neutral_pos': jnp.stack([s['neutral_pos'] for s in ep_jax_states]),
-                'obs_pos': jnp.stack([s['obs_pos'] for s in ep_jax_states]),
-            })
-            
-            # Batch-transfer info dicts (skip step 0 which has empty dict)
-            info_keys = ['ate_food', 'event_collided', 'rested', 'damage', 
-                        'damage_danger', 'damage_predator', 'damage_obstacle', 'termination_reason']
-            batched_info = {}
-            for ik in info_keys:
-                vals = []
-                for inf in ep_jax_infos:
-                    vals.append(inf.get(ik, 0))
-                # Convert JAX arrays in the list; plain Python values stay as-is
-                batched_info[ik] = np.array(jax.device_get(vals))
-            
-            # Batch-transfer observations
-            batched_obs = np.array(jax.device_get(jnp.stack(ep_obs)))
-            
-            # Pre-compute observation header indices
-            obs_header_indices = [i for i, h in enumerate(stat_headers) if h.startswith("obs_")]
-            num_obs_headers = len(obs_header_indices)
-            
-            # Build all CSV rows at once from NumPy arrays
-            num_steps = len(ep_jax_states)
-            stats_path = os.path.join(stats_dir, f"{ep+1:06d}ep_stats.csv")
-            
-            with open(stats_path, 'w', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(stat_headers)
-                
-                for t in range(num_steps):
-                    action_name = "None" if ep_actions[t] < 0 else (
-                        action_map[ep_actions[t]] if 0 <= ep_actions[t] < len(action_map) else "Unknown")
-                    
-                    row = [
-                        t,                                              # step
-                        int(batched_state['agent_pos'][t, 0]),          # pos_r
-                        int(batched_state['agent_pos'][t, 1]),          # pos_c
-                        action_name,                                    # action
-                        ep_rewards[t],                                  # reward
-                        float(batched_state['satiation'][t]),           # satiation
-                        float(batched_state['nutrition'][t]),           # nutrition
-                        float(batched_state['injury_level'][t]),        # injury
-                        int(batched_state['rest_streak'][t]),           # rest_streak
-                        bool(batched_info['ate_food'][t]),              # event_ate
-                        bool(batched_info['event_collided'][t]),        # event_collided
-                        bool(batched_info['rested'][t]),                # event_rested
-                        float(batched_info['damage'][t]),               # damage_total
-                        float(batched_info['damage_danger'][t]),        # damage_danger
-                        float(batched_info['damage_predator'][t]),      # damage_predator
-                        float(batched_info['damage_obstacle'][t]),      # damage_obstacle
-                    ]
-                    
-                    # Observations (vectorized slice)
-                    obs_vec = batched_obs[t]
-                    for i in range(min(num_obs_headers, len(obs_vec))):
-                        row.append(float(obs_vec[i]))
-                    
-                    # Resource positions
-                    res_pos = batched_state['res_pos'][t]
-                    res_active = batched_state['res_active'][t]
-                    for i in range(res_pos.shape[0]):
-                        row.append(int(res_pos[i, 0]))
-                        row.append(int(res_pos[i, 1]))
-                        row.append(bool(res_active[i]))
-                    
-                    # Predator positions
-                    pred_pos = batched_state['pred_pos'][t]
-                    for i in range(pred_pos.shape[0]):
-                        row.append(int(pred_pos[i, 0]))
-                        row.append(int(pred_pos[i, 1]))
-                    
-                    # Neutral positions
-                    neutral_pos = batched_state['neutral_pos'][t]
-                    for i in range(neutral_pos.shape[0]):
-                        row.append(int(neutral_pos[i, 0]))
-                        row.append(int(neutral_pos[i, 1]))
-                    
-                    # Obstacle positions
-                    obs_pos = batched_state['obs_pos'][t]
-                    for i in range(obs_pos.shape[0]):
-                        row.append(int(obs_pos[i, 0]))
-                        row.append(int(obs_pos[i, 1]))
-                    
-                    # Termination info and max values
-                    row.append(int(batched_info['termination_reason'][t]))
-                    row.append(float(params.max_satiation))
-                    row.append(float(params.max_injury))
-                    
-                    writer.writerow(row)
-            
-            if debug: print(f"    [Stats] Saved to {stats_path}")
+            _write_episode_stats(stats_dir, ep + 1, ep_jax_states, ep_jax_infos, ep_actions,
+                                 ep_rewards, ep_obs, stat_headers, action_map, params_ref, debug)
 
         step_pbar.close()
         
@@ -434,39 +444,140 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         if (debug or not WANDB_AVAILABLE) and not quiet:
             print(f"  --- Episode {ep+1}/{num_episodes} Complete | Steps: {step_count} | Reward: {total_reward:.2f} ---", flush=True)
         
-        # Add a few pause frames between episodes
         if render_video:
             for _ in range(5):
                 all_frames.append(all_frames[-1])
+
+
+def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_envs, seed, results_dir, checkpoint_pct,
+                          key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths,
+                          record_stats, stats_dir, stat_headers, action_map, params_ref,
+                          render_video=False, wandb_enabled=False, debug=False, quiet=True):
+    """Parallel env evaluation with episode-ticket design: only effective_num_envs run; when one finishes, refill if tickets remain."""
+    from src.environment.wrapper import ParallelEnv
     
-    # Save Consolidated Video
-    last_video_path = None
-    if render_video and all_frames:
-        video_path = os.path.join(video_dir, f"eval_{checkpoint_pct}.mp4")
-        fps = config.get('visualization.fps', 5)
-        if debug: print(f"    [Video] Saving {len(all_frames)} frames to {video_path}...", end="", flush=True)
-        save_jax_video(all_frames, video_path, fps=fps, quiet=quiet)
-        if debug: print(" Done", flush=True)
-        last_video_path = video_path
-        if not quiet:
-            print(f"  --- Consolidated Evaluation Video saved to: {video_path} ---", flush=True)
+    penv = ParallelEnv(params_ref)
+    max_steps = params_ref.max_steps
+    rest_enabled = params_ref.rest_action_enabled
+    eat_enabled = params_ref.eat_action_enabled
+    action_dim = 4 + int(rest_enabled) + int(eat_enabled)
+    
+    # Initial reset: effective_num_envs envs (wrapper splits key internally)
+    key, reset_key = jax.random.split(key)
+    states, obs = penv.reset(reset_key, effective_num_envs)
+    obs = jnp.array(obs)
+    
+    # Per-slot buffers for stats
+    slot_states = [[] for _ in range(effective_num_envs)]
+    slot_infos = [[] for _ in range(effective_num_envs)]
+    slot_actions = [[] for _ in range(effective_num_envs)]
+    slot_rewards = [[] for _ in range(effective_num_envs)]
+    slot_obs = [[] for _ in range(effective_num_envs)]
+    
+    if record_stats:
+        for i in range(effective_num_envs):
+            slot_states[i].append({
+                'agent_pos': states.agent_pos[i], 'satiation': states.satiation[i], 'nutrition': states.nutrition[i],
+                'injury_level': states.injury_level[i], 'rest_streak': states.rest_streak[i],
+                'res_pos': states.res_pos[i], 'res_active': states.res_active[i],
+                'pred_pos': states.pred_pos[i], 'neutral_pos': states.neutral_pos[i], 'obs_pos': states.obs_pos[i],
+            })
+            slot_infos[i].append({})
+            slot_actions[i].append(-1)
+            slot_rewards[i].append(0.0)
+            slot_obs[i].append(obs[i])
+    
+    h_state = model.initial_state(batch_size=effective_num_envs) if model is not None and hasattr(model, 'initial_state') else None
+    completed_episodes = 0
+    ep_pbar = tqdm(total=num_episodes, desc="Evaluating Episodes (parallel)", disable=quiet)
+    safety_cap = max_steps * num_episodes * 2
+
+    if not quiet:
+        print(f"  [Ticket] Started: {effective_num_envs} envs running, {num_episodes} tickets (episodes to complete).", flush=True)
+    if debug:
+        print(f"  [Ticket] Step loop safety_cap={safety_cap}.", flush=True)
+    
+    for _step in range(safety_cap):
+        if completed_episodes >= num_episodes:
+            break
+            
+        if model is not None:
+            action, _, _, h_state, _ = generic_inference(model, obs, h_state, eval_mode=True)
+            actions = jnp.reshape(jnp.asarray(action, dtype=jnp.int32), (effective_num_envs,))
+        else:
+            key, subkey = jax.random.split(key)
+            actions = jax.random.randint(subkey, (effective_num_envs,), 0, action_dim)
         
-        # Upload to WandB if enabled
-        if wandb_enabled and WANDB_AVAILABLE and wandb.run:
-            from src.utils.wandb_utils import upload_video
-            upload_video(video_path, episode=checkpoint_pct, step=checkpoint_pct, caption=f"Episode {checkpoint_pct}", quiet=True)
+        next_states, next_obs, rewards, dones, infos = penv.step(states, actions)
+        next_obs = jnp.array(next_obs)
+        
+        for i in range(effective_num_envs):
+            slot_states[i].append({
+                'agent_pos': next_states.agent_pos[i], 'satiation': next_states.satiation[i],
+                'nutrition': next_states.nutrition[i], 'injury_level': next_states.injury_level[i],
+                'rest_streak': next_states.rest_streak[i], 'res_pos': next_states.res_pos[i],
+                'res_active': next_states.res_active[i], 'pred_pos': next_states.pred_pos[i],
+                'neutral_pos': next_states.neutral_pos[i], 'obs_pos': next_states.obs_pos[i],
+            })
+            slot_infos[i].append({k: (v[i] if (hasattr(v, 'ndim') and v.ndim > 0) else v) for k, v in infos.items()})
+            slot_actions[i].append(int(actions[i]))
+            slot_rewards[i].append(float(rewards[i]))
+            slot_obs[i].append(next_obs[i])
+        
+        states = next_states
+        obs = next_obs
+        
+        for i in range(effective_num_envs):
+            if dones[i]:
+                completed_episodes += 1
+                total_r = sum(slot_rewards[i])
+                episode_rewards.append(total_r)
+                episode_lengths.append(len(slot_rewards[i]) - 1)
+                tickets_left = num_episodes - completed_episodes
+                if debug:
+                    print(f"  [Ticket] Env {i} finished → episode {completed_episodes}/{num_episodes} written "
+                          f"(reward={total_r:.2f}, steps={len(slot_rewards[i])-1}); tickets_left={tickets_left}.", flush=True)
+                if record_stats and slot_states[i]:
+                    _write_episode_stats(stats_dir, completed_episodes, slot_states[i], slot_infos[i],
+                                         slot_actions[i], slot_rewards[i], slot_obs[i],
+                                         stat_headers, action_map, params_ref, debug)
+                ep_pbar.update(1)
+                # Ticket used. Only give a new ticket (reset) if more episodes remain.
+                if completed_episodes >= num_episodes:
+                    if debug:
+                        print(f"  [Ticket] All tickets used; not refilling slot {i}.", flush=True)
+                    break
+                if debug:
+                    print(f"  [Ticket] Giving new ticket to slot {i} (reset).", flush=True)
+                key, reset_key = jax.random.split(key)
+                new_state = jax_reset(params_ref, reset_key)
+                states = jax.tree_util.tree_map(lambda x, y: x.at[i].set(y), states, new_state)
+                new_obs = get_observation(new_state, params_ref)
+                obs = obs.at[i].set(new_obs)
+                if h_state is not None:
+                    h_one = model.initial_state(batch_size=1)
+                    h_state = jax.tree_util.tree_map(lambda a, b: a.at[i].set(b.squeeze(0)), h_state, h_one)
+                slot_states[i] = [{'agent_pos': new_state.agent_pos, 'satiation': new_state.satiation, 'nutrition': new_state.nutrition,
+                                   'injury_level': new_state.injury_level, 'rest_streak': new_state.rest_streak,
+                                   'res_pos': new_state.res_pos, 'res_active': new_state.res_active,
+                                   'pred_pos': new_state.pred_pos, 'neutral_pos': new_state.neutral_pos, 'obs_pos': new_state.obs_pos}]
+                slot_infos[i] = [{}]
+                slot_actions[i] = [-1]
+                slot_rewards[i] = [0.0]
+                slot_obs[i] = [new_obs]
+        
+        if completed_episodes >= num_episodes:
+            if debug:
+                print(f"  [Ticket] Exiting step loop (completed_episodes={completed_episodes}).", flush=True)
+            break
     
-    # Statistics
-    mean_reward = float(np.mean(episode_rewards))
-    mean_length = float(np.mean(episode_lengths))
-    
-    return {
-        "mean_reward": mean_reward,
-        "mean_length": mean_length,
-        "episode_rewards": episode_rewards,
-        "episode_lengths": episode_lengths,
-        "last_video_path": last_video_path
-    }
+    ep_pbar.close()
+    if not quiet:
+        if completed_episodes >= num_episodes:
+            print(f"  [Ticket] Done: {completed_episodes} episodes completed (all tickets used).", flush=True)
+        else:
+            print(f"  [Ticket] Done: {completed_episodes}/{num_episodes} episodes (safety cap or early exit).", flush=True)
+
 
 def main():
     pass

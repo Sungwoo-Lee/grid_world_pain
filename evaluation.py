@@ -102,6 +102,8 @@ def main():
     parser.add_argument("--all", action="store_true", help="Evaluate all checkpoints found in the directory")
     parser.add_argument("--wandb-run-path", type=str, help="WandB run path (e.g. 'entity/project/run_id') for uploads")
     parser.add_argument("--render", action=argparse.BooleanOptionalAction, help="Toggle video recording (adds --no-render)")
+    parser.add_argument("--num_envs", type=int, help="Number of parallel envs (default from config testing.num_envs or 1). Effective parallelism is min(episodes, num_envs).")
+    parser.add_argument("--debug", action="store_true", help="Enable debug prints (e.g. episode-ticket lifecycle in parallel eval).")
     parser.add_argument("--device", type=str, default="gpu", help="Device to use for evaluation (e.g. cpu, gpu, cuda:0, gpu:1)")
     args = parser.parse_args()
 
@@ -152,11 +154,12 @@ def main():
     params = load_env_params(config)
 
     # Determine if video rendering should be enabled
-    # We prioritize CLI argument if provided, otherwise fallback to config
     if args.render is not None:
         render_video = args.render
     else:
         render_video = config.get('testing.render_video', False)
+
+    num_envs = args.num_envs if args.num_envs is not None else config.get('testing.num_envs', 1)
 
     # 3. Print Summary
     print(f"\n{'='*50}")
@@ -164,6 +167,7 @@ def main():
     print(f"{'='*50}")
     print(f"Grid: {params.height}x{params.width}")
     print(f"Episodes: {num_episodes}")
+    print(f"Num envs: {num_envs} (effective: {min(num_episodes, num_envs)})")
     print(f"Seed: {seed}")
     # Show default device if set, else first available
     actual_device = jax.config.values.get("jax_default_device") or jax.devices()[0]
@@ -310,8 +314,8 @@ def main():
             raise ValueError(f"Unsupported algorithm for JAX evaluation: {algorithm}")
             
         evaluate_jax_checkpoint(
-            model, params, config, num_episodes, seed, results_dir, iteration, 
-            render_video=render_video, quiet=False
+            model, params, config, num_episodes, seed, results_dir, iteration,
+            render_video=render_video, quiet=False, num_envs=num_envs, debug=args.debug
         )
 
     checkpointer.close()
