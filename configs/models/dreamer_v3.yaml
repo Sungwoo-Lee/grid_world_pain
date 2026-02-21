@@ -1,6 +1,6 @@
 agent:
   algorithm: "DreamerV3"
-  batch_size: 16
+  batch_size: 128
   sequence_length: 128   # Steps per trajectory (same concept as Recurrent PPO sequence_length)
   train_steps: 1
   model_lr: 1e-4

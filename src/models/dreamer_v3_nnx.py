@@ -395,7 +395,7 @@ class DreamerV3Agent(nnx.Module):
         feat = self.wm.get_feat(post)
         logits = self.ac.actor(feat)
         value_logits = self.ac.critic(feat)
-        value = from_twohot(value_logits)
+        value = from_twohot(value_logits, num_buckets=value_logits.shape[-1])
         
         # In evaluation (inference), we should store the action we just took 
         # so it's available for the next step.

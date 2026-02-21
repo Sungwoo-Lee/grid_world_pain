@@ -234,9 +234,10 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
 
         if render_video:
             if debug: print(f"    [Render] Initial frame...", end="", flush=True)
+            state_for_render = jax.device_get(state)
             true_obs = get_observation(state, params, apply_noise=False)
             all_frames.append(render_jax_state(
-                state, params, episode=ep+1, step=0, 
+                state_for_render, params, episode=ep+1, step=0, 
                 train_episode=checkpoint_pct,
                 sensory_data=get_sensory_viz(obs, true_obs),
                 info=None,
@@ -286,9 +287,11 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             
             if render_video:
                 if debug: print(f"    [Step {step_count}] Rendering...", end="", flush=True)
+                # Materialize state on host so renderer sees updated agent_pos (fixes "agent not moving" in video)
+                state_for_render = jax.device_get(state)
                 true_obs = get_observation(state, params, apply_noise=False)
                 all_frames.append(render_jax_state(
-                    state, params, episode=ep+1, step=step_count, 
+                    state_for_render, params, episode=ep+1, step=step_count, 
                     train_episode=checkpoint_pct,
                     action=action_idx, sensory_data=get_sensory_viz(next_obs, true_obs),
                     info=jax.device_get(info),
@@ -428,7 +431,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         episode_rewards.append(total_reward)
         episode_lengths.append(step_count)
         
-        if debug or not WANDB_AVAILABLE:
+        if (debug or not WANDB_AVAILABLE) and not quiet:
             print(f"  --- Episode {ep+1}/{num_episodes} Complete | Steps: {step_count} | Reward: {total_reward:.2f} ---", flush=True)
         
         # Add a few pause frames between episodes
@@ -445,7 +448,8 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         save_jax_video(all_frames, video_path, fps=fps, quiet=quiet)
         if debug: print(" Done", flush=True)
         last_video_path = video_path
-        print(f"  --- Consolidated Evaluation Video saved to: {video_path} ---", flush=True)
+        if not quiet:
+            print(f"  --- Consolidated Evaluation Video saved to: {video_path} ---", flush=True)
         
         # Upload to WandB if enabled
         if wandb_enabled and WANDB_AVAILABLE and wandb.run:

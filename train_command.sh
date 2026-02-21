@@ -11,8 +11,8 @@ set -e
 
 python train.py \
   --agent_config configs/models/dreamer_v3.yaml \
-  --num-envs 2048 \
+  --num-envs 128 \
   --episodes 10000000 \
   --checkpoint-frequency 100000  \
   --device cuda:0 \
-  --tag "dreamer_v3_2048env"
+  --tag "dreamer_v3_128env_128batch"

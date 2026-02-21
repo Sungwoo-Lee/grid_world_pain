@@ -73,6 +73,26 @@ def peel_nnx_state(st):
         return {k: peel_nnx_state(v) for k, v in st.items()}
     return st
 
+
+def _merge_restored_into_module_state(module_state, restored_state):
+    """
+    Recursively copy leaves from restored_state into the structure of module_state.
+    Handles Orbax restoring with string keys ('0','1') where module has int keys (0,1).
+    Returns a new dict with module_state structure but values from restored_state.
+    """
+    if isinstance(module_state, dict):
+        out = {}
+        for k in module_state.keys():
+            # Restored may have str(k) when module has int k (e.g. Sequential indices)
+            rkey = k if k in restored_state else (str(k) if str(k) in restored_state else None)
+            if rkey is not None:
+                out[k] = _merge_restored_into_module_state(module_state[k], restored_state[rkey])
+            else:
+                out[k] = module_state[k]  # keep original if not in restored
+        return out
+    # Leaf (array or other): use restored value if we have a matching leaf
+    return restored_state
+
 def main():
     parser = argparse.ArgumentParser(description="JAX GridWorld Evaluation")
     parser.add_argument("--results_dir", type=str, required=True, help="Path to results directory (Required)")
@@ -116,9 +136,11 @@ def main():
     if os.path.exists(eval_default_path):
         eval_defaults = Config.load_yaml(eval_default_path)
         config.merge(eval_defaults)
-    else:
-        # If missing, we must have them via CLI or saved config
-        pass
+    # Merge visualization config (icons, layout) so evaluation video matches training/tuningEnv
+    vis_config_path = "configs/visualization/visualization.yaml"
+    if os.path.exists(vis_config_path):
+        vis_defaults = Config.load_yaml(vis_config_path)
+        config.merge(vis_defaults)
 
     # 2. Resolve Parameters (No Safe Defaults)
     seed = args.seed or config.get_mandatory('testing.seed')
@@ -268,11 +290,21 @@ def main():
             trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=rngs)
             
             restored = checkpointer.restore(iteration)
-            
-            # Peel and update each component
-            nnx.update(trainer.agent.wm, peel_nnx_state(restored['wm']))
-            nnx.update(trainer.agent.ac.actor, peel_nnx_state(restored['actor']))
-            nnx.update(trainer.agent.ac.critic, peel_nnx_state(restored['critic']))
+            from flax.nnx.statelib import to_pure_dict
+            # Peel Orbax 'value' wrappers
+            wm_restored = peel_nnx_state(restored['wm'])
+            actor_restored = peel_nnx_state(restored['actor'])
+            critic_restored = peel_nnx_state(restored['critic'])
+            # Merge restored state into module state structure (handles str vs int keys for Sequential)
+            wm_struct = to_pure_dict(nnx.state(trainer.agent.wm, nnx.Param))
+            actor_struct = to_pure_dict(nnx.state(trainer.agent.ac.actor, nnx.Param))
+            critic_struct = to_pure_dict(nnx.state(trainer.agent.ac.critic, nnx.Param))
+            wm_state = _merge_restored_into_module_state(wm_struct, wm_restored)
+            actor_state = _merge_restored_into_module_state(actor_struct, actor_restored)
+            critic_state = _merge_restored_into_module_state(critic_struct, critic_restored)
+            nnx.update(trainer.agent.wm, wm_state)
+            nnx.update(trainer.agent.ac.actor, actor_state)
+            nnx.update(trainer.agent.ac.critic, critic_state)
             model = trainer.agent 
         else:
             raise ValueError(f"Unsupported algorithm for JAX evaluation: {algorithm}")
