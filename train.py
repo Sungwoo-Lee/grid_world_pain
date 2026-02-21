@@ -441,8 +441,19 @@ def main():
         activation = config.get_mandatory('agent.activation')
         return_mode = config.get_mandatory('agent.return_mode')
         
+        # Read neuromodulation config (None when modulation.type is null/absent)
+        modulation_config = config.get('agent.modulation', None)
+        if modulation_config is not None and modulation_config.get('type') is None:
+            modulation_config = None
+
         if not args.quiet:
             print(f"RNN Type: {rnn_type}, Activation: {activation}, Return Mode: {return_mode}")
+            if modulation_config is not None:
+                print(f"Neuromodulation: ENABLED (type={modulation_config['type']}, "
+                      f"mod_hidden={modulation_config['mod_hidden_size']}, "
+                      f"grouping={modulation_config['grouping_size']})")
+            else:
+                print(f"Neuromodulation: DISABLED (baseline)")
         
         model = ActorCriticRNN(
             input_dim=input_dim, 
@@ -450,7 +461,8 @@ def main():
             hidden_size=hidden_size, 
             rngs=nnx.Rngs(init_key),
             rnn_type=rnn_type,
-            activation=activation
+            activation=activation,
+            modulation_config=modulation_config
         )
         optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
         
@@ -468,11 +480,8 @@ def main():
             return_mode=return_mode
         )
         
-        # Initialize hidden state (LSTM uses tuple, GRU uses array)
-        if rnn_type.upper() == "LSTM":
-            h_state = (jnp.zeros((num_envs, hidden_size)), jnp.zeros((num_envs, hidden_size)))
-        else:
-            h_state = jnp.zeros((num_envs, hidden_size))
+        # Initialize hidden state via model (handles modulator state automatically)
+        h_state = model.initial_state(num_envs)
 
         if not args.quiet:
             print("JIT compiling train_iteration...")
@@ -488,8 +497,14 @@ def main():
             # Fallback if the YAML doesn't have a top-level 'agent' key (already merged into config)
             dreamer_config = config.get_mandatory('agent')
         
+        # Read neuromodulation config (None when modulation.type is null/absent)
+        dreamer_mod_config = config.get('agent.modulation', None)
+        if dreamer_mod_config is not None and dreamer_mod_config.get('type') is None:
+            dreamer_mod_config = None
+        
         key, init_key = jax.random.split(key)
-        trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=nnx.Rngs(init_key))
+        trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=nnx.Rngs(init_key),
+                                 modulation_config=dreamer_mod_config)
 
 
         buffer = ReplayBuffer(
@@ -629,7 +644,7 @@ def main():
                     mod_info = trajectories.mod_info
                     if args.debug: print(f" Done.", flush=True)
                     
-                    if not args.quiet and mod_info is not None:
+                    if args.debug and mod_info is not None:
                         print(f"  [Modulator] Mean Percept: {float(jnp.mean(mod_info.z_percept)):.3f}, Mean Memory: {float(jnp.mean(mod_info.z_memory)):.3f}, Temp: {float(jnp.mean(mod_info.temperature)):.2f}")
                     
                     steps_this_iter = num_steps * num_envs
@@ -695,17 +710,21 @@ def main():
 
                         # Add Modulator metrics if enabled
                         if mod_info is not None:
-                            # mod_info is a stacked ModulatorOutput (num_steps, num_envs, ...)
                             wandb_logs.update({
                                 "modulator/grad_norm": float(avg_mod_grad_norm),
-                                "modulator/z_percept_mean": float(jnp.mean(mod_info.z_percept)),
-                                "modulator/z_percept_std": float(jnp.std(mod_info.z_percept)),
+                                "modulator/gamma_mean": float(jnp.mean(mod_info.z_percept)),
+                                "modulator/gamma_std": float(jnp.std(mod_info.z_percept)),
                                 "modulator/z_memory_mean": float(jnp.mean(mod_info.z_memory)),
                                 "modulator/z_memory_std": float(jnp.std(mod_info.z_memory)),
                                 "modulator/temperature_mean": float(jnp.mean(mod_info.temperature)),
                                 "modulator/temperature_min": float(jnp.min(mod_info.temperature)),
                                 "modulator/temperature_max": float(jnp.max(mod_info.temperature)),
                             })
+                            if modulation_config is not None and modulation_config.get('type') == "PreActivation":
+                                wandb_logs.update({
+                                    "modulator/beta_mean": float(jnp.mean(mod_info.z_percept_add)),
+                                    "modulator/beta_std": float(jnp.std(mod_info.z_percept_add)),
+                                })
                         
                         wandb_logs.update({
                             "timesteps": global_step,
@@ -713,11 +732,14 @@ def main():
                         })
                         wandb.log(wandb_logs)
                     
-                    pbar.set_postfix({
+                    postfix = {
                         "Iter": iteration,
                         "Loss": f"{total_loss:.4f}",
                         "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"
-                    })
+                    }
+                    if mod_info is not None:
+                        postfix["T"] = f"{float(jnp.mean(mod_info.temperature)):.2f}"
+                    pbar.set_postfix(postfix)
                         
                 elif algorithm == "DreamerV3":
                     # Collect a batch of steps to match PPO's iteration rhythm
@@ -792,9 +814,24 @@ def main():
                         loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
                     
                     if wandb_enabled and iteration % 10 == 0:
-                        wandb.log({"timesteps": global_step, "iteration": iteration, **metrics})
+                        wandb_logs = {"timesteps": global_step, "iteration": iteration, **metrics}
+                        if dreamer_mod_config is not None and metrics:
+                            for mk in ['mod_gamma_mean', 'mod_gamma_std',
+                                        'mod_memory_mean', 'mod_memory_std',
+                                        'mod_z_reward_mean',
+                                        'mod_beta_mean', 'mod_beta_std']:
+                                if mk in metrics:
+                                    wandb_logs[f"modulator/{mk}"] = float(metrics[mk])
+                        wandb.log(wandb_logs)
                     
-                    pbar.set_postfix({"Iter": iteration, "Loss": loss_msg, "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}"})
+                    postfix = {
+                        "Iter": iteration,
+                        "Loss": loss_msg,
+                        "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}",
+                    }
+                    if dreamer_mod_config is not None and metrics and 'mod_z_reward_mean' in metrics:
+                        postfix["R_mod"] = f"{float(metrics['mod_z_reward_mean']):.2f}"
+                    pbar.set_postfix(postfix)
                     if args.debug: print(f" Done.", flush=True)
 
                 elif algorithm == "DQN":
