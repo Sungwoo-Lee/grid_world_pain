@@ -18,6 +18,23 @@ try:
 except ImportError:
     WANDB_AVAILABLE = False
 
+@nnx.jit(static_argnames="eval_mode")
+def generic_inference(model, x, h, key=None, eval_mode=False):
+    """Generic inference helper that works with both RecurrentPPO and DreamerV3 NNX models."""
+    # Standard signature for both models:
+    # (logits, value, h_new, mod_info) = model(x, h)
+    logits, value, h_new, mod_info = model(x, h)
+
+    if eval_mode:
+        action = jnp.argmax(logits)
+        log_prob = 0.0
+    else:
+        # Note: key must be provided if not eval_mode
+        action = jax.random.categorical(key, logits)
+        log_prob = jax.nn.log_softmax(logits)[action]
+
+    return action, log_prob, value.squeeze(), h_new, mod_info
+
 def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, checkpoint_pct, 
                             render_video=False, wandb_enabled=False, debug=False, quiet=True):
     """
@@ -69,74 +86,67 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         # 4. Location
         if 'Location' in breakdown:
             stat_headers += ["obs_loc_r", "obs_loc_c"]
-        # 5. Interoception
-        stat_headers += ["obs_sat", "obs_nut", "obs_inj"]
-        # 6. Visual
-        if 'Visual' in breakdown:
-            vis_labels = ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'NEU', 'RCK']
-            total_vis_dim = breakdown['Visual']
-            num_channels = len(vis_labels)
-            num_cells = total_vis_dim // num_channels
-            for c_idx, label in enumerate(vis_labels):
-                for i in range(num_cells):
-                    stat_headers.append(f"obs_vis_{label}_{i}")
-        # 7. Proprioception
-        if 'Proprioception' in breakdown:
-            for i in range(breakdown['Proprioception']): 
-                stat_headers.append(f"obs_prop_{i}")
+        # Get chemical dimension from params
+        chem_dim = breakdown.get('Olfaction', 0)
+        num_resources = params.res_type.shape[0]
+        num_predators = params.pred_property.shape[0] if params.predator_enabled else 0
+        num_neutral = params.neutral_property.shape[0]
+        num_obstacles = params.obs_blocking.shape[0]
         
-        # Object Positions
-        for i in range(len(params.res_type)):
-            r_type = "food" if params.res_type[i] == 0 else "danger"
-            stat_headers += [f"res_{i}_{r_type}_r", f"res_{i}_{r_type}_c", f"res_{i}_active"]
-        for i in range(len(params.pred_nociception)):
-            stat_headers += [f"pred_{i}_r", f"pred_{i}_c"]
-        for i in range(len(params.neutral_nociception)):
-            stat_headers += [f"neutral_{i}_r", f"neutral_{i}_c"]
-        for i in range(len(params.obs_blocking)):
-            obs_name = params.obstacle_names[params.obs_type[i]]
-            stat_headers += [f"obs_{i}_{obs_name}_r", f"obs_{i}_{obs_name}_c"]
+        # Action names: 0=Up, 1=Right, 2=Down, 3=Left, then Rest, Eat (core.py ACTION_DELTAS)
+        action_map = ["Up", "Right", "Down", "Left"]
+        if params.rest_action_enabled:
+            action_map.append("Rest")
+        if params.eat_action_enabled:
+            action_map.append("Eat")
         
-        stat_headers += ['termination_reason', 'max_satiation', 'max_injury']
+        headers = [
+            'episode', 'step', 'action', 'reward', 'satiation', 'nutrition', 'injury', 'rest_streak',
+            'agent_x', 'agent_y'
+        ]
+        for i in range(num_resources): headers += [f'res_{i}_x', f'res_{i}_y', f'res_{i}_active']
+        for i in range(num_predators): headers += [f'pred_{i}_x', f'pred_{i}_y']
+        for i in range(num_neutral):   headers += [f'neutral_{i}_x', f'neutral_{i}_y']
+        for i in range(num_obstacles): headers += [f'obs_{i}_x', f'obs_{i}_y']
+        headers.append('termination_reason')
+        headers += ['max_satiation', 'max_injury']
     
-    # Progress bar for episodes
-    ep_pbar = tqdm(range(num_episodes), desc="Evaluating Episodes", disable=quiet)
-    # Create action name mapping
-    action_map = ["Up", "Right", "Down", "Left"]
-    if params.rest_action_enabled:
-        action_map.append("Rest")
-    if params.eat_action_enabled:
-        action_map.append("Eat")
+    if not quiet:
+        print(f"  [DEBUG] Starting Evaluation: {num_episodes} episodes, Render={render_video}", flush=True)
 
-    for ep in ep_pbar:
-        if debug:
-            print(f"  --- Starting Evaluation Episode {ep+1}/{num_episodes} ---", flush=True)
+    # Main loop over episodes
+    ep_pbar = tqdm(total=num_episodes, desc="Evaluating Episodes", disable=quiet)
+    for ep in range(num_episodes):
+        if not quiet and debug:
+            print(f"  --- Starting Evaluation Episode {ep+1}/{num_episodes} ---")
             
+        # Reset env
         key, reset_key = jax.random.split(key)
+        # CRITICAL FIX: Signature is jax_reset(params, key)
         state = jax_reset(params, reset_key)
         obs = get_observation(state, params)
         
-        # Initialize hidden state
-        if hasattr(model, 'initial_state'):
-            h_state = model.initial_state(batch_size=1)
-        else:
-            h_state = None
-        
+        done = False
         total_reward = 0.0
         step_count = 0
-        done = False
+        
+        # Initial state
+        if model is not None and hasattr(model, 'initial_state'):
+            h_state = model.initial_state(batch_size=None)
+        else:
+            h_state = None
+            
         max_steps = params.max_steps
         
-        # Per-episode deferred stats accumulation (no GPU sync during loop)
-        # We collect raw JAX arrays and do a single device_get at episode end.
-        ep_jax_states = []   # list of dicts of JAX arrays
-        ep_jax_infos = []    # list of info dicts (JAX arrays)
-        ep_actions = []      # list of int action indices
-        ep_rewards = []      # list of float rewards
-        ep_obs = []          # list of observation JAX arrays
-
+        # Lists for deferred stats collection
+        ep_jax_states = []
+        ep_jax_infos = []
+        ep_actions = []
+        ep_rewards = []
+        ep_obs = []
+        
         if record_stats:
-            # Step 0: record initial state (deferred — no device_get)
+            # Step 0 stats
             ep_jax_states.append({
                 'agent_pos': state.agent_pos,
                 'satiation': state.satiation,
@@ -250,11 +260,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 # Model inference (deterministic in eval_mode)
                 obs_batch = obs[None, :]  # Add batch dim
                 
-                if h_state is not None:
-                    action, log_prob, value, h_new, _ = get_action_and_value_nnx(model, obs_batch, h_state, eval_mode=True)
-                    h_state = h_new
-                else:
-                    action, _, _, _, _ = get_action_and_value_nnx(model, obs_batch, None, eval_mode=True)
+                # Use algorithm-agnostic generic_inference
+                action, log_prob, value, h_new, _ = generic_inference(model, obs_batch, h_state, eval_mode=True)
+                h_state = h_new
                 
                 action_idx = int(action)
             else:

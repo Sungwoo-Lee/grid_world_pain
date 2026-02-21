@@ -1,0 +1,2937 @@
+DEBUG conda.gateways.logging:set_log_level(221): log_level set to 10
+DEBUG conda.gateways.subprocess:subprocess_call(97): executing>> /usr/bin/bash /tmp/tmptpcrfl_9
+WARNING:absl:Configured `CheckpointManager` using deprecated legacy API. Please follow the instructions at https://orbax.readthedocs.io/en/latest/guides/checkpoint/api_refactor.html to migrate.
+
+Training:   0%|          | 0/5 [00:00<?, ?it/s]
+Training:   0%|          | 0/5 [00:28<?, ?it/s]
+Training:   0%|          | 0/5 [00:28<?, ?it/s, Iter=1, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:52<?, ?it/s, Iter=1, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:52<?, ?it/s, Iter=2, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=2, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=3, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=3, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=4, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=4, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=5, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=5, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=6, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=6, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=7, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=7, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=8, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=8, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=9, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=9, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=10, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=10, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=11, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=11, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=12, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=12, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=13, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=13, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=14, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=14, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=15, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=15, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=16, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=16, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:53<?, ?it/s, Iter=17, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=17, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=18, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=18, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=19, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=19, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=20, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=20, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=21, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=21, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=22, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=22, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=23, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=23, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=24, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=24, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=25, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=25, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=26, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=26, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=27, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=27, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:54<?, ?it/s, Iter=28, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=28, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=29, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=29, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=30, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=30, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=31, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=31, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=32, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=32, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=33, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=33, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=34, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=34, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=35, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=35, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=36, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=36, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=37, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=37, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=38, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=38, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=39, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=39, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=40, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=40, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=41, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=41, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=42, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=42, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:55<?, ?it/s, Iter=43, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=43, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=44, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=44, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=45, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=45, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=46, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=46, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=47, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=47, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=48, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=48, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=49, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=49, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=50, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=50, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=51, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=51, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=52, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=52, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:56<?, ?it/s, Iter=53, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=53, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=54, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=54, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=55, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=55, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=56, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=56, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=57, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=57, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=58, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=58, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=59, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=59, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=60, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=60, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=61, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=61, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=62, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=62, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=63, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=63, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=64, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [00:57<?, ?it/s, Iter=64, Loss=, Rew=0.00]
+Training:   0%|          | 0/5 [02:59<?, ?it/s, Iter=65, Loss=L: 7.45, Rew=0.00]
+Training:   0%|          | 0/5 [03:24<?, ?it/s, Iter=65, Loss=L: 7.45, Rew=0.00]
+Training:   0%|          | 0/5 [04:42<?, ?it/s, Iter=66, Loss=L: 6.98, Rew=0.00]
+Training:   0%|          | 0/5 [04:42<?, ?it/s, Iter=66, Loss=L: 6.98, Rew=0.00]
+Training:   0%|          | 0/5 [04:42<?, ?it/s, Iter=67, Loss=L: 6.56, Rew=0.00]
+Training:   0%|          | 0/5 [04:43<?, ?it/s, Iter=67, Loss=L: 6.56, Rew=0.00]
+Training:   0%|          | 0/5 [04:43<?, ?it/s, Iter=68, Loss=L: 6.19, Rew=0.00]
+Training:   0%|          | 0/5 [04:43<?, ?it/s, Iter=68, Loss=L: 6.19, Rew=0.00]
+Training:   0%|          | 0/5 [04:43<?, ?it/s, Iter=69, Loss=L: 5.88, Rew=0.00]
+Training:   0%|          | 0/5 [04:43<?, ?it/s, Iter=69, Loss=L: 5.88, Rew=0.00]
+Training:   0%|          | 0/5 [04:43<?, ?it/s, Iter=70, Loss=L: 5.56, Rew=0.00]
+Training:   0%|          | 0/5 [04:43<?, ?it/s, Iter=70, Loss=L: 5.56, Rew=0.00]
+Training:   0%|          | 0/5 [04:44<?, ?it/s, Iter=71, Loss=L: 5.36, Rew=0.00]
+Training:   0%|          | 0/5 [04:44<?, ?it/s, Iter=71, Loss=L: 5.36, Rew=0.00]
+Training:   0%|          | 0/5 [04:44<?, ?it/s, Iter=72, Loss=L: 5.23, Rew=0.00]
+Training:   0%|          | 0/5 [04:44<?, ?it/s, Iter=72, Loss=L: 5.23, Rew=0.00]
+Training:   0%|          | 0/5 [04:44<?, ?it/s, Iter=73, Loss=L: 5.05, Rew=0.00]
+Training:   0%|          | 0/5 [04:44<?, ?it/s, Iter=73, Loss=L: 5.05, Rew=0.00]
+Training:   0%|          | 0/5 [04:44<?, ?it/s, Iter=74, Loss=L: 4.84, Rew=0.00]
+Training:  20%|██        | 1/5 [04:44<18:58, 284.64s/it, Iter=74, Loss=L: 4.84, Rew=0.00]
+Training:  20%|██        | 1/5 [04:44<18:58, 284.73s/it, Iter=75, Loss=L: 4.89, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:44<18:59, 284.79s/it, Iter=75, Loss=L: 4.89, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:44<18:59, 284.90s/it, Iter=76, Loss=L: 4.86, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:00, 285.02s/it, Iter=76, Loss=L: 4.86, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:00, 285.11s/it, Iter=77, Loss=L: 4.73, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:00, 285.18s/it, Iter=77, Loss=L: 4.73, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:01, 285.26s/it, Iter=78, Loss=L: 4.63, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:01, 285.33s/it, Iter=78, Loss=L: 4.63, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:01, 285.42s/it, Iter=79, Loss=L: 4.62, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:01, 285.49s/it, Iter=79, Loss=L: 4.62, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:02, 285.60s/it, Iter=80, Loss=L: 4.53, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:02, 285.71s/it, Iter=80, Loss=L: 4.53, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:03, 285.82s/it, Iter=81, Loss=L: 4.52, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:03, 285.90s/it, Iter=81, Loss=L: 4.52, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:45<19:03, 285.99s/it, Iter=82, Loss=L: 4.41, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:04, 286.06s/it, Iter=82, Loss=L: 4.41, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:04, 286.14s/it, Iter=83, Loss=L: 4.27, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:04, 286.20s/it, Iter=83, Loss=L: 4.27, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:05, 286.29s/it, Iter=84, Loss=L: 4.33, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:05, 286.38s/it, Iter=84, Loss=L: 4.33, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:05, 286.47s/it, Iter=85, Loss=L: 4.32, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:06, 286.55s/it, Iter=85, Loss=L: 4.32, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:06, 286.67s/it, Iter=86, Loss=L: 4.29, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:06, 286.75s/it, Iter=86, Loss=L: 4.29, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:07, 286.83s/it, Iter=87, Loss=L: 4.29, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:46<19:07, 286.92s/it, Iter=87, Loss=L: 4.29, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:47<19:08, 287.00s/it, Iter=88, Loss=L: 4.15, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:47<19:08, 287.09s/it, Iter=88, Loss=L: 4.15, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:47<19:08, 287.20s/it, Iter=89, Loss=L: 4.13, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:47<19:09, 287.29s/it, Iter=89, Loss=L: 4.13, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:47<19:09, 287.38s/it, Iter=90, Loss=L: 4.08, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:47<19:09, 287.46s/it, Iter=90, Loss=L: 4.08, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:47<19:10, 287.55s/it, Iter=91, Loss=L: 4.01, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:47<19:10, 287.62s/it, Iter=91, Loss=L: 4.01, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:12, 288.10s/it, Iter=92, Loss=L: 4.04, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:12, 288.17s/it, Iter=92, Loss=L: 4.04, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:12, 288.24s/it, Iter=93, Loss=L: 3.98, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:13, 288.35s/it, Iter=93, Loss=L: 3.98, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:13, 288.46s/it, Iter=94, Loss=L: 3.75, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:14, 288.53s/it, Iter=94, Loss=L: 3.75, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:14, 288.64s/it, Iter=95, Loss=L: 3.83, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:14, 288.73s/it, Iter=95, Loss=L: 3.83, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:15, 288.82s/it, Iter=96, Loss=L: 3.86, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:15, 288.89s/it, Iter=96, Loss=L: 3.86, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:48<19:15, 288.98s/it, Iter=97, Loss=L: 3.91, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:16, 289.06s/it, Iter=97, Loss=L: 3.91, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:16, 289.15s/it, Iter=98, Loss=L: 3.90, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:16, 289.23s/it, Iter=98, Loss=L: 3.90, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:17, 289.33s/it, Iter=99, Loss=L: 3.82, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:17, 289.41s/it, Iter=99, Loss=L: 3.82, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:17, 289.50s/it, Iter=100, Loss=L: 3.75, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:18, 289.55s/it, Iter=100, Loss=L: 3.75, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:18, 289.63s/it, Iter=101, Loss=L: 3.97, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:18, 289.68s/it, Iter=101, Loss=L: 3.97, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:19, 289.76s/it, Iter=102, Loss=L: 3.81, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:19, 289.86s/it, Iter=102, Loss=L: 3.81, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:49<19:19, 289.97s/it, Iter=103, Loss=L: 3.69, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:20, 290.06s/it, Iter=103, Loss=L: 3.69, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:20, 290.16s/it, Iter=104, Loss=L: 3.98, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:20, 290.23s/it, Iter=104, Loss=L: 3.98, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:21, 290.31s/it, Iter=105, Loss=L: 3.74, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:21, 290.38s/it, Iter=105, Loss=L: 3.74, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:21, 290.46s/it, Iter=106, Loss=L: 3.61, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:22, 290.54s/it, Iter=106, Loss=L: 3.61, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:22, 290.62s/it, Iter=107, Loss=L: 3.66, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:22, 290.70s/it, Iter=107, Loss=L: 3.66, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:23, 290.79s/it, Iter=108, Loss=L: 3.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:23, 290.86s/it, Iter=108, Loss=L: 3.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:50<19:23, 290.94s/it, Iter=109, Loss=L: 3.96, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:51<19:24, 291.00s/it, Iter=109, Loss=L: 3.96, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:51<19:24, 291.07s/it, Iter=110, Loss=L: 3.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:51<19:24, 291.17s/it, Iter=110, Loss=L: 3.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:51<19:25, 291.27s/it, Iter=111, Loss=L: 4.01, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:51<19:25, 291.37s/it, Iter=111, Loss=L: 4.01, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:51<19:26, 291.52s/it, Iter=112, Loss=L: 3.73, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:51<19:26, 291.61s/it, Iter=112, Loss=L: 3.73, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:51<19:26, 291.70s/it, Iter=113, Loss=L: 3.63, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:52<19:28, 292.23s/it, Iter=113, Loss=L: 3.63, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:52<19:29, 292.32s/it, Iter=114, Loss=L: 3.63, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:52<19:29, 292.41s/it, Iter=114, Loss=L: 3.63, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:52<19:30, 292.50s/it, Iter=115, Loss=L: 3.72, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:52<19:30, 292.56s/it, Iter=115, Loss=L: 3.72, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:52<19:30, 292.63s/it, Iter=116, Loss=L: 3.55, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:52<19:30, 292.69s/it, Iter=116, Loss=L: 3.55, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:52<19:31, 292.79s/it, Iter=117, Loss=L: 3.84, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:52<19:31, 292.86s/it, Iter=117, Loss=L: 3.84, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:52<19:31, 292.94s/it, Iter=118, Loss=L: 3.70, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:32, 293.03s/it, Iter=118, Loss=L: 3.70, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:32, 293.11s/it, Iter=119, Loss=L: 3.63, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:32, 293.20s/it, Iter=119, Loss=L: 3.63, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:33, 293.31s/it, Iter=120, Loss=L: 3.71, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:33, 293.39s/it, Iter=120, Loss=L: 3.71, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:33, 293.48s/it, Iter=121, Loss=L: 3.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:34, 293.55s/it, Iter=121, Loss=L: 3.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:34, 293.63s/it, Iter=122, Loss=L: 3.39, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:34, 293.72s/it, Iter=122, Loss=L: 3.39, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:35, 293.81s/it, Iter=123, Loss=L: 3.31, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:35, 293.87s/it, Iter=123, Loss=L: 3.31, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:53<19:35, 293.94s/it, Iter=124, Loss=L: 3.67, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:36, 294.03s/it, Iter=124, Loss=L: 3.67, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:36, 294.12s/it, Iter=125, Loss=L: 3.45, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:36, 294.22s/it, Iter=125, Loss=L: 3.45, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:37, 294.32s/it, Iter=126, Loss=L: 3.76, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:37, 294.38s/it, Iter=126, Loss=L: 3.76, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:37, 294.46s/it, Iter=127, Loss=L: 3.59, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:38, 294.52s/it, Iter=127, Loss=L: 3.59, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:38, 294.59s/it, Iter=128, Loss=L: 3.53, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:38, 294.68s/it, Iter=128, Loss=L: 3.53, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:39, 294.76s/it, Iter=129, Loss=L: 3.45, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:39, 294.84s/it, Iter=129, Loss=L: 3.45, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:54<19:39, 294.96s/it, Iter=130, Loss=L: 3.55, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:55<19:40, 295.04s/it, Iter=130, Loss=L: 3.55, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:55<19:40, 295.13s/it, Iter=131, Loss=L: 3.59, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:55<19:40, 295.22s/it, Iter=131, Loss=L: 3.59, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:55<19:41, 295.30s/it, Iter=132, Loss=L: 3.39, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:55<19:41, 295.35s/it, Iter=132, Loss=L: 3.39, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:55<19:41, 295.46s/it, Iter=133, Loss=L: 3.61, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:55<19:42, 295.53s/it, Iter=133, Loss=L: 3.61, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:55<19:42, 295.61s/it, Iter=134, Loss=L: 3.50, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:55<19:42, 295.72s/it, Iter=134, Loss=L: 3.50, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:56<19:44, 296.18s/it, Iter=135, Loss=L: 3.34, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:56<19:44, 296.25s/it, Iter=135, Loss=L: 3.34, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:56<19:45, 296.33s/it, Iter=136, Loss=L: 3.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:56<19:45, 296.41s/it, Iter=136, Loss=L: 3.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:56<19:46, 296.51s/it, Iter=137, Loss=L: 3.48, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:56<19:46, 296.61s/it, Iter=137, Loss=L: 3.48, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:56<19:46, 296.72s/it, Iter=138, Loss=L: 3.36, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:56<19:47, 296.77s/it, Iter=138, Loss=L: 3.36, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:56<19:47, 296.85s/it, Iter=139, Loss=L: 3.45, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:56<19:47, 296.93s/it, Iter=139, Loss=L: 3.45, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:48, 297.02s/it, Iter=140, Loss=L: 3.30, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:48, 297.11s/it, Iter=140, Loss=L: 3.30, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:48, 297.22s/it, Iter=141, Loss=L: 3.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:49, 297.30s/it, Iter=141, Loss=L: 3.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:49, 297.39s/it, Iter=142, Loss=L: 3.31, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:49, 297.47s/it, Iter=142, Loss=L: 3.31, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:50, 297.57s/it, Iter=143, Loss=L: 3.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:50, 297.64s/it, Iter=143, Loss=L: 3.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:50, 297.74s/it, Iter=144, Loss=L: 3.41, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:51, 297.80s/it, Iter=144, Loss=L: 3.41, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:51, 297.88s/it, Iter=145, Loss=L: 3.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:57<19:51, 297.95s/it, Iter=145, Loss=L: 3.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:52, 298.05s/it, Iter=146, Loss=L: 3.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:52, 298.12s/it, Iter=146, Loss=L: 3.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:52, 298.20s/it, Iter=147, Loss=L: 3.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:53, 298.29s/it, Iter=147, Loss=L: 3.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:53, 298.41s/it, Iter=148, Loss=L: 3.12, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:53, 298.48s/it, Iter=148, Loss=L: 3.12, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:54, 298.57s/it, Iter=149, Loss=L: 3.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:54, 298.66s/it, Iter=149, Loss=L: 3.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:55, 298.76s/it, Iter=150, Loss=L: 3.28, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:55, 298.84s/it, Iter=150, Loss=L: 3.28, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:55, 298.92s/it, Iter=151, Loss=L: 3.00, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:58<19:55, 299.00s/it, Iter=151, Loss=L: 3.00, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:59<19:56, 299.09s/it, Iter=152, Loss=L: 3.10, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:59<19:56, 299.17s/it, Iter=152, Loss=L: 3.10, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:59<19:57, 299.27s/it, Iter=153, Loss=L: 3.33, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:59<19:57, 299.33s/it, Iter=153, Loss=L: 3.33, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:59<19:57, 299.41s/it, Iter=154, Loss=L: 2.98, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:59<19:57, 299.48s/it, Iter=154, Loss=L: 2.98, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:59<19:58, 299.57s/it, Iter=155, Loss=L: 3.15, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:59<19:58, 299.64s/it, Iter=155, Loss=L: 3.15, Rew=-148.02]
+Training:  20%|██        | 1/5 [04:59<19:58, 299.72s/it, Iter=156, Loss=L: 3.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:00<20:01, 300.35s/it, Iter=156, Loss=L: 3.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:00<20:01, 300.44s/it, Iter=157, Loss=L: 2.91, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:00<20:02, 300.51s/it, Iter=157, Loss=L: 2.91, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:00<20:02, 300.60s/it, Iter=158, Loss=L: 2.97, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:00<20:02, 300.68s/it, Iter=158, Loss=L: 2.97, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:00<20:03, 300.76s/it, Iter=159, Loss=L: 2.93, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:00<20:03, 300.84s/it, Iter=159, Loss=L: 2.93, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:00<20:03, 300.93s/it, Iter=160, Loss=L: 2.74, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:00<20:03, 300.98s/it, Iter=160, Loss=L: 2.74, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:04, 301.06s/it, Iter=161, Loss=L: 3.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:04, 301.11s/it, Iter=161, Loss=L: 3.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:04, 301.20s/it, Iter=162, Loss=L: 2.73, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:05, 301.26s/it, Iter=162, Loss=L: 2.73, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:05, 301.34s/it, Iter=163, Loss=L: 2.89, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:05, 301.46s/it, Iter=163, Loss=L: 2.89, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:06, 301.57s/it, Iter=164, Loss=L: 2.79, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:06, 301.63s/it, Iter=164, Loss=L: 2.79, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:06, 301.72s/it, Iter=165, Loss=L: 2.92, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:07, 301.82s/it, Iter=165, Loss=L: 2.92, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:07, 301.92s/it, Iter=166, Loss=L: 2.81, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:01<20:07, 301.99s/it, Iter=166, Loss=L: 2.81, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:08, 302.08s/it, Iter=167, Loss=L: 2.98, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:08, 302.15s/it, Iter=167, Loss=L: 2.98, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:08, 302.24s/it, Iter=168, Loss=L: 2.84, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:09, 302.32s/it, Iter=168, Loss=L: 2.84, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:09, 302.41s/it, Iter=169, Loss=L: 2.83, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:09, 302.47s/it, Iter=169, Loss=L: 2.83, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:10, 302.56s/it, Iter=170, Loss=L: 2.50, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:10, 302.63s/it, Iter=170, Loss=L: 2.50, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:10, 302.71s/it, Iter=171, Loss=L: 2.74, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:11, 302.77s/it, Iter=171, Loss=L: 2.74, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:11, 302.84s/it, Iter=172, Loss=L: 2.76, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:02<20:11, 302.92s/it, Iter=172, Loss=L: 2.76, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:03<20:12, 303.02s/it, Iter=173, Loss=L: 2.77, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:03<20:12, 303.14s/it, Iter=173, Loss=L: 2.77, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:03<20:12, 303.25s/it, Iter=174, Loss=L: 2.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:03<20:13, 303.32s/it, Iter=174, Loss=L: 2.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:03<20:13, 303.41s/it, Iter=175, Loss=L: 2.55, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:03<20:13, 303.48s/it, Iter=175, Loss=L: 2.55, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:03<20:14, 303.57s/it, Iter=176, Loss=L: 2.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:03<20:14, 303.65s/it, Iter=176, Loss=L: 2.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:03<20:14, 303.73s/it, Iter=177, Loss=L: 2.60, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:03<20:15, 303.82s/it, Iter=177, Loss=L: 2.60, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:04<20:17, 304.29s/it, Iter=178, Loss=L: 2.72, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:04<20:17, 304.34s/it, Iter=178, Loss=L: 2.72, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:04<20:17, 304.42s/it, Iter=179, Loss=L: 2.79, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:04<20:18, 304.51s/it, Iter=179, Loss=L: 2.79, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:04<20:18, 304.62s/it, Iter=180, Loss=L: 2.61, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:04<20:18, 304.72s/it, Iter=180, Loss=L: 2.61, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:04<20:19, 304.83s/it, Iter=181, Loss=L: 2.59, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:04<20:19, 304.91s/it, Iter=181, Loss=L: 2.59, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:04<20:19, 305.00s/it, Iter=182, Loss=L: 2.53, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:20, 305.07s/it, Iter=182, Loss=L: 2.53, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:20, 305.16s/it, Iter=183, Loss=L: 2.42, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:20, 305.24s/it, Iter=183, Loss=L: 2.42, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:21, 305.34s/it, Iter=184, Loss=L: 2.67, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:21, 305.42s/it, Iter=184, Loss=L: 2.67, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:22, 305.51s/it, Iter=185, Loss=L: 2.51, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:22, 305.58s/it, Iter=185, Loss=L: 2.51, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:22, 305.66s/it, Iter=186, Loss=L: 2.62, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:22, 305.72s/it, Iter=186, Loss=L: 2.62, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:23, 305.81s/it, Iter=187, Loss=L: 2.43, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:05<20:23, 305.91s/it, Iter=187, Loss=L: 2.43, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:24, 306.00s/it, Iter=188, Loss=L: 2.51, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:24, 306.09s/it, Iter=188, Loss=L: 2.51, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:24, 306.18s/it, Iter=189, Loss=L: 2.49, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:24, 306.24s/it, Iter=189, Loss=L: 2.49, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:25, 306.36s/it, Iter=190, Loss=L: 2.66, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:25, 306.45s/it, Iter=190, Loss=L: 2.66, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:26, 306.54s/it, Iter=191, Loss=L: 2.56, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:26, 306.62s/it, Iter=191, Loss=L: 2.56, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:26, 306.71s/it, Iter=192, Loss=L: 2.42, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:27, 306.79s/it, Iter=192, Loss=L: 2.42, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:27, 306.89s/it, Iter=193, Loss=L: 2.46, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:06<20:27, 306.94s/it, Iter=193, Loss=L: 2.46, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:28, 307.02s/it, Iter=194, Loss=L: 2.40, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:28, 307.12s/it, Iter=194, Loss=L: 2.40, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:28, 307.20s/it, Iter=195, Loss=L: 2.30, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:29, 307.30s/it, Iter=195, Loss=L: 2.30, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:29, 307.40s/it, Iter=196, Loss=L: 2.43, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:29, 307.46s/it, Iter=196, Loss=L: 2.43, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:30, 307.55s/it, Iter=197, Loss=L: 2.39, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:30, 307.62s/it, Iter=197, Loss=L: 2.39, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:30, 307.70s/it, Iter=198, Loss=L: 2.50, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:31, 307.80s/it, Iter=198, Loss=L: 2.50, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:07<20:31, 307.89s/it, Iter=199, Loss=L: 2.43, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:08<20:33, 308.49s/it, Iter=199, Loss=L: 2.43, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:08<20:34, 308.58s/it, Iter=200, Loss=L: 2.54, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:08<20:34, 308.65s/it, Iter=200, Loss=L: 2.54, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:08<20:34, 308.74s/it, Iter=201, Loss=L: 2.32, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:08<20:35, 308.85s/it, Iter=201, Loss=L: 2.32, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:08<20:35, 308.96s/it, Iter=202, Loss=L: 2.49, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:36, 309.03s/it, Iter=202, Loss=L: 2.49, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:36, 309.13s/it, Iter=203, Loss=L: 2.27, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:36, 309.18s/it, Iter=203, Loss=L: 2.27, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:37, 309.27s/it, Iter=204, Loss=L: 2.24, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:37, 309.33s/it, Iter=204, Loss=L: 2.24, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:37, 309.41s/it, Iter=205, Loss=L: 2.36, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:38, 309.51s/it, Iter=205, Loss=L: 2.36, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:38, 309.59s/it, Iter=206, Loss=L: 2.32, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:38, 309.66s/it, Iter=206, Loss=L: 2.32, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:39, 309.78s/it, Iter=207, Loss=L: 2.19, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:39, 309.87s/it, Iter=207, Loss=L: 2.19, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:09<20:39, 309.95s/it, Iter=208, Loss=L: 2.19, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:40, 310.03s/it, Iter=208, Loss=L: 2.19, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:40, 310.11s/it, Iter=209, Loss=L: 2.12, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:40, 310.18s/it, Iter=209, Loss=L: 2.12, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:41, 310.27s/it, Iter=210, Loss=L: 2.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:41, 310.37s/it, Iter=210, Loss=L: 2.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:41, 310.47s/it, Iter=211, Loss=L: 2.18, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:42, 310.55s/it, Iter=211, Loss=L: 2.18, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:42, 310.64s/it, Iter=212, Loss=L: 2.34, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:42, 310.72s/it, Iter=212, Loss=L: 2.34, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:43, 310.81s/it, Iter=213, Loss=L: 2.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:43, 310.87s/it, Iter=213, Loss=L: 2.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:10<20:43, 310.96s/it, Iter=214, Loss=L: 2.13, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:44, 311.04s/it, Iter=214, Loss=L: 2.13, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:44, 311.13s/it, Iter=215, Loss=L: 2.26, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:44, 311.22s/it, Iter=215, Loss=L: 2.26, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:45, 311.32s/it, Iter=216, Loss=L: 2.16, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:45, 311.39s/it, Iter=216, Loss=L: 2.16, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:45, 311.49s/it, Iter=217, Loss=L: 2.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:46, 311.57s/it, Iter=217, Loss=L: 2.22, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:46, 311.66s/it, Iter=218, Loss=L: 2.09, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:46, 311.72s/it, Iter=218, Loss=L: 2.09, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:47, 311.81s/it, Iter=219, Loss=L: 2.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:11<20:47, 311.91s/it, Iter=219, Loss=L: 2.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:12<20:48, 312.02s/it, Iter=220, Loss=L: 2.17, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:12<20:48, 312.10s/it, Iter=220, Loss=L: 2.17, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:12<20:50, 312.61s/it, Iter=221, Loss=L: 1.96, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:12<20:50, 312.68s/it, Iter=221, Loss=L: 1.96, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:12<20:51, 312.77s/it, Iter=222, Loss=L: 2.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:12<20:51, 312.85s/it, Iter=222, Loss=L: 2.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:12<20:51, 312.93s/it, Iter=223, Loss=L: 2.13, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:52, 313.00s/it, Iter=223, Loss=L: 2.13, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:52, 313.08s/it, Iter=224, Loss=L: 2.02, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:52, 313.19s/it, Iter=224, Loss=L: 2.02, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:53, 313.29s/it, Iter=225, Loss=L: 2.05, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:53, 313.39s/it, Iter=225, Loss=L: 2.05, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:53, 313.48s/it, Iter=226, Loss=L: 2.02, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:54, 313.56s/it, Iter=226, Loss=L: 2.02, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:54, 313.65s/it, Iter=227, Loss=L: 2.11, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:54, 313.72s/it, Iter=227, Loss=L: 2.11, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:55, 313.82s/it, Iter=228, Loss=L: 2.13, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:55, 313.90s/it, Iter=228, Loss=L: 2.13, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:13<20:55, 313.98s/it, Iter=229, Loss=L: 2.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:14<20:56, 314.07s/it, Iter=229, Loss=L: 2.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:14<20:56, 314.17s/it, Iter=230, Loss=L: 2.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:14<20:56, 314.25s/it, Iter=230, Loss=L: 2.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:14<20:57, 314.34s/it, Iter=231, Loss=L: 2.01, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:14<20:57, 314.39s/it, Iter=231, Loss=L: 2.01, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:14<20:57, 314.47s/it, Iter=232, Loss=L: 1.99, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:14<20:58, 314.58s/it, Iter=232, Loss=L: 1.99, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:14<20:58, 314.67s/it, Iter=233, Loss=L: 2.00, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:14<20:59, 314.80s/it, Iter=233, Loss=L: 2.00, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:14<20:59, 314.94s/it, Iter=234, Loss=L: 1.99, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:00, 315.01s/it, Iter=234, Loss=L: 1.99, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:00, 315.10s/it, Iter=235, Loss=L: 2.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:00, 315.18s/it, Iter=235, Loss=L: 2.06, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:01, 315.27s/it, Iter=236, Loss=L: 1.91, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:01, 315.35s/it, Iter=236, Loss=L: 1.91, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:01, 315.44s/it, Iter=237, Loss=L: 1.98, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:02, 315.51s/it, Iter=237, Loss=L: 1.98, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:02, 315.61s/it, Iter=238, Loss=L: 1.88, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:02, 315.69s/it, Iter=238, Loss=L: 1.88, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:03, 315.80s/it, Iter=239, Loss=L: 1.96, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:03, 315.85s/it, Iter=239, Loss=L: 1.96, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:03, 315.92s/it, Iter=240, Loss=L: 1.99, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:15<21:03, 315.99s/it, Iter=240, Loss=L: 1.99, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:16<21:04, 316.08s/it, Iter=241, Loss=L: 1.93, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:16<21:04, 316.14s/it, Iter=241, Loss=L: 1.93, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:16<21:05, 316.26s/it, Iter=242, Loss=L: 2.01, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:16<21:07, 316.85s/it, Iter=242, Loss=L: 2.01, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:16<21:07, 316.94s/it, Iter=243, Loss=L: 2.00, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:08, 317.03s/it, Iter=243, Loss=L: 2.00, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:08, 317.13s/it, Iter=244, Loss=L: 2.03, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:08, 317.20s/it, Iter=244, Loss=L: 2.03, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:09, 317.29s/it, Iter=245, Loss=L: 2.01, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:09, 317.36s/it, Iter=245, Loss=L: 2.01, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:09, 317.47s/it, Iter=246, Loss=L: 1.97, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:10, 317.52s/it, Iter=246, Loss=L: 1.97, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:10, 317.61s/it, Iter=247, Loss=L: 1.80, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:10, 317.70s/it, Iter=247, Loss=L: 1.80, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:11, 317.80s/it, Iter=248, Loss=L: 1.91, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:11, 317.89s/it, Iter=248, Loss=L: 1.91, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:17<21:11, 317.97s/it, Iter=249, Loss=L: 2.02, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:12, 318.03s/it, Iter=249, Loss=L: 2.02, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:12, 318.13s/it, Iter=250, Loss=L: 1.96, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:12, 318.23s/it, Iter=250, Loss=L: 1.96, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:13, 318.33s/it, Iter=251, Loss=L: 2.07, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:13, 318.41s/it, Iter=251, Loss=L: 2.07, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:14, 318.50s/it, Iter=252, Loss=L: 2.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:14, 318.58s/it, Iter=252, Loss=L: 2.14, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:14, 318.68s/it, Iter=253, Loss=L: 1.95, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:14, 318.74s/it, Iter=253, Loss=L: 1.95, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:15, 318.82s/it, Iter=254, Loss=L: 1.99, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:18<21:15, 318.91s/it, Iter=254, Loss=L: 1.99, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:16, 319.00s/it, Iter=255, Loss=L: 1.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:16, 319.08s/it, Iter=255, Loss=L: 1.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:16, 319.19s/it, Iter=256, Loss=L: 1.93, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:17, 319.28s/it, Iter=256, Loss=L: 1.93, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:17, 319.36s/it, Iter=257, Loss=L: 1.91, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:17, 319.43s/it, Iter=257, Loss=L: 1.91, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:18, 319.51s/it, Iter=258, Loss=L: 1.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:18, 319.60s/it, Iter=258, Loss=L: 1.68, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:18, 319.68s/it, Iter=259, Loss=L: 1.73, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:19, 319.75s/it, Iter=259, Loss=L: 1.73, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:19, 319.86s/it, Iter=260, Loss=L: 1.86, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:19<21:19, 319.96s/it, Iter=260, Loss=L: 1.86, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:20<21:20, 320.05s/it, Iter=261, Loss=L: 1.97, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:20<21:20, 320.13s/it, Iter=261, Loss=L: 1.97, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:20<21:20, 320.22s/it, Iter=262, Loss=L: 1.73, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:20<21:21, 320.29s/it, Iter=262, Loss=L: 1.73, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:20<21:21, 320.38s/it, Iter=263, Loss=L: 1.90, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:20<21:21, 320.44s/it, Iter=263, Loss=L: 1.90, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:20<21:23, 320.98s/it, Iter=264, Loss=L: 1.69, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:24, 321.06s/it, Iter=264, Loss=L: 1.69, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:24, 321.14s/it, Iter=265, Loss=L: 1.71, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:24, 321.20s/it, Iter=265, Loss=L: 1.71, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:25, 321.29s/it, Iter=266, Loss=L: 2.05, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:25, 321.37s/it, Iter=266, Loss=L: 2.05, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:25, 321.45s/it, Iter=267, Loss=L: 1.88, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:26, 321.56s/it, Iter=267, Loss=L: 1.88, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:26, 321.67s/it, Iter=268, Loss=L: 1.86, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:27, 321.76s/it, Iter=268, Loss=L: 1.86, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:27, 321.84s/it, Iter=269, Loss=L: 1.80, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:27, 321.88s/it, Iter=269, Loss=L: 1.80, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:21<21:27, 321.98s/it, Iter=270, Loss=L: 1.86, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:22<21:28, 322.05s/it, Iter=270, Loss=L: 1.86, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:22<21:28, 322.14s/it, Iter=271, Loss=L: 1.77, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:22<21:28, 322.24s/it, Iter=271, Loss=L: 1.77, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:22<21:29, 322.35s/it, Iter=272, Loss=L: 1.92, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:22<21:29, 322.43s/it, Iter=272, Loss=L: 1.92, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:22<21:30, 322.52s/it, Iter=273, Loss=L: 1.83, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:22<21:30, 322.60s/it, Iter=273, Loss=L: 1.83, Rew=-148.02]
+Training:  20%|██        | 1/5 [05:22<21:30, 322.68s/it, Iter=274, Loss=L: 1.83, Rew=-148.02]
+Training:  40%|████      | 2/5 [05:22<08:04, 161.37s/it, Iter=274, Loss=L: 1.83, Rew=-148.02]
+Training:  40%|████      | 2/5 [05:22<08:04, 161.42s/it, Iter=275, Loss=L: 1.77, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:22<08:04, 161.45s/it, Iter=275, Loss=L: 1.77, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:22<08:04, 161.50s/it, Iter=276, Loss=L: 1.88, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:04, 161.54s/it, Iter=276, Loss=L: 1.88, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:04, 161.59s/it, Iter=277, Loss=L: 1.72, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:04, 161.64s/it, Iter=277, Loss=L: 1.72, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:05, 161.69s/it, Iter=278, Loss=L: 1.78, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:05, 161.72s/it, Iter=278, Loss=L: 1.78, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:05, 161.77s/it, Iter=279, Loss=L: 1.85, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:05, 161.80s/it, Iter=279, Loss=L: 1.85, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:05, 161.85s/it, Iter=280, Loss=L: 1.96, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:05, 161.90s/it, Iter=280, Loss=L: 1.96, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:05, 161.95s/it, Iter=281, Loss=L: 1.87, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:23<08:05, 161.98s/it, Iter=281, Loss=L: 1.87, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:24<08:06, 162.03s/it, Iter=282, Loss=L: 1.72, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:24<08:06, 162.07s/it, Iter=282, Loss=L: 1.72, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:24<08:06, 162.12s/it, Iter=283, Loss=L: 1.71, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:24<08:06, 162.15s/it, Iter=283, Loss=L: 1.71, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:24<08:06, 162.19s/it, Iter=284, Loss=L: 1.69, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:24<08:06, 162.22s/it, Iter=284, Loss=L: 1.69, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:24<08:06, 162.26s/it, Iter=285, Loss=L: 1.83, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:07, 162.52s/it, Iter=285, Loss=L: 1.83, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:07, 162.56s/it, Iter=286, Loss=L: 1.67, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:07, 162.60s/it, Iter=286, Loss=L: 1.67, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:07, 162.66s/it, Iter=287, Loss=L: 1.65, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:08, 162.70s/it, Iter=287, Loss=L: 1.65, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:08, 162.75s/it, Iter=288, Loss=L: 1.85, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:08, 162.78s/it, Iter=288, Loss=L: 1.85, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:08, 162.82s/it, Iter=289, Loss=L: 1.83, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:08, 162.87s/it, Iter=289, Loss=L: 1.83, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:08, 162.91s/it, Iter=290, Loss=L: 1.76, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:08, 162.95s/it, Iter=290, Loss=L: 1.76, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:25<08:08, 162.99s/it, Iter=291, Loss=L: 1.87, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:09, 163.03s/it, Iter=291, Loss=L: 1.87, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:09, 163.07s/it, Iter=292, Loss=L: 1.77, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:09, 163.10s/it, Iter=292, Loss=L: 1.77, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:09, 163.15s/it, Iter=293, Loss=L: 1.76, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:09, 163.18s/it, Iter=293, Loss=L: 1.76, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:09, 163.23s/it, Iter=294, Loss=L: 1.86, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:09, 163.28s/it, Iter=294, Loss=L: 1.86, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:10, 163.34s/it, Iter=295, Loss=L: 1.76, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:10, 163.39s/it, Iter=295, Loss=L: 1.76, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:10, 163.43s/it, Iter=296, Loss=L: 1.81, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:26<08:10, 163.47s/it, Iter=296, Loss=L: 1.81, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:10, 163.51s/it, Iter=297, Loss=L: 1.65, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:10, 163.55s/it, Iter=297, Loss=L: 1.65, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:10, 163.60s/it, Iter=298, Loss=L: 1.80, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:10, 163.63s/it, Iter=298, Loss=L: 1.80, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:11, 163.68s/it, Iter=299, Loss=L: 1.68, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:11, 163.73s/it, Iter=299, Loss=L: 1.68, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:11, 163.77s/it, Iter=300, Loss=L: 1.62, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:11, 163.81s/it, Iter=300, Loss=L: 1.62, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:11, 163.84s/it, Iter=301, Loss=L: 1.61, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:11, 163.87s/it, Iter=301, Loss=L: 1.61, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:11, 163.91s/it, Iter=302, Loss=L: 1.59, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:11, 163.95s/it, Iter=302, Loss=L: 1.59, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:27<08:11, 164.00s/it, Iter=303, Loss=L: 1.89, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:28<08:12, 164.06s/it, Iter=303, Loss=L: 1.89, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:28<08:12, 164.12s/it, Iter=304, Loss=L: 1.67, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:28<08:12, 164.16s/it, Iter=304, Loss=L: 1.67, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:28<08:12, 164.20s/it, Iter=305, Loss=L: 1.66, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:28<08:12, 164.24s/it, Iter=305, Loss=L: 1.66, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:28<08:12, 164.28s/it, Iter=306, Loss=L: 1.74, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:28<08:12, 164.31s/it, Iter=306, Loss=L: 1.74, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:29<08:13, 164.58s/it, Iter=307, Loss=L: 1.68, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:29<08:13, 164.61s/it, Iter=307, Loss=L: 1.68, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:29<08:13, 164.65s/it, Iter=308, Loss=L: 1.67, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:29<08:14, 164.70s/it, Iter=308, Loss=L: 1.67, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:29<08:14, 164.76s/it, Iter=309, Loss=L: 1.64, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:29<08:14, 164.80s/it, Iter=309, Loss=L: 1.64, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:29<08:14, 164.84s/it, Iter=310, Loss=L: 1.78, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:29<08:14, 164.89s/it, Iter=310, Loss=L: 1.78, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:29<08:14, 164.94s/it, Iter=311, Loss=L: 1.83, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:29<08:14, 164.98s/it, Iter=311, Loss=L: 1.83, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:15, 165.03s/it, Iter=312, Loss=L: 1.62, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:15, 165.06s/it, Iter=312, Loss=L: 1.62, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:15, 165.11s/it, Iter=313, Loss=L: 1.78, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:15, 165.15s/it, Iter=313, Loss=L: 1.78, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:15, 165.20s/it, Iter=314, Loss=L: 1.73, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:15, 165.22s/it, Iter=314, Loss=L: 1.73, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:15, 165.25s/it, Iter=315, Loss=L: 1.68, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:15, 165.30s/it, Iter=315, Loss=L: 1.68, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:16, 165.35s/it, Iter=316, Loss=L: 1.66, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:16, 165.39s/it, Iter=316, Loss=L: 1.66, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:16, 165.44s/it, Iter=317, Loss=L: 1.56, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:30<08:16, 165.47s/it, Iter=317, Loss=L: 1.56, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:31<08:16, 165.51s/it, Iter=318, Loss=L: 1.54, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:31<08:16, 165.54s/it, Iter=318, Loss=L: 1.54, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:31<08:16, 165.58s/it, Iter=319, Loss=L: 1.69, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:31<08:16, 165.62s/it, Iter=319, Loss=L: 1.69, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:31<08:16, 165.66s/it, Iter=320, Loss=L: 1.75, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:31<08:17, 165.71s/it, Iter=320, Loss=L: 1.75, Rew=-174.01]
+Training:  40%|████      | 2/5 [05:31<08:17, 165.76s/it, Iter=321, Loss=L: 1.70, Rew=-174.01]
+Training:  60%|██████    | 3/5 [05:31<03:41, 110.54s/it, Iter=321, Loss=L: 1.70, Rew=-174.01]
+Training:  60%|██████    | 3/5 [05:31<03:41, 110.57s/it, Iter=322, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:31<03:41, 110.60s/it, Iter=322, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:31<03:41, 110.62s/it, Iter=323, Loss=L: 1.70, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:31<03:41, 110.65s/it, Iter=323, Loss=L: 1.70, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:32<03:41, 110.67s/it, Iter=324, Loss=L: 1.60, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:32<03:41, 110.69s/it, Iter=324, Loss=L: 1.60, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:32<03:41, 110.72s/it, Iter=325, Loss=L: 1.65, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:32<03:41, 110.74s/it, Iter=325, Loss=L: 1.65, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:32<03:41, 110.77s/it, Iter=326, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:32<03:41, 110.80s/it, Iter=326, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:32<03:41, 110.83s/it, Iter=327, Loss=L: 1.61, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:32<03:41, 110.86s/it, Iter=327, Loss=L: 1.61, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:32<03:41, 110.89s/it, Iter=328, Loss=L: 1.77, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:33<03:42, 111.07s/it, Iter=328, Loss=L: 1.77, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:33<03:42, 111.10s/it, Iter=329, Loss=L: 1.63, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:33<03:42, 111.13s/it, Iter=329, Loss=L: 1.63, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:33<03:42, 111.16s/it, Iter=330, Loss=L: 1.61, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:33<03:42, 111.18s/it, Iter=330, Loss=L: 1.61, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:33<03:42, 111.21s/it, Iter=331, Loss=L: 1.82, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:33<03:42, 111.24s/it, Iter=331, Loss=L: 1.82, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:33<03:42, 111.27s/it, Iter=332, Loss=L: 1.54, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:33<03:42, 111.29s/it, Iter=332, Loss=L: 1.54, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:33<03:42, 111.33s/it, Iter=333, Loss=L: 1.58, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:42, 111.36s/it, Iter=333, Loss=L: 1.58, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:42, 111.39s/it, Iter=334, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:42, 111.42s/it, Iter=334, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:42, 111.45s/it, Iter=335, Loss=L: 1.74, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:42, 111.47s/it, Iter=335, Loss=L: 1.74, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:42, 111.50s/it, Iter=336, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:43, 111.53s/it, Iter=336, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:43, 111.55s/it, Iter=337, Loss=L: 1.69, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:43, 111.58s/it, Iter=337, Loss=L: 1.69, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:43, 111.62s/it, Iter=338, Loss=L: 1.61, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:34<03:43, 111.66s/it, Iter=338, Loss=L: 1.61, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.69s/it, Iter=339, Loss=L: 1.78, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.71s/it, Iter=339, Loss=L: 1.78, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.74s/it, Iter=340, Loss=L: 1.62, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.76s/it, Iter=340, Loss=L: 1.62, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.79s/it, Iter=341, Loss=L: 1.65, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.82s/it, Iter=341, Loss=L: 1.65, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.85s/it, Iter=342, Loss=L: 1.58, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.88s/it, Iter=342, Loss=L: 1.58, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.91s/it, Iter=343, Loss=L: 1.75, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.94s/it, Iter=343, Loss=L: 1.75, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.97s/it, Iter=344, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:35<03:43, 111.99s/it, Iter=344, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:36<03:44, 112.01s/it, Iter=345, Loss=L: 1.69, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:36<03:44, 112.03s/it, Iter=345, Loss=L: 1.69, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:36<03:44, 112.07s/it, Iter=346, Loss=L: 1.76, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:36<03:44, 112.09s/it, Iter=346, Loss=L: 1.76, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:36<03:44, 112.12s/it, Iter=347, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:36<03:44, 112.15s/it, Iter=347, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:36<03:44, 112.18s/it, Iter=348, Loss=L: 1.84, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:36<03:44, 112.21s/it, Iter=348, Loss=L: 1.84, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:36<03:44, 112.23s/it, Iter=349, Loss=L: 1.74, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:36<03:44, 112.26s/it, Iter=349, Loss=L: 1.74, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:37<03:44, 112.45s/it, Iter=350, Loss=L: 1.58, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:37<03:44, 112.48s/it, Iter=350, Loss=L: 1.58, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:37<03:45, 112.51s/it, Iter=351, Loss=L: 1.74, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:37<03:45, 112.53s/it, Iter=351, Loss=L: 1.74, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:37<03:45, 112.56s/it, Iter=352, Loss=L: 1.60, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:37<03:45, 112.59s/it, Iter=352, Loss=L: 1.60, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:37<03:45, 112.62s/it, Iter=353, Loss=L: 1.77, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:37<03:45, 112.65s/it, Iter=353, Loss=L: 1.77, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.68s/it, Iter=354, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.70s/it, Iter=354, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.74s/it, Iter=355, Loss=L: 1.58, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.77s/it, Iter=355, Loss=L: 1.58, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.80s/it, Iter=356, Loss=L: 1.87, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.84s/it, Iter=356, Loss=L: 1.87, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.87s/it, Iter=357, Loss=L: 1.80, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.89s/it, Iter=357, Loss=L: 1.80, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.92s/it, Iter=358, Loss=L: 1.83, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.94s/it, Iter=358, Loss=L: 1.83, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:38<03:45, 112.98s/it, Iter=359, Loss=L: 1.89, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.00s/it, Iter=359, Loss=L: 1.89, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.03s/it, Iter=360, Loss=L: 1.67, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.06s/it, Iter=360, Loss=L: 1.67, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.09s/it, Iter=361, Loss=L: 1.57, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.11s/it, Iter=361, Loss=L: 1.57, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.14s/it, Iter=362, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.17s/it, Iter=362, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.21s/it, Iter=363, Loss=L: 1.77, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.23s/it, Iter=363, Loss=L: 1.77, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.28s/it, Iter=364, Loss=L: 1.63, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:39<03:46, 113.32s/it, Iter=364, Loss=L: 1.63, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:46, 113.35s/it, Iter=365, Loss=L: 1.86, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:46, 113.37s/it, Iter=365, Loss=L: 1.86, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:46, 113.40s/it, Iter=366, Loss=L: 1.84, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:46, 113.42s/it, Iter=366, Loss=L: 1.84, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:46, 113.45s/it, Iter=367, Loss=L: 1.79, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:46, 113.48s/it, Iter=367, Loss=L: 1.79, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:47, 113.50s/it, Iter=368, Loss=L: 1.70, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:47, 113.53s/it, Iter=368, Loss=L: 1.70, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:47, 113.56s/it, Iter=369, Loss=L: 1.74, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:47, 113.59s/it, Iter=369, Loss=L: 1.74, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:47, 113.62s/it, Iter=370, Loss=L: 1.91, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:47, 113.64s/it, Iter=370, Loss=L: 1.91, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:40<03:47, 113.66s/it, Iter=371, Loss=L: 1.69, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:41<03:47, 113.82s/it, Iter=371, Loss=L: 1.69, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:41<03:47, 113.85s/it, Iter=372, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:41<03:47, 113.89s/it, Iter=372, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:41<03:47, 113.91s/it, Iter=373, Loss=L: 1.96, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:41<03:47, 113.94s/it, Iter=373, Loss=L: 1.96, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:41<03:47, 113.97s/it, Iter=374, Loss=L: 1.69, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:41<03:47, 113.99s/it, Iter=374, Loss=L: 1.69, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.02s/it, Iter=375, Loss=L: 2.06, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.05s/it, Iter=375, Loss=L: 2.06, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.08s/it, Iter=376, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.09s/it, Iter=376, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.12s/it, Iter=377, Loss=L: 1.74, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.15s/it, Iter=377, Loss=L: 1.74, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.18s/it, Iter=378, Loss=L: 1.75, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.20s/it, Iter=378, Loss=L: 1.75, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.23s/it, Iter=379, Loss=L: 1.69, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.26s/it, Iter=379, Loss=L: 1.69, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.29s/it, Iter=380, Loss=L: 1.64, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:42<03:48, 114.30s/it, Iter=380, Loss=L: 1.64, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:48, 114.34s/it, Iter=381, Loss=L: 1.77, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:48, 114.37s/it, Iter=381, Loss=L: 1.77, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:48, 114.40s/it, Iter=382, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:48, 114.43s/it, Iter=382, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:48, 114.47s/it, Iter=383, Loss=L: 1.79, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:48, 114.50s/it, Iter=383, Loss=L: 1.79, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:49, 114.53s/it, Iter=384, Loss=L: 1.79, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:49, 114.55s/it, Iter=384, Loss=L: 1.79, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:49, 114.58s/it, Iter=385, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:49, 114.60s/it, Iter=385, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:49, 114.63s/it, Iter=386, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:43<03:49, 114.66s/it, Iter=386, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.68s/it, Iter=387, Loss=L: 1.91, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.72s/it, Iter=387, Loss=L: 1.91, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.76s/it, Iter=388, Loss=L: 1.83, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.78s/it, Iter=388, Loss=L: 1.83, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.81s/it, Iter=389, Loss=L: 1.72, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.84s/it, Iter=389, Loss=L: 1.72, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.87s/it, Iter=390, Loss=L: 1.90, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.89s/it, Iter=390, Loss=L: 1.90, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.92s/it, Iter=391, Loss=L: 1.64, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.94s/it, Iter=391, Loss=L: 1.64, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:44<03:49, 114.97s/it, Iter=392, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:45<03:50, 115.01s/it, Iter=392, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:45<03:50, 115.17s/it, Iter=393, Loss=L: 1.53, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:45<03:50, 115.20s/it, Iter=393, Loss=L: 1.53, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:45<03:50, 115.24s/it, Iter=394, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:45<03:50, 115.26s/it, Iter=394, Loss=L: 1.73, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:45<03:50, 115.29s/it, Iter=395, Loss=L: 1.96, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:45<03:50, 115.32s/it, Iter=395, Loss=L: 1.96, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:50, 115.35s/it, Iter=396, Loss=L: 1.60, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:50, 115.37s/it, Iter=396, Loss=L: 1.60, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:50, 115.40s/it, Iter=397, Loss=L: 1.64, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:50, 115.42s/it, Iter=397, Loss=L: 1.64, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:50, 115.44s/it, Iter=398, Loss=L: 2.02, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:50, 115.47s/it, Iter=398, Loss=L: 2.02, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:51, 115.51s/it, Iter=399, Loss=L: 1.82, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:51, 115.53s/it, Iter=399, Loss=L: 1.82, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:51, 115.56s/it, Iter=400, Loss=L: 1.60, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:51, 115.59s/it, Iter=400, Loss=L: 1.60, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:51, 115.62s/it, Iter=401, Loss=L: 1.56, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:46<03:51, 115.65s/it, Iter=401, Loss=L: 1.56, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.67s/it, Iter=402, Loss=L: 1.82, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.71s/it, Iter=402, Loss=L: 1.82, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.75s/it, Iter=403, Loss=L: 1.89, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.77s/it, Iter=403, Loss=L: 1.89, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.80s/it, Iter=404, Loss=L: 1.78, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.82s/it, Iter=404, Loss=L: 1.78, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.85s/it, Iter=405, Loss=L: 1.78, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.88s/it, Iter=405, Loss=L: 1.78, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.91s/it, Iter=406, Loss=L: 1.82, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.93s/it, Iter=406, Loss=L: 1.82, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.95s/it, Iter=407, Loss=L: 1.96, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:47<03:51, 115.97s/it, Iter=407, Loss=L: 1.96, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.00s/it, Iter=408, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.02s/it, Iter=408, Loss=L: 1.68, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.05s/it, Iter=409, Loss=L: 1.66, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.07s/it, Iter=409, Loss=L: 1.66, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.11s/it, Iter=410, Loss=L: 1.61, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.14s/it, Iter=410, Loss=L: 1.61, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.17s/it, Iter=411, Loss=L: 1.78, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.20s/it, Iter=411, Loss=L: 1.78, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.24s/it, Iter=412, Loss=L: 1.70, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.26s/it, Iter=412, Loss=L: 1.70, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.29s/it, Iter=413, Loss=L: 1.76, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:48<03:52, 116.31s/it, Iter=413, Loss=L: 1.76, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:49<03:52, 116.34s/it, Iter=414, Loss=L: 1.78, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:49<03:53, 116.52s/it, Iter=414, Loss=L: 1.78, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:49<03:53, 116.54s/it, Iter=415, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:49<03:53, 116.57s/it, Iter=415, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:49<03:53, 116.60s/it, Iter=416, Loss=L: 1.72, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:49<03:53, 116.63s/it, Iter=416, Loss=L: 1.72, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.67s/it, Iter=417, Loss=L: 1.70, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.72s/it, Iter=417, Loss=L: 1.70, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.75s/it, Iter=418, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.78s/it, Iter=418, Loss=L: 1.71, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.81s/it, Iter=419, Loss=L: 1.62, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.83s/it, Iter=419, Loss=L: 1.62, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.86s/it, Iter=420, Loss=L: 1.66, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.89s/it, Iter=420, Loss=L: 1.66, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.92s/it, Iter=421, Loss=L: 1.67, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.95s/it, Iter=421, Loss=L: 1.67, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:50<03:53, 116.98s/it, Iter=422, Loss=L: 1.67, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:51<03:54, 117.01s/it, Iter=422, Loss=L: 1.67, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:51<03:54, 117.03s/it, Iter=423, Loss=L: 1.66, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:51<03:54, 117.05s/it, Iter=423, Loss=L: 1.66, Rew=-162.04]
+Training:  60%|██████    | 3/5 [05:51<03:54, 117.08s/it, Iter=424, Loss=L: 1.64, Rew=-162.04]
+Training:  80%|████████  | 4/5 [05:51<01:27, 87.82s/it, Iter=424, Loss=L: 1.64, Rew=-162.04] 
+Training:  80%|████████  | 4/5 [05:51<01:27, 87.84s/it, Iter=425, Loss=L: 1.67, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:51<01:27, 87.86s/it, Iter=425, Loss=L: 1.67, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:51<01:27, 87.89s/it, Iter=426, Loss=L: 1.80, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:51<01:27, 87.92s/it, Iter=426, Loss=L: 1.80, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:51<01:27, 87.95s/it, Iter=427, Loss=L: 1.81, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:51<01:27, 87.96s/it, Iter=427, Loss=L: 1.81, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:51<01:27, 87.99s/it, Iter=428, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.00s/it, Iter=428, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.03s/it, Iter=429, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.05s/it, Iter=429, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.07s/it, Iter=430, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.09s/it, Iter=430, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.11s/it, Iter=431, Loss=L: 1.74, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.13s/it, Iter=431, Loss=L: 1.74, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.15s/it, Iter=432, Loss=L: 1.55, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.17s/it, Iter=432, Loss=L: 1.55, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.19s/it, Iter=433, Loss=L: 1.82, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.20s/it, Iter=433, Loss=L: 1.82, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:52<01:28, 88.23s/it, Iter=434, Loss=L: 1.66, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:53<01:28, 88.26s/it, Iter=434, Loss=L: 1.66, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:53<01:28, 88.28s/it, Iter=435, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:53<01:28, 88.30s/it, Iter=435, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:53<01:28, 88.45s/it, Iter=436, Loss=L: 1.62, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:53<01:28, 88.47s/it, Iter=436, Loss=L: 1.62, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:53<01:28, 88.49s/it, Iter=437, Loss=L: 1.76, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.51s/it, Iter=437, Loss=L: 1.76, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.53s/it, Iter=438, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.55s/it, Iter=438, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.57s/it, Iter=439, Loss=L: 1.55, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.60s/it, Iter=439, Loss=L: 1.55, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.62s/it, Iter=440, Loss=L: 1.63, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.64s/it, Iter=440, Loss=L: 1.63, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.66s/it, Iter=441, Loss=L: 1.65, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.68s/it, Iter=441, Loss=L: 1.65, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.70s/it, Iter=442, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.72s/it, Iter=442, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:54<01:28, 88.74s/it, Iter=443, Loss=L: 1.81, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.77s/it, Iter=443, Loss=L: 1.81, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.79s/it, Iter=444, Loss=L: 1.67, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.81s/it, Iter=444, Loss=L: 1.67, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.84s/it, Iter=445, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.85s/it, Iter=445, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.87s/it, Iter=446, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.89s/it, Iter=446, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.91s/it, Iter=447, Loss=L: 1.74, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.93s/it, Iter=447, Loss=L: 1.74, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.96s/it, Iter=448, Loss=L: 1.78, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:55<01:28, 88.98s/it, Iter=448, Loss=L: 1.78, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.01s/it, Iter=449, Loss=L: 1.53, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.02s/it, Iter=449, Loss=L: 1.53, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.04s/it, Iter=450, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.06s/it, Iter=450, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.08s/it, Iter=451, Loss=L: 1.70, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.10s/it, Iter=451, Loss=L: 1.70, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.12s/it, Iter=452, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.14s/it, Iter=452, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.17s/it, Iter=453, Loss=L: 1.78, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.19s/it, Iter=453, Loss=L: 1.78, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.22s/it, Iter=454, Loss=L: 1.82, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:56<01:29, 89.23s/it, Iter=454, Loss=L: 1.82, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:57<01:29, 89.25s/it, Iter=455, Loss=L: 1.75, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:57<01:29, 89.27s/it, Iter=455, Loss=L: 1.75, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:57<01:29, 89.29s/it, Iter=456, Loss=L: 1.54, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:57<01:29, 89.31s/it, Iter=456, Loss=L: 1.54, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:57<01:29, 89.34s/it, Iter=457, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:57<01:29, 89.47s/it, Iter=457, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:57<01:29, 89.49s/it, Iter=458, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.50s/it, Iter=458, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.52s/it, Iter=459, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.55s/it, Iter=459, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.57s/it, Iter=460, Loss=L: 1.62, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.59s/it, Iter=460, Loss=L: 1.62, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.61s/it, Iter=461, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.63s/it, Iter=461, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.66s/it, Iter=462, Loss=L: 1.52, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.67s/it, Iter=462, Loss=L: 1.52, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.70s/it, Iter=463, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.73s/it, Iter=463, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:58<01:29, 89.75s/it, Iter=464, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.77s/it, Iter=464, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.79s/it, Iter=465, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.81s/it, Iter=465, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.84s/it, Iter=466, Loss=L: 1.70, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.86s/it, Iter=466, Loss=L: 1.70, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.88s/it, Iter=467, Loss=L: 1.59, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.89s/it, Iter=467, Loss=L: 1.59, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.92s/it, Iter=468, Loss=L: 1.59, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.94s/it, Iter=468, Loss=L: 1.59, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.96s/it, Iter=469, Loss=L: 1.75, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 89.98s/it, Iter=469, Loss=L: 1.75, Rew=-161.43]
+Training:  80%|████████  | 4/5 [05:59<01:29, 90.00s/it, Iter=470, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.02s/it, Iter=470, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.05s/it, Iter=471, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.07s/it, Iter=471, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.09s/it, Iter=472, Loss=L: 1.66, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.11s/it, Iter=472, Loss=L: 1.66, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.14s/it, Iter=473, Loss=L: 1.73, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.16s/it, Iter=473, Loss=L: 1.73, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.18s/it, Iter=474, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.20s/it, Iter=474, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.22s/it, Iter=475, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:00<01:30, 90.24s/it, Iter=475, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:01<01:30, 90.27s/it, Iter=476, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:01<01:30, 90.28s/it, Iter=476, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:01<01:30, 90.31s/it, Iter=477, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:01<01:30, 90.32s/it, Iter=477, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:01<01:30, 90.34s/it, Iter=478, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:01<01:30, 90.36s/it, Iter=478, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.51s/it, Iter=479, Loss=L: 1.75, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.53s/it, Iter=479, Loss=L: 1.75, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.55s/it, Iter=480, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.57s/it, Iter=480, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.60s/it, Iter=481, Loss=L: 1.53, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.62s/it, Iter=481, Loss=L: 1.53, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.64s/it, Iter=482, Loss=L: 1.64, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.66s/it, Iter=482, Loss=L: 1.64, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.69s/it, Iter=483, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.70s/it, Iter=483, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.72s/it, Iter=484, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:02<01:30, 90.74s/it, Iter=484, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.76s/it, Iter=485, Loss=L: 1.63, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.78s/it, Iter=485, Loss=L: 1.63, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.81s/it, Iter=486, Loss=L: 1.63, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.83s/it, Iter=486, Loss=L: 1.63, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.86s/it, Iter=487, Loss=L: 1.48, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.88s/it, Iter=487, Loss=L: 1.48, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.90s/it, Iter=488, Loss=L: 1.73, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.92s/it, Iter=488, Loss=L: 1.73, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.94s/it, Iter=489, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.96s/it, Iter=489, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:03<01:30, 90.99s/it, Iter=490, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.01s/it, Iter=490, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.03s/it, Iter=491, Loss=L: 1.64, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.04s/it, Iter=491, Loss=L: 1.64, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.06s/it, Iter=492, Loss=L: 1.77, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.08s/it, Iter=492, Loss=L: 1.77, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.10s/it, Iter=493, Loss=L: 1.67, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.11s/it, Iter=493, Loss=L: 1.67, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.13s/it, Iter=494, Loss=L: 1.58, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.14s/it, Iter=494, Loss=L: 1.58, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.16s/it, Iter=495, Loss=L: 1.52, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.18s/it, Iter=495, Loss=L: 1.52, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.21s/it, Iter=496, Loss=L: 1.64, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:04<01:31, 91.23s/it, Iter=496, Loss=L: 1.64, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:05<01:31, 91.26s/it, Iter=497, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:05<01:31, 91.28s/it, Iter=497, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:05<01:31, 91.30s/it, Iter=498, Loss=L: 1.84, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:05<01:31, 91.32s/it, Iter=498, Loss=L: 1.84, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:05<01:31, 91.34s/it, Iter=499, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:05<01:31, 91.36s/it, Iter=499, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:05<01:31, 91.38s/it, Iter=500, Loss=L: 1.76, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.52s/it, Iter=500, Loss=L: 1.76, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.53s/it, Iter=501, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.56s/it, Iter=501, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.58s/it, Iter=502, Loss=L: 1.66, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.60s/it, Iter=502, Loss=L: 1.66, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.62s/it, Iter=503, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.64s/it, Iter=503, Loss=L: 1.60, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.67s/it, Iter=504, Loss=L: 1.79, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.69s/it, Iter=504, Loss=L: 1.79, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.72s/it, Iter=505, Loss=L: 1.62, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:06<01:31, 91.73s/it, Iter=505, Loss=L: 1.62, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.76s/it, Iter=506, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.78s/it, Iter=506, Loss=L: 1.57, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.80s/it, Iter=507, Loss=L: 1.72, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.82s/it, Iter=507, Loss=L: 1.72, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.84s/it, Iter=508, Loss=L: 1.74, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.86s/it, Iter=508, Loss=L: 1.74, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.88s/it, Iter=509, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.90s/it, Iter=509, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.93s/it, Iter=510, Loss=L: 1.66, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.95s/it, Iter=510, Loss=L: 1.66, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.97s/it, Iter=511, Loss=L: 1.55, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:07<01:31, 91.99s/it, Iter=511, Loss=L: 1.55, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.01s/it, Iter=512, Loss=L: 1.72, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.04s/it, Iter=512, Loss=L: 1.72, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.06s/it, Iter=513, Loss=L: 1.59, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.08s/it, Iter=513, Loss=L: 1.59, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.11s/it, Iter=514, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.13s/it, Iter=514, Loss=L: 1.61, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.16s/it, Iter=515, Loss=L: 1.73, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.18s/it, Iter=515, Loss=L: 1.73, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.20s/it, Iter=516, Loss=L: 1.58, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.21s/it, Iter=516, Loss=L: 1.58, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:08<01:32, 92.24s/it, Iter=517, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:09<01:32, 92.26s/it, Iter=517, Loss=L: 1.56, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:09<01:32, 92.28s/it, Iter=518, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:09<01:32, 92.31s/it, Iter=518, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:09<01:32, 92.33s/it, Iter=519, Loss=L: 1.72, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:09<01:32, 92.35s/it, Iter=519, Loss=L: 1.72, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:09<01:32, 92.37s/it, Iter=520, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:09<01:32, 92.39s/it, Iter=520, Loss=L: 1.68, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:09<01:32, 92.41s/it, Iter=521, Loss=L: 1.59, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:09<01:32, 92.43s/it, Iter=521, Loss=L: 1.59, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:10<01:32, 92.57s/it, Iter=522, Loss=L: 1.52, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:10<01:32, 92.58s/it, Iter=522, Loss=L: 1.52, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:10<01:32, 92.61s/it, Iter=523, Loss=L: 1.74, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:10<01:32, 92.63s/it, Iter=523, Loss=L: 1.74, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:10<01:32, 92.65s/it, Iter=524, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:10<01:32, 92.67s/it, Iter=524, Loss=L: 1.69, Rew=-161.43]
+Training:  80%|████████  | 4/5 [06:10<01:32, 92.70s/it, Iter=525, Loss=L: 1.60, Rew=-161.43]
+Training: 100%|██████████| 5/5 [06:10<00:00, 74.17s/it, Iter=525, Loss=L: 1.60, Rew=-161.43]
+Training: 100%|██████████| 5/5 [06:10<00:00, 74.19s/it, Iter=526, Loss=L: 1.48, Rew=-160.89]
+                                                                                            
+
+Training: 100%|██████████| 5/5 [06:10<00:00, 74.20s/it, Iter=526, Loss=L: 1.48, Rew=-160.89]
+Training: 100%|██████████| 5/5 [06:12<00:00, 74.52s/it, Iter=526, Loss=L: 1.48, Rew=-160.89]
+
+[DEBUG] Script started. CLI arguments: Namespace(episodes=5, seed=None, config=None, agent_config='configs/models/dreamer_v3.yaml', tag='dreamer_verify_test', device=None, no_satiation=False, no_overeating_death=False, wandb_project=None, wandb_group=None, wandb_job_type=None, wandb_name=None, no_wandb=True, quiet=False, debug=True, checkpoint_frequency=5, load_checkpoint=None, wandb_resume_id=None, total_timesteps=None, num_envs=1, num_steps=None, hidden_size=None, lr=None, results_dir=None, wandb_entity=None)
+Device: gpu (cuda:0)
+[DEBUG] Phase 1: Configuration Loading...
+[DEBUG] Loading base config from /media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/environment/environment.yaml
+Loading train config from /media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/train/default.yaml
+Loading eval config from /media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/evaluation/default.yaml
+Loading logger config from /media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/logger/wandb.yaml
+Loading visualization config from /media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/visualization/visualization.yaml
+[DEBUG] Loading agent config from configs/models/dreamer_v3.yaml
+Loading agent config from: configs/models/dreamer_v3.yaml
+
+================================================================
+================== SYSTEM CONFIGURATION AUDIT ==================
+================================================================
+
+[ GLOBAL SETTINGS ]
+  ● episodes             : 100
+  ● seed                 : 42
+  ● tag                  : dreamer_verify_test
+
+[ AGENT ]
+  ● actor_fc_layers      : [128, 128, 128, 128, 128]
+  ● actor_lr             : 8e-5
+  ● algorithm            : DreamerV3
+  ● batch_length         : 64
+  ● batch_size           : 16
+  ● continue_fc_layers   : [128, 128, 128, 128, 128]
+  ● critic_fc_layers     : [128, 128, 128, 128, 128]
+  ● decoder_fc_layers    : [128, 128, 128, 128, 128]
+  ● encoder_dim          : 128
+  ● encoder_fc_layers    : [128, 128, 128, 128, 128]
+  ● frame_stack          : 1
+  ● model_lr             : 1e-4
+  ● reward_fc_layers     : [128, 128, 128, 128, 128]
+  ● rssm_classes         : 32
+  ● rssm_deter_dim       : 512
+  ● rssm_stoch_dim       : 32
+  ● train_steps          : 1
+  ● value_lr             : 8e-5
+
+[ BODY ]
+  ● death_penalty        : 100
+  ● eating_nutrition_cost : 1.0
+  ● eating_reward_penalty : 0.1
+  ● food_nutrition_gain  : 3
+  ● injury_smoothing_duration : 3
+  ● max_injury           : 30
+  ● max_nutrition        : 100
+  ● max_satiation        : 100
+  ● metabolic_cost       : 0.5
+  ● nutrition_to_satiation_scaling_factor : 1.0
+  ● overeating_death     : False
+  ● random_start_injury  : False
+  ● random_start_nutrition : False
+  ● random_start_satiation : False
+  ● recovery_accel_rate  : 0.5
+  ● recovery_base_rate   : 0.1
+  ● satiation_setpoint   : 100
+  ● start_nutrition      : 100
+  ● start_satiation      : 100
+  ● use_homeostatic_reward : True
+  ● with_injury          : True
+  ● with_nutrition       : True
+  ● with_satiation       : True
+
+[ ENVIRONMENT ]
+  ● eat_action_enabled   : True
+  ● height               : 20
+  ● location_areas       : 4 items (unnamed, unnamed, unnamed...)
+  ● max_steps            : 500
+  ● neutral_animals      : 1 items (Decoy Rabbit)
+  ● obstacles            : 6 items (rock, rock, tree...)
+  ● predator_enabled     : True
+  ● predators            : 2 items (Forest Predator TL, Forest Predator BR)
+  ● random_start_pos     : False
+  ● resources            : 6 items (Food Grass TL, Food Grass BR, Danger Grass TL...)
+  ● rest_action_enabled  : True
+  ● start_pos            : [6, 15]
+  ● width                : 20
+
+[ PERCEPTUAL_NOISE ]
+  ● enabled              : True
+
+  [ MODALITIES ]
+
+    [ COLLISION ]
+      ● clip_max             : 1.0
+      ● clip_min             : 0.0
+      ● injury_noise_scale   : 0.0
+      ● mode                 : constant
+      ● sigma                : 0.01
+
+    [ EXTERO_NOCICEPTION ]
+      ● clip_max             : 100.0
+      ● clip_min             : 0.0
+      ● injury_noise_scale   : 0.0
+      ● mode                 : constant
+      ● sigma                : 0.01
+
+    [ INJURY ]
+      ● clip_max             : 1.0
+      ● clip_min             : 0.0
+      ● injury_noise_scale   : 1.5
+      ● mode                 : state_dependent
+      ● sigma                : 0.05
+
+    [ LOCATION ]
+      ● clip_max             : 1.0
+      ● clip_min             : -1.0
+      ● injury_noise_scale   : 0.0
+      ● mode                 : constant
+      ● sigma                : 0.01
+
+    [ NUTRITION ]
+      ● clip_max             : 1.0
+      ● clip_min             : 0.0
+      ● injury_noise_scale   : 0.0
+      ● mode                 : constant
+      ● sigma                : 0.1
+
+    [ OLFACTION ]
+      ● clip_max             : 100.0
+      ● clip_min             : 0.0
+      ● injury_noise_scale   : 2.0
+      ● mode                 : state_dependent
+      ● sigma                : 0.15
+
+    [ PROPRIOCEPTION ]
+      ● clip_max             : 1.0
+      ● clip_min             : 0.0
+      ● injury_noise_scale   : 0.0
+      ● mode                 : constant
+      ● sigma                : 0.05
+
+    [ SATIATION ]
+      ● clip_max             : 1.0
+      ● clip_min             : 0.0
+      ● injury_noise_scale   : 0.0
+      ● mode                 : constant
+      ● sigma                : 0.1
+
+    [ VISUAL ]
+      ● clip_max             : 100.0
+      ● clip_min             : 0.0
+      ● injury_noise_scale   : 3.0
+      ● mode                 : state_dependent
+      ● sigma                : 0.05
+
+[ SENSORY ]
+  ● collision_sensor_range : 1
+  ● decay_power          : 1.0
+  ● location_sensor      : False
+  ● nociception_enabled  : True
+  ● nociception_size     : 1
+  ● olfactory_enabled    : True
+  ● proprioception_enabled : True
+  ● sensor_radius        : 20
+  ● using_sensory        : True
+  ● vector_size          : 5
+  ● visual_sensor_enabled : True
+  ● visual_sensor_range  : 0
+
+[ TESTING ]
+  ● evaluation_episodes  : 1
+  ● record_stats         : True
+  ● render_video         : True
+  ● seed                 : 56
+
+[ TRAINING ]
+  ● checkpoint_frequency : 10000
+  ● device               : auto
+  ● episodes             : 100
+  ● num_envs             : 128
+  ● seed                 : 42
+  ● video_during_training : True
+
+[ VISUALIZATION ]
+
+  [ ACTIVATIONS ]
+    ● activation_cmap      : magma
+    ● activation_range     : [0.0, 4.0]
+    ● attribution_cmap     : seismic
+    ● attribution_range    : [-1.0, 1.0]
+    ● bg_color             : #1A1A1A
+    ● dpi                  : 100
+    ● enabled              : False
+    ● header_height        : 0.6
+    ● label_color          : #B0B0B0
+    ● row_height           : 0.8
+    ● save_h5              : True
+    ● text_color           : #E0E0E0
+    ● with_lrp             : False
+  ● enabled              : True
+  ● font_family          : sans-serif
+  ● fps                  : 5
+  ● icon_scale           : 1.0
+
+  [ ICONS ]
+    ● agent                : agent
+    ● agent_bush           : bush_agent
+    ● agent_danger         : agent_danger
+    ● agent_food           : agent_food
+    ● agent_predator       : agent_predator
+    ● bush                 : bush
+    ● danger               : danger
+    ● food                 : food
+    ● neutral              : neutral
+    ● predator             : predator
+    ● rock                 : rock
+    ● tree                 : tree
+
+  [ LEARNING_CURVES ]
+    ● bg_color             : #F8F9FA
+
+    [ COLORS ]
+      ● epsilon              : #FCC419
+      ● milestone            : #FA5252
+      ● reward_main          : #4C6EF5
+      ● reward_raw           : #A5D8FF
+      ● steps_main           : #20C997
+      ● steps_raw            : #C3FAE8
+    ● dpi                  : 150
+    ● figsize              : [12, 12]
+    ● window_divisor       : 100
+  ● local_view_size      : 5
+
+  [ Q_TABLE ]
+    ● arrow_color_threshold : 0.7
+    ● bg_color             : #F8F9FA
+    ● cmap                 : viridis
+    ● dpi                  : 150
+    ● food_color           : #51CF66
+    ● label_color          : #495057
+    ● title_color          : #343A40
+  ● video_dpi            : 300
+
+[ WANDB ]
+  ● disabled             : True
+  ● entity               : sungwoolee
+  ● group                : default
+  ● job_type             : defualt
+  ● mode                 : online
+  ● name                 : default
+  ● project              : grid_world_pain
+
+================================================================
+
+[DEBUG] Phase 2: Results Directory Setup...
+Config saved to: results/JAX_DreamerV3/20260221-201302_dreamer_verify_test/models/config.yaml
+[DEBUG] Phase 3: WandB Initialization...
+
+============================================================
+================ JAX/FLAX RL CONFIGURATION =================
+============================================================
+
+[Environment]
+  ● Grid Size................ 20x20
+  ● Max Steps................ 500
+  ● Mode..................... Interoceptive (Homeostasis)
+  ● Reward Logic............. Homeostatic (Drive Reduction)
+  ● Injury System............ ENABLED
+
+[Training]
+  ● Framework................ JAX/Flax NNX
+  ● Total Timesteps.......... 2,500
+  ● Parallel Envs............ 1
+  ● Steps/Iteration.......... 1
+  ● Seed..................... 42
+  ● Results.................. results/JAX_DreamerV3/20260221-201302_dreamer_verify_test
+  ● WandB.................... Disabled
+[DEBUG] Phase 5: Training Setup...
+[DEBUG] Performing initial environment reset for 1 envs...
+
+--- RL API Specifications ---
+Action Dim: 6
+Observation Dim: 28 (Olfaction=5, Extero Nociception=1, Collision=5, Satiation=1, Nutrition=1, Injury=1, Visual=8, Proprioception=6)
+Dimension Breakdown:
+  Olfaction........... 5
+  Extero Nociception.. 1
+  Collision........... 5
+  Satiation........... 1
+  Nutrition........... 1
+  Injury.............. 1
+  Visual.............. 8
+  Proprioception...... 6
+Hidden Size: 512
+Learning Rate: 8e-5
+--------------------------------------------
+
+[DEBUG] Phase 6: Algorithm Initialization (DreamerV3)...
+[DEBUG] Phase 7: Entering Training Loop...
+[DEBUG] Loop start time: 20:13:22
+
+[DEBUG] --- Iteration 1 Start (Step: 0) ---
+ Done.
+
+[DEBUG] --- Iteration 2 Start (Step: 1) ---
+ Done.
+
+[DEBUG] --- Iteration 3 Start (Step: 2) ---
+ Done.
+
+[DEBUG] --- Iteration 4 Start (Step: 3) ---
+ Done.
+
+[DEBUG] --- Iteration 5 Start (Step: 4) ---
+ Done.
+
+[DEBUG] --- Iteration 6 Start (Step: 5) ---
+ Done.
+
+[DEBUG] --- Iteration 7 Start (Step: 6) ---
+ Done.
+
+[DEBUG] --- Iteration 8 Start (Step: 7) ---
+ Done.
+
+[DEBUG] --- Iteration 9 Start (Step: 8) ---
+ Done.
+
+[DEBUG] --- Iteration 10 Start (Step: 9) ---
+ Done.
+
+[DEBUG] --- Iteration 11 Start (Step: 10) ---
+ Done.
+
+[DEBUG] --- Iteration 12 Start (Step: 11) ---
+ Done.
+
+[DEBUG] --- Iteration 13 Start (Step: 12) ---
+ Done.
+
+[DEBUG] --- Iteration 14 Start (Step: 13) ---
+ Done.
+
+[DEBUG] --- Iteration 15 Start (Step: 14) ---
+ Done.
+
+[DEBUG] --- Iteration 16 Start (Step: 15) ---
+ Done.
+
+[DEBUG] --- Iteration 17 Start (Step: 16) ---
+ Done.
+
+[DEBUG] --- Iteration 18 Start (Step: 17) ---
+ Done.
+
+[DEBUG] --- Iteration 19 Start (Step: 18) ---
+ Done.
+
+[DEBUG] --- Iteration 20 Start (Step: 19) ---
+ Done.
+
+[DEBUG] --- Iteration 21 Start (Step: 20) ---
+ Done.
+
+[DEBUG] --- Iteration 22 Start (Step: 21) ---
+ Done.
+
+[DEBUG] --- Iteration 23 Start (Step: 22) ---
+ Done.
+
+[DEBUG] --- Iteration 24 Start (Step: 23) ---
+ Done.
+
+[DEBUG] --- Iteration 25 Start (Step: 24) ---
+ Done.
+
+[DEBUG] --- Iteration 26 Start (Step: 25) ---
+ Done.
+
+[DEBUG] --- Iteration 27 Start (Step: 26) ---
+ Done.
+
+[DEBUG] --- Iteration 28 Start (Step: 27) ---
+ Done.
+
+[DEBUG] --- Iteration 29 Start (Step: 28) ---
+ Done.
+
+[DEBUG] --- Iteration 30 Start (Step: 29) ---
+ Done.
+
+[DEBUG] --- Iteration 31 Start (Step: 30) ---
+ Done.
+
+[DEBUG] --- Iteration 32 Start (Step: 31) ---
+ Done.
+
+[DEBUG] --- Iteration 33 Start (Step: 32) ---
+ Done.
+
+[DEBUG] --- Iteration 34 Start (Step: 33) ---
+ Done.
+
+[DEBUG] --- Iteration 35 Start (Step: 34) ---
+ Done.
+
+[DEBUG] --- Iteration 36 Start (Step: 35) ---
+ Done.
+
+[DEBUG] --- Iteration 37 Start (Step: 36) ---
+ Done.
+
+[DEBUG] --- Iteration 38 Start (Step: 37) ---
+ Done.
+
+[DEBUG] --- Iteration 39 Start (Step: 38) ---
+ Done.
+
+[DEBUG] --- Iteration 40 Start (Step: 39) ---
+ Done.
+
+[DEBUG] --- Iteration 41 Start (Step: 40) ---
+ Done.
+
+[DEBUG] --- Iteration 42 Start (Step: 41) ---
+ Done.
+
+[DEBUG] --- Iteration 43 Start (Step: 42) ---
+ Done.
+
+[DEBUG] --- Iteration 44 Start (Step: 43) ---
+ Done.
+
+[DEBUG] --- Iteration 45 Start (Step: 44) ---
+ Done.
+
+[DEBUG] --- Iteration 46 Start (Step: 45) ---
+ Done.
+
+[DEBUG] --- Iteration 47 Start (Step: 46) ---
+ Done.
+
+[DEBUG] --- Iteration 48 Start (Step: 47) ---
+ Done.
+
+[DEBUG] --- Iteration 49 Start (Step: 48) ---
+ Done.
+
+[DEBUG] --- Iteration 50 Start (Step: 49) ---
+ Done.
+
+[DEBUG] --- Iteration 51 Start (Step: 50) ---
+ Done.
+
+[DEBUG] --- Iteration 52 Start (Step: 51) ---
+ Done.
+
+[DEBUG] --- Iteration 53 Start (Step: 52) ---
+ Done.
+
+[DEBUG] --- Iteration 54 Start (Step: 53) ---
+ Done.
+
+[DEBUG] --- Iteration 55 Start (Step: 54) ---
+ Done.
+
+[DEBUG] --- Iteration 56 Start (Step: 55) ---
+ Done.
+
+[DEBUG] --- Iteration 57 Start (Step: 56) ---
+ Done.
+
+[DEBUG] --- Iteration 58 Start (Step: 57) ---
+ Done.
+
+[DEBUG] --- Iteration 59 Start (Step: 58) ---
+ Done.
+
+[DEBUG] --- Iteration 60 Start (Step: 59) ---
+ Done.
+
+[DEBUG] --- Iteration 61 Start (Step: 60) ---
+ Done.
+
+[DEBUG] --- Iteration 62 Start (Step: 61) ---
+ Done.
+
+[DEBUG] --- Iteration 63 Start (Step: 62) ---
+ Done.
+
+[DEBUG] --- Iteration 64 Start (Step: 63) ---
+ Done.
+
+[DEBUG] --- Iteration 65 Start (Step: 64) ---
+ Done.
+
+[DEBUG] --- Iteration 66 Start (Step: 65) ---
+ Done.
+
+[DEBUG] --- Iteration 67 Start (Step: 66) ---
+ Done.
+
+[DEBUG] --- Iteration 68 Start (Step: 67) ---
+ Done.
+
+[DEBUG] --- Iteration 69 Start (Step: 68) ---
+ Done.
+
+[DEBUG] --- Iteration 70 Start (Step: 69) ---
+ Done.
+
+[DEBUG] --- Iteration 71 Start (Step: 70) ---
+ Done.
+
+[DEBUG] --- Iteration 72 Start (Step: 71) ---
+ Done.
+
+[DEBUG] --- Iteration 73 Start (Step: 72) ---
+ Done.
+
+[DEBUG] --- Iteration 74 Start (Step: 73) ---
+ Done.
+
+[DEBUG] --- Iteration 75 Start (Step: 74) ---
+ Done.
+
+[DEBUG] --- Iteration 76 Start (Step: 75) ---
+ Done.
+
+[DEBUG] --- Iteration 77 Start (Step: 76) ---
+ Done.
+
+[DEBUG] --- Iteration 78 Start (Step: 77) ---
+ Done.
+
+[DEBUG] --- Iteration 79 Start (Step: 78) ---
+ Done.
+
+[DEBUG] --- Iteration 80 Start (Step: 79) ---
+ Done.
+
+[DEBUG] --- Iteration 81 Start (Step: 80) ---
+ Done.
+
+[DEBUG] --- Iteration 82 Start (Step: 81) ---
+ Done.
+
+[DEBUG] --- Iteration 83 Start (Step: 82) ---
+ Done.
+
+[DEBUG] --- Iteration 84 Start (Step: 83) ---
+ Done.
+
+[DEBUG] --- Iteration 85 Start (Step: 84) ---
+ Done.
+
+[DEBUG] --- Iteration 86 Start (Step: 85) ---
+ Done.
+
+[DEBUG] --- Iteration 87 Start (Step: 86) ---
+ Done.
+
+[DEBUG] --- Iteration 88 Start (Step: 87) ---
+ Done.
+
+[DEBUG] --- Iteration 89 Start (Step: 88) ---
+ Done.
+
+[DEBUG] --- Iteration 90 Start (Step: 89) ---
+ Done.
+
+[DEBUG] --- Iteration 91 Start (Step: 90) ---
+ Done.
+
+[DEBUG] --- Iteration 92 Start (Step: 91) ---
+ Done.
+
+[DEBUG] --- Iteration 93 Start (Step: 92) ---
+ Done.
+
+[DEBUG] --- Iteration 94 Start (Step: 93) ---
+ Done.
+
+[DEBUG] --- Iteration 95 Start (Step: 94) ---
+ Done.
+
+[DEBUG] --- Iteration 96 Start (Step: 95) ---
+ Done.
+
+[DEBUG] --- Iteration 97 Start (Step: 96) ---
+ Done.
+
+[DEBUG] --- Iteration 98 Start (Step: 97) ---
+ Done.
+
+[DEBUG] --- Iteration 99 Start (Step: 98) ---
+ Done.
+
+[DEBUG] --- Iteration 100 Start (Step: 99) ---
+ Done.
+
+[DEBUG] --- Iteration 101 Start (Step: 100) ---
+ Done.
+
+[DEBUG] --- Iteration 102 Start (Step: 101) ---
+ Done.
+
+[DEBUG] --- Iteration 103 Start (Step: 102) ---
+ Done.
+
+[DEBUG] --- Iteration 104 Start (Step: 103) ---
+ Done.
+
+[DEBUG] --- Iteration 105 Start (Step: 104) ---
+ Done.
+
+[DEBUG] --- Iteration 106 Start (Step: 105) ---
+ Done.
+
+[DEBUG] --- Iteration 107 Start (Step: 106) ---
+ Done.
+
+[DEBUG] --- Iteration 108 Start (Step: 107) ---
+ Done.
+
+[DEBUG] --- Iteration 109 Start (Step: 108) ---
+ Done.
+
+[DEBUG] --- Iteration 110 Start (Step: 109) ---
+ Done.
+
+[DEBUG] --- Iteration 111 Start (Step: 110) ---
+ Done.
+
+[DEBUG] --- Iteration 112 Start (Step: 111) ---
+ Done.
+
+[DEBUG] --- Iteration 113 Start (Step: 112) ---
+ Done.
+
+[DEBUG] --- Iteration 114 Start (Step: 113) ---
+ Done.
+
+[DEBUG] --- Iteration 115 Start (Step: 114) ---
+ Done.
+
+[DEBUG] --- Iteration 116 Start (Step: 115) ---
+ Done.
+
+[DEBUG] --- Iteration 117 Start (Step: 116) ---
+ Done.
+
+[DEBUG] --- Iteration 118 Start (Step: 117) ---
+ Done.
+
+[DEBUG] --- Iteration 119 Start (Step: 118) ---
+ Done.
+
+[DEBUG] --- Iteration 120 Start (Step: 119) ---
+ Done.
+
+[DEBUG] --- Iteration 121 Start (Step: 120) ---
+ Done.
+
+[DEBUG] --- Iteration 122 Start (Step: 121) ---
+ Done.
+
+[DEBUG] --- Iteration 123 Start (Step: 122) ---
+ Done.
+
+[DEBUG] --- Iteration 124 Start (Step: 123) ---
+ Done.
+
+[DEBUG] --- Iteration 125 Start (Step: 124) ---
+ Done.
+
+[DEBUG] --- Iteration 126 Start (Step: 125) ---
+ Done.
+
+[DEBUG] --- Iteration 127 Start (Step: 126) ---
+ Done.
+
+[DEBUG] --- Iteration 128 Start (Step: 127) ---
+ Done.
+
+[DEBUG] --- Iteration 129 Start (Step: 128) ---
+ Done.
+
+[DEBUG] --- Iteration 130 Start (Step: 129) ---
+ Done.
+
+[DEBUG] --- Iteration 131 Start (Step: 130) ---
+ Done.
+
+[DEBUG] --- Iteration 132 Start (Step: 131) ---
+ Done.
+
+[DEBUG] --- Iteration 133 Start (Step: 132) ---
+ Done.
+
+[DEBUG] --- Iteration 134 Start (Step: 133) ---
+ Done.
+
+[DEBUG] --- Iteration 135 Start (Step: 134) ---
+ Done.
+
+[DEBUG] --- Iteration 136 Start (Step: 135) ---
+ Done.
+
+[DEBUG] --- Iteration 137 Start (Step: 136) ---
+ Done.
+
+[DEBUG] --- Iteration 138 Start (Step: 137) ---
+ Done.
+
+[DEBUG] --- Iteration 139 Start (Step: 138) ---
+ Done.
+
+[DEBUG] --- Iteration 140 Start (Step: 139) ---
+ Done.
+
+[DEBUG] --- Iteration 141 Start (Step: 140) ---
+ Done.
+
+[DEBUG] --- Iteration 142 Start (Step: 141) ---
+ Done.
+
+[DEBUG] --- Iteration 143 Start (Step: 142) ---
+ Done.
+
+[DEBUG] --- Iteration 144 Start (Step: 143) ---
+ Done.
+
+[DEBUG] --- Iteration 145 Start (Step: 144) ---
+ Done.
+
+[DEBUG] --- Iteration 146 Start (Step: 145) ---
+ Done.
+
+[DEBUG] --- Iteration 147 Start (Step: 146) ---
+ Done.
+
+[DEBUG] --- Iteration 148 Start (Step: 147) ---
+ Done.
+
+[DEBUG] --- Iteration 149 Start (Step: 148) ---
+ Done.
+
+[DEBUG] --- Iteration 150 Start (Step: 149) ---
+ Done.
+
+[DEBUG] --- Iteration 151 Start (Step: 150) ---
+ Done.
+
+[DEBUG] --- Iteration 152 Start (Step: 151) ---
+ Done.
+
+[DEBUG] --- Iteration 153 Start (Step: 152) ---
+ Done.
+
+[DEBUG] --- Iteration 154 Start (Step: 153) ---
+ Done.
+
+[DEBUG] --- Iteration 155 Start (Step: 154) ---
+ Done.
+
+[DEBUG] --- Iteration 156 Start (Step: 155) ---
+ Done.
+
+[DEBUG] --- Iteration 157 Start (Step: 156) ---
+ Done.
+
+[DEBUG] --- Iteration 158 Start (Step: 157) ---
+ Done.
+
+[DEBUG] --- Iteration 159 Start (Step: 158) ---
+ Done.
+
+[DEBUG] --- Iteration 160 Start (Step: 159) ---
+ Done.
+
+[DEBUG] --- Iteration 161 Start (Step: 160) ---
+ Done.
+
+[DEBUG] --- Iteration 162 Start (Step: 161) ---
+ Done.
+
+[DEBUG] --- Iteration 163 Start (Step: 162) ---
+ Done.
+
+[DEBUG] --- Iteration 164 Start (Step: 163) ---
+ Done.
+
+[DEBUG] --- Iteration 165 Start (Step: 164) ---
+ Done.
+
+[DEBUG] --- Iteration 166 Start (Step: 165) ---
+ Done.
+
+[DEBUG] --- Iteration 167 Start (Step: 166) ---
+ Done.
+
+[DEBUG] --- Iteration 168 Start (Step: 167) ---
+ Done.
+
+[DEBUG] --- Iteration 169 Start (Step: 168) ---
+ Done.
+
+[DEBUG] --- Iteration 170 Start (Step: 169) ---
+ Done.
+
+[DEBUG] --- Iteration 171 Start (Step: 170) ---
+ Done.
+
+[DEBUG] --- Iteration 172 Start (Step: 171) ---
+ Done.
+
+[DEBUG] --- Iteration 173 Start (Step: 172) ---
+ Done.
+
+[DEBUG] --- Iteration 174 Start (Step: 173) ---
+ Done.
+
+[DEBUG] --- Iteration 175 Start (Step: 174) ---
+ Done.
+
+[DEBUG] --- Iteration 176 Start (Step: 175) ---
+ Done.
+
+[DEBUG] --- Iteration 177 Start (Step: 176) ---
+ Done.
+
+[DEBUG] --- Iteration 178 Start (Step: 177) ---
+ Done.
+
+[DEBUG] --- Iteration 179 Start (Step: 178) ---
+ Done.
+
+[DEBUG] --- Iteration 180 Start (Step: 179) ---
+ Done.
+
+[DEBUG] --- Iteration 181 Start (Step: 180) ---
+ Done.
+
+[DEBUG] --- Iteration 182 Start (Step: 181) ---
+ Done.
+
+[DEBUG] --- Iteration 183 Start (Step: 182) ---
+ Done.
+
+[DEBUG] --- Iteration 184 Start (Step: 183) ---
+ Done.
+
+[DEBUG] --- Iteration 185 Start (Step: 184) ---
+ Done.
+
+[DEBUG] --- Iteration 186 Start (Step: 185) ---
+ Done.
+
+[DEBUG] --- Iteration 187 Start (Step: 186) ---
+ Done.
+
+[DEBUG] --- Iteration 188 Start (Step: 187) ---
+ Done.
+
+[DEBUG] --- Iteration 189 Start (Step: 188) ---
+ Done.
+
+[DEBUG] --- Iteration 190 Start (Step: 189) ---
+ Done.
+
+[DEBUG] --- Iteration 191 Start (Step: 190) ---
+ Done.
+
+[DEBUG] --- Iteration 192 Start (Step: 191) ---
+ Done.
+
+[DEBUG] --- Iteration 193 Start (Step: 192) ---
+ Done.
+
+[DEBUG] --- Iteration 194 Start (Step: 193) ---
+ Done.
+
+[DEBUG] --- Iteration 195 Start (Step: 194) ---
+ Done.
+
+[DEBUG] --- Iteration 196 Start (Step: 195) ---
+ Done.
+
+[DEBUG] --- Iteration 197 Start (Step: 196) ---
+ Done.
+
+[DEBUG] --- Iteration 198 Start (Step: 197) ---
+ Done.
+
+[DEBUG] --- Iteration 199 Start (Step: 198) ---
+ Done.
+
+[DEBUG] --- Iteration 200 Start (Step: 199) ---
+ Done.
+
+[DEBUG] --- Iteration 201 Start (Step: 200) ---
+ Done.
+
+[DEBUG] --- Iteration 202 Start (Step: 201) ---
+ Done.
+
+[DEBUG] --- Iteration 203 Start (Step: 202) ---
+ Done.
+
+[DEBUG] --- Iteration 204 Start (Step: 203) ---
+ Done.
+
+[DEBUG] --- Iteration 205 Start (Step: 204) ---
+ Done.
+
+[DEBUG] --- Iteration 206 Start (Step: 205) ---
+ Done.
+
+[DEBUG] --- Iteration 207 Start (Step: 206) ---
+ Done.
+
+[DEBUG] --- Iteration 208 Start (Step: 207) ---
+ Done.
+
+[DEBUG] --- Iteration 209 Start (Step: 208) ---
+ Done.
+
+[DEBUG] --- Iteration 210 Start (Step: 209) ---
+ Done.
+
+[DEBUG] --- Iteration 211 Start (Step: 210) ---
+ Done.
+
+[DEBUG] --- Iteration 212 Start (Step: 211) ---
+ Done.
+
+[DEBUG] --- Iteration 213 Start (Step: 212) ---
+ Done.
+
+[DEBUG] --- Iteration 214 Start (Step: 213) ---
+ Done.
+
+[DEBUG] --- Iteration 215 Start (Step: 214) ---
+ Done.
+
+[DEBUG] --- Iteration 216 Start (Step: 215) ---
+ Done.
+
+[DEBUG] --- Iteration 217 Start (Step: 216) ---
+ Done.
+
+[DEBUG] --- Iteration 218 Start (Step: 217) ---
+ Done.
+
+[DEBUG] --- Iteration 219 Start (Step: 218) ---
+ Done.
+
+[DEBUG] --- Iteration 220 Start (Step: 219) ---
+ Done.
+
+[DEBUG] --- Iteration 221 Start (Step: 220) ---
+ Done.
+
+[DEBUG] --- Iteration 222 Start (Step: 221) ---
+ Done.
+
+[DEBUG] --- Iteration 223 Start (Step: 222) ---
+ Done.
+
+[DEBUG] --- Iteration 224 Start (Step: 223) ---
+ Done.
+
+[DEBUG] --- Iteration 225 Start (Step: 224) ---
+ Done.
+
+[DEBUG] --- Iteration 226 Start (Step: 225) ---
+ Done.
+
+[DEBUG] --- Iteration 227 Start (Step: 226) ---
+ Done.
+
+[DEBUG] --- Iteration 228 Start (Step: 227) ---
+ Done.
+
+[DEBUG] --- Iteration 229 Start (Step: 228) ---
+ Done.
+
+[DEBUG] --- Iteration 230 Start (Step: 229) ---
+ Done.
+
+[DEBUG] --- Iteration 231 Start (Step: 230) ---
+ Done.
+
+[DEBUG] --- Iteration 232 Start (Step: 231) ---
+ Done.
+
+[DEBUG] --- Iteration 233 Start (Step: 232) ---
+ Done.
+
+[DEBUG] --- Iteration 234 Start (Step: 233) ---
+ Done.
+
+[DEBUG] --- Iteration 235 Start (Step: 234) ---
+ Done.
+
+[DEBUG] --- Iteration 236 Start (Step: 235) ---
+ Done.
+
+[DEBUG] --- Iteration 237 Start (Step: 236) ---
+ Done.
+
+[DEBUG] --- Iteration 238 Start (Step: 237) ---
+ Done.
+
+[DEBUG] --- Iteration 239 Start (Step: 238) ---
+ Done.
+
+[DEBUG] --- Iteration 240 Start (Step: 239) ---
+ Done.
+
+[DEBUG] --- Iteration 241 Start (Step: 240) ---
+ Done.
+
+[DEBUG] --- Iteration 242 Start (Step: 241) ---
+ Done.
+
+[DEBUG] --- Iteration 243 Start (Step: 242) ---
+ Done.
+
+[DEBUG] --- Iteration 244 Start (Step: 243) ---
+ Done.
+
+[DEBUG] --- Iteration 245 Start (Step: 244) ---
+ Done.
+
+[DEBUG] --- Iteration 246 Start (Step: 245) ---
+ Done.
+
+[DEBUG] --- Iteration 247 Start (Step: 246) ---
+ Done.
+
+[DEBUG] --- Iteration 248 Start (Step: 247) ---
+ Done.
+
+[DEBUG] --- Iteration 249 Start (Step: 248) ---
+ Done.
+
+[DEBUG] --- Iteration 250 Start (Step: 249) ---
+ Done.
+
+[DEBUG] --- Iteration 251 Start (Step: 250) ---
+ Done.
+
+[DEBUG] --- Iteration 252 Start (Step: 251) ---
+ Done.
+
+[DEBUG] --- Iteration 253 Start (Step: 252) ---
+ Done.
+
+[DEBUG] --- Iteration 254 Start (Step: 253) ---
+ Done.
+
+[DEBUG] --- Iteration 255 Start (Step: 254) ---
+ Done.
+
+[DEBUG] --- Iteration 256 Start (Step: 255) ---
+ Done.
+
+[DEBUG] --- Iteration 257 Start (Step: 256) ---
+ Done.
+
+[DEBUG] --- Iteration 258 Start (Step: 257) ---
+ Done.
+
+[DEBUG] --- Iteration 259 Start (Step: 258) ---
+ Done.
+
+[DEBUG] --- Iteration 260 Start (Step: 259) ---
+ Done.
+
+[DEBUG] --- Iteration 261 Start (Step: 260) ---
+ Done.
+
+[DEBUG] --- Iteration 262 Start (Step: 261) ---
+ Done.
+
+[DEBUG] --- Iteration 263 Start (Step: 262) ---
+ Done.
+
+[DEBUG] --- Iteration 264 Start (Step: 263) ---
+ Done.
+
+[DEBUG] --- Iteration 265 Start (Step: 264) ---
+ Done.
+
+[DEBUG] --- Iteration 266 Start (Step: 265) ---
+ Done.
+
+[DEBUG] --- Iteration 267 Start (Step: 266) ---
+ Done.
+
+[DEBUG] --- Iteration 268 Start (Step: 267) ---
+ Done.
+
+[DEBUG] --- Iteration 269 Start (Step: 268) ---
+ Done.
+
+[DEBUG] --- Iteration 270 Start (Step: 269) ---
+ Done.
+
+[DEBUG] --- Iteration 271 Start (Step: 270) ---
+ Done.
+
+[DEBUG] --- Iteration 272 Start (Step: 271) ---
+ Done.
+
+[DEBUG] --- Iteration 273 Start (Step: 272) ---
+ Done.
+
+[DEBUG] --- Iteration 274 Start (Step: 273) ---
+ Done.
+
+[DEBUG] --- Iteration 275 Start (Step: 274) ---
+ Done.
+
+[DEBUG] --- Iteration 276 Start (Step: 275) ---
+ Done.
+
+[DEBUG] --- Iteration 277 Start (Step: 276) ---
+ Done.
+
+[DEBUG] --- Iteration 278 Start (Step: 277) ---
+ Done.
+
+[DEBUG] --- Iteration 279 Start (Step: 278) ---
+ Done.
+
+[DEBUG] --- Iteration 280 Start (Step: 279) ---
+ Done.
+
+[DEBUG] --- Iteration 281 Start (Step: 280) ---
+ Done.
+
+[DEBUG] --- Iteration 282 Start (Step: 281) ---
+ Done.
+
+[DEBUG] --- Iteration 283 Start (Step: 282) ---
+ Done.
+
+[DEBUG] --- Iteration 284 Start (Step: 283) ---
+ Done.
+
+[DEBUG] --- Iteration 285 Start (Step: 284) ---
+ Done.
+
+[DEBUG] --- Iteration 286 Start (Step: 285) ---
+ Done.
+
+[DEBUG] --- Iteration 287 Start (Step: 286) ---
+ Done.
+
+[DEBUG] --- Iteration 288 Start (Step: 287) ---
+ Done.
+
+[DEBUG] --- Iteration 289 Start (Step: 288) ---
+ Done.
+
+[DEBUG] --- Iteration 290 Start (Step: 289) ---
+ Done.
+
+[DEBUG] --- Iteration 291 Start (Step: 290) ---
+ Done.
+
+[DEBUG] --- Iteration 292 Start (Step: 291) ---
+ Done.
+
+[DEBUG] --- Iteration 293 Start (Step: 292) ---
+ Done.
+
+[DEBUG] --- Iteration 294 Start (Step: 293) ---
+ Done.
+
+[DEBUG] --- Iteration 295 Start (Step: 294) ---
+ Done.
+
+[DEBUG] --- Iteration 296 Start (Step: 295) ---
+ Done.
+
+[DEBUG] --- Iteration 297 Start (Step: 296) ---
+ Done.
+
+[DEBUG] --- Iteration 298 Start (Step: 297) ---
+ Done.
+
+[DEBUG] --- Iteration 299 Start (Step: 298) ---
+ Done.
+
+[DEBUG] --- Iteration 300 Start (Step: 299) ---
+ Done.
+
+[DEBUG] --- Iteration 301 Start (Step: 300) ---
+ Done.
+
+[DEBUG] --- Iteration 302 Start (Step: 301) ---
+ Done.
+
+[DEBUG] --- Iteration 303 Start (Step: 302) ---
+ Done.
+
+[DEBUG] --- Iteration 304 Start (Step: 303) ---
+ Done.
+
+[DEBUG] --- Iteration 305 Start (Step: 304) ---
+ Done.
+
+[DEBUG] --- Iteration 306 Start (Step: 305) ---
+ Done.
+
+[DEBUG] --- Iteration 307 Start (Step: 306) ---
+ Done.
+
+[DEBUG] --- Iteration 308 Start (Step: 307) ---
+ Done.
+
+[DEBUG] --- Iteration 309 Start (Step: 308) ---
+ Done.
+
+[DEBUG] --- Iteration 310 Start (Step: 309) ---
+ Done.
+
+[DEBUG] --- Iteration 311 Start (Step: 310) ---
+ Done.
+
+[DEBUG] --- Iteration 312 Start (Step: 311) ---
+ Done.
+
+[DEBUG] --- Iteration 313 Start (Step: 312) ---
+ Done.
+
+[DEBUG] --- Iteration 314 Start (Step: 313) ---
+ Done.
+
+[DEBUG] --- Iteration 315 Start (Step: 314) ---
+ Done.
+
+[DEBUG] --- Iteration 316 Start (Step: 315) ---
+ Done.
+
+[DEBUG] --- Iteration 317 Start (Step: 316) ---
+ Done.
+
+[DEBUG] --- Iteration 318 Start (Step: 317) ---
+ Done.
+
+[DEBUG] --- Iteration 319 Start (Step: 318) ---
+ Done.
+
+[DEBUG] --- Iteration 320 Start (Step: 319) ---
+ Done.
+
+[DEBUG] --- Iteration 321 Start (Step: 320) ---
+ Done.
+
+[DEBUG] --- Iteration 322 Start (Step: 321) ---
+ Done.
+
+[DEBUG] --- Iteration 323 Start (Step: 322) ---
+ Done.
+
+[DEBUG] --- Iteration 324 Start (Step: 323) ---
+ Done.
+
+[DEBUG] --- Iteration 325 Start (Step: 324) ---
+ Done.
+
+[DEBUG] --- Iteration 326 Start (Step: 325) ---
+ Done.
+
+[DEBUG] --- Iteration 327 Start (Step: 326) ---
+ Done.
+
+[DEBUG] --- Iteration 328 Start (Step: 327) ---
+ Done.
+
+[DEBUG] --- Iteration 329 Start (Step: 328) ---
+ Done.
+
+[DEBUG] --- Iteration 330 Start (Step: 329) ---
+ Done.
+
+[DEBUG] --- Iteration 331 Start (Step: 330) ---
+ Done.
+
+[DEBUG] --- Iteration 332 Start (Step: 331) ---
+ Done.
+
+[DEBUG] --- Iteration 333 Start (Step: 332) ---
+ Done.
+
+[DEBUG] --- Iteration 334 Start (Step: 333) ---
+ Done.
+
+[DEBUG] --- Iteration 335 Start (Step: 334) ---
+ Done.
+
+[DEBUG] --- Iteration 336 Start (Step: 335) ---
+ Done.
+
+[DEBUG] --- Iteration 337 Start (Step: 336) ---
+ Done.
+
+[DEBUG] --- Iteration 338 Start (Step: 337) ---
+ Done.
+
+[DEBUG] --- Iteration 339 Start (Step: 338) ---
+ Done.
+
+[DEBUG] --- Iteration 340 Start (Step: 339) ---
+ Done.
+
+[DEBUG] --- Iteration 341 Start (Step: 340) ---
+ Done.
+
+[DEBUG] --- Iteration 342 Start (Step: 341) ---
+ Done.
+
+[DEBUG] --- Iteration 343 Start (Step: 342) ---
+ Done.
+
+[DEBUG] --- Iteration 344 Start (Step: 343) ---
+ Done.
+
+[DEBUG] --- Iteration 345 Start (Step: 344) ---
+ Done.
+
+[DEBUG] --- Iteration 346 Start (Step: 345) ---
+ Done.
+
+[DEBUG] --- Iteration 347 Start (Step: 346) ---
+ Done.
+
+[DEBUG] --- Iteration 348 Start (Step: 347) ---
+ Done.
+
+[DEBUG] --- Iteration 349 Start (Step: 348) ---
+ Done.
+
+[DEBUG] --- Iteration 350 Start (Step: 349) ---
+ Done.
+
+[DEBUG] --- Iteration 351 Start (Step: 350) ---
+ Done.
+
+[DEBUG] --- Iteration 352 Start (Step: 351) ---
+ Done.
+
+[DEBUG] --- Iteration 353 Start (Step: 352) ---
+ Done.
+
+[DEBUG] --- Iteration 354 Start (Step: 353) ---
+ Done.
+
+[DEBUG] --- Iteration 355 Start (Step: 354) ---
+ Done.
+
+[DEBUG] --- Iteration 356 Start (Step: 355) ---
+ Done.
+
+[DEBUG] --- Iteration 357 Start (Step: 356) ---
+ Done.
+
+[DEBUG] --- Iteration 358 Start (Step: 357) ---
+ Done.
+
+[DEBUG] --- Iteration 359 Start (Step: 358) ---
+ Done.
+
+[DEBUG] --- Iteration 360 Start (Step: 359) ---
+ Done.
+
+[DEBUG] --- Iteration 361 Start (Step: 360) ---
+ Done.
+
+[DEBUG] --- Iteration 362 Start (Step: 361) ---
+ Done.
+
+[DEBUG] --- Iteration 363 Start (Step: 362) ---
+ Done.
+
+[DEBUG] --- Iteration 364 Start (Step: 363) ---
+ Done.
+
+[DEBUG] --- Iteration 365 Start (Step: 364) ---
+ Done.
+
+[DEBUG] --- Iteration 366 Start (Step: 365) ---
+ Done.
+
+[DEBUG] --- Iteration 367 Start (Step: 366) ---
+ Done.
+
+[DEBUG] --- Iteration 368 Start (Step: 367) ---
+ Done.
+
+[DEBUG] --- Iteration 369 Start (Step: 368) ---
+ Done.
+
+[DEBUG] --- Iteration 370 Start (Step: 369) ---
+ Done.
+
+[DEBUG] --- Iteration 371 Start (Step: 370) ---
+ Done.
+
+[DEBUG] --- Iteration 372 Start (Step: 371) ---
+ Done.
+
+[DEBUG] --- Iteration 373 Start (Step: 372) ---
+ Done.
+
+[DEBUG] --- Iteration 374 Start (Step: 373) ---
+ Done.
+
+[DEBUG] --- Iteration 375 Start (Step: 374) ---
+ Done.
+
+[DEBUG] --- Iteration 376 Start (Step: 375) ---
+ Done.
+
+[DEBUG] --- Iteration 377 Start (Step: 376) ---
+ Done.
+
+[DEBUG] --- Iteration 378 Start (Step: 377) ---
+ Done.
+
+[DEBUG] --- Iteration 379 Start (Step: 378) ---
+ Done.
+
+[DEBUG] --- Iteration 380 Start (Step: 379) ---
+ Done.
+
+[DEBUG] --- Iteration 381 Start (Step: 380) ---
+ Done.
+
+[DEBUG] --- Iteration 382 Start (Step: 381) ---
+ Done.
+
+[DEBUG] --- Iteration 383 Start (Step: 382) ---
+ Done.
+
+[DEBUG] --- Iteration 384 Start (Step: 383) ---
+ Done.
+
+[DEBUG] --- Iteration 385 Start (Step: 384) ---
+ Done.
+
+[DEBUG] --- Iteration 386 Start (Step: 385) ---
+ Done.
+
+[DEBUG] --- Iteration 387 Start (Step: 386) ---
+ Done.
+
+[DEBUG] --- Iteration 388 Start (Step: 387) ---
+ Done.
+
+[DEBUG] --- Iteration 389 Start (Step: 388) ---
+ Done.
+
+[DEBUG] --- Iteration 390 Start (Step: 389) ---
+ Done.
+
+[DEBUG] --- Iteration 391 Start (Step: 390) ---
+ Done.
+
+[DEBUG] --- Iteration 392 Start (Step: 391) ---
+ Done.
+
+[DEBUG] --- Iteration 393 Start (Step: 392) ---
+ Done.
+
+[DEBUG] --- Iteration 394 Start (Step: 393) ---
+ Done.
+
+[DEBUG] --- Iteration 395 Start (Step: 394) ---
+ Done.
+
+[DEBUG] --- Iteration 396 Start (Step: 395) ---
+ Done.
+
+[DEBUG] --- Iteration 397 Start (Step: 396) ---
+ Done.
+
+[DEBUG] --- Iteration 398 Start (Step: 397) ---
+ Done.
+
+[DEBUG] --- Iteration 399 Start (Step: 398) ---
+ Done.
+
+[DEBUG] --- Iteration 400 Start (Step: 399) ---
+ Done.
+
+[DEBUG] --- Iteration 401 Start (Step: 400) ---
+ Done.
+
+[DEBUG] --- Iteration 402 Start (Step: 401) ---
+ Done.
+
+[DEBUG] --- Iteration 403 Start (Step: 402) ---
+ Done.
+
+[DEBUG] --- Iteration 404 Start (Step: 403) ---
+ Done.
+
+[DEBUG] --- Iteration 405 Start (Step: 404) ---
+ Done.
+
+[DEBUG] --- Iteration 406 Start (Step: 405) ---
+ Done.
+
+[DEBUG] --- Iteration 407 Start (Step: 406) ---
+ Done.
+
+[DEBUG] --- Iteration 408 Start (Step: 407) ---
+ Done.
+
+[DEBUG] --- Iteration 409 Start (Step: 408) ---
+ Done.
+
+[DEBUG] --- Iteration 410 Start (Step: 409) ---
+ Done.
+
+[DEBUG] --- Iteration 411 Start (Step: 410) ---
+ Done.
+
+[DEBUG] --- Iteration 412 Start (Step: 411) ---
+ Done.
+
+[DEBUG] --- Iteration 413 Start (Step: 412) ---
+ Done.
+
+[DEBUG] --- Iteration 414 Start (Step: 413) ---
+ Done.
+
+[DEBUG] --- Iteration 415 Start (Step: 414) ---
+ Done.
+
+[DEBUG] --- Iteration 416 Start (Step: 415) ---
+ Done.
+
+[DEBUG] --- Iteration 417 Start (Step: 416) ---
+ Done.
+
+[DEBUG] --- Iteration 418 Start (Step: 417) ---
+ Done.
+
+[DEBUG] --- Iteration 419 Start (Step: 418) ---
+ Done.
+
+[DEBUG] --- Iteration 420 Start (Step: 419) ---
+ Done.
+
+[DEBUG] --- Iteration 421 Start (Step: 420) ---
+ Done.
+
+[DEBUG] --- Iteration 422 Start (Step: 421) ---
+ Done.
+
+[DEBUG] --- Iteration 423 Start (Step: 422) ---
+ Done.
+
+[DEBUG] --- Iteration 424 Start (Step: 423) ---
+ Done.
+
+[DEBUG] --- Iteration 425 Start (Step: 424) ---
+ Done.
+
+[DEBUG] --- Iteration 426 Start (Step: 425) ---
+ Done.
+
+[DEBUG] --- Iteration 427 Start (Step: 426) ---
+ Done.
+
+[DEBUG] --- Iteration 428 Start (Step: 427) ---
+ Done.
+
+[DEBUG] --- Iteration 429 Start (Step: 428) ---
+ Done.
+
+[DEBUG] --- Iteration 430 Start (Step: 429) ---
+ Done.
+
+[DEBUG] --- Iteration 431 Start (Step: 430) ---
+ Done.
+
+[DEBUG] --- Iteration 432 Start (Step: 431) ---
+ Done.
+
+[DEBUG] --- Iteration 433 Start (Step: 432) ---
+ Done.
+
+[DEBUG] --- Iteration 434 Start (Step: 433) ---
+ Done.
+
+[DEBUG] --- Iteration 435 Start (Step: 434) ---
+ Done.
+
+[DEBUG] --- Iteration 436 Start (Step: 435) ---
+ Done.
+
+[DEBUG] --- Iteration 437 Start (Step: 436) ---
+ Done.
+
+[DEBUG] --- Iteration 438 Start (Step: 437) ---
+ Done.
+
+[DEBUG] --- Iteration 439 Start (Step: 438) ---
+ Done.
+
+[DEBUG] --- Iteration 440 Start (Step: 439) ---
+ Done.
+
+[DEBUG] --- Iteration 441 Start (Step: 440) ---
+ Done.
+
+[DEBUG] --- Iteration 442 Start (Step: 441) ---
+ Done.
+
+[DEBUG] --- Iteration 443 Start (Step: 442) ---
+ Done.
+
+[DEBUG] --- Iteration 444 Start (Step: 443) ---
+ Done.
+
+[DEBUG] --- Iteration 445 Start (Step: 444) ---
+ Done.
+
+[DEBUG] --- Iteration 446 Start (Step: 445) ---
+ Done.
+
+[DEBUG] --- Iteration 447 Start (Step: 446) ---
+ Done.
+
+[DEBUG] --- Iteration 448 Start (Step: 447) ---
+ Done.
+
+[DEBUG] --- Iteration 449 Start (Step: 448) ---
+ Done.
+
+[DEBUG] --- Iteration 450 Start (Step: 449) ---
+ Done.
+
+[DEBUG] --- Iteration 451 Start (Step: 450) ---
+ Done.
+
+[DEBUG] --- Iteration 452 Start (Step: 451) ---
+ Done.
+
+[DEBUG] --- Iteration 453 Start (Step: 452) ---
+ Done.
+
+[DEBUG] --- Iteration 454 Start (Step: 453) ---
+ Done.
+
+[DEBUG] --- Iteration 455 Start (Step: 454) ---
+ Done.
+
+[DEBUG] --- Iteration 456 Start (Step: 455) ---
+ Done.
+
+[DEBUG] --- Iteration 457 Start (Step: 456) ---
+ Done.
+
+[DEBUG] --- Iteration 458 Start (Step: 457) ---
+ Done.
+
+[DEBUG] --- Iteration 459 Start (Step: 458) ---
+ Done.
+
+[DEBUG] --- Iteration 460 Start (Step: 459) ---
+ Done.
+
+[DEBUG] --- Iteration 461 Start (Step: 460) ---
+ Done.
+
+[DEBUG] --- Iteration 462 Start (Step: 461) ---
+ Done.
+
+[DEBUG] --- Iteration 463 Start (Step: 462) ---
+ Done.
+
+[DEBUG] --- Iteration 464 Start (Step: 463) ---
+ Done.
+
+[DEBUG] --- Iteration 465 Start (Step: 464) ---
+ Done.
+
+[DEBUG] --- Iteration 466 Start (Step: 465) ---
+ Done.
+
+[DEBUG] --- Iteration 467 Start (Step: 466) ---
+ Done.
+
+[DEBUG] --- Iteration 468 Start (Step: 467) ---
+ Done.
+
+[DEBUG] --- Iteration 469 Start (Step: 468) ---
+ Done.
+
+[DEBUG] --- Iteration 470 Start (Step: 469) ---
+ Done.
+
+[DEBUG] --- Iteration 471 Start (Step: 470) ---
+ Done.
+
+[DEBUG] --- Iteration 472 Start (Step: 471) ---
+ Done.
+
+[DEBUG] --- Iteration 473 Start (Step: 472) ---
+ Done.
+
+[DEBUG] --- Iteration 474 Start (Step: 473) ---
+ Done.
+
+[DEBUG] --- Iteration 475 Start (Step: 474) ---
+ Done.
+
+[DEBUG] --- Iteration 476 Start (Step: 475) ---
+ Done.
+
+[DEBUG] --- Iteration 477 Start (Step: 476) ---
+ Done.
+
+[DEBUG] --- Iteration 478 Start (Step: 477) ---
+ Done.
+
+[DEBUG] --- Iteration 479 Start (Step: 478) ---
+ Done.
+
+[DEBUG] --- Iteration 480 Start (Step: 479) ---
+ Done.
+
+[DEBUG] --- Iteration 481 Start (Step: 480) ---
+ Done.
+
+[DEBUG] --- Iteration 482 Start (Step: 481) ---
+ Done.
+
+[DEBUG] --- Iteration 483 Start (Step: 482) ---
+ Done.
+
+[DEBUG] --- Iteration 484 Start (Step: 483) ---
+ Done.
+
+[DEBUG] --- Iteration 485 Start (Step: 484) ---
+ Done.
+
+[DEBUG] --- Iteration 486 Start (Step: 485) ---
+ Done.
+
+[DEBUG] --- Iteration 487 Start (Step: 486) ---
+ Done.
+
+[DEBUG] --- Iteration 488 Start (Step: 487) ---
+ Done.
+
+[DEBUG] --- Iteration 489 Start (Step: 488) ---
+ Done.
+
+[DEBUG] --- Iteration 490 Start (Step: 489) ---
+ Done.
+
+[DEBUG] --- Iteration 491 Start (Step: 490) ---
+ Done.
+
+[DEBUG] --- Iteration 492 Start (Step: 491) ---
+ Done.
+
+[DEBUG] --- Iteration 493 Start (Step: 492) ---
+ Done.
+
+[DEBUG] --- Iteration 494 Start (Step: 493) ---
+ Done.
+
+[DEBUG] --- Iteration 495 Start (Step: 494) ---
+ Done.
+
+[DEBUG] --- Iteration 496 Start (Step: 495) ---
+ Done.
+
+[DEBUG] --- Iteration 497 Start (Step: 496) ---
+ Done.
+
+[DEBUG] --- Iteration 498 Start (Step: 497) ---
+ Done.
+
+[DEBUG] --- Iteration 499 Start (Step: 498) ---
+ Done.
+
+[DEBUG] --- Iteration 500 Start (Step: 499) ---
+ Done.
+
+[DEBUG] --- Iteration 501 Start (Step: 500) ---
+ Done.
+
+[DEBUG] --- Iteration 502 Start (Step: 501) ---
+ Done.
+
+[DEBUG] --- Iteration 503 Start (Step: 502) ---
+ Done.
+
+[DEBUG] --- Iteration 504 Start (Step: 503) ---
+ Done.
+
+[DEBUG] --- Iteration 505 Start (Step: 504) ---
+ Done.
+
+[DEBUG] --- Iteration 506 Start (Step: 505) ---
+ Done.
+
+[DEBUG] --- Iteration 507 Start (Step: 506) ---
+ Done.
+
+[DEBUG] --- Iteration 508 Start (Step: 507) ---
+ Done.
+
+[DEBUG] --- Iteration 509 Start (Step: 508) ---
+ Done.
+
+[DEBUG] --- Iteration 510 Start (Step: 509) ---
+ Done.
+
+[DEBUG] --- Iteration 511 Start (Step: 510) ---
+ Done.
+
+[DEBUG] --- Iteration 512 Start (Step: 511) ---
+ Done.
+
+[DEBUG] --- Iteration 513 Start (Step: 512) ---
+ Done.
+
+[DEBUG] --- Iteration 514 Start (Step: 513) ---
+ Done.
+
+[DEBUG] --- Iteration 515 Start (Step: 514) ---
+ Done.
+
+[DEBUG] --- Iteration 516 Start (Step: 515) ---
+ Done.
+
+[DEBUG] --- Iteration 517 Start (Step: 516) ---
+ Done.
+
+[DEBUG] --- Iteration 518 Start (Step: 517) ---
+ Done.
+
+[DEBUG] --- Iteration 519 Start (Step: 518) ---
+ Done.
+
+[DEBUG] --- Iteration 520 Start (Step: 519) ---
+ Done.
+
+[DEBUG] --- Iteration 521 Start (Step: 520) ---
+ Done.
+
+[DEBUG] --- Iteration 522 Start (Step: 521) ---
+ Done.
+
+[DEBUG] --- Iteration 523 Start (Step: 522) ---
+ Done.
+
+[DEBUG] --- Iteration 524 Start (Step: 523) ---
+ Done.
+
+[DEBUG] --- Iteration 525 Start (Step: 524) ---
+ Done.
+
+[DEBUG] --- Iteration 526 Start (Step: 525) ---
+ Done.
+[CHECKPOINT] Saving model at episode 5 (Iteration 526)...
+  [DEBUG] Starting evaluation and video saving...
+Warning: Evaluation failed: 'EnvParams' object has no attribute 'res_pos'
+Training complete. Results saved to results/JAX_DreamerV3/20260221-201302_dreamer_verify_test
+

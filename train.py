@@ -801,8 +801,6 @@ def main():
                         episode_returns += np.sum(rew_steps, axis=0)
                         episode_lengths += num_steps
                     
-                    t_buffer = time.time() - t1
-                    
                     global_step += num_envs * num_steps
 
                     if wandb_enabled and iteration_episodes:

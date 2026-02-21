@@ -350,3 +350,63 @@ class DreamerV3Agent(nnx.Module):
                              modulation_config=modulation_config)
         feat_dim = self.wm.deter_dim + self.wm.stoch_dim * self.wm.discrete
         self.ac = ActorCritic(feat_dim, act_dim, config, rngs=rngs)
+
+    def initial_state(self, batch_size: int = None):
+        """Returns initial RSSM state (and modulator state if enabled)."""
+        if batch_size is None:
+            rssm_h = self.wm.rssm.initial(1)
+        else:
+            rssm_h = self.wm.rssm.initial(batch_size)
+            
+        if self.wm.modulation_enabled:
+            mod_h = self.wm.modulator.initial_state(batch_size)
+            return (rssm_h, mod_h)
+        return rssm_h
+
+    def __call__(self, x: jnp.ndarray, h: Any, key: jax.Array = None):
+        """
+        Inference step for evaluation/rollouts.
+        Args:
+            x: Observation, shape (B, obs_dim)
+            h: Hidden state (RSSM state or (RSSM, Modulator) tuple)
+            key: Optional PRNG key for stochastic RSSM sampling
+        Returns:
+            (logits, value, h_new, mod_info)
+        """
+        if self.wm.modulation_enabled:
+            rssm_h, mod_h = h
+            mod_out, mod_h_new = self.wm.modulator.forward_obs(x, mod_h)
+            embed = self.wm.encoder.forward_with_modulation(x, mod_out, self.wm.modulation_type)
+            mod_info = mod_out
+        else:
+            rssm_h = h
+            embed = self.wm.encoder(x)
+            mod_h_new = None
+            mod_info = None
+
+        if key is None:
+            key = jax.random.PRNGKey(0)
+
+        # RSSM step needs prev_action. We use transitions stored in RSSM state.
+        # During eval_mode, is_first is 0.0 (resets handled by env loops).
+        is_first = jnp.zeros((x.shape[0],))
+        post, _ = self.wm.rssm.step(rssm_h, embed, rssm_h['prev_action'], is_first, key)
+        
+        feat = self.wm.get_feat(post)
+        logits = self.ac.actor(feat)
+        value_logits = self.ac.critic(feat)
+        value = from_twohot(value_logits)
+        
+        # In evaluation (inference), we should store the action we just took 
+        # so it's available for the next step.
+        action = jnp.argmax(logits, axis=-1)
+        action_onehot = jax.nn.one_hot(action, self.wm.rssm.action_dim)
+        post = post.copy()
+        post['prev_action'] = action_onehot
+
+        if self.wm.modulation_enabled:
+            h_new = (post, mod_h_new)
+        else:
+            h_new = post
+            
+        return logits, value, h_new, mod_info

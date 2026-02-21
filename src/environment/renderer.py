@@ -121,7 +121,12 @@ COLORS = {
     'danger': '#DC2626',
     'predator': '#111827',
     'rock': '#4B5563',
-    'neutral': '#0891B2'
+    'neutral': '#0891B2',
+    
+    # Damage Segments
+    'dmg_danger': '#EF4444',
+    'dmg_predator': '#111827',
+    'dmg_obstacle': '#6B7280'
 }
 
 def draw_dual_capsule_bar(ax, x, y, w, h, state_pct, obs_pct, color, label=None, state_val=None, obs_val=None, transform=None):
