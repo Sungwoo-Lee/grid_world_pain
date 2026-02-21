@@ -14,5 +14,5 @@ python train.py \
   --num-envs 2048 \
   --episodes 10000000 \
   --checkpoint-frequency 100000  \
-  --device cuda:1 \
+  --device cuda:0 \
   --tag "dreamer_v3_2048env"

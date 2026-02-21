@@ -1,7 +1,7 @@
 agent:
   algorithm: "DreamerV3"
   batch_size: 16
-  batch_length: 64
+  sequence_length: 64
   train_steps: 1
   model_lr: 1e-4
   actor_lr: 8e-5

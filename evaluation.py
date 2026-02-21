@@ -263,7 +263,7 @@ def main():
                 'actor_lr': config.get_mandatory('agent.actor_lr'),
                 'value_lr': config.get_mandatory('agent.value_lr'),
                 'batch_size': config.get_mandatory('agent.batch_size'),
-                'batch_length': config.get_mandatory('agent.batch_length'),
+                'sequence_length': config.get_mandatory('agent.sequence_length'),
             }
             trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=rngs)
             

@@ -277,8 +277,9 @@ def main():
         hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
         lr = args.lr or config.get_mandatory('agent.lr_actor')
     elif algorithm == "DreamerV3":
-        # Dreamer doesn't use a single sequence_length for rollout collection (usually 1 step)
-        num_steps = args.num_steps or 1 
+        # Dreamer needs temporal sequences for the RSSM: collect sequence_length steps per
+        # iteration so we can store in env-major order (each env's trajectory contiguous).
+        num_steps = args.num_steps or config.get_mandatory('agent.sequence_length') 
         # Dreamer has many hidden sizes; using rssm_deter_dim as a proxy for summary/logging
         hidden_size = args.hidden_size or config.get_mandatory('agent.rssm_deter_dim')
         lr = args.lr or config.get_mandatory('agent.actor_lr')
@@ -510,7 +511,7 @@ def main():
 
         buffer = ReplayBuffer(
             capacity=int(1e5), 
-            sequence_length=dreamer_config['batch_length'], 
+            sequence_length=dreamer_config['sequence_length'], 
             obs_dim=input_dim, 
             action_dim=action_dim
         )
@@ -748,20 +749,22 @@ def main():
                     env_state, dreamer_state, key, transitions = trainer.collect_sequence(
                         env_state, params, num_steps, collect_key, dreamer_state)
                     
-                    # Convert transitions to NumPy and add to buffer
-                    
-                    # Batch transfer to host (one transfer instead of multiple)
+                    # Convert transitions to NumPy and add to buffer.
+                    # Store in ENV-MAJOR order so that sequence_length consecutive slots
+                    # are one env's trajectory (required for RSSM temporal learning).
+                    # (T, B, ...) -> (B, T, ...) -> (B*T, ...)
                     transitions_np = jax.device_get(transitions)
-                    
-                    # Reshape for add_batch (T, B, ...) -> (T*B, ...)
-                    num_items = num_steps * num_envs
-                    
-                    obs_flat = transitions_np['obs'].reshape(num_items, -1)
-                    act_flat = transitions_np['action'].reshape(num_items, -1)
-                    rew_flat = transitions_np['reward'].reshape(num_items)
-                    done_flat = transitions_np['terminal'].reshape(num_items)
-                    is_first_flat = transitions_np['is_first'].astype(bool).reshape(num_items)
-                    
+                    T, B = num_steps, num_envs
+                    obs_flat = transitions_np['obs'].transpose(1, 0, 2).reshape(B * T, -1)
+                    act_flat = transitions_np['action'].transpose(1, 0, 2).reshape(B * T, -1)
+                    rew_flat = transitions_np['reward'].transpose(1, 0).reshape(B * T)
+                    done_flat = transitions_np['terminal'].transpose(1, 0).reshape(B * T)
+                    # is_first can be (T, B) or (T, B, 1); flatten to (B*T,)
+                    is_first_arr = transitions_np['is_first'].astype(bool)
+                    if is_first_arr.ndim == 3:
+                        is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
+                    else:
+                        is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
                     buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
                     
                     # Update statistics (Vectorized where possible)
@@ -822,7 +825,7 @@ def main():
     
                     metrics = {}
                     loss_msg = ""
-                    if buffer.size > max(dreamer_config['batch_size'] * 2, dreamer_config['batch_length']):
+                    if buffer.size > max(dreamer_config['batch_size'] * 2, dreamer_config['sequence_length']):
                         train_steps = dreamer_config.get('train_steps', 1)
                         for _ in range(train_steps):
                             batch_jax = buffer.sample(dreamer_config['batch_size'])

@@ -148,6 +148,37 @@ against the reference SheepRL implementation ([Eclectic-Sheep/sheeprl](https://g
 | **Batch sampling** | Python loop: `for _ in range(batch_size)` with `np.random.randint` | Vectorized sampling with `sample_tensors` | **SheepRL faster for large batches** |
 | **Data transfer** | `np.array(batch)` → JAX arrays (implicit) | `dtype=None, device=fabric.device, from_numpy=True` | Equivalent |
 
+#### 3.3.1 Replay Buffer: Temporal Sequence Bug and Fix (2026-02-21)
+
+**Issue — RSSM was not receiving true temporal sequences**
+
+The replay buffer and collection pipeline had a correctness bug that broke world model learning:
+
+- **Storage:** With `num_steps = 1` and many envs (e.g. 1024), we stored transitions in **time-major** order: one step from each env in sequence, i.e. `[env0_t, env1_t, …, env1023_t]`.
+- **Sampling:** We took 64 **consecutive** buffer indices. Those 64 positions are 64 **different envs** at (roughly) the same time step, not one env over 64 steps.
+- **Effect:** The RSSM was trained on “sequences” where step t and step t+1 came from different envs, so it was not learning a temporal world model.
+
+**Fix**
+
+1. **Collect `sequence_length` steps and store in env-major order** (`train.py`):
+   - Set `num_steps = config.get_mandatory('agent.sequence_length')` (e.g. 64) so each iteration collects (T, B) = (64, num_envs).
+   - Reshape to **env-major** before adding to the buffer: transpose (T, B, …) → (B, T, …), then flatten to (B×T, …). So the buffer layout is: env0_t0..t63, env1_t0..t63, …; every block of `sequence_length` consecutive slots is one env’s trajectory.
+2. **Sample only at block boundaries** (`dreamer_v3_trainer.py`):
+   - In `ReplayBuffer.sample()`, draw start indices only at **multiples of `sequence_length`**: `block_indices = np.random.randint(0, self.size // self.sequence_length, size=batch_size)` then `starts = block_indices * self.sequence_length`. Each sampled “sequence” is then one env’s 64-step trajectory.
+3. **`is_first` shape handling** (`train.py`):
+   - Transitions from `collect_sequence` use `is_first` with shape (T, B, 1). When flattening to env-major, handle both (T, B) and (T, B, 1) so the buffer receives a 1D `is_first` array of length B×T.
+
+With these changes, the RSSM receives proper sequential data: each training batch has 16 sequences, each of which is one env’s trajectory over 64 steps.
+
+#### 3.3.2 Config naming: sequence_length (2026-02-21)
+
+DreamerV3 was updated to use the same config name as Recurrent PPO for “steps per trajectory”:
+
+- **Renamed:** `agent.batch_length` → `agent.sequence_length` in DreamerV3 configs and code.
+- **Reason:** Recurrent PPO uses `agent.sequence_length` for rollout length; DreamerV3 uses it for the length of each sequence sampled from the replay buffer. Using one name in both algorithms keeps configs consistent.
+- **Where:** `configs/models/dreamer_v3.yaml`, `configs/models/neuromodulated_dreamer_v3.yaml`, `train.py`, and `evaluation.py`. The ReplayBuffer already used an internal `sequence_length`; it is now fed from `dreamer_config['sequence_length']`.
+- **Unchanged:** `batch_size` still means “number of sequences per training batch” (e.g. 16) in DreamerV3.
+
 ### 3.4 Data Collection
 
 | Aspect | Local | SheepRL | Speed Impact |
@@ -176,7 +207,7 @@ embedded observations as scan inputs instead of raw observations.
 The DreamerV3 training loop collects only `num_steps` (= `sequence_length` = 1 by default) environment steps
 per iteration, then immediately trains. This means:
 - Only 4 transitions per iteration (with 4 envs)
-- Training doesn't start until buffer reaches `batch_size * batch_length` (16 × 64 = 1024 transitions)
+- Training doesn't start until buffer reaches `batch_size * sequence_length` (16 × 64 = 1024 transitions)
 - ~256 iterations of pure collection before any training
 
 SheepRL collects 1 step per iteration but uses a **replay ratio** to determine how many gradient steps
@@ -288,6 +319,8 @@ This section tracks the step-by-step implementation of high-impact optimizations
 | **4** | Replay | Vectorize Replay Sampling | **4.8x** | ✅ Finished | 2026-02-21 |
 | **5** | Replay Ratio | Replay Ratio Support | **N/A** | ✅ Finished | 2026-02-21 |
 | **6** | Parity | Correctness & Stability | **N/A** | ✅ Finished | 2026-02-21 |
+| **7** | Replay Buffer | Temporal sequences for RSSM (env-major storage + block sampling) | **Correctness** | ✅ Finished | 2026-02-21 |
+| **8** | Config | Rename `batch_length` → `sequence_length` (DreamerV3, match Recurrent PPO) | **Parity** | ✅ Finished | 2026-02-21 |
 
 **Cumulative Speedup**: The training loop is now orders of magnitude faster, with collection time reduced from **~20s to ~34ms** for a standard sequence.
 

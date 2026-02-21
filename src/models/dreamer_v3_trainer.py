@@ -567,6 +567,10 @@ class ReplayBuffer:
     def add_batch(self, obs, actions, rewards, dones, is_firsts):
         """Vectorized addition of a batch of transitions.
         
+        Caller must pass data in ENV-MAJOR order: the first sequence_length
+        entries = env0's trajectory, next sequence_length = env1's, etc.
+        This ensures sample() returns temporal sequences for the RSSM.
+        
         obs: (num_items, obs_dim)
         actions: (num_items, act_dim)
         rewards: (num_items,)
@@ -595,15 +599,19 @@ class ReplayBuffer:
             self.ep_start_idx = (self.idx - (num_items - 1 - last_done_pos)) % self.capacity
 
     def sample(self, batch_size):
-        # Sample all start indices at once
-        # Ensure we don't pick indices that would go out of bounds before the buffer is full
+        # Sample sequences that are TEMPORAL (one env over time).
+        # Buffer is stored in env-major order: block of sequence_length consecutive
+        # slots = one env's trajectory. So we sample start indices that are multiples
+        # of sequence_length.
         if self.size <= self.sequence_length:
-            return None # Not enough data
-            
-        starts = np.random.randint(0, self.size - self.sequence_length, size=batch_size)
-        
-        # Create full sequence indices using broadcasting
-        # indices shape: (batch_size, sequence_length)
+            return None  # Not enough data
+        num_blocks = self.size // self.sequence_length
+        if num_blocks < 1:
+            return None
+        # Start at multiples of sequence_length so 64 consecutive = one trajectory
+        block_indices = np.random.randint(0, num_blocks, size=batch_size)
+        starts = block_indices * self.sequence_length
+
         seq_range = np.arange(self.sequence_length)
         indices = (starts[:, None] + seq_range[None, :]) % self.capacity
 
