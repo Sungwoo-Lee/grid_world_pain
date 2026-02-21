@@ -564,6 +564,36 @@ class ReplayBuffer:
         if done:
             self.ep_start_idx = self.idx
 
+    def add_batch(self, obs, actions, rewards, dones, is_firsts):
+        """Vectorized addition of a batch of transitions.
+        
+        obs: (num_items, obs_dim)
+        actions: (num_items, act_dim)
+        rewards: (num_items,)
+        dones: (num_items,)
+        is_firsts: (num_items,)
+        """
+        num_items = obs.shape[0]
+        
+        # Calculate indices with wrap-around
+        indices = (self.idx + np.arange(num_items)) % self.capacity
+        
+        self.obs[indices] = obs
+        self.actions[indices] = actions
+        self.rewards[indices] = rewards
+        self.dones[indices] = dones
+        self.is_first[indices] = is_firsts
+        
+        self.idx = (self.idx + num_items) % self.capacity
+        self.size = min(self.size + num_items, self.capacity)
+        
+        # Update ep_start_idx if any dones present (last done wins)
+        # This matches the serial logic of 'always updating ep_start_idx'
+        if np.any(dones):
+            done_indices = np.where(dones)[0]
+            last_done_pos = done_indices[-1]
+            self.ep_start_idx = (self.idx - (num_items - 1 - last_done_pos)) % self.capacity
+
     def sample(self, batch_size):
         # Sample all start indices at once
         # Ensure we don't pick indices that would go out of bounds before the buffer is full

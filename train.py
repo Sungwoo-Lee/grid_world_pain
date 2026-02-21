@@ -29,6 +29,7 @@ Usage:
 """
 import argparse
 import os
+import time
 
 # --- Pre-parse arguments for Device Selection ---
 # To properly set JAX_PLATFORMS, we must do this BEFORE importing jax.
@@ -748,34 +749,59 @@ def main():
                         env_state, params, num_steps, collect_key, dreamer_state)
                     
                     # Convert transitions to NumPy and add to buffer
-                    # Transitions is a Dict[str, jnp.ndarray] with shape (num_steps, num_envs, ...)
-                    obs_steps = np.array(transitions['obs'])
-                    act_steps = np.array(transitions['action'])
-                    rew_steps = np.array(transitions['reward'])
-                    done_steps = np.array(transitions['terminal'])
-                    first_steps = np.array(transitions['is_first'])
                     
-                    for t in range(num_steps):
-                        for i in range(num_envs):
-                            buffer.add(
-                                obs_steps[t, i],
-                                act_steps[t, i],
-                                rew_steps[t, i],
-                                done_steps[t, i],
-                                first_steps[t, i]
-                            )
-                            
-                            episode_returns[i] += rew_steps[t, i]
-                            episode_lengths[i] += 1
-                            
-                            if done_steps[t, i]:
-                                total_episodes_completed += 1
-                                ep_reward = float(episode_returns[i])
-                                ep_length = int(episode_lengths[i])
+                    # Batch transfer to host (one transfer instead of multiple)
+                    transitions_np = jax.device_get(transitions)
+                    
+                    # Reshape for add_batch (T, B, ...) -> (T*B, ...)
+                    num_items = num_steps * num_envs
+                    
+                    obs_flat = transitions_np['obs'].reshape(num_items, -1)
+                    act_flat = transitions_np['action'].reshape(num_items, -1)
+                    rew_flat = transitions_np['reward'].reshape(num_items)
+                    done_flat = transitions_np['terminal'].reshape(num_items)
+                    is_first_flat = transitions_np['is_first'].astype(bool).reshape(num_items)
+                    
+                    buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+                    
+                    # Update statistics (Vectorized where possible)
+                    rew_steps = transitions_np['reward'] # (T, B)
+                    done_steps = transitions_np['terminal'] # (T, B)
+                    
+                    # More vectorized stats handling
+                    done_indices = np.where(done_steps) # (t_idxs, env_idxs)
+                    
+                    if done_indices[0].size > 0:
+                        # Track episode returns/lengths
+                        for i in np.unique(done_indices[1]):
+                            d_idxs = done_indices[0][done_indices[1] == i]
+                            curr_start = 0
+                            for d_idx in d_idxs:
+                                ep_reward = float(episode_returns[i] + np.sum(rew_steps[curr_start:d_idx+1, i]))
+                                ep_length = int(episode_lengths[i] + (d_idx + 1 - curr_start))
                                 ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
                                 iteration_episodes.append({'r': ep_reward, 'l': ep_length})
+                                total_episodes_completed += 1
                                 episode_returns[i] = 0
                                 episode_lengths[i] = 0
+                                curr_start = d_idx + 1
+                            
+                            # Add leftover
+                            if curr_start < num_steps:
+                                episode_returns[i] += np.sum(rew_steps[curr_start:, i])
+                                episode_lengths[i] += (num_steps - curr_start)
+                        
+                        # Environments with NO dones in this batch
+                        no_done_mask = np.ones(num_envs, dtype=bool)
+                        no_done_mask[done_indices[1]] = False
+                        episode_returns[no_done_mask] += np.sum(rew_steps[:, no_done_mask], axis=0)
+                        episode_lengths[no_done_mask] += num_steps
+                    else:
+                        # No episodes finished at all
+                        episode_returns += np.sum(rew_steps, axis=0)
+                        episode_lengths += num_steps
+                    
+                    t_buffer = time.time() - t1
                     
                     global_step += num_envs * num_steps
 
@@ -799,7 +825,6 @@ def main():
                     metrics = {}
                     loss_msg = ""
                     if buffer.size > max(dreamer_config['batch_size'] * 2, dreamer_config['batch_length']):
-                        if args.debug: print(f"  [DEBUG] DreamerV3 Training Update...", end="", flush=True)
                         train_steps = dreamer_config.get('train_steps', 1)
                         for _ in range(train_steps):
                             batch_jax = buffer.sample(dreamer_config['batch_size'])

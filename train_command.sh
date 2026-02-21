@@ -11,5 +11,5 @@ python train.py \
   --num-envs 128 \
   --episodes 10000000 \
   --checkpoint-frequency 1000000  \
-  --device cuda:1 \
-  --tag "dreamer_v3_128env"
+  --device cuda:0 \
+  --tag "dreamer_v3_128env_v2"
