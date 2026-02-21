@@ -808,14 +808,20 @@ def main():
                         loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
                     
                     if wandb_enabled and iteration % 10 == 0:
-                        wandb_logs = {"timesteps": global_step, "iteration": iteration, **metrics}
-                        if dreamer_mod_config is not None and metrics:
-                            for mk in ['mod_gamma_mean', 'mod_gamma_std',
-                                        'mod_memory_mean', 'mod_memory_std',
-                                        'mod_z_reward_mean',
-                                        'mod_beta_mean', 'mod_beta_std']:
-                                if mk in metrics:
-                                    wandb_logs[f"modulator/{mk}"] = float(metrics[mk])
+                        wandb_logs = {"timesteps": global_step, "iteration": iteration}
+                        for mk, mv in metrics.items():
+                            if mk.startswith('loss_actor') or mk.startswith('loss_critic') or \
+                               mk.startswith('mean_') or mk.startswith('entropy'):
+                                wandb_logs[f"Behavior/{mk}"] = float(mv)
+                            elif mk.startswith('loss_model') or mk.startswith('loss_recon') or \
+                                 mk.startswith('loss_kl') or mk.startswith('loss_rew') or \
+                                 mk.startswith('loss_cont') or mk.startswith('loss_dyn') or \
+                                 mk.startswith('loss_rep'):
+                                wandb_logs[f"WorldModel/{mk}"] = float(mv)
+                            elif mk.startswith('mod_'):
+                                wandb_logs[f"Modulator/{mk}"] = float(mv)
+                            else:
+                                wandb_logs[mk] = float(mv)
                         wandb.log(wandb_logs)
                     
                     postfix = {

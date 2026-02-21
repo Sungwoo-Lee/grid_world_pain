@@ -230,6 +230,8 @@ class DreamerTrainer(nnx.Module):
                 'loss_recon': loss_recon,
                 'loss_rew': loss_rew,
                 'loss_cont': loss_cont,
+                'loss_dyn_kl': jnp.mean(dyn_kl),
+                'loss_rep_kl': jnp.mean(rep_kl),
                 'loss_kl': loss_kl
             }
 
@@ -365,8 +367,13 @@ class DreamerTrainer(nnx.Module):
             metrics = {
                 'loss_critic': loss_critic,
                 'loss_actor': loss_actor,
+                'loss_actor_policy': jnp.mean(-log_probs * advantage * discount_weights),
+                'loss_actor_entropy': jnp.mean(-ENTROPY_SCALE * entropy * discount_weights),
                 'mean_return': jnp.mean(lambda_returns),
-                'mean_advantage': jnp.mean(advantage)
+                'mean_norm_return': jnp.mean(norm_returns),
+                'mean_value': jnp.mean(baseline),
+                'mean_advantage': jnp.mean(advantage),
+                'mean_entropy': jnp.mean(entropy)
             }
             return (loss_actor + loss_critic), (metrics, lambda_returns)
 
