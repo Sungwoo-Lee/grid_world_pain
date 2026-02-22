@@ -40,3 +40,8 @@ agent:
   
   # actor_fc_layers: [1024, 1024, 1024, 1024, 1024]
   # critic_fc_layers: [1024, 1024, 1024, 1024, 1024]
+
+  # Neuromodulation: DISABLED
+  # For neuromodulated variant, use: configs/models/neuromodulated_dreamer_v3.yaml
+  modulation:
+    type: null

@@ -15,3 +15,4 @@ agent:
   recurrent_layers: [128]
   hidden_size: 128
   rnn_type: "LSTM"
+  num_steps: 1

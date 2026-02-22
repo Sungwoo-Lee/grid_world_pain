@@ -1,0 +1,3 @@
+Use conda grid_world_pain environment
+Do not use safe default, just raise error.
+Use debug option for debugging train and evaluation.

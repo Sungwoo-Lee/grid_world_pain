@@ -11,3 +11,4 @@ agent:
   frame_stack: 4
   fc_layers: [128,128]
   hidden_size: 128
+  num_steps: 1
