@@ -4,6 +4,7 @@
 
 | Error | Solution |
 |-------|----------|
+| NAS I/O Error | See [Server & NAS Setup](SERVERS_AND_NAS.md) |
 | ModuleNotFoundError | Use `python scripts/run.py [script].py` |
 | Authentication failed | Browser must be visible for setup |
 | Browser crash | `python scripts/run.py cleanup_manager.py --preserve-library` |
