@@ -130,6 +130,10 @@ class AuthManager:
 
                 print(f"  ✅ Login successful!")
 
+                # Wait for session cookies to be fully synchronized
+                print("  ⏳ Synchronizing session state...")
+                page.wait_for_timeout(5000)
+
                 # Save authentication state
                 self._save_browser_state(context)
                 self._save_auth_info()
