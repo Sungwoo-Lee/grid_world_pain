@@ -16,7 +16,7 @@ from src.environment.renderer import render_jax_state, save_jax_video
 
 def main():
     # 1. Load default config
-    config_path = "configs/environment/environment.yaml"
+    config_path = "configs/environment/default.yaml"
     if not os.path.exists(config_path):
         print(f"Error: Config not found at {config_path}")
         return
@@ -35,24 +35,24 @@ def main():
     
     def get_sensory_viz(obs_vec):
         ptr = 0
-        chem_end = ptr + breakdown['Chemical']
-        chem_vec = obs_vec[ptr:chem_end]
-        ptr = chem_end
+        olf_end = ptr + breakdown.get('Olfaction', 0)
+        olf_vec = obs_vec[ptr:olf_end]
+        ptr = olf_end
         
-        noc_end = ptr + breakdown['Extero Nociception']
-        noc_val = float(obs_vec[ptr]) if breakdown['Extero Nociception'] > 0 else 0.0
+        noc_end = ptr + breakdown.get('Extero Nociception', 0)
+        noc_val = float(obs_vec[ptr]) if breakdown.get('Extero Nociception', 0) > 0 else 0.0
         ptr = noc_end
         
-        coll_end = ptr + breakdown['Collision']
+        coll_end = ptr + breakdown.get('Collision', 0)
         coll_vec = obs_vec[ptr:coll_end]
         ptr = coll_end
         
-        loc_end = ptr + breakdown['Location']
+        loc_end = ptr + breakdown.get('Location', 0)
         loc_vec = obs_vec[ptr:loc_end]
         ptr = loc_end
         
         viz = [
-            {'name': 'Olfactory', 'vector': chem_vec, 'type': 'spectrum'},
+            {'name': 'Olfactory', 'vector': olf_vec, 'type': 'spectrum'},
             {'name': 'Extero Nociception', 'intensity': noc_val, 'color': '#c0392b', 'type': 'intensity'},
             {'name': 'Collision', 'vector': coll_vec, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1, 'side_by_side': True},
             {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'}
@@ -60,7 +60,7 @@ def main():
         
         if 'Visual' in breakdown:
             vis_vec = obs_vec[ptr:ptr + breakdown['Visual']]
-            viz.insert(3, {'name': 'Visual (One-Hot)', 'vector': vis_vec, 'type': 'diamond', 'range': params.visual_sensor_range, 'num_features': 7, 'side_by_side': True})
+            viz.insert(3, {'name': 'Visual', 'vector': vis_vec, 'type': 'visual_grid', 'num_features': 8, 'range': params.visual_sensor_range})
         
         return viz
 

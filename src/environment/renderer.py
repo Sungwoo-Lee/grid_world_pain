@@ -140,7 +140,7 @@ def draw_dual_capsule_bar(ax, x, y, w, h, state_pct, obs_pct, color, label=None,
     
     # State (Reality) - Thicker, slightly translucent base
     if state_pct > 0:
-        val_w = max(h, w * state_pct)
+        val_w = max(h, w * min(1.0, state_pct))
         st_rect = matplotlib.patches.FancyBboxPatch(
             (x, y), val_w, h, boxstyle=f"round,pad=0,rounding_size={h/2}", 
             facecolor=color, edgecolor='none', alpha=0.3, transform=transform, zorder=1
@@ -149,7 +149,7 @@ def draw_dual_capsule_bar(ax, x, y, w, h, state_pct, obs_pct, color, label=None,
         
     # Observation (Perception) - Thinner interior bar or Marker
     if obs_pct > 0:
-        val_w = max(h*0.6, w * obs_pct)
+        val_w = max(h*0.6, w * min(1.0, obs_pct))
         obs_rect = matplotlib.patches.FancyBboxPatch(
             (x, y + h*0.2), val_w, h*0.6, boxstyle=f"round,pad=0,rounding_size={h*0.3}", 
             facecolor=color, edgecolor='none', transform=transform, zorder=2
@@ -605,14 +605,20 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
             elif s_data['type'] == 'spectrum':
                 obs_vec = np.array(s_data['vector'])
                 true_vec = np.array(s_data.get('true_vector', obs_vec))
+                
+                # Normalization fix: ensure max height doesn't exceed frame
+                # If any value > 1.0, scale the entire visualization proportionally
+                max_val = max(np.max(obs_vec), np.max(true_vec))
+                scale = 1.0 if max_val <= 1.0 else (1.0 / max_val)
+                
                 n = len(obs_vec)
                 sw = pw / n
                 for i in range(n):
                     vx = px + i * sw
                     # Show True (Ghosted)
-                    ax_right.add_patch(plt.Rectangle((vx, py), sw*0.8, ph*true_vec[i], color=COLORS['action'], alpha=0.2, transform=ax_right.transAxes))
+                    ax_right.add_patch(plt.Rectangle((vx, py), sw*0.8, ph*true_vec[i]*scale, color=COLORS['action'], alpha=0.2, transform=ax_right.transAxes))
                     # Show Observed (Solid)
-                    ax_right.add_patch(plt.Rectangle((vx, py), sw*0.8, ph*obs_vec[i], color=COLORS['action'], alpha=0.9, transform=ax_right.transAxes))
+                    ax_right.add_patch(plt.Rectangle((vx, py), sw*0.8, ph*obs_vec[i]*scale, color=COLORS['action'], alpha=0.9, transform=ax_right.transAxes))
             elif s_data['type'] == 'diamond' or s_data['type'] == 'visual_grid':
                 # V7 Categorical Spectrum Upgrade (Dual View Distribution)
                 r = int(s_data.get('range', 1))

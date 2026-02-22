@@ -1,3 +1,19 @@
-Use conda grid_world_pain environment
-Do not use safe default, just raise error.
-Use debug option for debugging train and evaluation.
+# Grid World Pain - Project Instructions
+
+## Environment Setup
+- **Python Interpreter**: Always use the absolute path to the conda environment:
+  `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python`
+- **JAX/XLA**: The code relies on JAX and Flax NNX. Ensure the conda environment is active.
+
+## Configuration Protocol (CRITICAL)
+- **No Safe Defaults**: Never use fallback values for critical parameters in `train.py` or `evaluation.py`.
+- **Mandatory Retrieval**: Use `config.get_mandatory('key')` for all agent parameters (e.g., `num_steps`, `hidden_size`, `lr`).
+- **Missing Keys**: If a key is missing from the YAML config, the script MUST raise a `ValueError`. Do not revert to hardcoded defaults.
+
+## Training & Evaluation
+- **Debugging**: Use the `--debug` flag when troubleshooting training initialization or evaluation passes.
+- **WandB**: use debugging as the job type
+
+## Code Standards
+- **JAX States**: When modifying environment logic, ensure compatibility with JAX state management and `vmap` operations.
+- **Config Management**: Updates to algorithms must be accompanied by corresponding updates to their YAML configurations in `configs/models/`.

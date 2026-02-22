@@ -6,7 +6,6 @@
 *.mp4
 *.egg-info/
 *.npy
-*.png
 *.csv
 *.pth
 *.log

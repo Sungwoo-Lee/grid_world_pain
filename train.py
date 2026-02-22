@@ -536,8 +536,8 @@ def main():
         target_update_freq = config.get_mandatory('agent.target_update_freq')
         batch_size = config.get_mandatory('agent.batch_size')
         
-        # Reuse num_steps as "collection steps per iteration"
-        num_steps = args.num_steps or 1 # Standard DQN explores 1 step per env per iter
+        # Use num_steps as "collection steps per iteration"
+        num_steps = args.num_steps or config.get_mandatory('agent.num_steps')
 
     elif algorithm == "DRQN":
         key, init_key = jax.random.split(key)
@@ -567,7 +567,7 @@ def main():
         h_state = model.initial_state(num_envs)
         
         # Reuse num_steps as "collection steps per iteration"
-        num_steps = args.num_steps or 1
+        num_steps = args.num_steps or config.get_mandatory('agent.num_steps')
 
     elif algorithm == "PPO":
         key, init_key = jax.random.split(key)

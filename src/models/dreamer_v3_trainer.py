@@ -478,6 +478,10 @@ class DreamerTrainer(nnx.Module):
                     (B, self.agent.ac.actor.net.layers[-1].out_features))
             # Initial step is always 'first'
             dreamer_state['is_first'] = jnp.ones((B, 1))
+            
+            # Initial modulator state if enabled
+            if self.agent.wm.modulation_enabled:
+                dreamer_state['mod_h'] = self.agent.wm.modulator.initial_state(B)
         
         def scan_fn(carry, _):
             state, d_state, current_key = carry
