@@ -98,7 +98,7 @@ class PPOConfig(NamedTuple):
     return_mode: str = "MC"
 
 # Defaults
-DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "configs", "environment", "environment.yaml")
+DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "configs", "environment", "default.yaml")
 
 def main():
     parser = argparse.ArgumentParser(description="Train JAX RL Agents")
@@ -186,7 +186,7 @@ def main():
         config.merge(logger_config)
 
     # Merge Visualization Defaults
-    vis_config_path = os.path.join(os.path.dirname(__file__), "configs", "visualization", "visualization.yaml")
+    vis_config_path = os.path.join(os.path.dirname(__file__), "configs", "visualization", "default.yaml")
     if os.path.exists(vis_config_path):
         if not args.quiet:
             print(f"Loading visualization config from {vis_config_path}")

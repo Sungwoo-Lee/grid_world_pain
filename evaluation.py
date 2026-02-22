@@ -139,7 +139,7 @@ def main():
         eval_defaults = Config.load_yaml(eval_default_path)
         config.merge(eval_defaults)
     # Merge visualization config (icons, layout) so evaluation video matches training/tuningEnv
-    vis_config_path = "configs/visualization/visualization.yaml"
+    vis_config_path = "configs/visualization/default.yaml"
     if os.path.exists(vis_config_path):
         vis_defaults = Config.load_yaml(vis_config_path)
         config.merge(vis_defaults)

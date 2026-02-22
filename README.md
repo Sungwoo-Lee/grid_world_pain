@@ -35,9 +35,9 @@
 ## 📂 Project Structure
 
 ```text
-grid_world_pain/
 ├── configs/                    # ⚙️ Configuration YAMLs
-│   ├── ablation/               # 🧪 Homeostatic & Survival Branches
+│   ├── experiment/             # 🧪 Homeostatic & Survival Branches
+│   │   ├── ablation/           # 🧪 Ablation Study Configs
 │   ├── environment/            # 🌍 Environment settings
 │   ├── models/                 # 🤖 Agent hyperparameters
 ├── src/                        # 🐍 Source Code
@@ -104,7 +104,7 @@ Train high-performance JAX agents with massive parallelization.
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
     --agent_config configs/models/recurrent_ppo.yaml \
-    --config configs/ablation/homeostatic/08_homeostatic.yaml \
+    --config configs/experiment/ablation/homeostatic/08_location.yaml \
     --num-envs 128
 ```
 

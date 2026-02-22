@@ -51,7 +51,7 @@ def main():
         config_queue.append(args.config)
     else:
         # Default: Full ablation sweep
-        base_dir = "configs/ablation"
+        base_dir = "configs/experiment/ablation"
         for branch in ["survival", "homeostatic"]:
             branch_dir = os.path.join(base_dir, branch)
             if os.path.isdir(branch_dir):

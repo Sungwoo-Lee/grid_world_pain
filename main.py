@@ -7,7 +7,7 @@ Purpose:
 - Uses centralized evaluation logic for video rendering.
 
 Usage:
-    python main.py --config configs/environment/environment.yaml --episodes 3
+    python main.py --config configs/environment/default.yaml --episodes 3
     python main.py --no-render --num-envs 256  # High-speed throughput test
 """
 import os
