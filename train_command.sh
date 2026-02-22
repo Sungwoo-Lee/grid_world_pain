@@ -14,5 +14,5 @@ python train.py \
   --num-envs 128 \
   --episodes 10000000 \
   --checkpoint-frequency 1000000  \
-  --device cuda:0 \
-  --tag "rppo_128env_recordStats_mbcost1"
+  --device cuda:1 \
+  --tag "rppo_128env_bush_hiding_NoLoc"

@@ -10,7 +10,8 @@ environment:
   random_start_pos: false 
 
   resources:
-    - name: "food" # Top Left
+    # --- GRASS QUADRANTS (High Risk, High Reward) ---
+    - name: "Food Grass TL"
       type: "food"
       count: 3
       spawn_area: [[1, 1], [10, 10]]
@@ -20,9 +21,40 @@ environment:
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
 
-    - name: "food" # Top Right
+    - name: "Food Grass BR"
       type: "food"
       count: 3
+      spawn_area: [[11, 11], [20, 20]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 35
+      regeneration_delay: 100
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+
+    - name: "Danger Grass TL"
+      type: "danger"
+      count: 8
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: [5.0, 15.0]
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+    - name: "Danger Grass BR"
+      type: "danger"
+      count: 8
+      spawn_area: [[11, 11], [20, 20]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: [5.0, 15.0]
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+    # --- SAND QUADRANTS (Low Risk, Sparse Resources) ---
+    - name: "Food Sand TR"
+      type: "food"
+      count: 1
       spawn_area: [[1, 11], [10, 20]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 20
@@ -30,48 +62,18 @@ environment:
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
 
-    - name: "food" # Bottom Right
+    - name: "Food Sand BL"
       type: "food"
-      count: 3
-      spawn_area: [[11, 11], [20, 20]]
-      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      max_consumption: 35
-      regeneration_delay: 100
-      damage: [0.0, 0.0]
-      nociception_intensity: 0.0
-
-    - name: "food" # Bottom Left
-      type: "food"
-      count: 3
+      count: 1
       spawn_area: [[11, 1], [20, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 20
       regeneration_delay: 250
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
-
-    - name: "danger" # Top Left
-      type: "danger"
-      count: 8
-      spawn_area: [[1, 1], [10, 10]]
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-      max_consumption: -1
-      damage: [5.0, 15.0]
-      regeneration_delay: 20
-      nociception_intensity: 0.9
-
-    - name: "danger" # Bottom Right
-      type: "danger"
-      count: 8
-      spawn_area: [[11, 11], [20, 20]]
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-      max_consumption: -1
-      damage: [5.0, 15.0]
-      regeneration_delay: 20
-      nociception_intensity: 0.9
       
   neutral_animals:
-    - name: "rabbit"
+    - name: "Decoy Rabbit"
       count: 5
       property: [0.0, 0.3, 0.0, 0.0, 0.0]
       move_interval: 1
@@ -81,7 +83,8 @@ environment:
 
   predator_enabled: true
   predators:
-    - name: "predator" # Top Left
+    # Grass Predators (Active and Territorial)
+    - name: "Forest Predator TL"
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 1
@@ -96,37 +99,7 @@ environment:
       attack_delay: 3
       lose_interest_multiplier: 2.0
 
-    - name: "predator" # Top Right
-      count: 1
-      property: [0.0, 1.0, 0.0, 0.0, 0.0]
-      move_interval: 1
-      damage: [5.0, 15.0]
-      nociception_intensity: 0.9
-      spawn_area: [[1, 11], [9, 19]]
-      patrol_area: [[1, 11], [9, 19]]
-      detection_range: 5
-      max_stamina: 30
-      stamina_recovery_rate: 1
-      hunt_stamina_threshold: 0.5
-      attack_delay: 3
-      lose_interest_multiplier: 2.0
-
-    - name: "predator" # Bottom Left
-      count: 1
-      property: [0.0, 1.0, 0.0, 0.0, 0.0]
-      move_interval: 1
-      damage: [5.0, 15.0]
-      nociception_intensity: 0.9
-      spawn_area: [[11, 1], [19, 9]]
-      patrol_area: [[11, 1], [19, 9]]
-      detection_range: 5
-      max_stamina: 30
-      stamina_recovery_rate: 1
-      hunt_stamina_threshold: 0.5
-      attack_delay: 3
-      lose_interest_multiplier: 2.0
-
-    - name: "predator" # Bottom Right
+    - name: "Forest Predator BR"
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 1
@@ -143,35 +116,25 @@ environment:
 
   location_areas:
     - type: "grass"
-      area: [[1, 1], [20, 20]]
+      area: [[1, 1], [10, 10]]
+    - type: "grass"
+      area: [[11, 11], [20, 20]]
     - type: "sand"
-      area: [[0, 0], [0, 0]]
+      area: [[1, 11], [10, 20]]
+    - type: "sand"
+      area: [[11, 1], [20, 10]]
 
   obstacles:
-    - name: "rock" # Top Left
-      count: 5
+    - name: "rock"
+      count: 10
       area: [[1, 11], [10, 20]]
       blocking: false
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-    - name: "rock" # Top Right
-      count: 5
-      area: [[1, 11], [10, 20]]
-      blocking: false
-      damage: [0.1, 0.5]
-      nociception_intensity: 0.3
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-    - name: "rock" # Bottom Left
-      count: 5
+    - name: "rock"
+      count: 10
       area: [[11, 1], [20, 10]]
-      blocking: false
-      damage: [0.1, 0.5]
-      nociception_intensity: 0.3
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-    - name: "rock" # Bottom Right
-      count: 5
-      area: [[11, 11], [20, 20]]
       blocking: false
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
@@ -190,32 +153,16 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.1
       properties: [0.0, 0.0, 0.0, 0.0, 1.0]
-    - name: "bush" # Top Left
-      count: 10
+    - name: "bush"
+      count: 5
       area: [[1, 1], [10, 10]]
       blocking: false
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
-    - name: "bush" # Top Right
-      count: 10
-      area: [[1, 11], [10, 20]]
-      blocking: false
-      damage: [0.0, 0.0]
-      nociception_intensity: 0.0
-      hides_agent: true
-      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
-    - name: "bush" # Bottom Left
-      count: 10
-      area: [[11, 1], [20, 10]]
-      blocking: false
-      damage: [0.0, 0.0]
-      nociception_intensity: 0.0
-      hides_agent: true
-      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
-    - name: "bush" # Bottom Right
-      count: 10
+    - name: "bush"
+      count: 5
       area: [[11, 11], [20, 20]]
       blocking: false
       damage: [0.0, 0.0]
@@ -225,38 +172,35 @@ environment:
 
 
 body:
-  # Body state
+  max_satiation: 100
+  max_nutrition: 100
+  max_injury: 30
+  # Nutrition: new_N = clip(prev_N - metabolic_cost + [gain - cost if ate], 0, max_N)
+  food_nutrition_gain: 3
+  eating_nutrition_cost: 1.0
+  eating_reward_penalty: 0.1
+  # Satiation: S = MaxS * (N / MaxN) ^ scaling_factor
+  nutrition_to_satiation_scaling_factor: 1.0
+  satiation_setpoint: 100
+  start_satiation: 100
+  start_nutrition: 100
+  metabolic_cost: 0.5
+  # Recovery: Recovery = base * (1 + accel)^(rest_streak - 1)
+  recovery_base_rate: 0.1
+  recovery_accel_rate: 0.5
+  # Injury: Damage is spread over duration steps (applied_dam = total_dam / duration)
+  injury_smoothing_duration: 3
+  death_penalty: 100
+  overeating_death: false
+  # Reward: if use_homeostatic_reward, Reward = prev_drive - curr_drive
+  # Drive (Euclidean): sqrt((satiation - setpoint)^2 + injury^2)
+  use_homeostatic_reward: true
   with_satiation: true
   with_nutrition: true
   with_injury: true
   random_start_satiation: false
   random_start_nutrition: false
   random_start_injury: false
-  # Body state limits
-  max_satiation: 100
-  max_nutrition: 100
-  max_injury: 30
-  # Nutrition: new_N = clip(prev_N - metabolic_cost + [gain - cost if ate], 0, max_N)
-  metabolic_cost: 0.5
-  food_nutrition_gain: 3
-  eating_nutrition_cost: 1.0
-  eating_reward_penalty: 0.0
-  # Satiation: S = MaxS * (N / MaxN) ^ scaling_factor
-  nutrition_to_satiation_scaling_factor: 1.0
-  satiation_setpoint: 100
-  start_satiation: 100
-  start_nutrition: 100
-  # Recovery: Recovery = base * (1 + accel)^(rest_streak - 1)
-  recovery_base_rate: 0.1
-  recovery_accel_rate: 0.5
-  # Injury: Damage is spread over duration steps (applied_dam = total_dam / duration)
-  injury_smoothing_duration: 3
-  # Reward: if use_homeostatic_reward, Reward = prev_drive - curr_drive
-  # Drive (Euclidean): sqrt((satiation - setpoint)^2 + injury^2)
-  use_homeostatic_reward: true
-  death_penalty: 100
-  overeating_death: false
-
 
 sensory:
   using_sensory: true
@@ -268,7 +212,7 @@ sensory:
   #Collision sensor
   collision_sensor_range: 1
   #Location sensor
-  location_sensor: false 
+  location_sensor: false
   #Nociception sensor
   nociception_enabled: true
   nociception_size: 1
