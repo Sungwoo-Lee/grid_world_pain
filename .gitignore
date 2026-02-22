@@ -22,5 +22,9 @@ logs/
 .wandb_api_key
 legacy/
 *legacy*
-skills/
-command.sh
+
+# Skills
+# Ignore local data but track the skill scripts
+skills/notebooklm/data/
+skills/notebooklm/.venv/
+!skills/
