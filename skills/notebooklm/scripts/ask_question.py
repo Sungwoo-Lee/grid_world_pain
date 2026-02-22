@@ -75,9 +75,10 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
         page = context.new_page()
         print("  🌐 Opening notebook...")
         page.goto(notebook_url, wait_until="domcontentloaded")
-
-        # Wait for NotebookLM
-        page.wait_for_url(re.compile(r"^https://notebooklm\.google\.com/"), timeout=10000)
+        
+        # Verbose state check
+        print(f"  📄 Page Title: {page.title()}")
+        print(f"  🔗 Current URL: {page.url}")
 
         # Wait for query input (MCP approach)
         print("  ⏳ Waiting for query input...")
@@ -87,7 +88,7 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
             try:
                 query_element = page.wait_for_selector(
                     selector,
-                    timeout=10000,
+                    timeout=60000,
                     state="visible"  # Only check visibility, not disabled!
                 )
                 if query_element:
@@ -120,7 +121,7 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
         answer = None
         stable_count = 0
         last_text = None
-        deadline = time.time() + 120  # 2 minutes timeout
+        deadline = time.time() + 300  # 5 minutes timeout
 
         while time.time() < deadline:
             # Check if NotebookLM is still thinking (most reliable indicator)
@@ -168,6 +169,13 @@ def ask_notebooklm(question: str, notebook_url: str, headless: bool = True) -> s
 
     except Exception as e:
         print(f"  ❌ Error: {e}")
+        try:
+            if 'page' in locals() and page:
+                error_img = DATA_DIR / f"error_{int(time.time())}.png"
+                page.screenshot(path=str(error_img))
+                print(f"  📸 Screenshot saved to: {error_img}")
+        except:
+            pass
         import traceback
         traceback.print_exc()
         return None
