@@ -184,7 +184,7 @@ body:
   satiation_setpoint: 100
   start_satiation: 100
   start_nutrition: 100
-  metabolic_cost: 1.0
+  metabolic_cost: 0.5
   # Recovery: Recovery = base * (1 + accel)^(rest_streak - 1)
   recovery_base_rate: 0.1
   recovery_accel_rate: 0.5

@@ -301,7 +301,7 @@ def main():
     # 2. Setup Results Directory
     if args.debug: print(f"[DEBUG] Phase 2: Results Directory Setup...", flush=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    tag = args.tag or config.get('tag', algorithm)
+    tag = args.tag or config.get_mandatory('tag')
     run_name = f"{timestamp}_{tag}"
     
     if args.results_dir:
@@ -443,8 +443,8 @@ def main():
         activation = config.get_mandatory('agent.activation')
         return_mode = config.get_mandatory('agent.return_mode')
         
-        # Read neuromodulation config (None when modulation.type is null/absent)
-        modulation_config = config.get('agent.modulation', None)
+        # Read neuromodulation config (MUST be defined in config, even if empty/null)
+        modulation_config = config.get_mandatory('agent.modulation')
         if modulation_config is not None and modulation_config.get('type') is None:
             modulation_config = None
 
@@ -499,8 +499,8 @@ def main():
             # Fallback if the YAML doesn't have a top-level 'agent' key (already merged into config)
             dreamer_config = config.get_mandatory('agent')
         
-        # Read neuromodulation config (None when modulation.type is null/absent)
-        dreamer_mod_config = config.get('agent.modulation', None)
+        # Read neuromodulation config (MUST be defined in config, even if empty/null)
+        dreamer_mod_config = config.get_mandatory('agent.modulation')
         if dreamer_mod_config is not None and dreamer_mod_config.get('type') is None:
             dreamer_mod_config = None
         
@@ -826,7 +826,7 @@ def main():
                     metrics = {}
                     loss_msg = ""
                     if buffer.size > max(dreamer_config['batch_size'] * 2, dreamer_config['sequence_length']):
-                        train_steps = dreamer_config.get('train_steps', 1)
+                        train_steps = dreamer_config.get_mandatory('train_steps')
                         for _ in range(train_steps):
                             batch_jax = buffer.sample(dreamer_config['batch_size'])
                             key, train_key = jax.random.split(key)
@@ -1170,23 +1170,74 @@ def main():
                         # Trigger evaluation after checkpoint
                         vis_flag = config.get_mandatory('visualization.enabled')
                         eval_v_flag = config.get_mandatory('training.video_during_training')
+                        eval_s_flag = config.get_mandatory('training.stats_during_training')
 
-                        if vis_flag or eval_v_flag:
+                        if eval_v_flag or eval_s_flag:
                             if args.debug:
-                                print(f"  [DEBUG] Starting evaluation and video saving...", flush=True)
+                                print(f"  [DEBUG] Starting evaluation... Video={eval_v_flag}, Stats={eval_s_flag}", flush=True)
                             try:
                                 from src.utils.evaluation_core import evaluate_jax_checkpoint
-                                eval_results = evaluate_jax_checkpoint(
-                                    model=model if algorithm == "RecurrentPPO" else trainer.agent,
-                                    params=params, config=config, num_episodes=config.get_mandatory('testing.evaluation_episodes'), seed=seed,
-                                    results_dir=results_dir, checkpoint_pct=total_episodes_completed,
-                                    render_video=True, wandb_enabled=wandb_enabled, debug=args.debug,
-                                    quiet=True
-                                )
-                                if wandb_enabled:
-                                    wandb.log({"Eval/MeanReward": eval_results["mean_reward"], "Eval/MeanLength": eval_results["mean_length"], "iteration": iteration, "timesteps": global_step})
+                                
+                                # Pass 1: Video
+                                if eval_v_flag:
+                                    video_eps = config.get_mandatory('training.eval_video_episodes')
+                                    if args.debug:
+                                        print(f"  [EVAL] Pass 1: Video (eps={video_eps})")
+                                    evaluate_jax_checkpoint(
+                                        model=model if algorithm == "RecurrentPPO" else trainer.agent,
+                                        params=params, config=config, num_episodes=video_eps, seed=seed,
+                                        results_dir=results_dir, checkpoint_pct=total_episodes_completed,
+                                        render_video=True, record_stats=False, wandb_enabled=wandb_enabled, debug=args.debug,
+                                        quiet=not args.debug, num_envs=1, device=jax.config.values['jax_default_device']
+                                    )
+                                
+                                # Pass 2: Stats
+                                eval_results = None
+                                if eval_s_flag:
+                                    stats_eps = config.get_mandatory('training.eval_stats_episodes')
+                                    stats_envs = config.get_mandatory('training.eval_stats_num_envs')
+                                    if args.debug:
+                                        print(f"  [EVAL] Pass 2: Stats (eps={stats_eps}, envs={stats_envs})")
+                                    eval_results = evaluate_jax_checkpoint(
+                                        model=model if algorithm == "RecurrentPPO" else trainer.agent,
+                                        params=params, config=config, num_episodes=stats_eps, seed=seed,
+                                        results_dir=results_dir, checkpoint_pct=total_episodes_completed,
+                                        render_video=False, record_stats=True, wandb_enabled=wandb_enabled, debug=args.debug,
+                                        quiet=not args.debug, num_envs=stats_envs, device=jax.config.values['jax_default_device']
+                                    )
+                                    if wandb_enabled and eval_results:
+                                        wandb.log({"Eval/MeanReward": eval_results["mean_reward"], "Eval/MeanLength": eval_results["mean_length"], "iteration": iteration, "timesteps": global_step})
+                                
+                                # Auto Analysis Trigger
+                                if config.get_mandatory('training.auto_analysis') and eval_s_flag:
+                                    if args.debug:
+                                        print(f"  [ANALYSIS] Triggering automated behavior analysis...")
+                                    import subprocess, sys
+                                    analysis_cmd = [
+                                        sys.executable, "analysis/agentActionAnalysis.py",
+                                        "--results_dir", results_dir,
+                                        "--checkpoint", str(total_episodes_completed),
+                                        "--output", os.path.join(results_dir, "stats", str(total_episodes_completed), "action_scatter.png"),
+                                        "--title", f"Episode {total_episodes_completed}"
+                                    ]
+                                    if not args.debug:
+                                        analysis_cmd.append("--quiet")
+                                    subprocess.run(analysis_cmd, check=False)
+                                    
+                                    if wandb_enabled:
+                                        plot_path = os.path.join(results_dir, "stats", str(total_episodes_completed), "action_scatter.png")
+                                        if os.path.exists(plot_path):
+                                            wandb.log({
+                                                "Analysis/ActionScatter": wandb.Image(plot_path, caption=f"Episode {total_episodes_completed}"), 
+                                                "iteration": iteration, 
+                                                "timesteps": global_step
+                                            })
+
                             except Exception as e:
                                 print(f"Warning: Evaluation failed: {e}")
+                                if args.debug:
+                                    import traceback
+                                    traceback.print_exc()
 
         except KeyboardInterrupt:
             print("\nTraining interrupted by user.")

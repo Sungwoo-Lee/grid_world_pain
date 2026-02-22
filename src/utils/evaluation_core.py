@@ -1,5 +1,6 @@
 import os
 import csv
+import contextlib
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -120,7 +121,7 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
 
 
 def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
-                            render_video=False, wandb_enabled=False, debug=False, quiet=True, num_envs=1):
+                            render_video=False, record_stats=None, wandb_enabled=False, debug=False, quiet=True, num_envs=1, device=None):
     """
     Runs deterministic evaluation episodes using the JAX model.
     When num_envs > 1, runs min(num_episodes, num_envs) envs in parallel (episode-ticket design).
@@ -145,7 +146,9 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     all_frames = []
     
     # Stats recording
-    record_stats = config.get('testing.record_stats', False)
+    if record_stats is None:
+        record_stats = config.get('testing.record_stats', False)
+    
     stats_dir = os.path.join(results_dir, "stats", str(checkpoint_pct))
     # Build stat_headers and action_map whenever we might record (single or parallel path)
     stat_headers = []
@@ -160,17 +163,25 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                        'satiation', 'nutrition', 'injury', 'rest_streak']
         stat_headers += ['event_ate', 'event_collided', 'event_rested',
                         'damage_total', 'damage_danger', 'damage_predator', 'damage_obstacle']
-        if 'Olfaction' in breakdown:
-            for i in range(breakdown['Olfaction']): 
-                stat_headers.append(f"obs_olf_{i}")
-        if 'Extero Nociception' in breakdown:
-            stat_headers.append("obs_noc")
-        coll_offsets = get_visual_offsets(params.sensor_range)
-        for i in range(coll_offsets.shape[0]):
-            dr, dc = coll_offsets[i]
-            stat_headers.append(f"obs_coll_r{dr}c{dc}")
-        if 'Location' in breakdown:
-            stat_headers += ["obs_loc_r", "obs_loc_c"]
+        # Add headers for all observation parts based on breakdown
+        for sensor_name, dim in breakdown.items():
+            if sensor_name == "Olfaction":
+                for i in range(dim): stat_headers.append(f"obs_olf_{i}")
+            elif sensor_name == "Extero Nociception":
+                stat_headers.append("obs_noc")
+            elif sensor_name == "Collision":
+                coll_offsets = get_visual_offsets(params.sensor_range)
+                for i in range(dim):
+                    dr, dc = coll_offsets[i]
+                    stat_headers.append(f"obs_coll_r{dr}c{dc}")
+            elif sensor_name == "Location":
+                stat_headers += ["obs_loc_r", "obs_loc_c"]
+            elif sensor_name in ["Satiation", "Nutrition", "Injury"]:
+                stat_headers.append(f"obs_intero_{sensor_name.lower()}")
+            elif sensor_name == "Visual":
+                for i in range(dim): stat_headers.append(f"obs_vis_{i}")
+            elif sensor_name == "Proprioception":
+                for i in range(dim): stat_headers.append(f"obs_prop_{i}")
         
         # Add headers for world entities (matching _write_episode_stats loop)
         # 1. Resources
@@ -199,22 +210,26 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     if not quiet:
         print(f"  [DEBUG] Starting Evaluation: {num_episodes} episodes, num_envs={num_envs}, effective={effective_num_envs}, Render={render_video}", flush=True)
 
-    # --- Single-env path (num_envs==1 or effective_num_envs==1) ---
-    if effective_num_envs == 1:
-        _run_single_env_eval(
-            model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
-            key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths, all_frames,
-            record_stats, stats_dir, stat_headers, action_map, params, max_steps=None,
-            render_video=render_video, wandb_enabled=wandb_enabled, debug=debug, quiet=quiet,
-        )
-    else:
-        # --- Parallel-env path (episode-ticket design) ---
-        _run_parallel_env_eval(
-            model, params, config, num_episodes, effective_num_envs, seed, results_dir, checkpoint_pct,
-            key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths,
-            record_stats, stats_dir, stat_headers, action_map, params,
-            render_video=render_video, wandb_enabled=wandb_enabled, debug=debug, quiet=quiet,
-        )
+    # Wrap execution in device context if provided
+    device_context = jax.default_device(device) if device is not None else contextlib.nullcontext()
+    
+    with device_context:
+        # --- Single-env path (num_envs==1 or effective_num_envs==1) ---
+        if effective_num_envs == 1:
+            _run_single_env_eval(
+                model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
+                key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths, all_frames,
+                record_stats, stats_dir, stat_headers, action_map, params, max_steps=None,
+                render_video=render_video, wandb_enabled=wandb_enabled, debug=debug, quiet=quiet,
+            )
+        else:
+            # --- Parallel-env path (episode-ticket design) ---
+            _run_parallel_env_eval(
+                model, params, config, num_episodes, effective_num_envs, seed, results_dir, checkpoint_pct,
+                key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths,
+                record_stats, stats_dir, stat_headers, action_map, params,
+                render_video=render_video, wandb_enabled=wandb_enabled, debug=debug, quiet=quiet,
+            )
 
     # Save Consolidated Video (single-env path fills all_frames; parallel path leaves it empty for now)
     last_video_path = None

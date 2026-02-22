@@ -10,9 +10,9 @@ set -e
 
 
 python train.py \
-  --agent_config configs/models/dreamer_v3.yaml \
+  --agent_config configs/models/recurrent_ppo.yaml \
   --num-envs 128 \
   --episodes 10000000 \
-  --checkpoint-frequency 100000  \
+  --checkpoint-frequency 1000000  \
   --device cuda:0 \
-  --tag "dreamer_v3_128env_128batch"
+  --tag "rppo_128env_recordStats_mbcost1"
