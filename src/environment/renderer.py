@@ -577,38 +577,6 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
     y_cursor -= 0.05
     pod_h_default = 0.11
     
-    # Segmented Damage Pod (New for Phase 4)
-    if info is not None and 'damage' in info:
-        dmg_total = float(info.get('damage', 0.0))
-        if dmg_total > 0:
-            pod_h_dmg = 0.12
-            y_frame_bottom = y_cursor - pod_h_dmg
-            draw_pod_frame(ax_right, 0.05, y_frame_bottom, 0.9, pod_h_dmg, "Acute Damage", transform=ax_right.transAxes)
-            
-            # Segmented damage values
-            d_dang = float(info.get('damage_danger', 0.0))
-            d_pred = float(info.get('damage_predator', 0.0))
-            d_obst = float(info.get('damage_obstacle', 0.0))
-            
-            # Draw normalized segments
-            seg_y = y_frame_bottom + 0.03
-            seg_w = 0.8
-            seg_h = 0.04
-            
-            max_d = max(d_dang + d_pred + d_obst, 1.0)
-            
-            # Draw Segmented Bar
-            cur_x = 0.1
-            for val, clr, lbl in [(d_dang, COLORS['dmg_danger'], "DNG"), (d_pred, COLORS['dmg_predator'], "PRD"), (d_obst, COLORS['dmg_obstacle'], "OBS")]:
-                if val > 0:
-                    vw = (val / max_d) * seg_w
-                    ax_right.add_patch(plt.Rectangle((cur_x, seg_y), vw, seg_h, facecolor=clr, transform=ax_right.transAxes))
-                    if vw > 0.05:
-                        ax_right.text(cur_x + vw/2, seg_y + seg_h/2, lbl, color='white', fontsize=5, fontweight='bold', ha='center', va='center', transform=ax_right.transAxes)
-                    cur_x += vw
-            
-            ax_right.text(0.9, seg_y + seg_h + 0.01, f"TOTAL: {dmg_total:.2f}", color=COLORS['injury'], fontsize=7, fontweight='bold', ha='right', transform=ax_right.transAxes)
-            y_cursor -= (pod_h_dmg + 0.03)
 
     known_sensors = ['Olfactory', 'Extero Nociception', 'Collision', 'Visual', 'LOC']
     
