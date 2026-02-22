@@ -54,10 +54,13 @@ python scripts/auth_manager.py status  # Fails without venv!
 ```
 
 The `run.py` wrapper automatically:
-1. Creates `.venv` if needed
+1. Creates `.venv` if needed (if not already in a suitable environment)
 2. Installs all dependencies
 3. Activates environment
 4. Executes script properly
+
+> [!NOTE]
+> If you are running on a **Server or NAS**, see the [Server & NAS Setup Guide](references/SERVERS_AND_NAS.md) for critical setup steps regarding file locking and environment integration.
 
 ## Core Workflow
 
