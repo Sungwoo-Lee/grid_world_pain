@@ -4,7 +4,7 @@ from jax import random
 from flax import nnx
 from typing import Tuple, Dict, Any, Optional
 
-from src.models.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist
+from src.models.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist, hafner_init
 from src.models.modulated_layer_norm_gru_cell import ModulatedLayerNormGRUCell
 
 # -----------------------------------------------------------------------------
@@ -18,8 +18,8 @@ class SiLU(nnx.Module):
 class LayerNormGRUCell(nnx.Module):
     def __init__(self, hidden_size: int, rngs: nnx.Rngs):
         self.hidden_size = hidden_size
-        self.dense_ih = nnx.Linear(hidden_size, 3 * hidden_size, use_bias=False, rngs=rngs)
-        self.dense_hh = nnx.Linear(hidden_size, 3 * hidden_size, use_bias=False, rngs=rngs)
+        self.dense_ih = nnx.Linear(hidden_size, 3 * hidden_size, use_bias=False, kernel_init=hafner_init(), rngs=rngs)
+        self.dense_hh = nnx.Linear(hidden_size, 3 * hidden_size, use_bias=False, kernel_init=hafner_init(), rngs=rngs)
 
         self.ln_ih = nnx.LayerNorm(3 * hidden_size, rngs=rngs)
         self.ln_hh = nnx.LayerNorm(3 * hidden_size, rngs=rngs)
@@ -48,15 +48,15 @@ class RSSM(nnx.Module):
         self.action_dim = action_dim
         self.modulation_enabled = modulation_enabled
 
-        self.img_in = nnx.Linear(stoch_dim * discrete + action_dim, deter_dim, rngs=rngs)
+        self.img_in = nnx.Linear(stoch_dim * discrete + action_dim, deter_dim, kernel_init=hafner_init(), rngs=rngs)
 
         if modulation_enabled:
             self.cell = ModulatedLayerNormGRUCell(deter_dim, rngs=rngs)
         else:
             self.cell = LayerNormGRUCell(deter_dim, rngs=rngs)
 
-        self.img_out = nnx.Linear(deter_dim, stoch_dim * discrete, rngs=rngs)
-        self.obs_out = nnx.Linear(deter_dim + embed_dim, stoch_dim * discrete, rngs=rngs)
+        self.img_out = nnx.Linear(deter_dim, stoch_dim * discrete, kernel_init=hafner_init(), rngs=rngs)
+        self.obs_out = nnx.Linear(deter_dim + embed_dim, stoch_dim * discrete, kernel_init=hafner_init(), rngs=rngs)
 
     def initial(self, batch_size: int):
         return {
@@ -84,7 +84,7 @@ class RSSM(nnx.Module):
 
         x = jnp.concatenate([stoch, action], axis=-1)
         x = self.img_in(x)
-        x = nnx.elu(x)
+        x = jax.nn.silu(x)
 
         if self.modulation_enabled and gate_bias is not None:
             deter = self.cell(x, deter, gate_bias=gate_bias)
@@ -121,7 +121,7 @@ class RSSM(nnx.Module):
 
         x = jnp.concatenate([stoch, action], axis=-1)
         x = self.img_in(x)
-        x = nnx.elu(x)
+        x = jax.nn.silu(x)
 
         if self.modulation_enabled and gate_bias is not None:
             deter = self.cell(x, deter, gate_bias=gate_bias)
@@ -157,11 +157,11 @@ class Encoder(nnx.Module):
         body_layers = []
         in_d = input_dim
         for h in fc_layers:
-            body_layers.append(nnx.Linear(in_d, h, rngs=rngs))
+            body_layers.append(nnx.Linear(in_d, h, kernel_init=hafner_init(), rngs=rngs))
             body_layers.append(nnx.LayerNorm(h, rngs=rngs))
             body_layers.append(SiLU())
             in_d = h
-        body_layers.append(nnx.Linear(in_d, embed_dim, rngs=rngs))
+        body_layers.append(nnx.Linear(in_d, embed_dim, kernel_init=hafner_init(), rngs=rngs))
         body_layers.append(nnx.LayerNorm(embed_dim, rngs=rngs))
         self.body = nnx.Sequential(*body_layers)
 
@@ -207,11 +207,11 @@ class Decoder(nnx.Module):
         layers = []
         in_d = input_dim
         for h in fc_layers:
-            layers.append(nnx.Linear(in_d, h, rngs=rngs))
+            layers.append(nnx.Linear(in_d, h, kernel_init=hafner_init(), rngs=rngs))
             layers.append(nnx.LayerNorm(h, rngs=rngs))
             layers.append(SiLU())
             in_d = h
-        layers.append(nnx.Linear(in_d, output_dim, rngs=rngs))
+        layers.append(nnx.Linear(in_d, output_dim, kernel_init=hafner_init(), rngs=rngs))
         self.net = nnx.Sequential(*layers)
 
     def __call__(self, x):
@@ -229,11 +229,11 @@ class MLP(nnx.Module):
         layers = []
         in_d = input_dim
         for h in hidden:
-            layers.append(nnx.Linear(in_d, h, rngs=rngs))
+            layers.append(nnx.Linear(in_d, h, kernel_init=hafner_init(), rngs=rngs))
             layers.append(nnx.LayerNorm(h, rngs=rngs))
             layers.append(SiLU())
             in_d = h
-        layers.append(nnx.Linear(in_d, output_dim, rngs=rngs))
+        layers.append(nnx.Linear(in_d, output_dim, kernel_init=hafner_init(), rngs=rngs))
         self.net = nnx.Sequential(*layers)
 
     def __call__(self, x):

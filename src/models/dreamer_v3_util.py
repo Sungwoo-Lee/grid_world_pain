@@ -152,3 +152,15 @@ class Moments(nnx.Module):
         invscale = jnp.maximum(1.0 / self.max_, self.high.value - self.low.value)
         return (x - self.low.value) / invscale
 
+
+def hafner_init(scale=0.8796):
+    """
+    Hafner initialization: Truncated normal with stddev = scale / sqrt(fan_in).
+    Matches the 'secret sauce' of the original DreamerV3 implementation.
+    """
+    def init(key, shape, dtype=jnp.float32):
+        fan_in = shape[0] if len(shape) > 0 else 1
+        stddev = scale / jnp.sqrt(fan_in)
+        # Using 2.0 * stddev as truncation bound is standard for truncated_normal
+        return jax.random.truncated_normal(key, -2.0, 2.0, shape, dtype=dtype) * stddev
+    return init
