@@ -3,7 +3,7 @@ agent:
   batch_size: 64
   sequence_length: 128   # Steps per trajectory (same concept as Recurrent PPO sequence_length)
   train_steps: 1
-  model_lr: 1e-4
+  model_lr: 8e-5
   actor_lr: 8e-5
   value_lr: 8e-5
   
@@ -22,6 +22,8 @@ agent:
   
   actor_fc_layers: [128, 128, 128, 128, 128]
   critic_fc_layers: [128, 128, 128, 128, 128]
+  
+  entropy_scale: 1e-4  # Reduced from 1e-3 to encourage focusing on rewards
   frame_stack: 1
 
 

@@ -842,7 +842,7 @@ def main():
                             elif mk.startswith('loss_model') or mk.startswith('loss_recon') or \
                                  mk.startswith('loss_kl') or mk.startswith('loss_rew') or \
                                  mk.startswith('loss_cont') or mk.startswith('loss_dyn') or \
-                                 mk.startswith('loss_rep'):
+                                 mk.startswith('loss_rep') or mk.startswith('model_'):
                                 wandb_logs[f"WorldModel/{mk}"] = float(mv)
                             elif mk.startswith('mod_'):
                                 wandb_logs[f"Modulator/{mk}"] = float(mv)
@@ -855,8 +855,13 @@ def main():
                         "Loss": loss_msg,
                         "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}",
                     }
-                    if dreamer_mod_config is not None and metrics and 'mod_z_reward_mean' in metrics:
-                        postfix["R_mod"] = f"{float(metrics['mod_z_reward_mean']):.2f}"
+                    if metrics:
+                        if 'model_reward_mae' in metrics:
+                            postfix["R_MAE"] = f"{float(metrics['model_reward_mae']):.3f}"
+                        if 'mean_entropy' in metrics:
+                            postfix["Ent"] = f"{float(metrics['mean_entropy']):.2f}"
+                        if dreamer_mod_config is not None and 'mod_z_reward_mean' in metrics:
+                            postfix["R_mod"] = f"{float(metrics['mod_z_reward_mean']):.2f}"
                     pbar.set_postfix(postfix)
                     if args.debug: print(f" Done.", flush=True)
 
@@ -1222,7 +1227,10 @@ def main():
                                     ]
                                     if not args.debug:
                                         analysis_cmd.append("--quiet")
-                                    subprocess.run(analysis_cmd, check=False)
+                                    result = subprocess.run(analysis_cmd, check=False, capture_output=True, text=True)
+                                    if result.returncode != 0:
+                                        print(f"Warning: Analysis script failed with return code {result.returncode}")
+                                        print(f"Error output: {result.stderr}")
                                     
                                     if wandb_enabled:
                                         plot_path = os.path.join(results_dir, "stats", str(total_episodes_completed), "action_scatter.png")

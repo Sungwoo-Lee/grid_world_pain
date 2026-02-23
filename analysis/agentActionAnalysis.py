@@ -1,6 +1,8 @@
 import os, glob, argparse, re, warnings
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for headless environments
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -110,7 +112,7 @@ def main():
     
     sns.scatterplot(
         data=filtered_stats,
-        x='nutrition',
+        x='satiation',
         y='injury',
         hue=hue_param,
         palette=palette_param,

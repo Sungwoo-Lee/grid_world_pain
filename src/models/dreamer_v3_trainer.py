@@ -225,6 +225,24 @@ class DreamerTrainer(nnx.Module):
 
             total_loss = loss_recon + loss_rew + loss_cont + loss_kl
 
+            # Error metrics (non-gradient)
+            rew_pred_val = from_twohot(rew_pred)
+            rew_error = jnp.mean(jnp.abs(rew_pred_val - reward))
+            
+            # Directional Reward MAE
+            pos_mask = (reward > 0.01).astype(jnp.float32)
+            neg_mask = (reward < -0.01).astype(jnp.float32)
+            rew_mae_pos = jnp.sum(jnp.abs(rew_pred_val - reward) * pos_mask) / (jnp.sum(pos_mask) + 1e-8)
+            rew_mae_neg = jnp.sum(jnp.abs(rew_pred_val - reward) * neg_mask) / (jnp.sum(neg_mask) + 1e-8)
+
+            # Latent Entropy
+            q_dist = jax.nn.softmax(q_logits)
+            latent_entropy = -jnp.sum(q_dist * jax.nn.log_softmax(q_logits), axis=-1).mean()
+
+            # Continue Accuracy
+            cont_target = 1.0 - terminal[..., None]
+            cont_acc = jnp.mean((nnx.sigmoid(cont_pred) > 0.5) == cont_target.astype(jnp.bool_))
+
             metrics = {
                 'loss_model': total_loss,
                 'loss_recon': loss_recon,
@@ -232,7 +250,12 @@ class DreamerTrainer(nnx.Module):
                 'loss_cont': loss_cont,
                 'loss_dyn_kl': jnp.mean(dyn_kl),
                 'loss_rep_kl': jnp.mean(rep_kl),
-                'loss_kl': loss_kl
+                'loss_kl': loss_kl,
+                'model_reward_mae': rew_error,
+                'model_reward_mae_pos': rew_mae_pos,
+                'model_reward_mae_neg': rew_mae_neg,
+                'model_latent_entropy': latent_entropy,
+                'model_cont_acc': cont_acc,
             }
 
             if modulation_enabled:
@@ -242,6 +265,7 @@ class DreamerTrainer(nnx.Module):
                     'mod_memory_mean': jnp.mean(mod_outputs_T.z_memory),
                     'mod_memory_std': jnp.std(mod_outputs_T.z_memory),
                     'mod_z_reward_mean': jnp.mean(mod_outputs_T.z_reward),
+                    'mod_z_reward_std': jnp.std(mod_outputs_T.z_reward),
                 })
                 if wm.modulation_type == "PreActivation":
                     metrics.update({
@@ -358,7 +382,7 @@ class DreamerTrainer(nnx.Module):
             logits = rollouts['action_dist']
             log_probs = jnp.sum(actions * jax.nn.log_softmax(logits), axis=-1)
             
-            ENTROPY_SCALE = 3e-4 # DreamerV3 default actor entropy scale
+            ENTROPY_SCALE = float(self.config.get('entropy_scale', 3e-4))
             entropy = -jnp.sum(jax.nn.softmax(logits) * jax.nn.log_softmax(logits), axis=-1)
             
             loss_actor_step = -(log_probs * advantage + ENTROPY_SCALE * entropy)
@@ -373,7 +397,8 @@ class DreamerTrainer(nnx.Module):
                 'mean_norm_return': jnp.mean(norm_returns),
                 'mean_value': jnp.mean(baseline),
                 'mean_advantage': jnp.mean(advantage),
-                'mean_entropy': jnp.mean(entropy)
+                'mean_entropy': jnp.mean(entropy),
+                'value_mae': jnp.mean(jnp.abs(baseline - lambda_returns))
             }
             return (loss_actor + loss_critic), (metrics, lambda_returns)
 
