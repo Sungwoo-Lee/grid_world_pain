@@ -149,6 +149,11 @@ def scan_imag(prev_state, key):
 ### 5.3 Learning via $\lambda$-Returns
 To stabilize target values, DreamerV3 computes **Lambda-Returns** ($V^\lambda$) over the imagined sequence. This balances the predicted rewards with the bootstrapped value estimates from the Critic, effectively "smoothing" the gradients across the 15-step dream.
 
+### 5.4 JAX/NNX Implementational Nuances (The "Batch Trap")
+When replicating DreamerV3 in JAX, two critical mathematical nuances arise that are often hidden in PyTorch implementations:
+1.  **PRNG Batch-Independence**: Standard JAX PRNG splitting `random.split(key, T)` yields identical stochastic samples for environments within a batch if their latent logits are identical (e.g., at the start of an episode). Complete replication requires a 2D key grid `random.split(key, T * B).reshape(T, B)` integrated with `jax.vmap` across the discrete categorical sampler (`OneHotDist`).
+2.  **KL Scaling**: The KL divergence between the posterior and prior must sum the information loss across all latent categorical groups (e.g., $32 \times 32$) *before* taking the temporal or batch mean. Taking the mean over the latent dimension artificially minimizes the required balancing scale, leading to prior collapse.
+
 ---
 
 ## 6. Specification for Replication: Architectural Constants

@@ -90,7 +90,13 @@ class OneHotDist:
         
     def sample(self, key):
         # Sample from probabilities (equivalent to categorical sampling)
-        sample_idx = random.categorical(key, jnp.log(self.probs + 1e-10))
+        # If key is (B, -1), we check if the probs also have a leading batch dimension B.
+        # This handles both latent z (B, stoch, discrete) and actions (B, action_dim).
+        if key.ndim == 2 and self.probs.ndim >= 2:
+            sample_idx = jax.vmap(lambda p, k: random.categorical(k, jnp.log(p + 1e-10)))(self.probs, key)
+        else:
+            sample_idx = random.categorical(key, jnp.log(self.probs + 1e-10))
+            
         sample_onehot = jax.nn.one_hot(sample_idx, self.num_classes)
         
         # Straight-Through Estimator

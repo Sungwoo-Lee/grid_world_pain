@@ -164,7 +164,8 @@ class DreamerTrainer(nnx.Module):
                 init_carry = wm.rssm.initial(B)
 
             rng, scan_rng = random.split(rng)
-            scan_rngs = random.split(scan_rng, T)
+            # Split keys for (T, B) to ensure independent sampling per environment per step
+            scan_rngs = random.split(scan_rng, T * B).reshape((T, B, -1))
 
             env_inputs = (action, is_first)
             env_inputs_T = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), env_inputs)
@@ -215,8 +216,12 @@ class DreamerTrainer(nnx.Module):
             q_logits_sg = jax.lax.stop_gradient(q_logits)
             p_logits_sg = jax.lax.stop_gradient(p_logits)
 
-            dyn_kl = kl_div_categ(q_logits_sg, p_logits)
+            dyn_kl = kl_div_categ(q_logits_sg, p_logits)  # (B, T, stoch, discrete) -> (B, T, stoch)
             rep_kl = kl_div_categ(q_logits, p_logits_sg)
+
+            # Sum over latent groups (stoch_dim) to get total info loss per state
+            dyn_kl = jnp.sum(dyn_kl, axis=-1)
+            rep_kl = jnp.sum(rep_kl, axis=-1)
 
             dyn_kl = jnp.maximum(dyn_kl, FREE_NATS)
             rep_kl = jnp.maximum(rep_kl, FREE_NATS)
@@ -344,7 +349,10 @@ class DreamerTrainer(nnx.Module):
 
                 imag_init = start_state
 
-            rng_imag = random.split(rng, HORIZON)
+            # Split keys for (HORIZON, IMAG_BATCH) for behavior learning
+            # IMAG_BATCH = B * T (flattened start_state)
+            imag_batch = start_state['deter'].shape[0] if not modulation_enabled else start_state[0]['deter'].shape[0]
+            rng_imag = random.split(rng, HORIZON * imag_batch).reshape((HORIZON, imag_batch, -1))
             _, rollouts = jax.lax.scan(scan_imag, imag_init, rng_imag)
 
             rews = rollouts['reward']

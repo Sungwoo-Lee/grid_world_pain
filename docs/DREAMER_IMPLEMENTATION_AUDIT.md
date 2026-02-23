@@ -19,8 +19,9 @@ The local implementation in `src/models/` is a **high-fidelity, performance-opti
 | **Scale Invariance**| Symlog (Global) | Applied to Obs, Reward, Value | **EXACT MATCH** |
 | **Discretization** | 255-bin Two-Hot | 255-bin `to_twohot` (Symlog space) | **EXACT MATCH** |
 | **Balancing** | 1.0 Unit Loss Scale | `total_loss = sum(losses)` | **EXACT MATCH** |
-| **Dynamics** | 0.5/0.1 KL Balancing | Implemented in `train_step` | **EXACT MATCH** |
+| **Dynamics** | 0.5/0.1 KL Balancing | Sums latents before temporal/batch mean | **EXACT MATCH** |
 | **Advantage** | Percentiles (5/95) | EMA `Moments` Module | **EXACT MATCH** |
+| **Action Space** | Unimix 0.01, Ent 3e-4 | `OneHotDist` + NNX `loss_actor_entropy` | **EXACT MATCH** |
 | **Wait-Init** | Hafner Constant ($0.8796$) | Standard Lecun/Xavier (Standard JAX) | **DIVERGENT** |
 | **Activation** | Global SiLU | SiLU (mostly), ELU (RSSM) | **DIVERGENT** |
 
@@ -35,6 +36,14 @@ Your `OneHotDist` implementation is excellent. The use of `sample_st = sample_on
 The `collect_sequence` implementation using `jax.lax.scan` and `jax.vmap` is a significant optimization over the serial `sheeprl` implementation.
 *   **Vectorized Encoding**: You batch-process environment observations before entering the RSSM temporal loop. This minimizes GPU-CPU sync overhead and maximizes throughput.
 *   **Auto-Reset Integration**: Your `select_done` logic inside the scan handles episode resets seamlessly without breaking JIT tracers.
+*   **Structurally Independent Sampling**: The codebase correctly generates 2D PRNG key grids ($T \times B$) and uses `jax.vmap` mapped across `OneHotDist.sample`. This ensures that even environments sharing identical sequence lengths and logits experience mathematically independent stochastic transitions.
+
+### 3.3 Configuration Protocol Parity
+Following strict structural alignment, the `configs/models/dreamer_v3.yaml` logic strictly mirrors the paper defaults through `get_mandatory`:
+*   **Learning Rates**: World Model ($1 \times 10^{-4}$), Actor/Critic ($3 \times 10^{-5}$).
+*   **Adam Epsilon**: Asymmetric bounds ($10^{-8}$ for WM, $10^{-5}$ for policy stability).
+*   **Entropy & Unimix**: Anchored at $3 \times 10^{-4}$ and $1\%$ respectively.
+
 
 ---
 
