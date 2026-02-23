@@ -749,7 +749,7 @@ def main():
                     # are one env's trajectory (required for RSSM temporal learning).
                     # (T, B, ...) -> (B, T, ...) -> (B*T, ...)
                     transitions_np = jax.device_get(transitions)
-                    T, B = num_steps, num_envs
+                    T, B = transitions_np['obs'].shape[0], transitions_np['obs'].shape[1]
                     obs_flat = transitions_np['obs'].transpose(1, 0, 2).reshape(B * T, -1)
                     act_flat = transitions_np['action'].transpose(1, 0, 2).reshape(B * T, -1)
                     rew_flat = transitions_np['reward'].transpose(1, 0).reshape(B * T)

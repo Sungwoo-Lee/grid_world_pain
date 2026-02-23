@@ -115,7 +115,43 @@ def forward(self, x, fabric):
 
 ---
 
-## 5. Specification for Replication: Architectural Constants
+## 5. Latent Imagination: The Dreaming Process
+
+The "dreaming" process is the engine of DreamerV3's sample efficiency. It allows the agent to learn complex behaviors by interacting with its own internal World Model (RSSM) rather than the physical environment.
+
+### 5.1 The Imagination Loop
+Training is split into two phases: **World Model Learning** (real data) and **Behavior Learning** (imagined data). In the imagination phase:
+1.  **Anchoring**: The sequence begins from a *posterior state* $z_t$ which was previously filtered from real observations.
+2.  **Stochastic Rollout**: The agent predicts future prior states $\hat{z}_{t+k}$ using only the RSSM's transition model $p_\theta$ and actions sampled from the current Actor policy $\pi_\psi$.
+3.  **Horizon ($H=15$)**: The rollout continues for a fixed depth. This "dream" is an entirely latent construct, requiring no decoder passes (pixels are never generated during dreaming).
+
+### 5.2 Actor-Critic Training in the Dream
+Unlike model-free RL which requires environment rewards, the Actor and Critic are trained on **Synthetic Signals**:
+-   **$\hat{r}$ (Imagined Reward)**: Predicted by the Reward Head for each latent state.
+-   **$\hat{v}$ (Imagined Value)**: Predicted by the Critic Head to estimate future returns.
+-   **$\hat{c}$ (Imagined Continue)**: Predicts if the sequence would terminate.
+
+#### [IMPLEMENTATION] Latent Rollout (`src/models/dreamer_v3_trainer.py`)
+```python
+def scan_imag(prev_state, key):
+    feat = self.agent.wm.get_feat(prev_state)
+    actor_out = actor(feat)
+    action = OneHotDist(actor_out).sample(key)
+    
+    # Predict next state WITHOUT observation
+    prior = self.agent.wm.rssm.imagine_step(prev_state, action, key)
+    
+    rew = from_twohot(self.agent.wm.reward_head(get_feat(prior)))
+    cont = nnx.sigmoid(self.agent.wm.continue_head(get_feat(prior)))
+    return prior, {'reward': rew, 'continue': cont, 'feat': feat}
+```
+
+### 5.3 Learning via $\lambda$-Returns
+To stabilize target values, DreamerV3 computes **Lambda-Returns** ($V^\lambda$) over the imagined sequence. This balances the predicted rewards with the bootstrapped value estimates from the Critic, effectively "smoothing" the gradients across the 15-step dream.
+
+---
+
+## 6. Specification for Replication: Architectural Constants
 
 To achieve performance parity with Hafner et al. (2023), the following specifications must be followed:
 
@@ -124,14 +160,14 @@ To achieve performance parity with Hafner et al. (2023), the following specifica
 | **Activation** | **SiLU (Swish)** | Superior gradient flow compared to ReLU/ELU in deep world models. |
 | **MLP Depth** | 5 Layers (512-1024 units) | Fixed capacity required for cross-domain stability. |
 | **Adam Epsilon**| WM: $10^{-8}$, AC: $10^{-5}$ | WM requires high-precision dynamics; AC benefits from damping. |
-| **Horison ($H$)** | **15 Steps** | Balanced depth for bootstrapping latent value estimates. |
+| **Horizon ($H$)** | **15 Steps** | Balanced depth for bootstrapping latent value estimates. |
 | **Recon. Head** | **Discrete/Symlog** | Protects against outlier observations and visual noise. |
 | **Stop-Gradient** | World Model / Actor | **Critical**: The Actor must NOT backpropagate into the RSSM. |
 | **Loss Weighting** | **Unit Scale (1.0)** | All main losses (KL, Reward, Value) are weighted at 1.0. |
 
 ---
 
-## 6. The Robustness Principle: Author's Implementation Philosophy
+## 7. The Robustness Principle: Author's Implementation Philosophy
 Replication is not just about the math; it is about the **Philosophy of Invariance**.
 *   **No Per-Task Tuning**: If the implementation requires changing the learning rate or KL weight for a specific environment (e.g., GridWorld vs. Atari), it is a failure of the scale-invariant architecture.
 *   **The Scale-Blind Advantage**: By performing all agent operations (Advantage, Reward Prediction, Value Bootstrapping) in the unit-normalized Symlog/Moments space, the agent becomes mathematically blind to the difference between a +1 reward and a +1,000,000 reward. This is the primary driver of SOTA generality.
@@ -150,15 +186,15 @@ def reconstruction_loss(po, observations, pr, rewards, ...):
 
 ---
 
-## 7. Exploration Evolution: From Noise to Disagreement
+## 8. Exploration Evolution: From Noise to Disagreement
 
 Effective exploration in world models is categorized by the transition from simple parametric noise to state-aware curiosity.
 
-### 7.1 Gaussian vs. Unimix
+### 8.1 Gaussian vs. Unimix
 *   **DreamerV1 (Gaussian)**: In continuous action spaces, exploration was achieved through additive Gaussian noise $\epsilon \sim \mathcal{N}(0, \sigma)$.
 *   **DreamerV2/V3 (Unimix)**: In discrete action spaces, the **1% Unimix** floor ($0.99 \pi + 0.01 \mathcal{U}$) prevents the agent from becoming over-confident in suboptimal actions, which is the primary cause of early-environment collapse in GridWorld settings.
 
-### 7.2 Plan2Explore: Task-Agnostic Curiosity
+### 8.2 Plan2Explore: Task-Agnostic Curiosity
 Plan2Explore introduces an **Intrinsic Reward** ($r^i$) defined by the uncertainty of the world model itself.
 $$r^i_t = \text{Variance}(\{p_\theta^k(z_t \mid h_t, a_{t-1})\}_{k=1}^K)$$
 *   **The Ensemble**: Plan2Explore utilizes an ensemble of transition models ($K \approx 5$). 
@@ -167,7 +203,7 @@ $$r^i_t = \text{Variance}(\{p_\theta^k(z_t \mid h_t, a_{t-1})\}_{k=1}^K)$$
 
 ---
 
-## 8. Proposed Research Trajectory
+## 9. Proposed Research Trajectory
 For senior review, we propose investigating three optimizations within the `sheeprl` framework:
 1.  **Adaptive KL Balancing**: Dynamic adjustment of $\alpha$ based on reconstruction entropy.
 2.  **Hybrid Latents**: Investigating the synergy between continuous (PlaNet) and discrete (DreamerV2) latents for environments with high visual fluidity.

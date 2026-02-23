@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--output", type=str, default="analysis/action_scatter.png", help="Output path for the plot")
     parser.add_argument("--title", type=str, help="Custom title for the plot")
     parser.add_argument("--quiet", action="store_true", help="Suppress output")
+    parser.add_argument("--plot-all", action="store_true", help="Plot all actions if requested ones are missing")
     
     args = parser.parse_known_args()[0]
 
@@ -94,13 +95,22 @@ def main():
         return
         
     filtered_stats = full_stats[full_stats['action'].isin(actions_to_plot)].copy()
+    missing_actions = False
 
     if filtered_stats.empty:
-        if not args.quiet:
-            print(f"Warning: No actions matching {actions_to_plot} found. Plotting all actions instead.")
-        filtered_stats = full_stats.copy()
-        hue_param = 'action'
-        palette_param = None
+        if args.plot_all:
+            if not args.quiet:
+                print(f"Warning: No actions matching {actions_to_plot} found. Plotting all actions as requested by --plot-all.")
+            filtered_stats = full_stats.copy()
+            hue_param = 'action'
+            palette_param = None
+        else:
+            if not args.quiet:
+                print(f"Note: No actions matching {actions_to_plot} found in this data.")
+            filtered_stats = pd.DataFrame(columns=full_stats.columns) # Empty df to avoid crash but show empty plot
+            hue_param = 'action'
+            palette_param = None
+            missing_actions = True
     else:
         if not args.quiet:
             print(f"Found {len(filtered_stats)} rows with actions: {actions_to_plot}")
@@ -110,26 +120,41 @@ def main():
     plt.figure(figsize=(10, 6))
     sns.set_theme(style="whitegrid")
     
-    sns.scatterplot(
-        data=filtered_stats,
-        x='satiation',
-        y='injury',
-        hue=hue_param,
-        palette=palette_param,
-        alpha=0.6,
-        s=50,
-        edgecolor='w',
-        linewidth=0.5
-    )
+    if not filtered_stats.empty:
+        sns.scatterplot(
+            data=filtered_stats,
+            x='satiation',
+            y='injury',
+            hue=hue_param,
+            palette=palette_param,
+            alpha=0.6,
+            s=50,
+            edgecolor='w',
+            linewidth=0.5
+        )
     
+    if missing_actions:
+        plt.text(0.5, 0.5, "Homeostatic Actions (Rest/Eat) not yet observed", 
+                 horizontalalignment='center', verticalalignment='center', 
+                 transform=plt.gca().transAxes, fontsize=14, color='gray',
+                 bbox=dict(facecolor='white', alpha=0.8, edgecolor='lightgray'))
+
     title_str = f"Satiation vs Injury Level (Actions: {', '.join(actions_to_plot)})"
     if args.title:
         title_str = f"{args.title}\n{title_str}"
     plt.title(title_str)
     plt.xlabel("Satiation")
     plt.ylabel("Injury Level")
-    plt.legend()
+    
+    # Only show legend if there's data to explain
+    if not filtered_stats.empty:
+        plt.legend()
+    
     plt.grid(True, linestyle='--', alpha=0.7)
+    
+    # Set axis limits to reasonable ranges if they exist
+    plt.xlim(-5, 105)
+    plt.ylim(-5, 105) # Satiation/Injury are usually 0-100
     
     # Save the plot
     output_path = args.output
@@ -138,8 +163,9 @@ def main():
         print(f"Scatter plot saved to: {output_path}")
 
         # Display counts
-        print("\nAction counts in filtered data:")
-        print(filtered_stats['action'].value_counts())
+        if not filtered_stats.empty:
+            print("\nAction counts in plotted data:")
+            print(filtered_stats['action'].value_counts())
 
 if __name__ == "__main__":
     main()

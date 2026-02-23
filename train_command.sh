@@ -11,4 +11,4 @@
   --episodes 10000000 \
   --checkpoint-frequency 1000000  \
   --device cuda:1 \
-  --tag "dreamer_v3_64env_bush_"
+  --tag "dreamer_v3_64env_bush_origparm_smallNet"
