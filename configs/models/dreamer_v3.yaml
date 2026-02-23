@@ -3,29 +3,28 @@ agent:
   batch_size: 64
   sequence_length: 128   # Steps per trajectory (same concept as Recurrent PPO sequence_length)
   train_steps: 1
-  model_lr: 8e-5
-  actor_lr: 8e-5
-  value_lr: 8e-5
+  model_lr: 1e-4
+  actor_lr: 3e-5
+  value_lr: 3e-5
   
-  # Network Configuration
+  # Network Configuration (Comparative Alignment with Recurrent PPO)
   encoder_dim: 128
-  encoder_fc_layers: [128, 128, 128, 128, 128]
+  encoder_fc_layers: [128, 128]
   
   rssm_deter_dim: 512
   rssm_stoch_dim: 32
   rssm_classes: 32
   
-  decoder_fc_layers: [128, 128, 128, 128, 128]
+  decoder_fc_layers: [128, 128]
   
-  reward_fc_layers: [128, 128, 128, 128, 128]
-  continue_fc_layers: [128, 128, 128, 128, 128]
+  reward_fc_layers: [128, 128]
+  continue_fc_layers: [128, 128]
   
-  actor_fc_layers: [128, 128, 128, 128, 128]
-  critic_fc_layers: [128, 128, 128, 128, 128]
+  actor_fc_layers: [128, 128]
+  critic_fc_layers: [128, 128]
   
-  entropy_scale: 1e-4  # Reduced from 1e-3 to encourage focusing on rewards
-  frame_stack: 1
-
+  entropy_scale: 3e-4  # Hafner 2023 standard value
+  unimix: 0.01
 
   # # Network Configuration (XL Profile)
   # encoder_dim: 1024

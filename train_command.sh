@@ -10,5 +10,5 @@
   --num-envs 64 \
   --episodes 10000000 \
   --checkpoint-frequency 1000000  \
-  --device cuda:0 \
-  --tag "dreamer_v3_64env_bush_128fc_ent1e-4"
+  --device cuda:1 \
+  --tag "dreamer_v3_64env_bush_"

@@ -61,16 +61,16 @@ class DreamerTrainer(nnx.Module):
         self.modulation_config = modulation_config
 
         agent_config = {
-            'encoder_dim': config.get('encoder_dim', 128),
-            'encoder_fc_layers': config.get('encoder_fc_layers', [128, 128]),
-            'rssm_deter_dim': config.get('rssm_deter_dim', 512),
-            'rssm_stoch_dim': config.get('rssm_stoch_dim', 32),
-            'rssm_classes': config.get('rssm_classes', 32),
-            'decoder_fc_layers': config.get('decoder_fc_layers', [128, 128]),
-            'reward_fc_layers': config.get('reward_fc_layers', [128, 128]),
-            'continue_fc_layers': config.get('continue_fc_layers', [128, 128]),
-            'actor_fc_layers': config.get('actor_fc_layers', [256, 256]),
-            'critic_fc_layers': config.get('critic_fc_layers', [256, 256]),
+            'encoder_dim': config.get_mandatory('agent.encoder_dim', int),
+            'encoder_fc_layers': config.get_mandatory('agent.encoder_fc_layers'),
+            'rssm_deter_dim': config.get_mandatory('agent.rssm_deter_dim', int),
+            'rssm_stoch_dim': config.get_mandatory('agent.rssm_stoch_dim', int),
+            'rssm_classes': config.get_mandatory('agent.rssm_classes', int),
+            'decoder_fc_layers': config.get_mandatory('agent.decoder_fc_layers'),
+            'reward_fc_layers': config.get_mandatory('agent.reward_fc_layers'),
+            'continue_fc_layers': config.get_mandatory('agent.continue_fc_layers'),
+            'actor_fc_layers': config.get_mandatory('agent.actor_fc_layers'),
+            'critic_fc_layers': config.get_mandatory('agent.critic_fc_layers'),
         }
 
         self.agent = DreamerV3Agent(obs_dim, act_dim, agent_config, rngs=rngs,
@@ -86,7 +86,7 @@ class DreamerTrainer(nnx.Module):
             self.agent.wm,
             optax.chain(
                 optax.clip_by_global_norm(1000.0),
-                optax.adam(float(config.get('model_lr', 1e-4)))
+                optax.adam(config.get_mandatory('agent.model_lr', float), eps=1e-8)
             ),
             wrt=nnx.Param
         )
@@ -94,7 +94,7 @@ class DreamerTrainer(nnx.Module):
             self.agent.ac.actor,
             optax.chain(
                 optax.clip_by_global_norm(100.0),  # Actor usually clipped more strictly
-                optax.adam(float(config.get('actor_lr', 3e-5)))
+                optax.adam(config.get_mandatory('agent.actor_lr', float), eps=1e-5)
             ),
             wrt=nnx.Param
         )
@@ -102,7 +102,7 @@ class DreamerTrainer(nnx.Module):
             self.agent.ac.critic,
             optax.chain(
                 optax.clip_by_global_norm(100.0),
-                optax.adam(float(config.get('value_lr', 8e-5)))
+                optax.adam(config.get_mandatory('agent.value_lr', float), eps=1e-5)
             ),
             wrt=nnx.Param
         )
@@ -382,7 +382,7 @@ class DreamerTrainer(nnx.Module):
             logits = rollouts['action_dist']
             log_probs = jnp.sum(actions * jax.nn.log_softmax(logits), axis=-1)
             
-            ENTROPY_SCALE = float(self.config.get('entropy_scale', 3e-4))
+            ENTROPY_SCALE = self.config.get_mandatory('agent.entropy_scale', float)
             entropy = -jnp.sum(jax.nn.softmax(logits) * jax.nn.log_softmax(logits), axis=-1)
             
             loss_actor_step = -(log_probs * advantage + ENTROPY_SCALE * entropy)

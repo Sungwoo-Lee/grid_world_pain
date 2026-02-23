@@ -493,19 +493,14 @@ def main():
     elif algorithm == "DreamerV3":
         from src.models.dreamer_v3_trainer import DreamerTrainer, ReplayBuffer
         
-        # Pass the 'agent' section to the trainer
-        dreamer_config = agent_config.get_mandatory('agent')
-        if dreamer_config is None:
-            # Fallback if the YAML doesn't have a top-level 'agent' key (already merged into config)
-            dreamer_config = config.get_mandatory('agent')
-        
         # Read neuromodulation config (MUST be defined in config, even if empty/null)
         dreamer_mod_config = config.get_mandatory('agent.modulation')
         if dreamer_mod_config is not None and dreamer_mod_config.get('type') is None:
             dreamer_mod_config = None
         
         key, init_key = jax.random.split(key)
-        trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=nnx.Rngs(init_key),
+        # Use agent_config (Config object) directly to support get_mandatory inside trainer
+        trainer = DreamerTrainer(input_dim, action_dim, agent_config, rngs=nnx.Rngs(init_key),
                                  modulation_config=dreamer_mod_config)
 
 
@@ -1234,18 +1229,20 @@ def main():
                                     
                                     if wandb_enabled:
                                         plot_path = os.path.join(results_dir, "stats", str(total_episodes_completed), "action_scatter.png")
-                                        if os.path.exists(plot_path):
-                                            wandb.log({
-                                                "Analysis/ActionScatter": wandb.Image(plot_path, caption=f"Episode {total_episodes_completed}"), 
-                                                "iteration": iteration, 
-                                                "timesteps": global_step
-                                            })
+                                        from src.utils.wandb_utils import upload_image
+                                        upload_image(
+                                            plot_path, 
+                                            step=total_episodes_completed, 
+                                            episode=total_episodes_completed, 
+                                            caption=f"Episode {total_episodes_completed}",
+                                            quiet=True,
+                                            extra_data={"iteration": iteration, "timesteps": global_step}
+                                        )
 
                             except Exception as e:
                                 print(f"Warning: Evaluation failed: {e}")
                                 if args.debug:
                                     import traceback
-                                    traceback.print_exc()
 
         except KeyboardInterrupt:
             print("\nTraining interrupted by user.")
