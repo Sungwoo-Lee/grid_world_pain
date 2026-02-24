@@ -4,24 +4,26 @@ agent:
   sequence_length: 128
   train_steps: 1
   model_lr: 1e-4
-  actor_lr: 8e-5
-  value_lr: 8e-5
+  actor_lr: 3e-5
+  value_lr: 3e-5
 
   # Network Configuration
   encoder_dim: 128
-  encoder_fc_layers: [128, 128, 128, 128, 128]
+  encoder_fc_layers: [128, 128]
 
   rssm_deter_dim: 512
   rssm_stoch_dim: 32
   rssm_classes: 32
 
-  decoder_fc_layers: [128, 128, 128, 128, 128]
-
-  reward_fc_layers: [128, 128, 128, 128, 128]
-  continue_fc_layers: [128, 128, 128, 128, 128]
-
-  actor_fc_layers: [128, 128, 128, 128, 128]
-  critic_fc_layers: [128, 128, 128, 128, 128]
+  decoder_fc_layers: [128, 128]
+  reward_fc_layers: [128, 128]
+  continue_fc_layers: [128, 128]
+  
+  actor_fc_layers: [128, 128]
+  critic_fc_layers: [128, 128]
+  
+  entropy_scale: 3e-4
+  unimix: 0.01
   frame_stack: 1
 
   # Encoding Configuration

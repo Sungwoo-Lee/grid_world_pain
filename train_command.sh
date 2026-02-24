@@ -6,9 +6,9 @@
 # neuromodulated_dreamer_v3
 
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --agent_config configs/models/recurrent_ppo.yaml \
-  --num-envs 128 \
+  --agent_config configs/models/dreamer_v3.yaml \
+  --num-envs 1 \
   --episodes 10000000 \
-  --checkpoint-frequency 1000000  \
-  --device cuda:0 \
-  --tag "recurrent_ppo_128env_hierarchical_groupEnc"
+  --checkpoint-frequency 1000000 \
+  --device cuda:1 \
+  --tag "dreamer_v3_1env_flat_groupEnc"

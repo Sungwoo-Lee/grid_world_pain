@@ -27,7 +27,7 @@ agent:
   unimix: 0.01
 
   # Encoding Configuration
-  encoding_mode: "hierarchical"  # "flat" or "hierarchical"
+  encoding_mode: "flat"  # "flat" or "hierarchical"
   
   hierarchical_params:
     default_mlp: [128]
