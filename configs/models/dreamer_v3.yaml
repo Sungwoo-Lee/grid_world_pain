@@ -26,6 +26,15 @@ agent:
   entropy_scale: 3e-4  # Hafner 2023 standard value
   unimix: 0.01
 
+  # Encoding Configuration
+  encoding_mode: "hierarchical"  # "flat" or "hierarchical"
+  
+  hierarchical_params:
+    default_mlp: [128]
+    hub_overrides:
+      body_state: [64]
+      association: [128]
+
   # # Network Configuration (XL Profile)
   # encoder_dim: 1024
   # encoder_fc_layers: [1024, 1024, 1024, 1024, 1024]

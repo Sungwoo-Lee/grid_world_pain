@@ -23,6 +23,17 @@ agent:
   activation: "tanh"       # "tanh" (PyTorch parity) or "relu" (original JAX)
   return_mode: "MC"        # "MC" (PyTorch parity) or "GAE" (original JAX)
 
+  # Encoding Configuration
+  encoding_mode: "hierarchical"  # "flat" or "hierarchical"
+  
+  hierarchical_params:
+    default_mlp: [64]
+    unimodal_overrides:
+      visual: [64]
+    hub_overrides:
+      body_state: [64]
+      association: [128]
+
   # Neuromodulation (§5 in NEUROMODULATION_ALGORITHM.md)
   # Bi-Recurrent Modulator: NeuromodulatorRNN + ModulatedGRUCell
   #

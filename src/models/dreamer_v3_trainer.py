@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 import optax
-from typing import NamedTuple, Tuple, Any
+from typing import NamedTuple, Tuple, Any, Optional
 from jax import random
 from functools import partial
 
@@ -56,6 +56,7 @@ def compute_lambda_values(rewards, values, continues, LAMBDA=0.95):
 
 class DreamerTrainer(nnx.Module):
     def __init__(self, obs_dim, act_dim, config, rngs: nnx.Rngs,
+                 obs_breakdown: Optional[dict] = None,
                  modulation_config=None):
         self.config = config
         self.modulation_config = modulation_config
@@ -71,9 +72,14 @@ class DreamerTrainer(nnx.Module):
             'continue_fc_layers': config.get_mandatory('agent.continue_fc_layers'),
             'actor_fc_layers': config.get_mandatory('agent.actor_fc_layers'),
             'critic_fc_layers': config.get_mandatory('agent.critic_fc_layers'),
+            
+            # Hierarchical Encoding Params
+            'encoding_mode': config.get_mandatory('agent.encoding_mode', str),
+            'hierarchical_params': config.to_dict().get('agent', {}).get('hierarchical_params', {})
         }
 
         self.agent = DreamerV3Agent(obs_dim, act_dim, agent_config, rngs=rngs,
+                                    obs_breakdown=obs_breakdown,
                                     modulation_config=modulation_config)
 
         feat_dim = self.agent.wm.deter_dim + self.agent.wm.stoch_dim * self.agent.wm.discrete
@@ -265,8 +271,12 @@ class DreamerTrainer(nnx.Module):
 
             if modulation_enabled:
                 metrics.update({
-                    'mod_gamma_mean': jnp.mean(jax.nn.sigmoid(mod_outputs_T.z_percept)),
-                    'mod_gamma_std': jnp.std(jax.nn.sigmoid(mod_outputs_T.z_percept)),
+                    'mod_z_unimodal_mean': jnp.mean(jax.nn.sigmoid(mod_outputs_T.z_unimodal)),
+                    'mod_z_unimodal_std': jnp.std(jax.nn.sigmoid(mod_outputs_T.z_unimodal)),
+                    'mod_z_bodystate_mean': jnp.mean(jax.nn.sigmoid(mod_outputs_T.z_bodystate)),
+                    'mod_z_bodystate_std': jnp.std(jax.nn.sigmoid(mod_outputs_T.z_bodystate)),
+                    'mod_z_association_mean': jnp.mean(jax.nn.sigmoid(mod_outputs_T.z_association)),
+                    'mod_z_association_std': jnp.std(jax.nn.sigmoid(mod_outputs_T.z_association)),
                     'mod_memory_mean': jnp.mean(mod_outputs_T.z_memory),
                     'mod_memory_std': jnp.std(mod_outputs_T.z_memory),
                     'mod_z_reward_mean': jnp.mean(mod_outputs_T.z_reward),
@@ -274,8 +284,9 @@ class DreamerTrainer(nnx.Module):
                 })
                 if wm.modulation_type == "PreActivation":
                     metrics.update({
-                        'mod_beta_mean': jnp.mean(mod_outputs_T.z_percept_add),
-                        'mod_beta_std': jnp.std(mod_outputs_T.z_percept_add),
+                        'mod_beta_unimodal_mean': jnp.mean(mod_outputs_T.z_unimodal_add),
+                        'mod_beta_bodystate_mean': jnp.mean(mod_outputs_T.z_bodystate_add),
+                        'mod_beta_association_mean': jnp.mean(mod_outputs_T.z_association_add),
                     })
 
             return total_loss, (metrics, posts, h_mods_all)
@@ -351,7 +362,7 @@ class DreamerTrainer(nnx.Module):
 
             # Split keys for (HORIZON, IMAG_BATCH) for behavior learning
             # IMAG_BATCH = B * T (flattened start_state)
-            imag_batch = start_state['deter'].shape[0] if not modulation_enabled else start_state[0]['deter'].shape[0]
+            imag_batch = start_state['deter'].shape[0]
             rng_imag = random.split(rng, HORIZON * imag_batch).reshape((HORIZON, imag_batch, -1))
             _, rollouts = jax.lax.scan(scan_imag, imag_init, rng_imag)
 

@@ -109,36 +109,73 @@ class ObservationEncoder(nnx.Module):
             self.monolith = nnx.Linear(input_dim, hidden_size, rngs=rngs)
 
     def __call__(self, x):
-        # Faster padding using static slice indexing
+        """Standard forward pass (no modulation)."""
+        if self.mode != 'hierarchical':
+            return jax.nn.relu(self.monolith(x))
+        
         batch_shape = x.shape[:-1]
         x_padded = jnp.zeros(batch_shape + (len(self.names), self.max_in), dtype=x.dtype)
-        
         start = 0
         for i, (name, dim) in enumerate(self.breakdown.items()):
-            # Use dynamic_update_slice or similar? No, we can just use .at[...].set(...) 
-            # if we are in JIT it will be optimized.
-            # For simplicity and speed in JAX:
-            # We construct a mask or use simple slicing.
-            # Using .at[...].set(...) is very readable and usually well-optimized by XLA.
             x_padded = x_padded.at[..., i, :dim].set(x[..., start : start + dim])
             start += dim
-            
-        if self.mode == 'hierarchical':
-            # Phase 1: Grouped encoding (Single fused kernel)
-            encoded_all = self.unimodal_grouped(x_padded)
-            
-            # Phase 2: Body-State Sub-Fusion
-            body_inputs = encoded_all[..., self.body_indices, :]
-            body_in = body_inputs.reshape(batch_shape + (-1,))
-            body_latent = self.body_hub(body_in)
-            
-            # Phase 3: Global Association
-            assoc_inputs = encoded_all[..., self.assoc_indices, :]
-            assoc_in = assoc_inputs.reshape(batch_shape + (-1,))
-            assoc_in = jnp.concatenate([assoc_in, body_latent], axis=-1)
-            return jax.nn.relu(self.assoc_hub(assoc_in))
-        else:
-            return jax.nn.relu(self.monolith(x))
+
+        # Phase 1: Grouped encoding
+        encoded_all = jax.nn.relu(self.unimodal_grouped(x_padded))
+
+        # Phase 2: Body-State Hub
+        body_inputs = encoded_all[..., self.body_indices, :]
+        body_in = body_inputs.reshape(batch_shape + (-1,))
+        body_latent = self.body_hub(body_in)
+
+        # Phase 3: Association Hub
+        assoc_inputs = encoded_all[..., self.assoc_indices, :]
+        assoc_in = assoc_inputs.reshape(batch_shape + (-1,))
+        assoc_in = jnp.concatenate([assoc_in, body_latent], axis=-1)
+        return jax.nn.relu(self.assoc_hub(assoc_in))
+
+    def forward_with_modulation(self, x, mod_output, modulation_type: str):
+        """Hierarchical forward pass with multi-stage modulation (Injection A)."""
+        if self.mode != 'hierarchical':
+            x_proj = self.monolith(x)
+            if modulation_type == "PreActivation":
+                gamma = jax.nn.sigmoid(mod_output.z_unimodal[..., 0:1]) # Fallback to first group or similar
+                beta = mod_output.z_unimodal_add[..., 0:1]
+                return jax.nn.relu(x_proj * gamma + beta)
+            else:
+                return jax.nn.relu(x_proj) * jax.nn.sigmoid(mod_output.z_unimodal[..., 0:1])
+
+        batch_shape = x.shape[:-1]
+        x_padded = jnp.zeros(batch_shape + (len(self.names), self.max_in), dtype=x.dtype)
+        start = 0
+        for i, (name, dim) in enumerate(self.breakdown.items()):
+            x_padded = x_padded.at[..., i, :dim].set(x[..., start : start + dim])
+            start += dim
+
+        # Phase 1: Unimodal + Modulation (z_unimodal)
+        encoded_all = self.unimodal_grouped(x_padded)
+        gamma1 = jax.nn.sigmoid(mod_output.z_unimodal)
+        beta1 = mod_output.z_unimodal_add
+        # Apply per-group modulation
+        encoded_all = jax.nn.relu(encoded_all * gamma1[..., None] + beta1[..., None])
+
+        # Phase 2: Body-State Hub + Modulation (z_bodystate)
+        body_inputs = encoded_all[..., self.body_indices, :]
+        body_in = body_inputs.reshape(batch_shape + (-1,))
+        body_latent = self.body_hub(body_in) 
+        gamma2 = jax.nn.sigmoid(mod_output.z_bodystate)
+        beta2 = mod_output.z_bodystate_add
+        body_latent = body_latent * gamma2 + beta2
+        # For uniformity, we'll apply it consistently.
+
+        # Phase 3: Association Hub + Modulation (z_association)
+        assoc_inputs = encoded_all[..., self.assoc_indices, :]
+        assoc_in = assoc_inputs.reshape(batch_shape + (-1,))
+        assoc_in = jnp.concatenate([assoc_in, body_latent], axis=-1)
+        assoc_latent = self.assoc_hub(assoc_in)
+        gamma3 = jax.nn.sigmoid(mod_output.z_association)
+        beta3 = mod_output.z_association_add
+        return jax.nn.relu(assoc_latent * gamma3 + beta3)
 
 
 class ActorCriticRNN(nnx.Module):
@@ -200,8 +237,9 @@ class ActorCriticRNN(nnx.Module):
             temp_clip = tuple(modulation_config['temp_clip'])
 
             self.modulator = NeuromodulatorRNN(
-                input_dim=input_dim,
+                obs_dim=input_dim,
                 target_hidden_size=hidden_size,
+                obs_breakdown=observation_breakdown,
                 mod_hidden_size=mod_hidden,
                 modulation_type=mod_type,
                 grouping_size=grouping,
@@ -242,17 +280,8 @@ class ActorCriticRNN(nnx.Module):
             mod_output, mod_h_new = self.modulator(x, mod_h)
 
             # --- Task path with modulation ---
-            # INJECTION A: Perceptual modulation (type-dependent)
-            if self.modulation_type == "PreActivation":
-                # Ferguson & Cardin style: gain + threshold shift INSIDE activation
-                x_linear = self.obs_encoder(x)
-                gamma = jax.nn.sigmoid(mod_output.z_percept)
-                beta = mod_output.z_percept_add
-                x_proj = jax.nn.relu(x_linear * gamma + beta)
-            else:
-                # Multiplicative (original): post-activation gating
-                x_proj = self.obs_encoder(x)
-                x_proj = x_proj * jax.nn.sigmoid(mod_output.z_percept)
+            # INJECTION A: Perceptual modulation (Phase-dependent)
+            x_proj = self.obs_encoder.forward_with_modulation(x, mod_output, self.modulation_type)
 
             # Layer 2: RNN forward with gate-bias injection
             if self.rnn_type == "LSTM":

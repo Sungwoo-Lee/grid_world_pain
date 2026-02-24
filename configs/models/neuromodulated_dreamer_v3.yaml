@@ -24,6 +24,15 @@ agent:
   critic_fc_layers: [128, 128, 128, 128, 128]
   frame_stack: 1
 
+  # Encoding Configuration
+  encoding_mode: "hierarchical"  # "flat" or "hierarchical"
+  
+  hierarchical_params:
+    default_mlp: [128]
+    hub_overrides:
+      body_state: [64]
+      association: [128]
+
   # Neuromodulation (§5 in NEUROMODULATION_ALGORITHM.md)
   # DreamerNeuromodulatorRNN with dual input projections (obs + imagine)
   #

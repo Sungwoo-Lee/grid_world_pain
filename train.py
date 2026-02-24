@@ -504,6 +504,7 @@ def main():
         key, init_key = jax.random.split(key)
         # Use agent_config (Config object) directly to support get_mandatory inside trainer
         trainer = DreamerTrainer(input_dim, action_dim, agent_config, rngs=nnx.Rngs(init_key),
+                                 obs_breakdown=obs_breakdown,
                                  modulation_config=dreamer_mod_config)
 
 
@@ -645,7 +646,12 @@ def main():
                     if args.debug: print(f" Done.", flush=True)
                     
                     if args.debug and mod_info is not None:
-                        print(f"  [Modulator] Mean Percept: {float(jnp.mean(mod_info.z_percept)):.3f}, Mean Memory: {float(jnp.mean(mod_info.z_memory)):.3f}, Temp: {float(jnp.mean(mod_info.temperature)):.2f}")
+                        z_uni = float(jnp.mean(mod_info.z_unimodal))
+                        z_body = float(jnp.mean(mod_info.z_bodystate))
+                        z_assoc = float(jnp.mean(mod_info.z_association))
+                        z_mem = float(jnp.mean(mod_info.z_memory))
+                        temp = float(jnp.mean(mod_info.temperature)) if hasattr(mod_info, 'temperature') else 1.0
+                        print(f"  [Modulator] Mean Uni: {z_uni:.3f}, Body: {z_body:.3f}, Assoc: {z_assoc:.3f}, Mem: {z_mem:.3f}, Temp: {temp:.2f}")
                     
                     steps_this_iter = num_steps * num_envs
                     global_step += steps_this_iter
