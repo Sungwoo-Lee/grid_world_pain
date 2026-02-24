@@ -8,8 +8,53 @@ from .neuromodulator import NeuromodulatorRNN
 
 
 
+class GroupedLinear(nnx.Module):
+    """
+    Applies independent linear layers to N groups in parallel using einsum.
+    Weights shape: [num_groups, in_features, out_features]
+    """
+    def __init__(self, num_groups: int, in_features: int, out_features: int, rngs: nnx.Rngs):
+        self.num_groups = num_groups
+        self.in_features = in_features
+        self.out_features = out_features
+        
+        # Initialize weights and bias for each group independently
+        w_key = rngs.params()
+        self.weights = nnx.Param(jax.random.normal(w_key, (num_groups, in_features, out_features)) * 0.1)
+        b_key = rngs.params()
+        self.bias = nnx.Param(jnp.zeros((num_groups, out_features)))
+
+    def __call__(self, x):
+        # x shape: [..., G, I], weights shape: [G, I, O]
+        # output shape: [..., G, O]
+        return jnp.einsum('...gi,gio->...go', x, self.weights) + self.bias
+
+
+class GroupedMLP(nnx.Module):
+    """
+    Applies independent MLPs to a collection of sensory inputs in parallel.
+    Uses GroupedLinear to ensure a single kernel launch for each Phase 1 layer.
+    """
+    def __init__(self, num_groups: int, max_in: int, hidden_layers: list, output_dim: int, rngs: nnx.Rngs):
+        self.num_groups = num_groups
+        self.max_in = max_in
+        
+        layers = []
+        in_d = max_in
+        for h in hidden_layers:
+            layers.append(GroupedLinear(num_groups, in_d, h, rngs=rngs))
+            layers.append(jax.nn.relu)
+            in_d = h
+            
+        layers.append(GroupedLinear(num_groups, in_d, output_dim, rngs=rngs))
+        self.net = nnx.Sequential(*layers)
+
+    def __call__(self, x_padded):
+        return self.net(x_padded)
+
+
 class MLP(nnx.Module):
-    """Simple Multi-Layer Perceptron helper."""
+    """Simple Multi-Layer Perceptron helper for non-grouped paths (hubs)."""
     def __init__(self, input_dim: int, hidden_layers: list, output_dim: int, rngs: nnx.Rngs):
         layers = []
         in_d = input_dim
@@ -25,7 +70,7 @@ class MLP(nnx.Module):
 
 
 class ObservationEncoder(nnx.Module):
-    """Unified observation encoder supporting flat and hierarchical modes."""
+    """Unified observation encoder supporting flat and hierarchical modes with grouped processing."""
     def __init__(self, input_dim: int, hidden_size: int, breakdown: dict,
                  config: Optional[dict], rngs: nnx.Rngs):
         if config is None:
@@ -38,57 +83,60 @@ class ObservationEncoder(nnx.Module):
         if self.mode == 'hierarchical':
             h_params = config['hierarchical_params']
             default_mlp = h_params['default_mlp']
-            unimodal_overrides = h_params.get('unimodal_overrides', {})
-            hub_overrides = h_params.get('hub_overrides', {})
             
-            # 1. Unimodal Encoders
-            encoders = {}
-            for name, dim in breakdown.items():
-                # Overrides are optional, but if a name is in overrides, we use it.
-                # Otherwise we MUST have a default_mlp.
-                target_mlp = unimodal_overrides.get(name.lower(), default_mlp)
-                # Output dim for unimodal encoders: using hidden_size
-                encoders[name] = MLP(dim, target_mlp, hidden_size, rngs=rngs)
-            self.encoders = nnx.Dict(encoders)
+            # 1. Grouped Unimodal Encoders
+            self.names = list(breakdown.keys())
+            input_dims = [breakdown[name] for name in self.names]
+            self.max_in = max(input_dims)
+            # Use grouped MLP structure
+            self.unimodal_grouped = GroupedMLP(len(self.names), self.max_in, default_mlp, hidden_size, rngs=rngs)
             
-            # 2. Body-State Hub (Intero + Extero Nocicep + Collision)
+            # 2. Body-State Hub
             body_sensors = ["Satiation", "Nutrition", "Injury", "Extero Nociception", "Collision"]
-            body_in_dim = sum([hidden_size for name in body_sensors if name in breakdown])
-            body_mlp_struct = hub_overrides.get('body_state', default_mlp)
+            self.body_indices = [i for i, name in enumerate(self.names) if name in body_sensors]
+            body_in_dim = len(self.body_indices) * hidden_size
+            body_mlp_struct = h_params.get('hub_overrides', {}).get('body_state', default_mlp)
             self.body_hub = MLP(body_in_dim, body_mlp_struct, hidden_size, rngs=rngs)
             
             # 3. Association Hub
             assoc_sensors = ["Olfaction", "Location", "Visual", "Proprioception"]
-            assoc_in_dim = sum([hidden_size for name in assoc_sensors if name in breakdown]) + hidden_size
-            assoc_mlp_struct = hub_overrides.get('association', default_mlp)
+            self.assoc_indices = [i for i, name in enumerate(self.names) if name in assoc_sensors]
+            assoc_in_dim = (len(self.assoc_indices) * hidden_size) + hidden_size
+            assoc_mlp_struct = h_params.get('hub_overrides', {}).get('association', default_mlp)
             self.assoc_hub = MLP(assoc_in_dim, assoc_mlp_struct, hidden_size, rngs=rngs)
             
         else:
             self.monolith = nnx.Linear(input_dim, hidden_size, rngs=rngs)
 
     def __call__(self, x):
-        # Universal slicing - robust to any batch shape
-        slices = {}
+        # Faster padding using static slice indexing
+        batch_shape = x.shape[:-1]
+        x_padded = jnp.zeros(batch_shape + (len(self.names), self.max_in), dtype=x.dtype)
+        
         start = 0
-        for name, dim in self.breakdown.items():
-            slices[name] = x[..., start : start + dim]
+        for i, (name, dim) in enumerate(self.breakdown.items()):
+            # Use dynamic_update_slice or similar? No, we can just use .at[...].set(...) 
+            # if we are in JIT it will be optimized.
+            # For simplicity and speed in JAX:
+            # We construct a mask or use simple slicing.
+            # Using .at[...].set(...) is very readable and usually well-optimized by XLA.
+            x_padded = x_padded.at[..., i, :dim].set(x[..., start : start + dim])
             start += dim
             
         if self.mode == 'hierarchical':
-            # Phase 1: Unimodal Encoding
-            encoded = {name: self.encoders[name](s) for name, s in slices.items()}
+            # Phase 1: Grouped encoding (Single fused kernel)
+            encoded_all = self.unimodal_grouped(x_padded)
             
             # Phase 2: Body-State Sub-Fusion
-            body_sensors = ["Satiation", "Nutrition", "Injury", "Extero Nociception", "Collision"]
-            body_inputs = [encoded[name] for name in body_sensors if name in encoded]
-            body_latent = self.body_hub(jnp.concatenate(body_inputs, axis=-1))
+            body_inputs = encoded_all[..., self.body_indices, :]
+            body_in = body_inputs.reshape(batch_shape + (-1,))
+            body_latent = self.body_hub(body_in)
             
             # Phase 3: Global Association
-            assoc_sensors = ["Olfaction", "Location", "Visual", "Proprioception"]
-            assoc_inputs = [encoded[name] for name in assoc_sensors if name in encoded]
-            assoc_inputs.append(body_latent)
-            return jax.nn.relu(self.assoc_hub(jnp.concatenate(assoc_inputs, axis=-1)))
-            
+            assoc_inputs = encoded_all[..., self.assoc_indices, :]
+            assoc_in = assoc_inputs.reshape(batch_shape + (-1,))
+            assoc_in = jnp.concatenate([assoc_in, body_latent], axis=-1)
+            return jax.nn.relu(self.assoc_hub(assoc_in))
         else:
             return jax.nn.relu(self.monolith(x))
 

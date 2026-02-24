@@ -11,4 +11,4 @@
   --episodes 10000000 \
   --checkpoint-frequency 1000000  \
   --device cuda:0 \
-  --tag "recurrent_ppo_128env_hierarchical"
+  --tag "recurrent_ppo_128env_hierarchical_groupEnc"
