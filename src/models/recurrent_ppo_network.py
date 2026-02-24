@@ -7,6 +7,92 @@ from .modulated_gru_cell import ModulatedGRUCell
 from .neuromodulator import NeuromodulatorRNN
 
 
+
+class MLP(nnx.Module):
+    """Simple Multi-Layer Perceptron helper."""
+    def __init__(self, input_dim: int, hidden_layers: list, output_dim: int, rngs: nnx.Rngs):
+        layers = []
+        in_d = input_dim
+        for h in hidden_layers:
+            layers.append(nnx.Linear(in_d, h, rngs=rngs))
+            layers.append(jax.nn.relu)
+            in_d = h
+        layers.append(nnx.Linear(in_d, output_dim, rngs=rngs))
+        self.net = nnx.Sequential(*layers)
+
+    def __call__(self, x):
+        return self.net(x)
+
+
+class ObservationEncoder(nnx.Module):
+    """Unified observation encoder supporting flat and hierarchical modes."""
+    def __init__(self, input_dim: int, hidden_size: int, breakdown: dict,
+                 config: Optional[dict], rngs: nnx.Rngs):
+        if config is None:
+            raise ValueError("Strict Config: encoding_config is required for ObservationEncoder.")
+            
+        self.mode = config['encoding_mode']
+        self.breakdown = breakdown
+        self.hidden_size = hidden_size
+        
+        if self.mode == 'hierarchical':
+            h_params = config['hierarchical_params']
+            default_mlp = h_params['default_mlp']
+            unimodal_overrides = h_params.get('unimodal_overrides', {})
+            hub_overrides = h_params.get('hub_overrides', {})
+            
+            # 1. Unimodal Encoders
+            encoders = {}
+            for name, dim in breakdown.items():
+                # Overrides are optional, but if a name is in overrides, we use it.
+                # Otherwise we MUST have a default_mlp.
+                target_mlp = unimodal_overrides.get(name.lower(), default_mlp)
+                # Output dim for unimodal encoders: using hidden_size
+                encoders[name] = MLP(dim, target_mlp, hidden_size, rngs=rngs)
+            self.encoders = nnx.Dict(encoders)
+            
+            # 2. Body-State Hub (Intero + Extero Nocicep + Collision)
+            body_sensors = ["Satiation", "Nutrition", "Injury", "Extero Nociception", "Collision"]
+            body_in_dim = sum([hidden_size for name in body_sensors if name in breakdown])
+            body_mlp_struct = hub_overrides.get('body_state', default_mlp)
+            self.body_hub = MLP(body_in_dim, body_mlp_struct, hidden_size, rngs=rngs)
+            
+            # 3. Association Hub
+            assoc_sensors = ["Olfaction", "Location", "Visual", "Proprioception"]
+            assoc_in_dim = sum([hidden_size for name in assoc_sensors if name in breakdown]) + hidden_size
+            assoc_mlp_struct = hub_overrides.get('association', default_mlp)
+            self.assoc_hub = MLP(assoc_in_dim, assoc_mlp_struct, hidden_size, rngs=rngs)
+            
+        else:
+            self.monolith = nnx.Linear(input_dim, hidden_size, rngs=rngs)
+
+    def __call__(self, x):
+        # Universal slicing - robust to any batch shape
+        slices = {}
+        start = 0
+        for name, dim in self.breakdown.items():
+            slices[name] = x[..., start : start + dim]
+            start += dim
+            
+        if self.mode == 'hierarchical':
+            # Phase 1: Unimodal Encoding
+            encoded = {name: self.encoders[name](s) for name, s in slices.items()}
+            
+            # Phase 2: Body-State Sub-Fusion
+            body_sensors = ["Satiation", "Nutrition", "Injury", "Extero Nociception", "Collision"]
+            body_inputs = [encoded[name] for name in body_sensors if name in encoded]
+            body_latent = self.body_hub(jnp.concatenate(body_inputs, axis=-1))
+            
+            # Phase 3: Global Association
+            assoc_sensors = ["Olfaction", "Location", "Visual", "Proprioception"]
+            assoc_inputs = [encoded[name] for name in assoc_sensors if name in encoded]
+            assoc_inputs.append(body_latent)
+            return jax.nn.relu(self.assoc_hub(jnp.concatenate(assoc_inputs, axis=-1)))
+            
+        else:
+            return jax.nn.relu(self.monolith(x))
+
+
 class ActorCriticRNN(nnx.Module):
     """Actor-Critic RNN (LSTM or GRU) using Flax NNX, with optional neuromodulation.
 
@@ -19,7 +105,9 @@ class ActorCriticRNN(nnx.Module):
     """
     def __init__(self, input_dim: int, action_dim: int, hidden_size: int, rngs: nnx.Rngs,
                  rnn_type: str = "LSTM", activation: str = "tanh",
-                 modulation_config: Optional[dict] = None):
+                 modulation_config: Optional[dict] = None,
+                 observation_breakdown: Optional[dict] = None,
+                 encoding_config: Optional[dict] = None):
         self.hidden_size = hidden_size
         self.action_dim = action_dim
         self.rnn_type = rnn_type.upper()
@@ -27,8 +115,14 @@ class ActorCriticRNN(nnx.Module):
         self.modulation_enabled = modulation_config is not None and modulation_config.get('type') is not None
         self.modulation_type = modulation_config['type'] if self.modulation_enabled else None
 
-        # Input projection
-        self.input_proj = nnx.Linear(input_dim, hidden_size, rngs=rngs)
+        # Observation Encoding (Flat or Hierarchical)
+        if observation_breakdown is None:
+            # Fallback for compatibility or if breakdown not provided
+            observation_breakdown = {"Observation": input_dim}
+            
+        self.obs_encoder = ObservationEncoder(
+            input_dim, hidden_size, observation_breakdown, encoding_config, rngs
+        )
 
         # RNN Layer (LSTM or ModulatedGRU)
         if self.rnn_type == "LSTM":
@@ -103,13 +197,13 @@ class ActorCriticRNN(nnx.Module):
             # INJECTION A: Perceptual modulation (type-dependent)
             if self.modulation_type == "PreActivation":
                 # Ferguson & Cardin style: gain + threshold shift INSIDE activation
-                x_linear = self.input_proj(x)
+                x_linear = self.obs_encoder(x)
                 gamma = jax.nn.sigmoid(mod_output.z_percept)
                 beta = mod_output.z_percept_add
                 x_proj = jax.nn.relu(x_linear * gamma + beta)
             else:
                 # Multiplicative (original): post-activation gating
-                x_proj = jax.nn.relu(self.input_proj(x))
+                x_proj = self.obs_encoder(x)
                 x_proj = x_proj * jax.nn.sigmoid(mod_output.z_percept)
 
             # Layer 2: RNN forward with gate-bias injection
@@ -134,7 +228,7 @@ class ActorCriticRNN(nnx.Module):
 
         else:
             # --- Original unmodulated path (exact baseline) ---
-            x_proj = jax.nn.relu(self.input_proj(x))
+            x_proj = self.obs_encoder(x)
 
             if self.rnn_type == "LSTM":
                 h_new, x_h = self.rnn_cell(h, x_proj)

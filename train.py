@@ -419,12 +419,13 @@ def main():
     eat_enabled = params.eat_action_enabled
     action_dim = 4 + int(rest_enabled) + int(eat_enabled)
 
+    obs_breakdown = get_observation_breakdown(params)
+    total_dim = sum(obs_breakdown.values())
+
     if not args.quiet:
         print("\n--- RL API Specifications ---")
         print(f"Action Dim: {action_dim}")
-        obs_breakdown = get_observation_breakdown(params)
         breakdown_str = ", ".join([f"{k}={v}" for k, v in obs_breakdown.items()])
-        total_dim = sum(obs_breakdown.values())
         print(f"Observation Dim: {total_dim} ({breakdown_str})")
         print(f"Dimension Breakdown:")
         for sensor_name, dim in obs_breakdown.items():
@@ -464,7 +465,9 @@ def main():
             rngs=nnx.Rngs(init_key),
             rnn_type=rnn_type,
             activation=activation,
-            modulation_config=modulation_config
+            modulation_config=modulation_config,
+            observation_breakdown=obs_breakdown,
+            encoding_config=config.to_dict().get('agent', {})
         )
         optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
         
