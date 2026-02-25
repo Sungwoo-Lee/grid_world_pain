@@ -252,6 +252,55 @@ Both `norm_returns` and `norm_baseline` are now in the same Moments-normalized s
 'value_mae': jnp.mean(jnp.abs(baseline - jax.lax.stop_gradient(lambda_returns)))
 ```
 
+#### Reference: Sheeprl Canonical Implementation
+
+For reference, here is how the sheeprl DreamerV3 (PyTorch) handles the same logic. Our fix now matches this pattern.
+
+**How `TwoHotEncodingDistribution` works** (`sheeprl/utils/distribution.py:224`):
+- Bins are **evenly spaced** in `[-20, +20]` — NOT symexp'd as some descriptions claim.
+- `symlog` is applied to the **input value** before finding the nearest bins (encoding).
+- `symexp` is applied to the **output** weighted average after decoding.
+
+```python
+# Sheeprl TwoHotEncodingDistribution
+class TwoHotEncodingDistribution:
+    def __init__(self, logits, low=-20, high=20,
+                 transfwd=symlog, transbwd=symexp):
+        self.bins = torch.linspace(low, high, logits.shape[-1])  # Evenly spaced!
+
+    @property
+    def mean(self):
+        # Decode: weighted avg in symlog-space → symexp back to raw
+        return self.transbwd((self.probs * self.bins).sum(...))
+
+    def log_prob(self, x):
+        # Encode: symlog(raw_target) → find two closest bins → cross-entropy
+        x = self.transfwd(x)  # symlog(x)
+        # ... two-hot encoding against the evenly-spaced bins
+```
+
+**Critic target** (`sheeprl/algos/dreamer_v3/dreamer_v3.py:314`):
+```python
+# Sheeprl trains critic on RAW lambda_values (symlog applied internally by log_prob)
+value_loss = -qv.log_prob(lambda_values.detach())
+# This is equivalent to our fixed: to_twohot(lambda_returns)
+```
+
+**Advantage normalization** (`sheeprl/algos/dreamer_v3/dreamer_v3.py:275-279`):
+```python
+# Sheeprl normalizes BOTH sides with the same Moments statistics
+baseline = predicted_values[:-1]                      # Raw space (from .mean → symexp)
+offset, invscale = moments(lambda_values, fabric)     # Moments on raw lambda
+normed_lambda_values = (lambda_values - offset) / invscale
+normed_baseline = (baseline - offset) / invscale      # Same normalization!
+advantage = normed_lambda_values - normed_baseline    # Both normalized → consistent
+```
+
+**Key takeaway**: The canonical sheeprl implementation confirms that:
+1. Critic is always trained on **raw** lambda returns (symlog is internal to `TwoHotEncodingDistribution`).
+2. Advantage uses **Moments normalization on both sides** with identical `offset` and `invscale`.
+3. These are exactly the patterns our fix now follows.
+
 #### Verification Run
 - **Tag**: `diagnostic_value_fix_v2`
 - **WandB**: `run-20260225_220450-a2jts33m`
