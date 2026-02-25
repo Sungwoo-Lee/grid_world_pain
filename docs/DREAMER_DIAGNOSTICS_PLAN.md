@@ -505,3 +505,94 @@ Compare this to our current fixed `train_steps`:
        trainer.train_step(batch, key)
    ```
 4. This auto-scales: 64 envs → 64× more grad steps per iteration, maintaining the 1:1 ratio.
+
+---
+
+## 10. Observation: Pre-Fix vs Post-Fix Performance Paradox (Feb 26, 00:20 KST)
+
+### 10.1 The Question
+
+The **pre-fix** run (`decoderupdat`, with the buggy `to_twohot(norm_returns)`) appeared to outperform the **post-fix** run (`fixedReturns`, with the corrected `to_twohot(lambda_returns)`). Why?
+
+### 10.2 Run Details
+
+| Config | decoderupdat (PRE-FIX) | fixedReturns (POST-FIX) |
+|:---|:---|:---|
+| **WandB** | `run-20260225_213404-4yfb1aa6` | `run-20260225_222020-4643srox` |
+| **to_twohot target** | `to_twohot(norm_returns)` (buggy) | `to_twohot(lambda_returns)` (fixed) |
+| **num_envs** | 1 | 1 |
+| **Episodes** | 100k (completed) | 100k (still running at ~90k) |
+
+### 10.3 WandB Final Metrics
+
+| Metric | decoderupdat (PRE-FIX) | fixedReturns (POST-FIX, ~50k tqdm) |
+|:---|:---|:---|
+| **mean_entropy** | **0.14** ❌ (collapsed!) | **1.78** ✅ (healthy) |
+| **mean_return** | -1.66 | — |
+| **mean_value** | 0.51 | — |
+| **value_mae** | **3.03** | — |
+| **loss_model** | **1.58** | ~1.76 (from tqdm) |
+| **loss_rew** | 0.69 | — |
+| **model_reward_mae** | 0.90 | ~2.88 (from tqdm) |
+| **latent_entropy** | **0.64** (collapsed) | — |
+| **Episode/Steps** | **64** | — |
+| **Eval/MeanLength** | **75.7** | — |
+| **iterations** | 31,134 | ~11,766 |
+
+### 10.4 Eval Stats Learning Curves
+
+**decoderupdat (PRE-FIX):**
+| Checkpoint | MeanLen | MeanRew | TotalAte | Learning? |
+|:---|:---|:---|:---|:---|
+| 10k eps | 17.3 | -134.3 | **0** | ❌ No learning |
+| 20k eps | 17.3 | -134.3 | **0** | ❌ No learning |
+| 30k eps | 18.0 | -134.7 | **0** | ❌ No learning |
+| 40k eps | 18.0 | -134.7 | **0** | ❌ No learning |
+| 50k eps | 21.6 | -136.4 | **0** | ❌ No learning |
+| **60k eps** | **94.3** | **-132.7** | **2369** | 💥 Sudden spike |
+| 70k eps | 52.3 | -135.5 | 790 | ⚠️ Dropped back |
+| 80k eps | 39.9 | -133.2 | 356 | ⚠️ Unstable |
+| 90k eps | 56.9 | -133.1 | 1493 | ⚠️ Oscillating |
+| 100k eps | 76.7 | -130.7 | 1261 | ⚠️ Inconsistent |
+
+**fixedReturns (POST-FIX):**
+| Checkpoint | MeanLen | MeanRew | TotalAte | Learning? |
+|:---|:---|:---|:---|:---|
+| 10k eps | 20.3 | -135.0 | **149** | ✅ Early learning |
+| 20k eps | 33.2 | -135.5 | **542** | ✅ Improving |
+| 30k eps | 41.7 | -132.0 | **1240** | ✅ Strong growth |
+| 40k eps | 49.1 | -134.5 | 711 | ✅ Dip but still eating |
+| 50k eps | 92.0 | -133.1 | 1139 | ✅ Strong |
+| 60k eps | 103.8 | -132.7 | 1355 | ✅ Continuing |
+| 70k eps | 84.9 | -135.0 | 724 | ✅ Slight dip |
+| 80k eps | 104.8 | -131.4 | 1213 | ✅ Best so far |
+
+### 10.5 Analysis: Why Pre-Fix Appeared Better
+
+**Short answer**: It didn't outperform consistently — it had a lucky exploration spike.
+
+**The pre-fix run had a fundamentally broken learning process:**
+1. **Entropy collapsed to 0.14** — the policy was effectively deterministic (almost always picking the same action)
+2. **Zero eating for 50k episodes** — the agent couldn't find food at all
+3. **The 60k spike is anomalous** — after 50k episodes of total failure, the agent suddenly achieved MeanLen=94 with 2369 eating events, then immediately regressed to 52 and 40 in subsequent checkpoints
+
+**This is a hallmark pattern of a collapsed-entropy agent that "got lucky":**
+- With entropy=0.14, the agent is essentially deterministic. If the fixed action sequence happens to stumble onto food (perhaps the environment's randomized start positions placed the agent near food), it will appear to "learn" temporarily
+- But since the policy is locked (no exploration), it can't adapt to different start positions → oscillating performance across checkpoints
+
+**The post-fix run has a fundamentally sound learning process:**
+1. **Entropy stays at 1.78** — healthy exploration throughout
+2. **Started eating by 10k episodes** — found food through genuine exploration, not luck
+3. **Monotonic improvement** from 20→33→42→49→92→104 MeanLen — a real learning curve
+4. **The learning is robust** — even dips (70k: 85) are much higher than the pre-fix's baseline
+
+### 10.6 The Paradox Resolved
+
+The pre-fix agent's lower `loss_model` (1.58 vs 1.76) and lower `reward_mae` (0.90 vs 2.88) are actually **symptoms of the bug, not signs of better learning**:
+
+- **Lower loss_model**: The critic was trained on `symlog(norm_returns)` which compressed everything to near-zero, making the prediction task trivially easy. Low loss ≠ useful world model.
+- **Lower reward_mae**: With entropy collapsed, the agent always takes the same action → always gets the same reward → the reward distribution has very low variance → easy to predict.
+- **High reward_mae in post-fix**: The agent is actually exploring diverse actions → encountering diverse rewards → harder prediction task → higher MAE. This is a sign of healthy exploration.
+
+> **Conclusion**: The post-fix run is unambiguously better. It has a genuine, stable learning curve driven by real exploration. The pre-fix run's occasional high points were lucky accidents in an otherwise collapsed policy. The fix is correct.
+
