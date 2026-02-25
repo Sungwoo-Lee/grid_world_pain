@@ -35,14 +35,14 @@ body:
   with_injury: false
   use_homeostatic_reward: false
   # Mandatory fields
-  max_satiation: 100
-  max_nutrition: 100
+  max_satiation: 30
+  max_nutrition: 30
   max_injury: 30
-  food_nutrition_gain: 3
-  satiation_setpoint: 100
-  start_satiation: 100
-  start_nutrition: 100
-  metabolic_cost: 0.5
+  food_nutrition_gain: 10
+  satiation_setpoint: 30
+  start_satiation: 30
+  start_nutrition: 30
+  metabolic_cost: 1
   nutrition_to_satiation_scaling_factor: 1.0
   recovery_base_rate: 0.1
   recovery_accel_rate: 0.5
@@ -71,4 +71,4 @@ sensory:
   nociception_size: 1
 
 visualization:
-  local_view_size: 5
+  local_view_size: 4

@@ -109,8 +109,7 @@ These issues affect **most or all** ablation configs because the fields are not 
 | `sensory.using_sensory` | `false` (ignored) | N/A | **Remove** |
 | Individual sensors | ❌ All inherited (`true`) | All `false` | **Add** |
 
-> [!NOTE]
-> **No food source present.** The extrinsic reward (`+1.0` for eating) is never triggered. The agent's only objective is survival (avoid `-death_penalty`). Consider whether a food source should be added for reward signal.
+- **Levels 04-08**: Danger Zone set to `count: 0` per latest coordination.
 
 ---
 
@@ -234,7 +233,7 @@ These issues affect **most or all** ablation configs because the fields are not 
 
 ## 📋 Summary of Required Changes
 
-### Must Add to ALL Ablation Configs
+### Must Add to ALL Ablation Configs (High-Stakes Standards)
 
 ```yaml
 environment:
@@ -244,6 +243,12 @@ environment:
   location_areas:
     - type: "grass"
       area: [[1, 1], [4, 4]]
+body:
+  max_satiation: 30
+  max_nutrition: 30
+  satiation_setpoint: 30
+  metabolic_cost: 1
+  food_nutrition_gain: 10
 ```
 
 ### Must Add to Levels 01–07

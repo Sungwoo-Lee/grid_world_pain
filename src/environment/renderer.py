@@ -363,7 +363,12 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
     half_view = view_size // 2
     r_start = max(0, min(height - view_size, ar - half_view))
     c_start = max(0, min(width - view_size, ac - half_view))
-    r_end, c_end = r_start + view_size, c_start + view_size
+    
+    # Robustly bound for cases where view_size > height/width (e.g. 5x5 view on 4x4 grid)
+    r_start = max(0, r_start)
+    c_start = max(0, c_start)
+    r_end = min(height, r_start + view_size)
+    c_end = min(width, c_start + view_size)
     
     # Force creation to ensure V2 aesthetics
     plt.close('all')

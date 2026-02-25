@@ -18,7 +18,7 @@ environment:
       damage: 0.0
     - name: "Danger Zone"
       type: "danger"
-      count: 1
+      count: 0
       spawn_area: [[1, 4], [1, 4]]
       properties: [0.0, 1.0, 0.0, 0.0, 0.0]
       damage: 1.0
@@ -51,14 +51,14 @@ body:
   with_injury: true
   use_homeostatic_reward: true
   # Mandatory fields
-  max_satiation: 100
-  max_nutrition: 100
+  max_satiation: 30
+  max_nutrition: 30
   max_injury: 30
-  food_nutrition_gain: 3
-  satiation_setpoint: 100
-  start_satiation: 100
-  start_nutrition: 100
-  metabolic_cost: 0.5
+  food_nutrition_gain: 10
+  satiation_setpoint: 30
+  start_satiation: 30
+  start_nutrition: 30
+  metabolic_cost: 1
   nutrition_to_satiation_scaling_factor: 1.0
   recovery_base_rate: 0.1
   recovery_accel_rate: 0.5
@@ -87,4 +87,4 @@ sensory:
   nociception_size: 1
 
 visualization:
-  local_view_size: 5
+  local_view_size: 4
