@@ -324,3 +324,184 @@ advantage = normed_lambda_values - normed_baseline    # Both normalized → cons
 **Conclusion**: The value-space fix **resolves the primary bugs** (entropy collapse + critic divergence). The agent is now exploring (mean_entropy=1.79), learning meaningful representations (latent_entropy=1.10), and surviving longer (28.6 vs 17 steps). The episode reward hasn't improved yet — this is expected since 5k episodes (144k timesteps) is very early for DreamerV3. A longer run (50k+ episodes) is needed to see reward improvement.
 
 **Next steps**: Run a longer training (e.g., 30k–50k episodes) with `--debug` to monitor entropy and reward trajectories over time. If rewards still don't improve, investigate hyperparameters (entropy_scale, train_steps) and environment parameters (max_nutrition, damage values).
+
+---
+
+## 9. Issue: Parallel Environment Scaling (Feb 25, 23:30 KST)
+
+### 9.1 Problem Statement
+
+Increasing from 1 to 64 parallel environments does **NOT** improve training — it actually makes per-episode learning dramatically worse.
+
+### 9.2 Run Comparison
+
+| Config | 1env (fixedReturns) | 64env (fixedTwoHot) |
+|:---|:---|:---|
+| **Tag** | `08_location_dreamer_v3_1env_1trainStep_fixedReturns` | `08_location_dreamer_v3_64env_16trainStep_fixedTwoHot` |
+| **WandB** | `run-20260225_222020-4643srox` | `run-20260225_225710-hgdfpos2` |
+| **num_envs** | 1 | 64 |
+| **train_steps** | 1 | 16 |
+| **sequence_length** | 128 | 128 |
+
+### 9.3 WandB Metrics Comparison
+
+| Metric | 1env (at ~50k eps, tqdm) | 64env (at 100k eps, WandB) |
+|:---|:---|:---|
+| **Entropy** | **1.78** (stable) | **1.64** (oscillating 1.56–1.74) |
+| **World Model Loss** | **1.76** | **2.51** (43% higher) |
+| **Reward MAE** | **2.88** | **2.92** |
+| **Reward MAE (pos)** | — | 0.77 |
+| **Latent Entropy** | — | **0.74** (low vs ~1.1 for 1env) |
+| **Value MAE** | — | **4.33** |
+| **Mean Return** | — | **-19.3** |
+| **Loss Critic** | — | **1.45** |
+| **Iterations** | **~11,766** | **367** |
+| **Timesteps** | ~6.4M | **3.0M** |
+
+### 9.4 Eval Stats Comparison (per-checkpoint)
+
+**1env (fixedReturns):**
+| Checkpoint | Mean Ep Len | Mean Ep Rew | Total Ate |
+|:---|:---|:---|:---|
+| 10k eps | 20.3 | -135.0 | 149 |
+| 20k eps | 33.2 | -135.5 | 542 |
+| 30k eps | 41.7 | -132.0 | 1240 |
+| 40k eps | 49.1 | -134.5 | 711 |
+| **50k eps** | **92.0** | **-133.1** | **1139** |
+
+**64env (fixedTwoHot):**
+| Checkpoint | Mean Ep Len | Mean Ep Rew | Total Ate |
+|:---|:---|:---|:---|
+| 10k eps | 24.3 | -137.1 | 11 |
+| 20k eps | 25.2 | -136.0 | 15 |
+| 30k eps | 20.5 | -134.1 | 155 |
+| 40k eps | 18.1 | -133.8 | 213 |
+| **50k eps** | **19.6** | **-133.4** | **346** |
+| 70k eps | 20.2 | -131.3 | 745 |
+| 90k eps | 35.3 | -136.6 | 151 |
+| 100k eps | 49.1 | -132.0 | 496 |
+
+**Key observation**: At 50k episodes, 1env's MeanLen is **92** vs 64env's **19.6** — a **4.7x** difference.
+
+### 9.5 Root Cause Analysis: Gradient-to-Data Ratio
+
+The core issue is a **severely imbalanced replay ratio** when scaling environments.
+
+**How the training loop works** (`train.py:750-837`):
+
+1. Each iteration calls `collect_sequence()` → produces `num_envs * sequence_length` transitions
+2. Then calls `trainer.train_step()` exactly `train_steps` times
+3. Each `train_step` samples one batch from the replay buffer
+
+**Gradient update calculation:**
+
+| | 1env | 64env |
+|:---|:---|:---|
+| Transitions per iteration | 1 × 128 = **128** | 64 × 128 = **8,192** |
+| Gradient updates per iteration | **1** | **16** |
+| **Data-to-gradient ratio** | **128:1** | **512:1** (4x worse) |
+| Gradient updates at 50k episodes | **~11,766** | **~2,936** |
+| **Gradient shortfall** | — | **4x fewer** updates at same ep count |
+
+The 64env run collects 64× more data but only does 16× more gradient updates per iteration. This means:
+- **The world model is underfitting**: it sees 4× less training per data point, explaining the higher loss (2.51 vs 1.76)
+- **The latent space is less structured**: lower latent entropy (0.74 vs >1.0) because the RSSM hasn't been trained enough
+- **The actor/critic lag behind**: fewer gradient updates → worse behavior learning
+
+### 9.6 Additional Concern: Replay Buffer Capacity
+
+With `capacity=100,000`:
+- **1env**: fills at 128 transitions/iter → ~781 iterations to fill → data stays ~781 iters
+- **64env**: fills at 8,192 transitions/iter → ~12 iterations to fill → data expires in ~12 iters
+
+The 64env setup has much higher **data turnover**, meaning old experiences are overwritten quickly. The world model may not get enough training passes over each piece of data before it's discarded.
+
+### 9.7 Proposed Remedies
+
+#### Option 1: Manual `train_steps` scaling
+Manually set `train_steps` proportional to `num_envs`. For 64 envs, `train_steps = 64` should match the 1env gradient-to-data ratio. Quick to implement but fragile — requires manual tuning every time `num_envs` changes.
+
+#### Option 2: Increase replay buffer capacity
+Scale buffer with `num_envs` (e.g., `capacity = 100,000 * num_envs`). Helps with data retention but doesn't fix the gradient shortfall.
+
+#### Option 3: Sheeprl's `Ratio` approach (recommended)
+
+Sheeprl's DreamerV3 uses a `Ratio` class to **automatically** compute how many gradient steps to take, ensuring a constant ratio of gradient updates per environment step, regardless of `num_envs`.
+
+**The `Ratio` class** (`sheeprl/utils/utils.py:259`, from [Hafner's original](https://github.com/danijar/dreamerv3/blob/8fa35f83eee1ce7e10f3dee0b766587d0a713a60/dreamerv3/embodied/core/when.py#L26)):
+
+```python
+class Ratio:
+    def __init__(self, ratio: float, pretrain_steps: int = 0):
+        self._ratio = ratio       # Target: gradient_steps / env_steps
+        self._prev = None         # Tracks cumulative env steps last processed
+        self._pretrain_steps = pretrain_steps  # Extra training at startup
+
+    def __call__(self, step: int) -> int:
+        """Given total env steps so far, return how many gradient steps to do NOW."""
+        if self._ratio == 0:
+            return 0
+        if self._prev is None:
+            # First call — handle pretrain
+            self._prev = step
+            repeats = int(step * self._ratio)
+            if self._pretrain_steps > 0:
+                repeats = int(self._pretrain_steps * self._ratio)
+            return repeats
+        # Subsequent calls — only count NEW env steps since last call
+        repeats = int((step - self._prev) * self._ratio)
+        self._prev += repeats / self._ratio  # Advance by exactly what we consumed
+        return repeats
+```
+
+**How it integrates into the training loop** (`sheeprl/algos/dreamer_v3/dreamer_v3.py:518,659-698`):
+
+```python
+# Init: replay_ratio = 1.0 (default for DreamerV3)
+ratio = Ratio(cfg.algo.replay_ratio, pretrain_steps=cfg.algo.per_rank_pretrain_steps)
+
+# Each iteration:
+policy_step += policy_steps_per_iter  # policy_steps_per_iter = num_envs * world_size
+ratio_steps = policy_step - prefill_steps * policy_steps_per_iter
+per_rank_gradient_steps = ratio(ratio_steps / world_size)  # Dynamically computed!
+
+if per_rank_gradient_steps > 0:
+    # Sample that many batches and train
+    for i in range(per_rank_gradient_steps):
+        train(...)
+        cumulative_per_rank_gradient_steps += 1
+```
+
+**What this means in practice:**
+
+With `replay_ratio = 1.0` (sheeprl DreamerV3 default), the `Ratio` class ensures **1 gradient step per 1 new environment step**:
+
+| | 1env | 64env |
+|:---|:---|:---|
+| Env steps per iteration | 1 | 64 |
+| `ratio(new_steps)` returns | **1** grad step | **64** grad steps |
+| **Gradient:Data ratio** | **1:1** | **1:1** ✅ (auto-scaled!) |
+
+Compare this to our current fixed `train_steps`:
+
+| | 1env (train_steps=1) | 64env (train_steps=16) |
+|:---|:---|:---|
+| Env steps per iteration | 128 | 8,192 |
+| Gradient updates per iteration | 1 | 16 |
+| **Gradient:Data ratio** | **1:128** | **1:512** ❌ |
+
+> **Key insight**: Sheeprl counts gradient steps per **environment step** (per policy step), while our code counts per **iteration** (which bundles `num_envs * sequence_length` env steps). This is why our `train_steps` parameter doesn't scale correctly with `num_envs`.
+
+**To implement this in our codebase**, we would:
+1. Replace the fixed `train_steps` config with `replay_ratio` (default: 1.0)
+2. Track cumulative environment steps (`global_step`)
+3. Use `Ratio(replay_ratio)` to compute gradient steps each iteration:
+   ```python
+   # In train.py, DreamerV3 branch:
+   new_env_steps = num_envs * sequence_length  # = 8192 for 64 envs
+   grad_steps = ratio(global_step)   # Returns new_env_steps * replay_ratio
+   for _ in range(grad_steps):
+       batch = buffer.sample(batch_size)
+       trainer.train_step(batch, key)
+   ```
+4. This auto-scales: 64 envs → 64× more grad steps per iteration, maintaining the 1:1 ratio.

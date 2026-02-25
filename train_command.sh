@@ -12,4 +12,4 @@
   --episodes 100000 \
   --checkpoint-frequency 10000 \
   --device cuda:1 \
-  --tag "08_location_dreamer_v3_64env_16trainStep_fixedTwoHot"
+  --tag "08_location_dreamer_v3_64env_64trainStep_fixedTwoHot"
