@@ -21,6 +21,9 @@ logs/
 legacy/
 *legacy*
 
+# Antigravity
+antigravity_data/
+
 # Skills
 # Ignore local data but track the skill scripts
 skills/notebooklm/data/

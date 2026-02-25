@@ -7,8 +7,8 @@
 
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --agent_config configs/models/dreamer_v3.yaml \
-  --num-envs 4 \
+  --num-envs 64 \
   --episodes 10000000 \
   --checkpoint-frequency 1000000 \
-  --device cuda:0 \
-  --tag "dreamer_v3_4env_hierarchical_16trainSteps"
+  --device cuda:1 \
+  --tag "dreamer_v3_64env_hierarchical_32trainSteps"

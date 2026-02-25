@@ -7,7 +7,7 @@ environment:
   max_steps: 500
   rest_action_enabled: true
   eat_action_enabled: true
-  random_start_pos: false 
+  random_start_pos: true 
 
   resources:
     - name: "food" # Top Left
