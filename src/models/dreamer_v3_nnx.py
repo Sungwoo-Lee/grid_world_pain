@@ -364,6 +364,75 @@ class Encoder(nnx.Module):
         else:
             return self.final_act(x_pre) * jax.nn.sigmoid(mod_output.z_percept)
 
+class DreamerObservationDecoder(nnx.Module):
+    """
+    Symmetric observation decoder for DreamerV3.
+    Matches the structure of DreamerObservationEncoder, handling both 
+    flat and hierarchical modes.
+    """
+    def __init__(self, feat_dim: int, obs_dim: int, breakdown: dict,
+                 config: dict, rngs: nnx.Rngs):
+        self.mode = config['encoding_mode']
+        self.breakdown = breakdown
+        self.obs_dim = obs_dim
+        
+        if self.mode == 'hierarchical':
+            h_params = config['hierarchical_params']
+            default_mlp = h_params['default_mlp']
+            hidden_size = config['encoder_dim'] # hidden_size per sensor
+            
+            self.names = list(breakdown.keys())
+            self.sensor_dims = [breakdown[name] for name in self.names]
+            self.max_out = max(self.sensor_dims)
+            
+            # 1. Global Association Decoder (Phase 1)
+            assoc_sensors = ["Olfaction", "Location", "Visual", "Proprioception"]
+            self.assoc_indices = [i for i, name in enumerate(self.names) if name in assoc_sensors]
+            assoc_mlp_struct = h_params.get('hub_overrides', {}).get('association', default_mlp)
+            self.assoc_decoder = MLP(feat_dim, (len(self.assoc_indices) * hidden_size) + hidden_size, assoc_mlp_struct, rngs=rngs)
+            
+            # 2. Body-State Hub Decoder (Phase 2)
+            body_sensors = ["Satiation", "Nutrition", "Injury", "Extero Nociception", "Collision"]
+            self.body_indices = [i for i, name in enumerate(self.names) if name in body_sensors]
+            body_mlp_struct = h_params.get('hub_overrides', {}).get('body_state', default_mlp)
+            self.body_decoder = MLP(hidden_size, len(self.body_indices) * hidden_size, body_mlp_struct, rngs=rngs)
+            
+            # 3. Grouped Unimodal Decoders (Phase 3)
+            self.unimodal_grouped_decoder = DreamerGroupedMLP(len(self.names), hidden_size, default_mlp, self.max_out, rngs=rngs)
+        else:
+            # Replicate standard Decoder behavior
+            decoder_fc = config['decoder_fc_layers']
+            self.flat_decoder = Decoder(feat_dim, obs_dim, decoder_fc, rngs=rngs)
+
+    def __call__(self, feat):
+        if self.mode == 'hierarchical':
+            batch_shape = feat.shape[:-1]
+            H = self.body_decoder.net.layers[0].in_features # hidden_size
+            
+            # Phase 1: Global Expansion
+            assoc_body_flat = self.assoc_decoder(feat)
+            assoc_flat = assoc_body_flat[..., :len(self.assoc_indices) * H]
+            body_latent = assoc_body_flat[..., len(self.assoc_indices) * H:]
+            
+            # Phase 2: Body-State Expansion
+            body_flat = self.body_decoder(body_latent)
+            
+            # Phase 3: Per-Sensor Reconstruction
+            latents_all = jnp.zeros(batch_shape + (len(self.names), H), dtype=feat.dtype)
+            assoc_reshaped = assoc_flat.reshape(batch_shape + (len(self.assoc_indices), H))
+            latents_all = latents_all.at[..., self.assoc_indices, :].set(assoc_reshaped)
+            body_reshaped = body_flat.reshape(batch_shape + (len(self.body_indices), H))
+            latents_all = latents_all.at[..., self.body_indices, :].set(body_reshaped)
+            
+            decoded_all_padded = self.unimodal_grouped_decoder(latents_all)
+            
+            parts = []
+            for i, dim in enumerate(self.sensor_dims):
+                parts.append(decoded_all_padded[..., i, :dim])
+            return jnp.concatenate(parts, axis=-1)
+        else:
+            return self.flat_decoder(feat)
+
 class Decoder(nnx.Module):
     def __init__(self, input_dim: int, output_dim: int, fc_layers: list, rngs: nnx.Rngs):
         """
@@ -450,7 +519,10 @@ class WorldModel(nnx.Module):
         feat_dim = self.deter_dim + self.stoch_dim * self.discrete
         self.feat_dim = feat_dim
 
-        self.decoder = Decoder(feat_dim, obs_dim, decoder_fc, rngs=rngs)
+        self.decoder = DreamerObservationDecoder(
+            feat_dim, obs_dim, obs_breakdown, config, rngs=rngs
+        )
+            
         self.reward_head = MLP(feat_dim, 255, reward_fc, rngs=rngs)
         self.continue_head = MLP(feat_dim, 1, continue_fc, rngs=rngs)
 
