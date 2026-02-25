@@ -404,10 +404,10 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # 2. Collision damage (blocking rocks)
     # Target the specific obstacle we hit
     at_attempted_obs = jnp.all(state.obs_pos == attempted_pos, axis=-1)
-    damage_obs_collision = jnp.where(just_collided, jnp.max(jnp.where(at_attempted_obs, sampled_obs_damage, 0.0)), 0.0)
+    damage_obs_collision = jnp.where(just_collided, jnp.max(jnp.where(at_attempted_obs, sampled_obs_damage, 0.0), initial=0.0), 0.0)
     
     # Calculate collision NOC intensity for sensing
-    collision_noc = jnp.where(just_collided, jnp.max(jnp.where(at_attempted_obs, params.obs_nociception, 0.0)), 0.0)
+    collision_noc = jnp.where(just_collided, jnp.max(jnp.where(at_attempted_obs, params.obs_nociception, 0.0), initial=0.0), 0.0)
     
     total_damage = damage_res + damage_pred + damage_obs_overlap + damage_obs_collision
     

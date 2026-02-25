@@ -131,6 +131,7 @@ Generate high-quality videos demonstrating agent behavior and sensory activation
 | 07 | Mobility | **Collision** (Ray-cast) |
 | 08 | Homeostasis | **Interoception** (Full) |
 | 09 | Navigation | **Location** (Spatial) |
+| 10+ | - | [Full Review Matrix](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/docs/ABLATION_REVIEW.md) |
 
 ---
 

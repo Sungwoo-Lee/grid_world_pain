@@ -2,7 +2,8 @@
 environment:
   height: 4
   width: 4
-  start_pos: [0, 0]
+  start_pos: [1, 1]
+  random_start_pos: true
   max_steps: 200
   eat_action_enabled: true
   rest_action_enabled: true
@@ -10,7 +11,7 @@ environment:
     - name: "Food Source"
       type: "food"
       count: 1
-      spawn_area: [[3, 3], [3, 3]]
+      spawn_area: [[4, 4], [4, 4]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       regeneration_delay: 0
@@ -18,7 +19,7 @@ environment:
     - name: "Danger Zone"
       type: "danger"
       count: 1
-      spawn_area: [[0, 3], [0, 3]]
+      spawn_area: [[1, 4], [1, 4]]
       properties: [0.0, 1.0, 0.0, 0.0, 0.0]
       damage: 1.0
       max_consumption: -1
@@ -30,17 +31,45 @@ environment:
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 3
       damage: 3.0
-      spawn_area: [[0, 0], [4, 4]]
-      patrol_area: [[0, 0], [4, 4]]
+      spawn_area: [[1, 1], [4, 4]]
+      patrol_area: [[1, 1], [4, 4]]
       detection_range: 10
       max_stamina: 500
       stamina_recovery_rate: 1.0
       hunt_stamina_threshold: 0.0
+      attack_delay: 3
+      lose_interest_multiplier: 2.0
+  obstacles: []
+  neutral_animals: []
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [4, 4]]
 
 body:
   with_satiation: true
+  with_nutrition: true
   with_injury: true
   use_homeostatic_reward: true
+  # Mandatory fields
+  max_satiation: 100
+  max_nutrition: 100
+  max_injury: 30
+  food_nutrition_gain: 3
+  satiation_setpoint: 100
+  start_satiation: 100
+  start_nutrition: 100
+  metabolic_cost: 0.5
+  nutrition_to_satiation_scaling_factor: 1.0
+  recovery_base_rate: 0.1
+  recovery_accel_rate: 0.5
+  injury_smoothing_duration: 3
+  death_penalty: 100
+  overeating_death: false
+  random_start_satiation: false
+  random_start_nutrition: false
+  random_start_injury: false
+  eating_nutrition_cost: 1.0
+  eating_reward_penalty: 0.0
 
 sensory:
   using_sensory: true
@@ -49,4 +78,13 @@ sensory:
   proprioception_enabled: true
   collision_sensor_enabled: true
   location_sensor: false
+  visual_sensor_enabled: false
+  visual_sensor_range: 0
+  sensor_radius: 4
+  decay_power: 1.0
+  collision_sensor_range: 1
+  vector_size: 5
+  nociception_size: 1
 
+visualization:
+  local_view_size: 5

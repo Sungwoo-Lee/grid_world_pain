@@ -43,7 +43,7 @@ def load_env_params(config: Config) -> EnvParams:
         res_type = jnp.zeros(0, dtype=jnp.int32)
         res_property = jnp.zeros((0, 5))
         res_nociception = jnp.zeros(0)
-        res_spawn_area = jnp.zeros((0, 4))
+        res_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
         res_max_cons = jnp.zeros(0, dtype=jnp.int32)
         res_reg_delay = jnp.zeros(0, dtype=jnp.int32)
         res_damage = jnp.zeros((0, 2))
@@ -81,8 +81,8 @@ def load_env_params(config: Config) -> EnvParams:
         pred_nociception = jnp.zeros(0)
         pred_move_int = jnp.zeros(0, dtype=jnp.int32)
         pred_damage = jnp.zeros((0, 2))
-        pred_patrol = jnp.zeros((0, 4))
-        pred_spawn_area = jnp.zeros((0, 4))
+        pred_patrol = jnp.zeros((0, 4), dtype=jnp.int32)
+        pred_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
         pred_detect = jnp.zeros(0)
         pred_max_stamina = jnp.zeros(0)
         pred_recovery = jnp.zeros(0)
@@ -129,7 +129,7 @@ def load_env_params(config: Config) -> EnvParams:
         obs_nociception = jnp.zeros(0, dtype=jnp.float32)
         chem_dim = res_property.shape[-1]
         obs_property = jnp.zeros((0, chem_dim))
-        obs_spawn_area = jnp.zeros((0, 4))
+        obs_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
         obs_type = jnp.zeros(0, dtype=jnp.int32)
         obstacle_names = ("rock",)
     
@@ -160,8 +160,8 @@ def load_env_params(config: Config) -> EnvParams:
         neutral_property = jnp.zeros((0, 5))
         neutral_nociception = jnp.zeros(0)
         neutral_move_int = jnp.zeros(0, dtype=jnp.int32)
-        neutral_patrol = jnp.zeros((0, 4))
-        neutral_spawn_area = jnp.zeros((0, 4))
+        neutral_patrol = jnp.zeros((0, 4), dtype=jnp.int32)
+        neutral_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
 
     # Build Grid Location Types
     import numpy as np

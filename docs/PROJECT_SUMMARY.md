@@ -61,6 +61,7 @@ graph TB
 | [src/environment/core.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/environment/core.py) | Functional grid-world logic; no side-effects. |
 | [src/environment/sensor.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/environment/sensor.py) | Vectorized implementation of Olfaction, Nociception, and Proprioception. |
 | [src/environment/config_loader.py](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/src/environment/config_loader.py) | Strict YAML-to-EnvParams mapper (Mandatory values only). |
+| [docs/ABLATION_REVIEW.md](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/docs/ABLATION_REVIEW.md) | Detailed mapping of experiment levels and motivations. |
 
 ---
 
