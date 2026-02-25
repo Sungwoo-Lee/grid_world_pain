@@ -304,6 +304,12 @@ class DreamerTrainer(nnx.Module):
             h_mod_start = h_mods_all.reshape((-1,) + h_mods_all.shape[2:])
             h_mod_start = jax.lax.stop_gradient(h_mod_start)
 
+        # Pre-compute moments parameters for advantage normalization (OUTSIDE grad)
+        # This avoids tracing through self.moments inside nnx.grad which causes OOM
+        moments_low = jax.lax.stop_gradient(self.moments.low.value)
+        moments_high = jax.lax.stop_gradient(self.moments.high.value)
+        moments_invscale = jnp.maximum(1.0 / self.moments.max_, moments_high - moments_low)
+
         def behavior_loss_fn(actor, critic, rng):
             if modulation_enabled:
                 def scan_imag(carry, key):
@@ -378,7 +384,7 @@ class DreamerTrainer(nnx.Module):
             # Lambda returns with global discount
             lambda_returns = compute_lambda_values(rews, all_vals, conts * GAMMA)
 
-            norm_returns = self.moments.normalize(lambda_returns)
+            norm_returns = (lambda_returns - moments_low) / moments_invscale
             
             # Cumulative Discount Weighting
             # weights[t] = \prod_{i=0}^{t-1} (conts[i] * GAMMA)
@@ -386,16 +392,16 @@ class DreamerTrainer(nnx.Module):
             discount_weights = jnp.cumprod(discount_weights, axis=0)
             discount_weights = jax.lax.stop_gradient(discount_weights)
 
-            # Critic Loss
+            # Critic Loss — train on RAW lambda_returns (canonical DreamerV3)
             v_pred_logits = critic(rollouts['feat'])
-            target_twohot = to_twohot(jax.lax.stop_gradient(norm_returns))
+            target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns))
             loss_critic_step = -jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1)
             loss_critic = jnp.mean(loss_critic_step * discount_weights)
 
-            # Actor Loss
+            # Actor Loss — normalize BOTH sides for consistent advantage
             baseline = from_twohot(v_pred_logits)
-            advantage = jax.lax.stop_gradient(norm_returns - baseline)
-            # advantage = (advantage - jnp.mean(advantage)) / (jnp.std(advantage) + 1e-8)
+            norm_baseline = (baseline - moments_low) / moments_invscale
+            advantage = jax.lax.stop_gradient(norm_returns - norm_baseline)
             
             actions = rollouts['action']
             logits = rollouts['action_dist']
@@ -417,7 +423,7 @@ class DreamerTrainer(nnx.Module):
                 'mean_value': jnp.mean(baseline),
                 'mean_advantage': jnp.mean(advantage),
                 'mean_entropy': jnp.mean(entropy),
-                'value_mae': jnp.mean(jnp.abs(baseline - lambda_returns))
+                'value_mae': jnp.mean(jnp.abs(baseline - jax.lax.stop_gradient(lambda_returns)))
             }
             return (loss_actor + loss_critic), (metrics, lambda_returns)
 

@@ -11,5 +11,5 @@
   --num-envs 1 \
   --episodes 100000 \
   --checkpoint-frequency 10000 \
-  --device cuda:1 \
-  --tag "08_location_dreamer_v3_1env_1trainStep_decoderupdat"
+  --device cuda:0 \
+  --tag "08_location_dreamer_v3_1env_1trainStep_fixedReturns"

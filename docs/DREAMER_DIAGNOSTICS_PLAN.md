@@ -59,3 +59,219 @@ Fixed buffer capacity ($10^5$) means high parallelism flushes memory 64x faster.
 Replay buffer `capacity` (100,000) is not a multiple of `sequence_length` (128). Upon wrap-around, the indexing shifts, causing the temporal sampler to retrieve non-sequential "jumbled" trajectories. This corruption occurs 64x faster in highly parallel runs.
 
 **Status**: Root cause identified. Implementation of fixes (scaling `train_steps`, fixing key splitting, and aligning buffer capacity) is required to restore parallel efficiency.
+
+---
+
+## 8. Feb 25 – 08_location Training Failure Investigation
+
+### 8.1 Context
+Training with `configs/experiment/ablation/homeostatic/08_location.yaml` + `dreamer_v3.yaml` (1 env, 1 train step) fails to learn. This run uses the **same JAX DreamerV3 code** but switches to the 08_location ablation config which includes a predator, homeostatic reward, and all sensory channels.
+
+> **Important Context (from user)**:  
+> - The 08_location task **was trainable** with a previous code version (different git branch). Those results were deleted during branch cleanup, so no baseline comparison exists.  
+> - The 08_location config is **easier and faster** than the default env config. RecurrentPPO solves it quickly. The default config is actually more difficult.  
+> - The issue could be a **code bug** in the current JAX DreamerV3 implementation, **and/or hyperparameter/environment parameter changes** that occurred during the JAX migration (e.g., max nutrition, damage values, etc.).
+
+**Run**: `results/JAX_DreamerV3/20260225-210859_08_location_dreamer_v3_1env_1trainStep_decoderupdat`  
+**WandB**: `run-20260225_210900-bthzxq3a`  
+**Command**: `train.py --config 08_location.yaml --agent_config dreamer_v3.yaml --num-envs 1 --episodes 100000`
+
+### 8.2 Empirical Evidence (from WandB + Eval Stats)
+
+#### Eval Stats (100 episodes per checkpoint)
+| Checkpoint | Mean Ep Length | Action Distribution | Termination |
+|:---|:---|:---|:---|
+| 10,004 | 20 steps | 87% Right, 6% Up | 100% death (code 3) |
+| 20,002 | 17.3 steps | 100% Up | Mixed |
+| 30,003 | 17.3 steps | 100% Up | Mixed |
+
+**Diagnosis**: Complete policy collapse to a single action by 20k episodes. No survival improvement whatsoever.
+
+#### WandB Summary Metrics (at ~30k episodes / 555k timesteps)
+| Metric | Value | Healthy Range | Verdict |
+|:---|:---|:---|:---|
+| `mean_entropy` | **0.07** (from 0.32 at 10k) | >0.5 | ❌ **COLLAPSED** |
+| `Episode/Reward` | -137 | Should improve | ❌ Flat |
+| `Episode/Steps` | 21 | Should increase | ❌ Flat |
+| `model_reward_mae` | 4.8 | <1.0 | ❌ Very high |
+| `model_reward_mae_pos` | **0.0** | >0 | ❌ **Never sees positive reward** |
+| `model_reward_mae_neg` | 4.8 | - | High error on negatives |
+| `latent_entropy` | 0.66 | 1.5-2.5 | ⚠️ Low |
+| `loss_recon` | 0.015 | <0.1 | ✅ OK |
+| `loss_rew` | 0.54 | - | ⚠️ Not converging |
+| `mean_value` | 0.42 | Should track return | ❌ Mismatch |
+| `mean_return` | -21.0 | Should improve | ❌ Stuck |
+| `value_mae` | **21.5** | <5 | ❌ **Critic completely wrong** |
+| `loss_dyn_kl` / `loss_rep_kl` | 1.63 | ~1.0 (free nats) | ⚠️ Near floor |
+
+#### Comparison with Previous Runs (default env, Feb 24)
+| Run | Entropy | Ep Steps | Ep Reward | Rew MAE | Latent Ent |
+|:---|:---|:---|:---|:---|:---|
+| 64env hierarchical (default) | 0.15 | 58 | -143 | 1.97 | 0.83 |
+| 16env hierarchical (default) | 0.03 | 51 | -144 | 1.89 | 0.80 |
+| 4env hierarchical (default) | 0.04 | 36 | -136 | 2.36 | 0.87 |
+| 1env hierarchical (default) | 0.12 | 11 | -130 | 3.28 | 0.67 |
+| **08_location 1env (THIS RUN)** | **0.07** | **17** | **-137** | **4.80** | **0.66** |
+
+**Key Observation**: Entropy collapse occurs across ALL runs. This is a **systemic problem** with the DreamerV3 implementation, not specific to 08_location. The 08_location config is harder (predator, homeostatic reward) which makes the problem more visible.
+
+### 8.3 Root Cause Hypotheses (Ranked by Likelihood)
+
+#### H1: ❌ Entropy Collapse → Policy Death Spiral (PRIMARY SUSPECT)
+The policy entropy drops to near-zero within the first 10k episodes. With `entropy_scale=3e-4`, the entropy bonus in the actor loss is negligible (`loss_actor_entropy = -6.6e-6`). Once the policy becomes deterministic, it cannot explore, so it never finds food → only sees negative rewards → world model learns "all actions lead to death" → actor converges to an arbitrary fixed action.
+
+**Evidence**: `mean_entropy = 0.07` (should be >0.5), all previous runs also collapsed.
+
+**Potential Fix**: Increase `entropy_scale` (try 1e-2 or 3e-3) or investigate if the Reinforce-style actor loss is correctly formulated.
+
+#### H2: ⚠️ Actor Loss Formulation Mismatch
+The current actor loss uses REINFORCE (`log_prob * advantage + entropy_scale * entropy`). Canonical DreamerV3 uses **dynamics backprop** through the world model, or at minimum **Reinforce with normalized advantages**. A pure Reinforce formulation is extremely sensitive to high-variance advantages.
+
+**Evidence**: `mean_advantage=0.057` is suspiciously small and uniform, suggesting the advantage signal is being washed out.
+
+**Potential Fix**: Verify advantage normalization is working. Consider switching to the canonical straight-through actor.
+
+#### H3: ⚠️ Critic Divergence
+The critic predicts `mean_value=0.42` while `mean_return=-21.0`, with `value_mae=21.5`. The critic is completely detached from reality. This poisons the advantage estimates.
+
+**Evidence**: Critic loss is 1.02 which isn't decreasing. The `mean_norm_return` is 0.48 while advantage is 0.057, suggesting the Moments normalization is compressing everything into a tiny range.
+
+**Potential Fix**: Check if the Moments normalization is working correctly. Verify that the `norm_returns` passed to the critic use consistent scaling.
+
+#### H4: 🔍 Reward Signal Starvation
+The world model has `model_reward_mae_pos=0.0`, meaning it has **never encountered a positive reward** in its training data. In the 08_location config, the agent must find food AND eat it to get positive reward, but it dies too quickly (17 steps) to ever reach the food source at position (3,3).
+
+**Evidence**: All rewards are negative (homeostatic drive-reduction penalties accumulate). The reward head only learns to predict negative values.
+
+**Contributing Factor**: This is a *consequence* of H1 (entropy collapse → no exploration → no food discovery), not an independent cause.
+
+#### H5: 🔍 KL Collapse (Latent Uninformative)
+Both `loss_dyn_kl` and `loss_rep_kl` are at 1.63 — just barely above the free-nats threshold of 1.0. This means the posterior is nearly equal to the prior (the observation provides almost no information to the latent state). The world model isn't learning meaningful dynamics.
+
+**Evidence**: `latent_entropy=0.66` is very low. The prior/posterior collapse means imagination produces meaningless rollouts.
+
+### 8.4 Diagnostic Plan
+
+#### Phase 1: Quick Experiments (No Code Changes)
+- [ ] **Exp 1.1**: Run the *same code* with default env config + 1env to confirm the problem is systemic (not 08_location specific). Compare entropy trajectory.
+- [ ] **Exp 1.2**: Check if `num_steps` variable for `collect_sequence` in the training loop is set correctly for 08_location. Verify `sequence_length=128` matches the buffer and batch sampling.
+
+#### Phase 2: Entropy Fix (Highest Priority)
+- [ ] **Exp 2.1**: Increase `entropy_scale` from `3e-4` to `3e-3` or `1e-2` and rerun 08_location.
+- [ ] **Exp 2.2**: Add entropy logging per-step to verify the entropy regularization gradient is flowing correctly through the actor.
+
+#### Phase 3: Actor-Critic Audit
+- [ ] **Audit 3.1**: Verify the advantage computation. Check if `norm_returns - baseline` is producing meaningful gradients. Log advantage statistics (min, max, std) per train step.
+- [ ] **Audit 3.2**: Verify the Moments normalization is not compressing the return distribution too aggressively. Log the Moments `low`, `high` EMA values.
+- [ ] **Audit 3.3**: Verify the critic is predicting in the same space as the lambda returns (both should be symlog-space, or both raw-space). A mismatch here would explain the `value_mae=21.5`.
+
+#### Phase 4: World Model Verification
+- [ ] **Audit 4.1**: Verify the decoder `loss_recon` target is correct. The loss is 0.015 (low), but check if the decoder target is `symlog(obs)` (matching the input) — see line 121 vs line 201 in `dreamer_v3_trainer.py`.
+- [ ] **Audit 4.2**: Dump example imagined rewards from the behavior rollout. Verify they're in the correct range (not symlogged when they should be raw, etc.).
+- [ ] **Audit 4.3**: Check if the `continue_head` is correctly predicting episode termination (0.9957 accuracy seems high — verify it's not trivially predicting "always continue").
+
+#### Phase 5: Structural Issues
+- [ ] **Check 5.1**: Verify the `num_steps` variable usage in `train.py` line 797 — is it defined for the Dreamer branch? (It appears to use `config.get_mandatory('agent.sequence_length')` for collection, but `num_steps` in the stats loop may be undefined).
+- [ ] **Check 5.2**: Verify the `collect_sequence` is passing `is_first` correctly for episode boundaries within a 128-step sequence.
+
+### 8.5 Code Audit Findings (Feb 25, 21:50 KST)
+
+> **ROOT CAUSE IDENTIFIED**: Critical value-space mismatch in `behavior_loss_fn` (lines 389-420 of `dreamer_v3_trainer.py`)
+
+**Bug chain traced through the behavior loss:**
+
+1. `lambda_returns` computed from `from_twohot()` → **raw space** ✅
+2. `norm_returns = moments.normalize(lambda_returns)` → **[0,1]-ish** ✅  
+3. **BUG (line 391)**: `target_twohot = to_twohot(norm_returns)` → `to_twohot()` internally calls `symlog()`, so critic learns `symlog(norm_returns)` — a **double transformation**.
+4. **BUG (line 396)**: `baseline = from_twohot(v_pred_logits)` → returns `symexp(predicted)` → back to **~norm_returns space** (approximately).
+5. **BUG (line 397)**: `advantage = norm_returns - baseline` → subtracts Moments-normalized values from symexp(symlog(normalized)) values — **incompatible spaces for any non-trivial magnitude**.
+
+**This explains ALL symptoms**: garbage advantage → random actor gradients → entropy collapse → policy death spiral.
+
+**Fix**: See `implementation_plan.md` — Option A (canonical DreamerV3): train critic on raw `lambda_returns`, normalize both sides for advantage computation.
+
+### 8.6 Applied Fix & Verification (Feb 25, 22:00 KST)
+
+#### Changes Made to `dreamer_v3_trainer.py`
+
+**Background: How DreamerV3's Critic Works**
+
+DreamerV3 uses a **two-hot encoded critic** to predict future returns. The flow is:
+
+1. The agent imagines future trajectories in the world model.
+2. It computes **lambda returns** (discounted cumulative rewards) from imagined rewards — these are in **raw reward space** (e.g., values like -20, +5, etc.).
+3. The critic learns to predict these returns using a **two-hot distribution** over 255 buckets. The `to_twohot()` function converts a scalar target into this distribution, but crucially it first applies `symlog()` internally (symmetric log: `sign(x) * log(|x|+1)`) to compress the value range.
+4. The inverse function `from_twohot()` decodes the critic's prediction back to a scalar, applying `symexp()` (the inverse of `symlog`) — returning a value in **raw space**.
+5. **Moments normalization** scales raw returns to a `[0, 1]`-ish range by tracking the 5th/95th percentile via Exponential Moving Average. This normalized form is used for the **advantage** (which drives the actor's learning signal).
+
+**Bug 1 — Critic trained on double-transformed targets (line 391)**
+
+```python
+# BEFORE (broken):
+norm_returns = self.moments.normalize(lambda_returns)  # Raw → Normalized [0,1]
+target_twohot = to_twohot(norm_returns)                # to_twohot applies symlog AGAIN!
+# Result: critic learns to predict symlog(norm_returns) — a double transformation
+```
+
+The critic was being trained on `symlog(normalized_returns)` — the returns were first Moments-normalized (compressing to ~[0,1]) and then `to_twohot()` applied `symlog()` again. This double compression made the critic's target distribution nearly uniform, making it very hard to learn.
+
+```python
+# AFTER (fixed):
+target_twohot = to_twohot(lambda_returns)  # Raw → symlog (single transform, as intended)
+# Result: critic learns to predict symlog(raw_returns) — correct single transformation
+```
+
+**Bug 2 — Advantage computed in mismatched spaces (lines 396-397)**
+
+The **advantage** = (how good this trajectory is) - (how good the critic thinks it is). Both sides must be in the same numerical space for this subtraction to be meaningful.
+
+```python
+# BEFORE (broken):
+baseline = from_twohot(v_pred_logits)      # Returns symexp(critic_prediction) → ~raw space
+advantage = norm_returns - baseline         # Normalized [0,1] minus raw [-20, +5] = GARBAGE
+```
+
+`norm_returns` was in `[0, 1]` range while `baseline` was in raw space `[-20, +5]`. The subtraction produced meaningless advantage values → random gradients for the actor → entropy collapse → the agent locks onto a single action and stops exploring.
+
+```python
+# AFTER (fixed):
+baseline = from_twohot(v_pred_logits)                        # Raw space
+norm_baseline = (baseline - moments_low) / moments_invscale  # Normalize to same scale
+advantage = norm_returns - norm_baseline                     # Both normalized → meaningful signal
+```
+
+Both `norm_returns` and `norm_baseline` are now in the same Moments-normalized space, producing a meaningful advantage signal that correctly tells the actor which actions are better than expected.
+
+> **Note**: We pre-compute `moments_low` and `moments_invscale` *outside* the `nnx.grad` function to avoid pulling the Moments module's internal state into JAX's gradient computation graph (which would cause OOM errors due to unnecessary gradient tracing).
+
+**Bug 3 — value_mae metric (line 420)**
+
+```python
+# BEFORE: compared baseline (raw-ish) vs lambda_returns (raw) — but baseline was corrupted
+# AFTER:  both in raw space, giving an honest accuracy measure of the critic
+'value_mae': jnp.mean(jnp.abs(baseline - jax.lax.stop_gradient(lambda_returns)))
+```
+
+#### Verification Run
+- **Tag**: `diagnostic_value_fix_v2`
+- **WandB**: `run-20260225_220450-a2jts33m`
+- **Config**: 08_location, 1 env, 5000 episodes (144k timesteps, 8 min)
+
+#### Results: Before vs After Fix (at 5000 episodes)
+| Metric | Broken (30k eps) | Fixed (5k eps) | Verdict |
+|:---|:---|:---|:---|
+| `mean_entropy` | **0.07** | **1.79** | ✅ **FIXED** — no longer collapsed |
+| `mean_return` | -21.0 | **-12.9** | ✅ Improving |
+| `mean_value` | 0.42 | **-6.15** | ✅ Now tracks returns |
+| `value_mae` | **21.5** | **6.75** | ✅ 3x more accurate |
+| `model_reward_mae_pos` | **0.0** | **6.0** | ✅ Now sees positive rewards |
+| `model_reward_mae` | 4.8 | 3.73 | ✅ Slightly better |
+| `latent_entropy` | 0.66 | **1.10** | ✅ Richer latent |
+| `Episode/Steps` | 17 | **28.6** | ✅ 68% longer survival |
+| `Episode/Reward` | -137 | -138 | ⚠️ Similar — needs more training |
+| `loss_recon` | 0.015 | 0.15 | ⚠️ Higher (expected — model exploring more) |
+| `loss_rew` | 0.54 | 1.80 | ⚠️ Higher (learning harder reward landscape) |
+
+**Conclusion**: The value-space fix **resolves the primary bugs** (entropy collapse + critic divergence). The agent is now exploring (mean_entropy=1.79), learning meaningful representations (latent_entropy=1.10), and surviving longer (28.6 vs 17 steps). The episode reward hasn't improved yet — this is expected since 5k episodes (144k timesteps) is very early for DreamerV3. A longer run (50k+ episodes) is needed to see reward improvement.
+
+**Next steps**: Run a longer training (e.g., 30k–50k episodes) with `--debug` to monitor entropy and reward trajectories over time. If rewards still don't improve, investigate hyperparameters (entropy_scale, train_steps) and environment parameters (max_nutrition, damage values).
