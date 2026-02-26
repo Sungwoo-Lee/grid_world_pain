@@ -159,6 +159,39 @@ class Moments(nnx.Module):
         return (x - self.low.value) / invscale
 
 
+class Ratio:
+    """
+    Computes the number of gradient steps to perform based on a target ratio 
+    of gradient steps per environment step.
+    
+    Directly taken from Hafner et al. (2023) implementation.
+    """
+    def __init__(self, ratio: float, pretrain_steps: int = 0):
+        if pretrain_steps < 0:
+            raise ValueError(f"'pretrain_steps' must be non-negative, got {pretrain_steps}")
+        if ratio < 0:
+            raise ValueError(f"'ratio' must be non-negative, got {ratio}")
+        self._pretrain_steps = pretrain_steps
+        self._ratio = ratio
+        self._prev = None
+
+    def __call__(self, step: int) -> int:
+        if self._ratio == 0:
+            return 0
+        if self._prev is None:
+            self._prev = step
+            repeats = int(step * self._ratio)
+            if self._pretrain_steps > 0:
+                # If pretrain_steps is provided, we use it for the first call
+                repeats = int(self._pretrain_steps * self._ratio)
+            return repeats
+        
+        # Subsequent calls compute steps since last call
+        repeats = int((step - self._prev) * self._ratio)
+        self._prev += repeats / self._ratio
+        return repeats
+
+
 def hafner_init(scale=0.8796):
     """
     Hafner initialization: Truncated normal with stddev = scale / sqrt(fan_in).

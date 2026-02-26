@@ -277,9 +277,10 @@ def main():
         hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
         lr = args.lr or config.get_mandatory('agent.lr_actor')
     elif algorithm == "DreamerV3":
-        # Dreamer needs temporal sequences for the RSSM: collect sequence_length steps per
-        # iteration so we can store in env-major order (each env's trajectory contiguous).
-        num_steps = args.num_steps or config.get_mandatory('agent.sequence_length') 
+        # collect_interval: how many env steps to collect per iteration per env.
+        # 1 = sheeprl-style (canonical, fine-grained), 128 = full sequence (JAX-optimized).
+        # The replay buffer samples sequence_length-step sequences for BPTT training regardless.
+        num_steps = args.num_steps or config.get_mandatory('agent.collect_interval')
         # Dreamer has many hidden sizes; using rssm_deter_dim as a proxy for summary/logging
         hidden_size = args.hidden_size or config.get_mandatory('agent.rssm_deter_dim')
         lr = args.lr or config.get_mandatory('agent.actor_lr')
@@ -506,6 +507,10 @@ def main():
         trainer = DreamerTrainer(input_dim, action_dim, agent_config, rngs=nnx.Rngs(init_key),
                                  obs_breakdown=obs_breakdown,
                                  modulation_config=dreamer_mod_config)
+
+        from src.models.dreamer_v3_util import Ratio
+        ratio_scaled_updates = Ratio(config.get_mandatory('agent.replay_ratio'))
+        cumulative_gradient_steps = 0
 
 
         buffer = ReplayBuffer(
@@ -748,10 +753,10 @@ def main():
                     pbar.set_postfix(postfix)
                         
                 elif algorithm == "DreamerV3":
-                    # Use JITTED collect_sequence for massive speedup (approx 600x)
+                    # Use JITTED collect_sequence (collect_interval steps per env per iteration)
                     key, collect_key = jax.random.split(key)
                     env_state, dreamer_state, key, transitions = trainer.collect_sequence(
-                        env_state, params, config.get_mandatory('agent.sequence_length'), collect_key, dreamer_state)
+                        env_state, params, num_steps, collect_key, dreamer_state)
                     
                     # Convert transitions to NumPy and add to buffer.
                     # Store in ENV-MAJOR order so that sequence_length consecutive slots
@@ -830,15 +835,24 @@ def main():
                     metrics = {}
                     loss_msg = ""
                     if buffer.size > max(config.get_mandatory('agent.batch_size') * 2, config.get_mandatory('agent.sequence_length')):
-                        train_steps = config.get_mandatory('agent.train_steps')
+                        # Dynamic gradient steps based on replay_ratio.
+                        # With collect_interval=1 (sheeprl-style): global_step increments by num_envs per iter,
+                        # ratio returns num_envs gradient steps. With collect_interval=128: increments by 
+                        # num_envs*128, so we normalize to count sequences, not individual timesteps.
+                        train_steps = ratio_scaled_updates(global_step // num_steps)
                         for _ in range(train_steps):
                             batch_jax = buffer.sample(config.get_mandatory('agent.batch_size'))
                             key, train_key = jax.random.split(key)
                             metrics = trainer.train_step(batch_jax, train_key)
+                            cumulative_gradient_steps += 1
                         loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
                     
                     if wandb_enabled and iteration % 10 == 0:
-                        wandb_logs = {"timesteps": global_step, "iteration": iteration}
+                        wandb_logs = {
+                            "timesteps": global_step, 
+                            "iteration": iteration,
+                            "Params/effective_replay_ratio": cumulative_gradient_steps / max(1, global_step)
+                        }
                         for mk, mv in metrics.items():
                             if mk.startswith('loss_actor') or mk.startswith('loss_critic') or \
                                mk.startswith('mean_') or mk.startswith('entropy'):

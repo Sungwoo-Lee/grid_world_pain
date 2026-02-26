@@ -2,7 +2,9 @@ agent:
   algorithm: "DreamerV3"
   batch_size: 64
   sequence_length: 128   # Steps per trajectory (same concept as Recurrent PPO sequence_length)
-  train_steps: 1
+  replay_ratio: 1.0
+  collect_interval: 1     # Env steps per iteration per env. 1 = sheeprl-style (canonical), 128 = full sequence (JAX-optimized)
+  train_steps: 64
   model_lr: 1e-4
   actor_lr: 3e-5
   value_lr: 3e-5
