@@ -231,7 +231,7 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
     else:
         # GAE (original JAX)
         obs_final = jax.vmap(get_observation, in_axes=(0, None))(next_env_state, env_params)
-        _, final_v, _ = jax.vmap(model)(obs_final, next_h_state)
+        _, final_v, _, _ = jax.vmap(model)(obs_final, next_h_state)
         
         values_with_next = jnp.concatenate([trajectories.value, final_v.reshape(1, -1)], axis=0)
         
