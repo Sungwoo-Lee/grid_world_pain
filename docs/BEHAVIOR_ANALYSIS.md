@@ -302,7 +302,74 @@ We cannot directly measure "unpleasantness" in an RL agent, but we can measure b
 
 ---
 
-## 7. Data Pipeline Requirements
+## 7. Hypervigilance and Attentional Compensation
+
+### Motivation
+
+Hypervigilance is a core feature of chronic pain states in both animals and humans. It is defined as an **increased attentional allocation toward threat-related stimuli**, often at the expense of goal-directed behavior. In predictive processing / active inference frameworks (see [PRECISION_MODULATION.md](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/docs/PRECISION_MODULATION.md)), pain increases the precision weighting of interoceptive and nociceptive signals, causing the agent to "over-attend" to potential threats.
+
+Our environment provides a unique opportunity to study this computationally. The **state-dependent perceptual noise** system degrades sensory precision under injury (olfaction σ×3 at max injury, visual σ×4, injury sensing σ×2.5). This means an injured agent receives objectively worse sensory information. Hypervigilance, in behavioral terms, is **what the agent does to compensate for this degraded perception**:
+
+1. **Scanning behavior**: Moving more frequently to sample different locations, compensating for unreliable distal sensing (olfaction, vision).
+2. **Predator monitoring**: Spending more time near predators' detection boundaries, "checking" on threats rather than efficiently foraging.
+3. **Freezing / hesitation**: Pausing (choosing Rest or staying in place) before committing to a movement, consistent with increased threat assessment.
+4. **Attentional narrowing**: Reducing the behavioral repertoire to survival-critical actions (Rest, basic movement), abandoning exploratory or foraging behavior.
+
+The critical distinction from Section 2 (Movement Suppression) is the **direction** of the behavioral change: movement suppression is *reduced* activity, while hypervigilant scanning is *increased but unfocused* activity. A hypervigilant agent may move **more** steps than a healthy agent but cover **less** unique territory — it paces rather than explores.
+
+### Professor's Guidelines
+* **Scanning frequency**: Rate of direction changes; an agent that rapidly alternates between directions is "scanning" its environment.
+* **Threat monitoring proximity**: Time spent at intermediate distances from threats (not avoiding, not approaching — watching).
+* **Hesitation / freeze-then-act patterns**: Frequency of Rest actions immediately followed by movement, indicating threat assessment before commitment.
+* **Attentional narrowing**: Reduction in action entropy specifically in high-threat contexts (near predators, in danger zones).
+* **Sensory compensation**: Compare behavior under different perceptual noise regimes — does the agent compensate more when noise is higher?
+
+### Grid World Implementation
+
+* **Scanning Frequency (Direction Changes)**: Count the number of consecutive action pairs where the movement direction changes:
+  - A "direction change" is defined as step $t$ and $t+1$ both having movement actions (∈ {Up, Right, Down, Left}) but with different directions.
+  - **Scanning rate** = `direction_changes / total_movement_steps`.
+  - **Prediction**: An injured agent in a state-dependent noise regime should show a higher scanning rate than a healthy agent, because its degraded olfactory and visual sensing requires more spatial sampling to localize threats and food.
+  - **Compare**: Scanning rate when `injury > threshold` vs. `injury == 0`, stratified by proximity to predators.
+
+* **Predator Monitoring Distance**: Using agent position `(pos_r, pos_c)` and predator positions `(pred_*_r, pred_*_c)`:
+  - Compute the Manhattan distance to the nearest predator at each step.
+  - **Three zones**: Close (dist ≤ 2), Monitoring (2 < dist ≤ detection_range), Far (dist > detection_range).
+  - **Hypervigilance signature**: An injured agent should spend *more* time in the Monitoring zone compared to a healthy agent. A healthy agent either approaches (Close) or ignores (Far); an injured agent "watches from a distance."
+  - **Metric**: `time_in_monitoring_zone / episode_length`, compared across injury levels.
+
+* **Freeze-then-Scan Pattern**: Identify sequences where `event_rested == True` at step $t$ is immediately followed by a movement action at step $t+1$:
+  - **Freeze-scan rate** = `count(Rest→Move pairs) / count(Rest events)`.
+  - A purely rest-seeking agent (§1) would show Rest→Rest sequences (long bouts). A hypervigilant agent would show short Rest→Move→Rest→Move alternations.
+  - **Distinguish from bout resting**: Compare the ratio of `single-step rests (rest_streak == 1 at bout end) / total rest bouts`. A high ratio of single-step rests indicates scanning-type pauses, not recuperative resting.
+
+  > [!NOTE]
+  > This metric explicitly tests whether the agent's resting behavior is recuperative (long bouts, §1) vs. vigilant (short pauses for threat assessment). The two are not mutually exclusive — the agent may show both, but their ratio should shift with injury severity and predator proximity.
+
+* **Environmental Sampling Entropy**: Compute the entropy of the agent's **movement direction** distribution within a sliding window (e.g., 20 steps):
+  - $H_{dir} = -\sum_{a \in \{U,R,D,L\}} p(a) \log p(a)$
+  - **Maximum entropy** (uniform directions = 2.0 bits) indicates random scanning; **low entropy** indicates directed movement.
+  - **Hypervigilance prediction**: Direction entropy should *increase* under injury (especially with state-dependent noise), as the agent samples more directions to compensate for unreliable distal sensing.
+  - **Compare with exploration entropy (§2)**: Exploration entropy measures *where* the agent goes; direction entropy measures *how* it moves. Hypervigilance can show high direction entropy (scanning) with low exploration entropy (staying in a small safe area).
+
+* **Sensory-Driven Decision Errors**: Leverage the fact that ep_stats.csv logs both the observation channels (`obs_olf_*`, `obs_vis_*`) and the ground-truth entity positions (`res_*_r/c`, `pred_*_r/c`):
+  - **False alarm rate**: Steps where the agent takes an avoidance action (moves away from a location) when no actual threat is nearby (Manhattan distance to nearest danger/predator > K). This indicates the agent is reacting to noisy sensory signals.
+  - **Miss rate**: Steps where the agent moves toward or through a danger zone despite a threat being present (distance ≤ 2). This indicates the agent failed to detect the threat through noisy channels.
+  - **Signal detection framing**: Compute d' (sensitivity index) = Z(hit rate) − Z(false alarm rate), borrowing from Signal Detection Theory. A decrease in d' under injury indicates genuine perceptual degradation; an *increase* in false alarm rate without a proportional increase in miss rate indicates hypervigilance (lowered detection threshold).
+
+  > [!IMPORTANT]
+  > This analysis requires defining "avoidance action" and "approach action" relative to threat positions. A practical operationalization: at each step, compute whether the agent's movement *increased* or *decreased* its Manhattan distance to the nearest threat. "Avoidance" = increased distance; "Approach" = decreased distance. Apply Signal Detection Theory to these classifications.
+
+* **Perceptual Regime Comparison** (Experimental Ablation): The precision modulation system (see PRECISION_MODULATION.md §6) defines experimental conditions:
+  - **State-dependent noise** (current default): olfaction α=2.0, visual α=3.0
+  - **Constant noise** (ablation): α=0 for all modalities
+  - **No noise**: all modes set to `"none"`
+  - For each condition, run the same behavioral battery. **Hypervigilance should emerge most strongly in the state-dependent condition** — the agent has learned that its senses degrade under injury and compensates behaviorally.
+  - If hypervigilant behavior appears even in the constant-noise condition, it is driven purely by the injury cost (drive-based), not by perceptual degradation. This distinction is theoretically important: it separates "pain-as-impairment" from "pain-as-uncertainty" accounts.
+
+---
+
+## 8. Data Pipeline Requirements
 
 > [!CAUTION]
 > The following columns are needed for complete analysis but are **not yet logged** in `ep_stats.csv`. The evaluation logger (`evaluation_core.py`) must be extended before the full battery can be run.
@@ -339,6 +406,10 @@ For a standard "Behavioral Battery" report, aggregate the following from `ep_sta
 | 10 | **Cause-of-Death Ratio** | §5 | `count(reason == 4) / count(reason ∈ {2, 4})` |
 | 11 | **Pain-Rest Odds Ratio** | §6 | `P(Rest \| injured) / P(Rest \| healthy)` |
 | 12 | **Post-Damage Aversion** | §6 | `Δ distance` from damage site |
+| 13 | **Scanning Rate** | §7 | `direction_changes / total_movement_steps` (injured vs. healthy) |
+| 14 | **Predator Monitoring Time** | §7 | `time_in_monitoring_zone / episode_length` |
+| 15 | **Freeze-Scan Ratio** | §7 | `single_step_rests / total_rest_bouts` |
+| 16 | **Direction Entropy** | §7 | $H_{dir}$ over 20-step sliding window |
 
 ---
 
@@ -356,5 +427,9 @@ The current analysis script (`analysis/agentActionAnalysis.py`) provides:
 - ❌ Conflict state identification and resolution analysis (§4)
 - ❌ Motivational switching heatmap (§4)
 - ❌ Survival and cause-of-death analysis (§5)
+- ❌ Scanning frequency and direction entropy (§7)
+- ❌ Predator monitoring distance analysis (§7)
+- ❌ Freeze-then-scan pattern detection (§7)
+- ❌ Signal detection analysis (d', false alarms, misses) (§7)
 - ❌ Temporal (cross-checkpoint) learning curves for all metrics
 - ❌ Statistical testing (t-tests, effect sizes, CIs)
