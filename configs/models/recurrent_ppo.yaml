@@ -19,8 +19,8 @@ agent:
   
   # Parity Options
   rnn_type: "GRU"       # "LSTM" (PyTorch parity) or "GRU" (original JAX)
-  activation: "relu"     # "tanh" (PyTorch parity) or "relu" (original JAX)
-  return_mode: "GAE"      # "MC" (PyTorch parity) or "GAE" (original JAX)
+  activation: "tanh"     # "tanh" (PyTorch parity) or "relu" (original JAX)
+  return_mode: "MC"      # "MC" (PyTorch parity) or "GAE" (original JAX)
 
   # Encoding Configuration
   encoding_mode: "hierarchical"  # "flat" or "hierarchical"

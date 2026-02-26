@@ -1016,3 +1016,43 @@ Each iteration:
 | More training per data | `replay_ratio=2` (compensates fast buffer turnover) |
 | Faster wall-clock time | `replay_ratio=0.5` (half the grad steps) |
 | Match old `train_steps=N` | `replay_ratio = N / num_envs` |
+
+---
+
+## 15. Research: Prioritized Replay Buffer (PRB) Benefits
+
+We investigated whether implementing a Prioritized Replay Buffer would benefit the project, reviewing both original Dreamer/World Model papers via NotebookLM and the `sheeprl` implementation.
+
+### 15.1 NotebookLM Findings (Dreamer/World Models Lineage)
+
+Based on the original papers (PlaNet, DreamerV1-V4), the lineage generally **avoids** dynamic Prioritized Replay (like TD-error based PER) to maintain simplicity:
+
+*   **PlaNet, DreamerV1/V2**: Strictly use uniform sampling of sequences from episodic buffers.
+*   **DreamerV3**: Explicitly rejected PRB for universality. The authors stated: *"Although prioritized replay... [can] improve the performance of Dreamer, we opt for uniform replay in our experiments for ease of implementation."*
+*   **DreamerV4**: Uses a **static data mixture** (50% uniform, 50% "relevant" trajectories) for multi-task offline learning (e.g., Minecraft diamond gathering), rather than a dynamic priority queue.
+
+### 15.2 Sheeprl Code Review
+
+The `sheeprl` implementation includes a simple but effective prioritization heuristic:
+
+*   **`prioritize_ends` (EpisodeBuffer)**: Instead of complex TD-error calculations, it simply increases the probability of sampling sequences that end at the termination of an episode.
+*   **Mechanism**: It allows the sampling range to extend "past" the episode end and then clips it to the final valid sequence index. This effectively makes the terminal transitions (often containing the most important reward signal) appear in more batches.
+*   **Citations**: This heuristic is often used in sparse-reward environments where terminal states (Goal/Death) carry the most information.
+
+### 15.3 Consideration for Our Project
+
+Given our `grid_world_pain` environment, here are the pros and cons of implementing PRB:
+
+**Pros:**
+1.  **Focus on Sparse Events**: Events like eating food or hitting a wall are rare but critical. Prioritizing these would speed up world model convergence on these boundaries.
+2.  **Compensate for Buffer Turnover**: With 64 environments, the buffer churns 65× faster. Prioritizing important sequences ensures they are trained on multiple times before being overwritten.
+
+**Cons:**
+1.  **JAX Complexity**: Standard PRB requires updating priorities in the buffer after every gradient step. In a JAX-jitted loop, this can introduce significant overhead and complexity compared to uniform sampling.
+2.  **Hyperparameter Sensitivity**: PRB introduces new hyperparameters ($\alpha$, $\beta$) that can destabilize learning if not tuned.
+
+### 15.4 Recommendation
+
+1.  **Start with `prioritize_ends`**: If we observe the agent struggling to learn from terminal rewards, we should implement the `prioritize_ends` heuristic from sheeprl. It is computationally cheap and directly addresses sparse terminal signals.
+2.  **Increase Buffer Size First**: Before moving to complex PRB, we should first scale the buffer size to handle the 64-env churn (see Section 13.4).
+3.  **Static Mixture (DreamerV4 style)**: For multi-goal tasks, a static "relevant sequence" sampler (e.g., sampling from successful episodes more often) is likely more robust than TD-error based prioritization.

@@ -18,4 +18,4 @@
   --episodes 10000 \
   --checkpoint-frequency 1000 \
   --device cuda:1 \
-  --tag "08_location_rppo"
+  --tag "08_location_rppo_tanh_mc"
