@@ -837,3 +837,182 @@ train_steps = ratio_scaled_updates(global_step // num_steps)
 The `collect_interval` only affects iteration granularity:
 - `1` (default): Many small iterations — matches canonical DreamerV3/sheeprl, finer-grained training
 - `128`: Fewer large iterations — exploits JAX `lax.scan` vectorization for faster collection
+
+---
+
+## 13. Re-interpretation of Section 11 Results (Feb 26, 14:15 KST)
+
+With the corrected understanding of per-sequence replay ratios (Section 12.4–12.7), we must re-interpret the Section 11 three-way comparison. The old analysis assumed the gradient-to-data ratio was the primary differentiator — but the recalculated ratios reveal a surprising picture.
+
+### 13.1 Recalculated Effective Replay Ratios
+
+All three Section 11 runs used `collect_interval = sequence_length = 128` (the old default). The correct metric is **gradient steps per collected sequence**:
+
+| Run | train_steps | envs/iter | seqs/iter | **grad/seq** | Notes |
+|:---|:---|:---|:---|:---|:---|
+| **1env/1train fixed** | 1 | 1 | 1 | **1.00** | ✅ |
+| **64env/64train fixed** | 64 | 64 | 64 | **1.00** | ✅ Same ratio! |
+| decoderupdat (pre-fix) | 1 | 1 | 1 | **1.00** | ✅ Same ratio! |
+| 64env/16train (Section 9) | 16 | 64 | 64 | **0.25** | ❌ Under-trained |
+
+> [!IMPORTANT]
+> **The 1env/1train and 64env/64train runs had identical effective replay ratios (1.0 per sequence).** The performance gap between them (MeanLen 188 vs 124 at 500k eps) is NOT explained by training intensity.
+
+### 13.2 What Actually Explains the Performance Gap?
+
+Since the replay ratio was matched, the remaining performance difference between 1env (MeanLen=188) and 64env (MeanLen=124) at 500k episodes must come from other factors:
+
+**1. Replay Buffer Turnover (likely primary cause)**
+| | 1env | 64env |
+|:---|:---|:---|
+| Transitions added per iter | 128 | 8,192 |
+| Buffer capacity | 100,000 | 100,000 |
+| Iters to fill buffer | ~781 | ~12 |
+| **Data retention time** | **~781 iters** | **~12 iters** |
+
+With 64 envs, data is overwritten 65× faster. The world model has far fewer opportunities to re-train on each piece of experience before it's discarded. This means:
+- Rare or important experiences (e.g., finding food for the first time) are quickly lost
+- The world model cannot consolidate its understanding through repeated exposure
+
+**2. Gradient Step Diversity**
+- **1env**: Each of the 1 grad step uses a batch sampled from a stable, slowly-changing buffer. The model sees similar data multiple times across iterations.
+- **64env**: Each of the 64 grad steps uses batches sampled from a rapidly-churning buffer. More diverse data per iteration, but less repeated exposure.
+
+**3. Number of Iterations**
+| | 1env | 64env |
+|:---|:---|:---|
+| Env steps at 500k eps | ~64M (230k iters × 128 × 1) | ~64M (500 iters × 128 × 64) |
+| **Iterations** | **~230,000** | **~500** |
+| Grad steps total | ~230,000 | ~32,000 |
+
+At the same episode count, 1env has done 7× more iterations and gradient steps despite collecting data at 1/64th the rate per iteration. This is because 64env completes 64 episodes per iteration vs 1env's ~1.
+
+### 13.3 Re-interpretation of Section 9's 64env/16train
+
+The earlier analysis (Section 9) identified the 64env/16train run as having a "gradient-to-data ratio mismatch." With the corrected per-sequence metric:
+
+- **64env/16train**: 16 grad steps / 64 sequences = **0.25 grad per sequence** — genuinely under-trained
+- **64env/64train**: 64 grad steps / 64 sequences = **1.0 grad per sequence** — correctly matched
+
+This confirms the Section 9 diagnosis was directionally correct, even though the absolute numbers were overstated (we said 1:512 vs 1:128, but per-sequence it was 0.25 vs 1.0).
+
+### 13.4 Implications for the New `replay_ratio` Implementation
+
+With `collect_interval=1` and `replay_ratio=1`:
+- **64env**: Each iter collects 64 env steps → 64 grad steps
+- This equals 1 gradient step per env step, or equivalently 1 gradient step per collected "event"
+- The buffer still samples full `sequence_length=128` sequences for training
+
+The replay buffer turnover issue (Section 13.2.1) remains. To address it:
+1. **Scale buffer capacity with num_envs**: `capacity = 100,000 × num_envs / 64 ≈ 100,000` (already correct for 1env, needs to be larger for 64env)
+2. **Or use `replay_ratio > 1`**: Train more on each collected experience before it's overwritten
+3. **Or reduce `collect_interval`**: Already set to 1 (minimum)
+
+### 13.5 Summary
+
+| Factor | Section 11 Conclusion | Corrected Interpretation |
+|:---|:---|:---|
+| Training intensity | "1env gets more training" | ❌ Both had 1.0 grad/seq — equal intensity |
+| Replay buffer | Mentioned but not primary | ✅ **Primary cause** of 1env advantage |
+| Total grad steps | 230k vs 32k | ✅ Consequence of buffer+ratio dynamics |
+| 64env/16train gap | "4× fewer gradient updates" | ✅ Correct (0.25 vs 1.0 per sequence) |
+
+---
+
+## 14. Quick Reference: Replay Ratio, Collect Interval, and Gradient Steps
+
+### 14.1 The Formula
+
+```
+env_steps_per_iter  = num_envs × collect_interval
+ratio_input         = env_steps_per_iter / collect_interval  =  num_envs
+grad_steps_per_iter = num_envs × replay_ratio
+```
+
+> The `// collect_interval` normalization cancels out the collection batch size, so **grad steps per iteration = `num_envs × replay_ratio`**, regardless of `collect_interval`.
+
+### 14.2 Worked Examples
+
+All examples use `sequence_length=128` (unchanged, used for replay buffer sampling and BPTT).
+
+---
+
+**Example A: `num_envs=1, collect_interval=1, replay_ratio=1`**
+```
+Each iteration:
+  Collect:  1 env × 1 step   = 1 env step
+  Train:    1 × 1.0           = 1 gradient step
+  
+  Buffer samples a random 128-step sequence for each grad step.
+```
+
+---
+
+**Example B: `num_envs=64, collect_interval=1, replay_ratio=1`**
+```
+Each iteration:
+  Collect:  64 envs × 1 step  = 64 env steps
+  Train:    64 × 1.0           = 64 gradient steps
+  
+  64 gradient steps, each sampling a random 128-step sequence from the buffer.
+```
+
+---
+
+**Example C: `num_envs=64, collect_interval=128, replay_ratio=1`**  
+(Equivalent to Example B, just batched differently)
+```
+Each iteration:
+  Collect:  64 envs × 128 steps = 8,192 env steps
+  Ratio input: 8192 / 128       = 64
+  Train:    64 × 1.0             = 64 gradient steps  ← same as Example B!
+  
+  The collect_interval=128 means fewer iterations but bigger collection batches.
+  Gradient steps per iteration are identical.
+```
+
+---
+
+**Example D: `num_envs=64, collect_interval=1, replay_ratio=2`**
+```
+Each iteration:
+  Collect:  64 envs × 1 step = 64 env steps
+  Train:    64 × 2.0          = 128 gradient steps
+  
+  Doubled training intensity — useful when buffer turnover is too fast.
+```
+
+---
+
+**Example E: `num_envs=64, collect_interval=1, replay_ratio=0.5`**
+```
+Each iteration:
+  Collect:  64 envs × 1 step = 64 env steps
+  Train:    64 × 0.5          = 32 gradient steps
+  
+  Halved training intensity — faster wall-clock iterations.
+```
+
+---
+
+### 14.3 Summary Table
+
+| num_envs | collect_interval | replay_ratio | env_steps/iter | **grad_steps/iter** |
+|:---|:---|:---|:---|:---|
+| 1 | 1 | 1 | 1 | **1** |
+| 1 | 128 | 1 | 128 | **1** |
+| 64 | 1 | 1 | 64 | **64** |
+| 64 | 128 | 1 | 8,192 | **64** |
+| 64 | 1 | 0.5 | 64 | **32** |
+| 64 | 1 | 2 | 64 | **128** |
+| 256 | 1 | 1 | 256 | **256** |
+
+### 14.4 Practical Guidance
+
+| Goal | Setting |
+|:---|:---|
+| Match sheeprl canonical | `collect_interval=1, replay_ratio=1` |
+| Faster collection (JAX) | `collect_interval=128, replay_ratio=1` (same grad steps) |
+| More training per data | `replay_ratio=2` (compensates fast buffer turnover) |
+| Faster wall-clock time | `replay_ratio=0.5` (half the grad steps) |
+| Match old `train_steps=N` | `replay_ratio = N / num_envs` |
