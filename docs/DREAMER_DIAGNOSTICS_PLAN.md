@@ -1019,40 +1019,123 @@ Each iteration:
 
 ---
 
-## 15. Research: Prioritized Replay Buffer (PRB) Benefits
+## 15. Research: Prioritized Replay Buffer (PRB) — Deep Analysis (Feb 26, 17:40 KST)
 
-We investigated whether implementing a Prioritized Replay Buffer would benefit the project, reviewing both original Dreamer/World Model papers via NotebookLM and the `sheeprl` implementation.
+### 15.1 NotebookLM Findings: What the Dreamer Lineage Actually Does
 
-### 15.1 NotebookLM Findings (Dreamer/World Models Lineage)
+Queried NotebookLM on PRB mechanisms across the World Models → Dreamer lineage. Key findings:
 
-Based on the original papers (PlaNet, DreamerV1-V4), the lineage generally **avoids** dynamic Prioritized Replay (like TD-error based PER) to maintain simplicity:
+**PlaNet, DreamerV1/V2**: Pure uniform sampling from episodic FIFO buffers.
 
-*   **PlaNet, DreamerV1/V2**: Strictly use uniform sampling of sequences from episodic buffers.
-*   **DreamerV3**: Explicitly rejected PRB for universality. The authors stated: *"Although prioritized replay... [can] improve the performance of Dreamer, we opt for uniform replay in our experiments for ease of implementation."*
-*   **DreamerV4**: Uses a **static data mixture** (50% uniform, 50% "relevant" trajectories) for multi-task offline learning (e.g., Minecraft diamond gathering), rather than a dynamic priority queue.
+**DreamerV3**: The paper says *"we opt for uniform replay"*, but the actual implementation uses a **hybrid** strategy:
+- **Online queue**: Fresh, non-overlapping trajectories from the current policy are included in every minibatch first.
+- **Uniform replay**: The rest of the batch is filled with uniformly sampled sequences from the historical buffer.
+- This ensures the model is constantly updated with its *current* policy's interactions without losing the diversity of past experience.
+- The authors explicitly acknowledge: *"prioritized replay... [can] improve the performance of Dreamer"* — they chose uniform for implementation simplicity, not because it's better.
 
-### 15.2 Sheeprl Code Review
+**DreamerV4**: Abandoned pure uniform for offline learning. Uses a **static 50/50 mixture**:
+- 50% uniformly sampled sequences from the full dataset
+- 50% "relevant" sequences (trajectories that accomplish target tasks, e.g., finding diamonds in Minecraft)
+- This addresses the problem of rare-event signal dilution in large datasets.
 
-The `sheeprl` implementation includes a simple but effective prioritization heuristic:
+**World Models (2018)**: Explicitly warned about **catastrophic forgetting** — "standard neural networks trained with backpropagation have limited capacity and may not be able to store all historical information inside their weight connections." Suggested external memory or behavioural replay.
 
-*   **`prioritize_ends` (EpisodeBuffer)**: Instead of complex TD-error calculations, it simply increases the probability of sampling sequences that end at the termination of an episode.
-*   **Mechanism**: It allows the sampling range to extend "past" the episode end and then clips it to the final valid sequence index. This effectively makes the terminal transitions (often containing the most important reward signal) appear in more batches.
-*   **Citations**: This heuristic is often used in sparse-reward environments where terminal states (Goal/Death) carry the most information.
+> [!IMPORTANT]
+> DreamerV3 is NOT purely uniform — it uses an online-queue to guarantee recency. Our buffer lacks this mechanism entirely.
 
-### 15.3 Consideration for Our Project
+### 15.2 Sheeprl Code Review: `prioritize_ends` Mechanism
 
-Given our `grid_world_pain` environment, here are the pros and cons of implementing PRB:
+The `sheeprl` `EpisodeBuffer` implements a lightweight heuristic (`prioritize_ends`) in its sampling method:
 
-**Pros:**
-1.  **Focus on Sparse Events**: Events like eating food or hitting a wall are rare but critical. Prioritizing these would speed up world model convergence on these boundaries.
-2.  **Compensate for Buffer Turnover**: With 64 environments, the buffer churns 65× faster. Prioritizing important sequences ensures they are trained on multiple times before being overwritten.
+**How it works** (from `sheeprl/data/buffers.py:1088-1097`):
+```python
+# Without prioritize_ends: upper = ep_len - sequence_length + 1
+# With prioritize_ends:    upper += sequence_length  (doubles the range)
+# Then clips: start_idx = min(sampled_idx, ep_len - sequence_length)
+```
 
-**Cons:**
-1.  **JAX Complexity**: Standard PRB requires updating priorities in the buffer after every gradient step. In a JAX-jitted loop, this can introduce significant overhead and complexity compared to uniform sampling.
-2.  **Hyperparameter Sensitivity**: PRB introduces new hyperparameters ($\alpha$, $\beta$) that can destabilize learning if not tuned.
+This means:
+- Without: Sampling start uniformly from `[0, ep_len - seq_len]` → equal weight to all positions
+- With: Sampling from `[0, ep_len]` → indices beyond `ep_len - seq_len` all clamp to the final valid position → **terminal sequences are oversampled by roughly `seq_len / ep_len`**
 
-### 15.4 Recommendation
+For a 300-step episode with `seq_len=64`:
+- Without: 237 possible start positions, each with probability 1/237
+- With: 300 possible start positions, but the last 64 all map to start=236 → terminal sequence appears with probability 64/300 ≈ 21% instead of 1/237 ≈ 0.4%
 
-1.  **Start with `prioritize_ends`**: If we observe the agent struggling to learn from terminal rewards, we should implement the `prioritize_ends` heuristic from sheeprl. It is computationally cheap and directly addresses sparse terminal signals.
-2.  **Increase Buffer Size First**: Before moving to complex PRB, we should first scale the buffer size to handle the 64-env churn (see Section 13.4).
-3.  **Static Mixture (DreamerV4 style)**: For multi-goal tasks, a static "relevant sequence" sampler (e.g., sampling from successful episodes more often) is likely more robust than TD-error based prioritization.
+This is a ~50× bias toward terminal sequences — a significant but computationally free prioritization.
+
+**Where it's used**: DreamerV2 in sheeprl enables `prioritize_ends=True` for Crafter and Ms. Pacman (sparse reward environments), but not for the default config. DreamerV3 in sheeprl does not use `EpisodeBuffer` at all.
+
+### 15.3 Our Buffer: Structural Audit
+
+Our `ReplayBuffer` in `dreamer_v3_trainer.py` has several limitations relevant to this analysis:
+
+**Current sampling** (`sample()`):
+```python
+# Pure block-aligned uniform sampling
+block_indices = np.random.randint(0, num_blocks, size=batch_size)
+starts = block_indices * self.sequence_length
+```
+
+| Feature | Our Buffer | DreamerV3 Paper | sheeprl EpisodeBuffer |
+|:---|:---|:---|:---|
+| Sampling | Block-aligned uniform | Hybrid (online queue + uniform) | Episode-aware uniform |
+| Recency bias | ❌ None | ✅ Online queue guarantees it | ❌ None (unless prioritize_ends) |
+| Episode boundaries | ❌ Ignores them | ✅ Respects via is_first | ✅ Stores complete episodes |
+| Terminal oversampling | ❌ None | ❌ None | ✅ `prioritize_ends` |
+| Cross-episode sequences | ⚠️ Possible if env resets mid-block | Handled by is_first masking | ❌ Impossible (episode-level storage) |
+
+**Key issues identified**:
+
+1. **No recency bias**: All stored data is sampled with equal probability. DreamerV3's online queue ensures fresh policy data is always in the batch. With 64 envs and fast buffer turnover, our model may train on stale data that no longer reflects the current policy.
+
+2. **Block-alignment rigidity**: We only sample at multiples of `sequence_length`. If an episode ends in the middle of a block, the next sample may span two unrelated episodes. The `is_first` flag in training handles this, but it wastes training signal on boundary artifacts.
+
+3. **No episode awareness**: We cannot selectively oversample rare episodes (e.g., episodes where the agent found food, or died from an unusual cause).
+
+### 15.4 Applicability to Our Grid World
+
+Our `grid_world_pain` environment has specific properties that make replay prioritization particularly relevant:
+
+**Reward structure**:
+- Homeostatic rewards are **dense** (received every step based on internal state changes)
+- Goal-reaching rewards are **sparse** (only when the agent enters a specific location)
+- Collision penalties are **sparse** (only on wall contact)
+
+**Episode characteristics**:
+- Episode length varies with agent competence (short episodes = quick death, long = survival)
+- Early training: most episodes are short, random exploration
+- Later training: episodes lengthen as the agent learns to survive
+
+**The core problem**: With 64 envs and a 100k buffer, data retention is ~12 iterations. If the agent discovers a successful strategy (e.g., navigating to food) in one episode, that critical experience may be overwritten before the world model has trained on it enough to generalize.
+
+### 15.5 Recommended Prioritization Strategy (Ordered by Complexity)
+
+**Level 0 — Buffer Scaling (do first, no code change)**:
+- Increase `capacity` proportionally to `num_envs`
+- 64 envs → `capacity = 100_000 × 64 = 6.4M` transitions (or a practical 1M–2M)
+- This directly addresses the turnover problem from Section 13.2
+
+**Level 1 — Online Queue (moderate complexity)**:
+- Reserve a fraction of each minibatch (e.g., 25%) for the *most recent* `collect_interval` transitions
+- Fill the remaining 75% with uniform buffer samples
+- Matches DreamerV3's hybrid approach
+- Implementation: store the latest collection as a separate "online" buffer, mix at sample time
+
+**Level 2 — `prioritize_ends` (low complexity)**:
+- Bias sampling toward sequences containing terminal transitions
+- Can be implemented by tracking done indices in the buffer and oversampling those blocks
+- Addresses sparse terminal reward learning
+- Our block-aligned sampling makes this slightly different from sheeprl (oversample blocks containing dones rather than episode-end positions)
+
+**Level 3 — Static Event Mixture (moderate complexity, DreamerV4-style)**:
+- Tag episodes by outcome (reached goal, starved, collided, survived N steps)
+- Sample 50% uniform + 50% from "interesting" episodes
+- Requires episode-level metadata tracking
+- Most effective if specific behaviors are hard to learn
+
+**Level 4 — Full TD-Error PER (high complexity, not recommended)**:
+- Requires computing TD errors after every gradient step
+- Incompatible with JAX jit patterns (priority updates are inherently sequential)
+- Adds α, β hyperparameters
+- The Dreamer lineage explicitly avoids this approach
