@@ -1,9 +1,9 @@
 # Default Configuration for GridWorld Interoceptive AI
 
 environment:
-  height: 20
-  width: 20
-  start_pos: [6, 15]
+  height: 10
+  width: 10
+  start_pos: [5, 5]
   max_steps: 500
   rest_action_enabled: true
   eat_action_enabled: true
@@ -12,48 +12,58 @@ environment:
   resources:
     - name: "food" # Top Left
       type: "food"
-      count: 3
-      spawn_area: [[1, 1], [10, 10]]
+      count: 1
+      spawn_area: [[1, 1], [5, 5]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 35
-      regeneration_delay: 100
+      regeneration_delay: 250
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
 
     - name: "food" # Top Right
       type: "food"
-      count: 3
-      spawn_area: [[1, 11], [10, 20]]
+      count: 1
+      spawn_area: [[1, 6], [5, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      max_consumption: 20
+      max_consumption: 35
       regeneration_delay: 250
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
 
     - name: "food" # Bottom Right
       type: "food"
-      count: 3
-      spawn_area: [[11, 11], [20, 20]]
+      count: 1
+      spawn_area: [[6, 6], [10, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 35
-      regeneration_delay: 100
+      regeneration_delay: 250
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
 
     - name: "food" # Bottom Left
       type: "food"
-      count: 3
-      spawn_area: [[11, 1], [20, 10]]
+      count: 1
+      spawn_area: [[6, 1], [10, 5]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      max_consumption: 20
+      max_consumption: 35
       regeneration_delay: 250
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
 
     - name: "danger" # Top Left
       type: "danger"
-      count: 8
-      spawn_area: [[1, 1], [10, 10]]
+      count: 2
+      spawn_area: [[1, 1], [5, 5]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: [5.0, 15.0]
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+    - name: "danger" # Top Right
+      type: "danger"
+      count: 2
+      spawn_area: [[1, 6], [5, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: [5.0, 15.0]
@@ -62,8 +72,18 @@ environment:
 
     - name: "danger" # Bottom Right
       type: "danger"
-      count: 8
-      spawn_area: [[11, 11], [20, 20]]
+      count: 2
+      spawn_area: [[6, 6], [10, 10]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: [5.0, 15.0]
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+    - name: "danger" # Bottom Left
+      type: "danger"
+      count: 2
+      spawn_area: [[6, 1], [10, 5]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: [5.0, 15.0]
@@ -76,147 +96,95 @@ environment:
       property: [0.0, 0.3, 0.0, 0.0, 0.0]
       move_interval: 1
       nociception_intensity: 0.1
-      spawn_area: [[1, 1], [20, 20]]
-      patrol_area: [[1, 1], [20, 20]]
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
 
   predator_enabled: true
   predators:
-    - name: "predator" # Top Left
-      count: 1
+    - name: "predator" # 
+      count: 2
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 1
       damage: [5.0, 15.0]
       nociception_intensity: 0.9
-      spawn_area: [[1, 1], [9, 9]]
-      patrol_area: [[1, 1], [9, 9]]
-      detection_range: 5
-      max_stamina: 30
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: 3
+      max_stamina: 15
       stamina_recovery_rate: 1
-      hunt_stamina_threshold: 0.5
+      hunt_stamina_threshold: 0.7
       attack_delay: 3
-      lose_interest_multiplier: 2.0
-
-    - name: "predator" # Top Right
-      count: 1
-      property: [0.0, 1.0, 0.0, 0.0, 0.0]
-      move_interval: 1
-      damage: [5.0, 15.0]
-      nociception_intensity: 0.9
-      spawn_area: [[1, 11], [9, 19]]
-      patrol_area: [[1, 11], [9, 19]]
-      detection_range: 5
-      max_stamina: 30
-      stamina_recovery_rate: 1
-      hunt_stamina_threshold: 0.5
-      attack_delay: 3
-      lose_interest_multiplier: 2.0
-
-    - name: "predator" # Bottom Left
-      count: 1
-      property: [0.0, 1.0, 0.0, 0.0, 0.0]
-      move_interval: 1
-      damage: [5.0, 15.0]
-      nociception_intensity: 0.9
-      spawn_area: [[11, 1], [19, 9]]
-      patrol_area: [[11, 1], [19, 9]]
-      detection_range: 5
-      max_stamina: 30
-      stamina_recovery_rate: 1
-      hunt_stamina_threshold: 0.5
-      attack_delay: 3
-      lose_interest_multiplier: 2.0
-
-    - name: "predator" # Bottom Right
-      count: 1
-      property: [0.0, 1.0, 0.0, 0.0, 0.0]
-      move_interval: 1
-      damage: [5.0, 15.0]
-      nociception_intensity: 0.9
-      spawn_area: [[11, 11], [20, 20]]
-      patrol_area: [[11, 11], [20, 20]]
-      detection_range: 5
-      max_stamina: 30
-      stamina_recovery_rate: 1
-      hunt_stamina_threshold: 0.5
-      attack_delay: 3
-      lose_interest_multiplier: 2.0
+      lose_interest_multiplier: 1.5
 
   location_areas:
     - type: "grass"
-      area: [[1, 1], [20, 20]]
+      area: [[1, 1], [10, 10]]
     - type: "sand"
       area: [[0, 0], [0, 0]]
 
   obstacles:
     - name: "rock" # Top Left
-      count: 5
-      area: [[1, 11], [10, 20]]
+      count: 3
+      area: [[1, 1], [5, 5]]
       blocking: false
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "rock" # Top Right
-      count: 5
-      area: [[1, 11], [10, 20]]
+      count: 3
+      area: [[1, 6], [5, 10]]
       blocking: false
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "rock" # Bottom Left
-      count: 5
-      area: [[11, 1], [20, 10]]
+      count: 3
+      area: [[6, 1], [10, 5]]
       blocking: false
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "rock" # Bottom Right
-      count: 5
-      area: [[11, 11], [20, 20]]
+      count: 3
+      area: [[6, 6], [10, 10]]
       blocking: false
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "tree"
-      count: 1
+      count: 0
       area: [[5, 15], [5, 15]]
       blocking: true
       damage: [0.1, 0.5]
       nociception_intensity: 0.1
       properties: [0.0, 0.0, 0.0, 0.0, 1.0]
-    - name: "tree"
-      count: 1
-      area: [[15, 5], [15, 5]]
-      blocking: true
-      damage: [0.1, 0.5]
-      nociception_intensity: 0.1
-      properties: [0.0, 0.0, 0.0, 0.0, 1.0]
     - name: "bush" # Top Left
-      count: 10
-      area: [[1, 1], [10, 10]]
+      count: 5
+      area: [[1, 1], [5, 5]]
       blocking: false
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
     - name: "bush" # Top Right
-      count: 10
-      area: [[1, 11], [10, 20]]
+      count: 5
+      area: [[1, 6], [5, 10]]
       blocking: false
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
     - name: "bush" # Bottom Left
-      count: 10
-      area: [[11, 1], [20, 10]]
+      count: 5
+      area: [[6, 1], [10, 5]]
       blocking: false
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
     - name: "bush" # Bottom Right
-      count: 10
-      area: [[11, 11], [20, 20]]
+      count: 5
+      area: [[6, 6], [10, 10]]
       blocking: false
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
@@ -264,7 +232,7 @@ sensory:
   olfactory_enabled: true
   sensor_radius: 20
   vector_size: 5
-  decay_power: 1.0
+  decay_power: 2.0
   #Collision sensor
   collision_sensor_range: 1
   #Location sensor
@@ -285,9 +253,9 @@ perceptual_noise:
   enabled: true
   modalities:
     olfaction:
-      mode: "state_dependent"
+      mode: "constant"
       sigma: 0.15
-      injury_noise_scale: 2.0
+      injury_noise_scale: 0.0
       clip_min: 0.0
       clip_max: 100.0     # Unbounded (aggregated chemical gradient)
     extero_nociception:
@@ -327,9 +295,9 @@ perceptual_noise:
       clip_min: 0.0
       clip_max: 1.0
     visual:
-      mode: "state_dependent"
+      mode: "constant"
       sigma: 0.05
-      injury_noise_scale: 3.0
+      injury_noise_scale: 0.0
       clip_min: 0.0
       clip_max: 100.0     # Unbounded (one-hot counts)
     proprioception:
