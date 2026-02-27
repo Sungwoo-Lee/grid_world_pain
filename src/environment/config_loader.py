@@ -4,6 +4,7 @@ Configuration loader for JAX Environment.
 Translates YAML config files into JAX-compatible EnvParams.
 """
 import yaml
+import numpy as np
 import jax.numpy as jnp
 from src.environment.state import EnvParams
 
@@ -179,6 +180,54 @@ def load_env_params(config: Config) -> EnvParams:
             grid_np[r1-1:r2, c1-1:c2] = type_idx
     grid_location_type = jnp.array(grid_np)
     
+    # ── Type-Level Placement: Group entities by spawn area ──
+    all_spawn_areas_np = np.concatenate([
+        np.array(res_spawn_area), np.array(pred_spawn_area),
+        np.array(obs_spawn_area), np.array(neutral_spawn_area)
+    ], axis=0)  # [N, 4]
+    num_total_entities = all_spawn_areas_np.shape[0]
+    
+    # Group by unique spawn area
+    groups_by_area = {}  # tuple(area) -> list of entity global indices
+    for eidx in range(num_total_entities):
+        area_key = tuple(all_spawn_areas_np[eidx].tolist())
+        groups_by_area.setdefault(area_key, []).append(eidx)
+    
+    # Build type-level arrays
+    area_keys_list = list(groups_by_area.keys())
+    num_types = len(area_keys_list)
+    type_counts_list = [len(groups_by_area[k]) for k in area_keys_list]
+    max_per_type = max(type_counts_list) if type_counts_list else 1
+    
+    type_areas_np = np.array([list(k) for k in area_keys_list], dtype=np.int32)
+    type_entity_map_np = np.full((num_types, max_per_type), 0, dtype=np.int32)
+    for tidx, k in enumerate(area_keys_list):
+        ents = groups_by_area[k]
+        type_entity_map_np[tidx, :len(ents)] = ents
+    
+    # Parse placement mode
+    placement_mode = config.get('environment.placement.mode', 'per_entity')
+    assert placement_mode in ('per_entity', 'per_type'), f"Unknown placement mode: {placement_mode}"
+    
+    # Log placement strategy
+    print("="*60)
+    print(f"ENTITY PLACEMENT STRATEGY: {placement_mode}")
+    print("="*60)
+    print(f"Grid: {height}×{width} ({height*width} cells)")
+    print(f"Total entities: {num_total_entities}")
+    if placement_mode == 'per_type':
+        print(f"Type groups: {num_types} (one lax.scan step each)")
+        for tidx, k in enumerate(area_keys_list):
+            area = list(k)
+            cnt = type_counts_list[tidx]
+            area_cells = (area[2]-area[0]) * (area[3]-area[1])
+            print(f"  Group {tidx}: area {area} → {cnt} entities / {area_cells} cells ({100*cnt/area_cells:.0f}%)")
+        print(f"Max entities per group: {max_per_type}")
+        print(f"Sequential steps: {num_types}")
+    else:
+        print(f"Sequential steps: {num_total_entities} (one per entity)")
+    print("="*60)
+    
     return EnvParams(
         height=height,
         width=width,
@@ -217,6 +266,13 @@ def load_env_params(config: Config) -> EnvParams:
         neutral_move_int=neutral_move_int,
         neutral_patrol=neutral_patrol,
         neutral_spawn_area=neutral_spawn_area,
+        type_areas=jnp.array(type_areas_np, dtype=jnp.int32),
+        type_counts=jnp.array(type_counts_list, dtype=jnp.int32),
+        type_entity_map=jnp.array(type_entity_map_np, dtype=jnp.int32),
+        max_per_type=max_per_type,
+        num_types=num_types,
+        num_entities=num_total_entities,
+        placement_mode=placement_mode,
         max_satiation=config.get_mandatory('body.max_satiation'),
         max_nutrition=config.get_mandatory('body.max_nutrition'),
         max_injury=config.get_mandatory('body.max_injury'),

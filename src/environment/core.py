@@ -520,36 +520,27 @@ def resolve_overlaps_global(
 ) -> jnp.ndarray:
     """Resolve entity position overlaps via single-pass sequential scan.
     
-    Uses a flat boolean occupancy mask over the grid. For each entity,
-    if its cell is already taken, it picks a random free cell within its
-    spawn area using a pre-shuffled global permutation.
-    
-    All ops are JIT-compiled with fixed, data-independent shapes.
+    Uses a flat boolean occupancy mask. For each entity, if its cell is
+    already taken, picks a random free cell within its spawn area using
+    a pre-shuffled global permutation. All ops are JIT-compatible.
     """
     num_entities = all_positions.shape[0]
     total_cells = grid_height * grid_width
     occupancy = jnp.zeros(total_cells, dtype=jnp.bool_)
-    
-    # Pre-generate shuffled cell order (one permutation for all entities)
     global_perm = jax.random.permutation(key, total_cells)
-    
-    # Pre-build row/col lookup for the entire grid
     cell_rows = jnp.arange(total_cells) // grid_width
     cell_cols = jnp.arange(total_cells) % grid_width
     
     def resolve_one(carry, _unused):
         occ, positions, i = carry
-        
         flat_idx = positions[i, 0] * grid_width + positions[i, 1]
         is_taken = occ[flat_idx]
         
-        # Candidate mask: within spawn area AND not yet occupied
         min_r, min_c, max_r, max_c = all_spawn_areas[i]
         in_area = (cell_rows >= min_r) & (cell_rows < max_r) & \
                   (cell_cols >= min_c) & (cell_cols < max_c)
         valid = in_area & (~occ)
         
-        # Pick first valid cell from shuffled order
         valid_in_perm = valid[global_perm]
         first_valid_mask = valid_in_perm & (jnp.cumsum(valid_in_perm) == 1)
         replacement_flat = jnp.where(first_valid_mask, global_perm, 0).sum()
@@ -560,7 +551,6 @@ def resolve_overlaps_global(
         
         positions = positions.at[i].set(jnp.array([new_r, new_c]))
         occ = occ.at[new_flat].set(True)
-        
         return (occ, positions, i + 1), None
     
     init_carry = (occupancy, all_positions, jnp.array(0))
@@ -570,66 +560,147 @@ def resolve_overlaps_global(
     return all_positions
 
 
+def place_in_area(
+    subkey: jax.random.PRNGKey,
+    area: jnp.ndarray,
+    occupancy: jnp.ndarray,
+    num_entities: int,
+    max_entities: int,
+    grid_height: int,
+    grid_width: int,
+) -> tuple:
+    """Place entities in a rectangular area, avoiding occupied cells.
+    
+    Uses a single global permutation filtered to valid candidates.
+    Returns (positions [max_entities, 2], flat_indices [max_entities]).
+    
+    Positions beyond num_entities are padded with zeros.
+    """
+    total_cells = grid_height * grid_width
+    min_r, min_c, max_r, max_c = area[0], area[1], area[2], area[3]
+    
+    cell_rows = jnp.arange(total_cells) // grid_width
+    cell_cols = jnp.arange(total_cells) % grid_width
+    
+    # Valid = in area AND not occupied
+    in_area = (cell_rows >= min_r) & (cell_rows < max_r) & \
+              (cell_cols >= min_c) & (cell_cols < max_c)
+    valid = in_area & (~occupancy)
+    
+    # Permute all cells, filter to valid
+    perm = jax.random.permutation(subkey, total_cells)
+    valid_in_perm = valid[perm]
+    
+    # Take first num_entities valid cells
+    cumsum = jnp.cumsum(valid_in_perm)
+    selected = valid_in_perm & (cumsum <= num_entities)
+    
+    # Extract flat indices, padded to max_entities
+    selected_flat = jnp.where(selected, perm, total_cells)  # sentinel
+    selected_flat = jnp.sort(selected_flat)[:max_entities]
+    selected_flat = jnp.where(
+        jnp.arange(max_entities) < num_entities,
+        selected_flat,
+        0  # unused padding
+    )
+    
+    pos_r = selected_flat // grid_width
+    pos_c = selected_flat % grid_width
+    positions = jnp.stack([pos_r, pos_c], axis=-1)
+    return positions, selected_flat
+
+
 @jax.jit
 def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     """Functional reset for the JAX environment.
     
-    Entity placement uses independent random sampling (vmap) followed by a
-    global overlap resolution pass (resolve_overlaps_global) to guarantee
-    no two entities share the same cell. The resolver uses lax.scan with
-    fixed shapes — fully JIT-compatible with negligible speed impact.
+    Uses 4-phase overlap-free entity placement:
+    Supports two placement modes (selected via config):
+      per_entity: vmap sampling + sequential overlap scan (fast on small grids)
+      per_type:   lax.scan over type groups (better for large grids)
     """
-    key, agent_key, res_key, pred_key, body_key, neutral_key = jax.random.split(key, 6)
+    key, agent_key, placement_key, body_key = jax.random.split(key, 4)
     
     # 1. Agent Position
     random_pos = jax.random.randint(agent_key, (2,), 0, jnp.array([params.height, params.width]))
     agent_pos = jnp.where(params.random_start_pos, random_pos, params.start_pos)
     
-    # 2. Resources (Random placement within spawn_area)
+    # 2. Entity Placement
     num_res = params.res_type.shape[0]
-    res_keys = jax.random.split(res_key, num_res)
-    
-    def sample_res_pos(rk, area):
-        return jax.random.randint(rk, (2,), area[:2], area[2:])
-        
-    res_pos = jax.vmap(sample_res_pos)(res_keys, params.res_spawn_area)
-    
-    # 3. Predators (Random placement within spawn_area)
     num_pred = params.pred_damage.shape[0]
-    pred_spawn_keys = jax.random.split(pred_key, num_pred)
-    
-    def sample_pred_pos(pk, area):
-        return jax.random.randint(pk, (2,), area[:2], area[2:])
-        
-    pred_pos = jax.vmap(sample_pred_pos)(pred_spawn_keys, params.pred_spawn_area)
-    
-    # 4. Obstacles (Random placement within spawn_area)
     num_obs = params.obs_blocking.shape[0]
-    obs_keys = jax.random.split(key, num_obs)
-    
-    def sample_obs_pos(ok, area):
-        return jax.random.randint(ok, (2,), area[:2], area[2:])
-        
-    obs_pos = jax.vmap(sample_obs_pos)(obs_keys, params.obs_spawn_area)
-    
-    # 5. Neutral Animals (Random placement within spawn_area)
     num_neutral = params.neutral_property.shape[0]
-    neutral_keys = jax.random.split(neutral_key, num_neutral)
-    def sample_neutral_pos(nk, area):
-        return jax.random.randint(nk, (2,), area[:2], area[2:])
-    neutral_pos = jax.vmap(sample_neutral_pos)(neutral_keys, params.neutral_spawn_area)
     
-    # 6. Resolve Overlaps Globally
-    key, resolve_key = jax.random.split(key)
-    all_positions = jnp.concatenate([res_pos, pred_pos, obs_pos, neutral_pos], axis=0)
-    all_spawn_areas = jnp.concatenate([
-        params.res_spawn_area, params.pred_spawn_area,
-        params.obs_spawn_area, params.neutral_spawn_area
-    ], axis=0)
-    all_positions = resolve_overlaps_global(
-        all_positions, all_spawn_areas, params.height, params.width, resolve_key
-    )
-    # Split back into per-type arrays
+    if params.placement_mode == 'per_entity':
+        # ── Per-Entity Scan: vmap sample + resolve_overlaps_global ──
+        placement_key, res_key, pred_key, obs_key, neutral_key, resolve_key = \
+            jax.random.split(placement_key, 6)
+        
+        # Sample initial positions (may have overlaps)
+        res_keys = jax.random.split(res_key, num_res)
+        res_pos = jax.vmap(lambda k, a: jax.random.randint(k, (2,), a[:2], a[2:]))(
+            res_keys, params.res_spawn_area)
+        
+        pred_keys = jax.random.split(pred_key, num_pred)
+        pred_pos = jax.vmap(lambda k, a: jax.random.randint(k, (2,), a[:2], a[2:]))(
+            pred_keys, params.pred_spawn_area)
+        
+        obs_keys = jax.random.split(obs_key, num_obs)
+        obs_pos = jax.vmap(lambda k, a: jax.random.randint(k, (2,), a[:2], a[2:]))(
+            obs_keys, params.obs_spawn_area)
+        
+        neutral_keys = jax.random.split(neutral_key, num_neutral)
+        neutral_pos = jax.vmap(lambda k, a: jax.random.randint(k, (2,), a[:2], a[2:]))(
+            neutral_keys, params.neutral_spawn_area)
+        
+        # Resolve all overlaps in one sequential scan
+        all_positions = jnp.concatenate([res_pos, pred_pos, obs_pos, neutral_pos], axis=0)
+        all_spawn_areas = jnp.concatenate([
+            params.res_spawn_area, params.pred_spawn_area,
+            params.obs_spawn_area, params.neutral_spawn_area
+        ], axis=0)
+        all_positions = resolve_overlaps_global(
+            all_positions, all_spawn_areas, params.height, params.width, resolve_key
+        )
+        
+    else:  # per_type
+        # ── Type-Level: lax.scan over spawn-area groups ──
+        all_positions = jnp.zeros((params.num_entities, 2), dtype=jnp.int32)
+        total_cells = params.height * params.width
+        occupancy = jnp.zeros(total_cells, dtype=jnp.bool_)
+        
+        def place_type_group(carry, type_idx):
+            occ, positions, rng = carry
+            rng, subkey = jax.random.split(rng)
+            area = params.type_areas[type_idx]
+            count = params.type_counts[type_idx]
+            type_pos, type_flat = place_in_area(
+                subkey, area, occ, count, params.max_per_type,
+                params.height, params.width
+            )
+            # Per-cell occupancy update (safe, avoids batched .at padding bug)
+            valid = jnp.arange(params.max_per_type) < count
+            for j in range(params.max_per_type):
+                occ = jnp.where(valid[j], occ.at[type_flat[j]].set(True), occ)
+            # Per-entity position scatter
+            entity_indices = params.type_entity_map[type_idx]
+            for j in range(params.max_per_type):
+                eidx = entity_indices[j]
+                positions = jnp.where(
+                    valid[j],
+                    positions.at[eidx].set(type_pos[j]),
+                    positions
+                )
+            return (occ, positions, rng), None
+        
+        placement_key, scan_key = jax.random.split(placement_key)
+        (_, all_positions, _), _ = jax.lax.scan(
+            place_type_group,
+            (occupancy, all_positions, scan_key),
+            jnp.arange(params.num_types)
+        )
+    
+    # 3. Split positions back into per-type arrays
     res_pos = all_positions[:num_res]
     pred_pos = all_positions[num_res:num_res + num_pred]
     obs_pos = all_positions[num_res + num_pred:num_res + num_pred + num_obs]

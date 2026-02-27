@@ -1291,3 +1291,281 @@ predators:
 ```
 
 Works perfectly — no code changes needed for new partition layouts.
+
+---
+
+## Implementation Progress Report (4-Phase)
+
+### Files Modified
+
+| File | Changes |
+|---|---|
+| `configs/environment/default.yaml` | Added `placement.partitions` with 4 quadrant definitions |
+| `src/environment/state.py` | Added 13 partition fields to `EnvParams` (areas, counts, entity maps, etc.) |
+| `src/environment/config_loader.py` | Entity classification (quadratic/non-quadratic/global), partition computation, diagnostic logging |
+| `src/environment/core.py` | Replaced `resolve_overlaps_global()` with `place_in_area()` + 3-phase `jax_reset` |
+
+### What Works
+
+- **Config loading** — Entity classification runs correctly:
+  ```
+  Partitions: 4 declared
+    Partition 0: [0,0]-[5,5] → 11 entities / 25 cells (44%)
+    Partition 1: [0,5]-[5,10] → 11 entities / 25 cells (44%)
+    Partition 2: [5,0]-[10,5] → 11 entities / 25 cells (44%)
+    Partition 3: [5,5]-[10,10] → 11 entities / 25 cells (44%)
+  Global entities: 6
+  Sequential steps: 2 (Phase1=0 + Phase2=1 + Phase3=1)
+  ```
+- **`place_in_area()`** — Core permutation function is verified correct in isolation
+- **Phase 2 (vmap)** — Produces 44 unique positions across 4 non-overlapping partitions
+- **Phase 3 (global)** — Works correctly when given proper occupancy mask
+
+### Issue: Occupancy Propagation Between Phases (UNRESOLVED)
+
+**Symptom**: 46/50 resets have collisions, always between partition entities (Phase 2) and global entities (Phase 3). Global entities land on cells already occupied by partition entities.
+
+**Root Cause Analysis**: The occupancy mask updated in Phase 2 is **not properly reflected** when Phase 3 calls `place_in_area()`. Evidence:
+
+| Test | Occupied Cells After Phase 2 | Expected |
+|---|---|---|
+| Direct Python test (outside JIT) | 44 ✅ | 44 |
+| Inside `jax_reset` (JIT-compiled) | 11 ❌ | 44 |
+
+Only 11/44 cells are marked, suggesting only 1 partition's worth of data is surviving the occupancy update.
+
+### Bugs Encountered During Implementation
+
+#### Bug 1: `NameError: num_neutral` (Fixed)
+Removing the old vmap sampling code also removed `num_neutral` variable declaration. Fixed by re-adding it after the position split.
+
+#### Bug 2: Scatter Sentinel Wrap-Around (Fixed)
+`partition_entity_map` uses `-1` as a sentinel for padding entries. Using `all_positions.at[eidx].set(pos)` with `eidx=-1` wraps to the last array element, corrupting neutral entity positions. Fixed by clamping: `safe_idx = jnp.maximum(eidx, 0)`.
+
+#### Bug 3: Batched `.at[].set()` with Duplicate Indices (Observed)
+`jnp.array.at[indices].set(values)` when `indices` has duplicates → last write wins. This caused issues with vectorized scatter approaches. Fixed by switching to per-entity Python for-loop writes.
+
+#### Bug 4: Occupancy Propagation Failure (OPEN)
+The `occupancy` array updated after Phase 2's `vmap` is not correctly propagated to Phase 3's `place_in_area()` within JIT. Suspected cause: JAX's handling of batched index-set operations inside JIT, or the `occupancy.at[safe_flat].set(valid_mask)` with multiple indices mapping to 0 (from `jnp.where` clamping) causing the last `False` to overwrite earlier `True` values.
+
+### Debugging Directions
+
+#### Direction 1: Sequential Per-Partition Occupancy Update
+Instead of batch-updating occupancy after vmap, update occupancy **per partition** using a Python loop:
+```python
+for pidx in range(num_partitions):
+    flat_indices = part_flat[pidx]
+    count = params.partition_counts[pidx]
+    for j in range(params.max_per_partition):
+        occupancy = jnp.where(j < count, occupancy.at[flat_indices[j]].set(True), occupancy)
+```
+This avoids the batched `.at[].set()` entirely.
+
+#### Direction 2: Remove `vmap` for Phase 2
+Use `lax.scan` instead of `vmap` across partitions. This makes occupancy update naturally sequential:
+```python
+def place_partition_step(carry, pidx):
+    occ, positions, rng = carry
+    rng, subkey = jax.random.split(rng)
+    area = params.partition_areas[pidx]
+    count = params.partition_counts[pidx]
+    pos, flat = place_in_area(subkey, area, occ, count, max_pp, H, W)
+    # Mark occupied
+    for j in range(max_pp):
+        occ = jnp.where(j < count, occ.at[flat[j]].set(True), occ)
+    # Scatter positions
+    ...
+    return (occ, positions, rng), None
+```
+This adds 4 sequential steps (one per partition) but guarantees correct occupancy propagation.
+
+> [!IMPORTANT]
+> Direction 2 is safer and simpler. Since partitions are non-overlapping, the sequential overhead is minimal (4 steps vs 1), and it completely eliminates the batched scatter/occupancy issues. Combined with the type-level Phase 1, total sequential steps = T + P + 1 (non-quad types + partitions + global).
+
+#### Direction 3: Verify with `jax.debug.print`
+Insert `jax.debug.print` inside JIT to inspect occupancy state at each phase boundary:
+```python
+jax.debug.print("Phase 2 occupancy sum: {}", jnp.sum(occupancy))
+```
+This would pinpoint exactly where occupancy counts drop.
+
+---
+
+## Decision: Type-Level Placement (Chosen Approach)
+
+### Motivation
+
+After implementing and debugging the partition-level `vmap` approach, we encountered fundamental limitations of JAX's batched index operations inside JIT. The decision: **use type-level sequential placement** instead.
+
+#### 1. JAX's Batched `.at[].set()` Is Unreliable for This Use Case
+
+The partition-level approach required updating an occupancy mask after `vmap`-parallel placement. Three batched write strategies all failed:
+
+| Strategy | Result | Root Cause |
+|---|---|---|
+| `occ.at[flat].set(occ[flat] \| mask)` | Only 11/44 cells marked | JIT-internal reordering |
+| `occ.at[safe_flat].set(valid_mask)` | 11/44 | Last-write-wins with clamped sentinels |
+| Per-cell for-loop `.at[i].set(True)` | ✅ 44/44 | Works, but 44 sequential ops |
+
+The only working approach (per-cell loop) requires 44 sequential operations — same order as type-level (7 steps) but with higher trace overhead.
+
+#### 2. Type-Level Is Correct by Construction
+
+`lax.scan` over types naturally chains occupancy through carry state:
+```
+step 0: place type_0          → occ_1
+step 1: place type_1 (occ_1)  → occ_2
+...
+step 6: place type_6 (occ_6)  → occ_7
+```
+**No gap** where occupancy could fail to propagate — guaranteed by `lax.scan` semantics.
+
+#### 3. Speed vs. Complexity Tradeoff
+
+| Approach | Seq. Steps | Complexity | Correctness | Status |
+|---|---|---|---|---|
+| Per-entity scan (Option C) | 50 | Low | ✅ | Current |
+| **Type-level (chosen)** | **~7** | **Low** | **✅ By construction** | **Implementing** |
+| Partition vmap | 2 | High | ❌ Buggy in JIT | Abandoned |
+| Partition vmap + per-cell fix | 2 + 44 | High | ✅ But slow | Not worth it |
+
+Type-level: **7× speedup** with minimal complexity and guaranteed correctness. Partition-level's 25× is unreachable without solving the JAX batched index problem.
+
+#### 4. Future-Proof
+
+Type-level works for **any config** — no partition declarations needed. Handles overlapping spawn areas, non-quadratic regions, and global entities uniformly. The `placement.partitions` config infrastructure remains for potential future use.
+
+### Implementation Plan
+
+Single `lax.scan` over all entity types:
+```
+lax.scan over types (food → danger → obstacles → pred → neutral):
+  Each step: permute within spawn area, exclude occupied, update occ
+Total: ~7 sequential steps (vs 50 current)
+```
+
+### Benchmark Results
+
+**Methodology**: Same as earlier (500 resets + 100K steps with resets on done). Default config, single env, CPU.
+
+| Metric | No Overlap (baseline) | Per-Entity Scan | **Type-Level (this)** |
+|---|---|---|---|
+| **Resets/sec** | 12,000 | ~10,000 | **343** |
+| **SPS** | 538 | ~420 (−22%) | **232 (−57%)** |
+| **ms/reset** | 0.08 | 0.10 | **2.92** |
+| **Correctness** | N/A (overlaps) | ✅ | ✅ |
+| **Seq. Steps** | 0 | 50 | **5** |
+
+### Root Cause: Slower Than Expected
+
+Despite 5 sequential steps (vs 50), type-level is **slower** due to **Python `for` loops unrolled inside `lax.scan` body**:
+
+```python
+def place_type_group(carry, type_idx):
+    # These loops unroll to max_per_type=11 ops each at trace time
+    for j in range(params.max_per_type):     # 11 occupancy writes
+        occ = jnp.where(valid[j], occ.at[type_flat[j]].set(True), occ)
+    for j in range(params.max_per_type):     # 11 position scatters
+        positions = jnp.where(valid[j], ...)
+```
+
+Each step: **22 JAX ops** × 5 groups = **110 ops total**, each involving full-array `jnp.where`. This exceeds the old per-entity scan's 50 simple single-cell checks.
+
+### Optimization Path
+
+> [!IMPORTANT]  
+> **Option A**: Replace per-cell occupancy with batched `occ.at[type_flat].set(True)` — safe because within a single type group, all flat indices are unique.
+>
+> **Option B**: Replace position scatter for-loop with vectorized `lax.dynamic_update_slice` or `jnp.ndarray.at[indices].set(values)`.
+>
+> **Option C**: For small grids (≤100 cells), revert to per-entity scan which is simpler and actually faster. Reserve type-level for larger grids.
+
+### Current Status
+
+Type-level is **correct** (zero overlaps by construction) but needs inner-loop optimization before replacing per-entity scan in production.
+
+---
+
+## Review: What We Tried, What Works, What Failed
+
+### Journey Summary
+
+We explored **4 approaches** to overlap-free entity placement:
+
+| # | Approach | Idea | Seq Steps | SPS | Correct? | Status |
+|---|---|---|---|---|---|---|
+| 0 | No overlap (baseline) | Skip overlap resolution | 0 | **538** | ❌ | Reference |
+| 1 | Per-entity scan | `lax.scan` over 50 entities, 1 cell per step | 50 | **~420** (−22%) | ✅ 50/50 | ⚠️ Replaced in code |
+| 2 | Partition vmap | `vmap` 4 partitions in parallel, 2 steps | 2 | N/A | ❌ 46/50 | ❌ Abandoned |
+| 3 | Type-level + for-loops | `lax.scan` over 5 groups, inner Python loops | 5 | **232** (−57%) | ✅ 50/50 | Tested, slow |
+| 4 | Type-level + batched | `lax.scan` over 5 groups, batched `.at[].set()` | 5 | **?** | **?** | **Currently in code, untested** |
+
+### What's Currently in the Code
+
+The code has **Approach #4** (type-level with batched scatter), **untested**:
+
+| File | Current State |
+|---|---|
+| `state.py` | Type-level fields: `type_areas`, `type_counts`, `type_entity_map`, `max_per_type`, `num_types`, `num_entities` |
+| `config_loader.py` | Groups entities by spawn area → 5 groups. Log output shows grouping. |
+| `core.py` | `place_in_area()` + `lax.scan` with **batched** `occ.at[type_flat].set(valid)` and `positions.at[entity_indices].set(...)` |
+| `default.yaml` | Has `placement.partitions` section (unused by current code) |
+
+> [!CAUTION]
+> The batched `.at[indices].set(values)` that **failed** in Approach #2 was between `vmap` and subsequent code (occupancy didn't propagate). In Approach #4, the batched set is **within** a single `lax.scan` step where indices are unique. This *should* work, but hasn't been verified yet.
+
+### Key JAX Lesson
+
+`vmap` captures closure variables **at call time**, not after mutation. Occupancy updated after `vmap` does NOT flow back into the `vmap`'d function. `lax.scan` carry state **does** flow forward correctly.
+
+---
+
+## Next Steps Plan
+
+### Option 1: Verify Current Code First — ⏱️ 10 min
+The code has Approach #4 (batched scatter). We stopped before testing it.
+1. Run 50-seed overlap test
+2. If correct → run SPS benchmark
+3. If SPS ≥ 420 → **done, keep it**
+4. If incorrect OR SPS < 420 → go to Option 2
+
+### Option 2: Revert to Per-Entity Scan — ⏱️ 15 min  
+Restore the proven `resolve_overlaps_global()` from git history:
+1. Restore per-entity scan in `core.py`
+2. Revert `state.py` and `config_loader.py` to remove type-level fields
+3. Verify 420 SPS
+
+**Rationale**: 420 SPS (−22%) is already acceptable. Amortized reset cost in training is <1% (resets every ~500 steps). Don't over-engineer for 10×10 / 50 entities.
+
+### Option 3: Hybrid — Keep Diagnostics, Use Simple Scan — ⏱️ 20 min  
+Keep the config analysis (useful logs) but use per-entity scan for execution.
+
+> [!IMPORTANT]
+> **Recommendation**: Start with Option 1. If it works → we're done. If not → Option 2 (revert to working state). The per-entity scan at 420 SPS is a perfectly fine production solution.
+
+---
+
+## Why Per-Entity Is Faster Than Per-Type on Small Grids
+
+Despite **10× fewer sequential steps** (5 vs 50), type-level is slower because **each step does far more work**:
+
+| | Per-Entity Scan (×50 steps) | Per-Type (×5 steps) |
+|---|---|---|
+| Per-step work | 1 cell lookup + 1 occ check | Full 100-cell permutation + cumsum + sort |
+| Occ update | `occ.at[scalar].set(True)` | 11 writes (for-loop or batched) |
+| Pos update | `pos.at[i].set(row, col)` | 11 scatter writes |
+| **Step cost** | ~5 lightweight ops | ~6 heavy array ops over 100 elements |
+
+On a **10×10 grid**, the per-entity scan's simplicity wins. Per-type would start winning on **larger grids** (50×50+) where per-entity's sequential occ checks over 2500-cell arrays become expensive.
+
+---
+
+## Final Decision: Config-Driven Dual Mode
+
+Both approaches kept in code with a config switch:
+
+```yaml
+placement:
+  mode: per_entity    # default, fast on ≤100 cells
+                      # alternative: "per_type" for large grids
+```

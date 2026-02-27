@@ -98,6 +98,15 @@ class EnvParams:
     neutral_patrol: jnp.ndarray      # [num_neutral, 4]
     neutral_spawn_area: jnp.ndarray  # [num_neutral, 4]
     
+    # Placement (Type-Level overlap resolution)
+    type_areas: jnp.ndarray        # [T, 4] spawn area per type group
+    type_counts: jnp.ndarray       # [T] entity count per type group
+    type_entity_map: jnp.ndarray   # [T, max_per_type] global entity indices
+    max_per_type: int = struct.field(pytree_node=False)   # max entities in any group
+    num_types: int = struct.field(pytree_node=False)       # number of type groups
+    num_entities: int = struct.field(pytree_node=False)    # total entities
+    placement_mode: str = struct.field(pytree_node=False)  # "per_entity" or "per_type"
+    
     # Body
     max_satiation: float
     max_nutrition: float

@@ -9,6 +9,17 @@ environment:
   eat_action_enabled: true
   random_start_pos: true 
 
+  # Entity placement overlap resolution strategy.
+  # "per_entity": Sequential scan over all entities (fast on small grids ≤100 cells)
+  # "per_type": Type-level lax.scan grouping by spawn area (better for large grids)
+  placement:
+    mode: per_entity
+    partitions:
+      - [[1, 1], [5, 5]]      # Top-Left quadrant
+      - [[1, 6], [5, 10]]     # Top-Right quadrant
+      - [[6, 1], [10, 5]]     # Bottom-Left quadrant
+      - [[6, 6], [10, 10]]    # Bottom-Right quadrant
+
   resources:
     - name: "food" # Top Left
       type: "food"
