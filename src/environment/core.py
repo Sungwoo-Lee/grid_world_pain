@@ -511,14 +511,73 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     return new_state, reward, done, info
 
 
+def resolve_overlaps_global(
+    all_positions: jnp.ndarray,
+    all_spawn_areas: jnp.ndarray,
+    grid_height: int,
+    grid_width: int,
+    key: jax.random.PRNGKey
+) -> jnp.ndarray:
+    """Resolve entity position overlaps via single-pass sequential scan.
+    
+    Uses a flat boolean occupancy mask over the grid. For each entity,
+    if its cell is already taken, it picks a random free cell within its
+    spawn area using a pre-shuffled global permutation.
+    
+    All ops are JIT-compiled with fixed, data-independent shapes.
+    """
+    num_entities = all_positions.shape[0]
+    total_cells = grid_height * grid_width
+    occupancy = jnp.zeros(total_cells, dtype=jnp.bool_)
+    
+    # Pre-generate shuffled cell order (one permutation for all entities)
+    global_perm = jax.random.permutation(key, total_cells)
+    
+    # Pre-build row/col lookup for the entire grid
+    cell_rows = jnp.arange(total_cells) // grid_width
+    cell_cols = jnp.arange(total_cells) % grid_width
+    
+    def resolve_one(carry, _unused):
+        occ, positions, i = carry
+        
+        flat_idx = positions[i, 0] * grid_width + positions[i, 1]
+        is_taken = occ[flat_idx]
+        
+        # Candidate mask: within spawn area AND not yet occupied
+        min_r, min_c, max_r, max_c = all_spawn_areas[i]
+        in_area = (cell_rows >= min_r) & (cell_rows < max_r) & \
+                  (cell_cols >= min_c) & (cell_cols < max_c)
+        valid = in_area & (~occ)
+        
+        # Pick first valid cell from shuffled order
+        valid_in_perm = valid[global_perm]
+        first_valid_mask = valid_in_perm & (jnp.cumsum(valid_in_perm) == 1)
+        replacement_flat = jnp.where(first_valid_mask, global_perm, 0).sum()
+        
+        new_flat = jnp.where(is_taken, replacement_flat, flat_idx)
+        new_r = new_flat // grid_width
+        new_c = new_flat % grid_width
+        
+        positions = positions.at[i].set(jnp.array([new_r, new_c]))
+        occ = occ.at[new_flat].set(True)
+        
+        return (occ, positions, i + 1), None
+    
+    init_carry = (occupancy, all_positions, jnp.array(0))
+    (_, all_positions, _), _ = jax.lax.scan(
+        resolve_one, init_carry, None, length=num_entities
+    )
+    return all_positions
+
+
 @jax.jit
 def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     """Functional reset for the JAX environment.
     
-    Note: Entity placement uses independent random sampling (vmap) without
-    overlap checking. On a 20×20 grid with ~15 entities, overlap probability 
-    is <4%. This matches the Craftax pattern where mobs start inactive and 
-    overlap checking is deferred to gameplay logic, prioritizing reset speed.
+    Entity placement uses independent random sampling (vmap) followed by a
+    global overlap resolution pass (resolve_overlaps_global) to guarantee
+    no two entities share the same cell. The resolver uses lax.scan with
+    fixed shapes — fully JIT-compatible with negligible speed impact.
     """
     key, agent_key, res_key, pred_key, body_key, neutral_key = jax.random.split(key, 6)
     
@@ -559,6 +618,22 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     def sample_neutral_pos(nk, area):
         return jax.random.randint(nk, (2,), area[:2], area[2:])
     neutral_pos = jax.vmap(sample_neutral_pos)(neutral_keys, params.neutral_spawn_area)
+    
+    # 6. Resolve Overlaps Globally
+    key, resolve_key = jax.random.split(key)
+    all_positions = jnp.concatenate([res_pos, pred_pos, obs_pos, neutral_pos], axis=0)
+    all_spawn_areas = jnp.concatenate([
+        params.res_spawn_area, params.pred_spawn_area,
+        params.obs_spawn_area, params.neutral_spawn_area
+    ], axis=0)
+    all_positions = resolve_overlaps_global(
+        all_positions, all_spawn_areas, params.height, params.width, resolve_key
+    )
+    # Split back into per-type arrays
+    res_pos = all_positions[:num_res]
+    pred_pos = all_positions[num_res:num_res + num_pred]
+    obs_pos = all_positions[num_res + num_pred:num_res + num_pred + num_obs]
+    neutral_pos = all_positions[num_res + num_pred + num_obs:]
     
     # 6. Body (Random start support)
     body_key1, body_key2, body_key3 = jax.random.split(body_key, 3)

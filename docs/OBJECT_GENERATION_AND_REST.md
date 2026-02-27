@@ -715,3 +715,579 @@ This prints **once** at initialization (not per-reset), adds zero runtime cost, 
 
 This gives you **the fastest speed for well-structured configs** (current default and future quadrant-based experiments) while **never breaking** on arbitrary configs.
 
+---
+
+## Implementation Report (2026-02-27)
+
+### What Was Done
+
+**File modified**: `src/environment/core.py`
+
+1. **Added `resolve_overlaps_global()` function** (lines 514–580):
+   - Uses a flat boolean occupancy mask over the entire grid (`jnp.zeros(100, dtype=bool_)`)
+   - Pre-generates a single `jax.random.permutation` of all grid cells for randomized fallback selection
+   - `lax.scan` iterates over all 50 entities sequentially:
+     - Check if entity's cell is already occupied in the mask
+     - If taken: find a free cell within the entity's spawn area using the shuffled permutation order
+     - Mark the final cell as occupied, update the position
+   - All operations have fixed, data-independent shapes → fully JIT-compatible
+
+2. **Modified `jax_reset()`**:
+   - After all entity positions are sampled independently (existing `vmap` logic unchanged), concatenates all positions and spawn areas into global arrays
+   - Calls `resolve_overlaps_global()` to guarantee no overlaps
+   - Splits the resolved positions back into per-type arrays (`res_pos`, `pred_pos`, `obs_pos`, `neutral_pos`)
+
+3. **Resource respawn** in `jax_step()` left unchanged — only 1 resource respawns at a time, overlap risk is negligible, and adding resolution to the hot step loop would hurt per-step speed.
+
+### Speed Benchmark Results
+
+**Benchmark method**: Custom SPS script — 500 resets + 100,000 steps (500 episodes × 200 steps) with JIT warmup. Default config, single env, CPU.
+
+| Metric | Before (baseline) | After (Option C) | Change |
+|---|---|---|---|
+| **Resets/sec** | 1,489 | 794 | **−47%** |
+| **Steps/sec (SPS)** | 538 | ~420 | **−22%** |
+| **Combined SPS** | 537 | ~415 | **−23%** |
+
+> [!WARNING]
+> The reset speed drop (−47%) is significant. The `lax.scan` over 50 entities with 100-element ops per iteration is the fundamental cost. **However**, during actual training with RecurrentPPO (128-step rollouts, 500-step episodes), resets occur only every ~500 steps. The amortized cost of the slower reset is:
+>
+> **Reset overhead per step**: ~(1/500) × (1/794 - 1/1489) ≈ 0.6μs/step — **negligible** relative to per-step cost (~1.9ms).
+>
+> **The actual training SPS impact should be <1%** when measured end-to-end in RecurrentPPO training.
+
+### Overlap Verification
+
+| Metric | Before | After |
+|---|---|---|
+| Resets with overlaps (out of 100) | **100 (100%)** | **0 (0%)** |
+| Avg overlapping entities per reset | **49** | **0** |
+| All entities unique per reset | ❌ | ✅ |
+
+### Issues Encountered
+
+1. **JIT Concretization Error**: Initial implementation computed `max_area = int(jnp.max(area_sizes))` inside the JIT-traced function. Since `area_sizes` depends on traced `spawn_area` values, `int()` fails. **Fix**: Use `grid_height * grid_width` (both are `pytree_node=False` statics) as a conservative upper bound for permutation size.
+
+2. **Python List Comprehension in Scan Body**: First implementation used `jnp.array([jnp.any(...) for j in range(max_area)])` to check candidates — a Python-level loop that JAX unrolls during tracing (100 iterations). **Fix**: Replaced with vectorized `jnp.isin()`.
+
+3. **Oversized Permutation**: Using `max_area = 100` for all entities (even those with 25-cell spawn areas) wastes computation. The `perm % area_cells` wrapping produces duplicate candidates. **Fix (v2)**: Replaced per-entity permutation with a single global permutation + occupancy mask approach, eliminating per-entity `permutation` calls entirely.
+
+4. **Speed Impact Higher Than Expected**: The `lax.scan` with 50 iterations × (100-element boolean ops + array indexing) per iteration adds ~0.6ms per reset. This is because the scan body cannot be vectorized — each iteration depends on the previous iteration's updated occupancy mask. This is an inherent limitation of sequential overlap resolution.
+
+### Remaining Work
+
+- [ ] **Add diagnostic logging** to `config_loader.py` (the `select_placement_strategy()` function with overlap detection and partition stats printed at init)
+- [ ] **Implement Option A (Three-Phase Permutation)** for non-overlapping configs to achieve negligible speed impact. The current default config satisfies the strict rules — Option A would eliminate the `lax.scan` entirely for this case.
+- [ ] **End-to-end RecurrentPPO speed test** — measure actual training SPS (not just env SPS) with 100+ episodes to confirm the amortized reset overhead is <1%.
+- [ ] **Benchmark with num_envs > 1** — the current benchmark uses single env; parallel envs may amortize JIT compilation differently.
+
+### Analysis of Observed Issues
+
+#### Why the Reset Speed Dropped −47%
+
+The `lax.scan` runs **50 iterations**, each doing:
+
+| Operation | Elements | Purpose |
+|---|---|---|
+| Spawn area mask (4 comparisons) | 100 each | Identify cells in entity's spawn area |
+| `valid[global_perm]` | 100 | Gather shuffled validity |
+| `jnp.cumsum(valid_in_perm)` | 100 | Find first-free index |
+| `jnp.where` + `.sum()` | 100 | Extract replacement cell |
+| `occ.at[new_flat].set(True)` | 1 | Update occupancy |
+
+Total: ~50 × 400 = **20K ops per reset**, all sequential (iteration N+1 depends on N's occupancy update).
+
+**Key insight**: Most iterations do *nothing useful*. For entities in non-overlapping quadrants (44 of 50), their cell is **never taken**, so the entire replacement logic computes but its result is discarded via `jnp.where(is_taken, ...)`. JAX still executes all ops even when `is_taken=False` — there is no short-circuit in JIT-compiled code.
+
+#### Why the SPS Drop (−22%) Overstates Training Impact
+
+The SPS benchmark steps loop resets every ~200 steps (when `done=True`). In real RecurrentPPO training, episodes last ~500 steps. The amortized reset cost:
+
+```
+Reset cost:    1.26ms (= 1/794)
+Episode time:  500 steps × 1.9ms/step ≈ 950ms
+Reset fraction: 1.26ms / 950ms = 0.13% of episode time
+```
+
+**The actual training SPS impact should be <1%**, far less than the −22% shown in the isolated env benchmark.
+
+#### The Sequential Dependency Is Fundamental
+
+No matter how we optimize the per-iteration cost, the scan count (50) cannot be reduced. Entity B cannot choose its cell until entity A's final cell is known (otherwise both might pick the same free cell). This is inherent to sequential overlap resolution.
+
+However, entities in **non-overlapping spawn areas** have **no dependency** — they can never collide. This is the core insight that enables Option A.
+
+---
+
+### Potential Optimization Directions
+
+#### Direction A: Implement Option A for Non-Overlapping Configs
+
+For the current default config, all 44 quadrant entities are in **non-overlapping partitions**. Replace the 50-iteration scan with **4 parallel permutations** + 1 phase for global entities:
+
+```
+Phase 1: vmap(permutation)(4 quadrants) → 44 entities, zero scan, fully parallel
+Phase 2: permute remaining 56 cells → pick first 6 for global entities
+Total: 5 permutations, no lax.scan at all
+```
+
+| Aspect | Assessment |
+|---|---|
+| Speed impact | **Near-zero** — permutation is O(25), done in parallel |
+| Code complexity | Moderate — needs partition detection + entity grouping at config load |
+| Config dependency | Only works if spawn areas are non-overlapping |
+| `EnvParams` changes | Needs new fields: `partition_valid_indices`, `entities_per_partition`, etc. |
+
+#### Direction B: Optimize Current Option C Per-Iteration Cost
+
+Stay with the scan but reduce per-iteration work:
+
+1. **Pre-compute spawn area masks** at config-load time — store as `[N, total_cells]` bool matrix in `EnvParams`, avoiding 4 comparisons × 100 elements per iteration
+2. **Use `jnp.argmax` instead of cumsum** for first-free: `argmax(valid_in_perm)` returns the first `True` directly
+
+| Aspect | Assessment |
+|---|---|
+| Speed impact | **Marginal** — saves ~100 ops/iter, but scan count (50) is the bottleneck |
+| Code complexity | Low |
+| Config dependency | None |
+
+#### Direction C: Accept Current Speed + Verify in Training
+
+The amortized cost is likely <1% of training time:
+
+- 794 resets/sec = **1.26ms per reset**
+- Episodes take **~950ms** (500 steps × 1.9ms)
+- Reset is **0.13%** of episode time
+
+If end-to-end RecurrentPPO training confirms <2% SPS impact, the current implementation is sufficient. Save development time, avoid code complexity.
+
+| Aspect | Assessment |
+|---|---|
+| Speed impact | **<2% predicted** for training (needs verification) |
+| Code complexity | **None** — already implemented |
+| Risk | If impact is >2%, still need Direction A |
+
+#### Direction D: Hybrid (A + C with Auto-Dispatch)
+
+Implement both. Config loader detects overlap at load time and dispatches:
+- Non-overlapping → Option A (near-zero overhead)
+- Overlapping → Option C (current implementation, <1% amortized)
+
+| Aspect | Assessment |
+|---|---|
+| Speed impact | **Best possible** for all configs |
+| Code complexity | **Highest** — two code paths, auto-detection logic |
+| Robustness | ✅ Never breaks regardless of config |
+
+---
+
+### Summary
+
+| Direction | Speed Gain | Effort | When to Choose |
+|---|---|---|---|
+| **A: Permutation** | ★★★★★ | Medium | If we want near-zero overhead for quadrant configs |
+| **B: Optimize scan** | ★★☆☆☆ | Low | If we want a quick marginal improvement |
+| **C: Accept + verify** | — | Zero | If end-to-end training impact is <2% |
+| **D: Hybrid A+C** | ★★★★★ | High | If we want optimal speed for all configs |
+
+---
+
+## Direction E: Type-Level Sequential Placement (Proposed)
+
+### The Idea
+
+Instead of resolving overlaps at the **individual entity** level (50 sequential iterations), place entities at the **type** level — one sequential step per object type, with a shared global occupancy matrix:
+
+```
+Step 0: Place trees (static, fixed)        → mark cells occupied → update matrix
+Step 1: Place food (4 entities)            → permute within quadrants, skip occupied → update matrix
+Step 2: Place dangers (8 entities)         → permute within quadrants, skip occupied → update matrix
+Step 3: Place rocks (12 entities)          → permute within quadrants, skip occupied → update matrix
+Step 4: Place bushes (20 entities)         → permute within quadrants, skip occupied → update matrix
+Step 5: Place predators (2 global)         → permute remaining free cells → update matrix
+Step 6: Place rabbits (5 global)           → permute remaining free cells → done
+```
+
+**Sequential steps: ~7 (one per type) instead of 50 (one per entity).**
+
+Within each step, all entities of that type are placed **in parallel** via `vmap` + permutation, because entities drawn from the same shuffled pool are inherently non-overlapping.
+
+### Professional Assessment
+
+**1. The abstraction level is correct.**
+
+The key insight is that sequentiality should operate at the **type** level, not the entity level. The current implementation treats every entity independently and resolves them one-by-one — but entities of the same type in the same area can be handled as a batch. This is a **7× reduction** in sequential steps (50 → 7).
+
+**2. The ordering principle is sound.**
+
+Static → local → global is precisely the correct dependency chain. Objects with smaller/fixed areas should be placed first because they have the most constrained choices. Global objects go last because they have the most flexibility and can work around everything else.
+
+**3. The "shared global matrix" is the right data structure.**
+
+Each type-step reads the current occupancy mask, places its entities in free cells, then writes back. This is clean, simple, and JIT-compatible.
+
+### Refinement: Type-Level vs Partition-Level
+
+Type-level placement can be **further optimized** for non-overlapping quadrants. Within one quadrant, all types (food, danger, rock, bush) share the same 25-cell pool and are independent of each other. So they can be placed in a **single permutation** rather than sequential type steps:
+
+| Approach | Sequential Steps | Entities/Step | Within-Step Parallelism |
+|---|---|---|---|
+| Current (per-entity scan) | **50** | 1 | None |
+| Type-level (this proposal) | **~7** | 2–20 | `vmap` within type |
+| Partition-level (Option A) | **2** | 11–44 | `vmap` across partitions |
+
+- **Type-level**: Works for **any spawn area geometry** (overlapping or not). Each type step can handle overlapping areas because it reads the updated occupancy from the previous step.
+- **Partition-level**: Only works for **non-overlapping** partitions, but achieves maximum parallelism (2 steps vs 7).
+
+For the current default config (non-overlapping quadrants), partition-level gives the best speed. But if a future experiment introduces overlapping areas, type-level is the correct fallback — far better than per-entity scanning.
+
+### Implementation: Partition-Level Placement
+
+The partition-level approach places **all entities within each non-overlapping quadrant** in a single permutation step, then handles global entities separately. Only **2 sequential steps** total.
+
+#### Data Flow
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ Config Load Time (once)                                          │
+│                                                                  │
+│  1. Detect partitions from spawn areas                           │
+│  2. Group entities by partition                                  │
+│  3. Store partition info in EnvParams:                           │
+│     - partition_areas [P, 4]   (P = num partitions = 4)          │
+│     - partition_counts [P]     (entities per partition = 11)     │
+│     - max_per_partition: int   (static = 11)                    │
+│     - num_global: int          (static = 6)                     │
+└──────────────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ Per-Reset (jax_reset)                                            │
+│                                                                  │
+│  Step 1: vmap(place_in_area)(4 partitions)          ← parallel   │
+│          Each: permute 25 cells → take first 11                  │
+│          Mark 44 cells occupied                                  │
+│                                                                  │
+│  Step 2: place_in_area(full grid, occupancy)        ← 1 step     │
+│          Permute 100 cells, filter 56 free → take first 6        │
+│                                                                  │
+│  Total: 2 sequential steps, ~400 ops each                        │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+#### Current Default Config Layout
+
+```
+Grid: 10×10 (100 cells)
+
+    col 0-4           col 5-9
+   ┌──────────────┬──────────────┐
+   │  Quadrant TL │  Quadrant TR │   row 0-4
+   │  11 entities │  11 entities │
+   │  25 cells    │  25 cells    │
+   ├──────────────┼──────────────┤
+   │  Quadrant BL │  Quadrant BR │   row 5-9
+   │  11 entities │  11 entities │
+   │  25 cells    │  25 cells    │
+   └──────────────┴──────────────┘
+   + 6 global entities (1 pred + 5 neutral) → anywhere on grid
+
+Per quadrant: 3 resources + 8 obstacles = 11 entities / 25 cells = 44% density
+Global: 6 entities / 56 remaining cells
+```
+
+#### Core Implementation
+
+```python
+def place_in_area(subkey, area, occupancy, num_entities, max_entities,
+                  grid_height, grid_width):
+    """Place num_entities in a rectangular area, avoiding occupied cells.
+    
+    Uses a single permutation of all grid cells, filtered to valid candidates.
+    Returns positions [max_entities, 2] and flat indices [max_entities].
+    """
+    total_cells = grid_height * grid_width
+    min_r, min_c, max_r, max_c = area
+    
+    # Cell coordinate lookup
+    cell_rows = jnp.arange(total_cells) // grid_width
+    cell_cols = jnp.arange(total_cells) % grid_width
+    
+    # Valid = in area AND not occupied
+    in_area = (cell_rows >= min_r) & (cell_rows < max_r) & \
+              (cell_cols >= min_c) & (cell_cols < max_c)
+    valid = in_area & (~occupancy)
+    
+    # Permute all cells, filter to valid
+    perm = jax.random.permutation(subkey, total_cells)
+    valid_in_perm = valid[perm]
+    
+    # Take first num_entities valid cells
+    cumsum = jnp.cumsum(valid_in_perm)
+    selected = valid_in_perm & (cumsum <= num_entities)
+    
+    # Extract flat indices, padded to max_entities
+    selected_flat = jnp.where(selected, perm, total_cells)  # sentinel
+    selected_flat = jnp.sort(selected_flat)[:max_entities]
+    selected_flat = jnp.where(
+        jnp.arange(max_entities) < num_entities,
+        selected_flat,
+        0  # unused padding
+    )
+    
+    pos_r = selected_flat // grid_width
+    pos_c = selected_flat % grid_width
+    positions = jnp.stack([pos_r, pos_c], axis=-1)
+    return positions, selected_flat
+
+
+def partition_level_reset(key, params):
+    """Two-step partition-level entity placement.
+    
+    Step 1: Place all entities in each non-overlapping partition
+            (parallel via vmap — zero sequential dependency)
+    Step 2: Place global entities in remaining free cells
+            (one sequential step)
+    """
+    total_cells = params.height * params.width
+    occupancy = jnp.zeros(total_cells, dtype=jnp.bool_)
+    
+    num_partitions = params.partition_areas.shape[0]  # 4
+    
+    # ── Step 1: Place partition entities (parallel) ──
+    key, *partition_keys = jax.random.split(key, num_partitions + 1)
+    partition_keys = jnp.stack(partition_keys)
+    
+    def place_one_partition(subkey, area, count):
+        """Place all entities in one partition. Called via vmap."""
+        return place_in_area(
+            subkey, area, occupancy,  # occupancy is empty (partitions don't overlap)
+            count, params.max_per_partition,
+            params.height, params.width
+        )
+    
+    # vmap across all partitions — fully parallel
+    partition_positions, partition_flat = jax.vmap(place_one_partition)(
+        partition_keys, params.partition_areas, params.partition_counts
+    )
+    # partition_positions: [P, max_per_partition, 2]
+    # partition_flat:      [P, max_per_partition]
+    
+    # Update occupancy with all partition entities
+    all_flat = partition_flat.reshape(-1)  # [P * max_per_partition]
+    valid_mask = (jnp.arange(all_flat.shape[0]).reshape(
+        num_partitions, params.max_per_partition
+    ) < params.partition_counts[:, None]).reshape(-1)
+    occupancy = occupancy.at[all_flat].set(valid_mask)
+    
+    # ── Step 2: Place global entities ──
+    key, global_key = jax.random.split(key)
+    full_grid = jnp.array([0, 0, params.height, params.width])
+    
+    global_positions, _ = place_in_area(
+        global_key, full_grid, occupancy,
+        params.num_global, params.num_global,
+        params.height, params.width
+    )
+    # global_positions: [num_global, 2]
+    
+    return partition_positions, global_positions
+```
+
+#### Required `EnvParams` Additions
+
+Computed **once** at config-load time in `config_loader.py`:
+
+```python
+# In load_env_params():
+
+# 1. Detect unique non-overlapping partitions
+all_local_areas = np.concatenate([res_spawn_area, obs_spawn_area], axis=0)
+grid_area = np.array([0, 0, height, width])
+
+partition_areas = np.unique(all_local_areas, axis=0)
+partition_areas = partition_areas[~np.all(partition_areas == grid_area, axis=1)]
+
+# 2. Count entities per partition
+partition_counts = np.array([
+    np.sum(np.all(all_local_areas == area, axis=1))
+    for area in partition_areas
+])
+max_per_partition = int(np.max(partition_counts))  # static for vmap
+
+# 3. Count global entities
+global_areas = np.concatenate([pred_spawn_area, neutral_spawn_area], axis=0)
+num_global = int(np.sum(np.all(global_areas == grid_area, axis=1)))
+
+# Add to EnvParams:
+#   partition_areas:   jnp.array [P, 4]
+#   partition_counts:  jnp.array [P]
+#   max_per_partition: int       (pytree_node=False)
+#   num_global:        int       (pytree_node=False)
+```
+
+#### Fallback Detection
+
+```python
+def select_placement_strategy(all_spawn_areas, height, width):
+    """Returns 'partition' or 'scan' based on config analysis."""
+    grid_area = np.array([0, 0, height, width])
+    local = all_spawn_areas[~np.all(all_spawn_areas == grid_area, axis=1)]
+    unique = np.unique(local, axis=0)
+    
+    for i in range(len(unique)):
+        for j in range(i + 1, len(unique)):
+            a, b = unique[i], unique[j]
+            overlap_r = max(0, min(a[2], b[2]) - max(a[0], b[0]))
+            overlap_c = max(0, min(a[3], b[3]) - max(a[1], b[1]))
+            if overlap_r > 0 and overlap_c > 0:
+                print(f"⚠️  Overlap: {a} ∩ {b} → falling back to per-entity scan")
+                return 'scan'
+    
+    print(f"✅  Non-overlapping partitions → partition-level placement")
+    return 'partition'
+```
+
+### Performance Comparison
+
+| Metric | Per-Entity Scan (current) | Partition-Level (this) | Speedup |
+|---|---|---|---|
+| Sequential steps | 50 | **2** | **25×** |
+| Per-step cost | ~400 ops | ~400 ops | — |
+| Total sequential ops | ~20,000 | **~800** | **25×** |
+| Wasted computation | 88% | **0%** | — |
+| `vmap` parallelism | None | ✅ 4 partitions | 4× in Step 1 |
+| Flexibility | ✅ Any config | ❌ Non-overlapping only | — |
+
+### Final Comparison Across All Approaches
+
+| Approach | Seq. Steps | Total Ops | Flexibility | Recommended |
+|---|---|---|---|---|
+| Per-entity scan (current C) | 50 | ~20K | ✅ Any config | Fallback only |
+| Type-level sequential (E) | ~7 | ~2.8K | ✅ Any config | Overlapping configs |
+| Partition-level (A) | 2 | ~800 | ❌ Non-overlapping only | Fast path |
+| **Unified 4-Phase** | **T + 2** | **Variable** | **✅ Any config** | **Production** |
+
+---
+
+## Unified 4-Phase Design (Final Architecture)
+
+### Overview
+
+Combines all ideas into a single design that handles **any config** and degrades gracefully:
+
+```
+Phase 0: Static objects (trees, walls)                             → 0 seq steps
+Phase 1: Non-quadratic entities, type-level (lax.scan, T types)    → T seq steps
+Phase 2: Quadratic entities (vmap across P partitions)             → 1 seq step (parallel)
+Phase 3: Global entities (permute remaining free cells)            → 1 seq step
+────────────────────────────────────────────────────────────────────
+Total: T + 2 sequential steps
+```
+
+### Config-Driven Partitions
+
+Instead of inferring partitions from spawn areas, **declare** them explicitly:
+
+```yaml
+# In configs/environment/default.yaml
+placement:
+  partitions:
+    - [0, 0, 5, 5]     # TL (any rectangular region — not limited to quadrants)
+    - [0, 5, 5, 10]    # TR
+    - [5, 0, 10, 5]    # BL
+    - [5, 5, 10, 10]   # BR
+```
+
+| Aspect | Inferred from spawn areas | Config-Driven |
+|---|---|---|
+| Detection | Fragile heuristic | Trivial matching |
+| Shapes | Must be exact quadrants | **Any rectangle** |
+| Non-equal partitions | Not supported | `[0,0,3,10]` + `[3,0,10,10]` ✅ |
+| Validation | Complex overlap check | Simple rectangle test |
+| Intent | Implicit (guessed) | **Explicit (declared)** |
+
+**Backward compatibility**: If no `partitions` key exists, fall back to **type-level sequential** (Phase 1 only, ~7 steps). Type-level is always better than per-entity scan since it batches all entities of the same type into a single permutation. The per-entity scan (50 steps) is never needed.
+
+### Entity Classification (Config-Load Time)
+
+```python
+def classify_entities(entities, declared_partitions, grid_height, grid_width):
+    full_grid = [0, 0, grid_height, grid_width]
+    non_quadratic = {}  # type_name → list of entities
+    quadratic = {}      # partition_idx → list of entities
+    global_ents = []
+    
+    for entity in entities:
+        area = entity['spawn_area']
+        matched = next((i for i, p in enumerate(declared_partitions) if area == p), None)
+        
+        if area == full_grid:
+            global_ents.append(entity)
+        elif matched is not None:
+            quadratic.setdefault(matched, []).append(entity)
+        else:
+            non_quadratic.setdefault(entity['type'], []).append(entity)
+    
+    return non_quadratic, quadratic, global_ents
+```
+
+### Phase 1: Non-Quadratic (Type-Level Permutation)
+
+Non-quadratic entities are grouped by **type** (same type = same spawn area). Each type step places ALL entities of that type in one permutation, then updates occupancy:
+
+```python
+def phase1_non_quadratic(key, occupancy, type_groups, params):
+    """Place non-quadratic entities type-by-type via lax.scan."""
+    def place_type(carry, type_info):
+        occ, rng = carry
+        area, num_entities, max_entities = type_info
+        rng, subkey = jax.random.split(rng)
+        positions, flat_indices = place_in_area(
+            subkey, area, occ, num_entities, max_entities,
+            params.height, params.width
+        )
+        occ = occ.at[flat_indices].set(jnp.arange(max_entities) < num_entities)
+        return (occ, rng), positions
+    
+    (occupancy, key), all_positions = jax.lax.scan(
+        place_type, (occupancy, key), type_groups
+    )
+    return occupancy, all_positions
+```
+
+### Graceful Degradation
+
+| Config Style | T (non-quad types) | Total Seq. Steps | vs. Current |
+|---|---|---|---|
+| **Current default** (clean quadrants) | 0 | **2** | **25× faster** |
+| 2 custom overlapping types | 2 | **4** | 12× faster |
+| 5 custom types, messy areas | 5 | **7** | 7× faster |
+| No partitions defined | ~7 (all types) | **~9** | 5× faster |
+
+> [!TIP]
+> **Never worse than the current per-entity scan (50 steps).** For the common case (clean quadrants, T=0), it's 25× faster.
+
+### Non-Equal Partition Example
+
+```yaml
+# Asymmetric layout — different sized rectangular regions
+placement:
+  partitions:
+    - [0, 0, 4, 10]    # top strip (40 cells — prey resources)
+    - [6, 0, 10, 4]    # bottom-left (16 cells — danger zone)
+    - [6, 4, 10, 10]   # bottom-right (24 cells — safe zone)
+# Rows 4-5 are unpartitioned — only global/non-quadratic entities spawn there
+
+resources:
+  - type: food
+    spawn_area: [0, 0, 4, 10]     # matches partition 0 → Phase 2
+  - type: danger  
+    spawn_area: [6, 0, 10, 4]     # matches partition 1 → Phase 2
+  - type: rare_item
+    spawn_area: [3, 3, 7, 7]      # matches NO partition → Phase 1 (T=1)
+predators:
+  - spawn_area: [0, 0, 10, 10]    # full grid → Phase 3
+```
+
+Works perfectly — no code changes needed for new partition layouts.

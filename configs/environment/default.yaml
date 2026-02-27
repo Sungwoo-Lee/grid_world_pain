@@ -56,7 +56,7 @@ environment:
       spawn_area: [[1, 1], [5, 5]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
-      damage: [5.0, 15.0]
+      damage: [15.0, 45.0]
       regeneration_delay: 20
       nociception_intensity: 0.9
 
@@ -66,7 +66,7 @@ environment:
       spawn_area: [[1, 6], [5, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
-      damage: [5.0, 15.0]
+      damage: [15.0, 45.0]
       regeneration_delay: 20
       nociception_intensity: 0.9
 
@@ -76,7 +76,7 @@ environment:
       spawn_area: [[6, 6], [10, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
-      damage: [5.0, 15.0]
+      damage: [15.0, 45.0]
       regeneration_delay: 20
       nociception_intensity: 0.9
 
@@ -86,7 +86,7 @@ environment:
       spawn_area: [[6, 1], [10, 5]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
-      damage: [5.0, 15.0]
+      damage: [15.0, 45.0]
       regeneration_delay: 20
       nociception_intensity: 0.9
       
@@ -102,10 +102,10 @@ environment:
   predator_enabled: true
   predators:
     - name: "predator" # 
-      count: 2
+      count: 3
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 1
-      damage: [5.0, 15.0]
+      damage: [15.0, 45.0]
       nociception_intensity: 0.9
       spawn_area: [[1, 1], [10, 10]]
       patrol_area: [[1, 1], [10, 10]]
@@ -203,9 +203,9 @@ body:
   # Body state limits
   max_satiation: 100
   max_nutrition: 100
-  max_injury: 30
+  max_injury: 100
   # Nutrition: new_N = clip(prev_N - metabolic_cost + [gain - cost if ate], 0, max_N)
-  metabolic_cost: 0.5
+  metabolic_cost: 1.0
   food_nutrition_gain: 3
   eating_nutrition_cost: 1.0
   eating_reward_penalty: 0.0

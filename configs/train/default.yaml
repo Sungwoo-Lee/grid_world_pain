@@ -4,8 +4,8 @@ training:
   num_envs: 128
   checkpoint_frequency: 10000 
   video_during_training: true
-  stats_during_training: true
-  auto_analysis: true
+  stats_during_training: false
+  auto_analysis: false 
   eval_video_episodes: 1
   eval_stats_episodes: 100
   eval_stats_num_envs: 10
