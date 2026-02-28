@@ -43,7 +43,7 @@ def compute_gae(rewards, values_next, dones, gamma, lmbda):
     return advantages
 
 def compute_mc_returns(rewards, dones, gamma):
-    """Computes Monte Carlo returns (matching PyTorch baseline)."""
+    """Computes Monte Carlo returns."""
     def mc_scan(carry, x):
         ret = carry
         reward, done = x

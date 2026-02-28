@@ -1560,12 +1560,31 @@ On a **10×10 grid**, the per-entity scan's simplicity wins. Per-type would star
 
 ---
 
-## Final Decision: Config-Driven Dual Mode
+## Current Object Overlap Checking Mechanisms
 
-Both approaches kept in code with a config switch:
+The environment currently guarantees zero entity overlaps (entities occupying the same grid cell) using a config-driven dual-mode placement strategy, controlled by `environment.placement.mode`.
+
+### 1. Per-Entity Scan Mode (`mode: per_entity`)
+**Recommended default for small grids (e.g., 10x10).**
+- **Algorithm:** 
+  1. Samples random initial positions for all entities using `jax.vmap`.
+  2. Uses a single `jax.lax.scan` over all individual entities (e.g., 50 sequential steps).
+  3. At each step, checks a flat boolean occupancy mask `[100]`.
+  4. If the entity's randomly sampled cell is empty, it takes it and marks it occupied.
+  5. If taken, it scans a pre-shuffled global permutation of all grid cells to find the first free cell strictly within its `spawn_area`.
+- **Performance:** Highly performant on small grids (~230-420 SPS resets). Each step is incredibly lightweight, requiring only scalar index lookups and localized conditional writes.
+
+### 2. Type-Level Grouping Mode (`mode: per_type`)
+**Alternative for large grids (e.g., 50x50+).**
+- **Algorithm:**
+  1. Groups entities by their `spawn_area` during config parsing (e.g., 5 unique areas = 5 groups).
+  2. Uses `jax.lax.scan` over the *type groups* rather than individual entities (e.g., 5 sequential steps instead of 50).
+  3. For each group, it generates a full `jax.random.permutation` of the entire grid, filters to valid cells within the `spawn_area` that are not yet occupied, and deterministically allocates `N` cells.
+  4. Updates the global occupancy mask and scatters the new positions in a batched manner using `occ.at[type_flat].set(valid)`.
+- **Performance:** Slower on small grids. Generating 100-element permutations and running cumsums 5 times is heavier than 50 scalar lookups. However, this approach scales far better on massive grids where running 50+ sequential steps with array lookups becomes a bottleneck.
 
 ```yaml
+# configs/environment/default.yaml
 placement:
-  mode: per_entity    # default, fast on ≤100 cells
-                      # alternative: "per_type" for large grids
+  mode: per_entity    # "per_entity" or "per_type"
 ```

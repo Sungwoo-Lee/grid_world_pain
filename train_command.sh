@@ -18,4 +18,4 @@
   --episodes 10000000 \
   --checkpoint-frequency 1000000 \
   --device cuda:0 \
-  --tag "rppo_10X10_100injury_3predators_metabolicCost1"
+  --tag "rppo_MC_relu_256hidden_LSTM_flat"

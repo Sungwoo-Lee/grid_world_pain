@@ -5,33 +5,33 @@ agent:
   gamma: 0.95
   K_epochs: 4
   eps_clip: 0.1
-  update_timestep: 2000
-  sequence_length: 128     # Steps per rollout/sequence (shared by PyTorch & JAX)
+  # update_timestep: 2000
+  sequence_length: 128     # Steps per rollout/sequence
   frame_stack: 1
   fc_layers: [128,128]
-  recurrent_layers: [64]
+  # recurrent_layers: [128]
   actor_fc_layers: [128,128]
   critic_fc_layers: [128,128]
-  hidden_size: 64
+  hidden_size: 256
   entropy_coef: 0.01
   gae_lambda: 0.95
   vf_coef: 0.5
   
   # Parity Options
-  rnn_type: "GRU"       # "LSTM" (PyTorch parity) or "GRU" (original JAX)
-  activation: "tanh"     # "tanh" (PyTorch parity) or "relu" (original JAX)
-  return_mode: "MC"      # "MC" (PyTorch parity) or "GAE" (original JAX)
+  rnn_type: "LSTM"       # "LSTM" or "GRU"
+  activation: "relu"     # "tanh" or "relu"
+  return_mode: "MC"      # "MC" or "GAE"
 
   # Encoding Configuration
   encoding_mode: "hierarchical"  # "flat" or "hierarchical"
   
   hierarchical_params:
-    default_mlp: [64]
+    default_mlp: [128,128]
     unimodal_overrides:
-      visual: [64]
+      visual: [128,128]
     hub_overrides:
-      body_state: [64]
-      association: [128]
+      body_state: [128,128]
+      association: [128,128]
 
   # Neuromodulation: DISABLED (true baseline, §5.2)
   # For neuromodulated variant, use: configs/models/neuromodulated_ppo.yaml
