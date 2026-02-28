@@ -348,8 +348,7 @@ class Encoder(nnx.Module):
 
         Args:
             x: Observation vector, shape (..., input_dim).
-            mod_output: DreamerModulatorOutput with z_percept (gamma) and
-                        z_percept_add (beta) fields.
+            mod_output: DreamerModulatorOutput with hierarchical fields.
             modulation_type: "Multiplicative" or "PreActivation".
 
         Returns:
@@ -357,12 +356,13 @@ class Encoder(nnx.Module):
         """
         x_pre = self.body(x)
 
+        # Flat encoder fallback: just use z_unimodal's first dimension
         if modulation_type == "PreActivation":
-            gamma = jax.nn.sigmoid(mod_output.z_percept)
-            beta = mod_output.z_percept_add
+            gamma = jax.nn.sigmoid(mod_output.z_unimodal[..., 0:1])
+            beta = mod_output.z_unimodal_add[..., 0:1]
             return self.final_act(x_pre * gamma + beta)
         else:
-            return self.final_act(x_pre) * jax.nn.sigmoid(mod_output.z_percept)
+            return self.final_act(x_pre) * jax.nn.sigmoid(mod_output.z_unimodal[..., 0:1])
 
 class DreamerObservationDecoder(nnx.Module):
     """

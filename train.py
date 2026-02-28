@@ -723,8 +723,12 @@ def main():
                         if mod_info is not None:
                             wandb_logs.update({
                                 "modulator/grad_norm": float(avg_mod_grad_norm),
-                                "modulator/gamma_mean": float(jnp.mean(mod_info.z_percept)),
-                                "modulator/gamma_std": float(jnp.std(mod_info.z_percept)),
+                                "modulator/gamma_uni_mean": float(jnp.mean(mod_info.z_unimodal)),
+                                "modulator/gamma_uni_std": float(jnp.std(mod_info.z_unimodal)),
+                                "modulator/gamma_body_mean": float(jnp.mean(mod_info.z_bodystate)),
+                                "modulator/gamma_body_std": float(jnp.std(mod_info.z_bodystate)),
+                                "modulator/gamma_assoc_mean": float(jnp.mean(mod_info.z_association)),
+                                "modulator/gamma_assoc_std": float(jnp.std(mod_info.z_association)),
                                 "modulator/z_memory_mean": float(jnp.mean(mod_info.z_memory)),
                                 "modulator/z_memory_std": float(jnp.std(mod_info.z_memory)),
                                 "modulator/temperature_mean": float(jnp.mean(mod_info.temperature)),
@@ -733,8 +737,12 @@ def main():
                             })
                             if modulation_config is not None and modulation_config.get('type') == "PreActivation":
                                 wandb_logs.update({
-                                    "modulator/beta_mean": float(jnp.mean(mod_info.z_percept_add)),
-                                    "modulator/beta_std": float(jnp.std(mod_info.z_percept_add)),
+                                    "modulator/beta_uni_mean": float(jnp.mean(mod_info.z_unimodal_add)),
+                                    "modulator/beta_uni_std": float(jnp.std(mod_info.z_unimodal_add)),
+                                    "modulator/beta_body_mean": float(jnp.mean(mod_info.z_bodystate_add)),
+                                    "modulator/beta_body_std": float(jnp.std(mod_info.z_bodystate_add)),
+                                    "modulator/beta_assoc_mean": float(jnp.mean(mod_info.z_association_add)),
+                                    "modulator/beta_assoc_std": float(jnp.std(mod_info.z_association_add)),
                                 })
                         
                         wandb_logs.update({
