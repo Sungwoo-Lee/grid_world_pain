@@ -616,8 +616,8 @@ def main():
             print("JIT compiling train_iteration_ppo...")
         jit_train = nnx.jit(train_iteration_ppo, static_argnums=(5,))
         
-    # 7. Training Loop
-    if args.debug: print(f"[DEBUG] Phase 7: Entering Training Loop...", flush=True)
+    # 7. Training Loop Initialization
+    if args.debug: print(f"[DEBUG] Phase 7: Training Loop Initialization...", flush=True)
     global_step = 0
     iteration = 0
     total_episodes_completed = 0
@@ -625,6 +625,84 @@ def main():
     episode_lengths = np.zeros(num_envs, dtype=np.int32)
     ep_info_buffer = deque(maxlen=100)
     
+    # --- Checkpoint Restoration (Continual Learning / Transfer) ---
+    if args.load_checkpoint:
+        if args.debug: print(f"[DEBUG] Phase 6.5: Restoring Checkpoint from {args.load_checkpoint}...", flush=True)
+        if not args.quiet:
+            print(f"Restoring checkpoint from {args.load_checkpoint}...")
+            
+        try:
+            restore_mngr = ocp.CheckpointManager(os.path.abspath(args.load_checkpoint))
+            # orbax CheckpointManager.latest_step() returns the largest step number
+            step = restore_mngr.latest_step()
+            
+            if step is not None:
+                # Load the raw state tree using PyTreeRestore, avoiding StandardRestore shape panic
+                restored = restore_mngr.restore(step, args=ocp.args.PyTreeRestore())
+                
+                # Check if this is a standard NNX model/optimizer setup, or Dreamer
+                if algorithm == "DreamerV3":
+                    nnx.update(trainer.agent.wm, restored['wm'])
+                    nnx.update(trainer.agent.ac.actor, restored['actor'])
+                    nnx.update(trainer.agent.ac.critic, restored['critic'])
+                    key = restored['key']
+                    global_step = restored['step']
+                    iteration = restored['iteration']
+                    total_episodes_completed = restored['episode']
+                    if not args.quiet: print(f"  -> DreamerV3 Model fully restored (Step: {step}).")
+                elif 'model' in locals() and 'optimizer' in locals():
+                    # Handle Architecture Mismatches (Selective copying via tree_map)
+                    restored_model_state = restored['model']
+                    current_model_state = nnx.state(model)
+                    
+                    # We flatten both states and map matching keys/shapes
+                    flat_restored, tree_def = jax.tree_util.tree_flatten_with_path(restored_model_state)
+                    flat_current, current_def = jax.tree_util.tree_flatten_with_path(current_model_state)
+                    
+                    # Convert paths to string keys for easy lookup
+                    restored_dict = {str(k): v for k, v in flat_restored}
+                    current_dict = {str(k): v for k, v in flat_current}
+                    
+                    valid_model_state = {}
+                    for k, cur_v in current_dict.items():
+                        if k in restored_dict:
+                            res_v = restored_dict[k]
+                            # Check if shapes match
+                            if hasattr(cur_v, 'shape') and hasattr(res_v, 'shape') and cur_v.shape == res_v.shape:
+                                valid_model_state[k] = res_v
+                            else:
+                                valid_model_state[k] = cur_v # Keep un-initialized if mismatch
+                        else:
+                            valid_model_state[k] = cur_v # Keep un-initialized if missing in checkpoint
+                    
+                    # Reconstruct the tree
+                    valid_flat = [valid_model_state[str(k)] for k, _ in flat_current]
+                    valid_tree = jax.tree_util.tree_unflatten(current_def, valid_flat)
+                    
+                    nnx.update(model, valid_tree)
+                    
+                    # For optimizers, assume full restore if model architecture matches fully, 
+                    # otherwise reset (default behavior via omitted update)
+                    matched_param_count = sum(1 for k in valid_model_state if k in restored_dict and hasattr(valid_model_state[k], 'shape'))
+                    if matched_param_count == len(restored_dict) and matched_param_count == len(current_dict):
+                        nnx.update(optimizer, restored['optimizer'])
+                        if not args.quiet: print(f"  -> Model and Optimizer fully restored (Step: {step}).")
+                    else:
+                        if not args.quiet: print(f"  -> Partial Model restore due to architecture mismatch (Step: {step}). Optimizer reset.")
+                    
+                    # Also restore standard training counters
+                    if 'h_state' in restored: h_state = restored['h_state']
+                    if 'key' in restored: key = restored['key']
+                    global_step = restored.get('step', global_step)
+                    iteration = restored.get('iteration', iteration)
+                    total_episodes_completed = restored.get('episode', total_episodes_completed)
+                    
+            else:
+                if not args.quiet: print(f"Warning: No valid checkpoint steps found at {args.load_checkpoint}.")
+        except Exception as e:
+            if not args.quiet:
+                print(f"Error restoring checkpoint: {e}")
+
     start_time = datetime.now()
     if args.debug: print(f"[DEBUG] Loop start time: {start_time.strftime('%H:%M:%S')}", flush=True)
 

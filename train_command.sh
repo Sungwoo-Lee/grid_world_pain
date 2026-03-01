@@ -15,7 +15,7 @@
   --config configs/environment/default.yamls \
   --agent_config configs/models/neuromodulated_ppo.yaml \
   --num-envs 128 \
-  --episodes 10000000 \
+  --episodes 100000000 \
   --checkpoint-frequency 1000000 \
-  --device cuda:1 \
+  --device cuda:0 \
   --tag "rppoNMN_MC_relu_128hidden_GRU_hierarchical"
