@@ -61,13 +61,14 @@ To fully support continual learning and knowledge transfer across environments, 
                    pass
    ```
 
-2. **Handle Architecture Mismatches:**
-   - When transferring to a new environment, the observation space or action space might differ slightly (e.g., changes in the grid width resulting in dimension differences). 
-   - A shape extraction handler using `jax.tree_util` selectively merges weights that align perfectly with the target environment. If the structure is fundamentally different, it preserves the existing initialization to avert shape crashes.
+2. **Enforce Strict Architecture Matching:**
+   - When transferring to a new environment, any change in the observation space or action space might alter network dimensions (e.g., changing grid constraints). 
+   - A shape validation handler actively traverses via `jax.tree_util` to match weights against the exact structure of the target environment's initialization.
+   - If *any* layer is missing, appended, or sized differently, the checkpoint loader aborts and dumps a detailed side-by-side diagnostic list of every mismatched layer shape.
 
-   **Implementation Example (Partial State Restoration):**
+   **Implementation Example (Strict Architecture Checking):**
    ```python
-   # Handle Architecture Mismatches (Selective copying via tree_map)
+   # Enforce Strict Architecture Matching
    restored_model_state = restored['model']
    current_model_state = nnx.state(model)
    
@@ -79,23 +80,38 @@ To fully support continual learning and knowledge transfer across environments, 
    restored_dict = {str(k): v for k, v in flat_restored}
    current_dict = {str(k): v for k, v in flat_current}
    
-   valid_model_state = {}
-   for k, cur_v in current_dict.items():
-       if k in restored_dict:
-           res_v = restored_dict[k]
-           # Check if shapes match
-           if hasattr(cur_v, 'shape') and hasattr(res_v, 'shape') and cur_v.shape == res_v.shape:
-               valid_model_state[k] = res_v
-           else:
-               valid_model_state[k] = cur_v # Keep un-initialized if mismatch
-       else:
-           valid_model_state[k] = cur_v # Keep un-initialized if missing in checkpoint
+   mismatches = []
    
-   # Reconstruct the tree
-   valid_flat = [valid_model_state[str(k)] for k, _ in flat_current]
+   # Check for mismatches or missing layers
+   for k, cur_v in current_dict.items():
+       if k not in restored_dict:
+           mismatches.append(f"Layer '{k}': Missing in Checkpoint (Current expects shape {getattr(cur_v, 'shape', 'No Shape')})")
+       else:
+           res_v = restored_dict[k]
+           cur_shape = getattr(cur_v, 'shape', None)
+           res_shape = getattr(res_v, 'shape', None)
+           
+           if cur_shape != res_shape:
+               mismatches.append(f"Layer '{k}': Checkpoint Shape {res_shape} != Current Shape {cur_shape}")
+               
+   for k in restored_dict.keys():
+       if k not in current_dict:
+           res_shape = getattr(restored_dict[k], 'shape', 'No Shape')
+           mismatches.append(f"Layer '{k}': Missing in Current (Checkpoint has shape {res_shape})")
+
+   if mismatches:
+       error_msg = "Architecture mismatch detected between checkpoint and current environment!\n"
+       error_msg += "The following structure differences were found:\n"
+       error_msg += "\n".join([f"  - {m}" for m in mismatches])
+       raise ValueError(error_msg)
+   
+   # If we survived, the structures are identical. Reconstruct and apply.
+   valid_flat = [restored_dict[str(k)] for k, _ in flat_current]
    valid_tree = jax.tree_util.tree_unflatten(current_def, valid_flat)
    
    nnx.update(model, valid_tree)
+   nnx.update(optimizer, restored['optimizer'])
+   if not args.quiet: print(f"  -> Model and Optimizer strictly matched and fully restored (Step: {step}).")
    ```
 
 ### Debugging Results
@@ -111,4 +127,16 @@ During implementation, several issues were encountered and resolved:
 4. **`nnx.State` Shape Inspection Failure**: When iterating over the keys of the `nnx.State` to skip mismatched layers, referencing layer shapes (e.g., `.shape`) directly onto a `nnx.State` returned an error because NNX treats internal elements fundamentally as node trees, not raw arrays.
    - *Fix*: Refactored array isolation through `jax.tree_util.tree_flatten_with_path`, decomposing the NNX State down to traversable linear pathways allowing for safe property evaluation.
 
-These debugging steps led to a very robust implementation where `train.py` can resume training and seamlessly fall back to partial loading when environment architectures diverge.
+5. **Strict Mismatch Detection Error Generation**: Rather than silently allowing mismatched layers to reinitialize to random values (which could lead to catastrophic corruption in untrained components while older weights falsely compensate), we switched to a strict `ValueError`. If an architecture mismatch occurs (e.g. attempting to load a checkpoint with a hidden size of `128` into a configuration specifying `256`), the script aborts immediately with an explicit mapping of the unmatched nodes:
+
+   ```text
+   ValueError: Architecture mismatch detected between checkpoint and current environment!
+   The following structure differences were found:
+     - Layer '(DictKey(key='rnn_cell'), DictKey(key='W_hn'), DictKey(key='bias'), DictKey(key='value'))': Checkpoint Shape (128,) != Current Shape (256,)
+     - Layer '(DictKey(key='rnn_cell'), DictKey(key='W_hn'), DictKey(key='kernel'), DictKey(key='value'))': Checkpoint Shape (128, 128) != Current Shape (256, 256)
+     - Layer '(DictKey(key='rnn_cell'), DictKey(key='W_hr'), DictKey(key='bias'), DictKey(key='value'))': Checkpoint Shape (128,) != Current Shape (256,)
+     - Layer '(DictKey(key='rnn_cell'), DictKey(key='W_hr'), DictKey(key='kernel'), DictKey(key='value'))': Checkpoint Shape (128, 128) != Current Shape (256, 256)
+     ...
+   ```
+
+These debugging steps led to a robust implementation where `train.py` safely prevents corrupted state imports and strictly enforces identically shaped training architectures.

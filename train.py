@@ -651,7 +651,7 @@ def main():
                     total_episodes_completed = restored['episode']
                     if not args.quiet: print(f"  -> DreamerV3 Model fully restored (Step: {step}).")
                 elif 'model' in locals() and 'optimizer' in locals():
-                    # Handle Architecture Mismatches (Selective copying via tree_map)
+                    # Enforce Strict Architecture Matching
                     restored_model_state = restored['model']
                     current_model_state = nnx.state(model)
                     
@@ -663,32 +663,38 @@ def main():
                     restored_dict = {str(k): v for k, v in flat_restored}
                     current_dict = {str(k): v for k, v in flat_current}
                     
-                    valid_model_state = {}
-                    for k, cur_v in current_dict.items():
-                        if k in restored_dict:
-                            res_v = restored_dict[k]
-                            # Check if shapes match
-                            if hasattr(cur_v, 'shape') and hasattr(res_v, 'shape') and cur_v.shape == res_v.shape:
-                                valid_model_state[k] = res_v
-                            else:
-                                valid_model_state[k] = cur_v # Keep un-initialized if mismatch
-                        else:
-                            valid_model_state[k] = cur_v # Keep un-initialized if missing in checkpoint
+                    mismatches = []
                     
-                    # Reconstruct the tree
-                    valid_flat = [valid_model_state[str(k)] for k, _ in flat_current]
+                    # Check for mismatches or missing layers
+                    for k, cur_v in current_dict.items():
+                        if k not in restored_dict:
+                            mismatches.append(f"Layer '{k}': Missing in Checkpoint (Current expects shape {getattr(cur_v, 'shape', 'No Shape')})")
+                        else:
+                            res_v = restored_dict[k]
+                            cur_shape = getattr(cur_v, 'shape', None)
+                            res_shape = getattr(res_v, 'shape', None)
+                            
+                            if cur_shape != res_shape:
+                                mismatches.append(f"Layer '{k}': Checkpoint Shape {res_shape} != Current Shape {cur_shape}")
+                                
+                    for k in restored_dict.keys():
+                        if k not in current_dict:
+                            res_shape = getattr(restored_dict[k], 'shape', 'No Shape')
+                            mismatches.append(f"Layer '{k}': Missing in Current (Checkpoint has shape {res_shape})")
+
+                    if mismatches:
+                        error_msg = "Architecture mismatch detected between checkpoint and current environment!\n"
+                        error_msg += "The following structure differences were found:\n"
+                        error_msg += "\n".join([f"  - {m}" for m in mismatches])
+                        raise ValueError(error_msg)
+                    
+                    # If we survived, the structures are identical. Reconstruct and apply.
+                    valid_flat = [restored_dict[str(k)] for k, _ in flat_current]
                     valid_tree = jax.tree_util.tree_unflatten(current_def, valid_flat)
                     
                     nnx.update(model, valid_tree)
-                    
-                    # For optimizers, assume full restore if model architecture matches fully, 
-                    # otherwise reset (default behavior via omitted update)
-                    matched_param_count = sum(1 for k in valid_model_state if k in restored_dict and hasattr(valid_model_state[k], 'shape'))
-                    if matched_param_count == len(restored_dict) and matched_param_count == len(current_dict):
-                        nnx.update(optimizer, restored['optimizer'])
-                        if not args.quiet: print(f"  -> Model and Optimizer fully restored (Step: {step}).")
-                    else:
-                        if not args.quiet: print(f"  -> Partial Model restore due to architecture mismatch (Step: {step}). Optimizer reset.")
+                    nnx.update(optimizer, restored['optimizer'])
+                    if not args.quiet: print(f"  -> Model and Optimizer strictly matched and fully restored (Step: {step}).")
                     
                     # Also restore standard training counters
                     if 'h_state' in restored: h_state = restored['h_state']
