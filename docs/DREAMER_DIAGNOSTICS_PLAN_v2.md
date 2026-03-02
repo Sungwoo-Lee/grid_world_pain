@@ -600,3 +600,24 @@ The activation memory dominates — this is proportional to `batch_size × seque
 4. **Consider `collect_interval: 1` with canonical batch** — If per-step drops to ~0.03s, even 64 Python-dispatched steps (~2s + overhead) may be acceptable, simplifying the architecture.
 
 > **Decision needed**: Should Phase 2 proceed at 13 s/it while speed tuning continues in parallel, or should batch dimension reduction be applied first?
+---
+
+### 8.2 Phase 1 Continuation: Batch Size Reduction (v7)
+**Date**: 2026-03-02
+**Phase**: 1 (Continuation)
+**Context**: 64env, CI=128, RR=1.0, `batch_size: 16`, `tag: speed_validation_gpu_buffer_v7`
+**Observation**: 
+- **VRAM Drop**: GPU memory usage dropped from 18.4 GB to **8.6 GB** (~53% reduction). This confirms that activation memory (proportional to `batch_size * sequence_length`) was the dominant memory consumer.
+- **JIT Stability**: No new JIT retracing issues observed. `collect_sequence` and `_scan_train_gpu` both compiled successfully with the new static batch dimension.
+- **Steady-State Speed (v7)**:
+  - **s/it**: **6.5s** (for 64 envs, CI=128, RR=1.0, batch=16)
+  - **SPS**: **1,260**
+  - **Improvement**: 2.0x faster than batch=64 (13.0 s/it).
+  - **GPU Utilization**: 100% (Arithmetically bound).
+
+**Analysis**:
+Reducing the batch size to 16 yielded a clean 2x speedup. While the target was <4.5 s/it (linear 4x projection), the achieved 6.5 s/it suggests non-linear scaling of JAX kernels or a fixed overhead in the `lax.scan` body (likely `nnx.split`/`nnx.merge` for 128-sequence activation tapes). However, 8.6 GB VRAM usage is much safer for long runs, and the system is achieving peak throughput for this heavy model configuration.
+
+**Resolution / Next Steps**:
+1. Phase 1 is concluded with optimized steady-state baseline.
+2. **Ready for Phase 2: Training Performance Validation** (awaiting user confirmation).
