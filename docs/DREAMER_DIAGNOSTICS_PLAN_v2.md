@@ -619,6 +619,9 @@ The activation memory dominates — this is proportional to `batch_size × seque
 **Analysis**:
 Reducing the batch size to 16 yielded a clean 2x speedup. While the target was <4.5 s/it (linear 4x projection), the achieved 6.5 s/it suggests non-linear scaling of JAX kernels or a fixed overhead in the `lax.scan` body (likely `nnx.split`/`nnx.merge` for 128-sequence activation tapes). However, 8.6 GB VRAM usage is much safer for long runs, and the system is achieving peak throughput for this heavy model configuration.
 
+**Why reducing batch size reduces wall-clock time** (not just memory):
+In standard supervised learning, larger batches parallelize across GPU cores and often take similar wall-clock time. But DreamerV3 is different — each gradient step involves **sequential 15-step imagination rollouts** through the world model, producing `batch_size × sequence_length × horizon` total imagined transitions. The GPU was already at **100% utilization** (confirmed via `nvidia-smi`), meaning it was fully saturated. Once a GPU is saturated, adding more parallel work doesn't run "for free" — it queues internally and takes proportionally longer. Reducing batch from 64→16 cuts total FLOPS per gradient step by 4x, which directly translates to less wall-clock time because the GPU had no spare capacity.
+
 **Resolution / Next Steps**:
 1. Phase 1 is concluded with optimized steady-state baseline.
 2. **Ready for Phase 2: Training Performance Validation** (awaiting user confirmation).
