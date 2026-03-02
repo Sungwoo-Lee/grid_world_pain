@@ -513,11 +513,13 @@ def main():
         cumulative_gradient_steps = 0
 
 
+        buffer_device = config.get('agent.buffer_device', 'gpu')
         buffer = ReplayBuffer(
             capacity=int(1e5), 
             sequence_length=config.get_mandatory('agent.sequence_length'), 
             obs_dim=input_dim, 
-            action_dim=action_dim
+            action_dim=action_dim,
+            device=buffer_device
         )
         dreamer_state = None 
 
@@ -932,11 +934,16 @@ def main():
                         # ratio returns num_envs gradient steps. With collect_interval=128: increments by 
                         # num_envs*128, so we normalize to count sequences, not individual timesteps.
                         train_steps = ratio_scaled_updates(global_step // num_steps)
-                        for _ in range(train_steps):
-                            batch_jax = buffer.sample(config.get_mandatory('agent.batch_size'))
-                            key, train_key = jax.random.split(key)
-                            metrics = trainer.train_step(batch_jax, train_key)
-                            cumulative_gradient_steps += 1
+                        
+                        if buffer.device == "gpu":
+                            # GPU path: sample + train all inside one JIT call
+                            metrics, key = trainer.train_multiple_gpu(buffer, train_steps, key)
+                        else:
+                            # CPU path: pre-sample on CPU, bulk transfer, then JIT train
+                            stacked = buffer.sample_multiple(train_steps, config.get_mandatory('agent.batch_size'))
+                            metrics, key = trainer.train_multiple_cpu(stacked, key)
+                            
+                        cumulative_gradient_steps += train_steps
                         loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
                     
                     if wandb_enabled and iteration % 10 == 0:

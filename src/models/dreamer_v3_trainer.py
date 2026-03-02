@@ -586,37 +586,103 @@ class DreamerTrainer(nnx.Module):
         
         return final_env_state, final_d_state, final_key, transitions
 
+    def train_multiple_gpu(self, buffer, num_steps, rng):
+        """Fully JIT-compiled training loop for GPU buffer.
+        
+        Samples and trains inside lax.scan — zero host involvement.
+        """
+        batch_size = self.config.get_mandatory('agent.batch_size', int)
+        
+        # 1. Functional split of the entire trainer
+        graphdef, state = nnx.split(self)
+        
+        @nnx.jit(static_argnums=(1,))
+        def _scan_train(state, num_steps, rng):
+            def scan_body(carry, _):
+                current_state, rng = carry
+                
+                # 2. Re-create a local trainer instance inside the JIT trace
+                # This makes trainer.train_step mutations legal
+                trainer = nnx.merge(graphdef, current_state)
+                
+                # Sample from GPU buffer (all on-device)
+                rng, sample_key, train_key = jax.random.split(rng, 3)
+                batch = buffer.sample(batch_size, key=sample_key)
+                
+                # gradient step
+                metrics = trainer.train_step(batch, train_key)
+                
+                # 3. Extract the locally mutated state to carry forward
+                new_state = nnx.state(trainer)
+                return (new_state, rng), metrics
+            
+            final_carry, all_metrics = jax.lax.scan(scan_body, (state, rng), None, length=num_steps)
+            return final_carry[0], jax.tree.map(jnp.mean, all_metrics), final_carry[1]
+        
+        # 4. Execute the fully batched JIT training loop
+        final_state, metrics_mean, rng = _scan_train(state, int(num_steps), rng)
+        
+        # 5. Apply the final aggregated state back to our real self
+        nnx.update(self, final_state)
+        
+        return metrics_mean, rng
+
+    def train_multiple_cpu(self, stacked_batches, rng):
+        """Batched JIT training for CPU buffer (Path A fallback).
+        
+        stacked_batches: pre-sampled dict of (num_steps, batch_size, seq_len, dim)
+        """
+        graphdef, state = nnx.split(self)
+        
+        @nnx.jit
+        def _scan_train(state, stacked_batches, rng):
+            def scan_body(carry, batch):
+                current_state, rng = carry
+                
+                trainer = nnx.merge(graphdef, current_state)
+                
+                rng, train_key = jax.random.split(rng)
+                metrics = trainer.train_step(batch, train_key)
+                
+                new_state = nnx.state(trainer)
+                return (new_state, rng), metrics
+            
+            final_carry, all_metrics = jax.lax.scan(scan_body, (state, rng), stacked_batches)
+            return final_carry[0], jax.tree.map(jnp.mean, all_metrics), final_carry[1]
+        
+        final_state, metrics_mean, rng = _scan_train(state, stacked_batches, rng)
+        nnx.update(self, final_state)
+        
+        return metrics_mean, rng
+
 # -----------------------------------------------------------------------------
 # Replay Buffer
 # -----------------------------------------------------------------------------
 import numpy as np
 
 class ReplayBuffer:
-    def __init__(self, capacity=10_000, sequence_length=16, obs_dim=33, action_dim=4):
+    def __init__(self, capacity=10_000, sequence_length=16, obs_dim=33, action_dim=4, device="gpu"):
         self.capacity = capacity
         self.sequence_length = sequence_length
-        self.obs = np.zeros((capacity, obs_dim), dtype=np.float32)
-        self.actions = np.zeros((capacity, action_dim), dtype=np.float32)
-        self.rewards = np.zeros((capacity,), dtype=np.float32)
-        self.dones = np.zeros((capacity,), dtype=np.float32)
-        self.is_first = np.zeros((capacity,), dtype=np.bool_)
+        self.device = device
+        self._on_gpu = (device == "gpu")
+        
+        if self._on_gpu:
+            self.obs = jnp.zeros((capacity, obs_dim), dtype=jnp.float32)
+            self.actions = jnp.zeros((capacity, action_dim), dtype=jnp.float32)
+            self.rewards = jnp.zeros((capacity,), dtype=jnp.float32)
+            self.dones = jnp.zeros((capacity,), dtype=jnp.float32)
+            self.is_first = jnp.zeros((capacity,), dtype=jnp.float32)
+        else:
+            self.obs = np.zeros((capacity, obs_dim), dtype=np.float32)
+            self.actions = np.zeros((capacity, action_dim), dtype=np.float32)
+            self.rewards = np.zeros((capacity,), dtype=np.float32)
+            self.dones = np.zeros((capacity,), dtype=np.float32)
+            self.is_first = np.zeros((capacity,), dtype=np.float32)
 
         self.idx = 0
         self.size = 0
         self.ep_start_idx = 0
-
-    def add(self, obs, action, reward, done, is_first):
-        self.obs[self.idx] = obs
-        self.actions[self.idx] = action
-        self.rewards[self.idx] = reward
-        self.dones[self.idx] = done
-        self.is_first[self.idx] = is_first
-
-        self.idx = (self.idx + 1) % self.capacity
-        self.size = min(self.size + 1, self.capacity)
-
-        if done:
-            self.ep_start_idx = self.idx
 
     def add_batch(self, obs, actions, rewards, dones, is_firsts):
         """Vectorized addition of a batch of transitions.
@@ -633,14 +699,20 @@ class ReplayBuffer:
         """
         num_items = obs.shape[0]
         
-        # Calculate indices with wrap-around
-        indices = (self.idx + np.arange(num_items)) % self.capacity
-        
-        self.obs[indices] = obs
-        self.actions[indices] = actions
-        self.rewards[indices] = rewards
-        self.dones[indices] = dones
-        self.is_first[indices] = is_firsts
+        if self._on_gpu:
+            indices = (self.idx + jnp.arange(num_items)) % self.capacity
+            self.obs = self.obs.at[indices].set(obs)
+            self.actions = self.actions.at[indices].set(actions)
+            self.rewards = self.rewards.at[indices].set(rewards)
+            self.dones = self.dones.at[indices].set(dones)
+            self.is_first = self.is_first.at[indices].set(is_firsts)
+        else:
+            indices = (self.idx + np.arange(num_items)) % self.capacity
+            self.obs[indices] = obs
+            self.actions[indices] = actions
+            self.rewards[indices] = rewards
+            self.dones[indices] = dones
+            self.is_first[indices] = is_firsts
         
         self.idx = (self.idx + num_items) % self.capacity
         self.size = min(self.size + num_items, self.capacity)
@@ -652,7 +724,12 @@ class ReplayBuffer:
             last_done_pos = done_indices[-1]
             self.ep_start_idx = (self.idx - (num_items - 1 - last_done_pos)) % self.capacity
 
-    def sample(self, batch_size):
+    def sample(self, batch_size, key=None):
+        """Sample a batch of sequences.
+        
+        For GPU mode: `key` is a JAX PRNG key (required).
+        For CPU mode: `key` is ignored, uses numpy RNG.
+        """
         # Sample sequences that are TEMPORAL (one env over time).
         # Buffer is stored in env-major order: block of sequence_length consecutive
         # slots = one env's trajectory. So we sample start indices that are multiples
@@ -662,17 +739,33 @@ class ReplayBuffer:
         num_blocks = self.size // self.sequence_length
         if num_blocks < 1:
             return None
-        # Start at multiples of sequence_length so 64 consecutive = one trajectory
-        block_indices = np.random.randint(0, num_blocks, size=batch_size)
-        starts = block_indices * self.sequence_length
-
-        seq_range = np.arange(self.sequence_length)
-        indices = (starts[:, None] + seq_range[None, :]) % self.capacity
+            
+        seq_range = (jnp.arange if self._on_gpu else np.arange)(self.sequence_length)
+        
+        if self._on_gpu:
+            block_indices = jax.random.randint(key, (batch_size,), 0, num_blocks)
+            starts = block_indices * self.sequence_length
+            indices = (starts[:, None] + seq_range[None, :]) % self.capacity
+        else:
+            block_indices = np.random.randint(0, num_blocks, size=batch_size)
+            starts = block_indices * self.sequence_length
+            indices = (starts[:, None] + seq_range[None, :]) % self.capacity
 
         return {
             'obs': self.obs[indices],
             'action': self.actions[indices],
             'reward': self.rewards[indices],
             'terminal': self.dones[indices],
-            'is_first': self.is_first[indices].astype(np.float32)
+            'is_first': self.is_first[indices] if self._on_gpu else self.is_first[indices].astype(np.float32)
         }
+
+    def sample_multiple(self, num_batches, batch_size, key=None):
+        """Pre-sample `num_batches` batches at once (for CPU mode batched JIT)."""
+        if self._on_gpu:
+            # For GPU: not needed — sample inside lax.scan instead
+            raise NotImplementedError("Use sample() inside lax.scan for GPU mode")
+        
+        batches = [self.sample(batch_size) for _ in range(num_batches)]
+        # Stack into (num_batches, batch_size, seq_len, dim) and transfer once
+        stacked = {k: jnp.array(np.stack([b[k] for b in batches])) for k in batches[0]}
+        return stacked

@@ -13,9 +13,9 @@
 
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/environment/default.yamls \
-  --agent_config configs/models/recurrent_ppo.yaml \
-  --num-envs 128 \
+  --agent_config configs/models/dreamer_v3.yaml \
+  --num-envs 64 \
   --episodes 100000000 \
   --checkpoint-frequency 1000000 \
-  --device cuda:1 \
-  --tag "rppo_MC_relu_128hidden_GRU_hierarchical"
+  --device cuda:0 \
+  --tag "dreamer_v3_128envs_64batch_128collect_replay1_hierarchical"
