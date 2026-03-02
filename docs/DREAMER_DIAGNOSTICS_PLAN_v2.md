@@ -288,21 +288,22 @@ The single most impactful speed improvement is reducing the per-gradient-step wo
 
 #### Step 1: Reduce Batch Size
 
-- [ ] **4.7.1** Change `configs/models/dreamer_v3.yaml`:
+- [x] **4.7.1** Change `configs/models/dreamer_v3.yaml`:
   ```yaml
   batch_size: 16          # was 64 (sequence_length stays at 128)
   ```
-- [ ] **4.7.2** Run benchmark: 64env, CI=128, RR=1.0, same tag format.
-- [ ] **4.7.3** Record steady-state s/it and SPS. Expected: **~3.2-4.5 s/it** (per-step drops from ~0.19s to ~0.05s).
-- [ ] **4.7.4** Record VRAM usage. Expected: **~6-9 GB** (down from 18.4 GB — activation memory is proportional to batch × seq).
+- [x] **4.7.2** Run benchmark: 64env, CI=128, RR=1.0, same tag format.
+- [x] **4.7.3** Record steady-state s/it and SPS. Expected: ~3.2-4.5 s/it. **Measured: 6.5 s/it, 1,260 SPS** (2x speedup, below 4x projection).
+- [x] **4.7.4** Record VRAM usage. Expected: ~6-9 GB. **Measured: 8.6 GB** (53% reduction from 18.4 GB).
 
-**Expected results table**:
-| Metric | Current (64×128) | Reduced (16×128) | Improvement |
-|:---|---:|---:|:---|
-| Imagined transitions / step | 122,880 | 30,720 | 4x less compute |
-| Per-step time (est.) | ~0.19s | ~0.05s | ~4x faster |
-| s/it (64 grad steps) | 13.0 | ~3.2-4.5 | ~3-4x faster |
-| VRAM | 18.4 GB | ~6-9 GB | ~2-3x less memory |
+**Results table**:
+| Metric | Before (64×128) | After (16×128) | Expected | Actual |
+|:---|---:|---:|:---|:---|
+| Imagined transitions / step | 122,880 | 30,720 | 4x less compute | 4x less compute |
+| Per-step time | ~0.203s | ~0.102s | ~0.05s | 0.102s (2x, not 4x) |
+| s/it (64 grad steps) | 13.0 | 6.5 | ~3.2-4.5 | **6.5** (2x speedup) |
+| VRAM | 18.4 GB | 8.6 GB | ~6-9 GB | **8.6 GB** (within range) |
+| SPS | 630 | 1,260 | — | **1,260** (2x) |
 
 #### Step 2: Replay Ratio Adjustment (If Still Too Slow)
 
@@ -621,3 +622,33 @@ Reducing the batch size to 16 yielded a clean 2x speedup. While the target was <
 **Resolution / Next Steps**:
 1. Phase 1 is concluded with optimized steady-state baseline.
 2. **Ready for Phase 2: Training Performance Validation** (awaiting user confirmation).
+
+**Review (Post-Measurement Analysis)**:
+
+The 2x speedup (not 4x) reveals a significant **fixed overhead per gradient step** inside the `lax.scan` body. We can decompose the per-step cost:
+
+```
+Per-step time = fixed_overhead + compute_time
+Old (batch=64): 0.203s = F + C
+New (batch=16): 0.102s = F + C/4    (4x less compute)
+
+Solving: 0.203 - 0.102 = 3C/4 → C = 0.135s (old compute), F = 0.068s
+```
+
+| Component | Per-step (batch=64) | Per-step (batch=16) | Per-iteration (×64 steps) |
+|:---|---:|---:|---:|
+| Fixed overhead (`nnx.split`/`nnx.merge`, scan bookkeeping) | 0.068s (33%) | 0.068s (**67%**) | **4.35s** |
+| GPU compute (imagined transitions) | 0.135s (67%) | 0.034s (33%) | 2.15s |
+| **Total** | **0.203s** | **0.102s** | **6.5s** |
+
+The fixed overhead is now the **dominant bottleneck** at batch=16 — 67% of each gradient step and 4.35s per iteration. This validates Step 3 (4.7.7-4.7.8): profiling `nnx.split`/`nnx.merge` is the next highest-impact optimization if further speed improvement is needed.
+
+However, 6.5 s/it is a reasonable operating point for Phase 2 diagnostics. Further optimization (flattening NNX state, reducing replay_ratio) can proceed in parallel with training performance validation.
+
+**Updated Phase 1 checklist status**:
+- [x] VRAM < 50% of 24 GB → 8.6 GB (36%) — **PASSED**
+- [x] No JIT retracing — **PASSED** (since 8.1)
+- [ ] s/it < 5.0 → 6.5 s/it — **NOT MET** (but 2x improvement from 13.0; diminishing returns without NNX refactor)
+- [x] Results recorded — Section 8.2
+
+**Recommendation**: Proceed to Phase 2 at 6.5 s/it. The remaining speed gap (6.5 → <5.0) requires NNX state management refactoring (Step 3), which is a significant code change best tackled after confirming training correctness.
