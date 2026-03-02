@@ -13,9 +13,9 @@
 
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/environment/default.yamls \
-  --agent_config configs/models/neuromodulated_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo.yaml \
   --num-envs 128 \
   --episodes 100000000 \
   --checkpoint-frequency 1000000 \
-  --device cuda:0 \
-  --tag "rppoNMN_MC_relu_128hidden_GRU_hierarchical"
+  --device cuda:1 \
+  --tag "rppo_MC_relu_128hidden_GRU_hierarchical"

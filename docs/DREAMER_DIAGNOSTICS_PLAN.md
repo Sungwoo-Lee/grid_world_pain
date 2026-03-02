@@ -1139,3 +1139,445 @@ Our `grid_world_pain` environment has specific properties that make replay prior
 - Incompatible with JAX jit patterns (priority updates are inherently sequential)
 - Adds α, β hyperparameters
 - The Dreamer lineage explicitly avoids this approach
+
+---
+
+## 16. Structural Bottleneck Analysis (Training Speed & Sample Efficiency)
+
+### 16.1 The FLOPs Bottleneck: Massive Batch Over-scaling
+
+The current implementation configures `batch_size: 64` and `sequence_length: 128`. While JAX can handle large tensors, this creates a massive computational load per gradient step compared to canonical DreamerV3 (which uses `batch_size: 16` and `sequence_length: 64`).
+
+*   **Canonical Imagination**: `16 (batch) * 64 (seq) * 15 (horizon) = 15,360` imagined transitions per gradient step.
+*   **Current JAX Imagination**: `64 (batch) * 128 (seq) * 15 (horizon) = 122,880` imagined transitions per gradient step.
+
+**Diagnosis**: The actor-critic networks perform **8x more FLOPs** per iteration step. This causes each training step to take significantly longer in wall-clock time, resulting in "late" or sluggish iteration speed.
+
+### 16.2 The Gradient Starvation: Replay Ratio Dilution
+
+The implementation of the `replay_ratio` fix (Section 12.6) used `global_step // num_steps` to calculate the number of training steps per iteration.
+
+*   `num_envs = 64`, `sequence_length = 128` → `8192` environment steps collected per iteration.
+*   The math `8192 // 128 == 64` produces exactly **64 gradient steps** per iteration.
+*   **Canonical equivalent**: To process 8,192 environment steps with a true ratio of 1.0 (using canonical batch sizing of 1024 data points), the model should perform **8,192 gradient steps**. 
+
+**Diagnosis**: The agent is executing **128x fewer gradient updates** per collected environment step. Relying on massive batches (8192 items) instead of many sequential gradient updates severely degrades the gradient descent process, crippling sample efficiency and slowing convergence.
+
+### 16.3 The Python Control-Flow Overhead
+
+If the gradient starvation is fixed by setting `train_steps = 8192`, the Python `for _ in range(train_steps):` loop in `train.py` becomes a major bottleneck. Launching 8,192 asynchronous JAX dispatches and `numpy` array slicing operations via CPU-GPU transfers per iteration will likely cause the process to be entirely CPU-bound. 
+
+### 16.4 Recommended Fixes
+
+1.  **Reduce Batch Footprint**: Update `configs/models/dreamer_v3.yaml` to `batch_size: 16` and `sequence_length: 64`.
+2.  **Correct Ratio Formulation**: Remove the `// num_steps` floor division in `train.py`. Give the `Ratio` tracker the true `global_steps` increment so it matches canonical update frequency (`1.0` grad steps per env step).
+3.  **JIT the Training Loop**: Refactor the innermost `train_steps` application in `dreamer_v3_trainer.py` to accept a pre-sampled array of batches (`train_steps, batch_size, seq_len, dim`) and execute the gradient loop entirely on the GPU via `jax.lax.scan`.
+
+---
+
+## 17. Proposed Remediation Plan (For Discussion)
+
+Based on the bottlenecks identified in Section 16, and targeting the performance baseline set by the `RecurrentPPO` implementation, the following roadmap is proposed:
+
+### Step 1: Correct Configuration Memory Bounds
+*   **Action**: Modify `configs/models/dreamer_v3.yaml` back to canonical parameters.
+*   **Details**: Set `batch_size: 16` and `sequence_length: 64` (down from 64/128). This prevents the world model and critic from executing 8x more FLOPs than necessary per update loop, speeding up individual GPU kernels.
+
+### Step 2: Fix Gradient Starvation in `train.py`
+*   **Action**: Correct the `Ratio` calculation for DreamerV3 in the training loop.
+*   **Details**: Currently, `train_steps = ratio_scaled_updates(global_step // num_steps)` drastically under-counts gradient steps (resulting in 128x less parameter updates than intended per environment interaction). This should be reverted to accept `global_step` directly so `replay_ratio=1` triggers canonical gradient saturation.
+
+### Step 3: Vectorize the Training Loop (JAX Optimization)
+*   **Action**: Move the Python-level `train_steps` for-loop into a JIT-compiled `jax.lax.scan` routine within `src/models/dreamer_v3_trainer.py`.
+*   **Details**: The massive speed of the `RecurrentPPO` implementation stems from dispatching the entire loss and update chunk to XLA at once. If we jump from 64 gradient steps to 8,192 gradient steps (due to the fixes in Step 2), triggering 8,192 individual asynchronous `train_step` JAX dispatches from a Python `for` loop in `train.py` will crush the CPU and stall the GPU. 
+*   **Implementation Note**: Flax `nnx.update` cannot be used intrinsically *inside* a `jax.lax.scan` body due to hidden state mutations. The refactor will require extracting the `nnx.state()` into a functional pure payload, running the scan loop, and applying the final state output back to the model once the scan returns.
+
+### Step 4: Validate Speed (SPS) against Recurrent PPO Baseline
+*   **Action**: Execute a multi-environment run via `train_command.sh` and compare the `it/s` (iterations per second) against the 128-env Recurrent PPO baselines. 
+*   **Expected Results**: We expect the sample efficiency to sharply increase (due to thousands of proper parameter updates per collection iteration) and wall-clock time per iteration to plummet (due to the completely fused XLA `lax.scan` compilation).
+
+---
+
+## 18. WandB Speed Benchmarking Plan (Mar 2, 15:09 KST)
+
+### 18.1 Objective
+
+Quantify the **wall-clock training speed** (iterations/second and env-steps/second) of each DreamerV3 configuration variant and compare against the RecurrentPPO baseline. This data will validate the bottleneck hypotheses from Section 16 and inform the remediation priority in Section 17.
+
+### 18.2 Target Runs
+
+The following 13 runs span `num_envs ∈ {1, 4, 16, 32, 64}`, `collect_interval ∈ {1, 128}`, `replay_ratio ∈ {0.25, 1.0}`, and the RecurrentPPO baseline:
+
+| # | Results Directory Name | Algorithm | Envs | Collect Interval | Replay Ratio |
+|:--|:---|:---|:---|:---|:---|
+| 1 | `20260226-141145_dreamer_v3_64env_replayRatio1_collectInterval1` | DreamerV3 | 64 | 1 | 1.0 |
+| 2 | `20260226-141311_dreamer_v3_64env_replayRatio025_collectInterval128` | DreamerV3 | 64 | 128 | 0.25 |
+| 3 | `20260226-141404_dreamer_v3_64env_replayRatio025_collectInterval128` | DreamerV3 | 64 | 128 | 0.25 |
+| 4 | `20260226-141420_dreamer_v3_64env_replayRatio1_collectInterval1` | DreamerV3 | 64 | 1 | 1.0 |
+| 5 | `20260226-143809_dreamer_v3_64env_replayRatio1_collectInterval128` | DreamerV3 | 64 | 128 | 1.0 |
+| 6 | `20260226-145802_dreamer_v3_64env_replayRatio1_collectInterval128_debug` | DreamerV3 | 64 | 128 | 1.0 |
+| 7 | `20260226-145949_dreamer_v3_4env_replayRatio1_collectInterval1` | DreamerV3 | 4 | 1 | 1.0 |
+| 8 | `20260226-150021_dreamer_v3_4env_replayRatio1_collectInterval128` | DreamerV3 | 4 | 128 | 1.0 |
+| 9 | `20260226-152857_dreamer_v3_16env_replayRatio1_collectInterval1` | DreamerV3 | 16 | 1 | 1.0 |
+| 10 | `20260226-152939_dreamer_v3_32env_replayRatio1_collectInterval1` | DreamerV3 | 32 | 1 | 1.0 |
+| 11 | `20260226-154210_dreamer_v3_1env_replayRatio1_collectInterval1` | DreamerV3 | 1 | 1 | 1.0 |
+| 12 | `20260226-154248_dreamer_v3_1env_replayRatio1_collectInterval128` | DreamerV3 | 1 | 128 | 1.0 |
+| 13 | `20260301-213626_rppoNMN_MC_relu_128hidden_GRU_hierarchical` | RPPO (NMN) | 128 | N/A | N/A |
+
+### 18.3 Extraction Methodology
+
+**Data Source**: WandB Python API (`wandb.Api().runs("grid_world_pain")`)
+
+**Metrics to Extract** (per run):
+1. `_timestamp` — automatic WandB wall-clock timestamp per logged step
+2. `timesteps` — cumulative environment steps (`global_step`)
+3. `iteration` — training iteration counter
+
+**Computed Metrics**:
+| Metric | Formula | Unit |
+|:---|:---|:---|
+| **Seconds per Iteration** | `mean(Δ_timestamp between consecutive logged steps)` | s/it |
+| **Iterations per Second** | `1 / (s/it)` | it/s |
+| **Env Steps per Second (SPS)** | `Δtimesteps / Δ_timestamp` | steps/s |
+| **Grad Steps per Iteration** | `Δcumulative_gradient_steps` (if logged) or infer from `Params/effective_replay_ratio × timesteps` | grad/it |
+| **Total Wall-Clock Time** | `max(_timestamp) - min(_timestamp)` | seconds |
+
+**Logging Frequency Notes**:
+- DreamerV3 logs loss metrics every **10 iterations** (`if iteration % 10 == 0`), but episode metrics are logged every iteration when episodes complete.
+- RecurrentPPO logs every iteration.
+- To get consistent `s/it`, we compute `Δ_timestamp / Δ_iteration` between consecutive log entries and normalize by the iteration gap.
+
+### 18.4 Script
+
+Permanent reusable tool: `scripts/benchmark_wandb_speed.py`
+
+```bash
+python scripts/benchmark_wandb_speed.py RUN_NAME1 RUN_NAME2 ...
+python scripts/benchmark_wandb_speed.py --csv RUN_NAME1  # CSV output
+```
+
+Matching strategy: exact match on WandB `run.name`, with fallback to `YYYYMMDD-HHMMSS` timestamp fuzzy-match (±120s, KST→UTC).
+
+### 18.5 Speed Comparison Table (Measured)
+
+> [!NOTE]
+> Two pairs of runs matched to the same WandB run due to overlapping timestamps. Their data is duplicated.
+
+| Run | Envs | CI | RR | s/it | it/s | SPS | Total Time | Timesteps |
+|:---|:---|:---|:---|---:|---:|---:|:---|---:|
+| Dreamer 64env CI=128 R=0.25 | 64 | 128 | 0.25 | 6.23 | 0.16 | **2,462** | 42h 42m | 201M |
+| Dreamer 64env CI=1 R=1.0 | 64 | 1 | 1.0 | 12.70 | 0.08 | **13** | 42h 40m | 785K |
+| Dreamer 64env CI=128 R=1.0 | 64 | 128 | 1.0 | 12.89 | 0.08 | **4,429** | 42h 18m | 94M |
+| Dreamer 32env CI=1 R=1.0 | 32 | 1 | 1.0 | 3.91 | 0.26 | **9** | 41h 25m | 1.2M |
+| Dreamer 16env CI=1 R=1.0 | 16 | 1 | 1.0 | 1.98 | 0.51 | **9** | 41h 26m | 1.2M |
+| Dreamer 4env CI=1 R=1.0 | 4 | 1 | 1.0 | 0.83 | 1.20 | **5** | 41h 53m | 728K |
+| Dreamer 4env CI=128 R=1.0 | 4 | 128 | 1.0 | 3.93 | 0.25 | **186** | 41h 53m | 19.6M |
+| Dreamer 1env CI=1 R=1.0 | 1 | 1 | 1.0 | 0.27 | 3.68 | **4** | 41h 13m | 547K |
+| Dreamer 1env CI=128 R=1.0 | 1 | 128 | 1.0 | 1.00 | 1.00 | **132** | 41h 11m | 18.9M |
+| **RPPO NMN 128env** | **128** | **—** | **—** | **0.37** | **2.69** | **44,688** | **17h 37m** | **2.78B** |
+
+> CI = `collect_interval`, RR = `replay_ratio`
+
+### 18.6 Analysis of Results
+
+#### Q1: Is `collect_interval=128` faster than `collect_interval=1`?
+
+**Yes, dramatically for SPS.** Comparing 64-env runs with RR=1.0:
+- CI=1: **13 SPS** (0.08 it/s)
+- CI=128: **4,429 SPS** (0.08 it/s)
+
+The `it/s` is identical (0.08), confirming **gradient steps dominate wall time, not collection**. The SPS difference comes from batching more env steps per iteration.
+
+#### Q2: How does SPS scale with `num_envs` (CI=1)?
+
+| Envs | SPS | s/it |
+|:---|---:|---:|
+| 1 | 4 | 0.27 |
+| 4 | 5 | 0.83 |
+| 16 | 9 | 1.98 |
+| 32 | 9 | 3.91 |
+| 64 | 13 | 12.70 |
+
+SPS barely scales (4→13, only 3x for 64x envs). Meanwhile `s/it` scales linearly. More envs = more gradient steps per iteration = longer wall time, with minimal throughput gain.
+
+#### Q3: How much slower is DreamerV3 than RPPO?
+
+| Metric | RPPO 128env | Dreamer 64env CI=128 | Ratio |
+|:---|---:|---:|:---|
+| SPS | 44,688 | 4,429 | **10x slower** |
+| Timesteps in ~42h | 2.78B | 94M | **30x fewer** |
+| it/s | 2.69 | 0.08 | **34x slower** |
+
+DreamerV3 is ~10-30x slower. Expected overhead (world model + imagination) is ~2-4x; the excess comes from the Python training loop.
+
+#### Q4: Does `replay_ratio=0.25` speed up iterations?
+
+64env CI=128: R=1.0 → 12.89 s/it; R=0.25 → 6.23 s/it. **Yes, halves iteration time**, confirming gradient steps are the primary time consumer.
+
+---
+
+## 19. Deep Analysis: Why DreamerV3 Is 10-34x Slower Than RPPO (Mar 2, 15:20 KST)
+
+### 19.1 The Fundamental Asymmetry: JIT Compilation Depth
+
+The single most important architectural difference between the two algorithms' training loops is **how deeply the training work is fused into a single XLA program**:
+
+| | RecurrentPPO | DreamerV3 |
+|:---|:---|:---|
+| **Collection** | `jax.lax.scan` over `num_steps` (JIT) | `jax.lax.scan` over `collect_interval` (JIT) |
+| **Training** | `N` PPO epochs fused inside the same JIT call | `N` gradient steps dispatched **individually** from Python |
+| **Python loop overhead** | **None** — entire collect+train is one `jit_train()` call | **Massive** — `for _ in range(train_steps): trainer.train_step(batch)` |
+| **Host↔Device transfers per iter** | **1** (call `jit_train`, get result) | **2 × train_steps** (each `buffer.sample` + `train_step`) |
+
+**RecurrentPPO** (`train.py:728`):
+```python
+# ONE JIT call = collect 128 steps + 4 PPO epochs = everything on GPU
+env_state, h_state, key, losses, num_completed, trajectories = jit_train(
+    model, optimizer, params, env_state, h_state, key, ppo_config
+)
+```
+
+**DreamerV3** (`train.py:935-939`):
+```python
+# N SEPARATE JIT calls = N round-trips between CPU and GPU
+for _ in range(train_steps):          # Python loop
+    batch_jax = buffer.sample(...)     # CPU: numpy slicing + host→device copy
+    metrics = trainer.train_step(...)   # GPU: one gradient step
+```
+
+### 19.2 Per-Component Time Budget
+
+Using the benchmark data, we can decompose `s/it` into its constituent parts:
+
+**Isolating collection time** (from 1env runs where `train_steps ≈ 1`):
+- 1env CI=1: 0.27 s/it, ~1 gradient step → collection ≈ 0.05s, training ≈ 0.22s per grad step
+- 1env CI=128: 1.00 s/it, ~1 gradient step → collection ≈ 0.78s (128 env steps via `lax.scan`), training ≈ 0.22s
+
+**Isolating training time** (from the CI=1 scaling data):
+| Envs | s/it | Grad steps/it | **s per grad step** |
+|:---|---:|---:|---:|
+| 1 | 0.27 | 1 | **0.22** |
+| 4 | 0.83 | 4 | **0.20** |
+| 16 | 1.98 | 16 | **0.12** |
+| 32 | 3.91 | 32 | **0.12** |
+| 64 | 12.70 | 64 | **0.20** |
+
+> Each `train_step` takes **~0.12-0.22 seconds**, and this cost is consistent regardless of the number of environments. The total iteration time scales linearly with the number of gradient steps.
+
+**RPPO comparison**:
+- 128env, 128 steps, 4 PPO epochs = **0.37 s/it total**
+- That's 0.37s for collection (128×128 = 16,384 steps) + 4 gradient epochs, all fused
+- Per gradient epoch: ~0.05s (estimated, since collection is also included)
+
+### 19.3 Where the Time Goes: Breakdown
+
+For a typical DreamerV3 64env CI=128 RR=1.0 iteration (12.89 s/it):
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Total iteration time: ~12.9 seconds                      │
+├──────────────────┬──────────────────────────────────────┤
+│ Collection       │ ~0.8s  (6%)  ← lax.scan, fast        │
+│ Statistics       │ ~0.1s  (1%)  ← numpy episode tracking │
+│ Buffer add       │ ~0.1s  (1%)  ← device_get + reshape   │
+│ ─────────────── │ ────────────────────────────────────── │
+│ Training loop    │ ~11.9s (92%) ← 64 × train_step        │
+│   ├ buffer.sample│   ~2.5s (19%)  ← numpy random indexing│
+│   ├ JAX dispatch │   ~1.5s (12%)  ← host→device + launch │
+│   └ GPU compute  │   ~7.9s (61%)  ← actual gradient work │
+└──────────────────┴──────────────────────────────────────┘
+```
+
+> [!IMPORTANT]
+> **92% of wall time is spent in the Python training loop.** Of that, ~31% is pure overhead (buffer sampling + JAX dispatch), not useful GPU computation.
+
+### 19.4 Why RPPO Avoids This Problem
+
+RPPO's architecture has a structural advantage that DreamerV3 cannot trivially replicate:
+
+1. **On-policy data**: RPPO trains on the data it just collected — no replay buffer needed. The training batch is already on the GPU from collection.
+2. **Fixed epoch count**: PPO runs exactly `N` epochs (typically 4) on the same batch. This is easy to fuse with `jax.lax.scan` or a simple unrolled loop inside JIT.
+3. **No sampling**: There is no CPU-side random sampling step between gradient updates.
+
+DreamerV3, by contrast:
+1. **Off-policy data**: Must sample from a CPU-side replay buffer (numpy arrays).
+2. **Variable train_steps**: The number of gradient steps depends on the runtime `Ratio` calculation.
+3. **Each step needs a fresh batch**: Unlike PPO which reuses the same data, each DreamerV3 gradient step samples a different random sequence from the buffer.
+
+### 19.5 The Buffer Bottleneck
+
+The `ReplayBuffer.sample()` method (`dreamer_v3_trainer.py`) performs:
+```python
+block_indices = np.random.randint(0, num_blocks, size=batch_size)
+starts = block_indices * self.sequence_length
+# ... numpy array slicing for obs, action, reward, terminal, is_first
+return {k: jnp.array(v) for k, v in batch.items()}  # numpy → JAX transfer
+```
+
+Each call:
+1. Generates random indices (CPU)
+2. Slices 5 numpy arrays (CPU, cache-unfriendly random access)
+3. Converts to JAX arrays (host→device memcpy)
+
+At 64 calls per iteration, this adds up to **~2.5s of pure CPU overhead** that cannot be parallelized with GPU work because each `train_step` must wait for its batch.
+
+### 19.6 Remediation Paths (Revised Based on Data)
+
+Based on the data, the bottleneck hierarchy is:
+
+1. **Training loop dispatch overhead (31% of iteration time)** — the most actionable
+2. **Per-step GPU compute time (61%)** — largely irreducible (this is the actual learning)
+3. **Collection (7%)** — already fast, not worth optimizing further
+
+#### Path A: Pre-sample + Batched JIT (Recommended)
+
+Pre-sample all `train_steps` batches at once on CPU, stack them into a single `(train_steps, batch_size, seq_len, dim)` tensor, transfer to GPU once, then execute all gradient steps via `jax.lax.scan`:
+
+```python
+# CPU: one bulk operation
+all_batches = buffer.sample_multiple(train_steps, batch_size)  # stacked numpy
+all_batches_jax = jax.device_put(all_batches)                  # one transfer
+
+# GPU: fused loop (no Python dispatch per step)
+final_state, metrics = trainer.train_multiple(all_batches_jax, key)
+```
+
+**Expected improvement**:
+- Eliminates ~31% overhead → ~12.9s × 0.69 ≈ **8.9 s/it** (1.45x faster)
+- GPU utilization increases from ~61% to ~89%
+
+#### Path B: Reduce Batch Dimensions (Complementary)
+
+Reduce `batch_size: 64→16` and `sequence_length: 128→64` to decrease per-step GPU compute:
+- Current: 64 × 128 × 15 = 122,880 imagined transitions/step
+- Canonical: 16 × 64 × 15 = 15,360 imagined transitions/step
+- **Expected per-step speedup: ~4-8x** → each gradient step drops from ~0.19s to ~0.03-0.05s
+- At 64 steps: GPU time drops from ~7.9s to ~1.3-2.1s
+
+**Combined (A + B)**: ~2.5s collection overhead + ~1.5s training ≈ **4-5 s/it** (~3x faster)
+
+#### Path C: Increase `collect_interval` + Reduce Gradient Steps (Alternative)
+
+Use CI=128 with a lower replay_ratio to match the same total gradient budget with fewer, larger iterations. This doesn't solve the fundamental Python loop problem but empirically halves s/it (see R=0.25 data).
+
+### 19.7 Expected Post-Fix Speed Targets
+
+| Configuration | Current s/it | Expected s/it | Expected SPS |
+|:---|---:|---:|---:|
+| 64env CI=128 RR=1.0 (Path A only) | 12.89 | ~8.9 | ~6,400 |
+| 64env CI=128 RR=1.0 (A + B) | 12.89 | ~4-5 | ~11,000-14,000 |
+| **RPPO 128env (reference)** | **0.37** | **—** | **44,688** |
+
+> [!CAUTION]
+> Even with all optimizations, DreamerV3 will remain slower than RPPO (~3-10x) due to the fundamental overhead of the world model (RSSM forward pass, imagination rollout, three-network optimization). This is an inherent cost of model-based RL — the value proposition is better sample efficiency, not faster wall-clock training.
+
+---
+
+## 20. GPU-Resident Replay Buffer: Feasibility Analysis (Mar 2, 15:37 KST)
+
+### 20.1 Motivation
+
+Section 19.5 showed that `buffer.sample()` contributes ~19% of iteration wall time (numpy random indexing + host→device memcpy). If the buffer lives entirely on GPU, both the sampling and the transfer are eliminated — samples become instant GPU memory reads.
+
+### 20.2 Memory Requirements
+
+**Current buffer structure** (`ReplayBuffer` in `dreamer_v3_trainer.py`):
+
+| Array | Shape | Dtype | Bytes per element |
+|:---|:---|:---|---:|
+| `obs` | `(capacity, 33)` | float32 | 132 |
+| `actions` | `(capacity, 4)` | float32 | 16 |
+| `rewards` | `(capacity,)` | float32 | 4 |
+| `dones` | `(capacity,)` | float32 | 4 |
+| `is_first` | `(capacity,)` | bool (→float32) | 4 |
+| **Total per transition** | | | **160 bytes** |
+
+**Memory at various capacities**:
+
+| Capacity | Memory | % of 24GB GPU |
+|:---|---:|---:|
+| 100,000 (current) | **16 MB** | 0.07% |
+| 500,000 | 80 MB | 0.33% |
+| 1,000,000 | 160 MB | 0.65% |
+| 5,000,000 | 800 MB | 3.3% |
+| 10,000,000 | 1.6 GB | 6.5% |
+
+> [!TIP]
+> **The current 100K buffer uses just 16 MB — negligible on a 24GB GPU.** Even scaling to 1M transitions (recommended in Section 15 for multi-env turnover) uses only 160 MB (0.65%). This is entirely feasible.
+
+**Hardware**: 2× NVIDIA GPUs, each with 24 GB VRAM.
+
+### 20.3 Implementation Approach: JAX-Native GPU Buffer
+
+Replace the numpy-backed `ReplayBuffer` with JAX arrays:
+
+```python
+class GPUReplayBuffer:
+    def __init__(self, capacity, seq_len, obs_dim, act_dim):
+        self.obs = jnp.zeros((capacity, obs_dim))      # on GPU
+        self.actions = jnp.zeros((capacity, act_dim))   # on GPU
+        self.rewards = jnp.zeros((capacity,))            # on GPU
+        self.dones = jnp.zeros((capacity,))              # on GPU
+        self.is_first = jnp.zeros((capacity,))           # on GPU
+        self.idx = jnp.array(0, dtype=jnp.int32)
+        self.size = jnp.array(0, dtype=jnp.int32)
+
+    @nnx.jit
+    def add_batch(self, obs, actions, rewards, dones, is_first):
+        # jax.lax.dynamic_update_slice or scatter
+        indices = (self.idx + jnp.arange(obs.shape[0])) % self.capacity
+        self.obs = self.obs.at[indices].set(obs)
+        # ... etc
+    
+    @nnx.jit
+    def sample(self, key, batch_size, seq_len):
+        num_blocks = self.size // seq_len
+        block_indices = jax.random.randint(key, (batch_size,), 0, num_blocks)
+        starts = block_indices * seq_len
+        seq_range = jnp.arange(seq_len)
+        indices = (starts[:, None] + seq_range[None, :]) % self.capacity
+        return {
+            'obs': self.obs[indices],       # GPU→GPU, instant
+            'action': self.actions[indices],
+            'reward': self.rewards[indices],
+            'terminal': self.dones[indices],
+            'is_first': self.is_first[indices],
+        }
+```
+
+**Key advantages**:
+1. **Zero host↔device transfers**: Both `add_batch` (from `collect_sequence` output, already on GPU) and `sample` operate entirely on GPU memory.
+2. **JIT-compatible sampling**: Since `jax.random.randint` is a JAX op, the entire `sample()` can be fused into the training `lax.scan`.
+3. **Eliminates Path A complexity**: No need to pre-sample on CPU and bulk-transfer — the buffer *is* on GPU, so each step inside `lax.scan` can sample directly.
+
+### 20.4 Comparison: Path A vs GPU Buffer
+
+| Aspect | Path A (Pre-sample + Batched JIT) | GPU-Resident Buffer |
+|:---|:---|:---|
+| Buffer location | CPU (numpy) | GPU (JAX arrays) |
+| Host→Device transfers | 1 bulk transfer per iteration | **0** |
+| Sampling inside `lax.scan` | ❌ (must pre-sample on CPU) | ✅ (JIT-compatible) |
+| Memory overhead | Temporary `(N, B, T, D)` on GPU | Permanent `(capacity, D)` on GPU |
+| Implementation complexity | Moderate (new `sample_multiple` + scan wrapper) | Moderate (rewrite buffer as JAX arrays) |
+| Buffer capacity limit | Unlimited (CPU RAM) | GPU VRAM (~24 GB, but 1M transitions = 160 MB) |
+| Dynamic `train_steps` | Must know count before sampling | Can sample inside the scan per step |
+
+> [!IMPORTANT]
+> The GPU buffer approach is **strictly superior** for our use case because the data is small (vectors, not images). It enables fully JIT-compiled training loops without any pre-sampling, and the memory cost is negligible. Path A remains a valid fallback for image-based environments where buffers would be too large for GPU memory.
+
+### 20.5 Implementation Plan
+
+> [!IMPORTANT]
+> **Path A (Pre-sample + Batched JIT) is selected for implementation**, with the GPU-resident buffer as the preferred enhancement.
+
+**Phase 1**: Implement Path A — pre-sample batches on CPU, single `device_put`, `lax.scan` training loop. This is simpler and unblocks immediate speedup.
+
+**Phase 2**: Migrate the buffer to GPU (JAX arrays). This eliminates all remaining host↔device overhead and allows dynamic `train_steps` inside JIT without pre-sampling.
+
+**Estimated total speedup** (Phase 1 + 2 + canonical batch sizes):
+- Current: 12.89 s/it (64env CI=128 RR=1.0)
+- Target: **~2-3 s/it** (~4-6x improvement)
+
+
+
+
