@@ -1817,5 +1817,122 @@ The 55x performance leap was achieved by combining two critical structural chang
 
 **Conclusion**: The DreamerV3 pipeline is now radically accelerated and natively aligned with the hardware profiles expected of maximum-throughput vector environment training.
 
+---
 
+## 22. Implementation Review: GPU Buffer + Batched JIT (Mar 2 Post-Implementation Audit)
+
+Post-implementation code review of Sections 19-21 against the actual codebase. Verifies correctness, identifies regressions, and flags remaining issues.
+
+### 22.1 Verified Correct
+
+| Component | Location | Status |
+|:---|:---|:---|
+| `ReplayBuffer` dual GPU/CPU backend | `dreamer_v3_trainer.py:663-771` | Matches Section 20.5 spec |
+| `train_multiple_gpu()` with `nnx.split/merge` | `dreamer_v3_trainer.py:589-628` | Correct functional state isolation via `lax.scan` |
+| `train_multiple_cpu()` with pre-sampling | `dreamer_v3_trainer.py:630-656` | Correct Path A implementation |
+| Config-driven dispatch (`gpu`/`cpu`) | `train.py:938-944` | Correctly routes to `train_multiple_gpu` or `train_multiple_cpu` |
+| `buffer_device` / `buffer_capacity` config keys | `dreamer_v3.yaml:13-14` | Present and wired through |
+| Block-aligned sampling (env-major order) | `train.py:858-871`, `dreamer_v3_trainer.py:727-760` | Correct: `(T,B,...) → (B,T,...) → (B*T,...)` ordering preserved |
+
+### 22.2 Issues Found
+
+#### Issue A: GPU→CPU→GPU Roundtrip in Collection Path [HIGH]
+
+**Location**: `train.py:859`
+
+```python
+transitions_np = jax.device_get(transitions)   # GPU → CPU (sync!)
+T, B = transitions_np['obs'].shape[0], transitions_np['obs'].shape[1]
+obs_flat = transitions_np['obs'].transpose(1, 0, 2).reshape(B * T, -1)
+# ... numpy reshaping ...
+buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+#                ^^^^^^^^ numpy arrays → buffer.obs.at[].set() → JAX (CPU → GPU)
+```
+
+When `buffer_device == "gpu"`, `collect_sequence` returns JAX arrays already on GPU. The code calls `jax.device_get()` (GPU→CPU), reshapes in numpy, then `add_batch` writes them back to JAX arrays (CPU→GPU). This is a full roundtrip that negates the zero-copy benefit for the *collection* phase.
+
+**Fix**: For GPU buffer, stay on-device:
+
+```python
+if buffer.device == "gpu":
+    T, B = transitions['obs'].shape[0], transitions['obs'].shape[1]
+    obs_flat = transitions['obs'].transpose(1, 0, 2).reshape(B * T, -1)
+    act_flat = transitions['action'].transpose(1, 0, 2).reshape(B * T, -1)
+    rew_flat = transitions['reward'].transpose(1, 0).reshape(B * T)
+    done_flat = transitions['terminal'].transpose(1, 0).reshape(B * T)
+    is_first_arr = transitions['is_first']
+    if is_first_arr.ndim == 3:
+        is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
+    else:
+        is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
+    buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+    # Still need numpy for episode stats
+    transitions_np = jax.device_get(transitions)
+else:
+    transitions_np = jax.device_get(transitions)
+    # ... existing numpy reshape + add_batch ...
+```
+
+#### Issue B: `np.any(dones)` on JAX Arrays in GPU Path [MEDIUM]
+
+**Location**: `dreamer_v3_trainer.py:722`
+
+```python
+if np.any(dones):  # dones is jnp array when _on_gpu=True → forces device_get
+```
+
+`np.any()` on a JAX array triggers a synchronous device transfer. This is called on every `add_batch` in the collection hot path.
+
+**Fix**: Guard with backend check, or remove `ep_start_idx` tracking entirely (see Issue C).
+
+#### Issue C: `ep_start_idx` is Dead Code [LOW]
+
+**Location**: `dreamer_v3_trainer.py:685, 720-725`
+
+`self.ep_start_idx` is written to but never read. It appears to be a vestigial field from a serial insertion approach. Its update logic (lines 720-725) is the sole cause of Issue B.
+
+**Fix**: Remove `ep_start_idx` and lines 720-725 entirely.
+
+#### Issue D: `config.get()` with Safe Defaults [LOW — Convention Violation]
+
+**Location**: `train.py:516, 518`
+
+```python
+buffer_device = config.get('agent.buffer_device', 'gpu')
+capacity=config.get('agent.buffer_capacity', int(1e5)),
+```
+
+Per the project's **No Safe Defaults** convention (Rule 1), these should use `config.get_mandatory()`. Both keys are defined in `dreamer_v3.yaml`, so the defaults are never hit in practice, but this violates the principle that missing config keys should raise immediately rather than silently fall back.
+
+#### Issue E: `buffer_capacity: 50000000` — Memory Consideration [NOTE]
+
+**Location**: `dreamer_v3.yaml:14`
+
+At 160 bytes/transition (Section 20.2), 50M transitions = **8 GB** on a 24 GB GPU. This is feasible but consumes 33% of VRAM, leaving less headroom for model parameters and activations during training. For reference:
+
+| Capacity | GPU Memory | % of 24 GB |
+|:---|---:|---:|
+| 100,000 | 16 MB | 0.07% |
+| 1,000,000 | 160 MB | 0.65% |
+| 10,000,000 | 1.6 GB | 6.5% |
+| **50,000,000** | **8 GB** | **33%** |
+
+Recommend starting with 1M-10M and scaling up only if sample diversity becomes an issue.
+
+#### Issue F: JIT Retracing on Buffer Mutation [NOTE — Acceptable]
+
+`train_multiple_gpu` captures `buffer` via closure. Since `add_batch` creates new JAX arrays (`.at[].set()` returns new arrays), the buffer object's array references change between training calls. This causes JIT cache misses and recompilation on the first call after each `add_batch`.
+
+This is inherent to the mutable-buffer-as-closure pattern and is acceptable given the current collect-then-train alternation. A more advanced approach (passing buffer arrays as explicit arguments) would avoid this but adds significant complexity.
+
+### 22.3 Remediation Status
+
+| Issue | Severity | Status | Notes |
+|:---|:---|:---|:---|
+| **A**: GPU→CPU→GPU roundtrip | HIGH | **FIXED** | `train.py:857-885` — GPU path now transposes/reshapes in JAX before `add_batch`, `device_get` only for CPU-side episode stats. CPU path unchanged. |
+| **B**: `np.any(dones)` on JAX array | MEDIUM | **FIXED** (via C) | Dead code removed; no JAX→CPU sync in `add_batch` hot path. |
+| **C**: `ep_start_idx` dead code | LOW | **FIXED** | `ep_start_idx` field and update logic (lines 685, 720-725) removed from `ReplayBuffer`. |
+| **D**: `config.get()` safe defaults | LOW | **FIXED** | `train.py:516-517` now uses `config.get_mandatory('agent.buffer_device')` and `config.get_mandatory('agent.buffer_capacity')`. |
+| **E**: `buffer_capacity: 50M` (8 GB) | NOTE | Open | Unchanged at 50M. Feasible on 24 GB GPU but monitor VRAM pressure under large batch/network configs. |
+| **F**: JIT retracing on buffer mutation | NOTE | Open (Acceptable) | Inherent to mutable-buffer-as-closure pattern. No action unless profiling flags it. |
 

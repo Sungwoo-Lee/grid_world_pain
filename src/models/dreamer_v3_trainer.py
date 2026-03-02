@@ -682,7 +682,6 @@ class ReplayBuffer:
 
         self.idx = 0
         self.size = 0
-        self.ep_start_idx = 0
 
     def add_batch(self, obs, actions, rewards, dones, is_firsts):
         """Vectorized addition of a batch of transitions.
@@ -716,13 +715,6 @@ class ReplayBuffer:
         
         self.idx = (self.idx + num_items) % self.capacity
         self.size = min(self.size + num_items, self.capacity)
-        
-        # Update ep_start_idx if any dones present (last done wins)
-        # This matches the serial logic of 'always updating ep_start_idx'
-        if np.any(dones):
-            done_indices = np.where(dones)[0]
-            last_done_pos = done_indices[-1]
-            self.ep_start_idx = (self.idx - (num_items - 1 - last_done_pos)) % self.capacity
 
     def sample(self, batch_size, key=None):
         """Sample a batch of sequences.

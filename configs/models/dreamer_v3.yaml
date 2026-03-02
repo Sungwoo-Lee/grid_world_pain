@@ -9,6 +9,10 @@ agent:
   actor_lr: 3e-5
   value_lr: 3e-5
   
+  # Buffer Configuration
+  buffer_device: "gpu"   # "gpu" (JAX array, zero-copy, fast) or "cpu" (numpy array, transfer overhead)
+  buffer_capacity: 10000000
+  
   # Network Configuration (Comparative Alignment with Recurrent PPO)
   encoder_dim: 128
   encoder_fc_layers: [128, 128]

@@ -513,9 +513,10 @@ def main():
         cumulative_gradient_steps = 0
 
 
-        buffer_device = config.get('agent.buffer_device', 'gpu')
+        buffer_device = config.get_mandatory('agent.buffer_device')
+        buffer_capacity = config.get_mandatory('agent.buffer_capacity')
         buffer = ReplayBuffer(
-            capacity=int(1e5), 
+            capacity=buffer_capacity, 
             sequence_length=config.get_mandatory('agent.sequence_length'), 
             obs_dim=input_dim, 
             action_dim=action_dim,
@@ -853,22 +854,35 @@ def main():
                         env_state, params, num_steps, collect_key, dreamer_state)
                     
                     # Convert transitions to NumPy and add to buffer.
-                    # Store in ENV-MAJOR order so that sequence_length consecutive slots
-                    # are one env's trajectory (required for RSSM temporal learning).
-                    # (T, B, ...) -> (B, T, ...) -> (B*T, ...)
-                    transitions_np = jax.device_get(transitions)
-                    T, B = transitions_np['obs'].shape[0], transitions_np['obs'].shape[1]
-                    obs_flat = transitions_np['obs'].transpose(1, 0, 2).reshape(B * T, -1)
-                    act_flat = transitions_np['action'].transpose(1, 0, 2).reshape(B * T, -1)
-                    rew_flat = transitions_np['reward'].transpose(1, 0).reshape(B * T)
-                    done_flat = transitions_np['terminal'].transpose(1, 0).reshape(B * T)
-                    # is_first can be (T, B) or (T, B, 1); flatten to (B*T,)
-                    is_first_arr = transitions_np['is_first'].astype(bool)
-                    if is_first_arr.ndim == 3:
-                        is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
+                    if buffer.device == "gpu":
+                        # STAY ON GPU: perform transpose/reshape in JAX (Zero Copy)
+                        T, B = transitions['obs'].shape[0], transitions['obs'].shape[1]
+                        obs_flat = transitions['obs'].transpose(1, 0, 2).reshape(B * T, -1)
+                        act_flat = transitions['action'].transpose(1, 0, 2).reshape(B * T, -1)
+                        rew_flat = transitions['reward'].transpose(1, 0).reshape(B * T)
+                        done_flat = transitions['terminal'].transpose(1, 0).reshape(B * T)
+                        is_first_arr = transitions['is_first']
+                        if is_first_arr.ndim == 3:
+                            is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
+                        else:
+                            is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
+                        buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+                        # Still need numpy for cpu-side stats calculation
+                        transitions_np = jax.device_get(transitions)
                     else:
-                        is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
-                    buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+                        # CPU path: existing logic
+                        transitions_np = jax.device_get(transitions)
+                        T, B = transitions_np['obs'].shape[0], transitions_np['obs'].shape[1]
+                        obs_flat = transitions_np['obs'].transpose(1, 0, 2).reshape(B * T, -1)
+                        act_flat = transitions_np['action'].transpose(1, 0, 2).reshape(B * T, -1)
+                        rew_flat = transitions_np['reward'].transpose(1, 0).reshape(B * T)
+                        done_flat = transitions_np['terminal'].transpose(1, 0).reshape(B * T)
+                        is_first_arr = transitions_np['is_first'].astype(bool)
+                        if is_first_arr.ndim == 3:
+                            is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
+                        else:
+                            is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
+                        buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
                     
                     # Update statistics (Vectorized where possible)
                     rew_steps = transitions_np['reward'] # (T, B)
