@@ -265,7 +265,7 @@ If measured `s/it > 1.0`, investigate in this order:
 2. **Is JIT retracing dominating?** Set `JAX_LOG_COMPILES=1`. If recompilation happens every iteration, the buffer closure capture is the cause.
 3. **Is collection the bottleneck?** Time `collect_sequence` vs `train_multiple_gpu` separately. Collection should be <1s for 64env CI=128.
 4. **Is `device_get` for stats blocking?** The GPU path still calls `jax.device_get(transitions)` for episode statistics (`train.py:871`). This is synchronous — measure if it's stalling the pipeline.
-5. **Is batch size too large per gradient step?** Each step processes `64 batch x 128 seq x 15 horizon = 122,880` imagined transitions. If GPU compute dominates, consider reducing `batch_size` to 16 or `sequence_length` to 64 (canonical values).
+5. **Is batch size too large per gradient step?** Each step processes `64 batch x 128 seq x 15 horizon = 122,880` imagined transitions. If GPU compute dominates, reduce `batch_size` to 16 (`sequence_length` stays at 128 to match RPPO).
 
 ### 4.5 Pass Criteria
 
@@ -278,13 +278,59 @@ If measured `s/it > 1.0`, investigate in this order:
 
 ### 4.6 Phase 1 Assessment
 
-**Overall: PARTIALLY PASSED** — JIT retracing and memory are resolved, but the speed target was missed. See Section 8.1 for full analysis and next steps.
+**Overall: PARTIALLY PASSED** — JIT retracing and memory are resolved, but the speed target was missed.
+
+The measured 13.0 s/it is essentially identical to the pre-optimization 12.89 s/it. The GPU buffer + `lax.scan` fusion successfully eliminated Python dispatch overhead (~31%), but **GPU compute was always the dominant cost (~61%)** and is irreducible at current batch dimensions. The original ~55x speedup estimate was fundamentally wrong — the realistic gain from overhead removal was ~1.45x. See Section 8.1 for the full investigation record.
+
+### 4.7 Phase 1 Continuation: Batch Dimension Reduction
+
+The single most impactful speed improvement is reducing the per-gradient-step workload. Currently each step processes `64 batch × 128 seq × 15 horizon = 122,880` imagined transitions — **4x the canonical DreamerV3** (`16 × 128 × 15 = 30,720`). Note: `sequence_length: 128` is kept to match RecurrentPPO config.
+
+#### Step 1: Reduce Batch Size
+
+- [ ] **4.7.1** Change `configs/models/dreamer_v3.yaml`:
+  ```yaml
+  batch_size: 16          # was 64 (sequence_length stays at 128)
+  ```
+- [ ] **4.7.2** Run benchmark: 64env, CI=128, RR=1.0, same tag format.
+- [ ] **4.7.3** Record steady-state s/it and SPS. Expected: **~3.2-4.5 s/it** (per-step drops from ~0.19s to ~0.05s).
+- [ ] **4.7.4** Record VRAM usage. Expected: **~6-9 GB** (down from 18.4 GB — activation memory is proportional to batch × seq).
+
+**Expected results table**:
+| Metric | Current (64×128) | Reduced (16×128) | Improvement |
+|:---|---:|---:|:---|
+| Imagined transitions / step | 122,880 | 30,720 | 4x less compute |
+| Per-step time (est.) | ~0.19s | ~0.05s | ~4x faster |
+| s/it (64 grad steps) | 13.0 | ~3.2-4.5 | ~3-4x faster |
+| VRAM | 18.4 GB | ~6-9 GB | ~2-3x less memory |
+
+#### Step 2: Replay Ratio Adjustment (If Still Too Slow)
+
+If reduced batch size achieves ~3-4 s/it but the target is <1.0:
+
+- [ ] **4.7.5** Try `replay_ratio: 0.5` — halves grad steps from 64 to 32. Expected: ~1.6-2.3 s/it.
+- [ ] **4.7.6** Verify that reduced replay ratio doesn't harm learning (compare `Episode/Steps` at 50k episodes vs RR=1.0).
+
+#### Step 3: Profile `nnx.split`/`nnx.merge` Overhead
+
+The `lax.scan` body calls `nnx.merge(graphdef, state)` and `nnx.state(trainer)` on every gradient step. This state serialization may add overhead that wasn't present in the pre-optimization Python loop.
+
+- [ ] **4.7.7** Add timing around `_scan_train_gpu` vs `collect_sequence` to isolate training time.
+- [ ] **4.7.8** If `nnx.merge`/`nnx.state` overhead is significant (>20% of training time): consider flattening state management — pass raw parameter pytrees through scan carry instead of full NNX graph objects.
+
+#### Step 4: Revised Pass Criteria
+
+Phase 1 is fully complete when:
+- [ ] Steady-state `s/it < 5.0` for 64env CI=128 RR=1.0 with `batch_size: 16`.
+- [ ] No JIT retracing after warmup (already achieved).
+- [ ] GPU memory < 50% of 24 GB (with reduced batch, should be ~6-9 GB).
+- [ ] Results recorded in Section 8.
 
 ---
 
 ## 5. Diagnostic Phase 2: Training Performance Validation
 
-**Prerequisite**: Phase 1 complete (training speed validated).
+**Prerequisite**: Phase 1 complete (training speed at acceptable level, s/it < 3.0).
 
 This phase verifies that the optimized pipeline produces correct learning behavior — the speed optimization must not have broken training dynamics.
 
@@ -358,7 +404,7 @@ Tag:        phase2_default_env_baseline
 **Checkpoints to evaluate** (via `evaluation.py`):
 - [ ] **5.5.1** At 100k, 500k, 1M, 5M episodes: record `MeanLen`, `MeanRew`, `TotalAte`, action distribution.
 - [ ] **5.5.2** Compare against RecurrentPPO baseline at equivalent episode counts.
-- [ ] **5.5.3** If performance plateaus early: investigate whether `batch_size: 64` / `sequence_length: 128` (8x canonical) is causing gradient issues. Consider reducing to canonical `batch_size: 16` / `sequence_length: 64`.
+- [ ] **5.5.3** If performance plateaus early: investigate whether `batch_size: 64` (4x canonical) is causing gradient issues. Consider reducing to `batch_size: 16`.
 
 ### 5.6 Pass Criteria
 
@@ -374,13 +420,13 @@ Phase 2 is complete when:
 
 **Prerequisite**: Phase 2 complete (training performance validated).
 
-### 6.1 Batch Size / Sequence Length Sweep
+### 6.1 Batch Size Sweep
 
-Our `batch_size: 64` and `sequence_length: 128` produce 8x more imagined transitions per gradient step than canonical DreamerV3 (`16 x 64`). This may affect training dynamics.
+Our `batch_size: 64` with `sequence_length: 128` produces 4x more imagined transitions per gradient step than canonical DreamerV3 (`16 × 128 × 15 = 30,720` vs `64 × 128 × 15 = 122,880`). This may affect training dynamics.
 
-- [ ] **6.1.1** Run with canonical dimensions (`batch_size: 16`, `sequence_length: 64`) and compare learning curves.
-- [ ] **6.1.2** If canonical is better: the large batch may be causing gradient dilution or excessive per-step compute without proportional learning benefit.
-- [ ] **6.1.3** If ours is comparable: keep current config (better GPU utilization).
+- [ ] **6.1.1** Run with `batch_size: 16` (already applied in Phase 1) and compare learning curves against `batch_size: 64`.
+- [ ] **6.1.2** If smaller batch is better: the large batch may be causing gradient dilution or excessive per-step compute without proportional learning benefit.
+- [ ] **6.1.3** If larger batch is comparable: consider increasing back for better GPU utilization (but only if speed target is met).
 
 ### 6.2 Entropy Scale Tuning
 
@@ -530,7 +576,7 @@ The measured 13.0 s/it vs 12.89 pre-optimization means effectively **no wall-clo
 
 *Why SPS dropped from 4,429 to 630*: The pre-opt SPS figure (v1 Section 18.5) was measured over a 42-hour run with `collect_interval=128`, counting `num_envs × collect_interval = 8,192` env steps per iteration even though the iteration took 12.89s. The current 630 SPS may reflect a different measurement window or iteration count. The per-step GPU compute time (~0.19-0.20s) is consistent across both measurements.
 
-*The real bottleneck — batch dimensions*: Each gradient step processes `64 batch × 128 seq × 15 horizon = 122,880` imagined transitions — **8x the canonical DreamerV3 workload** (`16 × 64 × 15 = 15,360`). At 64 gradient steps per iteration, this is ~7.8M total imagined transitions, which saturates the GPU (100% utilization confirmed).
+*The real bottleneck — batch dimensions*: Each gradient step processes `64 batch × 128 seq × 15 horizon = 122,880` imagined transitions — **4x the target workload** (`16 × 128 × 15 = 30,720`, keeping `sequence_length: 128` to match RPPO). At 64 gradient steps per iteration, this is ~7.8M total imagined transitions, which saturates the GPU (100% utilization confirmed).
 
 **VRAM breakdown**:
 | Component | Estimated Size |
@@ -545,9 +591,9 @@ The activation memory dominates — this is proportional to `batch_size × seque
 
 **Actionable Next Steps** (ordered by expected impact):
 
-1. **Reduce batch dimensions to canonical** — `batch_size: 16`. Expected per-step time: ~0.03-0.05s (vs current ~0.19s). At 64 grad steps: **~1.9-3.2 s/it**. Also reduces VRAM from ~18 GB to ~5-8 GB. **This is the highest-impact change.**
+1. **Reduce `batch_size` to 16** (keep `sequence_length: 128` to match RPPO). Expected per-step time: ~0.05s (vs current ~0.19s). At 64 grad steps: **~3.2-4.5 s/it**. Also reduces VRAM from ~18 GB to ~6-9 GB. **This is the highest-impact change.**
 
-2. **Reduce `replay_ratio` to 0.5** — Halves grad steps from 64 to 32 → ~6.5 s/it at current batch size, or ~1.0-1.6 s/it with canonical batch. Trades sample efficiency for wall-clock speed.
+2. **Reduce `replay_ratio` to 0.5** — Halves grad steps from 64 to 32 → ~6.5 s/it at current batch size, or ~1.6-2.3 s/it with reduced batch. Trades sample efficiency for wall-clock speed.
 
 3. **Profile `collect_sequence` vs `_scan_train_gpu`** — Confirm collection is <1s and training >12s. If `nnx.split`/`nnx.merge` inside `lax.scan` adds significant overhead, consider flattening state management.
 
