@@ -586,43 +586,68 @@ class DreamerTrainer(nnx.Module):
         
         return final_env_state, final_d_state, final_key, transitions
 
+    @nnx.jit(static_argnums=(1, 2, 6, 7))
+    def _scan_train_gpu(self, graphdef, num_steps, rng, arrays, b_size, b_cap, b_seq_len):
+        obs, actions, rewards, dones, is_first = arrays
+        num_blocks = b_size // b_seq_len
+        seq_range = jnp.arange(b_seq_len)
+
+        # Functional state split
+        _, state = nnx.split(self)
+
+        def scan_body(carry, _):
+            current_state, rng = carry
+            
+            # Re-create a local trainer instance inside the JIT trace
+            trainer = nnx.merge(graphdef, current_state)
+            batch_size = trainer.config.get_mandatory('agent.batch_size', int)
+            
+            # Sample from GPU buffer (all on-device)
+            rng, sample_key, train_key = jax.random.split(rng, 3)
+            
+            # Sampling logic inside JIT (zero host involvement)
+            block_indices = jax.random.randint(sample_key, (batch_size,), 0, num_blocks)
+            starts = block_indices * b_seq_len
+            indices = (starts[:, None] + seq_range[None, :]) % b_cap
+            
+            batch = {
+                'obs': obs[indices],
+                'action': actions[indices],
+                'reward': rewards[indices],
+                'terminal': dones[indices],
+                'is_first': is_first[indices]
+            }
+            
+            # gradient step
+            metrics = trainer.train_step(batch, train_key)
+            
+            # Extract the locally mutated state to carry forward
+            new_state = nnx.state(trainer)
+            return (new_state, rng), metrics
+        
+        final_carry, all_metrics = jax.lax.scan(scan_body, (state, rng), None, length=num_steps)
+        metrics_mean = jax.tree.map(jnp.mean, all_metrics)
+        return final_carry[0], metrics_mean, final_carry[1]
+
     def train_multiple_gpu(self, buffer, num_steps, rng):
         """Fully JIT-compiled training loop for GPU buffer.
         
         Samples and trains inside lax.scan — zero host involvement.
         """
-        batch_size = self.config.get_mandatory('agent.batch_size', int)
+        # 1. Functional split for structural description
+        graphdef, _ = nnx.split(self)
         
-        # 1. Functional split of the entire trainer
-        graphdef, state = nnx.split(self)
+        # Extract buffer arrays to pass explicitly (prevents JIT retracing)
+        buffer_arrays = (buffer.obs, buffer.actions, buffer.rewards, buffer.dones, buffer.is_first)
         
-        @nnx.jit(static_argnums=(1,))
-        def _scan_train(state, num_steps, rng):
-            def scan_body(carry, _):
-                current_state, rng = carry
-                
-                # 2. Re-create a local trainer instance inside the JIT trace
-                # This makes trainer.train_step mutations legal
-                trainer = nnx.merge(graphdef, current_state)
-                
-                # Sample from GPU buffer (all on-device)
-                rng, sample_key, train_key = jax.random.split(rng, 3)
-                batch = buffer.sample(batch_size, key=sample_key)
-                
-                # gradient step
-                metrics = trainer.train_step(batch, train_key)
-                
-                # 3. Extract the locally mutated state to carry forward
-                new_state = nnx.state(trainer)
-                return (new_state, rng), metrics
-            
-            final_carry, all_metrics = jax.lax.scan(scan_body, (state, rng), None, length=num_steps)
-            return final_carry[0], jax.tree.map(jnp.mean, all_metrics), final_carry[1]
+        # 2. Execute the stable JIT training loop
+        # We pass graphdef as it is hashable and constant
+        final_state, metrics_mean, rng = self._scan_train_gpu(
+            graphdef, int(num_steps), rng, buffer_arrays, 
+            buffer.size, buffer.capacity, buffer.sequence_length
+        )
         
-        # 4. Execute the fully batched JIT training loop
-        final_state, metrics_mean, rng = _scan_train(state, int(num_steps), rng)
-        
-        # 5. Apply the final aggregated state back to our real self
+        # 3. Apply the final aggregated state back to our real self
         nnx.update(self, final_state)
         
         return metrics_mean, rng

@@ -265,7 +265,7 @@ def main():
     algorithm = config.get_mandatory('agent.algorithm')
     
     # Strictly Resolve Parameters (No Safe Defaults)
-    episodes = args.episodes or config.get_mandatory('episodes')
+    episodes = args.episodes if args.episodes is not None else config.get_mandatory('episodes')
     env_max_steps = config.get_mandatory('environment.max_steps')
     num_envs = args.num_envs or config.get_mandatory('training.num_envs')
     
@@ -522,7 +522,20 @@ def main():
             action_dim=action_dim,
             device=buffer_device
         )
-        dreamer_state = None 
+        if algorithm == "DreamerV3":
+            # Initial Dreamer state (reset on every collect if we want, but better to persist)
+            # Initialize with zeros instead of None to avoid JIT re-trace on first call
+            dreamer_state = trainer.agent.wm.rssm.initial(num_envs)
+            # Add prev_action for consistency
+            dreamer_state['prev_action'] = jnp.zeros(
+                (num_envs, trainer.agent.ac.actor.net.layers[-1].out_features))
+            # Initial step is always 'first'
+            dreamer_state['is_first'] = jnp.ones((num_envs, 1))
+            # Initial modulator state if enabled
+            if trainer.agent.wm.modulation_enabled:
+                dreamer_state['mod_h'] = trainer.agent.wm.modulator.initial_state(num_envs)
+        else:
+            dreamer_state = None
 
     elif algorithm == "DQN":
         key, init_key = jax.random.split(key)
