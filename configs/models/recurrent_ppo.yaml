@@ -16,11 +16,12 @@ agent:
   entropy_coef: 0.01
   gae_lambda: 0.95
   vf_coef: 0.5
+  max_grad_norm: 0.5
   
   # Parity Options
   rnn_type: "GRU"       # "LSTM" or "GRU"
   activation: "relu"     # "tanh" or "relu"
-  return_mode: "MC"      # "MC" or "GAE"
+  return_mode: "GAE"      # "MC" or "GAE"
 
   # Encoding Configuration
   encoding_mode: "hierarchical"  # "flat" or "hierarchical"

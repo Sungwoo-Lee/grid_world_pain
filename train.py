@@ -96,6 +96,7 @@ class PPOConfig(NamedTuple):
     rnn_type: str = "LSTM"
     activation: str = "tanh"
     return_mode: str = "MC"
+    max_grad_norm: float = 0.5
 
 # Defaults
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "configs", "environment", "default.yaml")
@@ -470,7 +471,17 @@ def main():
             observation_breakdown=obs_breakdown,
             encoding_config=config.to_dict().get('agent', {})
         )
-        optimizer = nnx.Optimizer(model, optax.adam(lr), wrt=nnx.Param)
+        
+        # Use optax.chain for gradient clipping (Option A)
+        max_grad_norm = config.get_mandatory('agent.max_grad_norm')
+        optimizer = nnx.Optimizer(
+            model,
+            optax.chain(
+                optax.clip_by_global_norm(max_grad_norm),
+                optax.adam(lr),
+            ),
+            wrt=nnx.Param,
+        )
         
         ppo_config = PPOConfig(
             num_steps=num_steps,
@@ -483,7 +494,8 @@ def main():
             lr=lr,
             rnn_type=rnn_type,
             activation=activation,
-            return_mode=return_mode
+            return_mode=return_mode,
+            max_grad_norm=config.get_mandatory('agent.max_grad_norm')
         )
         
         # Initialize hidden state via model (handles modulator state automatically)
