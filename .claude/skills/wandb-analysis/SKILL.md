@@ -1,11 +1,11 @@
 ---
 name: wandb-analysis
-description: "Analyze WandB training logs for this project. Use when user asks about training results, run comparison, speed benchmarks, or training health metrics. Trigger on mentions of WandB, training runs, s/it, SPS, or metric analysis."
+description: "Analyze WandB training logs. Use when user asks about training results, run comparison, speed benchmarks, or metric analysis. Trigger on mentions of WandB, training runs, s/it, SPS, metrics, or training health. Works with any algorithm."
 ---
 
 # WandB Training Analysis Skill
 
-Analyze and compare training runs logged to Weights & Biases for the grid_world_pain project.
+Analyze and compare training runs logged to Weights & Biases. **Algorithm-agnostic** — automatically discovers what metrics exist in any run and extracts them for analysis.
 
 ## When to Use This Skill
 
@@ -13,155 +13,180 @@ Trigger when user:
 - Asks about training results, speed, or metrics from WandB
 - Wants to compare two or more training runs
 - Mentions WandB, run names (YYYYMMDD-HHMMSS format), s/it, SPS, or metric names
-- Asks "how is training going?" or "check the latest run"
+- Asks "how is training going?", "is training working?", or "check the latest run"
 - Provides run directory names for analysis
+- Asks what metrics or config a run has
 
 ## Project Context
 
 - **WandB Entity**: `sungwoolee`
 - **WandB Project**: `grid_world_pain`
-- **Run Naming**: `YYYYMMDD-HHMMSS_model_config_description` (the timestamp prefix is the primary identifier for matching)
-- **Algorithms**: DreamerV3 (primary), RecurrentPPO (baseline)
-- **Diagnostics Plan**: `docs/DREAMER_DIAGNOSTICS_PLAN_v2.md` (contains pass criteria and healthy ranges)
+- **Run Naming**: `YYYYMMDD-HHMMSS_model_config_description` (timestamp prefix is the primary identifier)
 
 ## Available Scripts
 
-All scripts are in `scripts/` and run from the project root.
+All scripts are in `scripts/` and require `PYTHONPATH=scripts` or running from the project root.
 
-### 1. Speed Benchmark (`scripts/benchmark_wandb_speed.py`)
+### Primary Tool: `scripts/wandb_metrics.py`
 
-Extracts wall-clock speed metrics from WandB logs.
+Four subcommands: `config`, `discover`, `extract`, `compare`.
+
+#### `config` — Show run hyperparameters
 
 ```bash
-python scripts/benchmark_wandb_speed.py RUN_NAME1 RUN_NAME2 [...]
+PYTHONPATH=scripts python scripts/wandb_metrics.py config RUN_NAME
+PYTHONPATH=scripts python scripts/wandb_metrics.py config RUN_NAME --json
 ```
 
-**Output**: Markdown table with `s/it`, `it/s`, `SPS`, total wall-clock time, iterations, timesteps.
+Shows algorithm type, hyperparameters, environment settings, and all logged config. Use this to **identify what algorithm a run used** before analyzing metrics.
 
-**Options**:
+#### `discover` — List all metrics in a run
+
+```bash
+PYTHONPATH=scripts python scripts/wandb_metrics.py discover RUN_NAME
+```
+
+Lists every metric grouped by prefix (e.g., Episode/, Policy/, WorldModel/, etc.). **Always run this first** to see what metrics are available before extracting.
+
+#### `extract` — Pull stats for a single run
+
+```bash
+PYTHONPATH=scripts python scripts/wandb_metrics.py extract RUN_NAME
+PYTHONPATH=scripts python scripts/wandb_metrics.py extract RUN_NAME --metrics "Episode/*,*loss*"
+```
+
+Outputs per-metric stats: steady-state (last 20%), final value, min, max, count, plus trajectory (first -> last).
+
+#### `compare` — Compare multiple runs
+
+```bash
+# Auto-discovery (works with any algorithm)
+PYTHONPATH=scripts python scripts/wandb_metrics.py compare RUN1 RUN2 --labels "A,B"
+
+# Filter to specific metrics
+PYTHONPATH=scripts python scripts/wandb_metrics.py compare RUN1 RUN2 --metrics "Episode/*,*loss*"
+
+# Use a named preset (curated metrics with pass/fail criteria)
+PYTHONPATH=scripts python scripts/wandb_metrics.py compare RUN1 RUN2 --preset dreamer_v3
+```
+
+**Available presets**: `dreamer_v3`, `recurrent_ppo`. Presets add a "Criterion" column with expected ranges.
+
+**Common options** (all subcommands):
 - `--entity ENTITY` — WandB entity (default: sungwoolee)
 - `--project PROJECT` — WandB project (default: grid_world_pain)
-- `--csv` — Output CSV instead of markdown
 
-### 2. Training Metrics Comparison (`scripts/compare_wandb_runs.py`)
-
-Pulls and compares training health metrics across runs.
+### Speed Benchmark: `scripts/benchmark_wandb_speed.py`
 
 ```bash
-python scripts/compare_wandb_runs.py \
-  --labels "label1,label2" \
-  RUN_NAME1 RUN_NAME2
+PYTHONPATH=scripts python scripts/benchmark_wandb_speed.py RUN1 RUN2 [...]
+PYTHONPATH=scripts python scripts/benchmark_wandb_speed.py RUN1 --csv
 ```
 
-**Output**: Markdown tables organized by category:
-- Episode Performance (Steps, Reward)
-- World Model (loss_recon, loss_rew, KL, latent_entropy, reward_mae, cont_acc)
-- Actor-Critic (mean_entropy, value_mae, advantage, actor/critic losses)
-- System (effective_replay_ratio)
-- Trajectory Summary (first → last values)
+Outputs: `s/it`, `it/s`, `SPS` (env steps/sec), total wall-clock time, iterations, timesteps.
 
-**Options**:
-- `--labels "A,B,C"` — Comma-separated labels (must match run count)
-- `--entity ENTITY` — WandB entity
-- `--project PROJECT` — WandB project
+### Legacy: `scripts/compare_wandb_runs.py`
 
-If `--labels` is omitted, runs are labeled Run1, Run2, etc.
+Backward-compatible wrapper. Defaults to `--preset dreamer_v3`.
 
 ## Analysis Workflow
 
-When the user asks to analyze runs, follow this order:
+### Step 1: Identify the run(s)
+Extract run names from user message. Format: `YYYYMMDD-HHMMSS_model_config...`
 
-### Step 1: Identify Runs
-Extract run names from user message. Run names follow the format:
-`YYYYMMDD-HHMMSS_model_envs_config...`
-
-### Step 2: Run Speed Benchmark
+### Step 2: Get run config
 ```bash
-python scripts/benchmark_wandb_speed.py RUN_NAME1 RUN_NAME2
+PYTHONPATH=scripts python scripts/wandb_metrics.py config RUN_NAME
 ```
+This tells you the algorithm, hyperparameters, and environment. Essential for knowing how to interpret the metrics.
 
-### Step 3: Run Training Metrics Comparison
+### Step 3: Discover available metrics
 ```bash
-python scripts/compare_wandb_runs.py --labels "descriptive1,descriptive2" RUN_NAME1 RUN_NAME2
+PYTHONPATH=scripts python scripts/wandb_metrics.py discover RUN_NAME
+```
+See what the algorithm actually logged. Different algorithms log different metrics.
+
+### Step 4: Check training speed
+```bash
+PYTHONPATH=scripts python scripts/benchmark_wandb_speed.py RUN_NAME
 ```
 
-### Step 4: Analyze Results Against Pass Criteria
+### Step 5: Extract or compare metrics
+```bash
+# Single run
+PYTHONPATH=scripts python scripts/wandb_metrics.py extract RUN_NAME
 
-Use these healthy ranges (from `docs/DREAMER_DIAGNOSTICS_PLAN_v2.md` Section 7):
-
-| Metric | Healthy Range | Red Flag |
-|:---|:---|:---|
-| `mean_entropy` | 0.5 - 1.8 | < 0.3 (entropy collapse) |
-| `loss_recon` | Decreasing, < 0.1 | Increasing or stuck |
-| `loss_rew` | Decreasing | Stuck or increasing |
-| `model_reward_mae_pos` | > 0 | = 0 (no food discovery) |
-| `value_mae` | < 5, decreasing | > 20 or diverging |
-| `loss_dyn_kl` | > 1.0, stable | = 1.0 (floor) or exploding |
-| `latent_entropy` | 1.0 - 2.5 | < 0.5 (collapsed representation) |
-| `eff_replay_ratio` | ≈ configured replay_ratio | Very different (gradient balance broken) |
-| `Episode/Steps` | Increasing | Flat or decreasing |
-| `cont_acc` | > 0.95 | Trivially predicting "always continue" |
-| `loss_actor_entropy` | Meaningful fraction of loss_actor | ≈ 0 (entropy bonus negligible) |
-
-### Step 5: Report Findings
-
-Structure the analysis as:
-1. **Speed comparison table** — s/it, SPS, total iterations
-2. **Training health assessment** — flag any metrics outside healthy ranges
-3. **Red flags** — critical issues requiring immediate attention
-4. **Comparison** — which run performed better and why
-5. **Recommendations** — actionable next steps
-
-### Step 6: Update Diagnostics Plan (If Requested)
-
-Add findings as a new Section 8.X in `docs/DREAMER_DIAGNOSTICS_PLAN_v2.md` following the template:
-```
-### 8.X [Title]
-**Date**: YYYY-MM-DD
-**Phase**: [1/2/3]
-**Context**: [Config, run tag, WandB link]
-**Observation**: [What was seen]
-**Analysis**: [Root cause investigation]
-**Resolution**: [Fix applied or next steps]
+# Multi-run comparison
+PYTHONPATH=scripts python scripts/wandb_metrics.py compare RUN1 RUN2 --labels "A,B"
 ```
 
-## WandB Metric Naming Conventions
+### Step 6: Assess training health
 
-Metrics are logged under these prefixes in WandB:
-- `Episode/*` — Per-episode aggregates (Steps, Reward, Number)
-- `WorldModel/*` — World model losses and reconstruction metrics
-- `Behavior/*` — Actor-critic losses and policy statistics
-- `Params/*` — Training system parameters (replay ratio)
-- `Modulator/*` — Neuromodulation outputs (if enabled)
-- `value_mae` — Critic MAE (logged at root level, not under Behavior/)
+Use the **General Training Health Checklist** below to evaluate whether training is working properly.
 
-**Important**: Episode metrics and training metrics are logged at different intervals. The comparison script handles this by pulling them separately.
+## General Training Health Checklist
 
-## Debugging Playbook
+These checks apply to **any RL algorithm**. Use the extracted metrics to verify each one:
 
-**Entropy Collapse** (`mean_entropy < 0.3`):
-1. Check `entropy_scale` — try 3e-3 or 1e-2
-2. Verify advantage computation uses same Moments normalization
-3. Check `to_twohot` target receives raw `lambda_returns`
+### 1. Reward Signal
+- **Episode reward** should trend **upward** (or toward the goal) over training
+- Check trajectory: `first -> last` — is there meaningful improvement?
+- Red flag: flat, decreasing, or oscillating wildly
 
-**Critic Divergence** (`value_mae > 20`):
-1. Verify critic trains on `to_twohot(lambda_returns)` (raw space)
-2. Check `from_twohot()` returns raw-space values
+### 2. Episode Length
+- **Episode steps** should change as the agent learns
+- In survival tasks: increasing steps = agent living longer = good
+- In goal-reaching tasks: decreasing steps = agent solving faster = good
+- Red flag: completely flat from start (agent not learning)
 
-**Zero Food Discovery** (`model_reward_mae_pos = 0`):
-1. Usually caused by entropy collapse — fix entropy first
-2. Check environment config (food placement, eat_enabled)
+### 3. Loss Convergence
+- All loss metrics (policy loss, value loss, reconstruction loss, etc.) should generally **decrease** over training
+- Red flag: losses increasing, exploding (NaN/Inf), or stuck at initial values
 
-**Replay Ratio Mismatch** (`eff_replay_ratio ≠ config`):
-1. Check `Ratio` class normalization — `global_step` must be `global_step // num_steps`
-2. Verify `collect_interval` interaction (v1 Section 14)
+### 4. Policy Entropy
+- Look for metrics with "entropy" in the name
+- Entropy should **decrease gradually** as the agent becomes more confident
+- Red flag: entropy collapsed to near-zero early (premature convergence — agent stopped exploring)
+- Red flag: entropy stuck at maximum (agent not learning a policy)
 
-**Slow Training** (`s/it >> target`):
-1. Confirm `buffer_device: "gpu"`
-2. Check JIT retracing: `JAX_LOG_COMPILES=1`
-3. Check batch dimensions: `batch_size × sequence_length × horizon` imagined transitions per step
+### 5. Value Prediction
+- Look for metrics with "value", "mae", or "critic" in the name
+- Value prediction error should **decrease** over training
+- Red flag: value error increasing or diverging (critic not learning)
+
+### 6. Training Speed
+- `s/it` should be **stable** (not increasing over time)
+- `SPS` (steps per second) should match expectations for the hardware
+- Red flag: training slowing down significantly over time
+
+### 7. NaN/Missing Data
+- Check metric counts (`N` column) — are all metrics being logged?
+- Red flag: metrics with very few data points or sudden gaps
+
+### 8. Gradient Health (if logged)
+- Look for grad_norm or similar metrics
+- Should be stable, not exploding
+- Red flag: gradient norm growing unboundedly
+
+## Report Structure
+
+When reporting analysis results, structure as:
+1. **Run Info** — algorithm, key hyperparameters (from config)
+2. **Speed** — s/it, SPS, total wall-clock time
+3. **Training Health** — checklist results with specific metric values
+4. **Red Flags** — any critical issues found
+5. **Comparison** — if multiple runs, which performed better and why
+6. **Recommendations** — actionable next steps
+
+## Algorithm-Specific Presets
+
+For curated analysis with known pass/fail criteria, use `--preset`:
+- `dreamer_v3` — World model losses, latent entropy, continuation accuracy, etc.
+- `recurrent_ppo` — Policy entropy, KL divergence, clip fraction, etc.
+
+For detailed algorithm-specific diagnostics, see relevant docs in `docs/`.
 
 ## Arguments
 
 When invoked as `/wandb-analysis RUN1 RUN2`, `$ARGUMENTS` contains the run names.
-Parse them and run both scripts automatically.
+Parse them and run the appropriate scripts automatically.
