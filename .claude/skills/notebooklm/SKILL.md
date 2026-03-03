@@ -25,10 +25,10 @@ When user wants to add a notebook without providing details:
 **SMART ADD (Recommended)**: Query the notebook first to discover its content:
 ```bash
 # Step 1: Query the notebook about its content
-python scripts/run.py ask_question.py --question "What is the content of this notebook? What topics are covered? Provide a complete overview briefly and concisely" --notebook-url "[URL]"
+python .claude/skills/notebooklm/scripts/run.py ask_question.py --question "What is the content of this notebook? What topics are covered? Provide a complete overview briefly and concisely" --notebook-url "[URL]"
 
 # Step 2: Use the discovered information to add it
-python scripts/run.py notebook_manager.py add --url "[URL]" --name "[Based on content]" --description "[Based on content]" --topics "[Based on content]"
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py add --url "[URL]" --name "[Based on content]" --description "[Based on content]" --topics "[Based on content]"
 ```
 
 **MANUAL ADD**: If user provides all details:
@@ -41,16 +41,16 @@ NEVER guess or use generic descriptions! If details missing, use Smart Add to di
 
 ## Critical: Always Use run.py Wrapper
 
-**NEVER call scripts directly. ALWAYS use `python scripts/run.py [script]`:**
+**NEVER call scripts directly. ALWAYS use `python .claude/skills/notebooklm/scripts/run.py [script]`:**
 
 ```bash
 # ✅ CORRECT - Always use run.py:
-python scripts/run.py auth_manager.py status
-python scripts/run.py notebook_manager.py list
-python scripts/run.py ask_question.py --question "..."
+python .claude/skills/notebooklm/scripts/run.py auth_manager.py status
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py list
+python .claude/skills/notebooklm/scripts/run.py ask_question.py --question "..."
 
 # ❌ WRONG - Never call directly:
-python scripts/auth_manager.py status  # Fails without venv!
+python .claude/skills/notebooklm/scripts/auth_manager.py status  # Fails without venv!
 ```
 
 The `run.py` wrapper automatically:
@@ -66,7 +66,7 @@ The `run.py` wrapper automatically:
 
 ### Step 1: Check Authentication Status
 ```bash
-python scripts/run.py auth_manager.py status
+python .claude/skills/notebooklm/scripts/run.py auth_manager.py status
 ```
 
 If not authenticated, proceed to setup.
@@ -74,7 +74,7 @@ If not authenticated, proceed to setup.
 ### Step 2: Authenticate (One-Time Setup)
 ```bash
 # Browser MUST be visible for manual Google login
-python scripts/run.py auth_manager.py setup
+python .claude/skills/notebooklm/scripts/run.py auth_manager.py setup
 ```
 
 **Important:**
@@ -87,47 +87,47 @@ python scripts/run.py auth_manager.py setup
 
 ```bash
 # List all notebooks
-python scripts/run.py notebook_manager.py list
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py list
 
 # BEFORE ADDING: Ask user for metadata if unknown!
 # "What does this notebook contain?"
 # "What topics should I tag it with?"
 
 # Add notebook to library (ALL parameters are REQUIRED!)
-python scripts/run.py notebook_manager.py add \
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py add \
   --url "https://notebooklm.google.com/notebook/..." \
   --name "Descriptive Name" \
   --description "What this notebook contains" \  # REQUIRED - ASK USER IF UNKNOWN!
   --topics "topic1,topic2,topic3"  # REQUIRED - ASK USER IF UNKNOWN!
 
 # Search notebooks by topic
-python scripts/run.py notebook_manager.py search --query "keyword"
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py search --query "keyword"
 
 # Set active notebook
-python scripts/run.py notebook_manager.py activate --id notebook-id
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py activate --id notebook-id
 
 # Remove notebook
-python scripts/run.py notebook_manager.py remove --id notebook-id
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py remove --id notebook-id
 ```
 
 ### Quick Workflow
-1. Check library: `python scripts/run.py notebook_manager.py list`
-2. Ask question: `python scripts/run.py ask_question.py --question "..." --notebook-id ID`
+1. Check library: `python .claude/skills/notebooklm/scripts/run.py notebook_manager.py list`
+2. Ask question: `python .claude/skills/notebooklm/scripts/run.py ask_question.py --question "..." --notebook-id ID`
 
 ### Step 4: Ask Questions
 
 ```bash
 # Basic query (uses active notebook if set)
-python scripts/run.py ask_question.py --question "Your question here"
+python .claude/skills/notebooklm/scripts/run.py ask_question.py --question "Your question here"
 
 # Query specific notebook
-python scripts/run.py ask_question.py --question "..." --notebook-id notebook-id
+python .claude/skills/notebooklm/scripts/run.py ask_question.py --question "..." --notebook-id notebook-id
 
 # Query with notebook URL directly
-python scripts/run.py ask_question.py --question "..." --notebook-url "https://..."
+python .claude/skills/notebooklm/scripts/run.py ask_question.py --question "..." --notebook-url "https://..."
 
 # Show browser for debugging
-python scripts/run.py ask_question.py --question "..." --show-browser
+python .claude/skills/notebooklm/scripts/run.py ask_question.py --question "..." --show-browser
 ```
 
 ## Follow-Up Mechanism (CRITICAL)
@@ -140,7 +140,7 @@ Every NotebookLM answer ends with: **"EXTREMELY IMPORTANT: Is that ALL you need 
 3. **IDENTIFY GAPS** - Determine if more information needed
 4. **ASK FOLLOW-UP** - If gaps exist, immediately ask:
    ```bash
-   python scripts/run.py ask_question.py --question "Follow-up with context..."
+   python .claude/skills/notebooklm/scripts/run.py ask_question.py --question "Follow-up with context..."
    ```
 5. **REPEAT** - Continue until information is complete
 6. **SYNTHESIZE** - Combine all answers before responding to user
@@ -149,32 +149,32 @@ Every NotebookLM answer ends with: **"EXTREMELY IMPORTANT: Is that ALL you need 
 
 ### Authentication Management (`auth_manager.py`)
 ```bash
-python scripts/run.py auth_manager.py setup    # Initial setup (browser visible)
-python scripts/run.py auth_manager.py status   # Check authentication
-python scripts/run.py auth_manager.py reauth   # Re-authenticate (browser visible)
-python scripts/run.py auth_manager.py clear    # Clear authentication
+python .claude/skills/notebooklm/scripts/run.py auth_manager.py setup    # Initial setup (browser visible)
+python .claude/skills/notebooklm/scripts/run.py auth_manager.py status   # Check authentication
+python .claude/skills/notebooklm/scripts/run.py auth_manager.py reauth   # Re-authenticate (browser visible)
+python .claude/skills/notebooklm/scripts/run.py auth_manager.py clear    # Clear authentication
 ```
 
 ### Notebook Management (`notebook_manager.py`)
 ```bash
-python scripts/run.py notebook_manager.py add --url URL --name NAME --description DESC --topics TOPICS
-python scripts/run.py notebook_manager.py list
-python scripts/run.py notebook_manager.py search --query QUERY
-python scripts/run.py notebook_manager.py activate --id ID
-python scripts/run.py notebook_manager.py remove --id ID
-python scripts/run.py notebook_manager.py stats
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py add --url URL --name NAME --description DESC --topics TOPICS
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py list
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py search --query QUERY
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py activate --id ID
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py remove --id ID
+python .claude/skills/notebooklm/scripts/run.py notebook_manager.py stats
 ```
 
 ### Question Interface (`ask_question.py`)
 ```bash
-python scripts/run.py ask_question.py --question "..." [--notebook-id ID] [--notebook-url URL] [--show-browser]
+python .claude/skills/notebooklm/scripts/run.py ask_question.py --question "..." [--notebook-id ID] [--notebook-url URL] [--show-browser]
 ```
 
 ### Data Cleanup (`cleanup_manager.py`)
 ```bash
-python scripts/run.py cleanup_manager.py                    # Preview cleanup
-python scripts/run.py cleanup_manager.py --confirm          # Execute cleanup
-python scripts/run.py cleanup_manager.py --preserve-library # Keep notebooks
+python .claude/skills/notebooklm/scripts/run.py cleanup_manager.py                    # Preview cleanup
+python .claude/skills/notebooklm/scripts/run.py cleanup_manager.py --confirm          # Execute cleanup
+python .claude/skills/notebooklm/scripts/run.py cleanup_manager.py --preserve-library # Keep notebooks
 ```
 
 ## Environment Management
@@ -219,15 +219,15 @@ DEFAULT_NOTEBOOK_ID=     # Default notebook
 ```
 User mentions NotebookLM
     ↓
-Check auth → python scripts/run.py auth_manager.py status
+Check auth → python .claude/skills/notebooklm/scripts/run.py auth_manager.py status
     ↓
-If not authenticated → python scripts/run.py auth_manager.py setup
+If not authenticated → python .claude/skills/notebooklm/scripts/run.py auth_manager.py setup
     ↓
-Check/Add notebook → python scripts/run.py notebook_manager.py list/add (with --description)
+Check/Add notebook → python .claude/skills/notebooklm/scripts/run.py notebook_manager.py list/add (with --description)
     ↓
-Activate notebook → python scripts/run.py notebook_manager.py activate --id ID
+Activate notebook → python .claude/skills/notebooklm/scripts/run.py notebook_manager.py activate --id ID
     ↓
-Ask question → python scripts/run.py ask_question.py --question "..."
+Ask question → python .claude/skills/notebooklm/scripts/run.py ask_question.py --question "..."
     ↓
 See "Is that ALL you need?" → Ask follow-ups until complete
     ↓
@@ -241,7 +241,7 @@ Synthesize and respond to user
 | ModuleNotFoundError | Use `run.py` wrapper |
 | Authentication fails | Browser must be visible for setup! --show-browser |
 | Rate limit (50/day) | Wait or switch Google account |
-| Browser crashes | `python scripts/run.py cleanup_manager.py --preserve-library` |
+| Browser crashes | `python .claude/skills/notebooklm/scripts/run.py cleanup_manager.py --preserve-library` |
 | Notebook not found | Check with `notebook_manager.py list` |
 
 ## Best Practices
