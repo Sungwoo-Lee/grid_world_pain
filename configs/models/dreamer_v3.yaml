@@ -11,7 +11,7 @@ agent:
   
   # Buffer Configuration
   buffer_device: "gpu"   # "gpu" (JAX array, zero-copy, fast) or "cpu" (numpy array, transfer overhead)
-  buffer_capacity: 10000000
+  buffer_capacity: 1000000
   
   # Network Configuration (Comparative Alignment with Recurrent PPO)
   encoder_dim: 128

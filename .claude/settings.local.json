@@ -1,12 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(conda run -n grid_world_pain python test_phase1_encoder_optimization.py)",
-      "Bash(source ~/miniconda3/etc/profile.d/conda.sh)",
-      "Bash(conda activate grid_world_pain)",
-      "Bash(python test_phase1_encoder_optimization.py)"
-    ],
-    "deny": [],
-    "ask": []
+      "Bash(xargs:*)",
+      "Bash(python:*)"
+    ]
   }
 }

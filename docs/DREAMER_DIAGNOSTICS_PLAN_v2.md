@@ -322,10 +322,10 @@ The `lax.scan` body calls `nnx.merge(graphdef, state)` and `nnx.state(trainer)` 
 #### Step 4: Revised Pass Criteria
 
 Phase 1 is fully complete when:
-- [ ] Steady-state `s/it < 5.0` for 64env CI=128 RR=1.0 with `batch_size: 16`.
-- [ ] No JIT retracing after warmup (already achieved).
-- [ ] GPU memory < 50% of 24 GB (with reduced batch, should be ~6-9 GB).
-- [ ] Results recorded in Section 8.
+- [x] Steady-state `s/it < 5.0` for 64env CI=128 RR=1.0 with `batch_size: 16`. → **4.98 s/it (Section 8.3)**
+- [x] No JIT retracing after warmup (already achieved).
+- [x] GPU memory < 50% of 24 GB → **8.6 GB (36%)** (Section 8.2)
+- [x] Results recorded in Section 8. → Sections 8.1, 8.2, 8.3
 
 ---
 
@@ -655,3 +655,108 @@ However, 6.5 s/it is a reasonable operating point for Phase 2 diagnostics. Furth
 - [x] Results recorded — Section 8.2
 
 **Recommendation**: Proceed to Phase 2 at 6.5 s/it. The remaining speed gap (6.5 → <5.0) requires NNX state management refactoring (Step 3), which is a significant code change best tackled after confirming training correctness.
+
+---
+
+### 8.3 Batch Size Comparison: Training Metrics (batch=64 vs batch=16)
+**Date**: 2026-03-03
+**Phase**: 1 → 2 (speed validation + training health)
+**Context**:
+- **batch=64**: `tag: dreamer_v3_128envs_64batch_128collect_replay1_hierarchical_1e6buffer` (WandB: `ep7fzk87`)
+- **batch=16**: `tag: dreamer_v3_128envs_16batch_128collect_replay1_hierarchical_1e6buffer` (WandB: `jl5ndawv`)
+- Both: 64 envs (naming says "128envs" — **mistake**), CI=128, RR=1.0, buffer_capacity=1M, GPU buffer
+- Data extracted via `scripts/benchmark_wandb_speed.py` and `scripts/compare_wandb_runs.py`
+
+#### 8.3.1 Speed Comparison
+
+| Run | s/it | it/s | SPS | Total Time | Iterations | Timesteps |
+|:---|---:|---:|---:|:---|---:|---:|
+| batch=64 | 45.98 | 0.02 | 5,979 | 16h 47m | 1,184 | 9.7M |
+| batch=16 | 4.98 | 0.20 | 4,405 | 13h 25m | 9,401 | 77.0M |
+
+**Key observations**:
+- batch=16 is **9.2x faster** per iteration (4.98 vs 45.98 s/it).
+- batch=64's 45.98 s/it is ~3.5x slower than the earlier v6 short diagnostic run (13.0 s/it). Possible causes: different buffer capacity (1M vs 10M), longer-run steady-state behavior, or WandB timestamp measurement over full run including checkpoints/logging overhead.
+- batch=16 processed **8x more data** (77M vs 9.7M timesteps) in **less wall-clock time** (13.4h vs 16.8h).
+- SPS favors batch=64 (5,979 vs 4,405) because each iteration collects the same env steps but batch=64 does more gradient work — SPS measures throughput, not training efficiency.
+
+#### 8.3.2 Training Health Comparison
+
+**Episode Performance** (steady-state = last 20% of run):
+
+| Metric | Criterion | batch=64 (steady) | batch=16 (steady) | batch=64 (last) | batch=16 (last) |
+|:---|:---|---:|---:|---:|---:|
+| `Episode/Steps` | ↑ better | 35.0 ± 1.8 | 35.4 ± 1.6 | 32.8 | 38.8 |
+| `Episode/Reward` | ↑ better | -207.0 ± 0.6 | -207.3 ± 0.6 | -206.5 | -208.3 |
+| `Total Episodes` | info | 255k | 1,964k | 283k | 2,183k |
+
+**World Model**:
+
+| Metric | Criterion | batch=64 | batch=16 | Status |
+|:---|:---|---:|---:|:---|
+| `loss_recon` | ↓ better | 0.011 | 0.011 | **OK** — both converged |
+| `loss_rew` | ↓ better | 1.44 | 1.72 | batch=64 slightly better |
+| `loss_dyn_kl` | > 1.0 | 2.11 | 2.22 | **OK** — both above floor |
+| `loss_rep_kl` | > 1.0 | 2.11 | 2.22 | **OK** — both above floor |
+| `latent_entropy` | 1.0-2.5 | **0.83** | **0.86** | **RED FLAG** — below 1.0 |
+| `reward_mae_pos` | > 0 | 0.21 | 0.12 | **OK** — food found |
+| `cont_acc` | > 0.95 | 0.983 | 0.981 | **OK** |
+
+**Actor-Critic**:
+
+| Metric | Criterion | batch=64 | batch=16 | Status |
+|:---|:---|---:|---:|:---|
+| `mean_entropy` | > 0.5 | 1.66 | 1.31 | **OK** — both above 0.5 (batch=16 dropped more) |
+| `value_mae` | < 5 | **7.56** | **7.56** | **RED FLAG** — both above 5.0 |
+| `mean_advantage` | non-trivial | -0.184 | -0.194 | **OK** — non-zero |
+| `mean_return` | info | -25.46 | -25.48 | Similar |
+| `mean_value` | info | -18.30 | -18.28 | Similar |
+| `loss_actor_entropy` | meaningful | **-0.0004** | **-0.0003** | **WARNING** — negligible entropy bonus |
+| `loss_critic` | ↓ better | 0.314 | 0.339 | batch=64 slightly better |
+
+**System**:
+
+| Metric | Criterion | batch=64 | batch=16 | Status |
+|:---|:---|---:|---:|:---|
+| `eff_replay_ratio` | ≈ 1.0 | **0.0078** | **0.0078** | **CRITICAL** — 128x below configured RR=1.0 |
+
+**Trajectory** (first → last):
+
+| Metric | batch=64 (1,184 iters) | batch=16 (9,401 iters) |
+|:---|:---|:---|
+| `Episode/Steps` | 27.6 → 32.8 | 27.3 → 38.8 |
+| `mean_entropy` | 1.79 → 1.65 | 1.79 → 1.29 |
+| `value_mae` | 8.43 → 7.58 | 8.00 → 7.57 |
+| `loss_recon` | 0.176 → 0.011 | 0.177 → 0.011 |
+| `reward_mae_pos` | 1.97 → 0.21 | 2.07 → 0.37 |
+| `latent_entropy` | 1.45 → 0.83 | 1.88 → 0.86 |
+
+#### 8.3.3 Review & Analysis
+
+**1. Speed: batch=16 is the clear winner.** 9.2x faster per iteration, 8x more data processed in less wall-clock time. Phase 1 speed target of <5.0 s/it is now met (4.98 s/it).
+
+**2. Training quality: batch sizes produce equivalent learning dynamics.** World model, critic, and episode metrics are nearly identical between the two runs. Neither batch size shows a clear learning advantage — the batch=16 run simply got further (8x more iterations) in less time.
+
+**3. CRITICAL — `effective_replay_ratio = 0.0078` (both runs).** The configured `replay_ratio: 1.0` should produce ~1.0 gradient step per env step, but the measured 0.0078 means the agent performs ~128x fewer gradient steps than expected. This is likely because `collect_interval=128` inflates the per-iteration env step count (`64 envs × 128 steps = 8,192`), but the `Ratio` class is receiving a different normalization. This must be investigated — it may explain why learning is slow despite 77M timesteps.
+
+Specifically: `effective_replay_ratio = grad_steps / global_step`. Each iteration produces `num_envs × collect_interval = 64 × 128 = 8,192` env steps. With RR=1.0 and the `Ratio` class, the expected grad_steps should be ~8,192 per iteration (or ~64 if normalized by `global_step // num_steps`). The measured 0.0078 suggests `grad_steps ≈ 64` while `global_step` increments by 8,192 — i.e., the normalization is **not** dividing by `num_steps`. This is the bug identified in v1 Section 14 ("Ratio class and `collect_interval` interaction").
+
+**4. RED FLAG — `latent_entropy` below 1.0 (both runs).** Started at 1.4-1.9 and dropped to 0.83-0.86. This indicates the latent representation is becoming increasingly deterministic — the posterior is collapsing toward point estimates. This reduces the world model's ability to represent uncertainty and may limit downstream policy quality. Worth monitoring in Phase 2.
+
+**5. RED FLAG — `value_mae` stuck at ~7.5 (both runs).** Above the < 5 threshold. The critic is converging (8.4→7.6) but slowly. With `mean_return ≈ -25.5`, a MAE of 7.5 represents ~30% prediction error. This may improve with more training or may indicate a systematic critic learning issue.
+
+**6. WARNING — `loss_actor_entropy` ≈ -0.0003 (both runs).** The entropy bonus is negligible compared to `loss_actor_policy` (≈ -0.3 to -1.2). At `entropy_scale: 3e-4`, the entropy term contributes < 0.1% of total actor loss. This means the entropy regularization is effectively inactive — the policy entropy (1.3-1.7) is maintained by the advantage landscape, not by explicit entropy pressure.
+
+#### 8.3.4 Actionable Items
+
+1. **CRITICAL: Fix `effective_replay_ratio`** — Investigate `Ratio` class normalization. The `global_step` passed to `ratio.wants(global_step)` must be `global_step // num_steps` (i.e., collect-interval-normalized), not raw env steps. See v1 Section 14 for the prior investigation.
+
+2. **Monitor `latent_entropy`** — If it continues dropping below 0.5 in Phase 2, consider:
+   - Increasing `free_nats` from 1.0 to 2.0 (forces latents away from determinism)
+   - Checking if KL balancing (`kl_balance: 0.8`) is pushing too hard on the representation loss
+
+3. **Monitor `value_mae`** — If still > 5 after fixing replay ratio (which should increase gradient steps dramatically), investigate critic target computation (Section 1.1 two-hot issue).
+
+4. **Consider increasing `entropy_scale`** — Current 3e-4 is negligible. If entropy drops below 0.5 in Phase 2, try 1e-3 or 3e-3 (Phase 3 item 6.2).
+
+5. **Phase 1 conclusion**: Speed target met with batch=16 (4.98 s/it < 5.0). Proceed to Phase 2 but **fix replay ratio first** — training is currently running at ~0.8% of intended gradient utilization.
