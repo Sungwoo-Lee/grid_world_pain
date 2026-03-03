@@ -1006,3 +1006,140 @@ The initial LLM implementation introduced zero-padding for disabled sensors, mak
 4. **`GroupedLinear` handles variable N**: The einsum works for any `N` — no encoder changes needed.
 
 **Fix applied**: `get_observation()` and `get_observation_breakdown()` in `sensor.py` now use conditional guards (no `else: zeros(...)` branches). Disabled sensors are absent from both the observation vector and the breakdown dict.
+
+---
+
+### 15.10 DreamerV3 2-Phase Encoding Review
+
+**Date:** 2026-03-03
+**Scope:** Verify the 2-phase hierarchical encoder is properly applied to all DreamerV3 components.
+
+#### 15.10.1 Init Chain (obs_breakdown flow)
+
+**Status: PASS**
+
+```
+train.py: obs_breakdown = get_observation_breakdown(params)
+  └→ DreamerTrainer(obs_breakdown=obs_breakdown)
+       └→ DreamerV3Agent(obs_breakdown=obs_breakdown)
+            └→ WorldModel(obs_breakdown=obs_breakdown)
+                 ├→ DreamerObservationEncoder(breakdown=obs_breakdown)   ✓
+                 ├→ DreamerObservationDecoder(breakdown=obs_breakdown)   ✓
+                 └→ DreamerNeuromodulatorRNN(obs_breakdown=obs_breakdown) ✓
+```
+
+All three consumers receive `obs_breakdown` and use `len(breakdown)` to set `N`.
+
+#### 15.10.2 DreamerObservationEncoder — 2-Phase Structure
+
+**Status: PASS (structure) / ACTION REQUIRED (activation asymmetry — see §15.10.5)**
+
+Clean 2-phase with DreamerV3-style components (LayerNorm + SiLU instead of bare ReLU):
+```
+Phase 1: obs → pad [B, N, max_in] → DreamerGroupedMLP(N, max_in, [32,32], H) → [B, N, H]
+Phase 2: reshape [B, N*H] → MLP(N*H, H, [32,32]) → SiLU → [B, H]
+```
+
+- [x] `unimodal_grouped` — `DreamerGroupedMLP` over all N sensors
+- [x] `multimodal_hub` — `MLP` with input dim `N × embed_dim`
+- [x] No body hub
+- [x] `forward_with_modulation` uses `z_unimodal`/`z_multimodal`
+
+#### 15.10.3 DreamerObservationDecoder — Symmetric 2-Phase
+
+**Status: PASS**
+
+```
+Phase 1 (Multimodal): feat [B, feat_dim] → MLP(feat_dim, N*H, [32,32]) → reshape [B, N, H]
+Phase 2 (Unimodal):   [B, N, H] → DreamerGroupedMLP(N, H, [32,32], max_out) → unpad & concat → [B, obs_dim]
+```
+
+- [x] `multimodal_decoder` maps `feat_dim → N * hidden_size`
+- [x] `unimodal_grouped_decoder` maps `(N, H) → (N, max_out)`, slices per-sensor dims, concatenates
+- [x] No body decoder
+
+#### 15.10.4 DreamerNeuromodulatorRNN, Trainer Metrics, Configs
+
+**Status: PASS**
+
+- [x] `num_groups_unimodal = len(obs_breakdown)` — per-sensor
+- [x] `head_unimodal` / `head_multimodal` — no `head_bodystate`
+- [x] `DreamerModulatorOutput`: `z_unimodal`, `z_unimodal_add`, `z_multimodal`, `z_multimodal_add`, `z_memory`, `z_reward`
+- [x] Trainer metrics: `mod_z_unimodal_mean/std`, `mod_z_multimodal_mean/std` (no bodystate)
+- [x] Both `dreamer_v3.yaml` and `neuromodulated_dreamer_v3.yaml`: `encoding_mode: "hierarchical"`, `default_mlp: [32,32]`, `multimodal_hub: [32,32]`
+
+#### 15.10.5 ACTION REQUIRED: Missing Inter-Phase Activation in Non-Modulated Path
+
+**Status: BUG**
+
+The non-modulated and modulated forward paths in `DreamerObservationEncoder` have an **activation asymmetry**. The modulated path applies SiLU between Phase 1 and Phase 2, but the non-modulated path does not.
+
+**Non-modulated** (`__call__` → `_forward_body`, lines 242-257):
+```python
+encoded_all = self.unimodal_grouped(x_padded)   # Pre-activation (LayerNorm, no SiLU)
+mm_in = encoded_all.reshape(batch_shape + (-1,)) # NO activation here
+return self.multimodal_hub(mm_in)                # → final_act(SiLU) applied in __call__
+```
+
+**Modulated** (`forward_with_modulation`, lines 270-281):
+```python
+encoded_all = self.unimodal_grouped(x_padded)    # Pre-activation
+gamma1 = jax.nn.sigmoid(mod_output.z_unimodal)
+beta1 = mod_output.z_unimodal_add
+encoded_all = SiLU()(encoded_all * gamma1[..., None] + beta1[..., None])  # ← SiLU HERE
+mm_in = encoded_all.reshape(batch_shape + (-1,))
+mm_latent = self.multimodal_hub(mm_in)
+gamma2 = jax.nn.sigmoid(mod_output.z_multimodal)
+beta2 = mod_output.z_multimodal_add
+return self.final_act(mm_latent * gamma2 + beta2)                         # ← SiLU
+```
+
+**Impact**: The modulated network has an extra non-linearity (SiLU) between Phase 1 and Phase 2 that the baseline doesn't have. This means:
+1. The modulated network is a **deeper effective architecture**, not just baseline + gating
+2. Any performance difference between modulated and non-modulated could be partially attributed to the extra activation, not just neuromodulation
+3. Baseline comparisons are **not fair**
+
+**Reference — RPO does this correctly** (`recurrent_ppo_network.py`). Both paths apply ReLU after Phase 1:
+```python
+# __call__ (line 115):
+encoded_all = jax.nn.relu(self.unimodal_grouped(x_padded))  # ReLU after Phase 1
+
+# forward_with_modulation (line 140-144):
+encoded_all = self.unimodal_grouped(x_padded)
+encoded_all = jax.nn.relu(encoded_all * gamma1[..., None] + beta1[..., None])  # ReLU after Phase 1
+```
+
+**Fix**: Add SiLU activation after Phase 1 in `_forward_body`:
+```python
+def _forward_body(self, x):
+    batch_shape = x.shape[:-1]
+    x_padded = jnp.zeros(batch_shape + (len(self.names), self.max_in), dtype=x.dtype)
+    start = 0
+    for i, (name, dim) in enumerate(self.breakdown.items()):
+        x_padded = x_padded.at[..., i, :dim].set(x[..., start : start + dim])
+        start += dim
+
+    # Phase 1: Grouped encoding + activation
+    encoded_all = jax.nn.silu(self.unimodal_grouped(x_padded))  # ← ADD silu() here
+
+    # Phase 2: Multimodal Hub
+    mm_in = encoded_all.reshape(batch_shape + (-1,))
+    return self.multimodal_hub(mm_in)
+```
+
+#### 15.10.6 Observation: Shared LayerNorm in DreamerGroupedMLP
+
+**Status: OBSERVATION (not a bug)**
+
+In `DreamerGroupedMLP` (line 184), `nnx.LayerNorm(h)` is applied to tensors of shape `[..., G, H]`. The normalization statistics (mean/variance) are computed **per-group independently** over the H dimension — this is correct. However, the learned affine parameters (scale and bias) of shape `(H,)` are **shared across all G groups**.
+
+This means while `DreamerGroupedLinear` has fully independent weights per group `[G, I, O]`, the subsequent LayerNorm applies the same learned scale/bias to all sensors. This partially couples the sensor representations through shared normalization parameters.
+
+| Component | Per-Group Independent? |
+|:---|:---:|
+| `DreamerGroupedLinear` weights `[G, I, O]` | Yes |
+| `DreamerGroupedLinear` bias `[G, O]` | Yes |
+| `nnx.LayerNorm` statistics (mean/var) | Yes (computed per group) |
+| `nnx.LayerNorm` scale/bias `(H,)` | **No (shared)** |
+
+This is not necessarily a bug — shared normalization can act as regularization. The RPO `GroupedMLP` avoids this entirely by using no LayerNorm (only ReLU). If fully independent per-sensor normalization is desired in the future, the LayerNorm would need to be replaced with a grouped variant using parameters of shape `(G, H)`.
