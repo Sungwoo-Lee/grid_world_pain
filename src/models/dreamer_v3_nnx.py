@@ -222,19 +222,10 @@ class DreamerObservationEncoder(nnx.Module):
             self.max_in = max(input_dims)
             self.unimodal_grouped = DreamerGroupedMLP(len(self.names), self.max_in, default_mlp, hidden_size, rngs=rngs)
             
-            # 2. Body-State Hub
-            body_sensors = ["Satiation", "Nutrition", "Injury", "Extero Nociception", "Collision"]
-            self.body_indices = [i for i, name in enumerate(self.names) if name in body_sensors]
-            body_in_dim = len(self.body_indices) * hidden_size
-            body_mlp_struct = h_params.get('hub_overrides', {}).get('body_state', default_mlp)
-            self.body_hub = MLP(body_in_dim, hidden_size, body_mlp_struct, rngs=rngs)
-            
-            # 3. Association Hub
-            assoc_sensors = ["Olfaction", "Location", "Visual", "Proprioception"]
-            self.assoc_indices = [i for i, name in enumerate(self.names) if name in assoc_sensors]
-            assoc_in_dim = (len(self.assoc_indices) * hidden_size) + hidden_size
-            assoc_mlp_struct = h_params.get('hub_overrides', {}).get('association', default_mlp)
-            self.assoc_hub = MLP(assoc_in_dim, embed_dim, assoc_mlp_struct, rngs=rngs)
+            # 2. Multimodal Hub
+            multimodal_in_dim = len(self.names) * hidden_size
+            multimodal_mlp_struct = h_params.get('multimodal_hub', default_mlp)
+            self.multimodal_hub = MLP(multimodal_in_dim, embed_dim, multimodal_mlp_struct, rngs=rngs)
             
             self.final_act = SiLU()
         else:
@@ -261,16 +252,9 @@ class DreamerObservationEncoder(nnx.Module):
         # Phase 1: Grouped encoding
         encoded_all = self.unimodal_grouped(x_padded)
         
-        # Phase 2: Body-State Sub-Fusion
-        body_inputs = encoded_all[..., self.body_indices, :]
-        body_in = body_inputs.reshape(batch_shape + (-1,))
-        body_latent = self.body_hub(body_in)
-        
-        # Phase 3: Global Association
-        assoc_inputs = encoded_all[..., self.assoc_indices, :]
-        assoc_in = assoc_inputs.reshape(batch_shape + (-1,))
-        assoc_in = jnp.concatenate([assoc_in, body_latent], axis=-1)
-        return self.assoc_hub(assoc_in)
+        # Phase 2: Multimodal Hub
+        mm_in = encoded_all.reshape(batch_shape + (-1,))
+        return self.multimodal_hub(mm_in)
 
     def forward_with_modulation(self, x, mod_output, modulation_type: str):
         if self.mode != 'hierarchical':
@@ -289,22 +273,12 @@ class DreamerObservationEncoder(nnx.Module):
         beta1 = mod_output.z_unimodal_add
         encoded_all = SiLU()(encoded_all * gamma1[..., None] + beta1[..., None])
 
-        # Phase 2: Body-State Hub + Modulation (z_bodystate)
-        body_inputs = encoded_all[..., self.body_indices, :]
-        body_in = body_inputs.reshape(batch_shape + (-1,))
-        body_latent = self.body_hub(body_in)
-        gamma2 = jax.nn.sigmoid(mod_output.z_bodystate)
-        beta2 = mod_output.z_bodystate_add
-        body_latent = body_latent * gamma2 + beta2
-
-        # Phase 3: Association Hub + Modulation (z_association)
-        assoc_inputs = encoded_all[..., self.assoc_indices, :]
-        assoc_in = assoc_inputs.reshape(batch_shape + (-1,))
-        assoc_in = jnp.concatenate([assoc_in, body_latent], axis=-1)
-        assoc_latent = self.assoc_hub(assoc_in)
-        gamma3 = jax.nn.sigmoid(mod_output.z_association)
-        beta3 = mod_output.z_association_add
-        return self.final_act(assoc_latent * gamma3 + beta3)
+        # Phase 2: Multimodal Hub + Modulation (z_multimodal)
+        mm_in = encoded_all.reshape(batch_shape + (-1,))
+        mm_latent = self.multimodal_hub(mm_in)
+        gamma2 = jax.nn.sigmoid(mod_output.z_multimodal)
+        beta2 = mod_output.z_multimodal_add
+        return self.final_act(mm_latent * gamma2 + beta2)
 
 
 class Encoder(nnx.Module):
@@ -385,19 +359,11 @@ class DreamerObservationDecoder(nnx.Module):
             self.sensor_dims = [breakdown[name] for name in self.names]
             self.max_out = max(self.sensor_dims)
             
-            # 1. Global Association Decoder (Phase 1)
-            assoc_sensors = ["Olfaction", "Location", "Visual", "Proprioception"]
-            self.assoc_indices = [i for i, name in enumerate(self.names) if name in assoc_sensors]
-            assoc_mlp_struct = h_params.get('hub_overrides', {}).get('association', default_mlp)
-            self.assoc_decoder = MLP(feat_dim, (len(self.assoc_indices) * hidden_size) + hidden_size, assoc_mlp_struct, rngs=rngs)
+            # 1. Multimodal Decoder (Phase 1)
+            multimodal_mlp_struct = h_params.get('multimodal_hub', default_mlp)
+            self.multimodal_decoder = MLP(feat_dim, len(self.names) * hidden_size, multimodal_mlp_struct, rngs=rngs)
             
-            # 2. Body-State Hub Decoder (Phase 2)
-            body_sensors = ["Satiation", "Nutrition", "Injury", "Extero Nociception", "Collision"]
-            self.body_indices = [i for i, name in enumerate(self.names) if name in body_sensors]
-            body_mlp_struct = h_params.get('hub_overrides', {}).get('body_state', default_mlp)
-            self.body_decoder = MLP(hidden_size, len(self.body_indices) * hidden_size, body_mlp_struct, rngs=rngs)
-            
-            # 3. Grouped Unimodal Decoders (Phase 3)
+            # 2. Grouped Unimodal Decoders (Phase 2)
             self.unimodal_grouped_decoder = DreamerGroupedMLP(len(self.names), hidden_size, default_mlp, self.max_out, rngs=rngs)
         else:
             # Replicate standard Decoder behavior
@@ -407,23 +373,14 @@ class DreamerObservationDecoder(nnx.Module):
     def __call__(self, feat):
         if self.mode == 'hierarchical':
             batch_shape = feat.shape[:-1]
-            H = self.body_decoder.net.layers[0].in_features # hidden_size
+            # Get hidden_size from unimodal decoder's input dim
+            H = self.unimodal_grouped_decoder.net.layers[0].in_features 
             
-            # Phase 1: Global Expansion
-            assoc_body_flat = self.assoc_decoder(feat)
-            assoc_flat = assoc_body_flat[..., :len(self.assoc_indices) * H]
-            body_latent = assoc_body_flat[..., len(self.assoc_indices) * H:]
+            # Phase 1: Multimodal Expansion
+            latents_flat = self.multimodal_decoder(feat)
+            latents_all = latents_flat.reshape(batch_shape + (len(self.names), H))
             
-            # Phase 2: Body-State Expansion
-            body_flat = self.body_decoder(body_latent)
-            
-            # Phase 3: Per-Sensor Reconstruction
-            latents_all = jnp.zeros(batch_shape + (len(self.names), H), dtype=feat.dtype)
-            assoc_reshaped = assoc_flat.reshape(batch_shape + (len(self.assoc_indices), H))
-            latents_all = latents_all.at[..., self.assoc_indices, :].set(assoc_reshaped)
-            body_reshaped = body_flat.reshape(batch_shape + (len(self.body_indices), H))
-            latents_all = latents_all.at[..., self.body_indices, :].set(body_reshaped)
-            
+            # Phase 2: Per-Sensor Reconstruction
             decoded_all_padded = self.unimodal_grouped_decoder(latents_all)
             
             parts = []

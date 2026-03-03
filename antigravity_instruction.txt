@@ -18,7 +18,3 @@
 ## Code Standards
 - **JAX States**: When modifying environment logic, ensure compatibility with JAX state management and `vmap` operations.
 - **Config Management**: Updates to algorithms must be accompanied by corresponding updates to their YAML configurations in `configs/models/`.
-
-## Research & Knowledge Retrieval
-- **NotebookLM Skill**: Utilize the skill in `skills/notebooklm/` for project-related research. Refer to [SKILL.md](file:///media/nas01/projects/Interoceptive-AI/grid_world_pain/skills/notebooklm/SKILL.md) for detailed usage patterns.
-- **Query Integrity**: Do not split research queries by sentence. Splitting by sentence generates multiple fragmented queries rather than a single coherent one. Always provide the query as a single, unified string to preserve context and intent.

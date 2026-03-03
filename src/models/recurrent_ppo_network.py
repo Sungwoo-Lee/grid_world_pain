@@ -91,19 +91,10 @@ class ObservationEncoder(nnx.Module):
             # Use grouped MLP structure
             self.unimodal_grouped = GroupedMLP(len(self.names), self.max_in, default_mlp, hidden_size, rngs=rngs)
             
-            # 2. Body-State Hub
-            body_sensors = ["Satiation", "Nutrition", "Injury", "Extero Nociception", "Collision"]
-            self.body_indices = [i for i, name in enumerate(self.names) if name in body_sensors]
-            body_in_dim = len(self.body_indices) * hidden_size
-            body_mlp_struct = h_params.get('hub_overrides', {}).get('body_state', default_mlp)
-            self.body_hub = MLP(body_in_dim, body_mlp_struct, hidden_size, rngs=rngs)
-            
-            # 3. Association Hub
-            assoc_sensors = ["Olfaction", "Location", "Visual", "Proprioception"]
-            self.assoc_indices = [i for i, name in enumerate(self.names) if name in assoc_sensors]
-            assoc_in_dim = (len(self.assoc_indices) * hidden_size) + hidden_size
-            assoc_mlp_struct = h_params.get('hub_overrides', {}).get('association', default_mlp)
-            self.assoc_hub = MLP(assoc_in_dim, assoc_mlp_struct, hidden_size, rngs=rngs)
+            # 2. Multimodal Hub
+            multimodal_in_dim = len(self.names) * hidden_size
+            multimodal_mlp_struct = h_params.get('multimodal_hub', default_mlp)
+            self.multimodal_hub = MLP(multimodal_in_dim, multimodal_mlp_struct, hidden_size, rngs=rngs)
             
         else:
             self.monolith = nnx.Linear(input_dim, hidden_size, rngs=rngs)
@@ -123,16 +114,9 @@ class ObservationEncoder(nnx.Module):
         # Phase 1: Grouped encoding
         encoded_all = jax.nn.relu(self.unimodal_grouped(x_padded))
 
-        # Phase 2: Body-State Hub
-        body_inputs = encoded_all[..., self.body_indices, :]
-        body_in = body_inputs.reshape(batch_shape + (-1,))
-        body_latent = self.body_hub(body_in)
-
-        # Phase 3: Association Hub
-        assoc_inputs = encoded_all[..., self.assoc_indices, :]
-        assoc_in = assoc_inputs.reshape(batch_shape + (-1,))
-        assoc_in = jnp.concatenate([assoc_in, body_latent], axis=-1)
-        return jax.nn.relu(self.assoc_hub(assoc_in))
+        # Phase 2: Multimodal Hub
+        mm_in = encoded_all.reshape(batch_shape + (-1,))
+        return jax.nn.relu(self.multimodal_hub(mm_in))
 
     def forward_with_modulation(self, x, mod_output, modulation_type: str):
         """Hierarchical forward pass with multi-stage modulation (Injection A)."""
@@ -159,23 +143,12 @@ class ObservationEncoder(nnx.Module):
         # Apply per-group modulation
         encoded_all = jax.nn.relu(encoded_all * gamma1[..., None] + beta1[..., None])
 
-        # Phase 2: Body-State Hub + Modulation (z_bodystate)
-        body_inputs = encoded_all[..., self.body_indices, :]
-        body_in = body_inputs.reshape(batch_shape + (-1,))
-        body_latent = self.body_hub(body_in) 
-        gamma2 = jax.nn.sigmoid(mod_output.z_bodystate)
-        beta2 = mod_output.z_bodystate_add
-        body_latent = body_latent * gamma2 + beta2
-        # For uniformity, we'll apply it consistently.
-
-        # Phase 3: Association Hub + Modulation (z_association)
-        assoc_inputs = encoded_all[..., self.assoc_indices, :]
-        assoc_in = assoc_inputs.reshape(batch_shape + (-1,))
-        assoc_in = jnp.concatenate([assoc_in, body_latent], axis=-1)
-        assoc_latent = self.assoc_hub(assoc_in)
-        gamma3 = jax.nn.sigmoid(mod_output.z_association)
-        beta3 = mod_output.z_association_add
-        return jax.nn.relu(assoc_latent * gamma3 + beta3)
+        # Phase 2: Multimodal Hub + Modulation (z_multimodal)
+        mm_in = encoded_all.reshape(batch_shape + (-1,))
+        mm_latent = self.multimodal_hub(mm_in)
+        gamma2 = jax.nn.sigmoid(mod_output.z_multimodal)
+        beta2 = mod_output.z_multimodal_add
+        return jax.nn.relu(mm_latent * gamma2 + beta2)
 
 
 class ActorCriticRNN(nnx.Module):

@@ -32,10 +32,8 @@ class ModulatorOutput(NamedTuple):
     """Output from the neuromodulator's branched heads."""
     z_unimodal: jnp.ndarray      # Phase 1: Unimodal gains
     z_unimodal_add: jnp.ndarray  # Phase 1: Unimodal biases
-    z_bodystate: jnp.ndarray     # Phase 2: Body-state gains
-    z_bodystate_add: jnp.ndarray # Phase 2: Body-state biases
-    z_association: jnp.ndarray   # Phase 3: Association gains
-    z_association_add: jnp.ndarray # Phase 3: Association biases
+    z_multimodal: jnp.ndarray    # Phase 2: Multimodal gains
+    z_multimodal_add: jnp.ndarray # Phase 2: Multimodal biases
     z_memory: jnp.ndarray        # Memory gate-bias signal
     temperature: jnp.ndarray     # Bounded temperature scalar
 
@@ -94,19 +92,12 @@ class NeuromodulatorRNN(nnx.Module):
             self.head_unimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_unimodal,
                                                bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
 
-        # Phase 2: Body-state
-        self.head_bodystate = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
-                                        bias_init=nnx.initializers.constant(percept_bias_init), rngs=rngs)
+        # Phase 2: Multimodal
+        self.head_multimodal = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
+                                         bias_init=nnx.initializers.constant(percept_bias_init), rngs=rngs)
         if self.modulation_type == "PreActivation":
-            self.head_bodystate_add = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
-                                                bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
-
-        # Phase 3: Association
-        self.head_association = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
-                                          bias_init=nnx.initializers.constant(percept_bias_init), rngs=rngs)
-        if self.modulation_type == "PreActivation":
-            self.head_association_add = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
-                                                  bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
+            self.head_multimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
+                                                 bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
 
         # Memory gate-bias head: raw output, injected into GRU update gate (§5.1a)
         self.head_memory = nnx.Linear(
@@ -165,12 +156,8 @@ class NeuromodulatorRNN(nnx.Module):
                                       getattr(self, 'head_unimodal_add', None), 
                                       getattr(self, 'z_unimodal_add_baseline', None), is_unimodal=True)
         
-        z_body, z_body_add = _get_signal(self.head_bodystate, self.z_hidden_baseline,
-                                        getattr(self, 'head_bodystate_add', None),
-                                        getattr(self, 'z_hidden_add_baseline', None))
-
-        z_assoc, z_assoc_add = _get_signal(self.head_association, self.z_hidden_baseline,
-                                          getattr(self, 'head_association_add', None),
+        z_multi, z_multi_add = _get_signal(self.head_multimodal, self.z_hidden_baseline,
+                                          getattr(self, 'head_multimodal_add', None),
                                           getattr(self, 'z_hidden_add_baseline', None))
 
         # Memory (always Multiplicative/direct bias)
@@ -182,8 +169,7 @@ class NeuromodulatorRNN(nnx.Module):
 
         output = ModulatorOutput(
             z_unimodal=z_uni, z_unimodal_add=z_uni_add,
-            z_bodystate=z_body, z_bodystate_add=z_body_add,
-            z_association=z_assoc, z_association_add=z_assoc_add,
+            z_multimodal=z_multi, z_multimodal_add=z_multi_add,
             z_memory=z_mem, temperature=temperature
         )
         return output, h_mod_new
@@ -203,10 +189,8 @@ class DreamerModulatorOutput(NamedTuple):
     """Output from the DreamerV3 neuromodulator's branched heads."""
     z_unimodal: jnp.ndarray      # Phase 1: Unimodal gains
     z_unimodal_add: jnp.ndarray  # Phase 1: Unimodal biases
-    z_bodystate: jnp.ndarray     # Phase 2: Body-state gains
-    z_bodystate_add: jnp.ndarray # Phase 2: Body-state biases
-    z_association: jnp.ndarray   # Phase 3: Association gains
-    z_association_add: jnp.ndarray # Phase 3: Association biases
+    z_multimodal: jnp.ndarray    # Phase 2: Multimodal gains
+    z_multimodal_add: jnp.ndarray # Phase 2: Multimodal biases
     z_memory: jnp.ndarray        # Memory gate-bias signal
     z_reward: jnp.ndarray        # Reward interpretation scale
 
@@ -278,19 +262,12 @@ class DreamerNeuromodulatorRNN(nnx.Module):
             self.head_unimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_unimodal,
                                                bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
 
-        # Phase 2: Body-state
-        self.head_bodystate = nnx.Linear(mod_hidden_size, self.num_groups_percept,
-                                        bias_init=nnx.initializers.constant(percept_bias_init), rngs=rngs)
+        # Phase 2: Multimodal
+        self.head_multimodal = nnx.Linear(mod_hidden_size, self.num_groups_percept,
+                                         bias_init=nnx.initializers.constant(percept_bias_init), rngs=rngs)
         if self.modulation_type == "PreActivation":
-            self.head_bodystate_add = nnx.Linear(mod_hidden_size, self.num_groups_percept,
-                                                bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
-
-        # Phase 3: Association
-        self.head_association = nnx.Linear(mod_hidden_size, self.num_groups_percept,
-                                          bias_init=nnx.initializers.constant(percept_bias_init), rngs=rngs)
-        if self.modulation_type == "PreActivation":
-            self.head_association_add = nnx.Linear(mod_hidden_size, self.num_groups_percept,
-                                                  bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
+            self.head_multimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_percept,
+                                                 bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
 
         # Memory gate-bias head: targets deter_dim (§5.1a)
         self.head_memory = nnx.Linear(
@@ -320,7 +297,7 @@ class DreamerNeuromodulatorRNN(nnx.Module):
         """Compute head outputs from modulator hidden state."""
         
         def _get_signal(head, baseline, head_add=None, baseline_add=None, target_dim=None, is_unimodal=False):
-            if not include_percept and (is_unimodal or head in [self.head_bodystate, self.head_association]):
+            if not include_percept and (is_unimodal or head == self.head_multimodal):
                 # Imagination mode: return zeros for perceptual heads
                 dim = self.num_groups_unimodal if is_unimodal else target_dim
                 return jnp.zeros(h_mod.shape[:-1] + (dim,)), jnp.zeros(h_mod.shape[:-1] + (dim,))
@@ -346,12 +323,8 @@ class DreamerNeuromodulatorRNN(nnx.Module):
                                       getattr(self, 'head_unimodal_add', None),
                                       getattr(self, 'z_unimodal_add_baseline', None), is_unimodal=True)
         
-        z_body, z_body_add = _get_signal(self.head_bodystate, self.z_hidden_baseline,
-                                        getattr(self, 'head_bodystate_add', None),
-                                        getattr(self, 'z_hidden_add_baseline', None), target_dim=self.embed_dim)
-
-        z_assoc, z_assoc_add = _get_signal(self.head_association, self.z_hidden_baseline,
-                                          getattr(self, 'head_association_add', None),
+        z_multi, z_multi_add = _get_signal(self.head_multimodal, self.z_hidden_baseline,
+                                          getattr(self, 'head_multimodal_add', None),
                                           getattr(self, 'z_hidden_add_baseline', None), target_dim=self.embed_dim)
 
         z_mem, _ = _get_signal(self.head_memory, self.z_mem_baseline, target_dim=self.deter_dim)
@@ -359,8 +332,7 @@ class DreamerNeuromodulatorRNN(nnx.Module):
 
         return DreamerModulatorOutput(
             z_unimodal=z_uni, z_unimodal_add=z_uni_add,
-            z_bodystate=z_body, z_bodystate_add=z_body_add,
-            z_association=z_assoc, z_association_add=z_assoc_add,
+            z_multimodal=z_multi, z_multimodal_add=z_multi_add,
             z_memory=z_mem, z_reward=z_rew
         )
 

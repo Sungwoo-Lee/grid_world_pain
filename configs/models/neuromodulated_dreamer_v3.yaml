@@ -30,10 +30,11 @@ agent:
   encoding_mode: "hierarchical"  # "flat" or "hierarchical"
   
   hierarchical_params:
-    default_mlp: [128]
-    hub_overrides:
-      body_state: [64]
-      association: [128]
+    # Unimodal Phase 1: Independent MLPs for each sensor
+    # Available sensor names for overrides: 
+    # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
+    default_mlp: [32,32]
+    multimodal_hub: [32,32]
 
   # Neuromodulation (§5 in NEUROMODULATION_ALGORITHM.md)
   # DreamerNeuromodulatorRNN with dual input projections (obs + imagine)

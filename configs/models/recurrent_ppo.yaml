@@ -26,12 +26,16 @@ agent:
   encoding_mode: "hierarchical"  # "flat" or "hierarchical"
   
   hierarchical_params:
-    default_mlp: [128,128]
+    # Unimodal Phase 1: Independent MLPs for each sensor
+    # Available sensor names for overrides: 
+    # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
+    default_mlp: [32,32]
     unimodal_overrides:
       visual: [128,128]
-    hub_overrides:
-      body_state: [128,128]
-      association: [128,128]
+      olfaction: [128,128]
+    
+    # Multimodal Phase 2: Fusion hub
+    multimodal_hub: [128,128]
 
   # Neuromodulation: DISABLED (true baseline, §5.2)
   # For neuromodulated variant, use: configs/models/neuromodulated_ppo.yaml

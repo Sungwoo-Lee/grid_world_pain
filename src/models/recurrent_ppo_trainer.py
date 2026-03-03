@@ -25,19 +25,27 @@ class PPOBatch(NamedTuple):
     dones: jnp.ndarray
     h_init: Any  # Can be tuple or array
 
-def compute_gae(rewards, values_next, dones, gamma, lmbda):
-    """Computes Generalized Advantage Estimation."""
-    def gae_scan(carry, x):
-        gae, next_v = carry
-        reward, next_v_val, done = x
-        delta = reward + gamma * next_v_val * (1 - done) - next_v
+def compute_gae(rewards, values, values_next, dones, gamma, lmbda):
+    """Computes Generalized Advantage Estimation.
+
+    Args:
+        rewards:     (T,) rewards at each timestep
+        values:      (T,) V(s_t) for t = 0..T-1
+        values_next: (T,) V(s_{t+1}) for t = 0..T-1
+        dones:       (T,) episode termination flags
+        gamma:       discount factor
+        lmbda:       GAE lambda
+    """
+    def gae_scan(gae, x):
+        reward, value, next_value, done = x
+        delta = reward + gamma * next_value * (1 - done) - value
         gae = delta + gamma * lmbda * (1 - done) * gae
-        return (gae, next_v_val), gae
+        return gae, gae
 
     _, advantages = jax.lax.scan(
-        gae_scan, 
-        (0.0, values_next[-1]), 
-        (rewards, values_next, dones),
+        gae_scan,
+        0.0,
+        (rewards, values, values_next, dones),
         reverse=True
     )
     return advantages
@@ -235,8 +243,8 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
         
         values_with_next = jnp.concatenate([trajectories.value, final_v.reshape(1, -1)], axis=0)
         
-        advantages = jax.vmap(compute_gae, in_axes=(1, 1, 1, None, None), out_axes=1)(
-            trajectories.reward, values_with_next[1:], trajectories.done, config.gamma, config.gae_lambda
+        advantages = jax.vmap(compute_gae, in_axes=(1, 1, 1, 1, None, None), out_axes=1)(
+            trajectories.reward, trajectories.value, values_with_next[1:], trajectories.done, config.gamma, config.gae_lambda
         )
         targets = advantages + trajectories.value
         advantages = (advantages - jnp.mean(advantages)) / (jnp.std(advantages) + 1e-8)

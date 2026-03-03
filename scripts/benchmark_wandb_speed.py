@@ -21,62 +21,14 @@ Output: a markdown table with s/it, it/s, SPS, and total wall-clock time.
 
 import argparse
 import sys
-from datetime import datetime, timedelta, timezone
-import wandb
 
-
-# ── WandB project coordinates ──────────────────────────────────────────────
-WANDB_ENTITY = "sungwoolee"
-WANDB_PROJECT = "grid_world_pain"
-TIMESTAMP_TOLERANCE_SEC = 120  # max allowed drift between run name and WandB created_at
-
-
-def parse_timestamp_from_name(run_name: str) -> datetime | None:
-    """Extract YYYYMMDD-HHMMSS from the beginning of a run name."""
-    # Format: 20260226-141145_dreamer_v3_...
-    parts = run_name.split("_", 1)
-    ts_str = parts[0]  # e.g. "20260226-141145"
-    try:
-        return datetime.strptime(ts_str, "%Y%m%d-%H%M%S")
-    except ValueError:
-        return None
-
-
-def match_wandb_run(api_runs, run_name: str):
-    """
-    Find the WandB run matching `run_name`.
-
-    Strategy (in order):
-      1. Exact match on run.name  (WandB name == results dir name)
-      2. Timestamp match: extract YYYYMMDD-HHMMSS from run_name and compare
-         against each WandB run's created_at within ±TIMESTAMP_TOLERANCE_SEC.
-    """
-    # Strategy 1: exact name match
-    for r in api_runs:
-        if r.name == run_name:
-            return r
-
-    # Strategy 2: timestamp fuzzy match
-    local_ts = parse_timestamp_from_name(run_name)
-    if local_ts is None:
-        return None
-
-    best_run = None
-    best_diff = timedelta(days=999)
-    for r in api_runs:
-        try:
-            # WandB stores created_at as ISO string (UTC)
-            wandb_ts = datetime.fromisoformat(r.created_at.replace("Z", "+00:00"))
-            # Convert our local timestamp to UTC+9 (KST) then to UTC for comparison
-            local_utc = local_ts.replace(tzinfo=timezone(timedelta(hours=9))).astimezone(timezone.utc)
-            diff = abs(wandb_ts - local_utc)
-            if diff < best_diff and diff < timedelta(seconds=TIMESTAMP_TOLERANCE_SEC):
-                best_diff = diff
-                best_run = r
-        except Exception:
-            continue
-
-    return best_run
+from wandb_utils import (
+    WANDB_ENTITY,
+    WANDB_PROJECT,
+    fetch_wandb_runs,
+    format_duration,
+    match_wandb_run,
+)
 
 
 def compute_speed_metrics(run) -> dict:
@@ -130,16 +82,6 @@ def compute_speed_metrics(run) -> dict:
     }
 
 
-def format_duration(seconds: float) -> str:
-    """Format seconds into a human-readable HH:MM:SS string."""
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    s = int(seconds % 60)
-    if h > 0:
-        return f"{h}h {m:02d}m {s:02d}s"
-    return f"{m}m {s:02d}s"
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Extract training speed metrics from WandB logs.",
@@ -166,16 +108,7 @@ def main():
     args = parser.parse_args()
 
     # ── Fetch all WandB runs ────────────────────────────────────────────
-    api = wandb.Api()
-    path = f"{args.entity}/{args.project}"
-    print(f"Fetching runs from {path}...", file=sys.stderr)
-    try:
-        api_runs = list(api.runs(path))
-    except Exception:
-        # Fallback: try without entity
-        path = args.project
-        api_runs = list(api.runs(path))
-    print(f"Found {len(api_runs)} WandB runs.", file=sys.stderr)
+    api_runs = fetch_wandb_runs(args.entity, args.project)
 
     # ── Process each target run ─────────────────────────────────────────
     results = []

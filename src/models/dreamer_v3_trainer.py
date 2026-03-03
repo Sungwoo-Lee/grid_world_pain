@@ -273,10 +273,8 @@ class DreamerTrainer(nnx.Module):
                 metrics.update({
                     'mod_z_unimodal_mean': jnp.mean(jax.nn.sigmoid(mod_outputs_T.z_unimodal)),
                     'mod_z_unimodal_std': jnp.std(jax.nn.sigmoid(mod_outputs_T.z_unimodal)),
-                    'mod_z_bodystate_mean': jnp.mean(jax.nn.sigmoid(mod_outputs_T.z_bodystate)),
-                    'mod_z_bodystate_std': jnp.std(jax.nn.sigmoid(mod_outputs_T.z_bodystate)),
-                    'mod_z_association_mean': jnp.mean(jax.nn.sigmoid(mod_outputs_T.z_association)),
-                    'mod_z_association_std': jnp.std(jax.nn.sigmoid(mod_outputs_T.z_association)),
+                    'mod_z_multimodal_mean': jnp.mean(jax.nn.sigmoid(mod_outputs_T.z_multimodal)),
+                    'mod_z_multimodal_std': jnp.std(jax.nn.sigmoid(mod_outputs_T.z_multimodal)),
                     'mod_memory_mean': jnp.mean(mod_outputs_T.z_memory),
                     'mod_memory_std': jnp.std(mod_outputs_T.z_memory),
                     'mod_z_reward_mean': jnp.mean(mod_outputs_T.z_reward),
@@ -285,8 +283,7 @@ class DreamerTrainer(nnx.Module):
                 if wm.modulation_type == "PreActivation":
                     metrics.update({
                         'mod_beta_unimodal_mean': jnp.mean(mod_outputs_T.z_unimodal_add),
-                        'mod_beta_bodystate_mean': jnp.mean(mod_outputs_T.z_bodystate_add),
-                        'mod_beta_association_mean': jnp.mean(mod_outputs_T.z_association_add),
+                        'mod_beta_multimodal_mean': jnp.mean(mod_outputs_T.z_multimodal_add),
                     })
 
             return total_loss, (metrics, posts, h_mods_all)

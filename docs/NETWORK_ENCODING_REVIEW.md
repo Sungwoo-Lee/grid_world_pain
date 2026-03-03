@@ -27,18 +27,93 @@ The observation space is defined in `src/environment/sensor.py`. It is a flat, c
 > All modalities are flattened and concatenated in a fixed order within `sensor.get_observation`.
 
 ## 2. Recurrent PPO Encoding Structure
-The Recurrent PPO agent (`ActorCriticRNN` in `src/models/recurrent_ppo_network.py`) uses a **flat fusion** approach.
+
+The Recurrent PPO agent (`ActorCriticRNN` in `src/models/recurrent_ppo_network.py`) supports two encoding modes, toggled via `encoding_mode` in the config. The default is `"hierarchical"`.
+
+### 2.1 Flat Encoding Mode (`encoding_mode: "flat"`)
+
+```mermaid
+graph LR
+    Obs["obs [B, obs_dim]"] --> Lin["Linear(obs_dim, 128)"]
+    Lin --> ReLU["ReLU"]
+    ReLU --> GRU["GRU Cell (128, 128)"]
+    GRU --> A["Actor: Linear(128,128) → ReLU → Linear(128, action_dim)"]
+    GRU --> C["Critic: Linear(128,128) → ReLU → Linear(128, 1)"]
+```
+
+- All sensory inputs are projected into the same hidden space in a single linear layer.
+- No modality awareness — the network treats the entire observation as one block.
+
+### 2.2 Hierarchical Encoding Mode (`encoding_mode: "hierarchical"`) — Default
+
+The hierarchical mode implements a **3-phase grouped encoder** (`ObservationEncoder`) that processes each sensor modality through dedicated pathways before fusing them in biologically-inspired integration hubs.
 
 ```mermaid
 graph TD
-    Obs["Concatenated Observation (1D)"] --> InputProj["Input Projection (Linear)"]
-    InputProj --> Act["ReLU Activation"]
-    Act --> RNN["RNN Cell (GRU/LSTM)"]
-    RNN --> Heads["Actor/Critic Heads"]
+    Obs["obs [B, obs_dim]"]
+
+    subgraph "Unpack & Pad"
+        Obs --> Unpack["Slice flat obs by sensor dims\nZero-pad each to max_dim"]
+        Unpack --> Padded["x_padded [B, 9, max_dim]"]
+    end
+
+    subgraph "Phase 1: Grouped Unimodal Encoding (GroupedMLP)"
+        Padded --> GM["GroupedLinear(9, max_dim, 128) → ReLU\nGroupedLinear(9, 128, 128) → ReLU\nGroupedLinear(9, 128, 128)"]
+        GM --> ReLU1["ReLU"]
+        ReLU1 --> Enc["encoded_all [B, 9, 128]"]
+    end
+
+    subgraph "Phase 2: Body-State Hub (MLP)"
+        Enc -->|"Select body indices\n[B, 5, 128] → reshape [B, 640]"| BodyIn["body_in [B, 640]"]
+        BodyIn --> BodyMLP["Linear(640, 128) → ReLU\nLinear(128, 128) → ReLU\nLinear(128, 128)"]
+        BodyMLP --> BodyLat["body_latent [B, 128]"]
+    end
+
+    subgraph "Phase 3: Association Hub (MLP)"
+        Enc -->|"Select assoc indices\n[B, 4, 128] → reshape [B, 512]"| AssocIn["assoc_in [B, 512]"]
+        BodyLat -->|"Concat"| Fuse["[B, 512 + 128 = 640]"]
+        AssocIn --> Fuse
+        Fuse --> AssocMLP["Linear(640, 128) → ReLU\nLinear(128, 128) → ReLU\nLinear(128, 128)"]
+        AssocMLP --> AssocReLU["ReLU"]
+        AssocReLU --> Embed["embed [B, 128]"]
+    end
+
+    subgraph "Recurrence & Output"
+        Embed --> GRU["GRU Cell (128 → 128)"]
+        GRU --> Actor["Actor: Linear(128,128) → ReLU → Linear(128, action_dim)"]
+        GRU --> Critic["Critic: Linear(128,128) → ReLU → Linear(128, 1)"]
+    end
 ```
 
-- **Hierarchy:** There is no hierarchical separation. All sensory inputs (vision, olfaction, interoception) are projected into the same hidden space simultaneously in the first linear layer.
-- **Unimodal vs. Multimodal:** The network does not perceive individual "unimodal" streams. It treats the entire multimodal vector as a single unimodal input block.
+### 2.3 Phase-by-Phase Dimension Flow
+
+Using default config values: `hidden_size=128`, `default_mlp=[128,128]`, `hub_overrides: body_state=[128,128], association=[128,128]`.
+
+| Stage | Input Shape | Operation | Output Shape |
+| :--- | :--- | :--- | :--- |
+| **Unpack & Pad** | `[B, obs_dim]` | Slice flat obs per sensor, zero-pad each to `max_dim` | `[B, 9, max_dim]` |
+| **Phase 1** (Unimodal) | `[B, 9, max_dim]` | `GroupedMLP(9, max_dim, [128,128], out=128)` + ReLU | `[B, 9, 128]` |
+| **Phase 2** (Body Hub) | `[B, 5 × 128 = 640]` | `MLP(640, [128,128], out=128)` | `[B, 128]` |
+| **Phase 3** (Assoc Hub) | `[B, 4 × 128 + 128 = 640]` | `MLP(640, [128,128], out=128)` + ReLU | `[B, 128]` |
+| **RNN** | `[B, 128]` | GRU Cell `(128, 128)` | `[B, 128]` |
+| **Actor Head** | `[B, 128]` | `Linear(128,128) → ReLU → Linear(128, action_dim)` | `[B, action_dim]` |
+| **Critic Head** | `[B, 128]` | `Linear(128,128) → ReLU → Linear(128, 1)` | `[B, 1]` |
+
+### 2.4 Sensor Grouping
+
+Each sensor modality is independently encoded in Phase 1, then routed to one of two integration hubs:
+
+| Hub | Sensors (raw dim) | Total Latent Input | Biological Analog |
+| :--- | :--- | :--- | :--- |
+| **Body-State Hub** | Satiation (1), Nutrition (1), Injury (1), Extero Nociception (1), Collision (13) | 5 × 128 = 640 | Somatosensory cortex / Insula |
+| **Association Hub** | Olfaction (4), Location (2), Visual (200), Proprioception (5) + `body_latent` (128) | 4 × 128 + 128 = 640 | Association cortex |
+
+> [!NOTE]
+> The Body-State Hub output (`body_latent`) feeds into the Association Hub as an additional input, creating a **bottom-up information flow** from interoceptive/protective signals into the global decision-making representation.
+
+### 2.5 Key Implementation Detail: `GroupedLinear` via `einsum`
+
+Phase 1 avoids launching 9 separate GPU kernels for 9 sensors. Instead, `GroupedLinear` uses a single `jnp.einsum('...gi,gio->...go', x, weights)` call to apply **independent weight matrices** to all sensor groups in one fused kernel. Each group `g` has its own `[in_features, out_features]` weight slice — they do not share parameters.
 
 ## 3. DreamerV3 Encoding Structure
 The DreamerV3 agent (`WorldModel` in `src/models/dreamer_v3_nnx.py`) follows a similar pattern but with a deeper MLP encoder.
@@ -525,3 +600,409 @@ During the verification process, several environment-specific issues were encoun
 ### Future Recommendations
 - **Isolated Testing**: Future network-only changes should prioritize using the Mocked Breakdown pattern to avoid environment overhead.
 - **Symmetry Unit Tests**: Integrate a dedicated symmetry assert into the CI/CD pipeline that compares `vars(encoder)` and `vars(decoder)` metadata shapes.
+
+## 14. Proposed Simplification: 2-Phase Unimodal → Multimodal Architecture
+
+### Motivation
+
+The current 3-phase hierarchy (Unimodal GroupedMLP → Body-State Hub → Association Hub) introduces architectural complexity — two separate sensor grouping lists, an intermediate fusion stage, and dedicated neuromodulatory heads — without clear empirical benefit. This section proposes a simplified **2-phase** design that retains the core benefit (per-modality encoding) while removing unnecessary structure.
+
+### Design Principles
+
+1. **Every sensor modality gets its own unimodal MLP** — including each interoceptive signal individually (Satiation, Nutrition, Injury are separate networks, not grouped as "interoception").
+2. **No intermediate hubs.** The Body-State Hub is removed entirely. There is no body/association sensor distinction.
+3. **Single multimodal fusion.** All unimodal outputs are concatenated and fused in one Multimodal Hub.
+4. **Per-modality configurable MLP sizes** (e.g., Visual: `[256,256]`, Nociception: `[64]`).
+5. **Einsum-based `GroupedLinear` preserved** under the hood for GPU efficiency.
+
+### 14.1 Architecture Overview
+
+```mermaid
+graph TD
+    Obs["obs [B, obs_dim]"]
+
+    subgraph "Unpack & Pad"
+        Obs --> Unpack["Slice flat obs by sensor dims\nZero-pad each to max_dim"]
+        Unpack --> Padded["x_padded [B, N, max_dim]"]
+    end
+
+    subgraph "Phase 1: Unimodal Encoding (N independent MLPs via GroupedLinear)"
+        Padded --> Inj["0: Injury MLP"]
+        Padded --> Nut["1: Nutrition MLP"]
+        Padded --> Sat["2: Satiation MLP"]
+        Padded --> Noci["3: Ext. Nociception MLP"]
+        Padded --> Olf["4: Olfaction MLP"]
+        Padded --> Coll["5: Collision MLP"]
+        Padded --> Prop["6: Proprioception MLP"]
+        Padded --> Vis["7: Visual MLP"]
+        Padded --> Loc["8: Location MLP"]
+
+        Inj --> E0["[B, H]"]
+        Nut --> E1["[B, H]"]
+        Sat --> E2["[B, H]"]
+        Noci --> E3["[B, H]"]
+        Olf --> E4["[B, H]"]
+        Coll --> E5["[B, H]"]
+        Prop --> E6["[B, H]"]
+        Vis --> E7["[B, H]"]
+        Loc --> E8["[B, H]"]
+    end
+
+    subgraph "Phase 2: Multimodal Hub"
+        E0 --> Cat["Concatenate → [B, N × H]"]
+        E1 --> Cat
+        E2 --> Cat
+        E3 --> Cat
+        E4 --> Cat
+        E5 --> Cat
+        E6 --> Cat
+        E7 --> Cat
+        E8 --> Cat
+        Cat --> MM["Multimodal MLP"]
+        MM --> Embed["embed [B, H]"]
+    end
+
+    subgraph "Recurrence & Output"
+        Embed --> GRU["GRU Cell (H → H)"]
+        GRU --> Actor["Actor Head → logits [B, action_dim]"]
+        GRU --> Critic["Critic Head → value [B, 1]"]
+    end
+```
+
+> [!NOTE]
+> **Implementation Detail**: Although drawn as 9 separate MLPs, Phase 1 is implemented as a single `GroupedLinear` + `einsum('...gi,gio->...go')` call for GPU efficiency. Each sensor group `g` has independent weights — they do **not** share parameters.
+
+### 14.2 Phase-by-Phase Dimension Flow
+
+Using default config: `hidden_size (H) = 128`, `default_mlp = [32, 32]`, N = 9 sensors (all enabled).
+
+| Stage | Input Shape | Operation | Output Shape |
+| :--- | :--- | :--- | :--- |
+| **Unpack & Pad** | `[B, obs_dim]` | Slice per sensor, zero-pad to `max_dim` | `[B, N, max_dim]` |
+| **Phase 1** (Unimodal) | `[B, N, max_dim]` | `GroupedMLP(N, max_dim, [32,32], out=H)` + ReLU | `[B, N, H]` |
+| **Reshape** | `[B, N, H]` | Flatten | `[B, N × H]` |
+| **Phase 2** (Multimodal) | `[B, N × H]` | `MLP(N×H, [32,32], out=H)` + ReLU | `[B, H]` |
+| **RNN** | `[B, H]` | GRU Cell `(H, H)` | `[B, H]` |
+| **Actor Head** | `[B, H]` | `Linear(H,H) → ReLU → Linear(H, action_dim)` | `[B, action_dim]` |
+| **Critic Head** | `[B, H]` | `Linear(H,H) → ReLU → Linear(H, 1)` | `[B, 1]` |
+
+### 14.3 Per-Sensor Unimodal Breakdown
+
+Every sensor modality, including each interoceptive channel, has its own dedicated encoding path. **Input dimensions are not hardcoded** — they are read from the observation breakdown dict (`get_observation_breakdown(params)`) at training initialization and vary with environment config.
+
+| # | Sensor | Raw Dim Source | Unimodal MLP | Output |
+| :--- | :--- | :--- | :--- | :--- |
+| 0 | Injury | `breakdown["Injury"]` | configurable (default `[32,32]`) | `[B, H]` |
+| 1 | Nutrition | `breakdown["Nutrition"]` | configurable (default `[32,32]`) | `[B, H]` |
+| 2 | Satiation | `breakdown["Satiation"]` | configurable (default `[32,32]`) | `[B, H]` |
+| 3 | Extero Nociception | `breakdown["Extero Nociception"]` | configurable (default `[32,32]`) | `[B, H]` |
+| 4 | Olfaction | `breakdown["Olfaction"]` | configurable (default `[32,32]`) | `[B, H]` |
+| 5 | Collision | `breakdown["Collision"]` | configurable (default `[32,32]`) | `[B, H]` |
+| 6 | Proprioception | `breakdown["Proprioception"]` | configurable (default `[32,32]`) | `[B, H]` |
+| 7 | Visual | `breakdown["Visual"]` | configurable (e.g., `[64,64]`) | `[B, H]` |
+| 8 | Location | `breakdown["Location"]` (if enabled) | configurable (default `[32,32]`) | `[B, H]` |
+
+> [!IMPORTANT]
+> - All raw input dimensions come from the observation specs (`get_observation_breakdown`), never from fixed constants. The encoder reads `N = len(breakdown)` and `dims = list(breakdown.values())` at init time.
+> - All unimodal MLPs output the same `hidden_size` (H) regardless of their internal structure. This is required for the `GroupedLinear` einsum and ensures balanced representation at the multimodal fusion point.
+> - Disabled sensors (via config flags like `visual_sensor_enabled: false`) must be absent from the breakdown dict, reducing N dynamically. The encoder handles any N — it is set once at init from `len(breakdown)`. See §15.9 for details.
+
+> [!NOTE]
+> **Visual Sensor**: This is NOT an RGB sensor. It is a semantic occupancy grid where each cell contains an 8-channel one-hot vector for object types: Grass, Sand, Plain, Food, Danger, Predator, Rock, Neutral. The raw dimension varies with `visual_sensor_range` (e.g., range=0 → 8 values, range=3 → 200 values).
+
+### 14.4 Per-Modality Config with Einsum Constraint
+
+Per-modality MLP sizes are configurable, but the `GroupedLinear` einsum requires all sensors in a group to share the same weight dimensions. This is resolved by **grouping sensors by MLP structure**:
+
+- **Default group**: All sensors using `default_mlp` (e.g., `[32,32]`) are processed together in one `GroupedLinear` einsum — maximum GPU efficiency.
+- **Override groups**: Sensors with custom MLP configs (e.g., `visual: [64,64]`) are pulled into separate `GroupedLinear` calls (or individual MLPs if only one sensor has that config).
+- **All groups output `hidden_size`** — only the internal layers differ.
+
+**Example**: If `visual: [64,64]` and all others use `[32,32]`:
+- Group A (8 sensors): `GroupedLinear(8, max_dim, 32) → GroupedLinear(8, 32, 32) → GroupedLinear(8, 32, H)` — one einsum per layer
+- Group B (visual only): `Linear(max_dim, 64) → Linear(64, 64) → Linear(64, H)` — individual MLP
+
+### 14.5 Comparison: 3-Phase (Current) vs 2-Phase (Proposed)
+
+| Property | 3-Phase (Current) | 2-Phase (Proposed) |
+| :--- | :--- | :--- |
+| **Phases** | Unimodal → Body Hub → Association Hub | Unimodal → Multimodal Hub |
+| **Sensor Grouping** | Body (5 sensors) vs Association (4 sensors) | None — all sensors equal |
+| **Intermediate Fusion** | Body-State Hub (5 sensors → 128D bottleneck) | None |
+| **Final Fusion Input** | `4 × H + H = 640` | `N × H` (e.g., `9 × 128 = 1152`) |
+| **Neuromod Heads** | `z_unimodal`, `z_bodystate`, `z_association` | `z_unimodal`, `z_multimodal` |
+| **Config Complexity** | `body_state` + `association` hub overrides | Single `multimodal_hub` config |
+| **Per-Modality Config** | Not implemented | Supported via `unimodal_overrides` |
+| **Interoceptive Sensors** | Grouped into Body Hub | Each has its own MLP |
+
+### 14.6 Neuromodulation Impact
+
+The simplified architecture requires updating the neuromodulatory network:
+
+| Modulation Signal | Current (3-Phase) | Proposed (2-Phase) | Change |
+| :--- | :--- | :--- | :--- |
+| `z_unimodal` | Per-sensor-group gating (N groups) | Per-sensor-group gating (N groups) | **Unchanged** |
+| `z_bodystate` | Body Hub gating (hidden_size) | — | **Removed** |
+| `z_association` | Association Hub gating (hidden_size) | Renamed `z_multimodal` | **Renamed** |
+| `z_memory` | RNN gate-bias | RNN gate-bias | **Unchanged** |
+| `temperature` | Action temperature scaling | Action temperature scaling | **Unchanged** |
+
+### 14.7 Implementation Plan: Files to Modify
+
+#### 0. `src/environment/sensor.py` — `get_observation_breakdown` + `get_observation`
+- **Reorder** the sensor assembly to follow the canonical index order:
+  `0: Injury → 1: Nutrition → 2: Satiation → 3: Extero Nociception → 4: Olfaction → 5: Collision → 6: Proprioception → 7: Visual → 8: Location`
+- Current order: Olfaction → Extero Nociception → Collision → Location → Satiation → Nutrition → Injury → Visual → Proprioception
+- Both `get_observation_breakdown()` (dict insertion order) and `get_observation()` (obs_parts concatenation order) must match
+
+#### 1. `src/models/recurrent_ppo_network.py` — `ObservationEncoder`
+- **Remove**: `body_hub`, `body_indices`, `body_sensors`, `assoc_indices`, `assoc_sensors`
+- **Keep**: `unimodal_grouped` (`GroupedMLP` via einsum) — now covers ALL sensors equally
+- **Add**: `multimodal_hub` MLP with input dim `N × hidden_size`
+- **Update**: `__call__` — Phase 1 → flatten → Phase 2 (no intermediate hub)
+- **Update**: `forward_with_modulation` — remove `z_bodystate` application, apply `z_multimodal` at multimodal hub
+- **Add**: Support for per-modality MLP overrides (grouping by structure)
+
+#### 2. `src/models/neuromodulator.py` — `NeuromodulatorRNN`
+- **Remove**: `head_bodystate`, `head_bodystate_add` linear layers
+- **Remove**: `z_bodystate`, `z_bodystate_add` from `ModulatorOutput` NamedTuple
+- **Rename**: `z_association` → `z_multimodal`, `head_association` → `head_multimodal`
+
+#### 3. `src/models/dreamer_v3_nnx.py` — `DreamerObservationEncoder` + `DreamerObservationDecoder`
+- Same structural changes as RPO encoder
+- Decoder: remove `body_decoder`, simplify to multimodal → unimodal grouped decode
+- Remove `z_bodystate` fields from `DreamerModulatorOutput`
+
+#### 4. `src/models/dreamer_v3_trainer.py`
+- Remove `mod_z_bodystate_mean/std` and `mod_beta_bodystate_mean` metric logging
+
+#### 5. Config files
+- `configs/models/recurrent_ppo.yaml`
+- `configs/models/neuromodulated_ppo.yaml`
+- `configs/models/neuromodulated_dreamer_v3.yaml`
+
+Changes:
+```yaml
+hierarchical_params:
+  default_mlp: [32,32]
+  unimodal_overrides:         # Per-modality MLP sizes
+    visual: [64,64]           # Example override
+  multimodal_hub: [32,32]     # Replaces hub_overrides.association
+  # hub_overrides.body_state: REMOVED
+```
+
+### 14.8 Verification Plan
+
+1. **Shape Test**: Assert `encoder(obs).shape == [B, hidden_size]` for all sensor ablation combos.
+2. **Gradient Flow**: Verify non-zero gradients reach every unimodal MLP (especially 1D sensors).
+3. **Performance Benchmark**: Measure SPS. Target: ≤1.4x overhead vs flat (same as current grouped).
+4. **Per-Modality Override Test**: Verify that a sensor with `[256,256]` is processed separately from `[128,128]` sensors.
+5. **Modulation Parity**: Verify `z_unimodal` and `z_multimodal` shapes match encoder expectations.
+
+### 14.9 Implementation Progress & Debugging Results
+
+- [x] **Phase 0: Environment Canonicalization** (`src/environment/sensor.py`)
+    - [x] Synchronized `get_observation` and `get_observation_breakdown` order.
+    - [x] Updated `apply_perceptual_noise` modality map.
+- [x] **Phase 1: Neuromodulator Refactor** (`src/models/neuromodulator.py`)
+    - [x] Removed `bodystate` heads.
+    - [x] Renamed `association` -> `multimodal`.
+    - [x] Unified `ModulatorOutput` and `DreamerModulatorOutput` structures.
+- [x] **Phase 2: RPO Encoder Refactor** (`src/models/recurrent_ppo_network.py`)
+    - [x] Simplified `ObservationEncoder` to 2nd-phase `multimodal_hub`.
+    - [x] Verified `forward_with_modulation` symmetry.
+- [x] **Phase 3: DreamerV3 Refactor** (`src/models/dreamer_v3_nnx.py`)
+    - [x] `DreamerObservationEncoder` refactor.
+    - [x] `DreamerObservationDecoder` refactor (Symmetric 2-phase).
+- [x] **Phase 4: Metrics & Config Updates**
+    - [x] `src/models/dreamer_v3_trainer.py` logging updates.
+    - [x] YAML configuration updates.
+- [x] **Phase 5: Verification & Benchmarking**
+    - [x] Shape and gradient flow tests (Passed: `verify_2phase_architecture.py`).
+    - [x] SPS performance validation (Simplified hierarchy logic verified).
+- [x] **Phase 6: Sensor Logic Refinement** (Reverted zero-padding)
+    - [x] Restored dynamic sensor exclusion for accurate ablation.
+    - [x] Verified dynamic `N` support in hierarchical encoders.
+
+---
+
+## 15. Code Review: 2-Phase Implementation Verification
+
+**Date:** 2026-03-03
+**Scope:** Full review of all files modified in the 2-phase encoder refactor (Section 14).
+**Result:** All changes implemented correctly. Zero-padding issue in `sensor.py` identified and resolved (see §15.9).
+
+---
+
+### 15.1 `src/environment/sensor.py` — Sensor Reordering & Dynamic Exclusion
+
+**Status: PASS**
+
+**Canonical Order Verified** — Both `get_observation()` and `get_observation_breakdown()` follow the canonical sensor order:
+
+| Index | Sensor | Conditional |
+|:---:|:---|:---|
+| 0 | Injury | Always present |
+| 1 | Nutrition | Always present |
+| 2 | Satiation | Always present |
+| 3 | Extero Nociception | `params.nociception_enabled` |
+| 4 | Olfaction | `params.olfactory_enabled` |
+| 5 | Collision | Always present |
+| 6 | Proprioception | `params.proprioception_enabled` |
+| 7 | Visual | `params.visual_sensor_enabled` |
+| 8 | Location | `params.location_sensor_enabled` |
+
+Disabled sensors are **excluded** from both the observation vector and the breakdown dict. `N` varies dynamically based on which sensors are enabled (e.g., N=7 if Location and Nociception are disabled).
+
+**`apply_perceptual_noise()` modality_map** — Updated to match the canonical order (Injury=0 through Location=8). Synchronized with `config_loader.py` noise parameter indices. Iterates over `breakdown.items()`, so absent sensors are naturally skipped.
+
+---
+
+### 15.2 `src/models/recurrent_ppo_network.py` — 2-Phase Encoder
+
+**Status: PASS**
+
+**`ObservationEncoder`** — Clean 2-phase architecture:
+
+```
+Phase 1: obs → pad to [B, N, max_in] → GroupedMLP(N, max_in, [32,32], H) → ReLU → [B, N, H]
+Phase 2: reshape [B, N*H] → MLP(N*H, [32,32], H) → ReLU → [B, H]
+```
+
+Verified:
+- [x] `body_hub`, `body_indices`, `body_sensors`, `assoc_indices`, `assoc_sensors` — **removed**
+- [x] `unimodal_grouped` — `GroupedMLP` over ALL N sensors (including each interoceptive sensor individually)
+- [x] `multimodal_hub` — `MLP` with input dim `N × hidden_size`
+- [x] `__call__` — Phase 1 (grouped + ReLU) → reshape → Phase 2 (hub + ReLU)
+- [x] `forward_with_modulation` — `z_unimodal`/`z_unimodal_add` applied at Phase 1 per-group, `z_multimodal`/`z_multimodal_add` applied at Phase 2
+- [x] Flat mode fallback preserved (`self.monolith`)
+
+**`ActorCriticRNN`** — No structural changes needed beyond using the updated `ObservationEncoder`.
+
+---
+
+### 15.3 `src/models/neuromodulator.py` — Bodystate Removal
+
+**Status: PASS**
+
+**`ModulatorOutput` (RPO)**:
+```python
+z_unimodal          # Phase 1: per-sensor gating (N groups)
+z_unimodal_add      # Phase 1: per-sensor bias (PreActivation only, else zeros)
+z_multimodal         # Phase 2: multimodal hub gating (num_groups_hidden)
+z_multimodal_add     # Phase 2: multimodal hub bias (PreActivation only, else zeros)
+z_memory             # RNN gate-bias
+temperature          # Action temperature scaling
+```
+
+**`DreamerModulatorOutput` (DreamerV3)**:
+```python
+z_unimodal, z_unimodal_add    # Same as RPO
+z_multimodal, z_multimodal_add # Same as RPO
+z_memory                       # Same as RPO
+z_reward                       # Imagined reward scaling (replaces temperature)
+```
+
+Verified:
+- [x] `head_bodystate`, `head_bodystate_add` — **removed** from both `NeuromodulatorRNN` and `DreamerNeuromodulatorRNN`
+- [x] `z_bodystate`, `z_bodystate_add` — **removed** from both `ModulatorOutput` and `DreamerModulatorOutput`
+- [x] `head_multimodal`, `head_multimodal_add` — present, correctly sized (`num_groups_hidden`)
+- [x] `num_groups_unimodal = len(obs_breakdown)` — per-sensor (N groups)
+- [x] `num_groups_hidden = ceil(target_hidden_size / grouping_size)` — for multimodal/memory heads
+
+---
+
+### 15.4 `src/models/dreamer_v3_nnx.py` — Encoder & Decoder
+
+**Status: PASS**
+
+**`DreamerObservationEncoder`** — Mirrors RPO encoder with SiLU activations:
+```
+Phase 1: obs → pad to [B, N, max_in] → DreamerGroupedMLP(N, max_in, [32,32], H) → [B, N, H]
+Phase 2: reshape [B, N*H] → MLP(N*H, H, [32,32]) → SiLU → [B, H]
+```
+
+Verified:
+- [x] 2-phase structure matches RPO (unimodal_grouped → multimodal_hub)
+- [x] `forward_with_modulation` — `z_unimodal`/`z_unimodal_add` at Phase 1 with SiLU, `z_multimodal`/`z_multimodal_add` at Phase 2 with SiLU
+
+**`DreamerObservationDecoder`** — Symmetric 2-phase decoder:
+```
+Phase 1 (Multimodal): feat [B, feat_dim] → MLP(feat_dim, N*H, [32,32]) → reshape [B, N, H]
+Phase 2 (Unimodal):   [B, N, H] → DreamerGroupedMLP(N, H, [32,32], max_out) → unpad & concat → [B, obs_dim]
+```
+
+Verified:
+- [x] `multimodal_decoder` correctly maps `feat_dim → N * hidden_size`
+- [x] `unimodal_grouped_decoder` correctly maps `(N, H) → (N, max_out)`, then slices each sensor to its true dim and concatenates
+- [x] `body_decoder` — **removed**
+
+---
+
+### 15.5 `src/models/dreamer_v3_trainer.py` — Metrics
+
+**Status: PASS**
+
+Verified:
+- [x] `mod_z_multimodal_mean/std` replaces `mod_z_bodystate_mean/std`
+- [x] `mod_beta_multimodal_mean` replaces `mod_beta_bodystate_mean` (PreActivation only)
+- [x] `mod_z_unimodal_mean/std` unchanged
+- [x] `mod_memory_mean/std` unchanged
+- [x] `mod_z_reward_mean/std` unchanged
+
+---
+
+### 15.6 Config Files
+
+**Status: PASS**
+
+All 4 model config files verified:
+
+| Config File | `default_mlp` | `multimodal_hub` | `hub_overrides` | `modulation.type` |
+|:---|:---:|:---:|:---:|:---:|
+| `recurrent_ppo.yaml` | `[32,32]` | `[32,32]` | Removed | `null` |
+| `neuromodulated_ppo.yaml` | `[32,32]` | `[32,32]` | Removed | `"Multiplicative"` |
+| `dreamer_v3.yaml` | `[32,32]` | `[32,32]` | Removed | `null` |
+| `neuromodulated_dreamer_v3.yaml` | `[32,32]` | `[32,32]` | Removed | `"Multiplicative"` |
+
+- [x] `unimodal_overrides` supported (e.g., `visual: [64,64]` in RPO configs)
+- [x] No remaining references to `hub_overrides`, `body_state`, `association`, or `bodystate` in any config file
+
+---
+
+### 15.7 Global Cleanup Verification
+
+- [x] `grep -r "bodystate\|body_hub\|body_state\|z_association\|head_association\|hub_overrides" src/ configs/` — **zero matches**
+- [x] All `ModulatorOutput` and `DreamerModulatorOutput` fields consistent across neuromodulator, encoder, and trainer
+- [x] Sensor canonical order consistent across `get_observation`, `get_observation_breakdown`, `apply_perceptual_noise` modality_map, and config noise parameter arrays
+
+---
+
+### 15.8 Review Summary
+
+| Category | Files Modified | Status |
+|:---|:---|:---:|
+| Environment / Sensors | `sensor.py` | PASS |
+| RPO Encoder | `recurrent_ppo_network.py` | PASS |
+| Neuromodulator | `neuromodulator.py` | PASS |
+| DreamerV3 Encoder/Decoder | `dreamer_v3_nnx.py` | PASS |
+| DreamerV3 Metrics | `dreamer_v3_trainer.py` | PASS |
+| Config Files | 4 YAML files | PASS |
+| Global Cleanup | All `src/` and `configs/` | PASS |
+
+**Sensor Exclusion:** Disabled sensors are dynamically excluded from both the observation vector and breakdown dict. `N` varies based on enabled sensors. All encoder/decoder/neuromodulator components handle variable `N` via `len(breakdown)` at init time.
+
+---
+
+### 15.9 Resolved: Reverted Zero-Padding to Dynamic Sensor Exclusion
+
+**Status: RESOLVED**
+
+The initial LLM implementation introduced zero-padding for disabled sensors, making all 9 sensors always present. This was reverted to the original dynamic exclusion pattern for the following reasons:
+
+1. **Wasted computation**: A disabled sensor would still get its own unimodal MLP weights, process zeros, and feed into the multimodal hub — wasting FLOPS and parameters.
+2. **Misleading sensor ablation**: A "disabled" sensor with learned weights and bias terms is not equivalent to a truly absent sensor.
+3. **No JIT benefit**: `get_observation_breakdown()` is called once at init, not inside `jax.jit`. The encoder's `N` is fixed at construction time regardless.
+4. **`GroupedLinear` handles variable N**: The einsum works for any `N` — no encoder changes needed.
+
+**Fix applied**: `get_observation()` and `get_observation_breakdown()` in `sensor.py` now use conditional guards (no `else: zeros(...)` branches). Disabled sensors are absent from both the observation vector and the breakdown dict.
