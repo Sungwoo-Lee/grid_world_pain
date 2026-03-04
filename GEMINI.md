@@ -1,4 +1,7 @@
 # Grid World Pain - Project Instructions
+Real-Time Documentation: When a specific document is designated for regular updates, you must log progress and any encountered issues incrementally.
+
+Checkpoint Frequency: Updates must be recorded during the implementation of each step—not just at the conclusion of the task. This ensures continuity and allows for a seamless resume point should the session interrupt.
 
 ## Environment Setup
 - **Python Interpreter**: Always use the absolute path to the conda environment:

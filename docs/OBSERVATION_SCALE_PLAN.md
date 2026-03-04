@@ -70,9 +70,11 @@ With `nutrition_to_satiation_scaling_factor = 1.0`: `obs_satiation = obs_nutriti
 
 ### Design
 
-Apply `symlog(x) = sign(x) * log(|x| + 1)` to olfaction and visual in `get_observation()`.
+Apply `symlog(x) = sign(x) * log(|x| + 1)` **inside `ActorCriticRNN.__call__()`** as the very first operation, before any encoding or modulation. The environment emits raw physically-meaningful values; compression is the PPO network's responsibility.
 
-**Why symlog over [0,1] normalization**: Theoretical max ≠ practical max for olfaction/visual (config-dependent, scenario-dependent). Symlog compresses without needing known bounds, preserves discrimination at small values, and is already used by DreamerV3 globally.
+**Why not in `sensor.py`**: DreamerV3 trainer applies `symlog(batch['obs'])` globally. Embedding symlog in the environment would cause olfaction/visual to receive `symlog(symlog(x))` in DreamerV3 (double-compression) while other modalities receive `symlog(x)`. This silently breaks DreamerV3's world-model assumptions. The environment must remain agent-agnostic.
+
+**Why apply globally (not per olfaction/visual slice)**: For [0,1] inputs, symlog is nearly identity (symlog(1.0) ≈ 0.69), so non-dominant modalities are unharmed. The compression is only meaningful for olfaction (40 → 3.71) and visual (13 → 2.64). Applying globally is simpler and mirrors DreamerV3's own design exactly.
 
 **Post-Symlog Scale Summary**:
 
@@ -80,56 +82,70 @@ Apply `symlog(x) = sign(x) * log(|x| + 1)` to olfaction and visual in `get_obser
 |----------|:-------:|:----------:|:--------------:|
 | Olfaction | 40.0 | 3.71 | 3.7× (was 40×) |
 | Visual | 13.0 | 2.64 | 2.6× (was 13×) |
+| All others | ≤1.0 | ≤0.69 | ~1× (negligible change) |
 
-**DreamerV3 double-symlog**: DreamerV3 trainer applies `symlog(batch['obs'])` globally (line 121). With this change, olfaction/visual get double-symlog'd: `symlog(symlog(40)) = symlog(3.71) ≈ 1.55`. Other modalities (already [0,1]): `symlog(1.0) ≈ 0.69`. Gap: 1.55 / 0.69 ≈ 2.2×. Acceptable — no changes to DreamerV3 trainer needed.
+**DreamerV3**: Entirely unaffected — environment unchanged, trainer unchanged.
 
-**PPO**: No existing symlog — benefits most from this fix.
+**Noise SNR improvement for PPO**: Olfaction improves from 0.4% → ~4% without changing σ values.
 
-**Noise SNR improvement**: Olfaction improves from 0.4% → ~4% without changing σ values.
+**Architectural position — how this compares to DreamerV3**:
+
+DreamerV3 applies `symlog(batch['obs'])` in the trainer before the world model encoder. This plan applies the same operation inside the PPO network's `__call__()` before `ObservationEncoder`. The pattern is identical; only the call site differs.
+
+```
+# DreamerV3 flow (dreamer_v3_trainer.py line ~121):
+raw obs → symlog(obs) → CNN/MLP encoder → RSSM (recurrent) → heads
+
+# PPO flow after this change (recurrent_ppo_network.py):
+raw obs → symlog(x) → GroupedMLP (per-modality) → multimodal hub → GRU/LSTM → actor/critic
+```
+
+| | DreamerV3 | PPO (this plan) |
+|---|---|---|
+| Where | Trainer, before world model | `ActorCriticRNN.__call__()`, before `ObservationEncoder` |
+| What | `symlog(batch['obs'])` — full obs | `symlog(x)` — full obs |
+| Scope | All modalities | All modalities |
+| Effect | Single symlog on raw obs | Single symlog on raw obs |
 
 ### File Changes
 
-#### `src/environment/sensor.py` — Add symlog helper (top of file)
+#### `src/models/recurrent_ppo_network.py` — Add symlog at top of `ActorCriticRNN.__call__()` (line 233)
+
+The single-line insertion must come before the `modulation_enabled` branch so that both the encoder and the modulator receive the same compressed observation.
 
 ```python
-# AFTER (new function, add near top of file):
-def _symlog(x):
-    """Symmetric log compression for unbounded observations."""
-    return jnp.sign(x) * jnp.log(jnp.abs(x) + 1.0)
-```
+# BEFORE (line 248–253):
+        if self.modulation_enabled:
+            task_h, mod_h = h
 
-#### `src/environment/sensor.py` — Wrap olfaction output (line ~270)
-
-```python
-# BEFORE:
-obs_parts.append(res_chem + pred_chem + obs_chem + neutral_chem)
+            # --- Modulator forward pass ---
+            mod_output, mod_h_new = self.modulator(x, mod_h)
 
 # AFTER:
-obs_parts.append(_symlog(res_chem + pred_chem + obs_chem + neutral_chem))
+        # Compress unbounded modalities (olfaction ~40, visual ~13) to ~[0, 3.7] range.
+        # Mirrors DreamerV3's global symlog applied in its trainer — applied here
+        # at the network boundary so the environment stays agent-agnostic.
+        x = jnp.sign(x) * jnp.log(jnp.abs(x) + 1.0)
+
+        if self.modulation_enabled:
+            task_h, mod_h = h
+
+            # --- Modulator forward pass ---
+            mod_output, mod_h_new = self.modulator(x, mod_h)
 ```
 
-#### `src/environment/sensor.py` — Wrap visual output (line ~281)
-
-```python
-# BEFORE:
-obs_parts.append(sense_visual(state.agent_pos, state, params))
-
-# AFTER:
-obs_parts.append(_symlog(sense_visual(state.agent_pos, state, params)))
-```
-
-No other files change. Trainers, configs, and network code remain untouched.
+No other files change. `sensor.py`, DreamerV3 trainer, configs, and all other network code remain untouched.
 
 ## Checkpoints
 
 What the implementing agent should verify **during** implementation:
 
-- [ ] `_symlog` function added and returns correct values: `_symlog(jnp.array(40.0))` ≈ 3.71, `_symlog(jnp.array(0.0))` = 0.0
-- [ ] Olfaction slice of `get_observation(state, params, apply_noise=False)` has values in [0, ~3.7] not [0, ~40]
-- [ ] Visual slice of `get_observation(state, params, apply_noise=False)` has values in [0, ~2.6] not [0, ~13]
-- [ ] All other modality slices unchanged (injury, nutrition, satiation, collision, proprioception, location)
-- [ ] No NaN/Inf in observation vector after symlog
-- [ ] Run single episode to confirm no runtime errors
+- [ ] Insertion is at line ~248, before the `if self.modulation_enabled` branch — not inside either branch
+- [ ] `jnp.sign(x) * jnp.log(jnp.abs(x) + 1.0)` evaluates correctly: symlog(40.0) ≈ 3.71, symlog(0.0) = 0.0, symlog(1.0) ≈ 0.693
+- [ ] `sensor.py` is unchanged — raw observations still in [0,~40] / [0,~13] at environment output
+- [ ] No NaN/Inf after symlog (guaranteed for finite inputs since log(|x|+1) is defined for all x)
+- [ ] Run single episode with recurrent PPO to confirm no runtime errors
+- [ ] Confirm the modulation path (`forward_with_modulation`) also receives the symlog'd `x` (it does, because the insertion precedes the branch)
 
 ## Implementation Report
 
@@ -145,9 +161,8 @@ What the implementing agent should verify **during** implementation:
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/environment/sensor.py` | Add `_symlog()` helper | ❌ | Not implemented |
-| `src/environment/sensor.py` | Wrap olfaction with `_symlog()` (line ~270) | ❌ | Not implemented |
-| `src/environment/sensor.py` | Wrap visual with `_symlog()` (line ~281) | ❌ | Not implemented |
+| `src/models/recurrent_ppo_network.py` | Add symlog as first op in `ActorCriticRNN.__call__()` (line ~248) | ❌ | Not implemented |
+| `src/environment/sensor.py` | No change — environment stays raw | — | By design |
 
 **Conclusion**: Implementation pending.
 
