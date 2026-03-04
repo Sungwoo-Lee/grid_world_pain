@@ -249,8 +249,8 @@ class DreamerObservationEncoder(nnx.Module):
             x_padded = x_padded.at[..., i, :dim].set(x[..., start : start + dim])
             start += dim
             
-        # Phase 1: Grouped encoding
-        encoded_all = self.unimodal_grouped(x_padded)
+        # Phase 1: Grouped encoding + activation
+        encoded_all = jax.nn.silu(self.unimodal_grouped(x_padded))
         
         # Phase 2: Multimodal Hub
         mm_in = encoded_all.reshape(batch_shape + (-1,))

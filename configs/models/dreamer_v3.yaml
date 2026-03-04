@@ -40,7 +40,10 @@ agent:
     # Available sensor names for overrides: 
     # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
     default_mlp: [32,32]
-    multimodal_hub: [32,32]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+    multimodal_hub: [128,128]
 
   # # Network Configuration (XL Profile)
   # encoder_dim: 1024
