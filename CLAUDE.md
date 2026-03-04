@@ -8,12 +8,7 @@
 
 ### Planning & Analysis
 - Claude is used for **planning and analysis only**. Implementation is done by other LLM agents.
-- Plans and analysis should be written to `docs/` files (e.g., `docs/NOISE_DEBUGGING_PLAN.md`).
-- Include enough detail in plans (file paths, line numbers, code snippets) for the implementing agent to execute without ambiguity.
-
-### Verification Reports
-- Start with a **summary table** showing all items and their status at a glance (file, change, status, notes).
-- Use ✅ / ❌ / ⚠️ status icons in the table for quick scanning.
-- Add a one-line conclusion after the table.
-- For ✅ items: table row is sufficient, no extra detail needed.
-- For ❌ / ⚠️ items: add a **detailed section below the table** explaining the issue, root cause, affected lines, and recommended fix — with enough context for the implementing LLM agent to resolve it without re-investigation.
+- Plans and analysis should be written to `docs/` files.
+- **Follow the template in `docs/TEMPLATES/issue_plan.md`** when creating new issue/plan documents. Read the template file before writing.
+- New issues discovered during work: append to same doc if closely related, create separate doc if independent. Cross-reference with `[Related](link)`.
+- Include enough detail (file paths, line numbers, code snippets) for the implementing agent to execute without ambiguity.
