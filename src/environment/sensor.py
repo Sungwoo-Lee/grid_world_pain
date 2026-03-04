@@ -202,18 +202,8 @@ def apply_perceptual_noise(obs: jnp.ndarray, state: EnvState, params: EnvParams,
     breakdown = get_observation_breakdown(params)
     
     # Mapping Sensor names to indices in params.noise_modes/sigmas/scales
-    # Sync with config_loader.py ordering
-    modality_map = {
-        "Injury": 0,
-        "Nutrition": 1,
-        "Satiation": 2,
-        "Extero Nociception": 3,
-        "Olfaction": 4,
-        "Collision": 5,
-        "Proprioception": 6,
-        "Visual": 7,
-        "Location": 8
-    }
+    # Derived from YAML order stored in params.
+    modality_map = {name: i for i, name in enumerate(params.noise_modality_order)}
     
     sigma_base_list = []
     alpha_list = []
@@ -244,8 +234,8 @@ def apply_perceptual_noise(obs: jnp.ndarray, state: EnvState, params: EnvParams,
     )
     
     # Clip ranges (Vectorized)
-    clip_min = jnp.concatenate([jnp.full((dim,), params.noise_clip_min[modality_map[name]]) for name, dim in breakdown.items()])
-    clip_max = jnp.concatenate([jnp.full((dim,), params.noise_clip_max[modality_map[name]]) for name, dim in breakdown.items()])
+    clip_min = jnp.concatenate([jnp.full((dim,), params.noise_clip_min[modality_map[name]]) for name, dim in breakdown.items() if name in modality_map])
+    clip_max = jnp.concatenate([jnp.full((dim,), params.noise_clip_max[modality_map[name]]) for name, dim in breakdown.items() if name in modality_map])
     
     noise = jax.random.normal(key, obs.shape) * sigma_eff
     return jnp.clip(obs + noise, clip_min, clip_max)

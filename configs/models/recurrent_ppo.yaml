@@ -8,10 +8,10 @@ agent:
   # update_timestep: 2000
   sequence_length: 128     # Steps per rollout/sequence
   frame_stack: 1
-  fc_layers: [128,128]
+  fc_layers: [256,256]
   # recurrent_layers: [128]
-  actor_fc_layers: [128,128]
-  critic_fc_layers: [128,128]
+  actor_fc_layers: [256,256]
+  critic_fc_layers: [256,256]
   hidden_size: 128
   entropy_coef: 0.01
   gae_lambda: 0.95
@@ -30,13 +30,13 @@ agent:
     # Unimodal Phase 1: Independent MLPs for each sensor
     # Available sensor names for overrides: 
     # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
-    default_mlp: [32,32]
+    default_mlp: [256,256]
     unimodal_overrides:
-      visual: [128,128]
-      olfaction: [128,128]
+      visual: [256,256]
+      olfaction: [256,256]
     
     # Multimodal Phase 2: Fusion hub
-    multimodal_hub: [128,128]
+    multimodal_hub: [256,256]
 
   # Neuromodulation: DISABLED (true baseline, §5.2)
   # For neuromodulated variant, use: configs/models/neuromodulated_ppo.yaml

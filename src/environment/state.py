@@ -156,7 +156,9 @@ class EnvParams:
 
     # Perceptual Noise Parameters (Vectorized across modalities)
     perceptual_noise_enabled: bool = struct.field(pytree_node=False)
-    # Modalities: Olfaction, Extero Nociception, Collision, Location, Satiation, Nutrition, Injury, Visual, Proprioception (+3 buffer)
+    # Order defined by YAML perceptual_noise.modalities key order (read via config_loader).
+    # sensor.py builds modality_map dynamically from this tuple — do not reorder independently.
+    noise_modality_order: tuple = struct.field(pytree_node=False)  # e.g. ("Injury","Nutrition",...)
     noise_modes: jnp.ndarray          # [12] int32 (0: None, 1: Constant, 2: State-Dependent)
     noise_sigmas: jnp.ndarray         # [12] float32 (Base Sigma)
     noise_injury_scales: jnp.ndarray  # [12] float32 (Injury Noise Scale)

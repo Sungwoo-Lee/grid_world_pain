@@ -315,64 +315,65 @@ def load_env_params(config: Config) -> EnvParams:
         action_dim=4 + int(config.get_mandatory('environment.rest_action_enabled')) + int(config.get_mandatory('environment.eat_action_enabled')),
 
         # Perceptual Noise Configuration
-        # Modalities: Olfaction, Extero Nociception, Collision, Location, Satiation, Nutrition, Injury, Visual, Proprioception
         perceptual_noise_enabled=config.get('perceptual_noise.enabled', False),
-        noise_modes=jnp.pad(jnp.array([
-            0 if config.get('perceptual_noise.modalities.olfaction.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.olfaction.mode') == 'constant' else 2,
-            0 if config.get('perceptual_noise.modalities.extero_nociception.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.extero_nociception.mode') == 'constant' else 2,
-            0 if config.get('perceptual_noise.modalities.collision.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.collision.mode') == 'constant' else 2,
-            0 if config.get('perceptual_noise.modalities.location.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.location.mode') == 'constant' else 2,
-            0 if config.get('perceptual_noise.modalities.satiation.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.satiation.mode') == 'constant' else 2,
-            0 if config.get('perceptual_noise.modalities.nutrition.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.nutrition.mode') == 'constant' else 2,
-            0 if config.get('perceptual_noise.modalities.injury.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.injury.mode') == 'constant' else 2,
-            0 if config.get('perceptual_noise.modalities.visual.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.visual.mode') == 'constant' else 2,
-            0 if config.get('perceptual_noise.modalities.proprioception.mode', 'none') == 'none' else 1 if config.get('perceptual_noise.modalities.proprioception.mode') == 'constant' else 2,
-        ], dtype=jnp.int32), (0, 3)),
-        noise_sigmas=jnp.pad(jnp.array([
-            config.get('perceptual_noise.modalities.olfaction.sigma', 0.0),
-            config.get('perceptual_noise.modalities.extero_nociception.sigma', 0.0),
-            config.get('perceptual_noise.modalities.collision.sigma', 0.0),
-            config.get('perceptual_noise.modalities.location.sigma', 0.0),
-            config.get('perceptual_noise.modalities.satiation.sigma', 0.0),
-            config.get('perceptual_noise.modalities.nutrition.sigma', 0.0),
-            config.get('perceptual_noise.modalities.injury.sigma', 0.0),
-            config.get('perceptual_noise.modalities.visual.sigma', 0.0),
-            config.get('perceptual_noise.modalities.proprioception.sigma', 0.0),
-        ], dtype=jnp.float32), (0, 3)),
-        noise_injury_scales=jnp.pad(jnp.array([
-            config.get('perceptual_noise.modalities.olfaction.injury_noise_scale', 0.0),
-            config.get('perceptual_noise.modalities.extero_nociception.injury_noise_scale', 0.0),
-            config.get('perceptual_noise.modalities.collision.injury_noise_scale', 0.0),
-            config.get('perceptual_noise.modalities.location.injury_noise_scale', 0.0),
-            config.get('perceptual_noise.modalities.satiation.injury_noise_scale', 0.0),
-            config.get('perceptual_noise.modalities.nutrition.injury_noise_scale', 0.0),
-            config.get('perceptual_noise.modalities.injury.injury_noise_scale', 0.0),
-            config.get('perceptual_noise.modalities.visual.injury_noise_scale', 0.0),
-            config.get('perceptual_noise.modalities.proprioception.injury_noise_scale', 0.0),
-        ], dtype=jnp.float32), (0, 3)),
-        noise_clip_min=jnp.pad(jnp.array([
-            config.get('perceptual_noise.modalities.olfaction.clip_min', -100.0),
-            config.get('perceptual_noise.modalities.extero_nociception.clip_min', -100.0),
-            config.get('perceptual_noise.modalities.collision.clip_min', -100.0),
-            config.get('perceptual_noise.modalities.location.clip_min', -100.0),
-            config.get('perceptual_noise.modalities.satiation.clip_min', -100.0),
-            config.get('perceptual_noise.modalities.nutrition.clip_min', -100.0),
-            config.get('perceptual_noise.modalities.injury.clip_min', -100.0),
-            config.get('perceptual_noise.modalities.visual.clip_min', -100.0),
-            config.get('perceptual_noise.modalities.proprioception.clip_min', -100.0),
-        ], dtype=jnp.float32), (0, 3)),
-        noise_clip_max=jnp.pad(jnp.array([
-            config.get('perceptual_noise.modalities.olfaction.clip_max', 100.0),
-            config.get('perceptual_noise.modalities.extero_nociception.clip_max', 100.0),
-            config.get('perceptual_noise.modalities.collision.clip_max', 100.0),
-            config.get('perceptual_noise.modalities.location.clip_max', 100.0),
-            config.get('perceptual_noise.modalities.satiation.clip_max', 100.0),
-            config.get('perceptual_noise.modalities.nutrition.clip_max', 100.0),
-            config.get('perceptual_noise.modalities.injury.clip_max', 100.0),
-            config.get('perceptual_noise.modalities.visual.clip_max', 100.0),
-            config.get('perceptual_noise.modalities.proprioception.clip_max', 100.0),
-        ], dtype=jnp.float32), (0, 3))
+        **_parse_noise_config(config)
     )
 
+_YAML_KEY_TO_SENSOR_NAME = {
+    "injury":              "Injury",
+    "nutrition":           "Nutrition",
+    "satiation":           "Satiation",
+    "extero_nociception":  "Extero Nociception",
+    "olfaction":           "Olfaction",
+    "collision":           "Collision",
+    "proprioception":      "Proprioception",
+    "visual":              "Visual",
+    "location":            "Location",
+}
+
+def _parse_noise_config(config: Config):
+    modalities_cfg = config.get('perceptual_noise.modalities') or {}
     
-    return params
+    def _parse_mode(s):
+        return 2 if s == 'state_dependent' else 1 if s == 'constant' else 0
+
+    noise_modality_order = tuple(
+        _YAML_KEY_TO_SENSOR_NAME[k]
+        for k in modalities_cfg
+        if k in _YAML_KEY_TO_SENSOR_NAME
+    )
+    pad = max(0, 12 - len(noise_modality_order))
+
+    noise_modes = jnp.pad(jnp.array([
+        _parse_mode(modalities_cfg[k].get('mode', 'none'))
+        for k in modalities_cfg if k in _YAML_KEY_TO_SENSOR_NAME
+    ], dtype=jnp.int32), (0, pad))
+    
+    noise_sigmas = jnp.pad(jnp.array([
+        modalities_cfg[k].get('sigma', 0.0)
+        for k in modalities_cfg if k in _YAML_KEY_TO_SENSOR_NAME
+    ], dtype=jnp.float32), (0, pad))
+    
+    noise_injury_scales = jnp.pad(jnp.array([
+        modalities_cfg[k].get('injury_noise_scale', 0.0)
+        for k in modalities_cfg if k in _YAML_KEY_TO_SENSOR_NAME
+    ], dtype=jnp.float32), (0, pad))
+    
+    noise_clip_min = jnp.pad(jnp.array([
+        modalities_cfg[k].get('clip_min', -100.0)
+        for k in modalities_cfg if k in _YAML_KEY_TO_SENSOR_NAME
+    ], dtype=jnp.float32), (0, pad))
+    
+    noise_clip_max = jnp.pad(jnp.array([
+        modalities_cfg[k].get('clip_max', 100.0)
+        for k in modalities_cfg if k in _YAML_KEY_TO_SENSOR_NAME
+    ], dtype=jnp.float32), (0, pad))
+
+    return {
+        "noise_modality_order": noise_modality_order,
+        "noise_modes": noise_modes,
+        "noise_sigmas": noise_sigmas,
+        "noise_injury_scales": noise_injury_scales,
+        "noise_clip_min": noise_clip_min,
+        "noise_clip_max": noise_clip_max,
+    }
