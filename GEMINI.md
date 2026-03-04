@@ -1,23 +1,36 @@
-# Grid World Pain - Project Instructions
-Real-Time Documentation: When a specific document is designated for regular updates, you must log progress and any encountered issues incrementally.
+# Grid World Pain — Implementation Agent Instructions
 
-Checkpoint Frequency: Updates must be recorded during the implementation of each step—not just at the conclusion of the task. This ensures continuity and allows for a seamless resume point should the session interrupt.
+## Documentation Protocol (CRITICAL)
 
-## Environment Setup
-- **Python Interpreter**: Always use the absolute path to the conda environment:
-  `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python`
-- **JAX/XLA**: The code relies on JAX and Flax NNX. Ensure the conda environment is active.
+When implementing a plan from `docs/`, you MUST update that document in real-time:
 
-## Configuration Protocol (CRITICAL)
-- **No Safe Defaults**: Never use fallback values for critical parameters in `train.py` or `evaluation.py`.
-- **Mandatory Retrieval**: Use `config.get_mandatory('key')` for all agent parameters (e.g., `num_steps`, `hidden_size`, `lr`).
-- **Missing Keys**: If a key is missing from the YAML config, the script MUST raise a `ValueError`. Do not revert to hardcoded defaults.
+1. **On start**: Set `Status` to `IN PROGRESS`. Fill `Implemented by: Gemini` and `Date` in the Implementation Report. Always use `Gemini` as the agent name in `Implemented by` and `Verified by` fields.
+2. **Each checkpoint**: After verifying, mark `- [ ]` → `- [x]` and append a one-line result (e.g., `- [x] No NaN — confirmed, 100 steps clean`).
+3. **Each file change**: Log what was done under Implementation Report immediately — not at the end. Include any deviations from the plan and why.
+4. **On error/blocker**: Append to Implementation Report with `**BLOCKER:**` prefix. Do not silently skip.
+5. **On completion**: Set `Status` to `COMPLETED`. Fill the Verification Report table. Run final verification steps.
+6. **On session interrupt**: The doc should already reflect all progress up to the last completed step — this is the resume point.
+
+> The goal: if the session dies mid-task, another agent can read the doc and continue from where you left off.
+
+## Environment
+
+- **Python**: `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python` (always use absolute path)
+- **Framework**: JAX + Flax NNX. Ensure conda env is active.
+
+## Configuration Protocol
+
+- **No fallback defaults** for critical params in `train.py` / `evaluation.py`.
+- Use `config.get_mandatory('key')` for all agent parameters.
+- Missing YAML key → `ValueError`. Never hardcode defaults.
 
 ## Training & Evaluation
-- **Debugging**: Use the `--debug` flag when troubleshooting training initialization or evaluation passes. Debugging tests should always be performed using the **default environment config** (`configs/environment/default.yaml`), not ablation or experiment-specific configs.
-- **WandB**: use debugging as the job type
-- **Performance Verification**: When adding features that may impact training speed, always check and report the training speed (SPS) changes.
+
+- **Debug flag**: Use `--debug` for troubleshooting. Always use `configs/environment/default.yaml` for debug runs (not ablation configs).
+- **WandB**: Job type = `debugging`.
+- **SPS check**: If changes may affect speed, measure and report training SPS before/after.
 
 ## Code Standards
-- **JAX States**: When modifying environment logic, ensure compatibility with JAX state management and `vmap` operations.
-- **Config Management**: Updates to algorithms must be accompanied by corresponding updates to their YAML configurations in `configs/models/`.
+
+- **JAX states**: All env logic must be compatible with JAX state management and `vmap`.
+- **Config parity**: Algorithm changes require matching YAML config updates in `configs/models/`.
