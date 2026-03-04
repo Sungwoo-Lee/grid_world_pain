@@ -246,6 +246,11 @@ class ActorCriticRNN(nnx.Module):
         Returns:
             (logits, value, h_new): Policy logits, value estimate, and new hidden state.
         """
+        # Compress unbounded modalities (olfaction ~40, visual ~13) to ~[0, 3.7] range.
+        # Mirrors DreamerV3's global symlog applied in its trainer — applied here
+        # at the network boundary so the environment stays agent-agnostic.
+        x = jnp.sign(x) * jnp.log(jnp.abs(x) + 1.0)
+
         if self.modulation_enabled:
             task_h, mod_h = h
 

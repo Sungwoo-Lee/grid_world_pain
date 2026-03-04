@@ -16,6 +16,7 @@ agent:
   entropy_coef: 0.01
   gae_lambda: 0.95
   vf_coef: 0.5
+  max_grad_norm: 0.5
 
   # Parity Options
   # GRU is required for gate-bias injection (§5.1a) — LSTM gate-bias not yet supported

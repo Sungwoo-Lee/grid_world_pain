@@ -764,11 +764,10 @@ def main():
                     
                     if args.debug and mod_info is not None:
                         z_uni = float(jnp.mean(mod_info.z_unimodal))
-                        z_body = float(jnp.mean(mod_info.z_bodystate))
-                        z_assoc = float(jnp.mean(mod_info.z_association))
+                        z_multi = float(jnp.mean(mod_info.z_multimodal))
                         z_mem = float(jnp.mean(mod_info.z_memory))
                         temp = float(jnp.mean(mod_info.temperature)) if hasattr(mod_info, 'temperature') else 1.0
-                        print(f"  [Modulator] Mean Uni: {z_uni:.3f}, Body: {z_body:.3f}, Assoc: {z_assoc:.3f}, Mem: {z_mem:.3f}, Temp: {temp:.2f}")
+                        print(f"  [Modulator] Mean Uni: {z_uni:.3f}, Multi: {z_multi:.3f}, Mem: {z_mem:.3f}, Temp: {temp:.2f}")
                     
                     steps_this_iter = num_steps * num_envs
                     global_step += steps_this_iter
@@ -837,10 +836,8 @@ def main():
                                 "modulator/grad_norm": float(avg_mod_grad_norm),
                                 "modulator/gamma_uni_mean": float(jnp.mean(mod_info.z_unimodal)),
                                 "modulator/gamma_uni_std": float(jnp.std(mod_info.z_unimodal)),
-                                "modulator/gamma_body_mean": float(jnp.mean(mod_info.z_bodystate)),
-                                "modulator/gamma_body_std": float(jnp.std(mod_info.z_bodystate)),
-                                "modulator/gamma_assoc_mean": float(jnp.mean(mod_info.z_association)),
-                                "modulator/gamma_assoc_std": float(jnp.std(mod_info.z_association)),
+                                "modulator/gamma_multi_mean": float(jnp.mean(mod_info.z_multimodal)),
+                                "modulator/gamma_multi_std": float(jnp.std(mod_info.z_multimodal)),
                                 "modulator/z_memory_mean": float(jnp.mean(mod_info.z_memory)),
                                 "modulator/z_memory_std": float(jnp.std(mod_info.z_memory)),
                                 "modulator/temperature_mean": float(jnp.mean(mod_info.temperature)),
@@ -851,10 +848,8 @@ def main():
                                 wandb_logs.update({
                                     "modulator/beta_uni_mean": float(jnp.mean(mod_info.z_unimodal_add)),
                                     "modulator/beta_uni_std": float(jnp.std(mod_info.z_unimodal_add)),
-                                    "modulator/beta_body_mean": float(jnp.mean(mod_info.z_bodystate_add)),
-                                    "modulator/beta_body_std": float(jnp.std(mod_info.z_bodystate_add)),
-                                    "modulator/beta_assoc_mean": float(jnp.mean(mod_info.z_association_add)),
-                                    "modulator/beta_assoc_std": float(jnp.std(mod_info.z_association_add)),
+                                    "modulator/beta_multi_mean": float(jnp.mean(mod_info.z_multimodal_add)),
+                                    "modulator/beta_multi_std": float(jnp.std(mod_info.z_multimodal_add)),
                                 })
                         
                         wandb_logs.update({
