@@ -13,9 +13,9 @@
 
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/environment/default.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/neuromodulated_ppo.yaml \
   --num-envs 128 \
-  --episodes 10000000 \
+  --episodes 100000000 \
   --checkpoint-frequency 1000000 \
-  --device cuda:1 \
-  --tag "rppo_128envs_GAE_gradNorm_256default_256vis_olf_hub"
+  --device cuda:0 \
+  --tag "rppoNMN_128envs_GAE_128mlp_multiplicative"

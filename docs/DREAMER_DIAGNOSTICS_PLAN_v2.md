@@ -760,3 +760,403 @@ Specifically: `effective_replay_ratio = grad_steps / global_step`. Each iteratio
 4. **Consider increasing `entropy_scale`** — Current 3e-4 is negligible. If entropy drops below 0.5 in Phase 2, try 1e-3 or 3e-3 (Phase 3 item 6.2).
 
 5. **Phase 1 conclusion**: Speed target met with batch=16 (4.98 s/it < 5.0). Proceed to Phase 2 but **fix replay ratio first** — training is currently running at ~0.8% of intended gradient utilization.
+
+---
+
+## 9. Multi-Environment Scaling Analysis (2026-03-05)
+
+Analysis of four DreamerV3 runs varying `num_envs` (1, 4, 8, 16) to test whether increasing environment parallelism addresses the pathologies identified in Sections 7.5 and 8.3.
+
+### 9.1 Runs Under Analysis
+
+| Alias | Full Tag | num_envs | Run ID | Status |
+|:---|:---|---:|:---|:---|
+| **DV3-1env** | `20260303-111929_dreamer_v3_1envs_16batch_128collect_replay1_hierarchical_1e6buffer` | 1 | `81xlvacs` | Completed |
+| **DV3-4env** | `20260304-203524_dreamer_v3_4envs_16batch_128collect_replay1_hierarchical_1e6buffer` | 4 | `c5i05ru8` | Running |
+| **DV3-8env** | `20260304-203615_dreamer_v3_8envs_16batch_128collect_replay1_hierarchical_1e6buffer` | 8 | `gwslkjfo` | Running |
+| **DV3-16env** | `20260304-203635_dreamer_v3_16envs_16batch_128collect_replay1_hierarchical_1e6buffer` | 16 | `fzoiyhn7` | Running |
+
+### 9.2 Configuration Differences
+
+The 1-env run uses a different hierarchical encoding architecture than the 4/8/16-env runs:
+
+| Parameter | DV3-1env | DV3-4env / 8env / 16env |
+|:---|:---|:---|
+| `num_envs` | 1 | 4 / 8 / 16 |
+| `hierarchical_params.default_mlp` | `[128]` | `[32, 32]` |
+| `hierarchical_params.multimodal_hub` | *(not set)* | `[128, 128]` |
+| `hierarchical_params.hub_overrides` | `{body_state: [64], association: [128]}` | *(not set)* |
+| `hierarchical_params.unimodal_overrides` | *(not set)* | `{visual: [128, 128], olfaction: [128, 128]}` |
+
+**Important caveat**: The 1-env run uses a body-state-aware architecture (dedicated encoding pathway) with larger defaults, while the 4/8/16-env runs use a smaller default encoder with sensor-specific overrides for visual and olfaction. This confounds the `num_envs` comparison — performance differences reflect **both** architecture and parallelism changes.
+
+All other hyperparameters are identical: `batch_size=16`, `collect_interval=128`, `replay_ratio=1`, `train_steps=64`, `buffer_capacity=1M`, `rssm_deter=512`, `rssm_stoch=32×32`, `model_lr=1e-4`, `actor_lr=3e-5`, `entropy_scale=3e-4`.
+
+### 9.3 Training Speed & Throughput
+
+| Metric | DV3-1env | DV3-4env | DV3-8env | DV3-16env |
+|:---|---:|---:|---:|---:|
+| **s/iteration** | 0.255 | 0.411 | 0.768 | 1.467 |
+| **SPS** | 507 | 1,382 | 1,393 | 1,607 |
+| **Wall-clock time** | 48h 55m | 15h 43m | 15h 42m | 15h 42m |
+| **Total timesteps** | 88.6M | 70.3M | 75.4M | 78.8M |
+| **Total iterations** | 691,769 | 137,357 | 73,659 | 38,492 |
+| **WM log points (n)** | 10,000 | 10,000 | 7,339 | 3,836 |
+
+**Speed analysis**:
+- SPS scales roughly linearly with `num_envs` (507 → 1,607 ≈ 3.2× for 16× more envs). The sub-linear scaling is expected — more envs increase per-iteration cost (world model trains on same batch_size but env stepping is parallelized).
+- The 4/8/16-env runs all completed ~70-79M timesteps in ~15.7 hours, compared to 88.6M in 48.9 hours for 1-env. Multi-env runs are **3× faster** in wall-clock time per timestep.
+- **Iterations decrease proportionally**: 1-env got 691k iterations (10k WM log points), 16-env got only 38k iterations (3,836 WM log points). Fewer iterations means fewer gradient updates — a critical consideration for learning dynamics.
+
+### 9.4 Episode Performance
+
+| Metric | DV3-1env | DV3-4env | DV3-8env | DV3-16env |
+|:---|---:|---:|---:|---:|
+| **Ep Steps (early → last)** | 21.5 → 7.0 | 22.1 → 38.1 | 26.2 → 37.9 | 27.1 → 32.0 |
+| **Ep Steps (steady-state)** | 62.8 ± 31.2 | 36.6 ± 7.0 | 36.4 ± 4.6 | 35.8 ± 3.2 |
+| **Ep Reward (early → last)** | -202.7 → -200.2 | -203.7 → -208.2 | -205.0 → -208.0 | -205.6 → -206.8 |
+| **Ep Reward (steady-state)** | -208.7 ± 8.5 | -207.5 ± 2.4 | -207.6 ± 1.7 | -207.5 ± 1.2 |
+
+**Key findings**:
+
+1. **DV3-1env episode steps collapsed** (21.5 → 7.0). The agent is dying faster at the end of training than at the beginning. This is a **catastrophic regression** — the policy has unlearned whatever survival behavior it initially had. The high variance (±31.2) during steady-state suggests highly erratic behavior before final collapse.
+
+2. **Multi-env runs show modest improvement** (22-27 → 32-38 steps). The 4-env and 8-env runs roughly doubled from their starting points. However, 32-38 steps out of a maximum 500 means the agent survives only **6-8% of the episode** — far from functional.
+
+3. **Multi-env steady-state is remarkably consistent**: 35.8-36.6 steps across 4/8/16 envs with decreasing variance (7.0 → 3.2). This suggests a **performance ceiling** that more environments alone cannot break through.
+
+4. **Reward is flat and indistinguishable** across all multi-env runs (~-207.5). Combined with short episodes, this means agents die quickly and accumulate roughly the same penalty each time. The homeostatic reward paradox (Section 7.4) applies: reward is dominated by death events, not learning signal.
+
+5. **The 1-env run's higher steady-state (62.8 steps)** is misleading — it reflects a period before collapse, not sustained performance. The final value (7.0 steps) is the worst of all runs.
+
+### 9.5 World Model Health
+
+| Metric | Criterion | DV3-1env | DV3-4env | DV3-8env | DV3-16env |
+|:---|:---|---:|---:|---:|---:|
+| `loss_model` | ↓ better | **2.20** | 2.94 | 3.01 | 3.00 |
+| `loss_recon` | ↓ better | **0.006** | 0.011 | 0.012 | 0.012 |
+| `loss_rew` | ↓ better | **1.09** | 1.65 | 1.72 | 1.72 |
+| `loss_dyn_kl` | > 1.0 | 1.80 | 2.05 | 2.04 | 2.03 |
+| `loss_rep_kl` | > 1.0 | 1.80 | 2.05 | 2.04 | 2.03 |
+| `latent_entropy` | 1.0–2.5 | ❌ 0.78 | ❌ 0.83 | ❌ 0.88 | ❌ 0.80 |
+| `cont_acc` | > 0.95 | ✅ 0.988 | ✅ 0.981 | ✅ 0.980 | ✅ 0.980 |
+| `reward_mae_pos` | > 0 | 0.050 | 0.175 | 0.144 | 0.153 |
+| `reward_mae_neg` | info | **2.47** | 3.70 | 3.70 | 3.73 |
+
+**Analysis**:
+
+1. **DV3-1env has lower WM losses across the board** — but this is deceptive. With 691k iterations vs 38k-137k for multi-env runs, the 1-env world model has had **5-18× more gradient updates**. It has overfit to its limited data distribution. The lower `loss_recon` (0.006 vs 0.012) suggests the decoder has memorized reconstruction patterns rather than learning generalizable features.
+
+2. **Latent entropy collapsed in ALL runs** (0.78-0.88 vs target 1.0-2.5). This was the critical Pathology 1 from Section 7.5 — and increasing `num_envs` has **not fixed it**. The multi-env runs are slightly better (0.83-0.88 vs 0.78) but still well below the healthy range. The RSSM posterior continues to collapse toward deterministic states regardless of data diversity.
+
+3. **KL losses are elevated in multi-env runs** (2.03-2.05 vs 1.80). With `free_nats=1.0`, a KL of 2.0 means the free-bits floor is not binding — the posterior and prior are diverging. However, the KL trajectory tells the real story:
+   - 1-env: started at 3.68, converged to 1.79 (posterior collapsed toward prior)
+   - 4-env: started at 1.00, increased to 2.12 (posterior diverging from prior)
+   - 8/16-env: same pattern (1.00 → 1.90-2.02)
+
+   The 1-env run's KL decrease reflects posterior collapse (entropy → 0.78), not healthy convergence. The multi-env KL increase reflects the posterior learning from diverse data faster than the prior can follow.
+
+4. **Positive reward prediction** (`reward_mae_pos`) is marginal across all runs. The multi-env runs show slightly higher values (0.14-0.18 vs 0.05) because more environments generate more diverse trajectories with occasional positive rewards. But the final values (0.00-0.02) indicate the reward head still gives up on positive reward prediction. This is **Pathology 3 (Positive Reward Blindness)** — unresolved.
+
+5. **Negative reward MAE** is ~50% higher in multi-env runs (3.70 vs 2.47). The world model struggles more with diverse negative-reward patterns from multiple environments. This makes sense — with more environments, there's more variety in death scenarios, making the reward distribution harder to model.
+
+### 9.6 Actor-Critic Health
+
+| Metric | Criterion | DV3-1env | DV3-4env | DV3-8env | DV3-16env |
+|:---|:---|---:|---:|---:|---:|
+| `mean_entropy` | > 0.5 | ✅ 1.61 | ✅ 1.38 | ✅ 1.30 | ✅ 1.29 |
+| `value_mae` | < 5 | ❌ 6.96 | ❌ 7.98 | ❌ 7.55 | ❌ 7.37 |
+| `mean_advantage` | non-trivial | -0.189 | -0.193 | -0.198 | -0.196 |
+| `mean_return` | info | -24.98 | -25.88 | -25.53 | -25.29 |
+| `mean_value` | info | -18.31 | -18.29 | -18.35 | -18.29 |
+| `loss_critic` | ↓ better | 0.328 | 0.333 | 0.324 | 0.325 |
+| `eff_replay_ratio` | ≈ 1.0 | ❌ 0.0078 | ❌ 0.0078 | ❌ 0.0078 | ❌ 0.0078 |
+
+**Analysis**:
+
+1. **Policy entropy is healthy** across all runs (1.29-1.61, all > 0.5). Unlike the latent entropy collapse, the actor maintains diverse action distributions. However, the trend is downward (1.79 → 1.27 for 4-env), suggesting slow policy specialization. The 1-env run retains the highest entropy (1.61) — but this didn't translate into better performance, indicating the policy explores without learning.
+
+2. **Critic divergence persists** (`value_mae` > 5 in all runs, **Pathology 2** from Section 7.5). The trajectory tells the real story:
+   - 1-env: 0.09 → 7.36 (critic worsening over 691k iterations)
+   - 4-env: 1.84 → 8.13 (worst)
+   - 16-env: 4.92 → 7.20 (best, but still diverging)
+
+   More environments start with higher value_mae (the critic faces more diverse returns from the start) but converge to similar bad levels. The critic is failing to learn accurate value predictions in all configurations.
+
+3. **Advantages are uniformly negative** (~-0.19). In a healthy DreamerV3, advantages should be centered near zero with both positive and negative values. All-negative advantages mean the actor consistently finds that real outcomes are worse than predicted — the critic is systematically overestimating value. This creates a **pessimistic policy gradient** that reinforces avoidance over exploration.
+
+4. **Effective replay ratio still stuck at 0.0078** across all runs. This confirms the bug is independent of `num_envs` — it's a systemic issue in how `grad_steps / global_step` is computed. With the replay ratio effectively at 0.78%, the world model, actor, and critic are **all drastically under-trained** relative to data collected. This remains the most actionable fix (Section 8.3.4 Item 1).
+
+### 9.7 Behavioral Observations (User-Reported)
+
+The user reports observing in evaluation videos that the agent:
+- **Succeeds at**: Avoiding predators, hiding in bushes, resting
+- **Fails at**: Consuming food resources
+
+This is consistent with the metrics:
+- **Why avoidance works**: Negative rewards (injury, death) dominate the buffer. The reward head learns to predict negative consequences well (`reward_mae_neg` converging). The world model imagines danger accurately → actor learns avoidance.
+- **Why foraging fails**: Positive rewards (eating, reducing drive) are extremely rare in the buffer. `reward_mae_pos → 0` means the world model **cannot imagine benefit from eating**. The actor has no gradient signal toward food-seeking behavior. This is Pathology 3 confirmed by behavioral observation.
+
+The agent has learned a **passive survival strategy**: avoid danger, hide, rest — all behaviors that reduce negative reward. But it cannot learn **active survival**: seeking food to prevent starvation. Eventually, passive survival fails because nutrition depletes to zero regardless of how well the agent avoids injury. This explains the ~35-step episode ceiling — it's roughly the starvation timeline for a non-eating agent.
+
+### 9.8 Core Problem: Asymmetric Reward Learning
+
+The fundamental issue across all four runs is **asymmetric reward learning in the world model**:
+
+| Reward Type | Frequency in Buffer | WM Prediction Quality | Actor Learning |
+|:---|:---|:---|:---|
+| **Negative** (injury, death, drive increase) | Very common (~99%) | Good (`mae_neg` converging) | ✅ Learns avoidance |
+| **Positive** (eating, drive decrease) | Extremely rare (<1%) | Failed (`mae_pos → 0`) | ❌ No foraging signal |
+
+This creates a **one-sided actor**: the imagined trajectories in DreamerV3's imagination always predict negative outcomes regardless of action → the actor only learns "minimize damage" → never discovers "seek reward" → buffer stays reward-poor → vicious cycle.
+
+### 9.9 Proposed Solution: DreamerV4-Style Recent Data Replay
+
+The user proposes adopting DreamerV4's replay buffer strategy, which mixes **recent data** with replay data during training batches.
+
+#### 9.9.1 Rationale
+
+DreamerV4 (Hafner et al., 2025) addresses exactly this class of problem — when positive experiences are rare in a large replay buffer, they get overwhelmed by the dominant negative experience distribution. The key insight:
+
+- **Standard replay** (current): Sample uniformly from the full 1M buffer → batch is 99% negative-reward transitions → reward head learns "always predict negative" → actor never imagines benefit from food
+- **DreamerV4 recent-data mixing**: Reserve a fraction of each training batch for **recent** transitions (e.g., last N steps) → even if the overall buffer is 99% negative, recent data captures the latest policy's behavior → as the policy improves even slightly (e.g., accidentally eating), those positive experiences are immediately amplified in training batches
+
+#### 9.9.2 Expected Benefits
+
+1. **Faster positive reward learning**: Recent data preserves the distribution of the current policy, including any rare positive events. The reward head trains on these immediately rather than waiting for them to become statistically significant in a 1M buffer.
+2. **Reduced staleness**: Current replay from a 1M buffer includes transitions from very early random policy. These may teach the world model outdated dynamics (e.g., "the agent always walks into predators").
+3. **Better posterior-prior alignment**: Recent data is more representative of current policy → posterior trains on current behavior → prior tracks posterior more closely → reduced KL divergence → healthier latent space.
+4. **Natural curriculum**: As the policy improves, the "recent" window naturally shifts to harder, more relevant scenarios.
+
+#### 9.9.3 Implementation Approach
+
+Two strategies, from simplest to most DreamerV4-faithful:
+
+**Option A: Simple Recent-Bias Sampling**
+- When sampling a training batch of 16 sequences, reserve K sequences (e.g., K=4) from the most recent `recent_window` transitions (e.g., last 10k steps)
+- Remaining 12 sequences sampled uniformly from the full buffer
+- Implementation: Add a `recent_fraction` parameter to the replay buffer's `sample()` method
+- Minimal code change, easy to tune via config
+
+**Option B: Full DreamerV4 Replay Strategy**
+- Maintain two buffer regions: a "recent" FIFO buffer (e.g., last 50k transitions) and the full replay buffer
+- Each batch: 50% from recent, 50% from replay (DreamerV4 default ratio)
+- Apply importance weighting if using different sampling distributions
+- More faithful to the paper but requires more significant buffer refactoring
+
+**Recommendation**: Start with **Option A** — it addresses the core issue (positive reward dilution) with minimal code change. The `recent_fraction` and `recent_window` can be tuned via YAML config. If Option A shows improvement, Option B can be explored as a follow-up.
+
+#### 9.9.4 Configuration Design
+
+```yaml
+# In agent config (dreamer_v3 section)
+replay:
+  capacity: 1_000_000
+  recent_fraction: 0.25        # 25% of batch from recent data
+  recent_window: 10_000        # "recent" = last 10k transitions
+  # existing params unchanged
+  replay_ratio: 1
+  batch_size: 16
+  sequence_length: 128
+```
+
+### 9.10 Additional Fixes to Combine with Recent-Data Replay
+
+Recent-data replay alone may not be sufficient. The following should be addressed in parallel:
+
+1. **Fix effective replay ratio** (Priority: CRITICAL, carried from Section 8.3.4)
+   - Current 0.0078 means 99.2% of collected data is never used for gradients
+   - Must fix `Ratio` class normalization before any replay strategy change can be properly evaluated
+
+2. **Increase `free_nats` to prevent latent entropy collapse** (Priority: HIGH)
+   - Current: `free_nats=1.0` → latent entropy collapses to 0.78-0.88
+   - Proposed: `free_nats=2.0` or `free_nats=3.0` → keep latent entropy in 1.0-2.5 range
+   - This prevents the posterior from collapsing, preserving stochastic imagination quality
+
+3. **Increase `entropy_scale`** (Priority: MEDIUM)
+   - Current: `3e-4` → `loss_actor_entropy ≈ -0.0003` (negligible)
+   - Proposed: `1e-3` or `3e-3` → meaningful entropy pressure to maintain exploration
+   - Especially important if recent-data replay shifts the actor toward a specific strategy
+
+4. **Standardize architecture across runs** (Priority: MEDIUM)
+   - The 1-env run's body-state-aware architecture should be tested with multi-env
+   - Recommended: Use `hub_overrides: {body_state: [64], association: [128]}` + `unimodal_overrides: {visual: [128, 128], olfaction: [128, 128]}` combined
+
+### 9.11 Summary: What num_envs Scaling Revealed
+
+| Finding | Implication |
+|:---|:---|
+| Multi-env prevents catastrophic collapse (1-env: 7 steps, multi-env: 32-38) | Minimum 4 envs needed for stable training |
+| Multi-env does NOT break the ~36-step ceiling | Data diversity alone doesn't solve the asymmetric reward problem |
+| Latent entropy still collapses in all runs | Need `free_nats` increase, not just more data |
+| `value_mae` diverges in all runs | Critic learning is fundamentally broken (possibly tied to replay ratio bug) |
+| `effective_replay_ratio = 0.0078` everywhere | Systemic bug, highest priority fix |
+| Agent avoids danger but never eats | World model can't imagine positive reward → need recent-data replay |
+| 4/8/16-env performance nearly identical | Diminishing returns beyond 4 envs for current hyperparameters |
+
+### 9.12 Recommended Next Steps (Prioritized)
+
+1. **Fix replay ratio bug** — Without this, gradient utilization is 128× below intended. All other improvements are limited by undertrained networks.
+2. **Implement 33/33/33 mixture sampling** — Positive-reward / recent / uniform split. Address the core positive-reward blindness. → **Implementation plan**: [`MIXTURE_SAMPLING_PLAN.md`](MIXTURE_SAMPLING_PLAN.md)
+3. **Increase `free_nats` to 2.0** — Prevent latent entropy collapse.
+4. **Run a controlled experiment**: 4 envs (cheapest multi-env that matches 8/16 performance) with fixes 1-3 applied, compared against current 4-env baseline.
+5. **Add behavioral logging** (Phase 2 from `TRAINING_METRICS_ANALYSIS.md` Section 4) — death cause, action distribution, and final physiology metrics to properly diagnose future runs.
+6. **Test body-state architecture with multi-env** — The 1-env architecture's `hub_overrides: {body_state: [64]}` may be important for interoceptive learning; currently untested with multi-env.
+
+---
+
+## 10. DreamerV4 Feature Applicability Review (2026-03-05)
+
+Reviewed `docs/DREAMER_IMPLEMENTATION_AUDIT.md` Sections 5.1–5.8 to identify DreamerV4 innovations that can be adopted within our constraints:
+- **Constraint 1**: Keep RSSM (RNN-based world model) — project is neuroscience-inspired, recurrent structure is architecturally motivated.
+- **Constraint 2**: Keep online sampling — no pre-defined dataset; the sparse foraging signal must be solved online.
+
+### 10.1 Applicable: PMPO Sign-Only Advantages (Audit Section 5.4) — HIGH IMPACT
+
+**What it is**: DreamerV4 replaces DreamerV3's magnitude-weighted percentile advantage normalization with PMPO (Preference Optimization as Probabilistic Inference). Imagined trajectories are split into D+ (above median return) and D- (below median). The actor receives **sign-only** gradients: increase probability of actions in D+, decrease in D-. Return magnitudes are discarded.
+
+$$L(\theta) = \frac{1-\alpha}{|D^-|} \sum_{i \in D^-} \ln \pi_\theta(a_i|s_i) - \frac{\alpha}{|D^+|} \sum_{i \in D^+} \ln \pi_\theta(a_i|s_i) + \frac{\beta}{N} \sum_{i=1}^{N} \text{KL}[\pi_\theta \| \pi_\text{prior}]$$
+
+With $\alpha = 0.5$ (equal weighting between positive and negative sets).
+
+**Why it directly addresses our pathologies**:
+
+| Current Problem | How PMPO Fixes It |
+|:---|:---|
+| `mean_advantage ≈ -0.19` uniformly negative (Section 9.6) | D+ always exists (top 50% of imagined trajectories). Even when all returns are negative, the "least bad" actions get positive reinforcement. |
+| Death penalty (-100) dominates food reward (+3) in gradients | Magnitudes discarded — sign-only means a +3 food event and a -100 death event contribute equal gradient weight. |
+| Critic overestimates value → pessimistic policy gradient | PMPO bypasses critic-based advantage entirely. D+/D- split uses raw returns, not critic predictions. |
+| `loss_actor_entropy ≈ -0.0003` (entropy bonus negligible) | PMPO replaces entropy bonus with KL prior (see 10.5). |
+
+**Compatibility**: Works directly with RSSM imagination. Only changes how actor loss is computed from imagined returns — no world model or critic architecture change needed. The existing `λ`-return computation is preserved; only the advantage → policy gradient step changes.
+
+**Implementation scope**: Replace `behavior_loss_fn` actor loss computation. Remove Moments EMA (no longer needed for percentile normalization). Add median-split logic over imagined returns.
+
+### 10.2 Applicable: 50/50 Mixture Sampling (Audit Section 5.7) — HIGH IMPACT
+
+Already proposed in Section 9.9 as "recent-data replay." The audit confirms V4's exact formulation is more targeted than pure recency — V4 splits batches into **uniform** (for world model calibration) and **task-relevant** (for sparse reward amplification), with loss decoupling between the two halves.
+
+**Refinement over Section 9.9**: V4's approach is not just recency-biased — it explicitly filters for **task-success events**. For our online setting, this translates to:
+
+| V4 (Offline) | Our Adaptation (Online) |
+|:---|:---|
+| Pre-annotated task-relevant sequences | Tag episodes at buffer insertion: `has_eating_event`, `has_recovery` |
+| 50% uniform + 50% task-relevant | 50% uniform + 25% recent (last 10k steps) + 25% reward-tagged |
+| BC loss on relevant half only | Actor-critic loss on all; WM dynamics loss on uniform half only |
+| Static dataset split | Dynamic tagging as buffer fills |
+
+**V4's loss decoupling insight** (Audit Section 5.7.5): Dynamics loss is applied **only** to the uniform half — this prevents the world model from learning that rare food events happen 50% of the time. Actor-critic loss is applied to both halves. This is more principled than applying all losses uniformly to a biased batch.
+
+**Early-training warm-up**: V4 sidesteps cold-start because its offline dataset already contains sufficient rare events. We need a warm-up period of uniform-only sampling until the "reward-tagged" pool reaches a minimum size (e.g., 100 episodes with eating events). Before that threshold, fall back to 75% uniform + 25% recent.
+
+**Configuration update** (supersedes Section 9.9.4):
+
+```yaml
+replay:
+  capacity: 1_000_000
+  sampling_mode: "mixture"          # "uniform" (default) or "mixture"
+  mixture:
+    uniform_fraction: 0.50          # WM dynamics loss applied here
+    recent_fraction: 0.25           # last recent_window steps
+    tagged_fraction: 0.25           # episodes with positive reward events
+    recent_window: 10_000
+    tagged_min_pool: 100            # minimum tagged episodes before enabling
+  # Loss decoupling: dynamics loss on uniform half, actor-critic on all
+```
+
+### 10.3 Applicable: RMS Loss Normalization (Audit Section 5.2) — MEDIUM IMPACT
+
+**What it is**: V4 replaces DreamerV3's unit-scale loss summation with RMS normalization — each loss component is divided by its running RMS before summing. This ensures no single loss dominates the gradient.
+
+**Current problem**: Our world model loss is `total = loss_recon + loss_rew + loss_dyn + loss_rep + loss_cont`. Observed magnitudes:
+
+| Loss | Steady-State Value | Relative Contribution |
+|:---|---:|---:|
+| `loss_rew` | 1.65–1.72 | **56%** |
+| `loss_dyn_kl` | 2.03–2.05 (but 0.5× weighted by KL balance) | ~34% |
+| `loss_rep_kl` | 2.03–2.05 (but 0.1× weighted by KL balance) | ~7% |
+| `loss_recon` | 0.011–0.012 | **<0.4%** |
+| `loss_cont` | (not separately logged) | ~3% |
+
+The reward head receives ~56% of total gradient weight, while the reconstruction head (which learns observation dynamics) receives <0.4%. This gradient imbalance may contribute to the reward head's dominance — it overfits to the negative-reward majority while the decoder is under-trained.
+
+**Implementation**: Track per-loss EMA of RMS (same mechanism as Moments). Divide each loss by its RMS before summing. Minimal code change — ~10 lines in `dreamer_v3_trainer.py::world_model_loss_fn`.
+
+### 10.4 Applicable: Symexp Two-Hot Bins (Audit Section 5.5) — LOW-MEDIUM IMPACT
+
+**What it is**: V4 shifts from symlog-spaced to symexp-spaced bins in the two-hot discretization. Symexp uses exponentially wider spacing at extremes and finer resolution near zero.
+
+**Why it may help**: Our reward range is narrow (~-100 to +3). Symlog allocates many bins to ranges we never use ($10^3$–$10^6$). Symexp would concentrate more bins in the critical near-zero region where "slightly negative" vs "slightly positive" reward is the difference between avoidance and foraging behavior.
+
+**Implementation**: Drop-in replacement in `to_twohot` / `from_twohot` in `dreamer_v3_util.py`. The bin boundary computation changes; the two-hot encoding logic stays the same.
+
+**Priority**: Low — the current symlog discretization isn't broken. This is a refinement, not a fix. Defer until after PMPO and mixture sampling are validated.
+
+### 10.5 Applicable: KL Prior Regularization (Audit Section 5.4) — LOW-MEDIUM IMPACT
+
+**What it is**: V4 replaces entropy regularization with a KL penalty toward a frozen **behavioral cloning prior** ($\beta = 0.3$). The prior prevents the policy from deviating too far from previously successful behavior.
+
+**Current problem**: `entropy_scale = 3e-4` produces `loss_actor_entropy ≈ -0.0003` (Section 8.3.3 item 6) — effectively inactive. The 1-env run's catastrophic collapse (21→7 steps) suggests the policy can unlearn good behavior without any trust-region constraint.
+
+**Adaptation for online RL** (no offline BC dataset): Use a **periodic policy snapshot** as the prior — freeze a copy of the actor every N iterations. This creates an implicit trust region: the policy can improve but cannot deviate too far from its recent successful state. This is conceptually similar to PPO's clipping but implemented through explicit KL divergence.
+
+**Note**: If PMPO (Section 10.1) is adopted, the KL prior is part of the PMPO loss formulation (the third term). Both should be implemented together.
+
+**Implementation**: Store a frozen actor copy (`jax.lax.stop_gradient`). Compute `KL[π_current || π_prior]` per imagined step. Update the frozen copy every `prior_update_interval` iterations (e.g., every 1000 iterations). Add `kl_prior_scale: 0.3` to config.
+
+### 10.6 Not Applicable (Filtered by Constraints)
+
+| V4 Feature | Reason Excluded |
+|:---|:---|
+| Block-Causal Transformer world model (Section 5.1) | **Constraint 1**: Keep RSSM/RNN |
+| Causal Tokenizer / Masked Autoencoder (Section 5.3) | Observations are 33-dim vector, not images |
+| Shortcut Forcing diffusion objective (Section 5.2) | Tied to transformer temporal modeling |
+| GQA / RoPE attention (Section 5.1) | Transformer-specific |
+| Offline dataset pipeline (Section 5.6) | **Constraint 2**: Online sampling required |
+| Start-frame augmentation (Section 5.7.4) | Offline-specific |
+| μ-law action encoding (Section 5.7.4) | Our actions are discrete (7 actions) |
+| Agent token causal masking (Section 5.5) | Transformer-specific |
+| Multi-Token Prediction for reward head (Section 5.5) | Low impact — reward data distribution is the problem, not head architecture |
+| SwiGLU activation (Section 5.1) | Minor; SiLU is functionally equivalent for our scale |
+
+### 10.7 Implementation Priority & Dependency Map
+
+```
+                    ┌─────────────────────────┐
+                    │ 0. Fix replay ratio bug  │  ← PREREQUISITE (Section 8.3.4)
+                    │    (not V4, but blocker) │
+                    └───────────┬─────────────┘
+                                │
+              ┌─────────────────┼─────────────────┐
+              ▼                 ▼                  ▼
+   ┌──────────────────┐ ┌──────────────┐ ┌────────────────┐
+   │ 1. PMPO sign-only│ │ 2. Mixture   │ │ 3. free_nats   │
+   │    advantages     │ │    sampling  │ │    → 2.0       │
+   │ (Section 10.1)   │ │ (Section 10.2)│ │ (Section 9.10) │
+   └────────┬─────────┘ └──────┬───────┘ └────────────────┘
+            │                   │
+            ▼                   ▼
+   ┌──────────────────┐ ┌──────────────────┐
+   │ 4. KL prior      │ │ 5. RMS loss norm │
+   │ (part of PMPO)   │ │ (Section 10.3)   │
+   │ (Section 10.5)   │ └──────────────────┘
+   └──────────────────┘
+            │
+            ▼
+   ┌──────────────────┐
+   │ 6. Symexp bins   │
+   │ (Section 10.4)   │
+   └──────────────────┘
+```
+
+| Step | Feature | Addresses | Effort | Depends On |
+|:---|:---|:---|:---|:---|
+| **0** | Fix replay ratio bug | All pathologies (128× under-training) | Low | — |
+| **1** | PMPO sign-only advantages | Asymmetric reward, all-negative advantage, critic divergence | Medium | Step 0 |
+| **2** | 50/25/25 mixture sampling | Positive reward blindness, data staleness | Medium | Step 0 |
+| **3** | Increase `free_nats` to 2.0 | Latent entropy collapse | Low (config change) | Step 0 |
+| **4** | KL prior regularization | Policy collapse, entropy ineffectiveness | Low (part of PMPO) | Step 1 |
+| **5** | RMS loss normalization | WM gradient imbalance | Low | Step 0 |
+| **6** | Symexp two-hot bins | Reward resolution near zero | Low | Step 1 (validate PMPO first) |
+
+**Recommended experiment**: Apply Steps 0–3 simultaneously in a single 4-env run. Steps 1+4 are tightly coupled (PMPO includes KL prior). Steps 2 and 3 are independent config/buffer changes. Compare against current 4-env baseline to measure combined impact before isolating individual contributions.

@@ -22,7 +22,7 @@ agent:
   # GRU is required for gate-bias injection (§5.1a) — LSTM gate-bias not yet supported
   rnn_type: "GRU"          # GRU required for full modulation support
   activation: "tanh"       # "tanh" (PyTorch parity) or "relu" (original JAX)
-  return_mode: "MC"        # "MC" (PyTorch parity) or "GAE" (original JAX)
+  return_mode: "GAE"        # "MC" (PyTorch parity) or "GAE" (original JAX)
 
   # Encoding Configuration
   encoding_mode: "hierarchical"  # "flat" or "hierarchical"
@@ -31,12 +31,12 @@ agent:
     # Unimodal Phase 1: Independent MLPs for each sensor
     # Available sensor names for overrides: 
     # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
-    default_mlp: [32,32]
+    default_mlp: [128,128]
     unimodal_overrides:
-      visual: [64,64]
+      visual: [128,128]
     
     # Multimodal Phase 2: Fusion hub
-    multimodal_hub: [32,32]
+    multimodal_hub: [128,128]
 
   # Neuromodulation (§5 in NEUROMODULATION_ALGORITHM.md)
   # Bi-Recurrent Modulator: NeuromodulatorRNN + ModulatedGRUCell
