@@ -534,6 +534,22 @@ def main():
             action_dim=action_dim,
             device=buffer_device
         )
+
+        # Positive-reward buffer (only created if mixture mode)
+        sampling_mode = config.get_mandatory('agent.sampling_mode')
+        positive_buffer = None
+        if sampling_mode == 'mixture':
+            pos_cap = config.get_mandatory('agent.positive_buffer_capacity')
+            # Round capacity to multiple of sequence_length
+            seq_len = config.get_mandatory('agent.sequence_length')
+            pos_cap = (pos_cap // seq_len) * seq_len
+            positive_buffer = ReplayBuffer(
+                capacity=pos_cap,
+                sequence_length=seq_len,
+                obs_dim=input_dim,
+                action_dim=action_dim,
+                device=buffer_device
+            )
         if algorithm == "DreamerV3":
             # Initial Dreamer state (reset on every collect if we want, but better to persist)
             # Initialize with zeros instead of None to avoid JIT re-trace on first call
@@ -887,6 +903,32 @@ def main():
                         else:
                             is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
                         buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+
+                        # Copy positive-reward blocks to the dedicated positive buffer
+                        if positive_buffer is not None:
+                            seq_len = buffer.sequence_length
+                            num_items = obs_flat.shape[0]
+                            num_written_blocks = num_items // seq_len
+
+                            for b in range(num_written_blocks):
+                                blk_start = b * seq_len
+                                blk_end = blk_start + seq_len
+                                blk_rewards = rew_flat[blk_start:blk_end]
+
+                                # Check if this block contains any positive reward
+                                if buffer._on_gpu:
+                                    has_positive = bool(jnp.any(blk_rewards > 0.0))
+                                else:
+                                    has_positive = bool(np.any(blk_rewards > 0.0))
+
+                                if has_positive:
+                                    positive_buffer.add_batch(
+                                        obs_flat[blk_start:blk_end],
+                                        act_flat[blk_start:blk_end],
+                                        rew_flat[blk_start:blk_end],
+                                        done_flat[blk_start:blk_end],
+                                        is_first_flat[blk_start:blk_end]
+                                    )
                         # Still need numpy for cpu-side stats calculation
                         transitions_np = jax.device_get(transitions)
                     else:
@@ -903,6 +945,29 @@ def main():
                         else:
                             is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
                         buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+
+                        # Copy positive-reward blocks to the dedicated positive buffer
+                        if positive_buffer is not None:
+                            seq_len = buffer.sequence_length
+                            num_items = obs_flat.shape[0]
+                            num_written_blocks = num_items // seq_len
+
+                            for b in range(num_written_blocks):
+                                blk_start = b * seq_len
+                                blk_end = blk_start + seq_len
+                                blk_rewards = rew_flat[blk_start:blk_end]
+
+                                # Check if this block contains any positive reward
+                                has_positive = bool(np.any(blk_rewards > 0.0))
+
+                                if has_positive:
+                                    positive_buffer.add_batch(
+                                        obs_flat[blk_start:blk_end],
+                                        act_flat[blk_start:blk_end],
+                                        rew_flat[blk_start:blk_end],
+                                        done_flat[blk_start:blk_end],
+                                        is_first_flat[blk_start:blk_end]
+                                    )
                     
                     # Update statistics (Vectorized where possible)
                     rew_steps = transitions_np['reward'] # (T, B)
@@ -971,10 +1036,14 @@ def main():
                         
                         if buffer.device == "gpu":
                             # GPU path: sample + train all inside one JIT call
-                            metrics, key = trainer.train_multiple_gpu(buffer, train_steps, key)
+                            metrics, key = trainer.train_multiple_gpu(buffer, train_steps, key, 
+                                                                       positive_buffer=positive_buffer)
                         else:
                             # CPU path: pre-sample on CPU, bulk transfer, then JIT train
-                            stacked = buffer.sample_multiple(train_steps, config.get_mandatory('agent.batch_size'))
+                            if config.get_mandatory('agent.sampling_mode') == 'mixture':
+                                stacked = trainer._sample_mixture_cpu(buffer, positive_buffer, train_steps, config.get_mandatory('agent.batch_size'))
+                            else:
+                                stacked = buffer.sample_multiple(train_steps, config.get_mandatory('agent.batch_size'))
                             metrics, key = trainer.train_multiple_cpu(stacked, key)
                             
                         cumulative_gradient_steps += train_steps
@@ -982,10 +1051,17 @@ def main():
                     
                     if wandb_enabled and iteration % 10 == 0:
                         wandb_logs = {
-                            "timesteps": global_step, 
-                            "iteration": iteration,
-                            "Params/effective_replay_ratio": cumulative_gradient_steps / max(1, global_step)
+                            "timesteps": global_step,                             "iteration": iteration,
+                             "Params/effective_replay_ratio": cumulative_gradient_steps / max(1, global_step)
                         }
+                        if positive_buffer is not None:
+                            pos_blocks = positive_buffer.size // positive_buffer.sequence_length
+                            pos_cap_blocks = positive_buffer.capacity // positive_buffer.sequence_length
+                            wandb_logs.update({
+                                "Params/positive_buffer_blocks": pos_blocks,
+                                "Params/positive_buffer_utilization": pos_blocks / max(pos_cap_blocks, 1),
+                                "Params/main_buffer_blocks": buffer.size // buffer.sequence_length,
+                            })
                         for mk, mv in metrics.items():
                             if mk.startswith('loss_actor') or mk.startswith('loss_critic') or \
                                mk.startswith('mean_') or mk.startswith('entropy'):

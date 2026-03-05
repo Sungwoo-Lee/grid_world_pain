@@ -583,10 +583,19 @@ class DreamerTrainer(nnx.Module):
         
         return final_env_state, final_d_state, final_key, transitions
 
-    @nnx.jit(static_argnums=(1, 2, 6, 7))
-    def _scan_train_gpu(self, graphdef, num_steps, rng, arrays, b_size, b_cap, b_seq_len):
-        obs, actions, rewards, dones, is_first = arrays
+    @nnx.jit(static_argnums=(1, 2, 7, 8, 10, 11, 12, 13))
+    def _scan_train_gpu(self, graphdef, num_steps, rng,
+                        main_arrays, pos_arrays,
+                        b_size, b_cap, b_seq_len,
+                        pos_size, pos_cap,
+                        pos_slots, recent_slots, recent_window, buf_idx):
+        obs, actions, rewards, dones, is_first = main_arrays
+        pos_obs, pos_actions, pos_rewards, pos_dones, pos_is_first = pos_arrays
+
         num_blocks = b_size // b_seq_len
+        max_blocks = b_cap // b_seq_len
+        num_pos_blocks = pos_size // b_seq_len
+        max_pos_blocks = pos_cap // b_seq_len
         seq_range = jnp.arange(b_seq_len)
 
         # Functional state split
@@ -599,20 +608,74 @@ class DreamerTrainer(nnx.Module):
             trainer = nnx.merge(graphdef, current_state)
             batch_size = trainer.config.get_mandatory('agent.batch_size', int)
             
-            # Sample from GPU buffer (all on-device)
-            rng, sample_key, train_key = jax.random.split(rng, 3)
+            # Mixture sampling logic inside JIT (zero host involvement)
+            rng, key_pos, key_recent, key_uniform, train_key = jax.random.split(rng, 5)
+            uniform_slots = batch_size - pos_slots - recent_slots
+
+            # --- Pool 1: Positive-reward buffer ---
+            # Sample uniformly from the positive buffer
+            pos_block_idx = jax.random.randint(
+                key_pos, (pos_slots,), 0, jnp.maximum(num_pos_blocks, 1))
+            pos_starts = pos_block_idx * b_seq_len
+            pos_indices = (pos_starts[:, None] + seq_range[None, :]) % pos_cap
+
+            pos_batch_obs = pos_obs[pos_indices]           # (pos_slots, seq_len, obs_dim)
+            pos_batch_act = pos_actions[pos_indices]       # (pos_slots, seq_len, act_dim)
+            pos_batch_rew = pos_rewards[pos_indices]       # (pos_slots, seq_len)
+            pos_batch_done = pos_dones[pos_indices]        # (pos_slots, seq_len)
+            pos_batch_first = pos_is_first[pos_indices]    # (pos_slots, seq_len)
+
+            # --- Pool 2: Recent blocks from main buffer ---
+            recent_blocks_count = jnp.minimum(recent_window // b_seq_len, num_blocks)
+            buf_block = buf_idx // b_seq_len
+            recent_offsets = jax.random.randint(
+                key_recent, (recent_slots,), 0, jnp.maximum(recent_blocks_count, 1))
+            recent_block_idx = (buf_block - recent_blocks_count + recent_offsets) % max_blocks
             
-            # Sampling logic inside JIT (zero host involvement)
-            block_indices = jax.random.randint(sample_key, (batch_size,), 0, num_blocks)
-            starts = block_indices * b_seq_len
-            indices = (starts[:, None] + seq_range[None, :]) % b_cap
-            
+            # Fallback: if not enough data, use uniform from main buffer
+            recent_fallback = jax.random.randint(key_recent, (recent_slots,), 0, num_blocks)
+            recent_block_idx = jnp.where(recent_blocks_count > 0, recent_block_idx, recent_fallback)
+
+            recent_starts = recent_block_idx * b_seq_len
+            recent_indices = (recent_starts[:, None] + seq_range[None, :]) % b_cap
+
+            recent_batch_obs = obs[recent_indices]
+            recent_batch_act = actions[recent_indices]
+            recent_batch_rew = rewards[recent_indices]
+            recent_batch_done = dones[recent_indices]
+            recent_batch_first = is_first[recent_indices]
+
+            # --- Pool 3: Uniform random from main buffer (existing behavior) ---
+            uniform_block_idx = jax.random.randint(key_uniform, (uniform_slots,), 0, num_blocks)
+            uniform_starts = uniform_block_idx * b_seq_len
+            uniform_indices = (uniform_starts[:, None] + seq_range[None, :]) % b_cap
+
+            uniform_batch_obs = obs[uniform_indices]
+            uniform_batch_act = actions[uniform_indices]
+            uniform_batch_rew = rewards[uniform_indices]
+            uniform_batch_done = dones[uniform_indices]
+            uniform_batch_first = is_first[uniform_indices]
+
+            # --- Fallback: if positive buffer is empty, replace with uniform from main ---
+            # When num_pos_blocks == 0, pos_batch_* contains garbage or zeros
+            fallback_block_idx = jax.random.randint(key_pos, (pos_slots,), 0, num_blocks)
+            fallback_starts = fallback_block_idx * b_seq_len
+            fallback_indices = (fallback_starts[:, None] + seq_range[None, :]) % b_cap
+
+            has_positive_data = num_pos_blocks > 0
+            pos_batch_obs = jnp.where(has_positive_data, pos_batch_obs, obs[fallback_indices])
+            pos_batch_act = jnp.where(has_positive_data, pos_batch_act, actions[fallback_indices])
+            pos_batch_rew = jnp.where(has_positive_data, pos_batch_rew, rewards[fallback_indices])
+            pos_batch_done = jnp.where(has_positive_data, pos_batch_done, dones[fallback_indices])
+            pos_batch_first = jnp.where(has_positive_data, pos_batch_first, is_first[fallback_indices])
+
+            # --- Concatenate all pools into the training batch ---
             batch = {
-                'obs': obs[indices],
-                'action': actions[indices],
-                'reward': rewards[indices],
-                'terminal': dones[indices],
-                'is_first': is_first[indices]
+                'obs': jnp.concatenate([pos_batch_obs, recent_batch_obs, uniform_batch_obs], axis=0),
+                'action': jnp.concatenate([pos_batch_act, recent_batch_act, uniform_batch_act], axis=0),
+                'reward': jnp.concatenate([pos_batch_rew, recent_batch_rew, uniform_batch_rew], axis=0),
+                'terminal': jnp.concatenate([pos_batch_done, recent_batch_done, uniform_batch_done], axis=0),
+                'is_first': jnp.concatenate([pos_batch_first, recent_batch_first, uniform_batch_first], axis=0),
             }
             
             # gradient step
@@ -626,7 +689,7 @@ class DreamerTrainer(nnx.Module):
         metrics_mean = jax.tree.map(jnp.mean, all_metrics)
         return final_carry[0], metrics_mean, final_carry[1]
 
-    def train_multiple_gpu(self, buffer, num_steps, rng):
+    def train_multiple_gpu(self, buffer, num_steps, rng, positive_buffer=None):
         """Fully JIT-compiled training loop for GPU buffer.
         
         Samples and trains inside lax.scan — zero host involvement.
@@ -637,11 +700,32 @@ class DreamerTrainer(nnx.Module):
         # Extract buffer arrays to pass explicitly (prevents JIT retracing)
         buffer_arrays = (buffer.obs, buffer.actions, buffer.rewards, buffer.dones, buffer.is_first)
         
+        # Mixture sampling config (static)
+        sampling_mode = self.config.get_mandatory('agent.sampling_mode')
+        pos_slots = self.config.get_mandatory('agent.mixture_positive_slots') if sampling_mode == 'mixture' else 0
+        recent_slots = self.config.get_mandatory('agent.mixture_recent_slots') if sampling_mode == 'mixture' else 0
+        recent_window = self.config.get_mandatory('agent.mixture_recent_window') if sampling_mode == 'mixture' else 0
+
+        # Positive buffer arrays (or zeros if not using mixture / positive buffer empty)
+        if positive_buffer is not None and positive_buffer.size > 0:
+            pos_arrays = (positive_buffer.obs, positive_buffer.actions, positive_buffer.rewards,
+                          positive_buffer.dones, positive_buffer.is_first)
+            pos_size = positive_buffer.size
+            pos_cap = positive_buffer.capacity
+        else:
+            # Dummy arrays — will be ignored when pos_slots fallback triggers
+            pos_arrays = (buffer.obs, buffer.actions, buffer.rewards, buffer.dones, buffer.is_first)
+            pos_size = 0
+            pos_cap = buffer.capacity
+
         # 2. Execute the stable JIT training loop
         # We pass graphdef as it is hashable and constant
         final_state, metrics_mean, rng = self._scan_train_gpu(
-            graphdef, int(num_steps), rng, buffer_arrays, 
-            buffer.size, buffer.capacity, buffer.sequence_length
+            graphdef, int(num_steps), rng, 
+            buffer_arrays, pos_arrays,
+            buffer.size, buffer.capacity, buffer.sequence_length,
+            pos_size, pos_cap,
+            pos_slots, recent_slots, recent_window, buffer.idx
         )
         
         # 3. Apply the final aggregated state back to our real self
@@ -676,6 +760,61 @@ class DreamerTrainer(nnx.Module):
         nnx.update(self, final_state)
         
         return metrics_mean, rng
+
+    def _sample_mixture_cpu(self, buffer, positive_buffer, num_batches, batch_size):
+        """CPU-path mixture sampling (called outside JIT)."""
+        seq_len = buffer.sequence_length
+        sampling_mode = self.config.get('agent.sampling_mode', 'uniform')
+        pos_slots = self.config.get('agent.mixture_positive_slots', 0) if sampling_mode == 'mixture' else 0
+        recent_slots = self.config.get('agent.mixture_recent_slots', 0) if sampling_mode == 'mixture' else 0
+        recent_window = self.config.get('agent.mixture_recent_window', 10000) if sampling_mode == 'mixture' else 0
+        uniform_slots = batch_size - pos_slots - recent_slots
+        
+        all_batches = []
+        for _ in range(num_batches):
+            # Pool 1: Positive buffer
+            if positive_buffer is not None and positive_buffer.size >= seq_len:
+                pos_batch = positive_buffer.sample(pos_slots)
+            else:
+                pos_batch = buffer.sample(pos_slots)  # fallback
+            
+            if pos_batch is None: # Extreme fallback
+                 pos_batch = buffer.sample(pos_slots)
+
+            # Pool 2: Recent from main buffer
+            num_blocks = buffer.size // seq_len
+            max_blocks = buffer.capacity // seq_len
+            recent_blocks_count = min(recent_window // seq_len, num_blocks)
+            buf_block = buffer.idx // seq_len
+
+            if recent_blocks_count > 0:
+                offsets = np.random.randint(0, recent_blocks_count, size=recent_slots)
+                recent_block_idx = (buf_block - recent_blocks_count + offsets) % max_blocks
+            else:
+                recent_block_idx = np.random.randint(0, max(num_blocks, 1), size=recent_slots)
+
+            seq_range = np.arange(seq_len)
+            recent_indices = (recent_block_idx[:, None] * seq_len + seq_range[None, :]) % buffer.capacity
+            recent_batch = {
+                'obs': buffer.obs[recent_indices],
+                'action': buffer.actions[recent_indices],
+                'reward': buffer.rewards[recent_indices],
+                'terminal': buffer.dones[recent_indices],
+                'is_first': buffer.is_first[recent_indices],
+            }
+
+            # Pool 3: Uniform from main buffer
+            uniform_batch = buffer.sample(uniform_slots)
+
+            # Concatenate
+            combined = {}
+            for key in ['obs', 'action', 'reward', 'terminal', 'is_first']:
+                combined[key] = np.concatenate([pos_batch[key], recent_batch[key], uniform_batch[key]], axis=0)
+            all_batches.append(combined)
+        
+        # Stack into (num_batches, batch_size, seq_len, dim) and transfer once
+        stacked = {k: jnp.array(np.stack([b[k] for b in all_batches])) for k in all_batches[0]}
+        return stacked
 
 # -----------------------------------------------------------------------------
 # Replay Buffer

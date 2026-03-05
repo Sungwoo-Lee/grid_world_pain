@@ -13,6 +13,14 @@ agent:
   buffer_device: "gpu"   # "gpu" (JAX array, zero-copy, fast) or "cpu" (numpy array, transfer overhead)
   buffer_capacity: 1000000
   
+  # Mixture sampling (DreamerV4-inspired two-buffer architecture)
+  # Set sampling_mode: "uniform" to disable (default backward-compatible behavior)
+  sampling_mode: "mixture"                # "uniform" or "mixture"
+  mixture_positive_slots: 5               # batch slots for positive-reward sequences
+  mixture_recent_slots: 5                 # batch slots for recent sequences
+  mixture_recent_window: 10000            # "recent" = last N transitions in main buffer
+  positive_buffer_capacity: 100000        # dedicated positive-reward buffer (100K transitions = 16 MB)
+  
   # Network Configuration (Comparative Alignment with Recurrent PPO)
   encoder_dim: 128
   encoder_fc_layers: [128, 128]
