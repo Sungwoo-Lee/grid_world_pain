@@ -101,6 +101,27 @@ The main buffer and positive buffer have different capacities and fill rates. In
 **Issue 7: Positive Buffer Block Alignment**
 The positive buffer must store data in the same env-major block format as the main buffer. When copying a positive block from the main buffer to the positive buffer, copy the full `sequence_length` contiguous transitions as a single unit. The positive buffer's `add_batch` receives exactly `sequence_length` items per call.
 
+**Issue 8: Positive Block Selection Semantics — Fixed Boundaries, Not Sliding Windows**
+
+The positive block detection operates on **fixed, non-overlapping** 128-step blocks aligned to insertion order. There is NO overlap — block 0 is steps `[0:128]`, block 1 is `[128:256]`, etc. The criterion is `any(reward > 0)` over the entire block: if even 1 of the 128 timesteps has a positive reward, the whole block is copied to the positive buffer.
+
+A typical positive block looks like:
+
+```
+t=0..50:   negative rewards (wandering, taking damage)
+t=51..55:  positive rewards (found food, eating)
+t=56..127: negative rewards (moving away)
+```
+
+This mixed +/- content is **by design and desirable**. The world model needs the full temporal context — the approach, the eating, and the aftermath — to learn the dynamics around positive events. If we only kept the positive timesteps, the model would have no context for *how the agent got there* or *what happened after*.
+
+**What this does NOT do:**
+- Does NOT create sliding windows centered on positive rewards
+- Does NOT duplicate a positive event across multiple overlapping sequences
+- Block boundaries are arbitrary relative to episodes — a positive reward near a block boundary (e.g., at `t=0` or `t=127`) means only one block gets selected, not a neighbor
+
+**Edge case**: If a positive reward falls at exactly the boundary between two blocks, only one block captures it and the temporal context is one-sided. This is rare and acceptable — the positive buffer accumulates many blocks over time, providing diverse contexts around positive events.
+
 ## Implementation Plan
 
 ### Design
