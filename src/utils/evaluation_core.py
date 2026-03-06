@@ -42,7 +42,8 @@ def generic_inference(model, x, h, key=None, eval_mode=False):
 
 
 def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos, ep_actions,
-                         ep_rewards, ep_obs, stat_headers, action_map, params, debug=False):
+                         ep_rewards, ep_obs, stat_headers, action_map, params, debug=False,
+                         ep_true_obs=None):
     """Write one episode's stats to CSV. Uses one batched device_get then writes rows."""
     info_keys = ['ate_food', 'event_collided', 'rested', 'damage',
                  'damage_danger', 'damage_predator', 'damage_obstacle', 'termination_reason']
@@ -63,8 +64,13 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
         vals = [inf.get(ik, 0) for inf in ep_jax_infos]
         batched_info[ik] = np.array(jax.device_get(vals))
     batched_obs = np.array(jax.device_get(jnp.stack(ep_obs)))
+    batched_true_obs = np.array(jax.device_get(jnp.stack(ep_true_obs))) if ep_true_obs is not None else None
+    
     obs_header_indices = [i for i, h in enumerate(stat_headers) if h.startswith("obs_")]
     num_obs_headers = len(obs_header_indices)
+    
+    true_obs_header_indices = [i for i, h in enumerate(stat_headers) if h.startswith("true_")]
+    num_true_obs_headers = len(true_obs_header_indices)
     num_steps = len(ep_jax_states)
     stats_path = os.path.join(stats_dir, f"{episode_number:06d}ep_stats.csv")
     with open(stats_path, 'w', newline='') as f:
@@ -94,6 +100,12 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
             obs_vec = batched_obs[t]
             for i in range(min(num_obs_headers, len(obs_vec))):
                 row.append(float(obs_vec[i]))
+            
+            # True obs (if noise diagnostics enabled)
+            if batched_true_obs is not None:
+                true_vec = batched_true_obs[t]
+                for i in range(min(num_true_obs_headers, len(true_vec))):
+                    row.append(float(true_vec[i]))
             res_pos = batched_state['res_pos'][t]
             res_active = batched_state['res_active'][t]
             for i in range(res_pos.shape[0]):
@@ -149,6 +161,10 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     if record_stats is None:
         record_stats = config.get('testing.record_stats', False)
     
+    # Noise diagnostics: Record true (noise-free) observations alongside noised obs
+    # Mandatory key — no fallback default.
+    record_true_obs = config.get_mandatory('testing.record_true_observations') and record_stats
+    
     stats_dir = os.path.join(results_dir, "stats", str(checkpoint_pct))
     # Build stat_headers and action_map whenever we might record (single or parallel path)
     stat_headers = []
@@ -182,6 +198,27 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 for i in range(dim): stat_headers.append(f"obs_vis_{i}")
             elif sensor_name == "Proprioception":
                 for i in range(dim): stat_headers.append(f"obs_prop_{i}")
+        
+        # Add headers for true observations if recording is enabled
+        if record_true_obs:
+            for sensor_name, dim in breakdown.items():
+                if sensor_name == "Olfaction":
+                    for i in range(dim): stat_headers.append(f"true_olf_{i}")
+                elif sensor_name == "Extero Nociception":
+                    stat_headers.append("true_noc")
+                elif sensor_name == "Collision":
+                    coll_offsets = get_visual_offsets(params.sensor_range)
+                    for i in range(dim):
+                        dr, dc = coll_offsets[i]
+                        stat_headers.append(f"true_coll_r{dr}c{dc}")
+                elif sensor_name == "Location":
+                    stat_headers += ["true_loc_r", "true_loc_c"]
+                elif sensor_name in ["Satiation", "Nutrition", "Injury"]:
+                    stat_headers.append(f"true_intero_{sensor_name.lower()}")
+                elif sensor_name == "Visual":
+                    for i in range(dim): stat_headers.append(f"true_vis_{i}")
+                elif sensor_name == "Proprioception":
+                    for i in range(dim): stat_headers.append(f"true_prop_{i}")
         
         # Add headers for world entities (matching _write_episode_stats loop)
         # 1. Resources
@@ -221,6 +258,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths, all_frames,
                 record_stats, stats_dir, stat_headers, action_map, params, max_steps=None,
                 render_video=render_video, wandb_enabled=wandb_enabled, debug=debug, quiet=quiet,
+                record_true_obs=record_true_obs,
             )
         else:
             # --- Parallel-env path (episode-ticket design) ---
@@ -229,6 +267,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths,
                 record_stats, stats_dir, stat_headers, action_map, params,
                 render_video=render_video, wandb_enabled=wandb_enabled, debug=debug, quiet=quiet,
+                record_true_obs=record_true_obs,
             )
 
     # Save Consolidated Video (single-env path fills all_frames; parallel path leaves it empty for now)
@@ -263,7 +302,8 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
 def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
                          key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths, all_frames,
                          record_stats, stats_dir, stat_headers, action_map, params_ref, max_steps,
-                         render_video=False, wandb_enabled=False, debug=False, quiet=True):
+                         render_video=False, wandb_enabled=False, debug=False, quiet=True,
+                         record_true_obs=False):
     """Original single-env loop: one episode at a time."""
     from src.environment.sensor import get_observation_breakdown
     if render_video:
@@ -295,6 +335,7 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
         ep_actions = []
         ep_rewards = []
         ep_obs = []
+        ep_true_obs = [] if record_true_obs else None
         
         if record_stats:
             # Step 0 stats
@@ -314,6 +355,9 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
             ep_actions.append(-1)    # No action at step 0 ("None")
             ep_rewards.append(0.0)
             ep_obs.append(obs)
+            if record_true_obs:
+                true_obs_step0 = get_observation(state, params_ref, apply_noise=False)
+                ep_true_obs.append(true_obs_step0)
         
         def get_sensory_viz(obs_vec, true_obs_vec=None):
             # Internal helper to slice flat obs into renderer-friendly format
@@ -467,13 +511,17 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
                 ep_actions.append(action_idx)
                 ep_rewards.append(float(reward))
                 ep_obs.append(next_obs)
+                if record_true_obs:
+                    true_obs_step = get_observation(state, params_ref, apply_noise=False)
+                    ep_true_obs.append(true_obs_step)
             
             obs = next_obs
             step_pbar.update(1)
         
         if record_stats and ep_jax_states:
             _write_episode_stats(stats_dir, ep + 1, ep_jax_states, ep_jax_infos, ep_actions,
-                                 ep_rewards, ep_obs, stat_headers, action_map, params_ref, debug)
+                                 ep_rewards, ep_obs, stat_headers, action_map, params_ref, debug,
+                                 ep_true_obs=ep_true_obs)
 
         step_pbar.close()
         
@@ -491,7 +539,8 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
 def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_envs, seed, results_dir, checkpoint_pct,
                           key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths,
                           record_stats, stats_dir, stat_headers, action_map, params_ref,
-                          render_video=False, wandb_enabled=False, debug=False, quiet=True):
+                          render_video=False, wandb_enabled=False, debug=False, quiet=True,
+                          record_true_obs=False):
     """Parallel env evaluation with episode-ticket design: only effective_num_envs run; when one finishes, refill if tickets remain."""
     from src.environment.wrapper import ParallelEnv
     
@@ -512,6 +561,7 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
     slot_actions = [[] for _ in range(effective_num_envs)]
     slot_rewards = [[] for _ in range(effective_num_envs)]
     slot_obs = [[] for _ in range(effective_num_envs)]
+    slot_true_obs = [[] for _ in range(effective_num_envs)] if record_true_obs else None
     
     if record_stats:
         for i in range(effective_num_envs):
@@ -525,6 +575,11 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
             slot_actions[i].append(-1)
             slot_rewards[i].append(0.0)
             slot_obs[i].append(obs[i])
+            if record_true_obs:
+                true_obs_i = get_observation(
+                    jax.tree_util.tree_map(lambda x: x[i], states), params_ref, apply_noise=False
+                )
+                slot_true_obs[i].append(true_obs_i)
     
     h_state = model.initial_state(batch_size=effective_num_envs) if model is not None and hasattr(model, 'initial_state') else None
     completed_episodes = 0
@@ -566,6 +621,11 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
             slot_actions[i].append(int(actions[i]))
             slot_rewards[i].append(float(rewards[i]))
             slot_obs[i].append(next_obs[i])
+            if record_true_obs:
+                true_obs_i = get_observation(
+                    jax.tree_util.tree_map(lambda x: x[i], next_states), params_ref, apply_noise=False
+                )
+                slot_true_obs[i].append(true_obs_i)
         
         states = next_states
         obs = next_obs
@@ -583,7 +643,8 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
                 if record_stats and slot_states[i]:
                     _write_episode_stats(stats_dir, completed_episodes, slot_states[i], slot_infos[i],
                                          slot_actions[i], slot_rewards[i], slot_obs[i],
-                                         stat_headers, action_map, params_ref, debug)
+                                         stat_headers, action_map, params_ref, debug,
+                                         ep_true_obs=slot_true_obs[i] if record_true_obs else None)
                 ep_pbar.update(1)
 
                 # Reset the slot buffer immediately
@@ -592,6 +653,8 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
                 slot_actions[i] = []
                 slot_rewards[i] = []
                 slot_obs[i] = []
+                if record_true_obs:
+                    slot_true_obs[i] = []
                 # Deactivate until reset
                 slot_active[i] = False
 
@@ -624,6 +687,9 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
                 slot_actions[i] = [-1]
                 slot_rewards[i] = [0.0]
                 slot_obs[i] = [new_obs]
+                if record_true_obs:
+                    true_obs_new = get_observation(new_state, params_ref, apply_noise=False)
+                    slot_true_obs[i] = [true_obs_new]
         
         if completed_episodes >= num_episodes:
             if debug:

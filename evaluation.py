@@ -57,7 +57,7 @@ from src.environment.config_loader import load_env_params
 from src.models.recurrent_ppo_network import ActorCriticRNN
 from src.environment.wrapper import ParallelEnv
 from src.environment.core import jax_step, jax_reset
-from src.environment.sensor import get_observation
+from src.environment.sensor import get_observation, get_observation_breakdown
 from src.utils.evaluation_core import evaluate_jax_checkpoint
 
 def peel_nnx_state(st):
@@ -267,17 +267,23 @@ def main():
                 rngs=rngs,
                 rnn_type=rnn_type,
                 activation=activation,
-                modulation_config=modulation_config
+                modulation_config=modulation_config,
+                observation_breakdown=get_observation_breakdown(params),
+                encoding_config=config.to_dict().get('agent', {})
             )
             
             # Restore via manager (returns the raw dict)
             restored = checkpointer.restore(iteration)
             
-            # Use the 'model' key as saved in train_jax.py
             if 'model' in restored:
+                from flax.nnx.statelib import to_pure_dict
                 model_state = restored['model']
                 peeled_state = peel_nnx_state(model_state)
-                nnx.update(model, peeled_state)
+                
+                # Robustly merge restored state into current model structure
+                current_struct = to_pure_dict(nnx.state(model, nnx.Param))
+                merged_state = _merge_restored_into_module_state(current_struct, peeled_state)
+                nnx.update(model, merged_state)
                 print(f"  [Success] Restored RecurrentPPO model weights from iteration {iteration}")
             else:
                 print(f"  [Warning] 'model' key not found in restored checkpoint. Keys: {list(restored.keys())}")

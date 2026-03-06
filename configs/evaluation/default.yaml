@@ -4,3 +4,4 @@ testing:
   num_envs: 1
   render_video: true
   record_stats: true
+  record_true_observations: false
