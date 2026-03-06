@@ -13,6 +13,10 @@
 - New issues discovered during work: append to same doc if closely related, create separate doc if independent. Cross-reference with `[Related](link)`.
 - Include enough detail (file paths, line numbers, code snippets) for the implementing agent to execute without ambiguity.
 
+### Configuration Protocol
+- **No fallback defaults** for critical config params. Implementation agents must use `config.get_mandatory('key')` — missing YAML key → `ValueError`.
+- New config keys added by plans must be listed in the plan's File Changes section with the exact YAML path and value.
+
 ### Verification Protocol
 After Gemini completes implementation, verify using this workflow:
 
