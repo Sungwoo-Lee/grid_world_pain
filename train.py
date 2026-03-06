@@ -31,6 +31,7 @@ import argparse
 import os
 import time
 import signal
+import sys
 
 # --- Pre-parse arguments for Device Selection ---
 # To properly set JAX_PLATFORMS, we must do this BEFORE importing jax.
@@ -98,6 +99,11 @@ class PPOConfig(NamedTuple):
     activation: str = "tanh"
     return_mode: str = "MC"
     max_grad_norm: float = 0.5
+
+# --- ANSI Color Codes ---
+YELLOW = "\033[1;33m"
+RED = "\033[1;31m"
+NC = "\033[0m" # No Color
 
 # --- Graceful Shutdown ---
 stop_requested = False

@@ -63,8 +63,18 @@ def run_remote(node_id, conda_env, script_cmd, dry_run=False):
         f"> {log_file} 2>&1 &"
     )
 
+    # SSH Multiplexing Options
+    # %h: host, %p: port, %r: remote user
+    control_path = "/tmp/ssh_mux_%h_%p_%r"
+    ssh_opts = [
+        "-o", "ControlMaster=auto",
+        "-o", f"ControlPath={control_path}",
+        "-o", "ControlPersist=600" # Persist for 10 minutes
+    ]
+
     ssh_cmd = [
         "ssh", "-p", str(SSH_PORT),
+    ] + ssh_opts + [
         f"{REMOTE_USER}@{ip}",
         remote_cmd
     ]
@@ -90,6 +100,7 @@ def run_remote(node_id, conda_env, script_cmd, dry_run=False):
         
         tail_cmd = [
             "ssh", "-p", str(SSH_PORT),
+            "-o", f"ControlPath={control_path}",
             f"{REMOTE_USER}@{ip}",
             f"tail -n 20 -f {log_file}"
         ]
