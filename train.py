@@ -30,6 +30,7 @@ Usage:
 import argparse
 import os
 import time
+import signal
 
 # --- Pre-parse arguments for Device Selection ---
 # To properly set JAX_PLATFORMS, we must do this BEFORE importing jax.
@@ -98,6 +99,18 @@ class PPOConfig(NamedTuple):
     return_mode: str = "MC"
     max_grad_norm: float = 0.5
 
+# --- Graceful Shutdown ---
+stop_requested = False
+
+def signal_handler(sig, frame):
+    global stop_requested
+    if not stop_requested:
+        print(f"\n{YELLOW}⚠️  Shutdown signal received (signal {sig}). Finishing current iteration...{NC}")
+        stop_requested = True
+    else:
+        print(f"\n{RED}🚨 Force quitting!{NC}")
+        sys.exit(1)
+
 # Defaults
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "configs", "environment", "default.yaml")
 
@@ -134,6 +147,10 @@ def main():
     parser.add_argument("--wandb-entity", type=str, help="WandB Entity Name")
     
     args = parser.parse_args()
+
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
     if args.debug:
         print(f"[DEBUG] Script started. CLI arguments: {args}", flush=True)
@@ -760,6 +777,8 @@ def main():
 
         try:
             while (total_episodes_completed < episodes) if episodes > 0 else (global_step < total_timesteps):
+                if stop_requested:
+                    break
 
                 iteration += 1
                 if args.debug: print(f"\n[DEBUG] --- Iteration {iteration} Start (Step: {global_step}) ---", flush=True)
