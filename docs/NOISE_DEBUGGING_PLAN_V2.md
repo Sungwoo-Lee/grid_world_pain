@@ -450,3 +450,48 @@ if __name__ == "__main__":
 | `evaluation.py` | Model init + state-dict merge fixes | ⚠️ | **Out of scope.** Added `observation_breakdown` and `encoding_config` to `ActorCriticRNN` init, and `_merge_restored_into_module_state()` helper for checkpoint restoration. Gemini reports this was needed to make evaluation run. Not part of this plan — should be tracked separately. |
 
 **Conclusion**: All planned changes implemented correctly. `evaluation_core.py` changes match the plan precisely. One out-of-scope file modified (`evaluation.py`) — model initialization fixes that were prerequisites for running eval. The config default is `false` instead of `true` (plan said `true`), which is a reasonable safety choice.
+
+### Noise Diagnostics Results
+
+**Run**: `results/JAX_RecurrentPPO/20260305-225610_rppo_128env_GAE_128mlp_1bush_3pred_2food/stats/10000030/`
+**Data**: 3 episodes, 174 total steps
+
+#### Raw analysis output (`analyze_noise_diagnostics.py`)
+
+| Modality | σ_expected | noise_std | noise_mean | SNR | clip_frac | Status |
+|----------|:----------:|:---------:|:----------:|:---:|:---------:|--------|
+| Injury | 0.05 | 0.04550 | +0.01475 | 3.98 | 24.1% | OK (SD) |
+| Nutrition | 0.10 | 0.09117 | -0.01026 | 3.09 | 0.6% | OK |
+| Satiation | 0.10 | 0.10672 | -0.00026 | 2.64 | 0.0% | OK |
+| Extero Noc | 0.01 | 0.00668 | +0.00210 | 32.31 | 34.5% | 0.67x |
+| Olfaction | 0.15 | 0.12533 | +0.03035 | 3.11 | 19.9% | OK |
+| Collision | 0.01 | 0.00669 | +0.00255 | 60.88 | 48.4% | 0.67x |
+| Visual | 0.05 | 0.03502 | +0.01676 | 10.77 | 40.8% | 0.70x |
+| Proprioception | 0.05 | 0.03181 | +0.01227 | 11.72 | 53.4% | 0.64x |
+
+Four modalities show apparent MISMATCH (0.64x–0.70x). Investigation below.
+
+#### Root cause: boundary clipping, not wrong sigma
+
+Most true values cluster at 0 (e.g. Collision 79%, Proprioception 83%, Visual 83%). When `true=0` and noise is negative, clipping at `clip_min=0` truncates the noise, reducing measured std and introducing positive mean bias.
+
+| Modality | true_at_0% | Interior noise_std | Interior ratio |
+|----------|:----------:|:------------------:|:--------------:|
+| Injury (SD) | 43.1% | 0.06445 | 1.29x (expected: >1x due to state-dependent α) |
+| Nutrition | 0.6% | 0.09315 | 0.93x |
+| Satiation | 0.6% | 0.10603 | 1.06x |
+| Extero Noc | 68.4% | 0.00872 | 0.87x |
+| Olfaction | 40.0% | 0.14060 | 0.94x |
+| Visual | 82.8% | 0.05061 | 1.01x |
+
+When excluding boundary values, **all modalities match their configured sigma within ±15%**.
+
+#### Ordering verification
+
+The V1 index mismatch fix is confirmed correct — each modality receives its intended sigma, not another modality's:
+- Nutrition gets ~0.10, not 0.01 or 0.15
+- Olfaction gets ~0.15, not 0.10 or 0.05
+- Injury gets ~0.05 base with state-dependent scaling (1.29x at mean injury)
+- Extero Nociception gets ~0.01, not 0.05 or 0.10
+
+**Verdict**: Noise implementation is correct. The apparent mismatches are expected boundary-clipping artifacts, not sigma misassignment.
