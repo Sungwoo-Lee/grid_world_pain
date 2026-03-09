@@ -296,8 +296,11 @@ def main():
     # Budget scales with parallelization: episodes * steps per episode * num environments
     total_timesteps = args.total_timesteps or (episodes * env_max_steps * num_envs)
     
-    if algorithm == "RecurrentPPO":
-        num_steps = args.num_steps or config.get_mandatory('agent.sequence_length')
+    if algorithm in ["RecurrentPPO", "PPO"]:
+        if algorithm == "RecurrentPPO":
+            num_steps = args.num_steps or config.get_mandatory('agent.sequence_length')
+        else:
+            num_steps = args.num_steps or config.get_mandatory('agent.num_steps')
         hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
         lr = args.lr or config.get_mandatory('agent.lr_actor')
     elif algorithm == "DreamerV3":
@@ -1448,7 +1451,7 @@ def main():
                                 for k in BEHAVIOR_KEYS:
                                     ep_data[k] = float(episode_behavior[k][i])
                                 for k in BEHAVIOR_DIST_KEYS:
-                                    ep_data[k] = float(episode_behavior[k][i] / max(ep_length, 1))
+                                    ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
                                 ep_data['termination_reason'] = int(info_np_step['termination_reason'][i])
 
                             ep_info_buffer.append(ep_data)
@@ -1531,7 +1534,7 @@ def main():
 
                 elif algorithm == "PPO":
                     if args.debug: print(f"  [DEBUG] Collecting {num_steps * num_envs} steps of experience...", end="", flush=True)
-                    env_state, key, losses, num_completed, rollout_rew, rollout_done = jit_train(
+                    env_state, key, losses, num_completed, trajectories = jit_train(
                         model, optimizer, params, env_state, key, ppo_config
                     )
                     if args.debug: print(f" Done.", flush=True)
@@ -1539,14 +1542,27 @@ def main():
                     steps_this_iter = num_steps * num_envs
                     global_step += steps_this_iter
                     
-                    rew_np = np.array(rollout_rew)
-                    done_np = np.array(rollout_done)
+                    step_info = trajectories.step_info
+                    info_np = {}
+                    if step_info is not None:
+                        for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']:
+                            info_np[k] = np.array(getattr(step_info, k))
+
+                    rew_np = np.array(trajectories.reward)
+                    done_np = np.array(trajectories.done)
+                    iteration_episodes = []
                     
                     for t in range(num_steps):
                         episode_returns += rew_np[t]
                         episode_lengths += 1
-                        dones_t = done_np[t].astype(bool)
                         
+                        if info_np:
+                            for k in BEHAVIOR_KEYS:
+                                episode_behavior[k] += info_np[k][t]
+                            for k in BEHAVIOR_DIST_KEYS:
+                                episode_dist_sums[k] += info_np[k][t]
+
+                        dones_t = done_np[t].astype(bool)
                         if np.any(dones_t):
                             completed_indices = np.where(dones_t)[0]
                             for i in completed_indices:
@@ -1555,23 +1571,23 @@ def main():
                                 ep_length = int(episode_lengths[i])
                                 
                                 ep_data = {'r': ep_reward, 'l': ep_length}
-                                if info:
+                                if info_np:
                                     for k in BEHAVIOR_KEYS:
                                         ep_data[k] = float(episode_behavior[k][i])
                                     for k in BEHAVIOR_DIST_KEYS:
-                                        ep_data[k] = float(episode_behavior[k][i] / max(ep_length, 1))
-                                    ep_data['termination_reason'] = int(info_np_step['termination_reason'][i])
+                                        ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
+                                    ep_data['termination_reason'] = int(info_np['termination_reason'][t][i])
 
                                 ep_info_buffer.append(ep_data)
                                 iteration_episodes.append(ep_data)
                                 episode_returns[i] = 0.0
                                 episode_lengths[i] = 0
-                                if info:
+                                if info_np:
                                     for k in BEHAVIOR_KEYS:
                                         episode_behavior[k][i] = 0.0
                                     for k in BEHAVIOR_DIST_KEYS:
                                         episode_dist_sums[k][i] = 0.0
-                    
+                            
                     if wandb_enabled:
                         logs = {
                             "iteration": iteration,
@@ -1579,10 +1595,33 @@ def main():
                         }
                         if iteration_episodes:
                             rewards_list = [ep['r'] for ep in iteration_episodes]
+                            lengths_list = [ep['l'] for ep in iteration_episodes]
                             logs.update({
                                 "Episode/Reward": np.mean(rewards_list),
-                                "Episode/Number": total_episodes_completed
+                                "Episode/Reward_Min": np.min(rewards_list),
+                                "Episode/Reward_Max": np.max(rewards_list),
+                                "Episode/Steps": np.mean(lengths_list),
+                                "Episode/Number": total_episodes_completed,
                             })
+                            # Behavioral metrics
+                            if 'ate_food' in iteration_episodes[0]:
+                                logs.update({
+                                    "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
+                                    "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
+                                    "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+                                    "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
+                                    "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
+                                    "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
+                                    "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
+                                    "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+                                    "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
+                                })
+                                # Termination reason distribution
+                                term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
+                                for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
+                                    logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
                         if losses:
                             # losses is a list of (total_loss, (p_loss, v_loss, e_loss))
                             avg_total = np.mean([l[0] for l in losses])

@@ -11,6 +11,22 @@ class Transition(NamedTuple):
     done: jnp.ndarray
     log_prob: jnp.ndarray
     value: jnp.ndarray
+    step_info: Any = None
+
+class StepInfo(NamedTuple):
+    """Per-step environment info carried through scan for behavioral logging."""
+    ate_food: jnp.ndarray
+    hit_predator: jnp.ndarray
+    hit_danger: jnp.ndarray
+    event_collided: jnp.ndarray
+    rested: jnp.ndarray
+    damage: jnp.ndarray
+    damage_predator: jnp.ndarray
+    damage_danger: jnp.ndarray
+    damage_obstacle: jnp.ndarray
+    dist_to_food: jnp.ndarray
+    dist_to_pred: jnp.ndarray
+    termination_reason: jnp.ndarray
 
 class PPOBatch(NamedTuple):
     obs: jnp.ndarray
@@ -100,7 +116,7 @@ def collect_trajectories(model, env_params, last_state, last_key, num_steps):
             get_action_and_value_ppo_nnx, in_axes=(None, 0, 0)
         )(model, obs, act_keys)
         
-        next_state, reward, done, _ = jax.vmap(jax_step, in_axes=(0, 0, None))(state, action, env_params)
+        next_state, reward, done, info = jax.vmap(jax_step, in_axes=(0, 0, None))(state, action, env_params)
         
         reset_key, key = jax.random.split(key)
         reset_state = jax.vmap(jax_reset, in_axes=(None, 0))(env_params, jax.random.split(reset_key, state.agent_pos.shape[0]))
@@ -110,7 +126,24 @@ def collect_trajectories(model, env_params, last_state, last_key, num_steps):
             reset_state, next_state
         )
         
-        trans = Transition(obs=obs, action=action, reward=reward, done=done, log_prob=log_prob, value=value)
+        step_info = StepInfo(
+            ate_food=info['ate_food'],
+            hit_predator=info['hit_predator'],
+            hit_danger=info['hit_danger'],
+            event_collided=info['event_collided'],
+            rested=info['rested'],
+            damage=info['damage'],
+            damage_predator=info['damage_predator'],
+            damage_danger=info['damage_danger'],
+            damage_obstacle=info['damage_obstacle'],
+            dist_to_food=info['dist_to_food'],
+            dist_to_pred=info['dist_to_pred'],
+            termination_reason=info['termination_reason'],
+        )
+        trans = Transition(
+            obs=obs, action=action, reward=reward, done=done, 
+            log_prob=log_prob, value=value, step_info=step_info
+        )
         return (final_state, key), trans
 
     (final_state, final_key), trajectories = jax.lax.scan(
@@ -177,4 +210,4 @@ def train_iteration_ppo(model, optimizer, env_params, env_state, key, config):
         epoch_losses.append((loss, aux))
     
     num_completed = jnp.sum(trajectories.done)
-    return next_env_state, key, epoch_losses, num_completed, trajectories.reward, trajectories.done
+    return next_env_state, key, epoch_losses, num_completed, trajectories

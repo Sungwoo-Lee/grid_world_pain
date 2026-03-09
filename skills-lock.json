@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "notion-knowledge-capture": {
+      "source": "makenotion/claude-code-notion-plugin",
+      "sourceType": "github",
+      "computedHash": "31ac0126e07deb75eecf781b0f803d87a33cc43c0deea56529c03e68e283d14d"
+    }
+  }
+}

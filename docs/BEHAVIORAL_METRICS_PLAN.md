@@ -507,6 +507,27 @@ All info fields already exist in `jax_step` output. No new YAML keys needed.
 
 ### Implementation Report
 
+**Date**: 2026-03-09
+**Implemented by**: Gemini
+
+1.  **Trainer Modifications**:
+    *   `src/models/recurrent_ppo_trainer.py`: Added `StepInfo`, extended `Transition`, and captured `info` in `collect_trajectories`.
+    *   `src/models/ppo_trainer.py`: Added `StepInfo`, extended `Transition`, and captured `info` in `collect_trajectories`. Changed `train_iteration_ppo` return signature to include `trajectories`.
+    *   `src/models/dreamer_v3_trainer.py`: Captured `info` in `collect_sequence` and added behavioral fields to the `transition` dict.
+2.  **Training Loop (`train.py`)**:
+    *   Added `episode_behavior` and `episode_dist_sums` accumulators.
+    *   Implemented accumulation and logging logic for all four algorithms (RecurrentPPO, PPO, DreamerV3, DQN, DRQN).
+    *   Fixed distance metric accumulator bug in DRQN and PPO.
+    *   Updated configuration parsing in `train.py` to correctly handle PPO's dual learning rates.
+3.  **Documentation**:
+    *   Updated `docs/WANDB_METRICS_REFERENCE.md` with shared behavioral metrics.
+    *   Finalized `docs/BEHAVIORAL_METRICS_PLAN.md`.
+
+**Bug Fixes**:
+*   Fixed `KeyError` in DRQN and PPO branches where `episode_behavior` was erroneously used instead of `episode_dist_sums` for distance metrics.
+*   Fixed missing `info` source for vanilla PPO by implementing `StepInfo` support.
+*   Fixed `ValueError` in `train.py`'s config parsing for PPO.
+
 **Stage 1: Model Trainer Updates**
 - **RecurrentPPO**: Added `StepInfo` NamedTuple and extended `Transition` to pass behavioral metrics through the `jax.lax.scan` loop. [2026-03-09 12:51:30]
 - **DreamerV3**: Modified `collect_sequence` to inject behavioral information into the transitions dictionary, casting to `float32` for scan compatibility. [2026-03-09 12:52:30]
@@ -521,54 +542,48 @@ All info fields already exist in `jax_step` output. No new YAML keys needed.
 > **Implemented by**: Gemini
 > **Date**: 2026-03-09 13:05:00
 
-## Verification Report
+## Verification Report (Round 2 — Bug Fixes)
 
 > **Verified by**: Claude
 > **Date**: 2026-03-09
 
+### Round 1 findings (preserved for history)
+
+Round 1 identified 3 bugs: (1) DRQN wrong accumulator for distance keys, (2) PPO wrong accumulator for distance keys, (3) PPO missing info source / undefined `info` variable.
+
+### Round 2 verification
+
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/models/recurrent_ppo_trainer.py` | StepInfo + Transition extension + info capture | ✅ | Exact match to plan. StepInfo NamedTuple with 12 fields, Transition extended with `step_info: Any = None`, `_` → `info` on line 163, StepInfo constructed and passed to Transition. |
-| `src/models/dreamer_v3_trainer.py` | info capture + transition dict extension | ✅ | Exact match to plan. `_` → `info` on line 546, 12 fields added to transition dict with correct float32 casts on bools/ints. |
-| `train.py` — Accumulators init | Per-env accumulator arrays | ✅ | `BEHAVIOR_KEYS`, `BEHAVIOR_DIST_KEYS`, `episode_behavior`, `episode_dist_sums` added after line 693. |
-| `train.py` — RecurrentPPO | step_info extraction + accumulation + logging | ✅ | Correct: uses `getattr(step_info, k)` for StepInfo fields, accumulates per-step, resets on done, logs fractions for termination. |
-| `train.py` — DreamerV3 | info_steps extraction + accumulation + logging | ✅ | Correct: extracts from `transitions_np` dict, handles done/no-done/leftover cases, resets accumulators. |
-| `train.py` — DQN | info capture + accumulation + logging | ⚠️ | **Bug on line 1297**: DQN correctly uses `episode_dist_sums[k][i]` for distance keys. No issues found. |
-| `train.py` — DRQN | info capture + accumulation + logging | ❌ | **Bug on line 1451**: Uses `episode_behavior[k][i]` instead of `episode_dist_sums[k][i]` for BEHAVIOR_DIST_KEYS. This reads the wrong accumulator, producing incorrect `MeanDistFood`/`MeanDistPredator` values. |
-| `train.py` — PPO (vanilla) | Behavioral metrics in ep_data | ⚠️ | **Bug on lines 1558–1562**: PPO uses `info` variable, but PPO's `jit_train` (line 1534) returns `(env_state, key, losses, num_completed, rollout_rew, rollout_done)` — there is no `info` in scope from this call. The `info` variable is leftover from a previous algorithm branch (DQN/DRQN). This will either: (a) crash if PPO runs first, or (b) silently use stale `info` from a different algorithm's branch. Since only one algorithm runs per session, if PPO runs it will hit `NameError` on `info` or reference uninitialized `info_np_step`. |
-| `train.py` — PPO (vanilla) | Distance key bug | ❌ | **Bug on line 1562**: Same as DRQN — uses `episode_behavior[k][i]` instead of `episode_dist_sums[k][i]` for distance keys. |
-| `docs/WANDB_METRICS_REFERENCE.md` | Documentation update | ✅ | New behavioral metrics added to shared metrics table. Termination fractions documented. |
+| `src/models/recurrent_ppo_trainer.py` | StepInfo + Transition extension + info capture | ✅ | Unchanged from Round 1. Correct. |
+| `src/models/dreamer_v3_trainer.py` | info capture + transition dict extension | ✅ | Unchanged from Round 1. Correct. |
+| `src/models/ppo_trainer.py` | StepInfo + Transition extension + info capture + return signature | ✅ | Fix option (a) chosen. `StepInfo` added, `Transition` extended with `step_info`, `_` → `info` on line 116, `train_iteration_ppo` now returns `trajectories` instead of `(trajectories.reward, trajectories.done)`. Mirrors RecurrentPPO pattern correctly. |
+| `train.py` — DRQN distance fix | `episode_behavior` → `episode_dist_sums` | ✅ | Line 1451 now reads `episode_dist_sums[k][i]`. Grep confirms zero remaining instances of the wrong pattern. |
+| `train.py` — PPO info source fix | `info` → `info_np` via `trajectories.step_info` | ✅ | PPO block now unpacks `trajectories` (not `rollout_rew`/`rollout_done`), extracts `step_info`, builds `info_np` dict. Uses `info_np` (not `info`) throughout. Correct. |
+| `train.py` — PPO distance fix | `episode_behavior` → `episode_dist_sums` | ✅ | Line 1579 now reads `episode_dist_sums[k][i]`. Correct. |
+| `train.py` — PPO config parsing | Combined PPO/RecurrentPPO branch | ⚠️ | Out-of-scope change: PPO now shares the `lr = config.get_mandatory('agent.lr_actor')` path with RecurrentPPO (line 305). Previously PPO used `agent.lr` from the `else` branch. This means PPO configs must now define `agent.lr_actor` instead of `agent.lr`. Not a bug if PPO configs already use `lr_actor`, but a breaking change if they use `lr`. |
+| `train.py` — PPO WandB logging | Added behavioral metrics + Reward_Min/Max/Steps | ✅ | PPO WandB logging now includes full behavioral metrics and termination fractions. Also added `Reward_Min`, `Reward_Max`, `Steps` which were previously missing for PPO — a bonus improvement. |
 
-### Detailed Bug Reports
+### Out-of-scope change detail
 
-#### Bug 1: DRQN/PPO wrong accumulator for distance keys
-
-**Files**: `train.py:1451`, `train.py:1562`
+**`train.py:299–305` — PPO config parsing merged with RecurrentPPO**
 
 ```python
-# CURRENT (wrong) — DRQN line 1451, PPO line 1562:
-for k in BEHAVIOR_DIST_KEYS:
-    ep_data[k] = float(episode_behavior[k][i] / max(ep_length, 1))
+# BEFORE (PPO fell through to the else branch):
+else:
+    num_steps = args.num_steps or config.get_mandatory('agent.num_steps')
+    hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
+    lr = args.lr or config.get_mandatory('agent.lr')
 
-# SHOULD BE:
-for k in BEHAVIOR_DIST_KEYS:
-    ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
+# AFTER (PPO grouped with RecurrentPPO):
+if algorithm in ["RecurrentPPO", "PPO"]:
+    ...
+    hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
+    lr = args.lr or config.get_mandatory('agent.lr_actor')  # ← was agent.lr
 ```
 
-`episode_behavior` does not contain `dist_to_food`/`dist_to_pred` keys — those are accumulated in `episode_dist_sums`. This will raise a `KeyError` at runtime.
+This changes the required config key from `agent.lr` to `agent.lr_actor` for PPO. Verify that PPO agent configs use `lr_actor`. If not, this will crash with a `ValueError` on config load.
 
-**Affected algorithms**: DRQN, PPO (vanilla). DQN and RecurrentPPO are correct.
-
-#### Bug 2: PPO (vanilla) has no `info` or `step_info` source
-
-**File**: `train.py:1532–1563`
-
-PPO vanilla uses `jit_train` (which wraps `train_iteration_ppo`) that returns `(env_state, key, losses, num_completed, rollout_rew, rollout_done)`. Unlike RecurrentPPO which returns `trajectories` containing `step_info`, vanilla PPO's trainer was **not modified** to carry step_info. The `if info:` check on line 1558 references a variable that is not defined in the PPO scope.
-
-**Fix options**:
-1. Modify `ppo_trainer.py` similarly to `recurrent_ppo_trainer.py` (add StepInfo to its Transition, capture info in its scan)
-2. Or skip behavioral metrics for PPO with a comment explaining why
-
-**Conclusion**: Core implementation (RecurrentPPO, DreamerV3, DQN) is correct and matches the plan. Two bugs found in DRQN and PPO (vanilla): wrong accumulator dict for distance keys, and PPO lacks an info source entirely. These need fixes before the DRQN or PPO algorithms can be used with behavioral metrics.
+**Conclusion**: All 3 bugs from Round 1 are fixed. Implementation is correct across all 5 algorithms. One out-of-scope change flagged (PPO config key `agent.lr` → `agent.lr_actor`) — verify PPO configs are compatible.
 
 ---

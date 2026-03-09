@@ -24,6 +24,9 @@ legacy/
 # Antigravity
 antigravity_data/
 
+#Claude
+claude_data/
+
 # Skills
 # Ignore local data but track the skill scripts
 skills/notebooklm/data/
