@@ -26,38 +26,89 @@ Defined at WandB init (`train.py:385–390`):
 
 ---
 
+## Episode Metrics: Aggregation Pipeline & Interpretation
+
+All `Episode/*` metrics follow a two-stage aggregation pipeline. Understanding this pipeline is essential for interpreting values correctly.
+
+### Stage 1: Per-Episode Accumulation
+
+During each episode, per-step data from the environment's `info` dict is accumulated into per-environment buffers (`episode_behavior`, `episode_dist_sums`). When an episode ends (done=True), these accumulators produce a single `ep_data` dict for that episode:
+
+| Metric Category | Per-Step Accumulation | Per-Episode Value | Example |
+|---|---|---|---|
+| **Event counts** (FoodEaten, PredatorHits, etc.) | `episode_behavior[k] += info[k]` each step | Raw sum over all steps in the episode | Agent ate food 3 times → `ate_food = 3` |
+| **Damage metrics** (TotalDamage, DamagePredator, etc.) | `episode_behavior[k] += info[k]` each step | Raw sum of damage over the episode | 5.0 damage per predator hit × 15 hits → `damage_predator = 75.0` |
+| **Distance metrics** (MeanDistFood, MeanDistPredator) | `episode_dist_sums[k] += info[k]` each step | Sum divided by episode length: `dist_sum / max(ep_length, 1)` | Sum of distances = 150.0 over 50 steps → `dist_to_food = 3.0` |
+| **Termination reason** | Captured once at episode end | Integer code: 1=MaxSteps, 2=Starvation, 3=Overeating, 4=Injury | Agent died from injury → `termination_reason = 4` |
+| **Reward** | Accumulated by the environment | Total episode return | — |
+| **Steps** | Counted by the environment | Episode length (integer) | — |
+
+After creating `ep_data`, the accumulators for that environment are reset to zero. The episode is appended to `iteration_episodes`.
+
+### Stage 2: Iteration-Level Aggregation (what gets logged to WandB)
+
+At the end of each training iteration, **all episodes that completed during that iteration** are aggregated with `np.mean()` into a single WandB log call. This means:
+
+- **Each WandB data point represents the mean across N episodes**, where N is the number of episodes that happened to finish during that iteration.
+- **N varies per iteration.** With parallel environments, multiple episodes can finish in the same iteration, or none at all (in which case no `Episode/*` data is logged for that iteration).
+- **This is standard RL logging convention** — the same pattern used by Stable Baselines3, CleanRL, and other frameworks.
+
+#### How to interpret each metric type
+
+| Metric | WandB Value Represents | Why It Can Be Non-Integer |
+|---|---|---|
+| `Episode/Reward` | Mean total return across N episodes | Average of different episode rewards |
+| `Episode/Steps` | Mean episode length across N episodes | e.g., episodes of length 42 and 58 → 50.0 |
+| `Episode/FoodEaten` | Mean food eaten per episode across N episodes | e.g., 3 episodes ate [0, 1, 0] food → 0.33 |
+| `Episode/PredatorHits` | Mean predator hits per episode | Same averaging as above |
+| `Episode/TotalDamage` | Mean cumulative damage per episode | Already float from per-step damage values |
+| `Episode/MeanDistFood` | Mean of per-episode mean distances | Double-averaged: per-step → per-episode → per-iteration |
+| `Episode/Term_Injury` | Fraction of N episodes ending in injury | e.g., 8 of 10 episodes → 0.80 |
+
+#### Practical example
+
+If an iteration has 4 completed episodes with `FoodEaten = [0, 0, 1, 3]`:
+- `Episode/FoodEaten` = `np.mean([0, 0, 1, 3])` = **1.0**
+- Early in training when agents rarely eat, most episodes have 0 food → mean is a small float like **0.14**
+
+#### WandB x-axis
+
+`Episode/*` metrics use `Episode/Number` (cumulative episode count) as the x-axis, not `timesteps` or `iteration`. This is set via `wandb.define_metric("Episode/*", step_metric="Episode/Number")`.
+
+---
+
 ## Metrics by Algorithm
 
 ### Shared Metrics (All Algorithms)
 
-Logged whenever episodes complete during an iteration.
+Logged whenever episodes complete during an iteration. See above for aggregation details.
 
-| Metric Key | Type | Description |
-|------------|------|-------------|
-| `Episode/Reward` | float | Mean reward of episodes completed in the current iteration |
-| `Episode/Reward_Min` | float | Minimum episode reward in the iteration |
-| `Episode/Reward_Max` | float | Maximum episode reward in the iteration |
-| `Episode/Steps` | float | Mean episode length in the iteration |
-| `Episode/Number` | int | Cumulative total episodes completed |
-| `Episode/FoodEaten` | float | Mean food eaten per episode |
-| `Episode/PredatorHits` | float | Mean predator hits per episode |
-| `Episode/DangerHits` | float | Mean danger hits per episode |
-| `Episode/RestCount` | float | Mean rest actions per episode |
-| `Episode/Collisions` | float | Mean collision count per episode |
-| `Episode/TotalDamage` | float | Mean total damage taken per episode |
-| `Episode/DamagePredator` | float | Mean damage from predators per episode |
-| `Episode/DamageDanger` | float | Mean damage from danger zones per episode |
-| `Episode/DamageObstacle` | float | Mean damage from obstacle collisions per episode |
-| `Episode/MeanDistFood` | float | Average distance to food per step across entire episode |
-| `Episode/MeanDistPredator`| float | Average distance to nearest predator per step |
-| `Episode/Term_Starvation` | float | Fraction of episodes ending in starvation (energy < 0.0) |
-| `Episode/Term_Injury` | float | Fraction of episodes ending in injury (health < 0.0) |
-| `Episode/Term_Overeating` | float | Fraction of episodes ending in overeating (stomach > stomach_capacity) |
-| `Episode/Term_MaxSteps` | float | Fraction of episodes reaching maximum episode length |
-| `timesteps` | int | Global environment step counter |
-| `iteration` | int | Training iteration counter |
+| Metric Key | Type | Per-Episode Aggregation | Description |
+|------------|------|------------------------|-------------|
+| `Episode/Reward` | float | sum of rewards | Mean episode return across the iteration |
+| `Episode/Reward_Min` | float | — | Minimum single-episode return in the iteration |
+| `Episode/Reward_Max` | float | — | Maximum single-episode return in the iteration |
+| `Episode/Steps` | float | step count | Mean episode length across the iteration |
+| `Episode/Number` | int | — | Cumulative total episodes completed (x-axis) |
+| `Episode/FoodEaten` | float | sum of `ate_food` events | Mean food eaten per episode |
+| `Episode/PredatorHits` | float | sum of `hit_predator` events | Mean predator hits per episode |
+| `Episode/DangerHits` | float | sum of `hit_danger` events | Mean danger zone hits per episode |
+| `Episode/RestCount` | float | sum of `rested` events | Mean rest actions per episode |
+| `Episode/Collisions` | float | sum of `event_collided` events | Mean collisions per episode |
+| `Episode/TotalDamage` | float | sum of `damage` | Mean total damage taken per episode |
+| `Episode/DamagePredator` | float | sum of `damage_predator` | Mean damage from predators per episode |
+| `Episode/DamageDanger` | float | sum of `damage_danger` | Mean damage from danger zones per episode |
+| `Episode/DamageObstacle` | float | sum of `damage_obstacle` | Mean damage from obstacles per episode |
+| `Episode/MeanDistFood` | float | sum of `dist_to_food` / ep_length | Mean per-step distance to food, averaged across episodes |
+| `Episode/MeanDistPredator`| float | sum of `dist_to_pred` / ep_length | Mean per-step distance to nearest predator, averaged across episodes |
+| `Episode/Term_Starvation` | float | binary (1 if reason==2) | Fraction of episodes ending in starvation (energy < 0.0) |
+| `Episode/Term_Injury` | float | binary (1 if reason==4) | Fraction of episodes ending in injury (health < 0.0) |
+| `Episode/Term_Overeating` | float | binary (1 if reason==3) | Fraction of episodes ending in overeating (stomach > capacity) |
+| `Episode/Term_MaxSteps` | float | binary (1 if reason==1) | Fraction of episodes reaching maximum episode length |
+| `timesteps` | int | — | Global environment step counter |
+| `iteration` | int | — | Training iteration counter |
 
-> **Note**: All behavioral metrics are now shared across all algorithms (RecurrentPPO, DreamerV3, DQN, DRQN).
+> **Note**: All behavioral metrics are shared across all algorithms (RecurrentPPO, DreamerV3, DQN, DRQN, PPO). The 4 termination fractions sum to 1.0 within each iteration.
 
 ### Evaluation Metrics (All Algorithms, at Checkpoints)
 
