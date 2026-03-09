@@ -619,4 +619,142 @@ This changes the required config key from `agent.lr` to `agent.lr_actor` for PPO
 - **Steps improving with reward**: Steps 26→59, Reward -200→-168 ✅
 - **No missing data points**: All metrics have N=1924 ✅
 
+## Issue #2: Episode Metrics Default to `timesteps` X-Axis in WandB UI
+
+> **Status**: PLANNED
+> **Opened**: 2026-03-09
+> **Related**: [wandb/wandb#6554](https://github.com/wandb/wandb/issues/6554), [WandB define_metric docs](https://docs.wandb.ai/models/track/log/customize-logging-axes)
+
+### Context
+
+Despite `define_metric("Episode/*", step_metric="Episode/Number")` being set on `train.py:391`, WandB UI still shows some `Episode/*` panels with `timesteps` as the x-axis. Manually switching 20+ plots to `Episode/Number` is tedious and resets on new runs.
+
+### Analysis
+
+The current `define_metric` setup on `train.py:388–393`:
+
+```python
+wandb.define_metric("iteration")
+wandb.define_metric("timesteps")
+wandb.define_metric("Episode/Number")
+wandb.define_metric("Episode/*", step_metric="Episode/Number")
+wandb.define_metric("loss/*", step_metric="iteration")
+wandb.define_metric("*", step_metric="timesteps")
+```
+
+**Root cause**: The problem is the interaction between `define_metric` globs and mixed step metrics in a single `wandb.log()` call. Currently, every `wandb.log(ep_log)` call includes `Episode/*` metrics alongside `timesteps` and `iteration` in the same dict (line 882–910). WandB's internal step tracking can get confused when multiple step metrics advance in the same log call, especially with the catch-all `*` → `timesteps` rule matching first.
+
+According to WandB's [define_metric docs](https://docs.wandb.ai/models/track/log/customize-logging-axes), specific globs should override catch-all, but [issue #6554](https://github.com/wandb/wandb/issues/6554) documents cases where this fails when step metrics are out of sync.
+
+### Implementation Plan
+
+**Two complementary fixes** — apply both for maximum reliability:
+
+#### Fix 1: Reorder `define_metric` calls (most-specific last)
+
+WandB uses last-write-wins for overlapping patterns. Move the catch-all `*` definition **first**, so specific patterns override it:
+
+##### `train.py` (lines 388–393)
+
+```python
+# BEFORE:
+wandb.define_metric("iteration")
+wandb.define_metric("timesteps")
+wandb.define_metric("Episode/Number")
+wandb.define_metric("Episode/*", step_metric="Episode/Number")
+wandb.define_metric("loss/*", step_metric="iteration")
+wandb.define_metric("*", step_metric="timesteps")
+
+# AFTER:
+wandb.define_metric("iteration")
+wandb.define_metric("timesteps")
+wandb.define_metric("Episode/Number")
+wandb.define_metric("*", step_metric="timesteps")               # catch-all FIRST
+wandb.define_metric("Episode/*", step_metric="Episode/Number")  # specific overrides
+wandb.define_metric("loss/*", step_metric="iteration")          # specific overrides
+wandb.define_metric("modulator/*", step_metric="iteration")     # add: was missing
+```
+
+#### Fix 2: Split `wandb.log()` calls by step metric
+
+Separate the log calls so each dict only contains metrics that share the same x-axis. This avoids WandB's step-sync confusion entirely.
+
+Currently, all algorithms log `Episode/*`, `timesteps`, and `iteration` in a single `wandb.log()` call. Split into two calls:
+
+##### Pattern for all algorithm branches (RecurrentPPO example, lines 882–910)
+
+```python
+# BEFORE (single log call with mixed step metrics):
+ep_log = {
+    "Episode/Reward": np.mean(rewards),
+    ...all Episode/* metrics...
+    "Episode/Number": total_episodes_completed,
+    "timesteps": global_step,
+    "iteration": iteration,
+}
+wandb.log(ep_log)
+
+# AFTER (two separate log calls):
+# Call 1: Episode metrics with their step metric
+ep_log = {
+    "Episode/Reward": np.mean(rewards),
+    ...all Episode/* metrics...
+    "Episode/Number": total_episodes_completed,
+}
+wandb.log(ep_log)
+
+# Call 2: Step-indexed metrics (logged separately or with loss call)
+# timesteps and iteration are logged in the loss/modulator log call instead
+```
+
+The loss/modulator `wandb.log()` call (line 958 for RecurrentPPO) already includes `timesteps` and `iteration`, so simply **remove** these two keys from the `ep_log` dict. This ensures:
+- `ep_log` only contains `Episode/*` + `Episode/Number` → WandB uses `Episode/Number` as x-axis
+- `wandb_logs` (loss call) contains `loss/*` + `modulator/*` + `timesteps` + `iteration` → WandB uses `iteration` as x-axis
+
+##### Apply the same split to all algorithm branches
+
+| Algorithm | Episode log call | Loss/step log call | Lines |
+|-----------|-----------------|-------------------|-------|
+| RecurrentPPO | Remove `timesteps`, `iteration` from `ep_log` | Already has them in `wandb_logs` (line 958) | 882–910, 954–958 |
+| DreamerV3 | Remove `timesteps`, `iteration` from `ep_log` | Already has them in `wandb_logs` (line 1216) | 1126–1160, 1210–1216 |
+| DQN | Remove `timesteps`, `iteration` from `logs` episode section | Keep in the loss section of same dict | 1331–1363 |
+| DRQN | Remove `timesteps`, `iteration` from `logs` episode section | Keep in the loss section of same dict | 1491–1524 |
+| PPO | Remove `timesteps`, `iteration` from `logs` episode section | Keep in the loss section of same dict | 1595–1629 |
+
+**Note for DQN/DRQN/PPO**: These use a single `logs` dict for both episode and loss metrics. Split into two `wandb.log()` calls: one for `Episode/*` keys + `Episode/Number`, another for `loss/*` + `timesteps` + `iteration`.
+
+### File Changes Summary
+
+| File | Change |
+|------|--------|
+| `train.py:388–393` | Reorder `define_metric` calls; add `modulator/*` rule |
+| `train.py:882–910` | RecurrentPPO: remove `timesteps`/`iteration` from `ep_log` |
+| `train.py:1126–1160` | DreamerV3: remove `timesteps`/`iteration` from `ep_log` |
+| `train.py:1331–1363` | DQN: split `logs` into episode + loss log calls |
+| `train.py:1491–1524` | DRQN: split `logs` into episode + loss log calls |
+| `train.py:1595–1629` | PPO: split `logs` into episode + loss log calls |
+
+### Checkpoints
+
+- [ ] Checkpoint 1 — After reordering `define_metric`, run RecurrentPPO for ~50 episodes with WandB. Check WandB UI: all `Episode/*` panels should default to `Episode/Number` x-axis without manual intervention.
+- [ ] Checkpoint 2 — Verify `loss/*` panels still default to `iteration` x-axis.
+- [ ] Checkpoint 3 — Verify `modulator/*` panels default to `iteration` x-axis (new rule).
+- [ ] Checkpoint 4 — Verify no "Steps must be monotonically increasing" warnings in the WandB console output.
+
+### Implementation Report
+
+> **Implemented by**:
+> **Date**:
+
+### Verification Report
+
+> **Verified by**:
+> **Date**:
+
+| File | Change | Status | Notes |
+|------|--------|:------:|-------|
+| | | | |
+
+**Conclusion**:
+
 ---
