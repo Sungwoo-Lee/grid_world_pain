@@ -51,9 +51,9 @@ agent:
   #                        beta  = additive threshold shift (Ferguson disinhibition)
   #   null              — Disabled (true baseline, no modulator constructed)
   modulation:
-    type: "Multiplicative"       # "Multiplicative", "PreActivation", or null
+    type: "PreActivation"       # "Multiplicative", "PreActivation", or null
     mod_hidden_size: 16          # GRU hidden units for modulator
-    grouping_size: 40             # Spatial grouping G (1 = per-neuron, §12)
+    grouping_size: 60             # Spatial grouping G (1 = per-neuron, §12)
     percept_bias_init: 2.0       # Gain head (gamma) bias init (§5.2: sigmoid(2.0)≈0.88)
     percept_add_bias_init: 0.0   # Threshold-shift head (beta) bias init (PreActivation only)
     memory_bias_init: 0.0        # Memory gate-bias init (§5.1a: neutral)

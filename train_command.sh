@@ -17,5 +17,5 @@
   --num-envs 128 \
   --episodes 100000000 \
   --checkpoint-frequency 1000000 \
-  --device cuda:0 \
-  --tag "rppoNMN_128env_2bush4pred1food_gSize40_multiplicative_modHidden16"
+  --device cuda:1 \
+  --tag "rppoNMN_128env_2bush4pred1food_gSize60_preActivation_modHidden16"
