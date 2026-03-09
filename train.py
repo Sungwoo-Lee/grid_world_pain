@@ -692,6 +692,14 @@ def main():
     episode_lengths = np.zeros(num_envs, dtype=np.int32)
     ep_info_buffer = deque(maxlen=100)
     
+    # Behavioral event accumulators (per-env, reset on episode done)
+    BEHAVIOR_KEYS = ['ate_food', 'hit_predator', 'hit_danger', 'event_collided', 'rested',
+                     'damage', 'damage_predator', 'damage_danger', 'damage_obstacle']
+    BEHAVIOR_DIST_KEYS = ['dist_to_food', 'dist_to_pred']  # Need mean, not sum
+
+    episode_behavior = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_KEYS}
+    episode_dist_sums = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_DIST_KEYS}
+    
     # --- Checkpoint Restoration (Continual Learning / Transfer) ---
     if args.load_checkpoint:
         if args.debug: print(f"[DEBUG] Phase 6.5: Restoring Checkpoint from {args.load_checkpoint}...", flush=True)
@@ -798,6 +806,13 @@ def main():
                         model, optimizer, params, env_state, h_state, key, ppo_config
                     )
                     
+                    step_info = getattr(trajectories, 'step_info', None)
+                    # Convert step_info fields to numpy (all shape [T, B])
+                    info_np = {}
+                    if step_info is not None:
+                        for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']:
+                            info_np[k] = np.array(getattr(step_info, k))
+
                     rollout_rew = trajectories.reward
                     rollout_done = trajectories.done
                     mod_info = trajectories.mod_info
@@ -819,6 +834,13 @@ def main():
                     for t in range(num_steps):
                         episode_returns += rew_np[t]
                         episode_lengths += 1
+                        
+                        if info_np:
+                            for k in BEHAVIOR_KEYS:
+                                episode_behavior[k] += info_np[k][t]
+                            for k in BEHAVIOR_DIST_KEYS:
+                                episode_dist_sums[k] += info_np[k][t]
+
                         dones_t = done_np[t].astype(bool)
                         
                         if np.any(dones_t):
@@ -828,28 +850,61 @@ def main():
                                 ep_reward = float(episode_returns[i])
                                 ep_length = int(episode_lengths[i])
                                 
+                                ep_data = {'r': ep_reward, 'l': ep_length}
+                                if info_np:
+                                    for k in BEHAVIOR_KEYS:
+                                        ep_data[k] = float(episode_behavior[k][i])
+                                    for k in BEHAVIOR_DIST_KEYS:
+                                        ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
+                                    ep_data['termination_reason'] = int(info_np['termination_reason'][t][i])
+
                                 # Store for moving average (tqdm)
-                                ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
+                                ep_info_buffer.append(ep_data)
                                 # Store for iteration-level logging (Stage 3)
-                                iteration_episodes.append({'r': ep_reward, 'l': ep_length})
+                                iteration_episodes.append(ep_data)
                                 
                                 # Reset for next episode in this slot
                                 episode_returns[i] = 0.0
                                 episode_lengths[i] = 0
+                                if info_np:
+                                    for k in BEHAVIOR_KEYS:
+                                        episode_behavior[k][i] = 0.0
+                                    for k in BEHAVIOR_DIST_KEYS:
+                                        episode_dist_sums[k][i] = 0.0
                     
                     # Log AGGREGATED stats for the iteration (Stage 3)
                     if wandb_enabled and iteration_episodes:
                         rewards = [ep['r'] for ep in iteration_episodes]
                         lengths = [ep['l'] for ep in iteration_episodes]
-                        wandb.log({
+                        ep_log = {
                             "Episode/Reward": np.mean(rewards),
                             "Episode/Reward_Min": np.min(rewards),
                             "Episode/Reward_Max": np.max(rewards),
                             "Episode/Steps": np.mean(lengths),
                             "Episode/Number": total_episodes_completed,
                             "timesteps": global_step,
-                            "iteration": iteration
-                        })
+                            "iteration": iteration,
+                        }
+                        # Behavioral metrics
+                        if 'ate_food' in iteration_episodes[0]:
+                            ep_log.update({
+                                "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
+                                "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
+                                "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+                                "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
+                                "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
+                                "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
+                                "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
+                                "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+                                "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
+                                "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
+                                "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
+                            })
+                            # Termination reason distribution (fraction of episodes ending each way)
+                            term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
+                            for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
+                                ep_log[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                        wandb.log(ep_log)
 
                     # Update progress bar based on total episodes completed
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
@@ -998,6 +1053,12 @@ def main():
                     rew_steps = transitions_np['reward'] # (T, B)
                     done_steps = transitions_np['terminal'] # (T, B)
                     
+                    # Extract behavioral info arrays [T, B]
+                    info_steps = {}
+                    for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']:
+                        if k in transitions_np:
+                            info_steps[k] = transitions_np[k]
+                    
                     # More vectorized stats handling
                     done_indices = np.where(done_steps) # (t_idxs, env_idxs)
                     
@@ -1009,42 +1070,91 @@ def main():
                             for d_idx in d_idxs:
                                 ep_reward = float(episode_returns[i] + np.sum(rew_steps[curr_start:d_idx+1, i]))
                                 ep_length = int(episode_lengths[i] + (d_idx + 1 - curr_start))
-                                ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
-                                iteration_episodes.append({'r': ep_reward, 'l': ep_length})
+                                
+                                ep_data = {'r': ep_reward, 'l': ep_length}
+                                if info_steps:
+                                    for k in BEHAVIOR_KEYS:
+                                        ep_data[k] = float(episode_behavior[k][i] + np.sum(info_steps[k][curr_start:d_idx+1, i]))
+                                    for k in BEHAVIOR_DIST_KEYS:
+                                        ep_data[k] = float((episode_dist_sums[k][i] + np.sum(info_steps[k][curr_start:d_idx+1, i])) / max(ep_length, 1))
+                                    ep_data['termination_reason'] = int(info_steps['termination_reason'][d_idx, i])
+
+                                ep_info_buffer.append(ep_data)
+                                iteration_episodes.append(ep_data)
                                 total_episodes_completed += 1
                                 episode_returns[i] = 0
                                 episode_lengths[i] = 0
+                                if info_steps:
+                                    for k in BEHAVIOR_KEYS:
+                                        episode_behavior[k][i] = 0.0
+                                    for k in BEHAVIOR_DIST_KEYS:
+                                        episode_dist_sums[k][i] = 0.0
                                 curr_start = d_idx + 1
                             
                             # Add leftover
                             if curr_start < num_steps:
                                 episode_returns[i] += np.sum(rew_steps[curr_start:, i])
                                 episode_lengths[i] += (num_steps - curr_start)
+                                if info_steps:
+                                    for k in BEHAVIOR_KEYS:
+                                        episode_behavior[k][i] += np.sum(info_steps[k][curr_start:, i])
+                                    for k in BEHAVIOR_DIST_KEYS:
+                                        episode_dist_sums[k][i] += np.sum(info_steps[k][curr_start:, i])
                         
                         # Environments with NO dones in this batch
                         no_done_mask = np.ones(num_envs, dtype=bool)
                         no_done_mask[done_indices[1]] = False
                         episode_returns[no_done_mask] += np.sum(rew_steps[:, no_done_mask], axis=0)
                         episode_lengths[no_done_mask] += num_steps
+                        if info_steps:
+                            for k in BEHAVIOR_KEYS:
+                                episode_behavior[k][no_done_mask] += np.sum(info_steps[k][:, no_done_mask], axis=0)
+                            for k in BEHAVIOR_DIST_KEYS:
+                                episode_dist_sums[k][no_done_mask] += np.sum(info_steps[k][:, no_done_mask], axis=0)
                     else:
                         # No episodes finished at all
                         episode_returns += np.sum(rew_steps, axis=0)
                         episode_lengths += num_steps
+                        if info_steps:
+                            for k in BEHAVIOR_KEYS:
+                                episode_behavior[k] += np.sum(info_steps[k], axis=0)
+                            for k in BEHAVIOR_DIST_KEYS:
+                                episode_dist_sums[k] += np.sum(info_steps[k], axis=0)
                     
                     global_step += num_envs * num_steps
 
                     if wandb_enabled and iteration_episodes:
                         rewards = [ep['r'] for ep in iteration_episodes]
                         lengths = [ep['l'] for ep in iteration_episodes]
-                        wandb.log({
+                        ep_log = {
                             "Episode/Reward": np.mean(rewards),
                             "Episode/Reward_Min": np.min(rewards),
                             "Episode/Reward_Max": np.max(rewards),
                             "Episode/Steps": np.mean(lengths),
                             "Episode/Number": total_episodes_completed,
                             "timesteps": global_step,
-                            "iteration": iteration
-                        })
+                            "iteration": iteration,
+                        }
+                        # Behavioral metrics
+                        if 'ate_food' in iteration_episodes[0]:
+                            ep_log.update({
+                                "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
+                                "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
+                                "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+                                "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
+                                "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
+                                "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
+                                "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
+                                "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+                                "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
+                                "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
+                                "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
+                            })
+                            # Termination reason distribution (fraction of episodes ending each way)
+                            term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
+                            for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
+                                ep_log[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                        wandb.log(ep_log)
 
                     # Update progress bar
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
@@ -1163,6 +1273,14 @@ def main():
                     # Stats tracking
                     episode_returns += np.array(reward)
                     episode_lengths += 1
+                    
+                    if info:
+                        info_np_step = {k: np.array(info[k]) for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']}
+                        for k in BEHAVIOR_KEYS:
+                            episode_behavior[k] += info_np_step[k]
+                        for k in BEHAVIOR_DIST_KEYS:
+                            episode_dist_sums[k] += info_np_step[k]
+
                     dones_np = np.array(done).astype(bool)
                     if np.any(dones_np):
                         completed_indices = np.where(dones_np)[0]
@@ -1170,10 +1288,24 @@ def main():
                             total_episodes_completed += 1
                             ep_reward = float(episode_returns[i])
                             ep_length = int(episode_lengths[i])
-                            ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
-                            iteration_episodes.append({'r': ep_reward, 'l': ep_length})
+                            
+                            ep_data = {'r': ep_reward, 'l': ep_length}
+                            if info:
+                                for k in BEHAVIOR_KEYS:
+                                    ep_data[k] = float(episode_behavior[k][i])
+                                for k in BEHAVIOR_DIST_KEYS:
+                                    ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
+                                ep_data['termination_reason'] = int(info_np_step['termination_reason'][i])
+
+                            ep_info_buffer.append(ep_data)
+                            iteration_episodes.append(ep_data)
                             episode_returns[i] = 0.0
                             episode_lengths[i] = 0
+                            if info:
+                                for k in BEHAVIOR_KEYS:
+                                    episode_behavior[k][i] = 0.0
+                                for k in BEHAVIOR_DIST_KEYS:
+                                    episode_dist_sums[k][i] = 0.0
                             
                     # 4. Update Step
                     loss_val = 0.0
@@ -1198,10 +1330,33 @@ def main():
                         }
                         if iteration_episodes:
                             rewards_list = [ep['r'] for ep in iteration_episodes]
+                            lengths_list = [ep['l'] for ep in iteration_episodes]
                             logs.update({
                                 "Episode/Reward": np.mean(rewards_list),
+                                "Episode/Reward_Min": np.min(rewards_list),
+                                "Episode/Reward_Max": np.max(rewards_list),
+                                "Episode/Steps": np.mean(lengths_list),
                                 "Episode/Number": total_episodes_completed
                             })
+                            # Behavioral metrics
+                            if 'ate_food' in iteration_episodes[0]:
+                                logs.update({
+                                    "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
+                                    "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
+                                    "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+                                    "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
+                                    "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
+                                    "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
+                                    "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
+                                    "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+                                    "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
+                                })
+                                # Termination reason distribution
+                                term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
+                                for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
+                                    logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
                         wandb.log(logs)
 
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
@@ -1272,6 +1427,14 @@ def main():
                     # Stats tracking
                     episode_returns += np.array(reward)
                     episode_lengths += 1
+                    
+                    if info:
+                        info_np_step = {k: np.array(info[k]) for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']}
+                        for k in BEHAVIOR_KEYS:
+                            episode_behavior[k] += info_np_step[k]
+                        for k in BEHAVIOR_DIST_KEYS:
+                            episode_dist_sums[k] += info_np_step[k]
+
                     dones_np = np.array(done).astype(bool)
                     if np.any(dones_np):
                         completed_indices = np.where(dones_np)[0]
@@ -1279,10 +1442,24 @@ def main():
                             total_episodes_completed += 1
                             ep_reward = float(episode_returns[i])
                             ep_length = int(episode_lengths[i])
-                            ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
-                            iteration_episodes.append({'r': ep_reward, 'l': ep_length})
+                            
+                            ep_data = {'r': ep_reward, 'l': ep_length}
+                            if info:
+                                for k in BEHAVIOR_KEYS:
+                                    ep_data[k] = float(episode_behavior[k][i])
+                                for k in BEHAVIOR_DIST_KEYS:
+                                    ep_data[k] = float(episode_behavior[k][i] / max(ep_length, 1))
+                                ep_data['termination_reason'] = int(info_np_step['termination_reason'][i])
+
+                            ep_info_buffer.append(ep_data)
+                            iteration_episodes.append(ep_data)
                             episode_returns[i] = 0.0
                             episode_lengths[i] = 0
+                            if info:
+                                for k in BEHAVIOR_KEYS:
+                                    episode_behavior[k][i] = 0.0
+                                for k in BEHAVIOR_DIST_KEYS:
+                                    episode_dist_sums[k][i] = 0.0
                             
                     # 4. Update Step
                     loss_val = 0.0
@@ -1314,10 +1491,33 @@ def main():
                         }
                         if iteration_episodes:
                             rewards_list = [ep['r'] for ep in iteration_episodes]
+                            lengths_list = [ep['l'] for ep in iteration_episodes]
                             logs.update({
                                 "Episode/Reward": np.mean(rewards_list),
+                                "Episode/Reward_Min": np.min(rewards_list),
+                                "Episode/Reward_Max": np.max(rewards_list),
+                                "Episode/Steps": np.mean(lengths_list),
                                 "Episode/Number": total_episodes_completed
                             })
+                            # Behavioral metrics
+                            if 'ate_food' in iteration_episodes[0]:
+                                logs.update({
+                                    "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
+                                    "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
+                                    "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+                                    "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
+                                    "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
+                                    "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
+                                    "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
+                                    "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+                                    "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
+                                })
+                                # Termination reason distribution
+                                term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
+                                for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
+                                    logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
                         wandb.log(logs)
 
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
@@ -1353,10 +1553,24 @@ def main():
                                 total_episodes_completed += 1
                                 ep_reward = float(episode_returns[i])
                                 ep_length = int(episode_lengths[i])
-                                ep_info_buffer.append({'r': ep_reward, 'l': ep_length})
-                                iteration_episodes.append({'r': ep_reward, 'l': ep_length})
+                                
+                                ep_data = {'r': ep_reward, 'l': ep_length}
+                                if info:
+                                    for k in BEHAVIOR_KEYS:
+                                        ep_data[k] = float(episode_behavior[k][i])
+                                    for k in BEHAVIOR_DIST_KEYS:
+                                        ep_data[k] = float(episode_behavior[k][i] / max(ep_length, 1))
+                                    ep_data['termination_reason'] = int(info_np_step['termination_reason'][i])
+
+                                ep_info_buffer.append(ep_data)
+                                iteration_episodes.append(ep_data)
                                 episode_returns[i] = 0.0
                                 episode_lengths[i] = 0
+                                if info:
+                                    for k in BEHAVIOR_KEYS:
+                                        episode_behavior[k][i] = 0.0
+                                    for k in BEHAVIOR_DIST_KEYS:
+                                        episode_dist_sums[k][i] = 0.0
                     
                     if wandb_enabled:
                         logs = {

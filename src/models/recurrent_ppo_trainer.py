@@ -4,6 +4,21 @@ from flax import nnx
 import optax
 from typing import NamedTuple, Tuple, Any, Union
 
+class StepInfo(NamedTuple):
+    """Per-step environment info carried through scan for behavioral logging."""
+    ate_food: jnp.ndarray
+    hit_predator: jnp.ndarray
+    hit_danger: jnp.ndarray
+    event_collided: jnp.ndarray
+    rested: jnp.ndarray
+    damage: jnp.ndarray
+    damage_predator: jnp.ndarray
+    damage_danger: jnp.ndarray
+    damage_obstacle: jnp.ndarray
+    dist_to_food: jnp.ndarray
+    dist_to_pred: jnp.ndarray
+    termination_reason: jnp.ndarray
+
 class Transition(NamedTuple):
     obs: jnp.ndarray
     action: jnp.ndarray
@@ -12,6 +27,7 @@ class Transition(NamedTuple):
     log_prob: jnp.ndarray
     value: jnp.ndarray
     mod_info: Any  # Neuromodulator outputs (z_percept, z_memory, temperature)
+    step_info: Any = None  # StepInfo for behavioral metrics (optional for backward compat)
     # h_state can be an array (GRU) or a tuple of arrays (LSTM)
     # We store it as a PyTree
 
@@ -147,7 +163,7 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
         )(model, obs, h_state, act_keys)
         
         # 2. Step Env
-        next_state, reward, done, _ = jax.vmap(jax_step, in_axes=(0, 0, None))(state, action, env_params)
+        next_state, reward, done, info = jax.vmap(jax_step, in_axes=(0, 0, None))(state, action, env_params)
         
         # 3. Handle Auto-Reset
         reset_key, _ = jax.random.split(key)
@@ -166,9 +182,24 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
         # Reset hidden state on done (generic PyTree reset)
         final_h = _h_reset_on_done(h_new, done)
         
+        step_info = StepInfo(
+            ate_food=info['ate_food'],
+            hit_predator=info['hit_predator'],
+            hit_danger=info['hit_danger'],
+            event_collided=info['event_collided'],
+            rested=info['rested'],
+            damage=info['damage'],
+            damage_predator=info['damage_predator'],
+            damage_danger=info['damage_danger'],
+            damage_obstacle=info['damage_obstacle'],
+            dist_to_food=info['dist_to_food'],
+            dist_to_pred=info['dist_to_pred'],
+            termination_reason=info['termination_reason'],
+        )
         trans = Transition(
             obs=obs, action=action, reward=reward, done=done,
-            log_prob=log_prob, value=value, mod_info=mod_info
+            log_prob=log_prob, value=value, mod_info=mod_info,
+            step_info=step_info
         )
         
         return (final_state, final_h, key), (trans, h_state)

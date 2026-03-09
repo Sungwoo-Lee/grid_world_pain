@@ -32,17 +32,32 @@ Defined at WandB init (`train.py:385–390`):
 
 Logged whenever episodes complete during an iteration.
 
-| Metric Key | Type | Description | Source Lines |
-|------------|------|-------------|-------------|
-| `Episode/Reward` | float | Mean reward of episodes completed in the current iteration | 845, 1039, 1201, 1369 |
-| `Episode/Reward_Min` | float | Minimum episode reward in the iteration | 846, 1040 |
-| `Episode/Reward_Max` | float | Maximum episode reward in the iteration | 847, 1041 |
-| `Episode/Steps` | float | Mean episode length in the iteration | 848, 1042 |
-| `Episode/Number` | int | Cumulative total episodes completed | 849, 1043, 1203, 1319 |
-| `timesteps` | int | Global environment step counter | 850, 1045, 1195, 1364 |
-| `iteration` | int | Training iteration counter | 851, 1046, 1194, 1363 |
+| Metric Key | Type | Description |
+|------------|------|-------------|
+| `Episode/Reward` | float | Mean reward of episodes completed in the current iteration |
+| `Episode/Reward_Min` | float | Minimum episode reward in the iteration |
+| `Episode/Reward_Max` | float | Maximum episode reward in the iteration |
+| `Episode/Steps` | float | Mean episode length in the iteration |
+| `Episode/Number` | int | Cumulative total episodes completed |
+| `Episode/FoodEaten` | float | Mean food eaten per episode |
+| `Episode/PredatorHits` | float | Mean predator hits per episode |
+| `Episode/DangerHits` | float | Mean danger hits per episode |
+| `Episode/RestCount` | float | Mean rest actions per episode |
+| `Episode/Collisions` | float | Mean collision count per episode |
+| `Episode/TotalDamage` | float | Mean total damage taken per episode |
+| `Episode/DamagePredator` | float | Mean damage from predators per episode |
+| `Episode/DamageDanger` | float | Mean damage from danger zones per episode |
+| `Episode/DamageObstacle` | float | Mean damage from obstacle collisions per episode |
+| `Episode/MeanDistFood` | float | Average distance to food per step across entire episode |
+| `Episode/MeanDistPredator`| float | Average distance to nearest predator per step |
+| `Episode/Term_Starvation` | float | Fraction of episodes ending in starvation (energy < 0.0) |
+| `Episode/Term_Injury` | float | Fraction of episodes ending in injury (health < 0.0) |
+| `Episode/Term_Overeating` | float | Fraction of episodes ending in overeating (stomach > stomach_capacity) |
+| `Episode/Term_MaxSteps` | float | Fraction of episodes reaching maximum episode length |
+| `timesteps` | int | Global environment step counter |
+| `iteration` | int | Training iteration counter |
 
-> **Note**: DQN and DRQN only log `Episode/Reward` and `Episode/Number` (no Min/Max/Steps).
+> **Note**: All behavioral metrics are now shared across all algorithms (RecurrentPPO, DreamerV3, DQN, DRQN).
 
 ### Evaluation Metrics (All Algorithms, at Checkpoints)
 

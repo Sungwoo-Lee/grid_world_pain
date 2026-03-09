@@ -543,7 +543,7 @@ class DreamerTrainer(nnx.Module):
             
             # 3. Step Environment
             action_idx = action_idx.astype(jnp.int32)
-            next_state_raw, reward, done, _ = jax.vmap(
+            next_state_raw, reward, done, info = jax.vmap(
                 jax_step, in_axes=(0, 0, None))(state, action_idx, params)
             
             # 4. Auto-Reset
@@ -573,7 +573,19 @@ class DreamerTrainer(nnx.Module):
                 'action': jax.nn.one_hot(action_idx, self.agent.ac.actor.net.layers[-1].out_features),
                 'reward': reward,
                 'terminal': done,
-                'is_first': d_state.get('is_first', jnp.zeros((B, 1)))
+                'is_first': d_state.get('is_first', jnp.zeros((B, 1))),
+                'ate_food': info['ate_food'].astype(jnp.float32),
+                'hit_predator': info['hit_predator'].astype(jnp.float32),
+                'hit_danger': info['hit_danger'].astype(jnp.float32),
+                'event_collided': info['event_collided'].astype(jnp.float32),
+                'rested': info['rested'].astype(jnp.float32),
+                'damage': info['damage'],
+                'damage_predator': info['damage_predator'],
+                'damage_danger': info['damage_danger'],
+                'damage_obstacle': info['damage_obstacle'],
+                'dist_to_food': info['dist_to_food'],
+                'dist_to_pred': info['dist_to_pred'],
+                'termination_reason': info['termination_reason'].astype(jnp.float32),
             }
             
             return (final_env_state, next_d_state, current_key), transition
