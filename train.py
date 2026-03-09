@@ -388,9 +388,11 @@ def main():
         wandb.define_metric("iteration")
         wandb.define_metric("timesteps")
         wandb.define_metric("Episode/Number")
+        wandb.define_metric("*", step_metric="timesteps")
         wandb.define_metric("Episode/*", step_metric="Episode/Number")
         wandb.define_metric("loss/*", step_metric="iteration")
-        wandb.define_metric("*", step_metric="timesteps")
+        wandb.define_metric("modulator/*", step_metric="iteration")
+        wandb.define_metric("behavior/*", step_metric="timesteps")
         
         wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py"))
 
@@ -885,8 +887,6 @@ def main():
                             "Episode/Reward_Max": np.max(rewards),
                             "Episode/Steps": np.mean(lengths),
                             "Episode/Number": total_episodes_completed,
-                            "timesteps": global_step,
-                            "iteration": iteration,
                         }
                         # Behavioral metrics
                         if 'ate_food' in iteration_episodes[0]:
@@ -1135,8 +1135,6 @@ def main():
                             "Episode/Reward_Max": np.max(rewards),
                             "Episode/Steps": np.mean(lengths),
                             "Episode/Number": total_episodes_completed,
-                            "timesteps": global_step,
-                            "iteration": iteration,
                         }
                         # Behavioral metrics
                         if 'ate_food' in iteration_episodes[0]:
@@ -1334,16 +1332,16 @@ def main():
                         if iteration_episodes:
                             rewards_list = [ep['r'] for ep in iteration_episodes]
                             lengths_list = [ep['l'] for ep in iteration_episodes]
-                            logs.update({
+                            ep_logs = {
                                 "Episode/Reward": np.mean(rewards_list),
                                 "Episode/Reward_Min": np.min(rewards_list),
                                 "Episode/Reward_Max": np.max(rewards_list),
                                 "Episode/Steps": np.mean(lengths_list),
                                 "Episode/Number": total_episodes_completed
-                            })
+                            }
                             # Behavioral metrics
                             if 'ate_food' in iteration_episodes[0]:
-                                logs.update({
+                                ep_logs.update({
                                     "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
                                     "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
                                     "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
@@ -1359,7 +1357,10 @@ def main():
                                 # Termination reason distribution
                                 term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                                 for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
-                                    logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                                    ep_logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                            
+                            wandb.log(ep_logs)
+                        
                         wandb.log(logs)
 
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
@@ -1495,16 +1496,16 @@ def main():
                         if iteration_episodes:
                             rewards_list = [ep['r'] for ep in iteration_episodes]
                             lengths_list = [ep['l'] for ep in iteration_episodes]
-                            logs.update({
+                            ep_logs = {
                                 "Episode/Reward": np.mean(rewards_list),
                                 "Episode/Reward_Min": np.min(rewards_list),
                                 "Episode/Reward_Max": np.max(rewards_list),
                                 "Episode/Steps": np.mean(lengths_list),
                                 "Episode/Number": total_episodes_completed
-                            })
+                            }
                             # Behavioral metrics
                             if 'ate_food' in iteration_episodes[0]:
-                                logs.update({
+                                ep_logs.update({
                                     "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
                                     "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
                                     "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
@@ -1520,7 +1521,10 @@ def main():
                                 # Termination reason distribution
                                 term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                                 for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
-                                    logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                                    ep_logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                            
+                            wandb.log(ep_logs)
+                        
                         wandb.log(logs)
 
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
@@ -1596,16 +1600,16 @@ def main():
                         if iteration_episodes:
                             rewards_list = [ep['r'] for ep in iteration_episodes]
                             lengths_list = [ep['l'] for ep in iteration_episodes]
-                            logs.update({
+                            ep_logs = {
                                 "Episode/Reward": np.mean(rewards_list),
                                 "Episode/Reward_Min": np.min(rewards_list),
                                 "Episode/Reward_Max": np.max(rewards_list),
                                 "Episode/Steps": np.mean(lengths_list),
                                 "Episode/Number": total_episodes_completed,
-                            })
+                            }
                             # Behavioral metrics
                             if 'ate_food' in iteration_episodes[0]:
-                                logs.update({
+                                ep_logs.update({
                                     "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
                                     "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
                                     "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
@@ -1621,11 +1625,15 @@ def main():
                                 # Termination reason distribution
                                 term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                                 for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
-                                    logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                                    ep_logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                            
+                            wandb.log(ep_logs)
+
                         if losses:
                             # losses is a list of (total_loss, (p_loss, v_loss, e_loss))
                             avg_total = np.mean([l[0] for l in losses])
                             logs.update({"loss/ppo_total": float(avg_total)})
+                        
                         wandb.log(logs)
 
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
