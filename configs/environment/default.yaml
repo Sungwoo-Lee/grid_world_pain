@@ -18,7 +18,7 @@ environment:
   resources:
     - name: "food" # Top Left
       type: "food"
-      count: 2
+      count: 1
       spawn_area: [[1, 1], [5, 5]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 35
@@ -28,7 +28,7 @@ environment:
 
     - name: "food" # Top Right
       type: "food"
-      count: 2
+      count: 1
       spawn_area: [[1, 6], [5, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 35
@@ -38,7 +38,7 @@ environment:
 
     - name: "food" # Bottom Right
       type: "food"
-      count: 2
+      count: 1
       spawn_area: [[6, 6], [10, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 35
@@ -48,7 +48,7 @@ environment:
 
     - name: "food" # Bottom Left
       type: "food"
-      count: 2
+      count: 1
       spawn_area: [[6, 1], [10, 5]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 35
@@ -108,7 +108,7 @@ environment:
   predator_enabled: true
   predators:
     - name: "predator" # 
-      count: 3
+      count: 4
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 1
       damage: [15.0, 45.0]
@@ -165,7 +165,7 @@ environment:
       nociception_intensity: 0.1
       properties: [0.0, 0.0, 0.0, 0.0, 1.0]
     - name: "bush" # Top Left
-      count: 1
+      count: 2
       area: [[1, 1], [5, 5]]
       blocking: false
       damage: [0.0, 0.0]
@@ -173,7 +173,7 @@ environment:
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
     - name: "bush" # Top Right
-      count: 1
+      count: 2
       area: [[1, 6], [5, 10]]
       blocking: false
       damage: [0.0, 0.0]
@@ -181,7 +181,7 @@ environment:
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
     - name: "bush" # Bottom Left
-      count: 1
+      count: 2
       area: [[6, 1], [10, 5]]
       blocking: false
       damage: [0.0, 0.0]
@@ -189,7 +189,7 @@ environment:
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
     - name: "bush" # Bottom Right
-      count: 1
+      count: 2
       area: [[6, 6], [10, 10]]
       blocking: false
       damage: [0.0, 0.0]
@@ -200,7 +200,7 @@ environment:
 
 body:
   # Body state
-  with_satiation: true
+  with_satiation: false
   with_nutrition: true
   with_injury: true
   random_start_satiation: false

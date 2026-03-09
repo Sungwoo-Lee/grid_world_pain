@@ -362,3 +362,231 @@ Both runs have **completed** (~14B timesteps, 72–89h). The full-training WandB
 The core problem is that **the environment doesn't create sufficient pressure for adaptive modulation**. With mostly constant noise and a 10x10 grid, static feature suppression is as good as (or better than) dynamic modulation. The modulator found the easiest gradient-reducing shortcut instead of learning the intended hypervigilance behavior.
 
 **Fix order**: Constrain the modulator's action space (tighter bounds on temperature and memory) → create environmental pressure (state-dependent noise) → refine architecture (grouping, learning rate) → increase task difficulty if needed.
+
+---
+
+## 10. Ablation Study: Grouping Size × Modulation Type × Mod Hidden Size
+
+> **Updated 2026-03-07**: New ablation sweep with 11 NMN variants + 1 baseline, all running on a revised environment (128 envs, 2 bush quadrants, 4 predators, 1 food per quadrant). All runs are **still running** (~14h, ~2.5B timesteps). Results below are mid-training snapshots — trends are established but final values will change.
+
+### 10.1 Experiment Design
+
+All runs share identical environment and agent hyperparameters (see §10.2). The only variables are:
+
+| Variable | Values Tested |
+|---|---|
+| **Modulation type** | Multiplicative (7 runs), PreActivation (4 runs), null/Baseline (1 run) |
+| **Grouping size** | 20, 40, 60, 80, 100 (Multiplicative default mod_hidden=32); 20, 60 (both types with mod_hidden=16 or 32) |
+| **Mod hidden size** | 16 (explicit in name), 32 (default, implicit when omitted) |
+
+### 10.2 Shared Environment Config
+
+```yaml
+environment:
+  width: 10, height: 10
+  max_steps: 500
+  predators: 4 (damage [15,45], detection_range=3, attack_delay=3)
+  food: 4 (1 per quadrant, max_consumption=35, regen_delay=250)
+  danger: 8 (2 per quadrant, damage [15,45])
+  rocks: 12 (3 per quadrant, damage [0.1,0.5])
+  bushes: 8 (2 per quadrant, hides_agent=true)
+  neutral_animals: 5 rabbits
+
+agent:
+  algorithm: RecurrentPPO
+  activation: relu
+  return_mode: GAE
+  rnn_type: GRU
+  hidden_size: 128
+  encoding_mode: hierarchical
+  lr_actor: 0.0005, lr_critic: 0.0001
+  K_epochs: 4, gamma: 0.95, gae_lambda: 0.95
+  entropy_coef: 0.01, eps_clip: 0.1
+  sequence_length: 128, num_envs: 128
+
+perceptual_noise:
+  enabled: true
+  injury: state_dependent (sigma=0.05, alpha=1.5)
+  all others: constant
+```
+
+**Key difference from previous runs (§2)**: This environment uses `return_mode: GAE` (vs MC), 4 predators (vs 3), and explicitly matched configs across all runs — no activation mismatch confound.
+
+### 10.3 Run Inventory
+
+| Tag | WandB ID | Type | G | mod_h | Timesteps | Status |
+|---|---|---|---|---|---|---|
+| `rppo_128env_2bush4pred1food` | `a1h6g56v` | Baseline | — | — | 1.89B | Running |
+| `rppoNMN_..._gSize20_multiplicative` | `y43bcakx` | Mult | 20 | 32 | 2.76B | Running |
+| `rppoNMN_..._gSize40_multiplicative` | `qfi6qfzy` | Mult | 40 | 32 | 2.47B | Running |
+| `rppoNMN_..._gSize60_multiplicative` | `pu438wd8` | Mult | 60 | 32 | 2.68B | Running |
+| `rppoNMN_..._gSize80_multiplicative` | `8x99hsgr` | Mult | 80 | 32 | 2.71B | Running |
+| `rppoNMN_..._gSize100_multiplicative` | `pmmg589y` | Mult | 100 | 32 | 2.67B | Running |
+| `rppoNMN_..._gSize20_multiplicative_modHidden16` | `imavc7fo` | Mult | 20 | 16 | 2.52B | Running |
+| `rppoNMN_..._gSize60_multiplicative_modHidden16` | `2tw7n7nj` | Mult | 60 | 16 | 2.77B | Running |
+| `rppoNMN_..._gSize20_preActivation_modHidden16` | `v1pdnlkf` | PreAct | 20 | 16 | 2.59B | Running |
+| `rppoNMN_..._gSize60_preActivation_modHidden16` | `vbkeujm3` | PreAct | 60 | 16 | 2.55B | Running |
+| `rppoNMN_..._gSize20_preActivation_modHidden32` | `v76stpj6` | PreAct | 20 | 32 | 2.50B | Running |
+| `rppoNMN_..._gSize60_preActivation_modHidden32` | `1jb899lc` | PreAct | 60 | 32 | 2.44B | Running |
+
+### 10.4 Episode Performance Comparison
+
+| Run | Reward (SS) | Steps (SS) | loss/value (SS) | loss/total (SS) |
+|---|---|---|---|---|
+| **Baseline** | **-113.24 ± 2.69** | **105.12 ± 2.75** | **63.90 ± 11.6** | **31.95 ± 5.8** |
+| Mult G=20 h=32 | -113.29 ± 2.73 | 97.25 ± 1.68 | 66.65 ± 13.2 | 33.32 ± 6.6 |
+| Mult G=40 h=32 | -114.98 ± 2.78 | 111.42 ± 3.32 | 65.21 ± 11.1 | 32.60 ± 5.5 |
+| Mult G=60 h=32 | -118.46 ± 3.21 | 112.85 ± 3.57 | 78.61 ± 12.5 | 39.30 ± 6.2 |
+| Mult G=80 h=32 | -117.57 ± 3.03 | 116.36 ± 3.45 | 70.30 ± 11.1 | 35.14 ± 5.5 |
+| Mult G=100 h=32 | -113.83 ± 2.63 | 103.04 ± 2.42 | 63.44 ± 11.1 | 31.71 ± 5.6 |
+| **Mult G=20 h=16** | -115.14 ± 2.78 | **121.45 ± 3.97** | 61.36 ± 9.7 | 30.67 ± 4.9 |
+| **Mult G=60 h=16** | **-108.42 ± 1.91** | 98.86 ± 1.35 | **44.48 ± 9.4** | **22.23 ± 4.7** |
+| PreAct G=20 h=16 | -118.68 ± 3.25 | 118.65 ± 3.99 | 73.11 ± 10.4 | 36.55 ± 5.2 |
+| PreAct G=60 h=16 | -116.65 ± 2.87 | **122.09 ± 3.81** | 65.94 ± 10.0 | 32.97 ± 5.0 |
+| PreAct G=20 h=32 | -113.01 ± 2.48 | 97.73 ± 1.52 | 63.63 ± 11.2 | 31.81 ± 5.6 |
+| PreAct G=60 h=32 | -112.82 ± 2.44 | 97.63 ± 1.54 | 63.39 ± 11.3 | 31.69 ± 5.7 |
+
+**Key observations**:
+- **Best reward**: `Mult G=60 h=16` at **-108.42** — ~5 points better than baseline (-113.24). Also has the lowest value loss (44.48 vs 63.90).
+- **Longest survival**: `PreAct G=60 h=16` at **122.09 steps** and `Mult G=20 h=16` at **121.45 steps** — both ~16 steps longer than baseline (105.12).
+- **Most baseline-like**: `PreAct G=60 h=32` (-112.82) and `PreAct G=20 h=32` (-113.01) are indistinguishable from baseline.
+- **Worst reward**: `Mult G=60 h=32` (-118.46) and `PreAct G=20 h=16` (-118.68) — ~5 points worse than baseline.
+- **mod_hidden=16 generally outperforms mod_hidden=32** in Multiplicative mode, suggesting the smaller modulator is more constrained and less prone to degenerate shortcuts.
+
+### 10.5 Modulator Behavior Comparison
+
+#### 10.5.1 Gamma (Perceptual Gain) — Unimodal
+
+| Run | gamma_uni_mean (SS) | sigmoid(gamma) | Interpretation |
+|---|---|---|---|
+| Mult G=20 h=32 | -2.447 | 8.0% | Suppressed |
+| Mult G=40 h=32 | -4.459 | 1.1% | **Hard suppressed** |
+| Mult G=60 h=32 | -1.856 | 13.5% | Suppressed |
+| Mult G=80 h=32 | -3.030 | 4.6% | Hard suppressed |
+| Mult G=100 h=32 | -2.664 | 6.5% | Suppressed |
+| **Mult G=20 h=16** | **-1.004** | **26.8%** | **Moderate gating** |
+| **Mult G=60 h=16** | **-0.644** | **34.5%** | **Mild gating** |
+| PreAct G=20 h=16 | 1.327 | 79.0% | Near pass-through |
+| PreAct G=60 h=16 | 0.840 | 69.8% | Moderate pass-through |
+| PreAct G=20 h=32 | 0.315 | 57.8% | Mild gating |
+| PreAct G=60 h=32 | 0.326 | 58.1% | Mild gating |
+
+**Finding**: All Multiplicative h=32 runs suppress unimodal features (sigmoid < 15%). The h=16 variants are much less aggressive (27–35%). PreActivation runs maintain near-pass-through or mild gating — the beta term provides an alternative pathway, reducing pressure to suppress via gamma.
+
+#### 10.5.2 Gamma (Perceptual Gain) — Multimodal
+
+| Run | gamma_multi_mean (SS) | sigmoid(gamma) | Interpretation |
+|---|---|---|---|
+| Mult G=20 h=32 | -2.351 | 8.7% | Suppressed |
+| Mult G=40 h=32 | -1.333 | 20.9% | Moderate suppression |
+| Mult G=60 h=32 | -1.778 | 14.5% | Suppressed |
+| Mult G=80 h=32 | -1.852 | 13.6% | Suppressed |
+| Mult G=100 h=32 | -1.985 | 12.1% | Suppressed |
+| **Mult G=20 h=16** | **-5.753** | **0.3%** | **Collapsed** |
+| **Mult G=60 h=16** | **-6.956** | **0.1%** | **Collapsed** |
+| PreAct G=20 h=16 | -7.235 | 0.07% | Collapsed |
+| PreAct G=60 h=16 | -7.473 | 0.06% | Collapsed |
+| PreAct G=20 h=32 | -7.175 | 0.08% | Collapsed |
+| PreAct G=60 h=32 | -7.925 | 0.04% | Collapsed |
+
+**Finding**: **ALL runs show multimodal (association hub) collapse** — sigmoid < 1% across all configurations. This is universal. The multimodal fusion layer is being shut off regardless of modulation type, grouping size, or mod_hidden_size. This strongly suggests the multimodal hub itself is the problem, not the modulator configuration.
+
+#### 10.5.3 Temperature
+
+| Run | temp_mean (SS) | temp_max (SS) | Interpretation |
+|---|---|---|---|
+| Baseline | — | — | No temperature modulation |
+| Mult G=20 h=32 | **8.055** | **10.00** | Extreme inflation, pinned |
+| Mult G=40 h=32 | 3.879 | 7.60 | Moderate inflation |
+| Mult G=60 h=32 | 4.088 | 7.66 | Moderate inflation |
+| Mult G=80 h=32 | 4.099 | 7.56 | Moderate inflation |
+| Mult G=100 h=32 | 3.496 | 7.74 | Moderate inflation |
+| **Mult G=20 h=16** | **1.341** | **2.30** | **Healthy range** |
+| **Mult G=60 h=16** | **2.022** | **2.97** | **Healthy range** |
+| PreAct G=20 h=16 | 3.945 | 6.43 | Moderate inflation |
+| PreAct G=60 h=16 | 1.954 | 3.34 | Mild inflation |
+| PreAct G=20 h=32 | 5.852 | 9.45 | Heavy inflation |
+| PreAct G=60 h=32 | 6.244 | **10.00** | Heavy inflation, pinned |
+
+**Finding**: The h=16 Multiplicative runs show the healthiest temperature behavior (mean 1.3–2.0, not pinned at ceiling). All h=32 runs inflate temperature significantly. PreActivation h=32 runs are the worst offenders (mean 5.9–6.2, near ceiling).
+
+#### 10.5.4 z_memory (GRU Gate Bias)
+
+| Run | z_mem_mean (SS) | Interpretation |
+|---|---|---|
+| Mult G=20 h=32 | +6.75 | **GRU forced to forget** (high update gate) |
+| Mult G=40 h=32 | +6.51 | Forced to forget |
+| Mult G=60 h=32 | +5.96 | Forced to forget |
+| Mult G=80 h=32 | +6.96 | Forced to forget |
+| Mult G=100 h=32 | +6.98 | Forced to forget |
+| **Mult G=20 h=16** | **+1.28** | **Mild forgetting bias — healthy** |
+| **Mult G=60 h=16** | **-0.14** | **Near neutral — healthy** |
+| PreAct G=20 h=16 | +3.44 | Moderate forgetting |
+| PreAct G=60 h=16 | +0.34 | Near neutral |
+| PreAct G=20 h=32 | +5.49 | Forced to forget |
+| PreAct G=60 h=32 | +8.72 | **Extreme forgetting** |
+
+**Critical observation**: In the previous diagnosis (§2.7, §5.2), z_memory was **negative** (-5.41 to -6.45), meaning the GRU was frozen (update gate → 0, retaining old state). In these new runs, z_memory is **positive** (+5 to +9 for h=32), meaning the opposite — the GRU update gate is pushed toward 1, causing **complete forgetting** at every timestep ($h_{new} \approx \tilde{h}$, discarding all previous state). Both extremes disable effective recurrent memory; only the h=16 runs maintain z_memory in a healthy range (-0.14 to +1.28).
+
+**Note**: The sign reversal from the previous experiment (z_mem ≈ -6 then, ≈ +7 now) does not indicate improved behavior — it indicates the same pathology (memory disabled) via the opposite mechanism (always-forget vs always-retain). The h=32 modulator has enough capacity to find either extreme; the h=16 modulator is too constrained to do so.
+
+#### 10.5.5 Beta (PreActivation Threshold Shift)
+
+| Run | beta_uni_mean (SS) | beta_multi_mean (SS) | Interpretation |
+|---|---|---|---|
+| PreAct G=20 h=16 | -1.345 | -0.438 | Inhibitory (raising threshold) |
+| PreAct G=60 h=16 | -0.972 | -0.244 | Mild inhibition |
+| PreAct G=20 h=32 | -0.618 | -0.030 | Near neutral |
+| PreAct G=60 h=32 | **+0.445** | -0.727 | **Disinhibited unimodal** / inhibited multimodal |
+
+**Finding**: Beta (threshold shift) is mostly negative (inhibitory) — the modulator raises activation thresholds, filtering weak signals. Only `PreAct G=60 h=32` shows positive unimodal beta (+0.445), but this run still collapses the multimodal hub (gamma_multi = -7.93). The beta term is not being used for the intended disinhibition effect described in the PreActivation theory.
+
+### 10.6 Analysis Summary
+
+#### 10.6.1 Headline: mod_hidden_size=16 is the critical factor
+
+The strongest predictor of healthy modulator behavior is **mod_hidden_size=16** (not grouping size or modulation type):
+
+| Factor | Healthy Temperature | Healthy z_memory | Best Reward |
+|---|---|---|---|
+| mod_hidden=16 + Multiplicative | Yes (1.3–2.0) | Yes (-0.14 to +1.28) | **-108.42** (best overall) |
+| mod_hidden=16 + PreActivation | Partial (2.0–3.9) | Partial (0.3–3.4) | -116 to -119 |
+| mod_hidden=32 + Multiplicative | No (3.5–8.1) | No (+5 to +7) | -113 to -118 |
+| mod_hidden=32 + PreActivation | No (5.9–6.2) | No (+5 to +9) | -113 (similar to baseline) |
+
+The h=16 modulator is too constrained to find degenerate extremes. With only 16 hidden units, the GRU cannot memorize shortcuts as easily, forcing it to learn more useful modulation patterns. The h=32 modulator consistently finds pathological strategies regardless of other settings.
+
+#### 10.6.2 Multimodal Hub Collapse is Universal
+
+Every NMN run — all 11 configurations — collapsed the multimodal hub gate to sigmoid < 1%. This is not a modulator pathology but a signal that **the multimodal fusion layer is not producing useful features**. Possible explanations:
+- The task is solvable with unimodal features alone (olfaction for food/predator, visual for threats)
+- The multimodal hub's architecture (1152→128→128→128) is too compressed
+- The hub receives already-modulated unimodal features, so its input quality depends on unimodal gate behavior
+
+#### 10.6.3 Grouping Size Has Less Impact Than Expected
+
+Comparing G=20 vs G=60 vs G=100 within Multiplicative h=32:
+- Reward range: -113.29 to -118.46 (all within noise of baseline)
+- All show similar pathological modulator values
+- G=20 has the worst temperature inflation (mean 8.05)
+- G=100 is closest to baseline behavior
+
+Grouping size does not prevent degenerate convergence — it changes which local optimum the modulator finds, but all are equally pathological when mod_hidden=32.
+
+#### 10.6.4 PreActivation Does Not Outperform Multiplicative
+
+Despite the theoretical advantage of having both gamma and beta controls, PreActivation runs do not outperform Multiplicative ones. The best-performing run (`Mult G=60 h=16`) uses Multiplicative mode. PreActivation h=32 runs achieve baseline-equivalent reward but with heavily pathological modulator internals (temperature 5.9–6.2, z_memory 5.5–8.7). The extra degrees of freedom in PreActivation appear to enable more pathways to degenerate solutions rather than better adaptive modulation.
+
+### 10.7 Updated Recommendations
+
+Based on this ablation study, the experiment priority list from §8 is revised:
+
+| Priority | Experiment | Rationale |
+|---|---|---|
+| **P0** | **Fix mod_hidden_size to 16** | h=16 prevents degenerate convergence in Multiplicative mode. The best-performing run uses h=16. |
+| **P1** | Tighten temp_clip to [0.5, 3.0] | Even the best run (Mult G=60 h=16) reaches temp_mean=2.0, temp_max=3.0. Tighter bounds keep it constrained. |
+| **P2** | Clamp z_memory to [-2, +2] | Prevents both always-retain (old pathology) and always-forget (new pathology). h=16 runs are already near this range naturally. |
+| **P3** | Enable state-dependent noise for olfaction + visual | Still needed — the environment doesn't reward adaptive modulation. All runs collapse multimodal hub. |
+| **P4** | Investigate multimodal hub architecture | Universal collapse suggests the hub itself is the bottleneck, not the modulator. Consider: wider hub, residual connections, or skip connections from unimodal to RNN. |
+| **P5** | Separate modulator learning rate (5x lower) | Still relevant for h=32 if revisited, but h=16 + shared LR already works. |
+| **P6** | Test Multiplicative G=60 h=16 as the new standard NMN config | This is the current best performer — use it as the reference for future ablations. |

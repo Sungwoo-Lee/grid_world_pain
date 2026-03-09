@@ -6,7 +6,7 @@ training:
   video_during_training: true
   stats_during_training: false
   auto_analysis: false 
-  eval_video_episodes: 1
+  eval_video_episodes: 3
   eval_stats_episodes: 100
   eval_stats_num_envs: 10
   seed: 42

@@ -21,7 +21,7 @@ agent:
   # Parity Options
   # GRU is required for gate-bias injection (§5.1a) — LSTM gate-bias not yet supported
   rnn_type: "GRU"          # GRU required for full modulation support
-  activation: "tanh"       # "tanh" (PyTorch parity) or "relu" (original JAX)
+  activation: "relu"       # "tanh" (PyTorch parity) or "relu" (original JAX)
   return_mode: "GAE"        # "MC" (PyTorch parity) or "GAE" (original JAX)
 
   # Encoding Configuration
@@ -34,6 +34,7 @@ agent:
     default_mlp: [128,128]
     unimodal_overrides:
       visual: [128,128]
+      olfaction: [128,128]
     
     # Multimodal Phase 2: Fusion hub
     multimodal_hub: [128,128]
@@ -51,7 +52,7 @@ agent:
   #   null              — Disabled (true baseline, no modulator constructed)
   modulation:
     type: "Multiplicative"       # "Multiplicative", "PreActivation", or null
-    mod_hidden_size: 64          # GRU hidden units for modulator
+    mod_hidden_size: 16          # GRU hidden units for modulator
     grouping_size: 40             # Spatial grouping G (1 = per-neuron, §12)
     percept_bias_init: 2.0       # Gain head (gamma) bias init (§5.2: sigmoid(2.0)≈0.88)
     percept_add_bias_init: 0.0   # Threshold-shift head (beta) bias init (PreActivation only)
