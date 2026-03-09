@@ -51,10 +51,10 @@ agent:
   #                        beta  = additive threshold shift (Ferguson disinhibition)
   #   null              — Disabled (true baseline, no modulator constructed)
   modulation:
-    type: "PreActivation"       # "Multiplicative", "PreActivation", or null
-    mod_hidden_size: 16          # GRU hidden units for modulator
-    grouping_size: 60             # Spatial grouping G (1 = per-neuron, §12)
-    percept_bias_init: 2.0       # Gain head (gamma) bias init (§5.2: sigmoid(2.0)≈0.88)
-    percept_add_bias_init: 0.0   # Threshold-shift head (beta) bias init (PreActivation only)
+    type: "Multiplicative"       # "Multiplicative", "PreActivation", or null
+    mod_hidden_size: 16          # GRU hidden units — h=16 prevents degenerate convergence (§10.6.1)
+    grouping_size: 60            # Spatial grouping G — Mult G=60 h=16 is best performer (§10.6)
+    percept_bias_init: 3.0       # Gain head (gamma) bias init — higher for truer pass-through (§8 P6)
     memory_bias_init: 0.0        # Memory gate-bias init (§5.1a: neutral)
-    temp_clip: [0.1, 10.0]       # Temperature bounds (§5.3a: prevent collapse)
+    temp_clip: [0.5, 3.0]        # Tightened bounds — h=16 best run reaches temp_mean=2.0, max=3.0 (§10.7 P1)
+    memory_clip: [-2.0, 2.0]     # Prevent GRU freeze/forget extremes (§10.7 P2, requires code support)

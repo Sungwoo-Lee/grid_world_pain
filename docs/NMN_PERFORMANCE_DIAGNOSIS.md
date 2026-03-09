@@ -590,3 +590,88 @@ Based on this ablation study, the experiment priority list from §8 is revised:
 | **P4** | Investigate multimodal hub architecture | Universal collapse suggests the hub itself is the bottleneck, not the modulator. Consider: wider hub, residual connections, or skip connections from unimodal to RNN. |
 | **P5** | Separate modulator learning rate (5x lower) | Still relevant for h=32 if revisited, but h=16 + shared LR already works. |
 | **P6** | Test Multiplicative G=60 h=16 as the new standard NMN config | This is the current best performer — use it as the reference for future ablations. |
+
+---
+
+## 11. Discussion: Dynamic Config Scheduling / Environment Curriculum (2026-03-09)
+
+> Record of critical analysis of proposed approaches for addressing the NMN performance gap.
+
+### 11.1 Proposal A: Algorithm Config Scheduling (Rejected)
+
+**Idea**: A system that loads different algorithm/modulator configs at predefined training stages — e.g., tighter modulator bounds early, looser later; annealing learning rates on a schedule.
+
+**Assessment: Not recommended.** Reasons:
+
+1. **Treats symptoms, not causes.** The diagnosis identifies clear root causes (insufficient environmental pressure, excessive modulator capacity, multimodal hub collapse). None are *timing* problems — the optimization landscape has degenerate attractors regardless of when configs are applied.
+2. **Combinatorial hyperparameter explosion.** N_params × N_stages × N_values. The 11-run ablation (§10) already shows mixed results from *static* configs. Scheduling multiplies the search space dramatically.
+3. **The best run (Mult G=60 h=16) doesn't need scheduling.** Simply constraining modulator capacity (h=16) produces healthy temperature, z_memory, and best reward. This is a *structural* fix, not a temporal one.
+4. **Mid-training config changes destabilize PPO.** PPO assumes a stationary MDP. Changing clipping bounds or architecture behavior mid-training invalidates the value function, causing performance crashes at each transition.
+
+### 11.2 Proposal B: Non-Stationary Environment Curriculum (Deferred to Phase 2)
+
+**Idea**: Periodically change environment parameters (predator count, bush count, predator olfactory properties, food availability) to create non-stationarity that forces adaptive behavior. Not algorithm config changes — purely environment changes.
+
+**Assessment: Scientifically interesting, but premature.** Should be Phase 2 after the known issues are fixed.
+
+#### 11.2.1 What's Good About This
+
+- **The core intuition is correct**: the diagnosis repeatedly states the environment doesn't create pressure for adaptive modulation. Non-stationarity *does* create pressure for adaptation.
+- **Biologically motivated**: animals evolved neuromodulation precisely because environments change — predator density fluctuates, food availability is seasonal, shelter comes and goes.
+- **Could differentiate NMN from baseline**: a fixed-architecture agent that memorizes one strategy should fail when the environment shifts; a modulated agent that dynamically adjusts processing *should* have an advantage.
+
+#### 11.2.2 Critical Concerns
+
+**Concern 1 — Non-stationarity creates pressure for *general* adaptation, not *neuromodulation* specifically.**
+
+The modulator's design is about precision-weighting sensory channels based on internal state (injury). Changing the number of predators or bushes doesn't create pressure to *modulate sensory precision based on injury*. It creates pressure to learn different policies for different environment configurations. These are fundamentally different problems.
+
+If predator count doubles mid-training, the agent needs a different *policy* (more cautious movement), not different *sensory weighting* (upweight olfaction). The modulator isn't designed to solve "the world changed" — it's designed to solve "my body state changed and I need to re-weight my senses."
+
+**Risk**: The NMN outperforms baseline under non-stationarity, but the real reason is extra parametric capacity absorbing distribution shift, not meaningful sensory modulation. The modulator internals must be checked to distinguish these explanations.
+
+**Concern 2 — PPO is the wrong algorithm for non-stationary environments.**
+
+PPO assumes a stationary MDP. Its value function estimates expected returns under the *current* environment. When the environment changes:
+- Value function is immediately wrong → value loss spikes
+- Wasted samples as the policy adapts to outdated value estimates
+- Performance crashes at every transition
+
+This hurts *both* agents equally, making the experimental signal noisy. Meta-RL algorithms (RL², MAML) are designed for this; PPO is not.
+
+**Concern 3 — Confounding two variables simultaneously.**
+
+The current diagnosis gives a clean experimental question: *does the modulator learn useful sensory modulation?* Adding non-stationarity introduces a second question: *can the agent handle changing environments?*
+
+If NMN wins under non-stationarity, possible explanations include: (a) proper sensory gain control, (b) extra capacity helps with distribution shift, (c) baseline was more brittle. If NMN loses: (a) modulation doesn't help, (b) non-stationarity broke PPO for both, (c) modulator shortcuts got worse under instability. Clean attribution becomes impossible.
+
+**Concern 4 — The unsolved problems from the diagnosis persist.**
+
+Even in a non-stationary environment:
+- Multimodal hub will still collapse (§10.6.2 — universal across ALL 11 configs)
+- State-dependent noise is still off — modulator has no reason to modulate precision based on injury
+- h=32 will still find degenerate shortcuts — capacity problem is independent of environment stationarity
+
+Non-stationarity adds a new dimension without fixing the existing broken ones.
+
+#### 11.2.3 Recommended Phasing
+
+**Phase 1 — Fix the known problems first (static environment)**
+- h=16, tight bounds, state-dependent noise (P0–P3 from §10.7)
+- Verify the modulator actually learns meaningful sensory modulation (gamma responds to injury state, not collapsed to a constant)
+- This answers: *does neuromodulation work at all under ideal conditions?*
+
+**Phase 2 — Test robustness with non-stationarity (THEN)**
+- Only after confirming the modulator learns meaningful modulation in a static environment
+- Use non-stationary environment to test whether the modulated agent *generalizes* better than baseline
+- Now the comparison is meaningful: both agents learned useful behavior, but the modulated one adapts better to change
+
+**If environment curriculum is pursued in Phase 2**, the highest-value variant is **state-dependent noise curriculum** (not entity count changes): start with strong state-dependent noise on all channels (making sensory modulation essential), then gradually reduce it. This directly pressures the modulator to learn its intended function — precision weighting based on body state.
+
+#### 11.2.4 Alternative: Modulator Freeze/Unfreeze
+
+A simpler mechanism that addresses the timescale separation issue (§5.5) without a full config scheduling system: freeze the modulator for the first N timesteps (e.g., 1B) while the task network learns stable representations, then unfreeze. This is one boolean flag with one timestep threshold — not a full scheduling system — and directly prevents the modulator from racing ahead to find degenerate shortcuts before the task network has converged.
+
+### 11.3 Conclusion
+
+**Do not build a generic config scheduling system.** The NMN's core problem is that suppressing features is a *better strategy* than modulating them in the current environment. No amount of scheduling changes that fact. Fix the fundamentals first (h=16, tighter bounds, state-dependent noise, multimodal hub investigation), confirm the modulator works under ideal conditions, then stress-test with non-stationarity as a Phase 2 experiment.
