@@ -586,4 +586,37 @@ This changes the required config key from `agent.lr` to `agent.lr_actor` for PPO
 
 **Conclusion**: All 3 bugs from Round 1 are fixed. Implementation is correct across all 5 algorithms. One out-of-scope change flagged (PPO config key `agent.lr` → `agent.lr_actor`) — verify PPO configs are compatible.
 
+### End-to-end validation (WandB run)
+
+**Run**: `20260309-172357_rppoNMN_128env_2bush4pred1food_gSize60_preActivation_modHidden16_BehavMetrics`
+**Algorithm**: RecurrentPPO with Neuromodulation (PreActivation)
+**Data points**: 1924 iterations, all 15 behavioral metrics logged with no gaps.
+
+#### Metric values and trajectory
+
+| Metric | First | Last (final) | Steady-State (last 20%) | Reasonable? |
+|--------|------:|-------------:|------------------------:|:-----------:|
+| `Episode/FoodEaten` | 0.14 | 0.95 | 0.65 ± 0.24 | ✅ Agent learned to eat |
+| `Episode/PredatorHits` | 2.31 | 2.44 | 2.65 ± 0.13 | ✅ Non-zero, 4 predators |
+| `Episode/DangerHits` | 1.96 | 0.68 | 0.68 ± 0.08 | ✅ Learned to avoid danger |
+| `Episode/RestCount` | 4.26 | 15.34 | 13.44 ± 1.90 | ✅ Discovered resting |
+| `Episode/Collisions` | 0.00 | 0.00 | 0.00 ± 0.00 | ✅ Expected for this map |
+| `Episode/TotalDamage` | 128.48 | 96.60 | 101.68 ± 3.69 | ✅ Decreasing |
+| `Episode/DamagePredator` | 68.82 | 74.49 | 79.51 ± 3.85 | ✅ Dominant source |
+| `Episode/DamageDanger` | 58.76 | 19.74 | 20.26 ± 2.34 | ✅ Matches DangerHits drop |
+| `Episode/DamageObstacle` | 0.90 | 2.38 | 1.90 ± 0.35 | ✅ Small, consistent |
+| `Episode/MeanDistFood` | 2.30 | 2.70 | 2.62 ± 0.06 | ✅ Reasonable grid distance |
+| `Episode/MeanDistPredator` | 3.90 | 5.31 | 4.94 ± 0.17 | ✅ Learned to keep distance |
+| `Episode/Term_MaxSteps` | 0.00 | 0.00 | 0.00 ± 0.00 | ✅ Never survives full ep |
+| `Episode/Term_Starvation` | 0.01 | 0.39 | 0.34 ± 0.03 | ✅ Rising as injury drops |
+| `Episode/Term_Overeating` | 0.00 | 0.00 | 0.00 ± 0.00 | ✅ Not configured |
+| `Episode/Term_Injury` | 0.99 | 0.61 | 0.66 ± 0.03 | ✅ Decreasing |
+
+#### Cross-validation checks
+
+- **Termination fractions sum to 1.0**: `Term_Injury(0.61) + Term_Starvation(0.39) = 1.00` ✅
+- **Damage breakdown consistent**: `DamagePredator(74.5) + DamageDanger(19.7) + DamageObstacle(2.4) = 96.6 ≈ TotalDamage(96.6)` ✅
+- **Steps improving with reward**: Steps 26→59, Reward -200→-168 ✅
+- **No missing data points**: All metrics have N=1924 ✅
+
 ---
