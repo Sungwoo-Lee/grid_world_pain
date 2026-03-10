@@ -25,8 +25,9 @@
 After Gemini completes implementation, verify using this workflow:
 
 1. **Read the plan doc** — check Implementation Report and Checkpoints for what was done, any deviations, or blockers.
-2. **Git diff** — run `git diff HEAD` to see Gemini's uncommitted changes vs the last commit. Cross-reference against the plan's File Changes section.
-3. **Flag unexpected changes** — any files modified that were not in the plan should be noted as out-of-scope in the Verification Report.
-4. **Targeted reads** — only read specific lines if the diff is unclear or logic needs closer inspection.
-5. **Fill the Verification Report** — complete the table with `✅`/`⚠️`/`❌` per file, then write a one-line conclusion. Use `Verified by: Claude`.
+2. **Diff stats check** — run `git diff --stat HEAD` first. Check the insertion/deletion counts per file against the plan's expected scope. A plan that calls for a 2-line fix should not show hundreds of deletions. **Flag any file where the net line change is disproportionate to the planned change** — this catches accidental deletions, file truncations, or scope creep before detailed review.
+3. **Git diff** — run `git diff HEAD` to see Gemini's uncommitted changes vs the last commit. Cross-reference against the plan's File Changes section.
+4. **Flag unexpected changes** — any files modified that were not in the plan should be noted as out-of-scope in the Verification Report.
+5. **Targeted reads** — only read specific lines if the diff is unclear or logic needs closer inspection.
+6. **Fill the Verification Report** — complete the table with `✅`/`⚠️`/`❌` per file, then write a one-line conclusion. Use `Verified by: Claude`.
 
