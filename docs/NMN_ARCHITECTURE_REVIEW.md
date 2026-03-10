@@ -71,11 +71,146 @@ These baselines allow each neuron/group to learn its own "resting" modulation le
 
 ### 2.4 Spatial Grouping
 
-With `grouping_size=40` and `hidden_size=128`:
-- **Unimodal**: 1 signal per modality (9 groups). Each group gates all output neurons of that modality's encoder.
-- **Multimodal/Memory**: `ceil(128/40) = 4` groups, each repeated 40 times to cover 128 hidden dims. This means 32-neuron blocks share the same modulation signal.
+Unimodal and multimodal heads use fundamentally **different grouping mechanisms**. Unimodal grouping is structurally defined by the number of sensor modalities. Multimodal/memory grouping is parameter-controlled via `grouping_size` and uses a repeat-and-slice operation.
 
-**Implication**: The modulator can shut off an entire 40-neuron block with a single negative value. This coarse grouping was identified as a contributor to the feature collapse observed in training (see NMN_PERFORMANCE_DIAGNOSIS.md §5.4).
+#### 2.4.1 Unimodal Grouping — One Signal Per Modality
+
+The unimodal head outputs exactly **one scalar per sensor modality**. The number of groups is not configurable — it is structurally determined by the observation breakdown:
+
+```python
+# neuromodulator.py:80
+self.num_groups_unimodal = len(obs_breakdown)  # = 9 (one per modality)
+
+# neuromodulator.py:89-90
+self.head_unimodal = nnx.Linear(mod_hidden_size, self.num_groups_unimodal, ...)
+# Shape: Linear(16 → 9)
+
+# Baseline: one learned offset per modality
+self.z_unimodal_baseline = nnx.Param(jnp.zeros(self.num_groups_unimodal))  # shape (9,)
+```
+
+**Signal computation** — In `_get_signal()` with `is_unimodal=True`, no repeat operation is applied. The raw head output is simply added to the baseline:
+
+```python
+# neuromodulator.py:137-140
+def _get_signal(head, baseline, ..., is_unimodal=False):
+    raw = head(h_mod_new)              # shape (batch, 9) for unimodal
+    if is_unimodal:
+        sig = baseline.value + raw     # shape (batch, 9) — direct addition, no repeat
+```
+
+**Injection** — At the encoder, this `(batch, 9)` signal is broadcast across all 128 output neurons of each modality using `[..., None]`:
+
+```python
+# recurrent_ppo_network.py:140-144
+encoded_all = self.unimodal_grouped(x_padded)     # shape (batch, 9, 128)
+gamma1 = sigmoid(mod_output.z_unimodal)            # shape (batch, 9)
+beta1 = mod_output.z_unimodal_add                  # shape (batch, 9) — zeros in Multiplicative
+encoded_all = relu(encoded_all * gamma1[..., None] + beta1[..., None])
+#                               gamma1[..., None] broadcasts: (batch, 9, 1) × (batch, 9, 128)
+#                               → All 128 neurons of modality i share the same gamma1[i]
+```
+
+**Worked example** — With 9 modalities and `hidden_size=128`:
+
+| Modality | Index | Gamma scalar | Effect on 128 output neurons |
+|----------|-------|-------------|------------------------------|
+| Injury | 0 | sigmoid(z₀) | All 128 injury features scaled by same value |
+| Nutrition | 1 | sigmoid(z₁) | All 128 nutrition features scaled by same value |
+| ... | ... | ... | ... |
+| Location | 8 | sigmoid(z₈) | All 128 location features scaled by same value |
+
+This is an all-or-nothing gate per modality. The modulator cannot selectively suppress certain features within a modality (e.g., keep "food direction" from olfaction while suppressing "food distance") — it must gate the entire 128-dim olfaction encoding uniformly.
+
+#### 2.4.2 Multimodal/Memory Grouping — Repeat-and-Slice
+
+The multimodal and memory heads use `grouping_size` (config parameter `G`) to produce a **small number of group signals** that are then **repeated** to cover the full hidden dimension:
+
+```python
+# neuromodulator.py:81
+self.num_groups_hidden = math.ceil(target_hidden_size / grouping_size)
+# With grouping_size=64, hidden_size=128: ceil(128/64) = 2 groups
+# With grouping_size=40, hidden_size=128: ceil(128/40) = 4 groups
+
+# neuromodulator.py:96-97
+self.head_multimodal = nnx.Linear(mod_hidden_size, self.num_groups_hidden, ...)
+# With G=64: Linear(16 → 2)
+# With G=40: Linear(16 → 4)
+
+# Baseline: per-NEURON (not per-group!) learned offset
+self.z_hidden_baseline = nnx.Param(jnp.zeros(target_hidden_size))  # shape (128,)
+```
+
+**Signal computation** — In `_get_signal()` with `is_unimodal=False`, the raw head output is **repeated by `grouping_size`** then sliced to `target_hidden_size`:
+
+```python
+# neuromodulator.py:141-143
+def _get_signal(head, baseline, ..., is_unimodal=False):
+    raw = head(h_mod_new)                                              # shape (batch, 2) with G=64
+    # NOT unimodal path:
+    sig = jnp.repeat(raw, self.grouping_size, axis=-1)[..., :self.target_hidden_size]
+    #     jnp.repeat([a, b], 64) → [a,a,...(64 times)...,a, b,b,...(64 times)...,b]  shape (128,)
+    #     [..., :128] slice is a no-op here since 2×64 = 128 exactly
+    sig = baseline.value + sig                                         # shape (batch, 128)
+    # baseline is per-neuron (128,), so each neuron gets its own offset
+    # even though the raw head signal is shared within a group
+```
+
+**Injection** — At the encoder, this `(batch, 128)` signal applies element-wise to the 128-dim multimodal hub output:
+
+```python
+# recurrent_ppo_network.py:146-151
+mm_in = encoded_all.reshape(batch_shape + (-1,))   # shape (batch, 9*128) = (batch, 1152)
+mm_latent = self.multimodal_hub(mm_in)              # shape (batch, 128)
+gamma2 = sigmoid(mod_output.z_multimodal)           # shape (batch, 128) — already expanded
+beta2 = mod_output.z_multimodal_add                 # shape (batch, 128)
+return relu(mm_latent * gamma2 + beta2)             # element-wise, no broadcasting needed
+```
+
+**Worked example** — With `grouping_size=64` and `hidden_size=128` (2 groups):
+
+```
+head_multimodal(h_mod) → raw = [a, b]           # 2 raw group values
+jnp.repeat([a, b], 64) → [a,a,...×64, b,b,...×64]  # expanded to 128
+                          └─ group 0 ─┘ └─ group 1 ─┘
+                          neurons 0–63   neurons 64–127
+
++ z_hidden_baseline (128 per-neuron values):
+  sig[0]  = baseline[0]  + a    ┐
+  sig[1]  = baseline[1]  + a    │ group 0: same 'a' but different baselines
+  ...                           │
+  sig[63] = baseline[63] + a    ┘
+  sig[64] = baseline[64] + b    ┐
+  sig[65] = baseline[65] + b    │ group 1: same 'b' but different baselines
+  ...                           │
+  sig[127]= baseline[127]+ b   ┘
+```
+
+**Key subtlety**: Although neurons within a group share the same raw head signal, the **per-neuron baselines** allow each neuron to learn a different resting modulation level. The head controls group-level *dynamics* (how modulation changes over time), while the baselines control per-neuron *static offsets*.
+
+The **memory head** follows the same repeat-and-slice pattern:
+
+```python
+# neuromodulator.py:102-107
+self.head_memory = nnx.Linear(mod_hidden_size, self.num_groups_hidden, ...)
+# Same num_groups_hidden as multimodal (ceil(128/64) = 2 with G=64)
+
+self.z_mem_baseline = nnx.Param(jnp.zeros(target_hidden_size))  # shape (128,)
+# Memory signal also gets per-neuron baselines + grouped dynamics
+```
+
+#### 2.4.3 Grouping Size Impact
+
+| `grouping_size` (G) | `num_groups_hidden` | Neurons per group | Granularity |
+|---------------------|--------------------|--------------------|-------------|
+| 1 | 128 | 1 | Per-neuron (finest) |
+| 40 | 4 | 32–40 | Coarse |
+| 64 | 2 | 64 | Very coarse |
+| 128 | 1 | 128 | Global (single scalar for all) |
+
+**Current config**: `grouping_size=64` → only **2 groups** for multimodal/memory. This means one half of the hidden dimension (neurons 0–63) shares one dynamic signal, and the other half (neurons 64–127) shares another. The modulator can shut off 64 neurons simultaneously with a single negative value.
+
+**Implication**: Coarse grouping was identified as a contributor to the feature collapse observed in training (see NMN_PERFORMANCE_DIAGNOSIS.md §5.4). The per-neuron baselines partially mitigate this — individual neurons can learn different resting points — but the *dynamic* modulation (the part that changes in response to observations) remains group-level. When the modulator learns to suppress a group, all neurons in that group are suppressed together regardless of their baseline offsets.
 
 ### 2.5 Temperature Computation
 
