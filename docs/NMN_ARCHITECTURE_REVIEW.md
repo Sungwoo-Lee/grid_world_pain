@@ -212,6 +212,8 @@ self.z_mem_baseline = nnx.Param(jnp.zeros(target_hidden_size))  # shape (128,)
 
 **Implication**: Coarse grouping was identified as a contributor to the feature collapse observed in training (see NMN_PERFORMANCE_DIAGNOSIS.md §5.4). The per-neuron baselines partially mitigate this — individual neurons can learn different resting points — but the *dynamic* modulation (the part that changes in response to observations) remains group-level. When the modulator learns to suppress a group, all neurons in that group are suppressed together regardless of their baseline offsets.
 
+**Known issue**: The unimodal path does not use `grouping_size` at all — it is structurally fixed at 1 scalar per modality. This is inconsistent with the multimodal path and was not the original design intent. See [UNIFY_UNIMODAL_GROUPING.md](docs/UNIFY_UNIMODAL_GROUPING.md) for the fix plan.
+
 ### 2.5 Temperature Computation
 
 ```python
