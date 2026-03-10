@@ -11,11 +11,14 @@
 # rppo
 # dreamer_v3_1env_replayRatio1_collectInterval128
 
+# --episodes 100000000
+# --checkpoint-frequency 1000000
+
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/environment/default.yaml \
-  --agent_config configs/models/neuromodulated_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo.yaml \
   --num-envs 128 \
   --episodes 100000000 \
   --checkpoint-frequency 1000000 \
   --device cuda:0 \
-  --tag "rppoNMN_128env_2bush4pred1food_gSize60_preActivation_modHidden16_BehavMetrics"
+  --tag "rppo_128env_2bush4pred2food_GAE_multimodal128"
