@@ -11,14 +11,28 @@
 
 - Claude is used for **planning and analysis only**. Implementation is done by other LLM agents.
 - Plans and analysis should be written to `docs/` files.
-- **Follow the template in `docs/TEMPLATES/issue_plan.md`** when creating new issue/plan documents. Read the template file before writing.
-- New issues discovered during work: append to same doc if closely related, create separate doc if independent. Cross-reference with `[Related](link)`.
+- **Two templates** — read the relevant template file before writing:
+  - **`docs/TEMPLATES/issue_plan.md`** — for development issues, bug fixes, and implementation plans.
+  - **`docs/TEMPLATES/training_analysis.md`** — for training experiment analysis (WandB results, ablation studies, run comparisons). This template follows a hypothesis-driven academic structure: research question → experimental design → results → analysis → conclusions.
+- **Choose the right template**: If the work is about *what to build/fix*, use issue_plan. If the work is about *what happened during training and why*, use training_analysis.
+- **Cross-referencing between documents**:
+  - If a training analysis reveals a bug or needed code change, create a separate issue_plan doc and link it from the analysis with `[Related](link)`.
+  - If an issue_plan investigation uncovers a new closely related issue, append it to the same doc. If independent, create a separate doc.
+  - Always cross-reference related docs in both directions.
 - Include enough detail (file paths, line numbers, code snippets) for the implementing agent to execute without ambiguity.
 
 ### Configuration Protocol
 
 - **No fallback defaults** for critical config params. Implementation agents must use `config.get_mandatory('key')` — missing YAML key → `ValueError`.
 - New config keys added by plans must be listed in the plan's File Changes section with the exact YAML path and value.
+
+### WandB Analysis Protocol
+
+- When analyzing WandB training results using the WandB skill, **always create a temporary document** in the `tmp/` folder to record all extracted data and findings as you go.
+- Use a descriptive filename prefixed with a datetime stamp in `YYYYMMDD_HHMMSS` format (e.g., `tmp/20260310_143052_wandb_dreamer_comparison.md`, `tmp/20260310_150817_wandb_reward_analysis.md`). Multiple analyses may run in parallel, so each should have its own file with a unique timestamp.
+- Write results to this file **after each extraction step** — do not wait until the end. This prevents loss of earlier results if the conversation context is compressed.
+- The document should include: run IDs, metric values, tables, comparisons, and any intermediate observations.
+- These files are temporary working notes — they can be cleaned up or overwritten as needed.
 
 ### Verification Protocol
 
