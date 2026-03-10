@@ -1,6 +1,6 @@
 # Restore evaluation_core.py — Accidental Deletion by Gemini
 
-> **Status**: IN PROGRESS
+> **Status**: COMPLETED
 > **Opened**: 2026-03-10
 > **Related**: [FIX_EVAL_TRUE_OBS_UNBOUND.md](FIX_EVAL_TRUE_OBS_UNBOUND.md), [VIDEO_TRUE_OBS_DIAGNOSIS.md](VIDEO_TRUE_OBS_DIAGNOSIS.md)
 
@@ -141,11 +141,11 @@ Replace with:
 
 ## Checkpoints
 
-- [ ] **CP1**: After restoring the file, verify it has ~694 lines and `evaluate_jax_checkpoint` is defined: `grep -n "^def " src/utils/evaluation_core.py`
-- [ ] **CP2**: After applying the fix, verify `true_obs` is initialized before the `if record_stats:` block — search for the line and confirm it's outside the block
-- [ ] **CP3**: Run a short training session with evaluation enabled (`training.video_during_training: true`). Confirm no import error and a video is generated at the first eval checkpoint
-- [ ] **CP4**: Run evaluation with `render_video=True` and `record_stats=False` — confirm no `UnboundLocalError`
-- [ ] **CP5**: Run evaluation with both `render_video=True` and `record_stats=True` — confirm video and CSV are both generated correctly
+- [x] **CP1**: After restoring the file, verify it has ~694 lines and `evaluate_jax_checkpoint` is defined: `grep -n "^def " src/utils/evaluation_core.py` [13:38:50]
+- [x] **CP2**: After applying the fix, verify `true_obs` is initialized before the `if record_stats:` block — search for the line and confirm it's outside the block [13:39:00]
+- [x] **CP3**: Run a short training session with evaluation enabled (`training.video_during_training: true`). Confirm no import error and a video is generated at the first eval checkpoint [13:54:00]
+- [x] **CP4**: Run evaluation with `render_video=True` and `record_stats=False` — confirm no `UnboundLocalError` [13:58:00]
+- [x] **CP5**: Run evaluation with both `render_video=True` and `record_stats=True` — confirm video and CSV are both generated correctly [13:58:00]
 
 ---
 
@@ -156,12 +156,18 @@ Replace with:
 
 ## Verification Report
 
-> **Verified by**: [agent/person]
-> **Date**: [date]
+> **Verified by**: Claude
+> **Date**: 2026-03-10
+
+**Diff stats** (`git diff --stat HEAD`): `evaluation_core.py | 695 +++` — proportionate to restoring a 694-line file + 1-line fix. Total 6 files changed, 720 insertions, 17 deletions.
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/utils/evaluation_core.py` | Restore from `2e4ac34` | | |
-| `src/utils/evaluation_core.py` | Apply `true_obs` init fix | | |
+| `src/utils/evaluation_core.py` | Restore from `2e4ac34` | ✅ | 695 lines restored. All 6 functions present (`generic_inference`, `_write_episode_stats`, `evaluate_jax_checkpoint`, `_run_single_env_eval`, `_run_parallel_env_eval`, `main`). |
+| `src/utils/evaluation_core.py` | Apply `true_obs` init fix (Step A) | ✅ | Line 341: `true_obs = get_observation(...)` correctly placed **before** `if record_stats:` at line 343. Duplicate removed from inside the block (line 362 now just `ep_true_obs.append(true_obs)`). |
+| `src/utils/evaluation_core.py` | Step loop `true_obs` | ✅ | Line 467: `true_obs` computed before both `render_video` (line 469) and `record_stats` (line 481) blocks. Shared correctly. |
+| `configs/environment/default.yaml` | Predator count 4→3, bush counts 2→1 | ⚠️ | **Not in plan.** Environment balance changes — likely user's own edits or from another task. |
+| `configs/models/neuromodulated_ppo.yaml` | Modulation type `Multiplicative`→`PreActivation` | ⚠️ | **Not in plan.** Model config change — likely user's own edits. |
+| `train_command.sh` | Modified | ⚠️ | **Not in plan.** Training command changes — likely user's own edits. |
 
-**Conclusion**: [one-line summary]
+**Conclusion**: ✅ Core implementation correct — `evaluation_core.py` fully restored with the `true_obs` fix applied. Three out-of-scope config/script changes flagged (likely pre-existing user edits, not from Gemini).
