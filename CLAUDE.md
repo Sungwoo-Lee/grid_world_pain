@@ -21,6 +21,13 @@
   - Always cross-reference related docs in both directions.
 - Include enough detail (file paths, line numbers, code snippets) for the implementing agent to execute without ambiguity.
 
+### Token Efficiency & Agent Policy
+
+- **Do NOT use subagents or multiagent parallelization** unless the user explicitly requests it. If you believe subagents would help, **ask the user first** before spawning any.
+- Prefer single batch shell scripts (loops) over launching many parallel agents/commands. One script that processes 16 runs sequentially is far cheaper than 16 separate agent calls.
+- Always save intermediate results to `tmp/` files **after each extraction step** — never accumulate results only in context. This prevents data loss if the conversation is compressed.
+- Avoid redundant work: do not extract the same data through multiple paths.
+
 ### Configuration Protocol
 
 - **No fallback defaults** for critical config params. Implementation agents must use `config.get_mandatory('key')` — missing YAML key → `ValueError`.
