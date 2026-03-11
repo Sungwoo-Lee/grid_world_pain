@@ -1,6 +1,6 @@
 # Fix: z_memory Clamp Not Implemented (memory_clip Config Ignored)
 
-> **Status**: IN PROGRESS
+> **Status**: COMPLETED
 > **Opened**: 2026-03-11
 > **Related**: [NMN_PERFORMANCE_DIAGNOSIS_v3.md](NMN_PERFORMANCE_DIAGNOSIS_v3.md) (§4.3.3, §5.1 Finding 4, §6.3 P0)
 
@@ -117,9 +117,9 @@ Read `memory_clip` from config and pass it to the modulator constructor:
 
 ## Checkpoints
 
-- [ ] **CP1**: After adding `memory_clip` param, verify `NeuromodulatorRNN` instantiates without error by running a single training iteration: `python train.py --config configs/models/neuromodulated_ppo.yaml --max_iterations 1`
-- [ ] **CP2**: Add a temporary debug print in `NeuromodulatorRNN.__call__` to confirm `z_mem` values are within [-2.0, 2.0] after clipping: `print(f"z_mem range: [{float(jnp.min(z_mem)):.3f}, {float(jnp.max(z_mem)):.3f}]")`
-- [ ] **CP3**: Verify the `memory_clip` key is read from config without error (no KeyError). If the key is missing from a config file, the default `(-2.0, 2.0)` in the `__init__` signature will be used.
+- [x] **CP1**: After adding `memory_clip` param, verify `NeuromodulatorRNN` instantiates without error by running a single training iteration: `python train.py --config configs/models/neuromodulated_ppo.yaml --max_iterations 1` [17:05:00]
+- [x] **CP2**: Add a temporary debug print in `NeuromodulatorRNN.__call__` to confirm `z_mem` values are within [-2.0, 2.0] after clipping: `print(f"z_mem range: [{float(jnp.min(z_mem)):.3f}, {float(jnp.max(z_mem)):.3f}]")` [17:08:00]
+- [x] **CP3**: Verify the `memory_clip` key is read from config without error (no KeyError). If the key is missing from a config file, the default `(-2.0, 2.0)` in the `__init__` signature will be used. [17:05:00]
 
 ## Implementation Report
 
@@ -128,13 +128,13 @@ Read `memory_clip` from config and pass it to the modulator constructor:
 
 ## Verification Report
 
-> **Verified by**:
-> **Date**:
+> **Verified by**: Claude
+> **Date**: 2026-03-11
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/models/neuromodulator.py` | Add `memory_clip` param + `jnp.clip` on z_mem | | |
-| `src/models/recurrent_ppo_network.py` | Read `memory_clip` from config, pass to modulator | | |
+| `src/models/neuromodulator.py` | Add `memory_clip` param + `jnp.clip` on z_mem | ✅ | `memory_clip` added to `__init__` signature (line 72) and stored as `self.memory_clip` (line 80). `jnp.clip` applied at line 159, immediately after `z_mem` computation and before `ModulatorOutput` construction. Mirrors `temp_clip` pattern exactly. |
+| `src/models/recurrent_ppo_network.py` | Read `memory_clip` from config, pass to modulator | ✅ | `memory_clip` read from `modulation_config` at line 211, passed to `NeuromodulatorRNN` constructor at line 224. |
 
-**Conclusion**:
+**Conclusion**: Implementation matches plan exactly. 3 insertions across 2 source files, no unexpected changes. The `jnp.clip` is correctly placed at the modulator output so both the GRU gate_bias and WandB logging receive the clamped value.
 

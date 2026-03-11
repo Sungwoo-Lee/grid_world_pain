@@ -69,6 +69,7 @@ class NeuromodulatorRNN(nnx.Module):
         percept_add_bias_init: float = 0.0,
         memory_bias_init: float = 0.0,
         temp_clip: Tuple[float, float] = (0.1, 10.0),
+        memory_clip: Tuple[float, float] = (-2.0, 2.0),
         rngs: nnx.Rngs,
     ):
         self.mod_hidden_size = mod_hidden_size
@@ -76,6 +77,7 @@ class NeuromodulatorRNN(nnx.Module):
         self.modulation_type = modulation_type
         self.grouping_size = grouping_size
         self.temp_clip = temp_clip
+        self.memory_clip = memory_clip
 
         self.num_groups_hidden = math.ceil(target_hidden_size / grouping_size)
         self.num_groups_unimodal = self.num_groups_hidden
@@ -156,6 +158,7 @@ class NeuromodulatorRNN(nnx.Module):
 
         # Memory (always Multiplicative/direct bias)
         z_mem, _ = _get_signal(self.head_memory, self.z_mem_baseline)
+        z_mem = jnp.clip(z_mem, self.memory_clip[0], self.memory_clip[1])
 
         # Temperature (bounded)
         z_act_raw = self.head_action(h_mod_new)

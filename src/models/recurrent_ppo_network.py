@@ -208,6 +208,7 @@ class ActorCriticRNN(nnx.Module):
             percept_add_bias = modulation_config.get('percept_add_bias_init', 0.0)
             memory_bias = modulation_config['memory_bias_init']
             temp_clip = tuple(modulation_config['temp_clip'])
+            memory_clip = tuple(modulation_config['memory_clip'])
 
             self.modulator = NeuromodulatorRNN(
                 obs_dim=input_dim,
@@ -220,6 +221,7 @@ class ActorCriticRNN(nnx.Module):
                 percept_add_bias_init=percept_add_bias,
                 memory_bias_init=memory_bias,
                 temp_clip=temp_clip,
+                memory_clip=memory_clip,
                 rngs=rngs,
             )
 
