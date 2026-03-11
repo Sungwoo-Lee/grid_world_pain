@@ -16,6 +16,7 @@ Trigger when user:
 - Asks "how is training going?", "is training working?", or "check the latest run"
 - Provides run directory names for analysis
 - Asks what metrics or config a run has
+- Asks about how a metric **evolved, developed, or changed** over training (use `timeseries`)
 
 ## Project Context
 
@@ -29,7 +30,7 @@ All scripts are in `scripts/` and require `PYTHONPATH=scripts` or running from t
 
 ### Primary Tool: `scripts/wandb_metrics.py`
 
-Four subcommands: `config`, `discover`, `extract`, `compare`.
+Five subcommands: `config`, `discover`, `extract`, `compare`, `timeseries`.
 
 #### `config` — Show run hyperparameters
 
@@ -72,6 +73,43 @@ PYTHONPATH=scripts python scripts/wandb_metrics.py compare RUN1 RUN2 --preset dr
 
 **Available presets**: `dreamer_v3`, `recurrent_ppo`. Presets add a "Criterion" column with expected ranges.
 
+#### `timeseries` — Temporal analysis of metric evolution
+
+Use this when the user asks **how** a metric changed over training, not just what it converged to. Supports two modes:
+
+**Windowed mode** (default) — divides training into N equal windows and shows mean/std/min/max per window:
+```bash
+# Default 10 windows
+PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps"
+
+# More granular: 20 windows
+PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps" --windows 20
+
+# Multiple metrics
+PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps,Episode/Reward,*loss*"
+```
+
+**Raw mode** — outputs every downsampled data point (step, value):
+```bash
+PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps" --raw
+```
+
+**Multi-run comparison** — side-by-side temporal comparison:
+```bash
+PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN1 RUN2 --metrics "Episode/Steps" --labels "A,B"
+```
+
+**Options**:
+- `--metrics` (required) — comma-separated glob patterns
+- `--windows N` — number of windows (default: 10)
+- `--raw` — output raw data points instead of windowed summary
+- `--samples N` — max data points to fetch from WandB (default: 10000)
+- `--labels` — comma-separated labels for multi-run
+
+**When to use `timeseries` vs `extract`**:
+- Use `extract` for "what did the metric converge to?" (summary stats)
+- Use `timeseries` for "how did the metric evolve?", "when did learning start?", "was there a collapse?", "show me the learning curve" (temporal shape)
+
 **Common options** (all subcommands):
 - `--entity ENTITY` — WandB entity (default: sungwoolee)
 - `--project PROJECT` — WandB project (default: grid_world_pain)
@@ -113,14 +151,23 @@ PYTHONPATH=scripts python scripts/benchmark_wandb_speed.py RUN_NAME
 
 ### Step 5: Extract or compare metrics
 ```bash
-# Single run
+# Single run — summary stats
 PYTHONPATH=scripts python scripts/wandb_metrics.py extract RUN_NAME
 
 # Multi-run comparison
 PYTHONPATH=scripts python scripts/wandb_metrics.py compare RUN1 RUN2 --labels "A,B"
 ```
 
-### Step 6: Assess training health
+### Step 6: Temporal analysis (when needed)
+```bash
+# How did key metrics evolve over training?
+PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps,Episode/Reward"
+
+# Compare learning curves between runs
+PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN1 RUN2 --metrics "Episode/Steps" --labels "A,B" --windows 15
+```
+
+### Step 7: Assess training health
 
 Use the **General Training Health Checklist** below to evaluate whether training is working properly.
 
@@ -131,12 +178,14 @@ These checks apply to **any RL algorithm**. Use the extracted metrics to verify 
 ### 1. Reward Signal
 - **Episode reward** should trend **upward** (or toward the goal) over training
 - Check trajectory: `first -> last` — is there meaningful improvement?
+- Use `timeseries` to see if improvement is gradual, sudden, or oscillating
 - Red flag: flat, decreasing, or oscillating wildly
 
 ### 2. Episode Length
 - **Episode steps** should change as the agent learns
 - In survival tasks: increasing steps = agent living longer = good
 - In goal-reaching tasks: decreasing steps = agent solving faster = good
+- Use `timeseries` to identify when learning started and if there were regressions
 - Red flag: completely flat from start (agent not learning)
 
 ### 3. Loss Convergence

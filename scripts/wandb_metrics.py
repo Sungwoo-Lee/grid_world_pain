@@ -6,10 +6,11 @@ Discover, extract, and compare metrics from any WandB training run,
 regardless of algorithm (DreamerV3, PPO, SAC, etc.).
 
 Subcommands:
-    config    — Show run hyperparameters/config
-    discover  — List all metrics logged in a run, grouped by prefix
-    extract   — Pull time-series stats for a single run
-    compare   — Compare metrics across multiple runs
+    config      — Show run hyperparameters/config
+    discover    — List all metrics logged in a run, grouped by prefix
+    extract     — Pull time-series stats for a single run
+    compare     — Compare metrics across multiple runs
+    timeseries  — Export windowed or raw time-series data for temporal analysis
 
 Usage:
     # Show what algorithm/config a run used
@@ -30,12 +31,24 @@ Usage:
 
     # Compare with a named preset
     python scripts/wandb_metrics.py compare RUN1 RUN2 --preset dreamer_v3
+
+    # Time-series: windowed summary (default 10 windows)
+    python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps"
+    python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps" --windows 20
+
+    # Time-series: raw downsampled data points
+    python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps" --raw
+
+    # Time-series: compare two runs side-by-side
+    python scripts/wandb_metrics.py timeseries RUN1 RUN2 --metrics "Episode/Steps" --labels "A,B"
 """
 
 import argparse
 import fnmatch
 import json
 import sys
+
+import numpy as np
 
 from wandb_utils import (
     WANDB_ENTITY,
@@ -518,6 +531,264 @@ def cmd_compare(args):
         print_compare_auto(results_list, labels, groups)
 
 
+# ── Time-series analysis ─────────────────────────────────────────────────────
+
+def pull_timeseries(run, keys: list[str], samples: int = 10000) -> dict[str, list]:
+    """
+    Pull raw time-series data for given metric keys.
+    Returns {metric_key: [(step, value), ...]}.
+    """
+    if not keys:
+        return {}
+
+    prefix_groups: dict[str, list[str]] = {}
+    for k in keys:
+        prefix = k.split("/", 1)[0] if "/" in k else "_root"
+        prefix_groups.setdefault(prefix, []).append(k)
+
+    results = {}
+    for prefix, group_keys in prefix_groups.items():
+        hist = run.history(keys=group_keys, samples=samples, pandas=True)
+        if hist is None or len(hist) == 0:
+            continue
+        hist = hist.sort_values("_step").reset_index(drop=True)
+
+        for mk in group_keys:
+            if mk in hist.columns:
+                series = hist[["_step", mk]].dropna(subset=[mk])
+                results[mk] = list(zip(series["_step"].tolist(),
+                                       series[mk].tolist()))
+    return results
+
+
+def compute_windowed_stats(data_points: list[tuple], n_windows: int) -> list[dict]:
+    """
+    Divide time-series into n_windows equal segments and compute stats per window.
+    Returns list of dicts with: window, step_start, step_end, mean, std, min, max, count.
+    """
+    if not data_points:
+        return []
+
+    n = len(data_points)
+    window_size = max(1, n // n_windows)
+    windows = []
+
+    for i in range(n_windows):
+        start_idx = i * window_size
+        if i == n_windows - 1:
+            # Last window takes all remaining points
+            end_idx = n
+        else:
+            end_idx = start_idx + window_size
+
+        if start_idx >= n:
+            break
+
+        chunk = data_points[start_idx:end_idx]
+        steps = [p[0] for p in chunk]
+        values = [p[1] for p in chunk]
+        arr = np.array(values)
+
+        windows.append({
+            "window": i + 1,
+            "step_start": int(steps[0]),
+            "step_end": int(steps[-1]),
+            "mean": float(arr.mean()),
+            "std": float(arr.std()) if len(arr) > 1 else 0.0,
+            "min": float(arr.min()),
+            "max": float(arr.max()),
+            "count": len(arr),
+        })
+
+    return windows
+
+
+def print_timeseries_windowed(all_windows: dict[str, list[dict]],
+                               labels: list[str],
+                               run_names: list[str]):
+    """Print windowed time-series tables."""
+    multi_run = len(labels) > 1
+
+    for mk in sorted(all_windows.keys()):
+        runs_data = all_windows[mk]  # list of window-lists, one per run
+        print(f"\n### `{mk}` — Windowed Summary\n")
+
+        if not multi_run:
+            windows = runs_data[0]
+            if not windows:
+                print("_No data._\n")
+                continue
+            print("| Window | Steps | Mean | Std | Min | Max | N |")
+            print("|---:|:---|---:|---:|---:|---:|---:|")
+            for w in windows:
+                print(
+                    f"| {w['window']} "
+                    f"| {w['step_start']:,}–{w['step_end']:,} "
+                    f"| {fmt(w['mean'])} "
+                    f"| {fmt(w['std'])} "
+                    f"| {fmt(w['min'])} "
+                    f"| {fmt(w['max'])} "
+                    f"| {w['count']} |"
+                )
+        else:
+            # Side-by-side comparison: show mean per window for each run
+            header = "| Window"
+            for label in labels:
+                header += f" | {label} (mean ± std)"
+            header += " |"
+            print(header)
+            sep = "|---:"
+            for _ in labels:
+                sep += "|:---"
+            sep += "|"
+            print(sep)
+
+            # Determine max windows across runs
+            max_win = max(len(wd) for wd in runs_data) if runs_data else 0
+            for wi in range(max_win):
+                row = f"| {wi + 1}"
+                for rd in runs_data:
+                    if wi < len(rd):
+                        w = rd[wi]
+                        row += f" | {fmt(w['mean'])} ± {fmt(w['std'])} ({w['step_start']:,}–{w['step_end']:,})"
+                    else:
+                        row += " | —"
+                row += " |"
+                print(row)
+        print()
+
+
+def print_timeseries_raw(all_series: dict[str, list],
+                          labels: list[str],
+                          run_names: list[str]):
+    """Print raw time-series data points."""
+    multi_run = len(labels) > 1
+
+    for mk in sorted(all_series.keys()):
+        runs_data = all_series[mk]  # list of [(step, value), ...] per run
+        print(f"\n### `{mk}` — Raw Time-Series\n")
+
+        if not multi_run:
+            points = runs_data[0]
+            if not points:
+                print("_No data._\n")
+                continue
+            print("| Step | Value |")
+            print("|---:|---:|")
+            for step, val in points:
+                print(f"| {int(step):,} | {fmt(val)} |")
+        else:
+            header = "| Step"
+            for label in labels:
+                header += f" | {label}"
+            header += " |"
+            print(header)
+            sep = "|---:"
+            for _ in labels:
+                sep += "|---:"
+            sep += "|"
+            print(sep)
+
+            # Merge steps from all runs and align
+            step_vals: dict[int, list] = {}
+            for ri, points in enumerate(runs_data):
+                for step, val in points:
+                    s = int(step)
+                    if s not in step_vals:
+                        step_vals[s] = [None] * len(labels)
+                    step_vals[s][ri] = val
+
+            for step in sorted(step_vals.keys()):
+                row = f"| {step:,}"
+                for val in step_vals[step]:
+                    row += f" | {fmt(val)}" if val is not None else " | —"
+                row += " |"
+                print(row)
+        print()
+
+
+def cmd_timeseries(args):
+    """Handle the 'timeseries' subcommand — export windowed or raw time-series."""
+    api_runs = fetch_wandb_runs(args.entity, args.project)
+
+    run_names = args.runs
+    if args.labels:
+        labels = [l.strip() for l in args.labels.split(",")]
+    else:
+        labels = run_names if len(run_names) <= 2 else [f"Run{i+1}" for i in range(len(run_names))]
+
+    if len(labels) != len(run_names):
+        print(f"ERROR: {len(labels)} labels for {len(run_names)} runs", file=sys.stderr)
+        sys.exit(1)
+
+    # Parse metric patterns
+    if not args.metrics:
+        print("ERROR: --metrics is required for timeseries. Use discover to find metric names.", file=sys.stderr)
+        sys.exit(1)
+    patterns = [p.strip() for p in args.metrics.split(",")]
+
+    # Match runs and pull data
+    matched_runs = []
+    for run_name, label in zip(run_names, labels):
+        matched = match_wandb_run(api_runs, run_name)
+        if matched is None:
+            print(f"  ✗ {run_name}: no match", file=sys.stderr)
+            matched_runs.append(None)
+        else:
+            print(f"  ✓ {label} → {matched.name} ({matched.id})", file=sys.stderr)
+            matched_runs.append(matched)
+
+    # Discover metrics from first available run to resolve glob patterns
+    ref_run = next((r for r in matched_runs if r is not None), None)
+    if ref_run is None:
+        print("ERROR: No runs matched.", file=sys.stderr)
+        sys.exit(1)
+
+    groups = discover_metrics(ref_run)
+    all_keys = [k for keys in groups.values() for k in keys]
+    resolved_keys = filter_metrics(all_keys, patterns)
+
+    if not resolved_keys:
+        print(f"ERROR: No metrics matched patterns: {patterns}", file=sys.stderr)
+        print(f"  Available: {all_keys[:20]}{'...' if len(all_keys) > 20 else ''}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"  Pulling {len(resolved_keys)} metrics from {len(run_names)} run(s)...", file=sys.stderr)
+
+    samples = args.samples if args.samples else 10000
+
+    if args.raw:
+        # Raw mode: output all downsampled data points
+        all_series: dict[str, list] = {mk: [] for mk in resolved_keys}
+        for matched, label in zip(matched_runs, labels):
+            if matched is None:
+                for mk in resolved_keys:
+                    all_series[mk].append([])
+                continue
+            ts = pull_timeseries(matched, resolved_keys, samples=samples)
+            for mk in resolved_keys:
+                all_series[mk].append(ts.get(mk, []))
+
+        print(f"\n## Time-Series (raw, up to {samples:,} samples): {' vs '.join(labels)}")
+        print_timeseries_raw(all_series, labels, run_names)
+    else:
+        # Windowed mode: aggregate into windows
+        n_windows = args.windows
+        all_windows: dict[str, list] = {mk: [] for mk in resolved_keys}
+        for matched, label in zip(matched_runs, labels):
+            if matched is None:
+                for mk in resolved_keys:
+                    all_windows[mk].append([])
+                continue
+            ts = pull_timeseries(matched, resolved_keys, samples=samples)
+            for mk in resolved_keys:
+                points = ts.get(mk, [])
+                all_windows[mk].append(compute_windowed_stats(points, n_windows))
+
+        print(f"\n## Time-Series ({n_windows} windows): {' vs '.join(labels)}")
+        print_timeseries_windowed(all_windows, labels, run_names)
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main():
@@ -575,6 +846,25 @@ def main():
     p_compare.add_argument("--entity", default=WANDB_ENTITY)
     p_compare.add_argument("--project", default=WANDB_PROJECT)
 
+    # -- timeseries --
+    p_ts = sub.add_parser(
+        "timeseries",
+        help="Export windowed or raw time-series data for temporal analysis.",
+    )
+    p_ts.add_argument("runs", nargs="+", help="One or more run names")
+    p_ts.add_argument("--metrics", type=str, required=True,
+                      help="Comma-separated glob patterns (e.g., 'Episode/Steps,*loss*')")
+    p_ts.add_argument("--labels", type=str, default=None,
+                      help="Comma-separated labels for multi-run comparison")
+    p_ts.add_argument("--windows", type=int, default=10,
+                      help="Number of windows for windowed mode (default: 10)")
+    p_ts.add_argument("--raw", action="store_true",
+                      help="Output raw downsampled data points instead of windowed summary")
+    p_ts.add_argument("--samples", type=int, default=None,
+                      help="Max data points to fetch from WandB (default: 10000)")
+    p_ts.add_argument("--entity", default=WANDB_ENTITY)
+    p_ts.add_argument("--project", default=WANDB_PROJECT)
+
     args = parser.parse_args()
 
     if args.command == "config":
@@ -585,6 +875,8 @@ def main():
         cmd_extract(args)
     elif args.command == "compare":
         cmd_compare(args)
+    elif args.command == "timeseries":
+        cmd_timeseries(args)
 
 
 if __name__ == "__main__":
