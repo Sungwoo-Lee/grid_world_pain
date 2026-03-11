@@ -21,6 +21,7 @@ logs/
 legacy/
 *legacy*
 tmp/
+train_command.sh
 
 # Antigravity
 antigravity_data/
