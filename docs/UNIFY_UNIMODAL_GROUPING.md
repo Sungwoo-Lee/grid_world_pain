@@ -1,6 +1,8 @@
 # Unify Unimodal Grouping with Multimodal Grouping
 
-> **Status**: PLANNED
+> **Status**: COMPLETED
+> **Implemented by**: Gemini
+> **Date**: 2026-03-11 16:45:10
 > **Opened**: 2026-03-10
 > **Related**: [NMN Architecture Review §2.4](docs/NMN_ARCHITECTURE_REVIEW.md)
 
@@ -370,27 +372,49 @@ Net parameter count is unchanged — the head shrinks (fewer outputs) while the 
 
 ## Checkpoints
 
-- [ ] Checkpoint 1 — After modifying `NeuromodulatorRNN.__init__()`, print `self.num_groups_unimodal` and `self.num_groups_hidden` to confirm they are equal (both 2 with G=64, hidden_size=128).
-- [ ] Checkpoint 2 — After modifying `_get_signal()`, print `z_uni.shape` in `__call__()` to confirm it is `(batch, 128)` not `(batch, 9)`.
-- [ ] Checkpoint 3 — In `forward_with_modulation()`, assert `gamma1.shape[-1] == encoded_all.shape[-1]` (both 128) to verify broadcast alignment.
-- [ ] Checkpoint 4 — Run a single training step (`python -m src.train --max_steps 10`) and verify no shape errors occur.
-- [ ] Checkpoint 5 — Search codebase for all consumers of `mod_output.z_unimodal` (grep for `z_unimodal`) and verify each handles the new `(batch, 128)` shape correctly.
-- [ ] Checkpoint 6 — If DreamerV3 encoder exists, verify the same shape change is propagated there.
+- [x] Checkpoint 1 — After modifying `NeuromodulatorRNN.__init__()`, print `self.num_groups_unimodal` and `self.num_groups_hidden` to confirm they are equal (both 2 with G=64, hidden_size=128). [16:48:10]
+- [x] Checkpoint 2 — After modifying `_get_signal()`, print `z_uni.shape` in `__call__()` to confirm it is `(batch, 128)` not `(batch, 9)`. [16:48:10]
+- [x] Checkpoint 3 — In `forward_with_modulation()`, assert `gamma1.shape[-1] == encoded_all.shape[-1]` (both 128) to verify broadcast alignment. [16:48:10]
+- [x] Checkpoint 4 — Run a single training step (`python -m src.train --max_steps 10`) and verify no shape errors occur. [16:49:30]
+- [x] Checkpoint 5 — Search codebase for all consumers of `mod_output.z_unimodal` (grep for `z_unimodal`) and verify each handles the new `(batch, 128)` shape correctly. [16:47:30]
+- [x] Checkpoint 6 — If DreamerV3 encoder exists, verify the same shape change is propagated there. [16:47:40]
 
 ## Implementation Report
 
-> **Implemented by**:
-> **Date**:
+> **Implemented by**: Gemini
+> **Date**: 2026-03-11 16:45:10
 
 ## Verification Report
 
-> **Verified by**:
-> **Date**:
+> **Verified by**: Claude
+> **Date**: 2026-03-11
+
+### Diff stats
+
+```
+ src/models/dreamer_v3_nnx.py        |  9 +++---
+ src/models/neuromodulator.py        | 57 +++++++++++++++----------------------
+ src/models/recurrent_ppo_network.py | 10 +++----
+```
+
+Net -6 lines across 3 source files — proportionate to scope (removing `is_unimodal` branching).
+
+### Out-of-scope changes
+
+- `.gitignore` — adds `tmp/` to gitignore. Harmless, unrelated.
+- `train_command.sh` — changes agent config, device, and tag. Unrelated to this plan.
+
+### Per-file verification
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/models/neuromodulator.py` | Unified unimodal grouping (NeuromodulatorRNN) | | |
-| `src/models/neuromodulator.py` | Unified unimodal grouping (DreamerNeuromodulatorRNN) | | |
-| `src/models/recurrent_ppo_network.py` | Change broadcast axis, update flat fallback | | |
+| `src/models/neuromodulator.py` | `NeuromodulatorRNN.__init__()` | ✅ | `num_groups_unimodal = num_groups_hidden`. Baseline `(target_hidden_size,)`. |
+| `src/models/neuromodulator.py` | `NeuromodulatorRNN._get_signal()` | ✅ | `is_unimodal` flag removed. Unified repeat-and-slice path. |
+| `src/models/neuromodulator.py` | `DreamerNeuromodulatorRNN.__init__()` | ✅ | `num_groups_unimodal = num_groups_percept`. Baseline `(embed_dim,)`. |
+| `src/models/neuromodulator.py` | `DreamerNeuromodulatorRNN._compute_heads()` | ✅ | `is_unimodal` → `is_percept`. Both unimodal and multimodal pass `is_percept=True`. Unified repeat-and-slice. |
+| `src/models/recurrent_ppo_network.py` | Hierarchical injection | ✅ | `gamma1[..., None]` → `gamma1[..., None, :]` — correct broadcast axis change. |
+| `src/models/recurrent_ppo_network.py` | Flat fallback | ✅ | `z_unimodal[..., 0:1]` → `z_unimodal` directly — correct, now `(batch, 128)` matches `x_proj`. |
+| `src/models/dreamer_v3_nnx.py` | `DreamerObservationEncoder` injection | ✅ | `gamma1[..., None]` → `gamma1[..., None, :]` — matches PPO change. |
+| `src/models/dreamer_v3_nnx.py` | `Encoder` flat fallback | ✅ | `z_unimodal[..., 0:1]` → `z_unimodal` directly — `body` output is `(batch, embed_dim)`, matches. |
 
-**Conclusion**:
+**Conclusion**: All changes match the plan exactly. No deviations, no missing changes, no unexpected modifications to source files. ✅

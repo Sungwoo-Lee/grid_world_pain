@@ -271,7 +271,8 @@ class DreamerObservationEncoder(nnx.Module):
         encoded_all = self.unimodal_grouped(x_padded)
         gamma1 = jax.nn.sigmoid(mod_output.z_unimodal)
         beta1 = mod_output.z_unimodal_add
-        encoded_all = SiLU()(encoded_all * gamma1[..., None] + beta1[..., None])
+        # Broadcast (batch, 1, 128) × (batch, 9, 128)
+        encoded_all = SiLU()(encoded_all * gamma1[..., None, :] + beta1[..., None, :])
 
         # Phase 2: Multimodal Hub + Modulation (z_multimodal)
         mm_in = encoded_all.reshape(batch_shape + (-1,))
@@ -332,11 +333,11 @@ class Encoder(nnx.Module):
 
         # Flat encoder fallback: just use z_unimodal's first dimension
         if modulation_type == "PreActivation":
-            gamma = jax.nn.sigmoid(mod_output.z_unimodal[..., 0:1])
-            beta = mod_output.z_unimodal_add[..., 0:1]
+            gamma = jax.nn.sigmoid(mod_output.z_unimodal)
+            beta = mod_output.z_unimodal_add
             return self.final_act(x_pre * gamma + beta)
         else:
-            return self.final_act(x_pre) * jax.nn.sigmoid(mod_output.z_unimodal[..., 0:1])
+            return self.final_act(x_pre) * jax.nn.sigmoid(mod_output.z_unimodal)
 
 class DreamerObservationDecoder(nnx.Module):
     """

@@ -77,8 +77,8 @@ class NeuromodulatorRNN(nnx.Module):
         self.grouping_size = grouping_size
         self.temp_clip = temp_clip
 
-        self.num_groups_unimodal = len(obs_breakdown)
         self.num_groups_hidden = math.ceil(target_hidden_size / grouping_size)
+        self.num_groups_unimodal = self.num_groups_hidden
 
         # Recurrent core
         self.gru = nnx.GRUCell(obs_dim, mod_hidden_size, rngs=rngs)
@@ -110,12 +110,12 @@ class NeuromodulatorRNN(nnx.Module):
         self.head_action = nnx.Linear(mod_hidden_size, 1, rngs=rngs)
 
         # === Per-neuron learned baselines ===
-        self.z_unimodal_baseline = nnx.Param(jnp.zeros(self.num_groups_unimodal))
+        self.z_unimodal_baseline = nnx.Param(jnp.zeros(target_hidden_size))
         self.z_hidden_baseline = nnx.Param(jnp.zeros(target_hidden_size))
         self.z_mem_baseline = nnx.Param(jnp.zeros(target_hidden_size))
 
         if self.modulation_type == "PreActivation":
-            self.z_unimodal_add_baseline = nnx.Param(jnp.zeros(self.num_groups_unimodal))
+            self.z_unimodal_add_baseline = nnx.Param(jnp.zeros(target_hidden_size))
             self.z_hidden_add_baseline = nnx.Param(jnp.zeros(target_hidden_size))
 
     def __call__(
@@ -134,27 +134,21 @@ class NeuromodulatorRNN(nnx.Module):
         """
         h_mod_new, _ = self.gru(h_mod, obs)
 
-        def _get_signal(head, baseline, head_add=None, baseline_add=None, is_unimodal=False):
+        def _get_signal(head, baseline, head_add=None, baseline_add=None):
             raw = head(h_mod_new)
-            if is_unimodal:
-                sig = baseline.value + raw
-            else:
-                sig = jnp.repeat(raw, self.grouping_size, axis=-1)[..., :self.target_hidden_size]
-                sig = baseline.value + sig
+            sig = jnp.repeat(raw, self.grouping_size, axis=-1)[..., :self.target_hidden_size]
+            sig = baseline.value + sig
             
             if head_add is not None:
                 raw_add = head_add(h_mod_new)
-                if is_unimodal:
-                    sig_add = baseline_add.value + raw_add
-                else:
-                    sig_add = jnp.repeat(raw_add, self.grouping_size, axis=-1)[..., :self.target_hidden_size]
-                    sig_add = baseline_add.value + sig_add
+                sig_add = jnp.repeat(raw_add, self.grouping_size, axis=-1)[..., :self.target_hidden_size]
+                sig_add = baseline_add.value + sig_add
                 return sig, sig_add
             return sig, jnp.zeros_like(sig)
 
         z_uni, z_uni_add = _get_signal(self.head_unimodal, self.z_unimodal_baseline, 
                                       getattr(self, 'head_unimodal_add', None), 
-                                      getattr(self, 'z_unimodal_add_baseline', None), is_unimodal=True)
+                                      getattr(self, 'z_unimodal_add_baseline', None))
         
         z_multi, z_multi_add = _get_signal(self.head_multimodal, self.z_hidden_baseline,
                                           getattr(self, 'head_multimodal_add', None),
@@ -243,8 +237,8 @@ class DreamerNeuromodulatorRNN(nnx.Module):
         self.modulation_type = modulation_type
         self.grouping_size = grouping_size
 
-        self.num_groups_unimodal = len(obs_breakdown)
         self.num_groups_percept = math.ceil(embed_dim / grouping_size)
+        self.num_groups_unimodal = self.num_groups_percept
         self.num_groups_memory = math.ceil(deter_dim / grouping_size)
 
         # === Dual input projections ===
@@ -284,48 +278,43 @@ class DreamerNeuromodulatorRNN(nnx.Module):
         )
 
         # === Per-neuron learned baselines ===
-        self.z_unimodal_baseline = nnx.Param(jnp.zeros(self.num_groups_unimodal))
+        self.z_unimodal_baseline = nnx.Param(jnp.zeros(embed_dim))
         self.z_hidden_baseline = nnx.Param(jnp.zeros(embed_dim))
         self.z_mem_baseline = nnx.Param(jnp.zeros(deter_dim))
 
         if self.modulation_type == "PreActivation":
-            self.z_unimodal_add_baseline = nnx.Param(jnp.zeros(self.num_groups_unimodal))
+            self.z_unimodal_add_baseline = nnx.Param(jnp.zeros(embed_dim))
             self.z_hidden_add_baseline = nnx.Param(jnp.zeros(embed_dim))
 
     def _compute_heads(self, h_mod: jnp.ndarray, include_percept: bool = True
                        ) -> DreamerModulatorOutput:
         """Compute head outputs from modulator hidden state."""
         
-        def _get_signal(head, baseline, head_add=None, baseline_add=None, target_dim=None, is_unimodal=False):
-            if not include_percept and (is_unimodal or head == self.head_multimodal):
+        def _get_signal(head, baseline, head_add=None, baseline_add=None, target_dim=None, is_percept=False):
+            if not include_percept and is_percept:
                 # Imagination mode: return zeros for perceptual heads
-                dim = self.num_groups_unimodal if is_unimodal else target_dim
-                return jnp.zeros(h_mod.shape[:-1] + (dim,)), jnp.zeros(h_mod.shape[:-1] + (dim,))
+                return jnp.zeros(h_mod.shape[:-1] + (target_dim,)), jnp.zeros(h_mod.shape[:-1] + (target_dim,))
             
             raw = head(h_mod)
-            if is_unimodal:
-                sig = baseline.value + raw
-            else:
-                sig = jnp.repeat(raw, self.grouping_size, axis=-1)[..., :target_dim]
-                sig = baseline.value + sig
+            sig = jnp.repeat(raw, self.grouping_size, axis=-1)[..., :target_dim]
+            sig = baseline.value + sig
             
             if head_add is not None:
                 raw_add = head_add(h_mod)
-                if is_unimodal:
-                    sig_add = baseline_add.value + raw_add
-                else:
-                    sig_add = jnp.repeat(raw_add, self.grouping_size, axis=-1)[..., :target_dim]
-                    sig_add = baseline_add.value + sig_add
+                sig_add = jnp.repeat(raw_add, self.grouping_size, axis=-1)[..., :target_dim]
+                sig_add = baseline_add.value + sig_add
                 return sig, sig_add
             return sig, jnp.zeros_like(sig)
 
         z_uni, z_uni_add = _get_signal(self.head_unimodal, self.z_unimodal_baseline,
                                       getattr(self, 'head_unimodal_add', None),
-                                      getattr(self, 'z_unimodal_add_baseline', None), is_unimodal=True)
+                                      getattr(self, 'z_unimodal_add_baseline', None), 
+                                      target_dim=self.embed_dim, is_percept=True)
         
         z_multi, z_multi_add = _get_signal(self.head_multimodal, self.z_hidden_baseline,
                                           getattr(self, 'head_multimodal_add', None),
-                                          getattr(self, 'z_hidden_add_baseline', None), target_dim=self.embed_dim)
+                                          getattr(self, 'z_hidden_add_baseline', None), 
+                                          target_dim=self.embed_dim, is_percept=True)
 
         z_mem, _ = _get_signal(self.head_memory, self.z_mem_baseline, target_dim=self.deter_dim)
         z_rew = jax.nn.sigmoid(self.head_reward(h_mod))

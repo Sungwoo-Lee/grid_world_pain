@@ -123,11 +123,11 @@ class ObservationEncoder(nnx.Module):
         if self.mode != 'hierarchical':
             x_proj = self.monolith(x)
             if modulation_type == "PreActivation":
-                gamma = jax.nn.sigmoid(mod_output.z_unimodal[..., 0:1]) # Fallback to first group or similar
-                beta = mod_output.z_unimodal_add[..., 0:1]
+                gamma = jax.nn.sigmoid(mod_output.z_unimodal)
+                beta = mod_output.z_unimodal_add
                 return jax.nn.relu(x_proj * gamma + beta)
             else:
-                return jax.nn.relu(x_proj) * jax.nn.sigmoid(mod_output.z_unimodal[..., 0:1])
+                return jax.nn.relu(x_proj) * jax.nn.sigmoid(mod_output.z_unimodal)
 
         batch_shape = x.shape[:-1]
         x_padded = jnp.zeros(batch_shape + (len(self.names), self.max_in), dtype=x.dtype)
@@ -140,8 +140,8 @@ class ObservationEncoder(nnx.Module):
         encoded_all = self.unimodal_grouped(x_padded)
         gamma1 = jax.nn.sigmoid(mod_output.z_unimodal)
         beta1 = mod_output.z_unimodal_add
-        # Apply per-group modulation
-        encoded_all = jax.nn.relu(encoded_all * gamma1[..., None] + beta1[..., None])
+        # Broadcast (batch, 1, 128) × (batch, 9, 128) — same gate pattern for all modalities
+        encoded_all = jax.nn.relu(encoded_all * gamma1[..., None, :] + beta1[..., None, :])
 
         # Phase 2: Multimodal Hub + Modulation (z_multimodal)
         mm_in = encoded_all.reshape(batch_shape + (-1,))
