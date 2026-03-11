@@ -20,6 +20,7 @@ logs/
 .wandb_api_key
 legacy/
 *legacy*
+tmp/
 
 # Antigravity
 antigravity_data/
