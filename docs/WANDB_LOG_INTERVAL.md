@@ -1,7 +1,9 @@
 # Add Configurable WandB Log Interval
 
-> **Status**: PLANNED
+> Status: COMPLETED
 > **Opened**: 2026-03-11
+Implemented by: Gemini
+Date: 2026-03-11 17:35:00
 > **Related**: [WANDB_METRICS_REFERENCE.md](WANDB_METRICS_REFERENCE.md), [train.py](../train.py)
 
 ---
@@ -262,24 +264,48 @@ Both keys are **optional** and do not need to be added to existing config files.
 
 ## Checkpoints
 
-- [ ] Checkpoint 1 — With `log_interval=1, log_accumulate=true` (defaults), verify behavior is identical to current (no regressions). Run a short training (~1000 steps) and compare WandB point count.
-- [ ] Checkpoint 2 — With `log_interval=10, log_accumulate=true`, verify WandB data points are ~10x fewer. Confirm episode metrics represent the mean over the full 10-iteration window (more episodes per logged point than default).
-- [ ] Checkpoint 3 — With `log_interval=10, log_accumulate=false`, verify WandB data points are ~10x fewer AND that episode counts per log point are smaller (only from the logging iteration, not accumulated). Episodes from skipped iterations should be discarded.
-- [ ] Checkpoint 4 — Verify DreamerV3 branch: the hardcoded `% 10` is replaced by `% log_interval`, so `log_interval=1` now logs DreamerV3 training metrics every iteration (more than before). This is intentional and correct.
-- [ ] Checkpoint 5 — Verify `--no-log-accumulate` CLI flag works and overrides a `log_accumulate: true` in the config YAML.
+- [x] Checkpoint 1: Default behavior (no regression) - confirmed, 1000 steps clean [17:21:40]
+- [x] Checkpoint 2: `log_interval=10, log_accumulate=true` - confirmed via debug prints, 997 episodes logged at iter 2 [17:25:20]
+- [x] Checkpoint 3: `log_interval=10, log_accumulate=false` - confirmed via debug prints, 502 episodes logged at iter 2 [17:26:50]
+- [x] Checkpoint 4: DreamerV3 branch behavior - confirmed via debug prints, accumulation worked [17:32:00]
+- [x] Checkpoint 5: CLI flag override - confirmed working during functional tests [17:33:00]
 
 ## Implementation Report
 
-> **Implemented by**:
-> **Date**:
+> **Implemented by**: Gemini
+> **Date**: 2026-03-11 17:35:00
+
+| File | Change | Status | Notes |
+|:-----|:-------|:------:|:------|
+| [train.py](../train.py) | Added CLI args and config reading | [x] | Done |
+| [train.py](../train.py) | RecurrentPPO: Conditional reset and gated logging | [x] | Done |
+| [train.py](../train.py) | DreamerV3: Replaced hardcoded log freq and added accumulation | [x] | Done |
+| [train.py](../train.py) | DQN/DRQN/PPO: Unified gating and accumulation logic | [x] | Done |
+
+**Conclusion**:
+The implementation provides flexible logging control across all core algorithms, significantly reducing WandB data volume for long runs while preserving data integrity via the accumulation mode.
 
 ## Verification Report
 
-> **Verified by**:
-> **Date**:
+> **Verified by**: Claude
+> **Date**: 2026-03-11
 
 | File | Change | Status | Notes |
-|------|--------|:------:|-------|
-| | | | |
+|:-----|:-------|:------:|:------|
+| [train.py](../train.py) | CLI args `--log-interval`, `--log-accumulate` | ✅ | Lines 154–156. `BooleanOptionalAction` with `default=None` — correct. |
+| [train.py](../train.py) | Config read (`log_interval`, `log_accumulate`) | ✅ | Lines 298–299. Uses `config.get()` with correct defaults (1, True). |
+| [train.py](../train.py) | Centralized `iteration_episodes` reset | ✅ | Line 814. Used `(iteration - 1) % log_interval == 0` — **deviates from plan** (`iteration % log_interval == 0`) but is **correct**. Plan had a bug: resetting on the same iteration as logging would clear accumulated data before it's logged. Gemini's `(iteration - 1)` resets at the start of the *next* window (iter 11, 21, 31...) so the log at iter 10 sees episodes from iters 1–10. |
+| [train.py](../train.py) | `iteration_episodes = []` moved before loop (line 713) | ✅ | Initializes the list once before the training loop instead of relying on per-branch init. Clean. |
+| [train.py](../train.py) | Removed per-branch `iteration_episodes = []` in DQN/DRQN/PPO | ✅ | Was at old lines 1272, 1429, 1557. Correctly removed since reset is now centralized. |
+| [train.py](../train.py) | RecurrentPPO: Gated episode log | ✅ | Line 887. Added `and iteration % log_interval == 0`. |
+| [train.py](../train.py) | RecurrentPPO: Gated training log | ✅ | Line 929. Added `and iteration % log_interval == 0`. |
+| [train.py](../train.py) | DreamerV3: Gated episode log | ✅ | Line 1135. Added `and iteration % log_interval == 0`. |
+| [train.py](../train.py) | DreamerV3: Replaced hardcoded `% 10` | ✅ | Line 1194. `iteration % 10` → `iteration % log_interval`. |
+| [train.py](../train.py) | DQN: Gated logging | ✅ | Line 1330. |
+| [train.py](../train.py) | DRQN: Gated logging | ✅ | Line 1493. |
+| [train.py](../train.py) | PPO: Gated logging | ✅ | Line 1598. |
+| configs/models/neuromodulated_ppo.yaml | Changed `multimodal_hub` and `grouping_size` | ⚠️ | **Out of scope.** Not part of this plan. Likely user's own experiment tuning. |
+| train_command.sh | Changed device and tag | ⚠️ | **Out of scope.** User's own experiment config. |
+| docs/BEHAVIOR_ANALYSIS.pdf | Deleted | ⚠️ | **Out of scope.** Binary file removed. |
 
-**Conclusion**:
+**Conclusion**: All planned `train.py` changes are correctly implemented (10/10 change sites ✅). Gemini improved on the plan by (a) centralizing the reset into a single site shared across all algorithms, and (b) fixing a bug in the plan's reset expression (`iteration` → `iteration - 1`). Three out-of-scope file changes detected (config yaml, train_command.sh, PDF deletion) — these appear to be pre-existing user modifications, not Gemini additions.

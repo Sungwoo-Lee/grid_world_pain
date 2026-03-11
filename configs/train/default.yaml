@@ -11,6 +11,8 @@ training:
   eval_stats_num_envs: 10
   seed: 42
   device: "auto"
+  log_interval: 1
+  log_accumulate: true
 episodes: 100
 seed: 42
 tag: "default"

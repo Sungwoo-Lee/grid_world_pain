@@ -151,6 +151,9 @@ def main():
     parser.add_argument("--lr", type=float, help="Learning rate (overrides agent config if provided)")
     parser.add_argument("--results-dir", type=str, help="Custom results directory")
     parser.add_argument("--wandb-entity", type=str, help="WandB Entity Name")
+    parser.add_argument("--log-interval", type=int, help="WandB logging interval in iterations (default: 1)")
+    parser.add_argument("--log-accumulate", action=argparse.BooleanOptionalAction, default=None,
+                        help="Accumulate episode metrics across log interval (default: true). Use --no-log-accumulate for hard interval.")
     
     args = parser.parse_args()
 
@@ -292,6 +295,8 @@ def main():
     episodes = args.episodes if args.episodes is not None else config.get_mandatory('episodes')
     env_max_steps = config.get_mandatory('environment.max_steps')
     num_envs = args.num_envs or config.get_mandatory('training.num_envs')
+    log_interval = args.log_interval or config.get('training.log_interval', 1)
+    log_accumulate = args.log_accumulate if args.log_accumulate is not None else config.get('training.log_accumulate', True)
     
     # Budget scales with parallelization: episodes * steps per episode * num environments
     total_timesteps = args.total_timesteps or (episodes * env_max_steps * num_envs)
@@ -705,6 +710,9 @@ def main():
     episode_behavior = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_KEYS}
     episode_dist_sums = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_DIST_KEYS}
     
+    # Buffer for episodes that finish across iterations (Stage 3)
+    iteration_episodes = []
+
     # --- Checkpoint Restoration (Continual Learning / Transfer) ---
     if args.load_checkpoint:
         if args.debug: print(f"[DEBUG] Phase 6.5: Restoring Checkpoint from {args.load_checkpoint}...", flush=True)
@@ -802,8 +810,9 @@ def main():
                 iteration += 1
                 if args.debug: print(f"\n[DEBUG] --- Iteration {iteration} Start (Step: {global_step}) ---", flush=True)
 
-                # Buffer for episodes that finish DURING THIS ITERATION
-                iteration_episodes = []
+                # Reset behavior depends on accumulation mode
+                if not log_accumulate or (iteration - 1) % log_interval == 0:
+                    iteration_episodes = []
                 
                 if algorithm == "RecurrentPPO":
                     if args.debug: print(f"  [DEBUG] Collecting {num_steps * num_envs} steps of experience...", end="", flush=True)
@@ -878,7 +887,7 @@ def main():
                                         episode_dist_sums[k][i] = 0.0
                     
                     # Log AGGREGATED stats for the iteration (Stage 3)
-                    if wandb_enabled and iteration_episodes:
+                    if wandb_enabled and iteration_episodes and iteration % log_interval == 0:
                         rewards = [ep['r'] for ep in iteration_episodes]
                         lengths = [ep['l'] for ep in iteration_episodes]
                         ep_log = {
@@ -920,7 +929,7 @@ def main():
                     avg_mod_grad_norm = jnp.mean(jnp.array([l[1][4] for l in losses]))
                     total_loss = jnp.mean(jnp.array([l[0] for l in losses]))
                     
-                    if wandb_enabled:
+                    if wandb_enabled and iteration % log_interval == 0:
                         wandb_logs = {
                             "loss/total": total_loss,
                             "loss/policy": avg_policy_loss,
@@ -1126,7 +1135,7 @@ def main():
                     
                     global_step += num_envs * num_steps
 
-                    if wandb_enabled and iteration_episodes:
+                    if wandb_enabled and iteration_episodes and iteration % log_interval == 0:
                         rewards = [ep['r'] for ep in iteration_episodes]
                         lengths = [ep['l'] for ep in iteration_episodes]
                         ep_log = {
@@ -1185,7 +1194,7 @@ def main():
                         cumulative_gradient_steps += train_steps
                         loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
                     
-                    if wandb_enabled and iteration % 10 == 0:
+                    if wandb_enabled and iteration % log_interval == 0:
                         wandb_logs = {
                             "timesteps": global_step,                             "iteration": iteration,
                              "Params/effective_replay_ratio": cumulative_gradient_steps / max(1, global_step)
@@ -1269,7 +1278,6 @@ def main():
                     obs = jax.vmap(get_observation, in_axes=(0, None))(env_state, params)
                     
                     global_step += num_envs
-                    iteration_episodes = []
                     
                     # Stats tracking
                     episode_returns += np.array(reward)
@@ -1322,7 +1330,7 @@ def main():
                         if iteration % target_update_freq == 0:
                             nnx.update(target_model, nnx.state(model))
                     
-                    if wandb_enabled:
+                    if wandb_enabled and iteration % log_interval == 0:
                         logs = {
                             "iteration": iteration,
                             "timesteps": global_step,
@@ -1426,7 +1434,6 @@ def main():
                         h_state = jnp.where(done[:, None], 0.0, h_state_new)
                     
                     global_step += num_envs
-                    iteration_episodes = []
                     
                     # Stats tracking
                     episode_returns += np.array(reward)
@@ -1486,7 +1493,7 @@ def main():
                         if iteration % target_update_freq == 0:
                             nnx.update(target_model, nnx.state(model))
                     
-                    if wandb_enabled:
+                    if wandb_enabled and iteration % log_interval == 0:
                         logs = {
                             "iteration": iteration,
                             "timesteps": global_step,
@@ -1554,7 +1561,6 @@ def main():
 
                     rew_np = np.array(trajectories.reward)
                     done_np = np.array(trajectories.done)
-                    iteration_episodes = []
                     
                     for t in range(num_steps):
                         episode_returns += rew_np[t]
@@ -1592,7 +1598,7 @@ def main():
                                     for k in BEHAVIOR_DIST_KEYS:
                                         episode_dist_sums[k][i] = 0.0
                             
-                    if wandb_enabled:
+                    if wandb_enabled and iteration % log_interval == 0:
                         logs = {
                             "iteration": iteration,
                             "timesteps": global_step,
