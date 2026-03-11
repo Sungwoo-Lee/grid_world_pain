@@ -20,5 +20,5 @@
   --num-envs 128 \
   --episodes 100000000 \
   --checkpoint-frequency 1000000 \
-  --device cuda:1 \
-  --tag "rppoNMN_128env_2bush4pred2food_MC_gSize64_Multiplicative_multimodal2048"
+  --device cuda:0 \
+  --tag "rppoNMN_128env_2bush4pred2food_MC_gSize1_Multiplicative_128Hub_unifiedGrouping_fixedMemoryClip"

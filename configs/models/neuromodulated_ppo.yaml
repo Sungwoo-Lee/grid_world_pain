@@ -37,7 +37,7 @@ agent:
       olfaction: [128,128]
     
     # Multimodal Phase 2: Fusion hub
-    multimodal_hub: [2048,2048]
+    multimodal_hub: [128,128]
 
   # Neuromodulation (§5 in NEUROMODULATION_ALGORITHM.md)
   # Bi-Recurrent Modulator: NeuromodulatorRNN + ModulatedGRUCell
@@ -53,7 +53,7 @@ agent:
   modulation:
     type: "Multiplicative"       # "Multiplicative", "PreActivation", or null
     mod_hidden_size: 16          # GRU hidden units — h=16 prevents degenerate convergence (§10.6.1)
-    grouping_size: 64            # Spatial grouping G — Mult G=60 h=16 is best performer (§10.6)
+    grouping_size: 1            # Spatial grouping G — Mult G=60 h=16 is best performer (§10.6)
     percept_bias_init: 3.0       # Gain head (gamma) bias init — higher for truer pass-through (§8 P6)
     memory_bias_init: 0.0        # Memory gate-bias init (§5.1a: neutral)
     temp_clip: [0.5, 3.0]        # Tightened bounds — h=16 best run reaches temp_mean=2.0, max=3.0 (§10.7 P1)
