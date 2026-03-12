@@ -212,7 +212,7 @@ body:
   max_injury: 100
   # Nutrition: new_N = clip(prev_N - metabolic_cost + [gain - cost if ate], 0, max_N)
   metabolic_cost: 1.0
-  food_nutrition_gain: 3
+  food_nutrition_gain: 6
   eating_nutrition_cost: 1.0
   eating_reward_penalty: 0.0
   # Satiation: S = MaxS * (N / MaxN) ^ scaling_factor
@@ -256,7 +256,7 @@ visualization:
   local_view_size: 5
 
 perceptual_noise:
-  enabled: true
+  enabled: false
   # Key order here is the single source of truth for noise array indices (0-8).
   # config_loader.py reads this order; sensor.py consumes it via params.noise_modality_order.
   modalities:
