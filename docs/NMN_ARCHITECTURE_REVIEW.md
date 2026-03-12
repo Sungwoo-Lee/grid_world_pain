@@ -1,6 +1,6 @@
 # NMN Architecture Review: RecurrentPPO Neuromodulatory Network
 
-> **Reviewer**: Claude | **Date**: 2026-03-06
+> **Reviewer**: Claude | **Date**: 2026-03-06 (updated 2026-03-12)
 > **Scope**: Structural review of the neuromodulatory network as implemented in RecurrentPPO.
 > **Key files**: `src/models/neuromodulator.py`, `src/models/recurrent_ppo_network.py`, `src/models/modulated_gru_cell.py`, `configs/models/neuromodulated_ppo.yaml`
 
@@ -23,11 +23,11 @@ Observation ──┬───────────────────�
 
 | Component | File | Lines | Purpose |
 |-----------|------|-------|---------|
-| `NeuromodulatorRNN` | `neuromodulator.py` | 41–182 | Recurrent core + branched output heads |
+| `NeuromodulatorRNN` | `neuromodulator.py` | 41–172 | Recurrent core + branched output heads |
 | `ModulatorOutput` | `neuromodulator.py` | 31–38 | NamedTuple carrying all modulation signals |
 | `ModulatedGRUCell` | `modulated_gru_cell.py` | 17–78 | Standard GRU with external update gate bias |
 | `ObservationEncoder` | `recurrent_ppo_network.py` | 72–151 | Hierarchical encoder with modulated forward path |
-| `ActorCriticRNN` | `recurrent_ppo_network.py` | 154–319 | Main network integrating all injections |
+| `ActorCriticRNN` | `recurrent_ppo_network.py` | 154–321 | Main network integrating all injections |
 
 ---
 
@@ -41,149 +41,102 @@ Observation ──┬───────────────────�
 
 ### 2.2 Branched Output Heads
 
-Six linear heads project from the shared GRU hidden state:
+Six linear heads project from the shared GRU hidden state. With current config `grouping_size=4`, `hidden_size=128`: `num_groups = ceil(128/4) = 32`.
 
 | Head | Output Shape | Activation | Init Bias | Role |
 |------|-------------|------------|-----------|------|
-| `head_unimodal` | `(num_modalities,)` = 9 | — (sigmoid applied at injection) | 2.0 | Per-sensor perceptual gain (gamma) |
-| `head_unimodal_add` | `(num_modalities,)` = 9 | — | 0.0 | Per-sensor bias (beta, PreActivation only) |
-| `head_multimodal` | `(ceil(128/40),)` = 4 | — (sigmoid applied at injection) | 2.0 | Multimodal fusion gain |
-| `head_multimodal_add` | `(ceil(128/40),)` = 4 | — | 0.0 | Multimodal fusion bias (PreActivation only) |
-| `head_memory` | `(ceil(128/40),)` = 4 | — (raw added to GRU gate) | 0.0 | GRU update gate bias |
+| `head_unimodal` | `(num_groups_hidden,)` = 32 | — (sigmoid applied at injection) | 3.0 | Spatial gain pattern applied uniformly to all modalities (gamma) |
+| `head_unimodal_add` | `(num_groups_hidden,)` = 32 | — | 0.0 | Spatial bias pattern applied uniformly to all modalities (beta, PreActivation only) |
+| `head_multimodal` | `(num_groups_hidden,)` = 32 | — (sigmoid applied at injection) | 3.0 | Multimodal fusion gain |
+| `head_multimodal_add` | `(num_groups_hidden,)` = 32 | — | 0.0 | Multimodal fusion bias (PreActivation only) |
+| `head_memory` | `(num_groups_hidden,)` = 32 | — (raw added to GRU gate) | 0.0 | GRU update gate bias |
 | `head_action` | `(1,)` | softplus + offset + clip | default | Temperature scalar |
 
 **Note on Multiplicative mode**: `head_unimodal_add` and `head_multimodal_add` are **not constructed** — the corresponding `z_*_add` outputs are filled with zeros. Only the gamma (gain) heads are active.
 
 ### 2.3 Per-Neuron Learned Baselines
 
-Each head's output is added to a **learned baseline parameter** before use:
+Each head's output is added to a **learned baseline parameter** before use. All baselines are per-neuron (shape `(target_hidden_size,)` = `(128,)`):
 
 ```python
-sig = baseline.value + raw   # for unimodal (per-group)
-sig = baseline.value + repeat(raw, G)[..., :target_hidden_size]  # for multimodal/memory
+# neuromodulator.py:115-117
+self.z_unimodal_baseline = nnx.Param(jnp.zeros(target_hidden_size))  # shape (128,)
+self.z_hidden_baseline = nnx.Param(jnp.zeros(target_hidden_size))    # shape (128,)
+self.z_mem_baseline = nnx.Param(jnp.zeros(target_hidden_size))       # shape (128,)
 ```
 
-- `z_unimodal_baseline`: shape `(9,)`, init zeros
-- `z_hidden_baseline`: shape `(128,)`, init zeros
-- `z_mem_baseline`: shape `(128,)`, init zeros
+Signal computation (unified for all heads):
+```python
+# neuromodulator.py:139-142
+raw = head(h_mod_new)                                              # shape (batch, 32) with G=4
+sig = jnp.repeat(raw, self.grouping_size, axis=-1)[..., :self.target_hidden_size]
+sig = baseline.value + sig                                         # shape (batch, 128)
+```
 
-These baselines allow each neuron/group to learn its own "resting" modulation level independently of the GRU dynamics. At initialization, baseline + head_bias = 0 + 2.0 = 2.0 for perceptual heads → sigmoid(2.0) ≈ 0.88 initial gain.
+These baselines allow each neuron to learn its own "resting" modulation level independently of the GRU dynamics. At initialization, baseline + head_bias = 0 + 3.0 = 3.0 for perceptual heads → sigmoid(3.0) ≈ 0.95 initial gain.
 
 ### 2.4 Spatial Grouping
 
-Unimodal and multimodal heads use fundamentally **different grouping mechanisms**. Unimodal grouping is structurally defined by the number of sensor modalities. Multimodal/memory grouping is parameter-controlled via `grouping_size` and uses a repeat-and-slice operation.
-
-#### 2.4.1 Unimodal Grouping — One Signal Per Modality
-
-The unimodal head outputs exactly **one scalar per sensor modality**. The number of groups is not configurable — it is structurally determined by the observation breakdown:
+All modulation heads — unimodal, multimodal, and memory — use the **same unified grouping mechanism** controlled by the `grouping_size` config parameter. The number of output groups is:
 
 ```python
-# neuromodulator.py:80
-self.num_groups_unimodal = len(obs_breakdown)  # = 9 (one per modality)
-
-# neuromodulator.py:89-90
-self.head_unimodal = nnx.Linear(mod_hidden_size, self.num_groups_unimodal, ...)
-# Shape: Linear(16 → 9)
-
-# Baseline: one learned offset per modality
-self.z_unimodal_baseline = nnx.Param(jnp.zeros(self.num_groups_unimodal))  # shape (9,)
-```
-
-**Signal computation** — In `_get_signal()` with `is_unimodal=True`, no repeat operation is applied. The raw head output is simply added to the baseline:
-
-```python
-# neuromodulator.py:137-140
-def _get_signal(head, baseline, ..., is_unimodal=False):
-    raw = head(h_mod_new)              # shape (batch, 9) for unimodal
-    if is_unimodal:
-        sig = baseline.value + raw     # shape (batch, 9) — direct addition, no repeat
-```
-
-**Injection** — At the encoder, this `(batch, 9)` signal is broadcast across all 128 output neurons of each modality using `[..., None]`:
-
-```python
-# recurrent_ppo_network.py:140-144
-encoded_all = self.unimodal_grouped(x_padded)     # shape (batch, 9, 128)
-gamma1 = sigmoid(mod_output.z_unimodal)            # shape (batch, 9)
-beta1 = mod_output.z_unimodal_add                  # shape (batch, 9) — zeros in Multiplicative
-encoded_all = relu(encoded_all * gamma1[..., None] + beta1[..., None])
-#                               gamma1[..., None] broadcasts: (batch, 9, 1) × (batch, 9, 128)
-#                               → All 128 neurons of modality i share the same gamma1[i]
-```
-
-**Worked example** — With 9 modalities and `hidden_size=128`:
-
-| Modality | Index | Gamma scalar | Effect on 128 output neurons |
-|----------|-------|-------------|------------------------------|
-| Injury | 0 | sigmoid(z₀) | All 128 injury features scaled by same value |
-| Nutrition | 1 | sigmoid(z₁) | All 128 nutrition features scaled by same value |
-| ... | ... | ... | ... |
-| Location | 8 | sigmoid(z₈) | All 128 location features scaled by same value |
-
-This is an all-or-nothing gate per modality. The modulator cannot selectively suppress certain features within a modality (e.g., keep "food direction" from olfaction while suppressing "food distance") — it must gate the entire 128-dim olfaction encoding uniformly.
-
-#### 2.4.2 Multimodal/Memory Grouping — Repeat-and-Slice
-
-The multimodal and memory heads use `grouping_size` (config parameter `G`) to produce a **small number of group signals** that are then **repeated** to cover the full hidden dimension:
-
-```python
-# neuromodulator.py:81
+# neuromodulator.py:82-83
 self.num_groups_hidden = math.ceil(target_hidden_size / grouping_size)
-# With grouping_size=64, hidden_size=128: ceil(128/64) = 2 groups
-# With grouping_size=40, hidden_size=128: ceil(128/40) = 4 groups
+self.num_groups_unimodal = self.num_groups_hidden  # unified — same as multimodal
+```
 
-# neuromodulator.py:96-97
+#### 2.4.1 Repeat-and-Slice Grouping
+
+All heads produce a small number of group signals that are then **repeated** to cover the full hidden dimension:
+
+```python
+# neuromodulator.py:82
+self.num_groups_hidden = math.ceil(target_hidden_size / grouping_size)
+# With grouping_size=4, hidden_size=128: ceil(128/4) = 32 groups
+
+# neuromodulator.py:91-92
+self.head_unimodal = nnx.Linear(mod_hidden_size, self.num_groups_unimodal, ...)
+# Linear(16 → 32)
+
+# neuromodulator.py:98-99
 self.head_multimodal = nnx.Linear(mod_hidden_size, self.num_groups_hidden, ...)
-# With G=64: Linear(16 → 2)
-# With G=40: Linear(16 → 4)
-
-# Baseline: per-NEURON (not per-group!) learned offset
-self.z_hidden_baseline = nnx.Param(jnp.zeros(target_hidden_size))  # shape (128,)
+# Linear(16 → 32)
 ```
 
-**Signal computation** — In `_get_signal()` with `is_unimodal=False`, the raw head output is **repeated by `grouping_size`** then sliced to `target_hidden_size`:
+**Signal computation** — In the unified `_get_signal()`, all heads use the same repeat-and-slice path:
 
 ```python
-# neuromodulator.py:141-143
-def _get_signal(head, baseline, ..., is_unimodal=False):
-    raw = head(h_mod_new)                                              # shape (batch, 2) with G=64
-    # NOT unimodal path:
+# neuromodulator.py:139-142
+def _get_signal(head, baseline, head_add=None, baseline_add=None):
+    raw = head(h_mod_new)                                              # shape (batch, 32) with G=4
     sig = jnp.repeat(raw, self.grouping_size, axis=-1)[..., :self.target_hidden_size]
-    #     jnp.repeat([a, b], 64) → [a,a,...(64 times)...,a, b,b,...(64 times)...,b]  shape (128,)
-    #     [..., :128] slice is a no-op here since 2×64 = 128 exactly
+    #     jnp.repeat([a, b, c, ..., z], 4) → [a,a,a,a, b,b,b,b, ..., z,z,z,z]  shape (128,)
     sig = baseline.value + sig                                         # shape (batch, 128)
-    # baseline is per-neuron (128,), so each neuron gets its own offset
-    # even though the raw head signal is shared within a group
 ```
 
-**Injection** — At the encoder, this `(batch, 128)` signal applies element-wise to the 128-dim multimodal hub output:
+**Key design point**: The unimodal signal has shape `(batch, 128)` — the same as multimodal. At injection, it broadcasts over the modality dimension: `(batch, 1, 128) × (batch, 9, 128)`. This means all 9 modalities receive the **same spatial gate pattern** — the modulator controls **which neuron positions** are amplified/suppressed, not which modalities.
 
-```python
-# recurrent_ppo_network.py:146-151
-mm_in = encoded_all.reshape(batch_shape + (-1,))   # shape (batch, 9*128) = (batch, 1152)
-mm_latent = self.multimodal_hub(mm_in)              # shape (batch, 128)
-gamma2 = sigmoid(mod_output.z_multimodal)           # shape (batch, 128) — already expanded
-beta2 = mod_output.z_multimodal_add                 # shape (batch, 128)
-return relu(mm_latent * gamma2 + beta2)             # element-wise, no broadcasting needed
-```
-
-**Worked example** — With `grouping_size=64` and `hidden_size=128` (2 groups):
+**Worked example** — With `grouping_size=4` and `hidden_size=128` (32 groups):
 
 ```
-head_multimodal(h_mod) → raw = [a, b]           # 2 raw group values
-jnp.repeat([a, b], 64) → [a,a,...×64, b,b,...×64]  # expanded to 128
-                          └─ group 0 ─┘ └─ group 1 ─┘
-                          neurons 0–63   neurons 64–127
+head_unimodal(h_mod) → raw = [a, b, c, ..., z]   # 32 raw group values
+jnp.repeat(raw, 4) → [a,a,a,a, b,b,b,b, ..., z,z,z,z]  # expanded to 128
 
-+ z_hidden_baseline (128 per-neuron values):
++ z_unimodal_baseline (128 per-neuron values):
   sig[0]  = baseline[0]  + a    ┐
   sig[1]  = baseline[1]  + a    │ group 0: same 'a' but different baselines
-  ...                           │
-  sig[63] = baseline[63] + a    ┘
-  sig[64] = baseline[64] + b    ┐
-  sig[65] = baseline[65] + b    │ group 1: same 'b' but different baselines
-  ...                           │
-  sig[127]= baseline[127]+ b   ┘
+  sig[2]  = baseline[2]  + a    │
+  sig[3]  = baseline[3]  + a    ┘
+  sig[4]  = baseline[4]  + b    ┐
+  ...                           │ group 1: same 'b' but different baselines
+  sig[7]  = baseline[7]  + b    ┘
+  ...
+
+Applied to ALL modalities uniformly (broadcast over dim 0):
+  Injury    neurons 0-3: × sigmoid(sig[0:4])   neurons 4-7: × sigmoid(sig[4:8])   ...
+  Nutrition neurons 0-3: × sigmoid(sig[0:3])   neurons 4-7: × sigmoid(sig[4:8])   ...
+  ...
+  Location  neurons 0-3: × sigmoid(sig[0:4])   neurons 4-7: × sigmoid(sig[4:8])   ...
 ```
 
 **Key subtlety**: Although neurons within a group share the same raw head signal, the **per-neuron baselines** allow each neuron to learn a different resting modulation level. The head controls group-level *dynamics* (how modulation changes over time), while the baselines control per-neuron *static offsets*.
@@ -191,39 +144,39 @@ jnp.repeat([a, b], 64) → [a,a,...×64, b,b,...×64]  # expanded to 128
 The **memory head** follows the same repeat-and-slice pattern:
 
 ```python
-# neuromodulator.py:102-107
+# neuromodulator.py:105-109
 self.head_memory = nnx.Linear(mod_hidden_size, self.num_groups_hidden, ...)
-# Same num_groups_hidden as multimodal (ceil(128/64) = 2 with G=64)
+# Same num_groups_hidden (32 with G=4)
 
 self.z_mem_baseline = nnx.Param(jnp.zeros(target_hidden_size))  # shape (128,)
 # Memory signal also gets per-neuron baselines + grouped dynamics
 ```
 
-#### 2.4.3 Grouping Size Impact
+#### 2.4.2 Grouping Size Impact
 
 | `grouping_size` (G) | `num_groups_hidden` | Neurons per group | Granularity |
 |---------------------|--------------------|--------------------|-------------|
 | 1 | 128 | 1 | Per-neuron (finest) |
+| 4 | 32 | 4 | Fine-grained |
 | 40 | 4 | 32–40 | Coarse |
 | 64 | 2 | 64 | Very coarse |
 | 128 | 1 | 128 | Global (single scalar for all) |
 
-**Current config**: `grouping_size=64` → only **2 groups** for multimodal/memory. This means one half of the hidden dimension (neurons 0–63) shares one dynamic signal, and the other half (neurons 64–127) shares another. The modulator can shut off 64 neurons simultaneously with a single negative value.
+**Current config**: `grouping_size=4` → **32 groups** for all heads (unimodal, multimodal, memory). Each group of 4 neurons shares one dynamic signal. This is fine-grained enough that the modulator can selectively gate small clusters of neurons without wholesale suppression.
 
-**Implication**: Coarse grouping was identified as a contributor to the feature collapse observed in training (see NMN_PERFORMANCE_DIAGNOSIS.md §5.4). The per-neuron baselines partially mitigate this — individual neurons can learn different resting points — but the *dynamic* modulation (the part that changes in response to observations) remains group-level. When the modulator learns to suppress a group, all neurons in that group are suppressed together regardless of their baseline offsets.
-
-**Known issue**: The unimodal path does not use `grouping_size` at all — it is structurally fixed at 1 scalar per modality. This is inconsistent with the multimodal path and was not the original design intent. See [UNIFY_UNIMODAL_GROUPING.md](docs/UNIFY_UNIMODAL_GROUPING.md) for the fix plan.
+**Design history**: Earlier configurations used `grouping_size=64` (2 groups) or `grouping_size=40` (4 groups), which enabled wholesale feature suppression — a contributor to the feature collapse observed in training (see NMN_PERFORMANCE_DIAGNOSIS.md §5.4). The current `G=4` significantly mitigates this risk.
 
 ### 2.5 Temperature Computation
 
 ```python
+# neuromodulator.py:164-165
 z_act_raw = self.head_action(h_mod_new)          # Linear(16 → 1)
-temperature = clip(softplus(z_act_raw) + 0.5, 0.1, 10.0)
+temperature = clip(softplus(z_act_raw) + 0.5, 0.5, 3.0)
 ```
 
 - `softplus` ensures positivity
 - `+0.5` offset prevents temperature from collapsing to near-zero at init
-- Clip bounds: `[0.1, 10.0]` — extremely wide. Temperature of 10.0 makes action logits near-uniform.
+- Clip bounds: `[0.5, 3.0]` — a 6× range. Temperature of 3.0 flattens action logits moderately; temperature of 0.5 sharpens them modestly.
 
 ---
 
@@ -248,7 +201,7 @@ In this mode, the modulator applies a **post-linear, pre-final-ReLU sigmoid gate
 
 | Modulator state (z) | gamma = sigmoid(z) | Computation | Output |
 |---|---|---|---|
-| z = 2.0 (init) | 0.88 | relu(3.5) × 0.88 | **3.08** (12% attenuated) |
+| z = 3.0 (init) | 0.95 | relu(3.5) × 0.95 | **3.33** (5% attenuated) |
 | z = 5.0 (gate open) | 0.993 | relu(3.5) × 0.993 | **3.48** (near pass-through) |
 | z = 0.0 (neutral) | 0.50 | relu(3.5) × 0.50 | **1.75** (halved) |
 | z = -5.0 (suppressed) | 0.007 | relu(3.5) × 0.007 | **0.024** (nearly silenced) |
@@ -258,29 +211,28 @@ The output is always ≤ the unmodulated value (`relu(3.5) = 3.5`). No z value c
 
 **Modulator heads constructed**: Only gamma heads (`head_unimodal`, `head_multimodal`). The additive heads (`head_unimodal_add`, `head_multimodal_add`) are **not constructed** — the `z_*_add` fields in `ModulatorOutput` are filled with zeros.
 
-**Additional parameters over baseline**: ~221 (gamma heads only, no beta heads or beta baselines).
-
-**Phase 1 (Unimodal) — per-modality gating**:
+**Phase 1 (Unimodal) — spatial gating broadcast over all modalities**:
 ```python
-encoded_all = self.unimodal_grouped(x_padded)            # GroupedMLP: (batch, 9, max_in) → (batch, 9, 128)
-gamma1 = sigmoid(mod_output.z_unimodal)                  # shape (batch, 9), range (0, 1)
-beta1 = mod_output.z_unimodal_add                        # always zeros in Multiplicative mode
-encoded_all = relu(encoded_all * gamma1[..., None] + beta1[..., None])
-# Effective: relu(encoded_all * gamma1[..., None])
+# recurrent_ppo_network.py:139-144
+encoded_all = self.unimodal_grouped(x_padded)              # GroupedMLP: (batch, 9, 128)
+gamma1 = sigmoid(mod_output.z_unimodal)                    # shape (batch, 128)
+beta1 = mod_output.z_unimodal_add                          # always zeros in Multiplicative mode
+# Broadcast (batch, 1, 128) × (batch, 9, 128) — same gate pattern for all modalities
+encoded_all = relu(encoded_all * gamma1[..., None, :] + beta1[..., None, :])
 ```
 
-Each of the 9 sensor modalities gets a single scalar gate ∈ (0, 1). This gate uniformly scales all 128 output neurons of that modality's encoder. At init: `sigmoid(2.0) ≈ 0.88` — modest initial attenuation.
+The modulation signal `(batch, 128)` broadcasts over the 9 modalities via `[..., None, :]`. All modalities receive the same spatial gate pattern — neurons at position `i` across all 9 modalities share the same gate value `sigmoid(z_unimodal[i])`.
 
 **Phase 2 (Multimodal) — fusion hub gating**:
 ```python
-mm_latent = self.multimodal_hub(mm_in)                   # MLP: 1152 → [128,128] → 128
-gamma2 = sigmoid(mod_output.z_multimodal)                # shape (batch, 128), range (0, 1)
-beta2 = mod_output.z_multimodal_add                      # always zeros
+# recurrent_ppo_network.py:146-151
+mm_latent = self.multimodal_hub(mm_in)                     # MLP: 1152 → [128,128] → 128
+gamma2 = sigmoid(mod_output.z_multimodal)                  # shape (batch, 128)
+beta2 = mod_output.z_multimodal_add                        # always zeros
 return relu(mm_latent * gamma2 + beta2)
-# Effective: relu(mm_latent * gamma2)
 ```
 
-The multimodal hub fuses all sensor outputs. Its 128-dim output is then element-wise gated by the grouped multimodal signal (4 groups → repeated to 128 dims).
+The multimodal hub fuses all sensor outputs. Its 128-dim output is then element-wise gated by the grouped multimodal signal (32 groups → repeated to 128 dims).
 
 **Behavior summary**: The Multiplicative modulator acts as a **soft binary mask**. It can silence features (gamma → 0) or pass them through nearly unchanged (gamma → 1), but cannot boost them. This is computationally simple and stable, but limits expressiveness — the modulator cannot learn "amplify nociceptive signals after injury," only "suppress non-nociceptive signals."
 
@@ -301,39 +253,40 @@ In this mode, the modulator applies **both a multiplicative gain (gamma) and an 
 
 | Scenario | z_gamma | gamma | beta | Computation: relu(3.5 × gamma + beta) | Output | Interpretation |
 |---|---|---|---|---|---|---|
-| Init state | 2.0 | 0.88 | 0.0 | relu(3.5 × 0.88 + 0.0) = relu(3.08) | **3.08** | Same as Multiplicative at init |
-| Disinhibited (danger nearby) | 2.0 | 0.88 | +2.0 | relu(3.5 × 0.88 + 2.0) = relu(5.08) | **5.08** | **Exceeds unmodulated 3.5** — beta lifts output above what Multiplicative can achieve |
+| Init state | 3.0 | 0.95 | 0.0 | relu(3.5 × 0.95 + 0.0) = relu(3.33) | **3.33** | Same as Multiplicative at init |
+| Disinhibited (danger nearby) | 3.0 | 0.95 | +2.0 | relu(3.5 × 0.95 + 2.0) = relu(5.33) | **5.33** | **Exceeds unmodulated 3.5** — beta lifts output above what Multiplicative can achieve |
 | Strongly inhibited (safe area) | -2.0 | 0.12 | -1.0 | relu(3.5 × 0.12 - 1.0) = relu(-0.58) | **0.0** | Signal killed — compressed by low gamma AND pushed below ReLU threshold by negative beta |
-| Selective (only strong signals) | 2.0 | 0.88 | -2.5 | relu(3.5 × 0.88 - 2.5) = relu(0.58) | **0.58** | Weak signals would fail: relu(1.0 × 0.88 - 2.5) = relu(-1.62) = 0 |
-| Noise gate (weak signal) | 2.0 | 0.88 | -2.5 | relu(**0.5** × 0.88 - 2.5) = relu(-2.06) | **0.0** | Weak input (0.5) doesn't survive the raised threshold |
+| Selective (only strong signals) | 3.0 | 0.95 | -2.5 | relu(3.5 × 0.95 - 2.5) = relu(0.83) | **0.83** | Weak signals would fail: relu(1.0 × 0.95 - 2.5) = relu(-1.55) = 0 |
+| Noise gate (weak signal) | 3.0 | 0.95 | -2.5 | relu(**0.5** × 0.95 - 2.5) = relu(-2.03) | **0.0** | Weak input (0.5) doesn't survive the raised threshold |
 
 Key differences from Multiplicative visible in these examples:
-- **Row 2 (Disinhibited)**: Output = 5.08 > 3.5 — positive beta achieves **effective amplification** that Multiplicative cannot do. The modulator can learn "boost olfaction sensitivity after injury."
+- **Row 2 (Disinhibited)**: Output = 5.33 > 3.5 — positive beta achieves **effective amplification** that Multiplicative cannot do. The modulator can learn "boost olfaction sensitivity after injury."
 - **Row 3 (Inhibited)**: gamma compresses the signal AND beta pushes it below zero. Two knobs working together produce stronger suppression than gamma alone.
-- **Rows 4–5 (Selective)**: With `gamma=0.88, beta=-2.5`, the effective ReLU threshold shifts from 0 to `2.5/0.88 ≈ 2.84` in input space. Only inputs > 2.84 activate the neuron. This is **selectivity sharpening** — the modulator filters weak/noisy signals while preserving strong ones. Multiplicative mode cannot do this; it attenuates all signals equally regardless of magnitude.
+- **Rows 4–5 (Selective)**: With `gamma=0.95, beta=-2.5`, the effective ReLU threshold shifts from 0 to `2.5/0.95 ≈ 2.63` in input space. Only inputs > 2.63 activate the neuron. This is **selectivity sharpening** — the modulator filters weak/noisy signals while preserving strong ones. Multiplicative mode cannot do this; it attenuates all signals equally regardless of magnitude.
 
 **Modulator heads constructed**: Both gamma heads AND beta heads (`head_unimodal`, `head_unimodal_add`, `head_multimodal`, `head_multimodal_add`). Additional learned baselines are also created (`z_unimodal_add_baseline`, `z_hidden_add_baseline`).
 
-**Additional parameters over Multiplicative**: ~230 extra (beta heads + beta baselines), totaling ~451 modulator-specific parameters for the perceptual heads.
-
 **Phase 1 (Unimodal)**:
 ```python
-encoded_all = self.unimodal_grouped(x_padded)            # GroupedMLP raw output (pre-activation)
-gamma1 = sigmoid(mod_output.z_unimodal)                  # gain ∈ (0, 1)
-beta1 = mod_output.z_unimodal_add                        # threshold shift ∈ (-∞, +∞)
-encoded_all = relu(encoded_all * gamma1[..., None] + beta1[..., None])
+# recurrent_ppo_network.py:139-144
+encoded_all = self.unimodal_grouped(x_padded)              # GroupedMLP raw output (pre-activation)
+gamma1 = sigmoid(mod_output.z_unimodal)                    # gain ∈ (0, 1), shape (batch, 128)
+beta1 = mod_output.z_unimodal_add                          # threshold shift, shape (batch, 128)
+# Broadcast (batch, 1, 128) × (batch, 9, 128)
+encoded_all = relu(encoded_all * gamma1[..., None, :] + beta1[..., None, :])
 ```
 
-Here gamma and beta work together:
+Here gamma and beta work together, broadcast uniformly across all modalities:
 - **High gamma + positive beta**: Strong signal amplification + lowered threshold → aggressive feature detection (disinhibited state)
 - **Low gamma + negative beta**: Compressed signal + raised threshold → strict noise filtering (inhibited state)
 - **High gamma + negative beta**: Only strong signals survive the raised threshold → sharpened selectivity
 
 **Phase 2 (Multimodal)**:
 ```python
-mm_latent = self.multimodal_hub(mm_in)                   # Hub raw output (pre-activation)
-gamma2 = sigmoid(mod_output.z_multimodal)                # gain
-beta2 = mod_output.z_multimodal_add                      # threshold shift
+# recurrent_ppo_network.py:146-151
+mm_latent = self.multimodal_hub(mm_in)                     # Hub raw output (pre-activation)
+gamma2 = sigmoid(mod_output.z_multimodal)                  # gain, shape (batch, 128)
+beta2 = mod_output.z_multimodal_add                        # threshold shift, shape (batch, 128)
 return relu(mm_latent * gamma2 + beta2)
 ```
 
@@ -354,28 +307,29 @@ Same two-parameter control applied to the fusion layer.
 | **Biological analog** | Binary masking (Ben-Iwhiwhu) | VIP-SST disinhibition (Ferguson & Cardin) + neural gain (Shine) |
 | **Extra modulator heads** | 0 | 2 (`head_unimodal_add`, `head_multimodal_add`) |
 | **Extra baselines** | 0 | 2 (`z_unimodal_add_baseline`, `z_hidden_add_baseline`) |
-| **Extra params (approx)** | 0 | ~230 |
-| **Config init** | `percept_bias_init: 2.0` | `percept_bias_init: 2.0`, `percept_add_bias_init: 0.0` |
-| **Init behavior** | sigmoid(2.0) ≈ 0.88 gain, no bias | sigmoid(2.0) ≈ 0.88 gain, zero bias → same as Multiplicative at init |
+| **Config init** | `percept_bias_init: 3.0` | `percept_bias_init: 3.0`, `percept_add_bias_init: 0.0` |
+| **Init behavior** | sigmoid(3.0) ≈ 0.95 gain, no bias | sigmoid(3.0) ≈ 0.95 gain, zero bias → same as Multiplicative at init |
 | **Risk profile** | Simpler, biased toward suppression | More expressive, but larger degenerate solution space |
 
 *\*Note: In both modes, gamma uses `sigmoid()` which is bounded to (0, 1). Neither mode supports gain > 1 (true amplification). The PreActivation mode compensates partially through the beta term — a positive beta can push features above the ReLU threshold even when gamma attenuates them, achieving an effective amplification of the number of active neurons (though not their magnitude).*
 
 #### 3.1.4 Flat Encoder Fallback
 
-When `encoding_mode: "flat"` (non-hierarchical), both modes collapse to a single-phase modulation using only the first element of `z_unimodal`:
+When `encoding_mode: "flat"` (non-hierarchical), both modes collapse to a single-phase modulation using the full `z_unimodal` signal:
 
 ```python
-# Multiplicative flat fallback:
-return relu(monolith(x)) * sigmoid(z_unimodal[..., 0:1])
-
-# PreActivation flat fallback:
-gamma = sigmoid(z_unimodal[..., 0:1])
-beta = z_unimodal_add[..., 0:1]
-return relu(monolith(x) * gamma + beta)
+# recurrent_ppo_network.py:123-130
+if self.mode != 'hierarchical':
+    x_proj = self.monolith(x)
+    if modulation_type == "PreActivation":
+        gamma = sigmoid(z_unimodal)          # (batch, 128) — full signal
+        beta = z_unimodal_add                # (batch, 128)
+        return relu(x_proj * gamma + beta)
+    else:
+        return relu(x_proj) * sigmoid(z_unimodal)
 ```
 
-This is a degenerate case — only 1 of 9 unimodal groups is used, and the multimodal phase is skipped entirely. The flat encoder path exists for backward compatibility but should not be used with modulation.
+The `z_unimodal` signal is now `(batch, 128)` — the same shape as `x_proj` — so it applies element-wise. The multimodal phase is skipped entirely. The flat encoder path exists for backward compatibility but should not be used with modulation.
 
 #### 3.1.5 Key Implementation Detail: Unified Code Path
 
@@ -384,6 +338,25 @@ Both modulation types share the **same forward code** in `forward_with_modulatio
 - In PreActivation mode, both heads exist and produce learned signals.
 
 The encoder code always computes `relu(encoded * gamma + beta)` — it's just that `beta = 0` in Multiplicative mode. This means switching modes requires only a config change and model re-initialization; no code branches exist in the encoder's hot path.
+
+#### 3.1.6 Key Implementation Detail: Unified Signal Computation
+
+The `_get_signal()` helper in `NeuromodulatorRNN.__call__()` uses a single code path for all heads — unimodal, multimodal, and memory (lines 139–149). There is no `is_unimodal` flag or branching. All heads produce grouped outputs that are repeat-and-sliced to the target hidden dimension:
+
+```python
+# neuromodulator.py:139-149
+def _get_signal(head, baseline, head_add=None, baseline_add=None):
+    raw = head(h_mod_new)
+    sig = jnp.repeat(raw, self.grouping_size, axis=-1)[..., :self.target_hidden_size]
+    sig = baseline.value + sig
+
+    if head_add is not None:
+        raw_add = head_add(h_mod_new)
+        sig_add = jnp.repeat(raw_add, self.grouping_size, axis=-1)[..., :self.target_hidden_size]
+        sig_add = baseline_add.value + sig_add
+        return sig, sig_add
+    return sig, jnp.zeros_like(sig)
+```
 
 ### 3.2 Injection B — Memory Gate-Bias
 
@@ -402,9 +375,16 @@ h_new = (1 - u) * h + u * n              # GRU update
 
 The gate-bias is additive on the pre-sigmoid activation — a lightweight intervention that preserves the GRU's internal dynamics while shifting its operating point.
 
+**Bounded output**: The `z_memory` signal is clamped before injection:
+```python
+# neuromodulator.py:161
+z_mem = jnp.clip(z_mem, self.memory_clip[0], self.memory_clip[1])
+```
+With `memory_clip: [-2.0, 2.0]` (config), this prevents the gate-bias from drifting to extreme values that would freeze or force-reset the GRU update gate. At the bounds: `sigmoid(pre + 2.0)` shifts the gate but cannot fully override it; `sigmoid(pre - 2.0)` shifts toward retention but doesn't freeze completely.
+
 ### 3.3 Injection C — Temperature Scaling
 
-**Location**: `ActorCriticRNN.__call__()` (line 276)
+**Location**: `ActorCriticRNN.__call__()` (line 278)
 
 ```python
 logits = logits / mod_output.temperature
@@ -413,6 +393,8 @@ logits = logits / mod_output.temperature
 Applied after actor head, before action sampling. Temperature τ controls exploration:
 - τ < 1 → sharper logits → deterministic behavior
 - τ > 1 → flatter logits → stochastic exploration
+
+Current bounds `[0.5, 3.0]` give a 6× range — enough for meaningful exploration control without allowing the modulator to fully override the learned policy.
 
 ---
 
@@ -425,15 +407,16 @@ obs (raw)
   │
   ├──► NeuromodulatorRNN
   │      GRU(obs_dim=30, hidden=16): obs → h_mod_new
-  │      Heads: h_mod_new → {z_uni, z_multi, z_mem, temperature}
+  │      Heads: h_mod_new → {z_uni(128), z_multi(128), z_mem(128), temperature(1)}
   │
   ├──► ObservationEncoder (with modulation)
   │      Phase 1: GroupedMLP(9 modalities, 30→128→128→128) × sigmoid(z_uni)
+  │               z_uni broadcasts (batch, 1, 128) × (batch, 9, 128)
   │      Phase 2: MLP(1152→128→128→128) × sigmoid(z_multi)
   │      Output: x_proj (batch, 128)
   │
   ├──► ModulatedGRUCell
-  │      Input: x_proj (128), h_prev (128), gate_bias=z_mem (128)
+  │      Input: x_proj (128), h_prev (128), gate_bias=clip(z_mem, -2, 2) (128)
   │      Output: h_new (128)
   │
   ├──► Actor Head
@@ -455,17 +438,27 @@ obs (raw)
 
 ### 5.1 Modulator Parameters
 
+With `grouping_size=4`, `mod_hidden_size=16`, `hidden_size=128`:
+
 | Component | Shape | Params |
 |-----------|-------|--------|
 | GRU input-to-hidden (3 gates) | (30, 16) × 3 | 1,440 |
 | GRU hidden-to-hidden (3 gates) | (16, 16) × 3 | 768 |
 | GRU biases (6 total) | 16 × 6 | 96 |
-| `head_unimodal` | (16, 9) + 9 | 153 |
-| `head_multimodal` | (16, 4) + 4 | 68 |
-| `head_memory` | (16, 4) + 4 | 68 |
+| `head_unimodal` | (16, 32) + 32 | 544 |
+| `head_multimodal` | (16, 32) + 32 | 544 |
+| `head_memory` | (16, 32) + 32 | 544 |
 | `head_action` | (16, 1) + 1 | 17 |
-| Baselines (z_unimodal, z_hidden, z_mem) | 9 + 128 + 128 | 265 |
-| **Total Modulator** | | **~2,875** |
+| Baselines (z_unimodal, z_hidden, z_mem) | 128 + 128 + 128 | 384 |
+| **Total Modulator (Multiplicative)** | | **~4,337** |
+
+PreActivation mode adds:
+| Component | Shape | Params |
+|-----------|-------|--------|
+| `head_unimodal_add` | (16, 32) + 32 | 544 |
+| `head_multimodal_add` | (16, 32) + 32 | 544 |
+| Baselines (z_unimodal_add, z_hidden_add) | 128 + 128 | 256 |
+| **Total Modulator (PreActivation)** | | **~5,681** |
 
 ### 5.2 Task Network Parameters (for context)
 
@@ -477,7 +470,7 @@ obs (raw)
 | Critic Head (2 layers) | ~33,000 |
 | **Total Task Network** | **~451,000** |
 
-**Modulator is ~0.6% of total parameters** — very lightweight. The 24% wall-clock overhead comes from the extra forward pass and sigmoid computations, not from parameter count.
+**Modulator is ~1.0% of total parameters** (Multiplicative) — lightweight. The overhead comes from the extra forward pass and sigmoid computations, not from parameter count.
 
 ---
 
@@ -496,7 +489,7 @@ This is a 30→16 compression in a single GRU step. The DreamerV3 variant adds `
 
 ### 6.2 Modulator Sees Symlog-Compressed Observations
 
-The symlog compression `sign(x) * log(|x| + 1)` is applied at line 252, before the modulator receives `x`. This compresses high-magnitude modalities (olfaction ~0–40, visual ~0–13) to ~0–3.7 range.
+The symlog compression `sign(x) * log(|x| + 1)` is applied at line 254, before the modulator receives `x`. This compresses high-magnitude modalities (olfaction ~0–40, visual ~0–13) to ~0–3.7 range.
 
 This is appropriate — it prevents olfaction from dominating the modulator's GRU dynamics. However, it also compresses interoceptive signals (injury, nutrition, satiation already in [0,1]) further: `symlog(0.5) = 0.405`. The modulator's ability to distinguish fine-grained interoceptive state may be reduced.
 
@@ -512,22 +505,7 @@ This means the modulator can only **attenuate** features — it cannot amplify t
 
 **Consequence**: The modulator cannot learn "after injury, amplify nociceptive signals" — only "suppress non-nociceptive signals." This asymmetry may bias the modulator toward suppression as the default strategy, which is exactly what was observed in training.
 
-### 6.4 Temperature Bounds Are Extremely Wide
-
-Current config: `temp_clip: [0.1, 10.0]`
-
-- At τ=10.0 with 5 actions: `softmax(logits/10)` → near-uniform (each action ≈ 20% ± tiny perturbation)
-- At τ=0.1 with 5 actions: `softmax(logits/0.1)` → near-deterministic (winner-take-all)
-
-The range spans **100x** from min to max. This gives the modulator enormous leverage over the policy — it can effectively disable the learned policy by setting temperature to 10.0. Training confirmed this: temperature mean reached 3.29 with max pinned at 10.0.
-
-### 6.5 No Clamp on `z_memory`
-
-The memory gate-bias `z_memory` has no bounds — it can drift to arbitrarily large negative values, which fully freezes the GRU update gate. At `z_memory = -6.5`, the update gate receives a constant -6.5 bias, making `sigmoid(anything - 6.5) ≈ 0` regardless of input.
-
-This effectively converts the recurrent network into a feedforward one — a drastic architectural change that the modulator can impose unilaterally.
-
-### 6.6 Critic Head Is Not Modulated
+### 6.4 Critic Head Is Not Modulated
 
 The critic receives the same GRU hidden state as the actor but its output is **not temperature-scaled** or otherwise modulated:
 ```python
@@ -539,21 +517,11 @@ This means the value function cannot benefit from modulation-dependent context. 
 
 This is likely acceptable since indirect modulation via the shared hidden state should suffice. But it's worth noting that the critic and actor operate under different modulation regimes (actor has temperature scaling, critic does not).
 
-### 6.7 Shared Optimizer / No Learning Rate Separation
+### 6.5 Shared Optimizer / No Learning Rate Separation
 
 Both task network and modulator parameters are trained with a single Adam optimizer at `lr=0.0005`. The NEUROMODULATION_ALGORITHM.md §4 recommends separate learning rates, but this is not implemented.
 
-**Consequence**: The modulator adapts at the same speed as the task network. Since the modulator has far fewer parameters (~2,875 vs ~451,000), it can converge much faster in practice. This allows the modulator to find and exploit degenerate shortcuts before the task network has learned useful features to modulate.
-
-### 6.8 Unimodal Modulation Applies Per-Group, Not Per-Neuron
-
-The unimodal gamma has shape `(9,)` — one scalar per sensor modality. This scalar gates all 128 output neurons of that modality's encoder:
-
-```python
-encoded_all = relu(encoded_all * gamma1[..., None])  # gamma1: (9,), encoded_all: (9, 128)
-```
-
-This is an all-or-nothing gate per modality. The modulator cannot selectively suppress certain features within a modality while preserving others. For example, it cannot keep "food direction" from olfaction while suppressing "food distance" — it must gate the entire olfaction encoding uniformly.
+**Consequence**: The modulator adapts at the same speed as the task network. Since the modulator has far fewer parameters (~4,337 vs ~451,000), it can converge much faster in practice. This allows the modulator to find and exploit degenerate shortcuts before the task network has learned useful features to modulate.
 
 ---
 
@@ -563,12 +531,18 @@ This is an all-or-nothing gate per modality. The modulator cannot selectively su
 |--------|-----------------------------------|---------------------------------------|
 | GRU input | Raw obs (no projection) | `relu(proj_obs(obs))` — learned projection |
 | Dual modes | No — single forward path | Yes — `forward_obs()` vs `forward_imagine()` |
-| Injection C | Temperature head (τ ∈ [0.1, 10.0]) | Reward head (sigmoid-bounded `z_reward`) |
+| Injection C | Temperature head (τ ∈ [0.5, 3.0]) | Reward head (sigmoid-bounded `z_reward`) |
 | Imagination mode | N/A | Zeros perceptual heads, keeps memory + reward |
 | Input to GRU | `obs_dim` directly | `mod_hidden_size` (after projection) |
 | Lazy init | No | `set_imagine_input_dim()` for imagination projection |
+| Unimodal grouping | `num_groups_hidden` (same as multimodal) | `num_groups_percept` (same as multimodal) |
+| Signal computation | Unified `_get_signal()` — no branching | Unified `_get_signal()` — `is_percept` flag for imagination zeroing only |
+| Unimodal baseline shape | `(target_hidden_size,)` | `(embed_dim,)` |
+| z_memory clamp | `memory_clip: [-2.0, 2.0]` | Not clamped (TODO) |
 
 The DreamerV3 variant is architecturally cleaner: the input projection decouples observation dimensionality from GRU state size, and dual modes handle the distinction between real observation and imagined rollouts.
+
+Both variants use the **same unified grouping** for unimodal and multimodal heads — the `is_unimodal` branching was eliminated in the unification refactor (see [UNIFY_UNIMODAL_GROUPING.md](docs/UNIFY_UNIMODAL_GROUPING.md)).
 
 ---
 
@@ -577,13 +551,18 @@ The DreamerV3 variant is architecturally cleaner: the input projection decouples
 | Risk | Severity | Current Impact | Mitigation |
 |------|----------|---------------|------------|
 | Sigmoid gain ≤ 1 (no amplification) | **High** | Modulator can only suppress, biasing toward feature collapse | Use `2 * sigmoid(z)` or `softplus(z)` for gain ∈ (0, ∞) |
-| Temperature bounds [0.1, 10.0] too wide | **High** | Modulator overrides policy (τ → 10.0) | Tighten to [0.5, 2.0] or [0.8, 1.5] |
-| No `z_memory` clamp | **High** | GRU frozen (z_mem → -6.5) | Clamp to [-2, +2] |
-| Coarse grouping (G=40) | **Medium** | 4 groups for 128 dims enables wholesale suppression | Reduce to G=1 (per-neuron) |
 | No input projection on modulator GRU | **Medium** | 30→16 compression in single step | Add `Linear(obs_dim, mod_hidden_size) + relu` |
 | Shared optimizer (no LR separation) | **Medium** | Modulator converges to degenerate shortcuts first | Use `optax.multi_transform` with 5–10× lower modulator LR |
-| Unimodal gate is per-modality scalar | **Low** | Cannot do within-modality selective gating | Acceptable for current architecture |
 | Critic not directly modulated | **Low** | Critic infers context from shared hidden state | Acceptable — indirect modulation sufficient |
+
+### Previously Mitigated Risks
+
+| Risk | Original Severity | Mitigation Applied |
+|------|-------------------|-------------------|
+| Temperature bounds [0.1, 10.0] too wide | **High** | Tightened to [0.5, 3.0] — 6× range prevents policy override |
+| No `z_memory` clamp | **High** | Clamped to [-2.0, 2.0] — prevents GRU freeze/force-reset |
+| Coarse grouping (G=40/64) | **Medium** | Reduced to G=4 (32 groups) — fine-grained control, prevents wholesale suppression |
+| Unimodal gate was per-modality scalar | **Low** | Unified with multimodal grouping — now uses same spatial pattern for all modalities |
 
 ---
 
@@ -591,12 +570,10 @@ The DreamerV3 variant is architecturally cleaner: the input projection decouples
 
 The architectural features above directly map to the pathological training outcomes documented in `NMN_PERFORMANCE_DIAGNOSIS.md`:
 
-1. **Feature collapse** (gamma_body → -4, gamma_assoc → -15): Enabled by sigmoid ≤ 1 (suppression is easy, amplification impossible) + coarse grouping (one value kills 40 neurons) + no environmental pressure for adaptive modulation.
+1. **Feature collapse** (gamma_body → -4, gamma_assoc → -15): Enabled by sigmoid ≤ 1 (suppression is easy, amplification impossible) + coarse grouping (one value kills 40 neurons) + no environmental pressure for adaptive modulation. **Partially mitigated**: G=4 grouping means each group controls only 4 neurons — wholesale suppression requires 32 groups to independently converge to suppression.
 
-2. **Memory freeze** (z_memory → -6.5): Enabled by unbounded z_memory + no timescale separation. Once body-state features are suppressed, the GRU carries no useful info, and freezing it reduces value loss variance.
+2. **Memory freeze** (z_memory → -6.5): Enabled by unbounded z_memory + no timescale separation. Once body-state features are suppressed, the GRU carries no useful info, and freezing it reduces value loss variance. **Mitigated**: z_memory clamped to [-2.0, 2.0].
 
-3. **Temperature inflation** (τ → 3.3, max pinned at 10.0): Enabled by excessively wide bounds. Compensatory response to frozen memory — the agent needs random exploration since its hidden state doesn't update.
+3. **Temperature inflation** (τ → 3.3, max pinned at 10.0): Enabled by excessively wide bounds. Compensatory response to frozen memory — the agent needs random exploration since its hidden state doesn't update. **Mitigated**: bounds tightened to [0.5, 3.0].
 
-4. **Stable degenerate equilibrium**: The modulator's tiny parameter count (~2,875) converges quickly to a local optimum that suppresses features + freezes memory + inflates temperature. The shared optimizer allows this to happen before the task network has learned features worth modulating.
-
-All four pathologies are **architecturally enabled** — they are not bugs in the code but rather consequences of design choices that permit the modulator to find degenerate shortcuts. The fixes involve constraining the modulator's action space (bounded outputs, tighter temperature, per-neuron grouping) and enforcing timescale separation (lower learning rate).
+4. **Stable degenerate equilibrium**: The modulator's parameter count (~4,337) converges quickly to a local optimum that suppresses features + freezes memory + inflates temperature. The shared optimizer allows this to happen before the task network has learned features worth modulate. **Partially mitigated**: memory clamp + temperature bounds + fine grouping break the equilibrium by constraining the modulator's action space, but shared optimizer remains a risk.
