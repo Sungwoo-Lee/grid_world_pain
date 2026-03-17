@@ -41,6 +41,16 @@
 - The document should include: run IDs, metric values, tables, comparisons, and any intermediate observations.
 - These files are temporary working notes — they can be cleaned up or overwritten as needed.
 
+### Training Results Analysis Workflow
+
+When the user asks for training results analysis (typically with an attached screenshot/image):
+
+1. **Extract run datetime IDs** — read the attached image and extract the datetime identifiers for the runs to analyze (format: `YYYYMMDD_HHMMSS`).
+2. **Locate local WandB log files** — find matching runs in the local `wandb/` folder (e.g., `wandb/run-YYYYMMDD_HHMMSS-<wandb_id>/`). Do NOT query the WandB web API for log data — use local files only.
+3. **Use the WandB skill** — invoke the `wandb-analysis` skill to parse and analyze the local log files.
+4. **Temporal evolution analysis** — the analysis **must** include temporal evolution of logged metrics (how key metrics change over training steps/episodes). Show trends, inflection points, and convergence behavior.
+5. **Produce analysis report** — write the final analysis to a `docs/` file using the `docs/TEMPLATES/training_analysis.md` template. Follow the WandB Analysis Protocol above for intermediate results in `tmp/`.
+
 ### Verification Protocol
 
 After Gemini completes implementation, verify using this workflow:
