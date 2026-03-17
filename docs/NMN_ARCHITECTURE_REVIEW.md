@@ -1,6 +1,6 @@
 # NMN Architecture Review: RecurrentPPO Neuromodulatory Network
 
-> **Reviewer**: Claude | **Date**: 2026-03-06 (updated 2026-03-12)
+> **Reviewer**: Claude | **Date**: 2026-03-06 (updated 2026-03-17)
 > **Scope**: Structural review of the neuromodulatory network as implemented in RecurrentPPO.
 > **Key files**: `src/models/neuromodulator.py`, `src/models/recurrent_ppo_network.py`, `src/models/modulated_gru_cell.py`, `configs/models/neuromodulated_ppo.yaml`
 
@@ -23,11 +23,11 @@ Observation ──┬───────────────────�
 
 | Component | File | Lines | Purpose |
 |-----------|------|-------|---------|
-| `NeuromodulatorRNN` | `neuromodulator.py` | 41–172 | Recurrent core + branched output heads |
+| `NeuromodulatorRNN` | `neuromodulator.py` | 41–178 | Recurrent core + branched output heads |
 | `ModulatorOutput` | `neuromodulator.py` | 31–38 | NamedTuple carrying all modulation signals |
 | `ModulatedGRUCell` | `modulated_gru_cell.py` | 17–78 | Standard GRU with external update gate bias |
 | `ObservationEncoder` | `recurrent_ppo_network.py` | 72–151 | Hierarchical encoder with modulated forward path |
-| `ActorCriticRNN` | `recurrent_ppo_network.py` | 154–321 | Main network integrating all injections |
+| `ActorCriticRNN` | `recurrent_ppo_network.py` | 154–320 | Main network integrating all injections |
 
 ---
 
@@ -410,7 +410,8 @@ obs (raw)
   │      Heads: h_mod_new → {z_uni(128), z_multi(128), z_mem(128), temperature(1)}
   │
   ├──► ObservationEncoder (with modulation)
-  │      Phase 1: GroupedMLP(9 modalities, 30→128→128→128) × sigmoid(z_uni)
+  │      Phase 1: GroupedMLP(9 modalities, max_in→128→128→128) × sigmoid(z_uni)
+  │               max_in = max per-modality dim (varies by env config)
   │               z_uni broadcasts (batch, 1, 128) × (batch, 9, 128)
   │      Phase 2: MLP(1152→128→128→128) × sigmoid(z_multi)
   │      Output: x_proj (batch, 128)
@@ -519,7 +520,7 @@ This is likely acceptable since indirect modulation via the shared hidden state 
 
 ### 6.5 Shared Optimizer / No Learning Rate Separation
 
-Both task network and modulator parameters are trained with a single Adam optimizer at `lr=0.0005`. The NEUROMODULATION_ALGORITHM.md §4 recommends separate learning rates, but this is not implemented.
+Both task network and modulator parameters are trained with a single Adam optimizer at `lr=lr_actor=0.0005`. The config defines a separate `lr_critic: 0.0001` key, but the RecurrentPPO training path creates only one optimizer using `lr_actor` for all parameters (actor, critic, and modulator alike). The NEUROMODULATION_ALGORITHM.md §4 recommends separate learning rates for the modulator, but this is not implemented.
 
 **Consequence**: The modulator adapts at the same speed as the task network. Since the modulator has far fewer parameters (~4,337 vs ~451,000), it can converge much faster in practice. This allows the modulator to find and exploit degenerate shortcuts before the task network has learned useful features to modulate.
 
