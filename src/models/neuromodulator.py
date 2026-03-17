@@ -88,16 +88,22 @@ class NeuromodulatorRNN(nnx.Module):
         # === Branched Hierarchical Heads ===
 
         # Phase 1: Unimodal
+        # FiLM modes use γ bias = 1.0 (identity in linear space); sigmoid modes use percept_bias_init
+        if self.modulation_type == "FiLM" or self.modulation_type == "FiLMNoNorm":
+            _percept_bias = 1.0
+        else:
+            _percept_bias = percept_bias_init
+
         self.head_unimodal = nnx.Linear(mod_hidden_size, self.num_groups_unimodal,
-                                       bias_init=nnx.initializers.constant(percept_bias_init), rngs=rngs)
-        if self.modulation_type == "PreActivation":
+                                       bias_init=nnx.initializers.constant(_percept_bias), rngs=rngs)
+        if self.modulation_type == "PreActivation" or self.modulation_type == "FiLM" or self.modulation_type == "FiLMNoNorm":
             self.head_unimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_unimodal,
                                                bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
 
         # Phase 2: Multimodal
         self.head_multimodal = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
-                                         bias_init=nnx.initializers.constant(percept_bias_init), rngs=rngs)
-        if self.modulation_type == "PreActivation":
+                                         bias_init=nnx.initializers.constant(_percept_bias), rngs=rngs)
+        if self.modulation_type == "PreActivation" or self.modulation_type == "FiLM" or self.modulation_type == "FiLMNoNorm":
             self.head_multimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_hidden,
                                                  bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
 
@@ -116,7 +122,7 @@ class NeuromodulatorRNN(nnx.Module):
         self.z_hidden_baseline = nnx.Param(jnp.zeros(target_hidden_size))
         self.z_mem_baseline = nnx.Param(jnp.zeros(target_hidden_size))
 
-        if self.modulation_type == "PreActivation":
+        if self.modulation_type == "PreActivation" or self.modulation_type == "FiLM" or self.modulation_type == "FiLMNoNorm":
             self.z_unimodal_add_baseline = nnx.Param(jnp.zeros(target_hidden_size))
             self.z_hidden_add_baseline = nnx.Param(jnp.zeros(target_hidden_size))
 
@@ -253,16 +259,22 @@ class DreamerNeuromodulatorRNN(nnx.Module):
         # === Branched Hierarchical Heads ===
 
         # Phase 1: Unimodal
+        # FiLM modes use γ bias = 1.0 (identity in linear space); sigmoid modes use percept_bias_init
+        if self.modulation_type == "FiLM" or self.modulation_type == "FiLMNoNorm":
+            _percept_bias = 1.0
+        else:
+            _percept_bias = percept_bias_init
+
         self.head_unimodal = nnx.Linear(mod_hidden_size, self.num_groups_unimodal,
-                                       bias_init=nnx.initializers.constant(percept_bias_init), rngs=rngs)
-        if self.modulation_type == "PreActivation":
+                                       bias_init=nnx.initializers.constant(_percept_bias), rngs=rngs)
+        if self.modulation_type == "PreActivation" or self.modulation_type == "FiLM" or self.modulation_type == "FiLMNoNorm":
             self.head_unimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_unimodal,
                                                bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
 
         # Phase 2: Multimodal
         self.head_multimodal = nnx.Linear(mod_hidden_size, self.num_groups_percept,
-                                         bias_init=nnx.initializers.constant(percept_bias_init), rngs=rngs)
-        if self.modulation_type == "PreActivation":
+                                         bias_init=nnx.initializers.constant(_percept_bias), rngs=rngs)
+        if self.modulation_type == "PreActivation" or self.modulation_type == "FiLM" or self.modulation_type == "FiLMNoNorm":
             self.head_multimodal_add = nnx.Linear(mod_hidden_size, self.num_groups_percept,
                                                  bias_init=nnx.initializers.constant(percept_add_bias_init), rngs=rngs)
 
@@ -285,7 +297,7 @@ class DreamerNeuromodulatorRNN(nnx.Module):
         self.z_hidden_baseline = nnx.Param(jnp.zeros(embed_dim))
         self.z_mem_baseline = nnx.Param(jnp.zeros(deter_dim))
 
-        if self.modulation_type == "PreActivation":
+        if self.modulation_type == "PreActivation" or self.modulation_type == "FiLM" or self.modulation_type == "FiLMNoNorm":
             self.z_unimodal_add_baseline = nnx.Param(jnp.zeros(embed_dim))
             self.z_hidden_add_baseline = nnx.Param(jnp.zeros(embed_dim))
 

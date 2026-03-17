@@ -51,7 +51,7 @@ agent:
   #                        beta  = additive threshold shift (Ferguson disinhibition)
   #   null              — Disabled (true baseline, no modulator constructed)
   modulation:
-    type: "Multiplicative"       # "Multiplicative", "PreActivation", or null
+    type: "Multiplicative"       # "Multiplicative", "PreActivation", "FiLM", "FiLMNoNorm", or null
     mod_hidden_size: 16          # GRU hidden units — h=16 prevents degenerate convergence (§10.6.1)
     grouping_size: 4            # Spatial grouping G — Mult G=60 h=16 is best performer (§10.6)
     percept_bias_init: 3.0       # Gain head (gamma) bias init — higher for truer pass-through (§8 P6)

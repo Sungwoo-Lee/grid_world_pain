@@ -118,17 +118,27 @@ class ObservationEncoder(nnx.Module):
         mm_in = encoded_all.reshape(batch_shape + (-1,))
         return jax.nn.relu(self.multimodal_hub(mm_in))
 
-    def forward_with_modulation(self, x, mod_output, modulation_type: str):
+    def forward_with_modulation(self, x, mod_output, modulation_type: str,
+                                film_unimodal_ln=None, film_multimodal_ln=None,
+                                film_flat_ln=None):
         """Hierarchical forward pass with multi-stage modulation (Injection A)."""
+        # --- Flat mode ---
         if self.mode != 'hierarchical':
             x_proj = self.monolith(x)
             if modulation_type == "PreActivation":
                 gamma = jax.nn.sigmoid(mod_output.z_unimodal)
                 beta = mod_output.z_unimodal_add
                 return jax.nn.relu(x_proj * gamma + beta)
-            else:
+            elif modulation_type == "FiLM":
+                if film_flat_ln is not None:
+                    x_proj = film_flat_ln(x_proj)
+                return jax.nn.relu(mod_output.z_unimodal * x_proj + mod_output.z_unimodal_add)
+            elif modulation_type == "FiLMNoNorm":
+                return jax.nn.relu(mod_output.z_unimodal * x_proj + mod_output.z_unimodal_add)
+            else:  # Multiplicative
                 return jax.nn.relu(x_proj) * jax.nn.sigmoid(mod_output.z_unimodal)
 
+        # --- Hierarchical mode ---
         batch_shape = x.shape[:-1]
         x_padded = jnp.zeros(batch_shape + (len(self.names), self.max_in), dtype=x.dtype)
         start = 0
@@ -136,19 +146,49 @@ class ObservationEncoder(nnx.Module):
             x_padded = x_padded.at[..., i, :dim].set(x[..., start : start + dim])
             start += dim
 
-        # Phase 1: Unimodal + Modulation (z_unimodal)
+        # Phase 1: Unimodal + Modulation
         encoded_all = self.unimodal_grouped(x_padded)
-        gamma1 = jax.nn.sigmoid(mod_output.z_unimodal)
-        beta1 = mod_output.z_unimodal_add
-        # Broadcast (batch, 1, 128) × (batch, 9, 128) — same gate pattern for all modalities
-        encoded_all = jax.nn.relu(encoded_all * gamma1[..., None, :] + beta1[..., None, :])
 
-        # Phase 2: Multimodal Hub + Modulation (z_multimodal)
+        if modulation_type == "PreActivation":
+            gamma1 = jax.nn.sigmoid(mod_output.z_unimodal)
+            beta1 = mod_output.z_unimodal_add
+            encoded_all = jax.nn.relu(encoded_all * gamma1[..., None, :] + beta1[..., None, :])
+        elif modulation_type == "FiLM":
+            if film_unimodal_ln is not None:
+                # Apply LayerNorm independently per modality (vmap over the 9-group dimension)
+                encoded_all = jax.vmap(film_unimodal_ln, in_axes=-2, out_axes=-2)(encoded_all)
+            gamma1 = mod_output.z_unimodal
+            beta1 = mod_output.z_unimodal_add
+            encoded_all = jax.nn.relu(gamma1[..., None, :] * encoded_all + beta1[..., None, :])
+        elif modulation_type == "FiLMNoNorm":
+            gamma1 = mod_output.z_unimodal
+            beta1 = mod_output.z_unimodal_add
+            encoded_all = jax.nn.relu(gamma1[..., None, :] * encoded_all + beta1[..., None, :])
+        else:  # Multiplicative
+            gamma1 = jax.nn.sigmoid(mod_output.z_unimodal)
+            encoded_all = jax.nn.relu(encoded_all) * gamma1[..., None, :]
+
+        # Phase 2: Multimodal Hub + Modulation
         mm_in = encoded_all.reshape(batch_shape + (-1,))
         mm_latent = self.multimodal_hub(mm_in)
-        gamma2 = jax.nn.sigmoid(mod_output.z_multimodal)
-        beta2 = mod_output.z_multimodal_add
-        return jax.nn.relu(mm_latent * gamma2 + beta2)
+
+        if modulation_type == "PreActivation":
+            gamma2 = jax.nn.sigmoid(mod_output.z_multimodal)
+            beta2 = mod_output.z_multimodal_add
+            return jax.nn.relu(mm_latent * gamma2 + beta2)
+        elif modulation_type == "FiLM":
+            if film_multimodal_ln is not None:
+                mm_latent = film_multimodal_ln(mm_latent)
+            gamma2 = mod_output.z_multimodal
+            beta2 = mod_output.z_multimodal_add
+            return jax.nn.relu(gamma2 * mm_latent + beta2)
+        elif modulation_type == "FiLMNoNorm":
+            gamma2 = mod_output.z_multimodal
+            beta2 = mod_output.z_multimodal_add
+            return jax.nn.relu(gamma2 * mm_latent + beta2)
+        else:  # Multiplicative
+            gamma2 = jax.nn.sigmoid(mod_output.z_multimodal)
+            return jax.nn.relu(mm_latent) * gamma2
 
 
 class ActorCriticRNN(nnx.Module):
@@ -181,6 +221,14 @@ class ActorCriticRNN(nnx.Module):
         self.obs_encoder = ObservationEncoder(
             input_dim, hidden_size, observation_breakdown, encoding_config, rngs
         )
+
+        # FiLM LayerNorm layers (only for FiLM, not FiLMNoNorm)
+        if self.modulation_enabled and self.modulation_type == "FiLM":
+            if self.obs_encoder.mode == 'hierarchical':
+                self.film_unimodal_ln = nnx.LayerNorm(hidden_size, rngs=rngs)
+                self.film_multimodal_ln = nnx.LayerNorm(hidden_size, rngs=rngs)
+            else:  # flat mode
+                self.film_flat_ln = nnx.LayerNorm(hidden_size, rngs=rngs)
 
         # RNN Layer (LSTM or ModulatedGRU)
         if self.rnn_type == "LSTM":
@@ -261,7 +309,12 @@ class ActorCriticRNN(nnx.Module):
 
             # --- Task path with modulation ---
             # INJECTION A: Perceptual modulation (Phase-dependent)
-            x_proj = self.obs_encoder.forward_with_modulation(x, mod_output, self.modulation_type)
+            x_proj = self.obs_encoder.forward_with_modulation(
+                x, mod_output, self.modulation_type,
+                film_unimodal_ln=getattr(self, 'film_unimodal_ln', None),
+                film_multimodal_ln=getattr(self, 'film_multimodal_ln', None),
+                film_flat_ln=getattr(self, 'film_flat_ln', None)
+            )
 
             # Layer 2: RNN forward with gate-bias injection
             if self.rnn_type == "LSTM":

@@ -145,7 +145,12 @@ class DreamerTrainer(nnx.Module):
 
                 # Vectorized encoder call
                 mod_outputs = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), mod_outputs_T)
-                embeds = wm.encoder.forward_with_modulation(obs, mod_outputs, wm.modulation_type)
+                embeds = wm.encoder.forward_with_modulation(
+                    obs, mod_outputs, wm.modulation_type,
+                    film_unimodal_ln=getattr(wm, 'film_unimodal_ln', None),
+                    film_multimodal_ln=getattr(wm, 'film_multimodal_ln', None),
+                    film_flat_ln=getattr(wm, 'film_flat_ln', None)
+                )
                 embeds_T = jnp.swapaxes(embeds, 0, 1)
 
                 # Now main RSSM scan uses pre-computed embeddings and modulator outputs
@@ -270,17 +275,24 @@ class DreamerTrainer(nnx.Module):
             }
 
             if modulation_enabled:
+                if wm.modulation_type == "FiLM" or wm.modulation_type == "FiLMNoNorm":
+                    effective_gamma_uni = mod_outputs_T.z_unimodal
+                    effective_gamma_multi = mod_outputs_T.z_multimodal
+                else:
+                    effective_gamma_uni = jax.nn.sigmoid(mod_outputs_T.z_unimodal)
+                    effective_gamma_multi = jax.nn.sigmoid(mod_outputs_T.z_multimodal)
+
                 metrics.update({
-                    'mod_z_unimodal_mean': jnp.mean(jax.nn.sigmoid(mod_outputs_T.z_unimodal)),
-                    'mod_z_unimodal_std': jnp.std(jax.nn.sigmoid(mod_outputs_T.z_unimodal)),
-                    'mod_z_multimodal_mean': jnp.mean(jax.nn.sigmoid(mod_outputs_T.z_multimodal)),
-                    'mod_z_multimodal_std': jnp.std(jax.nn.sigmoid(mod_outputs_T.z_multimodal)),
+                    'mod_z_unimodal_mean': jnp.mean(effective_gamma_uni),
+                    'mod_z_unimodal_std': jnp.std(effective_gamma_uni),
+                    'mod_z_multimodal_mean': jnp.mean(effective_gamma_multi),
+                    'mod_z_multimodal_std': jnp.std(effective_gamma_multi),
                     'mod_memory_mean': jnp.mean(mod_outputs_T.z_memory),
                     'mod_memory_std': jnp.std(mod_outputs_T.z_memory),
                     'mod_z_reward_mean': jnp.mean(mod_outputs_T.z_reward),
                     'mod_z_reward_std': jnp.std(mod_outputs_T.z_reward),
                 })
-                if wm.modulation_type == "PreActivation":
+                if wm.modulation_type == "PreActivation" or wm.modulation_type == "FiLM" or wm.modulation_type == "FiLMNoNorm":
                     metrics.update({
                         'mod_beta_unimodal_mean': jnp.mean(mod_outputs_T.z_unimodal_add),
                         'mod_beta_multimodal_mean': jnp.mean(mod_outputs_T.z_multimodal_add),
@@ -481,7 +493,11 @@ class DreamerTrainer(nnx.Module):
                 obs_symlog, mod_h)
 
             embed = self.agent.wm.encoder.forward_with_modulation(
-                obs_symlog, mod_output, self.agent.wm.modulation_type)
+                obs_symlog, mod_output, self.agent.wm.modulation_type,
+                film_unimodal_ln=getattr(self.agent.wm, 'film_unimodal_ln', None),
+                film_multimodal_ln=getattr(self.agent.wm, 'film_multimodal_ln', None),
+                film_flat_ln=getattr(self.agent.wm, 'film_flat_ln', None)
+            )
 
             gate_bias = mod_output.z_memory
         else:

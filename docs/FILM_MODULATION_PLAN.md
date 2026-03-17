@@ -440,3 +440,23 @@ embed = self.agent.wm.encoder.forward_with_modulation(
 I have addressed the ❌ identified by Claude in `dreamer_v3_trainer.py:495`. The `get_action` call site now correctly passes the `film_*_ln` parameters using `getattr`. 
 
 **Final Conclusion**: All 6 files are now fully aligned. Training and inference parity is guaranteed for all modulation modes (FiLM, FiLMNoNorm, Multiplicative, PreActivation).
+
+## Re-Verification Report (2026-03-17)
+
+> **Verified by**: Claude
+> **Date**: 2026-03-17
+
+Re-verified after Gemini's fix for the `get_action` call site.
+
+| File | Change | Status | Notes |
+|------|--------|:------:|-------|
+| `src/models/neuromodulator.py` | `_percept_bias` override + extended `or` conditions (both RNN classes) | ✅ | No change since last verification. |
+| `src/models/recurrent_ppo_network.py` | FiLM/FiLMNoNorm branches in encoder + LayerNorm construction + call site | ✅ | No change since last verification. |
+| `src/models/dreamer_v3_nnx.py` | FiLM/FiLMNoNorm branches in both encoders + WorldModel LayerNorm + agent call site | ✅ | No change since last verification. |
+| `src/models/dreamer_v3_trainer.py` | Effective γ logging + training call site (L148) | ✅ | No change since last verification. |
+| `src/models/dreamer_v3_trainer.py` | `get_action` call site (L495) | ✅ | **Fixed.** Now passes `film_unimodal_ln`, `film_multimodal_ln`, `film_flat_ln` via `getattr`, matching the training call site pattern. |
+| `configs/models/neuromodulated_ppo.yaml` | Comment update | ✅ | No change since last verification. |
+
+**Diff stats**: 5 files changed, +180 / −55. Proportionate to plan scope (5 files, ~77 new lines planned; extra lines from `elif` branch duplication and signature changes are expected).
+
+**Conclusion**: All ✅. The previous ❌ at `dreamer_v3_trainer.py:495` is resolved — train/eval parity is now guaranteed for FiLM mode. Implementation is complete and ready for experimental runs.
