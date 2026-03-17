@@ -543,37 +543,3 @@ Both task network and modulator parameters are trained with a single Adam optimi
 The DreamerV3 variant is architecturally cleaner: the input projection decouples observation dimensionality from GRU state size, and dual modes handle the distinction between real observation and imagined rollouts.
 
 Both variants use the **same unified grouping** for unimodal and multimodal heads — the `is_unimodal` branching was eliminated in the unification refactor (see [UNIFY_UNIMODAL_GROUPING.md](docs/UNIFY_UNIMODAL_GROUPING.md)).
-
----
-
-## 8. Summary of Architectural Risks
-
-| Risk | Severity | Current Impact | Mitigation |
-|------|----------|---------------|------------|
-| Sigmoid gain ≤ 1 (no amplification) | **High** | Modulator can only suppress, biasing toward feature collapse | Use `2 * sigmoid(z)` or `softplus(z)` for gain ∈ (0, ∞) |
-| No input projection on modulator GRU | **Medium** | 30→16 compression in single step | Add `Linear(obs_dim, mod_hidden_size) + relu` |
-| Shared optimizer (no LR separation) | **Medium** | Modulator converges to degenerate shortcuts first | Use `optax.multi_transform` with 5–10× lower modulator LR |
-| Critic not directly modulated | **Low** | Critic infers context from shared hidden state | Acceptable — indirect modulation sufficient |
-
-### Previously Mitigated Risks
-
-| Risk | Original Severity | Mitigation Applied |
-|------|-------------------|-------------------|
-| Temperature bounds [0.1, 10.0] too wide | **High** | Tightened to [0.5, 3.0] — 6× range prevents policy override |
-| No `z_memory` clamp | **High** | Clamped to [-2.0, 2.0] — prevents GRU freeze/force-reset |
-| Coarse grouping (G=40/64) | **Medium** | Reduced to G=4 (32 groups) — fine-grained control, prevents wholesale suppression |
-| Unimodal gate was per-modality scalar | **Low** | Unified with multimodal grouping — now uses same spatial pattern for all modalities |
-
----
-
-## 9. Relationship to Known Training Pathologies
-
-The architectural features above directly map to the pathological training outcomes documented in `NMN_PERFORMANCE_DIAGNOSIS.md`:
-
-1. **Feature collapse** (gamma_body → -4, gamma_assoc → -15): Enabled by sigmoid ≤ 1 (suppression is easy, amplification impossible) + coarse grouping (one value kills 40 neurons) + no environmental pressure for adaptive modulation. **Partially mitigated**: G=4 grouping means each group controls only 4 neurons — wholesale suppression requires 32 groups to independently converge to suppression.
-
-2. **Memory freeze** (z_memory → -6.5): Enabled by unbounded z_memory + no timescale separation. Once body-state features are suppressed, the GRU carries no useful info, and freezing it reduces value loss variance. **Mitigated**: z_memory clamped to [-2.0, 2.0].
-
-3. **Temperature inflation** (τ → 3.3, max pinned at 10.0): Enabled by excessively wide bounds. Compensatory response to frozen memory — the agent needs random exploration since its hidden state doesn't update. **Mitigated**: bounds tightened to [0.5, 3.0].
-
-4. **Stable degenerate equilibrium**: The modulator's parameter count (~4,337) converges quickly to a local optimum that suppresses features + freezes memory + inflates temperature. The shared optimizer allows this to happen before the task network has learned features worth modulate. **Partially mitigated**: memory clamp + temperature bounds + fine grouping break the equilibrium by constraining the modulator's action space, but shared optimizer remains a risk.
