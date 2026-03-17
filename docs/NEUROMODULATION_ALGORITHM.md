@@ -1115,3 +1115,1383 @@ Our implementation supports two configurable perceptual modulation styles at Inj
 | Pass-through initialization | Our design (§5.2) | Novel — bias init ensures modulator starts as **no-op**, critical for fair baseline comparison. Applied to all heads across both agents |
 | Configurable modulation style | Our design | Novel — single architecture supports both **Multiplicative** and **PreActivation** perceptual modulation via config switch, enabling controlled ablation between post-activation gating and pre-activation curve reshaping |
 | Imagination modulation | Our design | Novel — DreamerV3 modulator **continues running during imagination**, receiving `concat(feat, action)` as input. Injections B (memory) and C (reward) are active during planning, allowing the agent's "affective state" to influence imagined trajectories |
+
+---
+
+## Paper Review C: AlKilany & Goodman (2025) — "Neuromodulation Enhances Dynamic Sensory Processing in Spiking Neural Network Models"
+
+**Publication**: 2025
+**Full Citation**: AlKilany, A. & Goodman, D. F. M. (2025).
+
+### C.1 Architecture: Dual-Network SNN with External Modulator
+
+The architecture consists of two interconnected networks: a **Primary SNN** (the plant) and a **Modulator Network** (the controller).
+
+**Primary SNN**: A recurrent network with three layers:
+1.  **Input layer**: Feedforward spiking layer ($N_{in} = 700$ for Spiking Heidelberg Digits, $4096$ for DVS tasks).
+2.  **Hidden layer**: Fully connected recurrent layer of **Leaky Integrate-and-Fire (LIF)** neurons ($N_{hidden} = 200$).
+3.  **Readout layer**: Fully connected non-spiking, leaky readout layer ($N_{out}$ depends on classification classes).
+
+**Modulator Network — ANN Variant**: A two-layer MLP:
+-   **Input**: Concatenation of (1) current values of all modulatable parameters, (2) recent spiking activity of the primary SNN hidden layer, and (3) raw input spike trains. If temporal grouping is used (modulator runs every $K$ steps), spiking activity is summed over the preceding $K$ time steps.
+-   **Hidden**: Linear → ReLU.
+-   **Output**: Linear → Sigmoid (for substitution mode) or Tanh (for addition mode), mapping to the parameter modulation space.
+
+**Modulator Network — SNN Variant**: A single fully connected recurrent layer of LIF neurons. Continuous state inputs are injected as input currents. Discrete output spikes are segregated into groups representing positive or negative quantum adjustments for each primary network parameter.
+
+### C.2 Mathematical Formulation: LIF Dynamics with Dynamic Parameters
+
+The primary SNN neurons are current-based LIF units. The continuous-time dynamics:
+
+$$\tau_m \dot{v} = -v + x$$
+$$\tau_x \dot{x} = -x$$
+
+When $v > v_{th}$: emit spike and reset $v \leftarrow v_r$.
+
+For discrete-time implementation with integration step $dt$, time constants are parameterized as decay factors:
+
+$$\alpha = e^{-dt/\tau_x}, \quad \beta = e^{-dt/\tau_m}$$
+
+The modulator directly targets these parameters: $\alpha$, $\beta$, $v_{th}$, resting potential $v_0$, and reset potential $v_r$.
+
+### C.3 Modulation Mechanisms: Substitution vs. Addition
+
+The modulator output $m$ interacts with the primary network's parameter $p$ through two mechanisms:
+
+**Substitution** (absolute replacement):
+$$p \leftarrow m$$
+Requires ANN variant with Sigmoid output to bound the parameter range. Static offsets are applied (e.g., $+0.5\text{V}$ for $v_{th}$, $-0.5\text{V}$ for resting/reset potentials).
+
+**Addition** (relative adjustment):
+$$p \leftarrow p + m$$
+For ANN modulator: $m$ bounded via Tanh activation. For SNN modulator: two output neurons per parameter (one for $+\Delta$, one for $-\Delta$), where the magnitude of adjustment per spike is a learnable scalar.
+
+### C.4 Spatial Grouping (Dimensionality Reduction)
+
+Neurons in the primary SNN are clustered into spatial groups of size $G$. With additive modulation, each neuron $i$ maintains an independent, learnable baseline $\Psi_i(0)$. The modulator outputs a shared adjustment $m_{\lfloor i/G \rfloor}(t)$ for the $k$-th group:
+
+$$\Psi_i(t+1) = \text{Clip}\left(\Psi_i(0) + m_{\lfloor i/G \rfloor}(t)\right)$$
+
+This applies a uniform macroscopic shift to a group while preserving micro-level biophysical diversity through unique baselines.
+
+**Granularity spectrum**: $G=1$ (per-neuron, synaptic precision) → $1 < G < N$ (volume transmission, mesoscale) → $G=N$ (global neuromodulatory bath).
+
+**Key empirical finding**: Spatially extended modulation ($G=10$ or $G=20$) was **equally effective** as fine-grained modulation ($G=1$) across all tested tasks.
+
+### C.5 Bounding and Clipping
+
+Parameters are constrained to prevent numerical instability:
+
+| Parameter | Range |
+|---|---|
+| $\tau_m, \tau_x$ | $[1, 18]$ ms |
+| $v_{th}$ | $[0.5, 1.5]$ V |
+| $v_0, v_r$ | $[-0.5, 0.5]$ V |
+
+Under substitution: Sigmoid naturally restricts to $(0, 1)$, with static offsets mapping to valid ranges.
+Under addition: Explicit clipping applied after every update step.
+
+### C.6 Training Procedure
+
+**End-to-end surrogate gradient descent**:
+
+-   **Forward pass**: Spikes emitted using the Heaviside step function $H(x)$.
+-   **Backward pass**: Non-differentiable derivative replaced with smooth surrogate:
+$$H'(x) \approx \frac{1}{(|x| + 1)^2}$$
+
+**Phased training**: (1) Pre-train primary SNN without modulation to establish initial representations. (2) Use pre-trained weights to initialize joint training of primary + modulator networks.
+
+**Readout**: Maximum-over-time readout. Let $v_i^{max} = \max_t v_i(t)$ be the maximum membrane potential of the $i$-th output neuron. Class logits:
+$$x_i = \text{softmax}(v^{max}) = \frac{\exp(v_i^{max})}{\sum_j \exp(v_j^{max})}$$
+
+**Loss**: Cross-entropy over softmax logits, plus two regularization terms:
+1.  **Firing rate penalty**: $\sum(r - 0.01)^2$ (penalizes deviation from target rate $0.01$).
+2.  **Bursting suppression**: $\sum \text{ReLU}(r_{pop} - 100)^2$ (suppresses pathological population bursting).
+
+**Optimizer**: Adam, $\text{lr} = 10^{-3}$ (or $2 \times 10^{-4}$ for specific tasks), batch size $64$.
+
+---
+
+## Paper Review D: Costacurta et al. (2024) — "Structured Flexibility in Recurrent Neural Networks via Neuromodulation"
+
+**Publication**: 2024
+**Full Citation**: Costacurta, J. C., Bhandarkar, S., Zoltowski, D., & Linderman, S. W. (2024).
+
+### D.1 Architecture: The NM-RNN (Neuromodulated RNN)
+
+Two coupled continuous-time recurrent subnetworks:
+
+1.  **Output-Generating Subnetwork (Plant)**: A **low-rank RNN** of dimension $N$ that processes inputs and generates behavioral output.
+2.  **Neuromodulatory Subnetwork (Controller)**: A smaller **full-rank RNN** of dimension $M$ ($M < N$), acting as a processing bottleneck.
+
+**Timescale separation**: The controller time constant $\tau_z \gg \tau_x$ (the plant time constant), reflecting the biological reality that neuromodulatory signals evolve more slowly than sensory processing.
+
+### D.2 Mathematical Formulation: Coupled ODEs
+
+**Controller dynamics** — the neuromodulatory state $z(t) \in \mathbb{R}^M$:
+
+$$\tau_z \frac{dz(t)}{dt} = -z(t) + W_z \phi(z(t)) + B_z u(t)$$
+
+Where $W_z \in \mathbb{R}^{M \times M}$ are recurrent weights, $B_z \in \mathbb{R}^{M \times P}$ are input weights for external input $u(t) \in \mathbb{R}^P$, and $\phi(\cdot) = \tanh$.
+
+**With feedback variant** (for tasks requiring state-dependent gating, e.g., Element Finder):
+
+$$\tau_z \frac{dz(t)}{dt} = -z(t) + W_z \phi(z(t)) + (B_{zx} \phi(x(t)) + b_{zx}) + B_z u(t)$$
+
+**Neuromodulatory signal extraction** — from hidden state $z(t)$, a $K$-dimensional signal:
+
+$$s(z(t)) = \sigma(A_z z(t) + b_z) \in \mathbb{R}^K$$
+
+Where $\sigma(\cdot)$ is the sigmoid, bounding each $s_k \in (0, 1)$.
+
+**Plant dynamics** — the output-generating state $x(t) \in \mathbb{R}^N$:
+
+$$\tau_x \frac{dx(t)}{dt} = -x(t) + W_x(z(t)) \phi(x(t)) + B_x u(t)$$
+
+Where $B_x \in \mathbb{R}^{N \times P}$ are static input weights.
+
+### D.3 Core Innovation: Dynamically Modulated Low-Rank Recurrence
+
+The recurrent weight matrix $W_x(z(t))$ is **not static**. It is parameterized as a dynamically scaled rank-$K$ matrix:
+
+$$W_x(z(t)) = \sum_{k=1}^{K} s_k(z(t)) \cdot l_k r_k^\top$$
+
+Where:
+-   $l_k, r_k \in \mathbb{R}^N$: Fixed rank-1 structural motifs (left and right factors).
+-   $s_k(z(t)) \in (0, 1)$: Time-varying scalar gain for the $k$-th motif, computed by the controller.
+
+Each $s_k$ acts as an independent, time-varying multiplicative gain on its corresponding rank-1 dynamical motif $l_k r_k^\top$.
+
+### D.4 Readout
+
+Linear readout of the output-generating state:
+
+$$y(t) = C x(t) + d$$
+
+Where $C \in \mathbb{R}^{O \times N}$, $d \in \mathbb{R}^O$.
+
+### D.5 Theoretical Analysis: Connection to LSTM Forget Gates
+
+Under constraints — linearized activation ($\phi(x) = x$), symmetric rank-1 components ($l_k = r_k$), orthonormal basis ($L^\top L = I$) — the system perfectly decouples. Reparameterizing as $w(t) = L^\top x(t)$:
+
+$$w_k(t) = w_k(0) \exp\left(-\int_0^t \frac{1 - s_k(t')}{\tau_x} dt'\right)$$
+
+Here $s_k(t)$ directly controls the exponential decay rate of each mode $w_k(t)$ — functionally equivalent to an LSTM forget gate acting on individual dynamical motifs.
+
+### D.6 Training Procedure
+
+**Loss**: MSE / $L_2$ loss between readout $y(t)$ and target sequence $\hat{z}(t)$.
+
+**Optimization**: End-to-end via BPTT on Euler-discretized ODEs.
+
+**Two-stage transfer learning protocol**:
+1.  **Initial training**: Entire network (both subnetworks) trained on a base set of tasks.
+2.  **Transfer**: Freeze plant weights ($l_k, r_k, B_x, C$) and controller recurrence ($W_z$). Train **only** the contextual input weights of the controller on new tasks.
+
+This forces the controller to solve new tasks by discovering novel temporal sequences for $s(t)$ — recombining fixed rank-1 motifs without overwriting established synaptic weights.
+
+---
+
+## Paper Review E: Doya (2002) — "Metalearning and Neuromodulation"
+
+**Publication**: Neural Networks, 2002
+**Full Citation**: Doya, K. (2002).
+
+### E.1 Core Framework: Neuromodulator → RL Hyperparameter Mapping
+
+Four major neuromodulators are mapped to specific hyperparameters within an actor-critic RL architecture:
+
+| Neuromodulator | Brain Region | RL Parameter | Function |
+|---|---|---|---|
+| **Dopamine (DA)** | VTA / SNc | TD error $\delta(t)$ | Global learning signal |
+| **Serotonin (5-HT)** | Dorsal/Median Raphe | Discount factor $\gamma$ | Time scale of reward prediction |
+| **Noradrenaline (NA)** | Locus Coeruleus | Inverse temperature $\beta$ | Exploration-exploitation trade-off |
+| **Acetylcholine (ACh)** | Cholinergic Nuclei | Learning rate $\alpha$ | Speed of memory updates |
+
+### E.2 Mathematical Formulation: Actor-Critic with Modulated Parameters
+
+**Value function** (Critic): Parameterized as weighted sum of basis functions:
+$$V(s) = \sum_j v_j b_j(s)$$
+
+**Action-value function** (Actor):
+$$Q(s, a) = \sum_k w_k c_k(s, a)$$
+
+**TD error** (Dopamine):
+$$\delta(t) = r(t) + \gamma V(s(t)) - V(s(t-1))$$
+
+Alternative formulation suitable for basal ganglia circuitry:
+$$\delta(t) = r(t) - (1 - \gamma) V(s(t)) + (V(s(t)) - V(s(t-1)))$$
+
+Where $(1 - \gamma)V(s(t))$ acts as an immediate inhibitory signal.
+
+**Weight updates** (modulated by learning rate $\alpha$ = Acetylcholine):
+$$\Delta v_j = \alpha \cdot \delta(t) \cdot b_j(s(t-1))$$
+$$\Delta w_k = \alpha \cdot \delta(t) \cdot c_k(s(t-1), a(t-1))$$
+
+**Softmax policy** (modulated by inverse temperature $\beta$ = Noradrenaline):
+$$P(a_i | s) = \frac{e^{\beta Q(s, a_i)}}{\sum_{j=1}^{m} e^{\beta Q(s, a_j)}}$$
+
+-   $\beta \to 0$ (low NA): Random exploration.
+-   $\beta \to \infty$ (high NA): Deterministic exploitation (winner-take-all).
+
+### E.3 Meta-Learning: Heuristic Regulation of Meta-Parameters
+
+Doya does **not** propose a unified differentiable meta-gradient objective. Instead, meta-parameters are regulated by heuristic rules based on statistical moments of the agent's experience:
+
+**Discount factor $\gamma$ (Serotonin) — regulated by TD error variance**:
+High variance in $\delta(t)$ → inhibit serotonergic system → lower $\gamma$ → bias toward reliable short-term predictions. Rationale: learning long-horizon predictions ($\gamma$ large) inherently produces high-variance TD errors.
+
+**Inverse temperature $\beta$ (Noradrenaline) — regulated by Q-value variance**:
+High variance in $Q(s, a)$ for a given state → suppress NA → decrease $\beta$ → promote wider exploration. Rationale: uncertain value estimates warrant more stochastic exploration.
+
+**Learning rate $\alpha$ (Acetylcholine) — regulated by TD error oscillation**:
+Frequent sign changes in $\delta(t)$ → inhibit cholinergic system → lower $\alpha$ → stabilize memory updates. Rationale: oscillating TD errors indicate the learning rate is too high for stable convergence.
+
+### E.4 Neuroanatomical Computational Architecture
+
+| Brain Structure | Computational Role |
+|---|---|
+| **Striatum (Patch/Striosome)** | State value function $V(s)$ |
+| **Striatum (Matrix)** | Action-value functions $Q(s, a_i)$ |
+| **VTA / SNc** (Dopaminergic) | Computes and broadcasts TD error $\delta(t)$ |
+| **Dorsal/Median Raphe** (Serotonergic) | Modulates direct/indirect pathway balance → scales $\gamma$ |
+| **Locus Coeruleus** (Noradrenergic) | Alters gain in SNr/GP competitive dynamics → scales $\beta$ |
+| **Cholinergic Interneurons** | Modulates cortico-striatal plasticity → scales $\alpha$ |
+
+---
+
+## Paper Review F: Friston (2023) — "Computational Psychiatry: From Synapses to Sentience"
+
+**Publication**: 2023
+**Full Citation**: Friston, K. (2023).
+
+> **Note**: This paper is a high-level expert review, not a derivation paper. The mathematical framework below synthesizes the conceptual definitions from Friston (2023) with standard Active Inference formalisms. Equations marked with (*) are from the broader Active Inference literature, not explicitly in this specific paper.
+
+### F.1 Variational Free Energy
+
+Under the Bayesian brain hypothesis, the brain minimizes variational free energy $\mathcal{F}$, an upper bound on surprise. For Gaussian distributions:
+
+$$\mathcal{F}(\mu, x) = \frac{1}{2} \Pi_s \epsilon_s^2 + \frac{1}{2} \Pi_p \epsilon_p^2 - \frac{1}{2} \ln(\Pi_s \Pi_p) + C$$
+
+Decomposition (*):
+$$\mathcal{F} \approx \underbrace{D_{KL}[q(\mu) || p(\mu)]}_{\text{Complexity}} - \underbrace{\mathbb{E}_q[\ln p(x|\mu)]}_{\text{Accuracy}}$$
+
+### F.2 Belief Update: Gradient Descent on Free Energy
+
+Internal states $\mu$ (deep pyramidal cells) are updated based on prediction errors $\epsilon$ (superficial pyramidal cells):
+
+-   **Sensory prediction error**: $\epsilon_s = x - g(\mu)$
+-   **Prior prediction error**: $\epsilon_p = \mu - \mu_{prior}$
+
+State update (negative gradient of $\mathcal{F}$):
+
+$$\dot{\mu} = -\kappa \frac{\partial \mathcal{F}}{\partial \mu} = -\kappa \left(\Pi_p \epsilon_p - \nabla g(\mu)^\top \Pi_s \epsilon_s \right)$$
+
+Where $\kappa$ is the integration rate, $\nabla g(\mu)$ is the Jacobian of the generative model.
+
+### F.3 Precision as Synaptic Gain (Neuromodulation)
+
+**Precision** $\Pi$ is the inverse variance: $\Pi = 1/\sigma^2$.
+
+Physiologically, precision weighting = **synaptic gain control** — modulating postsynaptic sensitivity of superficial pyramidal cells broadcasting prediction errors. **Acetylcholine (ACh)** specifically encodes expected sensory precision $\Pi_s$.
+
+Precision dynamics (*):
+$$\dot{\Pi}_s \propto \beta - \epsilon_s^2$$
+
+Where $\beta$ is a tonic baseline. Sustained high prediction errors suppress cholinergic precision gain, flattening the energy landscape to facilitate belief updating.
+
+### F.4 Generalized Coordinates of Motion (*)
+
+States are represented as vectors of higher-order temporal derivatives $\tilde{\mu} = (\mu, \mu', \mu'', \ldots)$:
+
+$$\dot{\tilde{\mu}} = D\tilde{\mu} - \kappa \frac{\partial \mathcal{F}}{\partial \tilde{\mu}}$$
+
+Where $D$ is a block-shift operator moving the system forward in time.
+
+### F.5 Active Inference: Action Selection
+
+**Continuous (motor reflexes)** — action descends the free energy gradient:
+$$\dot{a} = -\kappa_a \frac{\partial \mathcal{F}}{\partial a} = -\kappa_a \frac{\partial x}{\partial a} \Pi_s \epsilon_s$$
+
+**Discrete (planning)** (*) — policies $\pi$ selected to minimize Expected Free Energy $G$:
+$$P(\pi) = \sigma(-\gamma \cdot G(\pi))$$
+
+Where $\gamma$ is a precision parameter over policies (linked to Dopaminergic tone), and $G(\pi)$ balances epistemic value (information gain) and instrumental value (expected utility).
+
+### F.6 Hierarchical Message Passing
+
+Mapped onto canonical cortical microcircuits:
+
+-   **Ascending** (bottom-up): Superficial pyramidal cells compute precision-weighted prediction errors ($\Pi \cdot \epsilon$) and broadcast them to the superordinate level.
+-   **Descending** (top-down): Deep pyramidal cells encode posterior expectations ($\mu$) and send predictions ($g(\mu)$) to the level below to "explain away" prediction errors.
+
+### F.7 Sensory Attenuation
+
+To initiate movement, the brain transiently suspends sensory precision ($\Pi_s \to 0$) during active sensing:
+
+$$\Pi_s(a) = \Pi_{baseline} \cdot \exp(-\lambda |a|) \quad (*)$$
+
+As motor action amplitude $|a|$ increases, sensory precision drops, preventing proprioceptive prediction errors from overriding motor predictions.
+
+---
+
+## Paper Review G: Lee et al. (2024) — "Lifelong Reinforcement Learning via Neuromodulation"
+
+**Publication**: 2024
+**Full Citation**: Lee, S., Liebana, S., Clopath, C., & Dabney, W. (2024).
+
+### G.1 Architecture: The Doya-DaYu Agent
+
+The agent formalizes Doya's (2002) neuromodulator-to-hyperparameter mapping with **explicit uncertainty estimation**:
+
+-   **Base algorithm**: Q-learning (tabular) or distributional RL (deep).
+-   **Uncertainty estimation**: Ensemble of independent Q-learning agents (tabular) or ensemble of distributional RL agents (deep).
+-   **Neuromodulatory integration**: Environmental uncertainties (estimated from ensemble) are continuously mapped to learning rate ($\alpha$) and softmax inverse temperature ($\beta$) at every timestep.
+
+### G.2 Uncertainty Estimation
+
+Two types of uncertainty, estimated from ensemble:
+
+**Epistemic uncertainty** (unexpected — corresponds to Noradrenaline):
+$$E(s, a) = \mathbb{E}_{i \sim \text{Unif}(1,N)} \left[\text{Var}_{\theta \sim P(\theta|D)} \left(y_i(\theta; s, a)\right)\right]$$
+
+**Aleatoric uncertainty** (expected — corresponds to Acetylcholine):
+$$A(s, a) = \text{Var}_{i \sim \text{Unif}(1,N)} \left[\mathbb{E}_{\theta \sim P(\theta|D)} \left(y_i(\theta; s, a)\right)\right]$$
+
+Where $y_i$ is the $i$-th estimated quantile, $\theta$ are model parameters from ensemble $P(\theta|D)$.
+
+**Tabular variant**: Aleatoric uncertainty estimated as return variance, updated via TD error $\delta$:
+$$\text{Var}(G(a)) \leftarrow \text{Var}(G(a)) + \alpha_G [\delta^2 - \text{Var}(G(a))]$$
+
+Epistemic uncertainty = variance of mean value estimates across ensemble members.
+
+### G.3 Neuromodulatory Mappings
+
+**Learning rate $\alpha$ (Acetylcholine)** — ratio of epistemic to total uncertainty:
+$$\alpha(s, a) = \frac{E(s, a)}{E(s, a) + A(s, a)}$$
+
+Naturally bounded in $(0, 1)$ as a ratio of positive variances. High epistemic uncertainty → high learning rate (rapid adaptation). High aleatoric uncertainty → low learning rate (stable, noise-robust).
+
+**Inverse temperature $\beta$ (Noradrenaline)** — inversely proportional to average epistemic uncertainty:
+$$\beta(s) = \frac{1}{\langle E(s, \hat{a}) \rangle_{\hat{a}}}$$
+
+High epistemic uncertainty → low $\beta$ → exploratory policy. Low epistemic uncertainty → high $\beta$ → exploitative policy.
+
+### G.4 Complete Update Equations
+
+**Q-value update** with ACh-modulated learning rate:
+$$Q(s, a) \leftarrow Q(s, a) + \alpha(s, a) \cdot \delta(t)$$
+
+Where $\delta(t) = r(t) + \gamma \max_{a'} Q(s', a') - Q(s, a)$ (TD error = Dopamine).
+
+**Action selection** with NA-modulated temperature:
+$$P(a_i | s) = \frac{e^{\beta(s) Q(s, a_i)}}{\sum_j e^{\beta(s) Q(s, a_j)}}$$
+
+### G.5 Continual Learning Setup
+
+-   **Environment**: Non-stationary $k$-armed bandit ($k=5$ arms), $N$ contexts.
+-   **Context duration**: Base $M=500$ steps, then switch with $p=0.4$.
+-   **At context switch**: Gaussian payout distributions fully resampled ($\mu \in [-5, 5]$, $\sigma \in [0.001, 2]$).
+-   **Task boundaries hidden**: Agent must autonomously detect non-stationarity.
+-   **Mechanism**: Distribution shift at context switch → epistemic uncertainty spike → automatic $\alpha$ increase (rapid forgetting of obsolete values) + $\beta$ decrease (renewed exploration), without explicit boundary signals.
+
+---
+
+## Paper Review H: Osman et al. (2024) — "A Hopfield Network Model of Neuromodulatory Arousal State"
+
+**Publication**: 2024
+**Full Citation**: Osman, M. A. M., Fox, K., & Stern, J. I. (2024).
+
+### H.1 Architecture: Arousal-Modulated Continuous Hopfield Network
+
+A continuous Hopfield network where a scalar arousal parameter $\alpha$ controls the balance between internal memory attractors and external sensory drive.
+
+### H.2 Mathematical Formulation: Network ODE
+
+The state vector $y \in \mathbb{R}^N$ evolves according to:
+
+$$\frac{dy}{dt} = -y + f\left(\frac{1}{\alpha} M y + W x\right)$$
+
+Where:
+-   $M \in \mathbb{R}^{N \times N}$: Symmetric, zero-diagonal recurrent connectivity matrix (stores memory patterns).
+-   $W \in \mathbb{R}^{N \times D}$: Feedforward input weights.
+-   $x \in \mathbb{R}^D$: External sensory stimulus.
+-   $f(\cdot) = \tanh$ (element-wise).
+-   $\alpha \in \mathbb{R}^+$: **Arousal parameter** — inversely scales recurrent interactions ($\frac{1}{\alpha} M y$), mediating internal memory vs. sensory drive.
+
+### H.3 Phase Transition Analysis
+
+| Phase | $\alpha$ Value | Behavior |
+|---|---|---|
+| **Ferromagnetic** (Deep Memory) | $\alpha \to 0$ | $\frac{dy}{dt} = -y + \text{sign}(My)$. Highly multistable, dominated by recurrent attractors. Sensory input irrelevant. |
+| **Paramagnetic** (Sensory-Driven) | $\alpha \to \infty$ | $\frac{dy}{dt} = -y + f(Wx)$. Unistable, energy landscape flat. Network passively tracks sensory input. |
+| **Critical Point** | $\alpha^* = \lambda_{max}(M)$ | Bifurcation from unistable to multistable dynamics (in absence of external input). |
+
+### H.4 Energy Function (Lyapunov)
+
+$$F(y | x; \alpha) = -\frac{1}{2\alpha} y^\top M y - \frac{1}{2} y^\top W x - \sum_{i=1}^{N} H_2^{(e)}\left(\frac{y_i + 1}{2}\right)$$
+
+Where $H_2^{(e)}(p) = -p \log p - (1-p) \log(1-p)$ is the binary entropy function. This is equivalent to the mean-field variational free energy of a Boltzmann machine.
+
+**Bayesian interpretation**: $\alpha$ scales the prior strength ($-\frac{1}{2} y^\top M y$) relative to likelihood ($-\frac{1}{2} y^\top W x$) and posterior entropy.
+
+### H.5 Arousal Dynamics
+
+$\alpha$ is an **exogenous control parameter** (no endogenous dynamics). Used as a "dynamic annealing schedule":
+1.  Upon detecting stimulus change → momentarily set $\alpha$ high → flatten energy landscape → escape obsolete memory attractors.
+2.  Gradually collapse $\alpha$ → network settles into new attractor corresponding to new stimulus.
+
+### H.6 Simulation Details
+
+Euler integration: $y(t + \Delta t) = y(t) + \Delta t \cdot \frac{dy(t)}{dt}$
+
+Tested configurations: 2-unit networks with mutual inhibitory connections ($M_{ij} = -1$); 10-unit networks with dense inhibitory structure ($M = I - \mathbf{1}\mathbf{1}^\top$), identity feedforward weights ($W = I$), initial states uniform on $[-1, 1]$.
+
+---
+
+## Paper Review I: Rodriguez-Garcia et al. (2026) — "Noradrenergic-Inspired Gain Modulation Attenuates the Stability Gap in Joint Training"
+
+**Publication**: 2026
+**Full Citation**: Rodriguez-Garcia, A., Ghosh, A., & Ramaswamy, S. (2026).
+
+### I.1 Algorithm: NGM-SGD (Noradrenergic Gain-Modulated SGD)
+
+Modifies standard SGD by introducing a dynamic, non-learnable gain scalar $g(t)$ that scales weights during the forward pass, inspired by phasic noradrenaline bursts.
+
+### I.2 Core Equations
+
+**Effective weights** (forward pass):
+$$W_{ij}^{eff}(t) = g_i(t) \cdot w_{ij}(t)$$
+
+**Gradient scaling** (backpropagation — chain rule through $g$):
+$$\frac{\partial L}{\partial w} = g(t) \frac{\partial L}{\partial W_{eff}}$$
+
+**Weight update**:
+$$w(t+1) = w(t) - \alpha \nabla_w L(f(x; g(t) w(t)), y_{target})$$
+
+### I.3 Entropy-Driven Gain Dynamic
+
+Uncertainty quantified as Shannon entropy of softmax output:
+$$H(y_t) = -\sum_i \pi_i(y_t) \log(\pi_i(y_t))$$
+
+Gain update (discrete-time leaky integrator):
+$$g(t+1) = \gamma g(t) + (1 - \gamma) g_0 + \eta H(y_t)$$
+
+Continuous-time equivalent:
+$$\tau \frac{dg(t)}{dt} = (g_0 - g(t)) + \kappa H(y_t)$$
+
+Where $\gamma \in (0,1)$ controls decay, $g_0$ is tonic baseline (typically $1$), $\eta > 0$ scales entropy impact.
+
+### I.4 Two-Timescale Decomposition
+
+The effective weight naturally decomposes:
+$$W_{ij}(t) = \underbrace{g_0 w_{ij}(t)}_{\text{Slow (consolidated)}} + \underbrace{[g_i(t) - g_0] w_{ij}(t)}_{\text{Fast (contextual)}}$$
+
+No dual weight storage needed — the two-timescale structure emerges from the multiplicative gain.
+
+### I.5 Loss Landscape Flattening (Hessian Analysis)
+
+Under reparameterization $\Phi(W) = gW$ ($g \geq 1$):
+-   Gradient: $\nabla_W \tilde{L}(W) = g \nabla_{W_{eff}} L(W_{eff})$
+-   Hessian: $\nabla_W^2 \tilde{L}(W) = g^2 \nabla_{W_{eff}}^2 L(W_{eff})$
+-   Eigenvalue scaling: $\lambda \to \lambda / g^2$
+
+At peak gain during task switch, curvature is maximally reduced, dampening sensitivity to distributional shifts.
+
+### I.6 Algorithm Pseudocode
+
+```
+Initialize: W ← W_init; g ← g_init
+for each context c_k ∈ C do
+  for iteration i = 1 to I_C do
+    (X, Ỹ) ~ D_k^B                              # Sample mini-batch
+    π ← softmax(F_W(X; g))                        # Forward with g·W
+    L ← (1/B) Σ l(π_j, ỹ_j)                      # Cross-entropy loss
+    W ← W - α ∇_W L                               # Standard SGD update
+    H ← -(1/B) Σ_j Σ_l π_{j,l} log π_{j,l}       # Batch entropy
+    g ← γg + (1-γ)g_0 + ηH                        # Update gain
+  end for
+end for
+```
+
+### I.7 Hyperparameters
+
+| Parameter | Symbol | Default | Sensitivity |
+|---|---|---|---|
+| Gain baseline | $g_0$ | 1 | Variations absorbed into $\alpha$ |
+| Gain decay | $\gamma$ | 0.9 | Swept $\{0.85, 0.9, 0.95\}$; 0.9 optimal |
+| Entropy scale | $\eta$ | Task-dependent | Swept $[0.1, 0.5]$; easy tasks need higher $\eta$, complex tasks need lower |
+
+Key design: $\eta$ is **decoupled** from $\gamma$ (unlike standard EMA where $\eta = 1 - \gamma$), allowing slow decay + high reactivity simultaneously.
+
+---
+
+## Paper Review J: Tambaş et al. (2025) — "Neuromodulation via Krotov-Hopfield Improves Accuracy and Robustness of RBMs"
+
+**Publication**: 2025
+**Full Citation**: Tambaş, B., Subaşı, A. L., & Kabakçıoğlu, A. (2025).
+
+### J.1 Standard RBM Equations
+
+**Energy function** ($N$ visible units $v$, $M$ hidden units $h$):
+$$E_\theta(v, h) = -v^\top W h - a^\top v - b^\top h$$
+
+**Joint probability**: $p_\theta(v,h) = \frac{e^{-E_\theta(v,h)}}{Z_\theta}$
+
+**Contrastive Divergence (CD) weight update**:
+$$\delta W_{ij}^{CD} = \eta [\langle v_i h_j \rangle_d - \langle v_i h_j \rangle_m]$$
+
+Where $\langle \cdot \rangle_d$ and $\langle \cdot \rangle_m$ are expectations over data and model (via $k$-step Gibbs sampling).
+
+### J.2 Krotov-Hopfield Modulatory Step
+
+**Input current** to each postsynaptic node $\nu$:
+$$I_{r_\nu} = \langle W_\nu, x \rangle$$
+
+Nodes ranked in descending order: $I_K \geq I_{K-1} \geq \cdots \geq I_1$.
+
+**Global neuromodulatory signal** (rank-based lateral inhibition):
+$$g_\nu(I) = \begin{cases} 1, & \text{if } r_\nu = K \text{ (Top-1 Winner)} \\ -\Delta, & \text{if } r_\nu \in [K-l, K-1] \text{ (Runners-up)} \\ 0, & \text{otherwise} \end{cases}$$
+
+Where $\Delta > 0$ is the anti-Hebbian penalty magnitude, $l$ is the number of penalized runners-up.
+
+### J.3 KH Weight Update
+
+**Local update** (Hebbian + spherical regularization):
+$$\Phi_{\mu\nu}(x, W) \equiv R^2 x_\mu - \langle W_\nu, x \rangle W_{\mu\nu}$$
+
+This regularizes incoming weights onto a sphere of radius $R$: $\sum_\mu |W_{\mu\nu}|^2 = R^2$.
+
+**Full KH weight modification** (normalized and modulated):
+$$\delta W_{\mu\nu}^{KH} = \epsilon \frac{g_\nu(I) \Phi_{\mu\nu}(x, W)}{\max_{\mu\nu}[g_\nu(I) \Phi_{\mu\nu}(x, W)]}$$
+
+-   **Winner** ($r_\nu = K$): Positive Hebbian update → weight vector moves toward input pattern.
+-   **Losers** ($r_\nu \in [K-l, K-1]$): Negative anti-Hebbian update ($\times -\Delta$) → weight vectors pushed away from input.
+
+### J.4 Training Loop (Interleaved CD + KH)
+
+At each timestep $t$:
+1.  Compute KH modulation: $\theta_t^{KH} = \theta_t + \delta\theta_t^{KH}$
+2.  Compute CD gradient at intermediate state: $\nabla_\theta L(\theta_t^{KH})$
+3.  Final update: $\theta_{t+1} = \theta_t^{KH} - \eta \nabla_\theta L(\theta_t^{KH})$
+
+**Modulation direction**: Top-down ($\text{KH}_{TD}$, using $h \sim p_\theta(h|v)$ and $W^\top$) or Bottom-up ($\text{KH}_{BU}$, using $v \sim p_d(v)$ and $W$).
+
+### J.5 Hyperparameters
+
+| Parameter | Value |
+|---|---|
+| CD learning rate $\eta$ | 0.1, batch size 100 |
+| KH step size $\epsilon$ | Annealed: $\epsilon(n) = \epsilon_0 (1 - n/S)^{3/2}$ |
+| Schedule duration $S$ | $\{50, 100, 200, 300, 400, 500\}$ epochs |
+| Runners-up $l$ | 1 |
+| Anti-Hebbian penalty $\Delta$ | 0.4 |
+| Spherical radius $R$ | 1.0 (std init) or 0.1 (LeCun init) |
+
+### J.6 Effect on Representations
+
+KH modulation forces strict feature competition → disentangled, non-overlapping receptive fields. Average cosine similarity between maximally overlapping features: Standard RBM = 0.41, $\text{KH}_{TD}$ = 0.37, $\text{KH}_{BU}$ = 0.35.
+
+---
+
+## Paper Review K: Tsuda et al. (2021) — "Neuromodulators Generate Multiple Context-Relevant Behaviors in a Recurrent Neural Network by Shifting Activity Hypertubes"
+
+**Publication**: 2021
+**Full Citation**: Tsuda, B., Pate, S. C., Tye, K. M., Siegelmann, H. T., & Sejnowski, T. J. (2021).
+
+### K.1 Architecture: Continuous-Time Rate-Based RNN
+
+-   **Network**: $N = 200$ units, sparse random connectivity ($p_{con} = 0.8$).
+-   **Dale's Law**: Enforced — 80% excitatory, 20% inhibitory.
+-   **Weight initialization**: $W \sim \mathcal{N}(0, g/\sqrt{N \cdot p_{con}})$, operating in chaotic regime ($g = 1.5$).
+-   **Time constants**: $\tau$ sampled uniformly from $[20, 100]$ ms.
+-   **Activation function**: Logistic sigmoid $r = \frac{1}{1 + e^{-x}}$.
+
+### K.2 Mathematical Formulation: Network Dynamics
+
+**Continuous-time ODE**:
+$$\tau \frac{dx}{dt} = -x + Wr + W_{in} u + \mathcal{N}(0, 0.1)$$
+
+**Discrete-time Euler integration** ($\Delta t = 5$ ms):
+$$x_{i,t} = \left(1 - \frac{\Delta t}{\tau}\right) x_{i,t-1} + \frac{\Delta t}{\tau} \left(\sum_j W_{ji} r_{ji,t-1} + W_{ui} u_{t-1}\right) + \mathcal{N}(0, 0.1)$$
+
+### K.3 Neuromodulatory Weight Scaling
+
+The neuromodulator $f$ uniformly scales **outgoing weights** of targeted presynaptic subpopulations. Partitioning into non-modulated ($k$) and modulated ($q$) neurons:
+
+$$\tau \dot{x}_i = -x_i + \sum_k W_{ki} r_{ki} + f \cdot \sum_q W_{qi} r_{qi} + W_{ui} u + \mathcal{N}(0, 0.1)$$
+
+**Targeting options**: Global (100%), random subpopulations (10%–90%), or cell-type specific (excitatory-only / inhibitory-only).
+
+### K.4 Hypertubes: State-Space Manifold Structure
+
+A "hypertube" is the stereotyped, robust path that population activity traces through high-dimensional state space over time. Despite intrinsic noise, the vector flow fields constrain trajectories within isolated tubes.
+
+Visualized via PCA on time-varying firing rates $r$; first 3 PCs capture 80–92% of activity variance.
+
+### K.5 Producing Distinct Behavioral Manifolds
+
+Different $f_{nm}$ values produce distinct manifolds by altering the internal flow field. Intermediate (untrained) $f_{nm}$ values shift hypertubes along a continuous "transition manifold." Output transitions are highly non-linear (sigmoidal/exponential), characterized by $EC_{50}$ (half-maximal transition level).
+
+**Capacity**: Up to 9 distinct output behaviors embedded in a single network using 9 unique neuromodulated subpopulations.
+
+### K.6 Training Procedure
+
+-   **Loss**: Least Square Error between readout $O = W_{out} r + b_{out}$ and target trajectory.
+-   **Optimizer**: BPTT with Adam.
+-   **Stopping**: Average trial LSE over last $n \times 25$ trials $< 1.0$, or max 15,000 trials.
+
+### K.7 Topological Separation Analysis
+
+**Angle of Departure (AoD)** — measures how the manifold departs from a linear interpolation:
+
+$$\vec{v}_1 = \vec{p}_F - \vec{p}_N, \quad \vec{u}_1 = \vec{p}_{L1} - \vec{p}_N$$
+$$AoD = \cos^{-1} \frac{\vec{u}_1 \cdot \vec{v}_1}{|\vec{u}_1| |\vec{v}_1|}$$
+
+Where $\vec{p}_N$ = no-modulation state, $\vec{p}_F$ = full-modulation state, $\vec{p}_{L1}$ = first intermediate level. Larger AoD correlates with lower sensitivity (higher $EC_{50}$).
+
+---
+
+## Paper Review L: Wainstein et al. (2025) — "Evidence from Pupillometry, fMRI, and RNN Modelling Shows That Gain Neuromodulation Mediates Task-Relevant Perceptual Switches"
+
+**Publication**: 2025
+**Full Citation**: Wainstein, G., Whyte, C. J., Ehgoetz Martens, K. A., Müller, E. J., Medel, V., Anderson, B., Stöttinger, E., Danckert, J., Munn, B. R., & Shine, J. M. (2025).
+
+### L.1 Architecture: E/I-Constrained RNN with Dynamic Gain
+
+-   **Network**: $N = 40$ units (32 excitatory, 8 inhibitory). Dale's Law enforced via static mask $W_{mask}$.
+-   **Connectivity**: $W_{rec} = |W_{rec}^{plastic}| \odot W_{mask}$ (absolute value + mask ensures sign constraint).
+-   **Input/Output**: $W_{in} \in \mathbb{R}^{40 \times 2}$, $W_{out} \in \mathbb{R}^{32 \times 2}$ (strictly positive). Only excitatory rates $r_E$ contribute to readout.
+
+### L.2 Network Dynamics ODE
+
+$$dx = \frac{1}{\tau}\left(-x(t) + W_{rec} r(t) + W_{in} u(t)\right) dt + dW$$
+
+Euler-Maruyama discretization ($\tau = 100$ ms):
+$$x(t + \Delta t) = (1 - \alpha) x(t) + \alpha(W_{rec} r(t) + W_{in} u(t)) + \sigma_{rec} \sqrt{\Delta t} \mathcal{N}(0, 1)$$
+
+Where $\alpha = \Delta t / \tau$, $\sigma_{rec} = 0.01$.
+
+### L.3 Gain-Parameterized Activation Function
+
+$$r(t) = \frac{1}{1 + \exp(-g(t) \odot x(t))}$$
+
+Where $g(t) \in \mathbb{R}^{40}$ is the time-varying neuronal gain vector. High $g$ → steep sigmoid (sensitive, decisive). Low $g$ → flat sigmoid (noisy, uncertain).
+
+### L.4 Classification Uncertainty
+
+**Readout**: $z = W_{out} r_E \in \mathbb{R}^2$
+
+**Softmax** with inverse temperature $\omega = 0.25$:
+$$p(z)_i = \frac{\exp(\omega z_i)}{\sum_j \exp(\omega z_j)}$$
+
+**Shannon entropy**:
+$$H(z) = -\sum_i p(z)_i \ln(p(z)_i)$$
+
+### L.5 Gain Dynamics (Uncertainty-Driven)
+
+$$\tau \frac{dg}{dt} = g_{tonic} - g(t) + \gamma H(z)$$
+
+Where $g_{tonic} = 1$ (baseline), $\gamma$ scales the uncertainty forcing. Without ambiguity, $g \to 1$ exponentially. During high uncertainty, $H(z)$ drives phasic gain bursts.
+
+### L.6 Training Procedure
+
+-   **Task**: Change-detection — inputs morph linearly between categories over 1-second trials.
+-   **Loss**: Cross-entropy on readout $z(t)$.
+-   **Optimizer**: BPTT with Adam, 1000 iterations.
+-   **During training**: Gain fixed at $g = 1$ (disabled), coarse $\Delta t = 200$ ms.
+-   **At test time**: Gain dynamics enabled, fine $\Delta t$.
+
+### L.7 Perceptual Switching Mechanism
+
+1.  Training segregates E/I units into two stimulus-selective clusters.
+2.  Gain burst at perceptual ambiguity selectively amplifies inhibitory units targeting the dominant excitatory population.
+3.  The stable attractor for the prior percept is **destabilized** (bifurcation into oscillatory regime).
+4.  Network escapes the old attractor; competing population establishes a new fixed point.
+
+This is equivalent to **flattening the energy landscape** (reducing barrier height between attractors), allowing large state displacements.
+
+### L.8 Pupillometry Connection
+
+The model's simulated gain dynamics $g(t)$ closely mimic empirical pupillary responses. Pupil dilation reflects the biological execution of the uncertainty-driven gain forcing $\gamma H(z)$, validating the LC-noradrenaline account of perceptual switching.
+
+---
+
+## Paper Review M: Ha et al. (2016) — "HyperNetworks"
+
+**Publication**: ICLR 2017 (arXiv 2016)
+**Full Citation**: Ha, D., Dai, A. M., & Le, Q. V. (2016).
+
+### M.1 Foundational Concept
+
+A hypernetwork $H$ (parameterized by $\Phi$) generates weights $\Theta$ for a main network $M$:
+$$\Theta_M = H(z; \Phi)$$
+
+This relaxed weight-sharing mechanism allows adaptation without unique learnable parameters per layer/timestep.
+
+### M.2 Static Hypernetworks (Feedforward/CNN)
+
+For the $j$-th convolutional layer, a learned embedding $z_j \in \mathbb{R}^{N_z}$ generates kernel $K_j \in \mathbb{R}^{N_{in} f_{size} \times N_{out} f_{size}}$:
+
+**Step 1** — Intermediate vectors (per input channel $i$):
+$$a_i^j = W_i z_j + B_i \quad \forall i = 1, \ldots, N_{in}$$
+
+**Step 2** — Kernel slice generation (shared $W_{out}$ across slices):
+$$K_i^j = \langle W_{out}, a_i^j \rangle + B_{out}$$
+
+**Step 3** — Concatenation: $K_j = (K_1^j \; K_2^j \; \ldots \; K_{N_{in}}^j)$
+
+Where $W_i \in \mathbb{R}^{d \times N_z}$, $W_{out} \in \mathbb{R}^{f_{size} \times N_{out} f_{size} \times d}$.
+
+### M.3 Dynamic Hypernetworks (HyperRNN) — Weight Factorization Trick
+
+Instead of generating full matrices, the hypernetwork generates a **scaling vector** $d(z) \in \mathbb{R}^{N_h}$ that scales rows of a static base matrix:
+
+$$W(z) = \text{diag}(d(z)) W_0 = d(z) \odot W_0$$
+
+**Complete HyperRNN equations**:
+
+1. HyperRNN state update: $\hat{x}_t = (h_{t-1}; x_t)$, $\hat{h}_t = \phi(W_{\hat{h}} \hat{h}_{t-1} + W_{\hat{x}} \hat{x}_t + \hat{b})$
+2. Embedding generation: $z_h = W_{\hat{h}h} \hat{h}_{t-1} + b_{\hat{h}h}$, $z_x = W_{\hat{h}x} \hat{h}_{t-1} + b_{\hat{h}x}$, $z_b = W_{\hat{h}b} \hat{h}_{t-1}$
+3. Scaling vectors: $d_h(z_h) = W_{hz} z_h$, $d_x(z_x) = W_{xz} z_x$, $b(z_b) = W_{bz} z_b + b_0$
+4. Main RNN update: $h_t = \phi(d_h(z_h) \odot W_h h_{t-1} + d_x(z_x) \odot W_x x_t + b(z_b))$
+
+### M.4 HyperLSTM Cell (Complete Equations)
+
+A smaller HyperLSTM cell ($\hat{h}_t$, $\hat{c}_t$) generates per-gate scaling vectors for the main LSTM.
+
+**For each gate** $y \in \{i, g, f, o\}$:
+1. HyperLSTM computes embeddings: $z_h^y, z_x^y, z_b^y$
+2. Scaling vectors: $d_h^y = W_{hz}^y z_h^y$, $d_x^y = W_{xz}^y z_x^y$, $b^y = W_{bz}^y z_b^y + b_0^y$
+
+**Main LSTM update**:
+$$y_t = \text{LN}(d_h^y \odot W_h^y h_{t-1} + d_x^y \odot W_x^y x_t + b^y) \quad \text{for } y \in \{i, g, f, o\}$$
+$$c_t = \sigma(f_t) \odot c_{t-1} + \sigma(i_t) \odot \text{Dropout}(\phi(g_t))$$
+$$h_t = \sigma(o_t) \odot \phi(\text{LN}(c_t))$$
+
+### M.5 Parameter Efficiency
+
+As depth $D$ increases, marginal cost = $N_z$ per layer (the embedding dimension). For CNNs with $D$ layers, the hypernetwork parameterizes the entire weight volume with:
+$$N_z \times D + d \times (N_z + 1) \times N_{in} + f_{size} \times N_{out} \times f_{size} \times (d + 1)$$
+
+### M.6 Training
+
+End-to-end via standard backpropagation / BPTT. Loss: task-specific (cross-entropy for classification, BPC/log-loss for sequence modeling). Both hypernetwork and main network optimized jointly.
+
+---
+
+## Paper Review N: Beck et al. (2023) — "Hypernetworks in Meta-Reinforcement Learning"
+
+**Publication**: 2023
+**Full Citation**: Beck, J., Jackson, M. T., Vuorio, R., & Whiteson, S. (2023).
+
+### N.1 The Problem: Initialization Instability
+
+When naive initialization (Kaiming, Orthogonal, etc.) is applied to the hypernetwork, the **variance of generated base network weights is uncontrolled**, causing exploding/vanishing activations in the generated policy — severe training instability in meta-RL.
+
+### N.2 Bias-HyperInit Algorithm
+
+**Core insight**: If the hypernetwork's output reduces to a standard reliable initialization at step zero, the system avoids instability.
+
+Let $W, b$ be the weight matrix and bias of the hypernetwork's **final linear layer**. Initialize:
+
+$$W_{i,j} := 0 \quad \forall i, j$$
+$$b := \phi_{shared} \sim f(\phi)$$
+
+Where $f(\phi)$ is any standard initialization (Kaiming, Orthogonal, etc.) known to work for the base architecture.
+
+**At initialization**, regardless of input $x$:
+$$\phi_{init} = Wx + b = 0 \cdot x + \phi_{shared} = \phi_{shared}$$
+
+All tasks share an identical, stable initialization. Gradients subsequently update $W$ for context-dependent parameter divergence. All preceding hidden layers use any default initialization.
+
+### N.3 Hypernetwork Architecture for Meta-RL
+
+1.  **Task encoder** $g$: Summarizes interaction history $\tau_t$ into embedding $e = g(\tau_t)$ (e.g., recurrent VAE in VariBAD).
+2.  **Hypernetwork** $h_\theta$: Maps embedding to policy parameters: $\phi = h_\theta(e) = Wx + b$ (final layer).
+3.  **Base policy**: $a_t \sim \pi_\phi(a | s_t)$. Policy has **no independent parameters** — purely a function of context.
+
+### N.4 Meta-RL Training Loop
+
+**Objective**:
+$$\arg\max_\theta \mathbb{E}_{M \sim p(M)} \left[\mathbb{E}_{\tau \sim \pi_\theta(\cdot), M} [R(\tau)]\right]$$
+
+-   **Inner loop**: Task encoder updates $e$ at every timestep from growing history.
+-   **Outer loop**: Hypernetwork + encoder optimized via PPO (VariBAD) or pure RL (RL2).
+
+### N.5 Advantage over Hyperfan-In (HFI)
+
+HFI requires custom variance analysis per base architecture — brittle and architecture-dependent. Bias-HyperInit is **architecture-agnostic**: zeroing $W$ and drawing $b$ from the target distribution guarantees the exact variance profile of the base initialization. Empirically matches or exceeds HFI on Meta-World and MuJoCo benchmarks.
+
+---
+
+## Paper Review O: Borycki et al. (2022) — "Hypernetwork Approach to Bayesian MAML"
+
+**Publication**: 2022
+**Full Citation**: Borycki, M., Przybysz, P., Tabor, J., Zięba, M., & Spurek, P. (2022).
+
+> **Note**: Limited detail available in NotebookLM sources. Summary based on available information.
+
+### O.1 Core Concept
+
+A hypernetwork maps task support sets to the **parameters of a probability distribution** over the target network's weights, capturing Bayesian uncertainty:
+
+$$\mu, \Sigma = H(c; \phi)$$
+$$\theta \sim \mathcal{N}(\mu, \Sigma)$$
+
+### O.2 Training
+
+The loss includes a KL-divergence regularization term:
+$$\mathcal{L} = \mathcal{L}_{task} + D_{KL}(q(\theta | c) \| p(\theta))$$
+
+This enforces uncertainty calibration — the generated weight distribution should not deviate arbitrarily from the prior.
+
+---
+
+## Paper Review P: Jiang et al. (2021) — "Dynamic Predictive Coding with Hypernetworks"
+
+**Publication**: 2021
+**Full Citation**: Jiang, L. P., Gklezakos, D. C., & Rao, R. P. N. (2021).
+
+### P.1 Generative Spatiotemporal Model
+
+Joint probability factorization:
+$$p(I_{1:T}, r_{1:T}) = p(r_1) \prod_{t=1}^{T} p(I_t | r_t) \prod_{t=2}^{T} p(r_t | r_{1:t-1})$$
+
+**Spatial model** (sparse coding): $I_t = U r_t + n$ (columns of $U$ are spatial filters, $n$ is Gaussian noise).
+
+### P.2 Hypernetwork-Generated Transition Dynamics
+
+At each timestep, hypernetwork $H$ computes mixing weights and updates its recurrent state:
+$$w_{t+1}, h_{t+1} = H(r_t, h_t)$$
+
+**Composite transition matrix** — linear combination of $K$ basis matrices:
+$$V_{t+1} = \sum_{k=1}^{K} w_{t+1}^k V_k$$
+
+**State transition**:
+$$r_{t+1} = f(V_{t+1} r_t) + m$$
+
+Where $f(\cdot) = \text{ReLU}$, $m$ is Gaussian noise.
+
+### P.3 Dictionary of Basis Transition Matrices
+
+-   $K = 5$ basis matrices $\{V_k\}_{k=1}^K$, each $V_k \in \mathbb{R}^{500 \times 500}$.
+-   Randomly initialized, learned via gradient descent.
+
+### P.4 Hypernetwork Architecture
+
+-   **Input**: Recurrent hidden state $h_t$ (400-dimensional).
+-   **MLP**: 4 hidden layers of 100 neurons each (bias + ReLU + batch normalization).
+-   **Output**: 5 neurons (matching $K$) without activation function → mixing weights $w_{t+1} \in \mathbb{R}^K$.
+-   Mixing weights are **unconstrained** (no softmax / simplex constraint).
+
+### P.5 Inference (MAP via Bayesian Filtering)
+
+**Initial step** ($t = 1$):
+$$r_1 := \arg\min_{r_1} ||I_1 - U r_1||_2^2 + \lambda ||r_1||_1$$
+
+**Subsequent steps** ($t > 1$):
+$$r_t := \arg\min_{r_t} ||I_t - U r_t||_2^2 + ||r_t - \text{ReLU}(V_t r_{t-1})||_2^2 + \lambda ||r_t||_1$$
+
+### P.6 Loss Function (Variational Free Energy)
+
+$$\mathcal{L} = \sum_{t=1}^{T} \left(||I_t - U r_t||_2^2 + \lambda ||r_t||_1\right) + \sum_{t=1}^{T-1} ||r_{t+1} - \text{ReLU}(V_{t+1} r_t)||_2^2$$
+
+**Predictive coding interpretation**:
+-   $||I_t - U r_t||_2^2$: **Spatial prediction error** (top-down visual prediction vs. bottom-up sensory input).
+-   $||r_{t+1} - \text{ReLU}(V_{t+1} r_t)||_2^2$: **Temporal prediction error** (hypernetwork-generated dynamics vs. actual next state).
+
+### P.7 Training
+
+Parameters updated via gradient descent: $U$ (SGD), $V_k$ (Adam), $H$ (Adam). States $r_t$ inferred first, then parameters updated.
+
+---
+
+## Paper Review Q: Rezaei-Shoshtari et al. (2023) — "Hypernetworks for Zero-Shot Transfer in Reinforcement Learning"
+
+**Publication**: 2023
+**Full Citation**: Rezaei-Shoshtari, S., Morissette, C., Hogan, F. R., Dudek, G., & Meger, D. (2023).
+
+### Q.1 Core Concept: MDP Parameters → Policy Weights
+
+HyperZero conceptualizes RL as a mapping from MDP parameters to near-optimal policy weights. Given a parameterized MDP family $M_i = (S, A, T_{\mu_i}, R_{\psi_i}, \gamma)$:
+
+$$[\theta_i; \phi_i] = H_\Theta(\psi_i, \mu_i)$$
+
+Where $\psi_i$ = reward parameters, $\mu_i$ = physics/dynamics parameters, $\Theta$ = hypernetwork parameters, $\theta_i$ = actor weights, $\phi_i$ = critic weights.
+
+### Q.2 Dual-Objective Loss
+
+**Prediction loss** (supervised from pre-collected optimal data):
+$$\mathcal{L}_{pred.}(\Theta) = \mathbb{E}_{(\psi_i, \mu_i, s, a^*, q^*) \sim D} \left[(\hat{Q}_{\phi_i}(s, a^*) - q^*)^2\right] + \mathbb{E}_{(\psi_i, \mu_i, s, a^*) \sim D} \left[(\hat{\pi}_{\theta_i}(s) - a^*)^2\right]$$
+
+**TD regularization loss** (enforces Bellman consistency):
+$$\mathcal{L}_{TD}(\Theta) = \mathbb{E}_{(\psi_i, \mu_i, s, a^*, s', r, q^*) \sim D} \left[(r + \gamma \hat{Q}_{\phi_i}(s', \bar{a}') - q^*)^2\right]$$
+
+Where $\bar{a}' = \hat{\pi}_{\theta_i}(s')$ (gradients stopped). This moves target estimates toward ground-truth (inverse of standard RL), ensuring generated actor-critic networks remain Bellman-consistent.
+
+### Q.3 Meta-Training Procedure
+
+1.  **Data collection**: Train independent TD3 agents on sampled MDP instances $M_i$. Collect rollouts $\tau_i^*$ into offline dataset $D$.
+2.  **Hypernetwork optimization**: Sample mini-batch from $D$. Generate $[\theta_i; \phi_i] = H_\Theta(\psi_i, \mu_i)$. Update $\Theta$ via gradient descent on $\mathcal{L}_{pred.} + \mathcal{L}_{TD}$.
+
+### Q.4 Zero-Shot Transfer
+
+At test time, given novel $\psi_{test}, \mu_{test}$: single forward pass through $H_\Theta$ → generates $\theta_{test}$ → policy $\hat{\pi}_{\theta_{test}}(a|s)$ deployed directly. **No gradient updates, fine-tuning, or environment interactions** on target task.
+
+### Q.5 Physics Context
+
+Reward $\psi$: Desired speed of motion (positive/negative velocities). Dynamics $\mu$: Morphology parameters (torso length, finger length) — implicitly alters weight/inertia in physics engine. Uniformly sampled from defined prior distributions.
+
+---
+
+## Paper Review R: Schöpf et al. (2022) — "Hypernetwork-PPO for Continual Reinforcement Learning"
+
+**Publication**: 2022
+**Full Citation**: Schöpf, E., Hollenstein, J., Saveriano, M., Rodríguez-Sánchez, A., & Piater, J. (2022).
+
+### R.1 Architecture: HN-PPO
+
+Two variants:
+-   **HN-PPO**: Hypernetwork generates both actor and critic weights.
+-   **HN-PPO+fc**: Hypernetwork generates actor only; critic is a standard MLP re-initialized per task.
+
+### R.2 Task Conditioning
+
+Task-incremental setting. Task identity $C$ represented as a trainable embedding vector $t \in \mathbb{R}^8$.
+
+**Weight generation**:
+$$\Theta_t = h(t, \Theta_h)$$
+
+Where $h$ is the hypernetwork, $\Theta_h$ are hypernetwork parameters, $\Theta_t$ are generated actor/critic parameters.
+
+### R.3 Continual Learning via Functional Regularization
+
+At the start of training a new task, generated parameters $\Theta_t$ are recorded for all previously learned task embeddings. During new-task training, an $L_2$ penalty prevents drift:
+
+$$\mathcal{L}_{reg} = \beta \frac{1}{T-1} \sum_{t=0}^{T} ||\Theta_t - \Theta_{t,new}||_2^2$$
+
+Where $\beta$ scales regularization strength, $\Theta_t$ are stored snapshots, $\Theta_{t,new}$ are current hypernetwork outputs for old task embeddings.
+
+### R.4 PPO Loss with Hypernetwork
+
+**Standard PPO clipped surrogate**:
+$$L_t^{clip}(\theta) = \mathbb{E}_t \left[\min\left(\frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{old}}(a_t|s_t)} \hat{A}_t, \; \text{clip}\left(\frac{\pi_\theta(a_t|s_t)}{\pi_{\theta_{old}}(a_t|s_t)}, 1-\epsilon, 1+\epsilon\right) \hat{A}_t\right)\right]$$
+
+**Total loss**:
+$$L_t^{total}(\theta) = L_t^{clip}(\theta) + c_v L_t^{vf}(\theta) + c_e S_{\pi_\theta}(s_t)$$
+
+Hypernetwork parameters $\Theta_h$ updated by differentiating through this total loss + $\mathcal{L}_{reg}$.
+
+### R.5 Architecture Details
+
+-   **Target networks** (actor/critic): MLP, 2 hidden layers × 64 neurons, tanh activations. Actor: 6-dim output. Critic: 1-dim.
+-   **Hypernetwork**: MLP, 2 hidden layers × 640 neurons, ReLU activations. Multi-head linear output layer (no nonlinearity). Actor: 7 heads (weight/bias tensors + std dev). Critic: 6 heads.
+-   **Scaling**: Model size constant — only an 8-dim embedding added per new task. Achieves remembering score of 1.00 (zero catastrophic forgetting) vs. severe forgetting in sequential PPO finetuning.
+
+---
+
+## Paper Review S: Ichikawa & Kaneko (2024) — "Bayesian Inference is Facilitated by Modular Neural Networks with Different Time Scales"
+
+**Publication**: 2024
+**Full Citation**: Ichikawa, K. & Kaneko, K. (2024).
+
+### S.1 Architecture: Multi-Timescale Modular RNN
+
+Vanilla continuous-time leaky RNN, ReLU activation, $N = 200$ total neurons:
+
+-   **Main Module (Fast)**: $N_m = 150$ neurons. Receives sensory input, projects to output.
+-   **Sub-Module (Slow)**: $N_s = 50$ neurons. **No direct input/output connections** — topologically insulated from environment.
+
+### S.2 Module Dynamics
+
+**Fast module** ($\alpha_m = 1$, rapid integration):
+$$x_m(t+1) = (1 - \alpha_m) x_m(t) + \alpha_m \text{ReLU}(W_{in} u(t) + W_{main} x_m(t) + W_{s \to m} x_s(t)) + \sqrt{\alpha_m} \xi_m$$
+
+**Slow module** ($\alpha_s \approx 0.1$, slow integration):
+$$x_s(t+1) = (1 - \alpha_s) x_s(t) + \alpha_s \text{ReLU}(W_{sub} x_s(t) + W_{m \to s} x_m(t)) + \sqrt{\alpha_s} \xi_s$$
+
+Where $\xi \sim \mathcal{N}(0, 0.05^2)$.
+
+**Readout** (from main module only): $y(t) = W_{out} x_m(t)$
+
+### S.3 Bayesian Inference Implementation
+
+Optimal Bayesian estimate for signal from generator $\mathcal{N}(\mu_g, \sigma_g^2)$ with observation noise $\sigma_l^2$:
+
+$$y_{opt} = \frac{\sigma_g^2}{\sigma_g^2 + \sigma_l^2} s + \frac{\sigma_l^2}{\sigma_g^2 + \sigma_l^2} \mu_g$$
+
+-   **Likelihood** (fast module): Processes instantaneous noisy input $u(t)$.
+-   **Prior** (slow module): Integrates history to estimate generator parameters. PCA reveals orthogonal axes encoding $\mu_g$ and $\sigma_g$ independently.
+-   **Integration**: $W_{s \to m} x_s(t)$ shifts the main module's representation toward optimal Bayesian estimate.
+
+### S.4 Training
+
+-   **Loss**: MSE between readout and ground truth: $L = \frac{1}{T} \sum_t (y(t) - y_{true}(t))^2$
+-   **Optimizer**: BPTT with Adam, lr = 0.001, weight decay = 0.0001, batch size = 50, 6000 iterations.
+-   **Emergent structure**: If time constants $\alpha_i$ are made learnable, gradient descent **spontaneously** evolves a slow insulated sub-module.
+
+### S.5 Task Setup
+
+-   Hidden generator: $y_{true} \sim \mathcal{N}(\mu_g, \sigma_g^2)$ with sudden shifts ($p_t = 0.03$), $\mu_g \in [-0.5, 0.5]$, $\sigma_g \in [0, 0.8]$.
+-   Observation: $s \sim \mathcal{N}(y_{true}, \sigma_l^2)$.
+-   Input encoding: Probabilistic Population Code (PPC), 100 neurons with Poisson-distributed activity.
+
+---
+
+## Paper Review T: Perez et al. (2018) — "FiLM: Visual Reasoning with a General Conditioning Layer"
+
+**Paper**: Perez, Strub, de Vries, Dumoulin, & Courville (2018)
+**Core idea**: Feature-wise Linear Modulation (FiLM) — a general-purpose conditioning mechanism where one network (the "conditioning network") predicts per-feature affine transformation parameters (scale γ and shift β) that modulate intermediate feature maps of another network (the "modulated network"). Originally applied to visual question answering (VQA), but the mechanism is a general-purpose neural modulation primitive applicable to any architecture.
+
+### T.1 Core FiLM Equation
+
+The fundamental operation is a per-channel affine transformation of feature maps:
+
+$$\text{FiLM}(F_{i,c} \mid \gamma_{i,c}, \beta_{i,c}) = \gamma_{i,c} \cdot F_{i,c} + \beta_{i,c}$$
+
+Where:
+-   $F_{i,c}$ = activation of the $c$-th feature map at the $i$-th network layer (a 2D spatial map for CNNs, or a scalar for MLPs)
+-   $\gamma_{i,c}$ = learned scaling parameter for feature $c$ at layer $i$ (multiplicative modulation)
+-   $\beta_{i,c}$ = learned shift parameter for feature $c$ at layer $i$ (additive modulation)
+-   Modulation is **per-channel** — all spatial locations within a feature map share the same γ and β
+
+### T.2 Conditioning Network (Generates γ, β)
+
+In the VQA application, a **GRU-based language encoder** processes the question and produces modulation parameters:
+
+1.  **Input**: Question tokens $q = (q_1, q_2, \ldots, q_L)$
+2.  **GRU encoder**: Hidden state $h_t = \text{GRU}(q_t, h_{t-1})$, hidden size = 4096
+3.  **Final hidden state**: $h_L$ (last GRU output) serves as the conditioning vector
+4.  **Linear projection per block**: For each FiLM-ed ResBlock $i$:
+    $$(\gamma_i, \beta_i) = W_i h_L + b_i$$
+    where $\gamma_i, \beta_i \in \mathbb{R}^{128}$ (one scalar per feature map), $W_i \in \mathbb{R}^{256 \times 4096}$
+
+**Key design choice**: Each ResBlock gets its **own** linear projection layer, so different layers can receive different modulation signals from the same conditioning vector.
+
+### T.3 Modulated Network (FiLM-ed ResBlock Architecture)
+
+The modulated network is a CNN with **4 FiLM-ed ResBlocks**, each containing 128 feature maps:
+
+```
+FiLM-ed ResBlock(x, γ, β):
+    h = Conv1×1(x)          # 1×1 conv, 128 channels
+    h = ReLU(h)
+    h = Conv3×3(h)          # 3×3 conv, 128 channels
+    h = BatchNorm(h)        # Batch normalization
+    h = FiLM(h | γ, β)     # Apply γ·h + β per-channel
+    h = ReLU(h)
+    return h + x            # Residual connection
+```
+
+**Critical placement**: FiLM is applied **after** batch normalization and **before** the final ReLU activation. This means:
+-   BN normalizes features to zero mean, unit variance
+-   FiLM then re-scales (γ) and re-centers (β) per-channel
+-   This effectively lets FiLM **override** the normalization statistics with task-conditioned values
+
+### T.4 Full Pipeline
+
+```
+Image (224×224×3)
+  → Conv(128, 3×3, stride 2, padding 1) + BN + ReLU     # Extract visual features
+  → FiLM-ResBlock₁(γ₁, β₁)                              # Modulated by question
+  → FiLM-ResBlock₂(γ₂, β₂)
+  → FiLM-ResBlock₃(γ₃, β₃)
+  → FiLM-ResBlock₄(γ₄, β₄)
+  → Global Max Pooling
+  → MLP classifier → answer
+```
+
+Total modulation parameters per question: $4 \times 2 \times 128 = 1024$ scalars (4 blocks × {γ, β} × 128 channels).
+
+### T.5 Training Details
+
+-   **End-to-end training**: Both conditioning network (GRU) and modulated network (CNN + ResBlocks) are trained jointly
+-   **Optimizer**: Adam, learning rate $3 \times 10^{-4}$
+-   **Loss**: Cross-entropy over answer vocabulary
+-   **No pre-training**: The CNN is trained from scratch (not a pre-trained backbone)
+
+### T.6 Relevance as Neuromodulation Primitive
+
+FiLM is architecturally analogous to neuromodulation:
+-   **γ (gain modulation)** ↔ neuromodulatory gain control (e.g., norepinephrine adjusting neural responsiveness)
+-   **β (bias/shift)** ↔ tonic baseline shifts (e.g., serotonin shifting activation thresholds)
+-   **Conditioning network** ↔ modulatory nuclei (e.g., locus coeruleus, raphe nuclei) that broadcast context-dependent signals
+-   **Per-channel modulation** ↔ receptor-type-specific effects (different neurotransmitter receptors on different neuron populations)
+-   **Layer-specific γ, β** ↔ laminar specificity of neuromodulatory innervation
+
+FiLM subsumes several special cases:
+-   γ = 1, β = learned → **Conditional bias** (additive-only modulation)
+-   γ = learned, β = 0 → **Gain-only modulation** (multiplicative-only)
+-   γ = 0 or 1 (binary) → **Feature gating / selection**
+
+---
+
+## Paper Review U: Tschantz et al. (2023) — "Hybrid Predictive Coding: Inferring, Fast and Slow"
+
+**Paper**: Tschantz, Baltieri, Seth, & Buckley (2023)
+**Core idea**: Hybrid Predictive Coding (HPC) unifies fast amortized inference (feedforward recognition model) with slow iterative inference (recurrent prediction-error minimization) within a single hierarchical generative model. A learned bottom-up encoder provides rapid initial beliefs, which are then refined by top-down iterative gradient descent on variational free energy. Both pathways are trained jointly via local Hebbian-like rules on a shared free energy objective.
+
+### U.1 Variational Free Energy Objective
+
+HPC frames perception as minimization of variational free energy $F$, an upper bound on surprise:
+
+$$F = \mathbb{E}_{q_\lambda(z)} \left[ \ln q_\lambda(z) - \ln p(z, x) \right] \geq D_{KL}\left[ q_\lambda(z) \| p(z|x) \right]$$
+
+Assuming Gaussian distributions:
+-   Approximate posterior: $q_\lambda(z) = \mathcal{N}(z; \mu, \sigma^2)$
+-   Prior: $p(z) = \mathcal{N}(z; \bar{\mu}, \sigma_p^2)$
+-   Likelihood: $p(x|z) = \mathcal{N}(x; f_\theta(z), \sigma_l^2)$
+
+The free energy decomposes into precision-weighted prediction errors:
+
+$$F(\mu, x) = \frac{1}{2\sigma_l} \epsilon_l^2 + \frac{1}{2\sigma_p} \epsilon_p^2 + \frac{1}{2} \ln(\sigma_l \cdot \sigma_p)$$
+
+Where $\epsilon_l$ is the sensory (likelihood) prediction error and $\epsilon_p$ is the prior prediction error.
+
+### U.2 Hierarchical Architecture ($L$ layers)
+
+Each layer $i$ maintains a state variable $\mu_i$ (mode of approximate posterior belief).
+
+**Generative model (top-down)**: Higher layers predict lower layers:
+$$\epsilon_i = \mu_{i-1} - f_{\theta_i}(\mu_i)$$
+
+where $f_{\theta_i}$ is the generative function with parameters $\theta_i$.
+
+**Recognition model (bottom-up / amortized)**: Lower layers predict higher layers:
+$$\mu_i = f_{\phi_i}(\mu_{i-1}), \quad \mu_0 = f_{\phi_0}(x)$$
+
+where $f_{\phi_i}$ is the amortized encoder with parameters $\phi_i$.
+
+**Amortized prediction error** (discrepancy between feedforward guess and iteratively refined belief $\mu^*$):
+$$\epsilon_i^\phi = \mu_{i+1}^* - f_{\phi_i}(\mu_i)$$
+
+### U.3 Hybrid Inference Procedure
+
+**Phase 1 — Fast amortized initialization**: At stimulus onset, sensory data $x$ propagates up the hierarchy via the recognition model $f_{\phi_i}(\cdot)$ to initialize all $\mu_i$ for $i \in \{0, \ldots, L-1\}$.
+
+**Phase 2 — Slow iterative refinement**: Starting from the amortized initialization, beliefs $\mu_i$ are updated via gradient descent on free energy:
+
+$$\dot{\mu}_i = -\kappa \left( \epsilon_p - \frac{\partial f_{\theta_i}(\mu_i)}{\partial \mu_i}^\top \epsilon_i \right)$$
+
+where:
+-   $\epsilon_p = \mu_i - f_{\theta_{i+1}}(\mu_{i+1})$ = error from the layer above (prior prediction error)
+-   $\epsilon_i$ = error from the layer below (likelihood prediction error)
+-   $\kappa$ = integration step size
+
+This runs for $N$ iterations (or until convergence) to reach refined equilibrium $\mu^*$.
+
+### U.4 Parameter Learning (Weight Updates)
+
+After iterative convergence to $\mu^*$, synaptic weights update via local Hebbian-like rules:
+
+**Generative parameters** (minimize generative prediction errors):
+$$\dot{\theta}_i = -\alpha \left( \epsilon_i \cdot f_{\theta_i}(\mu_i)^\top \right)$$
+
+**Amortized parameters** (learn to predict refined beliefs):
+$$\dot{\phi}_i = -\alpha \left( \epsilon_i^\phi \cdot f_{\phi_i}(\mu_i)^\top \right)$$
+
+The recognition model learns to approximate the result of iterative inference, so over training it produces increasingly accurate initializations, reducing the number of iterative steps needed.
+
+### U.5 Neural Network Architecture (MNIST implementation)
+
+-   **Hierarchy**: $L = 4$ layers
+-   **Dimensions**: 784 (sensory) → 500 → 500 → 10 (label/prior)
+-   **Generative activations** $f_\theta$: tanh for all layers except lowest (linear)
+-   **Amortized activations** $f_\phi$: tanh for all layers except highest
+-   **Weight normalization**: Applied to generative parameters for stability
+-   **Optimizer**: Adam, $\alpha = 0.01$
+-   **Inference step**: $\kappa = 0.01$, max $N = 100$ iterations per sample
+
+### U.6 Biological Correspondence
+
+| HPC Component | Neural Correlate |
+|---|---|
+| Amortized feedforward sweep | Initial cortical feedforward sweep (~100-150ms post-stimulus) |
+| Iterative refinement | Recurrent cortical processing (>150ms) |
+| Generative connections $\theta$ | Top-down cortical projections |
+| Recognition connections $\phi$ | Bottom-up cortical projections |
+| Prediction errors $\epsilon$ | Superficial pyramidal cell activity |
+| Beliefs $\mu$ | Deep pyramidal cell activity |
+| Precision weights $1/\sigma$ | Neuromodulatory gain control (e.g., attention) |
+
+### U.7 Relevance to Neuromodulation
+
+-   **Precision weighting** ($1/\sigma_l$, $1/\sigma_p$) directly maps to neuromodulatory gain modulation — a modulatory signal that scales the influence of prediction errors without changing their content
+-   **Adaptive computation**: The framework naturally adjusts processing depth (number of iterative steps) based on stimulus ambiguity, analogous to arousal-modulated processing depth
+-   **Active inference extension**: HPC naturally extends to active inference where actions minimize expected free energy, with precision over action policies modulated by dopaminergic signals
+
+---
+
+## Paper Review V: Wang et al. (2024) — "Neuromodulated Meta-Learning" (NeuronML)
+
+**Paper**: Wang, Guo, Qiang, Li, Zheng, Xiong, & Hua (2024)
+**Core idea**: NeuronML introduces a Flexible Network Structure (FNS) to meta-learning by learning a continuous structural mask $M$ that dynamically generates task-specific subnetworks via element-wise multiplicative gating. Unlike static-architecture meta-learning (e.g., MAML), NeuronML selectively activates distinct neuron populations per task, analogous to how biological neuromodulation routes information through specialized cortical regions. The mask is optimized via bi-level optimization with three biologically-inspired constraints: frugality, plasticity, and sensitivity.
+
+### V.1 Flexible Network Structure (Multiplicative Mask)
+
+Given base meta-learning parameters $\theta$, NeuronML introduces a learnable mask $M$ of identical dimensionality. The effective parameters for a forward pass are:
+
+$$\theta_M \leftarrow M \odot \theta$$
+
+where $\odot$ is the Hadamard (element-wise) product. Each element of $M$ represents the **activation probability** of its corresponding neuron — $M[i] = 0$ explicitly deactivates neuron $i$.
+
+### V.2 Bi-Level Optimization
+
+**First level (inner loop — weight adaptation)**: With mask $M$ fixed, adapt to task $\tau_i$ via gradient descent on support set $D_i^s$:
+
+$$\theta_M^i \leftarrow \theta_M - \alpha \nabla_\theta L_{\text{weight}}(D_i^s, \theta_M)$$
+
+Outer weight objective over query sets:
+
+$$\arg\min_\theta \frac{1}{N_{tr}} \sum_{i=1}^{N_{tr}} L_{\text{weight}}(D_i^q, \theta_M^i)$$
+
+**Second level (outer loop — structure optimization)**: With adapted weights fixed, optimize mask $M$ over all task data:
+
+$$\arg\min_M \frac{1}{N_{tr}} \sum_{i=1}^{N_{tr}} L_{\text{structure}}(D_i, \theta_M^i)$$
+
+### V.3 Structure Constraints
+
+The structure loss combines three differentiable constraints:
+
+$$L_{\text{structure}}(D_i, \theta_M^i) = \lambda_{fr} L_{fr}(\theta_i) + \lambda_{pl} L_{pl}(\theta_i, \theta_j) + \lambda_{se} L_{se}(\theta_i)$$
+
+**Frugality** (sparsity — activate only necessary neurons):
+
+$$L_{fr}(\theta_i) = \|\theta_i\|_1 \quad \text{s.t.} \quad \|\theta_i\|_1 \leq \max\{C, \gamma \cdot d \cdot \log(N_i / d)\}$$
+
+where $C$ is a constant, $\gamma$ a scaling factor, $d$ the parameter dimensionality, and $N_i$ the task sample size. Uses $\ell_1$ relaxation of the NP-hard $\ell_0$ norm.
+
+**Plasticity** (structural diversity across tasks — prevent collapse to static subnetwork):
+
+$$L_{pl}(\theta_i, \theta_j) = \sum_{j \neq i} \sum_{\omega \in \theta_i} \mathbb{I}(\theta_i[\omega], \theta_j[\omega]) \cdot p_\omega$$
+
+where $\mathbb{I}(\cdot)$ is an indicator function returning 1 if both tasks $\tau_i$ and $\tau_j$ activate neuron $\omega$, and $p_\omega$ is the **historical importance** (Hebbian-inspired softmax):
+
+$$p_\omega = \frac{e^{\beta L_\omega}}{\sum_k e^{\beta L_k}}$$
+
+where $L_\omega$ is the loss change caused by neuron $\omega$.
+
+**Sensitivity** (ensure active neurons are maximally informative):
+
+$$L_{se}(\theta_i) = \sum_{\omega=1}^{N_\omega} -\log\left(\frac{s(\omega)}{S}\right) \cdot \theta_i[\omega]$$
+
+where the sensitivity score is the gradient magnitude: $s(\omega) = \left|\frac{\partial L(\theta_i, \tau_i)}{\partial \theta_i[\omega]}\right|$ and $S$ is the total sensitivity.
+
+### V.4 Training Algorithm
+
+```
+Algorithm: NeuronML
+Input: Task distribution P(T), model f_{θ_M} with θ_M = M ⊙ θ
+Output: Trained model f_θ
+
+1: while not done do
+2:   Sample N_tr tasks {τ_i}_{i=1}^{N_tr} ~ P(T)
+3:   for i = 1 to N_tr do
+4:     Split τ_i data into support D_i^s and query D_i^q
+5:     Compute L_weight(D_i^s, θ_M)
+6:     Inner-loop adapt: θ_M^i ← θ_M - α∇_θ L_weight(D_i^s, θ_M)
+7:     Compute query loss L_weight(D_i^q, θ_M^i)
+8:     Compute structure loss L_structure(D_i, θ_M^i)
+9:   end for
+10:  Update θ using aggregated L_weight(D_i^q, θ_M^i)
+11:  Update M using aggregated L_structure(D_i, θ_M^i)
+12: end while
+```
+
+### V.5 Architecture Integration
+
+NeuronML is **architecture-agnostic** — the mask $M$ is embedded directly over parameter tensors of any standard backbone. Validated on Conv4, VGG16, ResNet18/50/101, and DenseNet.
+
+### V.6 Neuromodulatory Interpretation
+
+| NeuronML Component | Biological Analogue |
+|---|---|
+| Structural mask $M$ | Neuromodulatory gating (selective neuron activation/deactivation) |
+| Frugality constraint | Metabolic efficiency / sparse coding |
+| Plasticity constraint | Task-dependent circuit reconfiguration |
+| Sensitivity constraint | Hebbian relevance filtering |
+| Hadamard product $M \odot \theta$ | Gain modulation of synaptic efficacy |
+| Per-task subnetworks | Cortical specialization / functional segregation |
+
+---
+
+## Paper Review W: Wang et al. (2025) — "NEST: A Neuromodulated Small-world Hypergraph Trajectory Prediction Model for Autonomous Driving"
+
+**Paper**: Wang, Chen, Wen, & Pan (2025)
+**Core idea**: NEST uses artificial neuromodulation to dynamically adapt the topology of a small-world interaction hypergraph for multi-agent trajectory prediction in autonomous driving. Two neuromodulatory signals ($\alpha$, $\beta$) — computed from traffic density and clustering statistics — globally control hyperedge formation thresholds, allowing the graph structure to fluidly shift between dense local and sparse long-range interaction patterns depending on environmental conditions.
+
+### W.1 Architecture Overview
+
+NEST predicts future trajectories $Y = [Y_1, \ldots, Y_K]$ (K modal hypotheses) for traffic agents given historical data $X = [X_0, \ldots, X_n]$ (positions, velocities, accelerations over $t_h$ steps) and an HD map $M$. Four modules:
+
+1.  **Hypergraph Forming**: Neuromodulator + Small-world Network → Interaction Hypergraph $G = (V, E)$
+2.  **Hypergraph Pooling**: Extracts interaction features $F_i$ from $G$
+3.  **Context Fusion**: Cross-attention fusing lane features $F_l$ (from HD map) with interaction features $F_i$
+4.  **Multi-modal Predictor**: Decodes fused context into $K$ trajectory hypotheses with probabilities
+
+### W.2 Neuromodulatory Signals ($\alpha$, $\beta$)
+
+Two MLP-computed scalars control graph topology:
+
+**Threshold $\alpha$** (from clustering coefficient distribution):
+$$\alpha = \text{Sigmoid}\left(\text{Average}\left(\text{MLP}(\text{Coefficient Distribution})\right)\right)$$
+
+**Connection probability $\beta$** (from spatial density of historical data):
+$$\beta = \text{Sigmoid}\left(\text{Average}\left(\text{MLP}(\text{Density Feature})\right)\right)$$
+
+Both are continuous values in $(0, 1)$ driven by external traffic stimuli (agent features $F_a$).
+
+### W.3 Neuromodulated Hyperedge Formation
+
+The hyperedge set is dynamically constructed:
+
+$$E = \Omega(V, \alpha, \beta)$$
+
+where $\Omega$ is the Small-world Network generator. For each pair of nodes, the local clustering coefficient $C$ is evaluated against the modulated threshold:
+
+-   If $C > \alpha$: deterministic edge ($C_{i,j} = 1$)
+-   If $C \leq \alpha$: probabilistic edge with probability $\beta$
+
+This creates an **adaptive topology**: in dense traffic ($\alpha$ low), more deterministic edges form; in sparse traffic ($\alpha$ high), connections become probabilistic and long-range via $\beta$.
+
+### W.4 Intention and Trajectory Generation
+
+Agent interaction information: $I_a = \sum_{V_i \in E_j} \lambda_i V_i$ (learnable weights $\lambda_i$).
+
+Intention via Gumbel-Softmax (handling discrete modal uncertainty):
+$$I_i = \sigma\left(\frac{M_i(I_a) + \xi}{\tau}\right)$$
+
+where $\sigma$ is softmax, $M_i$ is the intention encoder, $\xi \sim \text{Gumbel}(0, 1)$, and $\tau$ is temperature.
+
+Additional streams:
+-   Personality: $I_p = M_p(\sum_{V_i \in V} \lambda_i V_i)$
+-   Willingness: $I_w = M_w(I_a)$
+
+Context fusion via cross-attention:
+$$F_c = \text{Attn}(Q = F_i, K = F_l, V = F_l)$$
+
+### W.5 Output Parameterization
+
+Each of the $K$ trajectory modes outputs Laplace-distributed predictions per timestep $t$:
+
+$$Y_i^t = [x_i^t, y_i^t, b_{i,x}^t, b_{i,y}^t]$$
+
+where $(x, y)$ are spatial coordinates and $(b_x, b_y)$ are Laplace scale parameters representing kinematic uncertainty.
+
+### W.6 Neuromodulatory Interpretation
+
+| NEST Component | Biological Analogue |
+|---|---|
+| Threshold $\alpha$ | Neural excitability threshold (modulated by tonic neuromodulator levels) |
+| Connection probability $\beta$ | Stochastic synaptic transmission probability |
+| Hyperedge formation $\Omega(V, \alpha, \beta)$ | Neuromodulatory gating of functional connectivity |
+| Traffic density → $\beta$ | Arousal-driven modulation of network connectivity |
+| Clustering → $\alpha$ | Local circuit regulation based on neighborhood statistics |
+| Adaptive topology shift | State-dependent reconfiguration of functional networks |
+
+### W.7 Relevance to Neuromodulation
+
+-   **Structural modulation**: Unlike most neuromodulatory algorithms that modulate activations or weights, NEST modulates **graph topology** — which connections exist at all
+-   **Environment-driven**: The modulatory signals are computed from environmental statistics (traffic density, clustering), analogous to how brainstem nuclei modulate cortical connectivity based on arousal and environmental demands
+-   **Continuous control**: $\alpha$ and $\beta$ are continuous (sigmoid-bounded), providing graded rather than binary modulation
