@@ -50,6 +50,7 @@ When the user asks for training results analysis (typically with an attached scr
 3. **Use the WandB skill** — invoke the `wandb-analysis` skill to parse and analyze the local log files.
 4. **Temporal evolution analysis** — the analysis **must** include temporal evolution of logged metrics (how key metrics change over training steps/episodes). Show trends, inflection points, and convergence behavior.
 5. **Produce analysis report** — write the final analysis to a `docs/` file using the `docs/TEMPLATES/training_analysis.md` template. Follow the WandB Analysis Protocol above for intermediate results in `tmp/`.
+6. **P**erformance Evaluation (Survival Logic)** - Evaluate the agent’s performance based on survival steps rather than cumulative reward.
 
 ### Verification Protocol
 
