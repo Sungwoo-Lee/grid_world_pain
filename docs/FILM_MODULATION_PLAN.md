@@ -352,17 +352,133 @@ Log raw γ for FiLM modes instead of sigmoid-transformed:
                     'mod_z_multimodal_std': jnp.std(effective_gamma_multi),
 ```
 
-### LayerNorm Vmapping Detail
+### LayerNorm in FiLM: Detailed Walkthrough
 
-The unimodal phase has shape `(batch, 9, 128)`. We need LayerNorm over the last dim (128) applied independently per modality. With a single `nnx.LayerNorm(128)`:
+This section explains how LayerNorm operates within the FiLM modulation pipeline, with concrete numerical examples. It covers the mathematical formula, the per-phase application, and the vmap trick used for the unimodal stage.
+
+#### The LayerNorm Formula
+
+`nnx.LayerNorm(128)` computes, for each sample independently:
+
+```
+x_norm = (x - μ) / √(σ² + ε) × scale + bias
+```
+
+Where:
+- **μ** = mean of the 128-dim feature vector
+- **σ²** = variance of the 128-dim feature vector
+- **ε** = 1e-5 (numerical stability constant)
+- **scale** = learnable parameter, initialized to **1.0** (shape: 128)
+- **bias** = learnable parameter, initialized to **0.0** (shape: 128)
+
+At initialization (scale=1, bias=0), this reduces to pure standardization: `(x - μ) / √(σ² + ε)`.
+
+#### Concrete Example: Phase 1 (Unimodal)
+
+Suppose after `GroupedMLP`, one modality (e.g. Olfaction, index 4) produces a 128-dim vector for one sample:
+
+```
+encoded_all[batch=0, modality=4, :] = [2.1, 0.3, -1.5, 4.0, ..., 0.8]
+                                        ←————— 128 values ——————→
+```
+
+**Step 1 — Compute statistics over the 128 dims:**
+
+```
+μ = mean([2.1, 0.3, -1.5, 4.0, ..., 0.8]) = 1.2   (example value)
+σ² = var([2.1, 0.3, -1.5, 4.0, ..., 0.8]) = 3.5    (example value)
+```
+
+**Step 2 — Normalize each element:**
+
+```
+x_norm[0] = (2.1 - 1.2) / √(3.5 + 1e-5) = 0.9 / 1.871  =  0.481
+x_norm[1] = (0.3 - 1.2) / √(3.5 + 1e-5) = -0.9 / 1.871 = -0.481
+x_norm[2] = (-1.5 - 1.2) / √(3.5 + 1e-5) = -2.7 / 1.871 = -1.443
+x_norm[3] = (4.0 - 1.2) / √(3.5 + 1e-5) = 2.8 / 1.871  =  1.496
+...
+```
+
+After this step, the 128 values have **mean ≈ 0** and **variance ≈ 1**.
+
+**Step 3 — Apply learnable scale and bias (initially identity):**
+
+```
+output[i] = scale[i] × x_norm[i] + bias[i]
+           = 1.0 × x_norm[i] + 0.0           ← at initialization
+           = x_norm[i]
+```
+
+**Step 4 — FiLM affine transform** (`recurrent_ppo_network.py:162`):
+
+The neuromodulator's unconstrained γ and β are applied to the normalized features:
+
+```
+γ₁ ≈ 1.0  (at init, because γ head bias = 1.0)
+β₁ ≈ 0.0  (at init, because β head bias = 0.0)
+
+result = relu(γ₁ × x_norm + β₁)
+       = relu(1.0 × 0.481 + 0.0)    = 0.481
+       = relu(1.0 × (-0.481) + 0.0) = 0.0      ← killed by ReLU
+       = relu(1.0 × (-1.443) + 0.0) = 0.0      ← killed by ReLU
+       = relu(1.0 × 1.496 + 0.0)    = 1.496
+```
+
+At initialization, the full pipeline is: **normalize → identity scaling → ReLU**. The modulator has no effect, which is the desired pass-through behavior.
+
+#### Why LayerNorm Matters for Modulation
+
+Without LayerNorm, raw activations from `GroupedMLP` can have arbitrary magnitude — some neurons output values around 5.0, others around 0.01. The modulator's γ and β would have to learn different scales per neuron, which is difficult.
+
+With LayerNorm, **every neuron's output is standardized to approximately N(0,1)** before γ/β are applied. This gives the modulation signals a consistent semantic meaning:
+
+| Modulator output | Effect |
+|-----------------|--------|
+| γ = 1.5 | Amplify by 50% — consistently, for every neuron |
+| γ = 0.0 | Suppress entirely, rely only on β — gradient still flows through β |
+| γ < 0 | Signal inversion (impossible in sigmoid-based modes) |
+| β = 0.3 | Shift by 0.3 standard deviations — a consistent semantic offset |
+
+This is what the original FiLM paper (Perez et al. 2018) calls a "standardized modulation target": the modulator learns a stable mapping from interoceptive state to modulation, regardless of the varying feature magnitudes across neurons and training time.
+
+#### Phase 1: Unimodal — Vmap Over Modalities
+
+The unimodal phase has shape `(batch, 9, 128)` — 9 modalities, each with 128 features. But `nnx.LayerNorm(128)` expects input of shape `(..., 128)`. The vmap trick handles this:
 
 ```python
 encoded_all = jax.vmap(film_unimodal_ln, in_axes=-2, out_axes=-2)(encoded_all)
 ```
 
-This vmaps the LayerNorm over the 9-modality dimension, applying it to each `(batch, 128)` slice. The same LayerNorm parameters are shared across all 9 modalities.
+This tells JAX: "treat the modality axis (dim -2, size 9) as the batch axis for vmap." It applies the **same** LayerNorm instance 9 times — once per modality — normalizing across the 128 features independently each time:
 
-If vmap over `nnx.LayerNorm` proves problematic at JIT time, the fallback is to reshape `(batch, 9, 128)` → `(batch*9, 128)`, apply LayerNorm, reshape back.
+```
+Input:  (batch, 9, 128)
+         │      │    │
+         │      │    └── LayerNorm normalizes over this axis (μ, σ² computed here)
+         │      └── vmap iterates over this axis (9 independent applications)
+         └── real batch axis (preserved)
+
+Output: (batch, 9, 128)  ← same shape, each (batch, 128) slice independently normalized
+```
+
+Key properties:
+- **Same LN parameters** (scale, bias) are shared across all 9 modalities — Injury and Olfaction get the same learned scale/bias.
+- **Statistics are computed independently** per modality — each modality's mean and variance reflect its own activation distribution, not a mixture of all modalities.
+- If vmap over `nnx.LayerNorm` proves problematic at JIT time, the fallback is to reshape `(batch, 9, 128)` → `(batch×9, 128)`, apply LayerNorm, then reshape back.
+
+#### Phase 2: Multimodal Hub — Direct Application
+
+At `recurrent_ppo_network.py:180–181`, the hub output is `(batch, 128)` — no modality dimension — so LayerNorm is applied directly without vmap:
+
+```python
+mm_latent = film_multimodal_ln(mm_latent)   # (batch, 128) → (batch, 128)
+```
+
+Same math as above, just on the fused multimodal representation.
+
+#### Parameter Cost
+
+Each `nnx.LayerNorm(128)` adds 256 parameters (128 scale + 128 bias). With two LN layers (unimodal + multimodal), FiLM mode adds **512 total parameters** compared to FiLMNoNorm or PreActivation. This is negligible relative to the full model size.
 
 ### Summary of Files Changed
 
