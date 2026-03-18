@@ -952,7 +952,7 @@ def main():
                                 "modulator/temperature_min": float(jnp.min(mod_info.temperature)),
                                 "modulator/temperature_max": float(jnp.max(mod_info.temperature)),
                             })
-                            if modulation_config is not None and modulation_config.get('type') == "PreActivation":
+                            if modulation_config is not None and modulation_config.get('type') in ("PreActivation", "FiLM", "FiLMNoNorm"):
                                 wandb_logs.update({
                                     "modulator/beta_uni_mean": float(jnp.mean(mod_info.z_unimodal_add)),
                                     "modulator/beta_uni_std": float(jnp.std(mod_info.z_unimodal_add)),
