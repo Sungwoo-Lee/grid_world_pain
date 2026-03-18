@@ -480,6 +480,68 @@ Same math as above, just on the fused multimodal representation.
 
 Each `nnx.LayerNorm(128)` adds 256 parameters (128 scale + 128 bias). With two LN layers (unimodal + multimodal), FiLM mode adds **512 total parameters** compared to FiLMNoNorm or PreActivation. This is negligible relative to the full model size.
 
+#### FAQ: LayerNorm + ReLU — Doesn't Half the Signal Get Killed?
+
+A natural concern: LayerNorm centers features to mean=0, which means roughly **half the values become negative and get killed by ReLU**. This seems wasteful. This section explains why it still works well, and specifically why it works in our FiLM context.
+
+##### The "half gets killed" concern is real but misleading
+
+Yes, after LayerNorm, ~50% of neurons have negative values. But this is **not a problem** — it's actually similar to what happens without LayerNorm:
+
+1. **ReLU already kills ~50% of neurons in healthy networks.** A well-initialized linear layer (e.g. Kaiming/He init) produces roughly zero-centered outputs. ReLU was designed for this regime. If ReLU is killing significantly *less* than ~50%, it often means activations have drifted positive (magnitude explosion), which is its own problem.
+
+2. **The neurons that survive are the informative ones.** LayerNorm ensures the surviving neurons have well-scaled magnitudes (in the range of ~0 to 2–3 standard deviations), rather than arbitrary magnitudes that vary across neurons and training time.
+
+##### The real reason LayerNorm works with ReLU
+
+The key insight: **LayerNorm's value isn't about preserving all activations — it's about controlling the scale of the ones that survive.**
+
+Without LayerNorm:
+```
+GroupedMLP output: [0.002, 15.3, -0.5, 42.1, ...]   ← wildly different scales
+After ReLU:        [0.002, 15.3,  0.0, 42.1, ...]   ← surviving values span 4 orders of magnitude
+```
+
+With LayerNorm:
+```
+GroupedMLP output: [0.002, 15.3, -0.5, 42.1, ...]
+After LN:         [-0.89, 0.52, -0.92, 1.85, ...]   ← standardized
+After ReLU:        [0.0,  0.52,  0.0,  1.85, ...]   ← surviving values are well-scaled
+```
+
+The surviving positive values are in a consistent range, which makes the downstream FiLM modulation (γ and β) much easier to learn.
+
+##### In our FiLM case specifically, there's a stronger reason
+
+In our pipeline, ReLU comes **after** the FiLM transform, not immediately after LayerNorm:
+
+```
+GroupedMLP → LayerNorm → γ·x + β → ReLU
+                         ↑
+                    β can shift negatives back to positive
+```
+
+The neuromodulator's **β (additive bias) can rescue negative values before ReLU sees them**. If a neuron outputs -1.2 after LayerNorm, and β = 1.5, then the input to ReLU is `γ·(-1.2) + 1.5`, which can be positive. The modulator controls which neurons survive ReLU — that's the whole point of FiLM modulation.
+
+This is structurally different from a plain `LayerNorm → ReLU` stack where the negatives are unconditionally killed. Here, the modulator **decides** what to keep and what to suppress, based on the agent's interoceptive state.
+
+##### Why not use an activation that doesn't kill negatives?
+
+You could. The DreamerV3 encoder in our codebase already uses **SiLU** (Sigmoid Linear Unit), which passes negative values through (attenuated). That's partly why DreamerV3's architecture uses SiLU everywhere — it avoids the dead-neuron problem entirely.
+
+For RecurrentPPO, changing ReLU → SiLU would be an independent experiment worth considering, but it's orthogonal to the FiLM question. The FiLM + LayerNorm combination works with ReLU because β provides the mechanism to shift the decision boundary.
+
+##### Summary
+
+| Concern | Why it's OK |
+|---------|-------------|
+| ~50% killed by ReLU | Normal and expected — ReLU in healthy networks kills ~50% anyway |
+| Lost information | β can shift negatives positive before ReLU — the modulator decides what survives |
+| Scale consistency | The real win — surviving values are well-scaled, making γ/β semantically stable |
+| Alternative | DreamerV3 side uses SiLU, which avoids this entirely |
+
+The fame of LayerNorm isn't about preserving all activations — it's about **stabilizing training dynamics** by preventing magnitude drift, which makes everything downstream (including our FiLM γ/β) easier to learn.
+
 ### Summary of Files Changed
 
 | File | Change | New Lines (approx) |
