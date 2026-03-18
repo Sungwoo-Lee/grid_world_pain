@@ -99,10 +99,13 @@ class ObservationEncoder(nnx.Module):
         else:
             self.monolith = nnx.Linear(input_dim, hidden_size, rngs=rngs)
 
-    def __call__(self, x):
-        """Standard forward pass (no modulation)."""
+    def __call__(self, x, unimodal_ln=None, multimodal_ln=None, flat_ln=None):
+        """Standard forward pass (no modulation). Optional LayerNorm on pre-activations."""
         if self.mode != 'hierarchical':
-            return jax.nn.relu(self.monolith(x))
+            x_proj = self.monolith(x)
+            if flat_ln is not None:
+                x_proj = flat_ln(x_proj)
+            return jax.nn.relu(x_proj)
         
         batch_shape = x.shape[:-1]
         x_padded = jnp.zeros(batch_shape + (len(self.names), self.max_in), dtype=x.dtype)
@@ -112,28 +115,32 @@ class ObservationEncoder(nnx.Module):
             start += dim
 
         # Phase 1: Grouped encoding
-        encoded_all = jax.nn.relu(self.unimodal_grouped(x_padded))
+        encoded_all = self.unimodal_grouped(x_padded)
+        if unimodal_ln is not None:
+            encoded_all = jax.vmap(unimodal_ln, in_axes=-2, out_axes=-2)(encoded_all)
+        encoded_all = jax.nn.relu(encoded_all)
 
         # Phase 2: Multimodal Hub
         mm_in = encoded_all.reshape(batch_shape + (-1,))
-        return jax.nn.relu(self.multimodal_hub(mm_in))
+        mm_latent = self.multimodal_hub(mm_in)
+        if multimodal_ln is not None:
+            mm_latent = multimodal_ln(mm_latent)
+        return jax.nn.relu(mm_latent)
 
     def forward_with_modulation(self, x, mod_output, modulation_type: str,
-                                film_unimodal_ln=None, film_multimodal_ln=None,
-                                film_flat_ln=None):
+                                unimodal_ln=None, multimodal_ln=None,
+                                flat_ln=None):
         """Hierarchical forward pass with multi-stage modulation (Injection A)."""
         # --- Flat mode ---
         if self.mode != 'hierarchical':
             x_proj = self.monolith(x)
+            if flat_ln is not None:
+                x_proj = flat_ln(x_proj)
             if modulation_type == "PreActivation":
                 gamma = jax.nn.sigmoid(mod_output.z_unimodal)
                 beta = mod_output.z_unimodal_add
                 return jax.nn.relu(x_proj * gamma + beta)
             elif modulation_type == "FiLM":
-                if film_flat_ln is not None:
-                    x_proj = film_flat_ln(x_proj)
-                return jax.nn.relu(mod_output.z_unimodal * x_proj + mod_output.z_unimodal_add)
-            elif modulation_type == "FiLMNoNorm":
                 return jax.nn.relu(mod_output.z_unimodal * x_proj + mod_output.z_unimodal_add)
             else:  # Multiplicative
                 return jax.nn.relu(x_proj) * jax.nn.sigmoid(mod_output.z_unimodal)
@@ -148,19 +155,14 @@ class ObservationEncoder(nnx.Module):
 
         # Phase 1: Unimodal + Modulation
         encoded_all = self.unimodal_grouped(x_padded)
+        if unimodal_ln is not None:
+            encoded_all = jax.vmap(unimodal_ln, in_axes=-2, out_axes=-2)(encoded_all)
 
         if modulation_type == "PreActivation":
             gamma1 = jax.nn.sigmoid(mod_output.z_unimodal)
             beta1 = mod_output.z_unimodal_add
             encoded_all = jax.nn.relu(encoded_all * gamma1[..., None, :] + beta1[..., None, :])
         elif modulation_type == "FiLM":
-            if film_unimodal_ln is not None:
-                # Apply LayerNorm independently per modality (vmap over the 9-group dimension)
-                encoded_all = jax.vmap(film_unimodal_ln, in_axes=-2, out_axes=-2)(encoded_all)
-            gamma1 = mod_output.z_unimodal
-            beta1 = mod_output.z_unimodal_add
-            encoded_all = jax.nn.relu(gamma1[..., None, :] * encoded_all + beta1[..., None, :])
-        elif modulation_type == "FiLMNoNorm":
             gamma1 = mod_output.z_unimodal
             beta1 = mod_output.z_unimodal_add
             encoded_all = jax.nn.relu(gamma1[..., None, :] * encoded_all + beta1[..., None, :])
@@ -171,18 +173,14 @@ class ObservationEncoder(nnx.Module):
         # Phase 2: Multimodal Hub + Modulation
         mm_in = encoded_all.reshape(batch_shape + (-1,))
         mm_latent = self.multimodal_hub(mm_in)
+        if multimodal_ln is not None:
+            mm_latent = multimodal_ln(mm_latent)
 
         if modulation_type == "PreActivation":
             gamma2 = jax.nn.sigmoid(mod_output.z_multimodal)
             beta2 = mod_output.z_multimodal_add
             return jax.nn.relu(mm_latent * gamma2 + beta2)
         elif modulation_type == "FiLM":
-            if film_multimodal_ln is not None:
-                mm_latent = film_multimodal_ln(mm_latent)
-            gamma2 = mod_output.z_multimodal
-            beta2 = mod_output.z_multimodal_add
-            return jax.nn.relu(gamma2 * mm_latent + beta2)
-        elif modulation_type == "FiLMNoNorm":
             gamma2 = mod_output.z_multimodal
             beta2 = mod_output.z_multimodal_add
             return jax.nn.relu(gamma2 * mm_latent + beta2)
@@ -213,6 +211,12 @@ class ActorCriticRNN(nnx.Module):
         self.modulation_enabled = modulation_config is not None and modulation_config.get('type') is not None
         self.modulation_type = modulation_config['type'] if self.modulation_enabled else None
 
+        if self.modulation_enabled and self.modulation_type == "FiLMNoNorm":
+            raise ValueError(
+                "modulation.type='FiLMNoNorm' has been removed. "
+                "Use type='FiLM' with use_layer_norm=false instead."
+            )
+
         # Observation Encoding (Flat or Hierarchical)
         if observation_breakdown is None:
             # Fallback for compatibility or if breakdown not provided
@@ -222,13 +226,15 @@ class ActorCriticRNN(nnx.Module):
             input_dim, hidden_size, observation_breakdown, encoding_config, rngs
         )
 
-        # FiLM LayerNorm layers (only for FiLM, not FiLMNoNorm)
-        if self.modulation_enabled and self.modulation_type == "FiLM":
+        # LayerNorm on encoder pre-activations (orthogonal to modulation type)
+        # Read from agent-level config, not modulation config
+        self.use_layer_norm = encoding_config['use_layer_norm']  # mandatory — no fallback default
+        if self.use_layer_norm:
             if self.obs_encoder.mode == 'hierarchical':
-                self.film_unimodal_ln = nnx.LayerNorm(hidden_size, rngs=rngs)
-                self.film_multimodal_ln = nnx.LayerNorm(hidden_size, rngs=rngs)
+                self.mod_unimodal_ln = nnx.LayerNorm(hidden_size, rngs=rngs)
+                self.mod_multimodal_ln = nnx.LayerNorm(hidden_size, rngs=rngs)
             else:  # flat mode
-                self.film_flat_ln = nnx.LayerNorm(hidden_size, rngs=rngs)
+                self.mod_flat_ln = nnx.LayerNorm(hidden_size, rngs=rngs)
 
         # RNN Layer (LSTM or ModulatedGRU)
         if self.rnn_type == "LSTM":
@@ -311,9 +317,9 @@ class ActorCriticRNN(nnx.Module):
             # INJECTION A: Perceptual modulation (Phase-dependent)
             x_proj = self.obs_encoder.forward_with_modulation(
                 x, mod_output, self.modulation_type,
-                film_unimodal_ln=getattr(self, 'film_unimodal_ln', None),
-                film_multimodal_ln=getattr(self, 'film_multimodal_ln', None),
-                film_flat_ln=getattr(self, 'film_flat_ln', None)
+                unimodal_ln=getattr(self, 'mod_unimodal_ln', None),
+                multimodal_ln=getattr(self, 'mod_multimodal_ln', None),
+                flat_ln=getattr(self, 'mod_flat_ln', None)
             )
 
             # Layer 2: RNN forward with gate-bias injection
@@ -338,7 +344,12 @@ class ActorCriticRNN(nnx.Module):
 
         else:
             # --- Original unmodulated path (exact baseline) ---
-            x_proj = self.obs_encoder(x)
+            x_proj = self.obs_encoder(
+                x,
+                unimodal_ln=getattr(self, 'mod_unimodal_ln', None),
+                multimodal_ln=getattr(self, 'mod_multimodal_ln', None),
+                flat_ln=getattr(self, 'mod_flat_ln', None)
+            )
 
             if self.rnn_type == "LSTM":
                 h_new, x_h = self.rnn_cell(h, x_proj)

@@ -480,7 +480,8 @@ def main():
         return_mode = config.get_mandatory('agent.return_mode')
         
         # Read neuromodulation config (MUST be defined in config, even if empty/null)
-        modulation_config = config.get_mandatory('agent.modulation')
+        # Using get() because get_mandatory() raises ValueError for null/None values
+        modulation_config = config.get('agent.modulation')
         if modulation_config is not None and modulation_config.get('type') is None:
             modulation_config = None
 
@@ -543,7 +544,8 @@ def main():
         from src.models.dreamer_v3_trainer import DreamerTrainer, ReplayBuffer
         
         # Read neuromodulation config (MUST be defined in config, even if empty/null)
-        dreamer_mod_config = config.get_mandatory('agent.modulation')
+        # Using get() because get_mandatory() raises ValueError for null/None values
+        dreamer_mod_config = config.get('agent.modulation')
         if dreamer_mod_config is not None and dreamer_mod_config.get('type') is None:
             dreamer_mod_config = None
         
@@ -952,7 +954,7 @@ def main():
                                 "modulator/temperature_min": float(jnp.min(mod_info.temperature)),
                                 "modulator/temperature_max": float(jnp.max(mod_info.temperature)),
                             })
-                            if modulation_config is not None and modulation_config.get('type') in ("PreActivation", "FiLM", "FiLMNoNorm"):
+                            if modulation_config is not None and modulation_config.get('type') in ("PreActivation", "FiLM"):
                                 wandb_logs.update({
                                     "modulator/beta_uni_mean": float(jnp.mean(mod_info.z_unimodal_add)),
                                     "modulator/beta_uni_std": float(jnp.std(mod_info.z_unimodal_add)),

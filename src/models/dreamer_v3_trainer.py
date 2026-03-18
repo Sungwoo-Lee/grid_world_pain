@@ -72,6 +72,7 @@ class DreamerTrainer(nnx.Module):
             'continue_fc_layers': config.get_mandatory('agent.continue_fc_layers'),
             'actor_fc_layers': config.get_mandatory('agent.actor_fc_layers'),
             'critic_fc_layers': config.get_mandatory('agent.critic_fc_layers'),
+            'use_layer_norm': config.get_mandatory('agent.use_layer_norm', bool),
             
             # Hierarchical Encoding Params
             'encoding_mode': config.get_mandatory('agent.encoding_mode', str),
@@ -147,9 +148,9 @@ class DreamerTrainer(nnx.Module):
                 mod_outputs = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), mod_outputs_T)
                 embeds = wm.encoder.forward_with_modulation(
                     obs, mod_outputs, wm.modulation_type,
-                    film_unimodal_ln=getattr(wm, 'film_unimodal_ln', None),
-                    film_multimodal_ln=getattr(wm, 'film_multimodal_ln', None),
-                    film_flat_ln=getattr(wm, 'film_flat_ln', None)
+                    unimodal_ln=getattr(wm, 'mod_unimodal_ln', None),
+                    multimodal_ln=getattr(wm, 'mod_multimodal_ln', None),
+                    flat_ln=getattr(wm, 'mod_flat_ln', None)
                 )
                 embeds_T = jnp.swapaxes(embeds, 0, 1)
 
@@ -163,8 +164,12 @@ class DreamerTrainer(nnx.Module):
 
                 init_carry = wm.rssm.initial(B)
             else:
-                # Non-modulated: Simple batch encoding (fully vectorized)
-                embeds = wm.encoder(obs)  # (B, T, embed_dim) - Single batched call!
+                embeds = wm.encoder(
+                    obs,
+                    unimodal_ln=getattr(wm, 'mod_unimodal_ln', None),
+                    multimodal_ln=getattr(wm, 'mod_multimodal_ln', None),
+                    flat_ln=getattr(wm, 'mod_flat_ln', None)
+                )
                 embeds_T = jnp.swapaxes(embeds, 0, 1)  # (T, B, embed_dim)
 
                 def scan_step(prev_state, inputs):
@@ -275,7 +280,7 @@ class DreamerTrainer(nnx.Module):
             }
 
             if modulation_enabled:
-                if wm.modulation_type == "FiLM" or wm.modulation_type == "FiLMNoNorm":
+                if wm.modulation_type == "FiLM":
                     effective_gamma_uni = mod_outputs_T.z_unimodal
                     effective_gamma_multi = mod_outputs_T.z_multimodal
                 else:
@@ -292,7 +297,7 @@ class DreamerTrainer(nnx.Module):
                     'mod_z_reward_mean': jnp.mean(mod_outputs_T.z_reward),
                     'mod_z_reward_std': jnp.std(mod_outputs_T.z_reward),
                 })
-                if wm.modulation_type == "PreActivation" or wm.modulation_type == "FiLM" or wm.modulation_type == "FiLMNoNorm":
+                if wm.modulation_type in ("PreActivation", "FiLM"):
                     metrics.update({
                         'mod_beta_unimodal_mean': jnp.mean(mod_outputs_T.z_unimodal_add),
                         'mod_beta_multimodal_mean': jnp.mean(mod_outputs_T.z_multimodal_add),
@@ -494,14 +499,19 @@ class DreamerTrainer(nnx.Module):
 
             embed = self.agent.wm.encoder.forward_with_modulation(
                 obs_symlog, mod_output, self.agent.wm.modulation_type,
-                film_unimodal_ln=getattr(self.agent.wm, 'film_unimodal_ln', None),
-                film_multimodal_ln=getattr(self.agent.wm, 'film_multimodal_ln', None),
-                film_flat_ln=getattr(self.agent.wm, 'film_flat_ln', None)
+                unimodal_ln=getattr(self.agent.wm, 'mod_unimodal_ln', None),
+                multimodal_ln=getattr(self.agent.wm, 'mod_multimodal_ln', None),
+                flat_ln=getattr(self.agent.wm, 'mod_flat_ln', None)
             )
 
             gate_bias = mod_output.z_memory
         else:
-            embed = self.agent.wm.encoder(obs_symlog)
+            embed = self.agent.wm.encoder(
+                obs_symlog,
+                unimodal_ln=getattr(self.agent.wm, 'mod_unimodal_ln', None),
+                multimodal_ln=getattr(self.agent.wm, 'mod_multimodal_ln', None),
+                flat_ln=getattr(self.agent.wm, 'mod_flat_ln', None)
+            )
             gate_bias = None
 
         post, _ = self.agent.wm.rssm.step(

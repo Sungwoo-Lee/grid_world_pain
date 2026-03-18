@@ -233,13 +233,13 @@ class DreamerObservationEncoder(nnx.Module):
             fc_layers = config['encoder_fc_layers']
             self.flat_encoder = Encoder(input_dim, embed_dim, fc_layers, rngs=rngs)
 
-    def __call__(self, x):
+    def __call__(self, x, unimodal_ln=None, multimodal_ln=None, flat_ln=None):
         if self.mode == 'hierarchical':
-            return self.final_act(self._forward_body(x))
+            return self.final_act(self._forward_body(x, unimodal_ln, multimodal_ln))
         else:
-            return self.flat_encoder(x)
+            return self.flat_encoder(x, flat_ln)
 
-    def _forward_body(self, x):
+    def _forward_body(self, x, unimodal_ln=None, multimodal_ln=None):
         """Processes the observation through the hierarchy (pre-activation)."""
         batch_shape = x.shape[:-1]
         x_padded = jnp.zeros(batch_shape + (len(self.names), self.max_in), dtype=x.dtype)
@@ -250,18 +250,24 @@ class DreamerObservationEncoder(nnx.Module):
             start += dim
             
         # Phase 1: Grouped encoding + activation
-        encoded_all = jax.nn.silu(self.unimodal_grouped(x_padded))
+        encoded_all = self.unimodal_grouped(x_padded)
+        if unimodal_ln is not None:
+            encoded_all = jax.vmap(unimodal_ln, in_axes=-2, out_axes=-2)(encoded_all)
+        encoded_all = jax.nn.silu(encoded_all)
         
         # Phase 2: Multimodal Hub
         mm_in = encoded_all.reshape(batch_shape + (-1,))
-        return self.multimodal_hub(mm_in)
+        mm_latent = self.multimodal_hub(mm_in)
+        if multimodal_ln is not None:
+            mm_latent = multimodal_ln(mm_latent)
+        return mm_latent
 
     def forward_with_modulation(self, x, mod_output, modulation_type: str,
-                                film_unimodal_ln=None, film_multimodal_ln=None,
-                                film_flat_ln=None):
+                                unimodal_ln=None, multimodal_ln=None,
+                                flat_ln=None):
         if self.mode != 'hierarchical':
             return self.flat_encoder.forward_with_modulation(
-                x, mod_output, modulation_type, film_flat_ln=film_flat_ln
+                x, mod_output, modulation_type, flat_ln=flat_ln
             )
             
         batch_shape = x.shape[:-1]
@@ -273,18 +279,14 @@ class DreamerObservationEncoder(nnx.Module):
 
         # Phase 1: Unimodal + Modulation
         encoded_all = self.unimodal_grouped(x_padded)
+        if unimodal_ln is not None:
+            encoded_all = jax.vmap(unimodal_ln, in_axes=-2, out_axes=-2)(encoded_all)
         
         if modulation_type == "PreActivation":
             gamma1 = jax.nn.sigmoid(mod_output.z_unimodal)
             beta1 = mod_output.z_unimodal_add
             encoded_all = jax.nn.silu(encoded_all * gamma1[..., None, :] + beta1[..., None, :])
         elif modulation_type == "FiLM":
-            if film_unimodal_ln is not None:
-                encoded_all = jax.vmap(film_unimodal_ln, in_axes=-2, out_axes=-2)(encoded_all)
-            gamma1 = mod_output.z_unimodal
-            beta1 = mod_output.z_unimodal_add
-            encoded_all = jax.nn.silu(gamma1[..., None, :] * encoded_all + beta1[..., None, :])
-        elif modulation_type == "FiLMNoNorm":
             gamma1 = mod_output.z_unimodal
             beta1 = mod_output.z_unimodal_add
             encoded_all = jax.nn.silu(gamma1[..., None, :] * encoded_all + beta1[..., None, :])
@@ -295,18 +297,14 @@ class DreamerObservationEncoder(nnx.Module):
         # Phase 2: Multimodal Hub + Modulation
         mm_in = encoded_all.reshape(batch_shape + (-1,))
         mm_latent = self.multimodal_hub(mm_in)
+        if multimodal_ln is not None:
+            mm_latent = multimodal_ln(mm_latent)
         
         if modulation_type == "PreActivation":
             gamma2 = jax.nn.sigmoid(mod_output.z_multimodal)
             beta2 = mod_output.z_multimodal_add
             return self.final_act(mm_latent * gamma2 + beta2)
         elif modulation_type == "FiLM":
-            if film_multimodal_ln is not None:
-                mm_latent = film_multimodal_ln(mm_latent)
-            gamma2 = mod_output.z_multimodal
-            beta2 = mod_output.z_multimodal_add
-            return self.final_act(gamma2 * mm_latent + beta2)
-        elif modulation_type == "FiLMNoNorm":
             gamma2 = mod_output.z_multimodal
             beta2 = mod_output.z_multimodal_add
             return self.final_act(gamma2 * mm_latent + beta2)
@@ -345,27 +343,28 @@ class Encoder(nnx.Module):
         # Final activation (separate for modulation injection point)
         self.final_act = SiLU()
 
-    def __call__(self, x):
+    def __call__(self, x, flat_ln=None):
         """Standard forward pass (no modulation)."""
-        return self.final_act(self.body(x))
+        x_pre = self.body(x)
+        if flat_ln is not None:
+            x_pre = flat_ln(x_pre)
+        return self.final_act(x_pre)
 
     def forward_with_modulation(self, x, mod_output, modulation_type: str,
-                                film_flat_ln=None):
+                                flat_ln=None):
         """Forward pass with neuromodulation (Injection A).
         
         Applies modulation between body (pre-activation) and final activation.
         """
         x_pre = self.body(x)
+        if flat_ln is not None:
+            x_pre = flat_ln(x_pre)
 
         if modulation_type == "PreActivation":
             gamma = jax.nn.sigmoid(mod_output.z_unimodal)
             beta = mod_output.z_unimodal_add
             return self.final_act(x_pre * gamma + beta)
         elif modulation_type == "FiLM":
-            if film_flat_ln is not None:
-                x_pre = film_flat_ln(x_pre)
-            return self.final_act(mod_output.z_unimodal * x_pre + mod_output.z_unimodal_add)
-        elif modulation_type == "FiLMNoNorm":
             return self.final_act(mod_output.z_unimodal * x_pre + mod_output.z_unimodal_add)
         else: # Multiplicative
             return self.final_act(x_pre) * jax.nn.sigmoid(mod_output.z_unimodal)
@@ -493,6 +492,12 @@ class WorldModel(nnx.Module):
                                    and modulation_config.get('type') is not None)
         self.modulation_type = modulation_config['type'] if self.modulation_enabled else None
 
+        if self.modulation_enabled and self.modulation_type == "FiLMNoNorm":
+            raise ValueError(
+                "modulation.type='FiLMNoNorm' has been removed. "
+                "Use type='FiLM' with use_layer_norm=false instead."
+            )
+
         # Use the new hierarchical-capable encoder
         self.encoder = DreamerObservationEncoder(
             obs_dim, encoder_dim, obs_breakdown, config, rngs=rngs
@@ -505,13 +510,15 @@ class WorldModel(nnx.Module):
             rngs=rngs,
         )
 
-        # FiLM LayerNorm layers (only for FiLM, not FiLMNoNorm)
-        if self.modulation_enabled and self.modulation_type == "FiLM":
+        # LayerNorm on encoder pre-activations (orthogonal to modulation type)
+        # Read from encoding_config (agent-level), not modulation_config
+        self.use_layer_norm = config['use_layer_norm']  # mandatory — no fallback default
+        if self.use_layer_norm:
             if self.encoder.mode == 'hierarchical':
-                self.film_unimodal_ln = nnx.LayerNorm(encoder_dim, rngs=rngs)
-                self.film_multimodal_ln = nnx.LayerNorm(encoder_dim, rngs=rngs)
+                self.mod_unimodal_ln = nnx.LayerNorm(encoder_dim, rngs=rngs)
+                self.mod_multimodal_ln = nnx.LayerNorm(encoder_dim, rngs=rngs)
             else:  # flat mode
-                self.film_flat_ln = nnx.LayerNorm(encoder_dim, rngs=rngs)
+                self.mod_flat_ln = nnx.LayerNorm(encoder_dim, rngs=rngs)
 
         feat_dim = self.deter_dim + self.stoch_dim * self.discrete
         self.feat_dim = feat_dim
@@ -619,14 +626,19 @@ class DreamerV3Agent(nnx.Module):
             mod_out, mod_h_new = self.wm.modulator.forward_obs(x, mod_h)
             embed = self.wm.encoder.forward_with_modulation(
                 x, mod_out, self.wm.modulation_type,
-                film_unimodal_ln=getattr(self.wm, 'film_unimodal_ln', None),
-                film_multimodal_ln=getattr(self.wm, 'film_multimodal_ln', None),
-                film_flat_ln=getattr(self.wm, 'film_flat_ln', None)
+                unimodal_ln=getattr(self.wm, 'mod_unimodal_ln', None),
+                multimodal_ln=getattr(self.wm, 'mod_multimodal_ln', None),
+                flat_ln=getattr(self.wm, 'mod_flat_ln', None)
             )
             mod_info = mod_out
         else:
             rssm_h = h
-            embed = self.wm.encoder(x)
+            embed = self.wm.encoder(
+                x,
+                unimodal_ln=getattr(self.wm, 'mod_unimodal_ln', None),
+                multimodal_ln=getattr(self.wm, 'mod_multimodal_ln', None),
+                flat_ln=getattr(self.wm, 'mod_flat_ln', None)
+            )
             mod_h_new = None
             mod_info = None
 
