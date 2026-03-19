@@ -22,7 +22,7 @@ agent:
   # Parity Options
   rnn_type: "GRU"       # "LSTM" or "GRU"
   activation: "relu"     # "tanh" or "relu"
-  return_mode: "GAE"      # "MC" or "GAE"
+  return_mode: "MC"      # "MC" or "GAE"
 
   # Encoding Configuration
   encoding_mode: "hierarchical"  # "flat" or "hierarchical"

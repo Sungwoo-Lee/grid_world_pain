@@ -17,13 +17,13 @@ agent:
   gae_lambda: 0.95
   vf_coef: 0.5
   max_grad_norm: 0.5
-  use_layer_norm: false
+  use_layer_norm: true
 
   # Parity Options
   # GRU is required for gate-bias injection (§5.1a) — LSTM gate-bias not yet supported
   rnn_type: "GRU"          # GRU required for full modulation support
   activation: "relu"       # "tanh" (PyTorch parity) or "relu" (original JAX)
-  return_mode: "GAE"        # "MC" (PyTorch parity) or "GAE" (original JAX)
+  return_mode: "MC"        # "MC" (PyTorch parity) or "GAE" (original JAX)
 
   # Encoding Configuration
   encoding_mode: "hierarchical"  # "flat" or "hierarchical"
@@ -52,7 +52,7 @@ agent:
   #                        beta  = additive threshold shift (Ferguson disinhibition)
   #   null              — Disabled (true baseline, no modulator constructed)
   modulation:
-    type: "PreActivation"       # "Multiplicative", "PreActivation", "FiLM", or null
+    type: "FiLM"       # "Multiplicative", "PreActivation", "FiLM", or null
     mod_hidden_size: 16          # GRU hidden units — h=16 prevents degenerate convergence (§10.6.1)
     grouping_size: 4            # Spatial grouping G — Mult G=60 h=16 is best performer (§10.6)
     percept_bias_init: 3.0       # Gain head (gamma) bias init — higher for truer pass-through (§8 P6)
