@@ -28,23 +28,27 @@ x_act = activation(x_out)          ← ReLU / SiLU
 ```
 
 The normalization serves two purposes:
+
 1. **Standardized modulation target**: γ and β operate on features with known statistics (μ=0, σ=1), so the modulator can learn a consistent mapping from context → modulation. Without normalization, the pre-activation magnitudes vary across neurons and training time, making γ and β semantically inconsistent.
 2. **Prevents feature magnitude drift**: Without normalization, the multiplicative γ can compound with already-large activations, leading to magnitude explosion or making the β term negligible relative to γ·x.
 
 ### Current Architecture vs FiLM
 
-| Aspect | Current (Multiplicative) | Current (PreActivation) | **FiLM** |
-|--------|-------------------------|------------------------|----------|
-| Equation | `relu(Wx) · σ(z)` | `relu(σ(z_γ) · Wx + z_β)` | `act(γ(z) · LN(Wx) + β(z))` |
-| γ range | (0, 1) via sigmoid | (0, 1) via sigmoid | **unconstrained** (ℝ) |
-| β | none / zeros | unconstrained | unconstrained |
-| Normalization | none | none | LayerNorm before modulation |
-| Can amplify? | No | Indirectly (β only) | **Yes** (γ > 1) |
-| Death spiral? | Yes (§2.1) | Partially (β helps) | **No** (β provides gradient bypass) |
+
+| Aspect        | Current (Multiplicative) | Current (PreActivation)   | **FiLM**                            |
+| ------------- | ------------------------ | ------------------------- | ----------------------------------- |
+| Equation      | `relu(Wx) · σ(z)`        | `relu(σ(z_γ) · Wx + z_β)` | `act(γ(z) · LN(Wx) + β(z))`         |
+| γ range       | (0, 1) via sigmoid       | **(0, 1) via sigmoid**    | **unconstrained (ℝ)**               |
+| β             | none / zeros             | unconstrained             | unconstrained                       |
+| Normalization | none                     | none                      | LayerNorm before modulation         |
+| Can amplify?  | No                       | Indirectly (β only)       | **Yes** (γ > 1)                     |
+| Death spiral? | Yes (§2.1)               | Partially (β helps)       | **No** (β provides gradient bypass) |
+
 
 ### Key Architectural Difference: γ is Unconstrained
 
 In PreActivation mode, γ = sigmoid(z) ∈ (0, 1) — attenuation only. In FiLM, **γ is not passed through sigmoid**. The raw modulator output is used directly as the scaling factor. This means:
+
 - γ > 1 → amplification (impossible in current modes)
 - γ < 0 → signal inversion (impossible in current modes)
 - γ = 0 → only β survives (gradient still flows)
@@ -55,17 +59,20 @@ This is the single most important difference. The sigmoid ceiling at 1.0 in curr
 
 We compare **three modulation types** against the existing **Multiplicative** baseline:
 
-| Condition | Config value | Description |
-|-----------|-------------|-------------|
-| **Multiplicative** (control) | `"Multiplicative"` | Existing: `relu(Wx) · σ(z)` |
-| **FiLM** | `"FiLM"` | Full FiLM: `act(γ · LN(Wx) + β)`, γ unconstrained |
-| **FiLMNoNorm** | `"FiLMNoNorm"` | FiLM without LayerNorm: `act(γ · Wx + β)`, γ unconstrained |
+
+| Condition                    | Config value       | Description                                                |
+| ---------------------------- | ------------------ | ---------------------------------------------------------- |
+| **Multiplicative** (control) | `"Multiplicative"` | Existing: `relu(Wx) · σ(z)`                                |
+| **FiLM**                     | `"FiLM"`           | Full FiLM: `act(γ · LN(Wx) + β)`, γ unconstrained          |
+| **FiLMNoNorm**               | `"FiLMNoNorm"`     | FiLM without LayerNorm: `act(γ · Wx + β)`, γ unconstrained |
+
 
 The **FiLM vs FiLMNoNorm** comparison isolates the effect of normalization. The **FiLMNoNorm vs PreActivation** comparison isolates the effect of unconstrained γ (since PreActivation uses sigmoid-bounded γ).
 
 ### Initialization Strategy
 
 FiLM initialization is critical for pass-through at start:
+
 - **γ init**: bias = 1.0, weights = small (so γ ≈ 1.0 → identity scaling)
 - **β init**: bias = 0.0, weights = small (so β ≈ 0.0 → no shift)
 
@@ -78,10 +85,12 @@ For FiLM (with LayerNorm), the initialization produces `1.0 · LN(x) + 0.0 = LN(
 LayerNorm is inserted **after the linear layer, before the FiLM transform**, at each modulation injection point:
 
 **Phase 1 (Unimodal)**: After `GroupedMLP` output, before FiLM + activation
+
 - Shape: `(batch, 9, 128)` → LayerNorm over last dim (128) → FiLM → relu/silu
 - Need a `GroupedLayerNorm` that normalizes each modality's 128-dim features independently
 
 **Phase 2 (Multimodal Hub)**: After hub MLP output, before FiLM + activation
+
 - Shape: `(batch, 128)` → LayerNorm over last dim (128) → FiLM → relu/silu
 - Standard `nnx.LayerNorm(128)`
 
@@ -98,12 +107,14 @@ LayerNorm is inserted **after the linear layer, before the FiLM transform**, at 
 Add `"FiLM"` and `"FiLMNoNorm"` as new `modulation.type` options alongside `"Multiplicative"` and `"PreActivation"`.
 
 **Data flow (FiLM with norm)**:
+
 ```
 GroupedMLP(x)  →  LayerNorm  →  γ(z) · normalized + β(z)  →  relu
                                   ↑ unconstrained
 ```
 
 **Data flow (FiLMNoNorm)**:
+
 ```
 GroupedMLP(x)  →  γ(z) · raw + β(z)  →  relu
                     ↑ unconstrained
@@ -365,6 +376,7 @@ x_norm = (x - μ) / √(σ² + ε) × scale + bias
 ```
 
 Where:
+
 - **μ** = mean of the 128-dim feature vector
 - **σ²** = variance of the 128-dim feature vector
 - **ε** = 1e-5 (numerical stability constant)
@@ -432,12 +444,14 @@ Without LayerNorm, raw activations from `GroupedMLP` can have arbitrary magnitud
 
 With LayerNorm, **every neuron's output is standardized to approximately N(0,1)** before γ/β are applied. This gives the modulation signals a consistent semantic meaning:
 
-| Modulator output | Effect |
-|-----------------|--------|
-| γ = 1.5 | Amplify by 50% — consistently, for every neuron |
-| γ = 0.0 | Suppress entirely, rely only on β — gradient still flows through β |
-| γ < 0 | Signal inversion (impossible in sigmoid-based modes) |
-| β = 0.3 | Shift by 0.3 standard deviations — a consistent semantic offset |
+
+| Modulator output | Effect                                                             |
+| ---------------- | ------------------------------------------------------------------ |
+| γ = 1.5          | Amplify by 50% — consistently, for every neuron                    |
+| γ = 0.0          | Suppress entirely, rely only on β — gradient still flows through β |
+| γ < 0            | Signal inversion (impossible in sigmoid-based modes)               |
+| β = 0.3          | Shift by 0.3 standard deviations — a consistent semantic offset    |
+
 
 This is what the original FiLM paper (Perez et al. 2018) calls a "standardized modulation target": the modulator learns a stable mapping from interoceptive state to modulation, regardless of the varying feature magnitudes across neurons and training time.
 
@@ -462,6 +476,7 @@ Output: (batch, 9, 128)  ← same shape, each (batch, 128) slice independently n
 ```
 
 Key properties:
+
 - **Same LN parameters** (scale, bias) are shared across all 9 modalities — Injury and Olfaction get the same learned scale/bias.
 - **Statistics are computed independently** per modality — each modality's mean and variance reflect its own activation distribution, not a mixture of all modalities.
 - If vmap over `nnx.LayerNorm` proves problematic at JIT time, the fallback is to reshape `(batch, 9, 128)` → `(batch×9, 128)`, apply LayerNorm, then reshape back.
@@ -489,7 +504,6 @@ A natural concern: LayerNorm centers features to mean=0, which means roughly **h
 Yes, after LayerNorm, ~50% of neurons have negative values. But this is **not a problem** — it's actually similar to what happens without LayerNorm:
 
 1. **ReLU already kills ~50% of neurons in healthy networks.** A well-initialized linear layer (e.g. Kaiming/He init) produces roughly zero-centered outputs. ReLU was designed for this regime. If ReLU is killing significantly *less* than ~50%, it often means activations have drifted positive (magnitude explosion), which is its own problem.
-
 2. **The neurons that survive are the informative ones.** LayerNorm ensures the surviving neurons have well-scaled magnitudes (in the range of ~0 to 2–3 standard deviations), rather than arbitrary magnitudes that vary across neurons and training time.
 
 ##### The real reason LayerNorm works with ReLU
@@ -497,12 +511,14 @@ Yes, after LayerNorm, ~50% of neurons have negative values. But this is **not a 
 The key insight: **LayerNorm's value isn't about preserving all activations — it's about controlling the scale of the ones that survive.**
 
 Without LayerNorm:
+
 ```
 GroupedMLP output: [0.002, 15.3, -0.5, 42.1, ...]   ← wildly different scales
 After ReLU:        [0.002, 15.3,  0.0, 42.1, ...]   ← surviving values span 4 orders of magnitude
 ```
 
 With LayerNorm:
+
 ```
 GroupedMLP output: [0.002, 15.3, -0.5, 42.1, ...]
 After LN:         [-0.89, 0.52, -0.92, 1.85, ...]   ← standardized
@@ -533,35 +549,39 @@ For RecurrentPPO, changing ReLU → SiLU would be an independent experiment wort
 
 ##### Summary
 
-| Concern | Why it's OK |
-|---------|-------------|
-| ~50% killed by ReLU | Normal and expected — ReLU in healthy networks kills ~50% anyway |
-| Lost information | β can shift negatives positive before ReLU — the modulator decides what survives |
-| Scale consistency | The real win — surviving values are well-scaled, making γ/β semantically stable |
-| Alternative | DreamerV3 side uses SiLU, which avoids this entirely |
+
+| Concern             | Why it's OK                                                                      |
+| ------------------- | -------------------------------------------------------------------------------- |
+| ~50% killed by ReLU | Normal and expected — ReLU in healthy networks kills ~50% anyway                 |
+| Lost information    | β can shift negatives positive before ReLU — the modulator decides what survives |
+| Scale consistency   | The real win — surviving values are well-scaled, making γ/β semantically stable  |
+| Alternative         | DreamerV3 side uses SiLU, which avoids this entirely                             |
+
 
 The fame of LayerNorm isn't about preserving all activations — it's about **stabilizing training dynamics** by preventing magnitude drift, which makes everything downstream (including our FiLM γ/β) easier to learn.
 
 ### Summary of Files Changed
 
-| File | Change | New Lines (approx) |
-|------|--------|-------------------|
-| `src/models/neuromodulator.py` | Extended `or` conditions on 3 existing `if`s + `_percept_bias` override | ~10 |
-| `src/models/recurrent_ppo_network.py` | Two new `elif` branches per phase + LayerNorm construction + updated call site | ~30 |
-| `src/models/dreamer_v3_nnx.py` | Two new `elif` branches per phase + LayerNorm construction | ~30 |
-| `src/models/dreamer_v3_trainer.py` | `if/else` for effective γ logging | ~6 |
-| `configs/models/neuromodulated_ppo.yaml` | Comment update (doc only) | ~1 |
+
+| File                                     | Change                                                                         | New Lines (approx) |
+| ---------------------------------------- | ------------------------------------------------------------------------------ | ------------------ |
+| `src/models/neuromodulator.py`           | Extended `or` conditions on 3 existing `if`s + `_percept_bias` override        | ~10                |
+| `src/models/recurrent_ppo_network.py`    | Two new `elif` branches per phase + LayerNorm construction + updated call site | ~30                |
+| `src/models/dreamer_v3_nnx.py`           | Two new `elif` branches per phase + LayerNorm construction                     | ~30                |
+| `src/models/dreamer_v3_trainer.py`       | `if/else` for effective γ logging                                              | ~6                 |
+| `configs/models/neuromodulated_ppo.yaml` | Comment update (doc only)                                                      | ~1                 |
+
 
 ---
 
 ## Checkpoints
 
-- [x] **Checkpoint 1** — After neuromodulator.py changes: instantiate `NeuromodulatorRNN(modulation_type="FiLM")` and verify that `head_unimodal_add` and `head_multimodal_add` exist, and that the γ head bias is 1.0 (not 3.0). Print `model.head_unimodal.bias.value` to confirm. [17:23:45]
-- [x] **Checkpoint 2** — After encoder changes: run a single forward pass with FiLM mode and print shapes at each stage. Verify `gamma1` is unconstrained (can be > 1 or < 0), not sigmoid-bounded. Print `gamma1.min(), gamma1.max()` — at init, should be ≈ 1.0. [17:28:15]
-- [x] **Checkpoint 3** — LayerNorm vmap: print `encoded_all` shape before and after LayerNorm application. Must remain `(batch, 9, 128)`. If vmap fails, use reshape fallback. [17:28:15]
-- [x] **Checkpoint 4** — Run 1 training iteration with `type: "FiLM"` and `type: "FiLMNoNorm"`. Verify no NaN/Inf in loss. Check that `mod_z_unimodal_mean` in logs reflects raw γ (should be ≈ 1.0 at start), not sigmoid-transformed. — confirmed, 100 steps clean [18:24:00]
-- [x] **Checkpoint 5** — Run 1 training iteration with `type: "Multiplicative"` to verify no regression in existing modes. — confirmed, 100 steps clean [18:26:00]
-- [x] **Checkpoint 6** — Parameter count: FiLM should add only the LayerNorm parameters (128 scale + 128 bias = 256 per LN, × 2 LN layers = 512 total) relative to PreActivation mode. FiLMNoNorm should have identical parameter count to PreActivation. — confirmed, consistent results [18:30:00]
+- **Checkpoint 1** — After neuromodulator.py changes: instantiate `NeuromodulatorRNN(modulation_type="FiLM")` and verify that `head_unimodal_add` and `head_multimodal_add` exist, and that the γ head bias is 1.0 (not 3.0). Print `model.head_unimodal.bias.value` to confirm. [17:23:45]
+- **Checkpoint 2** — After encoder changes: run a single forward pass with FiLM mode and print shapes at each stage. Verify `gamma1` is unconstrained (can be > 1 or < 0), not sigmoid-bounded. Print `gamma1.min(), gamma1.max()` — at init, should be ≈ 1.0. [17:28:15]
+- **Checkpoint 3** — LayerNorm vmap: print `encoded_all` shape before and after LayerNorm application. Must remain `(batch, 9, 128)`. If vmap fails, use reshape fallback. [17:28:15]
+- **Checkpoint 4** — Run 1 training iteration with `type: "FiLM"` and `type: "FiLMNoNorm"`. Verify no NaN/Inf in loss. Check that `mod_z_unimodal_mean` in logs reflects raw γ (should be ≈ 1.0 at start), not sigmoid-transformed. — confirmed, 100 steps clean [18:24:00]
+- **Checkpoint 5** — Run 1 training iteration with `type: "Multiplicative"` to verify no regression in existing modes. — confirmed, 100 steps clean [18:26:00]
+- **Checkpoint 6** — Parameter count: FiLM should add only the LayerNorm parameters (128 scale + 128 bias = 256 per LN, × 2 LN layers = 512 total) relative to PreActivation mode. FiLMNoNorm should have identical parameter count to PreActivation. — confirmed, consistent results [18:30:00]
 
 ---
 
@@ -569,6 +589,7 @@ The fame of LayerNorm isn't about preserving all activations — it's about **st
 > **Date**: 2026-03-17 18:35:00
 
 ### FiLM Implementation Report (2026-03-17)
+
 - Implemented `FiLM` and `FiLMNoNorm` in `neuromodulator.py`.
 - Integrated affine modulation with optional LayerNorm in `recurrent_ppo_network.py`.
 - Updated DreamerV3 (`dreamer_v3_nnx.py`) with FiLM support and SiLU activations.
@@ -581,24 +602,28 @@ The fame of LayerNorm isn't about preserving all activations — it's about **st
 > **Verified by**: Claude
 > **Date**: 2026-03-17
 
-| File | Change | Status | Notes |
-|------|--------|:------:|-------|
-| `src/models/neuromodulator.py` | `_percept_bias` override + extended `or` conditions (both RNN classes) | ✅ | Clean, matches plan exactly. 3 conditions extended per class. |
-| `src/models/recurrent_ppo_network.py` | FiLM/FiLMNoNorm branches in encoder + LayerNorm construction + call site | ✅ | All 4 branches correct. LayerNorm uses `self.obs_encoder.mode` (cleaner than `hasattr`). |
-| `src/models/dreamer_v3_nnx.py` | FiLM/FiLMNoNorm branches in both encoders + WorldModel LayerNorm + agent call site | ✅ | Uses `jax.nn.silu` directly instead of `SiLU()` wrapper — functionally identical. Flat encoder passes `film_flat_ln` correctly. |
-| `src/models/dreamer_v3_trainer.py` | Effective γ logging + beta logging condition extended | ✅ | Training loop call site (L148) correctly updated. Beta logging condition correctly extended. |
-| `src/models/dreamer_v3_trainer.py` | `get_action` call site (L495) | ❌ | **Missing `film_*_ln` args** — calls `forward_with_modulation` without passing LayerNorm layers. FiLM mode will silently skip normalization during inference/evaluation. |
-| `configs/models/neuromodulated_ppo.yaml` | Comment update | ✅ | Correct. |
+
+| File                                     | Change                                                                             | Status | Notes                                                                                                                                                                    |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/models/neuromodulator.py`           | `_percept_bias` override + extended `or` conditions (both RNN classes)             | ✅      | Clean, matches plan exactly. 3 conditions extended per class.                                                                                                            |
+| `src/models/recurrent_ppo_network.py`    | FiLM/FiLMNoNorm branches in encoder + LayerNorm construction + call site           | ✅      | All 4 branches correct. LayerNorm uses `self.obs_encoder.mode` (cleaner than `hasattr`).                                                                                 |
+| `src/models/dreamer_v3_nnx.py`           | FiLM/FiLMNoNorm branches in both encoders + WorldModel LayerNorm + agent call site | ✅      | Uses `jax.nn.silu` directly instead of `SiLU()` wrapper — functionally identical. Flat encoder passes `film_flat_ln` correctly.                                          |
+| `src/models/dreamer_v3_trainer.py`       | Effective γ logging + beta logging condition extended                              | ✅      | Training loop call site (L148) correctly updated. Beta logging condition correctly extended.                                                                             |
+| `src/models/dreamer_v3_trainer.py`       | `get_action` call site (L495)                                                      | ❌      | **Missing `film_*_ln` args** — calls `forward_with_modulation` without passing LayerNorm layers. FiLM mode will silently skip normalization during inference/evaluation. |
+| `configs/models/neuromodulated_ppo.yaml` | Comment update                                                                     | ✅      | Correct.                                                                                                                                                                 |
+
 
 ### ❌ Detail: `dreamer_v3_trainer.py:495` — Missing FiLM LayerNorm in `get_action`
 
 **Current (wrong)**:
+
 ```python
 embed = self.agent.wm.encoder.forward_with_modulation(
     obs_symlog, mod_output, self.agent.wm.modulation_type)
 ```
 
 **Should be**:
+
 ```python
 embed = self.agent.wm.encoder.forward_with_modulation(
     obs_symlog, mod_output, self.agent.wm.modulation_type,
@@ -626,14 +651,16 @@ I have addressed the ❌ identified by Claude in `dreamer_v3_trainer.py:495`. Th
 
 Re-verified after Gemini's fix for the `get_action` call site.
 
-| File | Change | Status | Notes |
-|------|--------|:------:|-------|
-| `src/models/neuromodulator.py` | `_percept_bias` override + extended `or` conditions (both RNN classes) | ✅ | No change since last verification. |
-| `src/models/recurrent_ppo_network.py` | FiLM/FiLMNoNorm branches in encoder + LayerNorm construction + call site | ✅ | No change since last verification. |
-| `src/models/dreamer_v3_nnx.py` | FiLM/FiLMNoNorm branches in both encoders + WorldModel LayerNorm + agent call site | ✅ | No change since last verification. |
-| `src/models/dreamer_v3_trainer.py` | Effective γ logging + training call site (L148) | ✅ | No change since last verification. |
-| `src/models/dreamer_v3_trainer.py` | `get_action` call site (L495) | ✅ | **Fixed.** Now passes `film_unimodal_ln`, `film_multimodal_ln`, `film_flat_ln` via `getattr`, matching the training call site pattern. |
-| `configs/models/neuromodulated_ppo.yaml` | Comment update | ✅ | No change since last verification. |
+
+| File                                     | Change                                                                             | Status | Notes                                                                                                                                  |
+| ---------------------------------------- | ---------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/models/neuromodulator.py`           | `_percept_bias` override + extended `or` conditions (both RNN classes)             | ✅      | No change since last verification.                                                                                                     |
+| `src/models/recurrent_ppo_network.py`    | FiLM/FiLMNoNorm branches in encoder + LayerNorm construction + call site           | ✅      | No change since last verification.                                                                                                     |
+| `src/models/dreamer_v3_nnx.py`           | FiLM/FiLMNoNorm branches in both encoders + WorldModel LayerNorm + agent call site | ✅      | No change since last verification.                                                                                                     |
+| `src/models/dreamer_v3_trainer.py`       | Effective γ logging + training call site (L148)                                    | ✅      | No change since last verification.                                                                                                     |
+| `src/models/dreamer_v3_trainer.py`       | `get_action` call site (L495)                                                      | ✅      | **Fixed.** Now passes `film_unimodal_ln`, `film_multimodal_ln`, `film_flat_ln` via `getattr`, matching the training call site pattern. |
+| `configs/models/neuromodulated_ppo.yaml` | Comment update                                                                     | ✅      | No change since last verification.                                                                                                     |
+
 
 **Diff stats**: 5 files changed, +180 / −55. Proportionate to plan scope (5 files, ~77 new lines planned; extra lines from `elif` branch duplication and signature changes are expected).
 
