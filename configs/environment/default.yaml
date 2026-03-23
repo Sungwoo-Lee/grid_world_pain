@@ -256,38 +256,38 @@ visualization:
   local_view_size: 5
 
 perceptual_noise:
-  enabled: false
+  enabled: true
   # Key order here is the single source of truth for noise array indices (0-8).
   # config_loader.py reads this order; sensor.py consumes it via params.noise_modality_order.
   modalities:
     injury:          # index 0
       mode: "state_dependent"
-      sigma: 0.05
+      sigma: 0.1
       injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 1.0
     nutrition:       # index 1
-      mode: "constant"
+      mode: "state_dependent"
       sigma: 0.1
-      injury_noise_scale: 0.0
+      injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 1.0
     satiation:       # index 2
-      mode: "constant"
+      mode: "state_dependent"
       sigma: 0.1
-      injury_noise_scale: 0.0
+      injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 1.0
     extero_nociception: # index 3
-      mode: "constant"
-      sigma: 0.01
-      injury_noise_scale: 0.0
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 100.0     # Unbounded (pain intensity)
     olfaction:       # index 4
-      mode: "constant"
-      sigma: 0.15
-      injury_noise_scale: 0.0
+      mode: "state_dependent"
+      sigma: 0.2
+      injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 100.0     # Unbounded (aggregated chemical gradient)
     collision:       # index 5
@@ -303,9 +303,9 @@ perceptual_noise:
       clip_min: 0.0
       clip_max: 1.0
     visual:          # index 7
-      mode: "constant"
-      sigma: 0.05
-      injury_noise_scale: 0.0
+      mode: "state_dependent"
+      sigma: 0.2
+      injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 100.0     # Unbounded (one-hot counts)
     location:        # index 8

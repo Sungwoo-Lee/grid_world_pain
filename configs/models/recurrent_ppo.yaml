@@ -17,7 +17,7 @@ agent:
   gae_lambda: 0.95
   vf_coef: 0.5
   max_grad_norm: 0.5
-  use_layer_norm: false
+  use_layer_norm: true
   
   # Parity Options
   rnn_type: "GRU"       # "LSTM" or "GRU"
