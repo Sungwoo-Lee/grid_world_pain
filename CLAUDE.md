@@ -21,6 +21,37 @@
   - Always cross-reference related docs in both directions.
 - Include enough detail (file paths, line numbers, code snippets) for the implementing agent to execute without ambiguity.
 
+## Iterative Technical Literature Review Protocol
+
+When tasked with reviewing a collection of references or papers (e.g., from a specific folder or a literature review list), follow this systematic, tiered approach.
+
+* **Source Mapping:** Identify all references from the specified source document or directory.
+* **Contextual Alignment:** Ensure the technical depth matches the project’s existing documentation and specific requirements.
+
+For every individual paper or reference, generate a review consisting of two distinct sections:
+
+Phase 1: Foundational Overview (Undergraduate-Level)
+* **Introduction:** A basic-level summary of the paper’s core problem and concept.
+* **Key Findings:** Summarize the main results and the primary algorithm or methodology used.
+* **Initial Takeaway:** Explain the high-level significance of the work in simple terms.
+
+Phase 2: Graduate-Level Deep Dive
+* **Technical Analysis:** Provide an advanced technical breakdown of the methodology suitable for a graduate student or researcher.
+* **Mathematical Rigor:** Include **all** critical equations from the paper.
+* **Derivations:** Do not simply state formulas; provide step-by-step mathematical derivations to show how results are reached.
+* **Formatting:** Use **LaTeX** for all mathematical variables, expressions, and standalone equations.
+
+To maintain high accuracy and prevent information loss, you must process references **one-by-one** using the following loop:
+
+1.  **Analyze:** Process a single reference according to the Phase 1 and Phase 2 requirements.
+2.  **Update:** Append this analysis to the master "Reference Review" document.
+3.  **Checkpoint:** Use your **"Ask User Question"** skill to provide a brief summary of what was just added and ask for permission to proceed to the next reference.
+4.  **Repeat:** Do not attempt to batch multiple papers in a single turn.
+
+* Use clear `##` and `###` headers for each paper title and sub-section.
+* Maintain an auto-updating Table of Contents at the top of the file as new reviews are added.
+* Ensure all LaTeX syntax is correctly formatted for Markdown rendering.
+
 ### Token Efficiency & Agent Policy
 
 - **Do NOT use subagents or multiagent parallelization** unless the user explicitly requests it. If you believe subagents would help, **ask the user first** before spawning any.
