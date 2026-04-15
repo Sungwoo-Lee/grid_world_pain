@@ -27,6 +27,7 @@ When tasked with reviewing a collection of references or papers (e.g., from a sp
 
 * **Source Mapping:** Identify all references from the specified source document or directory.
 * **Contextual Alignment:** Ensure the technical depth matches the project’s existing documentation and specific requirements.
+* **Skills:** Use pdf skill for this job.
 
 For every individual paper or reference, generate a review consisting of two distinct sections:
 
