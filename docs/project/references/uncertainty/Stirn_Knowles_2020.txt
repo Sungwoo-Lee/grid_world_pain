@@ -1,0 +1,1512 @@
+
+
+=== PAGE 1 ===
+
+Variational Variance: Simple, Reliable, Calibrated
+Heteroscedastic Noise Variance Parameterization
+Andrew Stirn David A. Knowles
+Columbia University
+andrew.stirn@cs.columbia.edu
+Columbia University & New York Genome Center
+daknowles@cs.columbia.edu
+Abstract
+Brittle optimization has been observed to
+adversely impact model likelihoods for re-
+gression and VAEs when simultaneously ﬁt-
+ting neural network mappings from a (ran-
+dom) variable onto the mean and variance
+of a dependent Gaussian variable. Previous
+works have bolstered optimization and im-
+proved likelihoods, but fail other basic pos-
+terior predictive checks (PPCs). Under the
+PPC framework, we propose critiques to test
+predictive mean and variance calibration and
+the predictive distribution’s ability to gener-
+ate sensible data. We ﬁnd that our attrac-
+tively simple solution, to treat heteroscedas-
+tic variance variationally, suﬃciently regular-
+izes variance to pass these PPCs. We con-
+sider a diverse gamut of existing and novel
+priors and ﬁnd our methods preserve or out-
+perform existing model likelihoods while sig-
+niﬁcantly improving parameter calibration
+and sample quality for regression and VAEs.
+1 Introduction
+The machine learning community ubiquitously em-
+ploys neural networks to map conditioning (random)
+variables onto the parameter space of other model vari-
+ables. This technique leverages the expressive power
+of deep learning while preserving probabilistic inter-
+pretability. For example, we often map covariates onto
+the simplex with neural networks to parameterize a
+categorical distribution over observed labels in classi-
+ﬁcation. Parameterizing the mean and variance of a
+normal distribution with neural networks is also preva-
+lent (Nix and Weigend, 1994; Kingma and Welling,
+Preliminary work. Copyright 2021 by the author(s).
+2013; Rezende et al., 2014) but problematic. In partic-
+ular, if our conditional mean network predicts nearly
+perfectly (i.e. µ(xi)≈ yi∀ i∈ [N]), then maximizing
+the log likelihood will push the variance networkσ2(xi)
+towards a pathological 0. This tendency coupled with
+the fact that σ−2 (precision) appears as a multiplica-
+tive factor in the gradient of the normal log likelihood
+w.r.t. µ, underlies why jointly optimizing mean and
+variance networks can be unstable. As the mean es-
+timates µ(xi) improve, the log likelihood encourages
+σ−2(xi)→∞ such that minuscule errors by the mean
+network can produce inappropriately large parameter
+updates. The variance network σ2(xi) eﬀectively con-
+trols the learning rate of the mean network µ(xi)–
+increasing it as the mean network improves–in direct
+opposition to the stochastic gradient descent conver-
+gence criteria of Robbins and Monro (1951). While
+good optima can be found when these criteria are not
+met, instability has been observed to reduce model
+likelihoods when optimizing mean and variance net-
+works in regression (Detlefsen et al., 2019) as well as
+when using mean and variance networks for Gaussian
+decoder likelihoods in VAEs (Takahashi et al., 2018).
+Also, Dai and Wipf (2019) identify the theoretical pref-
+erence of an optimal decoder for zero variance.
+While substantial progress has been made in produc-
+ing accurate means of posited model densities, reliable
+variance estimation has been more elusive despite its
+critical importance for numerous applications in to-
+day’s machine learning arena. For regression, accu-
+rate variance estimates enable Bayesian active learn-
+ing (Cohn et al., 1996) and reinforcement learning
+(Ghavamzadeh et al., 2016) regimes where new data
+is requested or exploration carried out based on pre-
+dictive variance. Realistic sample generation requires
+well-calibrated variance and is critical to adversarial
+learning and data imputation. We carefully inspected
+the code of many state-of-the-art VAE methods and
+found that the generated ‘samples’ were rarely sam-
+pled from the predictive (decoder) distribution. In-
+stead, these methods ancestrally resample latent vari-
+ables from the variational posterior and report the ex-
+arXiv:2006.04910v3  [cs.LG]  30 Oct 2020
+
+=== PAGE 2 ===
+
+Running heading title breaks the line
+pected value of the decoder density. This ‘sampling’
+procedure is actually a Monte-Carlo estimate–often
+using just a single sample from q(z|x)–of the poste-
+rior predictive mean, E[x∗|x] ≜
+∫
+x∗p(x∗|z)q(z|x) dz.
+While preserving uncertainty on the latent space by
+sampling q(z|x), reporting this expectation over the
+observed data space obfuscates any uncertainty in
+the predictive density. Furthermore, approximat-
+ing the posterior predictive distribution, p(x∗|x) ≜∫
+p(x∗|z)q(z|x) dz, with too few z samples can lead to
+inaccurate predictive variance estimates. VAE papers
+claiming improvements to sample quality (van den
+Oord et al., 2017; Razavi et al., 2019) and imputation
+(Nazabal et al., 2018; Mattei and Frellsen, 2018b) do
+not sample the predictive distribution despite some-
+times ﬁtting a global (homoscedastic) scalar variance
+to improve mean calibration (Dai and Wipf, 2019).
+Perhaps the two most commonly reported performance
+metrics for regression and VAEs are the log likeli-
+hood and the root mean square error (RMSE) of the
+model’s expected value. In VAE papers, it is not
+always clear if the reported log likelihood is the ex-
+pected log likelihood, Eq(z|x)[log p(x∗|z)], from the vari-
+ational objective or the log posterior predictive proba-
+bility, log p(x∗|x) = log Eq(z|x)[p(x∗|z)], where x∗ is a
+replicated x. The former is a lower bound of the latter
+via Jensen’s inequality. For consistency, we always use
+the (posterior) predictive distributions, p(y|x) for re-
+gression and p(x∗|x) for VAEs, since they are equally
+well-deﬁned for the frequentist and Bayesian methods
+we consider. We too evaluate log likelihoods and mean
+RMSEs, but also look beyond to variance. To do so,
+we adopt the framework of posterior predictive checks
+(PPCs) (Gelman et al., 2013). PPCs posit a well-ﬁt
+model should, with high probability, produce new data
+that looks similar to the observed data since any dis-
+crepancy could be the result of model misﬁt or chance.
+A common PPC is to evaluate the posterior predictive
+likelihood on a replicated set of the training data or
+better yet on a held-out validation or test set. Alterna-
+tively, one can sample values from the predictive dis-
+tribution and look for systemic discrepancies with the
+original data that may indicate model failure. Here,
+we conduct PPCs from several perspectives. We as-
+sess mean and variance calibrations by measuring bias
+and RMSE between the predictive mean and the data
+and between the predictive variance and the empirical
+variance w.r.t. the predictive mean. We also measure
+bias and RMSE between the original data and sam-
+ples taken from the predictive distribution; this tests
+the model’s ability to generate sensible data thereby
+critiquing cooperation of the mean and variance. We
+provide PPC speciﬁcs for regression and VAEs respec-
+tively in sections 3 and 4.
+In this article, we advocate a Bayesian treatment of
+the predictive distribution’s variance (or rather pre-
+cision for computational convenience). Treating vari-
+ance variationally induces a Kullback–Leibler (KL) di-
+vergence, which, for an appropriate prior, will produce
+gradients that prohibit variance from approaching the
+aforementioned zero pathology (somewhat analogous
+to logarithmic barriers to enforce constraints in con-
+vex optimization) and alleviates the theoretical con-
+cern that maximum likelihood estimation (MLE) of
+continuous VAEs is ill-posed for unbounded likelihood
+functions (Mattei and Frellsen, 2018a). Detlefsen et al.
+(2019) and Takahashi et al. (2018) have addressed op-
+timization instabilities to improve regression and VAE
+model likelihoods, respectively. Here, we look beyond
+likelihood to holistically improve model performance
+through the lens of PPCs. In section 2, we review rel-
+evant variational inference concepts. In section 3, we
+formalize our proposed methods for regression and ex-
+perimentally compare our methods to a variety of base-
+lines. In section 4, we do the same but for VAEs. We
+emphasize that our proposals broadly apply to both
+regression and continuous VAEs and notably outper-
+form other methods speciﬁc to each context.
+2 Amortized Variational Inference
+Variational inference (VI) (Blei et al., 2017) posits a
+family of tractable distributions q(Θ; ν) to approxi-
+mate the true posterior p(Θ|D ) over latent variables Θ
+conditioned on observed dataD. We assume i.i.d. data
+such that p(D| Θ) = ∏
+d∈D p(d|Θ). Often, and as in
+the case of amortized inference (Kingma and Welling,
+2013), we use a neural network with shared learnable
+parameters φ to map data d onto the variational pa-
+rameters ν (i.e. fφ : d→ ν). Amortized VI minimizes
+the variational posterior’s KL divergence from the true
+posterior, DKL(q(Θ|D )|| p(Θ|D )), by maximizing the
+evidence lower bound (ELBO or L or short),
+∑
+d∈D
+E
+q(Θ|fφ(d))
+[
+log p(d|Θ)
+]
+− DKL
+(
+q(Θ|fφ(d))|| p(Θ)
+)
+,
+since KL divergence is strictly non-negative and the
+summation of these dual objectives equals a constant.
+We focus on Gaussian likelihoods with mean µ and
+precision λ. If we treat λ variationally–we consider
+it a latent variable (i.e. λ∈ Θ), specify a prior p(λ)
+to describe its generative process, and employ a vari-
+ational family q(λ|·) to approximate the posterior (or
+factor thereof)–then the KL divergence above will con-
+tain DKL(q(λ|·)|| p(λ)). This regularizing term can
+fortify optimization as discussed in section 1 and, with
+well-informed priors, ideally will ﬁnd distributions over
+λ that accurately reﬂect the local predictive ability of
+mean network µ(·).
+
+=== PAGE 3 ===
+
+Andrew Stirn, David A. Knowles
+xi
+yi
+µi σ2
+i
+N
+i ∈ [N]
+xi
+yi
+µi αi βi
+t
+i ∈ [N]
+xi
+yi
+µi αi βi
+λi Γ
+ΓN
+i ∈ [N]
+Figure 1: Graphical Models for Regression: Normal,
+Student’s t, and Variational Variance (left to right).
+Diamonds are deterministic neural network parame-
+ter maps. Solid arrows denote the generative process.
+Dashed arrows deﬁne the variational family.
+3 Variational Variance for Regression
+Homoscedastic regression assumes yi = f(xi) + ϵi
+where f(xi) is some unknown function of the covari-
+ates and ϵi
+iid
+∼ N(0, σ2) captures noise on yi via the
+unknown global variance parameter σ2. Notably, the
+noise ϵi has no dependence on the covariates xi. Max-
+imizing the log likelihood of the data under a nor-
+mal treatment can be accomplished by ﬁrst minimiz-
+ing∑N
+i=1(yi− µ(xi))2 w.r.t. µ(·) (in our case, a neu-
+ral network) and thereafter setting the global noise
+variance σ2 = N−1∑N
+i=1(yi− µ(xi))2. Unfortunately,
+homoscedasticity is often assumed out of convenience
+rather than to reﬂect prior knowledge of the true gen-
+erative process. One can introduce heteroscedastic-
+ity by additionally parameterizing the noise variance
+with a neural network σ2(·) operating on the covari-
+ates. The generative process for this model appears
+in the leftmost model of ﬁg. 1, has local likelihood
+p(yi|xi) ≜ N (yi|µ(xi), σ2(xi)), can be optimized by
+MLE, and yields a predictive distribution that is sim-
+ply the factorized normal likelihoods since there are no
+priors. We refer to this model as the Normal model
+and note σ2(·) applies a softplus as its ﬁnal activation
+to ensure positive variances.
+3.1 Existing Methods W e Use as Baselines
+In addition to optimization instabilities, Detlefsen
+et al. (2019) observed that simultaneously learning
+neural mean and variance parameterizations can also
+underestimate the true variance, especially in areas
+of covariate space with scarce data. They motivate
+and propose four tricks to ameliorate these issues.
+First, they argue a batch containing xi, but lacking
+other nearby data, while suﬃcient for updating the
+mean, is insuﬃcient for updating the variance (un-
+less the mean is already known). Accordingly, they
+propose a ‘locality sampler’ that ensures any batch
+sample (xi, yi) is accompanied by its K nearest neigh-
+bors (w.r.t. xi), which are found in pre-training.
+Unfortunately, nearest neighbor distance can produce
+meaningless relationships for high dimensional data
+such as natural images. Second, they optimize the
+mean and variance networks in isolation (analogous
+to coordinate ascent). The ﬁrst half of training ﬁts
+only the mean network (using a ﬁxed variance) to
+ensure that, during the latter half of training where
+coordinate ascent alternates every few batches, vari-
+ance estimation is feasible since the mean network
+is presumably now reasonable. Third, they utilize a
+Gamma-Normal parameterized Student’s t, T(yi|xi)≡∫∞
+0 N (yi|µ(xi), λi) Gamma(λi|α(xi), β(xi))dλi, as the
+likelihood, which again results in a predictive distribu-
+tion that factors into local likelihoods (ﬁg. 1, middle).
+This parameterization highlights that the Student’s t
+distribution is a scaled mixture of Gaussians with un-
+known precision λi. From one perspective, the Stu-
+dent’s t regression model is an MLE problem unto
+itself. Alternatively, one could consider it an Em-
+pirical Bayes MAP (maximum a posteriori) estima-
+tion with local likelihoodN (yi|µ(xi), λi) and local het-
+eroscedastic precision prior Gamma( λi|α(xi), β(xi)),
+where the shared α(·) and β(·) neural prior parameter-
+izations are ﬁt during inference. Lastly, they extrap-
+olate variance as a learnable convex combination be-
+tween the estimated heteroscedastic variance (inverted
+samples from the parameterized Gamma) and some
+pre-deﬁned, larger, non-trainable variance. They per-
+form ablation and ﬁnd that their methods are com-
+plementary with the locality sampler and Student’s
+t distribution individually providing the most bene-
+ﬁt. We use Detlefsen to refer to their top method,
+which employs all four of their proposals and gener-
+ally outperforms their chosen baselines: Gaussian pro-
+cesses (Williams and Rasmussen, 2006; Snelson and
+Ghahramani, 2006; Damianou and Lawrence, 2013),
+unmodiﬁed neural-network parameterizations of mean
+and variance (Nix and Weigend, 1994; Bishop, 1994;
+Kingma and Welling, 2013; Rezende et al., 2014),
+Bayesian neural networks (MacKay, 1992; Hern´ andez-
+Lobato and Adams, 2015), and Monte-Carlo Drop Out
+(Gal and Ghahramani, 2016). We independently im-
+plemented just their Student’st proposal and refer to it
+as Student. This proposal in isolation is an important
+baseline since our variational methods also produce a
+Student’s t posterior predictive p(y|x).
+3.2 Proposed Regression Methods
+In contrast to Detlefsen et al. (2019), we propose a
+single, simple modiﬁcation: treat precision variation-
+ally (ﬁg. 1, right). The Student’s t variance can be
+undeﬁned and arbitrarily close to ∞, which makes it
+
+=== PAGE 4 ===
+
+Running heading title breaks the line
+famously robust against outliers, but, as we will see,
+unfortunately hamstrings its ability generate sensible
+data under our PPC framework. Depending on its
+parameters, a Gamma prior over precision can satu-
+rate in a single- (eﬀectively lower bounding variance)
+or double-sided (upper and lower bounding variance)
+manner. Thus, we can avoid optimization instabilities
+while also regularizing variance to pass our PPCs.
+Employing amortized VI may appear as a super-
+ﬂuous inference procedure since the exact posterior,
+p(λ|x, y), is available (see supplement), however, it
+factors into ∏N
+i=1 p(λi|xi, yi) such that local precision
+depends on both xi and yi. This undesirable dual
+dependence could mean p(λ|yi, x)̸= p(λ|yj, x) when
+yi ̸= yj. Thus, the exact posterior falls outside the
+scope of heteroscedasticity, where any realization of
+x should surjectively map onto variance or its dis-
+tribution’s parameter space. Our variational family,
+q(λi|xi) ≜ Gamma(λi|α(xi), β(xi)) satisﬁes this re-
+quirement. Amortized VI preserves the modeling ca-
+pacity of the Student’s t regression (Detlefsen et al.,
+2019) as it requires the same number of neural param-
+eterizations and too yields a Student’s t posterior pre-
+dictive. To summarize, we give up posterior exactness
+for heteroscedasticity and the ability to probabilisti-
+cally regularize precision’s variational distribution.
+We employ black-box VI (Ranganath et al., 2014) in
+conjunction with reparameterization gradients (Sali-
+mans et al., 2013; Kingma and Welling, 2013; Rezende
+et al., 2014; Figurnov et al., 2018) to maximize our
+variational objective,
+L =
+∑
+(x,y)∈D
+E
+q(λ|α(x),β(x))
+[
+logN (y|µ(x), λ)
+]
+− DKL
+(
+q(λ|α(x), β(x))|| p(λ)
+)
+, (1)
+w.r.t. the networks µ(·), α(·), and β(·). The ﬁrst ex-
+pectation of eq. (1) conveniently evaluates analytically
+1
+2
+(
+ψ(α(x))− log β(x)− log(2π)− α(x)
+β(x)(y− µ(x))2
+)
+(ψ(·) is the Digamma function) for univariate y and,
+with a diagonal covariance assumption, for multivari-
+ate y. Networks α(·) and β(·) employ softplus activa-
+tions to ensure they give positive parameter values.
+3.2.1 Precision Priors
+Typically, one deﬁnes a generative process before spec-
+ifying inference methods, yet here, we did the reverse
+since we seek a probabilistically principled way to regu-
+larize a distribution over precision that depends solely
+on the covariates: q(λ|α(x), β(x)), our variational pos-
+terior. As such, we still must deﬁne the priors whose
+regularization eﬀects we wish to evaluate. We con-
+sider both homoscedastic priors of form p(λ) as well
+as heteroscedastic priors of form p(λ|x), but note we
+use p(λ) as in eq. (1) to refer to both homo- and hetero-
+scedastic priors. Since heteroscedasticity is always
+available to our variational posterior, q(λ|α(x), β(x)),
+we really only care about which prior(s) oﬀer optimal
+PPC performance, but note a heteroscedastic prior
+creates a generative process with explicit heteroscedas-
+ticity, whereas, with a homoscedastic prior, we only
+recover heteroscedasticity as a result of our inference
+choices. Performance aside, one may ﬁnd a philosoph-
+ical preference to have heteroscedasticity exist congru-
+ently in both the generative process and in inference.
+We begin by introducing our considered homoscedas-
+tic priors. First, we use a standard Gamma prior
+p(λ) ≜ Gamma(λ; a, b), where a and b are scalar pa-
+rameters speciﬁed a priori. Second, we use what we
+call a V ariational Posterior (V AP) prior. This
+prior independently sets p(λi) ≜ q(λi|α(xi), β(xi)) for
+each data point such that the KL divergence penalty
+in eq. (1) vanishes. This ‘prior’ serves as an ablation
+test to conﬁrm the beneﬁcial regularization of the KL
+divergence. The variational objective (eq. (1)) with a
+VAP prior becomes a lower bound of the log predictive
+likelihood of the Student’s t regression via Jensen’s in-
+equality. We additionally consider the Empirical Bayes
+V AMPprior (Tomczak and Welling, 2017), which is
+the prior that maximizes the ELBO: the aggregate
+posterior p∗(λ) = N−1∑N
+i=j q(λ|α(xj), β(xj)), taken
+over the N training points. We note that this sum-
+mation marginalizes out heteroscedasticity. For com-
+putational eﬃciency, Tomczak and Welling (2017) pro-
+pose using K < N randomly selected (without replace-
+ment) training points (pseudo-inputs) instead of all N.
+They denote the j’th pseudo-input as uj. Additionally,
+they introduce the concept of treating pseudo-inputs
+{u1, . . . , uK} as trainable parameters which back prop-
+agation can modify, which we denote with V AMP∗.
+For heteroscedastic priors, we ﬁrst consider our novel
+modiﬁcation to the VAMP prior, xV AMP
+p(λ|x) ≜
+K∑
+j=1
+πj(x)q
+(
+λ|α(uj), β(uj)
+)
+.
+Heteroscedasticity is preserved using π(x), a neural
+network that maps x onto the simplex, to determine
+the mixture proportions. This augmentation decom-
+poses the KL divergence from eq. (1) into
+E
+q(λ|x)
+[log q(λ|x)]− E
+q(λ|x)
+[
+log
+K∑
+j=1
+πj(x)q(λ|uj)
+]
+, (2)
+where we evaluate the ﬁrst term analytically as the
+Gamma distribution’s negative entropy and Monte-
+
+=== PAGE 5 ===
+
+Andrew Stirn, David A. Knowles
+20
+10
+0
+10
+20
+y
+Detlefsen
+20
+10
+0
+10
+20
+y
+Detlefsen (fixed)
+5
+ 0 5 10 15
+x
+0
+1
+2
+3
+4
+5
+6std(y|x)
+Normal
+Student
+5
+ 0 5 10 15
+x
+Gamma-Normal (VAP)
+Gamma-Normal (Standard)
+5
+ 0 5 10 15
+x
+Gamma-Normal (VAMP)
+Gamma-Normal (VAMP*)
+5
+ 0 5 10 15
+x
+Gamma-Normal (xVAMP)
+Gamma-Normal (xVAMP*)
+5
+ 0 5 10 15
+x
+Gamma-Normal (VBEM)
+Gamma-Normal (VBEM*)
+5
+ 0 5 10 15
+x
+Figure 2: Toy Regression Results. Top two rows: dots
+are training data, black dashed/dotted lines and col-
+ored lines/areas are the true and predictive E[x|y]±2·√
+var(y|x), respectively. Third row: the true (black)
+and average predictive (colors correspond to methods
+above)
+√
+var(y|x) for 20 trials (area is one deviation).
+Carlo estimate the second using the log-sum-exp trick.
+We derive eq. (2) in our supplement. We too consider
+trainable pseudo-inputs for our xVAMP prior, which
+we denote as xV AMP∗. Our second heteroscedastic
+prior is mixture of Gamma distributions
+p(λ|x) ≜
+K∑
+j=1
+πj(x) Gamma(λ|aj, bj),
+where again the mixture proportions, π(x), depend on
+the covariates via a trainable mapping onto the sim-
+plex. We denote this prior as VBEM, which stands
+for Variational Bayes Expectation Maximization, since
+optimizing the prior parameters during VI is analo-
+gous to performing M steps. The resulting KL di-
+vergence is identical to eq. (2) except that we replace
+q(λ|α(uj), β(uj)) with p(λ|aj, bj). The non-trainable
+set of scalar parameters {aj, bj}K
+j=1 is the Cartesian
+square of a set of scalars ranging from 0.05 to 4.0 (see
+supplement for details). Again, we consider a version
+with trainable parameters, which we note as VBEM∗.
+Here, however, we randomly initialize trainable param-
+eters{ˆa1,ˆb1, . . . ,ˆaK,ˆbK} using a Uniform([−3, 3]). To
+ensure valid VBEM∗ parameters, we apply the soft-
+plus to these parameters (e.g. aj = softplus(ˆaj)). Be-
+cause precision is local to each data, there is always a
+1:1 ratio of likelihoods to KL divergences. Thus, the
+Bayesian truism that growing the data set will even-
+tually overwhelm the prior does not apply here.
+3.3 T oy Data
+Detlefsen et al. (2019) simulate heteroscedastic data.
+Similarly, we deﬁne a toy process y ≜ x· sin(x) + ϵ
+where ϵ|x∼N (0, [0.3· (1 + x)]2). We sample training
+covariates uniformly from [0, 10] and test over equally
+spaced points in [ −4, 14]. Detlefsen et al. (2019)’s
+code’s normal log likelihood’s log variance term was
+missing a 1
+2 (this bug only aﬀected this particular ex-
+periment). We ran their code with and without our
+correction to assess its impact. We also mimicked
+their implementation speciﬁcs (see supplement). We
+ﬁnd all methods adeptly estimate the true mean on
+the training interval [0 , 10] (top two rows of subplots,
+ﬁg. 2). Fixing Detlefsen et al. (2019)’s bug signiﬁ-
+cantly improves their ability to learn the true vari-
+ance on [0 , 10]. Our VAP prior is equally accurate
+on this interval. We set the parameters for the stan-
+dard Gamma prior using the MLE parameters of a
+Gamma distribution ﬁt over the the training inter-
+val’s true precision values. The standard Gamma and
+VBEM priors similarly overestimate the true variance
+on parts of [0 , 10], but are the only methods to con-
+sistently overestimate the variance outside the training
+interval [0, 10] (a desiderata of Detlefsen et al. (2019)).
+The VAMP and VAMP∗ priors are poor at captur-
+ing heteroscedastic variance, which we attribute to
+the aforementioned marginalization of heteroscedastic-
+ity. Namely, DKL(q(λ|x)||K−1∑K
+j=1 q(λ|uj)) is min-
+imized when the variational distributions are approx-
+imately uniform. Indeed, they predict homoscedas-
+ticity with a nearly constant standard deviation that
+is approximately equal to the expected value of the
+true standard deviation over the training interval, 1.8.
+The xVAMP and xVAMP ∗ priors generally capture
+the true variance albeit with some inaccuracy near the
+closure of [0 , 10]. VBEM∗ behaves similarly but with
+added inaccuracy across the entire training interval.
+3.4 UCI Data
+We consider many of the same UCI datasets as Detlef-
+sen et al. (2019) and process them similarly: we in-
+dependently whiten all features and targets to enforce
+zero mean and unit variance, while reporting perfor-
+mance metrics for the original target scalings. We
+collect metrics from randomly held-out validation sets
+that each constitute 10% of the data across 20 trials.
+We match the remaining implementation speciﬁcs to
+Detlefsen et al. (2019) (see supplement for details).
+We report model likelihood, N−1∑N
+i=1 log p(yi|xi),
+normalized by N, the number of validation data. Re-
+call p(yi|xi), the (posterior) predictive likelihood, is a
+Student’s t for all methods except the Normal model.
+The remaining PPC metrics require residuals for the
+predictive mean E[yi|xi]− yi, variance var[ yi|xi]−(
+E[yi|xi]− yi
+)2
+, and samples
+(
+y∗∼ p(yi|xi)
+)
+− yi. We
+note the expectations and variances are w.r.t. p(yi|xi).
+The predictive variance is σ2(x) for the Normal model
+and∀α(x) > 1 : β(x)
+α(x)−1 (i.e. the expectation of an
+Inverse-Gamma), which is always available since we
+
+=== PAGE 6 ===
+
+Running heading title breaks the line
+Table 1: UCI Log Predictive Probability (mean±std.) Tuples below dataset are ( Nobservations, dim(x), dim(y)).
+boston carbon concrete energy naval
+Algorithm Prior (506, 13, 1) (10721, 5, 3) (1030, 8, 1) (768, 8, 2) (11934, 16, 2)
+Sun et al. (2019) N/A -2.30±0.04 – -3.10±0.02 -0.68 ±0.02 7.13 ±0.02
+Detlefsen N/A -2.98 ±0.09 8.77 ±0.24 -3.66 ±0.08 -4.90 ±0.27 9.67 ±0.19
+Normal N/A -2.42 ±0.23 13.20 ±1.35 -3.06 ±0.17 -0.48 ±0.69 14.15 ±0.17
+Student N/A -2.37 ±0.19 17.19±0.21 -3.10±0.17 0.22 ±0.31 13.60 ±0.39
+Gamma-Normal VAP -2.36 ±0.17 15.52 ±0.24 -3.12 ±0.17 0.17 ±0.44 13.36 ±0.41
+Standard -2.48 ±0.29 11.28 ±0.02 -3.20 ±0.16 -1.05 ±0.18 12.33 ±0.16
+VAMP -2.39 ±0.17 14.37 ±0.17 -3.09 ±0.16 -0.18 ±0.21 14.16 ±0.78
+VAMP* -2.39 ±0.16 14.38 ±0.12 -3.09 ±0.16 -0.16 ±0.20 13.96 ±0.88
+xVAMP -2.33±0.17 15.38±0.24 -3.01 ±0.14 0.05 ±0.28 13.50 ±0.59
+xVAMP* -2.33 ±0.17 15.41 ±0.18 -3.01 ±0.13 0.11 ±0.39 13.34 ±0.47
+VBEM -2.46 ±0.11 4.57 ±1.00 -3.11 ±0.07 -4.52 ±0.26 9.02 ±0.61
+VBEM* -2.36 ±0.14 14.64 ±0.16 -2.99±0.13 0.49 ±0.28 14.42 ±0.15
+power plant superconductivity wine-red wine-white yacht
+Algorithm Prior (9568, 4, 1) (21263, 81, 1) (1599, 11, 1) (4898, 11, 1) (308, 6, 1)
+Sun et al. (2019) N/A -2.83±0.01 – – – -1.03±0.03
+Detlefsen N/A -3.26 ±9.1e-03 -5.21 ±0.02 -1.04 ±0.06 -1.12 ±0.04 -3.15 ±0.10
+Normal N/A -2.82 ±0.05 -3.51 ±0.10 -0.92 ±0.05 -1.05 ±0.04 -1.55 ±0.65
+Student N/A -2.78±0.03 -3.41±0.05 -0.80±0.10 -1.05±0.04 -1.73 ±0.59
+Gamma-Normal VAP -2.81 ±0.04 -3.45 ±0.06 -0.87 ±0.06 -1.04 ±0.04 -1.79 ±0.50
+Standard -2.88 ±0.03 -3.45 ±0.04 -0.98 ±0.07 -1.13 ±0.05 -1.73 ±0.38
+VAMP -2.83 ±0.03 -3.94 ±0.02 -0.94 ±0.05 -1.05 ±0.04 -2.83 ±0.70
+VAMP* -2.83 ±0.03 -3.94 ±0.03 -0.94 ±0.05 -1.05 ±0.04 -2.77 ±0.77
+xVAMP -2.81 ±0.04 -3.40 ±0.04 -0.90 ±0.05 -1.03 ±0.04 -1.68 ±0.38
+xVAMP* -2.81 ±0.04 -3.39±0.05 -0.89±0.06 -1.03 ±0.04 -1.71 ±0.47
+VBEM -2.89 ±0.05 -3.77 ±0.09 -0.91 ±0.05 -1.03 ±0.03 -2.64 ±0.23
+VBEM* -2.81 ±0.03 -3.41 ±0.04 -0.89 ±0.06 -1.03±0.04 -1.11 ±0.57
+oﬀset α(x)’s softplus output by 1. For each residual,
+we compute bias (i.e. the mean) and root mean square
+error (RMSE) over the N validation points.
+Table 1 contains UCI log predictive probabilities with
+top performers in bold. We include recent competi-
+tive results (Sun et al., 2019), which we italicize to
+emphasize that they are reported–we did not repro-
+duce them. Often the reported models utilized larger
+neural networks than we did. If multiple architectures
+were reported, we selected the one closest in size to
+ours. We report tables corresponding to the remain-
+ing six PPC metrics in our supplement, though we
+include a summary in table 2, which tallies the num-
+ber of the datasets for which a method was the top
+performer and, in parentheses, was statistically indis-
+tinguishable from the winner according to a two-sided
+Kolmogorov–Smirnov test with a p≤ 0.05 signiﬁcance
+threshold. Because we could not obtain all PPC met-
+rics for reported results, we exclude them from the
+summary table, but append them to the correspond-
+ing PPC table in our supplement if they were available.
+Examining table 2, we ﬁnd that our baselines generally
+under perform in each category compared to our meth-
+ods. Student’s and VAP’s under performance conﬁrms
+the beneﬁt of regularizing variance. Our VBEM∗ prior
+oﬀers the best balance of performance, winning log
+likelihood and posting a competitive number of statis-
+tical ties for the remaining PPCs. Since particular ap-
+plications may place higher emphasis on certain PPC
+categories, we encourage readers to utilize table 2 as
+a guide when picking a method most appropriate for
+their application.
+4 Variational Variance for V AEs
+The variational autoencoder (VAE) (Kingma and
+Welling, 2013) is a deep latent variable model (DLVM)
+that provides computationally eﬃcient VI for a gen-
+erative process from a low-dimensional latent local
+variable zi to high-dimensional data xi. We place a
+p(z) ≜N (0, I) prior on the latent variables and per-
+form inference by deﬁning q(z|x) ≜N (z|µz(x), σ2
+z(x)),
+where µz(x) and σ2
+z(x) are bifurcated outputs of the
+same neural network. A softplus is applied to the vari-
+ances to ensure positivity. The VAE’s ELBO is
+∑
+x∈D
+E
+q(z|x)
+[
+logN (x|µx(z), σ2
+x(z))
+]
+− DKL
+(
+q(z|x)|| p(z)
+)
+. (3)
+Parameter maps µx(z) and σ2
+x(z) can be either bifur-
+cated outputs of the same neural network ( V AE) or
+separate neural networks ( V AE-Split). We evaluate
+both architectures with and without batch normaliza-
+tion ( + BN ). Detlefsen et al. (2019) apply their re-
+gression proposals to VAEs. We refer the interested
+reader to their manuscript for details. Takahashi et al.
+(2018) propose using a Student’s t likelihood to bol-
+ster optimization and improve model likelihood. Their
+
+=== PAGE 7 ===
+
+Andrew Stirn, David A. Knowles
+Table 2: UCI Regression Summary: reported as wins (statistical ties)
+LL Mean Bias Mean RMSE Var Bias Var RMSE Sample Bias Sample RMSE
+Algorithm Prior
+Detlefsen N/A 0 (0) 2 (3) 1 (1) 0 (0) 0 (1) 0 (4) 0 (0)
+Normal N/A 0 (3) 1 (7) 2 (7) 1 (6) 2 (7) 2 (9) 3 (6)
+Student N/A 3 ( 7) 0 (7) 0 (6) 0 (5) 0 (3) 0 (9) 2 (5)
+Gamma-Normal VAP 0 (4) 0 (9) 0 (6) 0 (7) 0 (4) 3 (9) 0 (5)
+Standard 0 (0) 0 (7) 0 (6) 2 (6) 0 (5) 0 (7) 0 (5)
+VAMP 0 (3) 3 (10) 0 (8) 1 (7) 3 (9) 1 ( 10) 1 ( 9)
+VAMP* 0 (3) 0 ( 10) 1 (8) 2 (7) 1 ( 9) 0 ( 10) 2 ( 9)
+xVAMP 1 (4) 2 (9) 0 (7) 1 (6) 1 (7) 0 (9) 2 (6)
+xVAMP* 1 (4) 1 (9) 0 (7) 1 ( 8) 0 (8) 1 (9) 0 (6)
+VBEM 0 (1) 0 ( 10) 5 (10) 0 (0) 2 (6) 1 (9) 0 (0)
+VBEM* 5 (7) 1 (9) 1 (7) 2 (5) 1 (7) 2 (9) 0 (5)
+method, V AE-Student, results in an ELBO
+∑
+x∈D
+E
+q(z|x)
+[
+log T(x|µx(z), λx(z), νx(z))
+]
+− DKL
+(
+q(z|x)|| p(z)
+)
+(4)
+with three separate neural networks, µx(z), λx(z) and
+νx(z) for mean, precision, and degrees-of-freedom, re-
+spectively. Since the Student’s t variance is unde-
+ﬁned for νx(z) ∈ (0, 1], inﬁnite for νx(z) ∈ (1, 2],
+and arbitrarily close to ∞ for νx(z)≈ 2, we restrict
+νx(z) > 3 using a shifted softplus. We found that
+allowing the posterior predictive to attain these high
+variances worsens its PPC performance beyond what
+we report. Takahashi et al. (2018) additionally pro-
+pose their MAP-V AE where precision is absorbed
+into the likelihood: p(λ|z) ≜ Gamma(λ|a, b) for pre-
+deﬁned constants a and b. The MAP-VAE’s ELBO
+is identical to eq. (3) except for the additional log
+likelihood term and replacing σ2
+x(z) with a network
+that outputs precision. Our method, V3AE (varia-
+tional variance VAE) treats precision variationally and
+uses q(λ|z) ≜ Gamma(λ|α(z), β(z)) as its variational
+family. We consider the same priors discussed in sec-
+tion 3.2.1 for λ, except that we now condition on latent
+codes zi. Our resulting ELBO,
+∑
+x∈D
+E
+q(z|x)
+[
+E
+q(λ|z)
+[
+logN (x|µx(z), λ)
+]
+− DKL
+(
+q(λ|α(z), β(z))|| p(λ)
+)
+]
+− DKL
+(
+q(z|x)|| p(z)
+)
+, (5)
+introduces a KL divergence that regularizes the predic-
+tive variance. See supplement for additional details.
+A posterior predictive distribution is always the ex-
+pected likelihood w.r.t. the (variational) posterior.
+The VAE (+ BN), VAE-Split (+ BN), and MAP-
+VAE’s predictive distribution is the expected normal
+likelihood w.r.t. q(z|x). Because the decoder em-
+ploys neural networks that operate on z, this inte-
+gral is not analytically available. We therefore esti-
+mate it with 20 Monte-Carlo samples. The resulting
+approximation becomes a uniform mixture of Gaus-
+sians with one component for each z sample. Sim-
+ilarly, the VAE-Student’s approximate posterior pre-
+dictive is a uniform mixture of Student’s t distribu-
+tions. Our V3AE methods have two variational dis-
+tributions q(z|x) and q(λ|z). Integrating the V3AE’s
+normal likelihood w.r.t. q(λ|z) is analytically tractable
+and gives back a Student’s t. Thereafter, we approxi-
+mate q(z|x) integration again by taking a uniform mix-
+ture over z samples of Student t distributions.
+Having explicated the posterior predictive approxi-
+mations for each VAE method, we can now deﬁne
+our PPCs. We report normalized model likelihood,
+N−1∑N
+i=1 log p(x∗
+i|xi), for which x∗
+i denotes a repli-
+cated xi (i.e. x∗
+i ≡ xi). Our other PPCs require
+residuals for the predictive mean: E[x∗
+i|xi]− xi, vari-
+ance: var[x∗
+i|xi]−(E[x∗
+i|xi]− xi)2, and samples:
+(
+x∗∼
+p(x∗
+i|xi)
+)
+− xi. We rely on TensorFlow’s mixture dis-
+tribution support for generating the log likelihoods,
+means, variances, and samples associate with our pos-
+terior predictive approximations. Here, we focus on
+mean/sample RMSE and variance bias.
+We report VAE PPC metrics for the Fashion MNIST
+dataset in table 3. Top performers are in bold as well
+as any method that is statistically indistinguishable
+using the same test from section 3.4. In ﬁg. 3, we
+curate a subset of the VAE methods to qualitatively
+visualize our PPCs. We include tabular results for
+MNIST in our supplement, but note they trend simi-
+larly. Therein, one can also ﬁnd similar ﬁgures but for
+all methods with additional data samples.
+Comparing the Fixed-Variance VAEs conﬁrms Dai
+and Wipf (2019)’s claim that variance impacts mean
+quality. While ﬁxing variance to 0.001 produces the
+crispest means and samples, we sacriﬁce tremendous
+likelihood, heteroscedasticity, and our ability to ana-
+lyze model uncertainty. The Student VAE dominates
+
+=== PAGE 8 ===
+
+Running heading title breaks the line
+Table 3: VAE PPCs for Fashion MNIST (mean±std.)
+LL Mean RMSE Var Bias Sample RMSE
+Method
+Fixed-Var. VAE (1.0) -730.05 ±0.11 0.15 ±1.8e-03 0.98 ±5.7e-04 1.01 ±3.7e-04
+Fixed-Var. VAE (0.001) -1452.44 ±3.65 9.4e-02±4.6e-05 -7.8e-03±8.6e-06 9.9e-02±4.7e-05
+VAE 2154.31 ±42.11 0.25 ±1.4e-03 3.3e-02 ±1.5e-03 0.39 ±3.1e-03
+VAE + BN 1639.39 ±15.33 0.20 ±1.8e-03 2.1e-02 ±3.0e-03 0.31 ±5.6e-03
+VAE-Split 2099.28 ±39.97 0.27 ±2.9e-03 4.7e-02 ±1.6e-03 0.45 ±4.8e-03
+VAE-Split + BN 1948.30 ±25.87 0.26 ±6.2e-03 3.1e-02 ±3.6e-03 0.41 ±1.1e-02
+Detlefsen -1624.12 ±8.3e-03 0.16 ±8.2e-04 9.97 ±3.3e-04 3.17 ±1.2e-03
+MAP-VAE 1003.51 ±32.75 0.11 ±4.1e-03 -9.1e-03 ±6.2e-04 0.13 ±4.8e-03
+Student-VAE 3134.52±18.60 0.29±3.3e-03 7.4e-02 ±1.6e-02 0.49 ±2.2e-02
+V3AE-VAP 2146.46 ±67.83 0.28 ±3.5e-03 9.9e-04±3.0e-03 0.40±8.2e-03
+V3AE-Gamma 1201.95 ±25.25 0.11 ±2.8e-03 -8.0e-03 ±4.1e-04 0.12 ±3.4e-03
+V3AE-VAMP 1632.22 ±12.89 0.17 ±1.3e-03 1.5e-03 ±2.7e-04 0.25 ±2.4e-03
+V3AE-VAMP* 1630.10 ±17.87 0.18 ±2.6e-03 1.3e-03 ±2.5e-04 0.25 ±3.4e-03
+V3AE-xVAMP 1601.60 ±21.49 0.18 ±2.5e-03 1.3e-03 ±4.1e-04 0.25 ±3.8e-03
+V3AE-xVAMP* 1619.97 ±25.95 0.18 ±3.3e-03 1.5e-03 ±4.6e-04 0.25 ±5.0e-03
+V3AE-VBEM 306.46 ±1.04 0.10 ±6.8e-04 6.4e-02 ±9.7e-05 0.29 ±3.3e-04
+V3AE-VBEM* 1153.11 ±4.20 0.10 ±5.5e-04 4.4e-04±3.9e-05 0.15±8.0e-04
+VAE ( 2 = 1.0)
+VAE ( 2 = 0.001)
+VAE
+MAP-VAE
+Student-VAE
+V3AE-Gamma
+V3AE-VBEM*
+VAE ( 2 = 1.0)
+VAE ( 2 = 0.001)
+VAE
+MAP-VAE
+Student-VAE
+V3AE-Gamma
+V3AE-VBEM*
+Figure 3: VAE PPC Visualization: The rows within
+a subplot from top to bottom are randomly selected
+test data followed by the posterior predictive mean
+and variance and a sample from it. Pixel values are
+clamped to [0 , 1], when PPC values exit this interval.
+likelihood, but fails terribly at our other PPCs ren-
+dering predictive means and samples unrecognizable.
+This paradox highlights the need for our additional
+PPCs. The standard VAEs with heteroscedastic vari-
+ances attain likelihoods similar to many of our meth-
+ods, but perform notably worse than those same meth-
+ods on the other PPCs. Detlefsen’s VAE has the worst
+variance calibration and sample quality because their
+variance extrapolation learns to fully weight the larger
+constant variance of 10, which is excessive for data in
+[0, 1]. The MAP-VAE and our V3AE-Gamma make
+up much of likelihood lost when ﬁxing variance to
+0.001. These two methods also produce crisp samples
+and well-calibrated predictive means and variances.
+We note, however, our V3AE-Gamma attains supe-
+rior likelihoods. Interestingly, these two methods learn
+predictive variances that indicate the models are most
+uncertain at edge localization.
+5 Conclusion
+In this manuscript, we motivate and advocate a prob-
+abilistically principled method for regularizing neural
+network variance parameterizations that broadly ap-
+plies to regression and continuous VAEs. Our experi-
+ments highlight that model likelihood is not necessar-
+ily the complete story. Baseline methods with high
+likelihoods can have poor predictive mean and vari-
+ance calibrations and also exhibit systematic sampling
+discrepancies. As we discuss, these undesirable char-
+acteristics unfortunately are indicative of model fail-
+ure. Conversely, our proposed methods boast competi-
+tive model likelihoods and improve performance under
+this holistic set of model critiques. Additionally, our
+methods preserve heteroscedasticity and thereby en-
+able model uncertainty analyses. Thus, our methods
+may be of interest to those working on reinforcement
+learning, active learning, and data imputation tasks.
+
+=== PAGE 9 ===
+
+Andrew Stirn, David A. Knowles
+References
+Bishop, C. M. (1994). Mixture density networks.
+Blei, D. M., Kucukelbir, A., and McAuliﬀe, J. D.
+(2017). Variational inference: A review for statis-
+ticians. Journal of the American statistical Associ-
+ation, 112(518):859–877.
+Cohn, D. A., Ghahramani, Z., and Jordan, M. I.
+(1996). Active learning with statistical models.
+Journal of artiﬁcial intelligence research, 4:129–145.
+Dai, B. and Wipf, D. (2019). Diagnosing and enhanc-
+ing VAE models. In International Conference on
+Learning Representations.
+Damianou, A. and Lawrence, N. (2013). Deep gaussian
+processes. In Artiﬁcial Intelligence and Statistics ,
+pages 207–215.
+Detlefsen, N., Jørgensen, M., and Hauberg, S. (2019).
+Reliable training and estimation of variance net-
+works. In Advances in Neural Information Process-
+ing Systems, pages 6323–6333.
+Figurnov, M., Mohamed, S., and Mnih, A. (2018). Im-
+plicit reparameterization gradients. In Advances in
+Neural Information Processing Systems, pages 441–
+452.
+Gal, Y. and Ghahramani, Z. (2016). Dropout as a
+bayesian approximation: Representing model uncer-
+tainty in deep learning. In international conference
+on machine learning , pages 1050–1059.
+Gelman, A., Carlin, J. B., Stern, H. S., Dunson, D. B.,
+Vehtari, A., and Rubin, D. B. (2013). Bayesian data
+analysis. CRC press.
+Ghavamzadeh, M., Mannor, S., Pineau, J., and Tamar,
+A. (2016). Bayesian reinforcement learning: A sur-
+vey. arXiv preprint arXiv:1609.04436 .
+Hern´ andez-Lobato, J. M. and Adams, R. (2015). Prob-
+abilistic backpropagation for scalable learning of
+bayesian neural networks. In International Confer-
+ence on Machine Learning , pages 1861–1869.
+Kingma, D. P. and Ba, J. (2014). Adam: A
+method for stochastic optimization. arXiv preprint
+arXiv:1412.6980.
+Kingma, D. P. and Welling, M. (2013). Auto-encoding
+variational bayes. arXiv preprint arXiv:1312.6114 .
+MacKay, D. J. (1992). A practical bayesian framework
+for backpropagation networks. Neural computation,
+4(3):448–472.
+Mattei, P.-A. and Frellsen, J. (2018a). Leveraging
+the exact likelihood of deep latent variable models.
+In Advances in Neural Information Processing Sys-
+tems, pages 3855–3866.
+Mattei, P.-A. and Frellsen, J. (2018b). Miwae: Deep
+generative modelling and imputation of incomplete
+data. arXiv preprint arXiv:1812.02633 .
+Nazabal, A., Olmos, P. M., Ghahramani, Z., and
+Valera, I. (2018). Handling incomplete het-
+erogeneous data using vaes. arXiv preprint
+arXiv:1807.03653.
+Nix, D. A. and Weigend, A. S. (1994). Estimating the
+mean and variance of the target probability distribu-
+tion. In Proceedings of 1994 ieee international con-
+ference on neural networks (ICNN’94) , volume 1,
+pages 55–60. IEEE.
+Ranganath, R., Gerrish, S., and Blei, D. (2014). Black
+box variational inference. In Artiﬁcial Intelligence
+and Statistics, pages 814–822.
+Razavi, A., van den Oord, A., and Vinyals, O. (2019).
+Generating diverse high-ﬁdelity images with vq-vae-
+2. In Advances in Neural Information Processing
+Systems, pages 14837–14847.
+Rezende, D. J., Mohamed, S., and Wierstra, D. (2014).
+Stochastic backpropagation and approximate infer-
+ence in deep generative models. arXiv preprint
+arXiv:1401.4082.
+Robbins, H. and Monro, S. (1951). A stochastic ap-
+proximation method. The annals of mathematical
+statistics, pages 400–407.
+Salimans, T., Knowles, D. A., et al. (2013). Fixed-
+form variational posterior approximation through
+stochastic linear regression. Bayesian Analysis ,
+8(4):837–882.
+Snelson, E. and Ghahramani, Z. (2006). Sparse gaus-
+sian processes using pseudo-inputs. In Advances in
+neural information processing systems , pages 1257–
+1264.
+Sun, S., Zhang, G., Shi, J., and Grosse, R. (2019).
+Functional variational bayesian neural networks.
+arXiv preprint arXiv:1903.05779 .
+Takahashi, H., Iwata, T., Yamanaka, Y., Yamada, M.,
+and Yagi, S. (2018). Student-t variational autoen-
+coder for robust density estimation. In IJCAI, pages
+2696–2702.
+Tomczak, J. M. and Welling, M. (2017). Vae with a
+vampprior. arXiv preprint arXiv:1705.07120 .
+van den Oord, A., Vinyals, O., et al. (2017). Neu-
+ral discrete representation learning. In Advances
+in Neural Information Processing Systems , pages
+6306–6315.
+Williams, C. K. and Rasmussen, C. E. (2006). Gaus-
+sian processes for machine learning, volume 2. MIT
+press Cambridge, MA.
+
+=== PAGE 10 ===
+
+Running heading title breaks the line
+6 Introduction
+Hereafter, we include supplementary material for our manuscript. Please refer to our arxiv version for the
+latest results. Our code is available at https://github.com/astirn/VariationalVariance. We organize this
+supplement using the same section names as the main article. Any reference to the supplement from the main
+article will appear in the corresponding section. Figure and table numbers continue from the main article.
+7 Amortized Variational Inference
+This section is intentionally blank since its supplemental section is not necessary.
+8 Variational Variance for Regression
+8.1 Existing Methods W e Use as Baselines
+This section is intentionally blank since its supplemental section is not necessary.
+8.2 Proposed Regression Methods
+The following derivation proves that precision’s true posterior for regression locally factorizes into a distribution
+that depends both on the covariates xi and responses yi. As we discuss in the main article, this dual dependence
+implies the true posterior falls outside the scope of heteroscedasticity due to the additional dependence on yi.
+p(λ|y, x) = p(y, λ|x)
+p(y|x) = p(y, λ|x)∫
+p(y, λ|x)dλ = p(y|x, λ)p(λ)∫
+p(y, λ|x)dλ
+=
+∏n
+i=1N (yi|µ(xi), λi)p(λi)∫∏n
+i=1N (yi|µ(xi), λi)p(λi)dλi
+=
+∏n
+i=1N (yi|µ(xi), λi)p(λi)∏n
+i=1
+∫
+N (yi|µ(xi), λi)p(λi)dλi
+=
+n∏
+i=1
+p(λi|yi, xi)
+Above, we use p(λi|yi, xi) ≜ N(yi|µ(xi),λi)p(λi)∫
+N(yi|µ(xi),λi)p(λi)dλi
+to symbolically capture the local factorization.
+8.2.1 Precision Priors
+Here, we derive the xVAMP ELBO and decompose its KL divergence. The xVAMP generative process is
+u1, . . . , uK∼ UniformWithoutReplacement({x1, . . . , xN})
+λi|xi∼ p(λi|xi, u1, . . . , uK) ≜
+K∑
+j=1
+πj(xi)· q(λi|uj)
+yi|xi, λi∼ p(yi|xi, λi) ≜N (yi|µ(xi), λi).
+Please note that we treat {uj}K
+j=1 as prior parameters (not random variables).
+
+=== PAGE 11 ===
+
+Andrew Stirn, David A. Knowles
+This generative process leads to the local (per-point) ELBO
+log p(yi|xi) = E
+q(λi|xi)
+[
+log p(yi|xi, λi)− log q(λi|xi)
+p(λi|xi) + log q(λi|xi)
+p(λi|xi, yi)
+]
+= E
+q(λi|xi)
+[
+log p(yi|xi, λi)
+]
+− DKL
+(
+q(λi|xi)||p(λi|xi)
+)
++ DKL
+(
+q(λi|xi)||p(λi|xi, yi)
+)
+≥ E
+q(λi|xi)
+[
+log p(yi|xi, λi)
+]
+− DKL
+(
+q(λi|xi)||p(λi|xi)
+)
+= E
+q(λi|xi)
+[
+log p(yi|xi, λi)− log q(λi|xi) + log
+K∑
+j=1
+πj(xi)q(λi|uj)
+]
+.
+From the ELBO, we determine
+DKL
+(
+q(λi|xi)||p(λi|xi)
+)
+= E
+q(λi|xi)
+[
+log q(λi|xi)− log
+K∑
+j=1
+πj(xi)q(λi|uj)
+]
+=−H
+[
+q(λi|xi)
+]
+− E
+q(λi|xi)
+[
+log
+K∑
+j=1
+πj(xi)q(λi|uj)
+]
+. (6)
+For VBEM’s prior parameters we use the Cartesian square of a set of scalars ranging from 0.05 to 4.0. That set
+of integers is
+{0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0}.
+8.3 T oy Data
+Here, we provide the exact implementation details used during the toy regression experiments. For all methods,
+we employ neural networks with a single hidden layer of 50 sigmoid neurons to match Detlefsen et al. (2019).
+For our VAMP(∗), xVAMP(∗), and VBEM∗ priors, we set K = 20. For VAMP(∗) and xVAMP(∗), we sample
+20
+10
+0
+10
+20
+y
+Detlefsen
+20
+10
+0
+10
+20
+y
+Detlefsen (fixed)
+5
+ 0 5 10 15
+x
+0
+1
+2
+3
+4
+5
+6std(y|x)
+Normal
+Student
+5
+ 0 5 10 15
+x
+Gamma-Normal (VAP)
+Gamma-Normal (Standard)
+5
+ 0 5 10 15
+x
+Gamma-Normal (VAMP)
+Gamma-Normal (VAMP*)
+5
+ 0 5 10 15
+x
+Gamma-Normal (xVAMP)
+Gamma-Normal (xVAMP*)
+5
+ 0 5 10 15
+x
+Gamma-Normal (VBEM)
+Gamma-Normal (VBEM*)
+5
+ 0 5 10 15
+x
+Figure 4: Toy Regression Results. Top two rows: dots are training data, black dashed/dotted lines and colored
+lines/areas are the true and predictive E[x|y]± 2·
+√
+var(y|x), respectively. Third row: the true (black) and
+average predictive (colors correspond to methods above)
+√
+var(y|x) for 20 trials (area is one deviation).
+
+=== PAGE 12 ===
+
+Running heading title breaks the line
+pseudo-inputs ui
+iid
+∼ Uniform([−4, 14]). Like Detlefsen et al. (2019), we use ADAM (Kingma and Ba, 2014) for
+optimization. While Detlefsen et al. (2019) employ separate optimizers for the mean and variance networks that
+respectively use 1e-2 and 1e-3 as learning rates, we employ a single ADAM instance with a learning rate of 5e-3.
+We run all algorithms for 6e3 epochs without batching (i.e. the single batch contains all 500 training points).
+We ran the toy experiments on a NVIDA RTX2070.
+We additionally include an enlarged copy (ﬁg. 4) of the main article’s toy data ﬁgure for enhanced clarity.
+8.4 UCI Data
+Here, we provide the experimental speciﬁcs for the UCI regression experiments. Detlefsen et al. (2019) again
+employ a neural network with a single hidden layer, but now with 50 ReLU neurons. We use the same network
+architecture except with ELU neurons, which we found to be more robust during our Monte-Carlo estimation
+of the right-most term of eq. (6)’s RHS. The baseline code (Detlefsen et al., 2019) allows training to run for
+some number of batch iterations, whereas our code uses the notion of an epoch, which encompasses the number
+of batches required to see each example in the training set exactly once. To keep things equal, we allow each
+algorithm to run for a dataset-speciﬁc number of batch iterations with a batch size of 256, which we convert
+to epochs (⌈ iterations
+batch size⌉) for our methods. All UCI datasets use 2e4 batch iterations except for those with larger
+(N > 9000) sample sizes (e.g. carbon, naval, power plant, and superconductivity), which use 1e5 batch iterations.
+Here, Detlefsen et al. (2019) use 1e-2 and 1e-4 as learning rates for the mean and variance networks, respectively.
+We use 1e-3 as the learning rate for our single ADAM instance. We use a = 1 and b = 0.001 as the standard
+Gamma prior’s parameters. For VAMP( ∗) and xVAMP(∗) we sample K = 100 pseudo-inputs uniformly from
+the training set without replacement. We also use K = 100 for our VBEM∗ prior. We employ early stopping
+on the validation set’s log (posterior) predictive likelihood with a patience of 50 epochs. We implemented an
+equivalent early stopping mechanism in the baseline code (Detlefsen et al., 2019), in which we also introduced
+support for multivariate response variables. We ran the UCI experiments on a NVIDA RTX2070 and were able
+to parallelize up to ﬁve trials (i.e. ﬁve concurrent training sessions for any of the tested models).
+We include the remaining PPC metrics in tables 4 to 9, where we bold just the top performer. We italicize any
+cited (i.e. reported) results, which we never bold since we did not validate those methods under our experimental
+conﬁgurations (e.g. some reported results use larger neural networks). Statistical ties for all PPC metrics are
+tallied in table 2 of our original manuscript.
+Table 4: UCI Mean Bias (mean±std.) Tuples below dataset are ( Nobservations, dim(x), dim(y)).
+boston carbon concrete energy naval
+Algorithm Prior (506, 13, 1) (10721, 5, 3) (1030, 8, 1) (768, 8, 2) (11934, 16, 2)
+Detlefsen N/A -0.67 ±1.81 -9.8e-04 ±3.5e-03 -0.03 ±3.30 0.15 ±0.87 -2.8e-04 ±6.3e-04
+Normal N/A -0.28 ±0.56 5.5e-05 ±2.1e-04 0.32 ±0.66 0.06 ±0.10 -1.3e-04 ±1.2e-04
+Student N/A -0.50 ±0.51 -4.3e-05 ±1.4e-04 -0.04 ±0.72 -0.06 ±0.13 -1.0e-04 ±1.5e-04
+Gamma-Normal VAP -0.31 ±0.54 1.5e-04 ±2.2e-04 0.06 ±0.73 -0.03 ±0.12 -4.1e-05 ±8.1e-05
+Standard -0.39 ±0.67 5.0e-05 ±1.9e-04 0.09 ±0.72 0.04 ±0.10 -1.4e-04 ±8.5e-05
+VAMP -0.18±0.52 9.5e-06 ±2.3e-04 -0.10±0.58 0.02±0.11 -4.6e-06±5.5e-05
+VAMP* -0.18 ±0.52 7.9e-05 ±2.0e-04 -0.10 ±0.58 0.02 ±0.11 -8.9e-06 ±6.0e-05
+xVAMP -0.25 ±0.54 4.6e-05 ±1.8e-04 9.2e-03±0.63 0.03±0.11 -1.8e-06±7.1e-05
+xVAMP* -0.24 ±0.54 1.3e-04 ±2.0e-04 0.03 ±0.66 0.02 ±0.11 3.8e-06 ±6.2e-05
+VBEM -0.18 ±0.54 7.3e-05 ±3.8e-04 -0.01 ±0.55 0.03 ±0.11 1.5e-05 ±2.8e-05
+VBEM* -0.19 ±0.58 -2.2e-05 ±2.1e-04 -0.02 ±0.63 0.03 ±0.11 1.9e-05 ±5.8e-05
+power plant superconductivity wine-red wine-white yacht
+Algorithm Prior (9568, 4, 1) (21263, 81, 1) (1599, 11, 1) (4898, 11, 1) (308, 6, 1)
+Detlefsen N/A 0.15 ±0.79 1.22 ±3.11 0.02 ±0.12 2.8e-03±0.08 -0.06 ±1.19
+Normal N/A -9.9e-03 ±0.07 0.90 ±0.62 -5.1e-03±0.06 -3.3e-03±0.03 -0.96 ±0.82
+Student N/A 0.06 ±0.08 0.29 ±0.54 -0.07 ±0.06 -0.02 ±0.03 -7.47 ±2.71
+Gamma-Normal VAP 0.02 ±0.05 -0.08 ±0.33 -0.01 ±0.06 -7.0e-03 ±0.03 -7.22 ±2.74
+Standard -9.6e-03 ±0.11 0.74 ±0.33 -0.02 ±0.06 -0.01 ±0.03 -5.42 ±1.86
+VAMP 3.2e-03 ±0.06 0.09 ±0.38 -0.01 ±0.06 -0.01 ±0.03 -0.62 ±1.53
+VAMP* 3.2e-03 ±0.06 0.06 ±0.39 -0.01 ±0.06 -0.01 ±0.03 -0.60 ±1.53
+xVAMP 6.5e-03 ±0.07 -0.03 ±0.41 -9.6e-03 ±0.06 -7.9e-03 ±0.03 -5.44 ±2.46
+xVAMP* 2.0e-03 ±0.06 0.01±0.49 -8.8e-03±0.06 -8.7e-03 ±0.03 -5.59 ±2.61
+VBEM 1.2e-03 ±0.10 0.25 ±0.45 -9.6e-03 ±0.06 -5.8e-03 ±0.03 -0.17 ±0.52
+VBEM* 3.0e-05±0.07 0.09±0.46 -9.2e-03 ±0.06 -7.6e-03 ±0.02 -2.00 ±1.30
+
+=== PAGE 13 ===
+
+Andrew Stirn, David A. Knowles
+Table 5: UCI Mean RMSE (mean±std.) Tuples below dataset are ( Nobservations, dim(x), dim(y)).
+boston carbon concrete energy naval
+Algorithm Prior (506, 13, 1) (10721, 5, 3) (1030, 8, 1) (768, 8, 2) (11934, 16, 2)
+Sun et al. (2019) N/A 2.38±0.10 – 4.94±0.18 0.41 ±0.02 1.2e-04 ±0.00
+Detlefsen N/A 4.48 ±1.06 0.02 ±4.6e-03 8.13 ±1.65 2.05 ±0.49 4.2e-03 ±6.3e-04
+Normal N/A 3.36 ±1.29 7.5e-03±3.3e-03 6.05±0.66 1.30 ±0.14 3.5e-03 ±3.1e-04
+Student N/A 3.62 ±1.42 7.6e-03 ±3.3e-03 6.71 ±0.81 1.42 ±0.17 3.4e-03 ±5.0e-04
+Gamma-Normal VAP 3.44 ±1.21 7.7e-03 ±3.3e-03 6.61 ±0.84 1.38 ±0.15 3.2e-03 ±5.3e-04
+Standard 3.82 ±1.72 7.6e-03 ±3.3e-03 6.63 ±0.70 1.31 ±0.14 3.2e-03 ±5.1e-04
+VAMP 3.15 ±1.06 7.8e-03 ±3.2e-03 5.47 ±1.00 1.36 ±0.13 1.2e-03 ±1.0e-03
+VAMP* 3.15 ±1.05 7.8e-03 ±3.2e-03 5.47 ±1.00 1.36 ±0.13 1.6e-03 ±1.3e-03
+xVAMP 3.25 ±1.16 7.6e-03 ±3.3e-03 5.61 ±0.67 1.36 ±0.14 3.2e-03 ±5.2e-04
+xVAMP* 3.28 ±1.17 7.6e-03 ±3.3e-03 5.72 ±0.59 1.36 ±0.14 3.2e-03 ±4.9e-04
+VBEM 3.14±1.07 8.7e-03±3.3e-03 5.26±0.58 1.36±0.14 5.6e-04±1.6e-04
+VBEM* 3.18 ±1.12 7.6e-03 ±3.3e-03 5.59 ±0.70 1.30±0.13 2.4e-03±2.8e-04
+power plant superconductivity wine-red wine-white yacht
+Algorithm Prior (9568, 4, 1) (21263, 81, 1) (1599, 11, 1) (4898, 11, 1) (308, 6, 1)
+Sun et al. (2019) N/A 4.10±0.05 – – – 0.61±0.07
+Detlefsen N/A 4.33 ±0.27 17.72 ±1.29 0.71 ±0.06 0.76 ±0.04 2.42±1.06
+Normal N/A 4.12±0.20 14.53±0.44 0.62 ±0.03 0.70 ±0.04 3.42 ±2.30
+Student N/A 4.12 ±0.19 14.85 ±0.42 0.63 ±0.03 0.71 ±0.03 15.03 ±3.30
+Gamma-Normal VAP 4.14 ±0.21 14.83 ±0.48 0.62 ±0.03 0.70 ±0.03 14.70 ±3.31
+Standard 4.18 ±0.18 14.44 ±0.43 0.63 ±0.03 0.72 ±0.03 12.17 ±2.38
+VAMP 4.16 ±0.20 12.81 ±0.33 0.62 ±0.03 0.70 ±0.04 5.42 ±3.54
+VAMP* 4.16 ±0.20 12.80±0.35 0.62±0.03 0.70 ±0.04 5.30 ±3.65
+xVAMP 4.14 ±0.20 14.13 ±0.39 0.62 ±0.03 0.70 ±0.04 12.30 ±3.09
+xVAMP* 4.13 ±0.21 14.25 ±0.42 0.62 ±0.03 0.70 ±0.03 12.51 ±3.20
+VBEM 4.16 ±0.19 13.13 ±0.37 0.62±0.03 0.69 ±0.03 3.51±1.46
+VBEM* 4.12 ±0.19 14.08 ±0.42 0.62 ±0.03 0.69 ±0.03 5.33 ±2.58
+Table 6: UCI Variance Bias (mean±std.) Tuples below dataset are ( Nobservations, dim(x), dim(y)).
+boston carbon concrete energy naval
+Algorithm Prior (506, 13, 1) (10721, 5, 3) (1030, 8, 1) (768, 8, 2) (11934, 16, 2)
+Detlefsen N/A 1.0e+02 ±79.11 9.8e-05 ±1.6e-04 2.2e+02 ±91.85 18.60 ±8.88 nan ±nan
+Normal N/A 31.63 ±1.5e+02 3.5e+23 ±1.6e+24 -2.01 ±8.67 -0.16 ±0.24 3.1e-07 ±2.0e-06
+Student N/A 18.08 ±63.79 0.12 ±0.23 -2.20 ±9.28 24.00 ±85.42 4.9e-06 ±2.2e-05
+Gamma-Normal VAP 3.3e+02 ±1.3e+03 0.25 ±1.11 -2.13 ±7.85 0.04 ±0.31 3.1e-07 ±6.8e-07
+Standard 3.18 ±20.09 1.5e-04 ±5.8e-05 0.76 ±11.35 0.31 ±0.40 3.7e-06 ±2.9e-06
+VAMP -2.96 ±7.96 -6.6e-06 ±6.0e-05 -6.15 ±5.18 -0.15 ±0.39 1.7e-07 ±2.9e-07
+VAMP* -3.00 ±7.84 -6.0e-06±6.0e-05 -6.16±5.18 -0.13 ±0.40 1.3e-07±3.3e-07
+xVAMP 0.65 ±16.20 2.7e-05 ±9.7e-05 -4.82 ±4.63 6.0e-03±0.36 3.1e-07±7.4e-07
+xVAMP* 0.51 ±20.17 5.0e-04 ±2.2e-03 -4.66 ±5.07 -8.5e-03 ±0.36 2.7e-07 ±6.3e-07
+VBEM 6.74 ±8.48 0.01 ±4.5e-03 25.86 ±8.94 22.06 ±5.58 3.6e-05 ±1.4e-05
+VBEM* -0.11±8.62 -7.2e-06±6.1e-05 -0.58±5.05 0.02±0.28 3.9e-07 ±4.9e-07
+power plant superconductivity wine-red wine-white yacht
+Algorithm Prior (9568, 4, 1) (21263, 81, 1) (1599, 11, 1) (4898, 11, 1) (308, 6, 1)
+Detlefsen N/A 69.25 ±2.40 5.5e+04 ±6.2e+03 2.16 ±1.57 0.83 ±0.36 96.62 ±54.08
+Normal N/A 0.05±1.53 2.3e+13±1.0e+14 -3.8e-03 ±0.04 -0.02 ±0.06 20.68 ±54.95
+Student N/A -0.27 ±1.47 1.6e+05 ±3.3e+05 12.52 ±30.71 -5.6e-03 ±0.05 1.7e+03 ±2.3e+03
+Gamma-Normal VAP 0.52 ±1.29 9.0e+05 ±2.6e+06 0.03 ±0.05 0.13 ±0.64 1.3e+03 ±1.5e+03
+Standard 2.34 ±1.43 1.1e+02 ±81.21 0.04 ±0.11 -2.3e-03±0.05 -7.28 ±40.88
+VAMP 0.89 ±1.04 -9.83±7.97 0.05±0.06 -8.8e-03 ±0.04 38.05 ±83.39
+VAMP* 0.89 ±1.04 -9.89 ±7.98 0.05 ±0.06 -8.9e-03 ±0.04 38.07 ±83.29
+xVAMP 0.46 ±1.25 14.40 ±42.90 3.5e-03 ±0.05 -0.03 ±0.03 4.8e+02 ±1.7e+03
+xVAMP* 0.44 ±1.24 1.3e+02 ±4.7e+02 2.1e-03±0.05 -0.03±0.03 1.7e+02 ±1.5e+02
+VBEM 16.53 ±9.32 91.44 ±25.39 0.08 ±0.04 0.07 ±0.04 20.70 ±25.23
+VBEM* 1.86 ±1.44 9.87 ±16.22 0.05 ±0.06 0.01 ±0.04 26.48 ±26.88
+
+=== PAGE 14 ===
+
+Running heading title breaks the line
+Table 7: UCI Variance RMSE (mean±std.) Tuples below dataset are ( Nobservations, dim(x), dim(y)).
+boston carbon concrete energy naval
+Algorithm Prior (506, 13, 1) (10721, 5, 3) (1030, 8, 1) (768, 8, 2) (11934, 16, 2)
+Detlefsen N/A 2.5e+02 ±3.1e+02 2.8e-03 ±1.8e-03 2.9e+02 ±1.1e+02 21.58 ±10.55 nan ±nan
+Normal N/A 2.8e+02 ±1.1e+03 2.0e+25 ±8.8e+25 84.48 ±46.55 2.70±0.50 3.6e-05±1.5e-05
+Student N/A 1.1e+02 ±1.7e+02 1.19 ±2.12 86.73 ±25.52 1.0e+02 ±3.6e+02 1.4e-04 ±4.8e-04
+Gamma-Normal VAP 2.4e+03 ±9.5e+03 4.74 ±20.81 80.57 ±26.95 3.64 ±1.10 2.3e-05 ±8.7e-06
+Standard 76.10 ±83.67 2.8e-03 ±1.8e-03 92.78 ±28.09 3.05 ±1.00 3.0e-05 ±1.1e-05
+VAMP 31.89 ±37.72 2.7e-03±1.9e-03 60.50±29.84 4.19 ±0.79 5.5e-06±7.0e-06
+VAMP* 31.82±37.33 2.7e-03±1.9e-03 60.49 ±29.84 4.19 ±0.79 7.8e-06 ±9.1e-06
+xVAMP 63.40 ±84.86 3.0e-03 ±1.7e-03 59.74 ±20.73 3.36 ±0.88 2.3e-05 ±8.7e-06
+xVAMP* 64.27 ±1.2e+02 0.02 ±0.05 62.39 ±19.00 3.19 ±0.78 2.2e-05 ±6.3e-06
+VBEM 38.91 ±35.36 0.01 ±4.3e-03 59.36 ±13.87 26.09 ±6.92 4.2e-05 ±1.6e-05
+VBEM* 39.54 ±42.93 2.8e-03 ±1.9e-03 58.92±19.43 3.72±0.47 1.5e-05 ±3.8e-06
+power plant superconductivity wine-red wine-white yacht
+Algorithm Prior (9568, 4, 1) (21263, 81, 1) (1599, 11, 1) (4898, 11, 1) (308, 6, 1)
+Detlefsen N/A 85.20 ±10.25 2.2e+05 ±1.7e+04 7.27 ±9.73 2.91 ±3.65 1.1e+02 ±70.70
+Normal N/A 43.93±18.42 1.1e+15±4.8e+15 0.63 ±0.09 1.05 ±0.82 1.2e+02 ±2.7e+02
+Student N/A 44.88 ±18.75 5.8e+06 ±1.3e+07 1.2e+02 ±3.4e+02 0.96 ±0.35 5.7e+03 ±8.2e+03
+Gamma-Normal VAP 44.40 ±18.82 4.0e+07 ±1.2e+08 0.65 ±0.10 3.97 ±13.91 4.8e+03 ±5.7e+03
+Standard 45.18 ±18.49 1.5e+03 ±1.7e+03 0.77 ±0.38 0.94 ±0.20 1.1e+02 ±66.59
+VAMP 44.78 ±18.79 4.4e+02±55.55 0.63±0.09 0.87 ±0.25 99.44 ±1.2e+02
+VAMP* 44.78 ±18.79 4.4e+02 ±57.11 0.63 ±0.09 0.87 ±0.25 98.63 ±1.3e+02
+xVAMP 44.44 ±18.84 1.1e+03 ±1.8e+03 0.63±0.11 0.85±0.23 1.4e+03 ±4.8e+03
+xVAMP* 44.36 ±18.82 6.4e+03 ±2.1e+04 0.63 ±0.11 0.85 ±0.23 5.6e+02 ±4.9e+02
+VBEM 49.60 ±16.88 4.5e+02 ±59.88 0.63 ±0.11 0.82±0.11 39.19 ±37.73
+VBEM* 44.68 ±18.61 6.3e+02 ±4.2e+02 0.64 ±0.10 0.86 ±0.28 93.02 ±86.57
+Table 8: UCI Sample Bias (mean±std.) Tuples below dataset are ( Nobservations, dim(x), dim(y)).
+boston carbon concrete energy naval
+Algorithm Prior (506, 13, 1) (10721, 5, 3) (1030, 8, 1) (768, 8, 2) (11934, 16, 2)
+Detlefsen N/A -0.92 ±2.52 -9.4e-04 ±3.6e-03 0.49 ±3.93 0.17 ±1.03 -2.6e-04 ±6.1e-04
+Normal N/A -0.19±0.99 4.6e+09±2.0e+10 0.39 ±1.05 0.06 ±0.15 -1.2e-04 ±1.4e-04
+Student N/A -0.58 ±0.60 -4.3e-05 ±1.5e-04 -0.14 ±1.09 -0.07 ±0.15 -8.3e-05 ±2.0e-04
+Gamma-Normal VAP -0.34 ±0.54 1.5e-04 ±2.1e-04 -0.02±1.18 -0.04±0.14 -7.0e-06±1.1e-04
+Standard -0.39 ±0.59 7.2e-05 ±2.9e-04 0.04 ±1.02 0.04 ±0.13 -1.3e-04 ±1.2e-04
+VAMP -0.23 ±0.47 -1.8e-06±2.9e-04 -0.17±0.83 0.01 ±0.12 7.4e-06 ±5.5e-05
+VAMP* -0.24 ±0.47 6.7e-05 ±2.7e-04 -0.17 ±0.83 0.02 ±0.12 8.2e-06 ±5.9e-05
+xVAMP -0.23 ±0.69 -1.8e-05 ±2.4e-04 -0.08 ±0.88 6.0e-03 ±0.16 -2.2e-05 ±1.2e-04
+xVAMP* -0.23 ±0.68 7.9e-05 ±2.6e-04 -0.09 ±0.97 2.6e-03±0.15 -1.8e-05±1.2e-04
+VBEM -0.19 ±0.85 -4.2e-04 ±2.0e-03 -0.15 ±1.07 -0.09 ±0.49 -2.3e-05 ±1.4e-04
+VBEM* -0.24 ±0.70 3.3e-06 ±3.0e-04 0.02 ±0.79 0.02 ±0.10 1.8e-05 ±6.8e-05
+power plant superconductivity wine-red wine-white yacht
+Algorithm Prior (9568, 4, 1) (21263, 81, 1) (1599, 11, 1) (4898, 11, 1) (308, 6, 1)
+Detlefsen N/A 0.12 ±0.77 1.15 ±4.61 0.07 ±0.18 -4.9e-03 ±0.08 -0.19 ±2.16
+Normal N/A 0.02 ±0.16 3.6e+04 ±1.6e+05 1.7e-03±0.08 3.8e-03±0.05 -0.70 ±1.15
+Student N/A 0.04 ±0.13 0.29 ±0.61 -0.07 ±0.08 -0.03 ±0.04 -6.26 ±4.34
+Gamma-Normal VAP -7.6e-03±0.15 -0.06±0.41 -0.02 ±0.08 -0.02 ±0.04 -6.16 ±4.37
+Standard -0.04 ±0.16 0.70 ±0.51 -0.03 ±0.08 -0.02 ±0.04 -4.92 ±2.49
+VAMP -0.02 ±0.13 0.16 ±0.46 -0.02 ±0.08 -0.02 ±0.04 -0.62 ±1.94
+VAMP* -0.02 ±0.13 0.14 ±0.45 -0.02 ±0.08 -0.02 ±0.04 -0.58 ±1.94
+xVAMP -0.02 ±0.18 -0.16 ±0.62 -0.02 ±0.08 -0.02 ±0.04 -5.13 ±2.98
+xVAMP* -0.02 ±0.15 -0.13 ±0.62 -0.02 ±0.08 -0.02 ±0.04 -5.36 ±3.12
+VBEM -0.04 ±0.21 0.10 ±0.67 -0.02 ±0.08 -0.01 ±0.04 -0.19±0.89
+VBEM* 0.04 ±0.15 0.04±0.57 -7.3e-03±0.06 -2.3e-03±0.04 -1.74±1.59
+
+=== PAGE 15 ===
+
+Andrew Stirn, David A. Knowles
+Table 9: UCI Sample RMSE (mean±std.) Tuples below dataset are ( Nobservations, dim(x), dim(y)).
+boston carbon concrete energy naval
+Algorithm Prior (506, 13, 1) (10721, 5, 3) (1030, 8, 1) (768, 8, 2) (11934, 16, 2)
+Detlefsen N/A 12.02 ±3.89 0.03 ±3.6e-03 17.93 ±2.55 5.07 ±0.98 6.2e-03 ±5.7e-04
+Normal N/A 4.92 ±3.57 2.6e+11 ±1.2e+12 8.23 ±1.08 1.85±0.21 5.0e-03±5.4e-04
+Student N/A 4.64 ±1.10 8.1e-03±3.1e-03 9.18±1.36 2.07 ±0.37 5.0e-03 ±1.7e-03
+Gamma-Normal VAP 4.69 ±0.86 0.01 ±2.2e-03 9.42 ±1.82 2.02 ±0.35 4.5e-03 ±7.2e-04
+Standard 4.92 ±2.18 0.02 ±1.8e-03 8.67 ±1.20 1.88 ±0.38 4.6e-03 ±9.1e-04
+VAMP 4.27 ±0.87 0.01 ±1.9e-03 7.27 ±1.05 1.93 ±0.19 1.8e-03±1.4e-03
+VAMP* 4.26 ±0.86 0.01 ±2.0e-03 7.27±1.05 1.93±0.20 2.2e-03 ±1.8e-03
+xVAMP 4.23±1.15 0.01±2.0e-03 7.84 ±1.05 1.88 ±0.29 4.5e-03 ±7.5e-04
+xVAMP* 4.23 ±1.14 0.01 ±2.5e-03 8.00 ±1.01 1.87 ±0.30 4.5e-03 ±7.1e-04
+VBEM 5.03 ±0.92 0.11 ±0.03 9.21 ±0.98 5.13 ±0.83 5.9e-03 ±1.5e-03
+VBEM* 4.41 ±1.07 0.01 ±1.9e-03 7.90 ±1.10 1.85 ±0.30 3.5e-03 ±3.7e-04
+power plant superconductivity wine-red wine-white yacht
+Algorithm Prior (9568, 4, 1) (21263, 81, 1) (1599, 11, 1) (4898, 11, 1) (308, 6, 1)
+Detlefsen N/A 10.36 ±0.28 2.4e+02 ±15.98 1.43 ±0.34 1.27 ±0.10 10.71 ±2.19
+Normal N/A 5.85 ±0.20 1.7e+06 ±7.4e+06 0.86±0.07 0.98±0.03 4.73±3.68
+Student N/A 5.79±0.28 21.25±1.46 0.88 ±0.06 0.99 ±0.04 20.24 ±7.84
+Gamma-Normal VAP 5.90 ±0.26 21.05 ±0.81 0.89 ±0.06 0.99 ±0.04 20.00 ±7.47
+Standard 6.01 ±0.51 23.75 ±13.27 0.90 ±0.13 0.98 ±0.06 14.20 ±4.40
+VAMP 5.97 ±0.28 17.86 ±0.41 0.90 ±0.07 0.99 ±0.06 8.67 ±6.43
+VAMP* 5.97 ±0.28 17.85±0.42 0.90±0.07 0.99 ±0.06 8.50 ±6.57
+xVAMP 5.92 ±0.20 19.98 ±0.49 0.89 ±0.05 0.97±0.06 15.57±5.76
+xVAMP* 5.91 ±0.20 20.19 ±0.77 0.89 ±0.05 0.97 ±0.06 15.81 ±5.05
+VBEM 7.17 ±0.65 20.92 ±0.70 0.93 ±0.06 1.02 ±0.05 6.66 ±2.53
+VBEM* 6.00 ±0.20 19.78 ±0.48 0.89 ±0.07 0.97 ±0.03 6.84 ±4.58
+9 Variational Variance for V AEs
+For the VAE experiments, we use ADAM with a 5e-5 learning rate. All Monte-Carlo (MC) approximations use
+20 samples. We found additional samples did not improve log posterior predictive probability approximations.
+Since our VAMP(∗), xVAMP(∗), and VBEM∗ priors require twice as many MC samples ( q(λ|x) in addition to
+q(z|x)), their memory footprint is higher, requiring a batch size of 125 on a NVIDA RTX2070. The remaining
+models use a batch size of 256. Because the lower batch size has twice as many batch updates per epoch, those
+models train for half (500) the number of epochs used by the other models (1000). We employ early stopping on
+the validation set’s log posterior predictive probability with a patience of 25 for the 500 epoch models and 50
+for the 1000 epoch models. We use an encoder architecture with hidden layers of sizes 512, 256, and 128, each
+of which applies an ELU activation. The decoder architecture is the transpose of the encoder. The dimensions
+of the latent variable, dim( z), are 10 for MNIST and 25 for Fashion MNIST.
+We include PPC metrics for MNIST in table 10, which we could not ﬁt in the main report. Additionally, we
+include ﬁgs. 5 and 6, which are similar to ﬁg. 3 (main article) but have additional samples for all tested methods.
+Table 10: VAE PPCs for MNIST (mean±std.)
+LL Mean RMSE Var Bias Sample RMSE
+Method
+Fixed-Var. VAE (1.0) -732.10 ±0.11 0.17 ±1.1e-03 0.98 ±4.2e-04 1.02 ±2.5e-04
+Fixed-Var. VAE (0.001) -2902.66 ±29.23 0.11±3.3e-04 -1.2e-02±7.4e-05 0.12±3.1e-04
+VAE 2593.51 ±267.72 0.25 ±2.7e-03 4.3e-02 ±2.6e-02 0.41 ±3.5e-02
+VAE + BN 2386.70 ±23.17 0.25 ±1.8e-03 0.13 ±2.6e-02 0.50 ±2.6e-02
+VAE-Split 2282.32 ±65.63 0.25 ±2.7e-03 7.4e-02 ±2.6e-02 0.44 ±3.2e-02
+VAE-Split + BN 2482.36 ±75.34 0.28 ±4.4e-03 6.2e-02 ±1.1e-02 0.47 ±1.5e-02
+Detlefsen -1561.89 ±1.36 0.18 ±6.7e-04 9.12 ±2.1e-02 3.03 ±3.2e-03
+MAP-VAE 1291.42 ±6.94 0.13 ±1.9e-03 -1.3e-02 ±4.1e-04 0.15 ±2.0e-03
+Student-VAE 4826.82±530.95 0.27±1.7e-02 0.38 ±0.45 0.68 ±0.28
+V3AE-VAP 3243.11 ±445.47 0.24 ±3.5e-03 8.1e-04±9.7e-04 0.34±5.5e-03
+V3AE-Gamma 1495.01 ±2.75 0.13 ±7.0e-04 -1.2e-02 ±1.9e-04 0.15 ±9.2e-04
+V3AE-VAMP 2355.12 ±13.40 0.20 ±6.7e-04 6.2e-04±1.1e-03 0.28±1.7e-03
+V3AE-VAMP* 2270.76 ±41.89 0.20 ±7.9e-04 1.2e-03±1.1e-03 0.29±2.2e-03
+V3AE-xVAMP 2323.38 ±94.35 0.20 ±2.6e-03 1.9e-03±6.8e-04 0.29±3.2e-03
+V3AE-xVAMP* 2280.13 ±48.29 0.20 ±2.0e-03 6.5e-04±7.2e-04 0.29±3.7e-03
+V3AE-VBEM 296.95 ±0.92 0.12 ±8.1e-04 6.1e-02 ±2.7e-04 0.30 ±2.7e-04
+V3AE-VBEM* 2107.63 ±5.44 0.14 ±1.2e-03 1.6e-03±1.1e-04 0.20±1.6e-03
+
+=== PAGE 16 ===
+
+Running heading title breaks the line
+VAE ( 2 = 1.0)
+VAE ( 2 = 0.001)
+VAE
+VAE + BN
+VAE-Split
+VAE-Split + BN
+Detlefsen
+MAP-VAE
+Student-VAE
+V3AE-VAP
+V3AE-Gamma
+V3AE-VAMP
+V3AE-VAMP*
+V3AE-xVAMP
+V3AE-xVAMP*
+V3AE-VBEM
+V3AE-VBEM*
+Figure 5: VAE PPC Visualization for Fashion MNIST: The rows within a subplot from top to bottom are
+randomly selected test data followed by the posterior predictive mean and variance and a sample from it. Pixel
+values are clamped to [0 , 1], when PPC values exit this interval.
+
+=== PAGE 17 ===
+
+Andrew Stirn, David A. Knowles
+VAE ( 2 = 1.0)
+VAE ( 2 = 0.001)
+VAE
+VAE + BN
+VAE-Split
+VAE-Split + BN
+Detlefsen
+MAP-VAE
+Student-VAE
+V3AE-VAP
+V3AE-Gamma
+V3AE-VAMP
+V3AE-VAMP*
+V3AE-xVAMP
+V3AE-xVAMP*
+V3AE-VBEM
+V3AE-VBEM*
+Figure 6: VAE PPC Visualization for MNIST: The rows within a subplot from top to bottom are randomly
+selected test data followed by the posterior predictive mean and variance and a sample from it. Pixel values are
+clamped to [0 , 1], when PPC values exit this interval.
