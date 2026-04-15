@@ -3,7 +3,7 @@ title: "Reference Review — FiLM & Conditional Modulation under Noise (Core Pap
 status: DRAFT v1 — all 5 papers reviewed, synthesis complete
 last_updated: 2026-04-15
 target_depth: graduate-level — derivations in LaTeX
-source: NotebookLM notebook 822f0187 + arXiv cross-reference
+source: NotebookLM notebook 822f0187 + arXiv cross-reference 
 related:
   - ../../perceptual_noise_lit_review.md (§3, SQ2)
   - ../uncertainty/uncertainty_reference_review.md
