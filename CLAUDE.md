@@ -21,13 +21,24 @@
   - Always cross-reference related docs in both directions.
 - Include enough detail (file paths, line numbers, code snippets) for the implementing agent to execute without ambiguity.
 
-## Iterative Technical Literature Review Protocol
+## Literature Review 
 
 When tasked with reviewing a collection of references or papers (e.g., from a specific folder or a literature review list), follow this systematic, tiered approach.
 
 * **Source Mapping:** Identify all references from the specified source document or directory.
 * **Contextual Alignment:** Ensure the technical depth matches the project’s existing documentation and specific requirements.
-* **Skills:** Use pdf skill for this job.
+
+### Source Type — Choose the Right Skill
+
+Determine the input source before starting, then use the appropriate skill:
+
+| Input Specified | Skill to Use | How |
+|---|---|---|
+| A **directory path** (e.g., `docs/project/references/uncertainty/`) | `pdf` skill | Glob for `*.pdf` files in the directory; read and extract each PDF one-by-one using the pdf skill. |
+| A **NotebookLM link** (e.g., `https://notebooklm.google.com/notebook/...`) | `notebooklm` skill | Use the notebooklm skill to query the notebook; retrieve source-grounded answers and citations for each paper. |
+
+- If neither is specified, ask the user which source type they mean before proceeding.
+- If both are provided, process the directory PDFs first, then cross-reference with the NotebookLM notebook.
 
 For every individual paper or reference, generate a review consisting of two distinct sections:
 
