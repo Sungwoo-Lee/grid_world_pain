@@ -40,6 +40,21 @@ Determine the input source before starting, then use the appropriate skill:
 - If neither is specified, ask the user which source type they mean before proceeding.
 - If both are provided, process the directory PDFs first, then cross-reference with the NotebookLM notebook.
 
+### Review Paper Workflow (Pre-Phase Backbone)
+
+Before entering the per-paper Phase 1 / Phase 2 loop below, run this 4-step extraction process on each reference. Its purpose is to act as a **completeness guard**: a grounded, section-ordered backbone that ensures nothing important in the paper is missed. It applies to **all** literature review tasks (survey papers, empirical papers, and mixed collections).
+
+1. **Extract the section list** — pull the full section/subsection structure from the paper. For PDFs, extract yourself via the `pdf` skill. For NotebookLM sources, query the notebook for the table of contents / section headings.
+2. **Extract core contents per section** — for each section, extract its key claims, methods, equations, and results. PDF: extract directly. NotebookLM: issue one query per section.
+3. **Add all section contents to the review document** — append the full section-by-section summary to the master "Reference Review" document, preserving the paper's original section order. This forms the backbone.
+4. **Deep-dive on important sections** — based on the step-3 pass, Claude autonomously selects the sections most relevant to the project context (e.g., methodology, core algorithm, key derivations) and expands them with additional technical depth, equations, and derivations.
+
+Run steps 1–4 without intermediate checkpoints.
+
+**After the backbone is complete**, generate the final Phase 1 / Phase 2 review by **reorganizing and rephrasing** the 4-step results into a compact but detailed synthesis. Phase 1/2 are **not bound to the paper's original section order** — regroup content by theme, importance, or conceptual flow as appropriate. The backbone is the source of truth.
+
+The 4-step backbone is retained in the final document as an **appendix** (e.g., `### Appendix: Section-by-Section Backbone`) placed after the Phase 1/2 synthesis, so the rewrite remains traceable to the source.
+
 For every individual paper or reference, generate a review consisting of two distinct sections:
 
 Phase 1: Foundational Overview (Undergraduate-Level)
@@ -57,8 +72,6 @@ To maintain high accuracy and prevent information loss, you must process referen
 
 1.  **Analyze:** Process a single reference according to the Phase 1 and Phase 2 requirements.
 2.  **Update:** Append this analysis to the master "Reference Review" document.
-3.  **Checkpoint:** Use your **"Ask User Question"** skill to provide a brief summary of what was just added and ask for permission to proceed to the next reference.
-4.  **Repeat:** Do not attempt to batch multiple papers in a single turn.
 
 * Use clear `##` and `###` headers for each paper title and sub-section.
 * Maintain an auto-updating Table of Contents at the top of the file as new reviews are added.
