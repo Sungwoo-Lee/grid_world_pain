@@ -42,7 +42,7 @@ Determine the input source before starting, then use the appropriate skill:
 
 ### Review Paper Workflow (Pre-Phase Backbone)
 
-Before entering the per-paper Phase 1 / Phase 2 loop below, run this 4-step extraction process on each reference. Its purpose is to act as a **completeness guard**: a grounded, section-ordered backbone that ensures nothing important in the paper is missed. It applies to **all** literature review tasks (survey papers, empirical papers, and mixed collections).
+Before entering the per-paper Phase 1 / Phase 2 loop below, run this 4-step extraction process on each reference. Its purpose is to act as a **completeness guard**: a grounded, section-ordered backbone that ensures nothing important in the paper is missed or nothing additional, which will be critical for academic paper review, is added. It applies to **all** literature review tasks (survey papers, empirical papers, and mixed collections).
 
 1. **Extract the section list** — pull the full section/subsection structure from the paper. For PDFs, extract yourself via the `pdf` skill. For NotebookLM sources, query the notebook for the table of contents / section headings.
 2. **Extract core contents per section** — for each section, extract its key claims, methods, equations, and results. PDF: extract directly. NotebookLM: issue one query per section.
