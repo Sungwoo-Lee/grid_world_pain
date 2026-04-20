@@ -1,0 +1,2961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Visualizations: Computational Models of Pain Hypervigilance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['$','$'], ['\\(','\\)']],
+    displayMath: [['$$','$$'], ['\\[','\\]']]
+  },
+  chtml: {
+    // Use default MathJax CHTML fonts (based on Computer Modern / Latin Modern — the standard LaTeX font)
+    matchFontHeight: true,
+    mtextInheritFont: false
+  },
+  startup: {
+    typeset: true
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+<style>
+:root {
+  --color-prior: #4878A8;
+  --color-likelihood: #D4762C;
+  --color-posterior: #3A8C5C;
+  --color-risk: #C44E52;
+  --color-ambiguity: #8B6CAF;
+  --color-control: #6C7A89;
+  --color-bg: #FAFBFC;
+  --color-card: #FFFFFF;
+  --color-text: #2D3436;
+  --color-text-light: #636E72;
+  --color-border: #DFE6E9;
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.08);
+  --radius: 10px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* MathJax CHTML (Computer Modern / Latin Modern) integration */
+mjx-container[jax="CHTML"] {
+  font-size: 110% !important;  /* slightly larger to match body text optical size */
+}
+mjx-container[jax="CHTML"][display="true"] {
+  margin: 0.8em 0 !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+/* Inline math spacing */
+mjx-container[jax="CHTML"]:not([display="true"]) {
+  vertical-align: baseline;
+}
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', 'Helvetica Neue', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  font-size: 15px;
+}
+h1, h2, h3, h4 { font-family: 'Crimson Pro', Georgia, serif; font-weight: 600; }
+h1 { font-size: 2.2rem; margin-bottom: 0.3rem; }
+h2 { font-size: 1.6rem; margin-bottom: 0.8rem; color: var(--color-text); }
+h3 { font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--color-text-light); }
+
+/* Header */
+.page-header {
+  background: linear-gradient(135deg, #2D3436 0%, #4a6274 100%);
+  color: white;
+  padding: 2.5rem 2rem 2rem;
+  text-align: center;
+}
+.page-header h1 { color: white; font-size: 2rem; }
+.page-header p { color: rgba(255,255,255,0.75); font-size: 0.95rem; max-width: 700px; margin: 0.5rem auto 0; }
+
+/* Nav */
+.sticky-nav {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border);
+  display: flex; justify-content: center; gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.sticky-nav a {
+  text-decoration: none;
+  color: var(--color-text-light);
+  font-size: 0.85rem; font-weight: 500;
+  padding: 0.35rem 0.9rem;
+  border-radius: 20px;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.sticky-nav a:hover, .sticky-nav a.active {
+  background: var(--color-prior);
+  color: white;
+}
+
+/* Sections */
+.viz-section {
+  max-width: 1280px;
+  margin: 2rem auto;
+  padding: 0 1.5rem;
+}
+.viz-card {
+  background: var(--color-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 2rem;
+  margin-bottom: 1rem;
+}
+.viz-description {
+  margin-bottom: 1.2rem;
+  color: var(--color-text-light);
+  font-size: 0.92rem;
+}
+.equation-block {
+  background: linear-gradient(135deg, #f8f9fa 0%, #f0f4f8 100%);
+  border-left: 4px solid var(--color-prior);
+  padding: 1.2rem 1.5rem;
+  margin: 1rem 0 1.5rem;
+  border-radius: 0 8px 8px 0;
+  overflow-x: auto;
+  font-size: 1.05rem;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* Controls & Plots Layout */
+.viz-layout {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .viz-layout { grid-template-columns: 1fr; }
+}
+
+/* Controls Panel */
+.controls-panel {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 1.2rem;
+}
+.control-group { margin-bottom: 1rem; }
+.control-group:last-child { margin-bottom: 0; }
+.control-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  font-weight: 500;
+  margin-bottom: 0.3rem;
+  color: var(--color-text);
+}
+.control-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--color-prior);
+  font-weight: 600;
+  min-width: 3em;
+  text-align: right;
+}
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--color-border);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--color-prior);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--color-prior);
+  cursor: pointer;
+  border: none;
+}
+
+/* Collapsible panels */
+details.collapsible {
+  margin: 0.8rem 0;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+details.collapsible summary {
+  padding: 0.7rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: #f8f9fa;
+  color: var(--color-text);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  user-select: none;
+  transition: background 0.2s;
+}
+details.collapsible summary:hover { background: #f0f2f4; }
+details.collapsible summary::before {
+  content: '\25B6 ';
+  font-size: 0.7rem;
+  color: var(--color-prior);
+  transition: transform 0.2s;
+}
+details.collapsible[open] summary::before { transform: rotate(90deg); }
+details.collapsible summary::-webkit-details-marker { display: none; }
+.collapsible-content {
+  padding: 1rem 1.2rem;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--color-text);
+  border-top: 1px solid var(--color-border);
+}
+.collapsible-content p { margin-bottom: 0.8rem; }
+.collapsible-content p:last-child { margin-bottom: 0; }
+.collapsible-content .math-step {
+  background: #f8f9fa;
+  border-left: 3px solid var(--color-posterior);
+  padding: 0.6rem 1rem;
+  margin: 0.6rem 0;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.95rem;
+}
+.collapsible-content .concept-box {
+  background: rgba(72,120,168,0.06);
+  border: 1px solid rgba(72,120,168,0.15);
+  border-radius: 6px;
+  padding: 0.8rem 1rem;
+  margin: 0.8rem 0;
+}
+.collapsible-content .concept-box h4 {
+  font-size: 0.9rem;
+  color: var(--color-prior);
+  margin-bottom: 0.3rem;
+}
+.derivation-label { color: var(--color-posterior); }
+.prerequisite-label { color: var(--color-prior); }
+.clinical-label { color: var(--color-risk); }
+.background-label { color: #2D3436; }
+.collapsible-content ul, .collapsible-content ol { margin: 0.5rem 0 0.8rem 1.5rem; }
+.collapsible-content li { margin-bottom: 0.3rem; }
+.callout-box {
+  background: rgba(196,78,82,0.06);
+  border: 1px solid rgba(196,78,82,0.15);
+  border-radius: 6px;
+  padding: 0.8rem 1rem;
+  margin: 0.8rem 0;
+}
+.callout-box h4 { font-size: 0.9rem; color: var(--color-risk); margin-bottom: 0.3rem; }
+.example-box {
+  background: rgba(58,140,92,0.06);
+  border: 1px solid rgba(58,140,92,0.15);
+  border-radius: 6px;
+  padding: 0.8rem 1rem;
+  margin: 0.8rem 0;
+}
+.example-box h4 { font-size: 0.9rem; color: var(--color-posterior); margin-bottom: 0.3rem; }
+
+/* Preset descriptions */
+.preset-descriptions {
+  margin-top: 0.6rem;
+}
+.preset-desc-item {
+  display: none;
+  background: rgba(72,120,168,0.04);
+  border-left: 3px solid var(--color-prior);
+  padding: 0.7rem 1rem;
+  margin-top: 0.5rem;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  animation: fadeIn 0.2s ease-in;
+}
+.preset-desc-item.visible { display: block; }
+.preset-desc-item strong { color: var(--color-text); }
+.preset-desc-item .observe { color: var(--color-posterior); font-weight: 500; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* Presets */
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.2rem;
+}
+.preset-btn {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.35rem 0.8rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--color-text-light);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.preset-btn:hover {
+  border-color: var(--color-prior);
+  color: var(--color-prior);
+  background: rgba(72,120,168,0.06);
+}
+.preset-btn.active {
+  border-color: var(--color-prior);
+  background: var(--color-prior);
+  color: white;
+  animation: presetPulse 0.3s ease-out;
+}
+@keyframes presetPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+/* Plot containers */
+.plot-container { width: 100%; }
+.plot-area { width: 100%; min-height: 380px; background: #fafbfc; border-radius: 6px; }
+.plot-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 900px) {
+  .plot-row { grid-template-columns: 1fr; }
+}
+.plot-area-small { width: 100%; min-height: 280px; }
+.plot-area-tall { width: 100%; min-height: 300px; }
+
+/* Toggle */
+.toggle-container {
+  display: flex; align-items: center; gap: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+.toggle-switch {
+  position: relative;
+  width: 44px; height: 24px;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--color-border);
+  border-radius: 24px;
+  transition: 0.3s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 18px; width: 18px;
+  left: 3px; bottom: 3px;
+  background: white;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--color-risk);
+}
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+}
+.toggle-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+/* Action buttons */
+.action-btn {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.5rem 1.2rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: white;
+}
+.action-btn.primary { background: var(--color-prior); }
+.action-btn.primary:hover { background: #3a6590; }
+.action-btn.secondary { background: var(--color-control); }
+.action-btn.secondary:hover { background: #556573; }
+
+/* Stats display */
+.stats-bar {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 0.8rem;
+  flex-wrap: wrap;
+}
+.stat-item {
+  font-size: 0.82rem;
+}
+.stat-label { color: var(--color-text-light); }
+.stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Footer */
+.page-footer {
+  text-align: center;
+  padding: 2rem;
+  color: var(--color-text-light);
+  font-size: 0.82rem;
+  border-top: 1px solid var(--color-border);
+  margin-top: 2rem;
+}
+
+/* Section number badges */
+.section-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: white;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+.badge-1 { background: var(--color-prior); }
+.badge-2 { background: var(--color-likelihood); }
+.badge-3 { background: var(--color-risk); }
+.badge-4 { background: var(--color-ambiguity); }
+.badge-intro { background: #2D3436; }
+.badge-hv { background: #8B6CAF; }
+.badge-synth { background: #3A8C5C; }
+
+/* Framework hierarchy diagram (nested boxes showing Active Inference ⊃ LQG ⊃ Bayesian/DDM) */
+.framework-hierarchy {
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f8f9fa 0%, #eef2f6 100%);
+  border-radius: 12px;
+  margin: 1rem 0;
+}
+.framework-outer {
+  border: 2px solid var(--color-ambiguity);
+  border-radius: 12px;
+  padding: 1.2rem 1rem 1rem;
+  position: relative;
+  background: rgba(139,108,175,0.05);
+}
+.framework-outer > .framework-label {
+  position: absolute; top: -0.7em; left: 1rem;
+  background: var(--color-bg); padding: 0 0.5rem;
+  color: var(--color-ambiguity); font-weight: 600; font-size: 0.85rem;
+}
+.framework-middle {
+  border: 2px solid var(--color-risk);
+  border-radius: 10px;
+  padding: 1rem 0.8rem 0.8rem;
+  margin: 0.6rem 0.4rem;
+  position: relative;
+  background: rgba(196,78,82,0.05);
+}
+.framework-middle > .framework-label {
+  position: absolute; top: -0.7em; left: 0.8rem;
+  background: var(--color-bg); padding: 0 0.5rem;
+  color: var(--color-risk); font-weight: 600; font-size: 0.85rem;
+}
+.framework-inner-pair {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+.framework-inner {
+  border: 2px solid var(--color-prior);
+  border-radius: 8px;
+  padding: 0.8rem;
+  background: rgba(72,120,168,0.05);
+  text-align: center;
+  font-weight: 500; font-size: 0.88rem;
+  color: var(--color-prior);
+}
+.framework-inner.ddm { border-color: var(--color-likelihood); color: var(--color-likelihood); background: rgba(212,118,44,0.05); }
+.framework-inner small { display: block; color: var(--color-text-light); font-weight: 400; font-size: 0.78rem; margin-top: 0.2rem; }
+
+/* Roadmap cards */
+.roadmap-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.8rem; margin: 1rem 0;
+}
+.roadmap-card {
+  background: white;
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-prior);
+  border-radius: 6px;
+  padding: 0.9rem 1rem;
+  font-size: 0.88rem;
+}
+.roadmap-card h4 { font-size: 0.95rem; margin-bottom: 0.3rem; color: var(--color-text); }
+.roadmap-card.card-ddm { border-left-color: var(--color-likelihood); }
+.roadmap-card.card-lqg { border-left-color: var(--color-risk); }
+.roadmap-card.card-ai { border-left-color: var(--color-ambiguity); }
+
+/* Glossary */
+.glossary dl { columns: 2; column-gap: 1.5rem; font-size: 0.85rem; }
+.glossary dt { font-weight: 600; color: var(--color-prior); margin-top: 0.6rem; }
+.glossary dd { margin-left: 0; color: var(--color-text-light); }
+@media (max-width: 760px) { .glossary dl { columns: 1; } }
+
+/* Manifestation cards (hypervigilance section) */
+.manifestation-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.8rem; margin: 0.8rem 0;
+}
+.manifestation-card {
+  background: rgba(196,78,82,0.04);
+  border: 1px solid rgba(196,78,82,0.2);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  font-size: 0.87rem;
+}
+.manifestation-card h4 { font-size: 0.92rem; color: var(--color-risk); margin-bottom: 0.3rem; }
+
+/* Synthesis parameter table */
+.synthesis-table {
+  width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 0.8rem 0;
+}
+.synthesis-table th, .synthesis-table td {
+  padding: 0.55rem 0.7rem; text-align: left; border-bottom: 1px solid var(--color-border);
+}
+.synthesis-table th { background: #f8f9fa; font-weight: 600; color: var(--color-text); }
+.synthesis-table td.normal { color: var(--color-posterior); font-weight: 500; }
+.synthesis-table td.hv { color: var(--color-risk); font-weight: 500; }
+.synthesis-table tr:hover td { background: rgba(72,120,168,0.03); }
+
+/* References list */
+.refs-list { font-size: 0.85rem; line-height: 1.6; }
+.refs-list li { margin-bottom: 0.55rem; }
+.refs-list a { color: var(--color-prior); text-decoration: none; border-bottom: 1px dotted var(--color-prior); }
+.refs-list a:hover { border-bottom-style: solid; }
+
+/* Check-your-understanding prompt */
+.prediction-box {
+  background: linear-gradient(135deg, rgba(139,108,175,0.08) 0%, rgba(72,120,168,0.08) 100%);
+  border: 1px solid rgba(139,108,175,0.2);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  margin: 1rem 0;
+}
+.prediction-box h4 {
+  font-size: 0.92rem; color: var(--color-ambiguity); margin-bottom: 0.4rem;
+  display: flex; align-items: center; gap: 0.4rem;
+}
+.prediction-box h4::before { content: '\1F914'; font-size: 1.1rem; }
+.prediction-box .answer {
+  margin-top: 0.6rem; padding-top: 0.6rem;
+  border-top: 1px dashed rgba(139,108,175,0.3);
+  font-size: 0.86rem; color: var(--color-posterior);
+}
+
+/* Analogy box */
+.analogy-box {
+  background: rgba(212,118,44,0.06);
+  border: 1px solid rgba(212,118,44,0.2);
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  margin: 0.8rem 0;
+}
+.analogy-box h4 { font-size: 0.92rem; color: var(--color-likelihood); margin-bottom: 0.3rem; }
+.analogy-box h4::before { content: '\1F333  '; }
+
+/* Forward/cross-reference box */
+.crossref-box {
+  background: rgba(72,120,168,0.05);
+  border-left: 3px solid var(--color-prior);
+  padding: 0.7rem 1rem;
+  margin: 0.8rem 0;
+  font-size: 0.86rem;
+  border-radius: 0 6px 6px 0;
+}
+.crossref-box::before { content: '\1F517  '; color: var(--color-prior); }
+.crossref-box a { color: var(--color-prior); font-weight: 500; }
+
+/* Next-step navigation */
+.section-nav {
+  display: flex; justify-content: space-between; gap: 1rem;
+  margin-top: 1.5rem; padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+.section-nav a {
+  color: var(--color-text-light);
+  font-size: 0.88rem; font-weight: 500;
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  background: #f8f9fa;
+  transition: all 0.2s;
+}
+.section-nav a:hover { background: var(--color-prior); color: white; }
+.section-nav a.placeholder { visibility: hidden; }
+
+/* Clinical case study dropdown */
+.case-study-box {
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  margin: 0.8rem 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem;
+}
+.case-study-box label { font-weight: 500; font-size: 0.88rem; }
+.case-study-box select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  background: white;
+  cursor: pointer;
+}
+.case-study-box .case-desc {
+  flex-basis: 100%;
+  font-size: 0.84rem;
+  color: var(--color-text-light);
+  margin-top: 0.3rem;
+}
+
+/* Live parameter dashboard */
+.param-dashboard {
+  position: fixed; right: 1rem; top: 5rem; width: 260px;
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  padding: 0.8rem;
+  font-size: 0.78rem;
+  z-index: 90;
+  max-height: 80vh; overflow-y: auto;
+  transition: all 0.3s;
+}
+.param-dashboard.minimized { width: 44px; height: 44px; padding: 0; overflow: hidden; }
+.param-dashboard.minimized .param-dash-body { display: none; }
+.param-dashboard .param-dash-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding-bottom: 0.4rem; border-bottom: 1px solid var(--color-border);
+  margin-bottom: 0.5rem;
+  font-weight: 600; color: var(--color-text);
+}
+.param-dashboard .param-toggle {
+  background: transparent; border: none; cursor: pointer;
+  font-size: 1rem; color: var(--color-text-light); padding: 0 0.3rem;
+}
+.param-dashboard.minimized .param-dash-header {
+  border: none; margin: 0; padding: 0;
+  justify-content: center;
+  width: 44px; height: 44px;
+  font-size: 0;
+}
+.param-dashboard.minimized .param-toggle {
+  font-size: 1.2rem;
+}
+.param-group { margin-bottom: 0.5rem; }
+.param-group h5 {
+  font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--color-text-light); margin-bottom: 0.2rem; font-weight: 600;
+}
+.param-bar {
+  display: flex; align-items: center; gap: 0.4rem;
+  margin-bottom: 0.15rem;
+}
+.param-bar-label { min-width: 80px; color: var(--color-text); font-size: 0.76rem; }
+.param-bar-track {
+  flex: 1; height: 6px;
+  background: #eee;
+  border-radius: 3px; overflow: hidden;
+}
+.param-bar-fill {
+  height: 100%;
+  background: var(--color-prior);
+  border-radius: 3px;
+  transition: width 0.2s;
+}
+.param-bar-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem; color: var(--color-text-light);
+  min-width: 30px; text-align: right;
+}
+@media (max-width: 1500px) {
+  .param-dashboard { display: none; }
+  .param-dashboard.force-show { display: block; }
+}
+
+/* Export button */
+.export-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+  color: var(--color-text-light);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.export-btn:hover { border-color: var(--color-prior); color: var(--color-prior); }
+
+/* A-matrix policy tables */
+.policy-matrix-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.8rem; margin: 0.8rem 0;
+}
+.policy-matrix {
+  background: white;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.7rem;
+  font-size: 0.82rem;
+  text-align: center;
+}
+.policy-matrix h5 { font-size: 0.88rem; margin-bottom: 0.4rem; font-weight: 600; }
+.policy-matrix.explore h5 { color: var(--color-posterior); }
+.policy-matrix.mixed h5 { color: var(--color-likelihood); }
+.policy-matrix.guard h5 { color: var(--color-risk); }
+.policy-matrix table { width: 100%; border-collapse: collapse; margin: 0 auto; font-family: 'JetBrains Mono', monospace; }
+.policy-matrix th { font-size: 0.7rem; color: var(--color-text-light); font-weight: 500; padding: 0.2rem; }
+.policy-matrix td { padding: 0.3rem 0.4rem; border: 1px solid #eee; background: #fafafa; }
+
+/* Clinical translation callout (Viz 4) */
+.clinical-translation {
+  background: linear-gradient(135deg, rgba(58,140,92,0.08) 0%, rgba(72,120,168,0.05) 100%);
+  border: 1px solid rgba(58,140,92,0.2);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 0.8rem 0;
+}
+.clinical-translation h4 { font-size: 0.95rem; color: var(--color-posterior); margin-bottom: 0.4rem; }
+.clinical-translation h4::before { content: '\1FA7A  '; }
+
+/* Loading overlay */
+#loading-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: var(--color-bg);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.4s;
+}
+#loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.loader {
+  text-align: center;
+  color: var(--color-text-light);
+}
+.loader-spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-prior);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 1rem;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="loader">
+    <div class="loader-spinner"></div>
+    <div>Loading visualizations...</div>
+  </div>
+</div>
+
+<header class="page-header">
+  <h1>Computational Models of Pain Hypervigilance</h1>
+  <p>Interactive visualizations for Bayesian inference, drift-diffusion, optimal control, and active inference in pain perception</p>
+</header>
+
+<nav class="sticky-nav">
+  <a href="#intro"><span class="section-badge badge-intro">0</span>Intro</a>
+  <a href="#hypervigilance"><span class="section-badge badge-hv">HV</span>Hypervigilance</a>
+  <a href="#bayesian"><span class="section-badge badge-1">1</span>Bayesian</a>
+  <a href="#ddm"><span class="section-badge badge-2">2</span>DDM</a>
+  <a href="#lqg"><span class="section-badge badge-3">3</span>LQG</a>
+  <a href="#active-inf"><span class="section-badge badge-4">4</span>Active Inf.</a>
+  <a href="#synthesis"><span class="section-badge badge-synth">&#9733;</span>Synthesis</a>
+</nav>
+
+<!-- Live Parameter Dashboard (sticky, top-right) -->
+<aside class="param-dashboard" id="param-dashboard">
+  <div class="param-dash-header">
+    <span>Hypervigilance Dashboard</span>
+    <button class="param-toggle" onclick="toggleDashboard()" title="Minimize/Expand">&minus;</button>
+  </div>
+  <div class="param-dash-body">
+    <div class="param-group">
+      <h5>Bayesian (Viz 1)</h5>
+      <div class="param-bar"><span class="param-bar-label">&Pi;<sub>prior</sub></span><span class="param-bar-track"><span class="param-bar-fill" id="dash-pi-prior" style="width:10%"></span></span><span class="param-bar-value" id="dash-pi-prior-val">0.25</span></div>
+      <div class="param-bar"><span class="param-bar-label">&Pi;<sub>obs</sub></span><span class="param-bar-track"><span class="param-bar-fill" id="dash-pi-obs" style="width:10%; background:var(--color-likelihood)"></span></span><span class="param-bar-value" id="dash-pi-obs-val">0.25</span></div>
+      <div class="param-bar"><span class="param-bar-label">K (gain)</span><span class="param-bar-track"><span class="param-bar-fill" id="dash-K" style="width:50%; background:var(--color-posterior)"></span></span><span class="param-bar-value" id="dash-K-val">0.50</span></div>
+    </div>
+    <div class="param-group">
+      <h5>DDM (Viz 2)</h5>
+      <div class="param-bar"><span class="param-bar-label">boundary a</span><span class="param-bar-track"><span class="param-bar-fill" id="dash-a" style="width:50%"></span></span><span class="param-bar-value" id="dash-a-val">1.50</span></div>
+      <div class="param-bar"><span class="param-bar-label">start bias</span><span class="param-bar-track"><span class="param-bar-fill" id="dash-zb" style="width:50%; background:var(--color-risk)"></span></span><span class="param-bar-value" id="dash-zb-val">0.00</span></div>
+    </div>
+    <div class="param-group">
+      <h5>LQG (Viz 3)</h5>
+      <div class="param-bar"><span class="param-bar-label">C (sens.)</span><span class="param-bar-track"><span class="param-bar-fill" id="dash-C" style="width:20%; background:var(--color-risk)"></span></span><span class="param-bar-value" id="dash-C-val">1.00</span></div>
+      <div class="param-bar"><span class="param-bar-label">guarding</span><span class="param-bar-track"><span class="param-bar-fill" id="dash-guard" style="width:0%; background:var(--color-ambiguity)"></span></span><span class="param-bar-value" id="dash-guard-val">OFF</span></div>
+    </div>
+    <div class="param-group">
+      <h5>Active Inf. (Viz 4)</h5>
+      <div class="param-bar"><span class="param-bar-label">P(injured)</span><span class="param-bar-track"><span class="param-bar-fill" id="dash-ai-prior" style="width:50%"></span></span><span class="param-bar-value" id="dash-ai-prior-val">0.50</span></div>
+      <div class="param-bar"><span class="param-bar-label">pref. prec.</span><span class="param-bar-track"><span class="param-bar-fill" id="dash-ai-pref" style="width:20%; background:var(--color-risk)"></span></span><span class="param-bar-value" id="dash-ai-pref-val">2.0</span></div>
+    </div>
+  </div>
+</aside>
+
+<!-- ============================================================ -->
+<!-- INTRODUCTION & ROADMAP                                        -->
+<!-- ============================================================ -->
+<section class="viz-section" id="intro">
+  <div class="viz-card">
+    <h2><span class="section-badge badge-intro">0</span> Introduction &amp; Roadmap</h2>
+
+    <div class="viz-description">
+      <p>This interactive tutorial walks you through the <strong>computational models of pain</strong>, focusing on why the brain sometimes gets trapped in a state of chronic hypervigilance. By the end, you should be able to describe pain perception as precision-weighted inference, predict how reaction-time distributions shift with expectation, explain why guarding an injury can paradoxically prolong chronic pain, and unify all four frameworks under a single variational principle.</p>
+    </div>
+
+    <!-- Why it matters -->
+    <div class="callout-box">
+      <h4>Why Does This Matter?</h4>
+      <ul>
+        <li><strong>Clinical burden:</strong> Chronic pain affects ~20% of adults worldwide; it is the leading cause of disability globally (WHO).</li>
+        <li><strong>Economic cost:</strong> Estimated &gt; $600B/year in the U.S. alone (lost productivity + health-care), more than heart disease and cancer combined.</li>
+        <li><strong>Scientific puzzle:</strong> Traditional biomedical models treat pain as tissue damage. But chronic pain often persists with <em>no detectable pathology</em>. The answer lies in how the brain computes pain &mdash; not in the tissue.</li>
+        <li><strong>Therapeutic leverage:</strong> Understanding the <em>computation</em> of hypervigilance points directly to interventions: graded exposure, cognitive reappraisal, closed-loop neuromodulation, computational phenotyping of patients.</li>
+      </ul>
+    </div>
+
+    <!-- Framework hierarchy -->
+    <h3 style="margin-top:1.4rem">The Four Frameworks: A Nested Hierarchy</h3>
+    <p class="viz-description" style="margin-bottom:0.6rem">These are not four competing theories &mdash; they form a <strong>nested hierarchy</strong>, with the outermost containing the inner ones as special cases:</p>
+
+    <div class="framework-hierarchy">
+      <div class="framework-outer">
+        <span class="framework-label">4. Active Inference (Friston 2010)</span>
+        <p style="font-size:0.82rem; margin:0.3rem 0 0.5rem; color:var(--color-text-light);">Minimize Expected Free Energy: balance risk (avoiding unpreferred outcomes) vs. ambiguity (gaining information)</p>
+
+        <div class="framework-middle">
+          <span class="framework-label">3. LQG Optimal Control (Seymour 2023)</span>
+          <p style="font-size:0.82rem; margin:0.3rem 0 0.5rem; color:var(--color-text-light);">Gaussian-linear special case: Kalman filter + quadratic cost for injury recovery</p>
+
+          <div class="framework-inner-pair">
+            <div class="framework-inner">
+              1. Bayesian Inference
+              <small>Static: \(\mu_{\text{post}}\) from prior + evidence</small>
+            </div>
+            <div class="framework-inner ddm">
+              2. Drift-Diffusion
+              <small>Temporal: evidence accumulation to a bound</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Per-section roadmap cards -->
+    <h3 style="margin-top:1.4rem">What You'll Find in Each Section</h3>
+    <div class="roadmap-cards">
+      <div class="roadmap-card">
+        <h4>1. Bayesian Inference</h4>
+        <p>Pain as precision-weighted combination of expectation &amp; nociceptive signal. Explains placebo, nocebo, catastrophizing.</p>
+      </div>
+      <div class="roadmap-card card-ddm">
+        <h4>2. Drift-Diffusion</h4>
+        <p>Pain decisions unfold over <em>time</em>. Expectation shifts the starting point; threat imminence collapses the boundary.</p>
+      </div>
+      <div class="roadmap-card card-lqg">
+        <h4>3. LQG Control</h4>
+        <p>Post-injury pain as a recuperation controller. Guarding restricts information &rarr; chronic pain trap.</p>
+      </div>
+      <div class="roadmap-card card-ai">
+        <h4>4. Active Inference</h4>
+        <p>Exploration-vs-exploitation under uncertainty. The "dark-room problem" on interoceptive channels.</p>
+      </div>
+    </div>
+
+    <!-- How to use -->
+    <div class="concept-box">
+      <h4>How to Use This Page</h4>
+      <ul>
+        <li><strong>Sequential reading (recommended):</strong> Sections 1 &rarr; 2 &rarr; 3 &rarr; 4 build on each other. Use the "Continue to Section N &rarr;" button at the bottom of each section.</li>
+        <li><strong>Targeted exploration:</strong> Use the sticky nav at top to jump to any section. Each section is self-contained with its own Background, Prerequisites, Derivation, and Presets.</li>
+        <li><strong>Interactive experimentation:</strong> Every equation comes with sliders. Click a preset to snap to a clinically relevant configuration, then nudge sliders to explore nearby parameter space.</li>
+        <li><strong>Live dashboard (top-right):</strong> As you move sliders, the Hypervigilance Dashboard shows how your configuration compares to healthy baseline across all four models.</li>
+        <li><strong>Case-study mode:</strong> Use the dropdown below to auto-configure all four visualizations for specific clinical populations.</li>
+      </ul>
+    </div>
+
+    <!-- Case study dropdown -->
+    <div class="case-study-box">
+      <label for="case-study-select">Load Clinical Case Study:</label>
+      <select id="case-study-select" onchange="applyCaseStudy(this.value)">
+        <option value="">&mdash; Select a case &mdash;</option>
+        <option value="healthy">Healthy adult (baseline)</option>
+        <option value="acute">Acute injury (post-surgery day 1)</option>
+        <option value="fibromyalgia">Fibromyalgia</option>
+        <option value="chronic-back">Chronic low back pain (&gt; 6 months)</option>
+        <option value="crps">Complex Regional Pain Syndrome (CRPS)</option>
+        <option value="phantom">Phantom limb pain</option>
+      </select>
+      <div class="case-desc" id="case-study-desc">Each case sets parameters across all four visualizations to reflect the clinical population's characteristic computational phenotype.</div>
+    </div>
+
+    <!-- Glossary -->
+    <details class="collapsible">
+      <summary><span class="background-label">Glossary</span> &mdash; Quick reference for key terms</summary>
+      <div class="collapsible-content glossary">
+        <dl>
+          <dt>Nociception</dt><dd>Neural processing of noxious stimuli by specialized receptors. Not the same as pain &mdash; the signal, not the experience.</dd>
+          <dt>Interoception</dt><dd>Perception of the internal state of the body (heart rate, gut sensation, injury).</dd>
+          <dt>Exteroceptive</dt><dd>Perception of the external world (vision, hearing, touch).</dd>
+          <dt>Prior</dt><dd>The brain's belief about a quantity <em>before</em> seeing new evidence. \(P(x)\) in Bayes.</dd>
+          <dt>Likelihood</dt><dd>How well a hypothesis explains the observed data. \(P(o \mid x)\).</dd>
+          <dt>Posterior</dt><dd>Updated belief after combining prior and evidence. \(P(x \mid o)\).</dd>
+          <dt>Precision</dt><dd>Inverse of variance: \(\Pi = 1/\sigma^2\). High precision = high confidence.</dd>
+          <dt>Prediction error</dt><dd>Discrepancy between expected and observed. Drives learning.</dd>
+          <dt>Generative model</dt><dd>The brain's internal model of how hidden causes produce sensory observations.</dd>
+          <dt>Kalman gain</dt><dd>The fraction of the prediction error absorbed into the belief update.</dd>
+          <dt>Innovation</dt><dd>In Kalman filtering, the current prediction error \(y - C\hat{x}\).</dd>
+          <dt>Variational</dt><dd>Approximate Bayesian inference via optimization (minimizing free energy).</dd>
+          <dt>POMDP</dt><dd>Partially Observable Markov Decision Process &mdash; decisions under state uncertainty.</dd>
+          <dt>vmPFC</dt><dd>Ventromedial prefrontal cortex &mdash; valuation, safety, self-model.</dd>
+          <dt>PAG</dt><dd>Periaqueductal gray &mdash; midbrain hub for descending pain modulation.</dd>
+          <dt>S1 / S2</dt><dd>Primary and secondary somatosensory cortex &mdash; early sensory encoding of pain.</dd>
+          <dt>DLPFC</dt><dd>Dorsolateral prefrontal cortex &mdash; cognitive control, expectation maintenance.</dd>
+          <dt>NPS</dt><dd>Neurologic Pain Signature &mdash; fMRI pattern tracking nociceptive pain intensity.</dd>
+          <dt>Efference copy</dt><dd>Internal prediction of one's own action's sensory consequences.</dd>
+          <dt>Hypervigilance</dt><dd>Attentional process emerging under high threat value of pain (Crombez 2005).</dd>
+          <dt>Hyperalgesia</dt><dd>Amplified pain to noxious stimuli &mdash; sensitization, not attention.</dd>
+          <dt>Allodynia</dt><dd>Pain from non-noxious stimuli. Sensitization phenomenon.</dd>
+        </dl>
+      </div>
+    </details>
+
+    <div class="section-nav">
+      <a class="placeholder">&nbsp;</a>
+      <a href="#hypervigilance">Continue: What is Hypervigilance? &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- WHAT IS HYPERVIGILANCE?                                       -->
+<!-- ============================================================ -->
+<section class="viz-section" id="hypervigilance">
+  <div class="viz-card">
+    <h2><span class="section-badge badge-hv">HV</span> What is Hypervigilance?</h2>
+
+    <div class="viz-description">
+      <p>"Hypervigilance" is in the title of this tutorial, so let's define it precisely before the computational models. The term has been used loosely in the literature, but the canonical definition is from Crombez, Van Damme &amp; Eccleston (2005):</p>
+    </div>
+
+    <div class="example-box">
+      <h4>Definition (Crombez et al., 2005)</h4>
+      <p style="font-style: italic; margin-bottom: 0.4rem;">"Hypervigilance is an unintentional and efficient process that emerges when the threat value of pain is high, the fear system is activated, and the individual's current concern is to escape and avoid pain."</p>
+      <p>The key word is <strong>attentional</strong>. Hypervigilance is a <em>cognitive-attentional</em> phenomenon &mdash; not a sensory-receptor phenomenon.</p>
+    </div>
+
+    <h3 style="margin-top:1.2rem">The Four Attentional Manifestations</h3>
+    <div class="manifestation-grid">
+      <div class="manifestation-card">
+        <h4>1. Attentional Capture</h4>
+        <p>Pain-related cues (words, images, bodily sensations) automatically seize attention, disrupting ongoing tasks. The body-scan reflex.</p>
+      </div>
+      <div class="manifestation-card">
+        <h4>2. Difficulty Disengaging</h4>
+        <p>Once attention is captured by pain, it is hard to redirect. Rumination and catastrophizing emerge as the system gets stuck in pain-focused processing.</p>
+      </div>
+      <div class="manifestation-card">
+        <h4>3. Interpretive Bias</h4>
+        <p>Ambiguous stimuli are more likely to be classified as threatening or painful. A twinge becomes "damage"; a tingle becomes "spreading injury."</p>
+      </div>
+      <div class="manifestation-card">
+        <h4>4. Body Scanning</h4>
+        <p>Persistent, often unconscious monitoring of the body for threat signals. Drives anxiety, insomnia, and vigilance costs on other goals.</p>
+      </div>
+    </div>
+
+    <!-- Distinction from sensitization -->
+    <div class="callout-box">
+      <h4>Important Distinction: Hypervigilance &ne; Sensitization</h4>
+      <p><strong>Hyperalgesia</strong> (amplified pain to noxious stimuli) and <strong>allodynia</strong> (pain from non-noxious stimuli) are <em>sensitization</em> phenomena &mdash; changes in peripheral or central nociceptive gain. They are <strong>not</strong> manifestations of hypervigilance per se.</p>
+      <p>However, the two are computationally related: sensitization increases the sensory precision \(\Pi_{\text{obs}}\) for nociceptive channels, which feeds into the attentional system and can promote hypervigilant scanning. The two processes co-occur clinically and reinforce each other, but they operate at <em>different levels</em> of the computational hierarchy. In this tutorial:</p>
+      <ul>
+        <li><strong>Sensitization</strong> appears in Section 3 as an inflated observation matrix \(C\).</li>
+        <li><strong>Hypervigilance</strong> appears in Sections 1, 2, 4 as a specific configuration of precisions, boundaries, and prior beliefs.</li>
+      </ul>
+    </div>
+
+    <!-- Evolutionary framing -->
+    <div class="analogy-box">
+      <h4>Adaptive or Maladaptive?</h4>
+      <p>Hypervigilance is <em>not</em> inherently a malfunction. From an evolutionary perspective, it is an <strong>adaptive strategy</strong> when the cost of underestimating injury (reopening a wound, infection, death) vastly exceeds the cost of overestimating it (losing a day of foraging). An organism that resumes activity too early is dead; one that rests an extra day is inconvenienced.</p>
+      <p><strong>Cross-species evidence (~500 million years old):</strong> Cephalopods (octopus, cuttlefish, squid) &mdash; separated from mammals by half a billion years of evolution &mdash; show nearly identical post-injury behavior: nociceptor threshold reduction, wound-directed guarding for days, opioid modulation. This cross-phylum convergence reveals hypervigilance as an ancient, optimal-control solution to the universal computational problem of managing recovery under uncertainty.</p>
+      <p><strong>The pathology:</strong> Hypervigilance becomes maladaptive when it fails to <em>disengage</em> after healing. Understanding why it gets stuck &mdash; and how to unstick it &mdash; is the central question this tutorial addresses computationally.</p>
+    </div>
+
+    <div class="section-nav">
+      <a href="#intro">&larr; Previous: Introduction</a>
+      <a href="#bayesian">Continue: 1. Bayesian Inference &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- VISUALIZATION 1: BAYESIAN PAIN INFERENCE                      -->
+<!-- ============================================================ -->
+<section class="viz-section" id="bayesian">
+  <div class="viz-card">
+    <h2><span class="section-badge badge-1">1</span> Bayesian Pain Inference</h2>
+    <div class="viz-description">
+      <p>Pain is not a simple readout of nociceptive input &mdash; it is the <strong>posterior</strong> of a Bayesian inference combining top-down expectations (the <em>prior</em>) with bottom-up sensory evidence (the <em>likelihood</em>). The brain maintains a belief about the state of the body that is continuously updated by incoming sensory data. The posterior pain experience is a <strong>precision-weighted average</strong>: whichever source is more reliable (has lower variance, i.e., higher precision) dominates the percept.</p>
+      <p>This framework explains why the same physical stimulus can feel more or less painful depending on context: placebo analgesia, nocebo hyperalgesia, attentional modulation, and catastrophizing are all <em>precision manipulations</em> within this single equation.</p>
+    </div>
+
+    <!-- Background & Theory -->
+    <details class="collapsible">
+      <summary><span class="background-label">Background &amp; Theory</span> &mdash; Why pain is not an alarm bell</summary>
+      <div class="collapsible-content">
+        <p>The traditional "alarm bell" model treats pain as a straightforward readout of tissue damage: nociceptors detect a noxious stimulus, send a signal up the spinal cord, and the brain registers "ouch." Pain intensity should be proportional to stimulus intensity &mdash; more damage, more pain. <strong>This model is empirically wrong.</strong></p>
+
+        <div class="callout-box">
+          <h4>Evidence Against the Alarm Bell Model</h4>
+          <ul>
+            <li><strong>Placebo analgesia:</strong> A sugar pill described as a painkiller genuinely reduces pain. No change in the stimulus, yet the experience changes.</li>
+            <li><strong>Nocebo hyperalgesia:</strong> Warning someone that a procedure will be extremely painful makes the identical stimulus hurt more.</li>
+            <li><strong>Distraction:</strong> Soldiers report not noticing severe battlefield injuries until combat ends.</li>
+            <li><strong>Catastrophizing:</strong> Ruminating about pain amplifies the experience far beyond what nociceptive input would predict.</li>
+            <li><strong>Chronic pain without tissue damage:</strong> Many chronic pain patients have no detectable peripheral pathology &mdash; the alarm is ringing, but there is no fire.</li>
+            <li><strong>Phantom limb pain:</strong> The limb is gone, but the brain generates pain without any peripheral input.</li>
+          </ul>
+        </div>
+
+        <p>These observations force a radical conclusion: <strong>pain is not a sensation &mdash; it is a perception constructed by the brain</strong> (Wiech, 2016). The nociceptive signal is just one input among many. The brain combines it with expectations, context, attention, memory, and goals to produce the experience we call pain.</p>
+
+        <div class="analogy-box">
+          <h4>Everyday Analogy: The Rustling Sound in the Forest</h4>
+          <p>You are walking through a forest at dusk and hear a rustling sound. Is it <strong>the wind</strong> (harmless) or <strong>a snake</strong> (dangerous)? The sensory signal alone is ambiguous. Your brain must combine:</p>
+          <ul>
+            <li><strong>Prior beliefs:</strong> "This is a snake habitat; I just saw a warning sign"</li>
+            <li><strong>Sensory evidence:</strong> The acoustic pattern of the rustle</li>
+            <li><strong>Context:</strong> Dusk, low visibility, you're alone</li>
+            <li><strong>Cost asymmetry:</strong> Missing a real snake is far worse than reacting to imaginary wind</li>
+          </ul>
+          <p>Your final belief &mdash; and resulting behavior (freeze, step back, look carefully) &mdash; is not driven by the acoustic signal alone. It's a <strong>Bayesian posterior</strong> that weighs prior and evidence by their reliabilities. Pain works exactly the same way &mdash; but with nociceptive signals instead of acoustic ones.</p>
+        </div>
+
+        <p>Wiech (2016) frames this as <strong>"perception as inference"</strong> within a <strong>predictive coding</strong> framework: the brain generates predictions about expected sensory input, compares those predictions to actual nociceptive signals, and uses the discrepancy (prediction error) to update its beliefs. What you "feel" is not the raw signal &mdash; it is the brain's best estimate given everything it knows.</p>
+
+        <div class="example-box">
+          <h4>Worked Example: The Doctor's Warning</h4>
+          <p>A patient is about to receive a heat stimulus on their arm. The brain has two sources of information:</p>
+          <ol>
+            <li><strong>Prior expectation</strong> (\(\mu_{\text{prior}} = 7\)): Based on the doctor's warning, the patient expects a pain intensity of 7 out of 10.</li>
+            <li><strong>Sensory evidence</strong> (\(o = 4\)): The nociceptors report an actual intensity of 4 out of 10.</li>
+          </ol>
+          <p>If pain were a simple readout, the patient would feel 4/10. But under Bayesian inference, the brain combines prior and evidence, weighted by their respective <em>reliabilities</em> (precisions). If the patient is very confident in the warning (high prior precision) and uncertain about the sensory signal, the experience might be <strong>6/10</strong> &mdash; pulled toward the expectation. If the patient trusts the sensory signal more, it might be <strong>4.5/10</strong>.</p>
+          <p><strong>Try it yourself:</strong> Use the sliders below to replicate this scenario. Set \(\mu_{\text{prior}} = 7\), \(\sigma_{\text{prior}} = 0.5\), \(o = 4\), and \(\sigma_{\text{obs}} = 2\). Watch how the green posterior is dragged toward the blue prior.</p>
+        </div>
+
+        <p><strong>Neural substrates</strong> (Wiech, 2016): The likelihood \(P(o|x)\) is encoded in S1, S2, posterior insula, and lateral thalamus. The top-down prior is maintained by DLPFC and rostral ACC. The descending analgesia gate (ACC &rarr; PAG &rarr; spinal dorsal horn) modulates sensory precision. Prediction errors and valuation are processed in vmPFC and nucleus accumbens (mesolimbic circuit). A critical finding: cognitive self-regulation does <em>not</em> primarily modulate the Neurologic Pain Signature (S1/S2 pattern) &mdash; it acts through vmPFC&ndash;NAcc connectivity, changing the <em>generative model</em> rather than the early sensory encoding.</p>
+      </div>
+    </details>
+
+    <!-- Prerequisites -->
+    <details class="collapsible">
+      <summary><span class="prerequisite-label">Prerequisite Concepts</span> &mdash; Gaussian Distribution, Bayes' Theorem, Precision</summary>
+      <div class="collapsible-content">
+        <div class="concept-box">
+          <h4>The Gaussian (Normal) Distribution</h4>
+          <p>A Gaussian distribution describes a bell-shaped curve centered on a <strong>mean</strong> \(\mu\) (the most likely value) with a <strong>standard deviation</strong> \(\sigma\) controlling the spread. Its probability density function is:</p>
+          <div class="math-step">$$p(x) = \frac{1}{\sigma\sqrt{2\pi}} \exp\!\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)$$</div>
+          <p><strong>Variance</strong> \(\sigma^2\) measures how spread out the values are. A small \(\sigma\) means values cluster tightly around \(\mu\); a large \(\sigma\) means they are spread out. <strong>Precision</strong> is the inverse of variance: \(\Pi = 1/\sigma^2\). High precision = tight distribution = high confidence.</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>Bayes' Theorem</h4>
+          <p>Bayes' theorem tells us how to <em>update</em> a belief when new evidence arrives:</p>
+          <div class="math-step">$$P(\text{hypothesis} \mid \text{data}) = \frac{P(\text{data} \mid \text{hypothesis}) \cdot P(\text{hypothesis})}{P(\text{data})}$$</div>
+          <p>In words: the <strong>posterior</strong> (updated belief) is proportional to the <strong>likelihood</strong> (how well the data fits the hypothesis) times the <strong>prior</strong> (what we believed before seeing the data). The denominator \(P(\text{data})\) is just a normalizing constant that ensures probabilities sum to 1.</p>
+          <p>For pain: the <em>hypothesis</em> is "how much tissue damage is there?", the <em>data</em> is the nociceptive signal, the <em>prior</em> is the brain's expectation (shaped by context, learning, mood), and the <em>posterior</em> is the subjective pain experience.</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>Precision-Weighting: Why It Matters</h4>
+          <p>When both prior and observation are Gaussian, the posterior mean is a <strong>weighted average</strong> where the weights are the <em>precisions</em> (inverse variances). This is not arbitrary &mdash; it is the mathematically optimal way to combine two uncertain sources of information. The more precise (reliable) source gets more weight.</p>
+          <p>This is why <strong>attention</strong> modulates pain: attending to pain increases the precision of nociceptive observations (\(\Pi_{\text{obs}} \uparrow\)), giving them more weight. <strong>Distraction</strong> does the opposite (\(\Pi_{\text{obs}} \downarrow\)), letting expectations dominate.</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>Why Precision (not variance)? &mdash; The Mathematical Motivation</h4>
+          <p>Students often ask: <em>why use precision \(\Pi = 1/\sigma^2\) rather than variance \(\sigma^2\) directly?</em> The answer is elegant: <strong>when you multiply two Gaussians, their precisions add linearly:</strong></p>
+          <div class="math-step">$$\Pi_{\text{post}} = \Pi_{\text{prior}} + \Pi_{\text{obs}}$$</div>
+          <p>Precision is the <em>natural</em> quantity for Bayesian updating because combining sources of information is a sum-of-precisions operation. Variances don't combine this way (they require reciprocals). This is why the brain's neural circuitry for Bayesian inference uses precision-weighted prediction errors as its fundamental computational primitive (Friston, 2010).</p>
+          <p><em>Analogy:</em> Think of precision as "votes." Each source of information casts votes proportional to its reliability. The posterior is the weighted average of their positions, where weights are the vote counts. More votes (higher precision) &rarr; more influence.</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- Main equation -->
+    <div class="equation-block">
+      <p style="margin-bottom:0.5rem; font-weight:500; font-size:0.9rem;">The posterior pain intensity \(\mu_{\text{post}}\), Kalman gain \(K\), and prediction error \(\delta\):</p>
+      $$\mu_{\text{post}} = \frac{\Pi_{\text{obs}} \cdot o + \Pi_{\text{prior}} \cdot \mu_{\text{prior}}}{\Pi_{\text{obs}} + \Pi_{\text{prior}}}, \qquad K = \frac{\Pi_{\text{obs}}}{\Pi_{\text{obs}} + \Pi_{\text{prior}}}, \qquad \delta = o - \mu_{\text{prior}}$$
+      <p style="margin-top:0.5rem; font-size:0.85rem; color:#636E72;">where \(\Pi = 1/\sigma^2\) is precision, \(o\) is the nociceptive observation, \(\mu_{\text{prior}}\) is the expected pain, \(K\) is how much the brain trusts new evidence, and \(\delta\) is the surprise.</p>
+    </div>
+
+    <!-- Derivation -->
+    <details class="collapsible">
+      <summary><span class="derivation-label">Step-by-Step Derivation</span> &mdash; From Bayes' theorem to the precision-weighted posterior</summary>
+      <div class="collapsible-content">
+        <p><strong>Step 1: Set up the generative model.</strong> Assume the brain models pain intensity \(x\) with a Gaussian prior and receives a noisy observation \(o\):</p>
+        <div class="math-step">$$P(x) = \mathcal{N}(\mu_{\text{prior}}, \sigma_{\text{prior}}^2), \qquad P(o \mid x) = \mathcal{N}(x, \sigma_{\text{obs}}^2)$$</div>
+
+        <p><strong>Step 2: Apply Bayes' theorem.</strong> The posterior is proportional to the product of prior and likelihood:</p>
+        <div class="math-step">$$P(x \mid o) \propto P(o \mid x) \cdot P(x) = \exp\!\left(-\frac{(o - x)^2}{2\sigma_{\text{obs}}^2}\right) \cdot \exp\!\left(-\frac{(x - \mu_{\text{prior}})^2}{2\sigma_{\text{prior}}^2}\right)$$</div>
+
+        <p><strong>Step 3: Combine the exponents.</strong> Adding the two quadratic terms in the exponent:</p>
+        <div class="math-step">$$-\frac{1}{2}\left[\frac{(o-x)^2}{\sigma_{\text{obs}}^2} + \frac{(x-\mu_{\text{prior}})^2}{\sigma_{\text{prior}}^2}\right]$$</div>
+
+        <p><strong>Step 4: Complete the square in \(x\).</strong> Expanding and collecting terms in \(x\), we get a new quadratic of the form \(-\frac{1}{2\sigma_{\text{post}}^2}(x - \mu_{\text{post}})^2\), which is another Gaussian. The algebra yields:</p>
+        <div class="math-step">$$\frac{1}{\sigma_{\text{post}}^2} = \frac{1}{\sigma_{\text{obs}}^2} + \frac{1}{\sigma_{\text{prior}}^2} \quad \Rightarrow \quad \Pi_{\text{post}} = \Pi_{\text{obs}} + \Pi_{\text{prior}}$$</div>
+        <p>The posterior precision is the <em>sum</em> of the two input precisions &mdash; combining information always reduces uncertainty.</p>
+
+        <p><strong>Step 5: Find the posterior mean.</strong></p>
+        <div class="math-step">$$\mu_{\text{post}} = \frac{\Pi_{\text{obs}} \cdot o + \Pi_{\text{prior}} \cdot \mu_{\text{prior}}}{\Pi_{\text{obs}} + \Pi_{\text{prior}}}$$</div>
+        <p>This is a precision-weighted average. If \(\Pi_{\text{obs}} \gg \Pi_{\text{prior}}\), the posterior \(\approx o\) (trust the senses). If \(\Pi_{\text{prior}} \gg \Pi_{\text{obs}}\), the posterior \(\approx \mu_{\text{prior}}\) (trust the expectation).</p>
+
+        <p><strong>Step 6: Rewrite as prediction error update (Kalman form).</strong></p>
+        <div class="math-step">$$\mu_{\text{post}} = \mu_{\text{prior}} + K \cdot \delta, \qquad K = \frac{\Pi_{\text{obs}}}{\Pi_{\text{obs}} + \Pi_{\text{prior}}}, \qquad \delta = o - \mu_{\text{prior}}$$</div>
+        <p>The brain starts with its expectation \(\mu_{\text{prior}}\), computes the <strong>prediction error</strong> \(\delta\) (how much the observation differed from expectation), and corrects by a fraction \(K\) (the <strong>Kalman gain</strong>). When \(K=1\), the brain fully trusts the new evidence; when \(K=0\), it ignores it entirely.</p>
+      </div>
+    </details>
+
+    <h3>Presets</h3>
+    <div class="presets" id="bayesian-presets">
+      <button class="preset-btn active" onclick="BayesianViz.applyPreset('normal')">Normal</button>
+      <button class="preset-btn" onclick="BayesianViz.applyPreset('sharp')">Healthy (sharp sensation)</button>
+      <button class="preset-btn" onclick="BayesianViz.applyPreset('placebo')">Placebo</button>
+      <button class="preset-btn" onclick="BayesianViz.applyPreset('nocebo')">Nocebo</button>
+      <button class="preset-btn" onclick="BayesianViz.applyPreset('hypervigilance')">Hypervigilance</button>
+      <button class="preset-btn" onclick="BayesianViz.applyPreset('chronic')">Chronic Pain</button>
+    </div>
+    <div class="preset-descriptions" id="bayesian-preset-desc">
+      <div class="preset-desc-item visible" data-preset="normal">
+        <strong>Normal perception:</strong> Prior and observation have equal precision (\(\sigma_{\text{prior}} = \sigma_{\text{obs}} = 2\)), so the posterior sits midway between expectation and evidence. The Kalman gain \(K \approx 0.5\) &mdash; the brain weighs both sources equally. <span class="observe">Observe: the green posterior curve sits between blue (prior) and orange (likelihood).</span>
+      </div>
+      <div class="preset-desc-item" data-preset="sharp">
+        <strong>Healthy adult, sharp sensation:</strong> Vague prior expectation (\(\sigma_{\text{prior}} = 3.5\)) but very precise sensory signal (\(\sigma_{\text{obs}} = 0.4\)) &mdash; e.g., a clear pinprick. The observation dominates; the posterior closely tracks the sensed intensity. Kalman gain \(K \approx 0.99\). <span class="observe">Observe: the orange (likelihood) curve is sharp, the blue (prior) is wide, and the green (posterior) sits essentially on top of orange. This is the <em>counterpoint</em> to hypervigilance &mdash; a well-calibrated system that trusts reliable sensory input.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="placebo">
+        <strong>Placebo analgesia:</strong> The patient has been told "this will not hurt" &mdash; a strong, confident low-pain expectation (\(\mu_{\text{prior}}=2\), \(\sigma_{\text{prior}}=0.5\)). Even though the actual stimulus is moderate (\(o=5\)), the high prior precision pulls the posterior toward the low expectation. <span class="observe">Observe: the green posterior is dragged far below the orange observation toward the narrow blue prior. The Kalman gain K is low (&lt;0.2) &mdash; the brain discounts the sensory evidence.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="nocebo">
+        <strong>Nocebo hyperalgesia:</strong> The patient has been warned "this will be extremely painful" &mdash; a strong high-pain expectation (\(\mu_{\text{prior}}=7\), \(\sigma_{\text{prior}}=0.5\)). The actual stimulus is only moderate (\(o=4\)), but the precise prior dominates. <span class="observe">Observe: the posterior is pulled above the actual stimulus toward the fearful expectation. Prediction error \(\delta\) is large and negative, but K is too low to absorb it.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="hypervigilance">
+        <strong>Hypervigilance:</strong> Both prior AND observation precisions are elevated. The prior is locked on "high pain" (\(\mu_{\text{prior}}=8\), very tight \(\sigma=0.3\)), AND sensory channels are amplified (\(\sigma_{\text{obs}}=0.5\)). This is the dual-amplification state &mdash; the brain is both expecting pain and hypersensitive to nociceptive input. <span class="observe">Observe: both blue and orange curves are narrow (high precision). The posterior is dominated by the prior because \(\Pi_{\text{prior}} > \Pi_{\text{obs}}\). Even attending to the stimulus (high \(\Pi_{\text{obs}}\)) cannot overcome the locked prior.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="chronic">
+        <strong>Chronic pain (decoupled from input):</strong> The prior on injury is extremely precise (\(\sigma_{\text{prior}}=0.15\)) and high (\(\mu_{\text{prior}}=8\)). The actual nociceptive input is low (\(o=2\) &mdash; the tissue has healed), but the brain's model ignores it entirely. <span class="observe">Observe: the posterior (green) is virtually identical to the prior (blue). The observation (orange) has no effect. K &asymp; 0 &mdash; the brain has become impervious to corrective evidence. This is the computational signature of chronic pain without peripheral pathology.</span>
+      </div>
+    </div>
+
+    <div class="viz-layout">
+      <div class="controls-panel">
+        <h3>Prior (Expectation)</h3>
+        <div class="control-group">
+          <div class="control-label"><span>Prior mean &mu;<sub>prior</sub></span><span class="control-value" id="bay-mu-prior-val">5.0</span></div>
+          <input type="range" id="bay-mu-prior" min="0" max="10" step="0.1" value="5" oninput="BayesianViz.update()">
+        </div>
+        <div class="control-group">
+          <div class="control-label"><span>Prior std &sigma;<sub>prior</sub></span><span class="control-value" id="bay-sigma-prior-val">2.0</span></div>
+          <input type="range" id="bay-sigma-prior" min="0.1" max="5" step="0.05" value="2" oninput="BayesianViz.update()">
+        </div>
+
+        <h3 style="margin-top:1.2rem">Observation (Nociceptive Input)</h3>
+        <div class="control-group">
+          <div class="control-label"><span>Observation <em>o</em></span><span class="control-value" id="bay-obs-val">5.0</span></div>
+          <input type="range" id="bay-obs" min="0" max="10" step="0.1" value="5" oninput="BayesianViz.update()">
+        </div>
+        <div class="control-group">
+          <div class="control-label"><span>Observation std &sigma;<sub>obs</sub></span><span class="control-value" id="bay-sigma-obs-val">2.0</span></div>
+          <input type="range" id="bay-sigma-obs" min="0.1" max="5" step="0.05" value="2" oninput="BayesianViz.update()">
+        </div>
+      </div>
+
+      <div class="plot-container">
+        <p style="font-size:0.83rem; color:var(--color-text-light); margin-bottom:0.4rem;">
+          <strong>Reading the plots.</strong> <em>Left:</em> the Gaussian curves for the prior (blue), likelihood (orange), and posterior (green) over a 0&ndash;10 pain-intensity scale (think VAS: 0 = no pain, 10 = worst imaginable). The vertical dashed lines mark \(\mu_{\text{prior}}\), \(o\), and \(\mu_{\text{post}}\). <em>Right:</em> the bar chart shows <strong>why</strong> the posterior landed where it did &mdash; each bar is the precision-weight contributed by prior vs. observation. If "Observation Weight (K)" is 0.9, the posterior is almost entirely driven by the sensory signal; if it's 0.1, the prior dominates.
+        </p>
+        <div class="plot-row">
+          <div id="bayesian-plot-main" class="plot-area"></div>
+          <div id="bayesian-plot-weights" class="plot-area"></div>
+        </div>
+        <div class="stats-bar" id="bayesian-stats">
+          <div class="stat-item"><span class="stat-label">Posterior mean: </span><span class="stat-value" id="bay-stat-mu">5.00</span></div>
+          <div class="stat-item"><span class="stat-label">Kalman gain K: </span><span class="stat-value" id="bay-stat-K">0.50</span></div>
+          <div class="stat-item"><span class="stat-label">Prediction error &delta;: </span><span class="stat-value" id="bay-stat-delta">0.00</span></div>
+        </div>
+
+        <!-- Check Your Understanding -->
+        <div class="prediction-box">
+          <h4>Check Your Understanding</h4>
+          <p><strong>Predict:</strong> If you double \(\Pi_{\text{prior}}\) (halve \(\sigma_{\text{prior}}\)) while keeping \(\Pi_{\text{obs}}\) constant, what happens to the Kalman gain \(K\)? Will it increase, decrease, or stay the same?</p>
+          <details><summary style="cursor:pointer; color:var(--color-ambiguity); font-weight:500; font-size:0.85rem;">Show answer</summary>
+            <div class="answer"><strong>K decreases.</strong> Since \(K = \Pi_{\text{obs}}/(\Pi_{\text{obs}} + \Pi_{\text{prior}})\), increasing \(\Pi_{\text{prior}}\) while holding \(\Pi_{\text{obs}}\) constant increases the denominator but not the numerator, so K shrinks. Test this: halve \(\sigma_{\text{prior}}\) from 2 to 1 and observe K drop. This is the computational signature of catastrophizing &mdash; a tight, confident negative prior blocks sensory evidence from updating the belief.</div>
+          </details>
+        </div>
+
+        <!-- Cross-reference forward to LQG -->
+        <div class="crossref-box">
+          <strong>Why "Kalman" gain?</strong> The scalar gain \(K\) shown here is the static, 1-step version of the multivariate Kalman gain \(L\) from <a href="#lqg">Section 3 (LQG)</a>. Both are precision-weighted: they determine how much the belief shifts per unit of prediction error. The Kalman filter just does this same computation <em>at every timestep</em>, incorporating new observations as they arrive.
+        </div>
+      </div>
+    </div>
+
+    <!-- Next-section nav -->
+    <div class="section-nav">
+      <a href="#hypervigilance">&larr; Previous: What is Hypervigilance?</a>
+      <a href="#ddm">Continue: 2. Drift-Diffusion Model &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- VISUALIZATION 2: DRIFT-DIFFUSION MODEL                        -->
+<!-- ============================================================ -->
+<section class="viz-section" id="ddm">
+  <div class="viz-card">
+    <h2><span class="section-badge badge-2">2</span> Drift-Diffusion Model of Pain Perception</h2>
+    <div class="viz-description">
+      <p>Section 1 showed how the brain combines prior and evidence into a pain estimate. But this inference is not instantaneous &mdash; it unfolds over <strong>time</strong>. The <strong>Drift-Diffusion Model (DDM)</strong> captures this temporal process: a <em>decision variable</em> accumulates noisy sensory evidence moment by moment, drifting stochastically until it crosses a decision boundary. Crossing the upper boundary means "pain detected"; crossing the lower boundary means "no pain."</p>
+      <p>Pain expectations can bias this process in two ways: shifting the <strong>starting point</strong> (a decisional bias &mdash; the brain begins closer to "pain" before evidence arrives) or changing the <strong>drift rate</strong> (a sensory gain change &mdash; the evidence itself accumulates faster). Empirical studies show pain expectations <em>primarily shift the starting point</em> (Wiech, 2016).</p>
+    </div>
+
+    <!-- Background & Theory -->
+    <details class="collapsible">
+      <summary><span class="background-label">Background &amp; Theory</span> &mdash; From evidence accumulation to pain decisions</summary>
+      <div class="collapsible-content">
+        <p>Section 1 showed that pain is a Bayesian inference. But that picture is <em>static</em> &mdash; it computes a single posterior from a single observation. In reality, pain perception unfolds over <strong>time</strong>. Consider hearing a rustling sound in a forest: you don't instantly decide "snake" or "wind." You accumulate evidence moment by moment &mdash; each second of rustling provides another noisy sample &mdash; until you are confident enough to commit to a decision.</p>
+
+        <p>The mathematical framework for this temporal process is the <strong>Sequential Probability Ratio Test (SPRT)</strong> (Wald, 1947). The brain keeps a running tally &mdash; a <strong>decision variable</strong> &mdash; that sums the evidence so far. Accumulation continues until the tally crosses a <strong>bound</strong>, triggering commitment to one choice. This produces the fundamental <strong>speed-accuracy tradeoff</strong>: high bounds require more evidence (slower, more accurate); low bounds require less (faster, more error-prone).</p>
+
+        <div class="concept-box">
+          <h4>Neural Implementation: It's Not a Metaphor</h4>
+          <p>Single-unit recordings in macaques performing the random-dot motion task revealed the neural implementation of the SPRT (Gold &amp; Shadlen, 2007):</p>
+          <ol>
+            <li><strong>Sensory neurons in area MT</strong> encode the momentary evidence &mdash; their firing rate reflects the direction and strength of the motion signal.</li>
+            <li><strong>Downstream neurons in area LIP</strong> accumulate this evidence over time &mdash; their firing rate ramps up like the decision variable.</li>
+            <li><strong>A stereotyped firing-rate threshold</strong> triggers the saccade &mdash; this is the neural bound.</li>
+          </ol>
+          <p>The same logic applies to pain: a neural decision variable accumulates nociceptive evidence to a threshold. The Centro-Parietal Positivity (CPP), an EEG signal that builds to a fixed amplitude before each perceptual report, is the human correlate of this accumulator (O'Connell &amp; Kelly, 2021).</p>
+        </div>
+
+        <div class="callout-box">
+          <h4>Two Routes: Sensory Gain vs. Decisional Bias</h4>
+          <p>A key empirical finding from pain psychophysics (Wiech, 2016): when participants are cued to expect high or low pain before receiving a stimulus, <strong>expectation predominantly shifts the starting point \(z\), not the drift rate \(v\)</strong>. This means pain expectations act as a <em>decisional bias</em> (the brain begins closer to the "pain" decision before evidence arrives) rather than a <em>sensory gain change</em> (the brain doesn't literally accumulate evidence faster).</p>
+          <p>Drift rate changes were only observed when participants expected high pain but received low-intensity stimulation &mdash; i.e., when the expectation was maximally incongruent with the evidence.</p>
+        </div>
+
+        <p><strong>Hypervigilance in DDM terms:</strong> (1) Starting point biased toward pain (\(z > a/2\)), (2) lowered boundary separation (\(a \downarrow\)), and possibly (3) elevated drift rate for nociceptive channels. Together, these produce faster pain detection, lower thresholds, more false alarms, and faster expectation-congruent errors. Under <strong>threat imminence</strong>, an urgency signal \(u(t)\) further collapses the boundary: \(a(t) = a_0 - u(t)\), shifting the system from deliberative to reflexive mode.</p>
+      </div>
+    </details>
+
+    <!-- Prerequisites -->
+    <details class="collapsible">
+      <summary><span class="prerequisite-label">Prerequisite Concepts</span> &mdash; Random Walks, Stochastic Processes, First-Passage Times</summary>
+      <div class="collapsible-content">
+        <div class="concept-box">
+          <h4>Random Walk &amp; Brownian Motion</h4>
+          <p>Imagine flipping a coin repeatedly: heads = step up, tails = step down. The running total forms a <strong>random walk</strong>. In continuous time and space, this becomes <strong>Brownian motion</strong> (or a Wiener process) \(W_t\) &mdash; a mathematical model of pure noise that fluctuates continuously.</p>
+          <p>Key property: \(W_t\) has independent, Gaussian increments. Over a small time interval \(dt\), the change is \(dW \sim \mathcal{N}(0, dt)\). This means increments scale as \(\sqrt{dt}\), not \(dt\) &mdash; a fundamental difference from deterministic dynamics.</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>Drift + Diffusion: The Stochastic Differential Equation (SDE)</h4>
+          <p>The DDM adds a <strong>deterministic drift</strong> to the Brownian noise:</p>
+          <div class="math-step">$$dZ = \underbrace{v\, dt}_{\text{drift (signal)}} + \underbrace{\sigma\, dW_t}_{\text{diffusion (noise)}}$$</div>
+          <p>If Itō notation looks scary, here is the equivalent <strong>discrete-time form</strong> that actually runs in the simulation below:</p>
+          <div class="math-step">$$Z_{t+\Delta t} - Z_t = v\,\Delta t + \sigma\sqrt{\Delta t}\cdot\varepsilon_t, \qquad \varepsilon_t \sim \mathcal{N}(0,1)$$</div>
+          <p>At each small timestep \(\Delta t\), the decision variable moves by a <em>deterministic nudge</em> \(v\,\Delta t\) plus a <em>random kick</em> scaled by \(\sqrt{\Delta t}\). The square-root scaling is the crucial non-obvious feature of stochastic dynamics: noise accumulates slower than deterministic drift, which is why drift eventually wins with enough time.</p>
+          <p><strong>Drift \(v\)</strong>: the average direction of evidence accumulation. Positive \(v\) means evidence, on average, favors "pain." Larger \(|v|\) = stronger signal = easier decision.</p>
+          <p><strong>Diffusion \(\sigma\)</strong>: the noise amplitude. Larger \(\sigma\) = noisier evidence = more random paths = more errors.</p>
+          <p>Think of it as a biased coin-flip walk: the coin is slightly weighted (drift), but each flip is still random (diffusion).</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>Boundaries and First-Passage Time</h4>
+          <p>The <strong>boundaries</strong> at \(Z=a\) (upper, "Pain") and \(Z=0\) (lower, "No Pain") are decision thresholds. The process terminates the first time \(Z(t)\) hits either boundary. The time at which this happens is the <strong>first-passage time</strong> &mdash; this is the <em>reaction time</em> (RT) in psychological terms.</p>
+          <p><strong>Boundary separation \(a\)</strong> controls the speed-accuracy tradeoff: wide boundaries require more evidence (slow but accurate); narrow boundaries require less (fast but error-prone).</p>
+          <p><strong>Starting point \(z\)</strong>: where the accumulation begins. If \(z = a/2\), the process starts unbiased. If \(z > a/2\), it starts closer to the "Pain" boundary &mdash; a <em>prior bias</em> toward reporting pain.</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- Main equation -->
+    <div class="equation-block">
+      <p style="margin-bottom:0.5rem; font-weight:500; font-size:0.9rem;">The Drift-Diffusion equation with initial condition and boundaries:</p>
+      $$dZ = v\,dt + \sigma\,dW_t, \quad Z(0) = z, \quad \text{boundaries at } 0 \text{ (No Pain) and } a \text{ (Pain)}$$
+      <p style="margin-top:0.5rem; font-size:0.85rem; color:#636E72;">where \(v\) = drift rate (signal strength), \(\sigma\) = noise amplitude, \(z\) = starting point (prior bias), \(a\) = boundary separation (evidence threshold).</p>
+    </div>
+
+    <!-- Derivation -->
+    <details class="collapsible">
+      <summary><span class="derivation-label">Step-by-Step Derivation</span> &mdash; From SPRT to DDM, and connecting to Bayesian inference</summary>
+      <div class="collapsible-content">
+        <p><strong>Step 1: The Sequential Probability Ratio Test (SPRT).</strong> Given a sequence of evidence samples \(e_1, e_2, \ldots\), we compute the log-likelihood ratio (evidence for "pain" vs "no pain"):</p>
+        <div class="math-step">$$y_n = \sum_{i=1}^n \log\frac{P(e_i \mid \text{pain})}{P(e_i \mid \text{no pain})}$$</div>
+        <p>Each sample adds a weight \(w_i = \log[P(e_i|\text{pain})/P(e_i|\text{no pain})]\). The running sum \(y_n\) is the decision variable.</p>
+
+        <p><strong>Step 2: Continuous-time limit.</strong> If evidence arrives continuously and each increment is Gaussian, the sum becomes a stochastic integral. The per-sample weight \(w_i\) has mean \(\mu\) (the true signal) and variance \(\sigma_w^2\) (the noise). In continuous time:</p>
+        <div class="math-step">$$dy = \mu\, dt + \sigma_w\, dW_t$$</div>
+        <p>This is exactly the DDM equation, where drift \(v = \mu\) is the signal strength and diffusion \(\sigma = \sigma_w\) is the per-sample noise.</p>
+
+        <p><strong>Step 3: Boundaries from error-rate control.</strong> SPRT stops when the cumulative evidence crosses a threshold. Wald (1947) showed the bounds are set by the desired error rates \(\alpha, \beta\):</p>
+        <div class="math-step">$$\text{Upper bound: } A \approx \log\frac{1-\beta}{\alpha}, \qquad \text{Lower bound: } B \approx \log\frac{\beta}{1-\alpha}$$</div>
+        <p>With symmetric error rates (\(\alpha = \beta\)), the bounds are symmetric: \(\pm \log\frac{1-\alpha}{\alpha}\).</p>
+
+        <p><strong>Step 4: Connection to Bayesian inference (Section 1).</strong> The starting point \(z\) encodes the <strong>prior</strong>:</p>
+        <div class="math-step">$$z = \frac{a}{2} + \frac{1}{2}\log\frac{P(\text{pain})}{P(\text{no pain})}$$</div>
+        <p>If pain is expected (\(P(\text{pain}) > 0.5\)), \(z > a/2\) and the accumulator starts biased toward the "Pain" boundary. The drift rate \(v\) encodes the sensory evidence quality, mapping onto \(\Pi_{\text{obs}}\) in Section 1.</p>
+
+        <p><strong>Key insight:</strong> The DDM is the continuous-time, Gaussian limit of the SPRT &mdash; the mathematically optimal sequential test. The brain physically implements it by accumulating neural firing-rate differences to a threshold.</p>
+      </div>
+    </details>
+
+    <h3>Presets</h3>
+    <div class="presets" id="ddm-presets">
+      <button class="preset-btn active" onclick="DDMViz.applyPreset('normal')">Normal</button>
+      <button class="preset-btn" onclick="DDMViz.applyPreset('highpain')">High Pain Expectation</button>
+      <button class="preset-btn" onclick="DDMViz.applyPreset('hypervigilant')">Hypervigilant</button>
+      <button class="preset-btn" onclick="DDMViz.applyPreset('urgent')">Urgent Threat</button>
+    </div>
+    <div class="preset-descriptions" id="ddm-preset-desc">
+      <div class="preset-desc-item visible" data-preset="normal">
+        <strong>Normal perception:</strong> Starting point centered (\(z = a/2\)), moderate boundaries, moderate drift. The process has roughly equal chance of hitting either boundary. <span class="observe">Observe: paths wander before committing; RT distributions are broad; accuracy depends on drift rate.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="highpain">
+        <strong>High pain expectation (\(\Delta z\)):</strong> Starting point shifted up (\(z = 1.1\) vs \(a/2 = 0.75\)). The accumulator begins closer to the "Pain" boundary. Less evidence needed to report pain; more evidence needed to report "no pain." <span class="observe">Observe: more paths hit the upper boundary; RT for "Pain" responses is shorter; RT for "No Pain" errors is fast (the diagnostic signature of bias, not sensitivity change).</span>
+      </div>
+      <div class="preset-desc-item" data-preset="hypervigilant">
+        <strong>Hypervigilant:</strong> Starting point biased AND boundary lowered (\(a = 1.0\)). The agent requires less total evidence and starts biased toward pain. This produces fast, impulsive pain decisions with a high false-alarm rate. <span class="observe">Observe: nearly all paths hit the upper boundary quickly; RT distribution shifts left (faster); accuracy drops dramatically.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="urgent">
+        <strong>Urgent threat (collapsing boundary):</strong> Under imminent danger, the brain cannot afford slow deliberation. An urgency signal linearly collapses the boundary over time: \(a(t) = a_0 - u \cdot t\). Even if evidence is ambiguous, a decision is forced. <span class="observe">Observe: the effective boundary shrinks over time; the system becomes increasingly impulsive. This models the shift from deliberative to reflexive behavior under threat imminence.</span>
+      </div>
+    </div>
+
+    <div class="viz-layout">
+      <div class="controls-panel">
+        <div class="control-group">
+          <div class="control-label"><span>Drift rate <em>v</em></span><span class="control-value" id="ddm-v-val">0.50</span></div>
+          <input type="range" id="ddm-v" min="-3" max="3" step="0.05" value="0.5" oninput="DDMViz.update()">
+        </div>
+        <div class="control-group">
+          <div class="control-label"><span>Boundary <em>a</em></span><span class="control-value" id="ddm-a-val">1.50</span></div>
+          <input type="range" id="ddm-a" min="0.5" max="3" step="0.05" value="1.5" oninput="DDMViz.update()">
+        </div>
+        <div class="control-group">
+          <div class="control-label"><span>Starting point <em>z</em></span><span class="control-value" id="ddm-z-val">0.75</span></div>
+          <input type="range" id="ddm-z" min="0.05" max="2.95" step="0.05" value="0.75" oninput="DDMViz.update()">
+        </div>
+        <div class="control-group">
+          <div class="control-label"><span>Noise &sigma;</span><span class="control-value" id="ddm-sigma-val">1.00</span></div>
+          <input type="range" id="ddm-sigma" min="0.3" max="2" step="0.05" value="1" oninput="DDMViz.update()">
+        </div>
+
+        <div style="margin-top:1rem; display:flex; gap:0.5rem;">
+          <button class="action-btn primary" onclick="DDMViz.runTrials()">Run 2000 Trials</button>
+          <button class="action-btn secondary" onclick="DDMViz.runSingle()">Single Trial</button>
+        </div>
+      </div>
+
+      <div class="plot-container">
+        <p style="font-size:0.83rem; color:var(--color-text-light); margin-bottom:0.4rem;">
+          <strong>Reading the plots.</strong> <em>Left:</em> a handful of stochastic evidence-accumulation trajectories (thin colored lines), starting from \(z\) (green diamond) and drifting toward either the upper "Pain" boundary (red dashed) or the lower "No Pain" boundary (blue dashed). The gray dotted line is the mean drift. <em>Right:</em> the reaction-time (RT) distribution from 2000 Monte-Carlo trials, split by which boundary was hit: red bars = "Pain" responses, blue bars = "No Pain" responses. The relative <strong>heights</strong> of the two histograms reveal the response-rate asymmetry; the <strong>shapes</strong> reveal whether the asymmetry comes from bias (starting point) or sensitivity (drift rate).
+        </p>
+        <div class="plot-row">
+          <div id="ddm-plot-paths" class="plot-area"></div>
+          <div id="ddm-plot-rt" class="plot-area"></div>
+        </div>
+        <div class="stats-bar" id="ddm-stats">
+          <div class="stat-item"><span class="stat-label">Accuracy: </span><span class="stat-value" id="ddm-stat-acc">--</span></div>
+          <div class="stat-item"><span class="stat-label">Mean RT (correct): </span><span class="stat-value" id="ddm-stat-rt">--</span></div>
+          <div class="stat-item"><span class="stat-label">Upper (Pain) %: </span><span class="stat-value" id="ddm-stat-upper">--</span></div>
+        </div>
+
+        <div class="concept-box">
+          <h4>Interpreting the RT Histogram: Bias vs. Sensitivity</h4>
+          <p><strong>Bias (starting-point shift \(\Delta z\)):</strong> shifts the <em>heights</em> of the two histograms but preserves their shapes. Fast errors are the diagnostic tell &mdash; if you report "pain" wrongly, you report it quickly because the accumulator started near the pain boundary.</p>
+          <p><strong>Sensitivity (drift shift \(\Delta v\)):</strong> shifts the <em>shape</em> and <em>mean</em> of the RTs. Evidence accumulates faster toward one side, so correct responses speed up while errors become slower and rarer.</p>
+          <p>Wiech (2016) found pain expectations predominantly produce bias (\(z\)-shift) patterns, not sensitivity (\(v\)-shift) patterns &mdash; cognitive expectation biases the <em>decision</em>, not the <em>sensory encoding</em>.</p>
+        </div>
+
+        <div class="crossref-box">
+          <strong>Boundary behavior:</strong> the \(z\) slider is clamped to \([0.05, a-0.05]\) so the starting point always sits strictly between the two boundaries. If you set \(a\) smaller than \(z\), the code auto-snaps \(z\) into range. Otherwise a decision would be "made" before any evidence arrived.
+        </div>
+
+        <!-- Cross-reference linking DDM starting point to Bayesian prior -->
+        <div class="crossref-box">
+          <strong>Connection to Section 1:</strong> The DDM starting point corresponds to the <em>log prior odds</em>:
+          $$z = \frac{a}{2} + \frac{1}{2}\log\frac{P(\text{pain})}{P(\text{no pain})}$$
+          A strong, confident prior on pain (Viz 1: small \(\sigma_{\text{prior}}\), high \(\mu_{\text{prior}}\)) translates to \(z > a/2\) here &mdash; the same bias, expressed in a temporal accumulator.
+        </div>
+
+        <!-- Check Your Understanding -->
+        <div class="prediction-box">
+          <h4>Check Your Understanding</h4>
+          <p><strong>Predict:</strong> Across the four presets, which one should produce the <em>fastest mean RT</em> for "Pain" responses? Why?</p>
+          <details><summary style="cursor:pointer; color:var(--color-ambiguity); font-weight:500; font-size:0.85rem;">Show answer</summary>
+            <div class="answer"><strong>Hypervigilant.</strong> It combines two speed-up mechanisms: (1) starting point biased toward pain (\(z = 0.7\) on a lower boundary \(a = 1.0\), so \(z/a = 0.7 > 0.5\)), and (2) lowered boundary (\(a = 1.0\) vs. the Normal preset's \(a = 1.5\)). Both effects reduce the total evidence needed to commit to "pain." Test it by clicking the Hypervigilant preset and reading the "Mean RT (correct)" stat.</div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-nav">
+      <a href="#bayesian">&larr; Previous: 1. Bayesian Inference</a>
+      <a href="#lqg">Continue: 3. LQG Control &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- VISUALIZATION 3: LQG CONTROL LOOP                             -->
+<!-- ============================================================ -->
+<section class="viz-section" id="lqg">
+  <div class="viz-card">
+    <h2><span class="section-badge badge-3">3</span> LQG Control Loop &mdash; Injury Recovery</h2>
+    <div class="viz-description">
+      <p>Sections 1-2 addressed perception: "how much does it hurt?" This section addresses <strong>control</strong>: "what should the organism <em>do</em> about it?" Post-injury pain is an <strong>optimal control problem</strong>. The body is a <em>plant</em> (biological tissue healing over time), nociceptors are <em>sensors</em>, and the brain is the <em>controller</em> that must infer the hidden injury state and select protective actions (rest, guard, analgesia).</p>
+      <p>The brain estimates the hidden injury state via a <strong>Kalman filter</strong> and issues commands that trade off the cost of being injured (\(Q\)) against the cost of protection (\(R\), e.g., missed foraging). When <strong>guarding</strong> restricts sensory feedback, the innovation signal vanishes and the estimated injury gets stuck at "injured" &mdash; even as the body heals. This is the <em>information restriction hypothesis</em> for chronic pain (Seymour et al., 2023).</p>
+    </div>
+
+    <!-- Background & Theory -->
+    <details class="collapsible">
+      <summary><span class="background-label">Background &amp; Theory</span> &mdash; Three types of pain and why recovery is a control problem</summary>
+      <div class="collapsible-content">
+        <p>Sections 1&ndash;2 addressed the question "how much does it hurt?" This section addresses a different question: <strong>"what should the organism do about it?"</strong> To understand why this requires control theory, we must first distinguish three fundamentally different types of pain (Seymour, Crook &amp; Chen, 2023):</p>
+
+        <div class="concept-box">
+          <h4>Three Types of Pain &mdash; Three Computational Problems</h4>
+          <p><strong>Acute nociception</strong> (milliseconds to seconds): A fast feedforward reflex to minimize ongoing damage. Touching a hot stove triggers withdrawal. This is the "alarm bell" &mdash; it works well and is computationally simple.</p>
+          <p><strong>Post-injury pain</strong> (hours to weeks): Not signaling ongoing damage &mdash; it is <em>managing recovery</em>. The brain must infer a hidden variable (tissue healing state) from noisy signals and decide how much to protect vs. resume normal activity. This is an <strong>optimal control problem under uncertainty</strong>.</p>
+          <p><strong>Chronic pain</strong> (months to years): What happens when the control system <strong>breaks down</strong>. The controller becomes stuck in "injured" mode, enforcing protection long after the tissue has healed.</p>
+        </div>
+
+        <p>The key insight of Seymour et al. (2023) is that post-injury pain is not an alarm &mdash; it is a <strong>recuperation controller</strong>. Its purpose is to regulate protective behavior during healing: suppressing movement, promoting rest, reallocating energy, and trading short-term utility (foraging, mating) for long-term tissue repair.</p>
+
+        <div class="callout-box">
+          <h4>The Four Failure Modes of Chronic Pain</h4>
+          <p>Seymour et al. (2023) describe four mechanisms that seed the transition from adaptive post-injury pain to maladaptive chronic pain:</p>
+          <ol>
+            <li><strong>Maladaptive learning:</strong> Avoidance prevents the brain from discovering that actions no longer cause pain. Compounded by elevated punishment sensitivity.</li>
+            <li><strong>Maladaptive model:</strong> The brain's model doesn't account for central sensitization, so amplified nociceptive signals are interpreted as evidence of worse injury.</li>
+            <li><strong>Maladaptive integration:</strong> Nerve damage or amputation creates persistent sensory conflicts the brain cannot resolve.</li>
+            <li><strong>Maladaptive priors:</strong> Pessimistic beliefs ("it will never get better") override incoming recovery evidence.</li>
+          </ol>
+          <p>These four modes feed each other in a positive-feedback trap &mdash; the formal origin of the acute-to-chronic transition. <strong>Use the "Chronic Pain" preset below to see all failure modes operating simultaneously.</strong></p>
+        </div>
+
+        <div class="example-box">
+          <h4>Evolutionary Evidence: Hypervigilance Is 500 Million Years Old</h4>
+          <p>Cephalopods (octopus, cuttlefish, squid) &mdash; separated from mammals by ~500 million years of evolution &mdash; show strikingly similar post-injury behavior: nociceptor threshold reduction, wound-directed guarding persisting for <em>days</em>, and opioid-modulated pain behavior. This cross-phylum convergence is strong evidence that post-injury pain is an ancient, optimal-control solution that has been independently reinvented because the underlying computational problem is universal.</p>
+        </div>
+
+        <p><strong>Neuromodulatory implementation:</strong> <strong>Opioids</strong> modulate the Kalman gain \(L\) (descending analgesia reduces the innovation signal) and the observation matrix \(C\) (stress-induced analgesia suppresses nociceptor gain). <strong>Dopamine</strong> sets the effective \(Q/R\) ratio and controls action vigor. Post-injury downshift of mesolimbic dopamine raises the effective \(R\) on foraging &mdash; enforcing rest and low motivation (Gershman et al., 2024).</p>
+      </div>
+    </details>
+
+    <!-- Important notes box -->
+    <div class="callout-box">
+      <h4>Notation and Scope of This Visualization</h4>
+      <p><strong>Scalar simplification:</strong> The full LQG framework uses <em>matrix-valued</em> \(A, B, C, D, W, V\) for multi-dimensional state and observation. In this visualization, we collapse to <strong>scalars</strong> (1-D injury, 1-D observation) to keep plots interpretable. The matrix form is shown in the Step-by-Step Derivation; everything you see in the plots below is the 1-D special case.</p>
+      <p><strong>What "guarding" means physically:</strong> When you toggle Guarding ON, the agent is <em>physically immobilizing the injured body part</em> (e.g., limping, holding still, splinting). This protective action serves two functions: (1) it directly reduces the mechanical load on the tissue (accelerating healing via the control input \(u\)), and (2) critically, it <em>drastically reduces the informativeness of sensory observations</em> &mdash; the agent stops probing the limb, so the nociceptive channel is flooded with noise rather than information. This is the mechanism of information restriction.</p>
+    </div>
+
+    <!-- Prerequisites -->
+    <details class="collapsible">
+      <summary><span class="prerequisite-label">Prerequisite Concepts</span> &mdash; State-Space Models, Kalman Filter, Feedback Control</summary>
+      <div class="collapsible-content">
+        <div class="concept-box">
+          <h4>State-Space Models: Describing Dynamics</h4>
+          <p>A <strong>state-space model</strong> describes how a system evolves over time using two equations:</p>
+          <div class="math-step">$$x_{t+1} = A \cdot x_t + B \cdot u_t + w_t \qquad \text{(state equation: how injury evolves)}$$</div>
+          <div class="math-step">$$y_t = C \cdot x_t + v_t \qquad \text{(observation equation: what the sensors see)}$$</div>
+          <p>\(x_t\) is the <strong>hidden state</strong> (true injury level &mdash; you can't directly observe inflammation inside your knee). \(y_t\) is the <strong>observation</strong> (nociceptive signal &mdash; what you feel). \(u_t\) is the <strong>control action</strong> (rest, guard, move). \(w_t\) and \(v_t\) are <strong>noise</strong> (biological variability and sensor unreliability).</p>
+          <p><strong>\(A\)</strong> is the healing rate: if \(A < 1\), the injury naturally shrinks over time (spontaneous recovery). <strong>\(C\)</strong> is the sensor gain: larger \(C\) means the nociceptors amplify the injury signal (central sensitization).</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>The Kalman Filter: Optimal State Estimation</h4>
+          <p>Since \(x_t\) is hidden, the brain must <em>estimate</em> it from noisy observations. The <strong>Kalman filter</strong> is the mathematically optimal estimator for linear-Gaussian systems. It works in two steps each timestep:</p>
+          <p><strong>Predict:</strong> Use the model to forecast the next state: \(\hat{x}_{t|t-1} = A \hat{x}_{t-1} + B u_{t-1}\)</p>
+          <p><strong>Update:</strong> Compare the prediction to the actual observation and correct:</p>
+          <div class="math-step">$$\hat{x}_t = \hat{x}_{t|t-1} + L \cdot \underbrace{(y_t - C \hat{x}_{t|t-1})}_{\text{innovation (surprise)}}$$</div>
+          <p>The <strong>innovation</strong> is the prediction error &mdash; how much the observation surprised the estimator. The <strong>Kalman gain \(L\)</strong> controls how much of this surprise is absorbed into the estimate. This is the multivariate, temporal generalization of the Kalman gain \(K\) from Section 1.</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>Feedback Control: Closing the Loop</h4>
+          <p>In <strong>feedback control</strong>, the controller observes the state (via the Kalman filter) and adjusts its actions to drive the state toward a goal. For injury recovery, the goal is \(x = 0\) (healed). The optimal control law is:</p>
+          <div class="math-step">$$u_t^* = -K_{\text{control}} \cdot \hat{x}_t$$</div>
+          <p>When \(\hat{x}\) is large (believe the injury is severe), protect strongly. When \(\hat{x} \to 0\) (believe recovery is progressing), resume normal activity. The problem: if guarding suppresses the observations that would reveal recovery, \(\hat{x}\) never updates downward.</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- Main equation -->
+    <div class="equation-block">
+      <p style="margin-bottom:0.5rem; font-weight:500; font-size:0.9rem;">Plant dynamics, observation, and Kalman filter estimate:</p>
+      $$\dot{x} = Ax + Bu + w, \quad y = Cx + v, \quad \dot{\hat{x}} = A\hat{x} + Bu + L(y - C\hat{x})$$
+      <p style="margin-top:0.5rem; font-size:0.85rem; color:#636E72;">where \(x\) = true injury, \(\hat{x}\) = brain's estimate, \(y\) = nociceptive observation, \(u\) = control action (guarding), \(L\) = Kalman gain, \(A\) = healing rate, \(C\) = nociceptor sensitivity, \(w,v\) = noise.</p>
+    </div>
+
+    <!-- Derivation -->
+    <details class="collapsible">
+      <summary><span class="derivation-label">Step-by-Step Derivation</span> &mdash; Kalman gain and the information restriction mechanism</summary>
+      <div class="collapsible-content">
+        <p><strong>Step 1: The innovation and its role.</strong> The <em>innovation</em> is the difference between what the sensor reports and what the estimator predicted:</p>
+        <div class="math-step">$$\text{innovation}_t = y_t - \hat{y}_t = y_t - C\hat{x}_t$$</div>
+        <p>When the innovation is zero, the observation contained no new information. The estimator learns nothing.</p>
+
+        <p><strong>Step 2: The Kalman gain in 1D.</strong> The Kalman gain balances trust in the model vs. trust in the sensor:</p>
+        <div class="math-step">$$L = \frac{P \cdot C}{C^2 \cdot P + V}$$</div>
+        <p>where \(P\) is the estimation error covariance (how uncertain the estimate is) and \(V\) is the observation noise. This is the same precision-weighting logic as Section 1: \(L\) increases when the sensor is reliable (\(V\) small) and decreases when it is noisy (\(V\) large).</p>
+
+        <p><strong>Step 3: Information restriction mechanism.</strong> When the agent guards (avoids movement):</p>
+        <div class="math-step">$$\text{Guarding ON} \Rightarrow V_{\text{eff}} \uparrow \uparrow \Rightarrow L \downarrow \Rightarrow \text{innovation absorbed} \downarrow \Rightarrow \hat{x} \text{ stuck}$$</div>
+        <p>Guarding makes observations <em>uninformative</em> (high effective noise \(V_{\text{eff}}\)). The Kalman gain drops, innovations have no effect, and the estimate \(\hat{x}\) stays at "injured" even as the true state \(x\) heals toward zero. The controller, seeing a high \(\hat{x}\), continues to guard. A self-reinforcing trap.</p>
+
+        <p><strong>Step 4: Central sensitization inflates \(C\).</strong> If the nociceptor gain \(C\) increases without the brain knowing (no efference copy update), the brain treats amplified signals as evidence of greater injury:</p>
+        <div class="math-step">$$C \uparrow \Rightarrow y = C \cdot x + v \text{ is larger} \Rightarrow \text{brain infers larger } \hat{x}$$</div>
+        <p>The innovation is inflated by the amplified \(C\), and the Kalman gain absorbs this as evidence of worsening injury &mdash; even if the tissue is actually healing.</p>
+      </div>
+    </details>
+
+    <h3>Presets</h3>
+    <div class="presets" id="lqg-presets">
+      <button class="preset-btn active" onclick="LQGViz.applyPreset('normal')">Normal Recovery</button>
+      <button class="preset-btn" onclick="LQGViz.applyPreset('sensitization')">Central Sensitization</button>
+      <button class="preset-btn" onclick="LQGViz.applyPreset('restriction')">Information Restriction</button>
+      <button class="preset-btn" onclick="LQGViz.applyPreset('chronic')">Chronic Pain</button>
+      <button class="preset-btn" onclick="LQGViz.applyPreset('safe')">Safe Context (meta-ctrl)</button>
+      <button class="preset-btn" onclick="LQGViz.applyPreset('threat')">Threat Context (meta-ctrl)</button>
+    </div>
+    <div class="preset-descriptions" id="lqg-preset-desc">
+      <div class="preset-desc-item visible" data-preset="normal">
+        <strong>Normal recovery:</strong> The injury heals naturally (\(A=0.95\), blue curve decays), the Kalman filter tracks it accurately (red dashed follows blue), and the innovation signal (middle plot) reflects genuine changes in tissue state. <span class="observe">Observe: the estimated state closely tracks the true state; both converge to zero.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="sensitization">
+        <strong>Central sensitization (\(C=3\)):</strong> Nociceptors are amplified 3x. The brain interprets the louder signals as evidence of worse injury. <span class="observe">Observe: the estimated injury (red dashed) runs higher than the true injury (blue) because the inflated \(C\) biases the estimator upward. The innovation is large because the model's internal \(C\) doesn't match reality.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="restriction">
+        <strong>Information restriction (guarding ON):</strong> The agent guards the injury, which increases effective observation noise 15x. <span class="observe">Observe: the innovation signal (middle plot) collapses to near-zero &mdash; not because the injury is resolved, but because the sensor is uninformative. The estimated injury (red) stays high even as the true injury (blue) heals. The Kalman gain (bottom right, green) drops dramatically.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="chronic">
+        <strong>Chronic pain (combined failure):</strong> Central sensitization (\(C=3\)) AND guarding ON with high guard strength (0.5). <span class="observe">Observe: the worst of both worlds &mdash; the estimate is biased upward by sensitization AND locked in place by information restriction. The agent will continue guarding indefinitely, creating a self-reinforcing chronic pain loop.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="safe">
+        <strong>Safe context (meta-controller lowers opportunity cost):</strong> The agent is in a safe shelter with social support &mdash; the opportunity cost of rest (\(R\)) is low. The meta-controller in insula/vmPFC tolerates strong guarding (guard strength = 0.6) because foraging isn't urgent. <span class="observe">Observe: heavy guarding and fast healing, but also strong information restriction. Useful for acute injury but risky if maintained too long &mdash; this is how post-injury pain should look in the days after surgery.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="threat">
+        <strong>Threat context (meta-controller suppresses guarding):</strong> A predator is nearby &mdash; the opportunity cost of rest (\(R\)) is catastrophic because staying still means being eaten. The meta-controller forces guarding OFF despite the injury. Stress-induced analgesia also reduces nociceptive gain (low \(C\)). <span class="observe">Observe: the agent moves despite injury; Kalman gain stays high because observations remain informative. This models the "fight-or-flight overrides pain" phenomenon &mdash; soldiers running on broken legs during combat.</span>
+      </div>
+    </div>
+
+    <div class="viz-layout">
+      <div class="controls-panel">
+        <div class="control-group">
+          <div class="control-label"><span>Healing rate <em>A</em></span><span class="control-value" id="lqg-A-val">0.95</span></div>
+          <input type="range" id="lqg-A" min="0.80" max="0.995" step="0.005" value="0.95" oninput="LQGViz.simulate()">
+        </div>
+        <div class="control-group">
+          <div class="control-label"><span>Sensitization <em>C</em></span><span class="control-value" id="lqg-C-val">1.00</span></div>
+          <input type="range" id="lqg-C" min="0.5" max="5" step="0.1" value="1" oninput="LQGViz.simulate()">
+        </div>
+        <div class="control-group">
+          <div class="control-label"><span>Obs. noise <em>V</em></span><span class="control-value" id="lqg-V-val">0.10</span></div>
+          <input type="range" id="lqg-V" min="0.01" max="1" step="0.01" value="0.1" oninput="LQGViz.simulate()">
+        </div>
+        <div class="control-group">
+          <div class="control-label"><span>Process noise <em>W</em></span><span class="control-value" id="lqg-W-val">0.010</span></div>
+          <input type="range" id="lqg-W" min="0.001" max="0.1" step="0.001" value="0.01" oninput="LQGViz.simulate()">
+        </div>
+        <div class="control-group">
+          <div class="control-label" title="How strongly the rest/guard action affects healing. Negative values = rest accelerates healing (default). Positive = rest slows healing (e.g., muscle atrophy in aged patients)."><span>Control effect <em>B</em></span><span class="control-value" id="lqg-B-val">&minus;0.10</span></div>
+          <input type="range" id="lqg-B" min="-0.3" max="0.1" step="0.01" value="-0.1" oninput="LQGViz.simulate()">
+        </div>
+
+        <div class="toggle-container" style="margin-top:1rem;">
+          <label class="toggle-switch">
+            <input type="checkbox" id="lqg-guarding" onchange="LQGViz.simulate()">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Guarding (restricts information)</span>
+        </div>
+        <div class="control-group">
+          <div class="control-label"><span>Guard strength</span><span class="control-value" id="lqg-guard-val">0.30</span></div>
+          <input type="range" id="lqg-guard" min="0" max="1" step="0.05" value="0.3" oninput="LQGViz.simulate()">
+        </div>
+
+        <button class="action-btn secondary" style="margin-top:0.8rem; width:100%;" onclick="LQGViz.reseed()">Re-run Simulation</button>
+      </div>
+
+      <div class="plot-container">
+        <p style="font-size:0.83rem; color:var(--color-text-light); margin-bottom:0.4rem;">
+          <strong>Reading the plots.</strong> <em>Top:</em> the true injury state (solid blue, what's really happening in the tissue) vs. the brain's estimate (dashed red, what the brain <em>thinks</em> is happening). Both are normalized to [0, 1]: 0 = fully healed, 1 = peak injury. <em>Bottom left:</em> the innovation signal \(y - \hat{y}\) &mdash; the moment-to-moment prediction error that drives learning. <em>Bottom right:</em> the control signal \(u(t)\) (purple, guarding intensity) and the Kalman gain \(L\) (dashed green, how much the estimator trusts new observations).
+        </p>
+        <div id="lqg-plot-state" class="plot-area-tall"></div>
+        <div class="plot-row" style="margin-top:0.8rem;">
+          <div id="lqg-plot-innovation" class="plot-area-small"></div>
+          <div id="lqg-plot-control" class="plot-area-small"></div>
+        </div>
+
+        <div class="prediction-box">
+          <h4>Check Your Understanding</h4>
+          <p><strong>Predict:</strong> If you turn Guarding ON, will the <em>true</em> injury state (blue curve) heal faster, slower, or the same speed compared to Guarding OFF? And will the <em>estimated</em> injury (red dashed) track the true state correctly in either case?</p>
+          <details><summary style="cursor:pointer; color:var(--color-ambiguity); font-weight:500; font-size:0.85rem;">Show answer</summary>
+            <div class="answer"><strong>With default B &lt; 0: true injury heals FASTER under guarding</strong> (because rest accelerates tissue repair). But the <strong>estimated</strong> injury gets STUCK because guarding also cuts off informative sensory feedback (effective V &times;15). This is the paradox of chronic pain: the body is healing, but the brain cannot perceive that healing because guarding has deprived it of evidence. Test it: toggle Guarding ON with the Normal preset &mdash; watch the blue curve drop quickly while the red dashed curve stays flat.</div>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-nav">
+      <a href="#ddm">&larr; Previous: 2. Drift-Diffusion</a>
+      <a href="#active-inf">Continue: 4. Active Inference &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- VISUALIZATION 4: ACTIVE INFERENCE                             -->
+<!-- ============================================================ -->
+<section class="viz-section" id="active-inf">
+  <div class="viz-card">
+    <h2><span class="section-badge badge-4">4</span> Active Inference &mdash; The Chronic Pain Trap</h2>
+    <div class="viz-description">
+      <p><strong>Active inference</strong> is the most general framework in this tutorial &mdash; it subsumes Bayesian inference (Section 1), the DDM (Section 2), and LQG control (Section 3) as special cases. Its central claim: both perception and action serve a single objective &mdash; <strong>minimizing Expected Free Energy (EFE)</strong>.</p>
+      <p>The EFE has two components: <strong>risk</strong> (avoiding outcomes the agent dislikes, e.g., pain) and <strong>ambiguity</strong> (seeking observations that reduce uncertainty). The agent selects the policy with the lowest total EFE. In chronic pain, <em>risk dominates</em>: the agent guards to avoid pain, but this <strong>starves the inference of corrective data</strong>, trapping beliefs in "injured" &mdash; the <em>dark-room problem</em> on interoception.</p>
+    </div>
+
+    <!-- Background & Theory -->
+    <details class="collapsible">
+      <summary><span class="background-label">Background &amp; Theory</span> &mdash; The unifying framework and the dark-room problem</summary>
+      <div class="collapsible-content">
+        <p>Active inference (Friston, 2010; Smith, Friston &amp; Whyte, 2022) is the most general framework in this tutorial. Its central claim: both perception and action serve a single objective &mdash; <strong>minimizing surprise</strong> (equivalently, maximizing model evidence). An agent maintains a <em>generative model</em> of how hidden states in the world produce observations, and it acts to make its observations consistent with its model.</p>
+
+        <p>Active inference is not a competing framework &mdash; it <em>contains</em> the others as special cases:</p>
+        <ul>
+          <li><strong>Bayesian inference (Section 1)</strong> = perception as variational inference (minimizing free energy w.r.t. beliefs)</li>
+          <li><strong>DDM (Section 2)</strong> = evidence accumulation is belief updating; boundary crossing is policy commitment</li>
+          <li><strong>LQG control (Section 3)</strong> = the continuous, Gaussian, quadratic-cost special case of EFE minimization</li>
+        </ul>
+
+        <div class="callout-box">
+          <h4>The Exploration-Exploitation Dilemma in Injury Recovery</h4>
+          <p>Consider an injured agent in the recovery phase. It faces a fundamental tension:</p>
+          <p><strong>Exploitation (minimize risk):</strong> Select policies that minimize predicted nociceptive observations. These are protective policies &mdash; rest, guard, avoid movement. They are immediately effective: the agent avoids pain.</p>
+          <p><strong>Exploration (minimize ambiguity):</strong> Select policies that provide informative observations about the healing state. These are <em>active</em> policies &mdash; test the injured limb, attempt movement, probe the boundary of pain. They increase short-term risk but decrease ambiguity.</p>
+          <p><strong>The trap:</strong> Exploitation directly undermines exploration. Guarding suppresses movement &rarr; no movement means no sensory feedback &rarr; no feedback means no prediction errors to update the model &rarr; the model stays stuck on "injured" &rarr; the stuck model drives continued guarding. A self-reinforcing loop.</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>The Dark-Room Problem on Interoception</h4>
+          <p>The classic "dark-room problem" asks: why doesn't an agent that minimizes surprise just sit in a dark room forever? For exteroceptive agents, the answer is that they have <em>preferences for rich sensory experience</em> (food, social interaction, etc.).</p>
+          <p>But for interoceptive pain channels, the preferences are <strong>monotonically negative</strong> &mdash; there is no nociceptive observation the agent actively <em>seeks</em>. The "dark room" (complete avoidance of all nociceptive input) is genuinely the EFE minimum under a stuck injury prior. This is why chronic pain is so resistant to resolution: the mathematics of the agent's own inference system conspire against recovery.</p>
+        </div>
+
+        <div class="example-box">
+          <h4>Catastrophizing = Excessive Prior Precision + Elevated Preference Precision</h4>
+          <p>The catastrophizing literature maps directly onto active inference: catastrophizing is a state where (1) the agent is extremely confident it is injured (\(q(s=\text{injured})\) has very high precision), AND (2) even mild pain observations are perceived as catastrophically costly (\(C(\text{pain})\) is very strongly negative). This locks the agent into risk-minimization and prevents the epistemic actions that would allow recovery.</p>
+          <p><strong>Try it yourself:</strong> Click the "Chronic Pain Trap" preset below. Observe how the "Guard" policy has dramatically lower EFE than "Explore," and how the belief trajectory stays locked near \(P(\text{injured}) = 1.0\) even after the tissue heals at step 12.</p>
+        </div>
+
+        <p><strong>How active inference connects the frameworks:</strong> The value of active inference is that it provides a <strong>single, principled objective</strong> (minimize EFE) that naturally captures the tension between risk and ambiguity &mdash; the tension that is at the heart of chronic pain and hypervigilance. Safety (Section 6 of the tutorial) &asymp; low risk in EFE; threat &asymp; high risk; controllability &asymp; availability of low-risk policies. The Kalman filter from Section 3 is the Gaussian variational posterior.</p>
+      </div>
+    </details>
+
+    <!-- Prerequisites -->
+    <details class="collapsible">
+      <summary><span class="prerequisite-label">Prerequisite Concepts</span> &mdash; KL Divergence, Entropy, Policies, POMDP</summary>
+      <div class="collapsible-content">
+        <div class="concept-box">
+          <h4>KL Divergence: Measuring the "Distance" Between Distributions</h4>
+          <p>The <strong>Kullback-Leibler (KL) divergence</strong> measures how different two probability distributions are:</p>
+          <div class="math-step">$$D_{\text{KL}}[q \| p] = \sum_x q(x) \log\frac{q(x)}{p(x)}$$</div>
+          <p>It is always \(\geq 0\), and equals 0 only when \(q = p\) (the distributions are identical). Think of it as the "surprise cost" of using \(p\) when reality is \(q\). In active inference, risk = KL divergence between <em>predicted observations</em> and <em>preferred observations</em>.</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>Entropy: Measuring Uncertainty</h4>
+          <p><strong>Entropy</strong> \(H\) measures how uncertain or unpredictable a distribution is:</p>
+          <div class="math-step">$$H[p(o|s)] = -\sum_o p(o|s) \log p(o|s)$$</div>
+          <p>High entropy = observations are uninformative (a coin flip gives maximum entropy). Low entropy = observations are informative (a loaded die is more predictable). In active inference, ambiguity = expected entropy of observations &mdash; how informative the policy's observations will be about the hidden state.</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>POMDP: Partially Observable Markov Decision Process</h4>
+          <p>The world has <strong>hidden states</strong> \(s\) (injured vs. healed) that the agent cannot directly observe. Instead, it receives <strong>observations</strong> \(o\) (pain vs. no pain) that are probabilistically related to the state. The agent maintains a <strong>belief</strong> \(q(s)\) about the state and selects <strong>policies</strong> \(\pi\) (sequences of actions) to achieve its goals.</p>
+          <p>In our pain model: states = {injured, healed}, observations = {pain, no_pain}, policies = {Explore (test the limb), Guard (rest/avoid), Mixed}. The key question: does the agent explore to <em>learn</em> whether it has healed, or guard to <em>avoid</em> potential pain?</p>
+        </div>
+
+        <div class="concept-box">
+          <h4>Preferences: What the Agent Wants</h4>
+          <p>Unlike classical RL (which uses reward functions), active inference encodes goals as <strong>preferred observations</strong> \(p(o|C)\). The agent prefers observations consistent with a healthy body:</p>
+          <div class="math-step">$$p(o|C) \propto \exp(C(o))$$</div>
+          <p>With \(C(\text{no pain}) \gg C(\text{pain})\). The <strong>preference precision</strong> controls how strongly the agent is averse to pain observations. Higher precision = more aversive = stronger drive to avoid pain at all costs.</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- Main equation -->
+    <div class="equation-block">
+      <p style="margin-bottom:0.5rem; font-weight:500; font-size:0.9rem;">Expected Free Energy (EFE) decomposes into risk and ambiguity:</p>
+      $$G_\pi = \underbrace{D_{\text{KL}}\bigl[q(o|\pi) \| p(o|C)\bigr]}_{\text{risk: avoid unpreferred outcomes}} + \underbrace{\mathbb{E}_{q(s|\pi)}\!\left[H[p(o|s)]\right]}_{\text{ambiguity: seek information}}$$
+      <p style="margin-top:0.5rem; font-size:0.85rem; color:#636E72;">The agent selects the policy \(\pi^* = \arg\min_\pi G_\pi\). Risk drives <em>exploitation</em> (avoid pain); ambiguity drives <em>exploration</em> (gain information). The chronic pain trap occurs when risk overwhelms ambiguity.</p>
+    </div>
+
+    <!-- Derivation -->
+    <details class="collapsible">
+      <summary><span class="derivation-label">Step-by-Step Derivation</span> &mdash; EFE decomposition and why guarding creates a trap</summary>
+      <div class="collapsible-content">
+        <p><strong>Step 1: Expected observations under a policy.</strong> Given the agent's belief \(q(s)\) about the hidden state and the policy's observation model \(p(o|s)\), the predicted observations are:</p>
+        <div class="math-step">$$q(o|\pi) = \sum_s p(o|s,\pi) \cdot q(s)$$</div>
+        <p>If the agent believes it is probably injured (\(q(\text{injured}) = 0.8\)) and exploring produces pain when injured, then \(q(\text{pain}|\text{explore})\) is high.</p>
+
+        <p><strong>Step 2: Risk term.</strong> Risk measures how far the predicted observations are from what the agent wants:</p>
+        <div class="math-step">$$\text{Risk} = D_{\text{KL}}[q(o|\pi) \| p(o|C)] = \sum_o q(o|\pi) \log\frac{q(o|\pi)}{p(o|C)}$$</div>
+        <p>If the agent predicts it will observe pain but prefers not to, risk is high. <strong>Guarding</strong> reduces risk because its uninformative observations are less likely to be painful.</p>
+
+        <p><strong>Step 3: Ambiguity term.</strong> Ambiguity measures how informative the policy's observations will be:</p>
+        <div class="math-step">$$\text{Ambiguity} = \sum_s q(s) \cdot H[p(o|s,\pi)]$$</div>
+        <p><strong>Explore</strong> has low ambiguity: its observations reliably distinguish injured from healed (low entropy \(H\)). <strong>Guard</strong> has high ambiguity: its observations are uninformative (high entropy &mdash; you learn nothing by staying still).</p>
+
+        <p><strong>Step 4: The trap.</strong> For a hypervigilant agent with high \(q(\text{injured})\) and high preference precision:</p>
+        <div class="math-step">$$G_{\text{explore}} = \underbrace{\text{HIGH}}_{\text{predicts pain obs}} + \underbrace{\text{low}}_{\text{informative}}$$</div>
+        <div class="math-step">$$G_{\text{guard}} = \underbrace{\text{low}}_{\text{avoids pain obs}} + \underbrace{\text{HIGH}}_{\text{uninformative}}$$</div>
+        <p>If preference precision is high enough, the risk term for "explore" overwhelms its ambiguity advantage. The agent selects "guard" &mdash; and <strong>never obtains the data that would correct its belief</strong>. After the tissue heals at step 12, the exploring agent detects this (beliefs update down); the guarding agent does not (beliefs stay stuck). This is the <strong>chronic pain trap</strong>.</p>
+      </div>
+    </details>
+
+    <h3>Presets</h3>
+    <div class="presets" id="ai-presets">
+      <button class="preset-btn active" onclick="ActiveInfViz.applyPreset('healthy')">Healthy Agent</button>
+      <button class="preset-btn" onclick="ActiveInfViz.applyPreset('recovering')">Recovering</button>
+      <button class="preset-btn" onclick="ActiveInfViz.applyPreset('hypervigilant')">Hypervigilant</button>
+      <button class="preset-btn" onclick="ActiveInfViz.applyPreset('chronic')">Chronic Pain Trap</button>
+    </div>
+    <div class="preset-descriptions" id="ai-preset-desc">
+      <div class="preset-desc-item visible" data-preset="healthy">
+        <strong>Healthy agent:</strong> Low prior on injury (\(P(\text{injured})=0.3\)), moderate preference precision (1.0). The EFE favors exploration because risk is low (the agent doesn't strongly predict pain) and ambiguity reduction is valuable. <span class="observe">Observe: "Explore" has the lowest EFE (starred). In the belief trajectory, the exploring agent quickly converges to the true state.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="recovering">
+        <strong>Recovering agent:</strong> Moderate prior (\(P(\text{injured})=0.6\)), moderate preference precision (2.0). The agent is uncertain and mildly pain-averse. <span class="observe">Observe: "Mixed" policy often has the lowest EFE &mdash; a compromise between exploring and guarding. Beliefs update, but more slowly than the healthy agent.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="hypervigilant">
+        <strong>Hypervigilant agent:</strong> High prior (\(P(\text{injured})=0.8\)), high preference precision (5.0). The risk of exploring (predicting pain) is large. <span class="observe">Observe: "Guard" dominates. In the belief trajectory, the guarding agent's beliefs remain high even after the tissue heals at step 12, while the exploring agent would have updated.</span>
+      </div>
+      <div class="preset-desc-item" data-preset="chronic">
+        <strong>Chronic pain trap:</strong> Very high prior (\(P(\text{injured})=0.95\)), extreme preference precision (10.0). The agent is virtually certain it is injured and extremely pain-averse. <span class="observe">Observe: "Guard" has dramatically lower EFE than any other policy. Beliefs are permanently locked near 1.0 &mdash; the agent never discovers that it has healed. This is the formal computational definition of the chronic pain trap.</span>
+      </div>
+    </div>
+
+    <!-- Plain-English translation of EFE -->
+    <div class="concept-box">
+      <h4>EFE in Plain English</h4>
+      <div class="math-step">$$G_\pi = \underbrace{D_{\text{KL}}\bigl[q(o|\pi) \| p(o|C)\bigr]}_{\text{RISK}} \;+\; \underbrace{\mathbb{E}_{q(s|\pi)}\!\left[H[p(o|s)]\right]}_{\text{AMBIGUITY}}$$</div>
+      <p><strong>RISK (first term):</strong> "How much do the outcomes I expect from this policy differ from what I want?" If this policy predicts lots of pain and I hate pain, risk is high. <em>Minimizing risk drives exploitation</em> &mdash; choose policies that yield preferred outcomes.</p>
+      <p><strong>AMBIGUITY (second term):</strong> "How uncertain am I about what I'll actually see if I follow this policy?" If the policy's observations don't reliably distinguish "injured" from "healed," ambiguity is high. <em>Minimizing ambiguity drives exploration</em> &mdash; choose policies that provide information.</p>
+      <p>The total EFE is their <strong>sum</strong>. Lower is better. The agent selects \(\pi^* = \arg\min_\pi G_\pi\).</p>
+    </div>
+
+    <!-- A-matrix visualization for the three policies -->
+    <div class="concept-box">
+      <h4>The Three Policies' Observation Models \(A = p(o|s)\)</h4>
+      <p>Each policy defines a different likelihood of observing "pain" vs. "no pain" given the hidden state (healed / injured). The columns are states; the rows are observations. <strong>Explore</strong> has concentrated probabilities on the diagonal &mdash; its observations <em>diagnose</em> the true state. <strong>Guard</strong> is nearly uniform &mdash; its observations <em>cannot</em> distinguish states.</p>
+      <div class="policy-matrix-grid">
+        <div class="policy-matrix explore">
+          <h5>Explore</h5>
+          <p style="font-size:0.76rem; margin-bottom:0.4rem; color:var(--color-text-light);">High information, high short-term risk</p>
+          <table>
+            <tr><th></th><th>healed</th><th>injured</th></tr>
+            <tr><th>no pain</th><td>0.85</td><td>0.15</td></tr>
+            <tr><th>pain</th><td>0.15</td><td>0.85</td></tr>
+          </table>
+          <p style="font-size:0.72rem; margin-top:0.4rem;"><em>Entropy ≈ 0.42 (low)</em></p>
+        </div>
+        <div class="policy-matrix mixed">
+          <h5>Mixed</h5>
+          <p style="font-size:0.76rem; margin-bottom:0.4rem; color:var(--color-text-light);">Partial probing</p>
+          <table>
+            <tr><th></th><th>healed</th><th>injured</th></tr>
+            <tr><th>no pain</th><td>0.70</td><td>0.30</td></tr>
+            <tr><th>pain</th><td>0.30</td><td>0.70</td></tr>
+          </table>
+          <p style="font-size:0.72rem; margin-top:0.4rem;"><em>Entropy ≈ 0.61 (moderate)</em></p>
+        </div>
+        <div class="policy-matrix guard">
+          <h5>Guard</h5>
+          <p style="font-size:0.76rem; margin-bottom:0.4rem; color:var(--color-text-light);">Uninformative: nearly coin-flip</p>
+          <table>
+            <tr><th></th><th>healed</th><th>injured</th></tr>
+            <tr><th>no pain</th><td>0.55</td><td>0.45</td></tr>
+            <tr><th>pain</th><td>0.45</td><td>0.55</td></tr>
+          </table>
+          <p style="font-size:0.72rem; margin-top:0.4rem;"><em>Entropy ≈ 0.69 (high, nearly maximum)</em></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="viz-layout">
+      <div class="controls-panel">
+        <div class="control-group">
+          <div class="control-label"><span>Prior P(injured)</span><span class="control-value" id="ai-prior-val">0.50</span></div>
+          <input type="range" id="ai-prior" min="0.05" max="0.95" step="0.01" value="0.5" oninput="ActiveInfViz.update()">
+        </div>
+        <div class="control-group">
+          <div class="control-label"><span>Preference precision</span><span class="control-value" id="ai-pref-val">2.0</span></div>
+          <input type="range" id="ai-pref" min="0.5" max="10" step="0.1" value="2" oninput="ActiveInfViz.update()">
+        </div>
+        <div class="control-group">
+          <div class="control-label" title="The timestep at which the simulated tissue finishes healing. The agent's beliefs should, in principle, update after this step once sufficient evidence arrives. Whether they actually do depends on the policy's informativeness."><span>Healing step</span><span class="control-value" id="ai-heal-val">12</span></div>
+          <input type="range" id="ai-heal" min="5" max="25" step="1" value="12" oninput="ActiveInfViz.runBeliefSim()">
+        </div>
+
+        <button class="action-btn primary" style="margin-top:1rem; width:100%;" onclick="ActiveInfViz.runBeliefSim()">Re-run Belief Simulation</button>
+      </div>
+
+      <div class="plot-container">
+        <p style="font-size:0.83rem; color:var(--color-text-light); margin-bottom:0.4rem;">
+          <strong>Reading the plots.</strong> <em>Left:</em> stacked bar chart of EFE per policy &mdash; lower is better. Red = Risk component; purple = Ambiguity component. The selected policy (lowest total) gets a green border and gold star. <em>Right:</em> belief trajectories over 30 timesteps. The dashed vertical line marks the step at which the true tissue finishes healing (you can move this with the slider). A policy is <em>working</em> if its mean belief trajectory <strong>drops</strong> after the healing step &mdash; revealing that the agent correctly inferred recovery. A policy is <em>trapped</em> if its belief stays high.
+        </p>
+        <div class="plot-row">
+          <div id="ai-plot-efe" class="plot-area"></div>
+          <div id="ai-plot-belief" class="plot-area"></div>
+        </div>
+        <div class="stats-bar" id="ai-stats">
+          <div class="stat-item"><span class="stat-label">Selected policy: </span><span class="stat-value" id="ai-stat-policy">--</span></div>
+          <div class="stat-item"><span class="stat-label">Risk (selected): </span><span class="stat-value" id="ai-stat-risk">--</span></div>
+          <div class="stat-item"><span class="stat-label">Ambiguity (selected): </span><span class="stat-value" id="ai-stat-amb">--</span></div>
+          <div class="stat-item"><span class="stat-label">Dominant term: </span><span class="stat-value" id="ai-stat-dom">--</span></div>
+        </div>
+
+        <div class="prediction-box">
+          <h4>Check Your Understanding</h4>
+          <p><strong>Predict:</strong> Under the "Chronic Pain Trap" preset, can the agent be unstuck just by <em>lowering</em> preference precision (making pain less aversive)? Or does the prior on injury also need to change?</p>
+          <details><summary style="cursor:pointer; color:var(--color-ambiguity); font-weight:500; font-size:0.85rem;">Show answer</summary>
+            <div class="answer"><strong>Lowering preference precision alone is partially sufficient but often insufficient.</strong> As you lower pref precision, risk shrinks and "Explore" becomes competitive. But if the prior is locked at \(P(\text{injured}) = 0.95\), the agent still <em>starts</em> from a deeply-held injury belief. Graded exposure therapy therefore does <em>both</em>: (1) lowers the pain-aversiveness via safety learning (pref precision &darr;), and (2) generates prediction errors that gradually update the prior (\(P(\text{injured})\) &darr;). Try it: set Chronic Pain Trap, then manually drag pref precision to 0.5 while keeping prior at 0.95 &mdash; watch Explore become selected but beliefs still drift slowly.</div>
+          </details>
+        </div>
+
+        <!-- Clinical translation -->
+        <div class="clinical-translation">
+          <h4>How Graded Exposure Therapy Breaks the Trap</h4>
+          <p>Graded exposure therapy (the gold-standard treatment for chronic pain) works exactly by forcing the agent out of "Guard" and into "Explore":</p>
+          <ul>
+            <li><strong>Small, safe movements</strong> give the agent a low-risk way to test the injured region. Each small movement generates a prediction error; accumulated errors gradually update the prior on injury.</li>
+            <li><strong>Graded difficulty</strong> (hierarchy of exposures) ensures the agent never faces a movement whose predicted pain would dominate. The risk term stays low enough that the ambiguity term can meaningfully drive policy selection.</li>
+            <li><strong>Safety learning</strong> lowers the preference precision for pain observations (the nervous system relaxes its catastrophizing interpretation). Both levers are pulled at once.</li>
+          </ul>
+          <p>In computational terms: exposure therapy is a <em>clinically-engineered way of forcing Explore policies</em>, thereby restoring the epistemic action that the chronic pain trap had collapsed.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-nav">
+      <a href="#lqg">&larr; Previous: 3. LQG Control</a>
+      <a href="#synthesis">Continue: &#9733; Synthesis &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- SYNTHESIS                                                     -->
+<!-- ============================================================ -->
+<section class="viz-section" id="synthesis">
+  <div class="viz-card">
+    <h2><span class="section-badge badge-synth">&#9733;</span> Synthesis: Hypervigilance Across the Four Models</h2>
+
+    <div class="viz-description">
+      <p>Having walked through four computational frameworks, we can now assemble a <strong>unified characterization of hypervigilance</strong>. Although clinicians observe a single phenomenon, computationally it is a coherent pattern of parameter deviations that spans every level of the decision-making hierarchy.</p>
+    </div>
+
+    <h3 style="margin-top:1rem">Unified Hypervigilance Parameter Vector</h3>
+    <div style="overflow-x:auto">
+      <table class="synthesis-table">
+        <thead>
+          <tr>
+            <th>Framework</th>
+            <th>Parameter</th>
+            <th>Healthy (Normal)</th>
+            <th>Hypervigilant</th>
+            <th>Mechanism</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td rowspan="2"><strong>Bayesian (&sect;1)</strong></td>
+            <td>Prior precision \(\Pi_{\text{prior}}\)</td>
+            <td class="normal">Moderate</td>
+            <td class="hv">Elevated, biased to "injury"</td>
+            <td>Catastrophizing / fixed negative belief</td>
+          </tr>
+          <tr>
+            <td>Sensory precision \(\Pi_{\text{obs}}\)</td>
+            <td class="normal">Calibrated</td>
+            <td class="hv">Elevated for nociception</td>
+            <td>Attentional amplification</td>
+          </tr>
+          <tr>
+            <td rowspan="2"><strong>DDM (&sect;2)</strong></td>
+            <td>Starting point \(z\)</td>
+            <td class="normal">\(= a/2\) (unbiased)</td>
+            <td class="hv">\(&gt; a/2\) (biased to pain)</td>
+            <td>Decisional bias from prior</td>
+          </tr>
+          <tr>
+            <td>Boundary \(a\)</td>
+            <td class="normal">Context-appropriate</td>
+            <td class="hv">Lowered / urgency-collapsed</td>
+            <td>Impulsive pain decisions</td>
+          </tr>
+          <tr>
+            <td rowspan="2"><strong>LQG (&sect;3)</strong></td>
+            <td>Observation matrix \(C\)</td>
+            <td class="normal">Unity</td>
+            <td class="hv">Inflated (sensitization)</td>
+            <td>Nociceptor gain amplified</td>
+          </tr>
+          <tr>
+            <td>Information flow</td>
+            <td class="normal">Rich (movement)</td>
+            <td class="hv">Restricted (guarding)</td>
+            <td>Innovation &rarr; 0; \(\hat{x}\) stuck</td>
+          </tr>
+          <tr>
+            <td rowspan="2"><strong>Active Inference (&sect;4)</strong></td>
+            <td>Prior precision on injury</td>
+            <td class="normal">Moderate</td>
+            <td class="hv">Extreme (&infin; limit: chronic)</td>
+            <td>Cannot update from evidence</td>
+          </tr>
+          <tr>
+            <td>Preference precision \(C(o)\)</td>
+            <td class="normal">Balanced risk/ambiguity</td>
+            <td class="hv">Risk dominates</td>
+            <td>Epistemic action collapses</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-top:1.2rem">The Unifying Theme: Precision Dysregulation</h3>
+    <p class="viz-description">Across all four frameworks, hypervigilance reduces to a single computational motif: <strong>precision dysregulation</strong> &mdash; the mis-calibration of confidence weights in the brain's inference and control machinery.</p>
+    <ul>
+      <li><strong>Bayesian:</strong> precision is explicit (\(\Pi_{\text{prior}}, \Pi_{\text{obs}}\))</li>
+      <li><strong>DDM:</strong> precision maps onto starting point and boundary</li>
+      <li><strong>LQG:</strong> precision is the Kalman gain \(L\) and observation matrix \(C\)</li>
+      <li><strong>Active inference:</strong> precision is the risk&ndash;ambiguity balance in EFE</li>
+    </ul>
+    <p class="viz-description">These frameworks are mathematically nested: <em>Active Inference &sup; LQG &sup; Bayesian &equiv; DDM (limiting case)</em>. Precision dysregulation at the active-inference level propagates down through all the special cases, producing the full clinical syndrome.</p>
+
+    <!-- Clinical translation -->
+    <div class="clinical-translation">
+      <h4>From Theory to Clinical Practice</h4>
+      <p><strong>How do we unstick the chronic pain trap?</strong> The computational framework points directly to interventions:</p>
+      <ul>
+        <li><strong>Graded exposure therapy:</strong> Forces the agent into "Explore" policies, generating new prediction errors that can update a stuck prior (Viz 4).</li>
+        <li><strong>Cognitive reappraisal:</strong> Directly manipulates the prior \(\mu_{\text{prior}}\) by changing the generative model's context (Viz 1).</li>
+        <li><strong>Mindfulness / attention training:</strong> Reconfigures precision weights \(\Pi_{\text{obs}}\) to prevent attentional capture by pain (Viz 1, Viz 4).</li>
+        <li><strong>Closed-loop neuromodulation (e.g., SCS/DBS):</strong> Uses real-time state estimation (\(\hat{x}\)) and Model Predictive Control to directly modulate the LQG loop (Viz 3).</li>
+        <li><strong>Computational phenotyping:</strong> Instead of vague diagnostic labels, characterize each patient by their parameter vector (Mahajan &amp; Seymour 2025). Enables personalized therapy selection.</li>
+      </ul>
+    </div>
+
+    <!-- Connection to grid_world_pain -->
+    <div class="concept-box">
+      <h4>Forward Pointer: The Grid-World Pain Project</h4>
+      <p>This tutorial is the theoretical foundation for the <strong>Interoceptive AI &mdash; Grid-World Pain</strong> research project. The goal of that project is to implement the frameworks you've just explored in a reinforcement-learning agent that must balance exteroceptive goals (foraging for food) with interoceptive homeostasis (avoiding injury, recovering from damage).</p>
+      <p>The agent architecture instantiates:</p>
+      <ul>
+        <li><strong>Bayesian precision</strong> as a state-dependent observation noise (injury modulates sensor reliability)</li>
+        <li><strong>LQG control</strong> as a homeostatic reward function \(r = \Delta \text{drive}\) where drive combines satiation and injury</li>
+        <li><strong>Neuromodulation</strong> as multiplicative precision gates (HierarchicalNeuromodulator)</li>
+        <li><strong>Active-inference traps</strong> as information restriction via the "rest" action (guarding)</li>
+      </ul>
+      <p>See the full tutorial markdown (<code>computational_pain_hypervigilance_tutorial.md</code>) Sections 11&ndash;13 for the detailed mapping and implementation roadmap.</p>
+    </div>
+
+    <!-- References -->
+    <details class="collapsible">
+      <summary><span class="background-label">References &amp; Further Reading</span> &mdash; Full citations for the papers discussed in this tutorial</summary>
+      <div class="collapsible-content">
+        <ol class="refs-list">
+          <li><strong>Buchel, C., Geuter, S., Sprenger, C., &amp; Eippert, F. (2014).</strong> Placebo analgesia: A predictive coding perspective. <em>Neuron</em>, 81(6), 1223&ndash;1239. <a href="https://doi.org/10.1016/j.neuron.2014.02.042" target="_blank">DOI</a></li>
+          <li><strong>Cisek, P. (2021).</strong> An evolutionary perspective on the neural basis of decision making. Springer.</li>
+          <li><strong>Crombez, G., Van Damme, S., &amp; Eccleston, C. (2005).</strong> Hypervigilance to pain: An experimental and clinical analysis. <em>Pain</em>, 116(1&ndash;2), 4&ndash;7. <a href="https://doi.org/10.1016/j.pain.2005.03.035" target="_blank">DOI</a></li>
+          <li><strong>Daw, N. D., Niv, Y., &amp; Dayan, P. (2005).</strong> Uncertainty-based competition between prefrontal and dorsolateral striatal systems for behavioral control. <em>Nature Neuroscience</em>, 8, 1704&ndash;1711.</li>
+          <li><strong>Fleming, S. M. (2024).</strong> Metacognition and confidence: A review and synthesis. <em>Annual Review of Psychology</em>, 75, 241&ndash;268.</li>
+          <li><strong>Friston, K. (2010).</strong> The free-energy principle: A unified brain theory? <em>Nature Reviews Neuroscience</em>, 11(2), 127&ndash;138. <a href="https://doi.org/10.1038/nrn2787" target="_blank">DOI</a></li>
+          <li><strong>Gershman, S. J., Uchida, N., &amp; Bhatt, M. (2024).</strong> Explaining dopamine through prediction errors and beyond. <em>Nature Neuroscience</em>.</li>
+          <li><strong>Gold, J. I., &amp; Shadlen, M. N. (2007).</strong> The neural basis of decision making. <em>Annual Review of Neuroscience</em>, 30, 535&ndash;574. <a href="https://doi.org/10.1146/annurev.neuro.29.051605.113038" target="_blank">DOI</a></li>
+          <li><strong>Green, D. M., &amp; Swets, J. A. (1966).</strong> <em>Signal detection theory and psychophysics</em>. Wiley.</li>
+          <li><strong>Hanks, T. D., &amp; Summerfield, C. (2017).</strong> Perceptual decision making in rodents, monkeys, and humans. <em>Neuron</em>, 93(1), 15&ndash;31.</li>
+          <li><strong>LeDoux, J. E., &amp; Daw, N. D. (2018).</strong> Surviving threats: Neural circuit and computational implications of a new taxonomy of defensive behaviour. <em>Nature Reviews Neuroscience</em>, 19(5), 269&ndash;282. <a href="https://doi.org/10.1038/nrn.2018.22" target="_blank">DOI</a></li>
+          <li><strong>Levy, I., &amp; Schiller, D. (2021).</strong> Neural computations of threat. <em>Trends in Cognitive Sciences</em>, 25(4), 274&ndash;287.</li>
+          <li><strong>Mahajan, P., &amp; Seymour, B. (2025).</strong> Forward and reverse engineering the pain system: From computational neuroscience to neuro-engineering. <em>PAIN</em>.</li>
+          <li><strong>O'Connell, R. G., &amp; Kelly, S. P. (2021).</strong> Neurophysiology of human perceptual decision-making. <em>Annual Review of Neuroscience</em>, 44, 495&ndash;519.</li>
+          <li><strong>Pezzulo, G., Rigoli, F., &amp; Friston, K. (2015).</strong> Active inference, homeostatic regulation and adaptive behavioural control. <em>Progress in Neurobiology</em>, 134, 17&ndash;35.</li>
+          <li><strong>Ratcliff, R., &amp; McKoon, G. (2008).</strong> The diffusion decision model: Theory and data for two-choice decision tasks. <em>Neural Computation</em>, 20(4), 873&ndash;922. <a href="https://doi.org/10.1162/neco.2008.12-06-420" target="_blank">DOI</a></li>
+          <li><strong>Seymour, B., Crook, R. J., &amp; Chen, Z. S. (2023).</strong> Post-injury pain and behaviour: A control theory perspective. <em>Nature Reviews Neuroscience</em>. <a href="https://doi.org/10.1038/s41583-023-00699-5" target="_blank">DOI</a></li>
+          <li><strong>Smith, R., Friston, K. J., &amp; Whyte, C. J. (2022).</strong> A step-by-step tutorial on active inference and its application to empirical data. <em>Journal of Mathematical Psychology</em>, 107, 102632.</li>
+          <li><strong>Tashjian, S. M., Zbozinek, T. D., &amp; Mobbs, D. (2021).</strong> A decision architecture for safety computations. <em>Trends in Cognitive Sciences</em>, 25(5), 342&ndash;354.</li>
+          <li><strong>Van Damme, S., Legrain, V., Vogt, J., &amp; Eccleston, C. (2010).</strong> Keeping pain in mind: A motivational account of attention to pain. <em>Neuroscience &amp; Biobehavioral Reviews</em>, 34(2), 204&ndash;213.</li>
+          <li><strong>Vlaeyen, J. W. S., Crombez, G., &amp; Linton, S. J. (2016).</strong> The fear-avoidance model of pain. <em>Pain</em>, 157(8), 1588&ndash;1598.</li>
+          <li><strong>Wald, A. (1947).</strong> <em>Sequential analysis</em>. Wiley.</li>
+          <li><strong>Wiech, K. (2016).</strong> Deconstructing the sensation of pain: The influence of cognitive processes on pain perception. <em>Science</em>, 354(6312), 584&ndash;587. <a href="https://doi.org/10.1126/science.aaf8934" target="_blank">DOI</a></li>
+          <li><strong>Wiecki, T. V., Sofer, I., &amp; Frank, M. J. (2013).</strong> HDDM: Hierarchical Bayesian estimation of the drift-diffusion model in Python. <em>Frontiers in Neuroinformatics</em>, 7, 14.</li>
+        </ol>
+      </div>
+    </details>
+
+    <div class="section-nav">
+      <a href="#active-inf">&larr; Previous: 4. Active Inference</a>
+      <a href="#intro">Back to top &uarr;</a>
+    </div>
+  </div>
+</section>
+
+<footer class="page-footer">
+  <p>Companion to: <em>Computational Models of Perceptual Decision-Making in Pain: A Tutorial on Hypervigilance</em></p>
+  <p>Interoceptive AI Research Project &bull; 2026</p>
+</footer>
+
+<script>
+(function() {
+'use strict';
+
+// ============================================================
+// SHARED UTILITIES
+// ============================================================
+const COLORS = {
+  prior: '#4878A8', likelihood: '#D4762C', posterior: '#3A8C5C',
+  risk: '#C44E52', ambiguity: '#8B6CAF', control: '#6C7A89',
+  priorFill: 'rgba(72,120,168,0.15)', likelihoodFill: 'rgba(212,118,44,0.15)',
+  posteriorFill: 'rgba(58,140,92,0.2)',
+  trueState: '#4878A8', estimated: '#C44E52', innovation: '#D4762C',
+  guard: '#8B6CAF', kalmanGain: '#3A8C5C'
+};
+
+const PLOTLY_LAYOUT_DEFAULTS = {
+  font: { family: 'Inter, Helvetica Neue, sans-serif', size: 12, color: '#2D3436' },
+  paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+  margin: { t: 40, r: 20, b: 65, l: 55, pad: 4 },
+  hovermode: 'closest',
+  legend: {
+    orientation: 'h', y: -0.22, x: 0.5, xanchor: 'center', yanchor: 'top',
+    font: { size: 11 }, bgcolor: 'rgba(255,255,255,0.85)',
+    bordercolor: 'rgba(0,0,0,0.05)', borderwidth: 1
+  }
+};
+const AXIS_DEFAULTS = { automargin: true, gridcolor: '#eee' };
+
+function linspace(a, b, n) {
+  const arr = new Array(n);
+  const step = (b - a) / (n - 1);
+  for (let i = 0; i < n; i++) arr[i] = a + step * i;
+  return arr;
+}
+
+function gaussian(x, mu, sigma) {
+  const coeff = 1 / (sigma * Math.sqrt(2 * Math.PI));
+  const exp = Math.exp(-0.5 * ((x - mu) / sigma) ** 2);
+  return coeff * exp;
+}
+
+// Seeded PRNG (mulberry32)
+let _seed = 12345;
+function setSeed(s) { _seed = s; }
+function seededRandom() {
+  let t = _seed += 0x6D2B79F5;
+  t = Math.imul(t ^ t >>> 15, t | 1);
+  t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+}
+function seededNormal() {
+  const u1 = seededRandom(), u2 = seededRandom();
+  return Math.sqrt(-2 * Math.log(u1 + 1e-10)) * Math.cos(2 * Math.PI * u2);
+}
+
+function $(id) { return document.getElementById(id); }
+function val(id) { return parseFloat($(id).value); }
+function setVal(id, v) { $(id).value = v; }
+function showVal(id, v, decimals) {
+  $(id).textContent = typeof decimals === 'number' ? v.toFixed(decimals) : v;
+}
+
+function setPresetActive(containerId, btn) {
+  const btns = $(containerId).querySelectorAll('.preset-btn');
+  btns.forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function showPresetDesc(descContainerId, presetName) {
+  const container = $(descContainerId);
+  if (!container) return;
+  container.querySelectorAll('.preset-desc-item').forEach(d => d.classList.remove('visible'));
+  const target = container.querySelector('[data-preset="' + presetName + '"]');
+  if (target) {
+    target.classList.add('visible');
+    // Re-typeset MathJax inside the newly visible description
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      window.MathJax.typesetPromise([target]).catch(function(){});
+    }
+  }
+}
+
+function softmax(arr) {
+  const max = Math.max(...arr);
+  const exps = arr.map(v => Math.exp(v - max));
+  const sum = exps.reduce((a, b) => a + b, 0);
+  return exps.map(v => v / sum);
+}
+
+// ============================================================
+// VIZ 1: BAYESIAN PAIN INFERENCE
+// ============================================================
+const BayesianViz = {
+  init() {
+    this.update();
+  },
+
+  update() {
+    const mu_prior = val('bay-mu-prior');
+    const sigma_prior = val('bay-sigma-prior');
+    const o = val('bay-obs');
+    const sigma_obs = val('bay-sigma-obs');
+
+    showVal('bay-mu-prior-val', mu_prior, 1);
+    showVal('bay-sigma-prior-val', sigma_prior, 2);
+    showVal('bay-obs-val', o, 1);
+    showVal('bay-sigma-obs-val', sigma_obs, 2);
+
+    const pi_prior = 1 / (sigma_prior ** 2);
+    const pi_obs = 1 / (sigma_obs ** 2);
+    const pi_post = pi_prior + pi_obs;
+    const sigma_post = Math.sqrt(1 / pi_post);
+    const mu_post = (pi_obs * o + pi_prior * mu_prior) / pi_post;
+    const K = pi_obs / pi_post;
+    const delta = o - mu_prior;
+
+    showVal('bay-stat-mu', mu_post, 2);
+    showVal('bay-stat-K', K, 3);
+    showVal('bay-stat-delta', delta, 2);
+
+    // Main plot: 3 Gaussians
+    const x = linspace(-2, 12, 500);
+    const yPrior = x.map(v => gaussian(v, mu_prior, sigma_prior));
+    const yLik = x.map(v => gaussian(v, o, sigma_obs));
+    const yPost = x.map(v => gaussian(v, mu_post, sigma_post));
+
+    const traces = [
+      { x, y: yPrior, name: 'Prior P(x)', line: { color: COLORS.prior, width: 2.5 }, fill: 'tozeroy', fillcolor: COLORS.priorFill },
+      { x, y: yLik, name: 'Likelihood P(o|x)', line: { color: COLORS.likelihood, width: 2.5 }, fill: 'tozeroy', fillcolor: COLORS.likelihoodFill },
+      { x, y: yPost, name: 'Posterior P(x|o)', line: { color: COLORS.posterior, width: 3 }, fill: 'tozeroy', fillcolor: COLORS.posteriorFill }
+    ];
+
+    const yMax = Math.max(...yPrior, ...yLik, ...yPost) * 1.15;
+    const annotations = [
+      { x: mu_prior, y: yMax * 0.95, text: `<b>&mu;<sub>prior</sub>=${mu_prior.toFixed(1)}</b>`, showarrow: true, arrowhead: 0, arrowcolor: COLORS.prior, ax: -40, ay: -15, font: { color: COLORS.prior, size: 11 } },
+      { x: o, y: yMax * 0.85, text: `<b>o=${o.toFixed(1)}</b>`, showarrow: true, arrowhead: 0, arrowcolor: COLORS.likelihood, ax: 40, ay: -15, font: { color: COLORS.likelihood, size: 11 } },
+      { x: mu_post, y: yMax * 0.75, text: `<b>&mu;<sub>post</sub>=${mu_post.toFixed(2)}</b>`, showarrow: true, arrowhead: 0, arrowcolor: COLORS.posterior, ax: 0, ay: -20, font: { color: COLORS.posterior, size: 11 } }
+    ];
+    const shapes = [
+      { type: 'line', x0: mu_prior, x1: mu_prior, y0: 0, y1: yMax * 0.92, line: { color: COLORS.prior, width: 1.5, dash: 'dot' } },
+      { type: 'line', x0: o, x1: o, y0: 0, y1: yMax * 0.82, line: { color: COLORS.likelihood, width: 1.5, dash: 'dot' } },
+      { type: 'line', x0: mu_post, x1: mu_post, y0: 0, y1: yMax * 0.72, line: { color: COLORS.posterior, width: 2, dash: 'dash' } }
+    ];
+
+    const layout = {
+      ...PLOTLY_LAYOUT_DEFAULTS,
+      title: { text: 'Prior, Likelihood & Posterior', font: { size: 14 } },
+      xaxis: { ...AXIS_DEFAULTS, title: 'Pain Intensity', range: [-2, 12] },
+      yaxis: { ...AXIS_DEFAULTS, title: 'Density', range: [0, yMax] },
+      annotations, shapes,
+      showlegend: true
+    };
+    Plotly.react('bayesian-plot-main', traces, layout, { responsive: true, displayModeBar: false });
+
+    // Weight bar chart
+    const barTraces = [{
+      x: ['Prior Weight', 'Observation Weight (K)'],
+      y: [1 - K, K],
+      type: 'bar',
+      marker: { color: [COLORS.prior, COLORS.likelihood], line: { width: 0 } },
+      text: [(1 - K).toFixed(3), K.toFixed(3)],
+      textposition: 'outside',
+      textfont: { size: 12, family: 'JetBrains Mono, monospace' }
+    }];
+    const barLayout = {
+      ...PLOTLY_LAYOUT_DEFAULTS,
+      title: { text: 'Precision Weights', font: { size: 14 } },
+      xaxis: { ...AXIS_DEFAULTS, tickfont: { size: 11 } },
+      yaxis: { ...AXIS_DEFAULTS, title: 'Weight', range: [0, 1.25] },
+      showlegend: false,
+      uniformtext: { minsize: 8, mode: 'hide' }
+    };
+    Plotly.react('bayesian-plot-weights', barTraces, barLayout, { responsive: true, displayModeBar: false });
+  },
+
+  applyPreset(name) {
+    const presets = {
+      normal:         { mu: 3, sp: 2, o: 4, so: 2 },
+      sharp:          { mu: 3, sp: 3.5, o: 5, so: 0.4 },
+      placebo:        { mu: 2, sp: 0.5, o: 5, so: 2 },
+      nocebo:         { mu: 7, sp: 0.5, o: 4, so: 2 },
+      hypervigilance: { mu: 8, sp: 0.3, o: 4, so: 0.5 },
+      chronic:        { mu: 8, sp: 0.15, o: 2, so: 2 }
+    };
+    const p = presets[name];
+    setVal('bay-mu-prior', p.mu); setVal('bay-sigma-prior', p.sp);
+    setVal('bay-obs', p.o); setVal('bay-sigma-obs', p.so);
+    const btn = event ? event.target : null;
+    setPresetActive('bayesian-presets', btn);
+    showPresetDesc('bayesian-preset-desc', name);
+    this.update();
+  }
+};
+
+// ============================================================
+// VIZ 2: DRIFT-DIFFUSION MODEL
+// ============================================================
+const DDMViz = {
+  paths: [],
+  rtUpper: [],
+  rtLower: [],
+
+  init() {
+    this.runTrials();
+  },
+
+  simulatePath(v, a, z, sigma, dt, maxT, urgency) {
+    const path = [{ t: 0, Z: z }];
+    let Z = z, t = 0;
+    while (t < maxT) {
+      const aEff = urgency > 0 ? Math.max(0.1, a - urgency * t) : a;
+      Z += v * dt + sigma * Math.sqrt(dt) * seededNormal();
+      t += dt;
+      if (Z >= aEff) { path.push({ t, Z: aEff }); return { path, RT: t, boundary: 'upper', aFinal: aEff }; }
+      if (Z <= 0) { path.push({ t, Z: 0 }); return { path, RT: t, boundary: 'lower', aFinal: 0 }; }
+      path.push({ t, Z });
+    }
+    return { path, RT: maxT, boundary: Z >= a / 2 ? 'upper' : 'lower', aFinal: a };
+  },
+
+  update() {
+    const v = val('ddm-v'), a = val('ddm-a'), z = val('ddm-z'), sigma = val('ddm-sigma');
+    showVal('ddm-v-val', v, 2); showVal('ddm-a-val', a, 2);
+    showVal('ddm-z-val', z, 2); showVal('ddm-sigma-val', sigma, 2);
+
+    // Clamp z within boundary
+    if (z >= a) { setVal('ddm-z', a - 0.05); showVal('ddm-z-val', a - 0.05, 2); }
+
+    this.plotPaths(v, a, z, sigma);
+    this.plotRT();
+  },
+
+  runTrials() {
+    const v = val('ddm-v'), a = val('ddm-a'), z = val('ddm-z'), sigma = val('ddm-sigma');
+    showVal('ddm-v-val', v, 2); showVal('ddm-a-val', a, 2);
+    showVal('ddm-z-val', z, 2); showVal('ddm-sigma-val', sigma, 2);
+
+    const urgency = this._urgency || 0;
+    setSeed(Date.now());
+    this.paths = [];
+    this.rtUpper = [];
+    this.rtLower = [];
+
+    for (let i = 0; i < 2000; i++) {
+      const trial = this.simulatePath(v, a, Math.min(z, a - 0.01), sigma, 0.001, 5, urgency);
+      if (trial.boundary === 'upper') this.rtUpper.push(trial.RT);
+      else this.rtLower.push(trial.RT);
+    }
+
+    // Keep 8 display paths
+    setSeed(42);
+    this.paths = [];
+    for (let i = 0; i < 8; i++) {
+      const trial = this.simulatePath(v, a, Math.min(z, a - 0.01), sigma, 0.001, 5, urgency);
+      // Subsample for display
+      const sub = trial.path.filter((_, j) => j % 10 === 0 || j === trial.path.length - 1);
+      this.paths.push(sub);
+    }
+
+    this.plotPaths(v, a, z, sigma);
+    this.plotRT();
+  },
+
+  runSingle() {
+    const v = val('ddm-v'), a = val('ddm-a'), z = val('ddm-z'), sigma = val('ddm-sigma');
+    const urgency = this._urgency || 0;
+    setSeed(Date.now());
+    const trial = this.simulatePath(v, a, Math.min(z, a - 0.01), sigma, 0.001, 5, urgency);
+    const sub = trial.path.filter((_, j) => j % 10 === 0 || j === trial.path.length - 1);
+    this.paths = [sub];
+    this.plotPaths(v, a, z, sigma);
+  },
+
+  plotPaths(v, a, z, sigma) {
+    const traces = this.paths.map((p, i) => ({
+      x: p.map(pt => pt.t), y: p.map(pt => pt.Z),
+      mode: 'lines', line: { width: 1.5, color: p[p.length - 1].Z >= a * 0.9 ? COLORS.risk : COLORS.prior },
+      opacity: 0.7, showlegend: false, hoverinfo: 'skip'
+    }));
+
+    // Urgency zone: shaded region between original boundary a and collapsing boundary a(t) = max(0.1, a - u*t)
+    const u = this._urgency || 0;
+    if (u > 0) {
+      const tPts = linspace(0, 3, 60);
+      const collapseTop = tPts.map(() => a);
+      const collapseBottom = tPts.map(t => Math.max(0.1, a - u * t));
+      // Forward curve along top then reverse along bottom to form closed polygon
+      const polyX = tPts.concat([...tPts].reverse());
+      const polyY = collapseTop.concat([...collapseBottom].reverse());
+      traces.push({
+        x: polyX, y: polyY,
+        mode: 'lines', fill: 'toself',
+        fillcolor: 'rgba(196,78,82,0.15)',
+        line: { color: 'rgba(196,78,82,0)', width: 0 },
+        name: 'Urgency zone (lost to collapse)',
+        showlegend: true,
+        hoverinfo: 'skip'
+      });
+      // Collapsing boundary line
+      traces.push({
+        x: tPts, y: collapseBottom,
+        mode: 'lines',
+        line: { color: COLORS.risk, width: 2, dash: 'solid' },
+        name: 'Effective boundary a(t)',
+        showlegend: true,
+        hoverinfo: 'skip'
+      });
+    }
+
+    // Boundaries (original, fixed)
+    traces.push({ x: [0, 5], y: [a, a], mode: 'lines', line: { color: COLORS.risk, width: 2, dash: 'dash' }, name: u > 0 ? 'Original boundary a' : 'Pain boundary', showlegend: true });
+    traces.push({ x: [0, 5], y: [0, 0], mode: 'lines', line: { color: COLORS.prior, width: 2, dash: 'dash' }, name: 'No Pain boundary', showlegend: true });
+    // Starting point
+    traces.push({ x: [0], y: [z], mode: 'markers', marker: { size: 10, color: COLORS.posterior, symbol: 'diamond' }, name: 'Start (z)', showlegend: true });
+    // Mean drift line
+    const tMax = Math.min(2, (a - z) / Math.max(v, 0.01));
+    if (v > 0) traces.push({ x: [0, tMax], y: [z, z + v * tMax], mode: 'lines', line: { color: COLORS.control, width: 2, dash: 'dot' }, name: 'Mean drift', showlegend: true });
+
+    const urgencyAnnotations = u > 0 ? [{
+      x: 1.5, y: a - u * 0.5, ax: 0, ay: -35, showarrow: true, arrowhead: 2, arrowcolor: COLORS.risk,
+      text: '<b>Urgency collapses bound</b>', font: { color: COLORS.risk, size: 11 }
+    }] : [];
+
+    const layout = {
+      ...PLOTLY_LAYOUT_DEFAULTS,
+      title: { text: 'Evidence Accumulation', font: { size: 14 } },
+      xaxis: { ...AXIS_DEFAULTS, title: 'Time (s)', range: [0, 3] },
+      yaxis: { ...AXIS_DEFAULTS, title: 'Decision Variable Z', range: [-0.2, Math.max(a + 0.3, 2)] },
+      annotations: [
+        { x: 2.8, y: a + 0.1, text: '<b>PAIN</b>', showarrow: false, font: { color: COLORS.risk, size: 12 } },
+        { x: 2.8, y: -0.12, text: '<b>NO PAIN</b>', showarrow: false, font: { color: COLORS.prior, size: 12 } },
+        ...urgencyAnnotations
+      ]
+    };
+    Plotly.react('ddm-plot-paths', traces, layout, { responsive: true, displayModeBar: false });
+  },
+
+  plotRT() {
+    const nUp = this.rtUpper.length, nLow = this.rtLower.length;
+    const total = nUp + nLow || 1;
+    showVal('ddm-stat-acc', ((Math.max(nUp, nLow) / total) * 100).toFixed(1) + '%');
+    const meanRTcorrect = nUp > nLow
+      ? (this.rtUpper.reduce((a, b) => a + b, 0) / nUp).toFixed(3)
+      : nLow > 0 ? (this.rtLower.reduce((a, b) => a + b, 0) / nLow).toFixed(3) : '--';
+    showVal('ddm-stat-rt', meanRTcorrect + 's');
+    showVal('ddm-stat-upper', ((nUp / total) * 100).toFixed(1) + '%');
+
+    const traces = [];
+    if (nUp > 0) traces.push({ x: this.rtUpper, type: 'histogram', name: 'Pain (upper)', marker: { color: COLORS.risk }, opacity: 0.75, nbinsx: 40 });
+    if (nLow > 0) traces.push({ x: this.rtLower, type: 'histogram', name: 'No Pain (lower)', marker: { color: COLORS.prior }, opacity: 0.75, nbinsx: 40 });
+
+    const layout = {
+      ...PLOTLY_LAYOUT_DEFAULTS,
+      title: { text: 'Reaction Time Distribution (2000 trials)', font: { size: 14 } },
+      xaxis: { ...AXIS_DEFAULTS, title: 'Reaction Time (s)', range: [0, 3] },
+      yaxis: { ...AXIS_DEFAULTS, title: 'Count' },
+      barmode: 'overlay'
+    };
+    Plotly.react('ddm-plot-rt', traces, layout, { responsive: true, displayModeBar: false });
+  },
+
+  _urgency: 0,
+
+  applyPreset(name) {
+    const presets = {
+      normal:       { v: 0.5, a: 1.5, z: 0.75, sigma: 1.0, urgency: 0 },
+      highpain:     { v: 0.5, a: 1.5, z: 1.1, sigma: 1.0, urgency: 0 },
+      hypervigilant: { v: 0.5, a: 1.0, z: 0.7, sigma: 1.0, urgency: 0 },
+      urgent:       { v: 0.5, a: 2.0, z: 1.0, sigma: 1.0, urgency: 0.4 }
+    };
+    const p = presets[name];
+    setVal('ddm-v', p.v); setVal('ddm-a', p.a);
+    setVal('ddm-z', p.z); setVal('ddm-sigma', p.sigma);
+    this._urgency = p.urgency;
+    const btn = event ? event.target : null;
+    setPresetActive('ddm-presets', btn);
+    showPresetDesc('ddm-preset-desc', name);
+    this.runTrials();
+  }
+};
+
+// ============================================================
+// VIZ 3: LQG CONTROL LOOP
+// ============================================================
+const LQGViz = {
+  _seed: 54321,
+
+  init() { this.simulate(); },
+
+  reseed() {
+    this._seed = Date.now();
+    this.simulate();
+  },
+
+  steadyStateKalman(A, C, W, V) {
+    let P = 1.0;
+    for (let i = 0; i < 200; i++) {
+      const S = C * C * P + V;
+      const K = A * P * C / S;
+      P = A * A * P + W - K * A * P * C;
+      P = Math.max(P, 1e-10);
+    }
+    const L = P * C / (C * C * P + V);
+    return { L, P };
+  },
+
+  simulate() {
+    const A = val('lqg-A'), C = val('lqg-C'), V = val('lqg-V'), W = val('lqg-W');
+    const B = val('lqg-B');
+    const guarding = $('lqg-guarding').checked;
+    const guardStr = val('lqg-guard');
+    showVal('lqg-A-val', A, 3); showVal('lqg-C-val', C, 2);
+    showVal('lqg-V-val', V, 2); showVal('lqg-W-val', W, 3);
+    showVal('lqg-B-val', B, 2);
+    showVal('lqg-guard-val', guardStr, 2);
+
+    const nSteps = 120;
+    setSeed(this._seed);
+
+    const x = [1.0], xHat = [1.0], yArr = [], innovArr = [], uArr = [], LArr = [];
+
+    for (let t = 0; t < nSteps; t++) {
+      // Control
+      const u = guarding ? -guardStr * xHat[t] : 0;
+      uArr.push(u);
+
+      // True state
+      const w = seededNormal() * Math.sqrt(W);
+      x.push(Math.max(0, A * x[t] + B * u + w));
+
+      // Observation (guarding increases effective V)
+      const Veff = guarding ? V * 15 : V;
+      const v = seededNormal() * Math.sqrt(Veff);
+      const y = C * x[t] + v;
+      yArr.push(y);
+
+      // Kalman gain
+      const { L, P } = this.steadyStateKalman(A, C, W, Veff);
+      LArr.push(L);
+
+      // Innovation
+      const yHat = C * xHat[t];
+      const inn = y - yHat;
+      innovArr.push(inn);
+
+      // Estimate update
+      xHat.push(Math.max(0, A * xHat[t] + B * u + L * inn));
+    }
+
+    const t = linspace(0, nSteps, nSteps + 1);
+    const tMid = linspace(0, nSteps - 1, nSteps);
+
+    // Plot 1: True vs Estimated
+    const traces1 = [
+      { x: t, y: x, name: 'True injury x(t)', line: { color: COLORS.trueState, width: 2.5 } },
+      { x: t, y: xHat, name: 'Estimated x&#770;(t)', line: { color: COLORS.estimated, width: 2.5, dash: 'dash' } }
+    ];
+    const layout1 = {
+      ...PLOTLY_LAYOUT_DEFAULTS,
+      title: { text: 'Injury State: True vs Estimated', font: { size: 14 } },
+      xaxis: { ...AXIS_DEFAULTS, title: 'Time Step' },
+      yaxis: { ...AXIS_DEFAULTS, title: 'Injury (0 = healed, 1 = peak)', range: [-0.1, 1.3] },
+      shapes: [{ type: 'line', x0: 0, x1: nSteps, y0: 0, y1: 0, line: { color: '#aaa', width: 1, dash: 'dot' } }],
+      annotations: guarding ? [{
+        x: nSteps * 0.7, y: 1.15, text: '<b>Guarding ON &mdash; information restricted</b>',
+        showarrow: false, font: { color: COLORS.risk, size: 12 }
+      }] : []
+    };
+    Plotly.react('lqg-plot-state', traces1, layout1, { responsive: true, displayModeBar: false });
+
+    // Plot 2: Innovation
+    const traces2 = [
+      { x: tMid, y: innovArr, name: 'Innovation (y - y&#770;)', line: { color: COLORS.innovation, width: 1.5 }, fill: 'tozeroy', fillcolor: 'rgba(212,118,44,0.1)' }
+    ];
+    const layout2 = {
+      ...PLOTLY_LAYOUT_DEFAULTS,
+      margin: { ...PLOTLY_LAYOUT_DEFAULTS.margin, t: 30, b: 50 },
+      title: { text: 'Innovation Signal', font: { size: 13 } },
+      xaxis: { ...AXIS_DEFAULTS, title: 'Time Step' },
+      yaxis: { ...AXIS_DEFAULTS, title: 'Innovation' },
+      showlegend: false,
+      annotations: guarding ? [{
+        x: nSteps * 0.6, y: 0, ax: 0, ay: -35,
+        showarrow: true, arrowhead: 2, arrowcolor: COLORS.risk,
+        text: '<b>Innovation collapses<br>&rarr; stuck belief</b>',
+        align: 'center',
+        font: { color: COLORS.risk, size: 10 }
+      }] : []
+    };
+    Plotly.react('lqg-plot-innovation', traces2, layout2, { responsive: true, displayModeBar: false });
+
+    // Plot 3: Control + Kalman gain
+    const traces3 = [
+      { x: tMid, y: uArr, name: 'Control u(t)', line: { color: COLORS.guard, width: 2 }, yaxis: 'y' },
+      { x: tMid, y: LArr, name: 'Kalman gain L', line: { color: COLORS.kalmanGain, width: 2, dash: 'dash' }, yaxis: 'y2' }
+    ];
+    const avgL = LArr.reduce((a, b) => a + b, 0) / Math.max(LArr.length, 1);
+    const LInterp = avgL < 0.05 ? 'L&#8776;0: estimator IGNORES observations' : avgL > 0.3 ? 'L high: estimator TRUSTS observations' : 'L moderate: balanced';
+    const layout3 = {
+      ...PLOTLY_LAYOUT_DEFAULTS,
+      margin: { ...PLOTLY_LAYOUT_DEFAULTS.margin, t: 30 },
+      title: { text: 'Control & Kalman Gain', font: { size: 13 } },
+      xaxis: { ...AXIS_DEFAULTS, title: 'Time Step' },
+      yaxis: { ...AXIS_DEFAULTS, title: 'Control u', titlefont: { color: COLORS.guard } },
+      yaxis2: { ...AXIS_DEFAULTS, title: 'Kalman gain L', overlaying: 'y', side: 'right', titlefont: { color: COLORS.kalmanGain } },
+      annotations: [{
+        xref: 'paper', yref: 'paper', x: 0.5, y: -0.35, xanchor: 'center',
+        text: `<i>${LInterp}</i>`, showarrow: false,
+        font: { size: 10, color: COLORS.kalmanGain }
+      }]
+    };
+    Plotly.react('lqg-plot-control', traces3, layout3, { responsive: true, displayModeBar: false });
+  },
+
+  applyPreset(name) {
+    const presets = {
+      normal:        { A: 0.95, C: 1.0, V: 0.10, W: 0.01, B: -0.10, guard: false, gStr: 0.3 },
+      sensitization: { A: 0.95, C: 3.0, V: 0.10, W: 0.01, B: -0.10, guard: false, gStr: 0.3 },
+      restriction:   { A: 0.95, C: 1.0, V: 0.10, W: 0.01, B: -0.10, guard: true,  gStr: 0.3 },
+      chronic:       { A: 0.95, C: 3.0, V: 0.10, W: 0.01, B: -0.10, guard: true,  gStr: 0.5 },
+      // Meta-controller context presets
+      safe:          { A: 0.97, C: 1.0, V: 0.08, W: 0.01, B: -0.15, guard: true,  gStr: 0.6 },
+      threat:        { A: 0.90, C: 0.6, V: 0.05, W: 0.01, B: -0.10, guard: false, gStr: 0.0 }
+    };
+    const p = presets[name];
+    setVal('lqg-A', p.A); setVal('lqg-C', p.C);
+    setVal('lqg-V', p.V); setVal('lqg-W', p.W); setVal('lqg-B', p.B);
+    $('lqg-guarding').checked = p.guard;
+    setVal('lqg-guard', p.gStr);
+    this._seed = 54321;
+    const btn = event ? event.target : null;
+    setPresetActive('lqg-presets', btn);
+    showPresetDesc('lqg-preset-desc', name);
+    this.simulate();
+  }
+};
+
+// ============================================================
+// VIZ 4: ACTIVE INFERENCE
+// ============================================================
+const ActiveInfViz = {
+  init() { this.update(); this.runBeliefSim(); },
+
+  computeEFE(A_pi, priorS, C_pref) {
+    // priorS: [p(healed), p(injured)]
+    // A_pi[o][s]: p(o|s) under policy pi
+    const qO = [0, 0];
+    for (let o = 0; o < 2; o++)
+      for (let s = 0; s < 2; s++)
+        qO[o] += A_pi[o][s] * priorS[s];
+
+    // Risk: D_KL[q(o|pi) || p(o|C)]
+    let risk = 0;
+    for (let o = 0; o < 2; o++) {
+      if (qO[o] > 1e-10 && C_pref[o] > 1e-10)
+        risk += qO[o] * Math.log(qO[o] / C_pref[o]);
+    }
+
+    // Ambiguity: E_q(s)[H[p(o|s)]]
+    let ambiguity = 0;
+    for (let s = 0; s < 2; s++) {
+      let H = 0;
+      for (let o = 0; o < 2; o++) {
+        if (A_pi[o][s] > 1e-10)
+          H -= A_pi[o][s] * Math.log(A_pi[o][s]);
+      }
+      ambiguity += priorS[s] * H;
+    }
+
+    return { risk: Math.max(risk, 0), ambiguity, total: Math.max(risk, 0) + ambiguity };
+  },
+
+  update() {
+    const pInjured = val('ai-prior');
+    const prefPrec = val('ai-pref');
+    showVal('ai-prior-val', pInjured, 2);
+    showVal('ai-pref-val', prefPrec, 1);
+
+    const priorS = [1 - pInjured, pInjured];
+    const C_pref = softmax([prefPrec, -prefPrec]); // [p_pref(no_pain), p_pref(pain)]
+
+    // Likelihood matrices for each policy: A[o][s], o={no_pain, pain}, s={healed, injured}
+    const A_explore = [[0.85, 0.15], [0.15, 0.85]]; // informative
+    const A_guard   = [[0.55, 0.45], [0.45, 0.55]]; // uninformative
+    const A_mixed   = [[0.70, 0.30], [0.30, 0.70]];
+
+    const efeExplore = this.computeEFE(A_explore, priorS, C_pref);
+    const efeGuard   = this.computeEFE(A_guard,   priorS, C_pref);
+    const efeMixed   = this.computeEFE(A_mixed,   priorS, C_pref);
+
+    const efes = [efeExplore, efeMixed, efeGuard];
+    const names = ['Explore', 'Mixed', 'Guard'];
+    const minIdx = efes.reduce((mi, e, i) => e.total < efes[mi].total ? i : mi, 0);
+
+    showVal('ai-stat-policy', names[minIdx]);
+    showVal('ai-stat-risk', efes[minIdx].risk.toFixed(3));
+    showVal('ai-stat-amb', efes[minIdx].ambiguity.toFixed(3));
+    const sel = efes[minIdx];
+    const dominantTerm = sel.risk > sel.ambiguity
+      ? 'Risk (exploitation dominates)'
+      : sel.ambiguity > sel.risk
+        ? 'Ambiguity (exploration dominates)'
+        : 'Balanced';
+    showVal('ai-stat-dom', dominantTerm);
+
+    // Stacked bar chart
+    const riskVals = efes.map(e => e.risk);
+    const ambVals = efes.map(e => e.ambiguity);
+    const barColors = names.map((_, i) => i === minIdx ? 'rgba(58,140,92,0.3)' : 'transparent');
+
+    const traces = [
+      { x: names, y: riskVals, name: 'Risk', type: 'bar', marker: { color: COLORS.risk }, text: riskVals.map(v => v.toFixed(2)), textposition: 'inside', textfont: { color: 'white', size: 11 } },
+      { x: names, y: ambVals, name: 'Ambiguity', type: 'bar', marker: { color: COLORS.ambiguity }, text: ambVals.map(v => v.toFixed(2)), textposition: 'inside', textfont: { color: 'white', size: 11 } }
+    ];
+
+    const layout = {
+      ...PLOTLY_LAYOUT_DEFAULTS,
+      title: { text: 'Expected Free Energy by Policy', font: { size: 14 } },
+      barmode: 'stack',
+      uniformtext: { minsize: 8, mode: 'hide' },
+      xaxis: { ...AXIS_DEFAULTS },
+      yaxis: { ...AXIS_DEFAULTS, title: 'EFE (lower = preferred)' },
+      annotations: [{
+        x: names[minIdx], y: efes[minIdx].total + 0.05,
+        text: '&#9733; Selected', showarrow: false,
+        font: { color: COLORS.posterior, size: 12, weight: 'bold' }
+      }],
+      shapes: names.map((n, i) => ({
+        type: 'rect',
+        x0: i - 0.4, x1: i + 0.4, y0: 0, y1: efes[i].total,
+        line: { color: i === minIdx ? COLORS.posterior : 'transparent', width: 2.5 },
+        fillcolor: 'transparent'
+      }))
+    };
+    Plotly.react('ai-plot-efe', traces, layout, { responsive: true, displayModeBar: false });
+  },
+
+  runBeliefSim() {
+    const pInjured = val('ai-prior');
+    const healStep = $('ai-heal') ? Math.round(val('ai-heal')) : 12;
+    if ($('ai-heal-val')) showVal('ai-heal-val', healStep);
+    const nSteps = 30;
+    const nRuns = 80;
+
+    const A_explore = [[0.85, 0.15], [0.15, 0.85]];
+    const A_guard   = [[0.55, 0.45], [0.45, 0.55]];
+    const A_mixed   = [[0.70, 0.30], [0.30, 0.70]];
+    const policies = [
+      { name: 'Explore', A: A_explore, color: COLORS.posterior },
+      { name: 'Mixed', A: A_mixed, color: COLORS.likelihood },
+      { name: 'Guard', A: A_guard, color: COLORS.risk }
+    ];
+
+    setSeed(42);
+    const traces = [];
+
+    for (const pol of policies) {
+      const allTrajs = [];
+      for (let r = 0; r < nRuns; r++) {
+        let q = [1 - pInjured, pInjured];
+        const traj = [q[1]];
+        for (let t = 0; t < nSteps; t++) {
+          const sTrue = t < healStep ? 1 : 0; // heals at user-selected step
+          const pPain = pol.A[1][sTrue];
+          const obs = seededRandom() < pPain ? 1 : 0;
+          const lik = [pol.A[obs][0], pol.A[obs][1]];
+          const unnorm = [q[0] * lik[0], q[1] * lik[1]];
+          const Z = unnorm[0] + unnorm[1];
+          q = [unnorm[0] / Z, unnorm[1] / Z];
+          traj.push(q[1]);
+        }
+        allTrajs.push(traj);
+      }
+
+      // Compute mean and CI
+      const mean = [], upper = [], lower = [];
+      for (let t = 0; t <= nSteps; t++) {
+        const vals = allTrajs.map(tr => tr[t]).sort((a, b) => a - b);
+        mean.push(vals.reduce((a, b) => a + b, 0) / nRuns);
+        lower.push(vals[Math.floor(nRuns * 0.1)]);
+        upper.push(vals[Math.floor(nRuns * 0.9)]);
+      }
+
+      const tArr = linspace(0, nSteps, nSteps + 1);
+      traces.push({ x: tArr, y: upper, mode: 'lines', line: { width: 0 }, showlegend: false, hoverinfo: 'skip' });
+      traces.push({ x: tArr, y: lower, mode: 'lines', line: { width: 0 }, fill: 'tonexty',
+        fillcolor: pol.color.replace(')', ',0.12)').replace('rgb', 'rgba'),
+        showlegend: false, hoverinfo: 'skip' });
+      traces.push({ x: tArr, y: mean, name: pol.name, mode: 'lines', line: { color: pol.color, width: 2.5 } });
+    }
+
+    const layout = {
+      ...PLOTLY_LAYOUT_DEFAULTS,
+      title: { text: 'Belief Trajectory: P(injured) over time', font: { size: 14 } },
+      xaxis: { ...AXIS_DEFAULTS, title: 'Time Step' },
+      yaxis: { ...AXIS_DEFAULTS, title: 'P(injured)', range: [-0.05, 1.05] },
+      shapes: [
+        { type: 'line', x0: healStep, x1: healStep, y0: 0, y1: 1, line: { color: '#aaa', width: 1.5, dash: 'dot' } }
+      ],
+      annotations: [
+        { x: healStep, y: 1.02, text: 'Tissue heals', showarrow: false, font: { color: '#888', size: 11 } }
+      ]
+    };
+    Plotly.react('ai-plot-belief', traces, layout, { responsive: true, displayModeBar: false });
+  },
+
+  applyPreset(name) {
+    const presets = {
+      healthy:       { prior: 0.3, pref: 1.0 },
+      recovering:    { prior: 0.6, pref: 2.0 },
+      hypervigilant: { prior: 0.8, pref: 5.0 },
+      chronic:       { prior: 0.95, pref: 10.0 }
+    };
+    const p = presets[name];
+    setVal('ai-prior', p.prior); setVal('ai-pref', p.pref);
+    const btn = event ? event.target : null;
+    setPresetActive('ai-presets', btn);
+    showPresetDesc('ai-preset-desc', name);
+    this.update();
+    this.runBeliefSim();
+  }
+};
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+  BayesianViz.init();
+  DDMViz.init();
+  LQGViz.init();
+  ActiveInfViz.init();
+
+  // Hide loading overlay
+  setTimeout(function() {
+    $('loading-overlay').classList.add('hidden');
+  }, 500);
+
+  // Active nav tracking
+  const sections = document.querySelectorAll('.viz-section');
+  const navLinks = document.querySelectorAll('.sticky-nav a');
+  const observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        navLinks.forEach(function(link) { link.classList.remove('active'); });
+        const activeLink = document.querySelector('.sticky-nav a[href="#' + entry.target.id + '"]');
+        if (activeLink) activeLink.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-30% 0px -60% 0px' });
+  sections.forEach(function(s) { observer.observe(s); });
+
+  // Ensure MathJax typesets after DOM is ready (with retry for slow CDN)
+  function tryTypeset() {
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      window.MathJax.typesetPromise();
+    } else {
+      setTimeout(tryTypeset, 500);
+    }
+  }
+  tryTypeset();
+});
+
+// ============================================================
+// LIVE PARAMETER DASHBOARD
+// ============================================================
+function updateDashboard() {
+  // Bayesian
+  const sigP = val('bay-sigma-prior'), sigO = val('bay-sigma-obs');
+  const piP = 1 / (sigP * sigP);
+  const piO = 1 / (sigO * sigO);
+  const K = piO / (piO + piP);
+  // Map precisions to [0,100] for display via clamp
+  const pctPiP = Math.min(100, piP * 2);
+  const pctPiO = Math.min(100, piO * 2);
+  if ($('dash-pi-prior')) {
+    $('dash-pi-prior').style.width = pctPiP + '%';
+    $('dash-pi-prior-val').textContent = piP.toFixed(2);
+    $('dash-pi-obs').style.width = pctPiO + '%';
+    $('dash-pi-obs-val').textContent = piO.toFixed(2);
+    $('dash-K').style.width = (K * 100) + '%';
+    $('dash-K-val').textContent = K.toFixed(2);
+  }
+  // DDM
+  const aV = val('ddm-a'), zV = val('ddm-z');
+  const zb = Math.abs(zV - aV / 2);  // deviation from unbiased midpoint
+  const zbPct = Math.min(100, (zb / (aV / 2)) * 100);
+  if ($('dash-a')) {
+    $('dash-a').style.width = ((aV / 3) * 100) + '%';
+    $('dash-a-val').textContent = aV.toFixed(2);
+    $('dash-zb').style.width = zbPct + '%';
+    $('dash-zb-val').textContent = zbPct > 5 ? ((zV > aV/2 ? '+' : '-') + zb.toFixed(2)) : '0.00';
+  }
+  // LQG
+  const cV = val('lqg-C');
+  const isGuarding = $('lqg-guarding') && $('lqg-guarding').checked;
+  if ($('dash-C')) {
+    $('dash-C').style.width = ((cV / 5) * 100) + '%';
+    $('dash-C-val').textContent = cV.toFixed(2);
+    $('dash-guard').style.width = isGuarding ? '100%' : '0%';
+    $('dash-guard-val').textContent = isGuarding ? 'ON' : 'OFF';
+  }
+  // AI
+  const aiP = val('ai-prior'), aiPref = val('ai-pref');
+  if ($('dash-ai-prior')) {
+    $('dash-ai-prior').style.width = (aiP * 100) + '%';
+    $('dash-ai-prior-val').textContent = aiP.toFixed(2);
+    $('dash-ai-pref').style.width = ((aiPref / 10) * 100) + '%';
+    $('dash-ai-pref-val').textContent = aiPref.toFixed(1);
+  }
+}
+
+// Hook updateDashboard into existing module updates
+const _origBayUpdate = BayesianViz.update.bind(BayesianViz);
+BayesianViz.update = function() { _origBayUpdate(); updateDashboard(); };
+
+const _origDDMUpdate = DDMViz.update.bind(DDMViz);
+DDMViz.update = function() { _origDDMUpdate(); updateDashboard(); };
+const _origDDMRun = DDMViz.runTrials.bind(DDMViz);
+DDMViz.runTrials = function() { _origDDMRun(); updateDashboard(); };
+
+const _origLQGSim = LQGViz.simulate.bind(LQGViz);
+LQGViz.simulate = function() { _origLQGSim(); updateDashboard(); };
+
+const _origAIUpdate = ActiveInfViz.update.bind(ActiveInfViz);
+ActiveInfViz.update = function() { _origAIUpdate(); updateDashboard(); };
+
+function toggleDashboard() {
+  const dash = $('param-dashboard');
+  dash.classList.toggle('minimized');
+  const btn = dash.querySelector('.param-toggle');
+  btn.textContent = dash.classList.contains('minimized') ? '+' : '\u2212';
+}
+window.toggleDashboard = toggleDashboard;
+
+// ============================================================
+// CLINICAL CASE STUDIES
+// ============================================================
+const CASE_STUDIES = {
+  healthy: {
+    desc: 'Healthy adult baseline: balanced priors, well-calibrated sensory precision, no guarding. This is the reference for all other cases.',
+    bay: 'normal', ddm: 'normal', lqg: 'normal', ai: 'healthy'
+  },
+  acute: {
+    desc: 'Acute injury (~day 1 post-surgery): active recuperation. Normal guarding, transient sensitization. Adaptive post-injury pain \u2014 should resolve.',
+    bay: 'nocebo', ddm: 'highpain', lqg: 'safe', ai: 'recovering'
+  },
+  fibromyalgia: {
+    desc: 'Fibromyalgia: widespread pain without peripheral pathology. Central sensitization without guarding; amplified priors, elevated pref precision.',
+    bay: 'hypervigilance', ddm: 'hypervigilant', lqg: 'sensitization', ai: 'hypervigilant'
+  },
+  'chronic-back': {
+    desc: 'Chronic low back pain (>6 months): prototypical information-restriction trap. Long-term guarding + sensitization + catastrophizing priors.',
+    bay: 'chronic', ddm: 'hypervigilant', lqg: 'chronic', ai: 'chronic'
+  },
+  crps: {
+    desc: 'Complex Regional Pain Syndrome: severe hypervigilance + maladaptive integration (nerve injury). Priors lock at peak injury; exploration fails.',
+    bay: 'chronic', ddm: 'urgent', lqg: 'chronic', ai: 'chronic'
+  },
+  phantom: {
+    desc: 'Phantom limb pain: prior persists after the limb is gone. Observation has no signal, yet posterior = prior (no update possible).',
+    bay: 'chronic', ddm: 'highpain', lqg: 'restriction', ai: 'chronic'
+  }
+};
+function applyCaseStudy(key) {
+  if (!key) return;
+  const c = CASE_STUDIES[key];
+  if (!c) return;
+  $('case-study-desc').textContent = c.desc;
+  // Clear dummy event so sub-presets don't try to read .target
+  const fakeEvent = null;
+  BayesianViz.applyPreset(c.bay);
+  DDMViz.applyPreset(c.ddm);
+  LQGViz.applyPreset(c.lqg);
+  ActiveInfViz.applyPreset(c.ai);
+  // Re-typeset any new MathJax in descriptions
+  if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise(); }
+}
+window.applyCaseStudy = applyCaseStudy;
+
+// ============================================================
+// EXPORT PLOTS
+// ============================================================
+window.exportPlot = function(plotId, filename) {
+  if (!window.Plotly) return;
+  Plotly.downloadImage(plotId, { format: 'png', filename: filename || plotId, width: 1200, height: 700 });
+};
+
+// Initial dashboard population
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(updateDashboard, 800);
+});
+
+// Expose to global scope for inline event handlers (oninput, onclick)
+window.BayesianViz = BayesianViz;
+window.DDMViz = DDMViz;
+window.LQGViz = LQGViz;
+window.ActiveInfViz = ActiveInfViz;
+
+})();
+</script>
+</body>
+</html>
