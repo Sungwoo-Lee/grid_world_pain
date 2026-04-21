@@ -93,14 +93,14 @@ The olfaction dimension reported by `get_observation_breakdown` is read directly
 
 ### Per-entity chemical property vectors
 
-Each entity definition in YAML carries a chemical property vector. The config loader reads it and stores it in `EnvParams` as a `[N_entities, vector_size]` JAX array. These arrays are **constant** for the whole episode (stored in `EnvParams`, not `EnvState`).
+Each entity definition in YAML carries a chemical property vector (`properties` / `property`) indicating the mean, and optionally a standard deviation vector (`properties_std` / `property_std`). The config loader reads them and stores them in `EnvParams` as `[N_entities, vector_size]` JAX arrays. The mean and std arrays are **constant** for the whole episode (stored in `EnvParams`), but they are sampled into `EnvState` (`*_property_sampled`) at reset and upon respawn.
 
-| Entity type | YAML key | Config loader line | `EnvParams` field | Shape | Mandatory? |
-|---|---|---|---|---|---|
-| Resources | `properties` | `config_loader.py:32` | `res_property` | `[N_res, 5]` | Yes |
-| Predators | `property` | `config_loader.py:60` | `pred_property` | `[N_pred, 5]` | Yes |
-| Neutral animals | `property` | `config_loader.py:152` | `neutral_property` | `[N_neutral, 5]` | Yes |
-| Obstacles | `properties` | `config_loader.py:118` | `obs_property` | `[N_obs, 5]` | **No** — defaults to `[0.0]*chem_dim` if absent |
+| Entity type | YAML key | `EnvParams` field | Shape | `EnvState` field (sampled) | Shape | Mandatory? |
+|---|---|---|---|---|---|---|
+| Resources | `properties` (`_std`) | `res_property` (`_std`) | `[N_res, 5]` | `res_property_sampled` | `[N_res, 5]` | Yes (mean) / No (std) |
+| Predators | `property` (`_std`) | `pred_property` (`_std`) | `[N_pred, 5]` | `pred_property_sampled` | `[N_pred, 5]` | Yes (mean) / No (std) |
+| Neutral animals | `property` (`_std`) | `neutral_property` (`_std`) | `[N_neutral, 5]` | `neutral_property_sampled` | `[N_neutral, 5]` | Yes (mean) / No (std) |
+| Obstacles | `properties` (`_std`) | `obs_property` (`_std`) | `[N_obs, 5]` | `obs_property_sampled` | `[N_obs, 5]` | **No** — defaults to zeros |
 
 Note the YAML key spelling inconsistency: resources and obstacles use `properties` (plural); predators and neutral animals use `property` (singular).
 
@@ -123,10 +123,10 @@ When an entity list is empty the loader produces a zero-row array of shape `[0, 
 Applied to all four entity types and summed (`sensor.py:266–270`):
 
 ```python
-res_chem     = sense_resource(..., res_pos,     state.res_active,        params.res_property,     ...)
-pred_chem    = sense_resource(..., pred_pos,    ones(N_pred, bool),       params.pred_property,    ...)
-obs_chem     = sense_resource(..., obs_pos,     ones(N_obs, bool),        params.obs_property,     ...)
-neutral_chem = sense_resource(..., neutral_pos, ones(N_neutral, bool),    params.neutral_property, ...)
+res_chem     = sense_resource(..., res_pos,     state.res_active,        state.res_property_sampled,     ...)
+pred_chem    = sense_resource(..., pred_pos,    ones(N_pred, bool),       state.pred_property_sampled,    ...)
+obs_chem     = sense_resource(..., obs_pos,     ones(N_obs, bool),        state.obs_property_sampled,     ...)
+neutral_chem = sense_resource(..., neutral_pos, ones(N_neutral, bool),    state.neutral_property_sampled, ...)
 obs_olfactory = res_chem + pred_chem + obs_chem + neutral_chem
 ```
 

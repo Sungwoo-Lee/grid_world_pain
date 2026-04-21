@@ -182,14 +182,18 @@ visualization.local_view_size
 | `perceptual_noise.enabled` | `False` | `config_loader.py:318` |
 | `perceptual_noise.modalities.*` | empty dict | `_parse_noise_config` |
 | Per-resource `nociception_intensity` | `0.9` (danger) / `0.0` (food) | `config_loader.py:42` |
+| Per-resource `properties_std` | `[0.0] * vector_size` | `config_loader.py:32` |
 | Per-predator `nociception_intensity` | `0.9` | `config_loader.py:61` |
+| Per-predator `property_std` | `[0.0] * vector_size` | `config_loader.py:60` |
 | Per-predator `patrol_area` | full grid | `config_loader.py:71` |
 | Per-predator `lose_interest_multiplier` | `2.0` | `config_loader.py:78` |
 | Per-obstacle `blocking` | `True` | `config_loader.py:108` |
 | Per-obstacle `hides_agent` | `False` | `config_loader.py:109` |
 | Per-obstacle `damage` | `0.0` | `config_loader.py:112` |
 | Per-obstacle `nociception_intensity` | `0.3` | `config_loader.py:115` |
+| Per-obstacle `properties_std` | `[0.0] * vector_size` | `config_loader.py:118` |
 | Per-neutral `nociception_intensity` | `0.0` | `config_loader.py:153` |
+| Per-neutral `property_std` | `[0.0] * vector_size` | `config_loader.py:152` |
 
 ---
 

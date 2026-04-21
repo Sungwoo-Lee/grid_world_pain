@@ -13,6 +13,7 @@ class EnvState:
     res_active: jnp.ndarray     # [num_res] bool
     res_cons_count: jnp.ndarray # [num_res] int
     res_reg_timer: jnp.ndarray  # [num_res] int
+    res_property_sampled: jnp.ndarray # [num_res, vector_size]
     
     # Predators
     pred_pos: jnp.ndarray       # [num_pred, 2]
@@ -20,13 +21,16 @@ class EnvState:
     pred_stamina: jnp.ndarray    # [num_pred] float
     pred_move_timer: jnp.ndarray # [num_pred] int
     pred_attack_timer: jnp.ndarray # [num_pred] int
+    pred_property_sampled: jnp.ndarray # [num_pred, vector_size]
     
     # Neutral Animals (Olfactory Decoys)
     neutral_pos: jnp.ndarray     # [num_neutral, 2]
     neutral_move_timer: jnp.ndarray # [num_neutral] int
+    neutral_property_sampled: jnp.ndarray # [num_neutral, vector_size]
 
     # Obstacles
     obs_pos: jnp.ndarray        # [num_obs, 2]
+    obs_property_sampled: jnp.ndarray # [num_obs, vector_size]
     
     # Body
     satiation: jnp.ndarray       # [] float
@@ -59,6 +63,7 @@ class EnvParams:
     # Resources (Constant attributes)
     res_type: jnp.ndarray       # [num_res] int (0:food, 1:danger)
     res_property: jnp.ndarray   # [num_res, vector_size]
+    res_property_std: jnp.ndarray # [num_res, vector_size]
     res_nociception: jnp.ndarray # [num_res]
     res_spawn_area: jnp.ndarray # [num_res, 4] (min_r, min_c, max_r, max_c)
     res_max_cons: jnp.ndarray   # [num_res]
@@ -67,6 +72,7 @@ class EnvParams:
     
     # Predators (Constant attributes)
     pred_property: jnp.ndarray  # [num_pred, vector_size]
+    pred_property_std: jnp.ndarray # [num_pred, vector_size]
     pred_nociception: jnp.ndarray # [num_pred]
     pred_move_int: jnp.ndarray  # [num_pred]
     pred_damage: jnp.ndarray    # [num_pred, 2] [min, max]
@@ -87,12 +93,14 @@ class EnvParams:
     obs_spawn_area: jnp.ndarray # [num_obs, 4] (min_r, min_c, max_r, max_c)
     obs_damage: jnp.ndarray     # [num_obs, 2] [min, max]
     obs_property: jnp.ndarray   # [num_obs, vector_size]
+    obs_property_std: jnp.ndarray # [num_obs, vector_size]
     obs_nociception: jnp.ndarray # [num_obs]
     obs_type: jnp.ndarray       # [num_obs] int32 index for names
     obstacle_names: tuple[str, ...] = struct.field(pytree_node=False)
     
     # Neutral Animals
     neutral_property: jnp.ndarray   # [num_neutral, vector_size]
+    neutral_property_std: jnp.ndarray # [num_neutral, vector_size]
     neutral_nociception: jnp.ndarray # [num_neutral]
     neutral_move_int: jnp.ndarray    # [num_neutral]
     neutral_patrol: jnp.ndarray      # [num_neutral, 4]

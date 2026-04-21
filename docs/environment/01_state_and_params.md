@@ -37,6 +37,7 @@ Defined in `src/environment/state.py:6`.
 | `res_active` | `[num_res]` | bool | `{0, 1}` | Whether the resource is available for interaction |
 | `res_cons_count` | `[num_res]` | int32 | `[0, max_cons]` | How many times this resource has been consumed since last respawn |
 | `res_reg_timer` | `[num_res]` | int32 | `[0, reg_delay]` | Countdown to respawn; decrements each step when inactive |
+| `res_property_sampled` | `[num_res, 5]` | float32 | `[0, 1]` | Olfactory signature sampled at respawn |
 
 ### Predators
 
@@ -47,6 +48,7 @@ Defined in `src/environment/state.py:6`.
 | `pred_stamina` | `[num_pred]` | float32 | `[0, max_stamina]` | Current stamina; drains during Hunt, recovers otherwise |
 | `pred_move_timer` | `[num_pred]` | int32 | `[0, move_int]` | Countdown to next movement step |
 | `pred_attack_timer` | `[num_pred]` | int32 | `[0, attack_delay]` | Cooldown after an attack; blocks movement while nonzero |
+| `pred_property_sampled`| `[num_pred, 5]` | float32 | `[0, 1]` | Olfactory signature sampled at reset |
 
 ### Neutral Animals
 
@@ -54,12 +56,14 @@ Defined in `src/environment/state.py:6`.
 |-------|-------|-------|-------|-------------|
 | `neutral_pos` | `[num_neutral, 2]` | int32 | grid bounds | Current `(row, col)` of each neutral animal |
 | `neutral_move_timer` | `[num_neutral]` | int32 | `[0, move_int]` | Countdown to next move step |
+| `neutral_property_sampled`| `[num_neutral, 5]`| float32 | `[0, 1]` | Olfactory signature sampled at reset |
 
 ### Obstacles
 
 | Field | Shape | dtype | Range | Description |
 |-------|-------|-------|-------|-------------|
 | `obs_pos` | `[num_obs, 2]` | int32 | grid bounds | `(row, col)` of each obstacle; fixed after reset |
+| `obs_property_sampled`| `[num_obs, 5]` | float32 | `[0, 1]` | Olfactory signature sampled at reset |
 
 ### Body
 
@@ -99,7 +103,8 @@ Defined in `src/environment/state.py:51`. Fields marked `struct.field(pytree_nod
 | Field | Shape | Description |
 |-------|-------|-------------|
 | `res_type` | `[N]` int32 | 0=food, 1=danger |
-| `res_property` | `[N, 5]` float32 | Olfactory chemical signature per resource |
+| `res_property` | `[N, 5]` float32 | Olfactory chemical signature mean per resource |
+| `res_property_std` | `[N, 5]` float32 | Olfactory chemical signature std dev per resource |
 | `res_nociception` | `[N]` float32 | Nociception intensity emitted on contact |
 | `res_spawn_area` | `[N, 4]` int32 | Bounding box `(min_r, min_c, max_r, max_c)` for respawn |
 | `res_max_cons` | `[N]` int32 | Max consumptions before permanent deactivation; -1 = unlimited |
@@ -110,7 +115,8 @@ Defined in `src/environment/state.py:51`. Fields marked `struct.field(pytree_nod
 
 | Field | Shape | Description |
 |-------|-------|-------------|
-| `pred_property` | `[P, 5]` float32 | Olfactory signature |
+| `pred_property` | `[P, 5]` float32 | Olfactory signature mean |
+| `pred_property_std` | `[P, 5]` float32 | Olfactory signature std dev |
 | `pred_nociception` | `[P]` float32 | Nociception intensity on contact |
 | `pred_move_int` | `[P]` int32 | Steps per move (lower = faster) |
 | `pred_damage` | `[P, 2]` float32 | Damage range `[min, max]` |
@@ -132,7 +138,8 @@ Defined in `src/environment/state.py:51`. Fields marked `struct.field(pytree_nod
 | `obs_hides_agent` | `[O]` bool | If True and agent is on this cell, predators cannot detect the agent |
 | `obs_spawn_area` | `[O, 4]` int32 | Spawn bounding box |
 | `obs_damage` | `[O, 2]` float32 | Damage range on collision/overlap |
-| `obs_property` | `[O, 5]` float32 | Olfactory chemical signature |
+| `obs_property` | `[O, 5]` float32 | Olfactory chemical signature mean |
+| `obs_property_std` | `[O, 5]` float32 | Olfactory chemical signature std dev |
 | `obs_nociception` | `[O]` float32 | Nociception intensity on contact |
 | `obs_type` | `[O]` int32 | Index into `obstacle_names` tuple for visual encoding |
 | `obstacle_names` | `tuple[str]` | Static tuple of unique obstacle name strings (e.g. `("bush", "rock")`) |
@@ -141,7 +148,8 @@ Defined in `src/environment/state.py:51`. Fields marked `struct.field(pytree_nod
 
 | Field | Shape | Description |
 |-------|-------|-------------|
-| `neutral_property` | `[M, 5]` float32 | Olfactory signature |
+| `neutral_property` | `[M, 5]` float32 | Olfactory signature mean |
+| `neutral_property_std`| `[M, 5]` float32 | Olfactory signature std dev |
 | `neutral_nociception` | `[M]` float32 | Nociception on contact |
 | `neutral_move_int` | `[M]` int32 | Steps per move |
 | `neutral_patrol` | `[M, 4]` int32 | Patrol bounding box |

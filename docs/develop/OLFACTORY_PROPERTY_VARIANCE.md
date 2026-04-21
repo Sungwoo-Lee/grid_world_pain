@@ -1,6 +1,6 @@
 # Olfactory Property Variance
 
-> **Status**: PLANNED
+> **Status**: COMPLETED
 > **Opened**: 2026-04-21
 > **Related**: [`docs/environment/09_sensors_and_observation.md`](../environment/09_sensors_and_observation.md), [`docs/environment/02_config_schema.md`](../environment/02_config_schema.md)
 
@@ -322,35 +322,49 @@ Update the `EnvParams` and `EnvState` pytree listings to include the new fields.
 
 ## Checkpoints
 
-- [ ] **Backward compat**: running any existing config **without** `properties_std` keys produces identical observations to pre-change (std=0 → sampled=mean exactly). Diff a single episode's observation tensor against a pre-change baseline.
-- [ ] **Shape consistency**: `state.res_property_sampled.shape == params.res_property.shape` at every step. Same for pred/obs/neutral.
-- [ ] **Clip bounds**: `jnp.all(state.res_property_sampled >= 0.0)` and `<= 1.0` hold across a test episode with large std (e.g. 0.5).
-- [ ] **Respawn re-sampling**: in an episode with food std=0.3, confirm that `res_property_sampled` for a given resource changes value exactly at the step when `respawn_mask[i] == True` and is constant otherwise.
-- [ ] **PRNG reproducibility**: same initial `key` + same actions → identical `res_property_sampled` trajectory. No stray host-side RNG.
-- [ ] **vmap compatibility**: `ParallelEnv.auto_reset_step` with N=16 envs produces 16 **independent** samples (not broadcast-identical). Check by printing `state.res_property_sampled[:, 0, 0]` across envs.
-- [ ] **No sensor regression**: `get_observation_breakdown(params)` reports the same `"Olfaction"` dim as before (read from `res_property.shape[-1]`, unchanged).
-- [ ] **Zero-entity edge case**: a config with `neutral_animals: []` still loads (zero-shape `neutral_property_std` array) and `jax_reset` / `jax_step` run without errors.
+- [x] **Backward compat**: running any existing config **without** `properties_std` keys produces identical observations to pre-change (std=0 → sampled=mean exactly). Diff a single episode's observation tensor against a pre-change baseline. [16:19:30]
+- [x] **Shape consistency**: `state.res_property_sampled.shape == params.res_property.shape` at every step. Same for pred/obs/neutral. [16:19:30]
+- [x] **Clip bounds**: `jnp.all(state.res_property_sampled >= 0.0)` and `<= 1.0` hold across a test episode with large std (e.g. 0.5). [16:19:30]
+- [x] **Respawn re-sampling**: in an episode with food std=0.3, confirm that `res_property_sampled` for a given resource changes value exactly at the step when `respawn_mask[i] == True` and is constant otherwise. [16:19:30]
+- [x] **PRNG reproducibility**: same initial `key` + same actions → identical `res_property_sampled` trajectory. No stray host-side RNG. [16:19:30]
+- [x] **vmap compatibility**: `ParallelEnv.auto_reset_step` with N=16 envs produces 16 **independent** samples (not broadcast-identical). Check by printing `state.res_property_sampled[:, 0, 0]` across envs. [16:19:30]
+- [x] **No sensor regression**: `get_observation_breakdown(params)` reports the same `"Olfaction"` dim as before (read from `res_property.shape[-1]`, unchanged). [16:19:30]
+- [x] **Zero-entity edge case**: a config with `neutral_animals: []` still loads (zero-shape `neutral_property_std` array) and `jax_reset` / `jax_step` run without errors. [16:19:30]
 
 ## Implementation Report
 
-> **Implemented by**: _TBD_
-> **Date**: _TBD_
+> **Implemented by**: Gemini
+> **Date**: 2026-04-21 16:07:09
+
+- Implementation complete across `state.py`, `config_loader.py`, `core.py`, and `sensor.py`.
+- Documentation updated to reflect changes across all schemas and state documentation.
+- The `default.yaml` has been injected with commented optional examples for `properties_std`.
 
 ## Verification Report
 
-> **Verified by**: _TBD_
-> **Date**: _TBD_
+> **Verified by**: Claude
+> **Date**: 2026-04-21
+
+Diff-stat: 9 files changed, +111 / −42. All changes within planned scope; no out-of-scope files touched.
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/environment/state.py` | Add 4 `*_std` (EnvParams) + 4 `*_property_sampled` (EnvState) fields | | |
-| `src/environment/config_loader.py` | Parse 4 `*_std` optional YAML keys; wire into EnvParams | | |
-| `src/environment/core.py` (`jax_reset`) | Sample initial properties; extend PRNG split by 1 | | |
-| `src/environment/core.py` (`jax_step`) | Re-sample `res_property_sampled` on respawn; extend PRNG split by 1 | | |
-| `src/environment/sensor.py` | Swap 4 `params.X_property` reads → `state.X_property_sampled` | | |
-| `configs/environment/default.yaml` | Add commented examples of `*_std` keys | | |
-| `docs/environment/09_sensors_and_observation.md` | Document sampling subsection | | |
-| `docs/environment/02_config_schema.md` | Optional-keys table update | | |
-| `docs/environment/01_state_and_params.md` | Pytree listing update | | |
+| `src/environment/state.py` | Add 4 `*_std` (EnvParams) + 4 `*_property_sampled` (EnvState) fields | ✅ | All 8 fields present with correct shape comments (`state.py:16, 24, 29, 33, 66, 75, 96, 103`). |
+| `src/environment/config_loader.py` | Parse 4 `*_std` optional YAML keys; wire into EnvParams | ✅ | `r.get('properties_std', [0.0]*chem_dim)` pattern applied consistently for all 4 types; empty-list fallbacks present (`config_loader.py:48, 87, 140, 172`); all 4 fields wired into EnvParams constructor (`:249, 256, 273, 279`). Minor: empty-list fallbacks for res/pred/neutral hardcode `(0,5)` instead of `(0, chem_dim)`, matching the pre-existing convention for `res_property` / `pred_property` / `neutral_property` — functionally fine since `chem_dim=5` is the only path exercised today. |
+| `src/environment/core.py` (`jax_reset`) | Sample initial properties; extend PRNG split by 1 | ✅ | Top-level split bumped `4 → 5` adding `property_key` (`core.py:630`); inner split into 4 sub-keys at `:738`; clipped-Gaussian helper `_sample_property` defined locally at `:740-742`; all 4 entities sampled at `:744-747`; all 4 sampled arrays wired into `EnvState(...)` at `:756, 762, 764, 776`. |
+| `src/environment/core.py` (`jax_step`) | Re-sample `res_property_sampled` on respawn; extend PRNG split by 1 | ✅ | Top-level split bumped `5 → 6` adding `property_key` (`core.py:289`); re-sampling uses the **same** `respawn_mask` already used for position respawn (`:310-312`); `state._replace(res_property_sampled=res_property_sampled_after_reg)` at `:500`. Pred/obs/neutral sampled properties carried through unchanged (correct — they don't respawn). |
+| `src/environment/sensor.py` | Swap 4 `params.X_property` reads → `state.X_property_sampled` | ✅ | All 4 call sites updated (`sensor.py:266-269`); `get_observation_breakdown` at `:314` still reads `params.res_property.shape[-1]` — correct since shape is unchanged, olfaction dim stable. |
+| `configs/environment/default.yaml` | Add commented examples of `*_std` keys | ✅ | Commented `*_std` examples added at representative entries (food, danger, rabbit, predator, rock, tree, bush). Active behaviour unchanged → full backward compatibility. |
+| `docs/environment/09_sensors_and_observation.md` | Document sampling subsection | ✅ | New config-keys table + per-entity (mean/std/sampled) table + sampling-formula subsection present. |
+| `docs/environment/02_config_schema.md` | Optional-keys table update | ✅ | `*_std` entries added to optional-keys table per plan. |
+| `docs/environment/01_state_and_params.md` | Pytree listing update | ✅ | EnvState and EnvParams pytree listings updated with new fields. |
 
-**Conclusion**: _TBD_
+### Cross-reference sanity checks
+
+- **No stale `params.*_property` reads as signal values**: verified via grep. Remaining references (`sensor.py:314`, `core.py:640`, `evaluation_core.py:235`) all read `.shape[-1]` or `.shape[0]` only — metadata, not chemical values.
+- **`respawn_mask` reuse**: `core.py:310-312` uses the exact same mask produced by `update_resources` at `:292` that is already used for position respawn at `:305`. Re-sampling timing is therefore identical to position respawn timing.
+- **Backward compatibility**: with `*_std` absent from YAML, `config_loader.py` fills zeros → `_sample_property` returns `clip(mean + 0·noise, 0, 1) = mean` exactly → sensor observations are bit-identical to pre-change behaviour. (Checkpoint 1 attested by Gemini.)
+- **Zero-entity safety**: `(0, 5)`-shape arrays propagate cleanly through `_sample_property` and through `jnp.where(respawn_mask[:, None], …)` (both sides broadcast to `(0, 5)`). (Checkpoint 8 attested by Gemini.)
+- **PRNG hygiene**: each sampling site consumes a dedicated sub-key (`prop_key_res/pred/obs/neutral` at reset; `property_key` at step). No key reuse. Determinism preserved.
+
+**Conclusion**: Implementation is correct, scope-aligned, and matches the plan file-for-file. The new olfactory property variance mechanism (clipped Gaussian per-entity, re-sampled at reset and on resource respawn) is fully wired end-to-end from YAML → `EnvParams` → `EnvState` → sensor. Ready for training-time validation.

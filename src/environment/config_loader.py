@@ -30,6 +30,8 @@ def load_env_params(config: Config) -> EnvParams:
 
         res_type = jnp.array([0 if r_get(r, 'type') == 'food' else 1 for r in expanded_resources], dtype=jnp.int32)
         res_property = jnp.array([r_get(r, 'properties') for r in expanded_resources])
+        chem_dim = res_property.shape[-1]
+        res_property_std = jnp.array([r.get('properties_std', [0.0] * chem_dim) for r in expanded_resources])
         # Subtract 1 for minval (0-based) but keep maxval as is for JAX's exclusive upper bound
         res_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [r_get(r, 'spawn_area') for r in expanded_resources]])
         res_max_cons = jnp.array([r_get(r, 'max_consumption') for r in expanded_resources], dtype=jnp.int32)
@@ -43,6 +45,7 @@ def load_env_params(config: Config) -> EnvParams:
     else:
         res_type = jnp.zeros(0, dtype=jnp.int32)
         res_property = jnp.zeros((0, 5))
+        res_property_std = jnp.zeros((0, 5))
         res_nociception = jnp.zeros(0)
         res_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
         res_max_cons = jnp.zeros(0, dtype=jnp.int32)
@@ -58,6 +61,8 @@ def load_env_params(config: Config) -> EnvParams:
             return val
 
         pred_property = jnp.array([p_get(p, 'property') for p in predators])
+        chem_dim = pred_property.shape[-1]
+        pred_property_std = jnp.array([p.get('property_std', [0.0]*chem_dim) for p in predators])
         pred_nociception = jnp.array([p.get('nociception_intensity', 0.9) for p in predators])
         pred_move_int = jnp.array([p_get(p, 'move_interval') for p in predators], dtype=jnp.int32)
         
@@ -79,6 +84,7 @@ def load_env_params(config: Config) -> EnvParams:
         predator_enabled = config.get_mandatory('environment.predator_enabled')
     else:
         pred_property = jnp.zeros((0, 5))
+        pred_property_std = jnp.zeros((0, 5))
         pred_nociception = jnp.zeros(0)
         pred_move_int = jnp.zeros(0, dtype=jnp.int32)
         pred_damage = jnp.zeros((0, 2))
@@ -116,6 +122,7 @@ def load_env_params(config: Config) -> EnvParams:
         # Unified: Obstacles can have properties too
         chem_dim = res_property.shape[-1]
         obs_property = jnp.array([o.get('properties', [0.0]*chem_dim) for o in expanded_obstacles])
+        obs_property_std = jnp.array([o.get('properties_std', [0.0]*chem_dim) for o in expanded_obstacles])
         # Adjust for 0-based min and exclusive max
         obs_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [obs_get(o, 'area') for o in expanded_obstacles]])
         
@@ -130,6 +137,7 @@ def load_env_params(config: Config) -> EnvParams:
         obs_nociception = jnp.zeros(0, dtype=jnp.float32)
         chem_dim = res_property.shape[-1]
         obs_property = jnp.zeros((0, chem_dim))
+        obs_property_std = jnp.zeros((0, chem_dim))
         obs_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
         obs_type = jnp.zeros(0, dtype=jnp.int32)
         obstacle_names = ("rock",)
@@ -150,6 +158,8 @@ def load_env_params(config: Config) -> EnvParams:
             return val
         
         neutral_property = jnp.array([n_get(n, 'property') for n in expanded_neutral])
+        chem_dim = neutral_property.shape[-1]
+        neutral_property_std = jnp.array([n.get('property_std', [0.0]*chem_dim) for n in expanded_neutral])
         neutral_nociception = jnp.array([n.get('nociception_intensity', 0.0) for n in expanded_neutral])
         neutral_move_int = jnp.array([n_get(n, 'move_interval') for n in expanded_neutral], dtype=jnp.int32)
         h = config.get_mandatory('environment.height')
@@ -159,6 +169,7 @@ def load_env_params(config: Config) -> EnvParams:
         neutral_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('spawn_area', [[1,1],[h,w]]) for n in expanded_neutral]])
     else:
         neutral_property = jnp.zeros((0, 5))
+        neutral_property_std = jnp.zeros((0, 5))
         neutral_nociception = jnp.zeros(0)
         neutral_move_int = jnp.zeros(0, dtype=jnp.int32)
         neutral_patrol = jnp.zeros((0, 4), dtype=jnp.int32)
@@ -235,12 +246,14 @@ def load_env_params(config: Config) -> EnvParams:
         grid_location_type=grid_location_type,
         res_type=res_type,
         res_property=res_property,
+        res_property_std=res_property_std,
         res_nociception=res_nociception,
         res_spawn_area=res_spawn_area,
         res_max_cons=res_max_cons,
         res_reg_delay=res_reg_delay,
         res_damage=res_damage,
         pred_property=pred_property,
+        pred_property_std=pred_property_std,
         pred_nociception=pred_nociception,
         pred_move_int=pred_move_int,
         pred_damage=pred_damage,
@@ -257,11 +270,13 @@ def load_env_params(config: Config) -> EnvParams:
         obs_hides_agent=obs_hides_agent,
         obs_damage=obs_damage,
         obs_property=obs_property,
+        obs_property_std=obs_property_std,
         obs_nociception=obs_nociception,
         obs_spawn_area=obs_spawn_area,
         obs_type=obs_type,
         obstacle_names=obstacle_names,
         neutral_property=neutral_property,
+        neutral_property_std=neutral_property_std,
         neutral_nociception=neutral_nociception,
         neutral_move_int=neutral_move_int,
         neutral_patrol=neutral_patrol,

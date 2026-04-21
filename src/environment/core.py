@@ -286,7 +286,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     """Orchestrates a full environment step in JAX."""
     
     # 0. Split key for random events
-    key, respawn_key, predator_key, neutral_key, damage_key = jax.random.split(state.key, 5)
+    key, respawn_key, predator_key, neutral_key, damage_key, property_key = jax.random.split(state.key, 6)
 
     # 1. Resource Regeneration (before agent moves)
     new_active, new_reg_timer, new_cons_count, respawn_mask = update_resources(
@@ -303,6 +303,13 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     new_potential_pos = jax.vmap(sample_res_pos)(res_keys, params.res_spawn_area)
     # Only update position IF respawn_mask is true for that resource
     res_pos_after_reg = jnp.where(respawn_mask[:, None], new_potential_pos, state.res_pos)
+    
+    # Re-sample chemical property for respawned resources
+    noise = jax.random.normal(property_key, shape=params.res_property.shape)
+    new_sampled_prop = jnp.clip(params.res_property + params.res_property_std * noise, 0.0, 1.0)
+    res_property_sampled_after_reg = jnp.where(
+        respawn_mask[:, None], new_sampled_prop, state.res_property_sampled
+    )
     
     # 2. Agent Movement
     new_agent_pos, just_collided = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)
@@ -490,6 +497,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         res_active=final_active,
         res_reg_timer=next_reg_timer,
         res_cons_count=next_cons_count,
+        res_property_sampled=res_property_sampled_after_reg,
         pred_pos=new_pred_pos,
         pred_state=new_pred_state,
         pred_stamina=new_pred_stamina,
@@ -619,7 +627,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
       per_entity: vmap sampling + sequential overlap scan (fast on small grids)
       per_type:   lax.scan over type groups (better for large grids)
     """
-    key, agent_key, placement_key, body_key = jax.random.split(key, 4)
+    key, agent_key, placement_key, body_key, property_key = jax.random.split(key, 5)
     
     # 1. Agent Position
     random_pos = jax.random.randint(agent_key, (2,), 0, jnp.array([params.height, params.width]))
@@ -727,6 +735,17 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         
     injury_buffer = jnp.zeros(params.smoothing_duration)
     
+    prop_key_res, prop_key_pred, prop_key_obs, prop_key_neutral = jax.random.split(property_key, 4)
+    
+    def _sample_property(sub_key, mean, std):
+        noise = jax.random.normal(sub_key, shape=mean.shape)
+        return jnp.clip(mean + std * noise, 0.0, 1.0)
+        
+    res_property_sampled     = _sample_property(prop_key_res,     params.res_property,     params.res_property_std)
+    pred_property_sampled    = _sample_property(prop_key_pred,    params.pred_property,    params.pred_property_std)
+    obs_property_sampled     = _sample_property(prop_key_obs,     params.obs_property,     params.obs_property_std)
+    neutral_property_sampled = _sample_property(prop_key_neutral, params.neutral_property, params.neutral_property_std)
+    
     state = EnvState(
         agent_pos=agent_pos,
         current_step=jnp.array(0, dtype=jnp.int32),
@@ -734,12 +753,15 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         res_active=jnp.ones(num_res, dtype=jnp.bool_),
         res_cons_count=jnp.zeros(num_res, dtype=jnp.int32),
         res_reg_timer=jnp.zeros(num_res, dtype=jnp.int32),
+        res_property_sampled=res_property_sampled,
         pred_pos=pred_pos,
         pred_state=jnp.zeros(num_pred, dtype=jnp.int32), # PATROL
         pred_stamina=jnp.full(num_pred, params.pred_max_stamina, dtype=jnp.float32),
         pred_move_timer=jnp.zeros(num_pred, dtype=jnp.int32),
         pred_attack_timer=jnp.zeros(num_pred, dtype=jnp.int32),
+        pred_property_sampled=pred_property_sampled,
         obs_pos=obs_pos,
+        obs_property_sampled=obs_property_sampled,
         satiation=jnp.array(satiation, dtype=jnp.float32),
         nutrition=jnp.array(nutrition, dtype=jnp.float32),
         injury_level=jnp.array(injury, dtype=jnp.float32),
@@ -750,7 +772,8 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         key=key,
         last_action=jnp.array(4 if params.rest_action_enabled else 5, dtype=jnp.int32), # Default to Rest/Stay
         neutral_pos=neutral_pos,
-        neutral_move_timer=jnp.zeros(num_neutral, dtype=jnp.int32)
+        neutral_move_timer=jnp.zeros(num_neutral, dtype=jnp.int32),
+        neutral_property_sampled=neutral_property_sampled
     )
     
     return state

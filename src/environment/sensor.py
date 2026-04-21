@@ -263,10 +263,10 @@ def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
 
     # 5. Olfaction Sensor (Resources + Predators + Obstacles + Neutral)
     if params.olfactory_enabled:
-        res_chem = sense_resource(state.agent_pos, state.res_pos, state.res_active, params.res_property, params.sensor_radius, params.sensor_decay)
-        pred_chem = sense_resource(state.agent_pos, state.pred_pos, jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_), params.pred_property, params.sensor_radius, params.sensor_decay)
-        obs_chem = sense_resource(state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), params.obs_property, params.sensor_radius, params.sensor_decay)
-        neutral_chem = sense_resource(state.agent_pos, state.neutral_pos, jnp.ones(state.neutral_pos.shape[0], dtype=jnp.bool_), params.neutral_property, params.sensor_radius, params.sensor_decay)
+        res_chem = sense_resource(state.agent_pos, state.res_pos, state.res_active, state.res_property_sampled, params.sensor_radius, params.sensor_decay)
+        pred_chem = sense_resource(state.agent_pos, state.pred_pos, jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_), state.pred_property_sampled, params.sensor_radius, params.sensor_decay)
+        obs_chem = sense_resource(state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), state.obs_property_sampled, params.sensor_radius, params.sensor_decay)
+        neutral_chem = sense_resource(state.agent_pos, state.neutral_pos, jnp.ones(state.neutral_pos.shape[0], dtype=jnp.bool_), state.neutral_property_sampled, params.sensor_radius, params.sensor_decay)
         obs_parts.append(res_chem + pred_chem + obs_chem + neutral_chem)
     
     # 6. Collision
