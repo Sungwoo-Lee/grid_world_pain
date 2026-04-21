@@ -1,6 +1,6 @@
 # 07 — Predator AI
 
-> **Source**: `src/environment/core.py` (`update_predators`, `core.py:128`) | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/core.py` (`update_predators`, `core.py:128`) | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

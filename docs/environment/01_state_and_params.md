@@ -1,6 +1,6 @@
 # 01 — State & Parameters
 
-> **Source**: `src/environment/state.py` | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/state.py` | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

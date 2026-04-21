@@ -1,6 +1,6 @@
 # 12 — Renderer & Visualization
 
-> **Source**: `src/environment/renderer.py` | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/renderer.py` | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

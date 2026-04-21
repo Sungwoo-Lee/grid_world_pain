@@ -1,6 +1,6 @@
 # 02 — Config Schema
 
-> **Source**: `src/environment/config_loader.py`, `configs/environment/default.yaml` | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/config_loader.py`, `configs/environment/default.yaml` | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

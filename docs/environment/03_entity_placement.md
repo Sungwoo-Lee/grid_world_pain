@@ -1,6 +1,6 @@
 # 03 — Entity Placement
 
-> **Source**: `src/environment/core.py` (`jax_reset`, `resolve_overlaps_global`, `place_in_area`), `src/environment/config_loader.py` | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/core.py` (`jax_reset`, `resolve_overlaps_global`, `place_in_area`), `src/environment/config_loader.py` | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

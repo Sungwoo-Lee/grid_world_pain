@@ -1,6 +1,6 @@
 # 09 — Sensors & Observation
 
-> **Source**: `src/environment/sensor.py` (`get_observation`, `get_observation_breakdown`) | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/sensor.py` (`get_observation`, `get_observation_breakdown`) | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

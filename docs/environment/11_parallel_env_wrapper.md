@@ -1,6 +1,6 @@
 # 11 — Parallel Env Wrapper
 
-> **Source**: `src/environment/wrapper.py` | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/wrapper.py` | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

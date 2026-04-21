@@ -1,6 +1,6 @@
 # 06 — Reward & Termination
 
-> **Source**: `src/environment/core.py` (reward/termination sections, `core.py:450–511`) | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/core.py` (reward/termination sections, `core.py:450–511`) | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

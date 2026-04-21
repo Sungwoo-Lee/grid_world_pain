@@ -1,6 +1,6 @@
 # 05 — Body & Homeostasis
 
-> **Source**: `src/environment/core.py` (`update_body`, `calculate_drive`) | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/core.py` (`update_body`, `calculate_drive`) | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

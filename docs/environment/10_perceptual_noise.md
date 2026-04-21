@@ -1,6 +1,6 @@
 # 10 — Perceptual Noise
 
-> **Source**: `src/environment/sensor.py` (`apply_perceptual_noise`, `sensor.py:197`), `src/environment/config_loader.py` (`_parse_noise_config`, `config_loader.py:334`) | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/sensor.py` (`apply_perceptual_noise`, `sensor.py:197`), `src/environment/config_loader.py` (`_parse_noise_config`, `config_loader.py:334`) | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

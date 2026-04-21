@@ -1,6 +1,6 @@
 # 08 — Resources & Obstacles
 
-> **Source**: `src/environment/core.py` (`update_resources`, interaction section), `src/environment/config_loader.py` | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/core.py` (`update_resources`, interaction section), `src/environment/config_loader.py` | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 

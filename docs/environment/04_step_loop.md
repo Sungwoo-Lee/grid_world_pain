@@ -1,6 +1,6 @@
 # 04 — Step Loop
 
-> **Source**: `src/environment/core.py` (`jax_step`) | **Back to hub**: [README](README.md)
+> **Source**: `src/environment/core.py` (`jax_step`) | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 
