@@ -78,26 +78,72 @@ The collision bump nociception (`last_collision_noc`) is stored in `EnvState` du
 
 `sense_resource(agent_pos, res_pos, res_active, res_property, radius, decay_power)` (`sensor.py:5`)
 
-Applied to all four entity types and summed:
+### Config keys that control olfaction
+
+All four keys below are **mandatory** (missing → `ValueError`):
+
+| YAML key | `EnvParams` field | Type | Effect |
+|---|---|---|---|
+| `sensory.olfactory_enabled` | `olfactory_enabled` | bool (static) | Gates the entire sensor; if false, zero dims in obs |
+| `sensory.vector_size` | `olfactory_vector_size` | int (static) | Length of each entity's chemical property vector (default 5) |
+| `sensory.sensor_radius` | `sensor_radius` | float | Distance cutoff; entities beyond this are masked out (default 20, covers full 10×10 grid) |
+| `sensory.decay_power` | `sensor_decay` | float | Exponent in the distance-decay formula (default 2.0 = inverse-square) |
+
+The olfaction dimension reported by `get_observation_breakdown` is read directly from `params.res_property.shape[-1]` (`sensor.py:314`), not from `olfactory_vector_size` — so the two must match.
+
+### Per-entity chemical property vectors
+
+Each entity definition in YAML carries a chemical property vector. The config loader reads it and stores it in `EnvParams` as a `[N_entities, vector_size]` JAX array. These arrays are **constant** for the whole episode (stored in `EnvParams`, not `EnvState`).
+
+| Entity type | YAML key | Config loader line | `EnvParams` field | Shape | Mandatory? |
+|---|---|---|---|---|---|
+| Resources | `properties` | `config_loader.py:32` | `res_property` | `[N_res, 5]` | Yes |
+| Predators | `property` | `config_loader.py:60` | `pred_property` | `[N_pred, 5]` | Yes |
+| Neutral animals | `property` | `config_loader.py:152` | `neutral_property` | `[N_neutral, 5]` | Yes |
+| Obstacles | `properties` | `config_loader.py:118` | `obs_property` | `[N_obs, 5]` | **No** — defaults to `[0.0]*chem_dim` if absent |
+
+Note the YAML key spelling inconsistency: resources and obstacles use `properties` (plural); predators and neutral animals use `property` (singular).
+
+When an entity list is empty the loader produces a zero-row array of shape `[0, chem_dim]`, where `chem_dim` is inferred from `res_property.shape[-1]` (`config_loader.py:117, 131, 161`).
+
+### Default chemical signatures (from `default.yaml`)
+
+| Entity | `properties` / `property` | Interpretation |
+|---|---|---|
+| Food resource | `[1.0, 0.0, 0.0, 0.0, 0.0]` | Dim 0 = "food odour" |
+| Danger resource | `[0.0, 0.0, 0.0, 0.0, 0.0]` | No chemical signal |
+| Predator | `[0.0, 1.0, 0.0, 0.0, 0.0]` | Dim 1 = "predator odour" |
+| Rabbit (neutral) | `[0.0, 0.3, 0.0, 0.0, 0.0]` | Dim 1 partial, weaker predator-like scent |
+| Rock (obstacle) | `[0.0, 0.0, 0.0, 0.0, 0.0]` | No chemical signal |
+| Bush (obstacle) | `[0.0, 0.0, 0.0, 1.0, 0.0]` | Dim 3 = "vegetation odour" |
+| Tree (obstacle) | `[0.0, 0.0, 0.0, 0.0, 1.0]` | Dim 4 = "tree odour" |
+
+### Runtime signal computation
+
+Applied to all four entity types and summed (`sensor.py:266–270`):
+
 ```python
-res_chem     = sense_resource(..., res_pos,     res_active,  res_property,     ...)
-pred_chem    = sense_resource(..., pred_pos,    ones,        pred_property,     ...)
-obs_chem     = sense_resource(..., obs_pos,     ones,        obs_property,      ...)
-neutral_chem = sense_resource(..., neutral_pos, ones,        neutral_property,  ...)
-obs_olfactory = res_chem + pred_chem + obs_chem + neutral_chem   # sensor.py:270
+res_chem     = sense_resource(..., res_pos,     state.res_active,        params.res_property,     ...)
+pred_chem    = sense_resource(..., pred_pos,    ones(N_pred, bool),       params.pred_property,    ...)
+obs_chem     = sense_resource(..., obs_pos,     ones(N_obs, bool),        params.obs_property,     ...)
+neutral_chem = sense_resource(..., neutral_pos, ones(N_neutral, bool),    params.neutral_property, ...)
+obs_olfactory = res_chem + pred_chem + obs_chem + neutral_chem
 ```
 
-Per-entity computation:
+Resources are masked by `res_active` (consumed/inactive resources contribute nothing). Predators, obstacles, and neutral animals are always considered present (always-ones mask).
+
+Per-entity computation inside `sense_resource` (`sensor.py:5–22`):
+
 ```
-dist = ‖res_pos[n] - agent_pos‖₂
-decay = 1.0 / (dist^decay_power + 1e-10)   (or 2.0 if dist < 0.001)
-mask = active AND dist <= sensor_radius
-obs_olfactory += res_property[n] * decay * mask
+diff  = entity_pos[n] - agent_pos              # [2]
+dist  = ‖diff‖₂                               # L2 distance
+decay = 2.0                  if dist < 0.001   # agent on top of entity
+      = 1.0 / (dist^decay_power + 1e-10)       # otherwise (inverse-power decay)
+mask  = (entity_active[n]) AND (dist ≤ sensor_radius)
+signal += entity_property[n] * decay * mask    # [vector_size] accumulation
 ```
 
-Each entity contributes its 5-dim property vector weighted by distance decay. The result is a 5-dim vector representing the summed chemical gradient in the agent's vicinity. Food entities have signature `[1,0,0,0,0]`, predators `[0,1,0,0,0]`, bushes `[0,0,0,1,0]` by default config.
-
-The `sensor_radius` (default 20) effectively covers the entire 10×10 grid.
+The final `obs_olfactory` is a `[vector_size]` vector of summed weighted properties placed at observation indices `[4 : 4+vector_size]`.
 
 ---
 
