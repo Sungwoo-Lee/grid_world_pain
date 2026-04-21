@@ -21,6 +21,7 @@ environment:
       count: 2
       spawn_area: [[1, 1], [5, 5]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 12
       regeneration_delay: 0
       damage: [0.0, 0.0]
@@ -31,6 +32,7 @@ environment:
       count: 2
       spawn_area: [[1, 6], [5, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 12
       regeneration_delay: 0
       damage: [0.0, 0.0]
@@ -41,6 +43,7 @@ environment:
       count: 2
       spawn_area: [[6, 6], [10, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 12
       regeneration_delay: 0
       damage: [0.0, 0.0]
@@ -51,6 +54,7 @@ environment:
       count: 2
       spawn_area: [[6, 1], [10, 5]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 12
       regeneration_delay: 0
       damage: [0.0, 0.0]
@@ -61,6 +65,7 @@ environment:
       count: 1
       spawn_area: [[1, 1], [5, 5]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: [15.0, 45.0]
       regeneration_delay: 20
@@ -71,6 +76,7 @@ environment:
       count: 1
       spawn_area: [[1, 6], [5, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: [15.0, 45.0]
       regeneration_delay: 20
@@ -81,6 +87,7 @@ environment:
       count: 1
       spawn_area: [[6, 6], [10, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: [15.0, 45.0]
       regeneration_delay: 20
@@ -91,6 +98,7 @@ environment:
       count: 1
       spawn_area: [[6, 1], [10, 5]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: [15.0, 45.0]
       regeneration_delay: 20
@@ -100,6 +108,7 @@ environment:
     - name: "rabbit"
       count: 0
       property: [0.0, 0.3, 0.0, 0.0, 0.0]
+      property_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       move_interval: 1
       nociception_intensity: 0.1
       spawn_area: [[1, 1], [10, 10]]
@@ -110,6 +119,7 @@ environment:
     - name: "predator" # 
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      property_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       move_interval: 1
       damage: [15.0, 45.0]
       nociception_intensity: 0.9
@@ -124,6 +134,7 @@ environment:
     - name: "predator" # 
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      property_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       move_interval: 1
       damage: [15.0, 45.0]
       nociception_intensity: 0.9
@@ -138,6 +149,7 @@ environment:
     - name: "predator" # 
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      property_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       move_interval: 1
       damage: [15.0, 45.0]
       nociception_intensity: 0.9
@@ -152,6 +164,7 @@ environment:
     - name: "predator" # 
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      property_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       move_interval: 1
       damage: [15.0, 45.0]
       nociception_intensity: 0.9
@@ -180,6 +193,7 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "rock" # Top Right
       count: 0
       area: [[1, 6], [5, 10]]
@@ -187,6 +201,7 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "rock" # Bottom Left
       count: 0
       area: [[6, 1], [10, 5]]
@@ -194,6 +209,7 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "rock" # Bottom Right
       count: 0
       area: [[6, 6], [10, 10]]
@@ -201,6 +217,7 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "tree"
       count: 0
       area: [[5, 15], [5, 15]]
@@ -208,6 +225,7 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.1
       properties: [0.0, 0.0, 0.0, 0.0, 1.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "bush" # Top Left
       count: 3
       area: [[1, 1], [5, 5]]
@@ -216,6 +234,7 @@ environment:
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "bush" # Top Right
       count: 3
       area: [[1, 6], [5, 10]]
@@ -224,6 +243,7 @@ environment:
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "bush" # Bottom Left
       count: 3
       area: [[6, 1], [10, 5]]
@@ -232,6 +252,7 @@ environment:
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "bush" # Bottom Right
       count: 3
       area: [[6, 6], [10, 10]]
@@ -240,6 +261,7 @@ environment:
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
 
 
 body:

@@ -16,6 +16,7 @@ environment:
       count: 3
       spawn_area: [[1, 1], [10, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 35
       regeneration_delay: 100
       damage: [0.0, 0.0]
@@ -26,6 +27,7 @@ environment:
       count: 3
       spawn_area: [[11, 11], [20, 20]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 35
       regeneration_delay: 100
       damage: [0.0, 0.0]
@@ -36,6 +38,7 @@ environment:
       count: 8
       spawn_area: [[1, 1], [10, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: [5.0, 15.0]
       regeneration_delay: 20
@@ -46,6 +49,7 @@ environment:
       count: 8
       spawn_area: [[11, 11], [20, 20]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: [5.0, 15.0]
       regeneration_delay: 20
@@ -57,6 +61,7 @@ environment:
       count: 1
       spawn_area: [[1, 11], [10, 20]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 20
       regeneration_delay: 250
       damage: [0.0, 0.0]
@@ -67,6 +72,7 @@ environment:
       count: 1
       spawn_area: [[11, 1], [20, 10]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 20
       regeneration_delay: 250
       damage: [0.0, 0.0]
@@ -76,6 +82,7 @@ environment:
     - name: "Decoy Rabbit"
       count: 5
       property: [0.0, 0.3, 0.0, 0.0, 0.0]
+      property_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       move_interval: 1
       nociception_intensity: 0.1
       spawn_area: [[1, 1], [20, 20]]
@@ -87,6 +94,7 @@ environment:
     - name: "Forest Predator TL"
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      property_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       move_interval: 1
       damage: [5.0, 15.0]
       nociception_intensity: 0.9
@@ -102,6 +110,7 @@ environment:
     - name: "Forest Predator BR"
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      property_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       move_interval: 1
       damage: [5.0, 15.0]
       nociception_intensity: 0.9
@@ -132,6 +141,7 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "rock"
       count: 10
       area: [[11, 1], [20, 10]]
@@ -139,6 +149,7 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "tree"
       count: 1
       area: [[5, 15], [5, 15]]
@@ -146,6 +157,7 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.1
       properties: [0.0, 0.0, 0.0, 0.0, 1.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "tree"
       count: 1
       area: [[15, 5], [15, 5]]
@@ -153,6 +165,7 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.1
       properties: [0.0, 0.0, 0.0, 0.0, 1.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "bush"
       count: 5
       area: [[1, 1], [10, 10]]
@@ -161,6 +174,7 @@ environment:
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "bush"
       count: 5
       area: [[11, 11], [20, 20]]
@@ -169,6 +183,7 @@ environment:
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
 
 
 body:

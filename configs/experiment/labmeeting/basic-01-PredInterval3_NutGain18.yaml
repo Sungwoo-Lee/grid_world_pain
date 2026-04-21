@@ -21,6 +21,7 @@ environment:
       count: 1
       spawn_area: [[1, 1], [5, 5]]
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: 12
       regeneration_delay: 0
       damage: [0.0, 0.0]
@@ -31,6 +32,7 @@ environment:
       count: 1
       spawn_area: [[1, 1], [5, 5]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       max_consumption: -1
       damage: [15.0, 45.0]
       regeneration_delay: 20
@@ -40,6 +42,7 @@ environment:
     - name: "rabbit"
       count: 0
       property: [0.0, 0.3, 0.0, 0.0, 0.0]
+      property_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       move_interval: 1
       nociception_intensity: 0.1
       spawn_area: [[1, 1], [10, 10]]
@@ -50,6 +53,7 @@ environment:
     - name: "predator" # 
       count: 1
       property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      property_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       move_interval: 3
       damage: [15.0, 45.0]
       nociception_intensity: 0.9
@@ -76,6 +80,7 @@ environment:
       damage: [0.1, 0.5]
       nociception_intensity: 0.3
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
     - name: "bush" # Top Left
       count: 3
       area: [[1, 1], [5, 5]]
@@ -84,6 +89,7 @@ environment:
       nociception_intensity: 0.0
       hides_agent: true
       properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
 
 body:
   # Body state
