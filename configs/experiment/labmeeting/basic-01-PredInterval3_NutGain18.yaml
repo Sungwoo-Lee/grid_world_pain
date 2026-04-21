@@ -1,0 +1,203 @@
+# Default Configuration for GridWorld Interoceptive AI
+
+environment:
+  height: 5
+  width: 5
+  start_pos: [2, 2]
+  max_steps: 500
+  rest_action_enabled: true
+  eat_action_enabled: true
+  random_start_pos: true 
+
+  # Entity placement overlap resolution strategy.
+  # "per_entity": Sequential scan over all entities (fast on small grids ≤100 cells)
+  # "per_type": Type-level lax.scan grouping by spawn area (better for large grids)
+  placement:
+    mode: per_entity
+
+  resources:
+    - name: "food" # Top Left
+      type: "food"
+      count: 1
+      spawn_area: [[1, 1], [5, 5]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+
+    - name: "danger" # Top Left
+      type: "danger"
+      count: 1
+      spawn_area: [[1, 1], [5, 5]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: [15.0, 45.0]
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+  neutral_animals:
+    - name: "rabbit"
+      count: 0
+      property: [0.0, 0.3, 0.0, 0.0, 0.0]
+      move_interval: 1
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      
+  predator_enabled: true
+  predators:
+    - name: "predator" # 
+      count: 1
+      property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      move_interval: 3
+      damage: [15.0, 45.0]
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [5, 5]]
+      patrol_area: [[1, 1], [5, 5]]
+      detection_range: 3
+      max_stamina: 15
+      stamina_recovery_rate: 1
+      hunt_stamina_threshold: 0.7
+      attack_delay: 3
+      lose_interest_multiplier: 1.5
+
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [5, 5]]
+    - type: "sand"
+      area: [[0, 0], [0, 0]]
+
+  obstacles:
+    - name: "rock" # Top Left
+      count: 0
+      area: [[1, 1], [5, 5]]
+      blocking: false
+      damage: [0.1, 0.5]
+      nociception_intensity: 0.3
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+    - name: "bush" # Top Left
+      count: 3
+      area: [[1, 1], [5, 5]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+
+body:
+  # Body state
+  with_satiation: false
+  with_nutrition: true
+  with_injury: true
+  random_start_satiation: false
+  random_start_nutrition: false
+  random_start_injury: false
+  # Body state limits
+  max_satiation: 100
+  max_nutrition: 100
+  max_injury: 100
+  # Nutrition: new_N = clip(prev_N - metabolic_cost + [gain - cost if ate], 0, max_N)
+  metabolic_cost: 1.0
+  food_nutrition_gain: 18
+  eating_nutrition_cost: 1.0
+  eating_reward_penalty: 0.0
+  # Satiation: S = MaxS * (N / MaxN) ^ scaling_factor
+  nutrition_to_satiation_scaling_factor: 1.0
+  satiation_setpoint: 100
+  start_satiation: 100
+  start_nutrition: 100
+  # Recovery: Recovery = base * (1 + accel)^(rest_streak - 1)
+  recovery_base_rate: 0.1
+  recovery_accel_rate: 0.5
+  # Injury: Damage is spread over duration steps (applied_dam = total_dam / duration)
+  injury_smoothing_duration: 3
+  # Reward: if use_homeostatic_reward, Reward = prev_drive - curr_drive
+  # Drive (Euclidean): sqrt((satiation - setpoint)^2 + injury^2)
+  use_homeostatic_reward: true
+  death_penalty: 100
+  overeating_death: false
+
+
+sensory:
+  using_sensory: true
+  #Olfactory sensor
+  olfactory_enabled: true
+  sensor_radius: 20
+  vector_size: 5
+  decay_power: 2.0
+  #Collision sensor
+  collision_sensor_range: 1
+  #Location sensor
+  location_sensor: false 
+  #Nociception sensor
+  nociception_enabled: true
+  nociception_size: 1
+  #Visual sensor
+  visual_sensor_enabled: false
+  visual_sensor_range: 0
+  #Proprioception sensor
+  proprioception_enabled: true
+
+visualization:
+  local_view_size: 5
+
+perceptual_noise:
+  enabled: false
+  # Key order here is the single source of truth for noise array indices (0-8).
+  # config_loader.py reads this order; sensor.py consumes it via params.noise_modality_order.
+  modalities:
+    injury:          # index 0
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    nutrition:       # index 1
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    satiation:       # index 2
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    extero_nociception: # index 3
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0     # Unbounded (pain intensity)
+    olfaction:       # index 4
+      mode: "state_dependent"
+      sigma: 0.2
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0     # Unbounded (aggregated chemical gradient)
+    collision:       # index 5
+      mode: "constant"
+      sigma: 0.01
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    proprioception:  # index 6
+      mode: "constant"
+      sigma: 0.05
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    visual:          # index 7
+      mode: "state_dependent"
+      sigma: 0.2
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0     # Unbounded (one-hot counts)
+    location:        # index 8
+      mode: "constant"
+      sigma: 0.01
+      injury_noise_scale: 0.0
+      clip_min: -1.0       # Normalized to [-1, 1]
+      clip_max: 1.0
