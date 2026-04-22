@@ -332,3 +332,63 @@ def get_observation_breakdown(params: EnvParams):
         
     return breakdown
 
+def build_sensory_viz(obs, state, params, true_obs=None):
+    """Build the sensory_data list consumed by renderer.render_jax_state.
+
+    If true_obs is None, computes it from state+params with apply_noise=False
+    (unless perceptual_noise_enabled is False, in which case true_obs = obs).
+    """
+    import numpy as np  # renderer is host-side; np is fine here
+    breakdown = get_observation_breakdown(params)
+    if true_obs is None:
+        if bool(params.perceptual_noise_enabled):
+            true_obs = np.asarray(get_observation(state, params, apply_noise=False))
+        else:
+            true_obs = np.asarray(obs)
+    obs = np.asarray(obs)
+    
+    ptr = 0
+    t_ptr = 0
+    viz = []
+    
+    for sensor_name, dim in breakdown.items():
+        if sensor_name == "Olfaction":
+            olf_obs = obs[ptr:ptr+dim]
+            olf_true = true_obs[t_ptr:t_ptr+dim] if true_obs is not None else olf_obs
+            ptr += dim; t_ptr += dim
+            viz.append({'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true, 'type': 'spectrum', 'labels': ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'NEU', 'RCK']})
+        
+        elif sensor_name == "Extero Nociception":
+            noc_obs = float(obs[ptr])
+            noc_true = float(true_obs[t_ptr]) if true_obs is not None else noc_obs
+            ptr += dim; t_ptr += dim
+            viz.append({'name': 'Extero Nociception', 'intensity': noc_obs, 'true_intensity': noc_true, 'color': '#c0392b', 'type': 'intensity'})
+        
+        elif sensor_name == "Collision":
+            coll_obs = obs[ptr:ptr+dim]
+            coll_true = true_obs[t_ptr:t_ptr+dim] if true_obs is not None else coll_obs
+            ptr += dim; t_ptr += dim
+            viz.append({'name': 'Collision', 'vector': coll_obs, 'true_vector': coll_true, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1})
+        
+        elif sensor_name == "Location":
+            loc_vec = obs[ptr:ptr+dim]
+            ptr += dim; t_ptr += dim
+            viz.append({'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'})
+        
+        elif sensor_name in ("Satiation", "Nutrition", "Injury"):
+            s_obs = float(obs[ptr])
+            ptr += dim; t_ptr += dim
+            viz.append({'name': sensor_name, 'intensity': s_obs, 'type': 'intensity'})
+        
+        elif sensor_name == "Visual":
+            vis_obs = obs[ptr:ptr+dim]
+            vis_true = true_obs[t_ptr:t_ptr+dim] if true_obs is not None else vis_obs
+            ptr += dim; t_ptr += dim
+            viz.append({'name': 'Visual', 'vector': vis_obs, 'true_vector': vis_true, 'type': 'visual_grid', 'num_features': 8, 'range': params.visual_sensor_range, 'labels': ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'NEU', 'RCK']})
+        
+        elif sensor_name == "Proprioception":
+            proprio_vec = obs[ptr:ptr+dim]
+            ptr += dim; t_ptr += dim
+            viz.append({'name': 'Proprioception', 'vector': proprio_vec, 'type': 'radial', 'color': '#be4bdb'})
+
+    return viz

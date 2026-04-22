@@ -169,7 +169,7 @@ def draw_dual_capsule_bar(ax, x, y, w, h, state_pct, obs_pct, color, label=None,
         ax.text(x + w, y - 0.03, f"OBS:  {obs_val}", color=COLORS['text_label'], 
                 fontsize=6, fontweight='bold', ha='right', transform=transform, fontfamily='monospace')
 
-def draw_pod_frame(ax, x, y, w, h, title, offline=False, transform=None):
+def draw_pod_frame(ax, x, y, w, h, title, offline=False, obs_only=False, transform=None):
     """Draws a modular Telemetry Pod frame."""
     rect = plt.Rectangle((x, y), w, h, facecolor=COLORS['bg'], edgecolor=COLORS['border'], 
                          linewidth=0.5, transform=transform, zorder=0)
@@ -181,6 +181,10 @@ def draw_pod_frame(ax, x, y, w, h, title, offline=False, transform=None):
     
     # Title
     t_color = COLORS['text_label'] if not offline else COLORS['text_offline']
+    if obs_only:
+        title = title + " (OBS ONLY)"
+        t_color = COLORS['text_offline']
+        
     ax.text(x + 0.02, y + h + 0.015, title.upper(), color=t_color, 
             fontsize=8, fontweight='bold', transform=transform)
     
@@ -191,7 +195,7 @@ def draw_pod_frame(ax, x, y, w, h, title, offline=False, transform=None):
 
 from src.environment.sensor import get_visual_offsets
 
-def draw_boresight_diamond(ax, x, y, size, vec, r, num_features, true_vec=None, icons=None, transform=None):
+def draw_boresight_diamond(ax, x, y, size, vec, r, num_features, true_vec=None, icons=None, obs_only=False, transform=None):
     """
     Draws a schematic Manhattan diamond grid for directional sensors.
     Uses the same offset logic as sensor.py for perfect spatial alignment.
@@ -234,7 +238,7 @@ def draw_boresight_diamond(ax, x, y, size, vec, r, num_features, true_vec=None, 
         
         if num_features == 1:
             # Collision Style: Grid-based indicator
-            if true_vals[0] > 0.5: # Reality: Ghosted fill
+            if not obs_only and true_vals[0] > 0.5: # Reality: Ghosted fill
                 ax.add_patch(plt.Rectangle((cell_x - size*0.48, cell_y - size*0.48), size*0.96, size*0.96, 
                              facecolor=COLORS['danger'], alpha=0.15, transform=transform, zorder=2))
             if obs_vals[0] > 0.5: # Perception: Solid block
@@ -243,23 +247,24 @@ def draw_boresight_diamond(ax, x, y, size, vec, r, num_features, true_vec=None, 
         else:
             # Visual Style: Grid-based indicators
             # 1. Draw Reality (Ghosted)
-            true_active = np.where(true_vals > 0.1)[0]
-            # Prioritize entities (Index 3+) over terrain (0,1,2)
-            true_entities = [idx for idx in true_active if idx >= 3]
-            
-            for feat_idx in true_active:
-                icon_key = feature_keys[feat_idx % len(feature_keys)]
-                icon_img = icons.get(icon_key) if icons else None
-                if icon_img is not None and (feat_idx >= 3 or not true_entities):
-                    # Fixed scaling: ensure icon fits within the cell (size * 0.35 zoom)
-                    imagebox = OffsetImage(icon_img, zoom=size * 0.35)
-                    ab = AnnotationBbox(imagebox, (cell_x, cell_y), frameon=False, pad=0, xycoords=transform if transform else 'data')
-                    ab.set_alpha(0.15) 
-                    ax.add_artist(ab)
-                else:
-                    color = feature_colors[feat_idx % len(feature_colors)]
-                    ax.add_patch(plt.Rectangle((cell_x - size*0.48, cell_y - size*0.48), size*0.96, size*0.96, 
-                                 facecolor=color, alpha=0.1, transform=transform, zorder=2))
+            if not obs_only:
+                true_active = np.where(true_vals > 0.1)[0]
+                # Prioritize entities (Index 3+) over terrain (0,1,2)
+                true_entities = [idx for idx in true_active if idx >= 3]
+                
+                for feat_idx in true_active:
+                    icon_key = feature_keys[feat_idx % len(feature_keys)]
+                    icon_img = icons.get(icon_key) if icons else None
+                    if icon_img is not None and (feat_idx >= 3 or not true_entities):
+                        # Fixed scaling: ensure icon fits within the cell (size * 0.35 zoom)
+                        imagebox = OffsetImage(icon_img, zoom=size * 0.35)
+                        ab = AnnotationBbox(imagebox, (cell_x, cell_y), frameon=False, pad=0, xycoords=transform if transform else 'data')
+                        ab.set_alpha(0.15) 
+                        ax.add_artist(ab)
+                    else:
+                        color = feature_colors[feat_idx % len(feature_colors)]
+                        ax.add_patch(plt.Rectangle((cell_x - size*0.48, cell_y - size*0.48), size*0.96, size*0.96, 
+                                     facecolor=color, alpha=0.1, transform=transform, zorder=2))
             
             # 2. Draw Perception (Solid)
             obs_active = np.where(obs_vals > 0.1)[0]
@@ -281,7 +286,7 @@ def draw_boresight_diamond(ax, x, y, size, vec, r, num_features, true_vec=None, 
     # Center markers removed to reduce visual clutter as requested
     pass
 
-def draw_categorical_visual(ax, x, y, w, h, obs_vec, r, num_features, true_vec=None, labels=None, transform=None):
+def draw_categorical_visual(ax, x, y, w, h, obs_vec, r, num_features, true_vec=None, labels=None, obs_only=False, transform=None):
     """Draws a categorical bar chart for visual observations (V7).
     y: bottom of the pod frame
     h: total height of the pod frame
@@ -332,8 +337,9 @@ def draw_categorical_visual(ax, x, y, w, h, obs_vec, r, num_features, true_vec=N
             color = feature_colors[f_idx % len(feature_colors)]
             
             # Ground Truth (Ghosted)
-            true_val = float(true_grid[c_idx, f_idx])
-            ax.add_patch(plt.Rectangle((bx, bar_y), bw, bar_h * true_val, facecolor=color, alpha=0.15, transform=transform, zorder=1))
+            if not obs_only:
+                true_val = float(true_grid[c_idx, f_idx])
+                ax.add_patch(plt.Rectangle((bx, bar_y), bw, bar_h * true_val, facecolor=color, alpha=0.15, transform=transform, zorder=1))
             
             # Perception (Solid)
             obs_val = float(obs_grid[c_idx, f_idx])
@@ -589,6 +595,13 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
         s_data = sensor_map.get(s_name)
         offline = s_data is None
         
+        obs_only = False
+        if s_data is not None and s_data['type'] == 'intensity':
+            obs_only = 'true_intensity' not in s_data or s_data.get('true_intensity') == s_data.get('intensity')
+        elif s_data is not None and s_data['type'] in ('spectrum', 'diamond', 'visual_grid'):
+            tv = s_data.get('true_vector')
+            obs_only = tv is None or np.array_equal(np.asarray(tv), np.asarray(s_data['vector']))
+        
         # Dynamic pod height: Visual/Diamond pods get more room for bars + labels
         if not offline and s_data.get('type') in ('diamond', 'visual_grid'):
             pod_h = 0.20
@@ -596,7 +609,7 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
             pod_h = pod_h_default
         
         y_frame_bottom = y_cursor - pod_h
-        draw_pod_frame(ax_right, 0.05, y_frame_bottom, 0.9, pod_h, s_name, offline=offline, transform=ax_right.transAxes)
+        draw_pod_frame(ax_right, 0.05, y_frame_bottom, 0.9, pod_h, s_name, offline=offline, obs_only=obs_only, transform=ax_right.transAxes)
         
         if not offline:
             px, py, pw, ph = 0.15, y_frame_bottom + 0.02, 0.7, 0.07
@@ -605,8 +618,12 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
                 true_v = float(s_data.get('true_intensity', s_data['intensity']))
                 obs_v = float(s_data['intensity'])
                 # Adding numerical labels for research clarity
-                draw_dual_capsule_bar(ax_right, px, py, pw, ph, true_v, obs_v, COLORS['action'], 
-                                      state_val=f"{true_v:.2f}", obs_val=f"{obs_v:.2f}", transform=ax_right.transAxes)
+                if obs_only:
+                    draw_dual_capsule_bar(ax_right, px, py, pw, ph, 0, obs_v, COLORS['action'], 
+                                          state_val="--", obs_val=f"{obs_v:.2f}", transform=ax_right.transAxes)
+                else:
+                    draw_dual_capsule_bar(ax_right, px, py, pw, ph, true_v, obs_v, COLORS['action'], 
+                                          state_val=f"{true_v:.2f}", obs_val=f"{obs_v:.2f}", transform=ax_right.transAxes)
             elif s_data['type'] == 'spectrum':
                 obs_vec = np.array(s_data['vector'])
                 true_vec = np.array(s_data.get('true_vector', obs_vec))
@@ -621,7 +638,8 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
                 for i in range(n):
                     vx = px + i * sw
                     # Show True (Ghosted)
-                    ax_right.add_patch(plt.Rectangle((vx, py), sw*0.8, ph*true_vec[i]*scale, color=COLORS['action'], alpha=0.2, transform=ax_right.transAxes))
+                    if not obs_only:
+                        ax_right.add_patch(plt.Rectangle((vx, py), sw*0.8, ph*true_vec[i]*scale, color=COLORS['action'], alpha=0.2, transform=ax_right.transAxes))
                     # Show Observed (Solid)
                     ax_right.add_patch(plt.Rectangle((vx, py), sw*0.8, ph*obs_vec[i]*scale, color=COLORS['action'], alpha=0.9, transform=ax_right.transAxes))
             elif s_data['type'] == 'diamond' or s_data['type'] == 'visual_grid':
@@ -638,12 +656,12 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
                 # But for research standard r=0,1 we use the categorical spectrum
                 if r <= 1:
                     draw_categorical_visual(ax_right, 0.08, y_frame_bottom, 0.84, pod_h, obs_v, r, num_features, 
-                                           true_vec=true_v, labels=s_data.get('labels'), transform=ax_right.transAxes)
+                                           true_vec=true_v, labels=s_data.get('labels'), obs_only=obs_only, transform=ax_right.transAxes)
                 else:
                     origin_x, origin_y = 0.5, y_cursor - pod_h/2
                     cell_size = 0.12 / (2*r + 1)
                     draw_boresight_diamond(ax_right, origin_x, origin_y, cell_size, obs_v, r, num_features, 
-                                           true_vec=true_v, icons=icons, transform=ax_right.transAxes)
+                                           true_vec=true_v, icons=icons, obs_only=obs_only, transform=ax_right.transAxes)
                 
                 if not np.any(obs_v > 0.1) and not np.any(true_v > 0.1):
                     ax_right.text(0.5, y_cursor - pod_h/2, "NO SIGNALS", color=COLORS['text_offline'], 

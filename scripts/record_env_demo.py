@@ -34,35 +34,8 @@ def main():
     breakdown = get_observation_breakdown(params)
     
     def get_sensory_viz(obs_vec):
-        ptr = 0
-        olf_end = ptr + breakdown.get('Olfaction', 0)
-        olf_vec = obs_vec[ptr:olf_end]
-        ptr = olf_end
-        
-        noc_end = ptr + breakdown.get('Extero Nociception', 0)
-        noc_val = float(obs_vec[ptr]) if breakdown.get('Extero Nociception', 0) > 0 else 0.0
-        ptr = noc_end
-        
-        coll_end = ptr + breakdown.get('Collision', 0)
-        coll_vec = obs_vec[ptr:coll_end]
-        ptr = coll_end
-        
-        loc_end = ptr + breakdown.get('Location', 0)
-        loc_vec = obs_vec[ptr:loc_end]
-        ptr = loc_end
-        
-        viz = [
-            {'name': 'Olfactory', 'vector': olf_vec, 'type': 'spectrum'},
-            {'name': 'Extero Nociception', 'intensity': noc_val, 'color': '#c0392b', 'type': 'intensity'},
-            {'name': 'Collision', 'vector': coll_vec, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1, 'side_by_side': True},
-            {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'}
-        ]
-        
-        if 'Visual' in breakdown:
-            vis_vec = obs_vec[ptr:ptr + breakdown['Visual']]
-            viz.insert(3, {'name': 'Visual', 'vector': vis_vec, 'type': 'visual_grid', 'num_features': 8, 'range': params.visual_sensor_range})
-        
-        return viz
+        from src.environment.sensor import build_sensory_viz
+        return build_sensory_viz(obs_vec, state, params)
 
     # 4. Run loop
     key, reset_key = jax.random.split(key)

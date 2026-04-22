@@ -88,58 +88,8 @@ def main():
     breakdown = get_observation_breakdown(params)
     
     def get_sensory_viz(obs_vec, true_obs_vec=None):
-        ptr = 0
-        t_ptr = 0
-        
-        olf_dim = breakdown['Olfaction']
-        olf_obs = obs_vec[ptr:ptr+olf_dim]
-        olf_true = true_obs_vec[t_ptr:t_ptr+olf_dim] if true_obs_vec is not None else olf_obs
-        ptr += olf_dim; t_ptr += olf_dim
-        
-        noc_dim = breakdown['Extero Nociception']
-        noc_obs = float(obs_vec[ptr]) if noc_dim > 0 else 0.0
-        noc_true = float(true_obs_vec[t_ptr]) if true_obs_vec is not None and noc_dim > 0 else noc_obs
-        ptr += noc_dim; t_ptr += noc_dim
-        
-        coll_dim = breakdown['Collision']
-        coll_obs = obs_vec[ptr:ptr+coll_dim]
-        coll_true = true_obs_vec[t_ptr:t_ptr+coll_dim] if true_obs_vec is not None else coll_obs
-        ptr += coll_dim; t_ptr += coll_dim
-        
-        loc_dim = breakdown['Location']
-        loc_vec = obs_vec[ptr:ptr+loc_dim]
-        ptr += loc_dim; t_ptr += loc_dim
-        
-        sat_dim = breakdown['Satiation']
-        sat_obs = float(obs_vec[ptr]) if sat_dim > 0 else 0.0
-        ptr += sat_dim; t_ptr += sat_dim
-        
-        nut_dim = breakdown['Nutrition']
-        nut_obs = float(obs_vec[ptr]) if nut_dim > 0 else 0.0
-        ptr += nut_dim; t_ptr += nut_dim
-        
-        inj_dim = breakdown['Injury']
-        inj_obs = float(obs_vec[ptr]) if inj_dim > 0 else 0.0
-        ptr += inj_dim; t_ptr += inj_dim
-        
-        viz = [
-            {'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true, 'type': 'spectrum'},
-            {'name': 'Extero Nociception', 'intensity': noc_obs, 'true_intensity': noc_true, 'color': '#c0392b', 'type': 'intensity'},
-            {'name': 'Collision', 'vector': coll_obs, 'true_vector': coll_true, 'type': 'diamond', 'range': params.sensor_range, 'num_features': 1},
-            {'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'},
-            {'name': 'Satiation', 'intensity': sat_obs, 'type': 'intensity'},
-            {'name': 'Nutrition', 'intensity': nut_obs, 'type': 'intensity'},
-            {'name': 'Injury', 'intensity': inj_obs, 'type': 'intensity'},
-        ]
-        
-        if 'Visual' in breakdown:
-            vis_dim = breakdown['Visual']
-            vis_obs = obs_vec[ptr:ptr+vis_dim]
-            vis_true = true_obs_vec[t_ptr:t_ptr+vis_dim] if true_obs_vec is not None else vis_obs
-            ptr += vis_dim; t_ptr += vis_dim
-            viz.append({'name': 'Visual', 'vector': vis_obs, 'true_vector': vis_true, 'type': 'visual_grid', 'num_features': 8, 'range': params.visual_sensor_range})
-            
-        return viz
+        from src.environment.sensor import build_sensory_viz
+        return build_sensory_viz(obs_vec, state, params, true_obs_vec)
 
     icon_config = config.get('visualization.icons', None)
     true_obs = get_observation(state, params, apply_noise=False)
