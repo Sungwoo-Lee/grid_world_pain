@@ -53,8 +53,15 @@ def load_env_params(config: Config) -> EnvParams:
         def r_get(r, key):
             val = r.get(key)
             if val is None: raise ValueError(f"Strict Config: Resource field '{key}' is required.")
+            if key == 'type' and val == 'danger':
+                warnings.warn(
+                    "Resource type 'danger' is deprecated — rename to 'hiding_predator'.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
             return val
 
+        # 0: food, 1: hiding_predator
         res_type = jnp.array([0 if r_get(r, 'type') == 'food' else 1 for r in expanded_resources], dtype=jnp.int32)
         res_property = jnp.array([_read_properties(r, 'Resource') for r in expanded_resources])
         chem_dim = res_property.shape[-1]
@@ -68,7 +75,7 @@ def load_env_params(config: Config) -> EnvParams:
         raw_damage = [r_get(r, 'damage') for r in expanded_resources]
         res_damage = jnp.array([d if isinstance(d, list) else [d, d] for d in raw_damage])
         
-        res_nociception = jnp.array([r.get('nociception_intensity', 0.9 if r_get(r, 'type') == 'danger' else 0.0) for r in expanded_resources])
+        res_nociception = jnp.array([r.get('nociception_intensity', 0.9 if r_get(r, 'type') in ('hiding_predator', 'danger') else 0.0) for r in expanded_resources])
     else:
         res_type = jnp.zeros(0, dtype=jnp.int32)
         res_property = jnp.zeros((0, 5))

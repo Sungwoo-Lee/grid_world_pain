@@ -61,7 +61,7 @@ class EnvParams:
     grid_location_type: jnp.ndarray # [height, width] (0:plain, 1:grass, 2:sand)
     
     # Resources (Constant attributes)
-    res_type: jnp.ndarray       # [num_res] int (0:food, 1:danger)
+    res_type: jnp.ndarray       # [num_res] int (0:food, 1:hiding_predator)
     res_property: jnp.ndarray   # [num_res, vector_size]
     res_property_std: jnp.ndarray # [num_res, vector_size]
     res_nociception: jnp.ndarray # [num_res]

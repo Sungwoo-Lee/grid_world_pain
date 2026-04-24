@@ -10,6 +10,8 @@ Predators are hostile mobile agents that pursue and damage the player. They impl
 
 The entire predator system is gated by `params.predator_enabled` (a static flag). When False, the predator arrays are empty (shape `[0, ...]`) and predator update is a no-op.
 
+> **Note on "Hiding Predators"**: This document describes *active* mobile predators. The environment also supports "hiding predators", which are currently implemented as a stationary, damage-dealing resource type. See [08 — Resources & Obstacles](08_resources_and_obstacles.md) for details on hiding predators.
+
 ---
 
 ## State Machine

@@ -339,13 +339,13 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         jnp.clip(attempted_pos[1], 0, params.width - 1)
     ])
     
-    # Danger interaction (Auto)
-    is_danger = params.res_type == 1
+    # Hiding Predator interaction (Auto)
+    is_hiding_predator = params.res_type == 1
     # Sample damage for each resource interaction
     sampled_res_damage = jax.random.uniform(damage_key, (params.res_type.shape[0],), 
                                            minval=params.res_damage[:, 0], 
                                            maxval=params.res_damage[:, 1])
-    damage_res = jnp.sum(jnp.where(jnp.logical_and(interact_resource, is_danger), sampled_res_damage, 0.0))
+    damage_res = jnp.sum(jnp.where(jnp.logical_and(interact_resource, is_hiding_predator), sampled_res_damage, 0.0))
     
     # Food interaction (Action-based or Auto)
     is_food = params.res_type == 0
@@ -371,7 +371,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     
     # Final interact mask for lifecycle update
     interacted_this_step = jnp.logical_or(
-        jnp.logical_and(interact_resource, is_danger),
+        jnp.logical_and(interact_resource, is_hiding_predator),
         eat_lifecycle_triggered
     )
     
@@ -422,16 +422,16 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # rested is always action 4 if enabled
     rested = jnp.logical_and(params.rest_action_enabled, action == 4)
     
-    damage_danger = damage_res
+    damage_hiding_predator = damage_res
     
     info = {
         'ate_food': ate_food,
         'damage': total_damage,
-        'damage_danger': damage_danger,
+        'damage_hiding_predator': damage_hiding_predator,
         'damage_predator': damage_pred,
         'damage_obstacle': damage_obs_overlap + damage_obs_collision,
         'rested': rested,
-        'hit_danger': jnp.any(jnp.logical_and(interact_resource, is_danger)),
+        'hit_hiding_predator': jnp.any(jnp.logical_and(interact_resource, is_hiding_predator)),
         'hit_predator': jnp.any(at_predator),
     }
     

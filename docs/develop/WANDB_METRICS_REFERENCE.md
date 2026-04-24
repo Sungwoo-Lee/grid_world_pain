@@ -92,12 +92,12 @@ Logged whenever episodes complete during an iteration. See above for aggregation
 | `Episode/Number` | int | — | Cumulative total episodes completed (x-axis) |
 | `Episode/FoodEaten` | float | sum of `ate_food` events | Mean food eaten per episode |
 | `Episode/PredatorHits` | float | sum of `hit_predator` events | Mean predator hits per episode |
-| `Episode/DangerHits` | float | sum of `hit_danger` events | Mean danger zone hits per episode |
+| `Episode/DangerHits` | float | sum of `hit_hiding_predator` events | Mean danger zone hits per episode |
 | `Episode/RestCount` | float | sum of `rested` events | Mean rest actions per episode |
 | `Episode/Collisions` | float | sum of `event_collided` events | Mean collisions per episode |
 | `Episode/TotalDamage` | float | sum of `damage` | Mean total damage taken per episode |
 | `Episode/DamagePredator` | float | sum of `damage_predator` | Mean damage from predators per episode |
-| `Episode/DamageDanger` | float | sum of `damage_danger` | Mean damage from danger zones per episode |
+| `Episode/DamageDanger` | float | sum of `damage_hiding_predator` | Mean damage from danger zones per episode |
 | `Episode/DamageObstacle` | float | sum of `damage_obstacle` | Mean damage from obstacles per episode |
 | `Episode/MeanDistFood` | float | sum of `dist_to_food` / ep_length | Mean per-step distance to food, averaged across episodes |
 | `Episode/MeanDistPredator`| float | sum of `dist_to_pred` / ep_length | Mean per-step distance to nearest predator, averaged across episodes |

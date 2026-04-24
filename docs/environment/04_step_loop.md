@@ -196,11 +196,11 @@ Complete set of keys returned by `jax_step` in the `info` dict:
 |-----|-----------|-------------|
 | `ate_food` | bool | Agent consumed a food resource this step |
 | `damage` | float | Total damage received (all sources) |
-| `damage_danger` | float | Damage from danger resources only |
+| `damage_hiding_predator` | float | Damage from danger resources only |
 | `damage_predator` | float | Damage from predators only |
 | `damage_obstacle` | float | Damage from obstacles (overlap + collision) |
 | `rested` | bool | Agent chose the rest action |
-| `hit_danger` | bool | Agent overlapped at least one danger resource |
+| `hit_hiding_predator` | bool | Agent overlapped at least one danger resource |
 | `hit_predator` | bool | Agent overlapped at least one predator |
 | `termination_reason` | int32 scalar | Code 0–4 (see table above) |
 | `reward_homeostatic` | float | Homeostatic component of reward |
@@ -257,8 +257,8 @@ A: All damage is summed into `total_damage` (`core.py:419`) then passed to `upda
 **Q: Which state values are "before" vs "after" when reward is computed?**
 A: `calculate_drive(state.satiation, state.injury_level, params)` uses the **previous** step's values (the `state` input). `calculate_drive(new_satiation, new_injury, params)` uses the **new** values. Drive reduction = positive reward.
 
-**Q: Are `ate_food` and `hit_danger` mutually exclusive?**
-A: No. If the agent steps on a cell that has a food resource AND a danger resource at the same cell (possible since placement doesn't prevent this across kinds), both fire. `ate_food=True` *and* `damage_danger > 0` can appear in the same info dict.
+**Q: Are `ate_food` and `hit_hiding_predator` mutually exclusive?**
+A: No. If the agent steps on a cell that has a food resource AND a danger resource at the same cell (possible since placement doesn't prevent this across kinds), both fire. `ate_food=True` *and* `damage_hiding_predator > 0` can appear in the same info dict.
 
 **Q: Does `done=True` from termination skip reward computation?**
 A: No. Reward is computed regardless of `done`, then `-death_penalty` is added when `done=True`. The last-step reward is visible to the agent.

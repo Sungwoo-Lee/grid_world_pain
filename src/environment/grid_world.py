@@ -42,10 +42,10 @@ def _load_icons(icon_config=None):
         icon_config = {
             'agent': 'agent',
             'food': 'food',
-            'danger': 'danger',
+            'hiding_predator': 'danger',
             'predator': 'predator',
             'agent_food': 'agent_food',
-            'agent_danger': 'agent_danger',
+            'agent_hiding_predator': 'agent_danger',
             'agent_predator': 'agent_predator',
             'rock': 'rock',
             'bush': 'bush',
@@ -118,7 +118,7 @@ COLORS = {
     
     # Entity Tones (Muted but distinct)
     'food': '#059669',
-    'danger': '#DC2626',
+    'hiding_predator': '#DC2626',
     'predator': '#111827',
     'rock': '#4B5563',
     'neutral': '#0891B2'
@@ -205,14 +205,14 @@ def draw_boresight_diamond(ax, x, y, size, vec, r, num_features, true_vec=None, 
         'sand',     # 1: Sand
         'plain',    # 2: Plain
         'food',     # 3: Food
-        'danger',   # 4: Danger
+        'hiding_predator',   # 4: Hiding Predator
         'predator', # 5: Predator
         'rock',     # 6: Rock
         'neutral',  # 7: Neutral Animal
     ]
     
     feature_colors = [
-        '#A1DFA1', '#F2D7D5', '#FFFFFF', COLORS['food'], COLORS['danger'], 
+        '#A1DFA1', '#F2D7D5', '#FFFFFF', COLORS['food'], COLORS['hiding_predator'], 
         COLORS['predator'], COLORS['rock'], COLORS['neutral']
     ]
     
@@ -231,10 +231,10 @@ def draw_boresight_diamond(ax, x, y, size, vec, r, num_features, true_vec=None, 
             # Collision Style: Grid-based indicator
             if true_vals[0] > 0.5: # Reality: Ghosted fill
                 ax.add_patch(plt.Rectangle((cell_x - size*0.48, cell_y - size*0.48), size*0.96, size*0.96, 
-                             facecolor=COLORS['danger'], alpha=0.15, transform=transform, zorder=2))
+                             facecolor=COLORS['hiding_predator'], alpha=0.15, transform=transform, zorder=2))
             if obs_vals[0] > 0.5: # Perception: Solid block
                 ax.add_patch(plt.Rectangle((cell_x - size*0.35, cell_y - size*0.35), size*0.7, size*0.7, 
-                             facecolor=COLORS['danger'], alpha=0.8, transform=transform, zorder=3))
+                             facecolor=COLORS['hiding_predator'], alpha=0.8, transform=transform, zorder=3))
         else:
             # Visual Style: Grid-based indicators
             # 1. Draw Reality (Ghosted)
@@ -287,12 +287,12 @@ def draw_categorical_visual(ax, x, y, w, h, obs_vec, r, num_features, true_vec=N
     
     # Defaults for 8-channel (fallback)
     if labels is None:
-        feature_labels = ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'NEU', 'RCK']
+        feature_labels = ['GRS', 'SND', 'PLN', 'FOD', 'HPR', 'PRD', 'NEU', 'RCK']
     else:
         feature_labels = labels
         
     feature_colors = [
-        '#A1DFA1', '#F2D7D5', '#FFFFFF', COLORS['food'], COLORS['danger'], 
+        '#A1DFA1', '#F2D7D5', '#FFFFFF', COLORS['food'], COLORS['hiding_predator'], 
         COLORS['predator'], COLORS['neutral'], COLORS['rock']
     ]
     # Rotate colors if we have more features
@@ -423,7 +423,7 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
             ab = AnnotationBbox(imagebox, (c, r), frameon=False, pad=0, xycoords='data' if not is_axes_coords else ax.transAxes)
             ax.add_artist(ab)
         else:
-            m_map = {'agent':('o',COLORS['action']), 'food':('D',COLORS['food']), 'danger':('X',COLORS['danger']), 'predator':('v',COLORS['predator']), 'rock':('s',COLORS['rock']), 'neutral':('o',COLORS['neutral'])}
+            m_map = {'agent':('o',COLORS['action']), 'food':('D',COLORS['food']), 'hiding_predator':('X',COLORS['hiding_predator']), 'predator':('v',COLORS['predator']), 'rock':('s',COLORS['rock']), 'neutral':('o',COLORS['neutral'])}
             m, clr = m_map.get(icon_key, ('s', 'grey'))
             ax.plot(c, r, marker=m, markersize=12*s_fac, color=clr, markeredgecolor='white', markeredgewidth=1, transform=ax.transData if not is_axes_coords else ax.transAxes)
 
@@ -438,9 +438,9 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
         if not res_active[i]: continue
         rr, rc = int(res_pos[i, 0]), int(res_pos[i, 1])
         if rr == ar and rc == ac:
-            at_agent.append('food' if res_type[i] == 0 else 'danger')
+            at_agent.append('food' if res_type[i] == 0 else 'hiding_predator')
         elif r_start <= rr < r_end and c_start <= rc < c_end:
-            draw_icon(ax_grid, rr, rc, 'food' if res_type[i] == 0 else 'danger', zoom=0.035, s_fac=scale_factor)
+            draw_icon(ax_grid, rr, rc, 'food' if res_type[i] == 0 else 'hiding_predator', zoom=0.035, s_fac=scale_factor)
             
     p_pos = np.array(state.pred_pos)
     for i in range(p_pos.shape[0]):
@@ -475,8 +475,8 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
     agent_icon = 'agent'
     if 'predator' in at_agent:
         agent_icon = 'agent_predator'
-    elif 'danger' in at_agent:
-        agent_icon = 'agent_danger'
+    elif 'hiding_predator' in at_agent:
+        agent_icon = 'agent_hiding_predator'
     elif 'bush' in at_agent:
         agent_icon = 'agent_bush'
     elif 'food' in at_agent:
@@ -511,7 +511,7 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
             ax_minimap.scatter(valid[:, 1], valid[:, 0], s=2.5, color=color, edgecolors='none', alpha=0.8, zorder=2)
 
     plot_entity_dots(res_pos, res_active & (res_type == 0), COLORS['food'])
-    plot_entity_dots(res_pos, res_active & (res_type == 1), COLORS['danger'])
+    plot_entity_dots(res_pos, res_active & (res_type == 1), COLORS['hiding_predator'])
     plot_entity_dots(p_pos, np.ones(p_pos.shape[0], dtype=bool), COLORS['predator'])
     plot_entity_dots(o_pos, np.ones(o_pos.shape[0], dtype=bool), COLORS['rock'])
     plot_entity_dots(n_pos, np.ones(n_pos.shape[0], dtype=bool), COLORS['neutral'])
@@ -582,7 +582,7 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
             draw_pod_frame(ax_right, 0.05, y_frame_bottom, 0.9, pod_h_dmg, "Acute Damage", transform=ax_right.transAxes)
             
             # Segmented damage values
-            d_dang = float(info.get('damage_danger', 0.0))
+            d_dang = float(info.get('damage_hiding_predator', 0.0))
             d_pred = float(info.get('damage_predator', 0.0))
             d_obst = float(info.get('damage_obstacle', 0.0))
             
@@ -596,7 +596,7 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
             
             # Draw Segmented Bar
             cur_x = 0.1
-            for val, clr, lbl in [(d_dang, COLORS['dmg_danger'], "DNG"), (d_pred, COLORS['dmg_predator'], "PRD"), (d_obst, COLORS['dmg_obstacle'], "OBS")]:
+            for val, clr, lbl in [(d_dang, COLORS['dmg_hiding_predator'], "DNG"), (d_pred, COLORS['dmg_predator'], "PRD"), (d_obst, COLORS['dmg_obstacle'], "OBS")]:
                 if val > 0:
                     vw = (val / max_d) * seg_w
                     ax_right.add_patch(plt.Rectangle((cur_x, seg_y), vw, seg_h, facecolor=clr, transform=ax_right.transAxes))

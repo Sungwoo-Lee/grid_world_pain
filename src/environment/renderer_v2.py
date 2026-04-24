@@ -358,7 +358,7 @@ def render_jax_state_v2(state, params,
             m_map = {
                 'agent': ('o', COLORS['action']),
                 'food': ('D', COLORS['food']),
-                'danger': ('X', COLORS['danger']),
+                'hiding_predator': ('X', COLORS['hiding_predator']),
                 'predator': ('v', COLORS['predator']),
                 'rock': ('s', COLORS['rock']),
                 'neutral': ('o', COLORS['neutral']),
@@ -385,7 +385,7 @@ def render_jax_state_v2(state, params,
         if not res_active[i]:
             continue
         rr, rc = int(res_pos[i, 0]), int(res_pos[i, 1])
-        icon = 'food' if res_type[i] == 0 else 'danger'
+        icon = 'food' if res_type[i] == 0 else 'hiding_predator'
         if rr == ar and rc == ac:
             at_agent.append(icon)
         elif r_start <= rr < r_end and c_start <= rc < c_end:
@@ -417,8 +417,8 @@ def render_jax_state_v2(state, params,
     agent_icon = 'agent'
     if 'predator' in at_agent:
         agent_icon = 'agent_predator'
-    elif 'danger' in at_agent:
-        agent_icon = 'agent_danger'
+    elif 'hiding_predator' in at_agent:
+        agent_icon = 'agent_hiding_predator'
     elif 'bush' in at_agent:
         agent_icon = 'agent_bush'
     elif 'food' in at_agent:
@@ -452,7 +452,7 @@ def render_jax_state_v2(state, params,
                             alpha=0.9, zorder=2)
 
     plot_dots(res_pos, res_active & (res_type == 0), COLORS['food'])
-    plot_dots(res_pos, res_active & (res_type == 1), COLORS['danger'])
+    plot_dots(res_pos, res_active & (res_type == 1), COLORS['hiding_predator'])
     ax_mini.scatter(p_pos[:, 1], p_pos[:, 0], s=3,
                     color=COLORS['predator'], edgecolors='none', alpha=0.9, zorder=2)
     ax_mini.scatter(o_pos[:, 1], o_pos[:, 0], s=2,

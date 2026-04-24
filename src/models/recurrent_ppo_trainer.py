@@ -8,12 +8,12 @@ class StepInfo(NamedTuple):
     """Per-step environment info carried through scan for behavioral logging."""
     ate_food: jnp.ndarray
     hit_predator: jnp.ndarray
-    hit_danger: jnp.ndarray
+    hit_hiding_predator: jnp.ndarray
     event_collided: jnp.ndarray
     rested: jnp.ndarray
     damage: jnp.ndarray
     damage_predator: jnp.ndarray
-    damage_danger: jnp.ndarray
+    damage_hiding_predator: jnp.ndarray
     damage_obstacle: jnp.ndarray
     dist_to_food: jnp.ndarray
     dist_to_pred: jnp.ndarray
@@ -185,12 +185,12 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
         step_info = StepInfo(
             ate_food=info['ate_food'],
             hit_predator=info['hit_predator'],
-            hit_danger=info['hit_danger'],
+            hit_hiding_predator=info['hit_hiding_predator'],
             event_collided=info['event_collided'],
             rested=info['rested'],
             damage=info['damage'],
             damage_predator=info['damage_predator'],
-            damage_danger=info['damage_danger'],
+            damage_hiding_predator=info['damage_hiding_predator'],
             damage_obstacle=info['damage_obstacle'],
             dist_to_food=info['dist_to_food'],
             dist_to_pred=info['dist_to_pred'],

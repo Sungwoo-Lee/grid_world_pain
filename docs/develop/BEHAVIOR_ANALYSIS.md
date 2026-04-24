@@ -5,7 +5,7 @@ This document outlines how to measure "pain-like" behavior in our JAX-based grid
 > [!IMPORTANT]
 > **Data Availability Note**: The current `evaluation_core.py` logs the following columns to `ep_stats.csv`:
 > `step`, `pos_r`, `pos_c`, `action`, `reward`, `satiation`, `nutrition`, `injury`, `rest_streak`,
-> `event_ate`, `event_collided`, `event_rested`, `damage_total`, `damage_danger`, `damage_predator`, `damage_obstacle`,
+> `event_ate`, `event_collided`, `event_rested`, `damage_total`, `damage_hiding_predator`, `damage_predator`, `damage_obstacle`,
 > observation channels (olfactory, nociception, collision, location, interoceptive, visual, proprioceptive),
 > entity positions (`res_*`, `pred_*`, `neutral_*`, `obs_entity_*`), `termination_reason`, `max_satiation`, `max_injury`.
 >
@@ -160,7 +160,7 @@ A subtlety: we need to distinguish between **innate avoidance** (the agent simpl
   - **Direct overlap**: Count steps where agent position coincides with a danger entity. Compare across training checkpoints.
 
 * **Hazard Sensitivity (Learning Signal)**: Track cumulative damage columns across checkpoints:
-  - `mean(damage_danger)` per episode at each checkpoint — should decrease as agent learns avoidance.
+  - `mean(damage_hiding_predator)` per episode at each checkpoint — should decrease as agent learns avoidance.
   - `mean(damage_predator)` per episode — should also decrease if predator avoidance is learned.
   - **First-encounter effect**: In a given episode, does damage concentration shift from uniform to early-episode-only (suggesting the agent learns within-episode)?
 

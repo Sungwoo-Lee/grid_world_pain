@@ -18,7 +18,7 @@ GridWorld Pain is a JAX-based RL environment for **Interoceptive AI** research �
 | 05 | [Body & Homeostasis](05_body_homeostasis.md) | Nutrition/satiation dynamics, injury ring buffer, drive |
 | 06 | [Reward & Termination](06_reward_and_termination.md) | Survival vs homeostatic reward, termination codes 0–4 |
 | 07 | [Predator AI](07_predator_ai.md) | State machine, stamina, pursuit, bush concealment |
-| 08 | [Resources & Obstacles](08_resources_and_obstacles.md) | Food/danger, regen timers, neutral animals, obstacles |
+| 08 | [Resources & Obstacles](08_resources_and_obstacles.md) | Food/hiding_predator, regen timers, neutral animals, obstacles |
 | 09 | [Sensors & Observation](09_sensors_and_observation.md) | All sensor functions, assembly, `get_observation_breakdown` |
 | 10 | [Perceptual Noise](10_perceptual_noise.md) | Noise modes, modality order, state-dependent σ |
 | 11 | [Parallel Env Wrapper](11_parallel_env_wrapper.md) | `ParallelEnv`, `auto_reset_step`, vmap, PRNG |

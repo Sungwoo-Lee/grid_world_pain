@@ -75,7 +75,7 @@ Pod types by sensor:
 
 Pods are marked **OFFLINE** (greyed out) when the sensor is not enabled or `sensory_data` doesn't include that sensor.
 
-**Damage pod** (bottom of exteroception, when damage > 0): segmented bar showing proportional split of `damage_danger`, `damage_predator`, `damage_obstacle`.
+**Damage pod** (bottom of exteroception, when damage > 0): segmented bar showing proportional split of `damage_hiding_predator`, `damage_predator`, `damage_obstacle`.
 
 **Action pod** (fixed bottom): shows the current action name and arrow symbol.
 

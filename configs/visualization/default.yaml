@@ -12,10 +12,10 @@ visualization:
   icons:
     agent: "agent"
     food: "food"
-    danger: "danger"
+    hiding_predator: "danger"
     predator: "predator"
     agent_food: "agent_food"
-    agent_danger: "agent_danger"
+    agent_hiding_predator: "agent_danger"
     agent_predator: "agent_predator"
     rock: "rock"
     tree: "tree"

@@ -22,7 +22,7 @@ Headers are built once when `record_stats` is true (lines 66–111 in `evaluatio
 - **Fixed columns:**  
   `step`, `pos_r`, `pos_c`, `action`, `reward`, `satiation`, `nutrition`, `injury`, `rest_streak`,  
   `event_ate`, `event_collided`, `event_rested`,  
-  `damage_total`, `damage_danger`, `damage_predator`, `damage_obstacle`
+  `damage_total`, `damage_hiding_predator`, `damage_predator`, `damage_obstacle`
 - **Observation columns:**  
   From `get_observation_breakdown(params)` and `get_visual_offsets(params)`: e.g. `obs_olf_*`, `obs_noc`, `obs_coll_*`, `obs_loc_r`, `obs_loc_c`
 - **World state (per step):**  

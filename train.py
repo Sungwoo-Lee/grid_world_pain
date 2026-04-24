@@ -705,8 +705,8 @@ def main():
     ep_info_buffer = deque(maxlen=100)
     
     # Behavioral event accumulators (per-env, reset on episode done)
-    BEHAVIOR_KEYS = ['ate_food', 'hit_predator', 'hit_danger', 'event_collided', 'rested',
-                     'damage', 'damage_predator', 'damage_danger', 'damage_obstacle']
+    BEHAVIOR_KEYS = ['ate_food', 'hit_predator', 'hit_hiding_predator', 'event_collided', 'rested',
+                     'damage', 'damage_predator', 'damage_hiding_predator', 'damage_obstacle']
     BEHAVIOR_DIST_KEYS = ['dist_to_food', 'dist_to_pred']  # Need mean, not sum
 
     episode_behavior = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_KEYS}
@@ -904,12 +904,14 @@ def main():
                             ep_log.update({
                                 "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
                                 "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
-                                "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+                                # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
+                                # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
+                                "Episode/DangerHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                                 "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
                                 "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
                                 "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
                                 "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
-                                "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+                                "Episode/DamageDanger": np.mean([ep['damage_hiding_predator'] for ep in iteration_episodes]),
                                 "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
                                 "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
                                 "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
@@ -1152,12 +1154,13 @@ def main():
                             ep_log.update({
                                 "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
                                 "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
-                                "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+                                # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
+                                "Episode/DangerHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                                 "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
                                 "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
                                 "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
                                 "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
-                                "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+                                "Episode/DamageDanger": np.mean([ep['damage_hiding_predator'] for ep in iteration_episodes]),
                                 "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
                                 "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
                                 "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
@@ -1354,12 +1357,13 @@ def main():
                                 ep_logs.update({
                                     "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
                                     "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
-                                    "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+                                    # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
+                                    "Episode/DangerHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                                     "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
                                     "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
                                     "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
                                     "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
-                                    "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+                                    "Episode/DamageDanger": np.mean([ep['damage_hiding_predator'] for ep in iteration_episodes]),
                                     "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
                                     "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
                                     "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
@@ -1517,12 +1521,13 @@ def main():
                                 ep_logs.update({
                                     "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
                                     "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
-                                    "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+                                    # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
+                                    "Episode/DangerHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                                     "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
                                     "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
                                     "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
                                     "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
-                                    "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+                                    "Episode/DamageDanger": np.mean([ep['damage_hiding_predator'] for ep in iteration_episodes]),
                                     "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
                                     "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
                                     "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
@@ -1620,12 +1625,13 @@ def main():
                                 ep_logs.update({
                                     "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
                                     "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
-                                    "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+                                    # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
+                                    "Episode/DangerHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                                     "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
                                     "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
                                     "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
                                     "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
-                                    "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+                                    "Episode/DamageDanger": np.mean([ep['damage_hiding_predator'] for ep in iteration_episodes]),
                                     "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
                                     "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
                                     "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),

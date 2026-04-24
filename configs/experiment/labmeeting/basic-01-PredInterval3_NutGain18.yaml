@@ -27,8 +27,8 @@ environment:
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
 
-    - name: "danger" # Top Left
-      type: "danger"
+    - name: "hiding_predator" # Top Left
+      type: "hiding_predator"
       count: 1
       spawn_area: [[1, 1], [5, 5]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]

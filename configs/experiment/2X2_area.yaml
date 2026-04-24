@@ -33,8 +33,8 @@ environment:
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
 
-    - name: "Danger Grass TL"
-      type: "danger"
+    - name: "Hiding Predator Grass TL"
+      type: "hiding_predator"
       count: 8
       spawn_area: [[1, 1], [10, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -44,8 +44,8 @@ environment:
       regeneration_delay: 20
       nociception_intensity: 0.9
 
-    - name: "Danger Grass BR"
-      type: "danger"
+    - name: "Hiding Predator Grass BR"
+      type: "hiding_predator"
       count: 8
       spawn_area: [[11, 11], [20, 20]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]

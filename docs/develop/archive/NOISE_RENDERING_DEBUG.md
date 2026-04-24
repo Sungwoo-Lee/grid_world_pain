@@ -44,7 +44,7 @@ render_jax_state(..., sensory_data=viz, ...)                                    
 |---|---|---|
 | Step context | `step, pos_r, pos_c, action, reward` | always |
 | Body state | `satiation, nutrition, injury, rest_streak` | always |
-| Events | `event_ate, event_collided, event_rested, damage_total, damage_danger, damage_predator, damage_obstacle` | always |
+| Events | `event_ate, event_collided, event_rested, damage_total, damage_hiding_predator, damage_predator, damage_obstacle` | always |
 | **Noised observation** | `obs_intero_satiation, obs_intero_nutrition, obs_intero_injury, obs_noc, obs_olf_{0..V-1}, obs_coll_r{dr}c{dc}, obs_prop_{0..A-1}, obs_vis_{0..W-1}, obs_loc_r, obs_loc_c` | `record_stats` |
 | **Ground-truth observation** | `true_intero_*, true_noc, true_olf_*, true_coll_*, true_prop_*, true_vis_*, true_loc_*` | `record_true_obs` |
 | World entities | `res_{i}_r/c/active, pred_{i}_r/c, neutral_{i}_r/c, obs_entity_{i}_r/c` | `record_stats` |

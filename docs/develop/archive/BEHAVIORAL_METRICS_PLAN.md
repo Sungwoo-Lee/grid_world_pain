@@ -24,12 +24,12 @@ All of the following are computed every step but discarded during training:
 |----------|------|-----------------|
 | `ate_food` | bool | scalar |
 | `hit_predator` | bool | scalar |
-| `hit_danger` | bool | scalar |
+| `hit_hiding_predator` | bool | scalar |
 | `event_collided` | bool | scalar |
 | `rested` | bool | scalar |
 | `damage` | float32 | scalar |
 | `damage_predator` | float32 | scalar |
-| `damage_danger` | float32 | scalar |
+| `damage_hiding_predator` | float32 | scalar |
 | `damage_obstacle` | float32 | scalar |
 | `termination_reason` | int32 | scalar |
 | `dist_to_food` | float32 | scalar |
@@ -71,12 +71,12 @@ Per completed episode, log to WandB under `Episode/` prefix:
 |-----------|--------|-------------|
 | `Episode/FoodEaten` | `ate_food` | sum over episode steps |
 | `Episode/PredatorHits` | `hit_predator` | sum over episode steps |
-| `Episode/DangerHits` | `hit_danger` | sum over episode steps |
+| `Episode/DangerHits` | `hit_hiding_predator` | sum over episode steps |
 | `Episode/RestCount` | `rested` | sum over episode steps |
 | `Episode/Collisions` | `event_collided` | sum over episode steps |
 | `Episode/TotalDamage` | `damage` | sum over episode steps |
 | `Episode/DamagePredator` | `damage_predator` | sum over episode steps |
-| `Episode/DamageDanger` | `damage_danger` | sum over episode steps |
+| `Episode/DamageDanger` | `damage_hiding_predator` | sum over episode steps |
 | `Episode/DamageObstacle` | `damage_obstacle` | sum over episode steps |
 | `Episode/MeanDistFood` | `dist_to_food` | mean over episode steps |
 | `Episode/MeanDistPredator` | `dist_to_pred` | mean over episode steps |
@@ -115,12 +115,12 @@ class StepInfo(NamedTuple):
     """Per-step environment info carried through scan for behavioral logging."""
     ate_food: jnp.ndarray
     hit_predator: jnp.ndarray
-    hit_danger: jnp.ndarray
+    hit_hiding_predator: jnp.ndarray
     event_collided: jnp.ndarray
     rested: jnp.ndarray
     damage: jnp.ndarray
     damage_predator: jnp.ndarray
-    damage_danger: jnp.ndarray
+    damage_hiding_predator: jnp.ndarray
     damage_obstacle: jnp.ndarray
     dist_to_food: jnp.ndarray
     dist_to_pred: jnp.ndarray
@@ -175,12 +175,12 @@ trans = Transition(
 step_info = StepInfo(
     ate_food=info['ate_food'],
     hit_predator=info['hit_predator'],
-    hit_danger=info['hit_danger'],
+    hit_hiding_predator=info['hit_hiding_predator'],
     event_collided=info['event_collided'],
     rested=info['rested'],
     damage=info['damage'],
     damage_predator=info['damage_predator'],
-    damage_danger=info['damage_danger'],
+    damage_hiding_predator=info['damage_hiding_predator'],
     damage_obstacle=info['damage_obstacle'],
     dist_to_food=info['dist_to_food'],
     dist_to_pred=info['dist_to_pred'],
@@ -228,12 +228,12 @@ transition = {
     'is_first': d_state.get('is_first', jnp.zeros((B, 1))),
     'ate_food': info['ate_food'].astype(jnp.float32),
     'hit_predator': info['hit_predator'].astype(jnp.float32),
-    'hit_danger': info['hit_danger'].astype(jnp.float32),
+    'hit_hiding_predator': info['hit_hiding_predator'].astype(jnp.float32),
     'event_collided': info['event_collided'].astype(jnp.float32),
     'rested': info['rested'].astype(jnp.float32),
     'damage': info['damage'],
     'damage_predator': info['damage_predator'],
-    'damage_danger': info['damage_danger'],
+    'damage_hiding_predator': info['damage_hiding_predator'],
     'damage_obstacle': info['damage_obstacle'],
     'dist_to_food': info['dist_to_food'],
     'dist_to_pred': info['dist_to_pred'],
@@ -251,8 +251,8 @@ transition = {
 # AFTER line 693 (after ep_info_buffer):
 
 # Behavioral event accumulators (per-env, reset on episode done)
-BEHAVIOR_KEYS = ['ate_food', 'hit_predator', 'hit_danger', 'event_collided', 'rested',
-                 'damage', 'damage_predator', 'damage_danger', 'damage_obstacle']
+BEHAVIOR_KEYS = ['ate_food', 'hit_predator', 'hit_hiding_predator', 'event_collided', 'rested',
+                 'damage', 'damage_predator', 'damage_hiding_predator', 'damage_obstacle']
 BEHAVIOR_DIST_KEYS = ['dist_to_food', 'dist_to_pred']  # Need mean, not sum
 
 episode_behavior = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_KEYS}
@@ -346,12 +346,12 @@ if 'ate_food' in iteration_episodes[0]:
     ep_log.update({
         "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
         "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
-        "Episode/DangerHits": np.mean([ep['hit_danger'] for ep in iteration_episodes]),
+        "Episode/DangerHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
         "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
         "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
         "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
         "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
-        "Episode/DamageDanger": np.mean([ep['damage_danger'] for ep in iteration_episodes]),
+        "Episode/DamageDanger": np.mean([ep['damage_hiding_predator'] for ep in iteration_episodes]),
         "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
         "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
         "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),

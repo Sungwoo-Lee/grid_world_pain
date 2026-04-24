@@ -60,8 +60,8 @@ environment:
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
 
-    - name: "danger" # Top Left
-      type: "danger"
+    - name: "hiding_predator" # Top Left
+      type: "hiding_predator"
       count: 1
       spawn_area: [[1, 1], [5, 5]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -71,8 +71,8 @@ environment:
       regeneration_delay: 20
       nociception_intensity: 0.9
 
-    - name: "danger" # Top Right
-      type: "danger"
+    - name: "hiding_predator" # Top Right
+      type: "hiding_predator"
       count: 1
       spawn_area: [[1, 6], [5, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -82,8 +82,8 @@ environment:
       regeneration_delay: 20
       nociception_intensity: 0.9
 
-    - name: "danger" # Bottom Right
-      type: "danger"
+    - name: "hiding_predator" # Bottom Right
+      type: "hiding_predator"
       count: 1
       spawn_area: [[6, 6], [10, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -93,8 +93,8 @@ environment:
       regeneration_delay: 20
       nociception_intensity: 0.9
 
-    - name: "danger" # Bottom Left
-      type: "danger"
+    - name: "hiding_predator" # Bottom Left
+      type: "hiding_predator"
       count: 1
       spawn_area: [[6, 1], [10, 5]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]

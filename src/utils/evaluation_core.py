@@ -46,7 +46,7 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
                          ep_true_obs=None):
     """Write one episode's stats to CSV. Uses one batched device_get then writes rows."""
     info_keys = ['ate_food', 'event_collided', 'rested', 'damage',
-                 'damage_danger', 'damage_predator', 'damage_obstacle', 'termination_reason']
+                 'damage_hiding_predator', 'damage_predator', 'damage_obstacle', 'termination_reason']
     batched_state = jax.device_get({
         'agent_pos': jnp.stack([s['agent_pos'] for s in ep_jax_states]),
         'satiation': jnp.stack([s['satiation'] for s in ep_jax_states]),
@@ -93,7 +93,7 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
                 bool(batched_info['event_collided'][t]),
                 bool(batched_info['rested'][t]),
                 float(batched_info['damage'][t]),
-                float(batched_info['damage_danger'][t]),
+                float(batched_info['damage_hiding_predator'][t]),
                 float(batched_info['damage_predator'][t]),
                 float(batched_info['damage_obstacle'][t]),
             ]
@@ -178,7 +178,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         stat_headers = ['step', 'pos_r', 'pos_c', 'action', 'reward', 
                        'satiation', 'nutrition', 'injury', 'rest_streak']
         stat_headers += ['event_ate', 'event_collided', 'event_rested',
-                        'damage_total', 'damage_danger', 'damage_predator', 'damage_obstacle']
+                        'damage_total', 'damage_hiding_predator', 'damage_predator', 'damage_obstacle']
         # Add headers for all observation parts based on breakdown
         for sensor_name, dim in breakdown.items():
             if sensor_name == "Olfaction":

@@ -8,7 +8,7 @@
 
 The environment contains four categories of interactable objects beyond the agent:
 
-- **Resources** (food/danger): consumable entities with regeneration timers.
+- **Resources** (food/hiding_predator): consumable entities with regeneration timers.
 - **Obstacles** (rocks, bushes, trees): static blocking or passthrough terrain features.
 - **Neutral animals**: mobile non-hostile entities that wander the grid.
 - **Grid location types**: tile-level terrain annotation (plain, grass, sand).
@@ -19,18 +19,18 @@ Resources and obstacles are placed at reset and interact with the agent in Stage
 
 ## Resource Types
 
-`res_type [N]` int32 — 0 = food, 1 = danger.
+`res_type [N]` int32 — 0 = food, 1 = hiding_predator.
 
 **Food** (type 0):
 - Contact provides a nutrition gain of `food_nutrition_gain - eating_nutrition_cost`.
 - Olfactory signature in `res_property`: typically `[1,0,0,0,0]` (hot in channel 0).
 - No damage; `res_nociception = 0.0`.
 
-**Danger** (type 1):
+**Hiding Predator** (type 1):
 - Contact deals damage sampled from `Uniform(res_damage[n,0], res_damage[n,1])`.
 - `res_nociception` (default 0.9): the intensity forwarded to the nociception sensor on contact.
 - No nutrition effect.
-- Olfactory signature: typically `[0,0,0,0,0]` (no chemical signature) — agent must infer danger from other signals.
+- Olfactory signature: typically `[0,0,0,0,0]` (no chemical signature) — agent must infer hiding predators from other signals.
 
 Both types use the same lifecycle (consumption counter, timer, activity flag). The type only determines the interaction outcome.
 
@@ -40,7 +40,7 @@ Both types use the same lifecycle (consumption counter, timer, activity flag). T
 
 **Auto-eat mode** (`eat_action_enabled=False`): any step where `agent_pos == res_pos[n] AND res_active[n]` triggers consumption. No explicit action needed.
 
-**Eat-action mode** (`eat_action_enabled=True`): food consumption only occurs if the agent is on a food resource AND selects the eat action (action 5 if rest is enabled, action 4 if rest is disabled). Danger resources always trigger automatically regardless of this setting.
+**Eat-action mode** (`eat_action_enabled=True`): food consumption only occurs if the agent is on a food resource AND selects the eat action (action 5 if rest is enabled, action 4 if rest is disabled). Hiding predators always trigger automatically regardless of this setting.
 
 **Lifecycle tracking** (`core.py:372`):
 ```
@@ -79,7 +79,7 @@ sampled_res_damage = Uniform(res_damage[:, 0], res_damage[:, 1])
 damage_res = sum(sampled_res_damage where (interact AND is_danger))
 ```
 
-**Nociception** (`sensor.py:59`): the nociception sensor checks for active danger resources at the agent's exact position (`dist < 0.1`), returning the maximum `res_nociception` intensity among all overlapping dangers. This is a separate signal from the damage value — damage feeds the body, nociception feeds the sensor.
+**Nociception** (`sensor.py:59`): the nociception sensor checks for active hiding predators at the agent's exact position (`dist < 0.1`), returning the maximum `res_nociception` intensity among all overlapping hiding predators. This is a separate signal from the damage value — damage feeds the body, nociception feeds the sensor.
 
 ---
 
@@ -166,8 +166,8 @@ A: From deactivation. `res_reg_timer` is set to `res_reg_delay` at the moment `s
 **Q: When a resource respawns, does it get a new chemical property?**
 A: Yes. `core.py:307-312` re-samples the property on respawn: `new_sampled = clip(property + std * N(0, 1), 0, 1)`. This makes the respawn look "different" to the olfaction sensor if `property_std > 0`.
 
-**Q: Can a danger resource be "eaten" with the eat action?**
-A: No — danger always triggers automatically on overlap (`core.py:348`). The `eat_action_enabled` flag and the eat action only affect food resources (`core.py:351-365`). Danger ignores the flag.
+**Q: Can a hiding predator be "eaten" with the eat action?**
+A: No — hiding predators always trigger automatically on overlap (`core.py:348`). The `eat_action_enabled` flag and the eat action only affect food resources (`core.py:351-365`). Hiding predators ignore the flag.
 
 **Q: If I step onto a blocking obstacle, do I take damage once or continuously?**
 A: Once per collision step. Each time `just_collided=True`, the collision damage is sampled fresh. Standing against the same obstacle over multiple steps re-samples damage each step the agent tries to move into it. Rest action (staying put) is NOT a collision — the agent doesn't "re-bump" when resting.

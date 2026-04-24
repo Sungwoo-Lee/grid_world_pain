@@ -58,10 +58,10 @@ def sense_location(agent_pos, height, width):
 
 def sense_extero_nociception(agent_pos, state: EnvState, params: EnvParams):
     """
-    Continuous Phasic Nociceptor: Detects contact with danger, predators, and rocks.
+    Continuous Phasic Nociceptor: Detects contact with hiding predators, predators, and rocks.
     Returns the maximum intensity among all current painful contacts.
     """
-    # 1. Danger Resource Contact
+    # 1. Hiding Predator Contact
     dist_res = jnp.linalg.norm(state.res_pos - agent_pos, axis=-1)
     # Intensity = intensity from params if at position and active
     res_intensities = jnp.where(jnp.logical_and(state.res_active, dist_res < 0.1), params.res_nociception, 0.0)
@@ -120,7 +120,7 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     """Matmul-optimized Visual Sensor (simplified object recognition)."""
     # Channel mapping:
     # 0: Grass (loc 1), 1: Sand (loc 2), 2: Plain (loc 0)
-    # 3: Food (res_type 0), 4: Danger (res_type 1)
+    # 3: Food (res_type 0), 4: Hiding Predator (res_type 1)
     # 5: Predator, 6: Rock, 7: Neutral Animal
     
     vis_range = params.visual_sensor_range
@@ -163,7 +163,7 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     ], axis=0) # [Total_E]
     
     # Create Visual Property Matrix [Total_E, 8]
-    # Channels 3: Food, 4: Danger, 5: Predator, 6: Rock, 7: Neutral
+    # Channels 3: Food, 4: Hiding Predator, 5: Predator, 6: Rock, 7: Neutral
     num_res = state.res_pos.shape[0]
     num_pred = state.pred_pos.shape[0]
     num_obs = state.obs_pos.shape[0]
