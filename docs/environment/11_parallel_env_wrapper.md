@@ -113,3 +113,52 @@ This means each environment maintains an independent PRNG stream. Two envs that 
 - `agent_pos`: `[2]` single env → `[N, 2]` batched
 - `pred_pos`: `[P, 2]` single env → `[N, P, 2]` batched
 - `key`: `PRNGKey` single env → `[N, PRNGKey]` batched
+
+---
+
+## Clarifications / FAQ
+
+**Q: Does `ParallelEnv.step` auto-reset terminated environments?**
+A: **No.** It is a plain vmapped `jax_step` + `get_observation` (`wrapper.py:26-33`). Terminal states persist until the caller explicitly resets them. Use `auto_reset_step` if you want in-call reset, or handle it in your training loop.
+
+**Q: Does `auto_reset_step` have the same observation semantics as `ParallelEnv.step`?**
+A: Almost. It returns the **terminal** observation from `next_state` (not the reset observation), matching Gymnax/CleanRL. The returned `final_state` is the reset state (for next step's input). The subtle invariant: after a terminal transition, `obs` describes `next_state` but `final_state = reset_state`. Bootstrap value estimates should use `obs` with `done=True` as a terminal marker.
+
+**Q: How does `auto_reset_step` pick the reset PRNG key?**
+A: `reset_key, _ = jax.random.split(state.key)` at `wrapper.py:45`. It consumes the current env's key to derive a reset key. Deterministic given the terminal state — no top-level key needed. But beware: this means reset reproducibility depends on the entire episode's key chain, not just a fresh seed.
+
+**Q: Can I mix envs with different `num_envs` in the same `ParallelEnv` instance?**
+A: No — `num_envs` is set at `reset` time and determines the batched shape. Changing it triggers recompilation. If you need variable batch sizes (e.g. for curriculum), create multiple `ParallelEnv` instances or pad to a fixed max.
+
+**Q: Does `ParallelEnv` support heterogeneous `EnvParams` across envs?**
+A: No. `params` is `in_axes=None` for both reset and step — broadcast to all envs. Heterogeneous configs require multiple `ParallelEnv` instances with separate `jax.vmap` calls, then concatenating outputs.
+
+**Q: How does `info` get batched?**
+A: Each field in `info` is vmapped independently. A scalar info field (e.g. `termination_reason`) becomes a `[N]` array. A nested dict would be batched recursively. Consumers must aggregate over the leading axis to summarise across envs.
+
+**Q: Is the `apply_noise` arg honoured in `ParallelEnv.step`?**
+A: `_v_obs = jax.vmap(get_observation, in_axes=(0, None))` — the `apply_noise` kwarg isn't surfaced. It defaults to `True`. To disable noise in eval, either call `get_observation` directly with `apply_noise=False`, or wrap with a separate vmapped eval-obs function.
+
+**Q: Can I JIT-compile the whole training loop including `ParallelEnv.step`?**
+A: Yes. Both `_v_step` and `_v_obs` are pure JAX. The enclosing class is trivial; `self.params` is a static reference that can be closed over. Common pattern: wrap `ParallelEnv.step` in `@jax.jit` or call inside a larger jitted training step.
+
+**Q: Do terminated envs continue stepping with valid data?**
+A: Yes, they just keep stepping. `jax_step` doesn't short-circuit on `terminated=True`. The env stays in its terminal state and produces valid (but possibly non-sensical) observations/rewards until explicitly reset. This is why `auto_reset_step` exists.
+
+**Q: Does `auto_reset_step`'s `reset_state` get thrown away if `done=False`?**
+A: Yes, the `reset_state` is always computed (no short-circuit in `jax.lax.select`) but only used if `done=True`. The cost is constant per step — you pay for the reset even on non-terminal transitions. For most training runs this is negligible.
+
+**Q: What's the memory cost of a large `num_envs`?**
+A: Roughly `num_envs × sizeof(EnvState)` on GPU. For a typical 10×10 grid with ~20 entities, `EnvState` is a few KB per env, so 1024 envs ≈ a few MB. Easily fits on any GPU.
+
+**Q: Can I use `jax.pmap` instead of `jax.vmap` for multi-device parallelism?**
+A: Not directly — `ParallelEnv` uses `vmap`. Multi-device scaling would need a separate wrapper that `pmap`s over a *batch* dimension and vmaps within each device. Not provided out-of-the-box.
+
+**Q: Is the `key` in `EnvState` also vmapped?**
+A: Yes. It's an array of shape `[N, 2]` after vmap (a `PRNGKey` is shape `[2]`). Each env has its own independent key stream. The top-level `reset(key, num_envs)` seeds them deterministically from a single top-level key.
+
+**Q: What happens to `info['termination_reason']` after auto-reset?**
+A: It reports the reason from the **terminal** transition (the one that caused `done=True`). The fresh reset state has `terminated=False` and will produce `reason=0` on its next step. Good for logging episode-end reasons.
+
+**Q: Do I need to call `get_observation` myself after `ParallelEnv.reset`?**
+A: No — `reset` returns `(states, obs)` already. Same for `step`. You only need to call `get_observation` directly if you want a custom apply_noise setting or different state snapshot.

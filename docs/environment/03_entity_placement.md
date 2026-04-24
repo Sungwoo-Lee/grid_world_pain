@@ -114,3 +114,48 @@ Controlled by static boolean flags in `EnvParams`:
 | `random_start_satiation` | Not independently randomised; satiation is always derived from nutrition | — |
 
 When disabled, the deterministic starting values are `start_nutrition`, `start_satiation` (body config), and `start_pos` (converted to 0-based from YAML). Initial injury is always 0.0 when not randomised.
+
+> **Note**: `start_satiation` is **loaded but never used** — satiation at reset is always derived from nutrition via the power-law scaling factor. See doc `01` FAQ.
+
+---
+
+## Clarifications / FAQ
+
+**Q: Can the agent spawn on top of an entity?**
+A: **Yes.** Agent placement is computed at `core.py:633-634` *before* entity placement and the agent's cell is **never added to the occupancy mask**. An agent spawned with `random_start_pos=True` can land on a predator, obstacle, food, etc. The step loop's contact logic then fires on the very first step — so a random-spawn run can start with immediate damage or food gain.
+
+**Q: What's the entity processing order in `resolve_overlaps_global`?**
+A: Resources first, then predators, then obstacles, then neutral animals (the concatenation order at `per_entity` mode). Earlier entities get first pick — if a resource and a predator sample the same cell, the resource keeps it and the predator is relocated. This order is implicit in `all_positions = jnp.concatenate([res_pos, pred_pos, obs_pos, neutral_pos])`.
+
+**Q: What happens when a spawn area has fewer free cells than entities that need to go in it?**
+A: The scan's "first valid unoccupied cell" search falls back to cell `0` (global flat index 0 = grid origin `(0, 0)`) because `replacement_flat = jnp.where(first_valid_mask, global_perm, 0).sum()` returns `0` when no valid cell exists (`core.py:553-554`). This is a silent failure — **multiple entities stack on cell (0, 0)**. Guard against this in config: ensure each spawn area has strictly more cells than entities assigned to it.
+
+**Q: Why does `per_entity` mode get called "fast on small grids" but `per_type` wins on large grids?**
+A: `per_entity`'s `lax.scan` runs `N` steps (one per entity), with each step doing an `H*W`-length cumsum over the permutation. `per_type` runs `num_types` steps (one per spawn-area group). When `N` is large and entities cluster into few groups (e.g. 50 food items in one area), `per_type` is asymptotically cheaper. For small `N` (say, 5 entities) the overhead of grouping isn't worth it.
+
+**Q: Do the two modes produce the same placement given the same seed?**
+A: No — they use different sampling algorithms and consume the PRNG key differently. Switching modes changes reset-time layouts. If you want reproducibility across a mode change, also change the seed.
+
+**Q: When `num_res == 0` (no resources), does the code still work?**
+A: Yes. Empty arrays (`shape [0, ...]`) are handled by vmap/concatenation correctly. `num_res = 0` produces zero-length keys and zero-length positions, and the concat simply omits those rows. The same holds for the other entity kinds.
+
+**Q: Is `jax_reset` cheap enough to call every episode?**
+A: After the first JIT compile, yes — the whole thing is pure JAX and executes in one kernel launch on the host-to-device dispatch. In `ParallelEnv`, `jax_reset` is vmapped so a batch of envs resets in parallel without a Python-level loop.
+
+**Q: What's `jax_reset`'s return shape difference from `jax_step`?**
+A: `jax_reset` returns `EnvState` only. `jax_step` returns `(new_state, reward, done, info)`. If you want an observation at step 0, call `get_observation(state, params)` explicitly after reset (see doc `09_sensors_and_observation.md`).
+
+**Q: Is `agent_key` independent of entity placement keys?**
+A: Yes. `jax.random.split(key, 5)` produces five independent subkeys — agent, placement, body, property, and a remainder carried forward. Entity placement splits `placement_key` further. The agent's position and entity positions are therefore statistically independent given the master seed.
+
+**Q: What's stored in `occupancy` — Boolean per cell or entity index?**
+A: Boolean per cell (`[H*W]`). The mask tracks "any entity already here" — it does not record *which* entity. This is sufficient for collision avoidance but means you cannot reconstruct placement order from the mask.
+
+**Q: Why is `max_per_type` a static field?**
+A: It's the loop bound for `place_in_area`'s padding and for the `lax.scan` output shape. Making it static lets XLA unroll the inner loop and keeps output tensor shapes invariant across batches. Changing `max_per_type` triggers recompilation.
+
+**Q: Can I disable random start for just one dimension (e.g. random_pos=False but random_nutrition=True)?**
+A: Yes — each flag is independent. Common patterns: fix `start_pos` for reproducibility but randomise nutrition/injury for domain randomisation. See doc `01` Reset Values table.
+
+**Q: What happens if the spawn area is outside the grid (e.g. `[[0, 0], [20, 20]]` on a 10×10)?**
+A: The sampler uses the raw bounds without clipping (`core.py:653: jax.random.randint(k, (2,), a[:2], a[2:])`). If `a[2]` exceeds `H`, sampled rows can be ≥ H and the resulting position would be invalid. Config loader does not validate this — keep spawn areas within grid bounds.

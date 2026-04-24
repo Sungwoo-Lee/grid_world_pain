@@ -14,10 +14,16 @@ The function:
 - Assembles a new `EnvState` via `state._replace(...)` at the very end (Stage 7).
 - Returns `(new_state, scalar_reward, bool_done, info_dict)`.
 
-All random events for the step are derived from a single key split at the top:
+All random events for the step are derived from a single key split at the top (`core.py:289`):
 ```python
-key, respawn_key, predator_key, neutral_key, damage_key = jax.random.split(state.key, 5)
+key, respawn_key, predator_key, neutral_key, damage_key, property_key = jax.random.split(state.key, 6)
 ```
+- `respawn_key` — samples new resource positions on respawn.
+- `predator_key` — diagonal tie-breaking and any other predator randomness.
+- `neutral_key` — neutral animal jitter.
+- `damage_key` — **reused** for all three damage samples (resource, predator, obstacle). Means damage magnitudes across kinds are drawn from correlated uniforms within a single step.
+- `property_key` — re-samples chemical signatures on resource respawn (`core.py:307-312`).
+- `key` — stored back into `new_state.key` for the next step.
 
 ---
 
@@ -205,3 +211,66 @@ Complete set of keys returned by `jax_step` in the `info` dict:
 | `event_collided` | bool | Agent tried to move into a blocking obstacle |
 | `dist_to_food` | float | Euclidean distance to nearest active food |
 | `dist_to_pred` | float | Euclidean distance to nearest predator |
+
+---
+
+## Clarifications / FAQ
+
+**Q: What's the effective action index for Rest and Eat in each config?**
+A: Action indices slide based on which actions are enabled:
+
+| `rest_enabled` | `eat_enabled` | Action 0–3 | Action 4 | Action 5 |
+|----------------|---------------|-----------|---------|---------|
+| False | False | Up/R/D/L | (n/a, `action_dim=4`) | (n/a) |
+| True | False | Up/R/D/L | Rest | (n/a) |
+| False | True | Up/R/D/L | Eat | (n/a) |
+| True | True | Up/R/D/L | Rest | Eat |
+
+`eat_action_idx` is computed at `core.py:354` as `5 if rest_enabled else 4`. `rested = rest_enabled AND action == 4` at `core.py:423` — so with both disabled, `rested` is always False.
+
+**Q: Does `rested` imply the agent didn't move?**
+A: Yes — action 4 has delta `(0, 0)` and is the *only* way to set `rested=True`. Action 5 (Eat) also has `(0, 0)` delta but is not counted as rest.
+
+**Q: Can the agent eat and move in the same step?**
+A: No. Eating requires the agent to be standing on a food cell at the end of movement. Since Eat (action 5) has `(0, 0)` delta, the agent must have arrived on food on a prior step or spawn. In auto-eat mode (`eat_action_enabled=False`), any movement action that lands on food triggers consumption.
+
+**Q: Are damage samples correlated across kinds?**
+A: Slightly, yes. A single `damage_key` is reused for the uniform draws against each damage array (`core.py:345, 394, 406`). Different arrays share the same PRNG seed, so the sample values are correlated across resource/predator/obstacle indices. In practice this doesn't matter because `jnp.where(at_*, ...)` masks out non-colliding entities — but it does mean the three damage distributions aren't statistically independent.
+
+**Q: Is Stage 1 (resource regeneration) affected by the agent's current position?**
+A: Yes, implicitly — if a resource respawns onto the agent's current cell, the interaction check at Stage 4 fires immediately on the same step. Respawn uses `res_spawn_area` with no occupancy check, so a resource can land on the agent, another resource, or an obstacle. Use `max_consumption: -1` (unlimited) with a reasonable `regeneration_delay` to avoid edge cases.
+
+**Q: What happens if the agent runs into a blocking obstacle?**
+A: Three effects:
+1. Position stays at `state.agent_pos` (no movement) — `just_collided = True`.
+2. The specific obstacle hit by `attempted_pos` provides the damage sample (`core.py:413-414`).
+3. `last_collision_noc` is set to that obstacle's `obs_nociception`, cleared next step.
+
+A wall-bump therefore costs damage *and* generates a transient nociception signal for the sensor.
+
+**Q: What if the agent tries to move into a non-blocking obstacle (e.g. a bush)?**
+A: Movement proceeds. `just_collided=False`. At Stage 4, the obstacle's overlap damage (if any) is applied via `damage_obs_overlap`. Bushes typically have `damage: 0.0`. Non-blocking = "walk through", not "bounce".
+
+**Q: What's the order of damage application vs body update?**
+A: All damage is summed into `total_damage` (`core.py:419`) then passed to `update_body`, which injects it into the ring buffer (`injury_buffer`). Injury level doesn't fully reflect the hit until `smoothing_duration` steps later. See doc `05`.
+
+**Q: Which state values are "before" vs "after" when reward is computed?**
+A: `calculate_drive(state.satiation, state.injury_level, params)` uses the **previous** step's values (the `state` input). `calculate_drive(new_satiation, new_injury, params)` uses the **new** values. Drive reduction = positive reward.
+
+**Q: Are `ate_food` and `hit_danger` mutually exclusive?**
+A: No. If the agent steps on a cell that has a food resource AND a danger resource at the same cell (possible since placement doesn't prevent this across kinds), both fire. `ate_food=True` *and* `damage_danger > 0` can appear in the same info dict.
+
+**Q: Does `done=True` from termination skip reward computation?**
+A: No. Reward is computed regardless of `done`, then `-death_penalty` is added when `done=True`. The last-step reward is visible to the agent.
+
+**Q: Do `dist_to_food` and `dist_to_pred` use pre-step or post-step positions?**
+A: Mixed. They use `state.res_pos` (pre-respawn) and `state.pred_pos` (pre-predator-move), but compare against `new_agent_pos` (post-move) — `core.py:487-488`. These are telemetry only (info dict) and aren't fed to any sensor.
+
+**Q: Is `current_step` updated before or after termination check?**
+A: Before. `next_step = state.current_step + 1` then `truncated = next_step >= max_steps`. So on step `max_steps - 1` (`current_step` starts at 0), the check fires because `next_step == max_steps`. An episode runs for exactly `max_steps` steps before truncation.
+
+**Q: What's in `new_state.key` after a step — is it the new key or an old subkey?**
+A: The first element of the 6-way split (`key`, renamed from the split tuple). The five subkeys (`respawn_key`, `predator_key`, etc.) are consumed and discarded. The stored `key` will seed the next step's split.
+
+**Q: `update_resources` at Stage 1 fires for ALL inactive resources every step. Doesn't that re-trigger already-pending respawns?**
+A: No. `update_resources` (`core.py:115-126`) only decrements timers for `~res_active AND res_reg_timer > 0`. A resource with `active=False AND timer==0` stays inactive unless `respawn_mask` fires (which resets `active=True` and clears the timer). So an un-respawnable resource (`max_consumption` exhausted) can stay dead forever — check that path carefully if you rely on permanent deactivation.

@@ -102,3 +102,49 @@ The info dict always contains both `reward_homeostatic` and `reward_extrinsic` f
 - Deducted whenever `ate_food=True`, regardless of mode.
 - Rationale: in the eat-action configuration, this discourages spamming the eat action when not hungry, since the agent might be on food and triggering `ate_food` every step at zero metabolic benefit.
 - Recommended value if used: small positive (e.g. 0.1–1.0).
+
+---
+
+## Clarifications / FAQ
+
+**Q: Does `overeating_death=True` actually terminate the episode?**
+A: **No.** `core.py:449-450` only sets `reason=3`; it does **not** set `done=True`. The episode continues. Only nutrition≤0, injury≥max_injury, and truncation cause actual termination. See doc `05` FAQ for detail. Code 3 in telemetry is therefore informational, not terminal.
+
+**Q: When multiple termination conditions fire in the same step, which code wins?**
+A: The **last** `jnp.where` override applied, which by the order in `core.py:446-451` is: code 4 (injury) > code 3 (overeating, if enabled) > code 2 (starvation) > code 1 (truncation) > code 0. Example: if the agent starves AND hits max_steps on the same step, `reason=2` (starvation) is set, then code 1 would overwrite only if it ran later — but in this code it runs *first*, so starvation wins. Trace the order in `core.py:446-451` if you need the precise priority.
+
+**Q: Is `death_penalty` also applied on truncation?**
+A: Yes. `done = done_from_body OR truncated`, so truncation triggers the `done=True` branch and subtracts `death_penalty` from reward. If you want a reward-clean truncation, set `death_penalty=0` (or add a separate branch that checks truncation vs body-death).
+
+**Q: What's the reward on the very last step when both modes are "off" (`use_homeostatic_reward=False`, `ate_food=False`)?**
+A: `reward_extrinsic = -death_penalty` on termination, `0` otherwise. A no-food run terminates with exactly `-death_penalty` (minus `eating_reward_penalty` if food happened to be eaten on the terminal step).
+
+**Q: Why do `reward_homeostatic` and `reward_extrinsic` *both* appear in the info dict?**
+A: For logging separability even though exactly one is nonzero per mode. A homeostatic run still logs `reward_extrinsic = 0.0` every step, and vice versa. Useful when comparing modes offline with the same analysis scripts.
+
+**Q: Does the reward sign tell me whether the agent is succeeding?**
+A: Only in homeostatic mode. There, `reward > 0` iff drive decreased this step (agent moved toward homeostasis). In survival mode, `reward ∈ {0, 1}` during the episode (no signal about body state) and `reward = -death_penalty` on termination.
+
+**Q: How does `eating_reward_penalty` interact with `food_nutrition_gain`?**
+A: Independently. `eating_reward_penalty` only affects the reward signal; `food_nutrition_gain` and `eating_nutrition_cost` affect the body's actual nutrition. You can configure a setup where eating is good for the body but bad for reward — useful for discouraging unnecessary eating when satiation is already high (in eat-action mode).
+
+**Q: Can I use homeostatic reward without injury (i.e. `with_injury=False`)?**
+A: Yes, but drive degenerates to `|satiation - setpoint|` because `injury` stays frozen at reset value. Reward depends only on nutrition/satiation changes. Plus, any nonzero damage triggers instant death (with reason code usually miscoded as 0 or 1 — see doc `05`).
+
+**Q: What happens if `setpoint > max_satiation`?**
+A: Drive always includes a baseline `|setpoint - max_satiation|` term even at full satiation. The agent can never reduce drive to 0 — there's always a residual error. Avoid this config unless you're modelling persistent under-satiation.
+
+**Q: Does the info dict's `reason` match the final episode outcome?**
+A: Usually, but not always consistent. Specific gotchas:
+- `overeating_death=True` → reason=3 but episode continues (see first Q).
+- `with_injury=False` → instant death from damage produces reason=0 or 1 (not 4), because injury itself isn't maxed.
+Prefer checking `done` for the actual termination signal; use `reason` for diagnostic labelling.
+
+**Q: Is the reward shape `[1]` or `[]`?**
+A: Scalar (`[]`). Single float per step. When wrapped by `ParallelEnv` it becomes shape `[num_envs]` via vmap.
+
+**Q: What's the bound on `reward` magnitude?**
+A: Not strictly bounded. In homeostatic mode, per-step magnitude is bounded by the change in `sqrt((sat-setpoint)^2 + injury^2)` which is ≤ `sqrt(max_sat^2 + max_injury^2) ≈ 141` with defaults. Terminal step adds `-death_penalty`. So realistic range is roughly `[-(death_penalty + 141), +141]`. Survival mode is simpler: `[−death_penalty, 1]` per-step, minus `eating_reward_penalty`.
+
+**Q: How is reward clipped for training stability?**
+A: No clipping inside the environment — that's the caller's responsibility. If your algorithm (e.g. DQN) requires clipped reward, apply it in the training loop, not here.

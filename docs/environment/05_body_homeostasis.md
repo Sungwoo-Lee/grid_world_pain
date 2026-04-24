@@ -144,3 +144,55 @@ In the default configuration with `max_nutrition=100` and `metabolic_cost=1.0`, 
 | `with_injury=False` | Injury frozen at 0; any damage → instant death; injury buffer unused |
 
 All three flags are static (`pytree_node=False`), so changing them requires recompilation.
+
+---
+
+## Clarifications / FAQ
+
+**Q: Does `overeating_death=True` actually kill the agent?**
+A: **No — this is a latent bug.** `core.py:449-450` only sets `reason=3` when `new_satiation >= max_satiation`, but **never sets `done=True`**. The only `done` triggers are nutrition ≤ 0, injury ≥ max_injury (via `update_body`), and truncation. An agent with `overeating_death=True` that reaches `satiation == max_satiation` will have `termination_reason=3` reported but the episode continues. Treat this as telemetry, not a real termination. If you need actual overeating death, add the check to `update_body` or add `jnp.where(satiation>=max_satiation, True, done)` after the reason is set.
+
+**Q: What is `applied_inc` exactly and why does it gate recovery?**
+A: `applied_inc = temp_buffer[0]` is the front of the ring buffer **after** this step's damage has been added (`core.py:73, 76`). If the agent took damage on this step, then `inc > 0` → `applied_inc > 0` → `can_recover=False`. The gate `applied_inc <= 0` prevents the recovery amount from cancelling fresh pain — resting through a predator attack still leaves you hurt.
+
+**Q: Does `rest_streak` reset to 0 if the agent takes damage while resting?**
+A: No — the streak check is purely on the action (`info['rested']`), not on damage. `new_rest_streak = prev + 1 if rested else 0` (`core.py:84`). So a rest-and-take-damage step **keeps the streak going** but skips recovery this step. On the next step (if no new damage), full streak-multiplied recovery resumes.
+
+**Q: Is there a cap on `recovery_mult`?**
+A: No. The exponential `(1 + recovery_accel_rate)^(streak-1)` grows without bound, so at `accel=0.5` and streak 20, recovery is `0.1 * 1.5^19 ≈ 222` per step. Practically the injury clamp at 0 prevents over-recovery, but be aware that long rest streaks make injury vanish very quickly — tune `recovery_accel_rate` for realistic behaviour.
+
+**Q: What happens with `smoothing_duration=1`?**
+A: Damage is applied in full on the step it's taken. `inc = damage / 1 = damage`, `temp_buffer[0] = damage`, `new_buffer[0] = 0` after the roll. Effectively disables smoothing — a single hit jumps injury by `damage`. Use this for deterministic "one-shot death" style tasks.
+
+**Q: If I set `food_nutrition_gain = eating_nutrition_cost`, what happens?**
+A: `ate_food_gain = 0`, so eating has no effect on nutrition — but `ate_food=True` still fires (lifecycle update consumes the resource, reward may include `+1` in survival mode minus `eating_reward_penalty`). Useful for training agents where food acquisition is a reward signal divorced from energy.
+
+**Q: Can nutrition go negative?**
+A: No — `clip(..., 0.0, max_nutrition)` at `core.py:56` clamps it to 0. Starvation death fires at `new_nutrition <= 0`, which includes exactly 0.
+
+**Q: Does `metabolic_cost` apply when resting?**
+A: Yes. Rest does NOT pause metabolism (`core.py:52` deducts unconditionally). Rest only enables injury recovery — it doesn't save nutrition.
+
+**Q: What if damage comes from multiple sources in one step?**
+A: All damage is summed into `info['damage']` before `update_body` sees it (`core.py:419`). The buffer receives the total, spread across `smoothing_duration` slots. There's no per-source tracking in the buffer.
+
+**Q: Is the buffer applied before or after recovery each step?**
+A: Damage is applied first (`new_injury = prev_injury + applied_inc` at `core.py:77`), then recovery subtracts (`core.py:94`) only if `can_recover`. Net effect: `new_injury = prev_injury + applied_inc - (rested ? recovery : 0)` where recovery only fires if `applied_inc <= 0`.
+
+**Q: What's `state.satiation` when `with_satiation=False` at reset?**
+A: It's still computed via the power-law from nutrition at reset (`core.py:727-728`). The flag only prevents re-derivation at *step* time — reset always initialises satiation from nutrition regardless.
+
+**Q: What's the termination_reason when `with_injury=False` and damage kills the agent?**
+A: The reason code will usually stay at `0` (active) or `1` (truncated) because the `reason = jnp.where(new_injury >= params.max_injury, 4, reason)` check fires against the frozen `new_injury = prev_injury` which is 0. The episode does end (`done=True` from `core.py:111`) but the reason is misleading. This is a minor labelling inconsistency.
+
+**Q: Is `calculate_drive` always 2D (satiation + injury) regardless of `with_*` flags?**
+A: Yes. The drive function doesn't know about the flags; it always takes `(satiation, injury)` and computes distance to `(setpoint, 0)`. If `with_satiation=False`, satiation is frozen at its reset value — so drive may not change as expected. The homeostatic reward path is designed for the all-flags-on default.
+
+**Q: Does the reward ever become very large in a single step?**
+A: Yes at termination: `reward = drive_delta - death_penalty`. With `death_penalty=100` (default) the reward can spike to ≈ -100 on death. Some algorithms (Dreamer-style) are sensitive to this spike — consider scaling or clipping `death_penalty` when reward variance matters.
+
+**Q: Setpoint defaults — is it always `max_satiation`?**
+A: Yes by convention (`configs/environment/default.yaml` has `satiation_setpoint: 100 == max_satiation`). Setting it lower models an agent whose "ideal" is partial fullness — rarely used.
+
+**Q: Can `nutrition_to_satiation_scaling_factor = 0` work?**
+A: `fullness_ratio^0 = 1` for all positive fullness, so `new_satiation = max_satiation` always. Non-useful — avoid `k=0`. The formula is undefined for `k<0` when nutrition is 0 (divide by zero in fullness^k), so keep `k > 0`.

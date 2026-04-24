@@ -240,3 +240,78 @@ Flax `@struct.dataclass` automatically registers both classes as JAX pytrees. Th
 - **All other fields** are pytree leaves; their values can change freely without recompilation.
 - **Immutability**: Flax structs are immutable after creation. To produce an updated state, call `state.replace(field=new_value)` (also exposed as `state._replace(...)` for API compatibility). This is zero-copy when possible under XLA.
 - **`vmap` batching**: `ParallelEnv` vmaps over the leading dimension of `EnvState` arrays. Each env in the batch has its own independent state pytree — conceptually a batch of `EnvState` objects stacked along axis 0.
+
+---
+
+## Reset Values (What's in `EnvState` at step 0)
+
+Set in `core.py:749-778` during `jax_reset`. Use this as a single authoritative reference.
+
+| Field | Value at reset | Source |
+|-------|----------------|--------|
+| `agent_pos` | `start_pos` **or** uniform random cell (if `random_start_pos=True`) | `core.py:634` |
+| `current_step` | `0` | `core.py:751` |
+| `last_action` | `4` if `rest_action_enabled` else `5` — i.e. Rest/Stay | `core.py:773` |
+| `res_active` | all `True` | `core.py:753` |
+| `res_cons_count` | all `0` | `core.py:754` |
+| `res_reg_timer` | all `0` | `core.py:755` |
+| `pred_state` | all `0` (Patrol) | `core.py:758` |
+| `pred_stamina` | `pred_max_stamina[p]` (full) | `core.py:759` |
+| `pred_move_timer` | all `0` | `core.py:760` |
+| `pred_attack_timer` | all `0` | `core.py:761` |
+| `nutrition` | `start_nutrition` **or** `Uniform(max_nutrition/2, max_nutrition)` if `random_start_nutrition=True` | `core.py:720-724` |
+| `satiation` | **always derived** from nutrition: `max_satiation × (nutrition/max_nutrition)^k` | `core.py:727-728` |
+| `injury_level` | `0.0` **or** `Uniform(0, max_injury/2)` if `random_start_injury=True` | `core.py:730-734` |
+| `injury_buffer` | zeros of length `smoothing_duration` | `core.py:736` |
+| `last_collision_noc` | `0.0` | `core.py:769` |
+| `rest_streak` | `0` | `core.py:770` |
+| `terminated` | `False` | `core.py:771` |
+| `*_property_sampled` | `clip(mean + std * N(0, 1), 0, 1)` — Gaussian draw per entity | `core.py:740-747` |
+
+---
+
+## Clarifications / FAQ
+
+**Q: Why do entities have both `res_property` (in params) and `res_property_sampled` (in state)?**
+A: `res_property` is the configured **mean** chemical signature (constant across episodes); `res_property_std` is the standard deviation. At reset/respawn, each entity samples `sampled = clip(mean + std * N(0,1), 0, 1)` (`core.py:740-742`). This gives per-entity per-episode olfactory variation — two food resources with the same mean signature can smell slightly different. The sampled vector is what sensors read.
+
+**Q: The state tables show `vector_size = 5`. Is that hardcoded?**
+A: `5` is whatever shape your YAML `property: [v1, v2, v3, v4, v5]` has; `olfactory_vector_size` is derived from the config (`config_loader.py`). All entities in one config must share the same vector length. In practice every shipped config uses 5, hence the table.
+
+**Q: Are `start_satiation` and `random_start_satiation` actually used?**
+A: **No.** They are loaded into `EnvParams` by `config_loader.py` but never read by `core.py`. Satiation at reset is always derived from nutrition via `S = max_S × (N/max_N)^k`. These fields are legacy — leaving them in YAML has no effect. Prefer controlling starting satiation indirectly through `start_nutrition` / `random_start_nutrition`.
+
+**Q: Why is `noise_*` shape `[12]` when there are only 9 modalities?**
+A: The 12 is a fixed padding size (`config_loader.py:360`: `pad = max(0, 12 - len(noise_modality_order))`). Active modalities fill the leading slots per `noise_modality_order`, and the remaining slots are zero-padded so the array shape stays static under JIT. Indexing must always go through `noise_modality_order` or `modality_map` — raw index positions are not semantically meaningful beyond whatever order your YAML declared.
+
+**Q: How is resource respawn timing controlled?**
+A: When a resource is consumed, `res_active` flips to `False` and `res_reg_timer` is set to `res_reg_delay` (see doc `08_resources_and_obstacles.md`). Each step, inactive resources with `res_reg_timer > 0` count down (`core.py:115-123`). When the timer hits 0, `respawn_mask` fires: `res_active` flips back to `True` and a fresh `res_property_sampled` is drawn. If `res_max_cons` has been exhausted, the resource stays inactive permanently (set `res_max_cons = -1` for unlimited respawns).
+
+**Q: What are the integer values for `last_action`?**
+A: `0–3` = movement (Up, Down, Left, Right), `4` = Rest (only if `rest_action_enabled`), `5` = Eat (only if `eat_action_enabled`). `action_dim = 4 + rest_enabled + eat_enabled` (`config_loader.py:330`). The proprioception sensor one-hot-encodes this index.
+
+**Q: Does `terminated=True` get reset automatically?**
+A: Only on an explicit call to `jax_reset` — the step function itself never flips `terminated` back. In `ParallelEnv`, the wrapper detects `terminated=True` and calls `reset` on those environments (see doc `11_parallel_env_wrapper.md`).
+
+**Q: When does `injury_buffer` get populated?**
+A: Whenever damage is applied in a step, the raw damage value is distributed across `smoothing_duration` slots of the ring buffer (a uniform-spread injection). Each step, `injury_buffer[0]` is consumed into `injury_level` and the buffer rotates. This models "pain over time" — a single hit slowly increases injury for `smoothing_duration` steps. Full mechanics in doc `05_body_homeostasis.md`.
+
+**Q: What's the difference between `type_areas` and `grid_location_type`?**
+A: They serve orthogonal purposes:
+- `grid_location_type [H, W]` encodes **terrain** per cell (plain / grass / sand) — read by the location sensor and renderer.
+- `type_areas [T, 4]` encodes **spawn region bounding boxes per entity type-group** — used only during entity placement at reset. It has no runtime effect after step 0.
+
+**Q: What is `max_per_type` used for?**
+A: It's the max entity count across any single type-group. Used as a **static loop bound** for the per-type placement pass (`per_type` mode, doc `03`). Making it static (`pytree_node=False`) means JAX compiles the loop once; changing the max_per_type triggers recompilation.
+
+**Q: If `with_injury=False`, what happens on damage?**
+A: The injury system is bypassed entirely and any nonzero damage terminates the episode immediately (no smoothing, no recovery). This is used in configs where the task is "touch-nothing-bad" survival, not pain modelling.
+
+**Q: Does `overeating_death=True` kill at exactly `max_satiation` or above?**
+A: At `satiation >= max_satiation` (i.e. equality triggers death). See `05_body_homeostasis.md`.
+
+**Q: Is `EnvParams` immutable across an entire training run, or per-episode?**
+A: Per-episode in principle, but most training setups reuse the same `EnvParams` for every episode in a run (it's built once from the YAML). Changing any static field (`pytree_node=False`) mid-run triggers JIT recompilation. Changing a non-static field (e.g. `max_nutrition`) is free at runtime but uncommon — the usual pattern is to rebuild `EnvParams` only for a new experiment.
+
+**Q: Can I rely on `._replace(...)` vs `.replace(...)`?**
+A: Yes — both work identically. The `._replace` alias exists for compatibility with earlier code that used `namedtuple._replace` semantics. Use either.

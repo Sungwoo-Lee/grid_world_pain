@@ -173,3 +173,43 @@ Two axes: **WHEN** the save fires, and **WHAT step key** is written. Combination
 | **F1** | Same as F0 | `last+f` (nominal) | `last + f` | Directories become `100/, 200/, …`; requires `ckpt_data['episode']` to store actual count for resume accuracy. |
 | **F2** | F1 **+ catch-up loop** for missed milestones | nominal | advance through all crossed milestones | Saves same model state under multiple step keys — guaranteed milestone coverage, wasteful on disk. Pair with higher `max_to_keep`. |
 | **F3** | Require `f > max_expected_Δ` (config validation) | nominal | nominal | Guideline instead of fix. Rejects configs where `num_envs ≥ f`. |
+
+---
+
+## Clarifications / FAQ
+
+**Q: What is `total_episodes_completed` counting — cumulative over the whole run, or per-iteration?**
+A: **Cumulative across the entire training run**. It is initialised to 0 at start (or to the resumed value when loading a checkpoint), and only ever increments. Checkpoint step keys reflect this cumulative total — so the second training run of a 20k-episode resume will start with step keys above 20k.
+
+**Q: Is the drift deterministic given the same config and seed?**
+A: Yes. Under a fixed seed, env stepping is deterministic, so the per-iteration `Δₖ` sequence is fixed and the drift pattern reproduces exactly. Between runs with different seeds, drift values jitter but always exceed `last_save + f`.
+
+**Q: How do I force a checkpoint at a specific episode milestone?**
+A: Not supported by the current gate. Workaround: set `checkpoint_frequency` low (e.g. 1) and post-process by keeping only the savepoints nearest to your target milestones. Or implement **F2** (catch-up saves) — the plan explicitly does not.
+
+**Q: Does `max_to_keep=5` apply per-run or per-resume?**
+A: Per-`CheckpointManager` instance. A fresh run starts with an empty tracking list; resuming into the same `models_dir` re-attaches and Orbax re-discovers the existing 5 latest. Older saves that were already pruned stay gone.
+
+**Q: Can I raise `max_to_keep` without re-training?**
+A: Yes — change the value at the `CheckpointManagerOptions` call (`train.py:352`). The new limit only affects future saves. Previously-pruned checkpoints aren't recovered.
+
+**Q: Do WandB logs track nominal or actual episode counts?**
+A: WandB step = `total_episodes_completed` (actual count). If you're cross-referencing WandB with checkpoint filenames, both use the same number — but neither corresponds to clean milestones. Use the actual count.
+
+**Q: Why per-iteration and not per-episode gating?**
+A: Per-episode gating would require pausing the vmapped env loop at every `done`, breaking JIT efficiency. The training loop is designed to complete a full `num_steps × num_envs` iteration atomically on GPU. Per-iteration gating is a consequence of this design choice — the trade-off between milestone precision and throughput.
+
+**Q: What happens if `checkpoint_frequency=0` or negative?**
+A: Untested. The gate `total >= last + 0` fires every iteration; a negative frequency would cause even more aggressive saving. Keep `checkpoint_frequency >= 1`.
+
+**Q: Does the resume path reconstruct the correct `total_episodes_completed`?**
+A: Yes — `ckpt_data['episode']` stores the actual count at save time. On resume, `train.py:741, 794` reads this value and seeds `total_episodes_completed`. The resumed run continues the cumulative count seamlessly.
+
+**Q: Is Orbax's step key required to be monotonically increasing?**
+A: Yes. The gate ensures `total >= last + f` strictly increases, and since `total` is cumulative, step keys are monotone. Orbax uses step keys for sorting and pruning.
+
+**Q: Does a training crash mid-iteration lose the partial episode counts?**
+A: Yes — there is no intra-iteration checkpoint. If the process dies during iteration `k`, all `Δₖ` episodes from that iteration are lost and not counted against the resume. The last saved `total_episodes_completed` is the recovery point.
+
+**Q: Is this gate the same code path for RecurrentPPO and DreamerV3?**
+A: Largely yes. Both paths increment `total_episodes_completed` the same way and hit the same gate block at `train.py:1656-1694`. The DreamerV3 episode counter (`train.py:1575-1595`) is a structural parallel of the RPPO version (`train.py:855-889`). Any gate change applies to both.

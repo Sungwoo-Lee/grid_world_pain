@@ -264,3 +264,61 @@ if apply_noise:
 ```
 
 The PRNG key for noise is derived by `jax.random.fold_in(state.key, 999)` — a deterministic but independent branch from the main step key.
+
+---
+
+## Clarifications / FAQ
+
+**Q: Are observations normalised or raw?**
+A: Mixed. Interoceptive (1–3) are divided by max values → `[0, 1]`. Location is rescaled to `[-1, 1]`. Collision and Visual are binary `{0, 1}`. Proprioception is one-hot `{0, 1}`. **Olfaction is NOT bounded** — it's a sum of `property × decay × mask`, so it can exceed 1 with many entities or at close range (agent on top of an entity gives decay=2.0).
+
+**Q: What's the observation order, end-to-end?**
+A: `[Injury(1), Nutrition(1), Satiation(1), ExteroNoc(?), Olfaction(?), Collision(?), Proprioception(?), Visual(?), Location(?)]`. The only always-on sensors are the first 3 plus Collision. Every other sensor's dim depends on the enabled flag. To get the exact mapping at runtime, call `get_observation_breakdown(params)` — this is authoritative.
+
+**Q: Is `get_observation` called inside `jax_step`?**
+A: No. `jax_step` returns only the new state and scalars. The caller must explicitly call `get_observation(state, params)` to materialise the observation vector. `ParallelEnv` wraps this into a single step interface. See doc `11`.
+
+**Q: What happens when `apply_noise=False`?**
+A: The clean pre-noise vector is returned. Useful for evaluation/analysis. Note `apply_noise` is a static arg (`static_argnames=['apply_noise']`) — changing it triggers recompilation.
+
+**Q: Is `last_action` proprioception from the step *just completed* or the step *about to be taken*?**
+A: Just completed. `state.last_action` is set at the end of `jax_step` to the action that was just executed (`core.py:514`). The very first observation (step 0, post-reset) uses a placeholder — Rest (`4`) if rest is enabled, else Eat (`5`) (`core.py:773`).
+
+**Q: The olfaction decay is `1/(d^p + 1e-10)` — what's the `1e-10` for?**
+A: Numerical safety. At `d=0` this would divide by zero, but the `dist < 0.001` branch handles that case explicitly (returns 2.0). The `1e-10` protects against tiny but nonzero distances that would round to a huge number.
+
+**Q: Why is agent-on-entity decay exactly 2.0?**
+A: Hardcoded upper bound — chosen so that olfaction saturates predictably when the agent overlaps a source. Without this, the decay would be ≈ `1/1e-10 = 1e10`, which would swamp the entire signal. Change `sensor.py:14` if you need a different saturation value.
+
+**Q: Does olfaction see through obstacles?**
+A: Yes. There is no line-of-sight check (`sensor.py:5-22`). A chemical source on the other side of a wall is still smelled, attenuated by distance only.
+
+**Q: Do inactive resources contribute to olfaction?**
+A: No — `res_active` masks them out (`sensor.py:17`). Predators, obstacles, and neutrals are always counted (the mask passed in is `jnp.ones(...)`).
+
+**Q: What does the collision sensor return for the center cell?**
+A: Always `0`. The center is the agent's own cell — it can't be out of bounds, and the agent couldn't be there if it were blocked. Only non-center cells can be `1`.
+
+**Q: What ordering do the collision/visual diamond cells use?**
+A: Manhattan-distance shells in order `d=0, 1, 2, ...`. Within each shell, a fixed direction sweep (see `get_visual_offsets` at `sensor.py:89`). For `r=1`: `[center, (−1,0), (0,1), (1,0), (0,−1)]` — up/right/down/left. Use `get_visual_offsets(r)` if you need programmatic access.
+
+**Q: The visual sensor has 8 channels — but grass/sand/plain are mutually exclusive. Why not 6 channels?**
+A: Because a cell can simultaneously have terrain + entity (e.g. bush on grass). Channels 0–2 encode terrain (one-hot), channels 3–7 encode entities (can overlap if multiple entities stack). Total 8 = `3 + 5 entity channels`.
+
+**Q: Do predators showing up in `Visual[5]` account for Hunt/Patrol/Return state?**
+A: No. Channel 5 just marks "predator present at this cell" regardless of state. The predator's internal FSM is not observable. Inference of predator intent is the agent's job.
+
+**Q: Is the olfaction vector sum across all entity types in one `[vector_size]` vector, or separate per-type?**
+A: Summed into one (`sensor.py:270`: `res_chem + pred_chem + obs_chem + neutral_chem`). The agent cannot separate "food scent" from "predator scent" except by comparing which channel is hot — which is why channels are conventionally reserved per entity type (channel 0 = food odor, channel 1 = predator odor, etc.).
+
+**Q: Does the sensor system know about noise, or is noise applied after?**
+A: Noise is applied after. `get_observation` assembles the clean vector then optionally calls `apply_perceptual_noise` (`sensor.py:291-292`). The noise system reads `get_observation_breakdown` to know which slice belongs to which modality.
+
+**Q: What if `olfactory_vector_size` in YAML doesn't match the actual `property` vector length?**
+A: `get_observation_breakdown` reads `params.res_property.shape[-1]` directly (`sensor.py:314`) — so the breakdown uses the actual vector length. `olfactory_vector_size` is a separate static param used elsewhere (e.g. for encoder input shape). If the two diverge, you'll see a dimension mismatch downstream. Keep them in sync.
+
+**Q: The location sensor is `[-1, 1]` but on a 1×1 grid would divide by 0. Is this a real concern?**
+A: Only on pathological grids. `height=1` makes `(H-1)=0` and division would NaN. The code does not guard against this. Assume `H, W >= 2`.
+
+**Q: The noise key uses `fold_in(state.key, 999)` — why 999?**
+A: Arbitrary constant that salts the noise-RNG branch. Ensures the noise key is independent of the step RNG branches (which come from `split`, not `fold_in`). Any constant would work; 999 is just a readable sentinel.

@@ -23,6 +23,7 @@ GridWorld Pain is a JAX-based RL environment for **Interoceptive AI** research �
 | 10 | [Perceptual Noise](10_perceptual_noise.md) | Noise modes, modality order, state-dependent σ |
 | 11 | [Parallel Env Wrapper](11_parallel_env_wrapper.md) | `ParallelEnv`, `auto_reset_step`, vmap, PRNG |
 | 12 | [Renderer](12_renderer.md) | Telemetry dashboard, video export |
+| 13 | [Checkpoint Scheduling](13_checkpoint_scheduling.md) | Gate drift under vmap, milestone collapse, resume semantics |
 
 ---
 
@@ -158,3 +159,48 @@ Quick-lookup for YAML path → `EnvParams` field:
 | `perceptual_noise.enabled` | `perceptual_noise_enabled` | bool (static) |
 | `perceptual_noise.modalities` (key order) | `noise_modality_order` | tuple (static) |
 | `visualization.local_view_size` | `local_view_size` | int (static) |
+
+---
+
+## Cross-Doc Clarifications / FAQ
+
+These are cross-cutting gotchas that span multiple environment docs. For in-depth FAQs on a specific topic, see the FAQ section at the bottom of each numbered doc.
+
+**Q: Which `body.*` fields are loaded but never used?**
+A: `body.start_satiation` and `body.random_start_satiation` are mandatory in the schema but never read by `core.py`. Satiation at reset is always derived from nutrition via the power-law factor. Setting them has no effect. See [01](01_state_and_params.md#clarifications--faq) and [03](03_entity_placement.md#clarifications--faq).
+
+**Q: Does `overeating_death=True` actually terminate the episode?**
+A: **No — latent bug.** The flag only sets `termination_reason=3` but does not trigger `done=True`. The only terminators are nutrition≤0, injury≥max_injury, and truncation. See [05](05_body_homeostasis.md#clarifications--faq) and [06](06_reward_and_termination.md#clarifications--faq).
+
+**Q: Why does the agent sometimes spawn on top of a predator?**
+A: Agent placement at reset does NOT participate in the entity occupancy mask. A `random_start_pos=True` agent can overlap any entity. Contact effects fire on step 0. See [03](03_entity_placement.md#clarifications--faq).
+
+**Q: Why can two entities of the same kind land on the same cell after step 0?**
+A: Resource respawn (`core.py:300-305`) doesn't check occupancy. Predators and neutrals also have no inter-entity collision. Placement uniqueness is only enforced at reset. See [03](03_entity_placement.md#clarifications--faq), [07](07_predator_ai.md#clarifications--faq), [08](08_resources_and_obstacles.md#clarifications--faq).
+
+**Q: Why does my YAML key `property` do nothing for a resource?**
+A: Resources use `properties` (plural); predators/neutrals use `property` (singular). Silent fallback to zeros on typo. See [02](02_config_schema.md#gotchas--per-entity-yaml-key-names).
+
+**Q: Why does my new sensor crash `apply_perceptual_noise` with a `KeyError`?**
+A: Every sensor present in `get_observation_breakdown` must have a corresponding entry in `perceptual_noise.modalities`. Set the mode to `none` if you want to skip noise for that sensor. Silent omission crashes. See [10](10_perceptual_noise.md#clarifications--faq).
+
+**Q: Why are noise arrays shape `[12]` when I only configured 9 modalities?**
+A: Zero-padded to a fixed static shape for JIT stability. The extra 3 slots are unused. See [02](02_config_schema.md#clarifications--faq) and [10](10_perceptual_noise.md#clarifications--faq).
+
+**Q: Why is there a `terminated` field on `EnvState` and a `done` return value?**
+A: `terminated` is stored for next-step logic (e.g. `ParallelEnv.auto_reset_step`); `done` is the per-step return. They carry the same information. The wrapper's auto-reset checks `done`. See [01](01_state_and_params.md#clarifications--faq) and [11](11_parallel_env_wrapper.md#clarifications--faq).
+
+**Q: Why don't my checkpoint directories have round-number step keys like `100/, 200/`?**
+A: Per-iteration gate + cumulative episode counter = drift. With `num_envs=128` and `checkpoint_frequency=100`, expect names like `156, 224, 312, ...`. See [13](13_checkpoint_scheduling.md).
+
+**Q: Why does a rest-action step sometimes fail to heal my agent?**
+A: `can_recover = rested AND applied_inc <= 0`. If the agent took damage on this step (`inc > 0`), the front of the injury buffer blocks recovery. Rest streak continues; recovery resumes next step if no new damage. See [05](05_body_homeostasis.md#clarifications--faq).
+
+**Q: Do predators see through walls?**
+A: Yes. Detection is pure Manhattan distance — no line-of-sight, no obstacle blocking. The only concealment is an obstacle with `hides_agent: true` (bush). See [07](07_predator_ai.md#clarifications--faq).
+
+**Q: Does the renderer work with a batched `EnvState` from `ParallelEnv`?**
+A: No. Index into the batch first (`jax.tree.map(lambda x: x[i], batched)`) then call the renderer. It is CPU-only and not JIT-compatible. See [12](12_renderer.md#clarifications--faq).
+
+**Q: How do I confirm my observation layout matches what the noise system expects?**
+A: Call `get_observation_breakdown(params)` after loading config. This is the single source of truth for observation dim mapping, and it's what the noise system uses to build `modality_map`. See [09](09_sensors_and_observation.md#clarifications--faq).

@@ -143,3 +143,61 @@ obs_olfactory = res_chem + pred_chem + obs_chem + neutral_chem
 - channel 2 = plain (loc 0)
 
 **Predator concealment**: predators only check `obs_hides_agent` per-obstacle, not grid location type. Bush concealment is an obstacle property, not a tile property.
+
+---
+
+## Clarifications / FAQ
+
+**Q: Can two resources share the same cell?**
+A: At reset, no — `resolve_overlaps_global` prevents it. After respawn, **yes** — respawn position sampling (`core.py:300-305`) uses `res_spawn_area` with no occupancy check. Two food items can land on the same cell, and the agent standing there will interact with both.
+
+**Q: What if a resource respawns onto an obstacle cell?**
+A: It will. There's no overlap check against obstacles or predators either. The agent standing on that cell would receive food+obstacle effects simultaneously. For dense configs, use non-overlapping `res_spawn_area` and `obs_spawn_area` to avoid this.
+
+**Q: What's the difference between `res_max_cons = 0`, `-1`, and a positive value?**
+A: The deactivation check is `should_deactivate = active AND (res_max_cons > 0) AND (next_cons_count >= res_max_cons)`:
+- `res_max_cons = -1` (or any ≤ 0): the `> 0` guard fails, so the resource never deactivates — infinite consumption, no respawn needed.
+- `res_max_cons = 0`: same as -1 (guard fails).
+- `res_max_cons = N > 0`: resource deactivates after N consumptions, respawns after `res_reg_delay` steps.
+
+**Q: Does `res_reg_delay` start counting from deactivation or from the initial step?**
+A: From deactivation. `res_reg_timer` is set to `res_reg_delay` at the moment `should_deactivate` fires (`core.py:386`). A just-deactivated resource will not respawn for exactly `res_reg_delay` steps.
+
+**Q: When a resource respawns, does it get a new chemical property?**
+A: Yes. `core.py:307-312` re-samples the property on respawn: `new_sampled = clip(property + std * N(0, 1), 0, 1)`. This makes the respawn look "different" to the olfaction sensor if `property_std > 0`.
+
+**Q: Can a danger resource be "eaten" with the eat action?**
+A: No — danger always triggers automatically on overlap (`core.py:348`). The `eat_action_enabled` flag and the eat action only affect food resources (`core.py:351-365`). Danger ignores the flag.
+
+**Q: If I step onto a blocking obstacle, do I take damage once or continuously?**
+A: Once per collision step. Each time `just_collided=True`, the collision damage is sampled fresh. Standing against the same obstacle over multiple steps re-samples damage each step the agent tries to move into it. Rest action (staying put) is NOT a collision — the agent doesn't "re-bump" when resting.
+
+**Q: Does a non-blocking obstacle with `damage > 0` deal damage on every step the agent stays on it?**
+A: Yes. `damage_obs_overlap` is computed every step based on `agent_pos == obs_pos`. Standing on a non-blocking damaging tile (e.g. a brier patch) bleeds the agent each step.
+
+**Q: What's the max number of obstacles the agent can collide with simultaneously?**
+A: For collision damage, only one — `damage_obs_collision` uses `jnp.max(...)` over obstacles at `attempted_pos` (`core.py:414`), so it's the single hardest-hitting obstacle at that cell. For overlap damage, all matching obstacles are summed.
+
+**Q: Does the neutral animal's patrol area differ from its spawn area?**
+A: Yes — both are configured per-animal. `neutral_spawn_area` is used only at reset; `neutral_patrol` bounds movement every step (`core.py:265-266`). Same pattern as predators.
+
+**Q: Can neutral animals walk through each other?**
+A: Yes. They have no inter-animal collision — only obstacle collision (`core.py:273-277`). Like predators, multiple neutrals can stack on the same cell.
+
+**Q: Do neutral animals affect damage or nociception?**
+A: Neutrals contribute to **olfaction** (via `neutral_property`) and **nociception** (via `neutral_nociception`) only. They deal no damage, cause no termination, and do not trigger Hunt state in predators. They exist to add sensory clutter.
+
+**Q: What's the relationship between `res_property` and `res_property_sampled`?**
+A: `res_property` is the configured mean (constant per episode); `res_property_sampled` is the per-reset or per-respawn Gaussian sample (mean + std × N(0,1)). Sensors read `res_property_sampled`. See doc `01` FAQ.
+
+**Q: What if `grid_location_type` is set for a cell that also has an obstacle?**
+A: Both coexist. The location sensor reads `grid_location_type` at the agent's cell; the visual sensor also reads obstacle type. A bush on grass reads as "grass tile with a bush on it" — two separate signals.
+
+**Q: Does the renderer show obstacle type or obstacle name?**
+A: Obstacle type (int) maps to a fixed icon set in the renderer. See doc `12_renderer.md` for the exact icon-per-type mapping. `obstacle_names` is used primarily for the config → index mapping in `obs_type`.
+
+**Q: Are food olfactory channels always channel 0?**
+A: By convention in the shipped configs, yes — `property: [1, 0, 0, 0, 0]` for food. But the convention is not enforced; you can remap channels freely. The agent learns the channel meaning from data.
+
+**Q: What value should I give `res_nociception` for food?**
+A: `0.0` (default when `type: "food"`, per `config_loader.py:44`). Food should not activate the nociception sensor. If you set it nonzero, the agent will get a "pain" signal on eating — useful for modelling aversive food tasks.

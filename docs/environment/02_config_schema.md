@@ -276,3 +276,76 @@ perceptual_noise:
     visual:            mode: state_dependent, sigma: 0.2, injury_noise_scale: 1.5
     location:          mode: constant, sigma: 0.01
 ```
+
+---
+
+## Gotchas — Per-Entity YAML Key Names
+
+The YAML field names differ between entity kinds. This is easy to get wrong.
+
+| Entity | Chemical signature key | Std dev key |
+|--------|------------------------|-------------|
+| Resource | `properties` (plural) | `properties_std` |
+| Obstacle | `properties` (plural) | `properties_std` |
+| Predator | **`property`** (singular) | **`property_std`** |
+| Neutral animal | **`property`** (singular) | **`property_std`** |
+
+Using the wrong spelling silently falls back to the default (zero vector) for that entity — the entity will smell of nothing. Confirmed at `config_loader.py:32, 65, 124, 160`.
+
+---
+
+## Clarifications / FAQ
+
+**Q: What happens if I set `count: 0` on an entity entry?**
+A: `range(0)` produces zero expansions, so the entry is skipped entirely. It is a clean way to disable a specific entity kind without deleting its definition block — useful for ablations.
+
+**Q: What if I leave `count` out entirely?**
+A: It defaults to `1` (`config_loader.py:21, 105, 150`). One entity is spawned.
+
+**Q: Scalar vs range `damage` — which is the right format?**
+A: Both work. A scalar `damage: 10` expands internally to `[10, 10]`, i.e. deterministic damage (`config_loader.py:42, 71, 119`). A list `damage: [5, 15]` specifies a uniform distribution. The resulting `*_damage` array is always shape `[N, 2]`.
+
+**Q: What happens if `location_areas` has overlapping entries?**
+A: Later entries overwrite earlier ones at the overlapping cells (`config_loader.py:191` is a simple numpy slice assignment). There is no blending. Order your YAML so the desired foreground terrain appears last.
+
+**Q: What if `location_areas` is empty?**
+A: Every cell stays at `0` (plain). The location sensor will read "plain" everywhere.
+
+**Q: What does `placement.mode` actually affect at runtime?**
+A: Only the reset-time placement algorithm — after step 0, the two modes produce identical behaviour. See doc `03_entity_placement.md` for the trade-off. Changing the mode triggers JIT recompilation because `placement_mode` is a static (`pytree_node=False`) field.
+
+**Q: When is a type group created?**
+A: At config-load time, entities are grouped by the *exact* tuple of their 0-indexed spawn-area bounding box (`config_loader.py:203-205`). Two predators with `spawn_area: [[1,1],[10,10]]` share a group; a predator at `[[1,1],[10,10]]` and a food at the same area also share the same group (groups are cross-kind).
+
+**Q: How is `obstacle_names` built — does order matter?**
+A: `obstacle_names` is the **sorted unique** set of obstacle `name` fields across the config (`config_loader.py:130`). `obs_type[o]` is the index of obstacle `o`'s name in this tuple. Renderer sprite lookups use this index. If you rename an obstacle, the index may shift — don't hardcode indices outside the config.
+
+**Q: If I omit `name` on an obstacle, what happens?**
+A: Defaults to `"rock"` (`config_loader.py:130, 132`). The default single-entry tuple is `("rock",)`.
+
+**Q: Are `body.start_satiation` and `body.random_start_satiation` actually used?**
+A: They are mandatory in the schema and copied into `EnvParams`, but **never read by `core.py`** — satiation at reset is always derived from nutrition. This is a legacy field. See doc `01` FAQ for details.
+
+**Q: What's the shape of the resource damage for `type: "food"`?**
+A: Same as danger: `[num_res, 2]`. Food typically has `damage: [0, 0]`, but the slot still exists. `res_type` distinguishes food from danger (0 vs 1) — not the damage field.
+
+**Q: What does `sensor_radius: 20` do on a 10×10 grid?**
+A: Olfaction scales smell intensity by distance with decay `decay_power`; `sensor_radius` is the normalisation distance. A radius ≥ max grid distance means every olfactory source is detectable (intensity still decays with distance). See doc `09_sensors_and_observation.md`.
+
+**Q: If `perceptual_noise.enabled: false`, does `modalities` still need to be present?**
+A: No — if `perceptual_noise.enabled` is False, the noise module is bypassed at runtime. `_parse_noise_config` is still called (it safely returns zeros for missing modalities), so leaving `modalities` absent is fine.
+
+**Q: Does `config.get(...)` raise on missing keys?**
+A: No. `config.get('key', default)` returns the default. Only `config.get_mandatory('key')` raises `ValueError`. Use `.get` for optional keys and `.get_mandatory` for required ones — this is what enforces the mandatory list above.
+
+**Q: Is `default.yaml` loaded automatically?**
+A: No — you must explicitly point your training script at it (or merge it) via `Config.merge()`. There is no auto-loading. Each experiment YAML is self-contained unless it explicitly chains a base config.
+
+**Q: The doc says "9 modalities + 3 spare slots = 12". What are the 3 spares for?**
+A: Unused reserve for future modalities. They are always zero-valued and never indexed by any sensor (`noise_modality_order` only names the configured ones). See doc `10_perceptual_noise.md`.
+
+**Q: What happens if my YAML lists a modality name that isn't in `_YAML_KEY_TO_SENSOR_NAME`?**
+A: It is silently dropped from `noise_modality_order` (`config_loader.py:356-358`: the `if k in _YAML_KEY_TO_SENSOR_NAME` filter). No error is raised. Typos are silent — double-check the nine valid keys above.
+
+**Q: Does `start_pos: [5, 5]` match row/col or x/y?**
+A: Row/col, 1-indexed and inclusive. Stored as `[4, 4]` (0-indexed) in `EnvParams.start_pos` (`config_loader.py:313`: `jnp.array(...) - 1`).

@@ -131,3 +131,55 @@ The PRNG key comes from `jax.random.fold_in(state.key, 999)` in `get_observation
 | 9–11 | Zero padding |
 
 **Important**: the arrays are indexed by name at runtime via `modality_map`. If a modality listed in `noise_modality_order` is not in `get_observation_breakdown(params)` (e.g. sensor disabled but noise configured), `apply_perceptual_noise` will raise a `KeyError`. The safe pattern is to always have noise config match the enabled sensor set.
+
+---
+
+## Clarifications / FAQ
+
+**Q: What's the lookup failure mode — KeyError or silent skip?**
+A: **KeyError**, but in the opposite direction from the note above. Line 214 (`idx = modality_map[sensor_name]`) raises when an *enabled sensor* has no noise entry in `noise_modality_order`. If you enable Olfaction but forget to declare `olfaction:` under `perceptual_noise.modalities`, you'll crash at JIT-trace time. To safely skip noise for a sensor, set its mode to `none` in YAML — don't just omit it.
+
+**Q: Does noise apply when the sensor has no signal (e.g. no predator in sight)?**
+A: Yes. Noise is added unconditionally per dimension. An "all zeros" olfaction vector will become "all small Gaussians" after noise. The clip bounds then ensure the value stays in range. Agents must learn to distinguish "weak signal" from "weak signal + noise" — this is the whole point of perceptual noise.
+
+**Q: Is noise correlated across dimensions within one modality?**
+A: No. Each dimension gets an independent draw from `Normal(0, σ_eff)` (`sensor.py:240` samples one noise vector of full obs length). Two dimensions of the same modality (e.g. olfaction channels) have uncorrelated noise.
+
+**Q: Is noise correlated across modalities in one step?**
+A: No, same reason. One PRNG key, one vector draw of full-obs-length, one sample per element. Different modalities have different σ_eff but the underlying N(0,1) draws are independent.
+
+**Q: Is noise correlated across steps?**
+A: No. `obs_key = jax.random.fold_in(state.key, 999)` and `state.key` changes every step via the split-and-store pattern (`core.py:513`). Sequential observations see uncorrelated noise.
+
+**Q: What happens at `injury_norm > 1.0`?**
+A: Not possible — injury is clipped to `[0, max_injury]` in `update_body`. But if it somehow were, `σ_eff` would grow without bound: `σ_base × (1 + α × 1.5)` etc. No guard.
+
+**Q: What does `clip_min/clip_max` do beyond the natural sensor range?**
+A: Defines the valid range of the *noisy* observation. For interoceptive sensors with natural range `[0, 1]`, the clip typically matches. For olfaction with `clip_max: 100`, the clip is wide because olfaction can saturate well above 1 when the agent is on top of an entity. The clip is applied only after noise — **the pre-noise obs is never clipped** by this step.
+
+**Q: Why are `clip_min/clip_max` defaults `[-100, 100]` in `_parse_noise_config`?**
+A: Permissive bounds so that missing clip config doesn't mangle the signal. If you want a narrower clip, explicitly set `clip_min: 0, clip_max: 1` per modality.
+
+**Q: If I set `mode: state_dependent` and `injury_noise_scale: 0`, does it behave like `constant`?**
+A: Yes. `σ_eff = σ_base × (1 + 0 × injury_norm) = σ_base`. Functionally identical. The `mode` dispatch is then redundant.
+
+**Q: Can I set `sigma: 0` in `state_dependent` mode?**
+A: Yes but pointless. `σ_eff = 0 × (...) = 0`. No noise added. Equivalent to `mode: none`.
+
+**Q: How does noise affect the "Visual" sensor's binary channels?**
+A: Small Gaussians centered on 0/1, then clipped. A channel that reads 1 might become 0.87, and a channel that reads 0 might become 0.08. The agent sees this continuous smear, not binary. Consider whether your policy network expects binary inputs.
+
+**Q: Is perceptual noise applied during training but not eval?**
+A: That depends on how the caller invokes `get_observation`. `apply_noise` is a function parameter. Training wrappers pass `True`; eval wrappers typically pass `False` for deterministic rollout. See `ParallelEnv` for the pattern.
+
+**Q: What's the CPU/GPU cost of `apply_perceptual_noise`?**
+A: One vector draw from `Normal(0, 1)` sized to the observation, one elementwise multiply-add, one clip. Negligible compared to the rest of the step. The `breakdown` loop is Python-side but runs only at trace time (unrolled by `@jax.jit`).
+
+**Q: Why the 999 fold-in constant?**
+A: Documented in doc `09` — a readable salt constant to create an independent noise PRNG branch without splitting the main key. Any constant would work.
+
+**Q: Can I add a tenth modality?**
+A: Yes, if it corresponds to a real sensor. Steps: (1) add the YAML key to `_YAML_KEY_TO_SENSOR_NAME`; (2) add the sensor name to `get_observation_breakdown`; (3) if there will be > 12 active modalities, increase the pad-to-12 to the new cap in `config_loader.py:360`. All noise arrays are currently sized `[12]` — adding modalities beyond that needs a schema change.
+
+**Q: Do `noise_modality_order` and `get_observation_breakdown` have to declare modalities in the same order?**
+A: No. Lookup is by name (`modality_map[sensor_name]`). Order determines array *indices*; names determine *lookup*. But it's convention to keep them aligned for readability.
