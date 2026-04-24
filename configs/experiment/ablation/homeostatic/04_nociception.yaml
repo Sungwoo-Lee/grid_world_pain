@@ -12,7 +12,7 @@ environment:
   predators:
     - name: "Homeostatic Predator"
       count: 1
-      property: [0.0, 1.0, 0.0, 0.0, 0.0]
+      properties: [0.0, 1.0, 0.0, 0.0, 0.0]
       move_interval: 3
       damage: 3.0
       spawn_area: [[1, 1], [4, 4]]

@@ -179,7 +179,7 @@ A: Agent placement at reset does NOT participate in the entity occupancy mask. A
 A: Resource respawn (`core.py:300-305`) doesn't check occupancy. Predators and neutrals also have no inter-entity collision. Placement uniqueness is only enforced at reset. See [03](03_entity_placement.md#clarifications--faq), [07](07_predator_ai.md#clarifications--faq), [08](08_resources_and_obstacles.md#clarifications--faq).
 
 **Q: Why does my YAML key `property` do nothing for a resource?**
-A: Resources use `properties` (plural); predators/neutrals use `property` (singular). Silent fallback to zeros on typo. See [02](02_config_schema.md#gotchas--per-entity-yaml-key-names).
+A: All entities now use `properties` (plural) as the canonical key. If you use the legacy `property` key, it still works but emits a `DeprecationWarning`. A missing key on any entity now hard-fails with a `ValueError`. See [02](02_config_schema.md#per-entity-olfactory-yaml-keys).
 
 **Q: Why does my new sensor crash `apply_perceptual_noise` with a `KeyError`?**
 A: Every sensor present in `get_observation_breakdown` must have a corresponding entry in `perceptual_noise.modalities`. Set the mode to `none` if you want to skip noise for that sensor. Silent omission crashes. See [10](10_perceptual_noise.md#clarifications--faq).

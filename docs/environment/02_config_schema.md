@@ -280,18 +280,15 @@ perceptual_noise:
 
 ---
 
-## Gotchas — Per-Entity YAML Key Names
+## Per-Entity Olfactory YAML Keys
 
-The YAML field names differ between entity kinds. This is easy to get wrong.
+All entities with an olfactory signature now uniformly use the plural keys.
 
 | Entity | Chemical signature key | Std dev key |
 |--------|------------------------|-------------|
-| Resource | `properties` (plural) | `properties_std` |
-| Obstacle | `properties` (plural) | `properties_std` |
-| Predator | **`property`** (singular) | **`property_std`** |
-| Neutral animal | **`property`** (singular) | **`property_std`** |
+| All (Resource, Obstacle, Predator, Neutral) | `properties` | `properties_std` |
 
-Using the wrong spelling silently falls back to the default (zero vector) for that entity — the entity will smell of nothing. Confirmed at `config_loader.py:32, 65, 124, 160`.
+**Migration Note**: The singular forms (`property`, `property_std`) for predators and neutrals are deprecated and will print a `DeprecationWarning` if used, but currently still load the values as a fallback. For new configurations, always use the `properties` / `properties_std` spelling.
 
 ---
 

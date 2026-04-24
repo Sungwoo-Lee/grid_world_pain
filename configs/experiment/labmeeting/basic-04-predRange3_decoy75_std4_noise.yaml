@@ -107,16 +107,16 @@ environment:
   neutral_animals:
     - name: "rabbit"
       count: 1
-      property: [0.0, 0.5, 0.7, 0.0, 0.0]
-      property_std: [0.0, 0.4, 0.4, 0.0, 0.0]
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.4, 0.4, 0.0, 0.0]
       move_interval: 1
       nociception_intensity: 0.1
       spawn_area: [[1, 1], [5, 5]]
       patrol_area: [[1, 1], [5, 5]]
     - name: "rabbit"
       count: 1
-      property: [0.0, 0.5, 0.7, 0.0, 0.0]
-      property_std: [0.0, 0.4, 0.4, 0.0, 0.0]
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.4, 0.4, 0.0, 0.0]
       move_interval: 1
       nociception_intensity: 0.1
       spawn_area: [[6, 6], [10, 10]]
@@ -126,8 +126,8 @@ environment:
   predators:
     - name: "predator" # 
       count: 1
-      property: [0.0, 0.7, 0.5, 0.0, 0.0]
-      property_std: [0.0, 0.4, 0.4, 0.0, 0.0]
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.4, 0.4, 0.0, 0.0]
       move_interval: 1
       damage: [15.0, 45.0]
       nociception_intensity: 0.9

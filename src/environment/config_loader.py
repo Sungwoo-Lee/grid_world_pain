@@ -9,6 +9,33 @@ import jax.numpy as jnp
 from src.environment.state import EnvParams
 
 from src.utils.config import Config
+import warnings
+
+def _read_properties(entry, entity_label):
+    """Read olfactory signature, preferring `properties` (plural)."""
+    if 'properties' in entry:
+        return entry['properties']
+    if 'property' in entry:
+        warnings.warn(
+            f"{entity_label}: YAML key 'property' is deprecated — rename to 'properties'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return entry['property']
+    raise ValueError(f"{entity_label}: missing required key 'properties'.")
+
+def _read_properties_std(entry, entity_label):
+    """Same, for the `*_std` variant."""
+    if 'properties_std' in entry:
+        return entry['properties_std']
+    if 'property_std' in entry:
+        warnings.warn(
+            f"{entity_label}: YAML key 'property_std' is deprecated — rename to 'properties_std'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return entry['property_std']
+    raise ValueError(f"{entity_label}: missing required key 'properties_std'.")
 
 def load_env_params(config: Config) -> EnvParams:
     """Loads environment parameters from a Config object with strict retrieval."""
@@ -29,9 +56,9 @@ def load_env_params(config: Config) -> EnvParams:
             return val
 
         res_type = jnp.array([0 if r_get(r, 'type') == 'food' else 1 for r in expanded_resources], dtype=jnp.int32)
-        res_property = jnp.array([r_get(r, 'properties') for r in expanded_resources])
+        res_property = jnp.array([_read_properties(r, 'Resource') for r in expanded_resources])
         chem_dim = res_property.shape[-1]
-        res_property_std = jnp.array([r.get('properties_std', [0.0] * chem_dim) for r in expanded_resources])
+        res_property_std = jnp.array([_read_properties_std(r, 'Resource') for r in expanded_resources])
         # Subtract 1 for minval (0-based) but keep maxval as is for JAX's exclusive upper bound
         res_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [r_get(r, 'spawn_area') for r in expanded_resources]])
         res_max_cons = jnp.array([r_get(r, 'max_consumption') for r in expanded_resources], dtype=jnp.int32)
@@ -67,9 +94,9 @@ def load_env_params(config: Config) -> EnvParams:
             if val is None: raise ValueError(f"Strict Config: Predator field '{key}' is required.")
             return val
 
-        pred_property = jnp.array([p_get(p, 'property') for p in expanded_predators])
+        pred_property = jnp.array([_read_properties(p, 'Predator') for p in expanded_predators])
         chem_dim = pred_property.shape[-1]
-        pred_property_std = jnp.array([p.get('property_std', [0.0]*chem_dim) for p in expanded_predators])
+        pred_property_std = jnp.array([_read_properties_std(p, 'Predator') for p in expanded_predators])
         pred_nociception = jnp.array([p.get('nociception_intensity', 0.9) for p in expanded_predators])
         pred_move_int = jnp.array([p_get(p, 'move_interval') for p in expanded_predators], dtype=jnp.int32)
         
@@ -128,8 +155,8 @@ def load_env_params(config: Config) -> EnvParams:
         obs_nociception = jnp.array([o.get('nociception_intensity', 0.3) for o in expanded_obstacles], dtype=jnp.float32)
         # Unified: Obstacles can have properties too
         chem_dim = res_property.shape[-1]
-        obs_property = jnp.array([o.get('properties', [0.0]*chem_dim) for o in expanded_obstacles])
-        obs_property_std = jnp.array([o.get('properties_std', [0.0]*chem_dim) for o in expanded_obstacles])
+        obs_property = jnp.array([_read_properties(o, 'Obstacle') for o in expanded_obstacles])
+        obs_property_std = jnp.array([_read_properties_std(o, 'Obstacle') for o in expanded_obstacles])
         # Adjust for 0-based min and exclusive max
         obs_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [obs_get(o, 'area') for o in expanded_obstacles]])
         
@@ -164,9 +191,9 @@ def load_env_params(config: Config) -> EnvParams:
             if val is None: raise ValueError(f"Strict Config: Neutral Animal field '{key}' is required.")
             return val
         
-        neutral_property = jnp.array([n_get(n, 'property') for n in expanded_neutral])
+        neutral_property = jnp.array([_read_properties(n, 'Neutral Animal') for n in expanded_neutral])
         chem_dim = neutral_property.shape[-1]
-        neutral_property_std = jnp.array([n.get('property_std', [0.0]*chem_dim) for n in expanded_neutral])
+        neutral_property_std = jnp.array([_read_properties_std(n, 'Neutral Animal') for n in expanded_neutral])
         neutral_nociception = jnp.array([n.get('nociception_intensity', 0.0) for n in expanded_neutral])
         neutral_move_int = jnp.array([n_get(n, 'move_interval') for n in expanded_neutral], dtype=jnp.int32)
         h = config.get_mandatory('environment.height')
