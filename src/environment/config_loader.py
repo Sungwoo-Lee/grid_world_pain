@@ -53,34 +53,41 @@ def load_env_params(config: Config) -> EnvParams:
         res_damage = jnp.zeros((0, 2))
 
     # Build predator arrays
-    predators = config.get_mandatory('environment.predators')
-    if predators:
+    raw_predators = config.get_mandatory('environment.predators')
+    expanded_predators = []
+    if raw_predators:
+        for p in raw_predators:
+            count = p.get('count', 1)
+            for _ in range(count):
+                expanded_predators.append(p)
+                
+    if expanded_predators:
         def p_get(p, key):
             val = p.get(key)
             if val is None: raise ValueError(f"Strict Config: Predator field '{key}' is required.")
             return val
 
-        pred_property = jnp.array([p_get(p, 'property') for p in predators])
+        pred_property = jnp.array([p_get(p, 'property') for p in expanded_predators])
         chem_dim = pred_property.shape[-1]
-        pred_property_std = jnp.array([p.get('property_std', [0.0]*chem_dim) for p in predators])
-        pred_nociception = jnp.array([p.get('nociception_intensity', 0.9) for p in predators])
-        pred_move_int = jnp.array([p_get(p, 'move_interval') for p in predators], dtype=jnp.int32)
+        pred_property_std = jnp.array([p.get('property_std', [0.0]*chem_dim) for p in expanded_predators])
+        pred_nociception = jnp.array([p.get('nociception_intensity', 0.9) for p in expanded_predators])
+        pred_move_int = jnp.array([p_get(p, 'move_interval') for p in expanded_predators], dtype=jnp.int32)
         
         # Predator damage ranges
-        raw_p_damage = [p_get(p, 'damage') for p in predators]
+        raw_p_damage = [p_get(p, 'damage') for p in expanded_predators]
         pred_damage = jnp.array([d if isinstance(d, list) else [d, d] for d in raw_p_damage])
         
         h = config.get_mandatory('environment.height')
         w = config.get_mandatory('environment.width')
         # Adjust for 0-based min and exclusive max
-        pred_patrol = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [p.get('patrol_area', [[1,1],[h,w]]) for p in predators]])
-        pred_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [p.get('spawn_area', [[1,1],[h,w]]) for p in predators]])
-        pred_detect = jnp.array([p_get(p, 'detection_range') for p in predators])
-        pred_max_stamina = jnp.array([p_get(p, 'max_stamina') for p in predators])
-        pred_recovery = jnp.array([p_get(p, 'stamina_recovery_rate') for p in predators])
-        pred_hunt_thresh = jnp.array([p_get(p, 'hunt_stamina_threshold') for p in predators])
-        pred_attack_delay = jnp.array([p_get(p, 'attack_delay') for p in predators], dtype=jnp.int32)
-        pred_lose_interest_mult = jnp.array([p.get('lose_interest_multiplier', 2.0) for p in predators], dtype=jnp.float32)
+        pred_patrol = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [p.get('patrol_area', [[1,1],[h,w]]) for p in expanded_predators]])
+        pred_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [p.get('spawn_area', [[1,1],[h,w]]) for p in expanded_predators]])
+        pred_detect = jnp.array([p_get(p, 'detection_range') for p in expanded_predators])
+        pred_max_stamina = jnp.array([p_get(p, 'max_stamina') for p in expanded_predators])
+        pred_recovery = jnp.array([p_get(p, 'stamina_recovery_rate') for p in expanded_predators])
+        pred_hunt_thresh = jnp.array([p_get(p, 'hunt_stamina_threshold') for p in expanded_predators])
+        pred_attack_delay = jnp.array([p_get(p, 'attack_delay') for p in expanded_predators], dtype=jnp.int32)
+        pred_lose_interest_mult = jnp.array([p.get('lose_interest_multiplier', 2.0) for p in expanded_predators], dtype=jnp.float32)
         predator_enabled = config.get_mandatory('environment.predator_enabled')
     else:
         pred_property = jnp.zeros((0, 5))
