@@ -3,6 +3,7 @@ training:
   episodes: 100
   num_envs: 128
   checkpoint_frequency: 10000 
+  max_checkpoints_to_keep: 20
   video_during_training: true
   stats_during_training: false
   auto_analysis: false 

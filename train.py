@@ -346,10 +346,14 @@ def main():
     os.makedirs(models_dir, exist_ok=True)
     
     # Orbax Setup (New API)
+    _missing = object()
+    max_checkpoints = config.get('training.max_checkpoints_to_keep', _missing)
+    if max_checkpoints is _missing:
+        raise ValueError("Strict Config: Configuration key 'training.max_checkpoints_to_keep' is required but missing.")
     checkpointer = ocp.CheckpointManager(
         os.path.abspath(models_dir),
         checkpointers=ocp.StandardCheckpointer(),
-        options=ocp.CheckpointManagerOptions(max_to_keep=5, create=True)
+        options=ocp.CheckpointManagerOptions(max_to_keep=max_checkpoints, create=True)
     )
 
     # Save config

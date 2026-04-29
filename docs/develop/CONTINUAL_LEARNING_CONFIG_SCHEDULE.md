@@ -71,7 +71,7 @@ This forces the world model to re-learn environment dynamics from scratch in the
 Detailed in [`13_checkpoint_scheduling.md`](../environment/13_checkpoint_scheduling.md). Per user direction, the current checkpoint scheduler is **kept as-is** and the stage-transition trigger must use the **same drift semantics**:
 
 - The checkpoint gate at `train.py:1664` is evaluated **once per training iteration** (not per episode). Saved Orbax step keys are `total_episodes_completed`, which drifts above the nominal multiple of `checkpoint_frequency` by up to `num_envs − 1` episodes.
-- The stage-transition gate in this plan fires under the same rule: **the first iteration whose `total_episodes_completed ≥ boundaries[current_stage]`** triggers the transition. No forced save at the exact boundary, no nominal-milestone alignment, no changes to `main.last_checkpoint_save`, `max_to_keep`, or the step key passed to `checkpointer.save`.
+- The stage-transition gate in this plan fires under the same rule: **the first iteration whose `total_episodes_completed >= boundaries[current_stage]`** triggers the transition. No forced save at the exact boundary, no nominal-milestone alignment, no changes to `main.last_checkpoint_save`, `max_to_keep`, or the step key passed to `checkpointer.save`.
 - Consequence: a stage whose boundary is `3000` may actually transition at episode `3073`. This matches the behavior of the checkpointer today and is accepted.
 
 The review doc (`13_checkpoint_scheduling.md`) describes the drift for reference but **does not prescribe any change** to the scheduler as part of this plan.
@@ -415,7 +415,7 @@ Note: `main.last_checkpoint_save` is **not** reset on transition. It keeps advan
 
 #### `train.py` — checkpoint frequency lookup (line 1657)
 
-Minimal change: per-stage lookup in continual mode, otherwise unchanged. **Everything else in the scheduler stays exactly as it is today** — same drift, same step key (`total_episodes_completed`), same `main.last_checkpoint_save` singleton, same `max_to_keep=5`.
+Minimal change: per-stage lookup in continual mode, otherwise unchanged. **Everything else in the scheduler stays exactly as it is today** — same drift, same step key (`total_episodes_completed`), same `main.last_checkpoint_save` singleton, same YAML-configurable `max_to_keep`.
 
 ```python
 # BEFORE (train.py:1657):
@@ -504,7 +504,7 @@ Where `configs/experiment/curriculum_basic/` contains e.g.:
 - [ ] **Ckpt 4** — Stage transition fires exactly once: set `boundaries=[5, 10, 15]` with `num_envs=1` and a dummy agent; log stage index each iteration and assert transitions occur only at the expected episode counts.
 - [ ] **Ckpt 5** — Env rebuild actually takes effect: after transition, change a cheap-to-observe param like `food_nutrition_gain` between stages and confirm the agent observes the new value (via `behavior/ate_food_reward` WandB metric).
 - [ ] **Ckpt 6** — Per-stage ckpt freq honoured: stage with freq=1000 followed by stage with freq=100 produces saves spaced ≈100 episodes apart in the new stage (with the same drift the user already accepts). No forced save at the boundary.
-- [ ] **Ckpt 7** — Scheduler untouched: diff of `train.py:1658-1694` shows only the one-line `checkpoint_freq` lookup change (line 1657). Step key passed to `checkpointer.save` is still `total_episodes_completed`; `main.last_checkpoint_save` still snaps via `(total // freq) * freq`; `max_to_keep=5` unchanged.
+- [ ] **Ckpt 7** — Scheduler untouched: diff of `train.py:1658-1694` shows only the one-line `checkpoint_freq` lookup change (line 1657). Step key passed to `checkpointer.save` is still `total_episodes_completed`; `main.last_checkpoint_save` still snaps via `(total // freq) * freq`; `max_to_keep` logic unchanged.
 - [ ] **Ckpt 8** — WandB schema: after one transition, the WandB run has `stage/index` increasing 0 → 1 with a `stage/transition=1` spike, and `wandb.config.continual.stage_names` populated.
 - [ ] **Ckpt 9** — DreamerV3 buffer cleared at transition: launch with `algorithm=DreamerV3`, log `buffer.size` every iteration; immediately after a transition, `buffer.size == 0` and then regrows with new-stage transitions. Verify `stage/buffer_cleared_main` appears in WandB with the pre-clear size. For RecurrentPPO, the transition code path skips the clear block (no buffer to clear).
 - [ ] **Ckpt 10** — Mid-episode drop is observable: with `num_envs=5` and a boundary=100 schedule, log per-env `episode_returns` immediately before and after the transition. Verify that envs with non-zero pre-transition returns show zero post-transition, and `ep_info_buffer` gains no entries for them.

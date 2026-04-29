@@ -41,7 +41,7 @@ Key facts:
 - **Gate granularity = one training iteration**, i.e. one call to `jit_train(...)` covering `num_steps × num_envs` environment transitions.
 - **Step key passed to Orbax = `total_episodes_completed`** — the *actual* cumulative episode count at the end of that iteration, not the nominal milestone.
 - **Cursor update** snaps `last_checkpoint_save` **down** to the nearest multiple of `checkpoint_freq` below the current count: `(total // freq) * freq`.
-- **`max_to_keep=5`** in the `CheckpointManagerOptions` (`train.py:352`). Once 6 checkpoints have been written, the oldest is pruned — so early saves disappear silently.
+- **`max_to_keep`** in the `CheckpointManagerOptions` (configured by `training.max_checkpoints_to_keep`). Once the limit is reached, the oldest is pruned — so early saves disappear silently.
 
 ### Episode counter advancement
 
@@ -109,9 +109,9 @@ iter    episodes   gate            action    step    last_save
 
 On disk you see `{450, 890}` — the 100, 200, 300, 500, 600, 700 checkpoints simply never existed.
 
-### Regime 3 — silent pruning by `max_to_keep=5`
+### Regime 3 — silent pruning by `max_checkpoints_to_keep`
 
-Even when drift is small, the first few saves are deleted once `max_to_keep=5` is reached. A 20k-episode run with `f=1000` leaves only the last 5 saves (episodes ≈ 16k, 17k, 18k, 19k, 20k). Early checkpoints that were correctly written are **gone** — not a scheduling bug but often mistaken for one.
+Even when drift is small, the first few saves are deleted once the limit set by `training.max_checkpoints_to_keep` (default: 5) is reached. A 20k-episode run with `f=1000` leaves only the last 5 saves (episodes ≈ 16k, 17k, 18k, 19k, 20k) if the default is used. Early checkpoints that were correctly written are **gone** — not a scheduling bug but often mistaken for one. Set `training.max_checkpoints_to_keep: null` in your YAML to retain all checkpoints.
 
 ---
 
@@ -157,7 +157,7 @@ See [`docs/develop/CONTINUAL_LEARNING_CONFIG_SCHEDULE.md`](../develop/CONTINUAL_
 | Orbax step keys are actual episode counts (e.g. `156`), not nominal milestones (e.g. `100`) | Step key = `total_episodes_completed` | Accepted |
 | Milestones may collapse when `num_envs ≥ freq` | Per-iteration gate, per-iteration Δ can exceed freq | Accepted (raise freq manually if tight alignment matters) |
 | `main.last_checkpoint_save` persists across `main()` calls in the same process | Function-attribute singleton | Accepted (not an issue for single-run CLI usage) |
-| `max_to_keep=5` prunes the oldest saves | Orbax `CheckpointManagerOptions` default in `train.py:352` | Accepted (set higher in code if full history needed) |
+| `max_checkpoints_to_keep` prunes the oldest saves | YAML config `training.max_checkpoints_to_keep` | Accepted (set to null in config if full history needed) |
 
 ---
 
@@ -187,11 +187,11 @@ A: Yes. Under a fixed seed, env stepping is deterministic, so the per-iteration 
 **Q: How do I force a checkpoint at a specific episode milestone?**
 A: Not supported by the current gate. Workaround: set `checkpoint_frequency` low (e.g. 1) and post-process by keeping only the savepoints nearest to your target milestones. Or implement **F2** (catch-up saves) — the plan explicitly does not.
 
-**Q: Does `max_to_keep=5` apply per-run or per-resume?**
-A: Per-`CheckpointManager` instance. A fresh run starts with an empty tracking list; resuming into the same `models_dir` re-attaches and Orbax re-discovers the existing 5 latest. Older saves that were already pruned stay gone.
+**Q: Does `max_to_keep` apply per-run or per-resume?**
+A: Per-`CheckpointManager` instance. A fresh run starts with an empty tracking list; resuming into the same `models_dir` re-attaches and Orbax re-discovers the existing saves up to the limit. Older saves that were already pruned stay gone.
 
 **Q: Can I raise `max_to_keep` without re-training?**
-A: Yes — change the value at the `CheckpointManagerOptions` call (`train.py:352`). The new limit only affects future saves. Previously-pruned checkpoints aren't recovered.
+A: Yes — change the value of `training.max_checkpoints_to_keep` in your YAML config. The new limit only affects future saves. Previously-pruned checkpoints aren't recovered.
 
 **Q: Do WandB logs track nominal or actual episode counts?**
 A: WandB step = `total_episodes_completed` (actual count). If you're cross-referencing WandB with checkpoint filenames, both use the same number — but neither corresponds to clean milestones. Use the actual count.
