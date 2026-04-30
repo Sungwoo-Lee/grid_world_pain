@@ -97,6 +97,8 @@ def main():
                     help="Also write a consolidated MP4 concatenating every episode in order.")
     ap.add_argument("--skip-existing", action="store_true",
                     help="Skip episodes whose MP4 already exists.")
+    ap.add_argument("--cleanup-per-episode", action="store_true",
+                    help="After --concat succeeds, delete per-episode MP4s. Keeps only eval_<pct>.mp4.")
     args = ap.parse_args()
 
     rec_dir = Path(args.recordings_dir)
@@ -157,6 +159,21 @@ def main():
         consolidated = run_root / "videos" / f"eval_{rec_dir.name}.mp4"
         save_jax_video(frame_generator(), str(consolidated), fps=args.fps, quiet=True)
         print(f"Consolidated → {consolidated}")
+
+        if args.cleanup_per_episode:
+            removed = 0
+            for ep_file in episode_files:
+                out_mp4 = video_dir / (ep_file.stem.replace(".rec", "") + ".mp4")
+                if out_mp4.exists():
+                    out_mp4.unlink()
+                    removed += 1
+            
+            # Remove the now-empty per-episode directory if it has no other content
+            try:
+                video_dir.rmdir()  # only succeeds if empty
+            except OSError:
+                pass  # not empty (e.g., manual files); leave it
+            print(f"Cleaned up {removed} per-episode MP4(s); kept consolidated only.")
 
 
 if __name__ == "__main__":

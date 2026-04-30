@@ -297,6 +297,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             recordings_dir,
             "--concat",
             "--skip-existing",
+            "--cleanup-per-episode",
             "--fps", str(fps),
         ]
         child_env = dict(os.environ)

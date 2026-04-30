@@ -113,6 +113,7 @@ COLORS = {
     'satiation': '#0D9488',   # Teal
     'nutrition': '#D97706',   # Amber
     'injury': '#BE123C',      # Ruby/Crimson
+    'intero_noc': '#7C3AED',  # Violet (WandB/Purple aesthetic)
     'mod': '#7C3AED',         # Violet
     'action': '#2563EB',      # Cobalt
     
@@ -545,13 +546,17 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
     # Known sensor observations for mapping
     sensor_map = {s['name']: s for s in sensory_data} if sensory_data else {}
     
+    # Compact spacing when intero nociception is enabled (4 bars instead of 3)
+    intero_noc_enabled = bool(getattr(params, 'interoceptive_nociception_enabled', False))
+    bar_step = 0.10 if intero_noc_enabled else 0.15  # tighter when 4 bars
+    
     # Satiation
     sat_real, max_sat = float(state.satiation), float(params.max_satiation)
     sat_obs_data = sensor_map.get('Satiation', {'intensity': sat_real/max_sat})
     sat_obs = float(sat_obs_data.get('intensity', 0))
     draw_dual_capsule_bar(ax_left, 0.05, y_ptr, 0.9, 0.04, sat_real/max_sat, sat_obs, COLORS['satiation'], 
                           "Satiation", f"{sat_real/max_sat:.2f}", f"{sat_obs:.2f}", transform=ax_left.transAxes)
-    y_ptr -= 0.15
+    y_ptr -= bar_step
     
     # Nutrition
     nut_real, max_nut = float(state.nutrition), float(params.max_nutrition)
@@ -559,7 +564,7 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
     nut_obs = float(nut_obs_data.get('intensity', 0))
     draw_dual_capsule_bar(ax_left, 0.05, y_ptr, 0.9, 0.04, nut_real/max_nut, nut_obs, COLORS['nutrition'], 
                           "Nutrition", f"{nut_real/max_nut:.2f}", f"{nut_obs:.2f}", transform=ax_left.transAxes)
-    y_ptr -= 0.15
+    y_ptr -= bar_step
     
     # Injury
     inj_real, max_inj = float(state.injury_level), float(params.max_injury)
@@ -567,7 +572,18 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
     inj_obs = float(inj_obs_data.get('intensity', 0))
     draw_dual_capsule_bar(ax_left, 0.05, y_ptr, 0.9, 0.04, inj_real/max_inj, inj_obs, COLORS['injury'], 
                           "Injury", f"{inj_real/max_inj:.2f}", f"{inj_obs:.2f}", transform=ax_left.transAxes)
-    y_ptr -= 0.16
+    y_ptr -= bar_step
+
+    # Interoceptive Nociception (only when enabled)
+    if intero_noc_enabled:
+        # Use current injury as the "reality" baseline for pain perception.
+        # This highlights the temporal lag/smearing when convolution is enabled.
+        intero_real = float(state.injury_level) / max_inj
+        intero_obs_data = sensor_map.get('Intero Nociception', {'intensity': intero_real})
+        intero_obs = float(intero_obs_data.get('intensity', 0))
+        draw_dual_capsule_bar(ax_left, 0.05, y_ptr, 0.9, 0.04, intero_real, intero_obs, COLORS['intero_noc'],
+                              "Intero Noc", f"{intero_real:.2f}", f"{intero_obs:.2f}", transform=ax_left.transAxes)
+        y_ptr -= bar_step
     
     draw_pod_frame(ax_left, 0.05, 0.32, 0.9, 0.16, "Run Context", transform=ax_left.transAxes)
     ctxt_y = 0.43
