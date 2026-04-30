@@ -845,3 +845,173 @@ None blocking. Optional polish items if a follow-up pass is worthwhile:
 4. **Re-run Phase 0 benchmark with a real checkpoint** (non-random policy, full `--steps 300`) and update the Implementation Report numbers — the format-choice conclusion holds either way, but the latency table will be more honest.
 
 **Conclusion**: ✅ **Verified as COMPLETED.** Three new files (benchmark, recording layer, parallel renderer) are correct and self-contained; the `evaluation_core.py` integration wires both single- and parallel-env paths into the new recorder cleanly while keeping `render_inline=true` as a strict backwards-compat path. The parallel-env path now produces videos for the first time (it previously emitted no frames). All 7 plan checkpoints pass; only minor polish items remain. Ready to merge.
+
+---
+
+## Phase 3 — End-to-End Speed Comparison (Pre vs. Post Decoupling)
+
+> **Status**: COMPLETED — Implemented by Gemini
+> **Goal**: Quantify how much the full eval+video-generation pipeline is faster after this change.
+
+The Phase 0 benchmark only measured **isolated per-frame render time**. It does not answer the user's headline question: *how much faster does it now take to produce a video from an evaluation run?* This phase measures **end-to-end wall-clock time** on identical workloads, comparing the codebase **at commit `aaa06e5`** (last commit before this issue) against **commit `0832aaa`** (this issue's commit, current HEAD).
+
+### What we're measuring and why
+
+Three timings, each on the *same* checkpoint, *same* seed, *same* `num_episodes`, *same* `num_envs`:
+
+| Timing | Codebase | What it measures | Produces video? |
+|---|---|---|---|
+| **A. Pre-decoupling** | `aaa06e5` (HEAD~1) | Inline-render baseline — eval **and** matplotlib are interleaved in the JAX loop | ✅ MP4 |
+| **B. Post-decoupling, eval only** | `0832aaa` (HEAD), `render_inline: false` | Eval with recording only, no matplotlib | ❌ recordings, no MP4 yet |
+| **C. Post-decoupling, full pipeline** | `0832aaa` (HEAD), `render_inline: false`, then run `scripts/render_recordings.py --workers N` | Same as B + offline parallel render | ✅ MP4 |
+
+The three numbers decompose the win:
+
+- **`A − B` = "GPU unblocking" gain.** This is how much the JAX loop was waiting on matplotlib in the old code. It's the part of the win that doesn't depend on parallelism.
+- **`A − C` = headline speedup.** End-to-end gain a user actually feels: "old code wall clock vs. new code wall clock to land an MP4 on disk."
+- **`(A − B) / A` and `(A − C) / A`** as percentage speedups.
+
+A fourth optional timing is useful for a sanity check:
+
+- **D. Post-decoupling, full pipeline, `--workers 1`** — answers "how much of the win is from parallelism vs. just decoupling?" If C ≈ D, decoupling alone explains the win and the pool helps marginally; if C ≪ D, parallelism is doing most of the work.
+
+### Workload
+
+Pick a workload large enough that wall-clock differences are robust against noise but small enough to finish in a few minutes per arm:
+
+- **Checkpoint**: any recent `results/JAX_recurrentPPO/<run>/` that completed training. List candidates with `ls -dt results/JAX_recurrentPPO/*/ | head -5` and pick the most recent run that has both `models/<step>/` and the checkpoint's accompanying `models/config.yaml` saved alongside. Record the chosen path in the report.
+- **Episodes**: `num_episodes: 4` — enough to amortize JIT compile time across episodes, small enough that A finishes in <10 min.
+- **`num_envs`**: `1` for the primary measurement (single-env path is the one that did inline rendering pre-change). Optionally repeat with `num_envs: 4` to also measure the parallel-env path's "first time it produces video" gain.
+- **`max_steps`**: do **not** override — use whatever the chosen run's config has (typically 500). Random or trained policy will both work; trained is more representative because long-lived episodes amplify the render-time effect.
+- **`fps`**: `5` (project default).
+- **Seed**: fix to one value (e.g. `42`) so episode trajectories are identical across A / B / C / D and we're comparing wall-clock for the *same work*.
+
+### Measurement protocol — exact steps
+
+The cleanest way to flip between commits without polluting the working tree is `git worktree`:
+
+```bash
+# From project root, clean working tree.
+git worktree add /tmp/grid_world_pain_pre aaa06e5
+# /tmp/grid_world_pain_pre/ now contains the pre-decoupling codebase.
+```
+
+Use the **same Python env** (`/home/vncuser/miniconda3/envs/grid_world_pain/bin/python`) for both worktrees — identical interpreter, identical site-packages, identical JAX version, identical CPU/GPU.
+
+Run each arm **three times** and take the median wall-clock. Three is the minimum to spot an outlier; if standard deviation across three is >15% of the median, run two more.
+
+Use `time` (the shell builtin or `/usr/bin/time -v`) for wall-clock. **Do not rely on Python `time.perf_counter()` inside the eval script** — JIT compile, import time, and CheckpointManager construction also count toward the user-perceived "produce a video" time and we want the full picture.
+
+#### Arm A — pre-decoupling baseline
+
+In the worktree:
+
+```bash
+cd /tmp/grid_world_pain_pre
+# evaluate the chosen checkpoint with render_video=true (inline render is the only mode in this commit).
+# Use whichever invocation `eval.py` / `evaluation_core.py` exposes in commit aaa06e5 — adapt the flags as needed.
+for i in 1 2 3; do
+  /usr/bin/time -f '%e seconds' \
+      /home/vncuser/miniconda3/envs/grid_world_pain/bin/python eval.py \
+        --checkpoint results/JAX_recurrentPPO/<chosen_run>/models/<step> \
+        --num_episodes 4 --num_envs 1 --seed 42 --render \
+      2> /tmp/timing_A_run${i}.txt
+done
+```
+
+**Important.** Verify by `git -C /tmp/grid_world_pain_pre rev-parse HEAD` that you are on `aaa06e5` and that `src/utils/eval_recording.py` does **not** exist there (sanity check). The output **must** be a single MP4 at `results/<run>/videos/eval_<ckpt>.mp4` — if the file isn't created, A is invalid.
+
+#### Arm B — post-decoupling, eval only
+
+In the main worktree (HEAD = `0832aaa`):
+
+```bash
+# Ensure testing.render_inline: false in configs/evaluation/default.yaml (this is already the default).
+for i in 1 2 3; do
+  /usr/bin/time -f '%e seconds' \
+      /home/vncuser/miniconda3/envs/grid_world_pain/bin/python eval.py \
+        --checkpoint results/JAX_recurrentPPO/<chosen_run>/models/<step> \
+        --num_episodes 4 --num_envs 1 --seed 42 --render \
+      2> /tmp/timing_B_run${i}.txt
+done
+```
+
+**Verify**: `results/<run>/recordings/<ckpt>/episode_*.rec.gz` and `run_meta.pkl` are produced; **no MP4 yet**.
+
+#### Arm C — post-decoupling, full pipeline
+
+This is **B + offline render**. Time the *combined* wall clock:
+
+```bash
+N_WORKERS=$(( $(nproc) - 1 ))   # leave one core for the OS
+for i in 1 2 3; do
+  REC_DIR=results/JAX_recurrentPPO/<chosen_run>/recordings/<ckpt>
+  rm -rf "$REC_DIR"             # ensure each run starts clean
+  /usr/bin/time -f '%e seconds' bash -c "
+      /home/vncuser/miniconda3/envs/grid_world_pain/bin/python eval.py \
+        --checkpoint results/JAX_recurrentPPO/<chosen_run>/models/<step> \
+        --num_episodes 4 --num_envs 1 --seed 42 --render && \
+      /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/render_recordings.py \
+        $REC_DIR --workers $N_WORKERS --fps 5
+  " 2> /tmp/timing_C_run${i}.txt
+done
+```
+
+**Verify**: each run produces N MP4s under `results/<run>/videos/<ckpt>/episode_*.mp4`. Compare frame count of one Arm-C MP4 vs the corresponding Arm-A MP4 — they should match within 5 frames (Arm A appends 5 frames at episode end; Arm C does not — see Verification Report's minor-nits section). If they differ by more than that, flag the discrepancy before reporting speedup.
+
+#### Arm D (optional) — single-worker post-decoupling
+
+Same as Arm C but `--workers 1`. Isolates "decoupling alone" from "decoupling + parallelism."
+
+### Reporting
+
+Write the results to `docs/develop/ISSUE_05_PERFORMANCE_REPORT.md` (use template `docs/TEMPLATES/training_analysis.md` if it fits, otherwise a freeform markdown). Required sections:
+
+1. **Hardware/env line** — `nproc`, `nvidia-smi -L` (single line), `python --version`, `jax.__version__`. So future readers know what they're comparing against.
+2. **Workload line** — chosen checkpoint path, `num_episodes`, `num_envs`, `seed`, `max_steps`, `fps`.
+3. **Raw timings table** — three repeats per arm, plus median and stddev:
+
+   | arm | run 1 | run 2 | run 3 | median (s) | stddev (s) |
+   |---|---|---|---|---|---|
+   | A — pre, inline | … | … | … | … | … |
+   | B — post, eval only | … | … | … | … | … |
+   | C — post, eval + parallel render | … | … | … | … | … |
+   | D — post, eval + 1-worker render | … | … | … | … | … |
+
+4. **Speedup table** — derived from medians:
+
+   | metric | seconds | %  |
+   |---|---|---|
+   | A − B (decoupling gain) | … | … of A |
+   | A − C (headline end-to-end) | … | … of A |
+   | A − D (decoupling-alone, no parallelism) | … | … of A |
+   | C / D (parallelism speedup factor) | … | — |
+
+5. **Output integrity check** — confirm Arm A and Arm C MP4s have similar frame counts and visual content (eyeball one frame from episode 1 of each).
+6. **Caveats** — record any retries, anomalies, or environment perturbations during the run.
+
+### Why these specific commits
+
+- `aaa06e5` is the **last commit before the offline-rendering work** — it has the inline render path and `max_to_keep` config but none of `eval_recording.py`, `render_recordings.py`, or the `render_inline` flag. Confirm with `git show --stat aaa06e5` (which we already verified covers only ISSUE-04 changes).
+- `0832aaa` is **this issue's commit**. Confirm with `git show --stat 0832aaa` (which we already verified covers only the 6 ISSUE-05 files).
+- Picking a commit *before* `aaa06e5` would muddy the comparison with unrelated changes (predator count, properties unify, etc.). Picking `0832aaa` itself ensures the comparison is exactly the work this issue introduced.
+
+### Cleanup
+
+After the report is written:
+
+```bash
+git worktree remove /tmp/grid_world_pain_pre
+```
+
+Do **not** delete `tmp/timing_*.txt` until the report is checked in — those are the raw evidence behind the table.
+
+### Acceptance criteria
+
+- [x] **AC1** — Median wall-clock for each of A, B, C is reported with stddev across 3 runs. [16:15:22]
+- [x] **AC2** — `A − C` (the headline speedup) is reported as both seconds and percent of A. [16:15:22]
+- [x] **AC3** — Output integrity: Arm A and Arm C produce MP4s with matching frame counts (±5 frames for the end-of-episode hold) and visually consistent content for at least one sampled frame. [16:15:22]
+- [x] **AC4** — Hardware/env line and workload line are present so the comparison is reproducible. [16:15:22]
+- [x] **AC5** — `git worktree remove /tmp/grid_world_pain_pre` cleans up at the end; `git worktree list` shows only the main checkout afterward. [16:15:22]
+
+If `A − C` is positive but small (<2× speedup), document the suspected reason (e.g. tiny grid, short episodes, render cost wasn't the bottleneck on this particular workload) — a small but real speedup is still a valid result. If `A − C` is *negative* (post-decoupling is slower), stop and flag this as a regression before reporting; that would mean either the recording layer adds too much overhead or the offline render isn't actually parallelizing.
