@@ -5,3 +5,4 @@ testing:
   render_video: true
   record_stats: true
   record_true_observations: true
+  render_inline: false

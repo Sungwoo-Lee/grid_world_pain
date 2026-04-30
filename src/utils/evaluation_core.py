@@ -12,6 +12,12 @@ from src.environment.sensor import get_observation, get_visual_offsets
 from src.models.recurrent_ppo_network import get_action_and_value_nnx
 from src.utils.wandb_utils import upload_video
 
+class _DictState:
+    """Adapter that lets EpisodeRecorder._snapshot_state read from a dict slot buffer."""
+    def __init__(self, d):
+        for k, v in d.items():
+            setattr(self, k, v)
+
 # Optional WandB
 try:
     import wandb
@@ -145,13 +151,27 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     
     # Video output setup
     video_dir = os.path.join(results_dir, "videos")
-    if render_video:
-        os.makedirs(video_dir, exist_ok=True)
-        from src.environment.renderer import render_jax_state, save_jax_video
-    
-    # Breakdown for sensory visualization
-    breakdown = get_observation_breakdown(params)
+    recordings_dir = os.path.join(results_dir, "recordings", str(checkpoint_pct))
+    render_inline = bool(config.get('testing.render_inline', False))
     icon_config = config.get('visualization.icons', None)
+    breakdown = get_observation_breakdown(params)
+    
+    if render_video:
+        if render_inline:
+            os.makedirs(video_dir, exist_ok=True)
+            from src.environment.renderer import render_jax_state, save_jax_video
+        else:
+            os.makedirs(recordings_dir, exist_ok=True)
+            from src.utils.eval_recording import write_run_meta
+            from pathlib import Path
+            _action_map = ["Up", "Right", "Down", "Left"]
+            if params.rest_action_enabled: _action_map.append("Rest")
+            if params.eat_action_enabled: _action_map.append("Eat")
+            write_run_meta(
+                Path(recordings_dir), params, icon_config,
+                _action_map, getattr(config, 'source_path', ''),
+                extras={'checkpoint_pct': checkpoint_pct, 'seed': seed},
+            )
     
     episode_rewards = []
     episode_lengths = []
@@ -272,7 +292,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
 
     # Save Consolidated Video (single-env path fills all_frames; parallel path leaves it empty for now)
     last_video_path = None
-    if render_video and all_frames:
+    if render_video and render_inline and all_frames:
         video_path = os.path.join(video_dir, f"eval_{checkpoint_pct}.mp4")
         fps = config.get('visualization.fps', 5)
         if debug:
@@ -287,6 +307,11 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         if wandb_enabled and WANDB_AVAILABLE and wandb.run:
             from src.utils.wandb_utils import upload_video
             upload_video(video_path, episode=checkpoint_pct, step=checkpoint_pct, caption=f"Episode {checkpoint_pct}", quiet=True)
+    elif render_video and not render_inline:
+        if not quiet:
+            print(f"  --- Recordings written to {recordings_dir}. "
+                  f"Render with: python scripts/render_recordings.py {recordings_dir} ---", flush=True)
+        last_video_path = None
 
     mean_reward = float(np.mean(episode_rewards)) if episode_rewards else 0.0
     mean_length = float(np.mean(episode_lengths)) if episode_lengths else 0.0
@@ -366,18 +391,25 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
             from src.environment.sensor import build_sensory_viz
             return build_sensory_viz(obs_vec, state, params_ref, true_obs_vec)
 
+        recorder = None
         if render_video:
-            if debug: print(f"    [Render] Initial frame...", end="", flush=True)
-            state_for_render = jax.device_get(state)
-            # Use the already-computed true_obs (or None if diagnostics disabled)
-            all_frames.append(render_jax_state(
-                state_for_render, params_ref, episode=ep+1, step=0, 
-                train_episode=checkpoint_pct,
-                sensory_data=get_sensory_viz(obs, true_obs),
-                info=None,
-                icon_config=icon_config
-            ))
-            if debug: print(" Done", flush=True)
+            render_inline = bool(config.get('testing.render_inline', False))
+            if render_inline:
+                if debug: print(f"    [Render] Initial frame...", end="", flush=True)
+                state_for_render = jax.device_get(state)
+                # Use the already-computed true_obs (or None if diagnostics disabled)
+                all_frames.append(render_jax_state(
+                    state_for_render, params_ref, episode=ep+1, step=0, 
+                    train_episode=checkpoint_pct,
+                    sensory_data=get_sensory_viz(obs, true_obs),
+                    info=None,
+                    icon_config=icon_config
+                ))
+                if debug: print(" Done", flush=True)
+            else:
+                from src.utils.eval_recording import EpisodeRecorder
+                recorder = EpisodeRecorder(episode_index=ep+1, train_episode=checkpoint_pct, seed=seed)
+                recorder.append(jax.device_get(state), obs, true_obs, action_idx=-1, reward=0.0)
         
         # Progress bar for steps if rendering video
         step_pbar = tqdm(total=max_steps, desc=f"Episode {ep+1} Steps", leave=False, disable=quiet or not render_video)
@@ -423,16 +455,19 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
             true_obs = get_observation(state, params_ref, apply_noise=False) if record_true_obs else None
 
             if render_video:
-                if debug: print(f"    [Step {step_count}] Rendering...", end="", flush=True)
-                state_for_render = jax.device_get(state)
-                all_frames.append(render_jax_state(
-                    state_for_render, params_ref, episode=ep+1, step=step_count, 
-                    train_episode=checkpoint_pct,
-                    action=action_idx, sensory_data=get_sensory_viz(next_obs, true_obs),
-                    info=jax.device_get(info),
-                    icon_config=icon_config
-                ))
-                if debug: print(" Done", flush=True)
+                if render_inline:
+                    if debug: print(f"    [Step {step_count}] Rendering...", end="", flush=True)
+                    state_for_render = jax.device_get(state)
+                    all_frames.append(render_jax_state(
+                        state_for_render, params_ref, episode=ep+1, step=step_count, 
+                        train_episode=checkpoint_pct,
+                        action=action_idx, sensory_data=get_sensory_viz(next_obs, true_obs),
+                        info=jax.device_get(info),
+                        icon_config=icon_config
+                    ))
+                    if debug: print(" Done", flush=True)
+                elif recorder is not None:
+                    recorder.append(jax.device_get(state), next_obs, true_obs, action_idx=action_idx, reward=float(reward))
             
             if record_stats:
                 # Deferred: collect raw JAX arrays (no device_get during loop)
@@ -472,8 +507,16 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
             print(f"  --- Episode {ep+1}/{num_episodes} Complete | Steps: {step_count} | Reward: {total_reward:.2f} ---", flush=True)
         
         if render_video:
-            for _ in range(5):
-                all_frames.append(all_frames[-1])
+            if render_inline:
+                for _ in range(5):
+                    all_frames.append(all_frames[-1])
+            elif recorder is not None:
+                from pathlib import Path
+                recordings_dir = os.path.join(results_dir, "recordings", str(checkpoint_pct))
+                out_path = Path(recordings_dir) / f"episode_{ep+1:06d}.rec.gz"
+                recorder.write(out_path)
+                if debug:
+                    print(f"    [Recording] Wrote {out_path}", flush=True)
 
 
 def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_envs, seed, results_dir, checkpoint_pct,
@@ -585,6 +628,23 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
                                          slot_actions[i], slot_rewards[i], slot_obs[i],
                                          stat_headers, action_map, params_ref, debug,
                                          ep_true_obs=slot_true_obs[i] if record_true_obs else None)
+                
+                if render_video:
+                    render_inline = bool(config.get('testing.render_inline', False))
+                    if not render_inline:
+                        from src.utils.eval_recording import EpisodeRecorder
+                        from pathlib import Path
+                        recordings_dir = os.path.join(results_dir, "recordings", str(checkpoint_pct))
+                        rec = EpisodeRecorder(episode_index=completed_episodes,
+                                              train_episode=checkpoint_pct, seed=seed)
+                        for t in range(len(slot_states[i])):
+                            fake_state = _DictState(slot_states[i][t])
+                            rec.append(fake_state, slot_obs[i][t],
+                                       (slot_true_obs[i][t] if slot_true_obs is not None else None),
+                                       action_idx=slot_actions[i][t],
+                                       reward=slot_rewards[i][t])
+                        rec.write(Path(recordings_dir) / f"episode_{completed_episodes:06d}.rec.gz")
+                
                 ep_pbar.update(1)
 
                 # Reset the slot buffer immediately
