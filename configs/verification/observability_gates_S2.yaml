@@ -280,7 +280,7 @@ sensory:
   proprioception_enabled: true
 
   # Hidden-state observability gates (default true = backward compatible)
-  injury_observable: false
+  injury_observable: true
   nutrition_observable: false
   # Interoceptive nociception: tonic, delayed perception of hidden injury via alpha-kernel convolution.
   # alpha kernel: k_raw[i] = (i/tau) * exp(1 - i/tau), normalized so sum(k)=1. k[0]=0 → no instantaneous leak.

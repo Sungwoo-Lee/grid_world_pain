@@ -1,0 +1,86 @@
+environment:
+  height: 5
+  width: 5
+  start_pos: [2, 2]
+  random_start_pos: false
+  max_steps: 10
+  rest_action_enabled: true
+  eat_action_enabled: false
+  resources: []           # no food
+  predator_enabled: false
+  predators: []
+  neutral_animals:
+    - name: "test_neutral"
+      count: 1
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      move_interval: 0
+      nociception_intensity: 0.0
+      spawn_area: [[1, 1], [1, 1]]
+      patrol_area: [[1, 1], [1, 1]]
+  obstacles: []
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [5, 5]]
+
+body:
+  with_satiation: true
+  with_nutrition: true
+  with_injury: true
+  random_start_satiation: false
+  random_start_nutrition: false
+  random_start_injury: false
+  max_satiation: 100
+  max_nutrition: 100
+  max_injury: 100
+  metabolic_cost: 1.0
+  food_nutrition_gain: 6
+  eating_nutrition_cost: 1.0
+  eating_reward_penalty: 0.0
+  nutrition_to_satiation_scaling_factor: 1.0
+  satiation_setpoint: 100
+  start_satiation: 100
+  start_nutrition: 100
+  recovery_base_rate: 0.1
+  recovery_accel_rate: 0.5
+  injury_smoothing_duration: 3
+  use_homeostatic_reward: true
+  death_penalty: 100
+  overeating_death: false
+
+sensory:
+  using_sensory: true
+  olfactory_enabled: true
+  sensor_radius: 20
+  vector_size: 5
+  decay_power: 2.0
+  collision_sensor_range: 1
+  location_sensor: false
+  nociception_enabled: false
+  nociception_size: 1
+  visual_sensor_enabled: false
+  visual_sensor_range: 0
+  proprioception_enabled: false
+  injury_observable: true
+  nutrition_observable: true
+  interoceptive_nociception_enabled: false
+  interoceptive_convolution_enabled: false
+  interoceptive_kernel_tau: 3.0
+  interoceptive_kernel_length: 12
+
+visualization:
+  local_view_size: 5
+
+perceptual_noise:
+  enabled: false
+  modalities:
+    injury: {mode: "constant", sigma: 0.0, clip_min: 0.0, clip_max: 1.0}
+    nutrition: {mode: "constant", sigma: 0.0, clip_min: 0.0, clip_max: 1.0}
+    satiation: {mode: "constant", sigma: 0.0, clip_min: 0.0, clip_max: 1.0}
+    interoceptive_nociception: {mode: "constant", sigma: 0.0, clip_min: 0.0, clip_max: 1.0}
+    extero_nociception: {mode: "constant", sigma: 0.0, clip_min: 0.0, clip_max: 1.0}
+    olfaction: {mode: "constant", sigma: 0.0, clip_min: 0.0, clip_max: 1.0}
+    collision: {mode: "constant", sigma: 0.0, clip_min: 0.0, clip_max: 1.0}
+    proprioception: {mode: "constant", sigma: 0.0, clip_min: 0.0, clip_max: 1.0}
+    visual: {mode: "constant", sigma: 0.0, clip_min: 0.0, clip_max: 1.0}
+    location: {mode: "constant", sigma: 0.0, clip_min: 0.0, clip_max: 1.0}
