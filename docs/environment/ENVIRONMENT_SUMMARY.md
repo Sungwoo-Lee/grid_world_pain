@@ -81,9 +81,9 @@ jax_step(state, action, params)
 │
 ├── 5. BODY UPDATE  ──────────────────────────────────────────────────────────
 │       update_body(state, info, params)
-│       READ:  satiation, nutrition, injury_level, injury_buffer, rest_streak
-│       COMPUTES: new_satiation, new_nutrition, new_injury, done_from_body
-│       WRITE: satiation, nutrition, injury_level, injury_buffer, rest_streak
+│       READ:  satiation, nutrition, injury_level, injury_buffer, rest_streak, nociception_history_buffer
+│       COMPUTES: new_satiation, new_nutrition, new_injury, done_from_body, new_nociception_history
+│       WRITE: satiation, nutrition, injury_level, injury_buffer, rest_streak, nociception_history_buffer
 │
 ├── 6. TERMINATION  ──────────────────────────────────────────────────────────
 │       reason codes 0-4, done = done_from_body OR truncated
@@ -106,12 +106,13 @@ Authoritative sensor order (from `get_observation_breakdown()` in `sensor.py`).
 
 | Slice | Sensor | Enabled by | Dim | Value range |
 |-------|--------|-----------|-----|-------------|
-| `[0]` | Injury | Always | 1 | `[0, 1]` |
-| `[1]` | Nutrition | Always | 1 | `[0, 1]` |
+| `[0]` | Injury | `injury_observable` | 1 | `[0, 1]` |
+| `[1]` | Nutrition | `nutrition_observable` | 1 | `[0, 1]` |
 | `[2]` | Satiation | Always | 1 | `[0, 1]` |
-| `[3]` | Extero Nociception | `nociception_enabled` | 1 | `[0, 1]` |
-| `[4:4+V]` | Olfaction | `olfactory_enabled` | V=`olfactory_vector_size` | `[0, ∞)` |
-| `[4+V:4+V+C]` | Collision | Always | C=`2r²+2r+1` | `{0, 1}` |
+| `[3]` | Interoceptive Nociception | `intero_enabled` | 1 | `[0, 1]` |
+| `[4]` | Extero Nociception | `nociception_enabled` | 1 | `[0, 1]` |
+| `[5:5+V]` | Olfaction | `olfactory_enabled` | V=`olfactory_vector_size` | `[0, ∞)` |
+| `[5+V:5+V+C]` | Collision | Always | C=`2r²+2r+1` | `{0, 1}` |
 | `+A` | Proprioception | `proprioception_enabled` | A=`action_dim` | `{0, 1}` |
 | `+W` | Visual | `visual_sensor_enabled` | W=`(2r²+2r+1)×8` | `{0, 1}` |
 | `+2` | Location | `location_sensor_enabled` | 2 | `[-1, 1]` |
@@ -153,9 +154,14 @@ Quick-lookup for YAML path → `EnvParams` field:
 | `sensory.visual_sensor_range` | `visual_sensor_range` | int (static) |
 | `sensory.olfactory_enabled` | `olfactory_enabled` | bool (static) |
 | `sensory.nociception_enabled` | `nociception_enabled` | bool (static) |
+| `sensory.interoceptive_nociception_enabled` | `interoceptive_nociception_enabled` | bool (static) |
+| `sensory.interoceptive_convolution_enabled` | `interoceptive_convolution_enabled` | bool (static) |
+| `sensory.injury_observable` | `injury_observable` | bool (static) |
+| `sensory.nutrition_observable` | `nutrition_observable` | bool (static) |
 | `sensory.proprioception_enabled` | `proprioception_enabled` | bool (static) |
 | `sensory.location_sensor` | `location_sensor_enabled` | bool (static) |
 | `sensory.vector_size` | `olfactory_vector_size` | int (static) |
+| `sensory.interoceptive_kernel_length` | `interoceptive_kernel_length` | int (static) |
 | `perceptual_noise.enabled` | `perceptual_noise_enabled` | bool (static) |
 | `perceptual_noise.modalities` (key order) | `noise_modality_order` | tuple (static) |
 | `visualization.local_view_size` | `local_view_size` | int (static) |
@@ -184,7 +190,7 @@ A: All entities now use `properties` (plural) as the canonical key. If you use t
 **Q: Why does my new sensor crash `apply_perceptual_noise` with a `KeyError`?**
 A: Every sensor present in `get_observation_breakdown` must have a corresponding entry in `perceptual_noise.modalities`. Set the mode to `none` if you want to skip noise for that sensor. Silent omission crashes. See [10](10_perceptual_noise.md#clarifications--faq).
 
-**Q: Why are noise arrays shape `[12]` when I only configured 9 modalities?**
+**Q: Why are noise arrays shape `[13]` when I only configured 10 modalities?**
 A: Zero-padded to a fixed static shape for JIT stability. The extra 3 slots are unused. See [02](02_config_schema.md#clarifications--faq) and [10](10_perceptual_noise.md#clarifications--faq).
 
 **Q: Why is there a `terminated` field on `EnvState` and a `done` return value?**

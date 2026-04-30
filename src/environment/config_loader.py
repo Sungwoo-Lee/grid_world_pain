@@ -280,6 +280,31 @@ def load_env_params(config: Config) -> EnvParams:
         print(f"Sequential steps: {num_total_entities} (one per entity)")
     print("="*60)
     
+    # Hidden-state observability flags
+    injury_observable = bool(config.get_mandatory('sensory.injury_observable'))
+    nutrition_observable = bool(config.get_mandatory('sensory.nutrition_observable'))
+
+    # Interoceptive nociception (delayed-peak perception of hidden injury)
+    interoceptive_nociception_enabled = bool(config.get_mandatory('sensory.interoceptive_nociception_enabled'))
+    interoceptive_convolution_enabled = bool(config.get_mandatory('sensory.interoceptive_convolution_enabled'))
+    interoceptive_kernel_length = int(config.get_mandatory('sensory.interoceptive_kernel_length'))
+    interoceptive_kernel_tau = float(config.get_mandatory('sensory.interoceptive_kernel_tau'))
+
+    if interoceptive_convolution_enabled:
+        # Build normalized alpha kernel: k_raw[i] = (i/τ)·exp(1 - i/τ); k[i] = k_raw[i] / Σk_raw
+        _k_idx = np.arange(interoceptive_kernel_length, dtype=np.float32)
+        _k_raw = (_k_idx / interoceptive_kernel_tau) * np.exp(1.0 - _k_idx / interoceptive_kernel_tau)
+        _k_sum = float(_k_raw.sum())
+        if _k_sum <= 0.0:
+            raise ValueError(
+                f"interoceptive_kernel produced non-positive sum ({_k_sum}). "
+                f"Check tau ({interoceptive_kernel_tau}) and length ({interoceptive_kernel_length})."
+            )
+        interoceptive_kernel = jnp.array(_k_raw / _k_sum, dtype=jnp.float32)
+    else:
+        # Passthrough mode — kernel is unused but kept as zeros for shape stability.
+        interoceptive_kernel = jnp.zeros(interoceptive_kernel_length, dtype=jnp.float32)
+
     return EnvParams(
         height=height,
         width=width,
@@ -370,21 +395,32 @@ def load_env_params(config: Config) -> EnvParams:
         nociception_size=config.get_mandatory('sensory.nociception_size'),
         action_dim=4 + int(config.get_mandatory('environment.rest_action_enabled')) + int(config.get_mandatory('environment.eat_action_enabled')),
 
+        # Hidden-state observability flags
+        injury_observable=injury_observable,
+        nutrition_observable=nutrition_observable,
+
+        # Interoceptive nociception (delayed-peak perception of hidden injury)
+        interoceptive_nociception_enabled=interoceptive_nociception_enabled,
+        interoceptive_convolution_enabled=interoceptive_convolution_enabled,
+        interoceptive_kernel_length=interoceptive_kernel_length,
+        interoceptive_kernel=interoceptive_kernel,
+
         # Perceptual Noise Configuration
         perceptual_noise_enabled=config.get('perceptual_noise.enabled', False),
         **_parse_noise_config(config)
     )
 
 _YAML_KEY_TO_SENSOR_NAME = {
-    "injury":              "Injury",
-    "nutrition":           "Nutrition",
-    "satiation":           "Satiation",
-    "extero_nociception":  "Extero Nociception",
-    "olfaction":           "Olfaction",
-    "collision":           "Collision",
-    "proprioception":      "Proprioception",
-    "visual":              "Visual",
-    "location":            "Location",
+    "injury":                    "Injury",
+    "nutrition":                 "Nutrition",
+    "satiation":                 "Satiation",
+    "extero_nociception":        "Extero Nociception",
+    "interoceptive_nociception": "Interoceptive Nociception",
+    "olfaction":                 "Olfaction",
+    "collision":                 "Collision",
+    "proprioception":            "Proprioception",
+    "visual":                    "Visual",
+    "location":                  "Location",
 }
 
 def _parse_noise_config(config: Config):
@@ -398,7 +434,7 @@ def _parse_noise_config(config: Config):
         for k in modalities_cfg
         if k in _YAML_KEY_TO_SENSOR_NAME
     )
-    pad = max(0, 12 - len(noise_modality_order))
+    pad = max(0, 13 - len(noise_modality_order))
 
     noise_modes = jnp.pad(jnp.array([
         _parse_mode(modalities_cfg[k].get('mode', 'none'))

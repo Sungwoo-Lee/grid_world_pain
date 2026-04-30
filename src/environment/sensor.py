@@ -86,6 +86,24 @@ def sense_extero_nociception(agent_pos, state: EnvState, params: EnvParams):
     final_noc = jnp.max(jnp.array([max_res, max_pred, max_obs_overlap, max_collision]), initial=0.0)
     return jnp.array([final_noc])
 
+def sense_interoceptive_nociception(state: EnvState, params: EnvParams):
+    """
+    Tonic interoceptive pain. Two modes (selected statically at JIT time):
+
+    - Convolution mode (default): convolves recent injury history with a
+      normalized alpha kernel (peak at τ steps). Buffer slot 0 = most recent
+      injury; kernel[0]=0 so current-step injury does not leak instantaneously.
+    - Passthrough mode (`interoceptive_convolution_enabled=False`): bypasses
+      the kernel and returns the current normalized injury directly. Use this
+      for ablations where the agent should perceive injury without delay.
+
+    Returns scalar in [0, 1].
+    """
+    if params.interoceptive_convolution_enabled:
+        convolved = jnp.sum(state.nociception_history_buffer * params.interoceptive_kernel)
+        return jnp.array([convolved / jnp.maximum(params.max_injury, 1e-6)])
+    return jnp.array([state.injury_level / jnp.maximum(params.max_injury, 1e-6)])
+
 def get_visual_offsets(sensor_range):
     """Generates Manhattan diamond offsets in a consistent order."""
     offsets = []
@@ -248,16 +266,23 @@ def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
     
     obs_parts = []
     
-    # 1. Injury
-    obs_parts.append(jnp.array([state.injury_level / params.max_injury]))
-    
-    # 2. Nutrition
-    obs_parts.append(jnp.array([state.nutrition / params.max_nutrition]))
-    
-    # 3. Satiation
+    # 1. Injury (hidden when injury_observable=False) — interoceptive
+    if params.injury_observable:
+        obs_parts.append(jnp.array([state.injury_level / params.max_injury]))
+
+    # 2. Nutrition (hidden when nutrition_observable=False) — interoceptive
+    if params.nutrition_observable:
+        obs_parts.append(jnp.array([state.nutrition / params.max_nutrition]))
+
+    # 3. Satiation — interoceptive
     obs_parts.append(jnp.array([state.satiation / params.max_satiation]))
-    
-    # 4. Extero Nociception (Phasic - Multi-source)
+
+    # 4. Interoceptive Nociception — interoceptive
+    #    (Tonic — delayed function of hidden injury, or passthrough if convolution disabled)
+    if params.interoceptive_nociception_enabled:
+        obs_parts.append(sense_interoceptive_nociception(state, params))
+
+    # 5. Extero Nociception — exteroceptive (phasic, multi-source contact)
     if params.nociception_enabled:
         obs_parts.append(sense_extero_nociception(state.agent_pos, state, params))
 
@@ -296,16 +321,18 @@ def get_observation_breakdown(params: EnvParams):
     """Returns a dict of {sensor_name: dimension} for observation components."""
     breakdown = {}
     
-    # 1. Injury
-    breakdown["Injury"] = 1
-
-    # 2. Nutrition
-    breakdown["Nutrition"] = 1
-
-    # 3. Satiation
+    # 1. Injury (hidden when injury_observable=False) — interoceptive
+    if params.injury_observable:
+        breakdown["Injury"] = 1
+    # 2. Nutrition (hidden when nutrition_observable=False) — interoceptive
+    if params.nutrition_observable:
+        breakdown["Nutrition"] = 1
+    # 3. Satiation — interoceptive
     breakdown["Satiation"] = 1
-
-    # 4. Extero Nociception
+    # 4. Interoceptive Nociception — interoceptive (delayed/passthrough injury)
+    if params.interoceptive_nociception_enabled:
+        breakdown["Interoceptive Nociception"] = 1
+    # 5. Extero Nociception — exteroceptive
     if params.nociception_enabled:
         breakdown["Extero Nociception"] = 1
     
@@ -375,10 +402,16 @@ def build_sensory_viz(obs, state, params, true_obs=None):
             ptr += dim; t_ptr += dim
             viz.append({'name': 'LOC', 'value_text': f"({loc_vec[0]:.2f}, {loc_vec[1]:.2f})", 'color': '#ADB5BD', 'type': 'text'})
         
-        elif sensor_name in ("Satiation", "Nutrition", "Injury"):
+        elif sensor_name in ("Satiation", "Nutrition", "Injury", "Interoceptive Nociception"):
             s_obs = float(obs[ptr])
+            s_true = float(true_obs[t_ptr]) if true_obs is not None else s_obs
             ptr += dim; t_ptr += dim
-            viz.append({'name': sensor_name, 'intensity': s_obs, 'type': 'intensity'})
+            display_name = "Intero Nociception" if sensor_name == "Interoceptive Nociception" else sensor_name
+            color = "#8e44ad" if sensor_name == "Interoceptive Nociception" else None  # purple distinguishes pain
+            tile = {'name': display_name, 'intensity': s_obs, 'true_intensity': s_true, 'type': 'intensity'}
+            if color is not None:
+                tile['color'] = color
+            viz.append(tile)
         
         elif sensor_name == "Visual":
             vis_obs = obs[ptr:ptr+dim]

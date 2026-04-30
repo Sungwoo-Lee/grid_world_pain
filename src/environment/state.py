@@ -37,6 +37,7 @@ class EnvState:
     nutrition: jnp.ndarray       # [] float
     injury_level: jnp.ndarray    # [] float
     injury_buffer: jnp.ndarray   # [smoothing_duration] float
+    nociception_history_buffer: jnp.ndarray  # [interoceptive_kernel_length] float (past injury_level values, idx 0 = most recent)
     last_collision_noc: jnp.ndarray # float (intensity of last collision)
     rest_streak: jnp.ndarray     # [] int
     
@@ -156,6 +157,16 @@ class EnvParams:
     nociception_enabled: bool = struct.field(pytree_node=False)
     location_sensor_enabled: bool = struct.field(pytree_node=False)
 
+    # Hidden-state observability flags
+    injury_observable: bool = struct.field(pytree_node=False)
+    nutrition_observable: bool = struct.field(pytree_node=False)
+
+    # Interoceptive nociception (delayed-peak perception of hidden injury)
+    interoceptive_nociception_enabled: bool = struct.field(pytree_node=False)
+    interoceptive_convolution_enabled: bool = struct.field(pytree_node=False)
+    interoceptive_kernel_length: int = struct.field(pytree_node=False)
+    interoceptive_kernel: jnp.ndarray  # [interoceptive_kernel_length] float, normalized alpha kernel (zeros when convolution disabled)
+
     # Proprioception
     proprioception_enabled: bool = struct.field(pytree_node=False)
     action_dim: int = struct.field(pytree_node=False)
@@ -167,11 +178,11 @@ class EnvParams:
     # Order defined by YAML perceptual_noise.modalities key order (read via config_loader).
     # sensor.py builds modality_map dynamically from this tuple — do not reorder independently.
     noise_modality_order: tuple = struct.field(pytree_node=False)  # e.g. ("Injury","Nutrition",...)
-    noise_modes: jnp.ndarray          # [12] int32 (0: None, 1: Constant, 2: State-Dependent)
-    noise_sigmas: jnp.ndarray         # [12] float32 (Base Sigma)
-    noise_injury_scales: jnp.ndarray  # [12] float32 (Injury Noise Scale)
-    noise_clip_min: jnp.ndarray       # [12] float32 (Per-modality observation lower bound)
-    noise_clip_max: jnp.ndarray       # [12] float32 (Per-modality observation upper bound)
+    noise_modes: jnp.ndarray          # [13] int32 (0: None, 1: Constant, 2: State-Dependent)
+    noise_sigmas: jnp.ndarray         # [13] float32 (Base Sigma)
+    noise_injury_scales: jnp.ndarray  # [13] float32 (Injury Noise Scale)
+    noise_clip_min: jnp.ndarray       # [13] float32 (Per-modality observation lower bound)
+    noise_clip_max: jnp.ndarray       # [13] float32 (Per-modality observation upper bound)
 
     def _replace(self, **kwargs):
         return self.replace(**kwargs)

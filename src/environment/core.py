@@ -41,7 +41,7 @@ def calculate_drive(satiation, injury, params):
     current = jnp.stack([satiation, injury], axis=-1)
     return jnp.linalg.norm(current - target, axis=-1)
 
-def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, bool]:
+def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, bool]:
     """Updates satiation, nutrition, and injury levels with streak-based recovery."""
     prev_nutrition = state.nutrition
     prev_injury = state.injury_level
@@ -98,6 +98,10 @@ def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.nda
         new_injury = prev_injury
         new_buffer = state.injury_buffer
         new_rest_streak = prev_rest_streak
+
+    # Roll the perceptual history buffer and write the new injury at slot 0.
+    # Buffer is non-conditional on `with_injury`: if injury never updates, slot 0 stays at prev_injury (0 from reset).
+    new_nociception_history = jnp.roll(state.nociception_history_buffer, 1).at[0].set(new_injury)
         
     # Termination check (Based on Nutrition and Injury)
     done = False
@@ -110,7 +114,7 @@ def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.nda
         # Instant death logic for levels without health system
         done = jnp.where(damage > 0, True, done)
     
-    return new_satiation, new_nutrition, new_injury, new_buffer, new_rest_streak, done 
+    return new_satiation, new_nutrition, new_injury, new_buffer, new_nociception_history, new_rest_streak, done
 
 def update_resources(res_active, res_reg_timer, res_cons_count, params):
     """Updates resource timers and regeneration."""
@@ -435,7 +439,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         'hit_predator': jnp.any(at_predator),
     }
     
-    new_satiation, new_nutrition, new_injury, next_injury_buffer, new_rest_streak, done = update_body(state, info, params)
+    new_satiation, new_nutrition, new_injury, next_injury_buffer, next_nociception_history, new_rest_streak, done = update_body(state, info, params)
     
     # Max Steps Truncation
     next_step = state.current_step + 1
@@ -507,6 +511,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         nutrition=new_nutrition,
         injury_level=new_injury,
         injury_buffer=next_injury_buffer,
+        nociception_history_buffer=next_nociception_history,
         last_collision_noc=collision_noc,
         rest_streak=new_rest_streak,
         terminated=done,
@@ -734,6 +739,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         injury = 0.0
         
     injury_buffer = jnp.zeros(params.smoothing_duration)
+    nociception_history_buffer = jnp.zeros(params.interoceptive_kernel_length)
     
     prop_key_res, prop_key_pred, prop_key_obs, prop_key_neutral = jax.random.split(property_key, 4)
     
@@ -766,6 +772,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         nutrition=jnp.array(nutrition, dtype=jnp.float32),
         injury_level=jnp.array(injury, dtype=jnp.float32),
         injury_buffer=injury_buffer,
+        nociception_history_buffer=nociception_history_buffer,
         last_collision_noc=jnp.array(0.0, dtype=jnp.float32),
         rest_streak=jnp.array(0, dtype=jnp.int32),
         terminated=jnp.array(False, dtype=jnp.bool_),

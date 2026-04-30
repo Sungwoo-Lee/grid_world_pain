@@ -23,15 +23,16 @@ All sensors always present (dims are fixed by static params):
 
 | # | Sensor | Enabled by | Dim | Value range | Formula |
 |:-:|--------|-----------|-----|-------------|---------|
-| 1 | Injury | Always on | 1 | `[0, 1]` | `injury_level / max_injury` |
-| 2 | Nutrition | Always on | 1 | `[0, 1]` | `nutrition / max_nutrition` |
+| 1 | Injury | `injury_observable` | 1 | `[0, 1]` | `injury_level / max_injury` |
+| 2 | Nutrition | `nutrition_observable` | 1 | `[0, 1]` | `nutrition / max_nutrition` |
 | 3 | Satiation | Always on | 1 | `[0, 1]` | `satiation / max_satiation` |
-| 4 | Extero Nociception | `nociception_enabled` | 1 | `[0, 1]` | max intensity among contacts |
-| 5 | Olfaction | `olfactory_enabled` | `olfactory_vector_size` (5) | `[0, ∞)` | Σ property·decay(dist)·active |
-| 6 | Collision | Always on | `2r²+2r+1` | `{0, 1}` | binary Manhattan diamond |
-| 7 | Proprioception | `proprioception_enabled` | `action_dim` | `{0, 1}` | one-hot last action |
-| 8 | Visual | `visual_sensor_enabled` | `(2r²+2r+1)×8` | `{0, 1}` | 8-ch Manhattan diamond |
-| 9 | Location | `location_sensor_enabled` | 2 | `[-1, 1]` | normalised (row, col) |
+| 4 | Interoceptive Nociception | `intero_enabled` | 1 | `[0, 1]` | convolved (delayed) injury trace |
+| 5 | Extero Nociception | `nociception_enabled` | 1 | `[0, 1]` | max intensity among contacts |
+| 6 | Olfaction | `olfactory_enabled` | `vector_size` (5) | `[0, ∞)` | Σ property·decay(dist)·active |
+| 7 | Collision | Always on | `2r²+2r+1` | `{0, 1}` | binary Manhattan diamond |
+| 8 | Proprioception | `proprioception_enabled` | `action_dim` | `{0, 1}` | one-hot last action |
+| 9 | Visual | `visual_sensor_enabled` | `(2r²+2r+1)×8` | `{0, 1}` | 8-ch Manhattan diamond |
+| 10| Location | `location_sensor_enabled` | 2 | `[-1, 1]` | normalised (row, col) |
 
 With `sensor_range=1`, the collision diamond has 5 cells: `{center, up, right, down, left}`.
 With `visual_sensor_range=0`, the visual diamond has 1 cell (agent's own cell): `1×8=8` dims.
@@ -39,17 +40,33 @@ With `visual_sensor_range=1`, it has `5×8=40` dims.
 
 ---
 
-## Interoceptive Sensors (1–3)
+All values are normalised to `[0, 1]`.
 
-Always on. These are the core interoceptive channels — the agent's "body awareness":
+### Hidden States & Gating
+`Injury` and `Nutrition` sensors are **gateable**. If `params.injury_observable` or `params.nutrition_observable` is `False`, the corresponding slot is removed from the observation vector. This forces the agent to rely on indirect or delayed signals for body-state inference. `Satiation` is always observable as the primary (nonlinear) feedback for energy.
 
-```python
-obs[0] = state.injury_level / params.max_injury       # sensor.py:253
-obs[1] = state.nutrition / params.max_nutrition       # sensor.py:256
-obs[2] = state.satiation / params.max_satiation       # sensor.py:259
+---
+
+## Interoceptive Nociception (4)
+
+`sense_interoceptive_nociception(state, params)` (`sensor.py:85`)
+
+Provides a temporal trace of the ground truth `injury_level`. Unlike the "instant" Injury sensor, this sensor models a delayed and smoothed perception of pain, which remains active even if the ground truth injury is hidden.
+
+### Discrete Alpha-Kernel Convolution
+When `interoceptive_convolution_enabled=True`, the sensor performs a convolution of the `nociception_history_buffer` with a discrete alpha kernel:
+
+```
+k_raw[i] = (i / τ) * exp(1 - i / τ)
+kernel = k_raw / Σk_raw
 ```
 
-All three are normalised to `[0, 1]`. Note: comparing raw state values (0–100) to these observations directly will show a 100× difference — always normalise first.
+- **Delay**: The signal peaks at `τ` (tau) steps after an injury event.
+- **FIR Filter**: The convolution is performed over a fixed window of length `K` (`interoceptive_kernel_length`).
+- **Normalized Gain**: The kernel is normalized so its sum is 1.0, ensuring that in a steady state (constant injury), the sensor reading eventually matches the ground truth `injury/max_injury`.
+
+### Passthrough Mode
+If `interoceptive_convolution_enabled=False`, the sensor bypasses the kernel and emits `state.injury_level / params.max_injury` directly. This can be used as an ablation to verify the impact of temporal delay on agent behavior.
 
 ---
 
@@ -228,9 +245,10 @@ Returns an ordered dict mapping sensor names to their dimension counts. Used by 
 
 ```python
 breakdown = {
-    "Injury": 1,
-    "Nutrition": 1,
+    "Injury": 1,                      # if injury_observable
+    "Nutrition": 1,                   # if nutrition_observable
     "Satiation": 1,
+    "Interoceptive Nociception": 1,   # if interoceptive_nociception_enabled
     "Extero Nociception": 1,           # if nociception_enabled
     "Olfaction": olfactory_vector_size, # if olfactory_enabled
     "Collision": 2*r^2 + 2*r + 1,

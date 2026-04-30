@@ -73,6 +73,7 @@ Defined in `src/environment/state.py:6`.
 | `nutrition` | `[]` | float32 | `[0, max_nutrition]` | Objective energy reserve; decays each step |
 | `injury_level` | `[]` | float32 | `[0, max_injury]` | Current accumulated injury after ring-buffer smoothing |
 | `injury_buffer` | `[smoothing_duration]` | float32 | `[0, ...]` | Ring buffer holding incremental injury to be applied over future steps |
+| `nociception_history_buffer` | `[intero_length]` | float32 | `[0, max_injury]` | FIR history of `injury_level` values used by interoceptive sensor; slot 0 = most recent |
 | `last_collision_noc` | `[]` | float32 | `[0, 1]` | Nociception intensity from the most recent obstacle collision bump; cleared next step |
 | `rest_streak` | `[]` | int32 | `[0, ...]` | Consecutive steps the agent has been resting; boosts injury recovery rate |
 
@@ -211,11 +212,17 @@ Defined in `src/environment/state.py:51`. Fields marked `struct.field(pytree_nod
 | `local_view_size` | int | yes | Renderer local view window size |
 | `olfactory_enabled` | bool | yes | Enable olfaction sensor |
 | `nociception_enabled` | bool | yes | Enable exteroceptive nociception sensor |
+| `interoceptive_nociception_enabled` | bool | yes | Enable interoceptive nociception sensor |
+| `interoceptive_convolution_enabled` | bool | yes | If False, interoceptive sensor emits `injury/max` directly (no delay) |
+| `injury_observable` | bool | yes | If False, raw injury level is removed from observation |
+| `nutrition_observable` | bool | yes | If False, raw nutrition level is removed from observation |
 | `location_sensor_enabled` | bool | yes | Enable location sensor |
 | `proprioception_enabled` | bool | yes | Enable proprioception sensor |
 | `action_dim` | int | yes | Total number of actions (4 + rest + eat flags) |
 | `olfactory_vector_size` | int | yes | Olfaction vector length (equals `res_property` width) |
 | `nociception_size` | int | yes | Currently always 1 |
+| `interoceptive_kernel_length` | int | yes | Static length for `nociception_history_buffer` |
+| `interoceptive_kernel` | `[K]` float32 | no | Normalized alpha kernel used for interoceptive convolution |
 
 ### Perceptual Noise
 
@@ -223,11 +230,11 @@ Defined in `src/environment/state.py:51`. Fields marked `struct.field(pytree_nod
 |-------|------|--------|-------------|
 | `perceptual_noise_enabled` | bool | yes | Enable noise application |
 | `noise_modality_order` | tuple | yes | Ordered modality names from YAML key order; used to index noise arrays |
-| `noise_modes` | `[12]` int32 | no | Per-modality noise mode: 0=None, 1=Constant, 2=State-Dependent |
-| `noise_sigmas` | `[12]` float32 | no | Base standard deviation per modality |
-| `noise_injury_scales` | `[12]` float32 | no | Injury-scaling factor α per modality (used in mode 2) |
-| `noise_clip_min` | `[12]` float32 | no | Per-modality observation lower bound after noise |
-| `noise_clip_max` | `[12]` float32 | no | Per-modality observation upper bound after noise |
+| `noise_modes` | `[13]` int32 | no | Per-modality noise mode: 0=None, 1=Constant, 2=State-Dependent |
+| `noise_sigmas` | `[13]` float32 | no | Base standard deviation per modality |
+| `noise_injury_scales` | `[13]` float32 | no | Injury-scaling factor α per modality (used in mode 2) |
+| `noise_clip_min` | `[13]` float32 | no | Per-modality observation lower bound after noise |
+| `noise_clip_max` | `[13]` float32 | no | Per-modality observation upper bound after noise |
 
 ---
 
@@ -263,6 +270,7 @@ Set in `core.py:749-778` during `jax_reset`. Use this as a single authoritative 
 | `satiation` | **always derived** from nutrition: `max_satiation × (nutrition/max_nutrition)^k` | `core.py:727-728` |
 | `injury_level` | `0.0` **or** `Uniform(0, max_injury/2)` if `random_start_injury=True` | `core.py:730-734` |
 | `injury_buffer` | zeros of length `smoothing_duration` | `core.py:736` |
+| `nociception_history_buffer` | zeros of length `interoceptive_kernel_length` | `core.py:739` |
 | `last_collision_noc` | `0.0` | `core.py:769` |
 | `rest_streak` | `0` | `core.py:770` |
 | `terminated` | `False` | `core.py:771` |
@@ -281,8 +289,8 @@ A: `5` is whatever shape your YAML `property: [v1, v2, v3, v4, v5]` has; `olfact
 **Q: Are `start_satiation` and `random_start_satiation` actually used?**
 A: **No.** They are loaded into `EnvParams` by `config_loader.py` but never read by `core.py`. Satiation at reset is always derived from nutrition via `S = max_S × (N/max_N)^k`. These fields are legacy — leaving them in YAML has no effect. Prefer controlling starting satiation indirectly through `start_nutrition` / `random_start_nutrition`.
 
-**Q: Why is `noise_*` shape `[12]` when there are only 9 modalities?**
-A: The 12 is a fixed padding size (`config_loader.py:360`: `pad = max(0, 12 - len(noise_modality_order))`). Active modalities fill the leading slots per `noise_modality_order`, and the remaining slots are zero-padded so the array shape stays static under JIT. Indexing must always go through `noise_modality_order` or `modality_map` — raw index positions are not semantically meaningful beyond whatever order your YAML declared.
+**Q: Why is `noise_*` shape `[13]` when there are only 10 modalities?**
+A: The 13 is a fixed padding size (`config_loader.py:401`: `pad = max(0, 13 - len(noise_modality_order))`). Active modalities fill the leading slots per `noise_modality_order`, and the remaining slots are zero-padded so the array shape stays static under JIT. Indexing must always go through `noise_modality_order` or `modality_map` — raw index positions are not semantically meaningful beyond whatever order your YAML declared.
 
 **Q: How is resource respawn timing controlled?**
 A: When a resource is consumed, `res_active` flips to `False` and `res_reg_timer` is set to `res_reg_delay` (see doc `08_resources_and_obstacles.md`). Each step, inactive resources with `res_reg_timer > 0` count down (`core.py:115-123`). When the timer hits 0, `respawn_mask` fires: `res_active` flips back to `True` and a fresh `res_property_sampled` is drawn. If `res_max_cons` has been exhausted, the resource stays inactive permanently (set `res_max_cons = -1` for unlimited respawns).

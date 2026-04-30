@@ -14,7 +14,19 @@ The body subsystem models the agent's internal physiological state. It provides 
 
 Together these implement a homeostatic RL scenario: the agent receives drive-reduction reward for moving its body state toward healthy targets. This is implemented in `update_body()` (`core.py:44`), called from `jax_step` Stage 5. `calculate_drive()` (`core.py:38`) computes the Euclidean distance to the homeostatic setpoint for use in reward and analysis.
 
-Each subsystem can be independently disabled via `with_nutrition`, `with_satiation`, and `with_injury` flags. When disabled, the corresponding field retains its value unchanged and is excluded from drive/reward/termination logic.
+Each subsystem can be independently disabled via `with_nutrition`, `with_satiation`, and `with_injury` flags. Additionally, `injury_level` and `nutrition` can be masked from the agent's observation vector using `injury_observable` and `nutrition_observable` flags, while still serving as the authoritative ground truth for survival and reward logic.
+
+---
+
+## Hidden Body States
+
+A core design principle is the decoupling of **Ground Truth Body State** from **Sensory Observation**:
+
+1. **Ground Truth Authority**: The fields `injury_level` and `nutrition` in `EnvState` are the source of truth for the agent's survival. If `injury_level >= max_injury` or `nutrition <= 0`, the agent dies, regardless of whether it can "feel" or "see" these values.
+2. **Masking (Hidden States)**:
+   - `injury_observable = False`: The `Injury` slot is removed from the observation vector. The agent must rely on delayed, convolved interoceptive signals (see doc 09) to infer its state.
+   - `nutrition_observable = False`: The `Nutrition` slot is removed. The agent must rely on `Satiation` (which is always observable) or behavior to manage its energy.
+3. **Internal Dynamics**: These ground truth values always update normally behind the scenes, ensuring consistent physics and reward calculation even in "blind" configurations.
 
 ---
 
@@ -98,6 +110,8 @@ Example with defaults (`base=0.1`, `accel=0.5`):
 Recovery is gated by two conditions: agent must be resting (`info['rested']`), and no damage is being applied (`applied_inc <= 0`). If the agent is taking damage while resting, recovery does not activate.
 
 Injury is clamped to `[0, max_injury]` after all updates.
+
+**Interoceptive Nociception History** (`core.py:102`): After `injury_level` is updated, it is pushed into the `nociception_history_buffer` in `EnvState`. This buffer acts as a "tonic memory" of ground truth injury, enabling temporal convolution in the sensory system (see doc 09).
 
 **When `with_injury=False`**: injury frozen; `injury_buffer` unchanged. Damage does not accumulate. Instead, any nonzero `damage` in the info dict triggers instant death (`done = True`) directly in `update_body` (`core.py:111`). The injury death code (4) is still emitted, but termination is immediate on first contact.
 

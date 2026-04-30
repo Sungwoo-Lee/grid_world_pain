@@ -61,6 +61,7 @@ perceptual_noise:
 | `injury` | Injury | state_dependent | 0.1 | 1.5 | [0, 1] |
 | `nutrition` | Nutrition | state_dependent | 0.1 | 1.5 | [0, 1] |
 | `satiation` | Satiation | state_dependent | 0.1 | 1.5 | [0, 1] |
+| `interoceptive_nociception` | Interoceptive Nociception | state_dependent | 0.1 | 1.5 | [0, 1] |
 | `extero_nociception` | Extero Nociception | state_dependent | 0.1 | 1.5 | [0, 100] |
 | `olfaction` | Olfaction | state_dependent | 0.2 | 1.5 | [0, 100] |
 | `collision` | Collision | constant | 0.01 | 0.0 | [0, 1] |
@@ -83,7 +84,7 @@ perceptual_noise:
    - `noise_injury_scales [K]` float32: `injury_noise_scale` field
    - `noise_clip_min [K]` float32: `clip_min` field (default -100.0)
    - `noise_clip_max [K]` float32: `clip_max` field (default 100.0)
-4. Zero-pad all five arrays to length 12 using `jnp.pad(..., (0, pad))`.
+4. Zero-pad all five arrays to length 13 using `jnp.pad(..., (0, pad))`.
 
 The returned dict is unpacked into `EnvParams` with `**_parse_noise_config(config)`.
 
@@ -113,7 +114,7 @@ The PRNG key comes from `jax.random.fold_in(state.key, 999)` in `get_observation
 
 ## Array Layout
 
-**Why 12, not 9**: the pad to 12 keeps array shapes static across configs with fewer modalities. Adding or removing modalities from the YAML changes `noise_modality_order` length (a static field — triggers recompilation) but keeps the array shape at 12, which avoids GPU memory reallocations. The 3 extra slots are zero-padded and never accessed.
+**Why 13, not 10**: the pad to 13 keeps array shapes static across configs with fewer modalities. Adding or removing modalities from the YAML changes `noise_modality_order` length (a static field — triggers recompilation) but keeps the array shape at 13, which avoids GPU memory reallocations. The 3 extra slots are zero-padded and never accessed.
 
 **Index assignment**: indices 0–8 correspond to YAML keys in declaration order. An example with the default config:
 
@@ -122,13 +123,14 @@ The PRNG key comes from `jax.random.fold_in(state.key, 999)` in `get_observation
 | 0 | Injury |
 | 1 | Nutrition |
 | 2 | Satiation |
-| 3 | Extero Nociception |
-| 4 | Olfaction |
-| 5 | Collision |
-| 6 | Proprioception |
-| 7 | Visual |
-| 8 | Location |
-| 9–11 | Zero padding |
+| 3 | Interoceptive Nociception |
+| 4 | Extero Nociception |
+| 5 | Olfaction |
+| 6 | Collision |
+| 7 | Proprioception |
+| 8 | Visual |
+| 9 | Location |
+| 10–12 | Zero padding |
 
 **Important**: the arrays are indexed by name at runtime via `modality_map`. If a modality listed in `noise_modality_order` is not in `get_observation_breakdown(params)` (e.g. sensor disabled but noise configured), `apply_perceptual_noise` will raise a `KeyError`. The safe pattern is to always have noise config match the enabled sensor set.
 
@@ -178,8 +180,8 @@ A: One vector draw from `Normal(0, 1)` sized to the observation, one elementwise
 **Q: Why the 999 fold-in constant?**
 A: Documented in doc `09` — a readable salt constant to create an independent noise PRNG branch without splitting the main key. Any constant would work.
 
-**Q: Can I add a tenth modality?**
-A: Yes, if it corresponds to a real sensor. Steps: (1) add the YAML key to `_YAML_KEY_TO_SENSOR_NAME`; (2) add the sensor name to `get_observation_breakdown`; (3) if there will be > 12 active modalities, increase the pad-to-12 to the new cap in `config_loader.py:360`. All noise arrays are currently sized `[12]` — adding modalities beyond that needs a schema change.
+**Q: Can I add a eleventh modality?**
+A: Yes, if it corresponds to a real sensor. Steps: (1) add the YAML key to `_YAML_KEY_TO_SENSOR_NAME`; (2) add the sensor name to `get_observation_breakdown`; (3) if there will be > 13 active modalities, increase the pad-to-13 to the new cap in `config_loader.py:401`. All noise arrays are currently sized `[13]` — adding modalities beyond that needs a schema change.
 
 **Q: Do `noise_modality_order` and `get_observation_breakdown` have to declare modalities in the same order?**
 A: No. Lookup is by name (`modality_map[sensor_name]`). Order determines array *indices*; names determine *lookup*. But it's convention to keep them aligned for readability.

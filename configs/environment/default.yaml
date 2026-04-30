@@ -283,6 +283,21 @@ sensory:
   #Proprioception sensor
   proprioception_enabled: true
 
+  # Hidden-state observability gates (default true = backward compatible)
+  injury_observable: true
+  nutrition_observable: true
+  # Interoceptive nociception: tonic, delayed perception of hidden injury via alpha-kernel convolution.
+  # alpha kernel: k_raw[i] = (i/tau) * exp(1 - i/tau), normalized so sum(k)=1. k[0]=0 → no instantaneous leak.
+  # Peak at i=tau steps. kernel_length should cover ~4*tau for low truncation error.
+  interoceptive_nociception_enabled: true
+  # When false, the sensor bypasses the alpha kernel entirely and emits
+  # injury_level/max_injury directly (intero == injury, no delay, no smoothing).
+  # Use for ablations or to recover the pre-convolution baseline. tau and
+  # kernel_length below are still parsed for shape stability but unused.
+  interoceptive_convolution_enabled: true
+  interoceptive_kernel_tau: 3.0
+  interoceptive_kernel_length: 12
+
 visualization:
   local_view_size: 5
 
@@ -303,43 +318,49 @@ perceptual_noise:
       injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 1.0
-    satiation:       # index 2
+    satiation:       # index 2 — interoceptive
       mode: "state_dependent"
       sigma: 0.1
       injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 1.0
-    extero_nociception: # index 3
+    interoceptive_nociception:  # index 3 — interoceptive (new)
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    extero_nociception: # index 4 (was 3) — exteroceptive
       mode: "state_dependent"
       sigma: 0.1
       injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 100.0     # Unbounded (pain intensity)
-    olfaction:       # index 4
+    olfaction:       # index 5 (was 4)
       mode: "state_dependent"
       sigma: 0.2
       injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 100.0     # Unbounded (aggregated chemical gradient)
-    collision:       # index 5
+    collision:       # index 6 (was 5)
       mode: "constant"
       sigma: 0.01
       injury_noise_scale: 0.0
       clip_min: 0.0
       clip_max: 1.0
-    proprioception:  # index 6
+    proprioception:  # index 7 (was 6)
       mode: "constant"
       sigma: 0.05
       injury_noise_scale: 0.0
       clip_min: 0.0
       clip_max: 1.0
-    visual:          # index 7
+    visual:          # index 8 (was 7)
       mode: "state_dependent"
       sigma: 0.2
       injury_noise_scale: 1.5
       clip_min: 0.0
       clip_max: 100.0     # Unbounded (one-hot counts)
-    location:        # index 8
+    location:        # index 9 (was 8)
       mode: "constant"
       sigma: 0.01
       injury_noise_scale: 0.0
