@@ -721,12 +721,16 @@ def save_jax_video(frames, output_path, fps=5, quiet=False):
             os.dup2(devnull, sys.stdout.fileno())
             os.dup2(devnull, sys.stderr.fileno())
             os.close(devnull)
-            imageio.mimsave(output_path, frames, fps=fps)
+            with imageio.get_writer(output_path, fps=fps) as writer:
+                for frame in frames:
+                    writer.append_data(frame)
         finally:
             os.dup2(old_stdout_fd, sys.stdout.fileno())
             os.dup2(old_stderr_fd, sys.stderr.fileno())
             os.close(old_stdout_fd)
             os.close(old_stderr_fd)
     else:
-        imageio.mimsave(output_path, frames, fps=fps)
+        with imageio.get_writer(output_path, fps=fps) as writer:
+            for frame in frames:
+                writer.append_data(frame)
         print(f"Saved video to {output_path}")

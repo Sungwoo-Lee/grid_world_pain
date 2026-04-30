@@ -152,30 +152,24 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     # Video output setup
     video_dir = os.path.join(results_dir, "videos")
     recordings_dir = os.path.join(results_dir, "recordings", str(checkpoint_pct))
-    render_inline = bool(config.get('testing.render_inline', False))
     icon_config = config.get('visualization.icons', None)
     breakdown = get_observation_breakdown(params)
     
     if render_video:
-        if render_inline:
-            os.makedirs(video_dir, exist_ok=True)
-            from src.environment.renderer import render_jax_state, save_jax_video
-        else:
-            os.makedirs(recordings_dir, exist_ok=True)
-            from src.utils.eval_recording import write_run_meta
-            from pathlib import Path
-            _action_map = ["Up", "Right", "Down", "Left"]
-            if params.rest_action_enabled: _action_map.append("Rest")
-            if params.eat_action_enabled: _action_map.append("Eat")
-            write_run_meta(
-                Path(recordings_dir), params, icon_config,
-                _action_map, getattr(config, 'source_path', ''),
-                extras={'checkpoint_pct': checkpoint_pct, 'seed': seed},
-            )
+        os.makedirs(recordings_dir, exist_ok=True)
+        from src.utils.eval_recording import write_run_meta
+        from pathlib import Path
+        _action_map = ["Up", "Right", "Down", "Left"]
+        if params.rest_action_enabled: _action_map.append("Rest")
+        if params.eat_action_enabled: _action_map.append("Eat")
+        write_run_meta(
+            Path(recordings_dir), params, icon_config,
+            _action_map, getattr(config, 'source_path', ''),
+            extras={'checkpoint_pct': checkpoint_pct, 'seed': seed},
+        )
     
     episode_rewards = []
     episode_lengths = []
-    all_frames = []
     
     # Stats recording
     if record_stats is None:
@@ -275,7 +269,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         if effective_num_envs == 1:
             _run_single_env_eval(
                 model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
-                key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths, all_frames,
+                key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths,
                 record_stats, stats_dir, stat_headers, action_map, params, max_steps=None,
                 render_video=render_video, wandb_enabled=wandb_enabled, debug=debug, quiet=quiet,
                 record_true_obs=record_true_obs,
@@ -290,28 +284,44 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
                 record_true_obs=record_true_obs,
             )
 
-    # Save Consolidated Video (single-env path fills all_frames; parallel path leaves it empty for now)
+    # Auto-render recordings → consolidated MP4 → WandB upload (one path)
     last_video_path = None
-    if render_video and render_inline and all_frames:
-        video_path = os.path.join(video_dir, f"eval_{checkpoint_pct}.mp4")
+    if render_video and config.get_mandatory('testing.auto_render_after_eval'):
+        import subprocess, sys as _sys
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        render_script = os.path.join(project_root, "scripts", "render_recordings.py")
+        consolidated_mp4 = os.path.join(video_dir, f"eval_{checkpoint_pct}.mp4")
         fps = config.get('visualization.fps', 5)
-        if debug:
-            print(f"    [Video] Saving {len(all_frames)} frames to {video_path}...", end="", flush=True)
-        from src.environment.renderer import save_jax_video
-        save_jax_video(all_frames, video_path, fps=fps, quiet=quiet)
-        if debug:
-            print(" Done", flush=True)
-        last_video_path = video_path
+        cmd = [
+            _sys.executable, render_script,
+            recordings_dir,
+            "--concat",
+            "--skip-existing",
+            "--fps", str(fps),
+        ]
+        child_env = dict(os.environ)
+        child_env["JAX_PLATFORMS"] = "cpu"  # avoid GPU OOM in render workers (ISSUE_05_PERFORMANCE_REPORT)
         if not quiet:
-            print(f"  --- Consolidated Evaluation Video saved to: {video_path} ---", flush=True)
-        if wandb_enabled and WANDB_AVAILABLE and wandb.run:
-            from src.utils.wandb_utils import upload_video
-            upload_video(video_path, episode=checkpoint_pct, step=checkpoint_pct, caption=f"Episode {checkpoint_pct}", quiet=True)
-    elif render_video and not render_inline:
+            print(f"  --- Auto-rendering recordings: {' '.join(cmd)} ---", flush=True)
+        result = subprocess.run(cmd, env=child_env, capture_output=quiet, text=True)
+        if result.returncode != 0:
+            print(f"Warning: auto-render failed (returncode={result.returncode}). "
+                  f"Recordings preserved at {recordings_dir}.")
+            if quiet and result.stderr:
+                print(f"  stderr: {result.stderr[:500]}")
+        else:
+            if os.path.exists(consolidated_mp4):
+                last_video_path = consolidated_mp4
+                if not quiet:
+                    print(f"  --- Consolidated Evaluation Video: {consolidated_mp4} ---", flush=True)
+                if wandb_enabled and WANDB_AVAILABLE and wandb.run:
+                    from src.utils.wandb_utils import upload_video
+                    upload_video(consolidated_mp4, episode=checkpoint_pct, step=checkpoint_pct,
+                                 caption=f"Episode {checkpoint_pct}", quiet=True)
+    elif render_video:
         if not quiet:
             print(f"  --- Recordings written to {recordings_dir}. "
-                  f"Render with: python scripts/render_recordings.py {recordings_dir} ---", flush=True)
-        last_video_path = None
+                  f"Auto-render disabled. Render with: python scripts/render_recordings.py {recordings_dir} ---", flush=True)
 
     mean_reward = float(np.mean(episode_rewards)) if episode_rewards else 0.0
     mean_length = float(np.mean(episode_lengths)) if episode_lengths else 0.0
@@ -325,14 +335,12 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
 
 
 def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
-                         key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths, all_frames,
+                         key, video_dir, breakdown, icon_config, episode_rewards, episode_lengths,
                          record_stats, stats_dir, stat_headers, action_map, params_ref, max_steps,
                          render_video=False, wandb_enabled=False, debug=False, quiet=True,
                          record_true_obs=False):
     """Original single-env loop: one episode at a time."""
     from src.environment.sensor import get_observation_breakdown
-    if render_video:
-        from src.environment.renderer import render_jax_state
     max_steps = params_ref.max_steps if max_steps is None else max_steps
     ep_pbar = tqdm(total=num_episodes, desc="Evaluating Episodes", disable=quiet)
     for ep in range(num_episodes):
@@ -393,23 +401,9 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
 
         recorder = None
         if render_video:
-            render_inline = bool(config.get('testing.render_inline', False))
-            if render_inline:
-                if debug: print(f"    [Render] Initial frame...", end="", flush=True)
-                state_for_render = jax.device_get(state)
-                # Use the already-computed true_obs (or None if diagnostics disabled)
-                all_frames.append(render_jax_state(
-                    state_for_render, params_ref, episode=ep+1, step=0, 
-                    train_episode=checkpoint_pct,
-                    sensory_data=get_sensory_viz(obs, true_obs),
-                    info=None,
-                    icon_config=icon_config
-                ))
-                if debug: print(" Done", flush=True)
-            else:
-                from src.utils.eval_recording import EpisodeRecorder
-                recorder = EpisodeRecorder(episode_index=ep+1, train_episode=checkpoint_pct, seed=seed)
-                recorder.append(jax.device_get(state), obs, true_obs, action_idx=-1, reward=0.0)
+            from src.utils.eval_recording import EpisodeRecorder
+            recorder = EpisodeRecorder(episode_index=ep+1, train_episode=checkpoint_pct, seed=seed)
+            recorder.append(jax.device_get(state), obs, true_obs, action_idx=-1, reward=0.0)
         
         # Progress bar for steps if rendering video
         step_pbar = tqdm(total=max_steps, desc=f"Episode {ep+1} Steps", leave=False, disable=quiet or not render_video)
@@ -454,20 +448,8 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
             # Compute true obs once per step, gated by config
             true_obs = get_observation(state, params_ref, apply_noise=False) if record_true_obs else None
 
-            if render_video:
-                if render_inline:
-                    if debug: print(f"    [Step {step_count}] Rendering...", end="", flush=True)
-                    state_for_render = jax.device_get(state)
-                    all_frames.append(render_jax_state(
-                        state_for_render, params_ref, episode=ep+1, step=step_count, 
-                        train_episode=checkpoint_pct,
-                        action=action_idx, sensory_data=get_sensory_viz(next_obs, true_obs),
-                        info=jax.device_get(info),
-                        icon_config=icon_config
-                    ))
-                    if debug: print(" Done", flush=True)
-                elif recorder is not None:
-                    recorder.append(jax.device_get(state), next_obs, true_obs, action_idx=action_idx, reward=float(reward))
+            if render_video and recorder is not None:
+                recorder.append(jax.device_get(state), next_obs, true_obs, action_idx=action_idx, reward=float(reward))
             
             if record_stats:
                 # Deferred: collect raw JAX arrays (no device_get during loop)
@@ -506,17 +488,13 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
         if (debug or not WANDB_AVAILABLE) and not quiet:
             print(f"  --- Episode {ep+1}/{num_episodes} Complete | Steps: {step_count} | Reward: {total_reward:.2f} ---", flush=True)
         
-        if render_video:
-            if render_inline:
-                for _ in range(5):
-                    all_frames.append(all_frames[-1])
-            elif recorder is not None:
-                from pathlib import Path
-                recordings_dir = os.path.join(results_dir, "recordings", str(checkpoint_pct))
-                out_path = Path(recordings_dir) / f"episode_{ep+1:06d}.rec.gz"
-                recorder.write(out_path)
-                if debug:
-                    print(f"    [Recording] Wrote {out_path}", flush=True)
+        if render_video and recorder is not None:
+            from pathlib import Path
+            recordings_dir = os.path.join(results_dir, "recordings", str(checkpoint_pct))
+            out_path = Path(recordings_dir) / f"episode_{ep+1:06d}.rec.gz"
+            recorder.write(out_path)
+            if debug:
+                print(f"    [Recording] Wrote {out_path}", flush=True)
 
 
 def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_envs, seed, results_dir, checkpoint_pct,
@@ -630,20 +608,18 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
                                          ep_true_obs=slot_true_obs[i] if record_true_obs else None)
                 
                 if render_video:
-                    render_inline = bool(config.get('testing.render_inline', False))
-                    if not render_inline:
-                        from src.utils.eval_recording import EpisodeRecorder
-                        from pathlib import Path
-                        recordings_dir = os.path.join(results_dir, "recordings", str(checkpoint_pct))
-                        rec = EpisodeRecorder(episode_index=completed_episodes,
-                                              train_episode=checkpoint_pct, seed=seed)
-                        for t in range(len(slot_states[i])):
-                            fake_state = _DictState(slot_states[i][t])
-                            rec.append(fake_state, slot_obs[i][t],
-                                       (slot_true_obs[i][t] if slot_true_obs is not None else None),
-                                       action_idx=slot_actions[i][t],
-                                       reward=slot_rewards[i][t])
-                        rec.write(Path(recordings_dir) / f"episode_{completed_episodes:06d}.rec.gz")
+                    from src.utils.eval_recording import EpisodeRecorder
+                    from pathlib import Path
+                    recordings_dir = os.path.join(results_dir, "recordings", str(checkpoint_pct))
+                    rec = EpisodeRecorder(episode_index=completed_episodes,
+                                          train_episode=checkpoint_pct, seed=seed)
+                    for t in range(len(slot_states[i])):
+                        fake_state = _DictState(slot_states[i][t])
+                        rec.append(fake_state, slot_obs[i][t],
+                                   (slot_true_obs[i][t] if slot_true_obs is not None else None),
+                                   action_idx=slot_actions[i][t],
+                                   reward=slot_rewards[i][t])
+                    rec.write(Path(recordings_dir) / f"episode_{completed_episodes:06d}.rec.gz")
                 
                 ep_pbar.update(1)
 

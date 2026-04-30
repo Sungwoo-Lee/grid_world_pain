@@ -368,10 +368,7 @@ def build_sensory_viz(obs, state, params, true_obs=None):
     import numpy as np  # renderer is host-side; np is fine here
     breakdown = get_observation_breakdown(params)
     if true_obs is None:
-        if bool(params.perceptual_noise_enabled):
-            true_obs = np.asarray(get_observation(state, params, apply_noise=False))
-        else:
-            true_obs = np.asarray(obs)
+        true_obs = np.asarray(obs)
     obs = np.asarray(obs)
     
     ptr = 0

@@ -141,15 +141,21 @@ def main():
     if args.concat:
         from src.environment.renderer import save_jax_video
         import imageio
-        # Simple re-encode concat: decode each MP4, stack frames
-        frames = []
-        for t_in, _ in tasks:
-            mp4 = video_dir / (Path(t_in).stem.replace(".rec", "") + ".mp4")
-            rdr = imageio.get_reader(str(mp4))
-            frames.extend(list(rdr))
-            rdr.close()
+        def frame_generator():
+            for t_in, _ in tasks:
+                mp4 = video_dir / (Path(t_in).stem.replace(".rec", "") + ".mp4")
+                rdr = imageio.get_reader(str(mp4))
+                last_frame = None
+                for frame in rdr:
+                    yield frame
+                    last_frame = frame
+                rdr.close()
+                # Padding: hold last frame for 5 steps (legacy behavior)
+                if last_frame is not None:
+                    for _ in range(5):
+                        yield last_frame
         consolidated = run_root / "videos" / f"eval_{rec_dir.name}.mp4"
-        save_jax_video(frames, str(consolidated), fps=args.fps, quiet=True)
+        save_jax_video(frame_generator(), str(consolidated), fps=args.fps, quiet=True)
         print(f"Consolidated → {consolidated}")
 
 

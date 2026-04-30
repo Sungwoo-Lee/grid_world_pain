@@ -98,6 +98,7 @@ def main():
             results_dir=results_dir,
             checkpoint_pct=0,
             render_video=True,
+            num_envs=num_envs,
             quiet=False,
             debug=False
         )
