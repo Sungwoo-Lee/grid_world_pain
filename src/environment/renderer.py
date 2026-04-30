@@ -576,11 +576,28 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
 
     # Interoceptive Nociception (only when enabled)
     if intero_noc_enabled:
-        # Use current injury as the "reality" baseline for pain perception.
-        # This highlights the temporal lag/smearing when convolution is enabled.
-        intero_real = float(state.injury_level) / max_inj
-        intero_obs_data = sensor_map.get('Intero Nociception', {'intensity': intero_real})
-        intero_obs = float(intero_obs_data.get('intensity', 0))
+        # The convolution defines the *signal*; perceptual noise is independent and added on top.
+        # "real" = noise-free convolved intero noc (from get_observation(..., apply_noise=False))
+        # "obs"  = noisy version of the same convolved signal
+        # Both equal under perceptual_noise.enabled=False; differ only by noise when enabled.
+        intero_obs_data = sensor_map.get('Intero Nociception')
+        if intero_obs_data is not None:
+            intero_real = float(intero_obs_data.get('true_intensity',
+                                                   intero_obs_data.get('intensity', 0.0)))
+            intero_obs  = float(intero_obs_data.get('intensity', intero_real))
+        else:
+            # Fallback: no sensory_data provided. Recompute the convolved signal host-side.
+            # Mirrors sense_interoceptive_nociception() in src/environment/sensor.py
+            import numpy as _np
+            if bool(getattr(params, 'interoceptive_convolution_enabled', False)):
+                buf = _np.asarray(state.nociception_history_buffer)
+                ker = _np.asarray(params.interoceptive_kernel)
+                # Normalize by max_injury
+                intero_real = float(_np.sum(buf * ker) / max(float(params.max_injury), 1e-6))
+            else:
+                intero_real = float(state.injury_level) / max_inj
+            intero_obs = intero_real
+
         draw_dual_capsule_bar(ax_left, 0.05, y_ptr, 0.9, 0.04, intero_real, intero_obs, COLORS['intero_noc'],
                               "Intero Noc", f"{intero_real:.2f}", f"{intero_obs:.2f}", transform=ax_left.transAxes)
         y_ptr -= bar_step
