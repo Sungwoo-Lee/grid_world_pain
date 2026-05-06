@@ -8,8 +8,9 @@ last_updated: 2026-05-06
 
 # Develop Docs Reorganization Plan
 
-> **Status**: PLANNED
+> **Status**: COMPLETED
 > **Opened**: 2026-05-06
+> **Completed**: 2026-05-06
 > **Related**: [project_plan.md](../../../project/project_plan.md), [CLAUDE.md](../../../../CLAUDE.md)
 
 ---
@@ -355,12 +356,48 @@ Phase C:
 
 ## Implementation Report
 
-> **Implemented by**: [pending]
-> **Date**: [pending]
+> **Implemented by**: Claude (Sonnet 4.6, in-session)
+> **Date**: 2026-05-06
+> **Commit**: `c17fdae`
+
+### What was done
+
+**Phase A — System setup**
+- Created `scripts/regen_dev_index.py` (~180 lines): walks `docs/develop/{active,archive}/`, parses YAML frontmatter, validates required fields and `supersedes` / `superseded_by` chains, and writes a deterministic `INDEX.md`. Exits nonzero on any validation error so it can serve as a pre-commit hook.
+- Created [`docs/develop/active/meta/FRONTMATTER_CONTRACT.md`](FRONTMATTER_CONTRACT.md) defining the schema, valid `topic` and `status` enums, and the supersession workflow (including the mandatory `git mv`).
+- Added [`CLAUDE.md`](../../../../CLAUDE.md) bullet pointing at the contract; also added the conda-env rule (`/home/vncuser/miniconda3/envs/grid_world_pain/bin/python`).
+
+**Phase B — Frontmatter mechanical pass**
+- Created `scripts/migrate_dev_frontmatter.py` (one-shot): for each `.md` under `docs/develop/`, looks up topic/status from a hard-coded triage table, pulls `created` / `last_updated` dates from `git log --follow`, extracts the title from the H1, and inserts the YAML frontmatter block. Idempotent — skips files that already have frontmatter.
+- Applied the migration to all 65 docs (the contract was already covered). All NMN_PERFORMANCE_DIAGNOSIS_v1→v7 carry `superseded_by` chained forward to v8; v8 carries `supersedes: v7`. DREAMER_DIAGNOSTICS_PLAN_v1 (in archive/) carries `superseded_by: DREAMER_DIAGNOSTICS_PLAN_v2`; v2 (now in active/dreamer/) carries `supersedes: v1`. NOISE_DEBUGGING_PLAN → V2 chain established.
+
+**Phase C — Lifecycle moves and link rewrites**
+- `git mv`'d every flat-folder doc into either `docs/develop/active/<topic>/` (28 docs across behavior, continual_learning, diagnosis, dreamer, filim, meta, neuromodulation, precision, refactors, sensors) or `docs/develop/archive/` (17 from the flat folder, joining the existing 22 in archive/). All renames show ≥95% similarity in `git log --follow`.
+- Created `scripts/rewrite_dev_links.py` (one-shot): regex-rewrites references like `../develop/<file>.md` to `../develop/<active-or-archive>/<topic>/<file>.md` based on the current location of each file under `docs/develop/`. Also handles the misplaced `../develop/ENVIRONMENT_SUMMARY.md` reference in `project_plan.md` by retargeting it to `../environment/`.
+- Applied 40 link rewrites across 6 files: `docs/project/project_plan.md` (22), `docs/project/perceptual_noise_lit_review.md` (10), `docs/project/phase_1_noise_landscape.md` (4), `docs/environment/13_checkpoint_scheduling.md` (2), `docs/project/references/FiLM/film_conditional_modulation_review.md` (1), `docs/project/references/uncertainty/uncertainty_reference_review.md` (1). Manually fixed three remaining same-doc relative links (the plan doc's own references to `project_plan.md` / `CLAUDE.md` / `ENVIRONMENT_SUMMARY.md` after it moved to `active/meta/`).
+- Final index regen: 71 docs indexed (28 active, 43 archive), validation clean.
+
+### Deviations from the plan
+
+- The plan's Phase A.1 called for creating "empty subfolder structure" up front. Skipped — empty folders are not tracked by git. Subfolders were created implicitly when files were `git mv`'d into them, which is functionally equivalent and simpler.
+- The plan's File Changes section enumerated only `scripts/regen_dev_index.py` and `docs/develop/active/meta/FRONTMATTER_CONTRACT.md` as new files. Two additional one-shot scripts (`scripts/migrate_dev_frontmatter.py`, `scripts/rewrite_dev_links.py`) were added to make the bulk migration deterministic and re-runnable. Their docstrings mark them as one-shot — they may be `git rm`'d once the user is satisfied with the migration.
+- Topic assignment for archive/ docs (which the plan said the agent could adjust if file owners had better judgment) used the seed table from the plan; no adjustments.
+
+### Test results
+
+- `scripts/regen_dev_index.py` exits 0 on the final tree.
+- `git log --follow` on a sampled migrated file (`docs/develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md`) shows pre-move history intact.
+- `grep -rn "develop/[A-Z]" docs/ CLAUDE.md` excluding `active/` and `archive/` returns no hits — all incoming links updated.
+- `docs/develop/INDEX.md` matches expected structure (10 active topic groups, 8 archive topic groups).
+
+### Follow-ups
+
+- The user added an `env-config-auditor` agent and wove it into `feature-workflow` and `training-experiment-workflow` skills in parallel; those changes are not part of this commit and remain unstaged.
+- The two one-shot migration scripts (`migrate_dev_frontmatter.py`, `rewrite_dev_links.py`) are kept in `scripts/` for reproducibility. They can be removed in a separate housekeeping commit once the user is confident the migration is final.
 
 ## Verification Report
 
-> **Verified by**: [pending]
+> **Verified by**: [pending — senior-developer]
 > **Date**: [pending]
 
 | File | Change | Status | Notes |
