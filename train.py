@@ -59,7 +59,9 @@ import jax
 import jax.numpy as jnp
 import optax
 from flax import nnx
-from typing import NamedTuple
+from typing import NamedTuple, List, Optional
+from dataclasses import dataclass
+import glob
 
 from src.environment.config_loader import load_env_params
 from src.environment.wrapper import ParallelEnv
@@ -120,6 +122,81 @@ def signal_handler(sig, frame):
 # Defaults
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "configs", "environment", "default.yaml")
 
+
+# ---------------------------------------------------------------------------
+# Continual Learning: schedule dataclass and loader
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ContinualSchedule:
+    stage_config_paths: List[str]   # absolute paths, alphabetic order
+    stage_names: List[str]           # file stem, e.g. "01_predator_intro"
+    stage_configs: List[Config]      # pre-loaded Config per stage (base + stage overlay)
+    episode_boundaries: List[int]    # cumulative, strictly increasing
+    checkpoint_frequencies: List[int]  # parallel to stages
+
+    @property
+    def num_stages(self) -> int:
+        return len(self.stage_config_paths)
+
+    def stage_for_episode(self, episode: int) -> int:
+        """Return stage index for the given (0-based) episode count."""
+        for i, b in enumerate(self.episode_boundaries):
+            if episode < b:
+                return i
+        return self.num_stages - 1   # past the end -> stay in final stage
+
+
+def _build_continual_schedule(base_config: Config,
+                              configs_dir: str,
+                              schedule_path: str) -> ContinualSchedule:
+    # 1. Discover stage files
+    if not os.path.isdir(configs_dir):
+        raise ValueError(f"--configs-dir '{configs_dir}' is not a directory.")
+    paths = sorted(glob.glob(os.path.join(configs_dir, "*.yaml")))
+    if not paths:
+        raise ValueError(f"No *.yaml files found in {configs_dir}.")
+    names = [os.path.splitext(os.path.basename(p))[0] for p in paths]
+
+    # 2. Load schedule YAML
+    schedule = Config.load_yaml(schedule_path)
+    boundaries = schedule.get_mandatory("continual.episode_boundaries")
+    ckpt_freqs  = schedule.get_mandatory("continual.checkpoint_frequencies")
+
+    if len(boundaries) != len(paths):
+        raise ValueError(
+            f"episode_boundaries length ({len(boundaries)}) != number of stage configs "
+            f"({len(paths)}) in {configs_dir}.")
+    if len(ckpt_freqs) != len(paths):
+        raise ValueError(
+            f"checkpoint_frequencies length ({len(ckpt_freqs)}) != number of stage configs "
+            f"({len(paths)}).")
+    if sorted(boundaries) != list(boundaries) or len(set(boundaries)) != len(boundaries):
+        raise ValueError(f"episode_boundaries must be strictly increasing: {boundaries}")
+    if boundaries[0] <= 0:
+        raise ValueError(
+            f"episode_boundaries[0] must be > 0 (got {boundaries[0]}); "
+            "the first boundary is the upper bound of stage 0, so stage 0 must run "
+            "for at least one episode.")
+    if any(f <= 0 for f in ckpt_freqs):
+        raise ValueError(f"checkpoint_frequencies must be > 0: {ckpt_freqs}")
+
+    # 3. Pre-build per-stage Config objects by cloning base and merging each stage YAML
+    stage_configs = []
+    for p in paths:
+        stage_cfg = Config(yaml.safe_load(yaml.dump(base_config.to_dict())))  # deep copy
+        stage_cfg.merge(Config.load_yaml(p))
+        stage_configs.append(stage_cfg)
+
+    return ContinualSchedule(
+        stage_config_paths=paths,
+        stage_names=names,
+        stage_configs=stage_configs,
+        episode_boundaries=list(boundaries),
+        checkpoint_frequencies=list(ckpt_freqs),
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train JAX RL Agents")
     
@@ -127,6 +204,13 @@ def main():
     parser.add_argument("--episodes", type=int, help="Number of episodes to train")
     parser.add_argument("--seed", type=int, help="Random seed for reproducibility")
     parser.add_argument("--config", type=str, help="Path to base config YAML (Environment/Ablation)")
+    parser.add_argument("--configs-dir", type=str, default=None,
+                        help="Directory of stage config YAMLs for continual learning. "
+                             "Files are ordered alphabetically; prefix names with 01_, 02_, ... to control order. "
+                             "Mutually exclusive with --config.")
+    parser.add_argument("--continual-schedule", type=str, default=None,
+                        help="Path to schedule YAML (episode_boundaries, checkpoint_frequencies). "
+                             "Required when --configs-dir is used.")
     parser.add_argument("--agent_config", type=str, required=True, help="Path to agent config YAML (Required)")
     parser.add_argument("--tag", type=str, help="Tag for the training run")
     parser.add_argument("--device", type=str, help="Device to use (JAX handles this; kept for parity)")
@@ -154,7 +238,7 @@ def main():
     parser.add_argument("--log-interval", type=int, help="WandB logging interval in iterations (default: 1)")
     parser.add_argument("--log-accumulate", action=argparse.BooleanOptionalAction, default=None,
                         help="Accumulate episode metrics across log interval (default: true). Use --no-log-accumulate for hard interval.")
-    
+
     args = parser.parse_args()
 
     # Register signal handlers
@@ -220,8 +304,33 @@ def main():
         vis_defaults = Config.load_yaml(vis_config_path)
         config.merge(vis_defaults)
 
-    # Merge Base/User/Ablation Config (--config)
-    if args.config:
+    # Merge Base/User/Ablation Config (--config) OR load continual schedule
+    schedule: Optional[ContinualSchedule] = None
+    if args.configs_dir is not None:
+        if args.config:
+            raise ValueError("--configs-dir and --config are mutually exclusive.")
+        if args.continual_schedule is None:
+            raise ValueError("--continual-schedule is required when --configs-dir is set.")
+        schedule = _build_continual_schedule(config, args.configs_dir, args.continual_schedule)
+        # Fix 1: propagate CLI overrides to every stage config so load_env_params(stage_configs[i])
+        # honours --no-satiation / --no-overeating-death regardless of what the stage YAML says.
+        # These are properties of the run, not of any individual stage.
+        if args.no_satiation:
+            for _sc in schedule.stage_configs:
+                _sc.set('body.with_satiation', False)
+        if args.no_overeating_death:
+            for _sc in schedule.stage_configs:
+                _sc.set('body.overeating_death', False)
+        # Merge stage-0 into the live config so downstream code sees a fully-populated Config
+        # for the starting stage.
+        config = schedule.stage_configs[0]
+        if not args.quiet:
+            print(f"Continual mode: {schedule.num_stages} stages from {args.configs_dir}")
+            for i, (n, b, f) in enumerate(zip(schedule.stage_names,
+                                              schedule.episode_boundaries,
+                                              schedule.checkpoint_frequencies)):
+                print(f"  [{i:02d}] {n:30s}  until_ep={b:>6d}  ckpt_freq={f}")
+    elif args.config:
         if not args.quiet:
             print(f"Loading override config from: {args.config}")
         user_config = Config.load_yaml(args.config)
@@ -290,9 +399,21 @@ def main():
 
     # Determine Algorithm
     algorithm = config.get_mandatory('agent.algorithm')
-    
+
+
     # Strictly Resolve Parameters (No Safe Defaults)
-    episodes = args.episodes if args.episodes is not None else config.get_mandatory('episodes')
+    if schedule is not None:
+        if algorithm not in ("RecurrentPPO", "DreamerV3"):
+            raise ValueError(
+                f"Continual learning (--configs-dir) is only supported for "
+                f"RecurrentPPO and DreamerV3, got algorithm='{algorithm}'. "
+                "Use Option A: restrict to supported algorithms at startup.")
+        if args.episodes is not None:
+            raise ValueError("--episodes is incompatible with --configs-dir; "
+                             "episode budget is set by the schedule's last boundary.")
+        episodes = schedule.episode_boundaries[-1]
+    else:
+        episodes = args.episodes if args.episodes is not None else config.get_mandatory('episodes')
     env_max_steps = config.get_mandatory('environment.max_steps')
     num_envs = args.num_envs or config.get_mandatory('training.num_envs')
     log_interval = args.log_interval or config.get('training.log_interval', 1)
@@ -325,11 +446,64 @@ def main():
 
     
     # Re-load EnvParams with full merged config for JAX core
-    params = load_env_params(config)
-    
+    params = load_env_params(config)  # stage 0 (or single-config)
+
     # Apply CLI overrides to params if they exist in params (redundant now but safe)
     if args.no_satiation: params = params.replace(with_satiation=False)
     if args.no_overeating_death: params = params.replace(overeating_death=False)
+
+    # Validate obs/action dim AND modality fingerprint consistency across all stages
+    # BEFORE training starts.
+    def _modality_fingerprint(p):
+        """Tuple of all sensor-enable flags and key shape params that affect obs layout.
+        If any two stages produce different fingerprints the input semantics differ even
+        when obs_dim happens to be the same (same-total-dim modality swap)."""
+        return (
+            p.visual_sensor_enabled,
+            p.visual_sensor_range,
+            p.local_view_size,
+            p.olfactory_enabled,
+            p.olfactory_vector_size,
+            p.nociception_enabled,
+            p.nociception_size,
+            p.interoceptive_nociception_enabled,
+            p.location_sensor_enabled,
+            p.proprioception_enabled,
+            p.injury_observable,
+            p.nutrition_observable,
+            p.sensor_range,
+        )
+
+    if schedule is not None:
+        env_probe = ParallelEnv(params)
+        probe_key = jax.random.PRNGKey(0)
+        _, probe_obs = env_probe.reset(probe_key, 1)
+        stage0_obs_dim = int(probe_obs.shape[-1])
+        stage0_action_dim = 4 + int(params.rest_action_enabled) + int(params.eat_action_enabled)
+        stage0_fingerprint = _modality_fingerprint(params)
+        for i in range(1, schedule.num_stages):
+            p_i = load_env_params(schedule.stage_configs[i])
+            env_i = ParallelEnv(p_i)
+            _, obs_i = env_i.reset(probe_key, 1)
+            a_i = 4 + int(p_i.rest_action_enabled) + int(p_i.eat_action_enabled)
+            if int(obs_i.shape[-1]) != stage0_obs_dim or a_i != stage0_action_dim:
+                raise ValueError(
+                    f"Stage {i} ({schedule.stage_names[i]}) changes "
+                    f"obs_dim ({stage0_obs_dim} -> {int(obs_i.shape[-1])}) or "
+                    f"action_dim ({stage0_action_dim} -> {a_i}). "
+                    "Continual learning forbids architecture-visible dimension changes.")
+            fp_i = _modality_fingerprint(p_i)
+            if fp_i != stage0_fingerprint:
+                raise ValueError(
+                    f"Stage {i} ({schedule.stage_names[i]}) has a different sensor modality "
+                    f"fingerprint than stage 0, which would scramble the observation semantics "
+                    f"even if obs_dim is unchanged.\n"
+                    f"  Stage 0 fingerprint: {stage0_fingerprint}\n"
+                    f"  Stage {i} fingerprint: {fp_i}")
+        del env_probe
+        if not args.quiet:
+            print(f"Continual mode: obs_dim={stage0_obs_dim}, action_dim={stage0_action_dim} "
+                  f"validated consistent across {schedule.num_stages} stages.")
 
     # 2. Setup Results Directory
     if args.debug: print(f"[DEBUG] Phase 2: Results Directory Setup...", flush=True)
@@ -363,6 +537,24 @@ def main():
     if not args.quiet:
         print(f"Config saved to: {config_save_path}")
 
+    # In continual mode: also dump each stage config and the schedule for auditability
+    if schedule is not None:
+        for i, (name, cfg) in enumerate(zip(schedule.stage_names, schedule.stage_configs)):
+            out = os.path.join(models_dir, f"stage_{i:02d}_{name}.yaml")
+            with open(out, "w") as f:
+                yaml.dump(cfg.to_dict(), f, default_flow_style=False)
+        sched_dump = {
+            "continual": {
+                "episode_boundaries": schedule.episode_boundaries,
+                "checkpoint_frequencies": schedule.checkpoint_frequencies,
+                "stage_names": schedule.stage_names,
+            }
+        }
+        with open(os.path.join(models_dir, "schedule.yaml"), "w") as f:
+            yaml.dump(sched_dump, f, default_flow_style=False)
+        if not args.quiet:
+            print(f"Stage configs and schedule saved under {models_dir}")
+
     # 3. Initialize WandB
     if args.debug: print(f"[DEBUG] Phase 3: WandB Initialization...", flush=True)
     wandb_enabled = WANDB_AVAILABLE and not args.no_wandb and not config.get_mandatory('wandb.disabled')
@@ -374,26 +566,34 @@ def main():
             "entity": args.wandb_entity or config.get_mandatory('wandb.entity'),
             "group": args.wandb_group or config.get_mandatory('wandb.group'),
             "name": args.wandb_name or tag,
-            "config": {
-                "algorithm": algorithm,
-                "framework": "JAX/Flax NNX",
-                "total_timesteps": total_timesteps,
-                "num_envs": num_envs,
-                "num_steps": num_steps,
-                "lr": lr,
-                "hidden_size": hidden_size,
-                "seed": seed,
-                **config.to_dict()
-            },
             "reinit": True
         }
-        
+        wandb_config_payload = {
+            "algorithm": algorithm,
+            "framework": "JAX/Flax NNX",
+            "total_timesteps": total_timesteps,
+            "num_envs": num_envs,
+            "num_steps": num_steps,
+            "lr": lr,
+            "hidden_size": hidden_size,
+            "seed": seed,
+            **config.to_dict(),
+        }
+        if schedule is not None:
+            wandb_config_payload["continual"] = {
+                "num_stages": schedule.num_stages,
+                "stage_names": schedule.stage_names,
+                "episode_boundaries": schedule.episode_boundaries,
+                "checkpoint_frequencies": schedule.checkpoint_frequencies,
+            }
+        wandb_kwargs["config"] = wandb_config_payload
+
         if args.wandb_resume_id:
             wandb_kwargs['id'] = args.wandb_resume_id
             wandb_kwargs['resume'] = "allow"
-        
+
         wandb.init(**wandb_kwargs)
-        
+
         wandb.define_metric("iteration")
         wandb.define_metric("timesteps")
         wandb.define_metric("Episode/Number")
@@ -402,7 +602,9 @@ def main():
         wandb.define_metric("loss/*", step_metric="iteration")
         wandb.define_metric("modulator/*", step_metric="iteration")
         wandb.define_metric("behavior/*", step_metric="timesteps")
-        
+        wandb.define_metric("stage/index",      step_metric="Episode/Number")
+        wandb.define_metric("stage/transition", step_metric="Episode/Number")
+
         wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py"))
 
     # 4. Print Summary
@@ -704,6 +906,7 @@ def main():
     global_step = 0
     iteration = 0
     total_episodes_completed = 0
+    current_stage = 0
     episode_returns = np.zeros(num_envs, dtype=np.float32)
     episode_lengths = np.zeros(num_envs, dtype=np.int32)
     ep_info_buffer = deque(maxlen=100)
@@ -743,6 +946,8 @@ def main():
                     global_step = restored['step']
                     iteration = restored['iteration']
                     total_episodes_completed = restored['episode']
+                    if schedule is not None:
+                        current_stage = restored.get('stage', 0)
                     if not args.quiet: print(f"  -> DreamerV3 Model fully restored (Step: {step}).")
                 elif 'model' in locals() and 'optimizer' in locals():
                     # Enforce Strict Architecture Matching
@@ -796,6 +1001,8 @@ def main():
                     global_step = restored.get('step', global_step)
                     iteration = restored.get('iteration', iteration)
                     total_episodes_completed = restored.get('episode', total_episodes_completed)
+                    if schedule is not None:
+                        current_stage = restored.get('stage', 0)
                     
             else:
                 if not args.quiet: print(f"Warning: No valid checkpoint steps found at {args.load_checkpoint}.")
@@ -805,6 +1012,13 @@ def main():
 
     start_time = datetime.now()
     if args.debug: print(f"[DEBUG] Loop start time: {start_time.strftime('%H:%M:%S')}", flush=True)
+
+    def _stage_tag() -> dict:
+        """Return stage WandB tag dict; empty in single-config mode."""
+        if schedule is None:
+            return {}
+        return {"stage/index": current_stage,
+                "stage/name": schedule.stage_names[current_stage]}
 
     with tqdm(total=episodes, disable=args.quiet, desc="Training") as pbar:
 
@@ -816,10 +1030,90 @@ def main():
                 iteration += 1
                 if args.debug: print(f"\n[DEBUG] --- Iteration {iteration} Start (Step: {global_step}) ---", flush=True)
 
+                # === CONTINUAL LEARNING: stage-transition check ===
+                # Same per-iteration granularity as the checkpoint scheduler; drift is accepted.
+                if schedule is not None:
+                    new_stage = schedule.stage_for_episode(total_episodes_completed)
+                    if new_stage != current_stage:
+                        old_name = schedule.stage_names[current_stage]
+                        new_name = schedule.stage_names[new_stage]
+                        if not args.quiet:
+                            pbar.write(f"[STAGE] {current_stage}:{old_name} -> {new_stage}:{new_name} "
+                                       f"at ep={total_episodes_completed} "
+                                       f"(boundary was {schedule.episode_boundaries[current_stage]})")
+
+                        # Rebuild env with new params.
+                        # Model, optimizer, key persist; recurrent state is reset below (Fix 4).
+                        # NO forced save here — the periodic scheduler below is
+                        # the single source of truth for saves, same drift as today.
+                        params = load_env_params(schedule.stage_configs[new_stage])
+                        env = ParallelEnv(params)
+                        key, reset_key = jax.random.split(key)
+                        env_state, obs = env.reset(reset_key, num_envs)
+                        # Wipe in-flight episode accumulators.
+                        # Mid-episode envs' partial episodes are silently dropped
+                        # per user decision.
+                        episode_returns[:] = 0.0
+                        episode_lengths[:] = 0
+                        for _bk in BEHAVIOR_KEYS:
+                            episode_behavior[_bk][:] = 0.0
+                        for _bk in BEHAVIOR_DIST_KEYS:
+                            episode_dist_sums[_bk][:] = 0.0
+
+                        # --- DreamerV3 only: clear replay buffers to prevent
+                        # cross-stage dynamics contamination of the world model.
+                        if algorithm == "DreamerV3":
+                            # Cheap reset: mark as empty. sample() gates on self.size so
+                            # the (now stale) array contents become unreachable.
+                            pre_size = buffer.size
+                            buffer.idx = 0
+                            buffer.size = 0
+                            pos_pre_size = 0
+                            if positive_buffer is not None:
+                                pos_pre_size = positive_buffer.size
+                                positive_buffer.idx = 0
+                                positive_buffer.size = 0
+                            if not args.quiet:
+                                pbar.write(f"[STAGE] Cleared Dreamer replay buffer "
+                                           f"({pre_size} transitions) and positive buffer "
+                                           f"({pos_pre_size} transitions).")
+                            if wandb_enabled:
+                                wandb.log({
+                                    "stage/buffer_cleared_main":     pre_size,
+                                    "stage/buffer_cleared_positive": pos_pre_size,
+                                    "Episode/Number": total_episodes_completed,
+                                })
+
+                        # --- Fix 4: reset agent recurrent state at stage transition.
+                        # Symmetric with replay-buffer clearing — the env is fresh, so the
+                        # agent's memory of the old env should not contaminate new-stage rollouts.
+                        if algorithm == "RecurrentPPO":
+                            # Same init as training startup (train.py:717)
+                            h_state = model.initial_state(num_envs)
+                        elif algorithm == "DreamerV3":
+                            # Same init as training startup (train.py:772-780)
+                            dreamer_state = trainer.agent.wm.rssm.initial(num_envs)
+                            dreamer_state['prev_action'] = jnp.zeros(
+                                (num_envs, trainer.agent.ac.actor.net.layers[-1].out_features))
+                            dreamer_state['is_first'] = jnp.ones((num_envs, 1))
+                            if trainer.agent.wm.modulation_enabled:
+                                dreamer_state['mod_h'] = trainer.agent.wm.modulator.initial_state(num_envs)
+
+                        current_stage = new_stage
+
+                        if wandb_enabled:
+                            wandb.log({
+                                "stage/index":      current_stage,
+                                "stage/transition": 1,
+                                "Episode/Number":   total_episodes_completed,
+                            })
+                # ==================================================
+
+
                 # Reset behavior depends on accumulation mode
                 if not log_accumulate or (iteration - 1) % log_interval == 0:
                     iteration_episodes = []
-                
+
                 if algorithm == "RecurrentPPO":
                     if args.debug: print(f"  [DEBUG] Collecting {num_steps * num_envs} steps of experience...", end="", flush=True)
                     env_state, h_state, key, losses, num_completed, trajectories = jit_train(
@@ -902,6 +1196,7 @@ def main():
                             "Episode/Reward_Max": np.max(rewards),
                             "Episode/Steps": np.mean(lengths),
                             "Episode/Number": total_episodes_completed,
+                            **_stage_tag(),
                         }
                         # Behavioral metrics
                         if 'ate_food' in iteration_episodes[0]:
@@ -970,10 +1265,11 @@ def main():
                         
                         wandb_logs.update({
                             "timesteps": global_step,
-                            "iteration": iteration
+                            "iteration": iteration,
+                            **_stage_tag(),
                         })
                         wandb.log(wandb_logs)
-                    
+
                     postfix = {
                         "Iter": iteration,
                         "Loss": f"{total_loss:.4f}",
@@ -988,7 +1284,7 @@ def main():
                     key, collect_key = jax.random.split(key)
                     env_state, dreamer_state, key, transitions = trainer.collect_sequence(
                         env_state, params, num_steps, collect_key, dreamer_state)
-                    
+
                     # Convert transitions to NumPy and add to buffer.
                     if buffer.device == "gpu":
                         # STAY ON GPU: perform transpose/reshape in JAX (Zero Copy)
@@ -1152,6 +1448,7 @@ def main():
                             "Episode/Reward_Max": np.max(rewards),
                             "Episode/Steps": np.mean(lengths),
                             "Episode/Number": total_episodes_completed,
+                            **_stage_tag(),
                         }
                         # Behavioral metrics
                         if 'ate_food' in iteration_episodes[0]:
@@ -1178,19 +1475,19 @@ def main():
                     # Update progress bar
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
                     pbar.refresh()
-    
+
                     metrics = {}
                     loss_msg = ""
                     if buffer.size > max(config.get_mandatory('agent.batch_size') * 2, config.get_mandatory('agent.sequence_length')):
                         # Dynamic gradient steps based on replay_ratio.
                         # With collect_interval=1 (sheeprl-style): global_step increments by num_envs per iter,
-                        # ratio returns num_envs gradient steps. With collect_interval=128: increments by 
+                        # ratio returns num_envs gradient steps. With collect_interval=128: increments by
                         # num_envs*128, so we normalize to count sequences, not individual timesteps.
                         train_steps = ratio_scaled_updates(global_step // num_steps)
-                        
+
                         if buffer.device == "gpu":
                             # GPU path: sample + train all inside one JIT call
-                            metrics, key = trainer.train_multiple_gpu(buffer, train_steps, key, 
+                            metrics, key = trainer.train_multiple_gpu(buffer, train_steps, key,
                                                                        positive_buffer=positive_buffer)
                         else:
                             # CPU path: pre-sample on CPU, bulk transfer, then JIT train
@@ -1199,7 +1496,7 @@ def main():
                             else:
                                 stacked = buffer.sample_multiple(train_steps, config.get_mandatory('agent.batch_size'))
                             metrics, key = trainer.train_multiple_cpu(stacked, key)
-                            
+
                         cumulative_gradient_steps += train_steps
                         loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
                     
@@ -1229,6 +1526,7 @@ def main():
                                 wandb_logs[f"Modulator/{mk}"] = float(mv)
                             else:
                                 wandb_logs[mk] = float(mv)
+                        wandb_logs.update(_stage_tag())
                         wandb.log(wandb_logs)
                     
                     postfix = {
@@ -1613,6 +1911,7 @@ def main():
                         logs = {
                             "iteration": iteration,
                             "timesteps": global_step,
+                            **_stage_tag(),
                         }
                         if iteration_episodes:
                             rewards_list = [ep['r'] for ep in iteration_episodes]
@@ -1623,6 +1922,7 @@ def main():
                                 "Episode/Reward_Max": np.max(rewards_list),
                                 "Episode/Steps": np.mean(lengths_list),
                                 "Episode/Number": total_episodes_completed,
+                                **_stage_tag(),
                             }
                             # Behavioral metrics
                             if 'ate_food' in iteration_episodes[0]:
@@ -1664,7 +1964,10 @@ def main():
                     pbar.refresh()
 
                 # Checkpoint Logic
-                checkpoint_freq = args.checkpoint_frequency or config.get_mandatory('training.checkpoint_frequency')
+                if schedule is not None:
+                    checkpoint_freq = schedule.checkpoint_frequencies[current_stage]
+                else:
+                    checkpoint_freq = args.checkpoint_frequency or config.get_mandatory('training.checkpoint_frequency')
                 
                 # Check if we've crossed an episode boundary for checkpointing
                 # We save if the current episode count has reached the next checkpoint milestone
@@ -1679,23 +1982,25 @@ def main():
                     ckpt_data = {}
                     if algorithm == "RecurrentPPO":
                         ckpt_data = {
-                            'model': nnx.state(model, nnx.Param), 
-                            'optimizer': nnx.state(optimizer), 
-                            'h_state': h_state, 
-                            'key': key, 
-                            'iteration': iteration, 
+                            'model': nnx.state(model, nnx.Param),
+                            'optimizer': nnx.state(optimizer),
+                            'h_state': h_state,
+                            'key': key,
+                            'iteration': iteration,
                             'step': global_step,
-                            'episode': total_episodes_completed
+                            'episode': total_episodes_completed,
+                            'stage': current_stage,
                         }
                     elif algorithm == "DreamerV3":
                         ckpt_data = {
-                            'wm': nnx.state(trainer.agent.wm, nnx.Param), 
-                            'actor': nnx.state(trainer.agent.ac.actor, nnx.Param), 
-                            'critic': nnx.state(trainer.agent.ac.critic, nnx.Param), 
-                            'key': key, 
-                            'iteration': iteration, 
+                            'wm': nnx.state(trainer.agent.wm, nnx.Param),
+                            'actor': nnx.state(trainer.agent.ac.actor, nnx.Param),
+                            'critic': nnx.state(trainer.agent.ac.critic, nnx.Param),
+                            'key': key,
+                            'iteration': iteration,
                             'step': global_step,
-                            'episode': total_episodes_completed
+                            'episode': total_episodes_completed,
+                            'stage': current_stage,
                         }
 
                     if ckpt_data:
@@ -1742,7 +2047,7 @@ def main():
                                         quiet=not args.debug, num_envs=stats_envs, device=jax.config.values['jax_default_device']
                                     )
                                     if wandb_enabled and eval_results:
-                                        wandb.log({"Eval/MeanReward": eval_results["mean_reward"], "Eval/MeanLength": eval_results["mean_length"], "iteration": iteration, "timesteps": global_step})
+                                        wandb.log({"Eval/MeanReward": eval_results["mean_reward"], "Eval/MeanLength": eval_results["mean_length"], "iteration": iteration, "timesteps": global_step, **_stage_tag()})
                                 
                                 # Auto Analysis Trigger
                                 if config.get_mandatory('training.auto_analysis') and eval_s_flag:

@@ -1,0 +1,7 @@
+continual:
+  # Cumulative episode boundaries. Stage i runs while episode_count < episode_boundaries[i].
+  # Total episodes = episode_boundaries[-1].
+  episode_boundaries: [1000, 3000, 3500]
+
+  # Parallel to boundaries. One int per stage.
+  checkpoint_frequencies: [200, 500, 100]
