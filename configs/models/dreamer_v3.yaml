@@ -39,6 +39,8 @@ agent:
   
   entropy_scale: 3e-4  # Hafner 2023 standard value
   unimix: 0.01
+  use_layer_norm: true  # Orthogonal to modulation.type — applies LayerNorm to encoder pre-activations.
+                         # Mirrors recurrent_ppo.yaml:20 / neuromodulated_ppo.yaml:20. Mandatory since commit f1db0f0.
 
   # Encoding Configuration
   encoding_mode: "hierarchical"  # "flat" or "hierarchical"
