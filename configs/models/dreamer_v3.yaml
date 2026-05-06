@@ -47,7 +47,7 @@ agent:
     # Unimodal Phase 1: Independent MLPs for each sensor
     # Available sensor names for overrides: 
     # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
-    default_mlp: [32,32]
+    default_mlp: [128,128]
     unimodal_overrides:
       visual: [128,128]
       olfaction: [128,128]
