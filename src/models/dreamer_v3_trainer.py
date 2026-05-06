@@ -133,118 +133,121 @@ class DreamerTrainer(nnx.Module):
             # OPTIMIZATION: Pre-compute encoder embeddings for all timesteps (outside scan)
             # This enables batched parallel encoding instead of sequential per-timestep encoding
             # Expected speedup: 2-5x on world model training step
-            if modulation_enabled:
-                # For modulated path, we need modulator outputs for both encoding AND memory gate
-                # We do one scan for modulator+encoder, then main RSSM scan
-                def mod_scan(h_mod, o):
-                    mod_output, h_mod_new = wm.modulator.forward_obs(o, h_mod)
-                    return h_mod_new, (mod_output, h_mod_new)
+            with jax.named_scope("wm_encoder"):
+                if modulation_enabled:
+                    # For modulated path, we need modulator outputs for both encoding AND memory gate
+                    # We do one scan for modulator+encoder, then main RSSM scan
+                    def mod_scan(h_mod, o):
+                        mod_output, h_mod_new = wm.modulator.forward_obs(o, h_mod)
+                        return h_mod_new, (mod_output, h_mod_new)
 
-                obs_T = jnp.swapaxes(obs, 0, 1)  # (T, B, obs_dim)
-                h_mod_init = wm.modulator.initial_state(B)
-                _, (mod_outputs_T, h_mods_T) = jax.lax.scan(mod_scan, h_mod_init, obs_T)
+                    obs_T = jnp.swapaxes(obs, 0, 1)  # (T, B, obs_dim)
+                    h_mod_init = wm.modulator.initial_state(B)
+                    _, (mod_outputs_T, h_mods_T) = jax.lax.scan(mod_scan, h_mod_init, obs_T)
 
-                # Vectorized encoder call
-                mod_outputs = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), mod_outputs_T)
-                embeds = wm.encoder.forward_with_modulation(
-                    obs, mod_outputs, wm.modulation_type,
-                    unimodal_ln=getattr(wm, 'mod_unimodal_ln', None),
-                    multimodal_ln=getattr(wm, 'mod_multimodal_ln', None),
-                    flat_ln=getattr(wm, 'mod_flat_ln', None)
-                )
-                embeds_T = jnp.swapaxes(embeds, 0, 1)
+                    # Vectorized encoder call
+                    mod_outputs = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), mod_outputs_T)
+                    embeds = wm.encoder.forward_with_modulation(
+                        obs, mod_outputs, wm.modulation_type,
+                        unimodal_ln=getattr(wm, 'mod_unimodal_ln', None),
+                        multimodal_ln=getattr(wm, 'mod_multimodal_ln', None),
+                        flat_ln=getattr(wm, 'mod_flat_ln', None)
+                    )
+                    embeds_T = jnp.swapaxes(embeds, 0, 1)
 
-                # Now main RSSM scan uses pre-computed embeddings and modulator outputs
-                def scan_step(prev_state, inputs):
-                    embed, a, f, k, mod_output = inputs
-                    post, prior = wm.rssm.step(
-                        prev_state, embed, a, f, k,
-                        gate_bias=mod_output.z_memory)
-                    return post, (post, prior)
+                    # Now main RSSM scan uses pre-computed embeddings and modulator outputs
+                    def scan_step(prev_state, inputs):
+                        embed, a, f, k, mod_output = inputs
+                        post, prior = wm.rssm.step(
+                            prev_state, embed, a, f, k,
+                            gate_bias=mod_output.z_memory)
+                        return post, (post, prior)
 
-                init_carry = wm.rssm.initial(B)
-            else:
-                embeds = wm.encoder(
-                    obs,
-                    unimodal_ln=getattr(wm, 'mod_unimodal_ln', None),
-                    multimodal_ln=getattr(wm, 'mod_multimodal_ln', None),
-                    flat_ln=getattr(wm, 'mod_flat_ln', None)
-                )
-                embeds_T = jnp.swapaxes(embeds, 0, 1)  # (T, B, embed_dim)
+                    init_carry = wm.rssm.initial(B)
+                else:
+                    embeds = wm.encoder(
+                        obs,
+                        unimodal_ln=getattr(wm, 'mod_unimodal_ln', None),
+                        multimodal_ln=getattr(wm, 'mod_multimodal_ln', None),
+                        flat_ln=getattr(wm, 'mod_flat_ln', None)
+                    )
+                    embeds_T = jnp.swapaxes(embeds, 0, 1)  # (T, B, embed_dim)
 
-                def scan_step(prev_state, inputs):
-                    embed, a, f, k = inputs
-                    post, prior = wm.rssm.step(prev_state, embed, a, f, k)
-                    return post, (post, prior)
+                    def scan_step(prev_state, inputs):
+                        embed, a, f, k = inputs
+                        post, prior = wm.rssm.step(prev_state, embed, a, f, k)
+                        return post, (post, prior)
 
-                init_carry = wm.rssm.initial(B)
+                    init_carry = wm.rssm.initial(B)
 
-            rng, scan_rng = random.split(rng)
-            # Split keys for (T, B) to ensure independent sampling per environment per step
-            scan_rngs = random.split(scan_rng, T * B).reshape((T, B, -1))
+            with jax.named_scope("wm_rssm_scan"):
+                rng, scan_rng = random.split(rng)
+                # Split keys for (T, B) to ensure independent sampling per environment per step
+                scan_rngs = random.split(scan_rng, T * B).reshape((T, B, -1))
 
-            env_inputs = (action, is_first)
-            env_inputs_T = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), env_inputs)
+                env_inputs = (action, is_first)
+                env_inputs_T = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), env_inputs)
 
-            if modulation_enabled:
-                inputs_T = (embeds_T, *env_inputs_T, scan_rngs, mod_outputs_T)
-            else:
-                inputs_T = (embeds_T, *env_inputs_T, scan_rngs)
+                if modulation_enabled:
+                    inputs_T = (embeds_T, *env_inputs_T, scan_rngs, mod_outputs_T)
+                else:
+                    inputs_T = (embeds_T, *env_inputs_T, scan_rngs)
 
-            _, scan_outputs = jax.lax.scan(scan_step, init_carry, inputs_T)
+                _, scan_outputs = jax.lax.scan(scan_step, init_carry, inputs_T)
 
-            # Extract posts and priors from scan outputs
-            if modulation_enabled:
-                posts_T, priors_T = scan_outputs
-                # h_mods_T already computed in encode_scan
-                h_mods_all = jnp.swapaxes(h_mods_T, 0, 1)
-            else:
-                posts_T, priors_T = scan_outputs
-                h_mods_all = None
+                # Extract posts and priors from scan outputs
+                if modulation_enabled:
+                    posts_T, priors_T = scan_outputs
+                    # h_mods_T already computed in encode_scan
+                    h_mods_all = jnp.swapaxes(h_mods_T, 0, 1)
+                else:
+                    posts_T, priors_T = scan_outputs
+                    h_mods_all = None
 
-            posts = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), posts_T)
-            priors = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), priors_T)
+                posts = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), posts_T)
+                priors = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), priors_T)
 
-            # Reconstruction Loss
-            feat = wm.get_feat(posts)
-            recon = wm.decoder(feat)
-            loss_recon = jnp.mean(jnp.square(recon - obs))
+            with jax.named_scope("wm_losses"):
+                # Reconstruction Loss
+                feat = wm.get_feat(posts)
+                recon = wm.decoder(feat)
+                loss_recon = jnp.mean(jnp.square(recon - obs))
 
-            # Reward Loss
-            rew_pred = wm.reward_head(feat)
-            rew_target = to_twohot(reward)
-            loss_rew = -jnp.mean(jnp.sum(rew_target * jax.nn.log_softmax(rew_pred), axis=-1))
+                # Reward Loss
+                rew_pred = wm.reward_head(feat)
+                rew_target = to_twohot(reward)
+                loss_rew = -jnp.mean(jnp.sum(rew_target * jax.nn.log_softmax(rew_pred), axis=-1))
 
-            # Continue Loss
-            cont_pred = wm.continue_head(feat)
-            loss_cont = optax.sigmoid_binary_cross_entropy(cont_pred, 1.0 - terminal[..., None]).mean()
+                # Continue Loss
+                cont_pred = wm.continue_head(feat)
+                loss_cont = optax.sigmoid_binary_cross_entropy(cont_pred, 1.0 - terminal[..., None]).mean()
 
-            # KL Loss
-            q_logits = posts['logits']
-            p_logits = priors['logits']
+                # KL Loss
+                q_logits = posts['logits']
+                p_logits = priors['logits']
 
-            def kl_div_categ(p_logits, q_logits):
-                p_dist = jax.nn.softmax(p_logits)
-                p_log = jax.nn.log_softmax(p_logits)
-                q_log = jax.nn.log_softmax(q_logits)
-                return jnp.sum(p_dist * (p_log - q_log), axis=-1)
+                def kl_div_categ(p_logits, q_logits):
+                    p_dist = jax.nn.softmax(p_logits)
+                    p_log = jax.nn.log_softmax(p_logits)
+                    q_log = jax.nn.log_softmax(q_logits)
+                    return jnp.sum(p_dist * (p_log - q_log), axis=-1)
 
-            q_logits_sg = jax.lax.stop_gradient(q_logits)
-            p_logits_sg = jax.lax.stop_gradient(p_logits)
+                q_logits_sg = jax.lax.stop_gradient(q_logits)
+                p_logits_sg = jax.lax.stop_gradient(p_logits)
 
-            dyn_kl = kl_div_categ(q_logits_sg, p_logits)  # (B, T, stoch, discrete) -> (B, T, stoch)
-            rep_kl = kl_div_categ(q_logits, p_logits_sg)
+                dyn_kl = kl_div_categ(q_logits_sg, p_logits)  # (B, T, stoch, discrete) -> (B, T, stoch)
+                rep_kl = kl_div_categ(q_logits, p_logits_sg)
 
-            # Sum over latent groups (stoch_dim) to get total info loss per state
-            dyn_kl = jnp.sum(dyn_kl, axis=-1)
-            rep_kl = jnp.sum(rep_kl, axis=-1)
+                # Sum over latent groups (stoch_dim) to get total info loss per state
+                dyn_kl = jnp.sum(dyn_kl, axis=-1)
+                rep_kl = jnp.sum(rep_kl, axis=-1)
 
-            dyn_kl = jnp.maximum(dyn_kl, FREE_NATS)
-            rep_kl = jnp.maximum(rep_kl, FREE_NATS)
+                dyn_kl = jnp.maximum(dyn_kl, FREE_NATS)
+                rep_kl = jnp.maximum(rep_kl, FREE_NATS)
 
-            loss_kl = DYN_SCALE * jnp.mean(dyn_kl) + REP_SCALE * jnp.mean(rep_kl)
+                loss_kl = DYN_SCALE * jnp.mean(dyn_kl) + REP_SCALE * jnp.mean(rep_kl)
 
-            total_loss = loss_recon + loss_rew + loss_cont + loss_kl
+                total_loss = loss_recon + loss_rew + loss_cont + loss_kl
 
             # Error metrics (non-gradient)
             rew_pred_val = from_twohot(rew_pred)
@@ -305,9 +308,10 @@ class DreamerTrainer(nnx.Module):
 
             return total_loss, (metrics, posts, h_mods_all)
 
-        grads_model, (model_metrics, posts, h_mods_all) = nnx.grad(
-            model_loss_fn, has_aux=True)(self.agent.wm, rng)
-        self.model_opt.update(self.agent.wm, grads_model)
+        with jax.named_scope("dreamer_optim"):
+            grads_model, (model_metrics, posts, h_mods_all) = nnx.grad(
+                model_loss_fn, has_aux=True)(self.agent.wm, rng)
+            self.model_opt.update(self.agent.wm, grads_model)
 
         # --- 2. Behavior Learning (Imagination) ---
         start_state = jax.tree.map(lambda x: x.reshape((-1,) + x.shape[2:]), posts)
@@ -380,85 +384,88 @@ class DreamerTrainer(nnx.Module):
 
                 imag_init = start_state
 
-            # Split keys for (HORIZON, IMAG_BATCH) for behavior learning
-            # IMAG_BATCH = B * T (flattened start_state)
-            imag_batch = start_state['deter'].shape[0]
-            rng_imag = random.split(rng, HORIZON * imag_batch).reshape((HORIZON, imag_batch, -1))
-            _, rollouts = jax.lax.scan(scan_imag, imag_init, rng_imag)
+            with jax.named_scope("ac_imagine_scan"):
+                # Split keys for (HORIZON, IMAG_BATCH) for behavior learning
+                # IMAG_BATCH = B * T (flattened start_state)
+                imag_batch = start_state['deter'].shape[0]
+                rng_imag = random.split(rng, HORIZON * imag_batch).reshape((HORIZON, imag_batch, -1))
+                _, rollouts = jax.lax.scan(scan_imag, imag_init, rng_imag)
 
-            rews = rollouts['reward']
-            conts = rollouts['continue']
-            vals = rollouts['value']
+            with jax.named_scope("ac_losses"):
+                rews = rollouts['reward']
+                conts = rollouts['continue']
+                vals = rollouts['value']
 
-            start_feat = self.agent.wm.get_feat(start_state)
-            v_start = from_twohot(self.target_critic(start_feat))
+                start_feat = self.agent.wm.get_feat(start_state)
+                v_start = from_twohot(self.target_critic(start_feat))
 
-            all_vals = jnp.concatenate([v_start[None], vals], axis=0)
+                all_vals = jnp.concatenate([v_start[None], vals], axis=0)
 
-            # Lambda returns with global discount
-            lambda_returns = compute_lambda_values(rews, all_vals, conts * GAMMA)
+                # Lambda returns with global discount
+                lambda_returns = compute_lambda_values(rews, all_vals, conts * GAMMA)
 
-            norm_returns = (lambda_returns - moments_low) / moments_invscale
-            
-            # Cumulative Discount Weighting
-            # weights[t] = \prod_{i=0}^{t-1} (conts[i] * GAMMA)
-            discount_weights = jnp.concatenate([jnp.ones_like(conts[:1]), conts[:-1] * GAMMA], axis=0)
-            discount_weights = jnp.cumprod(discount_weights, axis=0)
-            discount_weights = jax.lax.stop_gradient(discount_weights)
+                norm_returns = (lambda_returns - moments_low) / moments_invscale
 
-            # Critic Loss — train on RAW lambda_returns (canonical DreamerV3)
-            v_pred_logits = critic(rollouts['feat'])
-            target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns))
-            loss_critic_step = -jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1)
-            loss_critic = jnp.mean(loss_critic_step * discount_weights)
+                # Cumulative Discount Weighting
+                # weights[t] = \prod_{i=0}^{t-1} (conts[i] * GAMMA)
+                discount_weights = jnp.concatenate([jnp.ones_like(conts[:1]), conts[:-1] * GAMMA], axis=0)
+                discount_weights = jnp.cumprod(discount_weights, axis=0)
+                discount_weights = jax.lax.stop_gradient(discount_weights)
 
-            # Actor Loss — normalize BOTH sides for consistent advantage
-            baseline = from_twohot(v_pred_logits)
-            norm_baseline = (baseline - moments_low) / moments_invscale
-            advantage = jax.lax.stop_gradient(norm_returns - norm_baseline)
-            
-            actions = rollouts['action']
-            logits = rollouts['action_dist']
-            log_probs = jnp.sum(actions * jax.nn.log_softmax(logits), axis=-1)
-            
-            ENTROPY_SCALE = self.config.get_mandatory('agent.entropy_scale', float)
-            entropy = -jnp.sum(jax.nn.softmax(logits) * jax.nn.log_softmax(logits), axis=-1)
-            
-            loss_actor_step = -(log_probs * advantage + ENTROPY_SCALE * entropy)
-            loss_actor = jnp.mean(loss_actor_step * discount_weights)
+                # Critic Loss — train on RAW lambda_returns (canonical DreamerV3)
+                v_pred_logits = critic(rollouts['feat'])
+                target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns))
+                loss_critic_step = -jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1)
+                loss_critic = jnp.mean(loss_critic_step * discount_weights)
 
-            metrics = {
-                'loss_critic': loss_critic,
-                'loss_actor': loss_actor,
-                'loss_actor_policy': jnp.mean(-log_probs * advantage * discount_weights),
-                'loss_actor_entropy': jnp.mean(-ENTROPY_SCALE * entropy * discount_weights),
-                'mean_return': jnp.mean(lambda_returns),
-                'mean_norm_return': jnp.mean(norm_returns),
-                'mean_value': jnp.mean(baseline),
-                'mean_advantage': jnp.mean(advantage),
-                'mean_entropy': jnp.mean(entropy),
-                'value_mae': jnp.mean(jnp.abs(baseline - jax.lax.stop_gradient(lambda_returns)))
-            }
+                # Actor Loss — normalize BOTH sides for consistent advantage
+                baseline = from_twohot(v_pred_logits)
+                norm_baseline = (baseline - moments_low) / moments_invscale
+                advantage = jax.lax.stop_gradient(norm_returns - norm_baseline)
+
+                actions = rollouts['action']
+                logits = rollouts['action_dist']
+                log_probs = jnp.sum(actions * jax.nn.log_softmax(logits), axis=-1)
+
+                ENTROPY_SCALE = self.config.get_mandatory('agent.entropy_scale', float)
+                entropy = -jnp.sum(jax.nn.softmax(logits) * jax.nn.log_softmax(logits), axis=-1)
+
+                loss_actor_step = -(log_probs * advantage + ENTROPY_SCALE * entropy)
+                loss_actor = jnp.mean(loss_actor_step * discount_weights)
+
+                metrics = {
+                    'loss_critic': loss_critic,
+                    'loss_actor': loss_actor,
+                    'loss_actor_policy': jnp.mean(-log_probs * advantage * discount_weights),
+                    'loss_actor_entropy': jnp.mean(-ENTROPY_SCALE * entropy * discount_weights),
+                    'mean_return': jnp.mean(lambda_returns),
+                    'mean_norm_return': jnp.mean(norm_returns),
+                    'mean_value': jnp.mean(baseline),
+                    'mean_advantage': jnp.mean(advantage),
+                    'mean_entropy': jnp.mean(entropy),
+                    'value_mae': jnp.mean(jnp.abs(baseline - jax.lax.stop_gradient(lambda_returns)))
+                }
             return (loss_actor + loss_critic), (metrics, lambda_returns)
 
-        grads_ac, (behavior_metrics, lambda_returns) = nnx.grad(behavior_loss_fn, argnums=(0,1), has_aux=True)(
-            self.agent.ac.actor,
-            self.agent.ac.critic,
-            rng
-        )
+        with jax.named_scope("dreamer_optim"):
+            grads_ac, (behavior_metrics, lambda_returns) = nnx.grad(behavior_loss_fn, argnums=(0,1), has_aux=True)(
+                self.agent.ac.actor,
+                self.agent.ac.critic,
+                rng
+            )
 
-        # --- 3. Update Moments (Outside Grad/Trace) ---
-        self.moments.update(lambda_returns)
+            # --- 3. Update Moments (Outside Grad/Trace) ---
+            self.moments.update(lambda_returns)
 
-        grads_actor, grads_critic = grads_ac
-        self.actor_opt.update(self.agent.ac.actor, grads_actor)
-        self.critic_opt.update(self.agent.ac.critic, grads_critic)
+            grads_actor, grads_critic = grads_ac
+            self.actor_opt.update(self.agent.ac.actor, grads_actor)
+            self.critic_opt.update(self.agent.ac.critic, grads_critic)
 
-        # EMA Update
-        current_st = nnx.state(self.agent.ac.critic, nnx.Param)
-        target_st = nnx.state(self.target_critic, nnx.Param)
-        new_target_st = jax.tree.map(lambda t, c: 0.98 * t + 0.02 * c, target_st, current_st)
-        nnx.update(self.target_critic, new_target_st)
+            # EMA Update
+            current_st = nnx.state(self.agent.ac.critic, nnx.Param)
+            target_st = nnx.state(self.target_critic, nnx.Param)
+            new_target_st = jax.tree.map(lambda t, c: 0.98 * t + 0.02 * c, target_st, current_st)
+            nnx.update(self.target_critic, new_target_st)
 
         return {**model_metrics, **behavior_metrics}
 
@@ -558,33 +565,37 @@ class DreamerTrainer(nnx.Module):
         
         def scan_fn(carry, _):
             state, d_state, current_key = carry
-            
+
             # 1. Sensing
-            obs = jax.vmap(get_observation, in_axes=(0, None))(state, params)
-            
+            with jax.named_scope("dreamer_sense"):
+                obs = jax.vmap(get_observation, in_axes=(0, None))(state, params)
+
             # 2. Action selection
-            current_key, act_key = jax.random.split(current_key)
-            action_idx, next_d_state = self.get_action(
-                obs, d_state, eval_mode=False, rng=act_key)
-            
+            with jax.named_scope("dreamer_act"):
+                current_key, act_key = jax.random.split(current_key)
+                action_idx, next_d_state = self.get_action(
+                    obs, d_state, eval_mode=False, rng=act_key)
+
             # 3. Step Environment
-            action_idx = action_idx.astype(jnp.int32)
-            next_state_raw, reward, done, info = jax.vmap(
-                jax_step, in_axes=(0, 0, None))(state, action_idx, params)
-            
+            with jax.named_scope("dreamer_env_step"):
+                action_idx = action_idx.astype(jnp.int32)
+                next_state_raw, reward, done, info = jax.vmap(
+                    jax_step, in_axes=(0, 0, None))(state, action_idx, params)
+
             # 4. Auto-Reset
-            current_key, reset_key = jax.random.split(current_key)
-            reset_state = jax.vmap(jax_reset, in_axes=(None, 0))(
-                params, jax.random.split(reset_key, B))
-            
-            def select_done(d, r, n):
-                d_expanded = d.reshape((d.shape[0],) + (1,) * (r.ndim - 1))
-                return jnp.where(d_expanded, r, n)
-                
-            final_env_state = jax.tree_util.tree_map(
-                lambda r, n: select_done(done, r, n),
-                reset_state, next_state_raw
-            )
+            with jax.named_scope("dreamer_env_reset"):
+                current_key, reset_key = jax.random.split(current_key)
+                reset_state = jax.vmap(jax_reset, in_axes=(None, 0))(
+                    params, jax.random.split(reset_key, B))
+
+                def select_done(d, r, n):
+                    d_expanded = d.reshape((d.shape[0],) + (1,) * (r.ndim - 1))
+                    return jnp.where(d_expanded, r, n)
+
+                final_env_state = jax.tree_util.tree_map(
+                    lambda r, n: select_done(done, r, n),
+                    reset_state, next_state_raw
+                )
             
             # 5. Prepare Dreamer state for NEXT step
             # On reset, we should reset RSSM state too? 
@@ -650,71 +661,73 @@ class DreamerTrainer(nnx.Module):
             rng, key_pos, key_recent, key_uniform, train_key = jax.random.split(rng, 5)
             uniform_slots = batch_size - pos_slots - recent_slots
 
-            # --- Pool 1: Positive-reward buffer ---
-            # Sample uniformly from the positive buffer
-            pos_block_idx = jax.random.randint(
-                key_pos, (pos_slots,), 0, jnp.maximum(num_pos_blocks, 1))
-            pos_starts = pos_block_idx * b_seq_len
-            pos_indices = (pos_starts[:, None] + seq_range[None, :]) % pos_cap
+            with jax.named_scope("replay_mixture_sample"):
+                # --- Pool 1: Positive-reward buffer ---
+                # Sample uniformly from the positive buffer
+                pos_block_idx = jax.random.randint(
+                    key_pos, (pos_slots,), 0, jnp.maximum(num_pos_blocks, 1))
+                pos_starts = pos_block_idx * b_seq_len
+                pos_indices = (pos_starts[:, None] + seq_range[None, :]) % pos_cap
 
-            pos_batch_obs = pos_obs[pos_indices]           # (pos_slots, seq_len, obs_dim)
-            pos_batch_act = pos_actions[pos_indices]       # (pos_slots, seq_len, act_dim)
-            pos_batch_rew = pos_rewards[pos_indices]       # (pos_slots, seq_len)
-            pos_batch_done = pos_dones[pos_indices]        # (pos_slots, seq_len)
-            pos_batch_first = pos_is_first[pos_indices]    # (pos_slots, seq_len)
+                pos_batch_obs = pos_obs[pos_indices]           # (pos_slots, seq_len, obs_dim)
+                pos_batch_act = pos_actions[pos_indices]       # (pos_slots, seq_len, act_dim)
+                pos_batch_rew = pos_rewards[pos_indices]       # (pos_slots, seq_len)
+                pos_batch_done = pos_dones[pos_indices]        # (pos_slots, seq_len)
+                pos_batch_first = pos_is_first[pos_indices]    # (pos_slots, seq_len)
 
-            # --- Pool 2: Recent blocks from main buffer ---
-            recent_blocks_count = jnp.minimum(recent_window // b_seq_len, num_blocks)
-            buf_block = buf_idx // b_seq_len
-            recent_offsets = jax.random.randint(
-                key_recent, (recent_slots,), 0, jnp.maximum(recent_blocks_count, 1))
-            recent_block_idx = (buf_block - recent_blocks_count + recent_offsets) % max_blocks
-            
-            # Fallback: if not enough data, use uniform from main buffer
-            recent_fallback = jax.random.randint(key_recent, (recent_slots,), 0, num_blocks)
-            recent_block_idx = jnp.where(recent_blocks_count > 0, recent_block_idx, recent_fallback)
+                # --- Pool 2: Recent blocks from main buffer ---
+                recent_blocks_count = jnp.minimum(recent_window // b_seq_len, num_blocks)
+                buf_block = buf_idx // b_seq_len
+                recent_offsets = jax.random.randint(
+                    key_recent, (recent_slots,), 0, jnp.maximum(recent_blocks_count, 1))
+                recent_block_idx = (buf_block - recent_blocks_count + recent_offsets) % max_blocks
 
-            recent_starts = recent_block_idx * b_seq_len
-            recent_indices = (recent_starts[:, None] + seq_range[None, :]) % b_cap
+                # Fallback: if not enough data, use uniform from main buffer
+                recent_fallback = jax.random.randint(key_recent, (recent_slots,), 0, num_blocks)
+                recent_block_idx = jnp.where(recent_blocks_count > 0, recent_block_idx, recent_fallback)
 
-            recent_batch_obs = obs[recent_indices]
-            recent_batch_act = actions[recent_indices]
-            recent_batch_rew = rewards[recent_indices]
-            recent_batch_done = dones[recent_indices]
-            recent_batch_first = is_first[recent_indices]
+                recent_starts = recent_block_idx * b_seq_len
+                recent_indices = (recent_starts[:, None] + seq_range[None, :]) % b_cap
 
-            # --- Pool 3: Uniform random from main buffer (existing behavior) ---
-            uniform_block_idx = jax.random.randint(key_uniform, (uniform_slots,), 0, num_blocks)
-            uniform_starts = uniform_block_idx * b_seq_len
-            uniform_indices = (uniform_starts[:, None] + seq_range[None, :]) % b_cap
+                recent_batch_obs = obs[recent_indices]
+                recent_batch_act = actions[recent_indices]
+                recent_batch_rew = rewards[recent_indices]
+                recent_batch_done = dones[recent_indices]
+                recent_batch_first = is_first[recent_indices]
 
-            uniform_batch_obs = obs[uniform_indices]
-            uniform_batch_act = actions[uniform_indices]
-            uniform_batch_rew = rewards[uniform_indices]
-            uniform_batch_done = dones[uniform_indices]
-            uniform_batch_first = is_first[uniform_indices]
+                # --- Pool 3: Uniform random from main buffer (existing behavior) ---
+                uniform_block_idx = jax.random.randint(key_uniform, (uniform_slots,), 0, num_blocks)
+                uniform_starts = uniform_block_idx * b_seq_len
+                uniform_indices = (uniform_starts[:, None] + seq_range[None, :]) % b_cap
 
-            # --- Fallback: if positive buffer is empty, replace with uniform from main ---
-            # When num_pos_blocks == 0, pos_batch_* contains garbage or zeros
-            fallback_block_idx = jax.random.randint(key_pos, (pos_slots,), 0, num_blocks)
-            fallback_starts = fallback_block_idx * b_seq_len
-            fallback_indices = (fallback_starts[:, None] + seq_range[None, :]) % b_cap
+                uniform_batch_obs = obs[uniform_indices]
+                uniform_batch_act = actions[uniform_indices]
+                uniform_batch_rew = rewards[uniform_indices]
+                uniform_batch_done = dones[uniform_indices]
+                uniform_batch_first = is_first[uniform_indices]
 
-            has_positive_data = num_pos_blocks > 0
-            pos_batch_obs = jnp.where(has_positive_data, pos_batch_obs, obs[fallback_indices])
-            pos_batch_act = jnp.where(has_positive_data, pos_batch_act, actions[fallback_indices])
-            pos_batch_rew = jnp.where(has_positive_data, pos_batch_rew, rewards[fallback_indices])
-            pos_batch_done = jnp.where(has_positive_data, pos_batch_done, dones[fallback_indices])
-            pos_batch_first = jnp.where(has_positive_data, pos_batch_first, is_first[fallback_indices])
+                # --- Fallback: if positive buffer is empty, replace with uniform from main ---
+                # When num_pos_blocks == 0, pos_batch_* contains garbage or zeros
+                fallback_block_idx = jax.random.randint(key_pos, (pos_slots,), 0, num_blocks)
+                fallback_starts = fallback_block_idx * b_seq_len
+                fallback_indices = (fallback_starts[:, None] + seq_range[None, :]) % b_cap
+
+                has_positive_data = num_pos_blocks > 0
+                pos_batch_obs = jnp.where(has_positive_data, pos_batch_obs, obs[fallback_indices])
+                pos_batch_act = jnp.where(has_positive_data, pos_batch_act, actions[fallback_indices])
+                pos_batch_rew = jnp.where(has_positive_data, pos_batch_rew, rewards[fallback_indices])
+                pos_batch_done = jnp.where(has_positive_data, pos_batch_done, dones[fallback_indices])
+                pos_batch_first = jnp.where(has_positive_data, pos_batch_first, is_first[fallback_indices])
 
             # --- Concatenate all pools into the training batch ---
-            batch = {
-                'obs': jnp.concatenate([pos_batch_obs, recent_batch_obs, uniform_batch_obs], axis=0),
-                'action': jnp.concatenate([pos_batch_act, recent_batch_act, uniform_batch_act], axis=0),
-                'reward': jnp.concatenate([pos_batch_rew, recent_batch_rew, uniform_batch_rew], axis=0),
-                'terminal': jnp.concatenate([pos_batch_done, recent_batch_done, uniform_batch_done], axis=0),
-                'is_first': jnp.concatenate([pos_batch_first, recent_batch_first, uniform_batch_first], axis=0),
-            }
+            with jax.named_scope("replay_concat"):
+                batch = {
+                    'obs': jnp.concatenate([pos_batch_obs, recent_batch_obs, uniform_batch_obs], axis=0),
+                    'action': jnp.concatenate([pos_batch_act, recent_batch_act, uniform_batch_act], axis=0),
+                    'reward': jnp.concatenate([pos_batch_rew, recent_batch_rew, uniform_batch_rew], axis=0),
+                    'terminal': jnp.concatenate([pos_batch_done, recent_batch_done, uniform_batch_done], axis=0),
+                    'is_first': jnp.concatenate([pos_batch_first, recent_batch_first, uniform_batch_first], axis=0),
+                }
             
             # gradient step
             metrics = trainer.train_step(batch, train_key)

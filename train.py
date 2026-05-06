@@ -238,6 +238,10 @@ def main():
     parser.add_argument("--log-interval", type=int, help="WandB logging interval in iterations (default: 1)")
     parser.add_argument("--log-accumulate", action=argparse.BooleanOptionalAction, default=None,
                         help="Accumulate episode metrics across log interval (default: true). Use --no-log-accumulate for hard interval.")
+    parser.add_argument("--profile", action="store_true",
+                        help="Enable jax.profiler trace of the training loop. "
+                             "Trace written to tmp/<timestamp>_dreamer_v3_vs_rppo_profile/<algo>_trace/. "
+                             "Forces --no-wandb and --quiet, runs warm-up + trace window then exits.")
 
     args = parser.parse_args()
 
@@ -247,6 +251,20 @@ def main():
     
     if args.debug:
         print(f"[DEBUG] Script started. CLI arguments: {args}", flush=True)
+
+    # --- Profiler constants ---
+    PROFILE_WARMUP_ITERS = 20
+    PROFILE_TRACE_ITERS = 200
+    PROFILE_TOTAL_ITERS = PROFILE_WARMUP_ITERS + PROFILE_TRACE_ITERS  # = 220
+
+    if args.profile:
+        args.no_wandb = True
+        args.quiet = True
+        from datetime import datetime as _dt
+        _profile_ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+        profile_parent = os.path.join("tmp", f"{_profile_ts}_dreamer_v3_vs_rppo_profile")
+        os.makedirs(profile_parent, exist_ok=True)
+        # The per-algo subdirectory is created after `algorithm` is known (below).
 
     # --- Finalize Device Selection ---
     try:
@@ -400,6 +418,12 @@ def main():
     # Determine Algorithm
     algorithm = config.get_mandatory('agent.algorithm')
 
+    if args.profile:
+        profile_trace_dir = os.path.join(profile_parent, f"{algorithm}_trace")
+        os.makedirs(profile_trace_dir, exist_ok=True)
+        print(f"[PROFILE] trace dir: {profile_trace_dir}")
+        print(f"[PROFILE] warm-up: {PROFILE_WARMUP_ITERS} iters, "
+              f"trace window: {PROFILE_TRACE_ITERS} iters")
 
     # Strictly Resolve Parameters (No Safe Defaults)
     if schedule is not None:
@@ -1109,6 +1133,18 @@ def main():
                             })
                 # ==================================================
 
+                # === PROFILER GATING ===
+                if args.profile:
+                    if iteration == PROFILE_WARMUP_ITERS + 1:  # i.e. iter 21
+                        jax.block_until_ready(env_state.agent_pos)
+                        jax.profiler.start_trace(profile_trace_dir)
+                        print(f"[PROFILE] start_trace at iter {iteration}", flush=True)
+                    if iteration > PROFILE_TOTAL_ITERS:
+                        jax.block_until_ready(env_state.agent_pos)
+                        jax.profiler.stop_trace()
+                        print(f"[PROFILE] trace complete: {profile_trace_dir}", flush=True)
+                        break
+                # ======================
 
                 # Reset behavior depends on accumulation mode
                 if not log_accumulate or (iteration - 1) % log_interval == 0:
@@ -1116,9 +1152,10 @@ def main():
 
                 if algorithm == "RecurrentPPO":
                     if args.debug: print(f"  [DEBUG] Collecting {num_steps * num_envs} steps of experience...", end="", flush=True)
-                    env_state, h_state, key, losses, num_completed, trajectories = jit_train(
-                        model, optimizer, params, env_state, h_state, key, ppo_config
-                    )
+                    with jax.named_scope("rppo_train_iteration"):
+                        env_state, h_state, key, losses, num_completed, trajectories = jit_train(
+                            model, optimizer, params, env_state, h_state, key, ppo_config
+                        )
                     
                     step_info = getattr(trajectories, 'step_info', None)
                     # Convert step_info fields to numpy (all shape [T, B])
@@ -1282,88 +1319,93 @@ def main():
                 elif algorithm == "DreamerV3":
                     # Use JITTED collect_sequence (collect_interval steps per env per iteration)
                     key, collect_key = jax.random.split(key)
-                    env_state, dreamer_state, key, transitions = trainer.collect_sequence(
-                        env_state, params, num_steps, collect_key, dreamer_state)
+                    with jax.named_scope("dreamer_collect_sequence"):
+                        env_state, dreamer_state, key, transitions = trainer.collect_sequence(
+                            env_state, params, num_steps, collect_key, dreamer_state)
 
                     # Convert transitions to NumPy and add to buffer.
                     if buffer.device == "gpu":
                         # STAY ON GPU: perform transpose/reshape in JAX (Zero Copy)
                         T, B = transitions['obs'].shape[0], transitions['obs'].shape[1]
-                        obs_flat = transitions['obs'].transpose(1, 0, 2).reshape(B * T, -1)
-                        act_flat = transitions['action'].transpose(1, 0, 2).reshape(B * T, -1)
-                        rew_flat = transitions['reward'].transpose(1, 0).reshape(B * T)
-                        done_flat = transitions['terminal'].transpose(1, 0).reshape(B * T)
-                        is_first_arr = transitions['is_first']
-                        if is_first_arr.ndim == 3:
-                            is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
-                        else:
-                            is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
-                        buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+                        with jax.named_scope("dreamer_buffer_add"):
+                            obs_flat = transitions['obs'].transpose(1, 0, 2).reshape(B * T, -1)
+                            act_flat = transitions['action'].transpose(1, 0, 2).reshape(B * T, -1)
+                            rew_flat = transitions['reward'].transpose(1, 0).reshape(B * T)
+                            done_flat = transitions['terminal'].transpose(1, 0).reshape(B * T)
+                            is_first_arr = transitions['is_first']
+                            if is_first_arr.ndim == 3:
+                                is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
+                            else:
+                                is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
+                            buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
 
-                        # Copy positive-reward blocks to the dedicated positive buffer
-                        if positive_buffer is not None:
-                            seq_len = buffer.sequence_length
-                            num_items = obs_flat.shape[0]
-                            num_written_blocks = num_items // seq_len
+                        with jax.named_scope("dreamer_positive_buffer_copy"):
+                            # Copy positive-reward blocks to the dedicated positive buffer
+                            if positive_buffer is not None:
+                                seq_len = buffer.sequence_length
+                                num_items = obs_flat.shape[0]
+                                num_written_blocks = num_items // seq_len
 
-                            for b in range(num_written_blocks):
-                                blk_start = b * seq_len
-                                blk_end = blk_start + seq_len
-                                blk_rewards = rew_flat[blk_start:blk_end]
+                                for b in range(num_written_blocks):
+                                    blk_start = b * seq_len
+                                    blk_end = blk_start + seq_len
+                                    blk_rewards = rew_flat[blk_start:blk_end]
 
-                                # Check if this block contains any positive reward
-                                if buffer._on_gpu:
-                                    has_positive = bool(jnp.any(blk_rewards > 0.0))
-                                else:
-                                    has_positive = bool(np.any(blk_rewards > 0.0))
+                                    # Check if this block contains any positive reward
+                                    if buffer._on_gpu:
+                                        has_positive = bool(jnp.any(blk_rewards > 0.0))
+                                    else:
+                                        has_positive = bool(np.any(blk_rewards > 0.0))
 
-                                if has_positive:
-                                    positive_buffer.add_batch(
-                                        obs_flat[blk_start:blk_end],
-                                        act_flat[blk_start:blk_end],
-                                        rew_flat[blk_start:blk_end],
-                                        done_flat[blk_start:blk_end],
-                                        is_first_flat[blk_start:blk_end]
-                                    )
+                                    if has_positive:
+                                        positive_buffer.add_batch(
+                                            obs_flat[blk_start:blk_end],
+                                            act_flat[blk_start:blk_end],
+                                            rew_flat[blk_start:blk_end],
+                                            done_flat[blk_start:blk_end],
+                                            is_first_flat[blk_start:blk_end]
+                                        )
                         # Still need numpy for cpu-side stats calculation
                         transitions_np = jax.device_get(transitions)
                     else:
                         # CPU path: existing logic
                         transitions_np = jax.device_get(transitions)
                         T, B = transitions_np['obs'].shape[0], transitions_np['obs'].shape[1]
-                        obs_flat = transitions_np['obs'].transpose(1, 0, 2).reshape(B * T, -1)
-                        act_flat = transitions_np['action'].transpose(1, 0, 2).reshape(B * T, -1)
-                        rew_flat = transitions_np['reward'].transpose(1, 0).reshape(B * T)
-                        done_flat = transitions_np['terminal'].transpose(1, 0).reshape(B * T)
-                        is_first_arr = transitions_np['is_first'].astype(bool)
-                        if is_first_arr.ndim == 3:
-                            is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
-                        else:
-                            is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
-                        buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+                        with jax.named_scope("dreamer_buffer_add"):
+                            obs_flat = transitions_np['obs'].transpose(1, 0, 2).reshape(B * T, -1)
+                            act_flat = transitions_np['action'].transpose(1, 0, 2).reshape(B * T, -1)
+                            rew_flat = transitions_np['reward'].transpose(1, 0).reshape(B * T)
+                            done_flat = transitions_np['terminal'].transpose(1, 0).reshape(B * T)
+                            is_first_arr = transitions_np['is_first'].astype(bool)
+                            if is_first_arr.ndim == 3:
+                                is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
+                            else:
+                                is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
+                            buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
 
-                        # Copy positive-reward blocks to the dedicated positive buffer
-                        if positive_buffer is not None:
-                            seq_len = buffer.sequence_length
-                            num_items = obs_flat.shape[0]
-                            num_written_blocks = num_items // seq_len
+                        with jax.named_scope("dreamer_positive_buffer_copy"):
+                            # Copy positive-reward blocks to the dedicated positive buffer
+                            if positive_buffer is not None:
+                                seq_len = buffer.sequence_length
+                                num_items = obs_flat.shape[0]
+                                num_written_blocks = num_items // seq_len
 
-                            for b in range(num_written_blocks):
-                                blk_start = b * seq_len
-                                blk_end = blk_start + seq_len
-                                blk_rewards = rew_flat[blk_start:blk_end]
+                                for b in range(num_written_blocks):
+                                    blk_start = b * seq_len
+                                    blk_end = blk_start + seq_len
+                                    blk_rewards = rew_flat[blk_start:blk_end]
 
-                                # Check if this block contains any positive reward
-                                has_positive = bool(np.any(blk_rewards > 0.0))
+                                    # Check if this block contains any positive reward
+                                    has_positive = bool(np.any(blk_rewards > 0.0))
 
-                                if has_positive:
-                                    positive_buffer.add_batch(
-                                        obs_flat[blk_start:blk_end],
-                                        act_flat[blk_start:blk_end],
-                                        rew_flat[blk_start:blk_end],
-                                        done_flat[blk_start:blk_end],
-                                        is_first_flat[blk_start:blk_end]
-                                    )
+                                    if has_positive:
+                                        positive_buffer.add_batch(
+                                            obs_flat[blk_start:blk_end],
+                                            act_flat[blk_start:blk_end],
+                                            rew_flat[blk_start:blk_end],
+                                            done_flat[blk_start:blk_end],
+                                            is_first_flat[blk_start:blk_end]
+                                        )
                     
                     # Update statistics (Vectorized where possible)
                     rew_steps = transitions_np['reward'] # (T, B)
@@ -1478,27 +1520,28 @@ def main():
 
                     metrics = {}
                     loss_msg = ""
-                    if buffer.size > max(config.get_mandatory('agent.batch_size') * 2, config.get_mandatory('agent.sequence_length')):
-                        # Dynamic gradient steps based on replay_ratio.
-                        # With collect_interval=1 (sheeprl-style): global_step increments by num_envs per iter,
-                        # ratio returns num_envs gradient steps. With collect_interval=128: increments by
-                        # num_envs*128, so we normalize to count sequences, not individual timesteps.
-                        train_steps = ratio_scaled_updates(global_step // num_steps)
+                    with jax.named_scope("dreamer_train_multiple"):
+                        if buffer.size > max(config.get_mandatory('agent.batch_size') * 2, config.get_mandatory('agent.sequence_length')):
+                            # Dynamic gradient steps based on replay_ratio.
+                            # With collect_interval=1 (sheeprl-style): global_step increments by num_envs per iter,
+                            # ratio returns num_envs gradient steps. With collect_interval=128: increments by
+                            # num_envs*128, so we normalize to count sequences, not individual timesteps.
+                            train_steps = ratio_scaled_updates(global_step // num_steps)
 
-                        if buffer.device == "gpu":
-                            # GPU path: sample + train all inside one JIT call
-                            metrics, key = trainer.train_multiple_gpu(buffer, train_steps, key,
-                                                                       positive_buffer=positive_buffer)
-                        else:
-                            # CPU path: pre-sample on CPU, bulk transfer, then JIT train
-                            if config.get_mandatory('agent.sampling_mode') == 'mixture':
-                                stacked = trainer._sample_mixture_cpu(buffer, positive_buffer, train_steps, config.get_mandatory('agent.batch_size'))
+                            if buffer.device == "gpu":
+                                # GPU path: sample + train all inside one JIT call
+                                metrics, key = trainer.train_multiple_gpu(buffer, train_steps, key,
+                                                                           positive_buffer=positive_buffer)
                             else:
-                                stacked = buffer.sample_multiple(train_steps, config.get_mandatory('agent.batch_size'))
-                            metrics, key = trainer.train_multiple_cpu(stacked, key)
+                                # CPU path: pre-sample on CPU, bulk transfer, then JIT train
+                                if config.get_mandatory('agent.sampling_mode') == 'mixture':
+                                    stacked = trainer._sample_mixture_cpu(buffer, positive_buffer, train_steps, config.get_mandatory('agent.batch_size'))
+                                else:
+                                    stacked = buffer.sample_multiple(train_steps, config.get_mandatory('agent.batch_size'))
+                                metrics, key = trainer.train_multiple_cpu(stacked, key)
 
-                        cumulative_gradient_steps += train_steps
-                        loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
+                            cumulative_gradient_steps += train_steps
+                            loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
                     
                     if wandb_enabled and iteration % log_interval == 0:
                         wandb_logs = {
