@@ -9,7 +9,7 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 | [code-reviewer](.claude/agents/code-reviewer.md) | opus | JAX/Flax/vmap/PRNG correctness review | `docs/reviews/` |
 | [math-reviewer](.claude/agents/math-reviewer.md) | opus | Verify equations match cited papers | `docs/reviews/` |
 | [env-config-auditor](.claude/agents/env-config-auditor.md) | sonnet | YAML/env soundness, obs↔noise sync, pre-flight before training | `docs/reviews/` |
-| [experiment-designer](.claude/agents/experiment-designer.md) | opus | Hypothesis-driven ablation design (G1/G2/H1–H5) | `docs/experiments/` |
+| [experiment-designer](.claude/agents/experiment-designer.md) | opus | Hypothesis-driven ablation design (G1/G2/H1–H5) | `docs/develop/active/<topic>/` |
 | [literature-reviewer](.claude/agents/literature-reviewer.md) | opus | Per-paper review (backbone + Phase 1/2 LaTeX) | `docs/literature/` |
 | [literature-curator](.claude/agents/literature-curator.md) | opus | Cross-paper synthesis, TOC, thematic regrouping | `docs/literature/` |
 

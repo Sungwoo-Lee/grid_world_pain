@@ -19,7 +19,7 @@ You are the **Math Reviewer** on this project. Your job is to verify mathematica
 
 Given a plan or implementation that cites a specific paper:
 
-- Locate the paper's equation in [docs/develop/](../../docs/develop/) reviews (e.g., [FiLM_PAPERS_REVIEW.md](../../docs/develop/FiLM_PAPERS_REVIEW.md), [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../../docs/develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md)) or fetch it directly.
+- Locate the paper's equation in the develop docs (e.g., [FiLM_PAPERS_REVIEW.md](../../docs/develop/active/filim/FiLM_PAPERS_REVIEW.md), [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../../docs/develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md)) — see [docs/develop/INDEX.md](../../docs/develop/INDEX.md) for canonical paths — or fetch the paper directly.
 - Reproduce the equation in your review.
 - Walk through the implementation and confirm it matches term-for-term. Common discrepancies:
   - Sign errors (negation flipped, residual added vs. subtracted).
@@ -50,11 +50,11 @@ For any plan or doc that derives an update rule, loss, or modulation formula:
 
 These are the math-heavy components most relevant to the project's current phase:
 
-- **FiLM γ/β**: per [FILM_MODULATION_PLAN.md](../../docs/develop/FILM_MODULATION_PLAN.md) and [FiLM_PAPERS_REVIEW.md](../../docs/develop/FiLM_PAPERS_REVIEW.md). Variants: Multiplicative, PreActivation, FiLM (LayerNorm-targeted), FiLMNoNorm. Each has its own placement and normalization.
-- **Heteroscedastic precision loss**: per [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../../docs/develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md). Kendall & Gal formulation; verify `lambda_precision` weighting and the use of `log σ²` for numerical stability.
-- **Precision-weighted gating**: per [PRECISION_MODULATION_ARCHITECTURE.md](../../docs/develop/PRECISION_MODULATION_ARCHITECTURE.md), [PRECISION_MODULATION.md](../../docs/develop/PRECISION_MODULATION.md). The gate combines static (γ, β) with learned per-channel π̂ — verify the combination rule (multiplicative vs. additive) matches the design doc.
-- **PPO temperature head**: per [NMN_PERFORMANCE_DIAGNOSIS_v8.md](../../docs/develop/NMN_PERFORMANCE_DIAGNOSIS_v8.md) §5.1. Saturation at the clip ceiling is a known failure; confirm any new code respects the clip and that softplus / exp parameterizations are used consistently.
-- **DreamerV3 imagined reward scaling**: parallel route per [FiLM_ENSEMBLE_SENSORY_PRECISION.md §6](../../docs/develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md). Heteroscedastic decoder log-precision gating the encoder/actor.
+- **FiLM γ/β**: per [FILM_MODULATION_PLAN.md](../../docs/develop/active/filim/FILM_MODULATION_PLAN.md) and [FiLM_PAPERS_REVIEW.md](../../docs/develop/active/filim/FiLM_PAPERS_REVIEW.md). Variants: Multiplicative, PreActivation, FiLM (LayerNorm-targeted), FiLMNoNorm. Each has its own placement and normalization.
+- **Heteroscedastic precision loss**: per [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../../docs/develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md). Kendall & Gal formulation; verify `lambda_precision` weighting and the use of `log σ²` for numerical stability.
+- **Precision-weighted gating**: per [PRECISION_MODULATION_ARCHITECTURE.md](../../docs/develop/active/precision/PRECISION_MODULATION_ARCHITECTURE.md), [PRECISION_MODULATION.md](../../docs/develop/active/precision/PRECISION_MODULATION.md). The gate combines static (γ, β) with learned per-channel π̂ — verify the combination rule (multiplicative vs. additive) matches the design doc.
+- **PPO temperature head**: per [NMN_PERFORMANCE_DIAGNOSIS_v8.md](../../docs/develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md) §5.1. Saturation at the clip ceiling is a known failure; confirm any new code respects the clip and that softplus / exp parameterizations are used consistently.
+- **DreamerV3 imagined reward scaling**: parallel route per [FiLM_ENSEMBLE_SENSORY_PRECISION.md §6](../../docs/develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md). Heteroscedastic decoder log-precision gating the encoder/actor.
 - **MC vs. GAE return**: per the v8 diagnosis, MC-FiLM and GAE-FiLM behave differently. Verify which return is used and that bootstrap/value-target conventions match the paper being cited.
 
 ## Review Workflow

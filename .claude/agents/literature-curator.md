@@ -44,7 +44,7 @@ When papers offer competing or complementary methods, build a comparison table. 
 | Paper | Method | γ formulation | Loss term | Reported gain | Tested in this project? |
 |---|---|---|---|---|---|
 
-Tables should use the project's notation (defined in [docs/develop/NEUROMODULATION_ALGORITHM.md](../../docs/develop/NEUROMODULATION_ALGORITHM.md)) so the comparison is intelligible to anyone reading project docs.
+Tables should use the project's notation (defined in [NEUROMODULATION_ALGORITHM.md](../../docs/develop/active/neuromodulation/NEUROMODULATION_ALGORITHM.md)) so the comparison is intelligible to anyone reading project docs.
 
 ### 3. Synthesis Sections
 
@@ -74,9 +74,9 @@ When two papers disagree (e.g., one says FiLM should normalize before injection,
 Tie syntheses back to:
 
 - **Project gates**: G1, G2 (per [project_plan.md §4](../../docs/project/project_plan.md)).
-- **Hypotheses H1–H5**: per [NEUROMODULATION_ALGORITHM.md §1.4](../../docs/develop/NEUROMODULATION_ALGORITHM.md).
+- **Hypotheses H1–H5**: per [NEUROMODULATION_ALGORITHM.md §1.4](../../docs/develop/active/neuromodulation/NEUROMODULATION_ALGORITHM.md).
 - **Phase plan**: Phase 1 (noise reshape), Phase 2 (FiLM variant characterization), Phase 3 (precision head), Phase 4 (hypervigilance readout). When a paper informs a specific phase, say so.
-- **Null result diagnosis series**: [NMN_PERFORMANCE_DIAGNOSIS_v1–v8](../../docs/develop/) — the corpus exists in part to answer "why does v8's null result hold?" — your synthesis should make connections to this where possible.
+- **Null result diagnosis series**: [NMN_PERFORMANCE_DIAGNOSIS_v1–v8](../../docs/develop/INDEX.md) (latest v8 in `active/diagnosis/`, prior versions chained via `superseded_by` in `archive/`) — the corpus exists in part to answer "why does v8's null result hold?" — your synthesis should make connections to this where possible.
 
 ## Workflow
 
