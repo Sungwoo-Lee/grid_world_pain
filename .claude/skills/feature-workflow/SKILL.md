@@ -82,7 +82,9 @@ Delegate back to the **`senior-developer`** agent for the Verification Protocol:
 5. Targeted reads only if the diff is unclear.
 6. Fill the **Verification Report** in the plan doc — table with `✅`/`⚠️`/`❌` per file, one-line conclusion, signed `Verified by: senior-developer`.
 
-**Output of Phase 4:** Verification Report in the plan doc. The user then decides whether to commit, request fixes, or revert.
+**If the diff touches `configs/`, `src/environment/`, or any sensor / observation-breakdown / perceptual-noise code**, also delegate to **`env-config-auditor`** (in parallel with senior-developer's verification — they are orthogonal checks). Senior-developer verifies plan adherence; env-config-auditor verifies obs↔noise sync, mandatory-key discipline, static-field recompile risk, and latent-bug recurrences. The audit report goes to `docs/reviews/config_<plan-name>.md` and is cross-linked from the plan doc's Verification Report section.
+
+**Output of Phase 4:** Verification Report in the plan doc; for env/config-touching changes, also a Config Audit report under `docs/reviews/`. The user then decides whether to commit, request fixes, or revert.
 
 ## Hand-off Artifact Summary
 
@@ -90,8 +92,8 @@ Delegate back to the **`senior-developer`** agent for the Verification Protocol:
 |---|---|---|
 | 1 | `docs/plans/<name>.md` (plan only) | User (Phase 2), developer (Phase 3) |
 | 2 | User approval | senior-developer flow controller |
-| 3 | Code diff (uncommitted), Implementation Report, Checkpoints | senior-developer (Phase 4) |
-| 4 | Verification Report | User |
+| 3 | Code diff (uncommitted), Implementation Report, Checkpoints | senior-developer + env-config-auditor (Phase 4) |
+| 4 | Verification Report; Config Audit report (if env/config touched) | User |
 
 ## Why This Sequence Matters
 

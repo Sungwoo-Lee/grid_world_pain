@@ -17,11 +17,12 @@ Both paths route through `senior-developer` as the primary agent. `developer` en
 ## Path A — Design a New Experiment
 
 ```
-[A1] senior-developer  → writes training_analysis-shaped design doc
-[A2] USER APPROVAL     → confirms hypothesis and experiment design
-[A3] developer         → applies config changes (only if needed)
-[A4] USER              → runs training (manually or via existing scripts)
-[A5] senior-developer  → analyzes results, fills in the design doc
+[A1]   senior-developer    → writes training_analysis-shaped design doc
+[A2]   USER APPROVAL       → confirms hypothesis and experiment design
+[A3]   developer           → applies config changes (only if needed)
+[A3.5] env-config-auditor  → pre-flight audit of the experiment configs
+[A4]   USER                → runs training (manually or via existing scripts)
+[A5]   senior-developer    → analyzes results, fills in the design doc
 ```
 
 ### A1 — Experiment design (senior-developer)
@@ -44,7 +45,13 @@ The user approves the hypothesis and design before any compute is spent.
 
 If new configs are needed, hand off to **`developer`** (mini-version of `feature-workflow` Phase 3): apply config changes, no fallback defaults, write Implementation Report.
 
-If no config changes are needed, **skip this phase** and go straight to A4.
+If no config changes are needed, **skip this phase** and go straight to A3.5.
+
+### A3.5 — Config audit (env-config-auditor, pre-flight)
+
+Before any training run, delegate to **`env-config-auditor`** to validate the experiment's configs. Mandatory whenever A3 produced config changes; recommended even when reusing existing configs (catches drift between the design doc and the actual YAML on disk). The auditor walks observation ↔ noise modality consistency, mandatory-key discipline, static-field recompile risk, latent-bug recurrences, schema padding, and (for sweeps) cross-config coherence.
+
+The audit produces `docs/reviews/config_<exp-name>.md` with `🔴 / 🟡 / 🟢` findings. **Resolve all `🔴` blockers before A4.** Cross-link the audit from the experiment doc.
 
 ### A4 — User runs training
 
@@ -98,7 +105,8 @@ Default: sequential. Switch to parallel only when the per-run reasoning genuinel
 | Phase | Produces | Read by |
 |---|---|---|
 | A1 / B2 | `docs/experiments/<exp>.md` or `docs/analyses/<topic>.md` | User; possibly bug-fix-workflow |
-| A3 | Config changes (uncommitted) + Implementation Report | senior-developer (verify if substantive) |
+| A3 | Config changes (uncommitted) + Implementation Report | senior-developer (verify if substantive); env-config-auditor (A3.5) |
+| A3.5 | `docs/reviews/config_<exp>.md` audit report | User (must clear 🔴 before A4) |
 | A5 / B1–B2 | Filled-in analysis doc with temporal evolution and survival-based evaluation | User |
 
 ## Why This Workflow Has Two Paths
