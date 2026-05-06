@@ -1,3 +1,11 @@
+---
+title: "Object Generation, Placement, and Rest Mechanics"
+topic: refactors
+status: archive
+created: 2026-02-27
+last_updated: 2026-04-12
+---
+
 # Object Generation, Placement, and Rest Mechanics
 
 ## Grid Layout

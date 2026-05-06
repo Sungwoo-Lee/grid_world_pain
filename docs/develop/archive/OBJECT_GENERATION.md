@@ -1,3 +1,11 @@
+---
+title: "Object Generation & Spawning System"
+topic: refactors
+status: archive
+created: 2026-03-04
+last_updated: 2026-04-12
+---
+
 # Object Generation & Spawning System
 
 ## 1. Overview

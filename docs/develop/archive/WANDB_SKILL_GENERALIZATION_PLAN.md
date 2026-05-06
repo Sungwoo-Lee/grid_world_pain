@@ -1,3 +1,11 @@
+---
+title: "Plan: Generalize WandB Analysis Skill"
+topic: meta
+status: archive
+created: 2026-03-03
+last_updated: 2026-04-12
+---
+
 # Plan: Generalize WandB Analysis Skill
 
 ## Context

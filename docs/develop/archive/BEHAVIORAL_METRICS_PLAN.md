@@ -1,3 +1,11 @@
+---
+title: Behavioral Metrics Logging During Training
+topic: behavior
+status: archive
+created: 2026-03-09
+last_updated: 2026-04-24
+---
+
 # Behavioral Metrics Logging During Training
 
 > **Status**: COMPLETED

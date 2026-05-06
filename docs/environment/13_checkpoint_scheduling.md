@@ -3,7 +3,7 @@
 > **Status**: Description only — current behavior is **accepted as-is** per user direction (no change prescribed).
 > **Primary source**: `train.py:1656-1694` | **Last updated**: 2026-04-20
 
-This document describes how the checkpoint-save scheduler in `train.py` actually behaves under parallel-env training, to make the observed drift predictable and to serve as a reference for the continual-learning plan ([`docs/develop/CONTINUAL_LEARNING_CONFIG_SCHEDULE.md`](../develop/CONTINUAL_LEARNING_CONFIG_SCHEDULE.md)), which inherits the same drift for its stage-transition gate. **No scheduler change is recommended or planned.** The "Alternative Schemes" section is retained as a reference for future reviewers only.
+This document describes how the checkpoint-save scheduler in `train.py` actually behaves under parallel-env training, to make the observed drift predictable and to serve as a reference for the continual-learning plan ([`docs/develop/CONTINUAL_LEARNING_CONFIG_SCHEDULE.md`](../develop/active/continual_learning/CONTINUAL_LEARNING_CONFIG_SCHEDULE.md)), which inherits the same drift for its stage-transition gate. **No scheduler change is recommended or planned.** The "Alternative Schemes" section is retained as a reference for future reviewers only.
 
 ---
 
@@ -142,7 +142,7 @@ if not hasattr(main, 'last_checkpoint_save'):
 
 ## Relevance to Continual Learning
 
-See [`docs/develop/CONTINUAL_LEARNING_CONFIG_SCHEDULE.md`](../develop/CONTINUAL_LEARNING_CONFIG_SCHEDULE.md). The continual-learning plan uses the **same per-iteration gate** for stage transitions, so the same drift applies:
+See [`docs/develop/CONTINUAL_LEARNING_CONFIG_SCHEDULE.md`](../develop/active/continual_learning/CONTINUAL_LEARNING_CONFIG_SCHEDULE.md). The continual-learning plan uses the **same per-iteration gate** for stage transitions, so the same drift applies:
 
 - A stage scheduled to end at episode `3000` will actually transition at the first iteration whose `total_episodes_completed ≥ 3000` — typically a few dozen episodes past the boundary when `num_envs = 128`.
 - The last in-stage checkpoint won't align exactly with the stage boundary. This is **accepted**; no forced save is triggered at the boundary.

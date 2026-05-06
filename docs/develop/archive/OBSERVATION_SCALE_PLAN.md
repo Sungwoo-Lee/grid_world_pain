@@ -1,3 +1,11 @@
+---
+title: Observation Scale Normalization
+topic: sensors
+status: archive
+created: 2026-03-04
+last_updated: 2026-04-12
+---
+
 # Observation Scale Normalization
 
 > **Status**: COMPLETED — verified and active.

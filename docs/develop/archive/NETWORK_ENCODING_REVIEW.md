@@ -1,3 +1,11 @@
+---
+title: "Network Structure & Observation Encoding Review"
+topic: refactors
+status: archive
+created: 2026-02-24
+last_updated: 2026-04-12
+---
+
 # Network Structure & Observation Encoding Review
 
 This document reviews the current network structure of the Recurrent PPO and DreamerV3 agents, specifically focusing on the observation encoding process and the hierarchical integration of multimodal inputs.

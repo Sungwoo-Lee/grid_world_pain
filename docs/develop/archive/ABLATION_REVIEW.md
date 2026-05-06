@@ -1,3 +1,11 @@
+---
+title: 🔬 Ablation Experiment Review
+topic: behavior
+status: archive
+created: 2026-02-25
+last_updated: 2026-04-12
+---
+
 # 🔬 Ablation Experiment Review
 
 > **Last Updated**: 2026-02-25

@@ -1,3 +1,11 @@
+---
+title: Verify Perceptual Noise Disabling
+topic: noise
+status: archive
+created: 2026-03-12
+last_updated: 2026-04-12
+---
+
 # Verify Perceptual Noise Disabling
 
 > Status: IN PROGRESS

@@ -1,3 +1,11 @@
+---
+title: Restore evaluation_core.py — Accidental Deletion by Gemini
+topic: refactors
+status: archive
+created: 2026-03-10
+last_updated: 2026-04-12
+---
+
 # Restore evaluation_core.py — Accidental Deletion by Gemini
 
 > **Status**: COMPLETED

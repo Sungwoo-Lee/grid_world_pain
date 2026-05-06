@@ -1,3 +1,12 @@
+---
+title: Noise Observation Diagnostics — V2
+topic: noise
+status: archive
+created: 2026-03-06
+last_updated: 2026-04-12
+supersedes: NOISE_DEBUGGING_PLAN.md
+---
+
 # Noise Observation Diagnostics — V2
 
 > **Status**: COMPLETED

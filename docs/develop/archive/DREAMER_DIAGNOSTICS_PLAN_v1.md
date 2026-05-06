@@ -1,3 +1,12 @@
+---
+title: "Diagnostic Plan: DreamerV3 Performance Investigation"
+topic: dreamer
+status: superseded
+created: 2026-02-23
+last_updated: 2026-04-12
+superseded_by: DREAMER_DIAGNOSTICS_PLAN_v2.md
+---
+
 # Diagnostic Plan: DreamerV3 Performance Investigation
 
 The objective is to identify why DreamerV3 (and its neuromodulated variant) is performing significantly worse than Recurrent PPO in the `grid_world_pain` environment.

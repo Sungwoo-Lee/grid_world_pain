@@ -1,3 +1,11 @@
+---
+title: Add Configurable WandB Log Interval
+topic: behavior
+status: archive
+created: 2026-03-11
+last_updated: 2026-04-12
+---
+
 # Add Configurable WandB Log Interval
 
 > Status: COMPLETED

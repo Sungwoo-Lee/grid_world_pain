@@ -1,3 +1,11 @@
+---
+title: Video Sensory Visualization — Observation Vector Order Mismatch
+topic: diagnosis
+status: archive
+created: 2026-03-06
+last_updated: 2026-04-12
+---
+
 # Video Sensory Visualization — Observation Vector Order Mismatch
 
 > **Status**: IN PROGRESS

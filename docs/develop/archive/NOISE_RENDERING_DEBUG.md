@@ -1,3 +1,11 @@
+---
+title: Perceptual Noise Rendering Debug Harness
+topic: sensors
+status: archive
+created: 2026-04-22
+last_updated: 2026-04-24
+---
+
 # Perceptual Noise Rendering Debug Harness
 
 > **Status**: PLANNED

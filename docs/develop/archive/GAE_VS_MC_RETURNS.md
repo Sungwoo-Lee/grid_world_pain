@@ -1,3 +1,11 @@
+---
+title: GAE vs Monte Carlo Returns in Recurrent PPO
+topic: diagnosis
+status: archive
+created: 2026-03-03
+last_updated: 2026-04-12
+---
+
 # GAE vs Monte Carlo Returns in Recurrent PPO
 
 ## The Core Problem

@@ -1,3 +1,11 @@
+---
+title: Evaluation Recording Stats — Review
+topic: refactors
+status: archive
+created: 2026-02-21
+last_updated: 2026-04-24
+---
+
 # Evaluation Recording Stats — Review
 
 This document describes how the **recording stats** mechanism works during JAX evaluation (`evaluation.py` → `evaluate_jax_checkpoint` in `src/utils/evaluation_core.py`).

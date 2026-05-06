@@ -2,7 +2,7 @@
 
 > **Status**: PLANNED
 > **Opened**: 2026-04-13
-> **Related**: [project_plan.md](project_plan.md) (§4, Phase 1), [PRECISION_MODULATION.md](../develop/PRECISION_MODULATION.md), [NMN_PERFORMANCE_DIAGNOSIS_v8.md](../develop/NMN_PERFORMANCE_DIAGNOSIS_v8.md)
+> **Related**: [project_plan.md](project_plan.md) (§4, Phase 1), [PRECISION_MODULATION.md](../develop/active/precision/PRECISION_MODULATION.md), [NMN_PERFORMANCE_DIAGNOSIS_v8.md](../develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md)
 
 ---
 
@@ -31,7 +31,7 @@ Eight rounds of diagnosis experiments (v1–v8) have progressively established t
 
 #### The v8 Null Result (Clearest Statement)
 
-v8 ([NMN_PERFORMANCE_DIAGNOSIS_v8.md](../develop/NMN_PERFORMANCE_DIAGNOSIS_v8.md)) tested FiLM modulation under perceptual noise with the following noise config:
+v8 ([NMN_PERFORMANCE_DIAGNOSIS_v8.md](../develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md)) tested FiLM modulation under perceptual noise with the following noise config:
 
 | Modality | Mode | σ_base | α (injury_scale) | σ_eff at Î=1 |
 |----------|------|--------|-------------------|--------------|
@@ -121,7 +121,7 @@ Phase 1 is **tuning, not engineering**. The environment already supports everyth
 The design is guided by three principles from the project plan (§4, Phase 1):
 
 - **Heterogeneous per-modality noise** — sharp reliability contrast between channels. The precision head (Phase 3) needs a landscape where some channels are trustworthy and others are not — not a flat landscape where everything is equally noisy.
-- **State-dependent, injury-scaled noise on threat-relevant channels** — reliability itself becomes time-varying and correlated with interoceptive state. This is the signal the recurrent neuromodulatory core can latch onto (per [NEUROMODULATION_ALGORITHM.md §1.4](../develop/NEUROMODULATION_ALGORITHM.md) hypotheses H1–H5).
+- **State-dependent, injury-scaled noise on threat-relevant channels** — reliability itself becomes time-varying and correlated with interoceptive state. This is the signal the recurrent neuromodulatory core can latch onto (per [NEUROMODULATION_ALGORITHM.md §1.4](../develop/active/neuromodulation/NEUROMODULATION_ALGORITHM.md) hypotheses H1–H5).
 - **Magnitudes tuned against G1** — the baseline must bleed. Sweep σ_base and injury_scale on the unmodulated LayerNorm baseline (no modulation) across ≥3 seeds.
 
 ### Proposed Noise Profile: "Sharp Contrast"

@@ -1,3 +1,11 @@
+---
+title: Recurrent PPO Diagnostics Plan
+topic: diagnosis
+status: archive
+created: 2026-02-26
+last_updated: 2026-04-12
+---
+
 # Recurrent PPO Diagnostics Plan
 
 ## 1. Gradient Update Mechanics

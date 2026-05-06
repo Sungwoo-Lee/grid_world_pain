@@ -5,7 +5,7 @@ last_updated: 2026-04-14
 target_depth: graduate-level — full derivations in LaTeX
 related:
   - perceptual_noise_lit_review.md (§2, SQ1)
-  - ../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md
+  - ../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md
 scope: |
   Per-paper review of the eight PDFs in docs/project/references/uncertainty/.
   Each entry has three layers: (1) Basic introduction and concept, (2) Main results

@@ -121,13 +121,13 @@ Four interacting causes are implicated:
    *calibrated gating*. Nothing in the PPO/Dreamer objective pushes the
    modulator to down-weight unreliable channels, so γ collapses to near-
    identity and the modulator is effectively bypassed.
-   ([PRECISION_MODULATION_ARCHITECTURE.md](../develop/PRECISION_MODULATION_ARCHITECTURE.md))
+   ([PRECISION_MODULATION_ARCHITECTURE.md](../develop/active/precision/PRECISION_MODULATION_ARCHITECTURE.md))
 2. **Static FiLM cannot express per-timestep reliability.** FiLM applies
    learned (γ, β) *uniformly* across time — it cannot distinguish "this
    channel is noisy right now" from "this feature should always be scaled
    this way," which is exactly the computation precision-weighting requires.
-   ([NMN_PERFORMANCE_DIAGNOSIS_v8.md](../develop/NMN_PERFORMANCE_DIAGNOSIS_v8.md),
-   [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md))
+   ([NMN_PERFORMANCE_DIAGNOSIS_v8.md](../develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md),
+   [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md))
 3. **Noise landscape does not reward precision.** The current perceptual
    noise profile is too uniform across modalities to make selective gating
    pay off: there is no strong reliability contrast between channels, so an
@@ -135,13 +135,13 @@ Four interacting causes are implicated:
    to be reshaped so that precision-weighting is actually required for
    survival — and, correspondingly, so that an unmodulated agent's
    performance is measurably *degraded* by noise it cannot filter.
-   ([NMN_PERFORMANCE_DIAGNOSIS_v8.md §6.2](../develop/NMN_PERFORMANCE_DIAGNOSIS_v8.md),
-   [PRECISION_MODULATION.md](../develop/PRECISION_MODULATION.md))
+   ([NMN_PERFORMANCE_DIAGNOSIS_v8.md §6.2](../develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md),
+   [PRECISION_MODULATION.md](../develop/active/precision/PRECISION_MODULATION.md))
 4. **Temperature saturation and critic instability.** The PPO temperature
    head saturates at the clip ceiling across MC-FiLM runs, rendering that
    injection site non-functional; under GAE, the modulator actively
    destabilizes the critic under noisy inputs rather than helping it.
-   ([NMN_PERFORMANCE_DIAGNOSIS_v8.md §5.1](../develop/NMN_PERFORMANCE_DIAGNOSIS_v8.md))
+   ([NMN_PERFORMANCE_DIAGNOSIS_v8.md §5.1](../develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md))
 
 ### Direction for Solving the Issue
 
@@ -165,8 +165,8 @@ The two leading success gates are fixed and drive the whole plan:
   the empirical fingerprint of the hypothesis in §2.
 
 Both gates are anchored in
-[NEUROMODULATION_ALGORITHM.md](../develop/NEUROMODULATION_ALGORITHM.md) and
-the [NMN_PERFORMANCE_DIAGNOSIS_v8](../develop/NMN_PERFORMANCE_DIAGNOSIS_v8.md)
+[NEUROMODULATION_ALGORITHM.md](../develop/active/neuromodulation/NEUROMODULATION_ALGORITHM.md) and
+the [NMN_PERFORMANCE_DIAGNOSIS_v8](../develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md)
 null result; they are not negotiable inside this plan.
 
 #### Phase 1 — Reshape the noise landscape until the baseline bleeds
@@ -185,7 +185,7 @@ tuning, not engineering:
   (olfaction, nociception, visual) so that *reliability itself* becomes
   time-varying and correlated with interoceptive state — this is the
   signal a shared recurrent neuromodulatory core can latch onto, per
-  [NEUROMODULATION_ALGORITHM.md §1.4](../develop/NEUROMODULATION_ALGORITHM.md)
+  [NEUROMODULATION_ALGORITHM.md §1.4](../develop/active/neuromodulation/NEUROMODULATION_ALGORITHM.md)
   hypotheses H1–H5.
 - **Magnitudes tuned against G1.** Sweep σ_base and injury_scale on the
   LayerNorm baseline (no modulation) across ≥3 seeds; pick a profile where
@@ -202,8 +202,8 @@ null result still holds — and isolate which FiLM variant, if any, is
 closest to breaking it before we spend effort on a precision head.
 
 - Re-run the unmodulated baseline and the FiLM variant(s) catalogued in
-  [FILM_MODULATION_PLAN.md](../develop/FILM_MODULATION_PLAN.md) and
-  [FiLM_PAPERS_REVIEW.md](../develop/FiLM_PAPERS_REVIEW.md) — at minimum
+  [FILM_MODULATION_PLAN.md](../develop/active/filim/FILM_MODULATION_PLAN.md) and
+  [FiLM_PAPERS_REVIEW.md](../develop/active/filim/FiLM_PAPERS_REVIEW.md) — at minimum
   Multiplicative, PreActivation, FiLM (LayerNorm-targeted), and
   FiLMNoNorm — under identical canonical noise, seeds, and horizon.
 - Record per-variant γ / β distributions, gate health, temperature
@@ -228,7 +228,7 @@ beyond the purely RL-driven gating of Phases 1–2.
   add a precision head (per-modality log-σ̂²) driven by the modulator's
   shared GRU hidden state. Train it with a **heteroscedastic auxiliary
   loss** (Kendall & Gal / FiLM-Ensemble formulation from
-  [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md))
+  [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md))
   on observation reconstruction or next-step prediction, with the loss
   weight `lambda_precision` as a first-class tunable.
 - **Gate injections on learned precision.** Existing Injection A (encoder
@@ -239,7 +239,7 @@ beyond the purely RL-driven gating of Phases 1–2.
   coordinated-modulation hypothesis (H4).
 - **DreamerV3 variant.** In parallel, explore the world-model-decoder
   route sketched in
-  [FiLM_ENSEMBLE_SENSORY_PRECISION.md §6](../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md):
+  [FiLM_ENSEMBLE_SENSORY_PRECISION.md §6](../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md):
   heteroscedastic decoder → per-modality log-precision → gate the
   DreamerV3 encoder/actor. This is *not* a replacement for the PPO
   precision head; it is a cross-check that the effect is not
@@ -254,7 +254,7 @@ detectable, time-locked, and cross-correlated across injection sites.
 
 Once G1 + G2 hold, the project pivots from "does it work" to "what is it
 showing us." Phase 4 analyses — hypothesis H1–H5 in
-[NEUROMODULATION_ALGORITHM.md §1.4](../develop/NEUROMODULATION_ALGORITHM.md) —
+[NEUROMODULATION_ALGORITHM.md §1.4](../develop/active/neuromodulation/NEUROMODULATION_ALGORITHM.md) —
 are only meaningful after a credible precision-weighted modulator exists,
 which is why they sit after Phase 3 rather than in parallel with it:
 
@@ -289,17 +289,17 @@ single entry point.
 Technical depth behind each phase lives in `docs/develop/`:
 
 - Environment mechanics and sensor layout:
-  [ENVIRONMENT_SUMMARY.md](../develop/ENVIRONMENT_SUMMARY.md)
+  [ENVIRONMENT_SUMMARY.md](../environment/ENVIRONMENT_SUMMARY.md)
 - Four-injection-site neuromodulation, hypotheses H1–H5, hypervigilance
   validation plan:
-  [NEUROMODULATION_ALGORITHM.md](../develop/NEUROMODULATION_ALGORITHM.md)
+  [NEUROMODULATION_ALGORITHM.md](../develop/active/neuromodulation/NEUROMODULATION_ALGORITHM.md)
 - FiLM variants and injection strategies, staged catalog of modulators:
-  [FILM_MODULATION_PLAN.md](../develop/FILM_MODULATION_PLAN.md),
-  [FiLM_PAPERS_REVIEW.md](../develop/FiLM_PAPERS_REVIEW.md)
+  [FILM_MODULATION_PLAN.md](../develop/active/filim/FILM_MODULATION_PLAN.md),
+  [FiLM_PAPERS_REVIEW.md](../develop/active/filim/FiLM_PAPERS_REVIEW.md)
 - Ensemble + heteroscedastic precision loss, decoder-side proposal:
-  [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md)
+  [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md)
 - Precision-gated modulation architecture (PPO + DreamerV3 routes):
-  [PRECISION_MODULATION_ARCHITECTURE.md](../develop/PRECISION_MODULATION_ARCHITECTURE.md),
-  [PRECISION_MODULATION.md](../develop/PRECISION_MODULATION.md)
+  [PRECISION_MODULATION_ARCHITECTURE.md](../develop/active/precision/PRECISION_MODULATION_ARCHITECTURE.md),
+  [PRECISION_MODULATION.md](../develop/active/precision/PRECISION_MODULATION.md)
 - Null-result diagnosis series (v1–v8), most recent:
-  [NMN_PERFORMANCE_DIAGNOSIS_v8.md](../develop/NMN_PERFORMANCE_DIAGNOSIS_v8.md)
+  [NMN_PERFORMANCE_DIAGNOSIS_v8.md](../develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md)

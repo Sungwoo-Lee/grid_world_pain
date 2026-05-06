@@ -1,3 +1,11 @@
+---
+title: Olfactory System Review
+topic: sensors
+status: archive
+created: 2026-02-24
+last_updated: 2026-04-12
+---
+
 # Olfactory System Review
 
 > **Date**: 2026-02-24

@@ -7,7 +7,7 @@ source: NotebookLM notebook 822f0187 + arXiv cross-reference
 related:
   - ../../perceptual_noise_lit_review.md (§3, SQ2)
   - ../uncertainty/uncertainty_reference_review.md
-  - ../../../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md
+  - ../../../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md
 scope: |
   Per-paper review of the five core Section 7.2 references in
   perceptual_noise_lit_review.md — the papers that define the FiLM /

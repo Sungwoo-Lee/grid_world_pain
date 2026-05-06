@@ -6,9 +6,9 @@ skill_used: deep-research / lit-review mode (fidelity spectrum)
 related:
   - project_plan.md
   - phase_1_noise_landscape.md
-  - ../develop/PRECISION_MODULATION_ARCHITECTURE.md
-  - ../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md
-  - ../develop/NMN_PERFORMANCE_DIAGNOSIS_v8.md
+  - ../develop/active/precision/PRECISION_MODULATION_ARCHITECTURE.md
+  - ../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md
+  - ../develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md
 ---
 
 # Literature Review — Noise, Perceptual Uncertainty, and Precision Modulation in Modern RL/ML
@@ -19,8 +19,8 @@ related:
 > or induce precision-weighted modulation?** The review deliberately excludes upstream neuroscience
 > (Active Inference, predictive coding) except where it grounds a specific deep-learning mechanism,
 > because those literatures are already catalogued in
-> [PRECISION_MODULATION_ARCHITECTURE.md](../develop/PRECISION_MODULATION_ARCHITECTURE.md) and
-> [NEUROMODULATION_ALGORITHM.md](../develop/NEUROMODULATION_ALGORITHM.md).
+> [PRECISION_MODULATION_ARCHITECTURE.md](../develop/active/precision/PRECISION_MODULATION_ARCHITECTURE.md) and
+> [NEUROMODULATION_ALGORITHM.md](../develop/active/neuromodulation/NEUROMODULATION_ALGORITHM.md).
 
 ## 0. Status Dashboard
 
@@ -206,7 +206,7 @@ prediction and a per-channel log σ̂². The across-member variance supplies epi
 the heteroscedastic head supplies aleatoric uncertainty. Critically, the FiLM parameters are
 trained *jointly* with the uncertainty head, so γ ends up correlated with learned precision rather
 than collapsing to identity. This is the scheme that
-[FiLM_ENSEMBLE_SENSORY_PRECISION.md](../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md) imports into
+[FiLM_ENSEMBLE_SENSORY_PRECISION.md](../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md) imports into
 the GridWorld Pain design.
 
 Two caveats from the original paper matter for RL porting. First, FiLM-Ensemble was validated on
@@ -260,7 +260,7 @@ live because nothing in the objective asks the agent to predict observations, on
 returns. Model-based agents are structurally different: a world model explicitly predicts
 `p(o_{t+1} | s_t, a_t)`, which gives the observation decoder a natural place to host a
 per-channel variance and therefore a natural precision signal. This is why the project's Phase 3
-DreamerV3 variant ([FiLM_ENSEMBLE_SENSORY_PRECISION.md §6](../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md))
+DreamerV3 variant ([FiLM_ENSEMBLE_SENSORY_PRECISION.md §6](../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md))
 is *not* a parallel alternative to the PPO precision head — it is a cleaner test bed for the
 same hypothesis.
 
@@ -286,7 +286,7 @@ symlog-Gaussian decoder is still a *fixed-variance* Gaussian on the symlog-trans
 not heteroscedastic — which is important: DreamerV3 achieves its robustness by normalizing target
 *scale*, not by learning per-channel variance. For precision modulation this is a gap: the
 DreamerV3 decoder as shipped does not produce a reusable precision signal, and
-[FiLM_ENSEMBLE_SENSORY_PRECISION.md §6](../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md) is
+[FiLM_ENSEMBLE_SENSORY_PRECISION.md §6](../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md) is
 explicit that a heteroscedastic decoder is a *modification*, not a default.
 
 ### 4.3 Alternative world models
@@ -449,7 +449,7 @@ external comparison exists.
 **Novel choice 2 — Using the precision head as a FiLM conditioning source (Phase 3).**
 FiLM-Ensemble (Turkoglu et al., 2022) does use heteroscedastic outputs, but the FiLM generator
 is driven by the backbone's own features, not by a separate learned precision. The project's
-Phase 3 plan in [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../develop/FiLM_ENSEMBLE_SENSORY_PRECISION.md)
+Phase 3 plan in [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md)
 is more aggressive: let π̂ directly shape γ. This is a reasonable extension but inherits *both*
 the variance-collapse failure mode (§2.2, Seitzer et al., 2022) *and* the FiLM identity-collapse
 failure mode (§3.2). Either alone is empirically documented; compounded, the risk is non-trivial.
@@ -652,7 +652,7 @@ publication-track artefact.
 2. **Publication window.** The review covers 2018–2026 per the user's instruction. Foundational
    predictive-coding / Active-Inference work (Friston 2010s) is cited only as a bridging
    reference (Parr et al., 2022) and is not systematically reviewed — see
-   [PRECISION_MODULATION_ARCHITECTURE.md](../develop/PRECISION_MODULATION_ARCHITECTURE.md)
+   [PRECISION_MODULATION_ARCHITECTURE.md](../develop/active/precision/PRECISION_MODULATION_ARCHITECTURE.md)
    for that layer.
 3. **No adversarial-robustness coverage.** §5.1 (E) noted adversarial perturbations are out
    of scope per §1.3. If the project pivots toward worst-case robustness framing, that literature

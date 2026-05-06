@@ -1,3 +1,12 @@
+---
+title: Noise Modality Ordering Bug
+topic: noise
+status: superseded
+created: 2026-03-04
+last_updated: 2026-04-12
+superseded_by: NOISE_DEBUGGING_PLAN_V2.md
+---
+
 # Noise Modality Ordering Bug
 
 > **Status**: COMPLETED — fixed and verified.

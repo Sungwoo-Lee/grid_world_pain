@@ -1,3 +1,11 @@
+---
+title: "Obstacle System Review & Bush Feature Pre-Analysis"
+topic: sensors
+status: archive
+created: 2026-02-20
+last_updated: 2026-04-12
+---
+
 # Obstacle System Review & Bush Feature Pre-Analysis
 
 > **Date**: 2026-02-20
