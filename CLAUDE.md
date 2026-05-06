@@ -1,121 +1,99 @@
-## Workflow Rules
+## Agent Team
 
-### Strict No-Implementation Policy
+This project uses a multi-agent workflow. Each agent has a dedicated profile in `.claude/agents/` with its full responsibilities and tool scope. **Delegate to the matching agent rather than doing the work yourself.**
 
-- **NEVER modify source code, configs, or scripts.** This includes creating, editing, or deleting any files under `src/`, `configs/`, `scripts/`, or any other code directories.
-- The only files Claude may create or edit are documentation files in `docs/` and project management files like this one (`CLAUDE.md`).
-- "Plan approved" means the plan document is accepted for review — it does NOT authorize code implementation.
-- Even when explicitly asked to implement, confirm with the user first, as implementation is handled by other LLM agents.
+### Roster
 
-### Planning & Analysis
+| Agent | Profile | Role | File scope |
+|---|---|---|---|
+| **senior-developer** | [.claude/agents/senior-developer.md](.claude/agents/senior-developer.md) | Planning, code analysis, WandB / training analysis, verification | `docs/`, `CLAUDE.md`, `.claude/agents/` only |
+| **developer** | [.claude/agents/developer.md](.claude/agents/developer.md) | Implementing approved plans, running tests, reporting results | Full code access (`src/`, `configs/`, `scripts/`, tests) |
+| **literature-reviewer** | [.claude/agents/literature-reviewer.md](.claude/agents/literature-reviewer.md) | Academic literature review of PDFs and NotebookLM notebooks | `docs/` only |
 
-- Claude is used for **planning and analysis only**. Implementation is done by other LLM agents.
-- Plans and analysis should be written to `docs/` files.
-- **Two templates** — read the relevant template file before writing:
-  - **`docs/TEMPLATES/issue_plan.md`** — for development issues, bug fixes, and implementation plans.
-  - **`docs/TEMPLATES/training_analysis.md`** — for training experiment analysis (WandB results, ablation studies, run comparisons). This template follows a hypothesis-driven academic structure: research question → experimental design → results → analysis → conclusions.
-- **Choose the right template**: If the work is about *what to build/fix*, use issue_plan. If the work is about *what happened during training and why*, use training_analysis.
-- **Cross-referencing between documents**:
-  - If a training analysis reveals a bug or needed code change, create a separate issue_plan doc and link it from the analysis with `[Related](link)`.
-  - If an issue_plan investigation uncovers a new closely related issue, append it to the same doc. If independent, create a separate doc.
-  - Always cross-reference related docs in both directions.
-- Include enough detail (file paths, line numbers, code snippets) for the implementing agent to execute without ambiguity.
+### Delegation Guide
 
-## Literature Review 
+| User intent | Delegate to |
+|---|---|
+| Plan a feature / investigate a bug / draft an implementation strategy | `senior-developer` |
+| Verify another agent's implementation against the plan | `senior-developer` |
+| Analyze WandB training results / ablation runs | `senior-developer` (uses `wandb-analysis` skill) |
+| Implement an approved plan / write code / run the test suite | `developer` |
+| Review papers from a directory of PDFs or a NotebookLM link | `literature-reviewer` |
 
-When tasked with reviewing a collection of references or papers (e.g., from a specific folder or a literature review list), follow this systematic, tiered approach.
+### Standard Hand-off Flow (Code Changes)
 
-* **Source Mapping:** Identify all references from the specified source document or directory.
-* **Contextual Alignment:** Ensure the technical depth matches the project’s existing documentation and specific requirements.
+1. **`senior-developer`** writes a plan to `docs/` using the appropriate template.
+2. User approves the plan.
+3. **`developer`** implements the plan, runs tests, appends an Implementation Report and updates Checkpoints in the plan doc, and leaves the working tree dirty (uncommitted).
+4. **`senior-developer`** runs the Verification Protocol on the diff and fills the Verification Report in the plan doc.
 
-### Source Type — Choose the Right Skill
+Each agent's profile contains the full procedure for its role — read the profile before delegating.
 
-Determine the input source before starting, then use the appropriate skill:
+### Workflow Skills
 
-| Input Specified | Skill to Use | How |
+Common multi-agent workflows are codified as skills under `.claude/skills/`. Use the matching skill rather than re-deriving the orchestration each time.
+
+| Skill | Pattern | Use when |
 |---|---|---|
-| A **directory path** (e.g., `docs/project/references/uncertainty/`) | `pdf` skill | Glob for `*.pdf` files in the directory; read and extract each PDF one-by-one using the pdf skill. |
-| A **NotebookLM link** (e.g., `https://notebooklm.google.com/notebook/...`) | `notebooklm` skill | Use the notebooklm skill to query the notebook; retrieve source-grounded answers and citations for each paper. |
+| **`feature-workflow`** | Sequential: plan → approve → implement → verify | Adding new features, sensors, models, environment components |
+| **`bug-fix-workflow`** | Sequential: root-cause → approve → fix + regression test → verify | Fixing bugs, regressions, crashes, unexpected behavior |
+| **`training-experiment-workflow`** | Branching: design new experiment OR analyze existing runs | Running training experiments, ablations, WandB result analysis |
+| **`parallel-literature-review`** | Parallel: shard corpus → K reviewer instances → merge | Large literature corpora (~10+ papers) where parallelism is worth the overhead |
 
-- If neither is specified, ask the user which source type they mean before proceeding.
-- If both are provided, process the directory PDFs first, then cross-reference with the NotebookLM notebook.
+For small literature reviews (under ~10 papers), invoke the `literature-reviewer` agent directly without the parallel skill.
 
-### Review Paper Workflow (Pre-Phase Backbone)
+---
 
-Before entering the per-paper Phase 1 / Phase 2 loop below, run this 4-step extraction process on each reference. Its purpose is to act as a **completeness guard**: a grounded, section-ordered backbone that ensures nothing important in the paper is missed or nothing additional, which will be critical for academic paper review, is added. It applies to **all** literature review tasks (survey papers, empirical papers, and mixed collections).
+## Project-Wide Rules
 
-1. **Extract the section list** — pull the full section/subsection structure from the paper. For PDFs, extract yourself via the `pdf` skill. For NotebookLM sources, query the notebook for the table of contents / section headings.
-2. **Extract core contents per section** — for each section, extract its key claims, methods, equations, and results. PDF: extract directly. NotebookLM: issue one query per section.
-3. **Add all section contents to the review document** — append the full section-by-section summary to the master "Reference Review" document, preserving the paper's original section order. This forms the backbone.
-4. **Deep-dive on important sections** — based on the step-3 pass, Claude autonomously selects the sections most relevant to the project context (e.g., methodology, core algorithm, key derivations) and expands them with additional technical depth, equations, and derivations.
-
-Run steps 1–4 without intermediate checkpoints.
-
-**After the backbone is complete**, generate the final Phase 1 / Phase 2 review by **reorganizing and rephrasing** the 4-step results into a compact but detailed synthesis. Phase 1/2 are **not bound to the paper's original section order** — regroup content by theme, importance, or conceptual flow as appropriate. The backbone is the source of truth.
-
-The 4-step backbone is retained in the final document as an **appendix** (e.g., `### Appendix: Section-by-Section Backbone`) placed after the Phase 1/2 synthesis, so the rewrite remains traceable to the source.
-
-For every individual paper or reference, generate a review consisting of two distinct sections:
-
-Phase 1: Foundational Overview (Undergraduate-Level)
-* **Introduction:** A basic-level summary of the paper’s core problem and concept.
-* **Key Findings:** Summarize the main results and the primary algorithm or methodology used.
-* **Initial Takeaway:** Explain the high-level significance of the work in simple terms.
-
-Phase 2: Graduate-Level Deep Dive
-* **Technical Analysis:** Provide an advanced technical breakdown of the methodology suitable for a graduate student or researcher.
-* **Mathematical Rigor:** Include **all** critical equations from the paper.
-* **Derivations:** Do not simply state formulas; provide step-by-step mathematical derivations to show how results are reached.
-* **Formatting:** Use **LaTeX** for all mathematical variables, expressions, and standalone equations.
-
-To maintain high accuracy and prevent information loss, you must process references **one-by-one** using the following loop:
-
-1.  **Analyze:** Process a single reference according to the Phase 1 and Phase 2 requirements.
-2.  **Update:** Append this analysis to the master "Reference Review" document.
-
-* Use clear `##` and `###` headers for each paper title and sub-section.
-* Maintain an auto-updating Table of Contents at the top of the file as new reviews are added.
-* Ensure all LaTeX syntax is correctly formatted for Markdown rendering.
-
-### Token Efficiency & Agent Policy
-
-- **Do NOT use subagents or multiagent parallelization** unless the user explicitly requests it. If you believe subagents would help, **ask the user first** before spawning any.
-- Prefer single batch shell scripts (loops) over launching many parallel agents/commands. One script that processes 16 runs sequentially is far cheaper than 16 separate agent calls.
-- Always save intermediate results to `tmp/` files **after each extraction step** — never accumulate results only in context. This prevents data loss if the conversation is compressed.
-- Avoid redundant work: do not extract the same data through multiple paths.
+These rules apply to **every** agent. Agent profiles may extend them but must not relax them.
 
 ### Configuration Protocol
 
-- **No fallback defaults** for critical config params. Implementation agents must use `config.get_mandatory('key')` — missing YAML key → `ValueError`.
-- New config keys added by plans must be listed in the plan's File Changes section with the exact YAML path and value.
+- **No fallback defaults** for critical config params. Use `config.get_mandatory('key')` — a missing YAML key must raise `ValueError`.
+- New config keys introduced by a plan must be listed in the plan's File Changes section with the exact YAML path and value.
 
-### WandB Analysis Protocol
+### Token Efficiency & Agent Policy
 
-- When analyzing WandB training results using the WandB skill, **always create a temporary document** in the `tmp/` folder to record all extracted data and findings as you go.
-- Use a descriptive filename prefixed with a datetime stamp in `YYYYMMDD_HHMMSS` format (e.g., `tmp/20260310_143052_wandb_dreamer_comparison.md`, `tmp/20260310_150817_wandb_reward_analysis.md`). Multiple analyses may run in parallel, so each should have its own file with a unique timestamp.
-- Write results to this file **after each extraction step** — do not wait until the end. This prevents loss of earlier results if the conversation context is compressed.
-- The document should include: run IDs, metric values, tables, comparisons, and any intermediate observations.
-- These files are temporary working notes — they can be cleaned up or overwritten as needed.
+- **Parallel subagents are allowed.** Use them when tasks are genuinely independent (e.g., reviewing disjoint paper subsets, running ablation analyses on separate runs). Do not parallelize tasks with hand-off dependencies (plan → implement → verify) — keep those sequential.
+- For mechanical batch work (e.g., extracting metrics from 16 WandB runs with the same script), prefer a single shell loop over spawning 16 agents — it is faster and cheaper. Reserve parallel agents for work that benefits from independent reasoning, not for mechanical iteration.
+- Save intermediate results to `tmp/` files **after each extraction step** — never accumulate results only in context. This prevents data loss if the conversation is compressed and lets parallel agents share progress.
+- Avoid redundant work: do not extract the same data through multiple paths.
 
-### Training Results Analysis Workflow
+### Working File Conventions
 
-When the user asks for training results analysis (typically with an attached screenshot/image):
+- All temporary working notes go in `tmp/` with a timestamped filename: `tmp/YYYYMMDD_HHMMSS_<topic>.md` (e.g., `tmp/20260310_143052_wandb_dreamer_comparison.md`).
+- Multiple analyses may run in parallel — each gets its own timestamped file with a unique HHMMSS.
+- Write to the working file **after each step**, not at the end.
+- These files are temporary and may be cleaned up or overwritten as needed.
 
-1. **Extract run datetime IDs** — read the attached image and extract the datetime identifiers for the runs to analyze (format: `YYYYMMDD_HHMMSS`).
-2. **Locate local WandB log files** — find matching runs in the local `wandb/` folder (e.g., `wandb/run-YYYYMMDD_HHMMSS-<wandb_id>/`). Do NOT query the WandB web API for log data — use local files only.
-3. **Use the WandB skill** — invoke the `wandb-analysis` skill to parse and analyze the local log files.
-4. **Temporal evolution analysis** — the analysis **must** include temporal evolution of logged metrics (how key metrics change over training steps/episodes). Show trends, inflection points, and convergence behavior.
-5. **Produce analysis report** — write the final analysis to a `docs/` file using the `docs/TEMPLATES/training_analysis.md` template. Follow the WandB Analysis Protocol above for intermediate results in `tmp/`.
-6. **P**erformance Evaluation (Survival Logic)** - Evaluate the agent’s performance based on survival steps rather than cumulative reward.
+### Documentation Templates
 
-### Verification Protocol
+Plans and analysis go in `docs/`. Two templates — read the relevant template file before writing:
 
-After Gemini completes implementation, verify using this workflow:
+- **[docs/TEMPLATES/issue_plan.md](docs/TEMPLATES/issue_plan.md)** — for development issues, bug fixes, and implementation plans (*"what to build/fix"*).
+- **[docs/TEMPLATES/training_analysis.md](docs/TEMPLATES/training_analysis.md)** — for training experiment analysis (WandB results, ablation studies, run comparisons; *"what happened during training and why"*). Hypothesis-driven academic structure: research question → experimental design → results → analysis → conclusions.
 
-1. **Read the plan doc** — check Implementation Report and Checkpoints for what was done, any deviations, or blockers.
-2. **Diff stats check** — run `git diff --stat HEAD` first. Check the insertion/deletion counts per file against the plan's expected scope. A plan that calls for a 2-line fix should not show hundreds of deletions. **Flag any file where the net line change is disproportionate to the planned change** — this catches accidental deletions, file truncations, or scope creep before detailed review.
-3. **Git diff** — run `git diff HEAD` to see Gemini's uncommitted changes vs the last commit. Cross-reference against the plan's File Changes section.
-4. **Flag unexpected changes** — any files modified that were not in the plan should be noted as out-of-scope in the Verification Report.
-5. **Targeted reads** — only read specific lines if the diff is unclear or logic needs closer inspection.
-6. **Fill the Verification Report** — complete the table with `✅`/`⚠️`/`❌` per file, then write a one-line conclusion. Use `Verified by: Claude`.
+**Cross-referencing between documents:**
+- If a `training_analysis` reveals a bug or needed code change, create a separate `issue_plan` doc and link it from the analysis with `[Related](link)`.
+- If an `issue_plan` investigation uncovers a closely related issue, append it to the same doc. If independent, create a separate doc.
+- Always cross-reference related docs in **both directions**.
+- Include enough detail (file paths, line numbers, code snippets) for the implementing agent to execute without ambiguity.
 
+### Performance Evaluation Convention
+
+- Agent training performance is evaluated based on **survival steps**, not cumulative reward. Any training analysis or report must respect this convention.
+
+---
+
+## Where the Detailed Workflows Live
+
+The full step-by-step procedures previously listed in this file have moved into the agent profiles. Pointers:
+
+- **Verification Protocol** (post-implementation diff review and Verification Report) → [senior-developer.md](.claude/agents/senior-developer.md)
+- **WandB Analysis Protocol** (`tmp/` checkpointing, temporal evolution analysis) → [senior-developer.md](.claude/agents/senior-developer.md)
+- **Training Results Analysis Workflow** (datetime ID extraction, local log files, survival-based evaluation) → [senior-developer.md](.claude/agents/senior-developer.md)
+- **Literature Review Workflow** (source-type skill mapping, 4-step backbone, Phase 1/2 synthesis with LaTeX) → [literature-reviewer.md](.claude/agents/literature-reviewer.md)
+- **Implementation Report & Checkpoint conventions** → [developer.md](.claude/agents/developer.md)
+
+When in doubt, read the profile of the agent you intend to use.
