@@ -8,7 +8,7 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 | [developer](.claude/agents/developer.md) | sonnet | Implement approved plans, test, report | full code |
 | [code-reviewer](.claude/agents/code-reviewer.md) | opus | JAX/Flax/vmap/PRNG correctness review | `docs/reviews/` |
 | [math-reviewer](.claude/agents/math-reviewer.md) | opus | Verify equations match cited papers | `docs/reviews/` |
-| [env-config-auditor](.claude/agents/env-config-auditor.md) | opus | YAML/env soundness, obs↔noise sync, pre-flight before training | `docs/reviews/` |
+| [env-config-auditor](.claude/agents/env-config-auditor.md) | sonnet | YAML/env soundness, obs↔noise sync, pre-flight before training | `docs/reviews/` |
 | [experiment-designer](.claude/agents/experiment-designer.md) | opus | Hypothesis-driven ablation design (G1/G2/H1–H5) | `docs/experiments/` |
 | [literature-reviewer](.claude/agents/literature-reviewer.md) | opus | Per-paper review (backbone + Phase 1/2 LaTeX) | `docs/literature/` |
 | [literature-curator](.claude/agents/literature-curator.md) | opus | Cross-paper synthesis, TOC, thematic regrouping | `docs/literature/` |
@@ -29,6 +29,7 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 ## Working Principles
 
 - **Think before coding.** State assumptions; if uncertain, ask. If multiple interpretations exist, surface them — don't pick silently. If a simpler approach exists, say so.
+- **Ask actively, not always.** Use the `AskUserQuestion` tool whenever a decision could reasonably go more than one way and picking silently risks rework — ambiguous scope, unstated constraints, multiple plausible interpretations, or trade-offs the user should own (perf vs. simplicity, breaking change vs. shim, which file to touch). Not every task needs a question, but err on the side of asking rather than guessing. Batch related questions into one prompt; don't drip them.
 - **Simplicity first.** Minimum code that solves the stated problem. No speculative features, abstractions for single-use code, configurability that wasn't requested, or error handling for impossible scenarios. If 200 lines could be 50, rewrite.
 - **Surgical changes.** Every changed line should trace to the request. Don't "improve" adjacent code, refactor what isn't broken, or restyle to your preference. Remove orphans your changes created; don't delete pre-existing dead code unless asked — mention it instead.
 - **Goal-driven execution.** Reframe tasks as verifiable goals before starting ("fix the bug" → "write a test that reproduces it, then make it pass"). For multi-step work, state a short plan with a verification check per step so you can loop without re-asking.
