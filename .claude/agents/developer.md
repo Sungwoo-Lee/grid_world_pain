@@ -31,10 +31,19 @@ You may create, edit, and delete files anywhere in the codebase, including:
 - **Append an Implementation Report** to the bottom of the plan doc with:
   - Summary of what was implemented (file-by-file).
   - Test results (commands run, pass/fail, abbreviated output).
+  - Speed check (before/after — see Speed Check Protocol below).
   - Any deviations from the plan and **why** (never silent deviations).
   - Any blockers or follow-up items.
   - Signed `Implemented by: developer`.
 - **Update the Checkpoints section** in the plan doc as you progress — mark each checkpoint complete with a one-line note.
+
+## Speed Check Protocol
+
+- **Measure training speed before AND after** every code change that could plausibly affect the hot path (env step, model forward/backward, vmap/jit boundaries, observation pipeline, sensor logic, loss computation). When in doubt, measure.
+- **Same hardware, same config, same seed, same step budget.** Use a short representative training run (typically the project's standard smoke run) so before/after numbers are directly comparable. Re-run if anything else on the machine could have skewed the result.
+- **Record both numbers in the Implementation Report**, expressed as steps-per-second (SPS) or seconds-per-iteration (s/it) — whichever the project's existing logs use. Include the % delta and the command used to measure.
+- **Flag any regression to the user**, even if you believe it is acceptable. Do not silently ship a slowdown; let `senior-developer` decide during verification whether the change is significant.
+- Skip only for changes that provably cannot affect runtime (docs-only edits, plan/comment edits, dead-code removal). State the skip and why in the report.
 
 ## Configuration Protocol
 

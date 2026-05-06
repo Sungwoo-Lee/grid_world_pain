@@ -29,13 +29,14 @@ Both paths route through `senior-developer` as the primary agent. `developer` en
 
 Delegate to the **`senior-developer`** agent. Its job:
 
-1. Read [docs/TEMPLATES/training_analysis.md](../../../docs/TEMPLATES/training_analysis.md). The template is hypothesis-driven (research question → design → expected outcomes → results → analysis → conclusions).
-2. Write a doc to `docs/experiments/<exp-name>.md` filling **only** the pre-results sections:
+1. Read [docs/TEMPLATES/training_analysis.md](../../../docs/TEMPLATES/training_analysis.md) and the [Frontmatter Contract](../../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md). The template is hypothesis-driven (research question → design → expected outcomes → results → analysis → conclusions).
+2. Write a doc to **`docs/develop/active/<topic>/<EXP_NAME>.md`** (typically `diagnosis/`, `hypervigilance/`, or `noise/` — pick the topic the experiment serves). The doc must start with YAML frontmatter (`title`, `topic`, `status: active`, `created`, `last_updated`; optional `phase`). Fill **only** the pre-results sections:
    - Research question and hypothesis.
    - Experimental design (configs, ablations, seeds, expected sample size).
    - Predicted outcomes (what would confirm vs. refute the hypothesis).
    - Empty Results / Analysis / Conclusions sections (filled in A5).
 3. List any required config changes. If new YAML keys are needed, list them with exact paths and values per the Configuration Protocol.
+4. Run `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/regen_dev_index.py` so the new doc appears in `docs/develop/INDEX.md`.
 
 ### A2 — User approval
 
@@ -83,7 +84,7 @@ Delegate to **`senior-developer`** with these mandatory steps:
 
 ### B2 — Analysis doc (senior-developer)
 
-Write the final doc to `docs/analyses/<topic>.md` using `docs/TEMPLATES/training_analysis.md`. Use the hypothesis-driven structure: even for unplanned analyses, retroactively frame the comparison as a question being answered.
+Write the final doc to **`docs/develop/active/<topic>/<NAME>.md`** (typically `diagnosis/` for ablation/comparison analyses; `behavior/` for behavioral readouts) using `docs/TEMPLATES/training_analysis.md` and the [Frontmatter Contract](../../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md). Use the hypothesis-driven structure: even for unplanned analyses, retroactively frame the comparison as a question being answered. Run `scripts/regen_dev_index.py` after writing.
 
 **Performance evaluation MUST use survival steps**, not cumulative reward — project-wide convention.
 
@@ -104,7 +105,7 @@ Default: sequential. Switch to parallel only when the per-run reasoning genuinel
 
 | Phase | Produces | Read by |
 |---|---|---|
-| A1 / B2 | `docs/experiments/<exp>.md` or `docs/analyses/<topic>.md` | User; possibly bug-fix-workflow |
+| A1 / B2 | `docs/develop/active/<topic>/<NAME>.md` (with frontmatter) | User; possibly bug-fix-workflow |
 | A3 | Config changes (uncommitted) + Implementation Report | senior-developer (verify if substantive); env-config-auditor (A3.5) |
 | A3.5 | `docs/reviews/config_<exp>.md` audit report | User (must clear 🔴 before A4) |
 | A5 / B1–B2 | Filled-in analysis doc with temporal evolution and survival-based evaluation | User |

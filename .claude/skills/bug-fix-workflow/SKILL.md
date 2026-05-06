@@ -22,7 +22,7 @@ This skill orchestrates the standard sequential workflow for diagnosing and fixi
 ## The Four Phases
 
 ```
-[Phase 1] senior-developer  → root cause analysis + fix plan to docs/
+[Phase 1] senior-developer  → root cause analysis + fix plan to docs/develop/active/<topic>/
 [Phase 2] USER APPROVAL     → human checkpoint on diagnosis and proposed fix
 [Phase 3] developer         → applies fix + regression test, runs full suite
 [Phase 4] senior-developer  → verifies fix against plan, confirms regression test catches the bug
@@ -32,10 +32,20 @@ This skill orchestrates the standard sequential workflow for diagnosing and fixi
 
 Delegate to the **`senior-developer`** agent. Its job:
 
-1. Read [docs/TEMPLATES/issue_plan.md](../../../docs/TEMPLATES/issue_plan.md).
+1. Read [docs/TEMPLATES/issue_plan.md](../../../docs/TEMPLATES/issue_plan.md) and the [Frontmatter Contract](../../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md).
 2. **Reproduce the bug first.** Identify the minimum command, config, or test that triggers the broken behavior. If the user described the bug informally, ask for the exact reproducer.
 3. Trace the bug to its root cause. Read the relevant source files. Use `grep` and `git log` / `git blame` to understand when and why the offending code was introduced. Distinguish *symptom* from *cause* — a NaN in the loss is a symptom; the cause might be a config default that should not exist.
-4. Write a fix plan to `docs/plans/bugfix-<short-name>.md` with these sections:
+4. Write a fix plan to **`docs/develop/active/<topic>/<NAME>.md`** (NOT `docs/plans/`). Pick the right `<topic>` folder per [FRONTMATTER_CONTRACT.md](../../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md) (`dreamer`, `behavior`, `sensors`, `refactors`, `diagnosis`, `issues`, etc.). Match the topic's existing naming convention (e.g. `DREAMER_BUGFIX_<SHORT_NAME>.md` for the dreamer folder, which uses SCREAMING_SNAKE_CASE). The doc must start with YAML frontmatter:
+   ```yaml
+   ---
+   title: "Bugfix: <one-line description>"
+   topic: <topic>           # must be in VALID_TOPICS
+   status: active
+   created: YYYY-MM-DD
+   last_updated: YYYY-MM-DD
+   ---
+   ```
+   Then the body sections:
    - **Symptom** — the observed broken behavior.
    - **Reproduction** — exact command or test that triggers it.
    - **Root cause** — file:line of the underlying issue, with explanation.
@@ -43,7 +53,8 @@ Delegate to the **`senior-developer`** agent. Its job:
    - **Regression test** — exact test to add (path + name) that would catch this bug if it returned.
    - **Test plan** — which existing tests to run to confirm no regressions elsewhere.
    - **Checkpoints** and empty Implementation/Verification Report sections.
-5. If the root cause turns out to be in the project's design rather than a localized bug, **stop and flag it** — design changes belong in `feature-workflow`, not bug-fix-workflow.
+5. After writing, run `python scripts/regen_dev_index.py` so the new file is registered in `docs/develop/INDEX.md` (auto-generated — never hand-edit).
+6. If the root cause turns out to be in the project's design rather than a localized bug, **stop and flag it** — design changes belong in `feature-workflow`, not bug-fix-workflow.
 
 **Output of Phase 1:** A diagnosis-and-fix plan. The bug is fully understood; no code is touched.
 

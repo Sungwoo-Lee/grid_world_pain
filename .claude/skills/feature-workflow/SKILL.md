@@ -21,7 +21,7 @@ This skill orchestrates the project's standard sequential workflow for adding ne
 ## The Four Phases
 
 ```
-[Phase 1] senior-developer  → writes plan to docs/  (no code touched)
+[Phase 1] senior-developer  → writes plan to docs/develop/active/<topic>/  (no code touched)
 [Phase 2] USER APPROVAL     → human checkpoint
 [Phase 3] developer         → implements, tests, reports
 [Phase 4] senior-developer  → verifies diff against plan
@@ -33,9 +33,18 @@ Each phase has clear hand-off artifacts. Do not skip phases or merge them.
 
 Delegate to the **`senior-developer`** agent. Its job:
 
-1. Read [docs/TEMPLATES/issue_plan.md](../../../docs/TEMPLATES/issue_plan.md) before writing.
+1. Read [docs/TEMPLATES/issue_plan.md](../../../docs/TEMPLATES/issue_plan.md) and the [Frontmatter Contract](../../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md) before writing.
 2. Investigate the relevant code areas (read-only).
-3. Write a plan doc to `docs/` — typically `docs/plans/<feature-name>.md`.
+3. Write a plan doc to **`docs/develop/active/<topic>/<NAME>.md`** (NOT `docs/plans/`). Pick the right `<topic>` folder per [FRONTMATTER_CONTRACT.md](../../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md) (`dreamer`, `behavior`, `sensors`, `refactors`, `neuromodulation`, `precision`, `filim`, `continual_learning`, etc.). Match each topic folder's existing naming convention (most use SCREAMING_SNAKE_CASE). The doc must start with YAML frontmatter:
+   ```yaml
+   ---
+   title: "<plan title>"
+   topic: <topic>           # must be in VALID_TOPICS
+   status: active
+   created: YYYY-MM-DD
+   last_updated: YYYY-MM-DD
+   ---
+   ```
 4. The plan must include:
    - Clear objectives and motivation.
    - File-by-file Change List with paths and line numbers.
@@ -44,8 +53,9 @@ Delegate to the **`senior-developer`** agent. Its job:
    - Checkpoints (incremental milestones the developer can mark complete).
    - Empty Implementation Report and Verification Report sections (filled later).
 5. Cross-reference any related docs.
+6. After writing, run `python scripts/regen_dev_index.py` so the new file is registered in `docs/develop/INDEX.md` (auto-generated — never hand-edit).
 
-**Output of Phase 1:** A complete plan doc at `docs/plans/<name>.md`. Code is untouched.
+**Output of Phase 1:** A complete plan doc at `docs/develop/active/<topic>/<NAME>.md` with valid frontmatter, registered in `INDEX.md`. Code is untouched.
 
 ### Phase 2 — User Approval (human checkpoint)
 
@@ -90,7 +100,7 @@ Delegate back to the **`senior-developer`** agent for the Verification Protocol:
 
 | Phase | Produces | Read by |
 |---|---|---|
-| 1 | `docs/plans/<name>.md` (plan only) | User (Phase 2), developer (Phase 3) |
+| 1 | `docs/develop/active/<topic>/<NAME>.md` (plan only, with frontmatter) | User (Phase 2), developer (Phase 3) |
 | 2 | User approval | senior-developer flow controller |
 | 3 | Code diff (uncommitted), Implementation Report, Checkpoints | senior-developer + env-config-auditor (Phase 4) |
 | 4 | Verification Report; Config Audit report (if env/config touched) | User |

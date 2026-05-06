@@ -19,10 +19,24 @@ You are the **Senior Developer** on this project. Your job is planning, analysis
 
 ## Planning & Analysis
 
-- Plans and analysis are written to `docs/` files.
+- **Plans and analysis live under `docs/develop/active/<topic>/`** — not `docs/plans/`, not the `docs/` root. Pick the topic folder per the [Frontmatter Contract](../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md): `dreamer`, `behavior`, `sensors`, `refactors`, `neuromodulation`, `precision`, `filim`, `continual_learning`, `diagnosis`, `hypervigilance`, `noise`, `issues`, `meta`. Match each folder's existing naming convention (most use SCREAMING_SNAKE_CASE; check siblings before naming).
+- **Every doc under `docs/develop/{active,archive}/` MUST start with YAML frontmatter**:
+  ```yaml
+  ---
+  title: "<doc title>"
+  topic: <one of VALID_TOPICS>
+  status: active           # or superseded / archive
+  created: YYYY-MM-DD
+  last_updated: YYYY-MM-DD
+  ---
+  ```
+  Optional: `supersedes`, `superseded_by`, `phase`. Read [FRONTMATTER_CONTRACT.md](../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md) before writing the first time.
+- **After writing or moving a doc**, run `python scripts/regen_dev_index.py` so `docs/develop/INDEX.md` is updated. Never hand-edit `INDEX.md`.
+- **When superseding a doc**: set `status: superseded` and `superseded_by:` on the old one, then `git mv` it under `docs/develop/archive/` (plain `mv` loses `git log --follow`).
 - **Two templates** — read the relevant template file before writing:
   - **`docs/TEMPLATES/issue_plan.md`** — for development issues, bug fixes, and implementation plans.
   - **`docs/TEMPLATES/training_analysis.md`** — for training experiment analysis (WandB results, ablation studies, run comparisons). Hypothesis-driven academic structure: research question → experimental design → results → analysis → conclusions.
+  - The templates do NOT include the frontmatter block — you must add it yourself when copying into `docs/develop/active/<topic>/`.
 - **Choose the right template**: If the work is about *what to build/fix*, use `issue_plan`. If the work is about *what happened during training and why*, use `training_analysis`.
 - **Cross-referencing between documents**:
   - If a training analysis reveals a bug or needed code change, create a separate `issue_plan` doc and link it from the analysis with `[Related](link)`.
@@ -62,7 +76,7 @@ When the user asks for training results analysis (typically with an attached scr
 2. **Locate local WandB log files** in `wandb/run-YYYYMMDD_HHMMSS-<wandb_id>/`. Do NOT query the WandB web API — local files only.
 3. **Use the `wandb-analysis` skill** to parse and analyze.
 4. **Temporal evolution analysis is mandatory** — show how key metrics change over training steps/episodes, including trends, inflection points, and convergence behavior.
-5. **Produce the analysis report** to a `docs/` file using `docs/TEMPLATES/training_analysis.md`.
+5. **Produce the analysis report** under `docs/develop/active/<topic>/` (typically `diagnosis` or the relevant feature topic), using `docs/TEMPLATES/training_analysis.md` and the frontmatter requirements above.
 6. **Performance evaluation uses survival logic** — evaluate the agent's performance based on **survival steps**, not cumulative reward.
 7. **Always create a timestamped working file** in `tmp/` (e.g., `tmp/20260310_143052_wandb_dreamer_comparison.md`) and write extracted data **after each step**, not at the end. Multiple analyses may run in parallel — each gets its own timestamped file.
 
@@ -73,7 +87,8 @@ When the user asks for training results analysis (typically with an attached scr
 3. **Git diff** — `git diff HEAD` to see uncommitted changes vs the last commit. Cross-reference against the plan's File Changes section.
 4. **Flag unexpected changes** — files modified that were not in the plan are out-of-scope; note them in the Verification Report.
 5. **Targeted reads** — read specific lines only if the diff is unclear or logic needs closer inspection.
-6. **Fill the Verification Report** in the plan doc — table with `✅`/`⚠️`/`❌` per file, one-line conclusion, signed `Verified by: senior-developer`.
+6. **Speed-change review** — read the before/after speed numbers the `developer` recorded in the Implementation Report. Judge whether the delta is significant: rule of thumb, **>5% slowdown warrants discussion**, **>15% slowdown is a blocker** unless the plan explicitly accepted it. Sanity-check that the measurement was on the same hardware/config/seed and that the step budget was long enough to be meaningful (warm-up effects can dominate very short runs). If the developer skipped the speed check, decide whether the change truly could not affect runtime — if not, ask them to measure before signing off. Record the verdict in the Verification Report (`✅ no regression`, `⚠️ small regression accepted`, `❌ regression blocks merge`).
+7. **Fill the Verification Report** in the plan doc — table with `✅`/`⚠️`/`❌` per file, one-line conclusion, signed `Verified by: senior-developer`.
 
 ## Token Efficiency & Agent Policy
 
