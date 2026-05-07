@@ -38,6 +38,7 @@ agent:
   
   entropy_scale: 3e-4
   cont_loss_weight: 1.0  # Continuation-head loss multiplier. 1.0 = pre-knob behavior.
+  imagined_rollout_probe: false
   unimix: 0.01
   use_layer_norm: true  # Orthogonal to modulation.type — applies LayerNorm to encoder pre-activations.
                          # Mirrors recurrent_ppo.yaml:20 / neuromodulated_ppo.yaml:20. Mandatory since commit f1db0f0.

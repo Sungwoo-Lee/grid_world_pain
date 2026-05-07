@@ -1572,7 +1572,8 @@ def main():
                             elif mk.startswith('loss_model') or mk.startswith('loss_recon') or \
                                  mk.startswith('loss_kl') or mk.startswith('loss_rew') or \
                                  mk.startswith('loss_cont') or mk.startswith('loss_dyn') or \
-                                 mk.startswith('loss_rep') or mk.startswith('model_'):
+                                 mk.startswith('loss_rep') or mk.startswith('model_') or \
+                                 mk.startswith('imagined_'):
                                 wandb_logs[f"WorldModel/{mk}"] = float(mv)
                             elif mk.startswith('mod_'):
                                 wandb_logs[f"Modulator/{mk}"] = float(mv)

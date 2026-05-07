@@ -127,6 +127,7 @@ class DreamerTrainer(nnx.Module):
 
         B, T, _ = obs.shape
         modulation_enabled = self.agent.wm.modulation_enabled
+        IMG_PROBE = self.config.get_mandatory('agent.imagined_rollout_probe', bool)
 
         # --- 1. World Model Learning ---
         def model_loss_fn(wm, rng):
@@ -283,6 +284,15 @@ class DreamerTrainer(nnx.Module):
                 'model_cont_acc': cont_acc,
             }
 
+            if IMG_PROBE:
+                # Real replay-batch first-termination step for parity with imagined probe.
+                t_mask = (terminal > 0.5).astype(jnp.float32)             # (B, T)
+                any_t = jnp.any(t_mask > 0, axis=1)                       # (B,)
+                first_t = jnp.argmax(t_mask, axis=1)
+                first_t = jnp.where(any_t, first_t, terminal.shape[1])    # T sentinel if no terminal in this row
+                real_term_step_mean = jnp.mean(first_t.astype(jnp.float32))
+                metrics.update({'imagined_real_term_step_mean': real_term_step_mean})
+
             if modulation_enabled:
                 if wm.modulation_type == "FiLM":
                     effective_gamma_uni = mod_outputs_T.z_unimodal
@@ -434,6 +444,22 @@ class DreamerTrainer(nnx.Module):
                 loss_actor_step = -(log_probs * advantage + ENTROPY_SCALE * entropy)
                 loss_actor = jnp.mean(loss_actor_step * discount_weights)
 
+                if IMG_PROBE:
+                    # Imagined-rollout termination probe.
+                    # conts: (H, B) post-sigmoid continue prob. Termination ≡ cont < 0.5.
+                    term_mask = (conts < 0.5).astype(jnp.float32)            # (H, B)
+                    any_term = jnp.any(term_mask > 0, axis=0)                 # (B,)
+                    first_term_step = jnp.argmax(term_mask, axis=0)           # (B,) — argmax of bool returns first True; 0 if none
+                    first_term_step = jnp.where(any_term, first_term_step, HORIZON)  # HORIZON sentinel if never terminates
+                    first_term_step_f = first_term_step.astype(jnp.float32)
+
+                    imag_term_frac_h8  = jnp.mean(jnp.any(term_mask[:8] > 0, axis=0).astype(jnp.float32))
+                    imag_term_frac_h15 = jnp.mean(any_term.astype(jnp.float32))   # full HORIZON
+                    imag_first_term_mean = jnp.mean(first_term_step_f)
+                    imag_first_term_p10  = jnp.percentile(first_term_step_f, 10.0)
+                    imag_first_term_p50  = jnp.percentile(first_term_step_f, 50.0)
+                    imag_first_term_p90  = jnp.percentile(first_term_step_f, 90.0)
+
                 metrics = {
                     'loss_critic': loss_critic,
                     'loss_actor': loss_actor,
@@ -446,6 +472,16 @@ class DreamerTrainer(nnx.Module):
                     'mean_entropy': jnp.mean(entropy),
                     'value_mae': jnp.mean(jnp.abs(baseline - jax.lax.stop_gradient(lambda_returns)))
                 }
+
+                if IMG_PROBE:
+                    metrics.update({
+                        'imagined_termination_fraction_h8':  imag_term_frac_h8,
+                        'imagined_termination_fraction_h15': imag_term_frac_h15,
+                        'imagined_first_term_step_mean':     imag_first_term_mean,
+                        'imagined_term_step_p10':            imag_first_term_p10,
+                        'imagined_term_step_p50':            imag_first_term_p50,
+                        'imagined_term_step_p90':            imag_first_term_p90,
+                    })
             return (loss_actor + loss_critic), (metrics, lambda_returns)
 
         with jax.named_scope("dreamer_optim"):
