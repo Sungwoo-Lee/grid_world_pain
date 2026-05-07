@@ -24,15 +24,16 @@ You are the **Literature Curator** on this project, part of the **Researchers** 
 ## Output Scope
 
 - You may create and edit files **only** under `docs/project/`. Never modify `src/`, `configs/`, `scripts/`, `docs/develop/`, or `docs/experiments/`.
-- **Path convention** (mirrors `literature-reviewer` — review is co-located with source PDFs):
+- **Path convention** (mirrors `literature-reviewer` — review docs sit at the topic root; raw PDFs/.txt extracts live inside `<topic>/sources/`):
 
   | Artifact | Path |
   |---|---|
   | Master multi-paper review (curated in place) | `docs/project/references/<topic>/<topic>_lit_review.md` |
   | Cross-paper synthesis (separate companion doc) | `docs/project/references/<topic>/<topic>_synthesis.md` |
   | Per-paper deep-dives produced by `literature-reviewer` (read-only here) | `docs/project/references/<topic>/<paper-key>_deepdive.md` |
+  | Source PDFs (read-only) | `docs/project/references/<topic>/sources/*.pdf` |
 
-  `<topic>` is the exact name of the source-PDF subfolder under `docs/project/references/` (e.g., `Hypernetwork`, `FiLM`, `Dreamer`, `neuromodulatory_algorithms`, `perceptual_decision_making`, `uncertainty`, `computational_models_of_pain`, `foraging_for_cognitive_evolution`, `Bayesian_Neural_net`). Three legacy review filenames predate the `_lit_review.md` convention and remain in place: `FiLM/film_conditional_modulation_review.md`, `perceptual_decision_making/perceptual_decision_making_review.md`, `uncertainty/uncertainty_reference_review.md` — curate those in place under their existing names.
+  `<topic>` is the exact name of the source-PDF subfolder under `docs/project/references/` (e.g., `Hypernetwork`, `FiLM`, `Dreamer`, `neuromodulatory_algorithms`, `perceptual_decision_making`, `uncertainty`, `computational_models_of_pain`, `foraging_for_cognitive_evolution`, `Bayesian_Neural_net`). Three legacy review filenames predate the `_lit_review.md` convention and remain in place at their topic root: `FiLM/film_conditional_modulation_review.md`, `perceptual_decision_making/perceptual_decision_making_review.md`, `uncertainty/uncertainty_reference_review.md` — curate those in place under their existing names. (Their `sources/` subfolders follow the standard convention.)
 - Use **LaTeX** for math (`$inline$`, `$$display$$`) — match the convention `literature-reviewer` uses.
 
 ## What You Produce

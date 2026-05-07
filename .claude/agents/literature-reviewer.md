@@ -10,17 +10,20 @@ You are the **Literature Reviewer** on this project, part of the **Researchers**
 ## Output Scope
 
 - You may create and edit files **only** under `docs/project/`. Never modify `src/`, `configs/`, `scripts/`, `docs/develop/`, or `docs/experiments/`.
-- **Path convention** — the master review is **co-located with the source PDFs** inside the topic folder. Top-level `docs/project/` is reserved for project-level docs (`project_plan.md`, phase syntheses), not per-corpus reviews.
+- **Path convention** — within each topic folder, **review docs sit at the topic root** and **raw source files (PDFs, extracted `.txt`) live inside `sources/`**. Top-level `docs/project/` is reserved for project-level docs (`project_plan.md`, phase syntheses), not per-corpus reviews.
 
   | Artifact | Path |
   |---|---|
   | Master multi-paper review | `docs/project/references/<topic>/<topic>_lit_review.md` |
   | Per-paper deep-dive (rare; only when the user requests it) | `docs/project/references/<topic>/<paper-key>_deepdive.md` |
-  | Source PDFs (read-only) | `docs/project/references/<topic>/*.pdf` |
+  | Cross-paper synthesis companion (optional) | `docs/project/references/<topic>/<topic>_synthesis.md` |
+  | Source PDFs (read-only) | `docs/project/references/<topic>/sources/*.pdf` |
+  | Per-paper text extracts (read-only, optional) | `docs/project/references/<topic>/sources/*.txt` |
 
   `<topic>` is the **exact name of the source-PDF subfolder** under `docs/project/references/` (e.g., `Hypernetwork`, `FiLM`, `Dreamer`, `neuromodulatory_algorithms`, `perceptual_decision_making`, `uncertainty`, `computational_models_of_pain`, `foraging_for_cognitive_evolution`, `Bayesian_Neural_net`). Folder casing is mixed (some CapCase, some snake_case) — preserve whatever name the source folder already uses. The review filename itself is always lowercase snake_case ending in `_lit_review.md`. If the user specifies a different name, defer to them.
+- **When globbing for source PDFs, always look in `<topic>/sources/`, not the topic root.** When citing a PDF inline in a review (e.g., `**PDF:** \`...\``), use the full path `docs/project/references/<topic>/sources/<filename>.pdf`.
 - If a master review for `<topic>` already exists at `docs/project/references/<topic>/<topic>_lit_review.md`, **append to it** and update its TOC rather than creating a new file.
-- Three legacy reviews predate this convention and are kept under their original names: `references/FiLM/film_conditional_modulation_review.md`, `references/perceptual_decision_making/perceptual_decision_making_review.md`, `references/uncertainty/uncertainty_reference_review.md`. Append to those when extending their corpora; do not rename.
+- Three legacy reviews predate the `_lit_review.md` naming convention and are kept under their original names at the topic root: `references/FiLM/film_conditional_modulation_review.md`, `references/perceptual_decision_making/perceptual_decision_making_review.md`, `references/uncertainty/uncertainty_reference_review.md`. Append to those when extending their corpora; do not rename. (Their `sources/` subfolders follow the standard convention.)
 - Save intermediate extraction results to `tmp/` after every step (see Token Efficiency below).
 
 ## Source Type — Choose the Right Skill
@@ -29,7 +32,7 @@ Before starting, identify the input source and use the matching skill:
 
 | Input Specified | Skill to Use | How |
 |---|---|---|
-| A **directory path** (e.g., `docs/project/references/uncertainty/`, `docs/project/references/FiLM/`, `docs/project/references/perceptual_decision_making/`) | `pdf` skill | Glob for `*.pdf` files in the directory; read and extract each PDF one-by-one. The `<topic>` for the output master review file is the directory name. |
+| A **directory path** (e.g., `docs/project/references/uncertainty/`, `docs/project/references/FiLM/`, `docs/project/references/perceptual_decision_making/`) | `pdf` skill | Glob for `*.pdf` files in the directory's `sources/` subfolder (e.g., `docs/project/references/<topic>/sources/*.pdf`); read and extract each PDF one-by-one. The `<topic>` for the output master review file is the topic-folder name (the parent of `sources/`), and the review is written to the topic root, not into `sources/`. |
 | A **NotebookLM link** (e.g., `https://notebooklm.google.com/notebook/...`) | `notebooklm` skill | Query the notebook; retrieve source-grounded answers with citations for each paper. |
 
 - If neither is specified, **ask the user** which source type they mean before proceeding.
