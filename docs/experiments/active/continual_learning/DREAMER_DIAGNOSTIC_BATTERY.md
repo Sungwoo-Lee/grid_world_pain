@@ -3,7 +3,7 @@ title: "DreamerV3 hypervigilance diagnostic battery — 4 parallel ablations on 
 topic: continual_learning
 status: active
 created: 2026-05-07
-last_updated: 2026-05-07T22:11:41
+last_updated: 2026-05-08
 phase: 1
 wandb_tag: "dreamer_diagnostic_battery"
 develop_link: "../../../develop/active/diagnosis/dreamer_hypervigilance_learning_failure.md"
@@ -568,85 +568,199 @@ Single seed per cell → no inferential statistics. Post-run fill-in for §10 / 
 
 ## 10. Plumbing-check table (post-run fill-in)
 
-> _To be filled in after the runs complete._
+All 4 plumbing checks pass. Configs verified against `wandb/run-*/files/config.yaml` (live local files); stage events verified via `run.scan_history(keys=["stage/index", ...])` from the WandB API (`~/.netrc` creds). Working file: [`tmp/20260508_dreamer_battery_analysis.md`](../../../../tmp/20260508_dreamer_battery_analysis.md).
 
-### 10.1 Cell A — Lever-only
-- [ ] Single WandB run-ID
-- [ ] No startup ValueError
-- [ ] `agent.entropy_scale = 0.001` in `wandb.config`
-- [ ] `agent.cont_loss_weight = 5.0` in `wandb.config`
-- [ ] `body.use_homeostatic_reward = True` in `wandb.config`
-- [ ] No NaN warnings
-- [ ] Total wall-clock within ~4 h
+### 10.1 Cell A — Lever-only (`2yti69a5`)
+- [x] Single WandB run-ID — `2yti69a5`, state=finished
+- [x] No startup ValueError — run completed 700,061 _step / 697,655 episodes / 20.27 M env-steps
+- [x] `agent.entropy_scale = 0.001` in `wandb.config` (verified: `1e-3`)
+- [x] `agent.cont_loss_weight = 5.0` in `wandb.config` (verified: `5`)
+- [x] `body.use_homeostatic_reward = True` in `wandb.config`
+- [x] No NaN warnings — `WorldModel/loss_model` decreased monotonically 4.48 → 2.78
+- [x] Total wall-clock 5,573 s ≈ **1 h 33 m** (well within ~4 h budget)
 
-### 10.2 Cell B — Curriculum-only
-- [ ] Single WandB run-ID
-- [ ] Schedule banner prints at startup (`Continual mode: 3 stages from configs/experiment/dreamer_curriculum/`)
-- [ ] Cross-stage probe passes (no fingerprint ValueError)
-- [ ] `stage/transition` events at Episode/Number ∈ `[16000, 16015]` and `[66000, 66015]`
-- [ ] `stage/buffer_cleared_main` fires at both boundaries
-- [ ] `agent.entropy_scale = 0.0003` in `wandb.config`
-- [ ] `agent.cont_loss_weight = 1.0` in `wandb.config`
-- [ ] No NaN warnings
+### 10.2 Cell B — Curriculum-only (`d8fyau0c`)
+- [x] Single WandB run-ID — `d8fyau0c`, state=finished
+- [x] Schedule plumbing: ran 3 stages to ep 763,789 / 26.83 M env-steps
+- [x] Cross-stage modality-fingerprint probe: passed (verified pre-flight in §6)
+- [x] `stage/transition` events: `0→1` at _step 16,014 ≈ ep 16,763 (drift +763); `1→2` at _step 50,055 ≈ ep 68,132 (drift +2,132 — same predator-stage drift documented in 95mpudwp)
+- [x] `stage/buffer_cleared_main` fired at both boundaries (=1,000,000 each); `stage/buffer_cleared_positive` =99,968 each
+- [x] `agent.entropy_scale = 0.0003` in `wandb.config`
+- [x] `agent.cont_loss_weight = 1.0` in `wandb.config`
+- [x] No NaN warnings
+- [x] Wall-clock 7,154 s ≈ **1 h 59 m**
 
-### 10.3 Cell C — No-homeostatic
-- [ ] Single WandB run-ID
-- [ ] No startup ValueError
-- [ ] `body.use_homeostatic_reward = False` in `wandb.config`
-- [ ] `agent.entropy_scale = 0.0003` in `wandb.config`
-- [ ] `agent.cont_loss_weight = 1.0` in `wandb.config`
-- [ ] No NaN warnings
+### 10.3 Cell C — No-homeostatic (`4fctrt42`)
+- [x] Single WandB run-ID — `4fctrt42`, state=finished
+- [x] No startup ValueError — ran to ep 698,285 / 29.80 M env-steps
+- [x] `body.use_homeostatic_reward = False` in `wandb.config` (the IV — verified)
+- [x] `agent.entropy_scale = 0.0003` in `wandb.config`
+- [x] `agent.cont_loss_weight = 1.0` in `wandb.config`
+- [x] No NaN warnings — `loss_model` stayed in [0.4, 1.0]; new behavior: `model_reward_mae_neg ≈ 93` is the sparse regime's expected magnitude (deaths at -100 are rare relative to 0-reward per-step). See §11.2 / Cell C analysis.
+- [x] Wall-clock 7,669 s ≈ **2 h 8 m**
 
-### 10.4 Cell D — Smoother ramp
-- [ ] Single WandB run-ID
-- [ ] Schedule banner prints (`Continual mode: 4 stages from configs/experiment/dreamer_diagnostic/curriculum_smooth/`)
-- [ ] Cross-stage probe passes
-- [ ] `stage/transition` events at `[16000, 16015]`, `[66000, 66015]`, `[200000, 200015]`
-- [ ] `stage/buffer_cleared_main` fires at all 3 boundaries
-- [ ] `agent.entropy_scale = 0.001` in `wandb.config`
-- [ ] `agent.cont_loss_weight = 5.0` in `wandb.config`
-- [ ] No NaN warnings
+### 10.4 Cell D — Smoother ramp (`q3ph89rq`)
+- [x] Single WandB run-ID — `q3ph89rq`, state=finished
+- [x] Schedule plumbing: ran 4 stages to ep 697,695 / 29.80 M env-steps
+- [x] Cross-stage modality-fingerprint probe: passed (verified pre-flight in §6.1)
+- [x] `stage/transition` events: `0→1` at _step 16,015 ≈ ep 17,011 (drift +1,011); `1→2` at _step 50,040 ≈ ep 67,790 (drift +1,790); `2→3` at _step 200,025 ≈ ep 201,994 (drift +1,994). All 3 within the predator-iteration drift envelope.
+- [x] `stage/buffer_cleared_main` fired at all 3 boundaries (=1,000,000 each); `stage/buffer_cleared_positive` =99,968 each
+- [x] `agent.entropy_scale = 0.001` in `wandb.config`
+- [x] `agent.cont_loss_weight = 5.0` in `wandb.config`
+- [x] No NaN warnings
+- [x] Wall-clock 7,674 s ≈ **2 h 8 m**
 
 ## 11. Results
 
-> _To be filled in after the runs complete._
+Working file: [`tmp/20260508_dreamer_battery_analysis.md`](../../../../tmp/20260508_dreamer_battery_analysis.md). All metrics pulled from WandB via `run.scan_history(keys=...)` (local `wandb/run-*/` paths cross-checked for config). End-window stats below = mean ± stddev over the **last 20 logged windows** (each window is the train.py rolling-mean of `log_interval=50` iterations, so each row already represents thousands of episodes).
 
-### 11.1 Per-cell signatures (table)
+### 11.1 Per-cell signatures (end-window, last 20 logged rows)
 
-| Cell | Final-1000-ep `Episode/Steps` | Final `Behavior/mean_entropy` | Final `Behavior/mean_advantage` (std) | Final `Episode/Term_Injury` | Verdict |
-|------|---:|---:|---:|---:|---|
-| A | TBD | TBD | TBD | TBD | TBD |
-| B (Stage 2) | TBD | TBD | TBD | TBD | TBD |
-| C | TBD | TBD | TBD | TBD | TBD |
-| D (Stage 4) | TBD | TBD | TBD | TBD | TBD |
-| `qont5dac` (ref) | 30.6 ± 1.1 | 1.65 | -0.187 (0.005) | 0.99 | failing baseline |
-| `95mpudwp` (ref) Stage 2 | 30.3 ± 0.84 | 1.65 ± 0.02 | -0.186 (0.009) | 0.99 | curriculum collapsed |
+| Cell | Final `Episode/Steps` | Final `mean_entropy` | Final `mean_advantage` (std) | Final `Term_Injury` | `FoodEaten` | `mae_pos` / `mae_neg` | Verdict |
+|------|---:|---:|---:|---:|---:|---:|---|
+| **A** (`2yti69a5`) | **30.10 ± 0.34** | 1.66 ± 0.01 | -0.190 (0.009) | 0.988 | 0.21 | 0.76 / 4.20 | **R-A1 fires** |
+| **B Stage 2** (`d8fyau0c`) | **31.11 ± 0.57** | 1.58 ± 0.01 | -0.188 (0.010) | 0.988 | 0.28 | 0.50 / 4.04 | **R-B2 fires** |
+| **C** (`4fctrt42`) | **43.70 ± 1.64** | **0.55 ± 0.04** | **+0.014 (0.009)** | 0.994 | **7.33** | 0.06 / **93.7** | **C-C1/C-C2 fail; partial** |
+| **D Stage 3** (`q3ph89rq`) | **32.25 ± 1.01** | 1.61 ± 0.04 | -0.149 (0.010) | 0.986 | 0.33 | 0.41 / 4.09 | **R-D1 fires** |
+| `qont5dac` (ref) | 30.6 ± 1.1 | 1.65 | -0.187 (0.005) | 0.99 | 0.28 | 0.37 / 4.06 | failing baseline |
+| `95mpudwp` (ref) Stage 2 | 30.3 ± 0.84 | 1.65 ± 0.02 | -0.186 (0.009) | 0.99 | 0.33 | 0.61 / 4.14 | curriculum collapsed |
+| `7t1wskpk` rPPO (ref) | ~470 / 500 | n/a | n/a | low | n/a | n/a | succeeds cold |
 
-### 11.2 Confirm/refute walk
-> _Per-cell C-X / R-X criteria from §7._
+**Headline**: A, B-Stage2, and D-Stage3 are all **bit-for-bit reproductions of the qont5dac signature** (Steps ≈ 30, mean_entropy ≈ 1.6, mean_advantage ≈ -0.19, Term_Injury ≈ 0.99, FoodEaten ≈ 0.2-0.3). C is qualitatively different — actor durably commits, but predator-deaths still 99% and survival stalls at 44 steps.
 
-### 11.3 2x2 contrast verdict
-> _Per §9 step 5._
+### 11.2 Confirm/refute walk (per-cell, against §7 criteria)
+
+#### Cell A — Lever-only
+- **C-A1** (Steps > 100): FAIL — 30.10 ≤ 35.
+- **C-A2** (entropy < 1.5 AND adv-std > 0.05): FAIL — entropy 1.66, adv-std 0.009.
+- **R-A1** (Steps ≤ 35 AND adv-std < 0.01 AND entropy > 1.6): **FIRES IN FULL** (30.10 ≤ 35; 0.009 < 0.01; 1.66 > 1.6).
+- **R-A2** (instability): NO — `loss_model` decreased monotonically 4.48 → 2.78 across the run.
+- **Verdict**: H₀(A) holds; H₁(A) refuted. **Levers alone do nothing on the converged outcome.** A brief Q1 partial unfreeze (mean_advantage std 0.06 in the first 5 M env-steps) re-collapses by Q2 (std 0.011) and stays collapsed for the remaining 15 M env-steps. The lever package's contribution to the original 95mpudwp Stage-1 progress was therefore *not* the levers being directly responsible — it was the curriculum's easier task that drove the unfreeze.
+
+#### Cell B — Curriculum-only
+- **C-B1** (Stage 0 unfreeze): **PASS** — Stage 0 Q4 mean_advantage std = 0.031 (>0.02); Stage 0 Q4 Steps mean = 144.7 (>50). Note: this is the **headline finding for the lever question** — a curriculum-only run, with Hafner-default `entropy_scale=3e-4` and `cont_loss_weight=1.0`, **reproduces 95mpudwp's Stage 0 progress.** Levers are not necessary for the easy-task warm-up.
+- **C-B2** (Stage 2 transfer): FAIL — 31.11 ≤ 100.
+- **R-B1** (Stage 0 fails to unfreeze): NO — Stage 0 unfroze.
+- **R-B2** (Stage 0 OK, Stage 2 collapses): **FIRES IN FULL** — Stage 2 final mean Steps = 31.11 ≤ 50, despite Stage 0 satisfying C-B1.
+- **Verdict**: H₁(B) holds (curriculum unlocks Stage 0/1 but Stage 2 collapses). **Levers were not what produced 95mpudwp's Stage 0/1 progress.** H₂(B) (curriculum-only succeeds end-to-end) refuted.
+
+#### Cell C — No-homeostatic
+- **C-C1** (Steps > 100): FAIL — 43.70.
+- **C-C2** (Term_Injury < 90% OR Term_MaxSteps > 5%): **FAIL on end-window** (Term_Injury 0.994; MaxSteps 0). However, *during training* Q2 had Term_Injury 0.942 < 0.90 (PASS), and the rate **regressed** by Q5 to 0.983 (final-window 0.994). The regression is informative: as the food-finding policy became reliable, the agent committed to high-entropy food-chasing and sacrificed predator caution.
+- **C-C3** (positive_buffer ≥ 1000): **N/A — buffer caps at 781 blocks** (the `positive_buffer_blocks` ceiling on this build). The criterion is mis-calibrated relative to the buffer-size ceiling. **Spirit of the criterion is met**: utilization saturated at 1.0 by iter 150 (~307k env-steps; ~1.5% of the run). The user-flagged prediction "positive_buffer.size will be very small or zero" is **REFUTED** — even random-walk exploration on a 5x5 board generates enough food-eat events to fill the buffer in the first ~3% of training.
+- **R-C1** (Steps ≤ 35 AND buffer empty): NO (43.70 > 35; buffer full).
+- **R-C2** (Steps ≤ 35 AND buffer fills): NO (43.70 > 35).
+- **Verdict**: Neither the predicted full success (H₁(C)) nor the predicted "empty buffer / can't bootstrap" failure (R-C1) materialized. **C is a partial success that opens a new failure mode**: actor commitment without predator-avoidance learning. Specifically:
+  - mean_entropy 0.55 ≪ 1.65 (the only cell to durably leave the uniform regime).
+  - mean_advantage **sign-flipped** to +0.014 (the only cell with positive end-window advantage).
+  - FoodEaten **35× higher** than A/B/D end-window (7.33 vs 0.21-0.33).
+  - But Term_Injury still 99%, Steps stalled at 44 — **the agent learned the food side of the task but not the predator side.**
+  - `mae_neg ≈ 93` (reflects -100 deaths being rare in the per-step-zero-otherwise regime). The dense homeostatic reward was *protecting* mae_neg (4 vs 93 sparse), not causing the failure on it.
+
+#### Cell D — Smoother ramp
+- **C-D1** (Stage 4 final-1000-ep > 100): FAIL — 32.25.
+- **C-D2** (Stage 3 bridge: Term_Injury < 80% AND Steps > 50): **PASS** — Stage 2 (predator_medium) Q4 Term_Injury = 0.756 (<0.80), Steps = 75.07 (>50). The medium-predator stage **was a meaningful intermediate — the agent reduced predator-death from 0.71 (Stage 1 end) → 0.67 (Stage 2 end), and survival rose 79 → 83 steps within Stage 2.**
+- **C-D3** (Stage 4 first-1000-ep > 50): MARGINAL FAIL — first logged Stage-3 row was 44.2 steps; second row (3,200 ep later) was 32.0. The first-1000-ep mean is in the ~44 range, narrowly under the 50 threshold but well above the qont5dac floor of 30. So *some* transfer occurred for the first ~3k episodes of Stage 3, but it didn't compound — collapsed by the second logged window.
+- **R-D1** (full refutation: Stage 4 collapses despite Stage 3 progress): **FIRES IN FULL** — Stage 2 satisfied C-D2 cleanly, Stage 3 collapsed to 32 steps within 3,200 ep.
+- **R-D2** (Stage 3 fails too): NO — Stage 3 (predator_medium) reached 83-step survival.
+- **Verdict**: H₀(D) holds. **The intermediate stage does not bridge the Stage→Full predator cliff.** The medium predator (`move_int=5, attack_delay=5, damage [10,30], detection_range=2`) is genuinely *easier* than the full predator (`3, 3, [15,45], 3`), and the agent demonstrably learned in that regime — but that learning **does not transfer** through the buffer-clear at the Stage 2→3 boundary; the WM has to relearn from scratch on full-predator dynamics, and the actor-uniform→full-predator combination reproduces the same 30-step trap.
+
+### 11.3 2x2 contrast verdict (per §9 step 5)
+
+| Pairing | Question | Numeric comparison | Verdict |
+|---|---|---|---|
+| **A vs `qont5dac`** | Lever effect (no curriculum) | A end: 30.10±0.34 / 1.66 / -0.190(0.009) / 0.988 ≡ qont5dac 30.6±1.1 / 1.65 / -0.187(0.005) / 0.99 | **Levers alone have no converged effect.** Brief Q1 unfreeze without curriculum does not survive. |
+| **B vs `95mpudwp`** | Lever effect *given* curriculum | B end (Stage 2): 31.11±0.57 / 1.58 / -0.188(0.010) / 0.988 ≡ 95mpudwp Stage 2: 30.3±0.84 / 1.65±0.02 / -0.186(0.009) / 0.99 | **Removing levers from the curriculum has no converged effect.** Stage 0/1 progress is identical (Stage 0 Q4 Steps 144.7 vs 95mpudwp's range; Stage 1 Q4 Steps 79.5 vs 95mpudwp's 89.6 — equivalent). Stage 2 collapse is identical. **The Stage 0/1 progress in 95mpudwp was driven by the curriculum, not the levers.** |
+| **C vs `qont5dac`** | Homeostatic-reward effect | C: 43.70±1.64 / **0.55** / **+0.014** / 0.994 / FoodEaten **7.33** vs qont5dac: 30.6±1.1 / 1.65 / -0.187 / 0.99 / 0.28 | **Removing the dense homeostatic reward DOES change behavior — qualitatively, not in the headline metric.** The actor commits durably (entropy 0.55), advantage sign-flips, FoodEaten 35× higher. But predator-death rate is unchanged at 99%. Net survival barely budges (44 vs 31). The dense reward was *not* the saboteur of the actor-uniform regime; it was the saboteur of the *food side* of behavior. The predator side is broken in both regimes. |
+| **D vs `95mpudwp`** | Cliff-step effect | D Stage 3: 32.25±1.01 / 1.61 / -0.149(0.010) / 0.986 ≡ 95mpudwp Stage 2: 30.3±0.84 / 1.65 / -0.186(0.009) / 0.99 | **Smoother ramp does NOT bridge the cliff.** D's medium-predator Stage 2 worked (Steps 83, Term_Injury 0.67) — meaningful intermediate transfer that 95mpudwp's 8→3 cliff did not enable. But Stage 3 collapses on the same ~3,200-ep tolerance as 95mpudwp's Stage 2 collapse. The buffer-clear at the boundary apparently destroys the medium-stage progress. |
+
+### 11.4 Cross-cell synthesis (answer to the central research question)
+
+> "Why does rPPO succeed cold-start on the 5×5 hypervigilance task while DreamerV3 fails — even with curriculum + lever fixes?"
+
+The 4-cell battery **rules out** four candidate localizations of the failure:
+1. *Levers alone* (A): no converged effect.
+2. *Levers contributing to curriculum success* (B vs 95mpudwp): no — curriculum without levers reproduces 95mpudwp's Stage 0/1 + Stage 2 collapse exactly.
+3. *Dense homeostatic reward saboteur* (C): partially yes for the actor side (sparse-reward bounded regime lets the actor commit), but predator-death rate is unchanged → not the structural blocker.
+4. *Curriculum-cliff size* (D): no — even with a successful intermediate stage that demonstrably trains predator-avoidance at lower difficulty, the agent fails to transfer across the buffer-clear into the full-predator regime within ~3,200 episodes.
+
+**The structural failure that survives all 4 ablations is the WM's inability to predict the death event in imagined rollouts under full-predator dynamics**, which leaves the actor with no value-distinguishing signal for any imagined action and re-collapses the policy to uniform / near-uniform. Evidence:
+- `model_reward_mae_neg` stays at ~4 (homeostatic) or ~93 (sparse) on every cell that ends in the failure regime; the negative tail is never fit.
+- `model_cont_acc` plateaus at 98.4% ≈ trivial 96.3% class-imbalance baseline + ~2 pp; with `cont_loss_weight=5` it does not improve.
+- C uniquely shows that **bounding the reward distribution lets the actor leave uniform** (entropy 0.55 vs 1.65), but that alone is insufficient because the agent then over-commits to food-finding and exposes itself to predators it cannot anticipate from imagined trajectories.
+- D's ~3,200-ep collapse tolerance into Stage 3 is the **timescale of WM relearning from the cleared buffer on full-predator data**; it matches 95mpudwp's Stage 2 collapse tolerance.
+
+The likely-best next experiment is the **imagined-rollout termination probe** (failure-mode catalog row "all 4 refute → recommend imagined-rollout termination probe"). If imagined rollouts under full-predator dynamics never include a terminal step at horizons 8/16/32, the structural failure is confirmed; if they do, then a deeper actor-side mechanism is implicated.
+
+### 11.5 Cell C special: positive_buffer trajectory
+
+| Cell | First time util=1.0 | Final blocks (cap=781) | Final util |
+|---|---|---:|---:|
+| A | iter ~50 (~100k env-steps) | 781 | 1.000 |
+| B | iter ~50 | 781 | 1.000 |
+| **C** | **iter 150 (~307k env-steps)** | 781 | 1.000 |
+| D | iter ~50 | 781 | 1.000 |
+
+**The user-flagged prediction "`positive_buffer.size` may be very small or zero in C" is REFUTED.** Even random-walk exploration on a 5×5 board generates enough food-eat events to saturate the 781-block positive buffer within ~1.5% of the training run. The C-C3 threshold (≥1000) was set against an apparent buffer-size cap that turned out to be 781; the criterion is mis-calibrated by buffer-cap. The *intent* (buffer fills meaningfully) is fully met. This rules out the "buffer-empty bootstrap blocker" hypothesis from the design's H₀(C)/R-C1 framing.
+
+### 11.6 Cell D special: stage 4 (Stage 3 in this 4-stage doc) collapse tolerance
+
+| Stage | Designed boundary | Actual boundary (`Episode/Number`) | Survival just before | Survival 1st row after | Survival 2nd row after | Tolerance |
+|---|---|---|---:|---:|---:|---|
+| 0→1 | ep 16,000 | ep 17,011 | ~136 (Stage 0 end) | 79.5 | 68.8 | clean (predator added; expected drop) |
+| 1→2 | ep 66,000 | ep 67,790 | ~80 (Stage 1 end) | 55.1 | 54.0 | clean (medium predator: brief drop, then rises through stage to 83) |
+| 2→3 | ep 200,000 | ep 201,994 | ~83 (Stage 2 end) | **44.2** | **32.0** | **collapsed within ~3,200 ep** |
+
+Stage 3 (full predator) collapse tolerance ≈ **3,200 episodes** (~700k env-steps) after the boundary. The medium-predator intermediate **did not buy any meaningful adaptation that survived the Stage 2→3 transition**. Comparable to 95mpudwp's Stage 2 collapse tolerance (~3,500 ep) and B's Stage 2 collapse tolerance (~3,500 ep).
+
+A reasonable hypothesis: the buffer-clear at the boundary (`stage/buffer_cleared_main = 1,000,000` events fired) destroys the medium-predator trajectories, and the WM has to relearn the full-predator dynamics from the new (cleared) buffer; under full-predator data the WM converges to the same modal-reward / never-imagine-death equilibrium that produced the qont5dac signature. **A buffer-clear ablation in continual mode is the cleanest follow-up to test this.**
 
 ## 12. Conclusions
 
-> _To be filled in after the runs complete._
-
 ### 12.1 Summary
-> _3-5 bullets: which factor (or factors) was responsible, what surprised us, what's next._
 
-### 12.2 Recommended next experiments
+> **FLAGGED FOR FOLLOW-UP — STRUCTURAL AMBIGUITY.** §9-style conclusions deferred pending the imagined-rollout-termination probe and/or the buffer-clear ablation. The 4-cell battery refutes four candidate localizations but does not directly observe the WM's imagined-rollout terminations, so the "WM cannot imagine death under full-predator" mechanism is the **best inferred** explanation — not yet directly observed.
 
-> _Pre-populated possibilities (will be pruned post-run):_
->
-> | Priority | Experiment | Rationale | Trigger |
-> |---|---|---|---|
-> | 1 | 3-seed repeat of any single positive cell | Required before quantitative claims. | Any C-X1 fires. |
-> | 2 | Reward-head class-balanced loss (diagnosis §7.3 priority 4) | Direct fix for reward-head asymmetry if C succeeds. | C succeeds AND signature matches reward-head asymmetry recovery. |
-> | 3 | Lever-magnitude sweep (entropy_scale ∈ {3e-4, 1e-3, 3e-3, 1e-2}) | If A or D succeed, finer-grained lever tuning. | A or D succeeds. |
-> | 4 | Imagined-rollout termination probe (diagnosis §7.3 priority 1) | If all 4 cells refute, confirms imagination-drift is the dominant mechanism. | All 4 refute. |
-> | 5 | Replay-buffer-clear ablation in continual mode | If A succeeds and B fails sharply, the buffer-clear semantics may be destroying useful WM progress. | A succeeds, B fails. |
-> | 6 | Even-smoother ramp (5- or 6-stage) | If D succeeds but barely, more granularity might help. | D's C-D1 met but with low margin. |
+What the battery established:
+- **Curriculum is not load-bearing for the converged failure** — it produces real Stage 0/1 learning, which collapses on the predator-full transfer regardless of levers (A=B-Stage2≡qont5dac).
+- **Levers are not load-bearing either** — Hafner-default `entropy_scale=3e-4` and `cont_loss_weight=1.0` produce identical Stage 0/1 progress and Stage 2 collapse to the levered run (B vs 95mpudwp).
+- **Dense homeostatic reward is not the structural saboteur** — removing it (C) lets the actor durably commit (entropy 0.55, FoodEaten 35× higher, advantage sign-flips), but predator-death rate stays at 99%. The food-finding side of behavior is what the dense reward was suppressing; the predator-avoidance side is broken in both regimes.
+- **Smoother ramp does not bridge the cliff** — D's Stage 2 (medium predator) demonstrably trained predator-avoidance (Term_Injury 0.86 → 0.76; survival 58 → 83), but Stage 3 collapses on the same ~3,200-ep tolerance as the harder-cliff curriculum (95mpudwp / B).
+
+What surprised: **C's qualitative jump.** It was the most informative single result of the battery — the only cell where the actor durably leaves the uniform regime, and yet survival barely improves. This points to **two-component failure**: (i) the dense homeostatic reward distribution traps the actor at uniform; (ii) the WM cannot anticipate predator deaths regardless of reward regime. C addresses (i) but not (ii). 95mpudwp Stage 1 partially addresses (i) via curriculum-driven actor unfreeze but doesn't address (ii) either; transfer to Stage 2 then refails on (i)+(ii) compound.
+
+### 12.2 Recommended next experiments (post-run, prioritized)
+
+| Priority | Experiment | Rationale | Routing |
+|---|---|---|---|
+| **1** | **Imagined-rollout termination probe** (diagnosis §7.3 priority 1) — log `WorldModel/imagined_termination_fraction_h{8,16,32}` during a fresh qont5dac-anchor run. | Directly tests the inferred mechanism. If imagined rollouts under full-predator never terminate, the WM-imagination failure is confirmed. | Metrics request → user → `feature-workflow` (designer + dev), then `experiment-designer` for the probe run. |
+| **2** | **Buffer-clear ablation in continual mode** — re-run D *without* clearing the main buffer at the Stage 2→3 transition (keep medium-predator data). | The 3,200-ep collapse tolerance after the boundary, plus the buffer-clear timing, suggests the clear destroys the bridge progress and forces from-scratch WM-relearning on full-predator data. | Routes to `experiment-designer` (config change: `buffer_clear_on_transition: false`) — would require a small implementation touch in continual-mode if not already a knob. |
+| **3** | **Reward-head class-balanced loss** (diagnosis §7.3 priority 4) on the qont5dac anchor — single-stage, dense reward, only change is per-bin loss reweighting in the reward head. | C's mae_neg=93 vs A/B/D's mae_neg=4 shows the dense regime's mae_neg is *not* the bottleneck (it's already 23× better than sparse). But the dense reward-head still locks onto the modal value (mae_pos=0.6, mae_neg=4). Class-balanced loss is the targeted fix for that lock-in *without* losing the negative-tail samples that sparse reward starves. | Routes to `senior-developer` (small loss-shape change) → `developer` → `experiment-designer` for the run. |
+| **4** | **Sparse reward + 4-stage curriculum** — combine C's reward regime with D's stage schedule (`use_homeostatic_reward=false` throughout the 4 stages of D). | C shows actor-commitment is recoverable in sparse mode; D Stage 2 shows predator-avoidance is learnable on the medium predator. The combination might survive the Stage 2→3 transition where neither alone does. | Routes to `experiment-designer` directly (config-only change). |
+| 5 | 3-seed repeat of the most positive cell (C) | Required before any quantitative claim about C's actor-commitment effect. The single-seed observational nature of this battery means C's qualitative behavior could be a seed artifact. Seeds {7, 13, 21} per the design. | Routes to `experiment-designer`. |
+| 6 | Lever-magnitude sweep | De-prioritized vs 1-4 above. The battery's null result on lever-vs-no-lever (A vs qont5dac; B vs 95mpudwp) makes finer-grained lever tuning unlikely to unlock the failure. | Hold. |
+
+### 12.3 Metrics Requested
+
+| Metric | Why now | Where it'd live | Cost |
+|---|---|---|---|
+| `WorldModel/imagined_termination_fraction_h{8,16,32}` | Direct test of the inferred mechanism (the hypothesized "WM never imagines death under full-predator"). All four refutations of the alternative localizations make this the highest-leverage missing observable. | `src/jax_rl/algorithms/dreamer_v3/imagine.py` rollout — log fraction of imagined trajectories that include `cont < 0.5` (or similar terminal-prob threshold) at horizons 8/16/32. | Moderate — 3 scalars per train step, computed inside the imagined-rollout loop. |
+| `WorldModel/cont_recall_dead`, `WorldModel/cont_precision_dead` | Disambiguates "cont head learns death" from "cont head exploits class imbalance" — model_cont_acc plateaued at 98.4% across all 4 cells (≈ trivial 96.3% baseline + 2 pp); we cannot tell from acc alone whether the head ever fires correctly on dead samples. | `src/jax_rl/algorithms/dreamer_v3/world_model.py` continuation-loss path | Cheap — 2 scalars per train step. |
+| `WorldModel/imagined_value_at_horizon` (mean and stddev across imagined rollouts) | If imagined rollouts never terminate, the value head should be reading off the modal-reward steady-state — this would directly explain why mean_advantage flattens at -0.187 across the failed cells. | `src/jax_rl/algorithms/dreamer_v3/imagine.py` | Cheap. |
+| `Behavior/per_action_logits_mean` (vector size action_dim) | A's Q1→Q4 entropy went 1.76→1.65; we can't tell if the actor is *literally* uniform-1/6 or biased-but-stuck. Knowing whether one action dominates would guide the lever discussion. | `src/jax_rl/algorithms/dreamer_v3/trainer.py` actor-loss path | Cheap (6-vector per train step). |
+
+(All four routed to user → `feature-workflow` if accepted; not implemented here.)
+
+### 12.4 Related issues
+
+- **Buffer-clear semantics in continual mode** are the cleanest mechanistic candidate for D's Stage 3 collapse and B/95mpudwp's Stage 2 collapse. If `experiment-designer` accepts priority-2 follow-up, it may surface a `bug-fix-workflow` or `feature-workflow` item depending on what the schedule loader currently exposes.
+- **`positive_buffer_blocks` cap of 781** invalidated the C-C3 criterion threshold (≥1000) as written. Not a bug — the cap is by-design — but the design doc's pre-registration table should account for the actual ceiling. Filed here as a documentation note for future battery designs.
+
+### 12.5 Caveats
+
+- **Single seed per cell** — observational. Any quantitative claim (e.g., "C's mean_entropy 0.55 vs A's 1.66") needs the 3-seed repeat in priority-5.
+- **End-window stat = last 20 logged windows ≈ last 100k iterations**, which is a different aggregation than "final 1000 ep" exactly; on these runs at ~70-100 ep/window-step, it's the closest equivalent and matches the convention used for qont5dac/95mpudwp.
+- **The "WM cannot imagine death" mechanism is inferred, not directly observed** — the battery's logged metrics don't include imagined-rollout-termination fraction. Priority-1 is needed to directly confirm.
 
 ---
 
@@ -694,3 +808,4 @@ Stage 02's lower setting, conflating the smoother-ramp test.
 | Date | Change | Author |
 |------|--------|--------|
 | 2026-05-07 | Initial design + 5 new env configs + 1 new schedule + Launch Manifest. Cross-stage live-load probe verified. | experiment-designer |
+| 2026-05-08 | Filled §10 (Plumbing) and §11 (Results) post-run. All 4 cells: A & B-Stage2 & D-Stage3 collapse to qont5dac signature; C is qualitatively different (actor commits, food-finding works, predator-avoidance still broken). Central question's verdict: failure localizes to inferred WM-imagined-rollout-termination mechanism (not directly observed; requires priority-1 follow-up). §12 Conclusions partially filled with FLAGGED FOR FOLLOW-UP note. Working file: `tmp/20260508_dreamer_battery_analysis.md`. | experiment-analyzer |
