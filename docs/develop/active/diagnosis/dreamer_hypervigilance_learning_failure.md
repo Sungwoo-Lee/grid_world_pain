@@ -342,3 +342,7 @@ The user's run-tag IDs `20260507-004915_rppo...` and `20260507-005008_dreamer...
 | Date | Change | Author |
 |---|---|---|
 | 2026-05-07 | Initial analysis | senior-developer |
+
+### D. See also
+
+- Curriculum recovery experiment built on this diagnosis (priority 2 + priority 5 levers + 3-stage food→predator curriculum): [`docs/experiments/active/continual_learning/DREAMER_CURRICULUM_FOOD_THEN_PREDATOR.md`](../../../experiments/active/continual_learning/DREAMER_CURRICULUM_FOOD_THEN_PREDATOR.md)

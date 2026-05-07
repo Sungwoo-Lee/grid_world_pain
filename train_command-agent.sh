@@ -73,14 +73,14 @@
 # ---------------------------------------------------------------------------
 
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --configs-dir configs/experiment/basic/ \
-  --continual-schedule configs/continual/basic_5x5_NoPred_to_PredInt3.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --configs-dir configs/experiment/dreamer_curriculum/ \
+  --continual-schedule configs/continual/dreamer_curriculum_food_then_predator.yaml \
+  --agent_config configs/models/dreamer_v3_curriculum.yaml \
   --num-envs 16 \
   --seed 0 \
-  --device cuda:1 \
-  --log-interval 5 \
-  --wandb-group continual_demo \
-  --wandb-job-type demo \
-  --wandb-name "continual_5x5_NoPred-to-PredInt3_rppo_s0" \
-  --tag "continual_5x5_NoPred-to-PredInt3_rppo_s0"
+  --device cuda:3 \
+  --log-interval 50 \
+  --wandb-group dreamer_curriculum \
+  --wandb-job-type curriculum \
+  --wandb-name "dreamer_curriculum_food_then_predator_s0" \
+  --tag "dreamer_curriculum_food_then_predator_s0"
