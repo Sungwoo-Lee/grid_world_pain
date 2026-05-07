@@ -57,6 +57,13 @@ You may create, edit, and delete files anywhere in the codebase, including:
 - Save intermediate results (training logs, intermediate metrics, large grep outputs) to `tmp/` files rather than holding them in context.
 - Avoid redundant work — do not run the same test or extract the same data through multiple paths.
 
+## Scratch Files & Debugging Artifacts
+
+- **All temporary debugging artifacts go in `tmp/`** — throwaway scripts, debug prints output, scratch notebooks, ad-hoc test snippets, comparison logs, captured stdout/stderr, intermediate metric dumps, profiling output, frame dumps. Never leave them in `src/`, `scripts/`, `configs/`, or the repo root.
+- **Name with a timestamp prefix** so files are sortable and easy to clean up: `tmp/YYYYMMDD_HHMMSS_<topic>.<ext>` (e.g., `tmp/20260506_170049_speed_check_before.log`, `tmp/20260506_170200_pytree_debug.py`).
+- **Do not commit `tmp/` files** — they are scratch space. If a debugging artifact turns out to be worth keeping (e.g., a useful regression test), promote it to its proper home (`tests/`, `scripts/`, `docs/`) with a non-tmp name and only then stage it.
+- **Reuse, don't accumulate** — when starting a new debugging session, glance at `tmp/` first. If an old scratch file from the same investigation already exists, append to it rather than spawning a near-duplicate.
+
 ## What You Do NOT Do
 
 - **Do not write or revise plans, analyses, or verification reports.** Those are the `senior-developer`'s job. If you discover something that should change in the plan, flag it in the Implementation Report and let `senior-developer` revise.
