@@ -56,3 +56,14 @@ The canonical flows, parallelism heuristics, cross-cutting constraints, and anti
 - **Working files.** Intermediate results to `tmp/YYYYMMDD_HHMMSS_<topic>.md`, written after each step.
 - **Parallelism.** OK for independent tasks; sequential for hand-off chains; shell loops beat parallel agents for mechanical batch work.
 - **Auto-commit.** Standing authorization to `git add` and `git commit` without asking, at logical sub-task boundaries — one coherent change per commit, separate commits for unrelated work (do not batch). Skip if the change is incomplete (failing tests, half-done implementation). Stage specific files by name (never `git add -A` / `.`). Match the existing message style — check `git log` for the project's conventional-commit + gitmoji format. Never commit secrets, never use `--no-verify`, never push.
+
+---
+
+## Session memory
+
+This project carries two memory layers; future-Claude must know which one to write to.
+
+- **Built-in auto-memory** at `~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/memory/MEMORY.md` — short typed rules another agent must obey on every invocation, with a sibling `feedback_*.md` per rule. User-and-machine-local; not under git.
+- **In-repo session memory** at `.claude-memory/` — multi-section session insights with rationale, decisions, follow-ups, and an optional raw-conversation archive. Version-controlled with the repo.
+
+When memory work is requested, read `.claude-memory/CLAUDE.md` (operating manual) and `.claude-memory/ROOT_INDEX.md` (topic registry) before capturing or recalling. The division-of-labor decision rule and capture triggers live in `.claude-memory/CLAUDE.md`; the design rationale and worked routing examples live in [docs/develop/active/meta/claude_memory_system_design.md](docs/develop/active/meta/claude_memory_system_design.md).

@@ -35,3 +35,11 @@ claude_data/
 skills/notebooklm/data/
 skills/notebooklm/.venv/
 !skills/
+
+# Claude session-memory soft-delete bin (track placeholder, ignore the rest)
+.claude-memory/.trash/*
+!.claude-memory/.trash/.gitkeep
+
+# Claude session-memory raw conversation archive — local-only, not committed
+.claude-memory/_archive/raw_conversations/*.md
+!.claude-memory/_archive/raw_conversations/.gitkeep
