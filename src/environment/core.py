@@ -437,6 +437,10 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         'rested': rested,
         'hit_hiding_predator': jnp.any(jnp.logical_and(interact_resource, is_hiding_predator)),
         'hit_predator': jnp.any(at_predator),
+        'hit_neutral': (
+            jnp.any(jnp.all(state.neutral_pos == new_agent_pos, axis=-1))
+            if state.neutral_pos.shape[0] > 0 else jnp.array(False)
+        ),
     }
     
     new_satiation, new_nutrition, new_injury, next_injury_buffer, next_nociception_history, new_rest_streak, done = update_body(state, info, params)
@@ -490,8 +494,12 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # GPU-side distance calculations for stats
     dist_to_food = jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 0), jnp.linalg.norm(state.res_pos - new_agent_pos, axis=-1), 99.0)) if state.res_pos.shape[0] > 0 else 99.0
     dist_to_pred = jnp.min(jnp.linalg.norm(state.pred_pos - new_agent_pos, axis=-1)) if state.pred_pos.shape[0] > 0 else 99.0
+    dist_to_neutral = jnp.min(jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)) if state.neutral_pos.shape[0] > 0 else 99.0
+    dist_to_hiding_predator = jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 1), jnp.linalg.norm(state.res_pos - new_agent_pos, axis=-1), 99.0)) if state.res_pos.shape[0] > 0 else 99.0
     info['dist_to_food'] = dist_to_food
     info['dist_to_pred'] = dist_to_pred
+    info['dist_to_neutral'] = dist_to_neutral
+    info['dist_to_hiding_predator'] = dist_to_hiding_predator
 
     # 7. Final State
     new_state = state._replace(

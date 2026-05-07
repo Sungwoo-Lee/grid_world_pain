@@ -615,6 +615,7 @@ class DreamerTrainer(nnx.Module):
                 'ate_food': info['ate_food'].astype(jnp.float32),
                 'hit_predator': info['hit_predator'].astype(jnp.float32),
                 'hit_hiding_predator': info['hit_hiding_predator'].astype(jnp.float32),
+                'hit_neutral': info['hit_neutral'].astype(jnp.float32),
                 'event_collided': info['event_collided'].astype(jnp.float32),
                 'rested': info['rested'].astype(jnp.float32),
                 'damage': info['damage'],
@@ -623,6 +624,8 @@ class DreamerTrainer(nnx.Module):
                 'damage_obstacle': info['damage_obstacle'],
                 'dist_to_food': info['dist_to_food'],
                 'dist_to_pred': info['dist_to_pred'],
+                'dist_to_neutral': info['dist_to_neutral'],
+                'dist_to_hiding_predator': info['dist_to_hiding_predator'],
                 'termination_reason': info['termination_reason'].astype(jnp.float32),
             }
             

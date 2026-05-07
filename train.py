@@ -936,9 +936,11 @@ def main():
     ep_info_buffer = deque(maxlen=100)
     
     # Behavioral event accumulators (per-env, reset on episode done)
-    BEHAVIOR_KEYS = ['ate_food', 'hit_predator', 'hit_hiding_predator', 'event_collided', 'rested',
+    BEHAVIOR_KEYS = ['ate_food', 'hit_predator', 'hit_hiding_predator', 'hit_neutral',
+                     'event_collided', 'rested',
                      'damage', 'damage_predator', 'damage_hiding_predator', 'damage_obstacle']
-    BEHAVIOR_DIST_KEYS = ['dist_to_food', 'dist_to_pred']  # Need mean, not sum
+    BEHAVIOR_DIST_KEYS = ['dist_to_food', 'dist_to_pred',
+                          'dist_to_neutral', 'dist_to_hiding_predator']  # Need mean, not sum
 
     episode_behavior = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_KEYS}
     episode_dist_sums = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_DIST_KEYS}
@@ -1241,7 +1243,6 @@ def main():
                                 "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
                                 "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
                                 # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
-                                # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
                                 "Episode/DangerHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                                 "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
                                 "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
@@ -1251,6 +1252,10 @@ def main():
                                 "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
                                 "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
                                 "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
+                                "Episode/MeanDistRabbit": np.mean([ep['dist_to_neutral'] for ep in iteration_episodes]),
+                                "Episode/MeanDistHidingPredator": np.mean([ep['dist_to_hiding_predator'] for ep in iteration_episodes]),
+                                "Episode/RabbitHits": np.mean([ep['hit_neutral'] for ep in iteration_episodes]),
+                                "Episode/HidingPredatorHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                             })
                             # Termination reason distribution (fraction of episodes ending each way)
                             term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
@@ -1261,7 +1266,7 @@ def main():
                     # Update progress bar based on total episodes completed
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
                     pbar.refresh()
-                    
+
                     avg_policy_loss = jnp.mean(jnp.array([l[1][0] for l in losses]))
                     avg_value_loss = jnp.mean(jnp.array([l[1][1] for l in losses]))
                     avg_ent_loss = jnp.mean(jnp.array([l[1][2] for l in losses]))
@@ -1507,6 +1512,10 @@ def main():
                                 "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
                                 "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
                                 "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
+                                "Episode/MeanDistRabbit": np.mean([ep['dist_to_neutral'] for ep in iteration_episodes]),
+                                "Episode/MeanDistHidingPredator": np.mean([ep['dist_to_hiding_predator'] for ep in iteration_episodes]),
+                                "Episode/RabbitHits": np.mean([ep['hit_neutral'] for ep in iteration_episodes]),
+                                "Episode/HidingPredatorHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                             })
                             # Termination reason distribution (fraction of episodes ending each way)
                             term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
@@ -1712,14 +1721,18 @@ def main():
                                     "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
                                     "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
                                     "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistRabbit": np.mean([ep['dist_to_neutral'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistHidingPredator": np.mean([ep['dist_to_hiding_predator'] for ep in iteration_episodes]),
+                                    "Episode/RabbitHits": np.mean([ep['hit_neutral'] for ep in iteration_episodes]),
+                                    "Episode/HidingPredatorHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                                 })
                                 # Termination reason distribution
                                 term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                                 for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
                                     ep_logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
-                            
+
                             wandb.log(ep_logs)
-                        
+
                         wandb.log(logs)
 
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
@@ -1876,14 +1889,18 @@ def main():
                                     "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
                                     "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
                                     "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistRabbit": np.mean([ep['dist_to_neutral'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistHidingPredator": np.mean([ep['dist_to_hiding_predator'] for ep in iteration_episodes]),
+                                    "Episode/RabbitHits": np.mean([ep['hit_neutral'] for ep in iteration_episodes]),
+                                    "Episode/HidingPredatorHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                                 })
                                 # Termination reason distribution
                                 term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                                 for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
                                     ep_logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
-                            
+
                             wandb.log(ep_logs)
-                        
+
                         wandb.log(logs)
 
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
@@ -1982,12 +1999,16 @@ def main():
                                     "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
                                     "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
                                     "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistRabbit": np.mean([ep['dist_to_neutral'] for ep in iteration_episodes]),
+                                    "Episode/MeanDistHidingPredator": np.mean([ep['dist_to_hiding_predator'] for ep in iteration_episodes]),
+                                    "Episode/RabbitHits": np.mean([ep['hit_neutral'] for ep in iteration_episodes]),
+                                    "Episode/HidingPredatorHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
                                 })
                                 # Termination reason distribution
                                 term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                                 for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
                                     ep_logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
-                            
+
                             wandb.log(ep_logs)
 
                         if losses:

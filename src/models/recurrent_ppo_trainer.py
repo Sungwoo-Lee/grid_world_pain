@@ -9,6 +9,7 @@ class StepInfo(NamedTuple):
     ate_food: jnp.ndarray
     hit_predator: jnp.ndarray
     hit_hiding_predator: jnp.ndarray
+    hit_neutral: jnp.ndarray
     event_collided: jnp.ndarray
     rested: jnp.ndarray
     damage: jnp.ndarray
@@ -17,6 +18,8 @@ class StepInfo(NamedTuple):
     damage_obstacle: jnp.ndarray
     dist_to_food: jnp.ndarray
     dist_to_pred: jnp.ndarray
+    dist_to_neutral: jnp.ndarray
+    dist_to_hiding_predator: jnp.ndarray
     termination_reason: jnp.ndarray
 
 class Transition(NamedTuple):
@@ -192,6 +195,7 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
             ate_food=info['ate_food'],
             hit_predator=info['hit_predator'],
             hit_hiding_predator=info['hit_hiding_predator'],
+            hit_neutral=info['hit_neutral'],
             event_collided=info['event_collided'],
             rested=info['rested'],
             damage=info['damage'],
@@ -200,6 +204,8 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
             damage_obstacle=info['damage_obstacle'],
             dist_to_food=info['dist_to_food'],
             dist_to_pred=info['dist_to_pred'],
+            dist_to_neutral=info['dist_to_neutral'],
+            dist_to_hiding_predator=info['dist_to_hiding_predator'],
             termination_reason=info['termination_reason'],
         )
         trans = Transition(
