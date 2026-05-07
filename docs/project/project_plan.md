@@ -29,6 +29,80 @@ multiplicative π̂ blend is dropped per RL-BDL §1.4. The framing
 scaffold (six minimum claims, seven gaps G-A through G-G) is in
 [ideas/nature_mi_paper_framing.md](ideas/nature_mi_paper_framing.md).
 
+## Open work items (current punch list)
+
+The plan below is the full program. The immediate next actions, in
+order, are listed here so the working state is visible from the top.
+Strike items as they land; cross-link the resulting docs / commits.
+
+- [ ] **Resolve G1′ blockers** before launching the diagnostic.
+  Three decisions surfaced by the design doc at
+  [../experiments/active/g1_prime_diagnostic/G1_PRIME_CHANNEL_RANK_DIAGNOSTIC.md](../experiments/active/g1_prime_diagnostic/G1_PRIME_CHANNEL_RANK_DIAGNOSTIC.md):
+    - **Canonical noise preset.** Designer recommends
+      `configs/experiment/hypervigilance/01-interoNocicept_noise.yaml`
+      (σ profile matches v8 NMN diagnosis verbatim; full
+      `interoceptive_nociception` + `extero_nociception` schema needed
+      by G2′; filed under `hypervigilance/`). Confirm or override.
+    - **Checkpoint strategy.** Codebase has no parameter save/load
+      (verified: v8 wandb dirs contain logs + media only;
+      `grep -rni 'checkpoint' src/` returns evaluation-checkpoint hooks
+      where `params` are passed in-process, never persisted).
+      Designer's preferred frozen-head-on-existing-checkpoint
+      implementation (a) is not viable as written. Options:
+        - **(i)** single-process freeze-then-continue — ~3 hr/seed full
+          LN training in-memory + ~12 min head fit;
+        - **(ii)** add orbax-style param save/load infra first
+          (~2–3 days `senior-developer` + `developer`); reusable across
+          the ~138–168-run program — fold into Phase 0 / Phase 2 plan;
+        - **(iii)** designer's rejected co-train (b) — kept as
+          fallback only.
+    - **Reconstruction target.** Clean $o^{\text{true}}_{t+1}$
+      (designer default; AI-correct under the
+      "$1/\Sigma_i$ refers to the signal" reading) vs. noisy
+      $o_{t+1}$.
+- [ ] **Phase 0 implement → audit → launch → analyze** the G1′
+  diagnostic. After blockers are resolved:
+  `senior-developer` plans the `g1_prime_logger.*` schema + logger
+  module + analysis script in `docs/develop/active/` →
+  `developer` implements → `senior-developer` verify +
+  `env-config-auditor` audit (parallel) →
+  `training-runner` launches (needs node + GPU; collect via
+  AskUserQuestion at the spawn boundary) →
+  `experiment-analyzer` runs `scripts/g1_prime_pass_fail.py` and
+  fills §4–§6 of the design doc against the ratio > 2 threshold.
+- [ ] **Phase 2 architecture plan + configs + implementation.**
+  Sequential after G1′ passes (designer's configs reference
+  architectural keys senior-developer's plan must define first):
+  `senior-developer` plans the §3 build (C1 EMA per RL-BDL §4 spec;
+  per-injection-site learnable-τ filters; multiplicative π̂ blend
+  removal; T/P split modulator with $T \leftarrow P$ coupling and
+  hysteresis; opioid-analog descending head) in
+  `docs/develop/active/` →
+  `experiment-designer` authors C0/C1/C2 configs + rung-{1,3,5}
+  configs + headline factorial + λ_prec sweep + cross-rung transfer
+  + G2′ five-quantity pre-registration in `configs/` and
+  `docs/experiments/active/` →
+  `developer` implements →
+  4-way parallel review (`senior-developer` verify +
+  `code-reviewer` + `math-reviewer` + `env-config-auditor`).
+- [ ] **Phase 3 headline factorial launch + analysis.** ~138–168 runs
+  across rungs {1, 3, 5} plus C0/C1/C2 plus the H5 T/P + opioid
+  sub-factorial on rung 5. Node + GPU **schedule** (not just one
+  pair — run plan needs batching across nodes 101–114) needed before
+  launch. `training-runner` × N (one per manifest row; runner fills
+  actuals) → `experiment-analyzer` reads the Launch Manifest as
+  authoritative inventory and applies the §4.2 G2′ five-property
+  fingerprint + the §2bis C1 cross-channel rate-of-rise dissociation
+  + the C2 cross-domain $r$ contrast + the §3.1 τ-ordering check.
+- [ ] **Phase 4 readout** (gated on Phase 3 dissociation + G2′ items
+  1–4). Time-locked traces, H4 cross-correlation, τ-ordering test,
+  H5 chronic-regime classifier, cross-rung modulator-state-freeze
+  transfer probe, survival benefit Δ. Maps to §5 Phase 4.
+
+Orchestration sequence is in
+[ideas/nature_mi_paper_framing_synthesis.md §5](ideas/nature_mi_paper_framing_synthesis.md);
+spawn `agent-manager` with this section as the brief to resume.
+
 ## 1. Project Goal
 
 **GridWorld Pain** is a reinforcement-learning research platform for
