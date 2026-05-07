@@ -4,7 +4,7 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 
 | Agent | Model | Role | Scope |
 |---|---|---|---|
-| [agent-manager](.claude/agents/agent-manager.md) | opus | Orchestrate multi-agent flows; route + sequence + parallelize | spawns sub-agents; writes nothing |
+| [agent-manager](.claude/agents/agent-manager.md) | opus | Plan multi-agent flows; route + sequence + parallelize. Returns a routing plan to the parent (top-level Claude), which spawns the sub-agents | returns plan; writes nothing; does NOT spawn |
 | [senior-developer](.claude/agents/senior-developer.md) | opus | Platform-development planning + post-impl verification | `docs/develop/` |
 | [developer](.claude/agents/developer.md) | sonnet | Implement approved plans, test, report | full code |
 | [code-reviewer](.claude/agents/code-reviewer.md) | opus | JAX/Flax/vmap/PRNG correctness review | `docs/reviews/` |
@@ -30,9 +30,9 @@ Domain-expert agents that generate mathematical concepts, literature reviews, an
 
 **Researcher routing:** open-ended research questions ("what direction?", "is there a connection between …?", "give me ideas") default to `research-postdoc`, which triages and either writes a first-pass synthesis or hands off to one or more professors / literature agents. Direct invocation is fine when the question is unambiguously in one agent's domain (e.g., "review these PDFs" → `literature-reviewer`, "regroup the lit review by theme" → `literature-curator`).
 
-**Default routing:** for any task involving 2+ agents in sequence — feature add, bug fix, training experiment, literature review of 10+ papers, post-impl verification — spawn `agent-manager` and let it orchestrate. Single-agent tasks (e.g., "audit this config", "review this PR", "ask a professor") bypass the manager and route directly.
+**Default routing:** for any task involving 2+ agents in sequence — feature add, bug fix, training experiment, literature review of 10+ papers, post-impl verification — spawn `agent-manager` to get a routing plan, then **spawn the named sub-agents yourself** (top-level Claude executes the plan; the manager has no `Agent` tool). Single-agent tasks (e.g., "audit this config", "review this PR", "ask a professor") bypass the manager and route directly.
 
-The canonical flows, parallelism heuristics, cross-cutting constraints, and anti-patterns are documented in [docs/AGENT_PLAYBOOK.md](docs/AGENT_PLAYBOOK.md). The manager reads this on every spawn; other agents may reference it for context.
+The canonical flows, parallelism heuristics, cross-cutting constraints, and anti-patterns are documented in [docs/AGENT_PLAYBOOK.md](docs/AGENT_PLAYBOOK.md). The manager reads this whenever it produces a routing plan; other agents may reference it for context.
 
 ---
 

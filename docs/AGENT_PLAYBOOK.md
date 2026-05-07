@@ -1,6 +1,6 @@
 # Agent Playbook
 
-The orchestration layer for the project's agent team. Read by `agent-manager` on every spawn; readable by other agents (and the user) for reference. Each agent profile in `.claude/agents/` says *what that agent does*; this doc says *who comes after whom and when*.
+The orchestration layer for the project's agent team. Read by `agent-manager` whenever it is producing a routing plan; readable by other agents (and the user) for reference. Each agent profile in `.claude/agents/` says *what that agent does*; this doc says *who comes after whom and when*. The `agent-manager` translates a request into a routing plan using this doc; the **parent (top-level Claude) executes the plan** by spawning the named sub-agents.
 
 Keep this doc small. Anything agent-specific belongs in the agent's profile. Only **cross-cutting orchestration patterns** live here.
 
@@ -67,7 +67,7 @@ The Launch Manifest is the **system-of-record** binding experimental cells to Wa
 | `training-runner` | Planned columns (to apply at launch) | Actual columns (Status, Node, GPU, Launched at, WandB run ID, Log path) of the row it launched |
 | `experiment-analyzer` | Whole table (run discovery) | — (analyzer never writes the manifest) |
 
-`training-runner` does NOT pick its own node/GPU — there is no monitoring source available to it. The agent-manager (or the user, in a direct invocation) collects node + GPU upfront and passes them in the spawn prompt. Bundling this with the launch-approval step is cheaper than letting the runner spawn, halt, and require a re-spawn.
+`training-runner` does NOT pick its own node/GPU — there is no monitoring source available to it. The `agent-manager` flags this as an `[ASK USER UPFRONT]` item in its routing plan, and the **parent (top-level Claude)** collects node + GPU before spawning the runner and passes them in the spawn prompt. Bundling this with the launch-approval step is cheaper than letting the runner spawn, halt, and require a re-spawn.
 
 For **one-off launches with no plan doc** (ad-hoc / debugging), the runner falls back to its default tag/wandb-name convention (see its profile §3a Path B). The convention is parallel to (and consistent with) the designer's manifest convention, so ad-hoc and planned runs interleave cleanly in WandB.
 
@@ -99,7 +99,7 @@ Sharding rules for the parallel case:
 
 ## Cross-Cutting Constraints
 
-These apply across multiple flows; the manager (or invoking agent) enforces them:
+These apply across multiple flows. The `agent-manager` flags them as preconditions in its routing plan; the **parent** enforces them at spawn time. Other invoking agents (when bypassing the manager for single-agent tasks) enforce them directly.
 
 - **env-config-auditor in parallel** with senior-developer's verification, whenever the diff touches configs/, src/environment/, or sensor/observation/noise code. Two orthogonal checks: SD verifies plan adherence; auditor verifies env↔config soundness.
 - **WandB analysis uses local files only.** `wandb/run-YYYYMMDD_HHMMSS-<id>/` — never the WandB web API.
@@ -112,7 +112,7 @@ These apply across multiple flows; the manager (or invoking agent) enforces them
 
 ## Anti-Patterns to Catch
 
-The manager (and any invoking agent) should detect and push back on these before spawning sub-agents:
+The `agent-manager` flags these in its routing plan; the parent (or any directly-invoking agent) pushes back on them before spawning sub-agents:
 
 - **"Analysis but no design exists"** — user asks for analysis of pre-registered hypothesis but there's no design doc. Push back: do you want Mode B post-hoc (weaker), or should we design first?
 - **"Bug fix but the plan rewrites the design"** — root cause is a project-design issue, not a localized bug. Escalate to feature flow.
@@ -133,7 +133,7 @@ The manager (and any invoking agent) should detect and push back on these before
 ## Failure-Recovery Patterns
 
 - **`training-runner` halts on missing config** → route to `experiment-designer`, then re-launch.
-- **`training-runner` halts on missing node/GPU** → orchestration bug, not a runner bug. The caller (agent-manager or user) should have supplied node + GPU in the spawn prompt. Collect them via `AskUserQuestion` and re-spawn — but treat this as a one-off; the proper path is to ask upfront, before the first spawn.
+- **`training-runner` halts on missing node/GPU** → orchestration bug, not a runner bug. The parent should have supplied node + GPU in the spawn prompt (the `agent-manager`'s routing plan flags this as an upfront ask). Collect them via `AskUserQuestion` and re-spawn — but treat this as a one-off; the proper path is to ask upfront, before the first spawn.
 - **`training-runner` halts on a plan-driven launch with `Status: running` or `completed` already** → the row was launched once already. Ask the user whether to re-launch (creates a duplicate WandB run) or pick a different row.
 - **`experiment-analyzer` finds a manifest row with `Status: planned` or `running`** → run not ready. Skip and surface to user; do not block the rest of the analysis.
 - **`env-config-auditor` flags 🔴** → resolve before any launch; loop back through `experiment-designer` if the design itself is wrong.
