@@ -5,8 +5,8 @@
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
 **Last updated**: 2026-05-08
-**Active folders**: 1
-**Total insights**: 1
+**Active folders**: 2
+**Total insights**: 3
 **Last audit**: (none)
 
 ---
@@ -15,7 +15,8 @@
 
 | Folder | Definition (1 line) | Insights | Last update | Top tags |
 |---|---|---|---|---|
-| `memory_system_design` | Claude memory system's own design decisions | 1 | 2026-05-08 | [memory, design, decision] |
+| `memory_system_design` | Claude memory system's own design decisions | 2 | 2026-05-08 | [memory, design, decision, skill] |
+| `subagent_engineering` | Subagent + worktree usage gotchas | 1 | 2026-05-08 | [meta, learned_lesson, worktree, subagent] |
 
 ---
 
@@ -47,4 +48,5 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-08: Captured 2 insight(s): `20260508_0429_memorize_skill_design_and_ship` into `memory_system_design`, `20260508_0430_worktree_isolation_path_safety` into the new `subagent_engineering` folder.
 - 2026-05-08: Created. Added `memory_system_design` folder (genesis insight: `20260508_0315_claude_memory_system_genesis`).

@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `memory_system_design` topic.
 
 **Folder definition**: Claude memory system's own design decisions
-**Insights**: 1
+**Insights**: 2
 **Last updated**: 2026-05-08
 
 ---
@@ -13,10 +13,12 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-08 | 04:29 | `20260508_0429_memorize_skill_design_and_ship` | Designed and shipped the `/memorize` Claude Code skill that captures conversations into `.claude-memory/`; validated end-to-end with a 3-eval benchmark (with-vs-without skill: +33pt). |
 | 2026-05-08 | 03:15 | `20260508_0315_claude_memory_system_genesis` | Design decisions for in-repo `.claude-memory/` layer: coexists with built-in MEMORY.md; insight density splits the two layers; archives are local-only/gitignored. |
 
 ---
 
 ## Change history
 
+- 2026-05-08: Added insight `20260508_0429_memorize_skill_design_and_ship` (`/memorize` skill ship).
 - 2026-05-08: Folder created. Added genesis insight `20260508_0315_claude_memory_system_genesis`.
