@@ -141,41 +141,51 @@ Notes:
 
 ### 4b. Post-launch sanity: confirm exactly ONE process started
 
-Right after `run_command.py` returns, verify exactly one `train.py` process matching this launch's `--tag` is alive on the target node. Use SSH key auth (no password):
+Right after `run_command.py` returns, verify exactly one `train.py` process matching this launch's `--tag` is alive on the target node. **Preferred check:** use `terminate_command.py` in scan-and-abort mode — it's already wired for this exact pattern, gives a tidy printout, and aborts cleanly when the user (or `--yes` is omitted) does not confirm a kill:
 
 ```bash
-ssh vncuser@192.168.0.<NODE> "pgrep -af 'train.py.*--tag <TAG>'"
+echo "n" | ./terminate_command.py <NODE> "<TAG>"
+```
+
+This prints the matching PIDs and command lines, then exits without killing anything (because the prompt is answered "n"). Equivalent direct-SSH form is also fine when you don't want the wrapper:
+
+```bash
+ssh -o BatchMode=yes -p 1800 vncuser@192.168.0.<NODE> "pgrep -af 'train.py.*--tag <TAG>'"
 ```
 
 Expected: a single PID (the one you just launched).
 
-If 2+ PIDs come back — something went wrong (re-fired script, race in `run_command.py`, residue from a prior session, hook re-trigger). **Halt** and instruct the user to clean up via `terminate_command.py` (see §4c). Do NOT declare success, do NOT auto-relaunch, do NOT update the manifest.
+If 2+ PIDs come back — something went wrong (re-fired script, race in `run_command.py`, residue from a prior session, hook re-trigger). **Halt** and clean up via `terminate_command.py` per §4c. Do NOT declare success, do NOT auto-relaunch, do NOT update the manifest.
+
+If 0 PIDs come back — the launch failed (config error, immediate exit). Tail the log for the error and surface it. Do not retry without surfacing the failure first.
 
 This check is mandatory. A run with siloed duplicates wastes the GPU, produces multiple WandB runs that fight for the same name/tag, and makes downstream analysis ambiguous.
 
 ### 4c. Process termination via `terminate_command.py`
 
-For graceful kill of runaway / duplicate / abandoned training processes:
+For graceful kill of runaway / duplicate / abandoned training processes. **You can run this directly** — `terminate_command.py` was refactored on 2026-05-07 to use SSH key auth (matches `run_command.py`) and now supports a `--yes` flag for non-interactive use. The previous `pexpect`/`getpass` interactive-password version is gone.
 
 - **Script:** `/media/nas01/projects/Interoceptive-AI/grid_world_pain/terminate_command.py`
-- **Usage:** `./terminate_command.py <nodes> <pattern> [-f]`
-- **Behavior:** Two-stage — STAGE 1 scans (lists matches across nodes), STAGE 2 prompts for confirmation, then kills.
+- **Usage:** `./terminate_command.py <nodes> <pattern> [-f] [-y]`
+- **Behavior:** Two-stage — STAGE 1 scans (lists matches across nodes), STAGE 2 prompts for confirmation (skipped if `-y`), then kills.
 - **Default signal:** SIGINT (graceful — lets the run finish current iter and close WandB cleanly).
-- **`-f` / `--force`:** SIGTERM (immediate). Use **only** after SIGINT failed to take effect within ~30s.
+- **`-f` / `--force`:** SIGTERM (immediate). Use **only** after SIGINT failed to take effect within ~30 s.
+- **`-y` / `--yes`:** Skip the interactive `(y/N)` confirmation. Use when you've already shown the user the scan output and gotten approval (or when scanned output unambiguously matches the duplicates you intended to kill).
 - **Node selection:** `101`, `101-105`, `101,102,110`, `all`, or `101,105-107,110`.
 
-**You cannot run this directly.** `terminate_command.py` requires interactive SSH password (`getpass`), unlike `run_command.py` which uses key auth. When you need a kill, **halt** and tell the user to run it themselves via the `!` prefix in their prompt:
+**Recommended kill flow** for the duplicate-launch case (the §4b failure mode):
 
-```
-! ./terminate_command.py 114 <tag-or-wandb-name>
-```
+1. Scan first: `echo "n" | ./terminate_command.py <NODE> "<TAG>"` — see what's there, abort.
+2. Show the scan output to the user. Confirm with them which PIDs to kill.
+3. Kill: `./terminate_command.py <NODE> "<TAG>" --yes` (SIGINT, with auto-confirm because the user already approved in step 2).
+4. Wait ~10 s, re-scan. If PIDs persist: escalate with `-f -y`. Re-scan again.
+5. Re-launch a single fresh process per the standard launch workflow.
 
-Always scope by tag/wandb-name — never by a generic pattern like `python` or `train.py`. After the user confirms cleanup, ask them to re-invoke you for a fresh launch.
-
-**Hard "Do Nots" for terminate_command.py guidance:**
-- Never tell the user to run `terminate_command.py all <generic-pattern>` — that nukes everything across the cluster.
-- Never escalate to `-f` (SIGTERM) without first attempting SIGINT and waiting at least 30s.
-- Never use `terminate_command.py` to "fix" anything other than rogue processes — it is not a launch tool.
+**Hard "Do Nots":**
+- Never run `terminate_command.py all <generic-pattern>` (e.g. `all "python"`, `all "train.py"`) — that nukes everything across the cluster, including other users' work. Always scope by tag/wandb-name.
+- Never use `-f` (SIGTERM) before attempting SIGINT and waiting at least 30 s — graceful shutdown lets WandB close the run cleanly.
+- Never use `terminate_command.py` for anything other than rogue/duplicate/abandoned processes — it is not a launch tool, not a general process-management tool.
+- Never use `--yes` without first showing the user the scanned output and getting approval to proceed (unless explicitly authorized for autonomous duplicate-kill in this turn).
 
 ### 5. Update the manifest (Path A only)
 
