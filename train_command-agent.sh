@@ -73,14 +73,14 @@
 # ---------------------------------------------------------------------------
 
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/experiment/basic/00-5X5_NoPred.yaml \
-  --agent_config configs/models/dreamer_v3.yaml \
+  --configs-dir configs/experiment/basic/ \
+  --continual-schedule configs/continual/basic_5x5_NoPred_to_PredInt3.yaml \
+  --agent_config configs/models/recurrent_ppo.yaml \
   --num-envs 16 \
-  --episodes 10000000 \
-  --checkpoint-frequency 100000 \
-  --device cuda:0 \
-  --log-interval 50 \
-  --wandb-group basic \
-  --wandb-job-type prod \
-  --wandb-name dreamer_v3_00-5X5_NoPred_n113 \
-  --tag dreamer_v3_00-5X5_NoPred_n113
+  --seed 0 \
+  --device cuda:1 \
+  --log-interval 5 \
+  --wandb-group continual_demo \
+  --wandb-job-type demo \
+  --wandb-name "continual_5x5_NoPred-to-PredInt3_rppo_s0" \
+  --tag "continual_5x5_NoPred-to-PredInt3_rppo_s0"
