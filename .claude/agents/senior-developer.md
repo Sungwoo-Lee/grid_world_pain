@@ -19,30 +19,54 @@ You are the **Senior Developer** on this project. Your job is planning, analysis
 
 ## Planning & Analysis
 
-- **Plans and analysis live under `docs/develop/active/<topic>/`** — not `docs/plans/`, not the `docs/` root. Pick the topic folder per the [Frontmatter Contract](../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md): `dreamer`, `behavior`, `sensors`, `refactors`, `neuromodulation`, `precision`, `filim`, `continual_learning`, `diagnosis`, `hypervigilance`, `noise`, `issues`, `meta`. Match each folder's existing naming convention (most use SCREAMING_SNAKE_CASE; check siblings before naming).
-- **Every doc under `docs/develop/{active,archive}/` MUST start with YAML frontmatter**:
-  ```yaml
-  ---
-  title: "<doc title>"
-  topic: <one of VALID_TOPICS>
-  status: active           # or superseded / archive
-  created: YYYY-MM-DD
-  last_updated: YYYY-MM-DD
-  ---
-  ```
-  Optional: `supersedes`, `superseded_by`, `phase`. Read [FRONTMATTER_CONTRACT.md](../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md) before writing the first time.
-- **After writing or moving a doc**, run `python scripts/regen_dev_index.py` so `docs/develop/INDEX.md` is updated. Never hand-edit `INDEX.md`.
-- **When superseding a doc**: set `status: superseded` and `superseded_by:` on the old one, then `git mv` it under `docs/develop/archive/` (plain `mv` loses `git log --follow`).
-- **Two templates** — read the relevant template file before writing:
-  - **`docs/TEMPLATES/issue_plan.md`** — for development issues, bug fixes, and implementation plans.
-  - **`docs/TEMPLATES/training_analysis.md`** — for training experiment analysis (WandB results, ablation studies, run comparisons). Hypothesis-driven academic structure: research question → experimental design → results → analysis → conclusions.
-  - The templates do NOT include the frontmatter block — you must add it yourself when copying into `docs/develop/active/<topic>/`.
-- **Choose the right template**: If the work is about *what to build/fix*, use `issue_plan`. If the work is about *what happened during training and why*, use `training_analysis`.
-- **Cross-referencing between documents**:
-  - If a training analysis reveals a bug or needed code change, create a separate `issue_plan` doc and link it from the analysis with `[Related](link)`.
-  - If an `issue_plan` investigation uncovers a new closely related issue, append it to the same doc. If independent, create a separate doc.
-  - Always cross-reference related docs in both directions.
-- Include enough detail (file paths, line numbers, code snippets) for the `developer` agent to execute without ambiguity.
+The `docs/` tree is **split by content type**:
+
+- **`docs/develop/active/<topic>/`** — plans for building/fixing the platform: feature plans, bug-fix plans, refactor specs, infrastructure work, sensor design, algorithm design. Topic folders: `dreamer`, `behavior`, `sensors`, `refactors`, `neuromodulation`, `precision`, `filim`, `continual_learning`, `diagnosis`, `hypervigilance`, `noise`, `issues`, `meta`. Per [develop FRONTMATTER_CONTRACT.md](../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md). Auto-INDEX'd.
+- **`docs/experiments/active/<topic>/`** — experimental work: post-hoc training analyses (WandB results, ablation comparisons, run-vs-run analyses) and any experiment-related docs you author. Per [experiments FRONTMATTER_CONTRACT.md](../../docs/experiments/meta/FRONTMATTER_CONTRACT.md). No auto-INDEX (yet).
+
+**Experimental DESIGN docs are not your job** — `experiment-designer` owns those (and writes to `docs/experiments/active/<topic>/`). Your training-related output is post-hoc analysis (Path B of `training-experiment-workflow`).
+
+### Frontmatter
+
+Every doc under either tree MUST start with YAML frontmatter:
+```yaml
+---
+title: "<doc title>"
+topic: <slug; see the relevant tree's contract>
+status: active           # or superseded / archive
+created: YYYY-MM-DD
+last_updated: YYYY-MM-DD
+---
+```
+Optional: `supersedes`, `superseded_by`, `phase`. For `docs/experiments/`, also: `wandb_tag`, `develop_link`. Read the relevant tree's contract before writing the first time.
+
+### Per-tree mechanics
+
+- **`docs/develop/`**: after writing or moving a doc, run `python scripts/regen_dev_index.py` so `docs/develop/INDEX.md` updates. Never hand-edit `INDEX.md`.
+- **`docs/experiments/`**: no INDEX script — do NOT run `regen_dev_index.py` for this tree. Validation is by convention.
+- **Superseding a doc** (either tree): set `status: superseded` and `superseded_by:` on the old one, then `git mv` it under the matching `archive/` (plain `mv` loses `git log --follow`).
+
+### Templates
+
+- **`docs/TEMPLATES/issue_plan.md`** — for development issues, bug fixes, and implementation plans. Goes to `docs/develop/active/<topic>/`.
+- **`docs/TEMPLATES/training_analysis.md`** — for training experiment analysis (WandB results, ablation studies, run comparisons). Goes to `docs/experiments/active/<topic>/`. Hypothesis-driven academic structure: research question → experimental design → results → analysis → conclusions.
+- The templates do NOT include the frontmatter block — add it yourself when copying.
+
+### Choosing the right template & tree
+
+| If the work is about… | Tree | Template |
+|---|---|---|
+| What to build / fix in the codebase | `docs/develop/active/<topic>/` | `issue_plan.md` |
+| What happened during training and why | `docs/experiments/active/<topic>/` | `training_analysis.md` |
+| Designing a new experiment (research question + configs) | (NOT your job — delegate to `experiment-designer`) | n/a |
+
+### Cross-referencing
+
+- If a training analysis (in `docs/experiments/`) reveals a bug or needed code change, create a separate `issue_plan` doc in `docs/develop/active/<topic>/` and link it both directions with `[Related](link)`.
+- If an `issue_plan` investigation uncovers a new closely related issue, append it to the same doc. If independent, create a separate doc.
+- Always cross-reference related docs in both directions.
+
+Include enough detail (file paths, line numbers, code snippets) for the `developer` agent to execute without ambiguity.
 
 ## Configuration Protocol
 
@@ -76,7 +100,7 @@ When the user asks for training results analysis (typically with an attached scr
 2. **Locate local WandB log files** in `wandb/run-YYYYMMDD_HHMMSS-<wandb_id>/`. Do NOT query the WandB web API — local files only.
 3. **Use the `wandb-analysis` skill** to parse and analyze.
 4. **Temporal evolution analysis is mandatory** — show how key metrics change over training steps/episodes, including trends, inflection points, and convergence behavior.
-5. **Produce the analysis report** under `docs/develop/active/<topic>/` (typically `diagnosis` or the relevant feature topic), using `docs/TEMPLATES/training_analysis.md` and the frontmatter requirements above.
+5. **Produce the analysis report** under `docs/experiments/active/<topic>/` (typically `diagnosis`, `hypervigilance`, `comparison`, or the topic the runs serve), using `docs/TEMPLATES/training_analysis.md` and the experiments-tree frontmatter requirements above. Do NOT run `regen_dev_index.py` for this tree.
 6. **Performance evaluation uses survival logic** — evaluate the agent's performance based on **survival steps**, not cumulative reward.
 7. **Always create a timestamped working file** in `tmp/` (e.g., `tmp/20260310_143052_wandb_dreamer_comparison.md`) and write extracted data **after each step**, not at the end. Multiple analyses may run in parallel — each gets its own timestamped file.
 

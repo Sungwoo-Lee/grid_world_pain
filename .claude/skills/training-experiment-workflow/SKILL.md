@@ -1,66 +1,77 @@
 ---
 name: training-experiment-workflow
-description: Workflow for designing, running, and analyzing training experiments and ablations in this RL project. Use this skill whenever the user wants to "run a training experiment", "compare these runs", "analyze WandB results", "test this hypothesis", "do an ablation on X", or attaches a screenshot of WandB run IDs and asks for analysis. Orchestrates the senior-developer (experiment design and analysis with the wandb-analysis skill) and optionally the developer (config changes only). Performance is always evaluated by survival steps, not cumulative reward — this is a project-wide convention. Use this skill even when the user does not say "experiment" or "workflow" — any training-results question or experiment-design request belongs here.
+description: Workflow for designing, running, and analyzing training experiments and ablations in this RL project. Use this skill whenever the user wants to "run a training experiment", "compare these runs", "analyze WandB results", "test this hypothesis", "do an ablation on X", or attaches a screenshot of WandB run IDs and asks for analysis. Orchestrates experiment-designer (design + config generation), env-config-auditor (pre-flight), training-runner (launch), and senior-developer (post-hoc result analysis). Performance is always evaluated by survival steps, not cumulative reward — this is a project-wide convention. Use this skill even when the user does not say "experiment" or "workflow" — any training-results question or experiment-design request belongs here.
 ---
 
 # Training Experiment Workflow
 
 This skill orchestrates the workflow for empirical training work — designing experiments, running them (or analyzing already-run results), and producing publication-quality analysis docs.
 
+All experiment docs live under **`docs/experiments/active/<topic>/`** per the [experiments Frontmatter Contract](../../../docs/experiments/meta/FRONTMATTER_CONTRACT.md). This tree is separate from `docs/develop/`, which holds platform-development plans. Pre-existing experiment-shaped docs under `docs/develop/active/{hypervigilance,noise,diagnosis}/` are NOT migrated retroactively — read them as reference, write new ones to `docs/experiments/`.
+
 It has two entry points depending on what the user is asking:
 
 - **(A) Design a new experiment** — the user wants to test a hypothesis or run an ablation.
 - **(B) Analyze existing results** — the user attaches a WandB screenshot or names datetime IDs and wants the data interpreted.
 
-Both paths route through `senior-developer` as the primary agent. `developer` enters only if the experiment requires code or config changes.
-
 ## Path A — Design a New Experiment
 
 ```
-[A1]   senior-developer    → writes training_analysis-shaped design doc
-[A2]   USER APPROVAL       → confirms hypothesis and experiment design
-[A3]   developer           → applies config changes (only if needed)
-[A3.5] env-config-auditor  → pre-flight audit of the experiment configs
-[A4]   USER                → runs training (manually or via existing scripts)
+[A1]   experiment-designer → design doc + configs
+[A1.5] env-config-auditor  → pre-flight audit of the configs
+[A2]   USER APPROVAL       → confirms hypothesis, design, and configs
+[A3]   training-runner     → launches via run_command.py on a chosen lab node
+[A4]   USER                → waits for training to complete (or monitors)
 [A5]   senior-developer    → analyzes results, fills in the design doc
 ```
 
-### A1 — Experiment design (senior-developer)
+`developer` enters Path A only when the experiment requires **schema changes** in the codebase (new mandatory YAML keys not yet read by `src/utils/config.py`). Pure parameter changes are written directly by `experiment-designer`.
 
-Delegate to the **`senior-developer`** agent. Its job:
+### A1 — Experiment design + config generation (experiment-designer)
 
-1. Read [docs/TEMPLATES/training_analysis.md](../../../docs/TEMPLATES/training_analysis.md) and the [Frontmatter Contract](../../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md). The template is hypothesis-driven (research question → design → expected outcomes → results → analysis → conclusions).
-2. Write a doc to **`docs/develop/active/<topic>/<EXP_NAME>.md`** (typically `diagnosis/`, `hypervigilance/`, or `noise/` — pick the topic the experiment serves). The doc must start with YAML frontmatter (`title`, `topic`, `status: active`, `created`, `last_updated`; optional `phase`). Fill **only** the pre-results sections:
+Delegate to the **`experiment-designer`** agent. Its job:
+
+1. Read [docs/TEMPLATES/training_analysis.md](../../../docs/TEMPLATES/training_analysis.md) and the [experiments Frontmatter Contract](../../../docs/experiments/meta/FRONTMATTER_CONTRACT.md). The template is hypothesis-driven (research question → design → expected outcomes → results → analysis → conclusions).
+2. Write a design doc to **`docs/experiments/active/<topic>/<EXP_NAME>.md`** with frontmatter (`title`, `topic`, `status: active`, `created`, `last_updated`; optional `phase`, `wandb_tag`, `develop_link`). Fill **only** the pre-results sections:
    - Research question and hypothesis.
    - Experimental design (configs, ablations, seeds, expected sample size).
    - Predicted outcomes (what would confirm vs. refute the hypothesis).
+   - Configs to Produce table.
+   - Analysis plan (pre-specified).
+   - Failure-mode catalog.
    - Empty Results / Analysis / Conclusions sections (filled in A5).
-3. List any required config changes. If new YAML keys are needed, list them with exact paths and values per the Configuration Protocol.
-4. Run `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/regen_dev_index.py` so the new doc appears in `docs/develop/INDEX.md`.
+3. **Generate the configs** under `configs/experiment/<topic>/` per the design's Configs to Produce table. Schema-affecting changes route through `developer` first; pure parameter configs are written directly.
+4. Do NOT run `regen_dev_index.py` — there is no INDEX for `docs/experiments/`.
+
+### A1.5 — Config audit (env-config-auditor, pre-flight)
+
+Delegate to **`env-config-auditor`** to validate the new configs against `docs/environment/`. Walks observation ↔ noise modality consistency, mandatory-key discipline, static-field recompile risk, latent-bug recurrences, schema padding, and (for sweeps) cross-config coherence.
+
+The audit produces `docs/reviews/config_<exp-name>.md` with `🔴 / 🟡 / 🟢` findings. **Resolve all `🔴` blockers before A2.** Cross-link the audit from the experiment doc.
 
 ### A2 — User approval
 
-The user approves the hypothesis and design before any compute is spent.
+The user approves the hypothesis, design, and configs before any compute is spent. The user may iterate with `experiment-designer` (revise design or configs) or with `env-config-auditor` (re-audit) before approving.
 
-### A3 — Config changes (developer, only if needed)
+### A3 — Launch training (training-runner)
 
-If new configs are needed, hand off to **`developer`** (mini-version of `feature-workflow` Phase 3): apply config changes, no fallback defaults, write Implementation Report.
+Delegate to the **`training-runner`** agent. It:
 
-If no config changes are needed, **skip this phase** and go straight to A3.5.
+- Re-reads the configs (read-only) for a final sanity check.
+- `WebFetch`es http://192.168.0.101:1810 to propose a node + free GPU.
+- Edits `train_command-new.sh` to point at the experiment's config + agent_config + chosen `--device cuda:N` and a unique `--tag`.
+- Launches via `python3 run_command.py <node> grid_world_pain "bash train_command-new.sh"` (SSH key auth — no password).
+- Confirms the run started; reports node, GPU, log path, and WandB tag back to the user.
 
-### A3.5 — Config audit (env-config-auditor, pre-flight)
+If `training-runner` finds a config issue at this stage, it halts and routes back to `experiment-designer` to fix.
 
-Before any training run, delegate to **`env-config-auditor`** to validate the experiment's configs. Mandatory whenever A3 produced config changes; recommended even when reusing existing configs (catches drift between the design doc and the actual YAML on disk). The auditor walks observation ↔ noise modality consistency, mandatory-key discipline, static-field recompile risk, latent-bug recurrences, schema padding, and (for sweeps) cross-config coherence.
+### A4 — User waits for training
 
-The audit produces `docs/reviews/config_<exp-name>.md` with `🔴 / 🟡 / 🟢` findings. **Resolve all `🔴` blockers before A4.** Cross-link the audit from the experiment doc.
-
-### A4 — User runs training
-
-The user runs training. Not Claude's job. The skill pauses here.
+Not Claude's job. The skill pauses here. The user (or `senior-developer` ad-hoc) may tail logs.
 
 ### A5 — Result analysis (senior-developer)
 
-When the user returns with run IDs (typically a WandB screenshot), delegate to **`senior-developer`** with the `wandb-analysis` skill to fill in the Results / Analysis / Conclusions sections of the same design doc.
+When the user returns with run IDs (typically a WandB screenshot), delegate to **`senior-developer`** with the `wandb-analysis` skill to fill in the Results / Analysis / Conclusions sections of the same design doc at `docs/experiments/active/<topic>/<EXP_NAME>.md`.
 
 ## Path B — Analyze Existing Results
 
@@ -84,7 +95,7 @@ Delegate to **`senior-developer`** with these mandatory steps:
 
 ### B2 — Analysis doc (senior-developer)
 
-Write the final doc to **`docs/develop/active/<topic>/<NAME>.md`** (typically `diagnosis/` for ablation/comparison analyses; `behavior/` for behavioral readouts) using `docs/TEMPLATES/training_analysis.md` and the [Frontmatter Contract](../../../docs/develop/active/meta/FRONTMATTER_CONTRACT.md). Use the hypothesis-driven structure: even for unplanned analyses, retroactively frame the comparison as a question being answered. Run `scripts/regen_dev_index.py` after writing.
+Write the final doc to **`docs/experiments/active/<topic>/<NAME>.md`** (typically `diagnosis/` for ablation/comparison analyses; `comparison/` for multi-run comparisons; `hypervigilance/` for hypervigilance-related readouts) using `docs/TEMPLATES/training_analysis.md` and the [experiments Frontmatter Contract](../../../docs/experiments/meta/FRONTMATTER_CONTRACT.md). Use the hypothesis-driven structure: even for unplanned analyses, retroactively frame the comparison as a question being answered. Do NOT run `regen_dev_index.py` — there is no INDEX for this tree.
 
 **Performance evaluation MUST use survival steps**, not cumulative reward — project-wide convention.
 
@@ -105,10 +116,10 @@ Default: sequential. Switch to parallel only when the per-run reasoning genuinel
 
 | Phase | Produces | Read by |
 |---|---|---|
-| A1 / B2 | `docs/develop/active/<topic>/<NAME>.md` (with frontmatter) | User; possibly bug-fix-workflow |
-| A3 | Config changes (uncommitted) + Implementation Report | senior-developer (verify if substantive); env-config-auditor (A3.5) |
-| A3.5 | `docs/reviews/config_<exp>.md` audit report | User (must clear 🔴 before A4) |
-| A5 / B1–B2 | Filled-in analysis doc with temporal evolution and survival-based evaluation | User |
+| A1 | `docs/experiments/active/<topic>/<EXP_NAME>.md` (design, with frontmatter) + `configs/experiment/<topic>/*.yaml` | env-config-auditor (A1.5); user (A2); training-runner (A3) |
+| A1.5 | `docs/reviews/config_<exp>.md` audit report | User (must clear 🔴 before A2) |
+| A3 | Edited `train_command-new.sh` + remote training process; log path + WandB tag reported back | User (A4); senior-developer (A5) |
+| A5 / B2 | Filled-in analysis doc at `docs/experiments/active/<topic>/<NAME>.md` | User; possibly bug-fix-workflow |
 
 ## Why This Workflow Has Two Paths
 
