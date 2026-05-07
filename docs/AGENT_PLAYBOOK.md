@@ -37,18 +37,39 @@ Regression test must fail pre-fix and pass post-fix — see `.claude/agents/deve
 ### Designing and running a training experiment
 
 ```
-experiment-designer (design doc + configs in docs/experiments/ and configs/experiment/)
+experiment-designer (design doc + configs + LAUNCH MANIFEST §3)
+                    Manifest has one row per run with planned:
+                      Tag, wandb-name, wandb-group, wandb-job-type, Seed
+                    Plus §3.1 mapping each row to env+agent config YAMLs.
         ↓
 env-config-auditor  (audit; resolve all 🔴 before launch)
         ↓
-USER APPROVAL
+USER APPROVAL  +  collect target node + GPU index per run (AskUserQuestion)
         ↓
-training-runner     (launch via run_command.py)
+training-runner     (one spawn per manifest row)
+                    Receives: node, GPU, plan_doc, run_id.
+                    Reads manifest row → applies planned tag/wandb-* values.
+                    Launches via run_command.py.
+                    Updates the manifest row in place: Status=running,
+                      Node, GPU, Launched at, WandB run ID, Log path.
         ↓
-USER waits for training
+USER waits for training (and updates Status=completed/failed/cancelled per row)
         ↓
-experiment-analyzer (fill in Results / Analysis / Conclusions of the same doc, Mode A)
+experiment-analyzer (Mode A; reads manifest as authoritative run inventory;
+                     fills Results / Analysis / Conclusions of the same doc)
 ```
+
+The Launch Manifest is the **system-of-record** binding experimental cells to WandB folders. Three agents share it with **strict column ownership**:
+
+| Agent | Reads | Writes |
+|---|---|---|
+| `experiment-designer` | — | Planned columns (Run, Cell, Tag, wandb-group, wandb-job-type, Seed) + §3.1 |
+| `training-runner` | Planned columns (to apply at launch) | Actual columns (Status, Node, GPU, Launched at, WandB run ID, Log path) of the row it launched |
+| `experiment-analyzer` | Whole table (run discovery) | — (analyzer never writes the manifest) |
+
+`training-runner` does NOT pick its own node/GPU — there is no monitoring source available to it. The agent-manager (or the user, in a direct invocation) collects node + GPU upfront and passes them in the spawn prompt. Bundling this with the launch-approval step is cheaper than letting the runner spawn, halt, and require a re-spawn.
+
+For **one-off launches with no plan doc** (ad-hoc / debugging), the runner falls back to its default tag/wandb-name convention (see its profile §3a Path B). The convention is parallel to (and consistent with) the designer's manifest convention, so ad-hoc and planned runs interleave cleanly in WandB.
 
 If an experiment-analyzer or experiment-designer adds a `## Metrics Requested` section, the user reviews and (if accepted) escalates to the feature flow to add the logger.
 
@@ -101,6 +122,7 @@ The manager (and any invoking agent) should detect and push back on these before
 - **"Bundle unrelated cleanups into a bugfix"** — verifier will (rightly) flag as out-of-scope. Surface this and split into separate plans.
 - **"Parallel reviewers within a single paper"** — fragmented reviews. Per-paper stays sequential; parallelism is at the corpus level only.
 - **"Ad-hoc edit to configs/ during a launch"** — `training-runner` halts on config issues; route to `experiment-designer` to fix.
+- **"Editing `train_command-new.sh`"** — that's the user's manual launch script. The agent owns `train_command-agent.sh` and never touches the user's.
 
 ## When to Parallelize
 
@@ -111,6 +133,9 @@ The manager (and any invoking agent) should detect and push back on these before
 ## Failure-Recovery Patterns
 
 - **`training-runner` halts on missing config** → route to `experiment-designer`, then re-launch.
+- **`training-runner` halts on missing node/GPU** → orchestration bug, not a runner bug. The caller (agent-manager or user) should have supplied node + GPU in the spawn prompt. Collect them via `AskUserQuestion` and re-spawn — but treat this as a one-off; the proper path is to ask upfront, before the first spawn.
+- **`training-runner` halts on a plan-driven launch with `Status: running` or `completed` already** → the row was launched once already. Ask the user whether to re-launch (creates a duplicate WandB run) or pick a different row.
+- **`experiment-analyzer` finds a manifest row with `Status: planned` or `running`** → run not ready. Skip and surface to user; do not block the rest of the analysis.
 - **`env-config-auditor` flags 🔴** → resolve before any launch; loop back through `experiment-designer` if the design itself is wrong.
 - **`developer`'s regression test passes pre-fix** → wrong test; back to `senior-developer` to revise the plan.
 - **`developer` finds a file that needs changing but isn't in the plan** → halt, surface in Implementation Report; don't silently expand scope. `senior-developer` decides at verification.

@@ -47,10 +47,20 @@ State what would *confirm* the hypothesis vs. what would *refute* it, in advance
 - **Controls / fixed factors**: every variable not under test must be pinned and named — noise preset, environment seed distribution, training horizon, all hyperparameters not under test.
 - **Seeds**: count + justification by expected effect size.
 - **Sample size**: episodes per seed × seeds; total compute estimate (rough s/it × steps × seeds).
-- **Run identification**: WandB tag pattern that downstream analysis can grep for.
+- **Run identification**: you own the tag/wandb-name scheme for the experiment. See §4 (Launch Manifest) below — every row's Tag and wandb-name is locked here at design time, not by the runner. Use a systematic, parseable scheme (e.g., `<algo>_<config_stem>_s<seed>`) so analysis can group/grep cleanly.
 
-#### 4. Configs to Produce
-A table mapping each cell of the design (e.g., baseline × seed=0..4, treatment × seed=0..4) to the exact config file you will write. If the design involves a sweep, decide between (a) one config file with seed varied at launch time, vs. (b) one file per cell — prefer (a) unless the sweep varies non-seed parameters.
+#### 4. Launch Manifest (system-of-record for all runs)
+
+Fill the `## 3. Launch Manifest` table from [docs/TEMPLATES/training_analysis.md](../../docs/TEMPLATES/training_analysis.md) with the planned columns: **Run, Cell, Tag (= wandb-name), wandb-group, wandb-job-type, Seed**, plus `Status: planned`. Leave the actual columns (Node, GPU, Launched at, WandB run ID, Log path) as `—` — the `training-runner` agent fills those at launch time.
+
+You also fill the §3.1 "Configs to Produce" sub-table mapping each Run to the exact env-config and agent-config YAMLs you will write. (The same information used to live in this section's Configs-to-Produce table — it now lives inside the manifest as §3.1.)
+
+**Naming rules you anchor:**
+- Tag and wandb-name MUST be identical per row (this is what `train.py:592` falls back on if name is blank — keep them in sync explicitly).
+- Format: `<algo>_<config_stem>_s<seed>` (or add a meaningful suffix only if it's an experimental factor — e.g., `_n<node>` only if node identity is part of the design).
+- All rows in one experiment share the same `wandb-group` (= top dir under `configs/experiment/` typically).
+- `wandb-job-type` defaults to `prod`. Set to `debug`/`pilot`/`ablation` when the runs aren't production.
+- Tags must be unique across the manifest (and ideally globally — re-using a tag breaks downstream analysis).
 
 #### 5. Analysis Plan (Pre-Specified)
 - Primary statistic (mean ± 95% CI across seeds).
@@ -94,7 +104,8 @@ The user reads this section. If accepted, the user invokes `feature-workflow` (`
 - **Single-seed runs to "confirm" anything**. A single seed cannot confirm; aim for ≥ 3, ideally 5+ for marginal effects.
 - **Letting an architecture's failure mode disqualify itself ambiguously**. Pre-specify whether a saturation, collapse, or critic explosion counts as "the architecture is wrong" or "this run was bad."
 - **Configs drifting from the design**. The design doc's *Configs to Produce* table is the single source of truth — the YAMLs you write must match it exactly.
-- **Re-using a tag**. WandB tag collisions break downstream analysis. Always name uniquely.
+- **Re-using a tag**. WandB tag collisions break downstream analysis. Always name uniquely. The Launch Manifest is your enforcement surface — populate every Tag value before handoff and check for duplicates.
+- **Leaving the runner to invent names**. The runner has a default convention for one-off launches, but for any planned experiment, the designer locks Tag and wandb-name in the manifest. Don't outsource consistency.
 
 ## Workflow
 

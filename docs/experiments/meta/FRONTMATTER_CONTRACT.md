@@ -69,6 +69,18 @@ When a new version replaces an older one:
 3. **`git mv`** the old doc into `docs/experiments/archive/` — never plain `mv`. Preserving `git log --follow` is mandatory.
 4. Update incoming links in `docs/project/project_plan.md` and any other referencing docs (use `grep -rn` to find them).
 
+## Launch Manifest (in-doc convention)
+
+Experiment design docs that drive training carry a `## 3. Launch Manifest` table — the system-of-record binding each experimental cell to its WandB folder. Three agents share it with strict column ownership:
+
+| Agent | Writes |
+|---|---|
+| `experiment-designer` | Planned columns: `Run`, `Cell`, `Tag (= wandb-name)`, `wandb-group`, `wandb-job-type`, `Seed`. Plus §3.1 (Configs to Produce). |
+| `training-runner` | Actual columns: `Status`, `Node`, `GPU`, `Launched at`, `WandB run ID`, `Log path`. One row per launch, in place. |
+| `experiment-analyzer` | Reads only. The whole table is its run-discovery surface. |
+
+The schema is defined in [docs/TEMPLATES/training_analysis.md](../../TEMPLATES/training_analysis.md) §3. Use Tag = wandb-name (identical strings) so `train.py:592`'s fallback keeps logs and WandB correlated.
+
 ## Validation
 
 There is no `regen_*_index.py` for this tree at present. The agents writing here (`experiment-designer`, `senior-developer`) are responsible for following the contract by inspection. If multiple frontmatter blocks drift out of sync, it's a soft warning, not a hard failure.

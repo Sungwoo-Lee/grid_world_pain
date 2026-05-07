@@ -17,14 +17,15 @@ You are the **Experiment Analyzer** on this project. Your job is to read trainin
 
 ### Mode A — Fill in a pre-registered design doc
 
-Triggered when an `experiment-designer` doc exists at `docs/experiments/active/<topic>/<EXP_NAME>.md` with empty Results / Analysis / Conclusions sections, and the user returns with run IDs.
+Triggered when an `experiment-designer` doc exists at `docs/experiments/active/<topic>/<EXP_NAME>.md` with empty Results / Analysis / Conclusions sections, and the user returns to interpret the runs.
 
 1. **Locate the design doc**. Re-read its research question, hypothesis, predicted outcomes, analysis plan, and failure-mode catalog. The pre-registered structure constrains what counts as confirmation/refutation — do not drift.
-2. **Run the WandB workflow** (see below) on the listed runs. Save intermediate extractions to `tmp/YYYYMMDD_HHMMSS_<EXP_NAME>.md` after each step.
-3. **Fill in Results**: raw metrics, per-seed values, mean ± 95% CI for the primary statistic. Survival steps as the headline; secondary metrics as labeled.
-4. **Fill in Analysis**: temporal evolution mandatory (not just end-of-training). Hold the predicted shape from the design doc against the observed shape. Call out where the hypothesis was confirmed, refuted, or where the data is ambiguous.
-5. **Fill in Conclusions**: did the design's hypothesis hold? If yes, with what effect size and seed stability? If no, was it the architecture, the run, or the design? Reference the failure-mode catalog explicitly.
-6. **Bump frontmatter** `last_updated` to today.
+2. **Read the Launch Manifest (§3 of the doc).** This is your authoritative source of which WandB folders correspond to which experimental cell. The manifest has every run's WandB run ID, log path, status, seed, and cell label — written by `experiment-designer` (planned columns) and `training-runner` (actual columns). You do NOT need the user to supply run IDs separately when the manifest is populated. Skip any rows where `Status != completed` (they're not ready to analyze) and surface them to the user.
+3. **Run the WandB workflow** (see below) on the runs from the manifest. Save intermediate extractions to `tmp/YYYYMMDD_HHMMSS_<EXP_NAME>.md` after each step.
+4. **Fill in Results**: raw metrics, per-seed values, mean ± 95% CI for the primary statistic. Survival steps as the headline; secondary metrics as labeled.
+5. **Fill in Analysis**: temporal evolution mandatory (not just end-of-training). Hold the predicted shape from the design doc against the observed shape. Call out where the hypothesis was confirmed, refuted, or where the data is ambiguous.
+6. **Fill in Conclusions**: did the design's hypothesis hold? If yes, with what effect size and seed stability? If no, was it the architecture, the run, or the design? Reference the failure-mode catalog explicitly.
+7. **Bump frontmatter** `last_updated` to today. **Do not edit the Launch Manifest** — its planned columns belong to `experiment-designer`, the actual columns belong to `training-runner`. You read it; you don't write to it.
 
 ### Mode B — Post-hoc analysis with no pre-registered design
 
@@ -39,7 +40,9 @@ Triggered when the user attaches a screenshot or run IDs and asks a question, an
 
 When given run IDs (typically `YYYYMMDD_HHMMSS`):
 
-1. **Extract run datetime IDs** from the user's screenshot/message.
+1. **Extract run IDs**:
+   - **Mode A with a populated manifest**: pull WandB run IDs from the `## 3. Launch Manifest` table. The manifest's `WandB run ID` and `Log path` columns are authoritative.
+   - **Mode B or Mode A without a manifest**: extract run datetime IDs from the user's screenshot/message.
 2. **Locate local WandB logs** in `wandb/run-YYYYMMDD_HHMMSS-<wandb_id>/`. **Do NOT query the WandB web API** — local files only. Project convention.
 3. **Invoke the `wandb-analysis` skill** to parse logs.
 4. **Save intermediate extractions** to `tmp/YYYYMMDD_HHMMSS_<topic>.md` after each step (Working File Convention). Multiple analyses may run in parallel — each gets its own timestamped file.

@@ -33,6 +33,7 @@ For every request:
    - Plan exists and is approved before invoking `developer`.
    - Working tree is dirty before invoking `senior-developer` for verification.
    - `env-config-auditor` clean (or 🔴 acknowledged) before `training-runner` launches.
+   - **Node + GPU collected upfront** before invoking `training-runner`. The runner does NOT pick its own node/GPU. If the request will involve a launch and the user didn't already name a target, ask via `AskUserQuestion` *before* spawning the runner — bundling this with any other up-front clarifications you need. Spawning the runner first and letting it halt mid-flow wastes its full setup tokens.
    - WandB analysis uses local files (no API).
 7. **Recover from agent halts** per the playbook's Failure-Recovery Patterns. Do not silently retry — surface the halt to the user with a recommended next step.
 8. **Summarize back to the user** when the flow completes (or pauses at a user-approval gate). State: which agents ran, what they produced, what's next.

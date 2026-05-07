@@ -47,14 +47,39 @@ Known factors that differ unintentionally or cannot be controlled.
      Common confounds: activation mismatch, different random seeds,
      hardware differences, different training durations. -->
 
-## 3. Run Inventory
+## 3. Launch Manifest
 
-| Label | WandB ID | Config Diff | Timesteps | Wall-Clock | Status |
-|-------|----------|-------------|-----------|------------|--------|
-| | | | | | |
+System-of-record for every training run in this experiment. **Owned jointly:**
+- `experiment-designer` writes the planned columns when authoring the doc.
+- `training-runner` fills the actual columns at launch time, in place.
+- `experiment-analyzer` reads the table to find WandB folders.
 
-<!-- "Config Diff" = only what differs from the shared config in §2.2.
-     Include WandB project/entity if not obvious from context. -->
+When the manifest exists, the runner's default tag/wandb-name convention is **overridden** by the planned values below. The runner never invents tags for runs in a manifest — it uses what's written here.
+
+| Run | Status | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Node | GPU | Launched at | WandB run ID | Log path |
+|-----|--------|------|--------------------|-------------|----------------|------|------|-----|-------------|--------------|----------|
+| 1 | planned | | | | prod | 0 | — | — | — | — | — |
+| 2 | planned | | | | prod | 1 | — | — | — | — | — |
+
+**Column semantics:**
+- **Run** — sequential integer, unique within this manifest.
+- **Status** — `planned` → `running` → `completed` / `failed` / `cancelled`.
+- **Cell** — short slug for the experimental condition (e.g., `NoPred`, `PredInterval3`). Multiple Runs can share a Cell when they differ only by Seed.
+- **Tag (= wandb-name)** — identical values for both. Designer's responsibility. Format: `<algo>_<config_stem>_s<seed>` (or include `_n<node>` if the node identity is meaningful for the experiment, e.g., a per-node systems study).
+- **wandb-group** — top dir under `configs/experiment/` typically (e.g., `basic`, `hypervigilance`). Same group for all rows in one experiment.
+- **wandb-job-type** — `prod` by default; `debug`/`pilot`/`test`/`ablation` when the run isn't a production run.
+- **Seed** — integer.
+- **Node / GPU / Launched at / WandB run ID / Log path** — runner fills at launch. Launched at uses ISO format (e.g., `2026-05-07T15:30:10`). Log path is `logs/<ts>_<tag>.log`.
+
+### 3.1 Configs to Produce (designer-only, pre-launch)
+
+| Run | Config (env) | Config (agent) |
+|-----|--------------|----------------|
+| 1 | `configs/experiment/<topic>/<file>.yaml` | `configs/models/<file>.yaml` |
+| 2 | `configs/experiment/<topic>/<file>.yaml` | `configs/models/<file>.yaml` |
+
+<!-- This sub-table maps each manifest Run to the exact YAMLs that train.py will load.
+     Often all rows share the same agent config and differ only by env config or seed. -->
 
 ## 4. Results
 
