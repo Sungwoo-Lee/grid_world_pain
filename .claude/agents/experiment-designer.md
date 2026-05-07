@@ -65,6 +65,19 @@ Pre-decide ambiguous outcomes:
 - Insufficient horizon — would the effect appear with more steps?
 - Seed-dependent noise drowning the effect — add seeds or accept null?
 
+#### 7. Metrics Requested (optional)
+
+If the experiment cannot be evaluated cleanly with the metrics currently logged in `src/`, add a `## Metrics Requested` subsection listing what would need to be added. Per metric:
+
+| Subfield | Content |
+|---|---|
+| **Metric** | Name and intended unit. |
+| **Why now** | Which prediction in §2 or analysis in §5 is bottlenecked by its absence. |
+| **Where it'd live** | Best-guess module/file in `src/`. |
+| **Cost** | Cheap (scalar/step) / moderate (per-component vector) / expensive (full state dump). |
+
+The user reads this section. If accepted, the user invokes `feature-workflow` (`senior-developer` plans → `developer` implements) to add the logger BEFORE the experiment launches. **Do not direct-route to `senior-developer` yourself** — keep the human in the loop on dev-pipeline scope. The same channel exists for `experiment-analyzer` to surface metric needs reactively (after seeing runs).
+
 ### B. The Configs Themselves
 
 - Place experimental configs at `configs/experiment/<topic>/<NAME>.yaml`. Topic mirrors the design doc's `topic:` frontmatter.

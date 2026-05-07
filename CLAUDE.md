@@ -4,12 +4,13 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 
 | Agent | Model | Role | Scope |
 |---|---|---|---|
-| [senior-developer](.claude/agents/senior-developer.md) | opus | Plan, analyze, WandB analysis, verify | `docs/` |
+| [senior-developer](.claude/agents/senior-developer.md) | opus | Platform-development planning + post-impl verification | `docs/develop/` |
 | [developer](.claude/agents/developer.md) | sonnet | Implement approved plans, test, report | full code |
 | [code-reviewer](.claude/agents/code-reviewer.md) | opus | JAX/Flax/vmap/PRNG correctness review | `docs/reviews/` |
 | [math-reviewer](.claude/agents/math-reviewer.md) | opus | Verify equations match cited papers | `docs/reviews/` |
 | [env-config-auditor](.claude/agents/env-config-auditor.md) | sonnet | YAML/env soundness, obs↔noise sync, pre-flight before training | `docs/reviews/` |
-| [experiment-designer](.claude/agents/experiment-designer.md) | opus | Experiment design + config generation | `configs/`, `docs/develop/active/<topic>/` |
+| [experiment-designer](.claude/agents/experiment-designer.md) | opus | Experiment design + config generation | `configs/`, `docs/experiments/active/<topic>/` |
+| [experiment-analyzer](.claude/agents/experiment-analyzer.md) | opus | Post-hoc training-result analysis (WandB, run comparisons) | `docs/experiments/active/<topic>/` |
 | [literature-reviewer](.claude/agents/literature-reviewer.md) | opus | Per-paper review (backbone + Phase 1/2 LaTeX) | `docs/literature/` |
 | [literature-curator](.claude/agents/literature-curator.md) | opus | Cross-paper synthesis, TOC, thematic regrouping | `docs/literature/` |
 | [training-runner](.claude/agents/training-runner.md) | sonnet | Pre-flight check + launch training on lab nodes (101–114) via `run_command.py`; configs are read-only | `train_command-new.sh` |

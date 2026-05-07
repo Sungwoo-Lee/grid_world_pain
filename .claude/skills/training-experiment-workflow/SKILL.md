@@ -1,6 +1,6 @@
 ---
 name: training-experiment-workflow
-description: Workflow for designing, running, and analyzing training experiments and ablations in this RL project. Use this skill whenever the user wants to "run a training experiment", "compare these runs", "analyze WandB results", "test this hypothesis", "do an ablation on X", or attaches a screenshot of WandB run IDs and asks for analysis. Orchestrates experiment-designer (design + config generation), env-config-auditor (pre-flight), training-runner (launch), and senior-developer (post-hoc result analysis). Performance is always evaluated by survival steps, not cumulative reward — this is a project-wide convention. Use this skill even when the user does not say "experiment" or "workflow" — any training-results question or experiment-design request belongs here.
+description: Workflow for designing, running, and analyzing training experiments and ablations in this RL project. Use this skill whenever the user wants to "run a training experiment", "compare these runs", "analyze WandB results", "test this hypothesis", "do an ablation on X", or attaches a screenshot of WandB run IDs and asks for analysis. Orchestrates experiment-designer (design + config generation), env-config-auditor (pre-flight), training-runner (launch), and experiment-analyzer (post-hoc result analysis). Performance is always evaluated by survival steps, not cumulative reward — this is a project-wide convention. Use this skill even when the user does not say "experiment" or "workflow" — any training-results question or experiment-design request belongs here.
 ---
 
 # Training Experiment Workflow
@@ -22,7 +22,7 @@ It has two entry points depending on what the user is asking:
 [A2]   USER APPROVAL       → confirms hypothesis, design, and configs
 [A3]   training-runner     → launches via run_command.py on a chosen lab node
 [A4]   USER                → waits for training to complete (or monitors)
-[A5]   senior-developer    → analyzes results, fills in the design doc
+[A5]   experiment-analyzer → analyzes results, fills in the design doc
 ```
 
 `developer` enters Path A only when the experiment requires **schema changes** in the codebase (new mandatory YAML keys not yet read by `src/utils/config.py`). Pure parameter changes are written directly by `experiment-designer`.
@@ -69,23 +69,26 @@ If `training-runner` finds a config issue at this stage, it halts and routes bac
 
 Not Claude's job. The skill pauses here. The user (or `senior-developer` ad-hoc) may tail logs.
 
-### A5 — Result analysis (senior-developer)
+### A5 — Result analysis (experiment-analyzer)
 
-When the user returns with run IDs (typically a WandB screenshot), delegate to **`senior-developer`** with the `wandb-analysis` skill to fill in the Results / Analysis / Conclusions sections of the same design doc at `docs/experiments/active/<topic>/<EXP_NAME>.md`.
+When the user returns with run IDs (typically a WandB screenshot), delegate to **`experiment-analyzer`** with the `wandb-analysis` skill to fill in the Results / Analysis / Conclusions sections of the same design doc at `docs/experiments/active/<topic>/<EXP_NAME>.md`.
+
+If the analysis surfaces a metric that should have been logged but wasn't, the analyzer adds a `## Metrics Requested` section to the same doc. The user reviews; if accepted, escalate to `feature-workflow` (`senior-developer` plans → `developer` implements) to add the logger. The original experiment may need to be re-run with the new metric.
 
 ## Path B — Analyze Existing Results
 
 The user has a screenshot of WandB or a list of `YYYYMMDD_HHMMSS` run IDs and wants analysis. There is no design doc yet; you may be analyzing runs that were not pre-registered.
 
 ```
-[B1] senior-developer  → extracts run IDs, locates local logs, runs wandb-analysis
-[B2] senior-developer  → produces training_analysis doc
+[B1] experiment-analyzer → extracts run IDs, locates local logs, runs wandb-analysis
+[B2] experiment-analyzer → produces training_analysis doc (Mode B in the analyzer's profile)
 [B3] (optional) → if analysis reveals a bug, branch into bug-fix-workflow
+                 → if analysis reveals a missing metric, branch into feature-workflow
 ```
 
-### B1 — Run identification and extraction (senior-developer)
+### B1 — Run identification and extraction (experiment-analyzer)
 
-Delegate to **`senior-developer`** with these mandatory steps:
+Delegate to **`experiment-analyzer`** with these mandatory steps:
 
 1. **Extract run datetime IDs** from the user's screenshot/message (`YYYYMMDD_HHMMSS` format).
 2. **Locate local WandB logs** in `wandb/run-YYYYMMDD_HHMMSS-<wandb_id>/`. **Do NOT query the WandB web API** — use local files only.
@@ -93,7 +96,7 @@ Delegate to **`senior-developer`** with these mandatory steps:
 4. Save intermediate extractions to a `tmp/YYYYMMDD_HHMMSS_<topic>.md` working file as you go (Working File Convention).
 5. **Temporal evolution analysis is mandatory** — show how key metrics change over training steps/episodes, including trends, inflection points, convergence behavior. Static end-of-training snapshots are not sufficient.
 
-### B2 — Analysis doc (senior-developer)
+### B2 — Analysis doc (experiment-analyzer)
 
 Write the final doc to **`docs/experiments/active/<topic>/<NAME>.md`** (typically `diagnosis/` for ablation/comparison analyses; `comparison/` for multi-run comparisons; `hypervigilance/` for hypervigilance-related readouts) using `docs/TEMPLATES/training_analysis.md` and the [experiments Frontmatter Contract](../../../docs/experiments/meta/FRONTMATTER_CONTRACT.md). Use the hypothesis-driven structure: even for unplanned analyses, retroactively frame the comparison as a question being answered. Do NOT run `regen_dev_index.py` — there is no INDEX for this tree.
 
@@ -108,7 +111,7 @@ If the analysis surfaces a bug or needed code change, the analysis doc must incl
 When comparing many independent runs (e.g., 8 seeds × 4 ablations = 32 runs), parallelism is sometimes worth it.
 
 - **Mechanical extraction** (the same metric across all runs): use a **single shell loop**, not parallel agents. Far cheaper.
-- **Independent run-level reasoning** (each run has its own qualitative pattern to interpret): consider parallel `senior-developer` instances, one per run group. Merge the results into a single analysis doc afterward.
+- **Independent run-level reasoning** (each run has its own qualitative pattern to interpret): consider parallel `experiment-analyzer` instances, one per run group. Merge the results into a single analysis doc afterward.
 
 Default: sequential. Switch to parallel only when the per-run reasoning genuinely benefits from independent attention.
 
