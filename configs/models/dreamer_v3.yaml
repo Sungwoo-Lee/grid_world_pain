@@ -38,6 +38,7 @@ agent:
   critic_fc_layers: [128, 128]
   
   entropy_scale: 3e-4  # Hafner 2023 standard value
+  cont_loss_weight: 1.0  # Continuation-head loss multiplier. 1.0 = pre-knob behavior.
   unimix: 0.01
   use_layer_norm: true  # Orthogonal to modulation.type — applies LayerNorm to encoder pre-activations.
                          # Mirrors recurrent_ppo.yaml:20 / neuromodulated_ppo.yaml:20. Mandatory since commit f1db0f0.

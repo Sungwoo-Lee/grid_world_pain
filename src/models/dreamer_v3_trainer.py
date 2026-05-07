@@ -247,7 +247,8 @@ class DreamerTrainer(nnx.Module):
 
                 loss_kl = DYN_SCALE * jnp.mean(dyn_kl) + REP_SCALE * jnp.mean(rep_kl)
 
-                total_loss = loss_recon + loss_rew + loss_cont + loss_kl
+                CONT_LOSS_WEIGHT = self.config.get_mandatory('agent.cont_loss_weight', float)
+                total_loss = loss_recon + loss_rew + CONT_LOSS_WEIGHT * loss_cont + loss_kl
 
             # Error metrics (non-gradient)
             rew_pred_val = from_twohot(rew_pred)
