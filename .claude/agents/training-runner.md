@@ -139,6 +139,44 @@ Notes:
 - The script then opens an interactive `tail -f` of that log. That's fine — you don't need to manage it; the user can Ctrl-C the tail without affecting the remote nohup'd process.
 - If the SSH succeeds but the remote process exits within ~5 seconds (visible in the log tail), assume the launch failed (config error, missing GPU, syntax error in `train_command-agent.sh`) and surface the error rather than declaring success.
 
+### 4b. Post-launch sanity: confirm exactly ONE process started
+
+Right after `run_command.py` returns, verify exactly one `train.py` process matching this launch's `--tag` is alive on the target node. Use SSH key auth (no password):
+
+```bash
+ssh vncuser@192.168.0.<NODE> "pgrep -af 'train.py.*--tag <TAG>'"
+```
+
+Expected: a single PID (the one you just launched).
+
+If 2+ PIDs come back — something went wrong (re-fired script, race in `run_command.py`, residue from a prior session, hook re-trigger). **Halt** and instruct the user to clean up via `terminate_command.py` (see §4c). Do NOT declare success, do NOT auto-relaunch, do NOT update the manifest.
+
+This check is mandatory. A run with siloed duplicates wastes the GPU, produces multiple WandB runs that fight for the same name/tag, and makes downstream analysis ambiguous.
+
+### 4c. Process termination via `terminate_command.py`
+
+For graceful kill of runaway / duplicate / abandoned training processes:
+
+- **Script:** `/media/nas01/projects/Interoceptive-AI/grid_world_pain/terminate_command.py`
+- **Usage:** `./terminate_command.py <nodes> <pattern> [-f]`
+- **Behavior:** Two-stage — STAGE 1 scans (lists matches across nodes), STAGE 2 prompts for confirmation, then kills.
+- **Default signal:** SIGINT (graceful — lets the run finish current iter and close WandB cleanly).
+- **`-f` / `--force`:** SIGTERM (immediate). Use **only** after SIGINT failed to take effect within ~30s.
+- **Node selection:** `101`, `101-105`, `101,102,110`, `all`, or `101,105-107,110`.
+
+**You cannot run this directly.** `terminate_command.py` requires interactive SSH password (`getpass`), unlike `run_command.py` which uses key auth. When you need a kill, **halt** and tell the user to run it themselves via the `!` prefix in their prompt:
+
+```
+! ./terminate_command.py 114 <tag-or-wandb-name>
+```
+
+Always scope by tag/wandb-name — never by a generic pattern like `python` or `train.py`. After the user confirms cleanup, ask them to re-invoke you for a fresh launch.
+
+**Hard "Do Nots" for terminate_command.py guidance:**
+- Never tell the user to run `terminate_command.py all <generic-pattern>` — that nukes everything across the cluster.
+- Never escalate to `-f` (SIGTERM) without first attempting SIGINT and waiting at least 30s.
+- Never use `terminate_command.py` to "fix" anything other than rogue processes — it is not a launch tool.
+
 ### 5. Update the manifest (Path A only)
 
 If the launch was plan-driven, edit the `## 3. Launch Manifest` row matching `run_id` in `plan_doc`:
@@ -184,6 +222,7 @@ After a successful launch:
 - **Remote process exits immediately**: tail the log, surface the first ~30 lines of the error, halt.
 - **Node + GPU not supplied in spawn prompt**: halt and ask the caller. Do not guess, do not try to discover free GPUs — that's the caller's job.
 - **GPU collision on the supplied node**: if `nvidia-smi` over SSH (a single quick check is fine) shows the supplied GPU is already busy, halt and report. The caller decides whether to override or pick a different GPU.
+- **Duplicate training processes after launch (post-launch `pgrep` returns 2+ PIDs matching the tag)**: surface the duplicate count immediately and instruct the user to run `./terminate_command.py <node> <tag>` (per §4c). Do NOT auto-relaunch. Do NOT update the manifest until cleanup is confirmed and a single fresh launch is in place. This has happened before — the post-launch `pgrep` (§4b) is the canonical guard.
 
 ## Token Efficiency
 

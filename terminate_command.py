@@ -28,10 +28,8 @@ Examples:
 """
 
 import argparse
-import getpass
+import subprocess
 import sys
-import pexpect
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
@@ -82,33 +80,42 @@ def parse_nodes(node_str):
     
     return sorted(list(nodes))
 
-def ssh_execute(ip, command, password, timeout=10):
-    """Execute a command via SSH using pexpect and return the output and exit status."""
-    ssh_cmd = f"ssh -o ConnectTimeout=5 -p {SSH_PORT} {REMOTE_USER}@{ip} \"{command}\""
+def ssh_execute(ip, command, timeout=10):
+    """Execute a command via SSH using key auth (mirrors run_command.py).
+
+    Uses BatchMode=yes so a missing key fails fast instead of prompting.
+    Reuses ControlMaster multiplexing for parallel scan/kill calls.
+    """
+    control_path = f"/tmp/ssh_mux_term_{ip}_{SSH_PORT}_{REMOTE_USER}"
+    ssh_cmd = [
+        "ssh",
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=5",
+        "-o", "StrictHostKeyChecking=accept-new",
+        "-o", "ControlMaster=auto",
+        "-o", f"ControlPath={control_path}",
+        "-o", "ControlPersist=60",
+        "-p", str(SSH_PORT),
+        f"{REMOTE_USER}@{ip}",
+        command,
+    ]
     try:
-        child = pexpect.spawn(ssh_cmd, encoding='utf-8', timeout=timeout)
-        index = child.expect(["(?i)password:", "(?i)are you sure you want to continue connecting", pexpect.EOF, pexpect.TIMEOUT])
-        
-        if index == 1:
-            child.sendline("yes")
-            child.expect("(?i)password:")
-            child.sendline(password)
-        elif index == 0:
-            child.sendline(password)
-        
-        output = child.read()
-        child.close()
-        return output, child.exitstatus
+        result = subprocess.run(
+            ssh_cmd, capture_output=True, text=True, timeout=timeout
+        )
+        return result.stdout, result.returncode
+    except subprocess.TimeoutExpired:
+        return "Timeout", -1
     except Exception as e:
         return str(e), -1
 
-def scan_node(node_id, pattern, password):
+def scan_node(node_id, pattern):
     """Scan a node for matching processes. Returns (node_id, processes, status)."""
     ip = get_node_ip(node_id)
     # pgrep -af: a=show full command line, f=match against full command line
     command = f"pgrep -af '{pattern}'"
-    output, status = ssh_execute(ip, command, password)
-    
+    output, status = ssh_execute(ip, command)
+
     processes = []
     if status == 0 and output:
         for line in output.strip().splitlines():
@@ -116,12 +123,12 @@ def scan_node(node_id, pattern, password):
                 processes.append(line)
     return node_id, processes, status
 
-def kill_node(node_id, pattern, password, signal_num=2):
+def kill_node(node_id, pattern, signal_num=2):
     """Kill matching processes on a node using the specified signal."""
     ip = get_node_ip(node_id)
     # pkill -<sig> -f <pattern>
     command = f"pkill -{signal_num} -f '{pattern}'"
-    output, status = ssh_execute(ip, command, password)
+    output, status = ssh_execute(ip, command)
     return status == 0
 
 def main():
@@ -144,6 +151,7 @@ Usage Examples:
     parser.add_argument("nodes", type=str, help="Node(s) to target (e.g. 101, 101-105, all)")
     parser.add_argument("pattern", type=str, help="Process pattern to pkill (passed to pkill -f)")
     parser.add_argument("-f", "--force", action="store_true", help="Send SIGTERM (15) instead of SIGINT (2)")
+    parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt (non-interactive)")
 
     args = parser.parse_args()
 
@@ -154,7 +162,6 @@ Usage Examples:
         sys.exit(1)
 
     print(f"{BOLD}{CYAN}🚀 STAGE 1: Scanning for processes matching '{args.pattern}'...{NC}")
-    password = getpass.getpass(f"🔑 Enter SSH password for {REMOTE_USER}: ")
 
     node_results = {}
     unresponsive_nodes = []
@@ -162,7 +169,7 @@ Usage Examples:
 
     # Parallel scanning
     with ThreadPoolExecutor(max_workers=len(target_nodes)) as executor:
-        futures = {executor.submit(scan_node, node_id, args.pattern, password): node_id for node_id in target_nodes}
+        futures = {executor.submit(scan_node, node_id, args.pattern): node_id for node_id in target_nodes}
         
         # Use tqdm for progress bar
         with tqdm(total=len(target_nodes), desc="Scanning nodes", unit="node") as pbar:
@@ -199,17 +206,20 @@ Usage Examples:
     
     signal_num = 15 if args.force else 2
     sig_name = "SIGTERM (Force)" if args.force else "SIGINT (Graceful)"
-    
-    confirm = input(f"\n{BOLD}{RED}Proceed with termination using {sig_name}? (y/N): {NC}")
-    if confirm.lower() != 'y':
-        print(f"{CYAN}Aborted.{NC}")
-        return
+
+    if args.yes:
+        print(f"\n{YELLOW}--yes flag set; skipping confirmation. Proceeding with {sig_name}.{NC}")
+    else:
+        confirm = input(f"\n{BOLD}{RED}Proceed with termination using {sig_name}? (y/N): {NC}")
+        if confirm.lower() != 'y':
+            print(f"{CYAN}Aborted.{NC}")
+            return
 
     print(f"\n{BOLD}{CYAN}🚀 STAGE 2: Terminating processes with {sig_name}...{NC}")
     success_count = 0
     # Use parallel termination as well if many nodes
     with ThreadPoolExecutor(max_workers=min(len(node_results), 10)) as executor:
-        future_to_node = {executor.submit(kill_node, node_id, args.pattern, password, signal_num=signal_num): node_id for node_id in node_results.keys()}
+        future_to_node = {executor.submit(kill_node, node_id, args.pattern, signal_num=signal_num): node_id for node_id in node_results.keys()}
         for future in as_completed(future_to_node):
             node_id = future_to_node[future]
             try:
