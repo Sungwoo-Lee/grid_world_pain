@@ -56,7 +56,7 @@ second run will append papers 4–6.
 
 **Citation:** Ha, D., & Schmidhuber, J. (2018). *World Models.* arXiv:1803.10122.
 
-**PDF:** `docs/project/references/Dreamer/Ha and Schmidhuber 2018 - World Models.pdf` (21 pages)
+**PDF:** `docs/project/references/Dreamer/sources/Ha and Schmidhuber 2018 - World Models.pdf` (21 pages)
 
 ### Backbone
 
@@ -361,7 +361,7 @@ each chip away at.
 Lee, H., & Davidson, J. (2019). *Learning Latent Dynamics for Planning from
 Pixels.* ICML 2019 (PMLR 97).
 
-**PDF:** `docs/project/references/Dreamer/Hafner et al. 2019 - Learning Latent Dynamics for Planning from Pixels.pdf` (11 pages)
+**PDF:** `docs/project/references/Dreamer/sources/Hafner et al. 2019 - Learning Latent Dynamics for Planning from Pixels.pdf` (11 pages)
 
 ### Backbone
 
@@ -646,7 +646,7 @@ in practice the optimiser does not find that solution.
 **Citation:** Hafner, D., Lillicrap, T., Ba, J., & Norouzi, M. (2020). *Dream
 to Control: Learning Behaviors by Latent Imagination.* ICLR 2020.
 
-**PDF:** `docs/project/references/Dreamer/Hafner et al. 2020 - Dream to control - Learning behaviors by latent imagination.pdf` (20 pages)
+**PDF:** `docs/project/references/Dreamer/sources/Hafner et al. 2020 - Dream to control - Learning behaviors by latent imagination.pdf` (20 pages)
 
 ### Backbone
 
@@ -1017,7 +1017,7 @@ for return-beyond-horizon.
 
 **Citation:** Hafner, D., Lillicrap, T., Norouzi, M., & Ba, J. (2021). *Mastering Atari with Discrete World Models.* International Conference on Learning Representations (ICLR), arXiv:2010.02193.
 
-**PDF:** `docs/project/references/Dreamer/Hafner et al. 2021 - Mastering Atari with Discrete World Models.pdf` (26 pages)
+**PDF:** `docs/project/references/Dreamer/sources/Hafner et al. 2021 - Mastering Atari with Discrete World Models.pdf` (26 pages)
 
 ### Backbone
 
@@ -1309,7 +1309,7 @@ world-model representation rather than letting them shape it.
 
 **Citation:** Hafner, D., Pasukonis, J., Ba, J., & Lillicrap, T. (2023). *Mastering Diverse Domains through World Models.* arXiv:2301.04104.
 
-**PDF:** `docs/project/references/Dreamer/Hafner et al. 2023 - Mastering Diverse Domains through World Models.pdf` (38 pages)
+**PDF:** `docs/project/references/Dreamer/sources/Hafner et al. 2023 - Mastering Diverse Domains through World Models.pdf` (38 pages)
 
 ### Backbone
 
@@ -1628,7 +1628,7 @@ $\{256, 512, 1024, 2048, 4096\}$ and CNN multipliers $\{24, 32, 48, 64,
 
 **Citation:** Hafner, D., Pasukonis, J., Ba, J., & Lillicrap, T. (2025). *Mastering diverse control tasks through world models.* Nature, doi:10.1038/s41586-025-08744-2.
 
-**PDF:** `docs/project/references/Dreamer/Hafner et al. 2025 - Mastering diverse control tasks through world models.pdf` (19 pages, main; supplementary in same volume)
+**PDF:** `docs/project/references/Dreamer/sources/Hafner et al. 2025 - Mastering diverse control tasks through world models.pdf` (19 pages, main; supplementary in same volume)
 
 This paper is the peer-reviewed Nature publication of DreamerV3. The
 algorithmic core is identical to the 2023 preprint (Paper 5a) — symlog
@@ -1938,7 +1938,7 @@ trained inside the world model.
 
 **Citation:** Hafner, D.\*, Yan, W.\*, & Lillicrap, T. (2025). *Training Agents Inside of Scalable World Models.* arXiv:2509.24527. (\* equal contribution; Google DeepMind.)
 
-**PDF:** `docs/project/references/Dreamer/Hafner et al. 2025 - Training agents inside of scalable world models.pdf` (32 pages)
+**PDF:** `docs/project/references/Dreamer/sources/Hafner et al. 2025 - Training agents inside of scalable world models.pdf` (32 pages)
 
 ### Backbone
 

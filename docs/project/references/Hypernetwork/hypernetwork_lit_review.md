@@ -78,7 +78,7 @@ the paper itself supports them.
 **Citation:** Ha, D., Dai, A., & Le, Q. V. (2016). *HyperNetworks.* ICLR 2017
 (arXiv:1609.09106v4).
 
-**PDF:** `docs/project/references/Hypernetwork/Ha et al. 2016 - HyperNetworks.pdf` (29 pages incl. appendix)
+**PDF:** `docs/project/references/Hypernetwork/sources/Ha et al. 2016 - HyperNetworks.pdf` (29 pages incl. appendix)
 
 ### Backbone
 
@@ -433,7 +433,7 @@ optimisation (Section A.2.3).
 **Citation:** Galanti, T., & Wolf, L. (2020). *On the Modularity of
 Hypernetworks.* NeurIPS 2020.
 
-**PDF:** `docs/project/references/Hypernetwork/Galanti and Wolf 2020 - On the modularity of hypernetworks.pdf` (11 pages)
+**PDF:** `docs/project/references/Hypernetwork/sources/Galanti and Wolf 2020 - On the modularity of hypernetworks.pdf` (11 pages)
 
 ### Backbone
 
@@ -750,7 +750,7 @@ $\Omega(\epsilon^{-(m_1+m_2)/r})$ lower bound for arbitrary neural networks
 *Dynamic Predictive Coding with Hypernetworks.* bioRxiv
 2021.02.22.432194.
 
-**PDF:** `docs/project/references/Hypernetwork/Jiang et al. 2021 - Dynamic Predictive Coding with Hypernetworks.pdf` (19 pages)
+**PDF:** `docs/project/references/Hypernetwork/sources/Jiang et al. 2021 - Dynamic Predictive Coding with Hypernetworks.pdf` (19 pages)
 
 ### Backbone
 
@@ -1090,7 +1090,7 @@ the project's neuromodulation / FiLM line of inquiry.
 T., Tabor, J., & Spurek, P. (2022). *Hypernetwork approach to Bayesian
 MAML.* arXiv:2210.02796.
 
-**PDF:** `docs/project/references/Hypernetwork/Borycki et al. 2022 - Hypernetwork approach to Bayesian MAML.pdf` (14 pages)
+**PDF:** `docs/project/references/Hypernetwork/sources/Borycki et al. 2022 - Hypernetwork approach to Bayesian MAML.pdf` (14 pages)
 
 ### Backbone
 
@@ -1403,7 +1403,7 @@ parameters). Papers 5–7 will explore further combinations.
 A. (2022). *Hypernetwork-PPO for Continual Reinforcement Learning.* Deep
 RL Workshop @ NeurIPS 2022.
 
-**PDF:** `docs/project/references/Hypernetwork/Schöpf et al. 2022 - Hypernetwork-ppo for continual reinforcement learning.pdf` (13 pages)
+**PDF:** `docs/project/references/Hypernetwork/sources/Schöpf et al. 2022 - Hypernetwork-ppo for continual reinforcement learning.pdf` (13 pages)
 
 ### Backbone
 
@@ -1679,7 +1679,7 @@ preserves it approximately.
 **Citation:** Beck, J., Jackson, M., Vuorio, R., & Whiteson, S. (2023).
 *Hypernetworks in Meta-Reinforcement Learning.* CoRL 2022.
 
-**PDF:** `docs/project/references/Hypernetwork/Beck et al. 2023 - Hypernetworks in Meta-Reinforcement Learning.pdf` (10 pages)
+**PDF:** `docs/project/references/Hypernetwork/sources/Beck et al. 2023 - Hypernetworks in Meta-Reinforcement Learning.pdf` (10 pages)
 
 ### Backbone
 
@@ -1993,7 +1993,7 @@ modularity.
 G., & Meger, D. (2023). *Hypernetworks for Zero-Shot Transfer in
 Reinforcement Learning.* AAAI-23.
 
-**PDF:** `docs/project/references/Hypernetwork/Rezaei-Shoshtari et al. 2023 - Hypernetworks for Zero-Shot Transfer in Reinforcement Learning.pdf` (9 pages)
+**PDF:** `docs/project/references/Hypernetwork/sources/Rezaei-Shoshtari et al. 2023 - Hypernetworks for Zero-Shot Transfer in Reinforcement Learning.pdf` (9 pages)
 
 ### Backbone
 
@@ -2323,7 +2323,7 @@ extrapolation error.
 A. (2023). *A Brief Review of Hypernetworks in Deep Learning.*
 arXiv:2306.06955.
 
-**PDF:** `docs/project/references/Hypernetwork/Chauhan et al. 2023 - A Brief Review of Hypernetworks in Deep Learning.pdf` (19 pages)
+**PDF:** `docs/project/references/Hypernetwork/sources/Chauhan et al. 2023 - A Brief Review of Hypernetworks in Deep Learning.pdf` (19 pages)
 
 ### Backbone
 

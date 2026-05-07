@@ -226,7 +226,7 @@ Computationally, the system has both a detection-gain effect and a policy effect
 **Citation key.** Elfwing, S., & Seymour, B. (2017). Parallel reward and punishment control in
 humans and robots: safe reinforcement learning using the MaxPain algorithm. *IEEE ICDL-EPIROB*
 2017. Source: local PDF (8 pp.) at
-`docs/project/references/computational_models_of_pain/Elfwing and Seymour 2017 - Parallel reward and punishment control in humans and robots - Safe reinforcement learning using the MaxPain algorithm.pdf`.
+`docs/project/references/computational_models_of_pain/sources/Elfwing and Seymour 2017 - Parallel reward and punishment control in humans and robots - Safe reinforcement learning using the MaxPain algorithm.pdf`.
 
 ### Phase 1 — Foundational overview
 
@@ -427,7 +427,7 @@ regimes the optimal $w$ would shift toward $0$.
 Donayre Pimentel, S., Majeed, M., Austin, J.-S., Williams, A. C. de C., & Mogil, J. S. (2020).
 Chronic pain produces hypervigilance to predator odor in mice. *Current Biology*, **30**(15),
 R866–R867 (Correspondence; pp. R866–R867). Source: local PDF (2 pp.) at
-`docs/project/references/computational_models_of_pain/Lister et al. 2020 - Chronic pain produces hypervigilance to predator odor in mice.pdf`.
+`docs/project/references/computational_models_of_pain/sources/Lister et al. 2020 - Chronic pain produces hypervigilance to predator odor in mice.pdf`.
 
 ### Phase 1 — Foundational overview
 
@@ -592,7 +592,7 @@ expected to produce an interaction effect of similar magnitude, not a dramatic f
 intertwined inference and control underpin post-injury pain and behaviour. *PLOS Computational
 Biology*, **22**(1): e1013538. https://doi.org/10.1371/journal.pcbi.1013538. Code:
 https://github.com/PranavMahajan25/InjuryPOMDP. Source: local PDF (17 pp.) at
-`docs/project/references/computational_models_of_pain/Mahajan et al. 2026 - Homeostasis after injury - How intertwined inference and control underpin post-injury pain and behaviour.pdf`.
+`docs/project/references/computational_models_of_pain/sources/Mahajan et al. 2026 - Homeostasis after injury - How intertwined inference and control underpin post-injury pain and behaviour.pdf`.
 
 > Note: prior placeholder labeled this paper "Mahajan & Seymour 2024". Correct citation is
 > Mahajan, Dayan & Seymour (2026), PLoS Comp Biol; preprint dates from May 2025. Updated
@@ -849,7 +849,7 @@ explicitly mention **ACL tear** as their planned empirical test case.
 **Citation key.** Seymour, B., Crook, R. J., & Chen, Z. S. (2023). Post-injury pain and
 behaviour: a control theory perspective. *Nature Reviews Neuroscience*, **24**(6), 378–392.
 https://doi.org/10.1038/s41583-023-00699-5. Source: local PDF (15 pp.) at
-`docs/project/references/computational_models_of_pain/Seymour et al. 2023 - Post-injury pain and behaviour - a control theory perspective.pdf`.
+`docs/project/references/computational_models_of_pain/sources/Seymour et al. 2023 - Post-injury pain and behaviour - a control theory perspective.pdf`.
 
 > Note: prior placeholder labeled this paper "Seymour 2019". The correct citation is
 > **Seymour, Crook & Chen (2023)**, *Nat Rev Neurosci*. The 2019 paper of similar topic is
@@ -1135,7 +1135,7 @@ behaviours.
 (2023). Persistent nociceptor hyperactivity as a painful evolutionary adaptation. *Trends
 in Neurosciences*, **46**(3), 211–227.
 https://doi.org/10.1016/j.tins.2022.12.007. Source: local PDF (17 pp.) at
-`docs/project/references/computational_models_of_pain/Walters et al. 2023 - Persistent nociceptor hyperactivity as a painful evolutionary adaptation.pdf`.
+`docs/project/references/computational_models_of_pain/sources/Walters et al. 2023 - Persistent nociceptor hyperactivity as a painful evolutionary adaptation.pdf`.
 
 > Note: prior placeholder labeled this "Walters 2019" / *Frontiers*. The correct citation is
 > the *Trends in Neurosciences* 2023 review. Updated throughout. Note that Crook (2014;
