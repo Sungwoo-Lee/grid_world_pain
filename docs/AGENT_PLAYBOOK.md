@@ -93,7 +93,7 @@ If the analysis surfaces a bug → fork to bug-fix flow. If a missing metric →
 Sharding rules for the parallel case:
 - Shard by file count, not topic. K = ceil(N / 5), capped at 6.
 - Each reviewer writes to its own `tmp/lit_review_shard_<i>.md`.
-- After all shards complete, merge into `docs/project/<topic>_lit_review.md` (matching the existing `docs/project/perceptual_noise_lit_review.md` convention; `<topic>` mirrors the relevant `docs/project/references/<topic>/` subfolder). Dedupe at merge (a paper may have ended up in two shards).
+- After all shards complete, merge into `docs/project/references/<topic>/<topic>_lit_review.md` (the master review is co-located with the source PDFs; `<topic>` is the exact name of the source-PDF subfolder under `docs/project/references/`). Dedupe at merge (a paper may have ended up in two shards).
 - Per-paper processing inside each shard stays sequential — the 4-step backbone needs focused attention per paper.
 - For thematic regrouping after the merge, hand off to `literature-curator`.
 

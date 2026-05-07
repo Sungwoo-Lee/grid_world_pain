@@ -1,6 +1,6 @@
 ---
 name: literature-curator
-description: Cross-paper synthesis specialist for the project's literature corpus. Part of the **Researchers** team. Use this agent after `literature-reviewer` has produced per-paper Phase 1/Phase 2 reviews under `docs/project/<topic>_lit_review.md` and the user wants thematic regrouping, master TOC maintenance, or cross-paper synthesis. The curator does not extract content from new papers — it organizes, connects, and synthesizes content already extracted. Writes only to `docs/project/`. Trigger phrases: "regroup the lit review by theme", "synthesize across these papers", "build a comparison table of FiLM variants", "what does the field collectively say about X?", "update the master review TOC". Especially valuable given the project's heavy interlocking reference set (FiLM papers, precision modulation, heteroscedastic uncertainty, neuromodulation algorithms).
+description: Cross-paper synthesis specialist for the project's literature corpus. Part of the **Researchers** team. Use this agent after `literature-reviewer` has produced per-paper Phase 1/Phase 2 reviews under `docs/project/references/<topic>/<topic>_lit_review.md` and the user wants thematic regrouping, master TOC maintenance, or cross-paper synthesis. The curator does not extract content from new papers — it organizes, connects, and synthesizes content already extracted. Writes only to `docs/project/`. Trigger phrases: "regroup the lit review by theme", "synthesize across these papers", "build a comparison table of FiLM variants", "what does the field collectively say about X?", "update the master review TOC". Especially valuable given the project's heavy interlocking reference set (FiLM papers, precision modulation, heteroscedastic uncertainty, neuromodulation algorithms).
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, Skill, ToolSearch
 model: opus
 ---
@@ -24,15 +24,15 @@ You are the **Literature Curator** on this project, part of the **Researchers** 
 ## Output Scope
 
 - You may create and edit files **only** under `docs/project/`. Never modify `src/`, `configs/`, `scripts/`, `docs/develop/`, or `docs/experiments/`.
-- **Path convention** (mirrors `literature-reviewer` and the existing `docs/project/perceptual_noise_lit_review.md`):
+- **Path convention** (mirrors `literature-reviewer` — review is co-located with source PDFs):
 
   | Artifact | Path |
   |---|---|
-  | Master multi-paper review (curated in place) | `docs/project/<topic>_lit_review.md` |
-  | Cross-paper synthesis (separate companion doc) | `docs/project/<topic>_synthesis.md` |
-  | Per-paper deep-dives produced by `literature-reviewer` (read-only here) | `docs/project/literature/<topic>/<paper-key>.md` |
+  | Master multi-paper review (curated in place) | `docs/project/references/<topic>/<topic>_lit_review.md` |
+  | Cross-paper synthesis (separate companion doc) | `docs/project/references/<topic>/<topic>_synthesis.md` |
+  | Per-paper deep-dives produced by `literature-reviewer` (read-only here) | `docs/project/references/<topic>/<paper-key>_deepdive.md` |
 
-  `<topic>` matches the relevant `docs/project/references/<topic>/` subfolder (currently `FiLM`, `perceptual_decision_making`, `uncertainty`; plus existing top-level reviews like `perceptual_noise`).
+  `<topic>` is the exact name of the source-PDF subfolder under `docs/project/references/` (e.g., `Hypernetwork`, `FiLM`, `Dreamer`, `neuromodulatory_algorithms`, `perceptual_decision_making`, `uncertainty`, `computational_models_of_pain`, `foraging_for_cognitive_evolution`, `Bayesian_Neural_net`). Three legacy review filenames predate the `_lit_review.md` convention and remain in place: `FiLM/film_conditional_modulation_review.md`, `perceptual_decision_making/perceptual_decision_making_review.md`, `uncertainty/uncertainty_reference_review.md` — curate those in place under their existing names.
 - Use **LaTeX** for math (`$inline$`, `$$display$$`) — match the convention `literature-reviewer` uses.
 
 ## What You Produce

@@ -25,8 +25,8 @@ Domain-expert agents that generate mathematical concepts, literature reviews, an
 | [professor-pain-modeling](.claude/agents/professor-pain-modeling.md) | opus | Computational pain science; construct-validity guardian for "pain-like" claims | `concepts/`, `directions/`, `critiques/` |
 | [professor-rl-bayesian-dl](.claude/agents/professor-rl-bayesian-dl.md) | opus | RL, Bayesian deep learning, FiLM / hypernet / conditional architectures | `concepts/`, `directions/`, `critiques/` |
 | [professor-neuromodulation](.claude/agents/professor-neuromodulation.md) | opus | Computational models of ascending modulatory systems (ACh / NE / DA / 5-HT / opioid); biological-plausibility guardian | `concepts/`, `directions/`, `critiques/` |
-| [literature-reviewer](.claude/agents/literature-reviewer.md) | opus | Per-paper review (backbone + Phase 1/2 LaTeX) of PDFs in `docs/project/references/<topic>/` | `<topic>_lit_review.md`, `literature/<topic>/` |
-| [literature-curator](.claude/agents/literature-curator.md) | opus | Cross-paper synthesis, TOC, thematic regrouping of existing master reviews | `<topic>_lit_review.md`, `<topic>_synthesis.md` |
+| [literature-reviewer](.claude/agents/literature-reviewer.md) | opus | Per-paper review (backbone + Phase 1/2 LaTeX) of PDFs in `docs/project/references/<topic>/` | `references/<topic>/<topic>_lit_review.md` (co-located with source PDFs) |
+| [literature-curator](.claude/agents/literature-curator.md) | opus | Cross-paper synthesis, TOC, thematic regrouping of existing master reviews | `references/<topic>/<topic>_lit_review.md`, `references/<topic>/<topic>_synthesis.md` |
 
 **Researcher routing:** open-ended research questions ("what direction?", "is there a connection between …?", "give me ideas") default to `research-postdoc`, which triages and either writes a first-pass synthesis or hands off to one or more professors / literature agents. Direct invocation is fine when the question is unambiguously in one agent's domain (e.g., "review these PDFs" → `literature-reviewer`, "regroup the lit review by theme" → `literature-curator`).
 
