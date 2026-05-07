@@ -73,14 +73,14 @@
 # ---------------------------------------------------------------------------
 
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --configs-dir configs/experiment/dreamer_curriculum/ \
-  --continual-schedule configs/continual/dreamer_curriculum_food_then_predator.yaml \
+  --configs-dir configs/experiment/dreamer_diagnostic/curriculum_smooth/ \
+  --continual-schedule configs/continual/dreamer_curriculum_smooth_4stage.yaml \
   --agent_config configs/models/dreamer_v3_curriculum.yaml \
   --num-envs 16 \
   --seed 0 \
   --device cuda:3 \
   --log-interval 50 \
-  --wandb-group dreamer_curriculum \
-  --wandb-job-type curriculum \
-  --wandb-name "dreamer_curriculum_food_then_predator_s0" \
-  --tag "dreamer_curriculum_food_then_predator_s0"
+  --wandb-group dreamer_diagnostic_battery \
+  --wandb-job-type ablation \
+  --wandb-name "dreamer_ablation_smooth_ramp_s0" \
+  --tag "dreamer_ablation_smooth_ramp_s0"
