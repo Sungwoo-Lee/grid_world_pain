@@ -1,0 +1,78 @@
+# Continual schedule: dreamer_curriculum_smooth_4stage
+# ----------------------------------------------------------------------------
+# Four-stage smooth curriculum for the dreamer_diagnostic_battery / Experiment D.
+# Halves the difficulty cliff between Stages 1 (predator_slow / now "very_slow")
+# and 3 (predator_full) of the previous 3-stage curriculum, by inserting an
+# intermediate Stage 03 (predator_medium).
+#
+# Stage source (alphabetic order in
+# configs/experiment/dreamer_diagnostic/curriculum_smooth/):
+#   01_food_only.yaml             -- predators[0].count=0, hiding_predator.count=0
+#                                     (verbatim copy of dreamer_curriculum/01_food_only.yaml)
+#   02_predator_very_slow.yaml    -- 1 mobile predator, slowed (move_int=8,
+#                                     attack_delay=8, damage [5,15],
+#                                     detection_range=2); hiding_predator.count=1
+#                                     (verbatim copy of dreamer_curriculum/02_predator_slow.yaml,
+#                                      renamed to disambiguate from new Stage 03)
+#   03_predator_medium.yaml       -- NEW intermediate stage. 1 mobile predator
+#                                     halfway between Stages 02 and 04 along
+#                                     speed/attack/damage:
+#                                       move_int=5, attack_delay=5,
+#                                       damage [10,30], detection_range=2 (held)
+#                                     hiding_predator.count=1
+#   04_predator_full.yaml         -- failing-task anchor (verbatim copy of
+#                                     basic/01-5X5_PredInterval3_NutGain18.yaml)
+#
+# Cross-stage modality fingerprint match: see design doc §4 (live-load probe).
+# All sensor flags, body params, grid params, action enables, and the
+# hiding_predator entity (count 1 at Stages 02-04, count 0 at Stage 01) are
+# byte-identical across stages. The only env deltas are predator counts and
+# parameters on predators[0].
+#
+# Boundaries — episode budget and rationale
+# -----------------------------------------
+# Total budget: 700,000 episodes. Per the user's hard requirements (~3-4 h
+# wall-clock at the failing-baseline rate of ~28 step/episode * 16 envs *
+# 2330 env-steps/sec ~ 1300 ep/s in the worst case; faster if survival
+# improves and episodes lengthen).
+#
+# Cumulative boundaries: [16000, 66000, 200000, 700000]
+#   Stage 1 (food_only):     0     -> 16000   delta 16000   (matches 3-stage curriculum)
+#   Stage 2 (very_slow):     16000 -> 66000   delta 50000   (matches 3-stage curriculum)
+#   Stage 3 (medium):        66000 -> 200000  delta 134000  (NEW; ~1/5 of full task budget)
+#   Stage 4 (full):          200000 -> 700000 delta 500000  (bulk on the failing anchor)
+#
+# Why these per-stage deltas:
+#   - Stages 1 and 2 are sized to match the 3-stage curriculum (95mpudwp run);
+#     those stages worked. Re-using the same budgets reduces the number of
+#     things changing between this experiment and 95mpudwp.
+#   - Stage 3 (medium, NEW) gets 134000 episodes. Roughly 2.7x Stage 2's
+#     budget — chosen because the medium predator should have shorter average
+#     episode length than Stage 2's (~100 steps) but longer than Stage 4's
+#     (~30 steps), so per-episode env-step yield is lower; we need more
+#     episodes to expose the WM to the same env-step volume as Stage 2 had.
+#   - Stage 4 (full) gets 500000 episodes. The 95mpudwp Stage 3 budget was
+#     700000 (and was unused after collapse); we sized Stage 4 here at
+#     500000 to keep total at 700000 while leaving the smoother-ramp's bulk
+#     time on the actual failing task. If transfer happens we want enough
+#     episodes to see the inflection clearly.
+#
+# Checkpoint frequencies: [8000, 25000, 50000, 100000]
+#   Stage 1: 8000  -> 2 ckpts (mid + end)
+#   Stage 2: 25000 -> 2 ckpts (mid + end)
+#   Stage 3: 50000 -> 2-3 ckpts (transfer monitor)
+#   Stage 4: 100000 -> 5 ckpts (final-task progress)
+#
+# Design doc:
+#   docs/experiments/active/continual_learning/DREAMER_DIAGNOSTIC_BATTERY.md
+
+continual:
+  # Cumulative episode boundaries.
+  # Stage 0 (01_food_only)              runs while ep_count <  16000.
+  # Stage 1 (02_predator_very_slow)     runs from ep 16000  until ep  66000.
+  # Stage 2 (03_predator_medium)        runs from ep 66000  until ep 200000.
+  # Stage 3 (04_predator_full)          runs from ep 200000 until ep 700000 = total.
+  episode_boundaries: [16000, 66000, 200000, 700000]
+
+  # One int per stage. Parallel to episode_boundaries above.
+  checkpoint_frequencies: [8000, 25000, 50000, 100000]
