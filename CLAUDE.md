@@ -12,11 +12,25 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 | [env-config-auditor](.claude/agents/env-config-auditor.md) | sonnet | YAML/env soundness, obs↔noise sync, pre-flight before training | `docs/reviews/` |
 | [experiment-designer](.claude/agents/experiment-designer.md) | opus | Experiment design + config generation | `configs/`, `docs/experiments/active/<topic>/` |
 | [experiment-analyzer](.claude/agents/experiment-analyzer.md) | opus | Post-hoc training-result analysis (WandB, run comparisons) | `docs/experiments/active/<topic>/` |
-| [literature-reviewer](.claude/agents/literature-reviewer.md) | opus | Per-paper review (backbone + Phase 1/2 LaTeX) | `docs/literature/` |
-| [literature-curator](.claude/agents/literature-curator.md) | opus | Cross-paper synthesis, TOC, thematic regrouping | `docs/literature/` |
 | [training-runner](.claude/agents/training-runner.md) | sonnet | Pre-flight check + launch training on lab nodes (101–114) via `run_command.py`; configs are read-only | `train_command-new.sh` |
 
-**Default routing:** for any task involving 2+ agents in sequence — feature add, bug fix, training experiment, literature review of 10+ papers, post-impl verification — spawn `agent-manager` and let it orchestrate. Single-agent tasks (e.g., "audit this config", "review this PR") bypass the manager and route directly.
+### Researchers
+
+Domain-expert agents that generate mathematical concepts, literature reviews, and publication-direction memos for the project. They write **only** to `docs/project/` and do not edit code, configs, or develop / experiment docs. Recommendations that imply downstream work are handed off (named) to `senior-developer`, `experiment-designer`, etc.
+
+| Agent | Model | Role | Scope (under `docs/project/`) |
+|---|---|---|---|
+| [research-postdoc](.claude/agents/research-postdoc.md) | opus | First responder for open-ended research questions; triages to professors or writes first-pass synthesis | `ideas/`, `triage/` |
+| [professor-bayesian-brain](.claude/agents/professor-bayesian-brain.md) | opus | Perceptual decision making, predictive coding, active inference, Bayesian decision theory | `concepts/`, `directions/`, `critiques/` |
+| [professor-pain-modeling](.claude/agents/professor-pain-modeling.md) | opus | Computational pain science; construct-validity guardian for "pain-like" claims | `concepts/`, `directions/`, `critiques/` |
+| [professor-rl-bayesian-dl](.claude/agents/professor-rl-bayesian-dl.md) | opus | RL, Bayesian deep learning, FiLM / hypernet / conditional architectures | `concepts/`, `directions/`, `critiques/` |
+| [professor-neuromodulation](.claude/agents/professor-neuromodulation.md) | opus | Computational models of ascending modulatory systems (ACh / NE / DA / 5-HT / opioid); biological-plausibility guardian | `concepts/`, `directions/`, `critiques/` |
+| [literature-reviewer](.claude/agents/literature-reviewer.md) | opus | Per-paper review (backbone + Phase 1/2 LaTeX) of PDFs in `docs/project/references/<topic>/` | `<topic>_lit_review.md`, `literature/<topic>/` |
+| [literature-curator](.claude/agents/literature-curator.md) | opus | Cross-paper synthesis, TOC, thematic regrouping of existing master reviews | `<topic>_lit_review.md`, `<topic>_synthesis.md` |
+
+**Researcher routing:** open-ended research questions ("what direction?", "is there a connection between …?", "give me ideas") default to `research-postdoc`, which triages and either writes a first-pass synthesis or hands off to one or more professors / literature agents. Direct invocation is fine when the question is unambiguously in one agent's domain (e.g., "review these PDFs" → `literature-reviewer`, "regroup the lit review by theme" → `literature-curator`).
+
+**Default routing:** for any task involving 2+ agents in sequence — feature add, bug fix, training experiment, literature review of 10+ papers, post-impl verification — spawn `agent-manager` and let it orchestrate. Single-agent tasks (e.g., "audit this config", "review this PR", "ask a professor") bypass the manager and route directly.
 
 The canonical flows, parallelism heuristics, cross-cutting constraints, and anti-patterns are documented in [docs/AGENT_PLAYBOOK.md](docs/AGENT_PLAYBOOK.md). The manager reads this on every spawn; other agents may reference it for context.
 
