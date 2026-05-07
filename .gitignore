@@ -43,3 +43,7 @@ skills/notebooklm/.venv/
 # Claude session-memory raw conversation archive — local-only, not committed
 .claude-memory/_archive/raw_conversations/*.md
 !.claude-memory/_archive/raw_conversations/.gitkeep
+
+# Skill eval workspaces — iteration outputs are transient
+.claude/skills/*-workspace/
+.claude/worktrees/
