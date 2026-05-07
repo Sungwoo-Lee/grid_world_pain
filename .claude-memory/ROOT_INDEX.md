@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-05-08
 **Active folders**: 2
-**Total insights**: 3
+**Total insights**: 4
 **Last audit**: (none)
 
 ---
@@ -15,7 +15,7 @@
 
 | Folder | Definition (1 line) | Insights | Last update | Top tags |
 |---|---|---|---|---|
-| `memory_system_design` | Claude memory system's own design decisions | 2 | 2026-05-08 | [memory, design, decision, skill] |
+| `memory_system_design` | Claude memory system's own design decisions | 3 | 2026-05-08 | [memory, design, decision, skill] |
 | `subagent_engineering` | Subagent + worktree usage gotchas | 1 | 2026-05-08 | [meta, learned_lesson, worktree, subagent] |
 
 ---
@@ -48,5 +48,6 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-08: Captured 1 insight: `20260508_0447_recall_skill_design_and_ship` into `memory_system_design` (no new tags; all reused).
 - 2026-05-08: Captured 2 insight(s): `20260508_0429_memorize_skill_design_and_ship` into `memory_system_design`, `20260508_0430_worktree_isolation_path_safety` into the new `subagent_engineering` folder.
 - 2026-05-08: Created. Added `memory_system_design` folder (genesis insight: `20260508_0315_claude_memory_system_genesis`).
