@@ -517,7 +517,7 @@ cheaper than if all five rungs are construct-relevant.
 
 - [project_plan.md](../project_plan.md) — the document this memo will eventually drive a rewrite of.
 - [phase_1_noise_landscape.md](../phase_1_noise_landscape.md) — the existing draft for Phase 1; relevant to gap G-B.
-- [perceptual_noise_lit_review.md](../perceptual_noise_lit_review.md) — relevant background for the precision-weighting framing.
+- [perceptual_noise_lit_review.md](../references/uncertainty/perceptual_noise_lit_review.md) — relevant background for the precision-weighting framing.
 - [NEUROMODULATION_ALGORITHM.md §1.4](../../develop/active/neuromodulation/NEUROMODULATION_ALGORITHM.md) — H1–H5.
 - [NMN_PERFORMANCE_DIAGNOSIS_v8.md](../../develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md) — the v8 null result that Claims 1–4 must explain.
 - [PRECISION_MODULATION_ARCHITECTURE.md](../../develop/active/precision/PRECISION_MODULATION_ARCHITECTURE.md), [FiLM_ENSEMBLE_SENSORY_PRECISION.md](../../develop/active/filim/FiLM_ENSEMBLE_SENSORY_PRECISION.md) — Phase 3 architectural anchors.
