@@ -61,6 +61,15 @@ Optional: `supersedes`, `superseded_by`, `phase`. Read [FRONTMATTER_CONTRACT.md]
 - **No fallback defaults** for critical config params. The `developer` agent must use `config.get_mandatory('key')` — missing YAML key → `ValueError`.
 - New config keys added by plans must be listed in the plan's File Changes section with the exact YAML path and value.
 
+## Bug-Triage Discipline
+
+When the plan you're writing is a bug fix (vs. a new feature):
+
+1. **Reproduce first.** Identify the minimum command, config, or test that triggers the broken behavior. If the user described the bug informally, ask for the exact reproducer before writing the plan.
+2. **Trace to root cause, not symptom.** A NaN in the loss is a symptom; the cause might be a config that should never have been allowed. Use `git log` / `git blame` to find when and why the offending code was introduced.
+3. **Plan a regression test.** Specify the exact test path + name to add. The test must fail on the current (pre-fix) code and pass after the fix — that's what proves the fix works. Bake this requirement into the plan's File Changes section so `developer` can't skip it.
+4. **Escalate design issues.** If the root cause turns out to be a project-design issue rather than a localized bug, stop and tell the user — design changes belong in a feature plan, not a bug-fix plan. Don't quietly expand the bug-fix scope.
+
 ## Verification Protocol (after `developer` finishes implementation)
 
 1. **Read the plan doc** — check the Implementation Report and Checkpoints for what was done, deviations, blockers.

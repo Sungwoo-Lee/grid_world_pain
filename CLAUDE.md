@@ -4,6 +4,7 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 
 | Agent | Model | Role | Scope |
 |---|---|---|---|
+| [agent-manager](.claude/agents/agent-manager.md) | opus | Orchestrate multi-agent flows; route + sequence + parallelize | spawns sub-agents; writes nothing |
 | [senior-developer](.claude/agents/senior-developer.md) | opus | Platform-development planning + post-impl verification | `docs/develop/` |
 | [developer](.claude/agents/developer.md) | sonnet | Implement approved plans, test, report | full code |
 | [code-reviewer](.claude/agents/code-reviewer.md) | opus | JAX/Flax/vmap/PRNG correctness review | `docs/reviews/` |
@@ -15,16 +16,9 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 | [literature-curator](.claude/agents/literature-curator.md) | opus | Cross-paper synthesis, TOC, thematic regrouping | `docs/literature/` |
 | [training-runner](.claude/agents/training-runner.md) | sonnet | Pre-flight check + launch training on lab nodes (101–114) via `run_command.py`; configs are read-only | `train_command-new.sh` |
 
-**Default code-change flow:** senior-developer plans → user approves → developer implements (uncommitted) → senior-developer verifies. Codified in the `feature-workflow` skill.
+**Default routing:** for any task involving 2+ agents in sequence — feature add, bug fix, training experiment, literature review of 10+ papers, post-impl verification — spawn `agent-manager` and let it orchestrate. Single-agent tasks (e.g., "audit this config", "review this PR") bypass the manager and route directly.
 
-### Workflow Skills (`.claude/skills/`)
-
-| Skill | Pattern |
-|---|---|
-| `feature-workflow` | plan → approve → implement → verify |
-| `bug-fix-workflow` | root-cause → approve → fix + regression test → verify |
-| `training-experiment-workflow` | design new experiment OR analyze existing runs |
-| `parallel-literature-review` | shard corpus → K reviewers → merge (≥10 papers) |
+The canonical flows, parallelism heuristics, cross-cutting constraints, and anti-patterns are documented in [docs/AGENT_PLAYBOOK.md](docs/AGENT_PLAYBOOK.md). The manager reads this on every spawn; other agents may reference it for context.
 
 ---
 

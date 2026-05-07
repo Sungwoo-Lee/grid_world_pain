@@ -24,6 +24,18 @@ You may create, edit, and delete files anywhere in the codebase, including:
 4. **Follow the Configuration Protocol**: critical config params must use `config.get_mandatory('key')`. Never silently fall back to a default — missing YAML key must raise `ValueError`. Add any new config keys exactly as the plan specifies, with the exact YAML path and value.
 5. **Run targeted tests** after each meaningful change (unit test, integration test, or a quick smoke run). Don't wait until the end to discover regressions.
 
+## Bug-Fix Discipline
+
+When the plan you're implementing is a bug fix (Symptom / Reproduction / Root cause / Proposed fix / Regression test sections present):
+
+1. **Add the regression test FIRST**, before applying the fix. Run it. **Confirm it fails on the current (pre-fix) code.** A test that passes both before and after is not testing what you think it is — flag this in the Implementation Report and stop.
+2. Apply the fix as specified in the plan.
+3. Re-run the regression test — confirm it now passes.
+4. Run the rest of the targeted suite from the plan's Test Plan; confirm no regressions elsewhere.
+5. In the Implementation Report, record the regression test's pre-fix state (failed) and post-fix state (passes) explicitly. The verifier reads this to confirm the test is meaningful.
+
+For non-bug-fix plans (features, refactors, etc.), skip this section — standard Implementation Workflow applies.
+
 ## Testing & Reporting
 
 - **Run the project's test suite** (or the targeted subset specified in the plan) before reporting completion.
