@@ -45,3 +45,4 @@ The diary is the **index** to those, not a duplicate.
 - **Reverse-chronological at every level** (newest at the top of each section).
 - All content English; no emojis unless explicitly requested.
 - Links use repo-relative paths (e.g., `docs/develop/active/meta/foo.md`) so the diary is meaningful on any clone.
+- Link cells are auto-formatted by `scripts/diary_append.py`: 7–40 hex chars become `` commit `<hash>` `` (so a git commit ID is unambiguous), and path-shaped strings become `[<filename-stem>](<path>)` (so the link is clickable in any markdown viewer). Pass raw values to the script — do not pre-wrap them yourself.

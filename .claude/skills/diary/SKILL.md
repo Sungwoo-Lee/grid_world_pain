@@ -113,6 +113,19 @@ Edits the matching `Training runs` row in place: sets `Ended = HH:MM`, `Status =
 
 Prepends a bullet to `## Notes`. Use sparingly; structured rows are preferred.
 
+## Link auto-formatting
+
+The script auto-formats whatever you pass to `--link` / `--doc` / `--analysis` / `--commits`:
+
+- **Git commit hash** (7–40 hex chars, e.g. `a16a6c9` or `dfa3c68f4e1`) → rendered as `` commit `<hash>` `` so the row makes clear it is a commit ID, not a generic identifier.
+- **Repo-relative path** (contains `/` or ends in `.md` / `.py` / `.yaml` / etc.) → rendered as `[<filename-stem>](<path>)` so it is clickable in any markdown viewer. Use repo-relative paths so the link is valid on a fresh clone.
+- **Already a markdown link** (`[text](url)`), an HTML anchor (`<a …>`), or a URL (`http…`) → left as-is.
+- **Anything else** (`(pending)`, `(none)`, free text) → left as-is.
+
+So: always pass the **raw value** — the commit hash by itself, the path by itself — and let the script wrap it. Do not pre-format markdown links yourself; that is the script's job.
+
+For `session-end --commits "a16a6c9 f878873"` (whitespace-separated list), each token is formatted independently.
+
 ## Hard rules
 
 - **Always pass repo-relative paths in `--link`, `--doc`, `--analysis`.** Never absolute paths from `$HOME` or system roots — links must be valid on a fresh clone.

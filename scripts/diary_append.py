@@ -39,6 +39,42 @@ TEMPLATE = DIARY_DIR / "TEMPLATE.md"
 KST = timezone(timedelta(hours=9))
 
 
+_HEX = re.compile(r"^[0-9a-f]{7,40}$")
+_PATH_HINT = re.compile(r"[/\\]|\.(md|py|yaml|yml|json|toml|sh|txt|html|csv|tsv)$")
+
+
+def format_link(s: str) -> str:
+    """Render a single link token in markdown-friendly form.
+
+    - Empty / None → empty.
+    - Already a markdown link (starts with '[') or anchor (starts with '<') → leave as-is.
+    - 7–40 hex chars → `commit \`<hash>\`` (disambiguates git commit IDs).
+    - Path-shaped (contains slash, or ends in a known extension) → `[<stem>](<path>)`.
+    - Anything else (e.g. '(pending)', '(none)', URL) → leave as-is.
+    """
+    if not s:
+        return ""
+    s = s.strip()
+    if not s:
+        return ""
+    if s.startswith("[") or s.startswith("<") or s.startswith("http"):
+        return s
+    if _HEX.match(s):
+        return f"commit `{s}`"
+    if _PATH_HINT.search(s):
+        from os.path import basename, splitext
+        stem = splitext(basename(s))[0]
+        return f"[{stem}]({s})"
+    return s
+
+
+def format_links(s: str) -> str:
+    """Format a whitespace-separated list of link tokens (used for --commits)."""
+    if not s:
+        return ""
+    return " ".join(format_link(tok) for tok in s.split())
+
+
 def today_str() -> str:
     return datetime.now(KST).strftime("%Y-%m-%d")
 
@@ -227,7 +263,7 @@ def cmd_session_start(args):
         path = ensure_daily_file(args.date)
         text = path.read_text()
         time = args.time or now_hhmm()
-        link = args.link or ""
+        link = format_link(args.link or "")
         row = f"| {time} | (open) | {args.label} | {args.summary} | {link} |"
         text = insert_row_at_top(text, "Sessions", row)
         write_atomic(path, text)
@@ -240,7 +276,8 @@ def cmd_session_end(args):
         path = ensure_daily_file(args.date)
         text = path.read_text()
         time = args.time or now_hhmm()
-        text = edit_session_end_row(text, args.label, time, args.commits)
+        commits_md = format_links(args.commits) if args.commits else None
+        text = edit_session_end_row(text, args.label, time, commits_md)
         write_atomic(path, text)
         print(f"session-end logged at {time} into {path.name}")
     with_lock(args.date, go)
@@ -251,7 +288,8 @@ def cmd_event(args, type_label):
         path = ensure_daily_file(args.date)
         text = path.read_text()
         time = args.time or now_hhmm()
-        row = f"| {time} | {type_label} | {args.subject} | {args.link} |"
+        link = format_link(args.link)
+        row = f"| {time} | {type_label} | {args.subject} | {link} |"
         text = insert_row_at_top(text, "Events (chronological, newest first)", row)
         write_atomic(path, text)
         print(f"{type_label} logged at {time} into {path.name}")
@@ -263,9 +301,10 @@ def cmd_training_start(args):
         path = ensure_daily_file(args.date)
         text = path.read_text()
         time = args.time or now_hhmm()
+        doc_md = format_link(args.doc)
         row = (
             f"| {time} |  | {args.tag} | {args.node}:{args.gpu} | running | "
-            f"{args.cell} | {args.wandb} | — | {args.doc} |"
+            f"{args.cell} | {args.wandb} | — | {doc_md} |"
         )
         text = insert_row_at_top(text, "Training runs", row)
         write_atomic(path, text)
@@ -278,7 +317,8 @@ def cmd_training_done(args):
         path = ensure_daily_file(args.date)
         text = path.read_text()
         time = args.time or now_hhmm()
-        text = edit_training_row(text, args.tag, time, args.result, args.analysis)
+        analysis_md = format_link(args.analysis) if args.analysis else None
+        text = edit_training_row(text, args.tag, time, args.result, analysis_md)
         write_atomic(path, text)
         print(f"training-done logged at {time} (tag={args.tag}) into {path.name}")
     with_lock(args.date, go)
