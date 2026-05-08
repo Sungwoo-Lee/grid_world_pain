@@ -1,9 +1,9 @@
 ---
 title: "Per-entity avoidance logging — MeanDist + Hits for rabbit and hiding_predator"
 topic: hypervigilance
-status: implemented
+status: active
 created: 2026-05-07
-last_updated: 2026-05-07
+last_updated: 2026-05-08
 ---
 
 # Per-entity avoidance logging — MeanDist + Hits for rabbit and hiding_predator
