@@ -24,6 +24,8 @@
 | `hypervigilance` | `20260508_1427_nmn_heterogeneity_sweep_design` | Hypervigilance experiments and results |
 | `training_runner` | `20260508_1428_node_env_recovery_recipe` | Training-runner agent, launch workflow, lab-node infra |
 | `dreamer` | `20260508_1431_diagnostic_battery_refutes_four_fixes` | DreamerV3 model/config decisions, failure-mode diagnoses |
+| `film` | `20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse` | FiLM-gating / conditional modulation (architecture, hyperparameters, behaviour under noise) |
+| `refutation` | `20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse` | Negative-result insight: a pre-registered hypothesis is refuted (or a candidate cause is ruled out) |
 
 ---
 
@@ -44,7 +46,6 @@ These are not yet active — they become active when first used in an insight. R
 
 | Candidate | Intended scope |
 |---|---|
-| `film` | FiLM-gating / conditional modulation |
 | `precision` | Precision-weighting, noise sensitivity |
 | `rl` | Reinforcement learning algorithm decisions |
 | `wandb` | WandB logging, run tracking |
@@ -54,6 +55,11 @@ These are not yet active — they become active when first used in an insight. R
 
 ## Change history
 
+- 2026-05-09: 4 insights from the cluster-ops scripting consolidation session (`20260509_0309_cluster_py_consolidation`, `20260509_0310_bash_ic_alias_over_ssh`, `20260509_0311_diary_auto_session_backfill`, `20260509_0312_node_num_hostname_in_bashrc`) reused existing tags `meta`, `decision`, `learned_lesson`, `training_runner`, `design`, `memory` — no new tags promoted.
+- 2026-05-08: 2 insights from the NMN heterogeneity-sweep analyzer chain (`20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse`, `20260508_2004_profile_dependent_temp_saturation_mc_film`) promoted `film` from candidate to active and added new active tag `refutation`. Existing tags `nmn`, `hypervigilance`, `learned_lesson` reused.
+- 2026-05-08: 1 insight on Claude Code statusline script gotchas (`20260508_1826_statusline_jq_ifs_pct`) reused existing tags `meta`, `learned_lesson`, `decision` — no new tags promoted.
+- 2026-05-08: 1 insight on scoping the lab SSH config block to vncuser reused existing tags `meta`, `decision`, `learned_lesson`, `training_runner` — no new tags promoted.
+- 2026-05-08: 3 insights from the evaaa→episode container rebuild session reused existing tags `meta`, `decision`, `learned_lesson`, `training_runner` — no new tags promoted.
 - 2026-05-08: Promoted `dreamer` from candidate to active during the dreamer hypervigilance investigation memorize session (4 insights, reconciled with the parallel NMN session — my IDs bumped to 1431–1434).
 - 2026-05-08: Promoted `nmn`, `noise`, `hypervigilance`, `training_runner` from candidates to active during NMN heterogeneity-sweep capture session (3 insights into `nmn_diagnosis` + `cluster_ops`).
 - 2026-05-08: Activated `skill` (new), `learned_lesson` (promoted from candidate), `worktree` (new), `subagent` (new). Added during `/memorize` skill rollout capture session.

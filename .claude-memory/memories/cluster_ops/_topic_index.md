@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 4
-**Last updated**: 2026-05-08
+**Insights**: 12
+**Last updated**: 2026-05-09
 
 ---
 
@@ -13,6 +13,14 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-09 | 03:12 | `20260509_0312_node_num_hostname_in_bashrc` | Bashrc derives `NODE_NUM` from primary lab IP last octet; every `doc-run-*` alias passes `--hostname="docker-${NODE_NUM}"`. Container prompts read `vncuser@docker-101` … `vncuser@docker-114`, instant disambiguation when shelling between cluster containers. Variable expands at alias-use time because aliases are macro-substituted before re-parsing. |
+| 2026-05-09 | 03:10 | `20260509_0310_bash_ic_alias_over_ssh` | To invoke a bash alias from a remote `~/.bashrc` over SSH, use `bash -ic '<alias>'` — non-interactive shells skip alias expansion, and the standard Ubuntu bashrc returns early in non-interactive mode (`case $- in *i*) ;; *) return ;; esac`). The 'no job control' notice is harmless; filter with `grep -v`. |
+| 2026-05-09 | 03:09 | `20260509_0309_cluster_py_consolidation` | Replaced 8 single-purpose bash scripts (distribute_image, list_*, stop, rm, run, rmi, rollout) with one Python tool `cluster.py` (~440 LOC, stdlib only). Subcommand architecture; per-subcommand `--include` / `--exclude` filters; module-level password cache for `rollout`; SSH ControlMaster multiplexing baked in. |
+| 2026-05-08 | 18:26 | `20260508_1826_statusline_jq_ifs_pct` | Three lessons from configuring `~/.claude/statusline-command.sh` on docker-102: `jq` is not installed (use `/home/vncuser/miniconda3/bin/python3` for JSON parsing); bash `read` with `IFS=$'\t'` collapses consecutive tabs (use `\|` to preserve empty fields); Claude Code's statusline JSON pre-calculates `context_window.used_percentage` so no transcript parsing is needed. |
+| 2026-05-08 | 17:17 | `20260508_1717_ssh_config_match_user_scoping` | OpenSSH `Host` directives match by destination only — not by user. The lab SSH config block written by `bootstrap_lab_ssh.sh` silently rewrote `ssh sungwoo320@192.168.0.10X` from port 22 to 1800 (the docker container's sshd, which has no sungwoo320 account). Fix: replace global `Host` block with `Match user vncuser host 192.168.0.10?,192.168.0.11?`. All SSH-using scripts pass -p 1800 explicitly so agents are unaffected; the config block is convenience-only. |
+| 2026-05-08 | 16:39 | `20260508_1639_ssh_credentials_in_shared_image` | `docker export` snapshots `/etc/ssh/ssh_host_*` and `~vncuser/.ssh/{id_rsa,authorized_keys,known_hosts}` — same flattened image rolled to 14 nodes shares one SSH server identity and one client identity (which is what enables run_command.py passwordless SSH between containers). Risk: host-key reconciliation if the prior image regenerated keys per-container. /tmp/ssh_mux_* sockets stay on tmpfs, do not propagate. |
+| 2026-05-08 | 16:38 | `20260508_1638_container_slimdown_recipe` | 5-tier recipe that shrank the running evaaa container from 53.2 GB image to ~11 GB on disk in /home/vncuser. Critical traps: `docker commit` cannot shrink (must `docker export | docker import`); ncdu sums hardlinks (deleting one path frees nothing); `conda clean --all` is conservative — `--force-pkgs-dirs` is needed for orphan extracted dirs; `pyproject.toml` may declare deps the code never imports (this project listed `torch>=2.9.1` with zero imports). |
+| 2026-05-08 | 16:37 | `20260508_1637_nas_automount_fstab_actimeo` | Bake CIFS auto-mount with `actimeo=1,_netdev,nofail` into the container image via /etc/fstab + /etc/smb-credentials (mode 0600). systemd-in-docker auto-generates `.mount` units from fstab; the runner's /tmp/<unique>.sh bypass stays as belt-and-suspenders since `actimeo=1` shrinks the staleness window from ~60s to ~1s but does not fully close it. |
 | 2026-05-08 | 14:46 | `20260508_1446_cifs_race_node112_recurrence` | CIFS attribute-cache race recurred on node 112 (cross-node confirmation), and the runner did NOT auto-apply the canonical /tmp/<unique>.sh bypass on first launch of either round — duplicates `gh1cz01q` (Round 1) and `f5d933ro` (Round 2 Cell C) caught only by post-launch pgrep. Bypass must be applied upfront. |
 | 2026-05-08 | 14:34 | `20260508_1434_terminate_command_key_auth_refactor` | Refactored terminate_command.py from pexpect+getpass to subprocess+SSH-key-auth (mirrors run_command.py). Added `--yes` flag for non-interactive use; kept two-stage scan/confirm default. |
 | 2026-05-08 | 14:33 | `20260508_1433_cifs_bypass_for_run_command` | Node 114 CIFS client caches `train_command-agent.sh` inode content; fresh NAS edits invisible to remote bash → silent duplicate launches. Workaround: write same content to `/tmp/train_cmd_<unique>.sh` on the node and bash that path. |
@@ -22,6 +30,10 @@
 
 ## Change history
 
+- 2026-05-09: Added 3 insights from the cluster-ops scripting consolidation session: `20260509_0309_cluster_py_consolidation` (8 bash scripts → one Python tool), `20260509_0310_bash_ic_alias_over_ssh` (the alias-over-SSH technique it uses), `20260509_0312_node_num_hostname_in_bashrc` (the bashrc that supplies the aliases). No new tags.
+- 2026-05-08: Added 1 insight: `20260508_1826_statusline_jq_ifs_pct` (Claude Code statusline script gotchas — no `jq` on docker-102, bash `read` IFS-whitespace collapse, and the pre-calculated `context_window.used_percentage` field).
+- 2026-05-08: Added 1 insight: `20260508_1717_ssh_config_match_user_scoping` (scoping the lab SSH config Host block to vncuser via `Match user`, fixing the sungwoo320@host trap; ships in the same evaaa→episode rebuild).
+- 2026-05-08: Added 3 insights from the evaaa→episode container rebuild session: `20260508_1637_nas_automount_fstab_actimeo` (CIFS auto-mount via fstab+actimeo, baked into image), `20260508_1638_container_slimdown_recipe` (5-tier 53→11 GB cleanup with hardlink/conda traps), `20260508_1639_ssh_credentials_in_shared_image` (SSH-cred propagation when sharing a docker image to 14 nodes).
 - 2026-05-08: Added 1 insight from the hypervigilance/sameProp session: `20260508_1446_cifs_race_node112_recurrence` (cross-node confirmation of the CIFS race + compliance-gap finding).
 - 2026-05-08: Added 2 insights from the dreamer-hypervigilance session: `20260508_1433_cifs_bypass_for_run_command`, `20260508_1434_terminate_command_key_auth_refactor`.
 - 2026-05-08: Folder created. Added insight `20260508_1428_node_env_recovery_recipe` (node 101 env recovery).
