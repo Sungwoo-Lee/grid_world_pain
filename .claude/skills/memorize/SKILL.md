@@ -145,11 +145,23 @@ If **approximate**: write a markdown summary of recent ~20 turns into `.claude-m
 
 If archive size > 50 KB, surface: `Archive ~XX KB: check for sensitive content before committing the insight.` (The archive is gitignored; only the insight file is committed.)
 
-### Step 8 — Confirm and report
+### Step 8 — Log each insight to the diary (mandatory)
+
+After all insights are written and indexes updated, call the diary helper for **each** insight written. One call per insight; the script flock-protects concurrent invocations from parallel sessions.
+
+```bash
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py insight \
+  --subject "<copy from the insight's frontmatter `summary` field>" \
+  --link   ".claude-memory/memories/<topic>/<id>.md"
+```
+
+This is a hard step, not optional — the diary is the project's cross-session status board, and a memory capture without a diary entry creates an invisible gap. If a diary call errors (e.g., `docs/diary/` is missing), surface the error to the user but do not roll back the insight writes; the insights are the durable artefact.
+
+### Step 9 — Confirm and report
 
 Report in plain English:
 
-> Saved N insight(s) to `.claude-memory/`:
+> Saved N insight(s) to `.claude-memory/` (and logged to today's diary):
 >
 > - `<topic>` — <one-liner>
 > - `<topic>` — <one-liner>

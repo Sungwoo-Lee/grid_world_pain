@@ -88,4 +88,11 @@ For non-bug-fix plans (features, refactors, etc.), skip this section — standar
 When implementation is complete:
 - All planned files modified, all tests run, Implementation Report written.
 - Leave the working tree dirty (uncommitted) for verification.
+- **Log to the daily diary** (mandatory):
+  ```bash
+  /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py implemented \
+    --subject "<one-line summary of what was implemented>" \
+    --link   "<plan-doc-path-relative-to-repo-root>"
+  ```
+  Use the plan-doc path for `--link` (you haven't committed yet — `senior-developer` does not commit either; the user does after verification). Script flock-protects concurrent calls. See `.claude/skills/diary/SKILL.md`.
 - Notify the user that implementation is done and ready for `senior-developer` verification.

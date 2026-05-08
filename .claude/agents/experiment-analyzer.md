@@ -99,5 +99,13 @@ The user reads this section. If accepted, the user invokes `feature-workflow` (`
 When the analysis is complete:
 - Doc saved at `docs/experiments/active/<topic>/<NAME>.md` with valid frontmatter; `last_updated` bumped to today.
 - Working `tmp/` files left for traceability (they're gitignored anyway).
+- **Log to the daily diary** (mandatory) — for **each** training run analyzed (or once per analysis if it covers multiple runs sharing a tag):
+  ```bash
+  /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py training-done \
+    --tag      "<TAG that training-runner used at training-start>" \
+    --result   "<one-line headline finding, e.g. 'survival 23 ± 2 steps'>" \
+    --analysis "<docs/experiments/active/<topic>/<NAME>.md>"
+  ```
+  The `--tag` MUST match the TAG passed by `training-runner` at `training-start` — the script edits the existing `Training runs` row in place by tag (Status changes from `running` to `done HH:MM`, Result and Doc fields filled). If the row doesn't exist, the script errors; surface that to the user rather than re-creating the row blindly. Script flock-protects concurrent calls. See `.claude/skills/diary/SKILL.md`.
 - Notify the user with: doc path, headline finding (1–2 sentences), and any `Metrics Requested` or `Related Issues` flagged for follow-up.
 - The user decides whether to act on requested metrics (→ `feature-workflow`) or related bugs (→ `bug-fix-workflow`).

@@ -67,3 +67,25 @@ This project carries two memory layers; future-Claude must know which one to wri
 - **In-repo session memory** at `.claude-memory/` — multi-section session insights with rationale, decisions, follow-ups, and an optional raw-conversation archive. Version-controlled with the repo.
 
 When memory work is requested, read `.claude-memory/CLAUDE.md` (operating manual) and `.claude-memory/ROOT_INDEX.md` (topic registry) before capturing or recalling. The division-of-labor decision rule and capture triggers live in `.claude-memory/CLAUDE.md`; the design rationale and worked routing examples live in [docs/develop/active/meta/claude_memory_system_design.md](docs/develop/active/meta/claude_memory_system_design.md).
+
+---
+
+## Diary protocol
+
+The project keeps a daily event log at [docs/diary/YYYY-MM-DD.md](docs/diary/) — a single-glance status board across all parallel Claude sessions. **Update it whenever a notable event fires, even without an explicit user request.** The diary is the cross-session index; missing entries create invisible gaps when another session looks at "what's happening today".
+
+The mechanism is the `/diary` skill ([.claude/skills/diary/SKILL.md](.claude/skills/diary/SKILL.md)), which calls `scripts/diary_append.py` (flock-protected, safe under parallel calls). Subcommand-to-event mapping:
+
+| When this happens | Call this subcommand |
+|---|---|
+| Top-level Claude session begins a multi-step task | `session-start --label … --summary … [--link plan-or-doc]` |
+| Same session wraps up | `session-end --label … --commits "<hashes>"` |
+| `developer` reports an implementation complete | `implemented --subject … --link <commit-hash-or-plan-doc>` |
+| `senior-developer` reports a verification complete | `verified --subject … --link <plan-doc>` |
+| `/memorize` writes 1+ insights | already chained — `/memorize` Step 8 calls `diary_append.py insight ...` once per insight |
+| `training-runner` launches a training | `training-start --tag … --node … --gpu … --cell … --wandb … --doc <design-doc>` |
+| `experiment-analyzer` finishes an analysis | `training-done --tag <same-as-start> --result "<one-line>" --analysis <analysis-doc>` |
+
+Pass **raw values** (commit hashes, repo-relative paths) to `--link` / `--doc` / `--analysis` / `--commits` — the script auto-formats them as `commit `<hash>`` or `[stem](relative-path)`. Tags must match between `training-start` and `training-done`; session labels must match between `session-start` and `session-end`.
+
+Agent profiles in `.claude/agents/` carry their own diary-update reminder for their specific subcommand. Top-level Claude is responsible for `session-start` / `session-end`. The `/memorize` chain handles `insight` rows automatically.
