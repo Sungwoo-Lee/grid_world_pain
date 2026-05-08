@@ -1,18 +1,18 @@
 ---
-title: "Per-quadrant occupancy + per-rabbit-instance distance logging (Round-2 escalation)"
+title: "Per-tag per-instance distance logging (rabbits and predators) — Round-2 escalation"
 topic: hypervigilance
 status: active
 created: 2026-05-08
-last_updated: 2026-05-08
+last_updated: 2026-05-09
 phase: 1
 ---
 
-# Per-quadrant occupancy + per-rabbit-instance distance logging
+# Per-tag per-instance distance logging (rabbits and predators)
 
 > **Status**: PLANNED
-> **Opened**: 2026-05-08
+> **Opened**: 2026-05-08 (rewritten 2026-05-09)
 > **Related**:
-> - [`docs/experiments/active/hypervigilance/sameprop_round2_design.md`](../../../experiments/active/hypervigilance/sameprop_round2_design.md) — §7 Metrics Requested (origin), §9.5 (failure-mode mapping that motivates them), §9.8 step 2 (escalation), §9.10 (escalated specs as load-bearing).
+> - [`docs/experiments/active/hypervigilance/sameprop_round2_design.md`](../../../experiments/active/hypervigilance/sameprop_round2_design.md) — §7 Metrics Requested (origin), §9.5 (failure-mode mapping), §9.10 (escalation, load-bearing).
 > - [`docs/develop/active/hypervigilance/per_entity_avoidance_logging.md`](per_entity_avoidance_logging.md) — direct precedent (commit `4b55fc6`); this plan extends the same 5 pipeline stages additively.
 > - [`docs/develop/active/hypervigilance/sameprop_discriminating_channels.md`](sameprop_discriminating_channels.md) — channels memo, why quadrant-vs-class is the live ambiguity.
 
@@ -27,156 +27,138 @@ With predator quadrant-locked to TL `[[1,1],[5,5]]` and rabbits at TL+BR, an
 agent that camps the BR rabbit corner and never visits TL produces *identical*
 WandB numbers to an agent that learned class-conditional avoidance. The
 aggregate `Episode/MeanDistRabbit = 2.58` could be "agent visits BR rabbit at
-distance ~1.5 and TL rabbit at distance ~3.5" (avoidance of co-located
+distance ~1.5 and TL rabbit at distance ~3.5" (avoidance of the *co-located*
 rabbit) **or** "agent visits both rabbits at distance ~2.6" (true class
 indifference). The two pictures support opposite verdicts on H₀(A1) vs H₁(A1).
 
-The fix is two additive metrics:
+The fix is **per-instance L2 distance, surfaced under a YAML-supplied tag**:
 
-1. Per-rabbit-instance L2 distance, surfaced quadrant-tagged
-   (`Episode/MeanDistRabbit_TL`, `..._BR`, etc.).
-2. Per-episode quadrant occupancy fractions (`Episode/QuadrantOccupancy_{TL,TR,BL,BR}`).
+```
+Episode/MeanDistRabbit_TL    Episode/MeanDistPredator_TL
+Episode/MeanDistRabbit_BR    Episode/MeanDistPredator_TL  # (only one predator in A1)
+```
 
-Without these, no amount of additional training resolves the Cell A1 verdict
-(see Round-2 §9.10). They are **prerequisites for the Round-2 re-launch**, not
-optional polish.
+Comparing `MeanDistRabbit_TL` against `MeanDistPredator_TL` directly
+disambiguates "agent avoids the TL *location*" from "agent avoids the predator
+*class*" — the metric pair the Round-2 verdict needs. Without it, no amount of
+additional training resolves Cell A1 (see Round-2 §9.10). It is a
+**prerequisite for the Round-2 re-launch**, not optional polish.
 
 ## Analysis
 
+### Design choice: tags over geometry
+
+The metric semantics belong in the YAML config (which already encodes spawn
+areas, properties, and per-instance counts), not in env source code. Hard-coding
+quadrant geometry inside `core.py` / `config_loader.py` would lock the platform
+to a 4-quadrant 10×10-grid assumption that future experiments (3-region, 9-cell
+arena, asymmetric splits) would have to undo. A small **string tag per entity
+instance** keeps the source geometry-agnostic: the tag is the only thing the
+WandB key derives from, and the JIT graph never sees the string.
+
 ### Existing pipeline (read-only audit)
 
-The pipeline was already mapped end-to-end by the prior plan
-[`per_entity_avoidance_logging.md`](per_entity_avoidance_logging.md) §Analysis;
-this plan reuses every site identified there. Verbatim summary of the 5 stages
-(verified against current `v1.3` source on 2026-05-08):
+Pipeline stages and exact line numbers verified against `v1.3` source on
+2026-05-09. The prior plan
+[`per_entity_avoidance_logging.md`](per_entity_avoidance_logging.md) (commit
+`4b55fc6`) added the *aggregated* `dist_to_neutral` / `dist_to_hiding_predator`
+keys at all five sites; this plan reuses every site identically.
 
-1. **Env step (`src/environment/core.py:431-502`)** — builds the per-step `info`
-   dict. `dist_to_neutral` (the *aggregated* nearest-rabbit distance) is at
-   `core.py:497`. Per-instance norms are already computed inside that line:
-   `jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)` produces a
-   `[num_neutral]` vector and is then immediately `jnp.min`-reduced. To get
-   per-instance, do not reduce.
-2. **RPPO `StepInfo` NamedTuple (`src/models/recurrent_ppo_trainer.py:7-22`)**
+1. **Env step (`src/environment/core.py:494-502`)** — builds the per-step
+   `info` dict with aggregated nearest-entity distances. The per-instance norm
+   `jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)` is already
+   computed at line 497; it is then `jnp.min`-reduced. To get per-instance,
+   simply do not reduce.
+2. **RPPO `StepInfo` NamedTuple (`src/models/recurrent_ppo_trainer.py:7-23`)**
    — populated in `collect_trajectories` near the existing `dist_to_neutral`
-   wiring (~line 191-208 after the prior plan's expansion).
+   wiring.
 3. **Dreamer transition dict (`src/models/dreamer_v3_trainer.py:609-633`)** —
-   mirrors `info`. New entries land next to the existing `dist_to_neutral` /
-   `dist_to_hiding_predator` keys.
-4. **`train.py` accumulators (`train.py:939-946`)** —
-   - `BEHAVIOR_KEYS` (sum-aggregated boolean per-step events).
-   - `BEHAVIOR_DIST_KEYS` (mean-aggregated per-step distances).
-   - Used at: `1084-1086, 1166, 1192-1195, 1208-1211, 1223-1226, 1421,
-     1439-1442, 1451-1454, 1462-1465, 1473-1476, 1482-1485, 1647-1650,
-     1663-1666, 1674-1677, 1808-1811, 1824-1827, 1835-1838, 1929, 1940-1943,
-     1955-1958, 1966-1969`.
-5. **`train.py` WandB aggregation (5 mirrored sites)** — append
-   `Episode/MeanDistRabbit_*` and `Episode/QuadrantOccupancy_*` next to the
-   existing `Episode/MeanDistRabbit` line at:
+   mirrors `info`. New entries land next to the existing per-entity keys.
+4. **`train.py` accumulators (`train.py:939-946`)** — `BEHAVIOR_KEYS` (sum
+   per-step booleans) and `BEHAVIOR_DIST_KEYS` (mean per-step distances).
+   Used at the five mirrored sites listed below.
+5. **`train.py` WandB aggregation (5 mirrored sites)** — append per-tag keys
+   next to the existing `Episode/MeanDistRabbit` line:
    - PPO main: `train.py:1255`
    - PPO branch B: `train.py:1515`
    - Dreamer branch A: `train.py:1725`
    - Dreamer branch B: `train.py:1893`
    - Dreamer branch C: `train.py:2003`
 
-### Why quadrant-tagged names (not generic `_idx0`, `_idx1`)
+### YAML schema additions
 
-The Round-2 designer/user preference is **quadrant-tagged** — quadrant identity
-is the experimentally meaningful axis. The mapping from a rabbit's static
-`neutral_spawn_area` to a quadrant tag {TL, TR, BL, BR} is a deterministic
-Python-time computation in the config loader and produces a static
-`neutral_quadrant_idx` array on `EnvParams`. This solves four problems
-simultaneously:
+One new optional field per instance, on both `neutral_animals` and `predators`
+(symmetric, per the user directive). Existing config example (R2 Cell A1):
 
-- **Generic across configs.** Any future config with rabbits in TR or BL
-  (Round 3 candidates) gets meaningful keys without further code changes.
-- **Stable WandB schema.** A given config emits a fixed key set every run.
-  Configs with no TL rabbit simply never log `Episode/MeanDistRabbit_TL`.
-- **JIT-safe.** The mapping happens once in `config_loader.py` (Python `int`s
-  baked into a `jnp.ndarray` field on `EnvParams`); the env step does not
-  branch on quadrant identity, only on indices.
-- **Forward-compatible with multi-count YAML entries.** If a future YAML uses
-  `count: 2, spawn_area: [[1,1],[5,5]]` (both rabbits in TL, expanded to two
-  instances at config-load), both instances get tag `TL` and the per-quadrant
-  mean averages over them — semantically what the user wants.
+```yaml
+neutral_animals:
+  - name: "rabbit"
+    count: 1
+    spawn_area: [[1, 1], [5, 5]]
+    tag: "TL"                         # NEW (optional; default = f"idx{i}")
+    ...
+  - name: "rabbit"
+    count: 1
+    spawn_area: [[6, 6], [10, 10]]
+    tag: "BR"                         # NEW
+    ...
 
-### Why not 4 boolean masks for QuadrantOccupancy
+predators:
+  - name: "predator"
+    count: 1
+    spawn_area: [[1, 1], [5, 5]]
+    tag: "TL"                         # NEW
+    ...
+```
 
-The §7 hint suggested 4 boolean masks per step. A simpler equivalent is one
-`int32` field `quadrant_idx ∈ {0,1,2,3}` derived from `new_agent_pos`. At
-episode-aggregation time `train.py` reduces the per-step trace into 4 fractions
-via `np.mean(quadrant_idx == k)` for `k ∈ 0..3`. The information is identical;
-the env step adds 1 scalar to `info` instead of 4 booleans, and the JIT graph
-gains 2 integer divisions (`r // (h//2)`, `c // (w//2)`) plus a fused
-`2*row_half + col_half` index — well under 1 % of step cost. The 4 boolean
-expansion happens off-GPU in NumPy.
+`hiding_predators` are stored inside `environment.resources` with
+`type: hiding_predator` (not a separate list); their YAML row already accepts
+the same per-instance fields. Tagging them is **out of scope for this plan** —
+they live behind a different schema surface; flagged as Open Question 1.
 
-### Edge cases — quadrant boundary on a 10×10 grid
+### Tag rules
 
-`params.height = params.width = 10`; positions are 0-indexed integer grid cells
-(post-config-loader subtraction at `config_loader.py:70,118,168,209-210`).
-Quadrants are then:
-
-| Quadrant | Row range (incl) | Col range (incl) |
-|---|---|---|
-| TL (0) | 0–4 | 0–4 |
-| TR (1) | 0–4 | 5–9 |
-| BL (2) | 5–9 | 0–4 |
-| BR (3) | 5–9 | 5–9 |
-
-Splitter: `row_half = (new_agent_pos[0] >= height // 2).astype(int32)`,
-`col_half = (new_agent_pos[1] >= width // 2).astype(int32)`,
-`quadrant_idx = 2 * row_half + col_half`. For odd grid sizes (e.g. 9×9), the
-center cell goes into the BR quadrant by `>=` — documented in a code comment.
-The hypervigilance configs are all 10×10; this is a non-issue at the
-experimental level.
-
-For the per-rabbit quadrant tag (computed at config-load time in
-`config_loader.py`), use the **midpoint of each `neutral_spawn_area`**:
-`mid_r = (min_r + max_r - 1) / 2`, `mid_c = (min_c + max_c - 1) / 2` (the `-1`
-because the loader stores `min_r-1, min_c-1, max_r, max_c` already; midpoint of
-the *zero-indexed inclusive* range is `(min_r0 + max_r0 - 1) / 2` where
-`min_r0 = min_r-1` is what's stored). Then apply the same `>= height//2`
-splitter. This gives every YAML rabbit entry a single static quadrant tag,
-even if its spawn area technically crosses the halfway line (which none of the
-hypervigilance configs do — all rabbit areas are wholly within one quadrant).
+- **Default** when `tag` is absent or empty string: `f"idx{i}"`, where `i` is
+  the entity's expanded position in the post-`count` list (matches today's
+  `expanded_neutral` / `expanded_predators` ordering in `config_loader.py`).
+- **Multi-instance entries** (`count: 2, tag: "TL"`): both expanded instances
+  inherit the tag; the per-tag metric is the **mean** over the matching
+  instances (same reduction as the existing aggregated `MeanDistRabbit`).
+- **Allowed characters**: `[A-Za-z0-9_-]+`. WandB accepts more, but `/` opens
+  nested namespaces; restrict to alphanumeric + `_` + `-` and raise
+  `ValueError` at config-load if violated.
+- **Type**: stored as a static `tuple[str, ...]` on the `EnvParams` object
+  (`pytree_node=False`). Strings never enter a `jnp.ndarray`, never touch the
+  JIT graph, never recompile.
+- **`config.get_mandatory` does NOT apply.** The field is optional with a
+  documented default, so loader code uses `entry.get('tag', None)` and
+  normalises in Python. (Project rule "no fallback defaults" targets *critical*
+  config that affects training dynamics; metric-label strings do not.)
 
 ### Backward compatibility
 
-- No new YAML config keys → existing configs continue to load. (`config.get_mandatory`
-  is not invoked.)
-- `EnvParams` gains 1 new field (`neutral_quadrant_idx`, a `jnp.ndarray` of
-  shape `[num_neutral]`, dtype int32). Existing `_replace`/dataclass field
-  ordering is preserved (append at the bottom of the Neutral Animals block).
-- `info` gains 2 new entries:
-  - `dist_per_neutral` — `jnp.ndarray` of shape `[num_neutral]`, fixed at trace
-    time. For configs with `num_neutral = 0` we fall back to a `(0,)`-shape
-    array (handled identically to today's `state.neutral_pos.shape[0] > 0`
-    guard).
-  - `quadrant_idx` — `int32` scalar.
-- `Episode/MeanDistRabbit` (the aggregated nearest-rabbit metric) is **not**
-  removed; the new `Episode/MeanDistRabbit_TL` / `_BR` are additive.
-- Per-quadrant rabbit keys appear only for quadrants that contain at least one
-  rabbit. Configs with 0 rabbits emit none of the new rabbit keys; the
-  `QuadrantOccupancy_*` keys always emit (4 keys, regardless of config) since
-  the agent is always in some quadrant.
-- The Dreamer replay buffer rebuilds itself from the transition dict at run
-  start, so the new fixed-shape `dist_per_neutral` array propagates without
-  buffer-shape surgery — same as the prior plan.
+- Existing configs with no `tag` field load unchanged → tags default to
+  `("idx0", "idx1", ...)`.
+- Existing aggregated keys `Episode/MeanDistRabbit`,
+  `Episode/MeanDistHidingPredator`, `Episode/RabbitHits`,
+  `Episode/HidingPredatorHits` are **preserved**.
+- New per-tag keys are purely additive: `Episode/MeanDistRabbit_<tag>` and
+  `Episode/MeanDistPredator_<tag>`. (Note: `MeanDistPredator` aggregated does
+  not currently exist at any of the 5 WandB sites — see `train.py:1255-1256`,
+  `1515-1516`, `1725-1726`, `1893-1894`, `2003-2004`. The new
+  `MeanDistPredator_<tag>` keys are the first per-predator distance metric on
+  the platform.)
+- Configs with 0 entities → `num_neutral_for_log = 0` (or
+  `num_predator_for_log = 0`); no per-tag keys emit; no error.
 
 ### Vmap / JIT safety
 
-- `dist_per_neutral` operates on already-batched `state.neutral_pos` arrays
-  and produces a fixed-shape `[num_neutral]` jax array — vmaps cleanly to
-  `[num_envs, num_neutral]` like the existing `dist_to_neutral` reduction.
-- `quadrant_idx` is a single int32 scalar derived from `new_agent_pos` and the
-  static `params.height` / `params.width` — vmaps to `[num_envs]`.
-- `neutral_quadrant_idx` lives on `EnvParams` as a regular `jnp.ndarray` (the
-  dataclass currently mixes static `pytree_node=False` ints/floats with
-  dynamic `jnp.ndarray` fields — see `state.py:65-115`); a `[num_neutral]`
-  int array is shaped consistently with the existing `neutral_nociception` /
-  `neutral_move_int` arrays, which are dynamic.
-- All Python-level `if shape[0] > 0` guards stay at trace time (per the prior
-  plan's analysis); recompile behaviour is unchanged.
+- `dist_per_neutral` / `dist_per_predator` are fixed-shape `[num_*]` jax
+  arrays computed from already-batched `state.*_pos` arrays. Vmaps cleanly to
+  `[num_envs, num_*]` like the existing `dist_to_neutral` reduction.
+- `EnvParams.neutral_tags` and `EnvParams.predator_tags` are static
+  `tuple[str, ...]` (`pytree_node=False`) — Python-only, never traced.
+- Python-level `if shape[0] > 0` guards stay at trace time; no recompilation.
 
 ## Implementation Plan
 
@@ -184,220 +166,314 @@ hypervigilance configs do — all rabbit areas are wholly within one quadrant).
 
 #### Final WandB metric set
 
-| Key | Aggregation | Source `info` field | Notes |
-|-----|-------------|---------------------|-------|
-| `Episode/MeanDistRabbit_TL` | per-step mean of distances to rabbits whose static quadrant tag = TL | `dist_per_neutral` + `params.neutral_quadrant_idx` | Emitted only if ≥ 1 rabbit has tag TL. |
-| `Episode/MeanDistRabbit_TR` | same, TR | same | Emitted only if ≥ 1 rabbit has tag TR. |
-| `Episode/MeanDistRabbit_BL` | same, BL | same | Emitted only if ≥ 1 rabbit has tag BL. |
-| `Episode/MeanDistRabbit_BR` | same, BR | same | Emitted only if ≥ 1 rabbit has tag BR. |
-| `Episode/QuadrantOccupancy_TL` | fraction of episode steps with `quadrant_idx == 0` | `quadrant_idx` | Always emitted. Sums across 4 quadrants ≈ 1.0 (= 1.0 exactly for any individual env). |
-| `Episode/QuadrantOccupancy_TR` | fraction, idx 1 | same | Always. |
-| `Episode/QuadrantOccupancy_BL` | fraction, idx 2 | same | Always. |
-| `Episode/QuadrantOccupancy_BR` | fraction, idx 3 | same | Always. |
+For Cell A1 (`02-sameProp_R2_passivePredator.yaml`) with rabbits tagged
+`TL`/`BR` and the single predator tagged `TL`:
 
-For Round-2 A1/C the rabbit-quadrant set is `{TL, BR}` — the new keys are
-`Episode/MeanDistRabbit_TL` and `Episode/MeanDistRabbit_BR` only. Future Round
-3 configs with TR/BL rabbits get `_TR` / `_BL` automatically.
+| Key | Aggregation | Source `info` field |
+|---|---|---|
+| `Episode/MeanDistRabbit_TL` | per-step mean of distances to rabbits with tag TL | `dist_per_neutral` + `EnvParams.neutral_tags` |
+| `Episode/MeanDistRabbit_BR` | same, tag BR | same |
+| `Episode/MeanDistPredator_TL` | per-step mean of distances to predators with tag TL | `dist_per_predator` + `EnvParams.predator_tags` |
+
+Configs with future TR/BL tags get `_TR` / `_BL` automatically with no source
+edits. Configs with no `tag` field emit `_idx0`, `_idx1`, etc.
 
 #### Per-step `info` additions
 
+Insert between lines 501 and 502 of `core.py`:
+
 ```python
-# Two new info entries (to be inserted next to the existing `dist_to_neutral` block at core.py:497-501).
+# Per-instance distances: keep the [num_*] vector (no reduction).
 info['dist_per_neutral'] = (
     jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)
     if state.neutral_pos.shape[0] > 0
     else jnp.zeros((0,), dtype=jnp.float32)
 )
-info['quadrant_idx'] = (
-    2 * (new_agent_pos[0] >= (params.height // 2)).astype(jnp.int32)
-    +     (new_agent_pos[1] >= (params.width  // 2)).astype(jnp.int32)
+info['dist_per_predator'] = (
+    jnp.linalg.norm(state.pred_pos - new_agent_pos, axis=-1)
+    if state.pred_pos.shape[0] > 0
+    else jnp.zeros((0,), dtype=jnp.float32)
 )
 ```
 
-`dist_per_neutral.shape == (num_neutral,)`, which is a static, config-baked
-size. `quadrant_idx` is a scalar `int32` in `{0,1,2,3}`. Neither field
-triggers any new recompilation paths.
+`dist_per_neutral.shape == (num_neutral,)`, `dist_per_predator.shape ==
+(num_predator,)` — both static, config-baked sizes. **No quadrant geometry.
+No `quadrant_idx`. No grid-half-split.**
 
-#### Static per-rabbit quadrant tag (config_loader)
+#### Static tag tuples (`config_loader.py`)
 
-In `src/environment/config_loader.py`, after `neutral_spawn_area` is built
-(currently line 210), compute:
+After `expanded_neutral` is built (around line 193):
 
 ```python
-# Quadrant tag per neutral (rabbit), based on spawn-area midpoint.
-# Layout: 0=TL, 1=TR, 2=BL, 3=BR (matches `quadrant_idx` in core.py).
-# Uses height/width loaded just above (lines 206-207).
-if expanded_neutral:
-    h_half = h // 2
-    w_half = w // 2
-    # neutral_spawn_area stores [min_r0, min_c0, max_r1, max_c1]
-    # (min - 1 already applied by lines 209-210). Midpoint of the
-    # zero-indexed inclusive range is (min_r0 + max_r1 - 1) / 2.
-    mid_r = (neutral_spawn_area[:, 0] + neutral_spawn_area[:, 2] - 1) / 2
-    mid_c = (neutral_spawn_area[:, 1] + neutral_spawn_area[:, 3] - 1) / 2
-    row_half = (mid_r >= h_half).astype(jnp.int32)
-    col_half = (mid_c >= w_half).astype(jnp.int32)
-    neutral_quadrant_idx = 2 * row_half + col_half
-else:
-    neutral_quadrant_idx = jnp.zeros((0,), dtype=jnp.int32)
+# Tag normalisation helper (Python-only; never traced).
+import re
+_TAG_RE = re.compile(r'^[A-Za-z0-9_-]+$')
+
+def _normalise_tag(raw, idx, entity_label):
+    """Return a valid metric-suffix string. Empty / missing → f'idx{idx}'."""
+    if raw is None or raw == "":
+        return f"idx{idx}"
+    s = str(raw)
+    if not _TAG_RE.match(s):
+        raise ValueError(
+            f"{entity_label} tag {s!r} contains characters outside [A-Za-z0-9_-]. "
+            f"Tag is appended to WandB key 'Episode/MeanDist{entity_label}_<tag>'; "
+            f"slashes / spaces / dots break the namespace."
+        )
+    return s
 ```
 
-Then add `neutral_quadrant_idx=neutral_quadrant_idx` to the `EnvParams(...)`
-constructor (around line 349, next to `neutral_spawn_area=`).
+(Place at module top alongside `_read_properties` for symmetry.)
 
-In `src/environment/state.py`, add the field to the `# Neutral Animals`
-block of `EnvParams` (around line 108):
+Then in the `if expanded_neutral:` branch, append:
 
 ```python
+neutral_tags = tuple(
+    _normalise_tag(n.get('tag'), i, 'Rabbit')
+    for i, n in enumerate(expanded_neutral)
+)
+```
+
+In the matching `else` branch:
+
+```python
+neutral_tags = tuple()
+```
+
+Same pattern in the `if expanded_predators:` branch (around line 95) and its
+`else`:
+
+```python
+predator_tags = tuple(
+    _normalise_tag(p.get('tag'), i, 'Predator')
+    for i, p in enumerate(expanded_predators)
+)
+# else:
+predator_tags = tuple()
+```
+
+Pass both into the `EnvParams(...)` constructor at line 308:
+
+```python
+neutral_tags=neutral_tags,
+predator_tags=predator_tags,
+```
+
+#### `EnvParams` field additions (`state.py`)
+
+Add at the end of the `# Neutral Animals` block (after line 108) and at the
+end of the `# Predators` block (after line 88):
+
+```python
+# Predators
+...
+pred_spawn_area: jnp.ndarray  # [num_pred, 4]
+predator_tags: tuple[str, ...] = struct.field(pytree_node=False)  # NEW
+
+# Neutral Animals
+...
 neutral_spawn_area: jnp.ndarray  # [num_neutral, 4]
-neutral_quadrant_idx: jnp.ndarray  # [num_neutral] int32 (0=TL, 1=TR, 2=BL, 3=BR; midpoint of spawn_area)
+neutral_tags: tuple[str, ...] = struct.field(pytree_node=False)  # NEW
 ```
 
-The new field is a regular dynamic `jnp.ndarray` (no `pytree_node=False`),
-matching `neutral_spawn_area` directly above.
+Both are static — `pytree_node=False` keeps them out of the JIT pytree, so JAX
+treats them as Python constants (same pattern as `obstacle_names` at line 100).
 
-#### Train-time aggregation (per-quadrant fan-out)
+#### Train-time aggregation
 
-`BEHAVIOR_DIST_KEYS` does **not** absorb `dist_per_neutral` (it's a vector,
-not a scalar — the per-key sum loop at `train.py:1194` would NumPy-error).
-Instead, add a parallel accumulator `episode_dist_per_neutral_sums` that
-holds `(num_envs, num_neutral)` per-step sums, and a `quadrant_step_counts`
-that holds `(num_envs, 4)` per-step quadrant counters.
+`BEHAVIOR_DIST_KEYS` (`train.py:942-943`) cannot absorb `dist_per_*` (the
+per-key sum loop at line 1194 NumPy-errors on vector values). Add parallel
+accumulators next to it (around line 946):
 
 ```python
-# train.py near line 946, after the existing accumulator dicts:
-num_neutral_for_log = int(np.array(params.neutral_quadrant_idx).shape[0])
-neutral_quadrant_np  = np.array(params.neutral_quadrant_idx, dtype=np.int32)  # (num_neutral,)
-QUADRANT_NAMES       = ('TL', 'TR', 'BL', 'BR')
-# Accumulators:
-episode_dist_per_neutral_sums = np.zeros((num_envs, num_neutral_for_log), dtype=np.float32)
-episode_quadrant_step_counts  = np.zeros((num_envs, 4), dtype=np.float32)
+# Per-instance accumulators (Round-2 metrics).
+neutral_tags  = tuple(params.neutral_tags)   # static; possibly empty
+predator_tags = tuple(params.predator_tags)
+num_neutral_for_log  = len(neutral_tags)
+num_predator_for_log = len(predator_tags)
+episode_dist_per_neutral_sums  = np.zeros((num_envs, num_neutral_for_log),  dtype=np.float32)
+episode_dist_per_predator_sums = np.zeros((num_envs, num_predator_for_log), dtype=np.float32)
 ```
 
-In each per-step accumulation block (5 sites; same as `BEHAVIOR_DIST_KEYS`
-sites listed above), append:
+In each per-step accumulation block (5 sites; same locations as the existing
+`BEHAVIOR_DIST_KEYS` sites), append after the existing dist-keys loop:
 
 ```python
-# After the existing BEHAVIOR_DIST_KEYS loop (~train.py:1194-1195):
 if 'dist_per_neutral' in info_np and num_neutral_for_log > 0:
-    episode_dist_per_neutral_sums += info_np['dist_per_neutral'][t]   # (B, num_neutral)
-if 'quadrant_idx' in info_np:
-    qidx_t = info_np['quadrant_idx'][t]  # (B,) int32
-    # one-hot accumulate
-    for q in range(4):
-        episode_quadrant_step_counts[:, q] += (qidx_t == q).astype(np.float32)
+    episode_dist_per_neutral_sums  += info_np['dist_per_neutral'][t]
+if 'dist_per_predator' in info_np and num_predator_for_log > 0:
+    episode_dist_per_predator_sums += info_np['dist_per_predator'][t]
 ```
 
-In each per-episode-finalization block (5 sites; same locations as the
-existing `for k in BEHAVIOR_DIST_KEYS: ep_data[k] = ...` loops), append per-quadrant
-group means and per-quadrant occupancy fractions to `ep_data`:
+In each per-episode finalisation block (5 sites), append:
 
 ```python
-# After the existing dist-mean fill (~train.py:1210-1211):
 ep_l = max(ep_length, 1)
-# Per-rabbit-instance group means by quadrant tag.
 if num_neutral_for_log > 0:
-    means_per_neutral = episode_dist_per_neutral_sums[i] / ep_l  # (num_neutral,)
-    for q in range(4):
-        mask_q = (neutral_quadrant_np == q)
-        if mask_q.any():
-            ep_data[f'mean_dist_rabbit_q{q}'] = float(np.mean(means_per_neutral[mask_q]))
-# Quadrant occupancy fractions.
-quad_frac = episode_quadrant_step_counts[i] / ep_l  # (4,)
-for q in range(4):
-    ep_data[f'quadrant_occupancy_q{q}'] = float(quad_frac[q])
+    means = episode_dist_per_neutral_sums[i] / ep_l       # (num_neutral,)
+    for j, tag in enumerate(neutral_tags):
+        ep_data[f'mean_dist_rabbit_{tag}_raw'] = float(means[j])
+if num_predator_for_log > 0:
+    means = episode_dist_per_predator_sums[i] / ep_l      # (num_predator,)
+    for j, tag in enumerate(predator_tags):
+        ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
 ```
 
 In each per-env reset block (right next to the existing
-`episode_dist_sums[k][i] = 0.0` lines), append:
+`episode_dist_sums[k][i] = 0.0`), append:
 
 ```python
-episode_dist_per_neutral_sums[i, :] = 0.0
-episode_quadrant_step_counts[i, :]  = 0.0
+if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
+if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
 ```
 
-In each WandB ep_log block (5 sites listed above), append:
+In the stage-transition wipe (`train.py:1082-1087`), append:
 
 ```python
-# Right after the existing "Episode/MeanDistRabbit" line (~train.py:1255):
-for q, qname in enumerate(QUADRANT_NAMES):
-    key_dist = f'mean_dist_rabbit_q{q}'
-    if any(key_dist in ep for ep in iteration_episodes):
-        ep_log[f"Episode/MeanDistRabbit_{qname}"] = np.mean(
-            [ep[key_dist] for ep in iteration_episodes if key_dist in ep]
-        )
-    ep_log[f"Episode/QuadrantOccupancy_{qname}"] = np.mean(
-        [ep[f'quadrant_occupancy_q{q}'] for ep in iteration_episodes]
-    )
+episode_dist_per_neutral_sums[:, :]  = 0.0
+episode_dist_per_predator_sums[:, :] = 0.0
 ```
 
-The `if any(key_dist in ep for ep in iteration_episodes)` guard is what
-suppresses `Episode/MeanDistRabbit_TR` / `_BL` for the Round-2 configs that
-have no rabbits in those quadrants. `QuadrantOccupancy_*` is always emitted.
+#### WandB ep_log fan-out (5 sites)
 
-The mid-stage-transition wipe of accumulators at `train.py:1082-1087` (and
-the equivalent Dreamer/Dreamer-branch wipes referenced through the same
-constants) must be extended to wipe the two new accumulator arrays as well —
-omitting this is the single most likely silent-bug source for this change
-(stale Stage-N partial counters bleeding into Stage-N+1).
+Per-tag fan-out groups instances that share a tag (mean across instances).
+After the existing `Episode/MeanDistRabbit` line at each of the 5 sites, build
+the literal then mutate (Pattern A):
+
+```python
+ep_log = { ... existing keys ... }
+
+# Per-tag fan-out: group instances sharing a tag, take mean across episodes.
+for tag in sorted(set(neutral_tags)):
+    matching = [j for j, t in enumerate(neutral_tags) if t == tag]
+    per_ep = []
+    for ep in iteration_episodes:
+        vals = [ep[f'mean_dist_rabbit_{neutral_tags[j]}_raw']
+                for j in matching
+                if f'mean_dist_rabbit_{neutral_tags[j]}_raw' in ep]
+        if vals:
+            per_ep.append(np.mean(vals))
+    if per_ep:
+        ep_log[f"Episode/MeanDistRabbit_{tag}"] = float(np.mean(per_ep))
+
+for tag in sorted(set(predator_tags)):
+    matching = [j for j, t in enumerate(predator_tags) if t == tag]
+    per_ep = []
+    for ep in iteration_episodes:
+        vals = [ep[f'mean_dist_predator_{predator_tags[j]}_raw']
+                for j in matching
+                if f'mean_dist_predator_{predator_tags[j]}_raw' in ep]
+        if vals:
+            per_ep.append(np.mean(vals))
+    if per_ep:
+        ep_log[f"Episode/MeanDistPredator_{tag}"] = float(np.mean(per_ep))
+```
+
+The implementing agent should hoist this into a tiny helper (e.g.,
+`_per_tag_fanout(ep_log, episodes, tags, ep_key_fn, wandb_key_fn)`) so the
+5-site copy doesn't drift. Branch C uses `ep_logs.update({...})` rather than
+`ep_log = { ... }`; adjust the variable name accordingly.
 
 ### File Changes
 
-#### `src/environment/state.py` (line 108, inside `EnvParams.# Neutral Animals` block)
+#### `src/environment/state.py`
+
+Add two static fields, one per entity list.
 
 ```python
-# BEFORE (state.py:107-108):
-    neutral_patrol: jnp.ndarray      # [num_neutral, 4]
-    neutral_spawn_area: jnp.ndarray  # [num_neutral, 4]
+# BEFORE (Predators block, line 88):
+    pred_spawn_area: jnp.ndarray  # [num_pred, 4]
 
-# AFTER (add 1 new line below `neutral_spawn_area`):
-    neutral_patrol: jnp.ndarray      # [num_neutral, 4]
-    neutral_spawn_area: jnp.ndarray  # [num_neutral, 4]
-    neutral_quadrant_idx: jnp.ndarray  # [num_neutral] int32 (0=TL,1=TR,2=BL,3=BR; midpoint of spawn_area)
+
+    # Obstacles
+
+# AFTER:
+    pred_spawn_area: jnp.ndarray  # [num_pred, 4]
+    predator_tags: tuple[str, ...] = struct.field(pytree_node=False)  # static metric-label tags, len = num_pred
+
+
+    # Obstacles
 ```
 
-#### `src/environment/config_loader.py` (around line 210, inside the `if expanded_neutral:` block; and constructor at line 349)
+```python
+# BEFORE (Neutral Animals block, lines 107-108):
+    neutral_patrol: jnp.ndarray      # [num_neutral, 4]
+    neutral_spawn_area: jnp.ndarray  # [num_neutral, 4]
+
+# AFTER:
+    neutral_patrol: jnp.ndarray      # [num_neutral, 4]
+    neutral_spawn_area: jnp.ndarray  # [num_neutral, 4]
+    neutral_tags: tuple[str, ...] = struct.field(pytree_node=False)  # static metric-label tags, len = num_neutral
+```
+
+#### `src/environment/config_loader.py`
+
+Add the tag normaliser at module level (top of file, alongside
+`_read_properties`):
 
 ```python
-# BEFORE (lines 209-210, end of the `if expanded_neutral:` block):
-        neutral_patrol = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('patrol_area', [[1,1],[h,w]]) for n in expanded_neutral]])
-        neutral_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('spawn_area', [[1,1],[h,w]]) for n in expanded_neutral]])
+# Allowed characters in entity tags (used in WandB key 'Episode/MeanDist*_<tag>').
+import re as _re
+_TAG_RE = _re.compile(r'^[A-Za-z0-9_-]+$')
 
-# AFTER (append static quadrant-tag computation; uses `h` / `w` already loaded at lines 206-207):
-        neutral_patrol = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('patrol_area', [[1,1],[h,w]]) for n in expanded_neutral]])
-        neutral_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('spawn_area', [[1,1],[h,w]]) for n in expanded_neutral]])
-        # Quadrant tag per neutral, derived from spawn-area midpoint.
-        # Layout: 0=TL, 1=TR, 2=BL, 3=BR (matches core.py `quadrant_idx`).
-        # neutral_spawn_area entries are [min_r0, min_c0, max_r1, max_c1]
-        # (min-1 already applied above). Midpoint of the zero-indexed inclusive
-        # range = (min0 + max1 - 1) / 2; for odd grid sizes the boundary cell
-        # goes BR by `>=`.
-        h_half = h // 2
-        w_half = w // 2
-        _mid_r = (neutral_spawn_area[:, 0] + neutral_spawn_area[:, 2] - 1) / 2
-        _mid_c = (neutral_spawn_area[:, 1] + neutral_spawn_area[:, 3] - 1) / 2
-        neutral_quadrant_idx = (
-            2 * (_mid_r >= h_half).astype(jnp.int32)
-            +     (_mid_c >= w_half).astype(jnp.int32)
+def _normalise_tag(raw, idx, entity_label):
+    if raw is None or raw == "":
+        return f"idx{idx}"
+    s = str(raw)
+    if not _TAG_RE.match(s):
+        raise ValueError(
+            f"{entity_label} tag {s!r} must match [A-Za-z0-9_-]+ "
+            f"(used in WandB key suffix; slashes / spaces / dots break the namespace)."
         )
+    return s
 ```
 
+In the `if expanded_predators:` block (after line 124):
+
 ```python
-# In the matching `else` branch (lines 212-217), add:
-        neutral_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
-        neutral_quadrant_idx = jnp.zeros((0,), dtype=jnp.int32)
+# AFTER existing pred_lose_interest_mult:
+predator_tags = tuple(
+    _normalise_tag(p.get('tag'), i, 'Predator')
+    for i, p in enumerate(expanded_predators)
+)
 ```
 
+In the matching `else` (after line 139):
+
 ```python
-# In the `EnvParams(...)` constructor at line 349, add the new field next to `neutral_spawn_area=neutral_spawn_area,`:
-        neutral_spawn_area=neutral_spawn_area,
-        neutral_quadrant_idx=neutral_quadrant_idx,
+predator_tags = tuple()
 ```
 
-#### `src/environment/core.py` (insert between lines 501 and 502, inside the GPU-distance block)
+In the `if expanded_neutral:` block (after line 210):
 
 ```python
-# BEFORE (core.py:497-502):
+# AFTER existing neutral_spawn_area:
+neutral_tags = tuple(
+    _normalise_tag(n.get('tag'), i, 'Rabbit')
+    for i, n in enumerate(expanded_neutral)
+)
+```
+
+In the matching `else` (after line 217):
+
+```python
+neutral_tags = tuple()
+```
+
+In the `EnvParams(...)` constructor (around line 334 next to
+`pred_spawn_area=pred_spawn_area,` and line 349 next to
+`neutral_spawn_area=neutral_spawn_area,`):
+
+```python
+predator_tags=predator_tags,
+...
+neutral_tags=neutral_tags,
+```
+
+#### `src/environment/core.py` (insert between lines 501 and 502)
+
+```python
+# BEFORE (lines 497-502):
     dist_to_neutral = jnp.min(jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)) if state.neutral_pos.shape[0] > 0 else 99.0
     dist_to_hiding_predator = jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 1), jnp.linalg.norm(state.res_pos - new_agent_pos, axis=-1), 99.0)) if state.res_pos.shape[0] > 0 else 99.0
     info['dist_to_food'] = dist_to_food
@@ -405,118 +481,65 @@ omitting this is the single most likely silent-bug source for this change
     info['dist_to_neutral'] = dist_to_neutral
     info['dist_to_hiding_predator'] = dist_to_hiding_predator
 
-# AFTER (add per-instance vector and quadrant scalar; existing keys unchanged):
+# AFTER (add per-instance vectors; existing keys unchanged):
     dist_to_neutral = jnp.min(jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)) if state.neutral_pos.shape[0] > 0 else 99.0
     dist_to_hiding_predator = jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 1), jnp.linalg.norm(state.res_pos - new_agent_pos, axis=-1), 99.0)) if state.res_pos.shape[0] > 0 else 99.0
-    # Per-instance rabbit distances: keep the [num_neutral] vector (no reduction).
+    # Per-instance unreduced distance vectors for tag-based logging.
     dist_per_neutral = (
         jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)
         if state.neutral_pos.shape[0] > 0
         else jnp.zeros((0,), dtype=jnp.float32)
     )
-    # Agent's current quadrant: 0=TL, 1=TR, 2=BL, 3=BR (matches config_loader's neutral_quadrant_idx).
-    quadrant_idx = (
-        2 * (new_agent_pos[0] >= (params.height // 2)).astype(jnp.int32)
-        +     (new_agent_pos[1] >= (params.width  // 2)).astype(jnp.int32)
+    dist_per_predator = (
+        jnp.linalg.norm(state.pred_pos - new_agent_pos, axis=-1)
+        if state.pred_pos.shape[0] > 0
+        else jnp.zeros((0,), dtype=jnp.float32)
     )
     info['dist_to_food'] = dist_to_food
     info['dist_to_pred'] = dist_to_pred
     info['dist_to_neutral'] = dist_to_neutral
     info['dist_to_hiding_predator'] = dist_to_hiding_predator
-    info['dist_per_neutral'] = dist_per_neutral
-    info['quadrant_idx'] = quadrant_idx
+    info['dist_per_neutral']  = dist_per_neutral
+    info['dist_per_predator'] = dist_per_predator
 ```
 
-#### `src/models/recurrent_ppo_trainer.py` (`StepInfo` lines 7-22; constructor lines 191-208 after the prior plan)
+#### `src/models/recurrent_ppo_trainer.py`
 
 ```python
-# BEFORE — StepInfo NamedTuple (after the prior plan landed): 15 fields.
+# BEFORE (StepInfo, lines 7-23): 15 fields.
 class StepInfo(NamedTuple):
     """Per-step environment info carried through scan for behavioral logging."""
     ate_food: jnp.ndarray
-    hit_predator: jnp.ndarray
-    hit_hiding_predator: jnp.ndarray
-    hit_neutral: jnp.ndarray
-    event_collided: jnp.ndarray
-    rested: jnp.ndarray
-    damage: jnp.ndarray
-    damage_predator: jnp.ndarray
-    damage_hiding_predator: jnp.ndarray
-    damage_obstacle: jnp.ndarray
-    dist_to_food: jnp.ndarray
-    dist_to_pred: jnp.ndarray
-    dist_to_neutral: jnp.ndarray
-    dist_to_hiding_predator: jnp.ndarray
+    ...
     termination_reason: jnp.ndarray
 
-# AFTER — add 2 new fields at the end (preserve existing order):
+# AFTER: add 2 new fields at the end (preserve existing order).
 class StepInfo(NamedTuple):
     """Per-step environment info carried through scan for behavioral logging."""
     ate_food: jnp.ndarray
-    hit_predator: jnp.ndarray
-    hit_hiding_predator: jnp.ndarray
-    hit_neutral: jnp.ndarray
-    event_collided: jnp.ndarray
-    rested: jnp.ndarray
-    damage: jnp.ndarray
-    damage_predator: jnp.ndarray
-    damage_hiding_predator: jnp.ndarray
-    damage_obstacle: jnp.ndarray
-    dist_to_food: jnp.ndarray
-    dist_to_pred: jnp.ndarray
-    dist_to_neutral: jnp.ndarray
-    dist_to_hiding_predator: jnp.ndarray
+    ...
     termination_reason: jnp.ndarray
-    dist_per_neutral: jnp.ndarray   # [num_neutral] — per-rabbit distance, unreduced
-    quadrant_idx: jnp.ndarray       # int32 scalar — agent's quadrant
+    dist_per_neutral: jnp.ndarray   # [num_neutral]  per-rabbit distance, unreduced
+    dist_per_predator: jnp.ndarray  # [num_predator] per-predator distance, unreduced
 ```
 
-```python
-# BEFORE — StepInfo construction in collect_trajectories (post-prior-plan):
-step_info = StepInfo(
-    ate_food=info['ate_food'],
-    hit_predator=info['hit_predator'],
-    hit_hiding_predator=info['hit_hiding_predator'],
-    hit_neutral=info['hit_neutral'],
-    event_collided=info['event_collided'],
-    rested=info['rested'],
-    damage=info['damage'],
-    damage_predator=info['damage_predator'],
-    damage_hiding_predator=info['damage_hiding_predator'],
-    damage_obstacle=info['damage_obstacle'],
-    dist_to_food=info['dist_to_food'],
-    dist_to_pred=info['dist_to_pred'],
-    dist_to_neutral=info['dist_to_neutral'],
-    dist_to_hiding_predator=info['dist_to_hiding_predator'],
-    termination_reason=info['termination_reason'],
-)
+In `collect_trajectories` where `StepInfo(...)` is constructed: add 2 new lines
+mirroring the existing wiring (the developer locates the call by grep —
+`grep -n "StepInfo(" src/models/recurrent_ppo_trainer.py`):
 
-# AFTER — add 2 new lines at the end (matching the new NamedTuple field order):
+```python
 step_info = StepInfo(
-    ate_food=info['ate_food'],
-    hit_predator=info['hit_predator'],
-    hit_hiding_predator=info['hit_hiding_predator'],
-    hit_neutral=info['hit_neutral'],
-    event_collided=info['event_collided'],
-    rested=info['rested'],
-    damage=info['damage'],
-    damage_predator=info['damage_predator'],
-    damage_hiding_predator=info['damage_hiding_predator'],
-    damage_obstacle=info['damage_obstacle'],
-    dist_to_food=info['dist_to_food'],
-    dist_to_pred=info['dist_to_pred'],
-    dist_to_neutral=info['dist_to_neutral'],
-    dist_to_hiding_predator=info['dist_to_hiding_predator'],
+    ...
     termination_reason=info['termination_reason'],
     dist_per_neutral=info['dist_per_neutral'],
-    quadrant_idx=info['quadrant_idx'],
+    dist_per_predator=info['dist_per_predator'],
 )
 ```
 
 #### `src/models/dreamer_v3_trainer.py` (transition dict, lines 609-633)
 
 ```python
-# BEFORE — Dreamer transition dict (post-prior-plan):
+# BEFORE — Dreamer transition dict:
 transition = {
     ...
     'dist_to_neutral': info['dist_to_neutral'],
@@ -529,415 +552,291 @@ transition = {
     ...
     'dist_to_neutral': info['dist_to_neutral'],
     'dist_to_hiding_predator': info['dist_to_hiding_predator'],
-    'dist_per_neutral': info['dist_per_neutral'],
-    'quadrant_idx': info['quadrant_idx'].astype(jnp.float32),  # cast to float32 for replay-buffer homogeneity
+    'dist_per_neutral':  info['dist_per_neutral'],
+    'dist_per_predator': info['dist_per_predator'],
     'termination_reason': info['termination_reason'].astype(jnp.float32),
 }
 ```
 
-Note: `dist_per_neutral` stays as `float32` (already is); `quadrant_idx` is
-cast `int32 → float32` for Dreamer replay-buffer dtype consistency. The
-`train.py` Dreamer aggregation sites use `info_np[k][t]` indexing directly off
-the post-step `info` dict, not off the replay buffer, so the cast is purely a
-buffer-dtype concern — does not affect aggregation values.
+Both new entries are already `float32` (matching the existing dist keys); no
+dtype cast needed.
 
-#### `train.py` (3 edits inside the lifecycle, applied at all 5 mirrored sites where applicable)
+#### `train.py` (5 mirrored sites + 1 init + 1 stage-wipe)
 
-**Edit 1 — accumulator init (single-site, near line 946)**
+**Edit 1 — accumulator init (single-site, after line 946)**
 
 ```python
-# BEFORE (train.py:945-946):
-episode_behavior = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_KEYS}
-episode_dist_sums = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_DIST_KEYS}
-
-# AFTER — add 4 new lines (note: `params` here is the EnvParams from load_env_params at start-of-training):
-episode_behavior = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_KEYS}
-episode_dist_sums = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_DIST_KEYS}
-# Per-rabbit + per-quadrant accumulators (Round-2 metrics).
-num_neutral_for_log = int(np.array(params.neutral_quadrant_idx).shape[0])
-neutral_quadrant_np = np.array(params.neutral_quadrant_idx, dtype=np.int32)  # (num_neutral,)
-QUADRANT_NAMES      = ('TL', 'TR', 'BL', 'BR')
-episode_dist_per_neutral_sums = np.zeros((num_envs, num_neutral_for_log), dtype=np.float32)
-episode_quadrant_step_counts  = np.zeros((num_envs, 4), dtype=np.float32)
+# AFTER existing episode_dist_sums init:
+neutral_tags  = tuple(params.neutral_tags)
+predator_tags = tuple(params.predator_tags)
+num_neutral_for_log  = len(neutral_tags)
+num_predator_for_log = len(predator_tags)
+episode_dist_per_neutral_sums  = np.zeros((num_envs, num_neutral_for_log),  dtype=np.float32)
+episode_dist_per_predator_sums = np.zeros((num_envs, num_predator_for_log), dtype=np.float32)
 ```
 
-**Edit 2 — per-step accumulation (inside the `for t in range(num_steps):` loop, **5 sites**)**
+**Edit 2 — per-step accumulation (5 sites)**
 
-Sites (mirrored — apply identical edit at each):
-- `train.py:1187-1226` — PPO main, the existing block updates `episode_behavior` then `episode_dist_sums`. Append the new accumulators **after** `episode_dist_sums`.
-- `train.py:1431-1485` — PPO branch B.
-- `train.py:1645-1677` — Dreamer branch A.
-- `train.py:1806-1838` — Dreamer branch B.
-- `train.py:1927-1969` — Dreamer branch C.
+Sites (the same 5 used by `BEHAVIOR_DIST_KEYS`):
+- `train.py:1192-1226` — PPO main
+- `train.py:1439-1485` — PPO branch B
+- `train.py:1648-1677` — Dreamer A (uses `info_np_step` not `info_np[...][t]`)
+- `train.py:1809-1838` — Dreamer B (same, `info_np_step`)
+- `train.py:1940-1969` — Dreamer C
 
-Per-site insertion (representative, PPO main):
+Per-site insertion (after the existing `for k in BEHAVIOR_DIST_KEYS` loop):
 
 ```python
-# BEFORE (train.py:1187-1226 abbreviated):
-for t in range(num_steps):
-    episode_returns += rew_np[t]
-    episode_lengths += 1
-    if info_np:
-        for k in BEHAVIOR_KEYS:
-            episode_behavior[k] += info_np[k][t]
-        for k in BEHAVIOR_DIST_KEYS:
-            episode_dist_sums[k] += info_np[k][t]
-    dones_t = done_np[t].astype(bool)
-    if np.any(dones_t):
-        completed_indices = np.where(dones_t)[0]
-        for i in completed_indices:
-            ...
-            ep_data = {'r': ep_reward, 'l': ep_length}
-            if info_np:
-                for k in BEHAVIOR_KEYS:
-                    ep_data[k] = float(episode_behavior[k][i])
-                for k in BEHAVIOR_DIST_KEYS:
-                    ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
-                ep_data['termination_reason'] = int(info_np['termination_reason'][t][i])
-            ep_info_buffer.append(ep_data)
-            iteration_episodes.append(ep_data)
-            # Reset for next episode in this slot
-            episode_returns[i] = 0.0
-            episode_lengths[i] = 0
-            if info_np:
-                for k in BEHAVIOR_KEYS:
-                    episode_behavior[k][i] = 0.0
-                for k in BEHAVIOR_DIST_KEYS:
-                    episode_dist_sums[k][i] = 0.0
-
-# AFTER — three additions, each marked with comments. Apply per-site.
-for t in range(num_steps):
-    episode_returns += rew_np[t]
-    episode_lengths += 1
-    if info_np:
-        for k in BEHAVIOR_KEYS:
-            episode_behavior[k] += info_np[k][t]
-        for k in BEHAVIOR_DIST_KEYS:
-            episode_dist_sums[k] += info_np[k][t]
-        # === ROUND-2 METRICS: per-rabbit + per-quadrant accumulation ===
-        if 'dist_per_neutral' in info_np and num_neutral_for_log > 0:
-            episode_dist_per_neutral_sums += info_np['dist_per_neutral'][t]  # (B, num_neutral)
-        if 'quadrant_idx' in info_np:
-            qidx_t = info_np['quadrant_idx'][t]  # (B,) int (or float after Dreamer cast)
-            qidx_t = qidx_t.astype(np.int32)
-            for q in range(4):
-                episode_quadrant_step_counts[:, q] += (qidx_t == q).astype(np.float32)
-        # === END ROUND-2 METRICS ===
-    dones_t = done_np[t].astype(bool)
-    if np.any(dones_t):
-        completed_indices = np.where(dones_t)[0]
-        for i in completed_indices:
-            ...
-            ep_data = {'r': ep_reward, 'l': ep_length}
-            if info_np:
-                for k in BEHAVIOR_KEYS:
-                    ep_data[k] = float(episode_behavior[k][i])
-                for k in BEHAVIOR_DIST_KEYS:
-                    ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
-                ep_data['termination_reason'] = int(info_np['termination_reason'][t][i])
-                # === ROUND-2 METRICS: per-episode finalization ===
-                ep_l_safe = max(ep_length, 1)
-                if num_neutral_for_log > 0:
-                    means_per_neutral = episode_dist_per_neutral_sums[i] / ep_l_safe  # (num_neutral,)
-                    for q in range(4):
-                        mask_q = (neutral_quadrant_np == q)
-                        if mask_q.any():
-                            ep_data[f'mean_dist_rabbit_q{q}'] = float(np.mean(means_per_neutral[mask_q]))
-                quad_frac = episode_quadrant_step_counts[i] / ep_l_safe  # (4,)
-                for q in range(4):
-                    ep_data[f'quadrant_occupancy_q{q}'] = float(quad_frac[q])
-                # === END ROUND-2 METRICS ===
-            ep_info_buffer.append(ep_data)
-            iteration_episodes.append(ep_data)
-            # Reset for next episode in this slot
-            episode_returns[i] = 0.0
-            episode_lengths[i] = 0
-            if info_np:
-                for k in BEHAVIOR_KEYS:
-                    episode_behavior[k][i] = 0.0
-                for k in BEHAVIOR_DIST_KEYS:
-                    episode_dist_sums[k][i] = 0.0
-                # === ROUND-2 METRICS: per-env reset ===
-                episode_dist_per_neutral_sums[i, :] = 0.0
-                episode_quadrant_step_counts[i, :]  = 0.0
-                # === END ROUND-2 METRICS ===
+# === Per-tag accumulation ===
+if 'dist_per_neutral' in info_np and num_neutral_for_log > 0:
+    episode_dist_per_neutral_sums  += info_np['dist_per_neutral'][t]
+if 'dist_per_predator' in info_np and num_predator_for_log > 0:
+    episode_dist_per_predator_sums += info_np['dist_per_predator'][t]
 ```
 
-The Dreamer-branch sites do not all use `info_np[...][t]` indexing identically
-— branch A reads `info_np_step` via `info_np_step = {k: np.array(info[k]) for k
-in ...}` at line 1647, then builds `ep_data` *outside* the per-step loop. Confirm
-the per-site shape of `dist_per_neutral` (`(B, num_neutral)` after `np.array`)
-and `quadrant_idx` (`(B,)`) before applying the same logic. The implementing
-agent must verify each site reads `info_np[k][t]` vs `info_np_step[k]` and adjust
-the indexing accordingly; the **arithmetic** is identical.
+**Dreamer A / B note**: those sites read `info_np_step = {k: np.array(info[k])
+for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']}` (lines
+1647, 1808) — the per-step indexing differs. The developer must (a) extend
+that comprehension to include the two new keys, then (b) accumulate using
+`info_np_step['dist_per_neutral']` (no `[t]` index, since `info_np_step` is
+already a per-step dict). The arithmetic is identical; only the indexing
+differs. **Verify shapes per site before applying.**
 
-**Edit 3 — WandB ep_log block (5 sites, post-existing-MeanDistRabbit line)**
-
-Sites (the same 5 sites that already log `Episode/MeanDistRabbit`):
-- `train.py:1255` — PPO main
-- `train.py:1515` — PPO branch B
-- `train.py:1725` — Dreamer A
-- `train.py:1893` — Dreamer B
-- `train.py:2003` — Dreamer C
-
-Per-site insertion:
+Per-episode finalisation (in the same 5 blocks, after the existing
+`for k in BEHAVIOR_DIST_KEYS` ep_data fill):
 
 ```python
-# BEFORE (representative, PPO main, lines 1253-1258):
-"Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
-"Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
-"Episode/MeanDistRabbit": np.mean([ep['dist_to_neutral'] for ep in iteration_episodes]),
-"Episode/MeanDistHidingPredator": np.mean([ep['dist_to_hiding_predator'] for ep in iteration_episodes]),
-"Episode/RabbitHits": np.mean([ep['hit_neutral'] for ep in iteration_episodes]),
-"Episode/HidingPredatorHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
-
-# AFTER — append per-quadrant fan-out via a small loop *after* the dict literal close.
-# Implementation note: the existing 5 sites use `ep_log = { ... }` literal syntax;
-# the loop must run after the literal is built. Two acceptable patterns:
-#
-#   Pattern A (preferred — fewer diffs): build the literal, then mutate it.
-#       ep_log = { ... existing keys ... }
-#       for q, qname in enumerate(QUADRANT_NAMES):
-#           rkey = f'mean_dist_rabbit_q{q}'
-#           if any(rkey in ep for ep in iteration_episodes):
-#               ep_log[f"Episode/MeanDistRabbit_{qname}"] = float(np.mean(
-#                   [ep[rkey] for ep in iteration_episodes if rkey in ep]
-#               ))
-#           ep_log[f"Episode/QuadrantOccupancy_{qname}"] = float(np.mean(
-#               [ep[f'quadrant_occupancy_q{q}'] for ep in iteration_episodes]
-#           ))
-#
-#   Pattern B: dict-merge with `**{ f"Episode/...": ... for q in ... }` inside the literal.
-#       (More compact but harder to grep; avoid.)
-#
-# Choose Pattern A. Apply at all 5 sites identically.
+ep_l_safe = max(ep_length, 1)
+if num_neutral_for_log > 0:
+    means = episode_dist_per_neutral_sums[i] / ep_l_safe
+    for j, tag in enumerate(neutral_tags):
+        ep_data[f'mean_dist_rabbit_{tag}_raw'] = float(means[j])
+if num_predator_for_log > 0:
+    means = episode_dist_per_predator_sums[i] / ep_l_safe
+    for j, tag in enumerate(predator_tags):
+        ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
 ```
 
-The implementing agent must place the post-mutation block **before** the
-`wandb.log(ep_log, ...)` call at the end of each block; for branch C (Dreamer)
-the literal is `ep_logs.update({...})` rather than `ep_log = { ... }` — adjust
-the variable name accordingly. The same guard `if any(rkey in ep for ep in
-iteration_episodes)` correctly suppresses TR / BL keys for the hypervigilance
-configs.
-
-**Edit 4 — stage-transition wipe (single-site, near `train.py:1082-1087`)**
+Per-env reset (in the same 5 blocks, after the existing
+`episode_dist_sums[k][i] = 0.0`):
 
 ```python
-# BEFORE:
-episode_returns[:] = 0.0
-episode_lengths[:] = 0
-for _bk in BEHAVIOR_KEYS:
-    episode_behavior[_bk][:] = 0.0
-for _bk in BEHAVIOR_DIST_KEYS:
-    episode_dist_sums[_bk][:] = 0.0
+if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
+if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+```
 
-# AFTER (add 2 lines after the existing wipes):
-episode_returns[:] = 0.0
-episode_lengths[:] = 0
-for _bk in BEHAVIOR_KEYS:
-    episode_behavior[_bk][:] = 0.0
-for _bk in BEHAVIOR_DIST_KEYS:
-    episode_dist_sums[_bk][:] = 0.0
-# === ROUND-2 METRICS: per-rabbit / per-quadrant wipes ===
-episode_dist_per_neutral_sums[:, :] = 0.0
-episode_quadrant_step_counts[:, :]  = 0.0
-# === END ROUND-2 METRICS ===
+**Edit 3 — WandB ep_log fan-out (5 sites)**
+
+After the existing `ep_log = { ... }` literal at each site (PPO main 1255,
+PPO branch B 1515, Dreamer A 1725, Dreamer B 1893, Dreamer C 2003), append the
+fan-out block from the Design section above. Branch C: replace
+`ep_log = { ... }` with the matching `ep_logs.update({...})` variable name.
+
+The implementing agent should factor the fan-out into a small helper at the
+top of `train.py` (next to where `BEHAVIOR_DIST_KEYS` is defined) so the
+5-site copy stays in sync:
+
+```python
+def _append_per_tag_means(ep_log, iteration_episodes, tags, ep_key_prefix, wandb_key_prefix):
+    """Group ep_data['<ep_key_prefix>_<tag>_raw'] by tag, mean across instances
+    then mean across episodes, write into ep_log[f'{wandb_key_prefix}_{tag}']."""
+    for tag in sorted(set(tags)):
+        matching = [j for j, t in enumerate(tags) if t == tag]
+        per_ep = []
+        for ep in iteration_episodes:
+            vals = [ep[f'{ep_key_prefix}_{tags[j]}_raw']
+                    for j in matching
+                    if f'{ep_key_prefix}_{tags[j]}_raw' in ep]
+            if vals:
+                per_ep.append(np.mean(vals))
+        if per_ep:
+            ep_log[f'{wandb_key_prefix}_{tag}'] = float(np.mean(per_ep))
+```
+
+Per-site call:
+
+```python
+_append_per_tag_means(ep_log, iteration_episodes, neutral_tags,
+                      'mean_dist_rabbit',   'Episode/MeanDistRabbit')
+_append_per_tag_means(ep_log, iteration_episodes, predator_tags,
+                      'mean_dist_predator', 'Episode/MeanDistPredator')
+```
+
+**Edit 4 — stage-transition wipe (single-site, near line 1082-1087)**
+
+```python
+# AFTER existing wipes:
+episode_dist_per_neutral_sums[:, :]  = 0.0
+episode_dist_per_predator_sums[:, :] = 0.0
 ```
 
 `grep -n "episode_returns\[:\] = 0.0" train.py` will surface any other wipe
-sites; if more exist (e.g., Dreamer-side stage-transition), add the same 2
-lines next to each. Per the prior plan's audit there is only the one
-stage-transition wipe at line 1082.
+sites; if more exist, add the same 2 lines at each. Per the prior plan's audit
+there is only the one stage-transition wipe at line 1082.
 
 ### Test plan
 
-#### T1 — Smoke test: new info keys present and well-shaped
+#### T1 — Tags propagate from YAML
 
-`tests/environment/test_per_quadrant_and_per_rabbit_info.py`:
+`tests/environment/test_per_tag_logging.py`:
 
 ```python
-"""Per-quadrant + per-rabbit-instance info keys are present and JIT-safe."""
+"""Per-instance tags propagate from YAML into EnvParams."""
 import jax
-import jax.numpy as jnp
 import numpy as np
 from src.environment.config_loader import load_env_params
-from src.environment.core import jax_reset, jax_step
+from src.utils.config import Config
 
-CONFIG = "configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml"
+def test_explicit_tags_propagate(tmp_path):
+    yaml_text = """
+    environment:
+      neutral_animals:
+        - {name: rabbit, count: 1, properties: [0,1,0,0,0], properties_std: [0,0,0,0,0],
+           move_interval: 1, spawn_area: [[1,1],[5,5]], tag: "TL"}
+        - {name: rabbit, count: 1, properties: [0,1,0,0,0], properties_std: [0,0,0,0,0],
+           move_interval: 1, spawn_area: [[6,6],[10,10]], tag: "BR"}
+      ...
+    """  # full config — copy from 02-sameProp_R2_passivePredator.yaml and override neutral_animals
+    cfg_path = tmp_path / "test.yaml"
+    cfg_path.write_text(yaml_text)
+    params = load_env_params(Config.from_yaml(str(cfg_path)))
+    assert params.neutral_tags == ("TL", "BR"), params.neutral_tags
+```
 
-def test_dist_per_neutral_and_quadrant_idx_present_and_finite():
-    params = load_env_params(CONFIG)
-    key = jax.random.PRNGKey(0)
-    state, _ = jax_reset(params, key)
+#### T2 — Default tags when YAML omits `tag`
+
+```python
+def test_default_tag_is_idx_positional(tmp_path):
+    """Existing config (no tag field) defaults to ('idx0','idx1')."""
+    params = load_env_params(Config.from_yaml(
+        "configs/experiment/hypervigilance/01-interoNocicept.yaml"
+    ))
+    # 01-interoNocicept.yaml has 2 rabbits, no tag field.
+    assert params.neutral_tags == ("idx0", "idx1"), params.neutral_tags
+```
+
+#### T3 — Per-instance distances match known geometry
+
+```python
+def test_dist_per_neutral_matches_l2():
+    """Place agent at (5,5), record dist_per_neutral from a known state."""
+    import jax.numpy as jnp
+    from src.environment.core import jax_reset, jax_step
+    params = load_env_params(Config.from_yaml(
+        "configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml"
+    ))
+    state, _ = jax_reset(params, jax.random.PRNGKey(0))
+    state = state._replace(agent_pos=jnp.array([5, 5], dtype=state.agent_pos.dtype))
+    pre = np.array(state.neutral_pos)  # snapshot
     _, _, _, info = jax_step(state, jnp.array(4, dtype=jnp.int32), params)
-
-    # dist_per_neutral has shape (num_neutral,) and is finite
-    assert 'dist_per_neutral' in info
     dpn = np.array(info['dist_per_neutral'])
-    assert dpn.shape == (int(np.array(params.neutral_quadrant_idx).shape[0]),)
-    assert np.all(np.isfinite(dpn))
-
-    # quadrant_idx is a finite int in {0,1,2,3}
-    assert 'quadrant_idx' in info
-    qidx = int(np.array(info['quadrant_idx']))
-    assert qidx in (0, 1, 2, 3)
-
-def test_neutral_quadrant_idx_matches_round2_layout():
-    """02-sameProp_R2_passivePredator.yaml: rabbit 0 in TL (idx 0), rabbit 1 in BR (idx 3)."""
-    params = load_env_params(CONFIG)
-    nqi = np.array(params.neutral_quadrant_idx)
-    assert nqi.tolist() == [0, 3], f"expected [TL=0, BR=3], got {nqi.tolist()}"
+    assert dpn.shape == (params.neutral_pos.shape[0],) if hasattr(params, 'neutral_pos') else (len(params.neutral_tags),)
+    expected = np.linalg.norm(pre - np.array([5, 5]), axis=-1)
+    # Rabbit may move ≤ 1 cell within the same step; relax to atol=1.5 (√2).
+    assert np.allclose(dpn, expected, atol=1.5), (dpn, expected)
 ```
 
-#### T2 — Quadrant fractions sum to 1.0 over a deterministic 10-step rollout
+#### T4 — Invalid tag character raises ValueError
 
 ```python
-def test_quadrant_occupancy_fractions_sum_to_one_over_episode():
-    """A 10-step deterministic rest-rollout: agent stays at start_pos every step.
-    Fraction of steps in agent's quadrant = 1.0; other 3 quadrants = 0.0."""
-    params = load_env_params(CONFIG)
-    key = jax.random.PRNGKey(123)
-    state, _ = jax_reset(params, key)
-
-    # Force a known agent position via state replace.
-    state = state._replace(agent_pos=jnp.array([2, 2], dtype=state.agent_pos.dtype))  # TL
-
-    qidx_seen = []
-    for _ in range(10):
-        state, _, _, info = jax_step(state, jnp.array(4, dtype=jnp.int32), params)  # rest
-        qidx_seen.append(int(np.array(info['quadrant_idx'])))
-
-    # Resting at (2,2) keeps the agent in TL (height//2=5, width//2=5 → row<5 and col<5).
-    fracs = np.array([np.mean(np.array(qidx_seen) == q) for q in range(4)])
-    assert np.isclose(fracs.sum(), 1.0)
-    assert np.isclose(fracs[0], 1.0)  # TL
-    assert np.allclose(fracs[1:], 0.0)
+import pytest
+def test_invalid_tag_char_raises(tmp_path):
+    yaml_text = "..."  # config with tag: "TL/inner"
+    cfg_path = tmp_path / "bad.yaml"
+    cfg_path.write_text(yaml_text)
+    with pytest.raises(ValueError, match="Rabbit tag"):
+        load_env_params(Config.from_yaml(str(cfg_path)))
 ```
 
-#### T3 — Per-rabbit distance equals L2 distance to that specific rabbit
+#### T5 — Smoke training run
 
-```python
-def test_per_rabbit_distance_matches_known_geometry():
-    """Place agent at (2,2) (TL). MeanDistRabbit_TL after 1 step ≈ L2[(2,2), TL-rabbit-pos]."""
-    params = load_env_params(CONFIG)
-    key = jax.random.PRNGKey(7)
-    state, _ = jax_reset(params, key)
-    # TL rabbit: state.neutral_pos[0]; BR rabbit: state.neutral_pos[1]
-    state = state._replace(agent_pos=jnp.array([2, 2], dtype=state.agent_pos.dtype))
-    pre_neutral = np.array(state.neutral_pos)  # snapshot before the rabbit moves
+Run a 3-iteration smoke RPPO training on
+`02-sameProp_R2_passivePredator.yaml` (after the user/developer adds `tag:
+"TL"` / `tag: "BR"` per the "Configs to update" section below). Confirm
+`Episode/MeanDistRabbit_TL`, `Episode/MeanDistRabbit_BR`,
+`Episode/MeanDistPredator_TL` appear in `wandb/run-*/files/output.log` (or
+stdout `Episode/...` echoes) with finite values bracketed correctly
+(0 ≤ value ≤ √(10² + 10²) ≈ 14.1). T5 is the end-to-end gate; T1–T4 are unit
+gates.
 
-    _, _, _, info = jax_step(state, jnp.array(4, dtype=jnp.int32), params)
+### Configs to update post-implementation
 
-    dpn = np.array(info['dist_per_neutral'])
-    # dist_per_neutral is computed with state.neutral_pos PRE-step (matches existing
-    # dist_to_neutral semantics at core.py:497). Expected:
-    expected = np.linalg.norm(pre_neutral - np.array([2, 2]), axis=-1)
-    assert np.allclose(dpn, expected, atol=1e-5), f"got {dpn}, expected {expected}"
-```
+The metric is geometry-agnostic, but it only produces meaningful keys when
+configs supply tags. The user pre-authorises the developer to add tag fields
+to the following hypervigilance configs **in the same PR** (these are
+Round-1 / Round-2 configs the user has already authored, all using the
+TL+BR rabbit layout per the audit at line 24 of the prior plan version):
 
-If `dist_to_neutral` is actually computed against `state.neutral_pos` *after*
-the rabbit move within the same `jax_step` (this is a question for the
-implementer to verify by reading `core.py` around the rabbit-movement block),
-relax T3 to `np.allclose(dpn, expected_post, atol=1.5)` — rabbit moves at most
-1 cell per step, so the per-instance distance differs by at most √2 ≈ 1.42
-from the pre-step position. Note T3 is the math-correctness gate; if it fails,
-the implementation is wrong.
+- `configs/experiment/hypervigilance/01-interoNocicept.yaml` — rabbits TL+BR
+- `configs/experiment/hypervigilance/01-interoNocicept_noise.yaml` — rabbits TL+BR
+- `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` — rabbits TL+BR
+- `configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml` — rabbits TL+BR; predator TL
+- `configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml` — verify layout, tag accordingly
 
-#### T4 — Dropping a quadrant: keys correctly suppressed
+Edit pattern (per rabbit / predator entry): add one line `tag: "TL"` (or
+`"BR"`, etc.) inside the existing list entry. No other YAML changes.
 
-```python
-def test_no_TR_BL_rabbits_suppresses_those_quadrant_keys():
-    """The R2 configs have rabbits only in TL and BR. The fan-out logic should
-    expose mean_dist_rabbit_q0 and _q3 in ep_data, and not _q1 / _q2."""
-    # Pure-Python check on the static neutral_quadrant_idx — no env step needed.
-    params = load_env_params(CONFIG)
-    nqi = np.array(params.neutral_quadrant_idx)
-    has_q = {q: bool((nqi == q).any()) for q in range(4)}
-    assert has_q == {0: True, 1: False, 2: False, 3: True}
-```
-
-#### T5 — Smoke training run (post-merge sanity)
-
-Run a 3-iteration smoke RPPO training on `02-sameProp_R2_passivePredator.yaml`
-and confirm `Episode/QuadrantOccupancy_TL`, `..._TR`, `..._BL`, `..._BR`,
-`Episode/MeanDistRabbit_TL`, `Episode/MeanDistRabbit_BR` appear in
-`wandb/run-*/files/output.log` (or stdout `Episode/...` echoes). T5 is the
-end-to-end gate; T1–T4 are unit gates.
-
-### Backwards-compat / cross-config sanity
-
-- `01-interoNocicept_sameProp.yaml` (Round 1) — same TL+BR rabbit layout;
-  emits the same 6 new keys as Round 2. Aggregated `Episode/MeanDistRabbit`
-  numerically unchanged.
-- `01-interoNocicept.yaml`, `01-interoNocicept_noise.yaml` — same TL+BR layout
-  per the config-survey grep above; same key set.
-- Configs with 0 rabbits (none currently in `configs/experiment/hypervigilance/`,
-  but historic configs may exist) — `num_neutral_for_log = 0`,
-  `episode_dist_per_neutral_sums.shape = (num_envs, 0)`, no
-  `Episode/MeanDistRabbit_*` keys emitted; `Episode/QuadrantOccupancy_*` still
-  emitted (4 keys, sum to ~1.0 per episode).
-- Configs with rabbits in TR or BL (Round-3 candidates) — `_TR` / `_BL` keys
-  appear automatically without code changes.
+The developer must surface a diff of these config edits in the Implementation
+Report so the user can spot-check tag↔spawn_area correctness.
 
 ## Checkpoints
 
-What the implementing agent should verify **during** implementation:
-
-- [ ] **C1 — `state.py`**: `EnvParams` builds without error after adding
-  `neutral_quadrant_idx`. `python -c "from src.environment.state import EnvParams"` exits 0.
-- [ ] **C2 — `config_loader.py`**: `load_env_params("configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml")` returns a params object with
-  `np.array(params.neutral_quadrant_idx).tolist() == [0, 3]`. Same call on
-  `01-interoNocicept_sameProp.yaml` returns `[0, 3]`. Same on `02-sameProp_R2_decoupleFood.yaml` returns `[0, 3]`.
-- [ ] **C3 — `core.py`**: T1 passes (info keys present, finite, correctly shaped).
+- [ ] **C1 — `state.py`**: `EnvParams` builds without error.
+  `python -c "from src.environment.state import EnvParams"` exits 0.
+- [ ] **C2 — `config_loader.py`**: `load_env_params(<R2 A1 yaml after tag edit>)`
+  returns `params.neutral_tags == ("TL", "BR")` and
+  `params.predator_tags == ("TL",)`. Loading a pre-tag config returns
+  `("idx0", "idx1")` and `("idx0",)` respectively.
+- [ ] **C3 — `core.py`**: T3 passes (info keys present, finite, correctly shaped).
 - [ ] **C4 — `recurrent_ppo_trainer.py`**: `StepInfo` has 17 fields; a
-  1-iteration RPPO smoke runs without `KeyError` and `step_info.dist_per_neutral.shape ==
-  (num_steps, num_envs, num_neutral)`.
-- [ ] **C5 — `dreamer_v3_trainer.py`**: `DreamerTrainer` imports without error;
-  the transition dict includes `dist_per_neutral` and `quadrant_idx` (verified
-  by `grep -c "'dist_per_neutral'" src/models/dreamer_v3_trainer.py` returning ≥ 1).
-- [ ] **C6 — `train.py` accumulators**: `grep -n "episode_dist_per_neutral_sums" train.py`
-  returns 1 init line + 5 per-step accumulation sites + 5 per-env reset sites
-  + 1 stage-wipe site = **12 hits**. `grep -n "episode_quadrant_step_counts" train.py`
-  returns the same count = **12 hits**.
-- [ ] **C7 — `train.py` WandB**: `grep -c '"Episode/QuadrantOccupancy_TL"' train.py`
-  returns **5**. Same for `_TR`, `_BL`, `_BR`. Same for `"Episode/MeanDistRabbit_TL"`
-  (5) and `_BR` (5).
-- [ ] **C8 — Tests**: T1, T2, T3 (or relaxed T3), T4 pass.
-- [ ] **C9 — Smoke training (T5)**: A 3-iteration RPPO smoke on
-  `02-sameProp_R2_passivePredator.yaml` echoes all new `Episode/...` keys with
-  finite values and the four `QuadrantOccupancy_*` fields summing to ≈ 1.0
-  (per-iteration mean across episodes; tolerance 0.05 for partial-episode
-  episodes captured by the iteration window).
+  1-iteration RPPO smoke runs without `KeyError`;
+  `step_info.dist_per_neutral.shape == (num_steps, num_envs, num_neutral)`.
+- [ ] **C5 — `dreamer_v3_trainer.py`**: imports cleanly; the transition dict
+  includes `dist_per_neutral` and `dist_per_predator`
+  (`grep -c "'dist_per_neutral'" src/models/dreamer_v3_trainer.py` ≥ 1).
+- [ ] **C6 — `train.py` accumulators**:
+  `grep -n "episode_dist_per_neutral_sums" train.py` returns 1 init line +
+  5 per-step accumulation sites + 5 per-env reset sites + 1 stage-wipe = **12 hits**.
+  `grep -n "episode_dist_per_predator_sums" train.py` returns the same count = **12**.
+- [ ] **C7 — `train.py` WandB**:
+  `grep -c "_append_per_tag_means" train.py` returns ≥ 10 (5 sites × 2 calls)
+  if the helper is used; otherwise the inline loop count must equal 10.
+- [ ] **C8 — Tests**: T1, T2, T3 (relaxed `atol=1.5`), T4 pass.
+- [ ] **C9 — Smoke training (T5)**: 3-iteration RPPO smoke on
+  `02-sameProp_R2_passivePredator.yaml` (post-tag-edit) emits
+  `Episode/MeanDistRabbit_TL`, `Episode/MeanDistRabbit_BR`,
+  `Episode/MeanDistPredator_TL` with finite values in `[0, 14.5]`.
 
 ## Acceptance Criteria
 
 The implementing agent declares "done" when **all** hold:
 
-1. `info['dist_per_neutral']` is a `[num_neutral]` jax.Array after every
-   `jax_step`; `info['quadrant_idx']` is an int32 scalar in `{0,1,2,3}`.
-2. `EnvParams.neutral_quadrant_idx` is a `[num_neutral]` int32 jax.Array,
-   correctly mapped from `neutral_spawn_area` midpoints. T4 passes for the
-   3 hypervigilance configs (all return `[0, 3]`).
-3. `StepInfo` has the 2 new fields; `collect_trajectories` populates all 17
+1. `info['dist_per_neutral']` is a `[num_neutral]` jax.Array;
+   `info['dist_per_predator']` is a `[num_predator]` jax.Array — after every
+   `jax_step`.
+2. `EnvParams.neutral_tags` and `EnvParams.predator_tags` are
+   `tuple[str, ...]` static fields, lengths matching `num_neutral` /
+   `num_predator`, contents normalised through `_normalise_tag` (default
+   `f"idx{i}"` when YAML omits `tag`).
+3. Invalid tag characters raise `ValueError` at config-load (T4).
+4. `StepInfo` has the 2 new fields; `collect_trajectories` populates all 17
    fields without `KeyError`.
-4. The Dreamer transition dict has `dist_per_neutral` and `quadrant_idx`.
-5. `train.py` accumulators initialise correctly for `num_neutral = 0` and
-   `num_neutral > 0`. The stage-transition wipe extends to both new arrays.
-6. **All 5** WandB aggregation sites emit `Episode/QuadrantOccupancy_{TL,TR,BL,BR}` (4 keys × 5 sites = 20 hits) and emit
-   `Episode/MeanDistRabbit_{TL,BR}` for the hypervigilance R2 configs (2 keys
-   × 5 sites = 10 hits). `_TR` and `_BL` are correctly **not** emitted for
-   those configs.
-7. The aggregated `Episode/MeanDistRabbit` (the existing key from the prior
-   plan) is **numerically unchanged** vs a pre-change run on the same config
-   + seed for the first iteration's mean. (Sanity: the new code only adds
-   accumulators; it does not alter the existing reduction.)
-8. T1, T2, T4 pass. T3 passes either tight (`atol=1e-5`) or relaxed
-   (`atol=1.5`) per the rabbit-move semantics — implementer notes which.
-9. **No new YAML config keys.** `config.get_mandatory(...)` is **not** called
-   for any new key.
-10. **Speed-check note** in the Implementation Report: 100-iteration RPPO
-    walltime on `01-interoNocicept_sameProp.yaml` before vs after, same
-    hardware/seed. Expected ≤ 1 % slowdown; **>5 % is a blocker**.
+5. The Dreamer transition dict has `dist_per_neutral` and `dist_per_predator`.
+6. `train.py` accumulators initialise correctly for `num_* = 0` (no-op) and
+   `num_* > 0`. Stage-transition wipe extends to both new arrays.
+7. **All 5** WandB aggregation sites emit the per-tag fan-out for both rabbits
+   and predators. The aggregated `Episode/MeanDistRabbit` (existing key) is
+   **numerically unchanged** vs a pre-change run on the same config + seed
+   for the first iteration's mean.
+8. T1–T5 pass (T3 relaxed to `atol=1.5`).
+9. **No `config.get_mandatory(...)` call for any new key** (tag is optional).
+10. Configs in "Configs to update" list have `tag` fields added with values
+    matching their `spawn_area` semantics; the diff is surfaced in the
+    Implementation Report.
+11. **Speed-check**: 100-iteration RPPO walltime on
+    `01-interoNocicept_sameProp.yaml` before vs after, same hardware/seed.
+    Expected ≤ 1 % slowdown; **>5 % is a blocker** unless the developer
+    documents a justification.
 
 ## Implementation Report
 
@@ -945,7 +844,9 @@ The implementing agent declares "done" when **all** hold:
 > **Date**: [date]
 
 <!-- Filled by the developer after code changes are made.
-     Describe what was done, any deviations from the plan, and why. -->
+     Describe what was done, any deviations from the plan, and why. Include the
+     diff of config-file edits (the "Configs to update post-implementation"
+     list) so the user can spot-check tag↔spawn_area correctness. -->
 
 ## Verification Report
 
@@ -954,51 +855,55 @@ The implementing agent declares "done" when **all** hold:
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/environment/state.py` | +1 EnvParams field | | |
-| `src/environment/config_loader.py` | +static-quadrant-tag block, +1 constructor arg | | |
-| `src/environment/core.py` | +2 info keys (`dist_per_neutral`, `quadrant_idx`) | | |
+| `src/environment/state.py` | +2 EnvParams fields (`predator_tags`, `neutral_tags`) | | |
+| `src/environment/config_loader.py` | +`_normalise_tag` helper, +2 tag tuples in branches, +2 constructor args | | |
+| `src/environment/core.py` | +2 info keys (`dist_per_neutral`, `dist_per_predator`) | | |
 | `src/models/recurrent_ppo_trainer.py` | +2 StepInfo fields, +2 wiring lines | | |
 | `src/models/dreamer_v3_trainer.py` | +2 transition keys | | |
-| `train.py` (accumulators init + 5 per-step sites + 5 reset sites + 1 stage-wipe) | per-rabbit + per-quadrant accumulators | | |
-| `train.py` (5 WandB sites) | per-quadrant fan-out: 4 occupancy keys + 0–4 rabbit-quadrant keys | | |
-| `tests/environment/test_per_quadrant_and_per_rabbit_info.py` | new (T1–T4) | | |
+| `train.py` (accumulators init + 5 per-step + 5 reset + 1 wipe) | per-tag accumulators | | |
+| `train.py` (5 WandB sites) | `_append_per_tag_means` helper + 5 site calls (×2 for rabbit/predator) | | |
+| `tests/environment/test_per_tag_logging.py` | new (T1–T4) | | |
+| Hypervigilance configs (5 files) | add `tag:` lines per the list | | |
 
 **Conclusion**: [one-line summary]
 
 ---
 
-## Open questions for the user (raised by senior-developer pre-implementation)
+## Open questions for the user
 
-These are not blocking the developer; the plan above commits to a default
-answer for each. Surfaced for visibility:
+1. **`hiding_predators` tagging**: hiding-predators live inside
+   `environment.resources` with `type: hiding_predator`, not their own list.
+   The `02-sameProp_R2_passivePredator.yaml` config has 4 of them (one per
+   quadrant). To tag them, we'd need to extend the `resources` schema and
+   plumb a separate `hiding_predator_tags` tuple — out of scope for this plan.
+   Default chosen: defer; existing aggregated `Episode/MeanDistHidingPredator`
+   continues to apply. *Override only if Cell A1 analysis flags
+   hiding-predator-class avoidance as a separate confound.*
 
-1. **Quadrant tie-breaker on odd grid sizes.** Plan uses `>= height//2` so a
-   center cell on a 9×9 grid goes BR, not TL. The hypervigilance configs are
-   all 10×10, so this is academic for Round 2 / Round 3. Alternative: round to
-   nearest, or split center cells across two quadrants — neither was
-   requested. Default chosen: `>=`. *Override only if a future config relies
-   on a different rule.*
+2. **Multi-instance same-tag reduction**: when two rabbits share `tag: "TL"`
+   (e.g., `count: 2, spawn_area: [[1,1],[5,5]], tag: "TL"`), the metric is
+   the **mean** over those instances, then meaned across episodes. Alternative
+   would be `min` (matches the existing aggregated `MeanDistRabbit` `jnp.min`
+   semantics), but mean is more interpretable for the disambiguation use case.
+   Default chosen: mean. *Override if a future config relies on nearest-rabbit
+   semantics within a tag.*
 
-2. **`Episode/MeanDistRabbit_<Q>` definition for multi-rabbit-per-quadrant
-   configs.** Plan averages per-instance distances within a quadrant
-   (`np.mean(means_per_neutral[mask_q])`). Alternative: report `min` (nearest
-   rabbit in that quadrant) — closer to the aggregated `MeanDistRabbit`'s
-   `jnp.min` semantics, but harder to interpret across windows. Default
-   chosen: mean. *The hypervigilance configs all have 1 rabbit per quadrant;
-   default and alternative are equivalent for Round 2. Decide the convention
-   before any future multi-rabbit-per-quadrant config lands.*
+3. **Tag character set**: `[A-Za-z0-9_-]+` is enforced (no `/`, no `.`, no
+   space). Generous enough for compass labels (`TL`, `TR`, `BL`, `BR`),
+   numeric (`0`, `1`), and short descriptive (`spawn_a`, `near_food`).
+   *Override only if a config-naming convention requires `.` or other.*
 
-3. **`quadrant_idx` dtype in Dreamer replay buffer.** Plan casts to `float32`
-   for buffer-dtype homogeneity (matching how `hit_predator` etc. are cast
-   per `dreamer_v3_trainer.py:609-633`). The cast is reversed at numpy
-   aggregation time via `.astype(np.int32)`. Alternative: keep `int32`
-   throughout and special-case the buffer dtype check. Default chosen: cast.
-   *Functionally equivalent; cast is the lower-friction option.*
+---
 
-4. **No new YAML keys vs. exposing `quadrant_split` as configurable.** Plan
-   bakes `>= height//2` directly into the env step. Alternative: add a config
-   key (e.g., `environment.quadrant_split: 'half'` vs `'thirds'`). The
-   project's `no fallback defaults` rule means a configurable would need to
-   be `config.get_mandatory(...)`, breaking every existing config. Default
-   chosen: hard-code. *If quadrant geometry ever needs to vary across
-   experiments, design a separate plan.*
+## Changelog
+
+- **2026-05-09** — Rewritten to tag-based design after user feedback (quadrant
+  hard-coding rejected). Source code is now geometry-agnostic; semantics live
+  in YAML. Drops `QuadrantOccupancy_*` (redundant with per-tag distance for
+  the disambiguation use case). Adds symmetric per-tag distances for
+  `predators` (new on the platform — no aggregated `MeanDistPredator` exists
+  today). `hiding_predators` deferred (different YAML surface).
+- **2026-05-08** — Original quadrant-hard-coded plan (committed in `40bcc1d`,
+  never implemented). Locked TL/TR/BL/BR splits via `>= height//2` inside
+  `core.py` and `config_loader.py`; rejected as too brittle for future
+  experimental layouts.
