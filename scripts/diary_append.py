@@ -49,7 +49,11 @@ def format_link(s: str) -> str:
     - Empty / None → empty.
     - Already a markdown link (starts with '[') or anchor (starts with '<') → leave as-is.
     - 7–40 hex chars → `commit \`<hash>\`` (disambiguates git commit IDs).
-    - Path-shaped (contains slash, or ends in a known extension) → `[<stem>](<path>)`.
+    - Path-shaped (contains slash, or ends in a known extension) → `[<stem>](<path>)`,
+      where <path> is rewritten to be relative TO THE DIARY FILE's directory
+      (`docs/diary/`) so the link resolves correctly when clicked in any markdown
+      viewer. Repo-relative input (e.g. `.claude-memory/foo.md`) becomes
+      `../../.claude-memory/foo.md`; `docs/develop/x.md` becomes `../develop/x.md`.
     - Anything else (e.g. '(pending)', '(none)', URL) → leave as-is.
     """
     if not s:
@@ -62,9 +66,17 @@ def format_link(s: str) -> str:
     if _HEX.match(s):
         return f"commit `{s}`"
     if _PATH_HINT.search(s):
-        from os.path import basename, splitext
+        from os.path import basename, splitext, relpath
         stem = splitext(basename(s))[0]
-        return f"[{stem}]({s})"
+        # Rewrite the path to be relative to docs/diary/ (where the diary file lives).
+        # Input is expected to be repo-relative (e.g. ".claude-memory/foo.md"); we
+        # resolve it against REPO_ROOT, then make it relative to DIARY_DIR.
+        try:
+            target_abs = (REPO_ROOT / s).resolve()
+            link = relpath(target_abs, start=DIARY_DIR)
+        except Exception:
+            link = s  # fall back to the raw input
+        return f"[{stem}]({link})"
     return s
 
 
