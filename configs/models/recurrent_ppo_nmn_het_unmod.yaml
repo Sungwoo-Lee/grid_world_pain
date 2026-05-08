@@ -1,0 +1,43 @@
+# Agent config — NMN Noise Heterogeneity Sweep
+# Architecture: Unmodulated baseline (LN, no neuromodulator)
+# Identical to configs/models/recurrent_ppo.yaml (which is v8's MC_Unmod_Noise_LN
+# template). Filed under a sweep-specific name so the sweep's two architectures
+# live side-by-side in this dir for clarity.
+# All hyperparameters held at v8 §2.2 values (controlled across the sweep).
+
+agent:
+  algorithm: "RecurrentPPO"
+  lr_actor: 0.0005
+  lr_critic: 0.0001
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  sequence_length: 128
+  frame_stack: 1
+  fc_layers: [128,128]
+  actor_fc_layers: [128,128]
+  critic_fc_layers: [128,128]
+  hidden_size: 128
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+
+  # v8-anchored parity options (see NMN_PERFORMANCE_DIAGNOSIS_v8 §2.2)
+  rnn_type: "GRU"
+  activation: "relu"
+  return_mode: "MC"      # MC: cleaner per v8 (smaller seed variance + lower critic loss)
+
+  encoding_mode: "hierarchical"
+
+  hierarchical_params:
+    default_mlp: [128,128]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+    multimodal_hub: [128,128]
+
+  # Unmodulated baseline: no neuromodulator constructed.
+  modulation:
+    type: null
