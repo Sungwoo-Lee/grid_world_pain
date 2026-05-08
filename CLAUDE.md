@@ -56,6 +56,13 @@ The canonical flows, parallelism heuristics, cross-cutting constraints, and anti
 - **Working files.** Intermediate results to `tmp/YYYYMMDD_HHMMSS_<topic>.md`, written after each step.
 - **Parallelism.** OK for independent tasks; sequential for hand-off chains; shell loops beat parallel agents for mechanical batch work.
 - **Auto-commit.** Standing authorization to `git add` and `git commit` without asking, at logical sub-task boundaries — one coherent change per commit, separate commits for unrelated work (do not batch). Skip if the change is incomplete (failing tests, half-done implementation). Stage specific files by name (never `git add -A` / `.`). Match the existing message style — check `git log` for the project's conventional-commit + gitmoji format. Never commit secrets, never use `--no-verify`, never push.
+- **Git safety (DO NOT WIPE GITIGNORED DATA).** This repo lives on a NAS that **does not support symlinks**, so the standard "move data outside the repo and symlink in" protection is unavailable. Gitignored data (`results/`, `claude_data/`, `wandb/`, `logs/`, `tmp/`, `legacy/`, `antigravity_data/`, etc.) is therefore destroyed unrecoverably by any aggressive `git clean`. Hard rules:
+  - **Never** use `git clean -x` / `-X` / `-fdx` / `-fdX` — the `-x`/`-X` flag deletes gitignored files. Allowed: `git clean -fd` (untracked-only; gitignored survives). Always preview with `git clean -fdn` (dry-run) first, and surface the listed paths to the user before executing the real clean.
+  - **Never** force-checkout / force-switch between branches without first checking whether the destination branch tracks paths that are currently untracked locally — `git checkout -f <branch>` will overwrite an untracked file at a path tracked on the destination.
+  - **Avoid** `git stash -u` followed by `git stash drop` — `-u` carries untracked into the stash, and `drop` then loses them. Use `git stash list` + `git stash show -u` to confirm before any drop.
+  - **`git reset --hard` is safe** for gitignored data (only resets tracked files); the danger is in `git clean -x` that often follows it.
+  - **Before any merge / rebase / branch switch / non-trivial git operation**, snapshot critical untracked data: `cp -a results /tmp/results-bk-$(date +%s)` (or `claude_data`, `wandb`, etc., as relevant). The cost is one second; the alternative is re-training.
+  - **Past incident**: the `results/` directory (training outputs across `JAX_RecurrentPPO` / `JAX_DreamerV3` / `JAX_Sandbox` / `JAX_PPO`) was lost during a failed merge when destructive cleanup followed. Recovery required re-training. This rule exists because of that incident.
 
 ---
 
