@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import os
 import re
 import shutil
 import sys
@@ -37,6 +38,24 @@ TEMPLATE = DIARY_DIR / "TEMPLATE.md"
 
 # Asia/Seoul = UTC+9 (no DST)
 KST = timezone(timedelta(hours=9))
+
+
+def resolve_session(arg: str | None) -> str:
+    """Resolve the session column value.
+
+    - If --session was passed explicitly: use it verbatim.
+    - Else: derive from $CLAUDE_CODE_SESSION_ID env var, take first 8 hex chars.
+    - Else: 'unknown'.
+
+    Sub-agents are expected to pass --session "<parent-prefix>/<role>" explicitly
+    (e.g. "f3ab7f37/developer") so lineage is preserved in the diary row.
+    """
+    if arg:
+        return arg.strip()
+    env = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    if env:
+        return env.split("-")[0][:8]
+    return "unknown"
 
 
 _HEX = re.compile(r"^[0-9a-f]{7,40}$")
@@ -182,15 +201,15 @@ def edit_training_row(text: str, tag: str, ended: str, result: str, analysis_doc
         if not ln.lstrip().startswith("|"):
             continue
         cols = [c.strip() for c in ln.strip("|").split("|")]
-        # Layout: Started | Ended | Tag | Node:GPU | Status | Cell | WandB | Result | Doc
-        if len(cols) < 9:
+        # Layout: Started | Ended | Session | Tag | Node:GPU | Status | Cell | WandB | Result | Doc
+        if len(cols) < 10:
             continue
-        if cols[2] == tag:
+        if cols[3] == tag:
             cols[1] = ended
-            cols[4] = f"done {ended}"
-            cols[7] = result
+            cols[5] = f"done {ended}"
+            cols[8] = result
             if analysis_doc:
-                cols[8] = analysis_doc
+                cols[9] = analysis_doc
             body[i] = "| " + " | ".join(cols) + " |"
             found = True
             break
@@ -212,13 +231,13 @@ def edit_session_end_row(text: str, label: str, ended: str, commits: str | None)
         if not ln.lstrip().startswith("|"):
             continue
         cols = [c.strip() for c in ln.strip("|").split("|")]
-        # Layout: Started | Ended | Label | Summary | Links
-        if len(cols) < 5:
+        # Layout: Started | Ended | Session | Label | Summary | Links
+        if len(cols) < 6:
             continue
-        if cols[2] == label and (cols[1] == "" or cols[1] == "(open)"):
+        if cols[3] == label and (cols[1] == "" or cols[1] == "(open)"):
             cols[1] = ended
             if commits:
-                cols[4] = (cols[4] + " " + commits).strip()
+                cols[5] = (cols[5] + " " + commits).strip()
             body[i] = "| " + " | ".join(cols) + " |"
             found = True
             break
@@ -276,10 +295,11 @@ def cmd_session_start(args):
         text = path.read_text()
         time = args.time or now_hhmm()
         link = format_link(args.link or "")
-        row = f"| {time} | (open) | {args.label} | {args.summary} | {link} |"
+        sess = resolve_session(args.session)
+        row = f"| {time} | (open) | {sess} | {args.label} | {args.summary} | {link} |"
         text = insert_row_at_top(text, "Sessions", row)
         write_atomic(path, text)
-        print(f"session-start logged at {time} into {path.name}")
+        print(f"session-start logged at {time} (session={sess}) into {path.name}")
     with_lock(args.date, go)
 
 
@@ -301,10 +321,11 @@ def cmd_event(args, type_label):
         text = path.read_text()
         time = args.time or now_hhmm()
         link = format_link(args.link)
-        row = f"| {time} | {type_label} | {args.subject} | {link} |"
+        sess = resolve_session(args.session)
+        row = f"| {time} | {sess} | {type_label} | {args.subject} | {link} |"
         text = insert_row_at_top(text, "Events (chronological, newest first)", row)
         write_atomic(path, text)
-        print(f"{type_label} logged at {time} into {path.name}")
+        print(f"{type_label} logged at {time} (session={sess}) into {path.name}")
     with_lock(args.date, go)
 
 
@@ -314,13 +335,14 @@ def cmd_training_start(args):
         text = path.read_text()
         time = args.time or now_hhmm()
         doc_md = format_link(args.doc)
+        sess = resolve_session(args.session)
         row = (
-            f"| {time} |  | {args.tag} | {args.node}:{args.gpu} | running | "
+            f"| {time} |  | {sess} | {args.tag} | {args.node}:{args.gpu} | running | "
             f"{args.cell} | {args.wandb} | — | {doc_md} |"
         )
         text = insert_row_at_top(text, "Training runs", row)
         write_atomic(path, text)
-        print(f"training-start logged at {time} (tag={args.tag}) into {path.name}")
+        print(f"training-start logged at {time} (session={sess}, tag={args.tag}) into {path.name}")
     with_lock(args.date, go)
 
 
@@ -353,7 +375,7 @@ def main():
 
     s = sub.add_parser("session-start"); s.add_argument("--label", required=True)
     s.add_argument("--summary", required=True); s.add_argument("--link", default="")
-    s.add_argument("--time"); s.set_defaults(func=cmd_session_start)
+    s.add_argument("--time"); s.add_argument("--session"); s.set_defaults(func=cmd_session_start)
 
     s = sub.add_parser("session-end"); s.add_argument("--label", required=True)
     s.add_argument("--commits"); s.add_argument("--time"); s.set_defaults(func=cmd_session_end)
@@ -361,12 +383,13 @@ def main():
     for ev in ("implemented", "verified", "insight"):
         s = sub.add_parser(ev); s.add_argument("--subject", required=True)
         s.add_argument("--link", required=True); s.add_argument("--time")
+        s.add_argument("--session")
         s.set_defaults(func=lambda a, e=ev: cmd_event(a, e))
 
     s = sub.add_parser("training-start")
     for f in ("tag", "node", "gpu", "cell", "wandb", "doc"):
         s.add_argument(f"--{f}", required=True)
-    s.add_argument("--time"); s.set_defaults(func=cmd_training_start)
+    s.add_argument("--time"); s.add_argument("--session"); s.set_defaults(func=cmd_training_start)
 
     s = sub.add_parser("training-done"); s.add_argument("--tag", required=True)
     s.add_argument("--result", required=True); s.add_argument("--analysis", default=None)

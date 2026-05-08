@@ -92,7 +92,8 @@ When implementation is complete:
   ```bash
   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py implemented \
     --subject "<one-line summary of what was implemented>" \
-    --link   "<plan-doc-path-relative-to-repo-root>"
+    --link    "<plan-doc-path-relative-to-repo-root>" \
+    --session "${CLAUDE_CODE_SESSION_ID:0:8}/developer"
   ```
   Use the plan-doc path for `--link` (you haven't committed yet — `senior-developer` does not commit either; the user does after verification). Script flock-protects concurrent calls. See `.claude/skills/diary/SKILL.md`.
 - Notify the user that implementation is done and ready for `senior-developer` verification.

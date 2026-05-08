@@ -83,7 +83,8 @@ When the plan you're writing is a bug fix (vs. a new feature):
    ```bash
    /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py verified \
      --subject "<one-line: what was verified, e.g. 'Memory system seed (all 9 plan checkpoints)'>" \
-     --link   "<plan-doc-path-relative-to-repo-root>"
+     --link    "<plan-doc-path-relative-to-repo-root>" \
+     --session "${CLAUDE_CODE_SESSION_ID:0:8}/senior-developer"
    ```
    Script flock-protects concurrent calls. See `.claude/skills/diary/SKILL.md`.
 

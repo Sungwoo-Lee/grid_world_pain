@@ -113,6 +113,16 @@ Edits the matching `Training runs` row in place: sets `Ended = HH:MM`, `Status =
 
 Prepends a bullet to `## Notes`. Use sparingly; structured rows are preferred.
 
+## Session column (who wrote each row)
+
+Every row carries a `Session` column so you can tell which Claude session wrote it — important when multiple sessions update the diary in parallel.
+
+- **Top-level Claude session**: pass nothing. The script defaults to the first 8 hex chars of `$CLAUDE_CODE_SESSION_ID` (e.g. `f3ab7f37`). This env var is set by Claude Code in every shell the harness spawns.
+- **Sub-agent (`developer`, `senior-developer`, `training-runner`, `experiment-analyzer`)**: pass `--session "${CLAUDE_CODE_SESSION_ID:0:8}/<role>"` explicitly so the row reads `f3ab7f37/developer`. The slash separator makes lineage visible: parent session prefix on the left, sub-agent role on the right. Each agent's profile under `.claude/agents/` carries the exact `--session` value to use.
+- **Manual / scripted call from outside Claude Code**: pass any short label, e.g. `--session "manual"` or `--session "cron"`. If unset and `$CLAUDE_CODE_SESSION_ID` is empty, the script writes `unknown` and continues.
+
+The Session column is informational — it does not affect row matching for `session-end`, `training-done`, etc. (those still match by `--label` and `--tag`).
+
 ## Link auto-formatting
 
 The script auto-formats whatever you pass to `--link` / `--doc` / `--analysis` / `--commits`:

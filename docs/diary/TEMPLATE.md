@@ -4,21 +4,21 @@
 
 ## Sessions
 
-| Started | Ended | Label | Summary | Links |
-|---|---|---|---|---|
-| _(no sessions yet today)_ | | | | |
+| Started | Ended | Session | Label | Summary | Links |
+|---|---|---|---|---|---|
+| _(no sessions yet today)_ | | | | | |
 
 ## Events (chronological, newest first)
 
-| Time | Type | Subject | Link |
-|---|---|---|---|
-| _(no events yet today)_ | | | |
+| Time | Session | Type | Subject | Link |
+|---|---|---|---|---|
+| _(no events yet today)_ | | | | |
 
 ## Training runs
 
-| Started | Ended | Tag | Node:GPU | Status | Cell | WandB | Result | Doc |
-|---|---|---|---|---|---|---|---|---|
-| _(no training runs yet today)_ | | | | | | | | |
+| Started | Ended | Session | Tag | Node:GPU | Status | Cell | WandB | Result | Doc |
+|---|---|---|---|---|---|---|---|---|---|
+| _(no training runs yet today)_ | | | | | | | | | |
 
 ## Notes
 

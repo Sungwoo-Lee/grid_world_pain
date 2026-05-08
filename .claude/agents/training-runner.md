@@ -230,11 +230,12 @@ After a successful launch:
 - **Log to the daily diary** (mandatory):
   ```bash
   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py training-start \
-    --tag   "<TAG from --wandb-name or launch manifest>" \
-    --node  <node-int>     --gpu <gpu-int> \
-    --cell  "<cell letter, or '-' if not part of a cell battery>" \
-    --wandb "<WandB run name>" \
-    --doc   "<docs/experiments/active/<topic>/<design-doc>.md>"
+    --tag     "<TAG from --wandb-name or launch manifest>" \
+    --node    <node-int>     --gpu <gpu-int> \
+    --cell    "<cell letter, or '-' if not part of a cell battery>" \
+    --wandb   "<WandB run name>" \
+    --doc     "<docs/experiments/active/<topic>/<design-doc>.md>" \
+    --session "${CLAUDE_CODE_SESSION_ID:0:8}/training-runner"
   ```
   The `--tag` value MUST match what `experiment-analyzer` will pass to `training-done` later — that's how the diary's training row gets edited in place from `running` to `done`. Use the same TAG that's in the launch manifest. Script flock-protects concurrent calls. See `.claude/skills/diary/SKILL.md`.
 - That's it. **Do not** start tailing logs long-term, do not analyze metrics, do not write plans. Subsequent analysis belongs to `experiment-analyzer` (the user invokes it later).

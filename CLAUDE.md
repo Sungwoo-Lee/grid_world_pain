@@ -88,4 +88,6 @@ The mechanism is the `/diary` skill ([.claude/skills/diary/SKILL.md](.claude/ski
 
 Pass **raw values** (commit hashes, repo-relative paths) to `--link` / `--doc` / `--analysis` / `--commits` — the script auto-formats them as `commit `<hash>`` or `[stem](relative-path)`. Tags must match between `training-start` and `training-done`; session labels must match between `session-start` and `session-end`.
 
+Every row carries a **Session** column showing which Claude session wrote it. Top-level Claude calls inherit the value automatically from `$CLAUDE_CODE_SESSION_ID` (first 8 hex chars, e.g. `f3ab7f37`). Sub-agents must pass `--session "${CLAUDE_CODE_SESSION_ID:0:8}/<role>"` explicitly so rows read `f3ab7f37/developer`, `f3ab7f37/training-runner`, etc. — the slash separator makes parent→sub-agent lineage visible at a glance. Each agent profile under `.claude/agents/` documents its exact `--session` value.
+
 Agent profiles in `.claude/agents/` carry their own diary-update reminder for their specific subcommand. Top-level Claude is responsible for `session-start` / `session-end`. The `/memorize` chain handles `insight` rows automatically.
