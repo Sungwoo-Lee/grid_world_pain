@@ -40,21 +40,31 @@ TEMPLATE = DIARY_DIR / "TEMPLATE.md"
 KST = timezone(timedelta(hours=9))
 
 
-def resolve_session(arg: str | None) -> str:
+def resolve_session(arg: str | None, *, full: bool = False) -> str:
     """Resolve the session column value.
 
-    - If --session was passed explicitly: use it verbatim.
-    - Else: derive from $CLAUDE_CODE_SESSION_ID env var, take first 8 hex chars.
+    - If --session was passed explicitly: use it verbatim (no truncation).
+    - Else: derive from $CLAUDE_CODE_SESSION_ID env var.
+      - full=True (used by session-start): return the full UUID, e.g.
+        'f3ab7f37-218c-463b-ba24-e555d496dec1' — copy-paste-ready for
+        `claude --resume <UUID>`.
+      - full=False (everywhere else): return first 8 hex chars, e.g.
+        'f3ab7f37' — compact for tables with many rows.
     - Else: 'unknown'.
 
     Sub-agents are expected to pass --session "<parent-prefix>/<role>" explicitly
     (e.g. "f3ab7f37/developer") so lineage is preserved in the diary row.
+
+    Convention: the Sessions table carries the full UUID (one row per session,
+    canonical anchor for `claude --resume`); Events and Training runs carry the
+    prefix (many rows, compactness matters; cross-reference back to the Sessions
+    row to recover the full UUID).
     """
     if arg:
         return arg.strip()
     env = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
     if env:
-        return env.split("-")[0][:8]
+        return env if full else env.split("-")[0][:8]
     return "unknown"
 
 
@@ -295,7 +305,8 @@ def cmd_session_start(args):
         text = path.read_text()
         time = args.time or now_hhmm()
         link = format_link(args.link or "")
-        sess = resolve_session(args.session)
+        # Sessions row uses the FULL UUID (copy-paste-ready for `claude --resume`).
+        sess = resolve_session(args.session, full=True)
         row = f"| {time} | (open) | {sess} | {args.label} | {args.summary} | {link} |"
         text = insert_row_at_top(text, "Sessions", row)
         write_atomic(path, text)

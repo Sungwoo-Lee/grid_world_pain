@@ -117,8 +117,18 @@ Prepends a bullet to `## Notes`. Use sparingly; structured rows are preferred.
 
 Every row carries a `Session` column so you can tell which Claude session wrote it — important when multiple sessions update the diary in parallel.
 
-- **Top-level Claude session**: pass nothing. The script defaults to the first 8 hex chars of `$CLAUDE_CODE_SESSION_ID` (e.g. `f3ab7f37`). This env var is set by Claude Code in every shell the harness spawns.
-- **Sub-agent (`developer`, `senior-developer`, `training-runner`, `experiment-analyzer`)**: pass `--session "${CLAUDE_CODE_SESSION_ID:0:8}/<role>"` explicitly so the row reads `f3ab7f37/developer`. The slash separator makes lineage visible: parent session prefix on the left, sub-agent role on the right. Each agent's profile under `.claude/agents/` carries the exact `--session` value to use.
+The convention splits by **table density**:
+
+| Table | Session value | Why |
+|---|---|---|
+| Sessions | **Full UUID** (e.g. `f3ab7f37-218c-463b-ba24-e555d496dec1`) | One row per session — canonical anchor. Copy-paste into `claude --resume <UUID>` to resume that session in a new terminal. |
+| Events, Training runs | **8-char prefix** (e.g. `f3ab7f37`) | Many rows; compactness matters. To recover the full UUID, look up the matching Sessions row, or `ls ~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/<prefix>*`. |
+| Sub-agent rows | `<parent-prefix>/<role>` (e.g. `f3ab7f37/developer`) | Lineage explicit: which parent session, which sub-agent role. |
+
+How the value is resolved per call:
+
+- **Top-level Claude session**: pass nothing. The script defaults from `$CLAUDE_CODE_SESSION_ID` — full UUID for `session-start`, 8-char prefix for everything else.
+- **Sub-agent (`developer`, `senior-developer`, `training-runner`, `experiment-analyzer`)**: pass `--session "${CLAUDE_CODE_SESSION_ID:0:8}/<role>"` explicitly so the row reads `f3ab7f37/developer`. Each agent's profile under `.claude/agents/` carries the exact `--session` value to use.
 - **Manual / scripted call from outside Claude Code**: pass any short label, e.g. `--session "manual"` or `--session "cron"`. If unset and `$CLAUDE_CODE_SESSION_ID` is empty, the script writes `unknown` and continues.
 
 The Session column is informational — it does not affect row matching for `session-end`, `training-done`, etc. (those still match by `--label` and `--tag`).
