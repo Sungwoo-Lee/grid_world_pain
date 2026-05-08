@@ -22,5 +22,6 @@
 
 ## Change history
 
+- 2026-05-08: Added 1 insight from the hypervigilance/sameProp session: `20260508_1446_cifs_race_node112_recurrence` (cross-node confirmation of the CIFS race + compliance-gap finding).
 - 2026-05-08: Added 2 insights from the dreamer-hypervigilance session: `20260508_1433_cifs_bypass_for_run_command`, `20260508_1434_terminate_command_key_auth_refactor`.
 - 2026-05-08: Folder created. Added insight `20260508_1428_node_env_recovery_recipe` (node 101 env recovery).

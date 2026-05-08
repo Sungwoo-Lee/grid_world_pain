@@ -5,8 +5,8 @@
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
 **Last updated**: 2026-05-08
-**Active folders**: 5
-**Total insights**: 11
+**Active folders**: 6
+**Total insights**: 14
 **Last audit**: (none)
 
 ---
@@ -19,7 +19,8 @@
 | `subagent_engineering` | Subagent + worktree usage gotchas | 1 | 2026-05-08 | [meta, learned_lesson, worktree, subagent] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 2 | 2026-05-08 | [nmn, noise, hypervigilance, design] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 2 | 2026-05-08 | [dreamer, hypervigilance, decision, learned_lesson] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 3 | 2026-05-08 | [meta, training_runner, learned_lesson, decision] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 4 | 2026-05-08 | [meta, training_runner, learned_lesson, decision] |
+| `hypervigilance` | Hypervigilance experiments | 2 | 2026-05-08 | [hypervigilance, design, learned_lesson, decision] |
 
 ---
 
@@ -51,6 +52,7 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-08: Captured 3 insights from the hypervigilance/sameProp Round 1 + Round 2 design session: `20260508_1444_sameprop_round1_finding_and_confound` and `20260508_1445_sameprop_discriminating_channels` into the new `hypervigilance` folder, `20260508_1446_cifs_race_node112_recurrence` into existing `cluster_ops`. No new tags promoted (all reused: hypervigilance, design, learned_lesson, decision, meta, training_runner).
 - 2026-05-08: Captured 4 insights: 2 into the new `dreamer_diagnosis` folder (`20260508_1431_diagnostic_battery_refutes_four_fixes`, `20260508_1432_probe_refutes_imagined_death_absence`), 2 into the existing `cluster_ops` folder (`20260508_1433_cifs_bypass_for_run_command`, `20260508_1434_terminate_command_key_auth_refactor`). Promoted candidate tag `dreamer` to active. (Reconciled with a parallel session that captured 3 insights at HHMM 1426–1428; my IDs bumped to 1431–1434 to avoid collision.)
 - 2026-05-08: Captured 3 insights: `20260508_1426_v8_noise_bug_refuted` and `20260508_1427_nmn_heterogeneity_sweep_design` into the new `nmn_diagnosis` folder, `20260508_1428_node_env_recovery_recipe` into the new `cluster_ops` folder. Promoted candidate tags `nmn`, `noise`, `hypervigilance`, `training_runner` to active.
 - 2026-05-08: Captured 1 insight: `20260508_0447_recall_skill_design_and_ship` into `memory_system_design` (no new tags; all reused).
