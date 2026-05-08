@@ -11,8 +11,8 @@ session_label: "claude-memory genesis"
 importance: high
 status: settled
 supersedes: []
-raw_source: none
-raw_completeness: none
+raw_source: claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/f3ab7f37-218c-463b-ba24-e555d496dec1.jsonl
+raw_completeness: full
 ---
 
 # Claude session-memory system: design decisions and genesis
@@ -63,4 +63,4 @@ None — the plan resolved all five open questions before implementation.
 - Built-in auto-memory: `~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/memory/MEMORY.md`
 - Helper script: `scripts/claude_jsonl_to_md.py`
 - Why a new folder: first insight in this layer; "memory_system_design" mirrors the reference layout's same-named topic and is the natural home for any future insight about this layer's own evolution. No existing folder to match against (this is the first folder).
-- Note: `raw_source` is "none" — no raw archive was captured for this genesis session. A future insight about this system could optionally archive the implementation conversation via `scripts/claude_jsonl_to_md.py`; the resulting archive would be local-only (not committed).
+- `raw_source` points at the synced JSONL on NAS (`claude_data/.claude/projects/.../<UUID>.jsonl`). Push via `./sync-agent-data.sh claude push` to update the NAS copy; on another node, `./sync-agent-data.sh claude pull` first, then `claude --resume <UUID>` (re-enter the session) or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot view). Backfilled (originally `none`) when /memorize Step 7 design changed to point at the synced JSONL.

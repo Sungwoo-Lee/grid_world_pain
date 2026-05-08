@@ -135,13 +135,17 @@ All four layers are mandatory — skipping any of them is a regression.
 
 ## 7. Raw-archive policy
 
-- Archive lives at `.claude-memory/_archive/raw_conversations/<insight-id>.md`. Filename matches the primary insight ID. If one conversation produced multiple insights, name the archive after the chronologically first one; each insight's `raw_source` points at it.
-- **Archives are local-only (gitignored).** The `.gitignore` ignores `_archive/raw_conversations/*.md` but tracks `.gitkeep`. The insight's `raw_source` link is meaningful only on the originating machine; cloners see a broken link by design. Note this in the insight's `## References` section.
-- **Capture path (pick one)**:
-  - Default (session-end keyword + user confirms): Claude writes a markdown summary of recent turns into the archive file. Mark `raw_completeness: approximate`.
-  - On request ("save full raw"): user supplies the path to the Claude Code transcript JSONL under `~/.claude/projects/.../` and Claude runs `scripts/claude_jsonl_to_md.py <jsonl> <out_md>`. Mark `raw_completeness: full`.
-- **Loading**: L4 only (see section 9), behind the large-file warning protocol (see section 10).
-- When archive size exceeds 50 KB, surface a one-line reminder when the archive write trigger fires: `"Archive ~XX KB: check for sensitive content before committing the insight."` (Note: the archive itself is not committed — only the insight file is.)
+The raw conversation is the JSONL Claude Code writes per session — there is no separate `.md` archive maintained by `/memorize`. The JSONL is the canonical raw record. The user's `sync-agent-data.sh` script mirrors `~/.claude/` → `claude_data/` on the NAS, so the JSONL is reachable from any node that has pulled.
+
+- **Where it lives**: `claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/<UUID>.jsonl` (synced from each node's `~/.claude/.../<UUID>.jsonl`). Repo-relative; `claude_data/` is `.gitignore`'d so the JSONL travels via the sync script, not git.
+- **Insight pointer**: `/memorize` Step 7 sets every insight's `raw_source` to the JSONL path computed from `$CLAUDE_CODE_SESSION_ID`, with `raw_completeness: full`. No prompt — the link is set automatically.
+- **Sync responsibility**: `/memorize` does not auto-push. It surfaces a one-line reminder at the end of capture: "If you have not pushed recently, run `./sync-agent-data.sh claude push`." The user runs the sync.
+- **Reading the raw conversation** (L4 — only on explicit user confirmation):
+  - Best: `claude --resume <UUID>` re-enters the session in Claude Code (full UI, navigation, search).
+  - Ad-hoc: `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` produces a one-shot markdown view. Apply the section 10 large-file warning protocol before reading the resulting file in context.
+- **Cross-node**: on a fresh node, `./sync-agent-data.sh claude pull` brings down all JSONLs; `raw_source` links resolve afterwards.
+
+The legacy `_archive/raw_conversations/` directory is no longer used. New insights point at the synced JSONL directly. Existing insights with `_archive/raw_conversations/...md` raw_source values were backfilled to point at the JSONL when this design changed.
 
 ---
 

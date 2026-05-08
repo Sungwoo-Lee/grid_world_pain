@@ -11,8 +11,8 @@ session_label: "recall skill rollout"
 importance: high
 status: settled
 supersedes: []
-raw_source: none
-raw_completeness: none
+raw_source: claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/f3ab7f37-218c-463b-ba24-e555d496dec1.jsonl
+raw_completeness: full
 ---
 
 # `/recall` skill design and ship
@@ -55,3 +55,4 @@ Built `.claude/skills/recall/` and shipped at commit `3705ece`. The memory layer
 - Paired insight: `20260508_0429_memorize_skill_design_and_ship` (write counterpart)
 - Genesis: `20260508_0315_claude_memory_system_genesis`
 - Ship commit: `3705ece`
+- `raw_source` points at the synced JSONL on NAS (`claude_data/.claude/projects/.../<UUID>.jsonl`). Push via `./sync-agent-data.sh claude push` to update the NAS copy; on another node, `./sync-agent-data.sh claude pull` first, then `claude --resume <UUID>` (re-enter the session) or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot view). Backfilled (originally `none`) when /memorize Step 7 design changed to point at the synced JSONL.

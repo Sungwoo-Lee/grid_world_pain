@@ -11,7 +11,7 @@ session_label: "memorize skill rollout"
 importance: high
 status: settled
 supersedes: []
-raw_source: _archive/raw_conversations/20260508_0429_memorize_skill_design_and_ship.md
+raw_source: claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/f3ab7f37-218c-463b-ba24-e555d496dec1.jsonl
 raw_completeness: full
 ---
 
@@ -47,4 +47,4 @@ The `Agent` tool's `isolation: "worktree"` mode creates a separate git worktree 
 - Iteration-1 evidence: `.claude/skills/memorize-workspace/iteration-1/` (gitignored; lives locally).
 - Iteration-2 SKILL.md hard-rule fix: `.claude/skills/memorize/SKILL.md` → "Hard rules" section, line about "Repo-relative paths only".
 - Closest existing folder: `memory_system_design`. **Why a new folder**: `memory_system_design` is for decisions about the `.claude-memory/` layer's *content*; this insight is about Claude Code subagent tooling and worktree mechanics, which is upstream of any specific layer. A future insight about an agent-profile change or a subagent-spawning quirk would fit `subagent_engineering` cleanly but would feel orphaned in `memory_system_design`.
-- `raw_source` link is local-only (archives are gitignored; cloners see a broken link by design).
+- `raw_source` points at the synced JSONL on NAS (`claude_data/.claude/projects/.../<UUID>.jsonl`). Push via `./sync-agent-data.sh claude push` to update the NAS copy; on another node, `./sync-agent-data.sh claude pull` first, then `claude --resume <UUID>` (re-enter the session) or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot view). Backfilled from the deprecated `_archive/raw_conversations/` design.

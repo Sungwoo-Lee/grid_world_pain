@@ -11,7 +11,7 @@ session_label: "memorize skill rollout"
 importance: high
 status: settled
 supersedes: []
-raw_source: _archive/raw_conversations/20260508_0429_memorize_skill_design_and_ship.md
+raw_source: claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/f3ab7f37-218c-463b-ba24-e555d496dec1.jsonl
 raw_completeness: full
 ---
 
@@ -60,4 +60,4 @@ Built `.claude/skills/memorize/` — a project-local Claude Code skill that capt
 - Paired insight in this session: `20260508_0430_worktree_isolation_path_safety` (the engineering finding from running the evals)
 - Design plan: `docs/develop/active/meta/claude_memory_system_design.md`
 - Ship commit: `f878873`
-- `raw_source` link is local-only (archives are gitignored; cloners see a broken link by design).
+- `raw_source` points at the synced JSONL on NAS (`claude_data/.claude/projects/.../<UUID>.jsonl`). Push via `./sync-agent-data.sh claude push` to update the NAS copy; on another node, `./sync-agent-data.sh claude pull` first, then `claude --resume <UUID>` (re-enter the session) or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot view). Backfilled from the deprecated `_archive/raw_conversations/` design.

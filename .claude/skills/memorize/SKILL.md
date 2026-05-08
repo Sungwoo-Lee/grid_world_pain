@@ -119,31 +119,24 @@ For each insight:
 - Existing tag used → bump count; do not change first-use ID.
 - New tag → append row with `tag | meaning | count=1 | first_use=<insight_id>`. English snake_case, singular, no slashes.
 
-### Step 7 — Raw-archive prompt (optional)
+### Step 7 — Set raw_source to the synced JSONL (automatic)
 
-After all insights are written, ask:
+The raw conversation is the JSONL Claude Code writes per session. The user's `sync-agent-data.sh` script mirrors `~/.claude/` → `claude_data/` on the NAS, so the JSONL is reachable from any node that has pulled. There is no separate `.md` archive — the JSONL itself is the canonical raw record.
 
-> Also archive the raw conversation? (full / approximate / skip)
+For each insight written, set the frontmatter fields:
 
-- **full** — verbatim via `scripts/claude_jsonl_to_md.py`. `raw_completeness: full`.
-- **approximate** — Claude writes a markdown summary of recent turns. Smaller, less complete. `raw_completeness: approximate`.
-- **skip** — no archive; fields stay at `none`.
+- `raw_source: claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/<UUID>.jsonl` — `<UUID>` is the full session UUID from `$CLAUDE_CODE_SESSION_ID`.
+- `raw_completeness: full` — the JSONL is verbatim.
 
-Non-interactive default: **skip**, unless the user's original message explicitly asked for a raw archive.
+In each insight's `## References` section, add one line:
 
-If **full**:
+> Raw conversation: synced via `./sync-agent-data.sh claude push`. To read on another node: `./sync-agent-data.sh claude pull`, then either `claude --resume <UUID>` (re-enter the session) or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot markdown view).
 
-```bash
-JSONL=$(ls -t ~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/*.jsonl | head -1)
-ARCH=.claude-memory/_archive/raw_conversations/<chronologically-first-insight-id>.md
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude_jsonl_to_md.py "$JSONL" "$ARCH"
-```
+After all insights are written, surface a single one-line reminder to the user:
 
-Then update each insight's `raw_source` and `raw_completeness`, and add a one-line note in `## References`: `raw_source link is local-only (archives are gitignored).`
+> Raw-conversation links point at `claude_data/.../<UUID>.jsonl`. If you have not pushed recently, run `./sync-agent-data.sh claude push` so the link resolves on other nodes.
 
-If **approximate**: write a markdown summary of recent ~20 turns into `.claude-memory/_archive/raw_conversations/<id>.md`. Same field updates and local-only note.
-
-If archive size > 50 KB, surface: `Archive ~XX KB: check for sensitive content before committing the insight.` (The archive is gitignored; only the insight file is committed.)
+(No prompt asking the user to choose — the link is set automatically. The user's existing sync habit handles the rest.)
 
 ### Step 8 — Log each insight to the diary (mandatory)
 
@@ -166,7 +159,7 @@ Report in plain English:
 > - `<topic>` — <one-liner>
 > - `<topic>` — <one-liner>
 >
-> Indexes updated. Raw archive: <full / approximate / skip>.
+> Indexes updated. Raw conversation linked to `claude_data/.../<UUID>.jsonl`. If you have not pushed recently, run `./sync-agent-data.sh claude push`.
 
 Do **not** offer to commit. The skill ends at the file writes; the user holds standing auto-commit authorization.
 
