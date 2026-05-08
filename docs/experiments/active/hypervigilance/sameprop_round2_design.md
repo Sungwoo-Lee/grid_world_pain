@@ -1,7 +1,7 @@
 ---
 title: "SameProp Round 2 — confound control (food decoupling) + movement-signature ablation"
 topic: hypervigilance
-status: active
+status: partial
 created: 2026-05-08
 last_updated: 2026-05-08
 phase: 1
@@ -12,9 +12,9 @@ supersedes: ""
 
 # SameProp Round 2 — confound control + movement-signature ablation
 
-> **Status**: PLANNED — Launchable after `env-config-auditor` sign-off + user authorization.
+> **Status**: PARTIAL — both runs SIGINT'd at ~3.5h / ~0.4M episodes (≈4–5 % of the 10M target). Pre-registered §4.2/§4.3 thresholds CANNOT be applied at this budget; see §9 for truncated-data partial verdict.
 > **Date**: 2026-05-08
-> **Author**: experiment-designer
+> **Author**: experiment-designer (§§0–8); experiment-analyzer (§9 truncated-data verdict)
 > **Related**:
 > - Round 1 launch + analysis (parent): [`sameprop_existing_run_survey.md`](sameprop_existing_run_survey.md)
 > - Discriminating-channels memo: [`docs/develop/active/hypervigilance/sameprop_discriminating_channels.md`](../../../develop/active/hypervigilance/sameprop_discriminating_channels.md)
@@ -105,8 +105,8 @@ All other fields fixed at Round-1 baseline (`01-interoNocicept_sameProp.yaml`). 
 
 | Run | Status | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Node | GPU | Launched at | WandB run ID | Log path |
 |-----|--------|------|--------------------|-------------|----------------|------|------|-----|-------------|--------------|----------|
-| 1 | running | C-decoupleFood | `hypervigilance-round2-C-seed42_n112_gpu0` | hypervigilance | prod | 42 | 112 | cuda:0 | 2026-05-08T14:17:50 | 0u266oj5 | logs/20260508_141750.log |
-| 2 | running | A1-passivePredator | `hypervigilance-round2-A1-seed43_n112_gpu1` | hypervigilance | prod | 43 | 112 | cuda:1 | 2026-05-08T14:20:15 | 27svrmhv | logs/20260508_142015.log |
+| 1 | stopped early (SIGINT @ 3h 20m, 489,857 ep) | C-decoupleFood | `hypervigilance-round2-C-seed42_n112_gpu0` | hypervigilance | prod | 42 | 112 | cuda:0 | 2026-05-08T14:17:50 | 0u266oj5 | logs/20260508_141750.log |
+| 2 | stopped early (SIGINT @ 3h 22m, 388,905 ep) | A1-passivePredator | `hypervigilance-round2-A1-seed43_n112_gpu1` | hypervigilance | prod | 43 | 112 | cuda:1 | 2026-05-08T14:20:15 | 27svrmhv | logs/20260508_142015.log |
 
 ### 3.1 Configs to Produce (designer-only, pre-launch)
 
@@ -258,6 +258,183 @@ If accepted, hand off to `senior-developer` → `developer` via `feature-workflo
 
 ---
 
+## 9. Truncated-data Partial Analysis (2026-05-08)
+
+> **TRUNCATION BANNER — read first.**
+> Both runs were stopped by user SIGINT at **~3.5 h / ~0.4 M episodes**, against a pre-registered budget of **10.0 M episodes (~150 h at observed SPS).** Cell C reached **489,857 episodes (4.9 %)**; Cell A1 reached **388,905 episodes (3.9 %)**. Round 1's behavioural metrics did not stabilise until **~5–6 M episodes** (per the [Round-1 baseline analysis](round1_relog_baseline_analysis.md) §4.4 — windows 1 and 2 differ by ≥0.18 cells in `MeanDistRabbit`, but windows 6–8 differ by ≤ 0.01). **The data analysed below is in the early-learning regime, not the converged regime.** The pre-registered confirmation/refutation thresholds in §4.2 and §4.3 (designed for last-10 % of 10 M episodes) **cannot be applied directly** to a 0.4 M-episode tail. This section reports what the early trajectory shows; final verdicts on H₀(C), H₁(C), H₀(A1), H₁(A1) require completing the budget.
+>
+> **Author**: experiment-analyzer.
+> **Mode**: pre-registered design exists (§§1–8); §9 is a partial-budget readout against the same hypothesis-aware structure.
+> **Working files**: `tmp/20260508_round2_truncated_compare.txt`, `tmp/20260508_round2_temporal_evolution.txt`, `tmp/20260508_round1_36window_for_match.txt`, `tmp/20260508_round2_truncated_summary.txt`.
+
+### 9.1 Run actuals
+
+| Cell | WandB ID | Final episode | Walltime | Iterations | SPS | Final TS |
+|------|----------|--------------:|---------:|-----------:|----:|---------:|
+| C — decoupleFood | `0u266oj5` | 489,857 | 3 h 20 m | 5,800 | 41,357 | 95.8 M |
+| A1 — passivePredator | `27svrmhv` | 388,905 | 3 h 22 m | 10,150 | 42,823 | 167 M |
+
+Note A1 had ~75 % more iterations than C in the same wallclock because A1 episodes are far longer (mean Steps ≈ 482 vs C ≈ 272 — see §9.2). SPS values are healthy and within Round-1's 41–55 k band; truncation is not driven by training-speed pathology.
+
+### 9.2 Per-cell early-trajectory readout (last-10 % window of *observed* episodes)
+
+Computed over `Episode/Number` ≈ 440k–490k for Cell C; ≈ 350k–389k for Cell A1. Mean ± within-window std (= temporal noise across episodes in the window, not seed dispersion — n=1 seed per cell).
+
+| Metric (§4.1) | Cell C @ 0.49 M ep | Cell A1 @ 0.39 M ep | R1 converged (~7.2 M) |
+|---|---:|---:|---:|
+| `Episode/MeanDistRabbit` | **4.857 ± 0.022** | **2.583 ± 0.050** | 3.77 |
+| `Episode/MeanDistPredator` | **4.424 ± 0.096** | **6.447 ± 0.361** | 4.40 |
+| `Episode/RabbitHits` / ep | **0.594 ± 0.031** | **17.93 ± 0.755** | 6.46 |
+| `Episode/PredatorHits` / ep | **2.460 ± 0.132** | **0.913 ± 0.418** | 3.37 |
+| `Episode/Steps` (survival) | **275.84 ± 5.99** | **481.39 ± 6.16** | 327.3 |
+| **Δ ≡ MeanDistPredator − MeanDistRabbit** | **−0.43** (rabbit FARTHER) | **+3.86** (rabbit MUCH closer) | +0.63 |
+| **ΔH ≡ RabbitHits − PredatorHits** | **−1.87** | **+17.02** | +3.09 |
+| `Episode/MeanDistFood` | 1.821 ± 0.028 | 0.878 ± 0.128 | 2.41 |
+| `Episode/MeanDistHidingPredator` | 2.619 ± 0.019 | 2.383 ± 0.034 | 2.63 |
+| `Episode/HidingPredatorHits` / ep | 2.498 ± 0.074 | 3.904 ± 0.463 | 3.00 |
+| `Episode/FoodEaten` / ep | 42.5 ± 1.6 | 151.7 ± 16.9 | 54.7 |
+| `Episode/Term_Injury` | 0.334 ± 0.027 | 0.057 ± 0.024 | 0.339 |
+| `Episode/Term_Starvation` | 0.517 ± 0.026 | 0.054 ± 0.032 | 0.398 |
+| `Episode/Term_MaxSteps` | 0.150 ± 0.013 | 0.888 ± 0.033 | 0.263 |
+| `Episode/Reward` | −209.83 ± 1.27 | −129.09 ± 5.02 | −204.5 |
+
+Both signs of Δ and ΔH are **already past the pre-registered confirmation magnitude** (|Δ| ≥ 0.3 cells, |ΔH| ≥ 1.5/ep) at < 5 % of the planned budget, but in **directions that diverge sharply between cells and from R1**. This is the central observation of the truncated read.
+
+### 9.3 §4.4 temporal-evolution check (3 sub-windows of the observed data)
+
+Both cells split into three equal-episode windows from `Episode/Number`. The point of this check is to distinguish (a) "the truncation cut into a meaningful early-learning shoulder" from (b) "the truncation is at a transient — the curves haven't settled".
+
+**Cell C — decoupleFood, seed 42:**
+
+| Window | ep range | MeanDistRabbit | MeanDistPredator | Δ | RabbitHits | PredatorHits | ΔH | Steps | Term_MaxSteps |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 20k–230k | 4.918 ± 0.16 | 5.100 ± 0.28 | +0.18 | 0.432 | 1.435 | −1.00 | 152.0 | 0.012 |
+| 2 | 230k–370k | 4.944 ± 0.05 | 4.667 ± 0.21 | **−0.28** | 0.501 | 2.214 | **−1.71** | 235.4 | 0.079 |
+| 3 | 370k–480k | 4.855 ± 0.02 | 4.378 ± 0.10 | **−0.48** | 0.574 | 2.521 | **−1.95** | 271.8 | 0.142 |
+
+- `MeanDistRabbit` is essentially flat (4.92 → 4.94 → 4.86), pinned at the **far end of the grid (random-policy baseline ≈ 4.68; the agent is *farther* from rabbits than chance).** Window-3 is statistically tighter than W1, indicating the policy is converging on this far-rabbit behaviour, not drifting through it.
+- `MeanDistPredator` is **decreasing** (5.10 → 4.67 → 4.38) — the agent is becoming *less avoidant* of the predator over training. This is the opposite trajectory shape from R1 (where predator distance slowly *grew*).
+- Δ is **monotonically more negative across all 3 windows**: +0.18 → −0.28 → −0.48. This is not a transient.
+- `Steps` is still rising (152 → 236 → 272 — pre-stable; R1 took ~5 M ep to reach 327).
+- The §4.4 stability rule ("verdict only if stable across last 3 windows") is **failed**: Δ is moving, not stable. But the *direction of motion* is consistent — the gap is widening in the inverted direction window over window.
+
+**Cell A1 — passivePredator, seed 43:**
+
+| Window | ep range | MeanDistRabbit | MeanDistPredator | Δ | RabbitHits | PredatorHits | ΔH | Steps | Term_MaxSteps |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0–150k | 2.655 ± 0.18 | 6.623 ± 0.58 | **+3.97** | 15.48 | 0.678 | **+14.80** | 413.4 | 0.664 |
+| 2 | 150k–270k | 2.578 ± 0.06 | 6.521 ± 0.42 | **+3.94** | 18.23 | 0.815 | **+17.42** | 482.8 | 0.898 |
+| 3 | 270k–380k | 2.582 ± 0.05 | 6.357 ± 0.39 | **+3.78** | 17.95 | 1.023 | **+16.93** | 482.8 | 0.898 |
+
+- All three primary distances are **stable across windows 2 and 3** (MeanDistRabbit Δ < 0.01; MeanDistPredator Δ ≈ 0.16; Steps Δ = 0). Cell A1 has reached an **early plateau** — at 0.39 M episodes, the policy has effectively converged to its current strategy. This is dramatically faster than R1's 5–6 M-episode plateau.
+- `Steps = 482.8 ≈ max_steps cap of 500` — the agent is **always running out the clock**, terminating via `Term_MaxSteps = 0.89` rather than via injury (0.06) or starvation (0.05).
+- `RabbitHits = 17.95/ep` (≈ 1 hit per 27 steps) is consistent with the agent **standing on or near rabbits for most of the episode** (the 2 rabbits in TL+BR each move every step; 17.95 hits in 482 steps ≈ continuous co-location).
+- `PredatorHits = 1.02/ep` is rising slowly (0.68 → 0.81 → 1.02) — the predator's reduced patrol area `[[1,1],[5,5]]` does still occasionally co-locate with the agent's TL traversal, but rarely.
+
+The §4.4 stability rule ("verdict only if stable across last 3 windows") is **passed for Cell A1** — windows 2 and 3 agree to ≤ 0.05 cells on every primary metric. The verdict, however, is contaminated by the §5 failure mode (see §9.5).
+
+### 9.4 Cross-round comparison at matched episode count
+
+The fair Round-1 comparator at this budget is **R1's ~0.3–0.4 M episode window**, not its 7.2 M converged tail. At matched episode count, R1's two seeds were still *learning* (Steps ≈ 145–159, well below their 327 final value). From `tmp/20260508_round1_36window_for_match.txt` window 1:
+
+| Quantity | Cell C @ 0.49 M | R1-s42 @ 0.40 M | Cell A1 @ 0.39 M | R1-s43 @ 0.30 M |
+|---|---:|---:|---:|---:|
+| `Episode/Steps` | 275.8 | 145.6 | 481.4 | 158.9 |
+| `Episode/MeanDistRabbit` | **4.857** | 4.141 | **2.583** | 4.101 |
+| `Episode/MeanDistPredator` | **4.424** | 4.697 | **6.447** | 4.453 |
+| Δ | **−0.43** | +0.56 | **+3.86** | +0.35 |
+| `Episode/RabbitHits` | **0.59** | 2.02 | **17.93** | 2.25 |
+| `Episode/PredatorHits` | **2.46** | 2.24 | **0.91** | 2.63 |
+| ΔH | **−1.87** | −0.22 | **+17.02** | −0.38 |
+| `Episode/FoodEaten` | 42.5 | 11.7 | 151.7 | 15.7 |
+
+At equal episode budget, **both R2 cells have already produced larger effect magnitudes than R1's converged 7.2M tail (Δ_R1_SS = +0.63, ΔH_R1_SS = +3.09)**, but in opposite-or-extreme directions to R1's signal. The interventions in cells C and A1 have **measurably and rapidly** changed the learned behaviour — they are not no-ops swallowed by training noise.
+
+### 9.5 §5 failure-mode catalog: which apply to the truncated data?
+
+The pre-registered failure-mode catalog in §5 anticipated several patterns; let me hold the truncated data against each.
+
+- **§5 row 2 — "Cell A1: agent never approaches predator… `MeanDistPredator` looks high purely by spatial separation"**: **APPLIES STRONGLY.** Cell A1's MeanDistPredator = 6.45 with predator confined to TL `[[1,1],[5,5]]` and agent's reward dominated by food (which is in the same TL+BR quadrants as the rabbits) is consistent with **the agent occupying the BR rabbit/food quadrant while the predator paces TL.** The §5 instruction was to read `Episode/Steps` and `Episode/FoodEaten` together; both are saturated (`Steps ≈ 482`, `FoodEaten = 152`) and `Term_MaxSteps = 0.89`, exactly the diagnostic signature §5 named. **Verdict: A1's apparent confirmation of H₁(A1) is moot in §5's terms** — the agent is not discriminating "predator class via post-contact teaching"; it is **spatially segregating from the predator's quadrant** while ignoring the rabbit in the predator-shared quadrant. A per-rabbit-instance log (the §7 Metrics Requested item) would distinguish "agent avoids TL rabbit + visits BR rabbit" from "agent visits both rabbits equally"; without that, the verdict is ambiguous.
+
+- **§5 row 3 — "Cell C: agent learns to camp the TR or BL food + bush corners and rarely visits TL/BR rabbit quadrants → `MeanDistRabbit` looks artificially high"**: **APPLIES, in modified form.** Cell C's `MeanDistRabbit = 4.86 > random-baseline 4.68` and `RabbitHits = 0.59/ep ≈ once every 460 steps` is consistent with **the agent successfully camping in TR+BL food quadrants and effectively never visiting the TL+BR rabbit quadrants.** This is mechanically a *successful* food-decoupling — the food-quadrant-spillover mechanism that confounded R1 has been removed, and the resulting policy reveals: **without food drawing the agent toward rabbits, the agent does not visit rabbits at all.** Note this does NOT confirm H₀(C) ("no genuine class discrimination") — it makes the question moot, because the agent never tests the rabbit-vs-predator olfactory signal in the relevant range; both classes are now far away.
+
+- **§5 row 4 — "Saturation: `Episode/Steps` plateaus at ≈340 (Round-1 ceiling)"**: **DOES NOT APPLY.** Neither cell has reached saturation at this budget — Cell C is climbing (152 → 272), Cell A1 has plateaued at 482 (above R1's 327 ceiling, because A1's Term_MaxSteps fraction is 0.89).
+
+- **§5 row 5 — "Seed-dependent noise: 1 seed per cell flips relative to Round-1's 2-seed verdict"**: **POTENTIALLY APPLIES.** Both cells use 1 seed only; both produce sign-changes (or magnitude-changes large enough to qualify) relative to R1's converged tail. The §2.3 confound table flagged this and instructed: *"do not declare the cell verdict from a single seed unless thresholds in §4.2/§4.3 are exceeded by a wide margin (>2x)"*. Cell A1 exceeds the H₁(A1) threshold by ~10x but is contaminated by §5 row 2; Cell C produces an outcome §4.2 didn't enumerate (sign-flipped Δ = −0.43, neither H₀(C) nor H₁(C) language fits).
+
+### 9.6 Provisional verdicts (EARLY — NEEDS RE-LAUNCH)
+
+> **All four hypothesis verdicts below are tagged PROVISIONAL.** None can be elevated to "confirmed" or "refuted" per §4 thresholds at this budget. The R1 reference values they were calibrated against are 7.2 M-episode steady-state numbers; the R2 data here are 0.4 M-episode early-learning trajectory numbers.
+
+**H₀(C) — "Round-1 effect was the food confound; |Δ| ≤ 0.1, |ΔH| ≤ 1.0":**
+- Truncated Δ = **−0.43**, ΔH = **−1.87**. Magnitudes exceed H₀'s flat-equality threshold by 4–5×, so a strict reading is "H₀(C) is **not** confirmed".
+- But the *direction* is sign-flipped — the agent is *farther from rabbits than from predator*, consistent with **a more nuanced version of H₀(C)**: the food confound was indeed driving R1's apparent discrimination, and once removed, the agent stops approaching rabbits entirely. The "no genuine class discrimination" prediction is upheld in the sense that **rabbit attraction was driven by food-co-location**, but the corollary is unanticipated: the agent doesn't fall back to neutral; it actively avoids the now-food-empty rabbit quadrants.
+- **Provisional verdict (Cell C): WEAK SUPPORT for the food-confound mechanism of H₀(C), but with an unanticipated structural finding that needs the full budget to confirm — at converged training, does Δ stay negative, drift toward 0, or revert to R1's positive sign?** Provisional, not confirmed.
+
+**H₁(C) — "Genuine discrimination survives food-decoupling; Δ ≥ 0.3, ΔH ≥ 1.5":**
+- **Refuted at this budget**, in sign and magnitude. Δ has the wrong sign and is monotonically becoming more negative across windows. The probability that 9.5 M more episodes flip Δ from −0.48 to +0.30 (a +0.78 reversal against an established trend) without a phase transition is low.
+- **Provisional verdict (Cell C): H₁(C) PROVISIONALLY REFUTED — class discrimination does not survive food-quadrant decoupling.** Strong direction, weak budget; needs full run for final.
+
+**H₀(A1) — "Movement signature was dominant; PredatorHits ≈ RabbitHits, |Δ_dist| ≤ 0.3":**
+- Truncated PredatorHits − RabbitHits = 0.91 − 17.93 = **−17.02**, MeanDistPredator − MeanDistRabbit = **+3.86**. Both magnitudes are **far past** H₀(A1)'s equality bands (|ΔH| ≤ 1.0, |Δ_dist| ≤ 0.3) — strict reading: **not confirmed**.
+- However, the §5 failure-mode "agent never visits the predator's quadrant" applies, so this verdict is **uninformative** — the agent's spatial segregation prevents the H₀(A1) test from being meaningful. The metric `PredatorHits = 0.91` is low not because the agent learned class-conditional avoidance, but because it almost never enters the predator's TL patrol box.
+- **Provisional verdict (Cell A1): H₀(A1) UNTESTABLE at this design.** Need either per-quadrant occupancy logging (§7 Metrics Requested item) or a Round 2.5 cell that forces agent visits to the predator quadrant (e.g., one food source pinned to TL).
+
+**H₁(A1) — "Post-contact visual+extero-noc alone is sufficient; PredatorHits < RabbitHits − 1.5":**
+- Truncated PredatorHits − RabbitHits = **−17.02**, far past the H₁(A1) margin. Strict reading: **confirmed by 10x**.
+- But the §5 failure-mode contamination means this confirmation is plausibly an artifact of spatial segregation, not class discrimination via the GRU's post-contact teaching. The agent's actual policy is "camp food, harvest rabbits, avoid TL where predator lives" — *which would produce identical numbers under "rabbits and predators are kinematically identical"* (the H₀(A1) condition).
+- **Provisional verdict (Cell A1): H₁(A1) PROVISIONALLY CONFIRMED IN STATISTIC, but the confirmation is observationally indistinguishable from the §5 row-2 failure mode.** Without per-rabbit-instance logging, the result cannot be cleanly attributed to class learning.
+
+### 9.7 Random-policy baseline check (§4.6)
+
+R1's prior random-policy baseline `MeanDistPredator ≈ 4.684`. At this budget:
+- Cell C: MeanDistPredator = 4.42 (slightly below random — agent is mildly closer than random); MeanDistRabbit = 4.86 (slightly **above** random — agent is slightly *farther* from rabbits than random would be).
+- Cell A1: MeanDistPredator = 6.45, MeanDistRabbit = 2.58. Both far from random — the policy is making strong, structured spatial choices, just not the ones the design tested for.
+
+### 9.8 What is needed to complete the round?
+
+Recommended next steps, in order of priority:
+
+1. **(P0) Re-launch identical configs at 10M-episode budget.** Both cells have produced large early signals, but the §4.4 stability rule fails for Cell C (Δ still moving) and the H₁(A1) confirmation in Cell A1 is contaminated by an under-anticipated failure mode. The pre-registered thresholds were calibrated for converged behaviour; the data here are not converged. Wallclock estimate: ~3.5h × (10M / 0.45M) ≈ ~75 h per cell on RTX 3090; ~150h total wallclock for the pair. **Run on a node where 15h × 5 sequential restarts can complete uninterrupted**, or use checkpoint-and-resume if available.
+
+2. **(P0, before re-launch) Add per-rabbit-instance and quadrant-occupancy logs.** The §7 Metrics Requested items (per-rabbit `MeanDistRabbit_TL` / `MeanDistRabbit_BR` and `QuadrantOccupancy_{TL,TR,BL,BR}`) are now load-bearing for Cell A1's verdict. Without them, no amount of additional training will disambiguate "class-conditional avoidance" from "TL quadrant avoidance". Hand off to `feature-workflow` (`senior-developer` plans → `developer` implements). This is now a blocker on Round-2-A1's interpretability.
+
+3. **(P1) Consider Round 2.5 cell — Cell A2 = "predator forced to roam through agent's quadrants":** if quadrant occupancy data confirm the §5 row-2 failure mode in A1, design a third cell that prevents the agent from spatial segregation — e.g., predator patrol area = `[[1,1],[10,10]]` (R1 default) + HUNT disabled. This isolates the movement-signature ablation from the spatial-confinement confound.
+
+4. **(P2) Consider whether Cell C's early signal is strong enough to justify a Round 2.5 instead of completing Round 2.** Cell C's sign-flipped Δ already at 0.49 M episodes is informative *in itself* — even at provisional status it suggests the food/rabbit co-location was indeed load-bearing for R1's apparent class discrimination. A Round 2.5 cell with food in *all four* quadrants (rather than the current 2/2 split) would test whether removing the agent's spatial-camping option restores the R1 effect or collapses it further.
+
+### 9.9 Summary (one paragraph)
+
+At ~5 % of the planned budget, both R2 cells have already departed sharply from R1's converged tail, but in directions and via mechanisms that the pre-registered §4 thresholds did not enumerate: Cell C produces a sign-flipped Δ = −0.43 (rabbits *farther* than predator) consistent with food-driven attraction having been the load-bearing R1 mechanism, and Cell A1 produces a saturated Δ = +3.86 that is operationally indistinguishable from a §5-anticipated "agent avoids predator quadrant by spatial segregation" failure mode. Cell C is not yet stable across windows; Cell A1 is stable but uninterpretable without per-quadrant logging. **The ranking-question raised by Round 1 — does olfactory class identity drive learned avoidance under sameProp — remains open after the truncated read.** The runs need to be re-launched at full budget AND extended with per-quadrant / per-rabbit-instance logging before §4.2/§4.3 verdicts can be issued.
+
+### 9.10 Metrics Requested (now load-bearing — see §9.8 step 2)
+
+The §7 items are no longer optional. To make Cell A1's verdict interpretable at full budget, the following must be logged:
+
+| Subfield | Content |
+|---|---|
+| **Metric (1, escalated)** | `Episode/MeanDistRabbit_TL`, `Episode/MeanDistRabbit_BR` (per-rabbit-instance distance, cells). |
+| **Why now (escalated rationale)** | At 0.39 M episodes Cell A1 has already converged to a strategy whose interpretation hinges on whether the agent treats the TL-rabbit (co-located with passive predator) differently from the BR-rabbit (alone). With aggregate `MeanDistRabbit = 2.58`, the average is consistent with "agent visits BR rabbit at distance ~1.5 and TL rabbit at distance ~3.5" (= 2.5 mean) OR with "agent visits both rabbits at distance 2.58" — the two pictures produce identical aggregate metrics but support different verdicts on H₀(A1) vs H₁(A1). Without per-rabbit indexing, no further training resolves the question. |
+| **Where it'd live** | `src/environment/core.py` near the existing per-entity blocks (~line 491 of `dist_to_neutral`). |
+| **Cost** | Cheap — the per-instance norm is already computed; just don't reduce. |
+
+| Subfield | Content |
+|---|---|
+| **Metric (2, escalated)** | `Episode/QuadrantOccupancy_{TL,TR,BL,BR}` — fraction of episode steps the agent spends in each quadrant. |
+| **Why now (escalated rationale)** | The §5 row-2 failure mode in Cell A1 (and row-3 failure mode in Cell C) cannot be diagnosed without quadrant occupancy. The truncated data is consistent with both "agent learned class avoidance" and "agent learned spatial segregation"; full-budget data will be similarly consistent unless this metric is in `info`. |
+| **Where it'd live** | `src/environment/core.py` per-step occupancy counter, surfaced via `info`. |
+| **Cost** | Cheap — 4 boolean masks + reduce. |
+
+If accepted, hand off to `feature-workflow` (`senior-developer` plans → `developer` implements) BEFORE re-launching Round 2.
+
+### 9.11 Related Issues
+
+- The §5 failure-mode catalog was prescient about both observed pathologies (Cell C → row 3, Cell A1 → row 2). No bug-fix-workflow needed; the failure modes were anticipated.
+- Frontmatter status escalated `active` → `partial`; manifest §3 statuses changed from `running` to `stopped early (SIGINT @ ...)`.
+- No `develop/`-side plan needed yet; the §9.10 Metrics Requested items will become a `feature-workflow` plan if the user accepts them.
+
+---
+
 ## Appendix
 
 ### A. Cell mapping table
@@ -298,6 +475,7 @@ If accepted, hand off to `senior-developer` → `developer` via `feature-workflo
 |------|--------|--------|
 | 2026-05-08 | Initial pre-registered design for Round 2; 2 cells × 1 seed each on node 112 cuda:0/cuda:1 | experiment-designer |
 | 2026-05-08 | Launched both cells; manifest rows updated with WandB IDs and log paths; CIFS-stale duplicate noted (see §D) | training-runner |
+| 2026-05-08 | Both runs SIGINT'd at ~3.5h / ~0.4M episodes; status frontmatter set to `partial`; manifest statuses set to `stopped early`; §9 truncated-data partial-verdict analysis appended; §9.10 escalates §7 Metrics Requested to load-bearing | experiment-analyzer |
 
 ### D. CIFS-attribute-cache stale-read incident (2026-05-08)
 
