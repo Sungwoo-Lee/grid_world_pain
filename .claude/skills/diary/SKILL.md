@@ -155,8 +155,40 @@ For `session-end --commits "a16a6c9 f878873"` (whitespace-separated list), each 
 - **Session labels must match** between `session-start` and `session-end` (same lookup).
 - **Subject and result text**: keep to one line, no newlines (would break the markdown table). The diary row is meant to be scannable.
 - All content English; no emojis unless the user explicitly asks.
-- **Do not commit from this skill.** The diary file is updated, but commit decisions belong to the user. The skill ends at the script call.
-- If the script errors (e.g., training-done with no matching tag, session-end with no matching label), surface the error to the user — do not silently retry or fabricate the missing row.
+- **Auto-commit after the script call.** The user has standing auto-commit authorization for diary writes. After every successful `diary_append.py` invocation done as a standalone `/diary` action, immediately commit the touched diary file (see "Auto-commit" section below). The exception is when this skill is being invoked from inside `/memorize` Step 8 — there, `/memorize` Step 9 bundles the diary row with the insight commit, so this skill's commit step is skipped. Detect that case from context (the calling skill is `/memorize`) and skip the commit.
+- If the script errors (e.g., training-done with no matching tag, session-end with no matching label), surface the error to the user — do not silently retry or fabricate the missing row, and do not commit (errors mean nothing was appended).
+
+## Auto-commit (mandatory after standalone calls)
+
+After a successful `diary_append.py` invocation done outside `/memorize`, commit the diary file in the same turn — do not ask, do not batch with later edits.
+
+```bash
+git add docs/diary/<YYYY-MM-DD>.md
+git commit -m "$(cat <<'EOF'
+docs(diary): 📚 <subcommand>: <one-line subject of the row just written>
+EOF
+)"
+```
+
+Subject pattern by subcommand (keep ≤ ~70 chars total):
+
+| Subcommand | Example subject |
+|---|---|
+| `session-start` | `docs(diary): 📚 session-start: memory + memorize ship` |
+| `session-end`   | `docs(diary): 📚 session-end: memory + memorize ship` |
+| `implemented`   | `docs(diary): 📚 implemented: /memorize skill` |
+| `verified`      | `docs(diary): 📚 verified: memory system seed plan` |
+| `insight`       | `docs(diary): 📚 insight: <copy of --subject>` (only when called outside /memorize) |
+| `training-start` | `docs(diary): 📚 training-start: <TAG> on node N gpu G` |
+| `training-done`  | `docs(diary): 📚 training-done: <TAG> — <one-line result>` |
+| `note`          | `docs(diary): 📚 note: <first ~50 chars of --text>` |
+
+Hard rules for the commit:
+
+- **Stage only the diary file by name.** Never `git add -A` or `git add .` — other working-tree changes must not slip into a diary commit.
+- **Skip the commit when invoked from `/memorize`** — Step 9 of `/memorize` bundles the diary row into the insight commit so the capture lands atomically.
+- **Skip if the script errored.** No row written ⇒ nothing to commit.
+- **No `--no-verify`, no secrets, no push.** Pre-commit hooks must run; do not push.
 
 ## Why a script and not Edit
 

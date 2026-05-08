@@ -150,7 +150,37 @@ After all insights are written and indexes updated, call the diary helper for **
 
 This is a hard step, not optional — the diary is the project's cross-session status board, and a memory capture without a diary entry creates an invisible gap. If a diary call errors (e.g., `docs/diary/` is missing), surface the error to the user but do not roll back the insight writes; the insights are the durable artefact.
 
-### Step 9 — Confirm and report
+### Step 9 — Auto-commit the capture (mandatory)
+
+After all writes succeed, bundle every file this skill touched into a single commit. The user has standing auto-commit authorization — do not ask. One coherent commit per `/memorize` run, regardless of how many insights or diary rows were produced.
+
+```bash
+git add .claude-memory/ROOT_INDEX.md \
+        .claude-memory/memories/_global_tags.md \
+        .claude-memory/memories/<topic>/_topic_index.md \
+        .claude-memory/memories/<topic>/<id>.md \
+        docs/diary/<YYYY-MM-DD>.md
+# repeat the topic-index and insight paths for every (topic, id) pair written
+
+git commit -m "$(cat <<'EOF'
+docs(memory): 📚 capture N insight(s) from <one-line session theme>
+
+- <topic>/<slug>: <one-liner>
+- <topic>/<slug>: <one-liner>
+EOF
+)"
+```
+
+Match the existing project style: conventional-commit type `docs`, scope `memory`, gitmoji `📚`, subject ≤ ~70 chars (check `git log --oneline -- .claude-memory/` for tone). The body lists each insight as a bullet with topic/slug and the summary line — this is what makes the commit greppable months later.
+
+Hard rules for the commit:
+
+- **Stage by name only.** Never `git add -A` or `git add .` — other unrelated working-tree changes must not slip in.
+- **Skip if any prior step errored.** A failed insight write or a failed diary call means the capture is incomplete; do not commit a partial state. Surface the error and let the user resolve.
+- **No `--no-verify`, no secrets, no push.** Pre-commit hooks must run; do not push.
+- **Auto-commit the diary rows here, not in Step 8.** Step 8 calls `diary_append.py` without committing. This step bundles the diary file alongside the insights so the whole capture lands as one atomic commit. (Standalone `/diary` calls outside `/memorize` commit themselves — see `.claude/skills/diary/SKILL.md`.)
+
+### Step 10 — Confirm and report
 
 Report in plain English:
 
@@ -159,9 +189,7 @@ Report in plain English:
 > - `<topic>` — <one-liner>
 > - `<topic>` — <one-liner>
 >
-> Indexes updated. Raw conversation linked to `claude_data/.../<UUID>.jsonl`. If you have not pushed recently, run `./sync-agent-data.sh claude push`.
-
-Do **not** offer to commit. The skill ends at the file writes; the user holds standing auto-commit authorization.
+> Indexes updated. Committed as `<short-hash>`. Raw conversation linked to `claude_data/.../<UUID>.jsonl`. If you have not pushed recently, run `./sync-agent-data.sh claude push`.
 
 ## Hard rules
 
