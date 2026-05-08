@@ -72,17 +72,17 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# Dreamer Probe Battery — E4: 3-stage curriculum + levers + probe (per-stage breakdown), launched 2026-05-08
-# Node 114, cuda:3. Run 4 of 4; see docs/experiments/active/continual_learning/DREAMER_PROBE_BATTERY.md §3 Launch Manifest.
+# Hypervigilance Round 2 — Cell A1 (passivePredator), launched 2026-05-08
+# Node 112, cuda:1, seed 43. Run 2 of 2; see docs/experiments/active/hypervigilance/sameprop_round2_design.md §3 Launch Manifest.
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --configs-dir configs/experiment/dreamer_curriculum/ \
-  --continual-schedule configs/continual/dreamer_curriculum_food_then_predator.yaml \
-  --agent_config configs/models/dreamer_v3_curriculum_probe.yaml \
-  --num-envs 16 \
-  --seed 0 \
-  --device cuda:3 \
+  --config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml \
+  --agent_config configs/models/recurrent_ppo.yaml \
+  --episodes 10000000 \
+  --num-envs 128 \
+  --seed 43 \
+  --device cuda:1 \
   --log-interval 50 \
-  --wandb-group dreamer_probe_battery \
-  --wandb-job-type ablation \
-  --wandb-name "dreamer_probe_curriculum_s0" \
-  --tag "dreamer_probe_curriculum_s0"
+  --wandb-group hypervigilance \
+  --wandb-job-type prod \
+  --wandb-name "hypervigilance-round2-A1-seed43_n112_gpu1" \
+  --tag "hypervigilance-round2-A1-seed43_n112_gpu1"
