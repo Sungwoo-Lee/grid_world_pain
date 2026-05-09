@@ -73,7 +73,8 @@ class DreamerTrainer(nnx.Module):
             'actor_fc_layers': config.get_mandatory('agent.actor_fc_layers'),
             'critic_fc_layers': config.get_mandatory('agent.critic_fc_layers'),
             'use_layer_norm': config.get_mandatory('agent.use_layer_norm', bool),
-            
+            'zero_init_reward_critic': config.get_mandatory('agent.zero_init_reward_critic', bool),
+
             # Hierarchical Encoding Params
             'encoding_mode': config.get_mandatory('agent.encoding_mode', str),
             'hierarchical_params': config.to_dict().get('agent', {}).get('hierarchical_params', {})

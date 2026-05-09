@@ -444,9 +444,17 @@ class Decoder(nnx.Module):
         return self.net(x)
 
 class MLP(nnx.Module):
-    def __init__(self, input_dim, output_dim, hidden: list, rngs: nnx.Rngs):
+    def __init__(self, input_dim, output_dim, hidden: list, rngs: nnx.Rngs,
+                 zero_init_output: bool = False):
         """
         Configurable MLP with LayerNorm + SiLU.
+
+        Args:
+            zero_init_output: If True, the *final* Linear is constructed with
+                zero kernel and zero bias (matches sheeprl
+                `uniform_init_weights(0.0)` and Hafner published code's
+                `outscale=0.0` override on reward + critic output heads).
+                Default False = bit-identical to pre-knob behaviour.
         """
         layers = []
         in_d = input_dim
@@ -455,7 +463,15 @@ class MLP(nnx.Module):
             layers.append(nnx.LayerNorm(h, rngs=rngs))
             layers.append(SiLU())
             in_d = h
-        layers.append(nnx.Linear(in_d, output_dim, kernel_init=hafner_init(), rngs=rngs))
+        if zero_init_output:
+            layers.append(nnx.Linear(
+                in_d, output_dim,
+                kernel_init=nnx.initializers.zeros_init(),
+                bias_init=nnx.initializers.zeros_init(),
+                rngs=rngs,
+            ))
+        else:
+            layers.append(nnx.Linear(in_d, output_dim, kernel_init=hafner_init(), rngs=rngs))
         self.net = nnx.Sequential(*layers)
 
     def __call__(self, x):
@@ -527,8 +543,13 @@ class WorldModel(nnx.Module):
             feat_dim, obs_dim, obs_breakdown, config, rngs=rngs
         )
             
-        self.reward_head = MLP(feat_dim, 255, reward_fc, rngs=rngs)
+        zero_init_rc = config.get('zero_init_reward_critic', False)
+        self.reward_head = MLP(feat_dim, 255, reward_fc, rngs=rngs,
+                               zero_init_output=zero_init_rc)
         self.continue_head = MLP(feat_dim, 1, continue_fc, rngs=rngs)
+        # continue_head intentionally NOT zero-init (sheeprl uses
+        # uniform_init_weights(1.0) on continue_model, matching our default
+        # hafner_init).
 
         # --- Construct modulator when enabled ---
         if self.modulation_enabled:
@@ -571,9 +592,13 @@ class ActorCritic(nnx.Module):
         """
         actor_fc = config['actor_fc_layers']
         critic_fc = config['critic_fc_layers']
+        zero_init_rc = config.get('zero_init_reward_critic', False)
 
         self.actor = MLP(feat_dim, act_dim, actor_fc, rngs=rngs)
-        self.critic = MLP(feat_dim, 255, critic_fc, rngs=rngs)
+        # actor intentionally NOT zero-init (sheeprl uses
+        # uniform_init_weights(1.0) on actor.mlp_heads, matching our default).
+        self.critic = MLP(feat_dim, 255, critic_fc, rngs=rngs,
+                          zero_init_output=zero_init_rc)
 
 class DreamerV3Agent(nnx.Module):
     """

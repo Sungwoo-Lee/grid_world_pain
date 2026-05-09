@@ -1,18 +1,57 @@
+# DreamerV3 — Hafner-Atari replay_ratio variant
+# ----------------------------------------------------------------------------
+# Provenance: byte-identical copy of configs/models/dreamer_v3.yaml with
+# exactly ONE delta:
+#
+#     replay_ratio: 0.5  ->  0.0625
+#
+# This is the canonical Hafner-2023 Atari/DMC default. Our project default
+# (0.5) is 8× higher, which the conventional-failure-mode critique
+# (docs/project/critiques/dreamer_conventional_failure_modes_for_our_setup.md
+# §2.2 / §2.10) identified as the modal-trace-overtraining / self-confirming-
+# pessimism failure mode that produced the `3zjhap9w` collapse on NoPred.
+#
+# Hafner-2023 §B reports the architecture works cleanly across replay_ratio
+# in [1/512, 1]. 0.0625 is the published Atari benchmark setting.
+#
+# Cost: ~8× less _scan_train_gpu compute per env-step, so iter-time is
+# dominated by collect + host bookkeeping. Per
+# docs/develop/active/diagnosis/dreamer_replay_ratio_sweep.md fit
+# `iter_time(R) ≈ 0.243 + 0.696·R`, R=0.0625 → ~0.29 s/iter (vs R=0.5 → ~0.59).
+# Wall-clock should be ~half that of an R=0.5 run at the same env-step budget.
+#
+# All other Hafner-2023 defaults preserved (entropy_scale=3e-4,
+# cont_loss_weight=1.0, lr triple, mixture sampling, hierarchical encoder,
+# rssm 512/32x32, imagined_rollout_probe=false). Used by the conventional-
+# fixes battery's Cell A1 (NoPred + rr=0.0625; replication-fix on `3zjhap9w`).
+#
+# References:
+#   - Conventional-failure-mode critique (the rationale for this knob):
+#     docs/project/critiques/dreamer_conventional_failure_modes_for_our_setup.md
+#   - Strip-down direction memo (the 2×2 design that motivates it):
+#     docs/project/directions/dreamer_minimum_viable_strip_down.md
+#   - Battery design doc:
+#     docs/experiments/active/dreamer_diagnosis/DREAMER_CONVENTIONAL_FIXES_BATTERY.md
+#   - Replay-ratio speed sweep (cost model):
+#     docs/develop/active/diagnosis/dreamer_replay_ratio_sweep.md
+#   - Reference collapse run this fix targets (`3zjhap9w`):
+#     tmp/20260508_replayRatio05_NoPred_analysis.md
+
 agent:
   algorithm: "DreamerV3"
   batch_size: 16
   sequence_length: 128   # Steps per trajectory (same concept as Recurrent PPO sequence_length)
-  replay_ratio: 0.5
+  replay_ratio: 0.0625   # FIX-DELTA vs dreamer_v3.yaml (0.5 -> 0.0625). Hafner-2023 Atari/DMC default.
   collect_interval: 128     # Env steps per iteration per env. 1 = sheeprl-style (canonical), 128 = full sequence (JAX-optimized)
   train_steps: 64
   model_lr: 1e-4
   actor_lr: 3e-5
   value_lr: 3e-5
-  
+
   # Buffer Configuration
   buffer_device: "gpu"   # "gpu" (JAX array, zero-copy, fast) or "cpu" (numpy array, transfer overhead)
   buffer_capacity: 1000000
-  
+
   # Mixture sampling (DreamerV4-inspired two-buffer architecture)
   # Set sampling_mode: "uniform" to disable (default backward-compatible behavior)
   sampling_mode: "mixture"                # "uniform" or "mixture"
@@ -20,62 +59,45 @@ agent:
   mixture_recent_slots: 5                 # batch slots for recent sequences
   mixture_recent_window: 10000            # "recent" = last N transitions in main buffer
   positive_buffer_capacity: 100000        # dedicated positive-reward buffer (100K transitions = 16 MB)
-  
+
   # Network Configuration (Comparative Alignment with Recurrent PPO)
   encoder_dim: 128
   encoder_fc_layers: [128, 128]
-  
+
   rssm_deter_dim: 512
   rssm_stoch_dim: 32
   rssm_classes: 32
-  
+
   decoder_fc_layers: [128, 128]
-  
+
   reward_fc_layers: [128, 128]
   continue_fc_layers: [128, 128]
-  
+
   actor_fc_layers: [128, 128]
   critic_fc_layers: [128, 128]
-  
+
   entropy_scale: 3e-4  # Hafner 2023 standard value
   cont_loss_weight: 1.0  # Continuation-head loss multiplier. 1.0 = pre-knob behavior.
   imagined_rollout_probe: false  # Diagnostic: log imagined-trajectory termination stats. False = bit-identical to pre-probe runs.
   unimix: 0.01
   zero_init_reward_critic: true   # Output-layer zero-init for reward + critic heads (Hafner/sheeprl recipe).
-                                   # See docs/develop/active/diagnosis/dreamer_zero_init_reward_critic_fix.md
-                                   # and §6 item 27 of dreamer_v3_implementation.md.
+                                   # See docs/develop/active/diagnosis/dreamer_zero_init_reward_critic_fix.md.
                                    # When false, reward/critic output Linear uses hafner_init (pre-knob behaviour, bit-identical).
   use_layer_norm: true  # Orthogonal to modulation.type — applies LayerNorm to encoder pre-activations.
                          # Mirrors recurrent_ppo.yaml:20 / neuromodulated_ppo.yaml:20. Mandatory since commit f1db0f0.
 
   # Encoding Configuration
   encoding_mode: "hierarchical"  # "flat" or "hierarchical"
-  
+
   hierarchical_params:
     # Unimodal Phase 1: Independent MLPs for each sensor
-    # Available sensor names for overrides: 
+    # Available sensor names for overrides:
     # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
     default_mlp: [128,128]
     unimodal_overrides:
       visual: [128,128]
       olfaction: [128,128]
     multimodal_hub: [128,128]
-
-  # # Network Configuration (XL Profile)
-  # encoder_dim: 1024
-  # encoder_fc_layers: [1024, 1024, 1024, 1024, 1024]
-  
-  # rssm_deter_dim: 4096
-  # rssm_stoch_dim: 32
-  # rssm_classes: 32
-  
-  # decoder_fc_layers: [1024, 1024, 1024, 1024, 1024]
-  
-  # reward_fc_layers: [1024, 1024, 1024, 1024, 1024]
-  # continue_fc_layers: [1024, 1024, 1024, 1024, 1024]
-  
-  # actor_fc_layers: [1024, 1024, 1024, 1024, 1024]
-  # critic_fc_layers: [1024, 1024, 1024, 1024, 1024]
 
   # Neuromodulation: DISABLED
   # For neuromodulated variant, use: configs/models/neuromodulated_dreamer_v3.yaml
