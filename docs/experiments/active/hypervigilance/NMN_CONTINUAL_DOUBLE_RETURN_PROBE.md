@@ -132,7 +132,7 @@ System-of-record. `experiment-designer` filled the planned columns (Tag, Cell, S
 | Run | Status | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Node | GPU | Launched at | WandB run ID | Log path |
 |-----|--------|------|--------------------|-------------|----------------|------|------|-----|-------------|--------------|----------|
 | 1 | running | continual_modulated | rppo_nmn_cont_dr_mod_s0 | nmn_continual_double_return | prod | 0 | 101 | cuda:0 | 2026-05-09T18:27:03 | 9wckyb5k | logs/20260509_182703.log |
-| 2 | planned | continual_unmodulated | rppo_nmn_cont_dr_unmod_s0 | nmn_continual_double_return | prod | 0 | 101 | cuda:1 | — | — | — |
+| 2 | running | continual_unmodulated | rppo_nmn_cont_dr_unmod_s0 | nmn_continual_double_return | prod | 0 | 101 | cuda:1 | 2026-05-09T18:29:57 | jknwa5xu | logs/20260509_182957.log |
 
 ### 3.1 Configs to Produce
 

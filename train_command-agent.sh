@@ -72,18 +72,18 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# Hypervigilance Round 2.5 — Cell A1 (passivePredator), launched 2026-05-09
-# Node 106, cuda:1, seed 43. See docs/experiments/active/hypervigilance/sameprop_round25_design.md §3 Launch Manifest.
+# NMN continual double-return probe — Run 2 (unmodulated, ContUnmod), launched 2026-05-09
+# Node 101, cuda:1, seed 0. See docs/experiments/active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md §3 Launch Manifest Row 2.
+# NO --episodes: continual mode episode budget is governed by the schedule YAML (boundaries [1500,3000,3700,4400,5100]).
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --configs-dir configs/continual/nmn_double_return_stages/ \
+  --continual-schedule configs/continual/nmn_double_return.yaml \
+  --agent_config configs/models/recurrent_ppo_nmn_het_unmod.yaml \
   --num-envs 128 \
-  --seed 43 \
-  --episodes 10000000 \
-  --checkpoint-frequency 100000 \
+  --seed 0 \
   --device cuda:1 \
   --log-interval 50 \
-  --wandb-group hypervigilance \
+  --wandb-group nmn_continual_double_return \
   --wandb-job-type prod \
-  --wandb-name "hypervigilance-round25-A1-seed43_n106_gpu1" \
-  --tag "hypervigilance-round25-A1-seed43_n106_gpu1"
+  --wandb-name rppo_nmn_cont_dr_unmod_s0 \
+  --tag rppo_nmn_cont_dr_unmod_s0
