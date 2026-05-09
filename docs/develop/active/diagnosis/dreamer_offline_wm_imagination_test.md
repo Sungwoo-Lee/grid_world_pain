@@ -3,7 +3,7 @@ title: "DreamerV3: offline WM-imagination diagnostic on Cell A1 NoPred checkpoin
 topic: diagnosis
 status: active
 created: 2026-05-09
-last_updated: 2026-05-09T15:55
+last_updated: 2026-05-09
 phase: 1
 verified_by: senior-developer
 verified_on: 2026-05-09
