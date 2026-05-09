@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 12
+**Insights**: 13
 **Last updated**: 2026-05-09
 
 ---
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-09 | 15:36 | `20260509_1536_train_py_checkpoint_restore_nnx_skew` | Latent infrastructure bug surfaced during the offline WM-test build: `train.py:981–1000` orbax restore would fail with current NNX on a fresh checkpoint restore due to a string-key + `{'value': array}` leaf skew that `nnx.update` does not accept. Workaround in offline-test script via `_normalize_checkpoint`; trainer not yet fixed. Any future `train.py --resume` would fail. |
 | 2026-05-09 | 03:12 | `20260509_0312_node_num_hostname_in_bashrc` | Bashrc derives `NODE_NUM` from primary lab IP last octet; every `doc-run-*` alias passes `--hostname="docker-${NODE_NUM}"`. Container prompts read `vncuser@docker-101` … `vncuser@docker-114`, instant disambiguation when shelling between cluster containers. Variable expands at alias-use time because aliases are macro-substituted before re-parsing. |
 | 2026-05-09 | 03:10 | `20260509_0310_bash_ic_alias_over_ssh` | To invoke a bash alias from a remote `~/.bashrc` over SSH, use `bash -ic '<alias>'` — non-interactive shells skip alias expansion, and the standard Ubuntu bashrc returns early in non-interactive mode (`case $- in *i*) ;; *) return ;; esac`). The 'no job control' notice is harmless; filter with `grep -v`. |
 | 2026-05-09 | 03:09 | `20260509_0309_cluster_py_consolidation` | Replaced 8 single-purpose bash scripts (distribute_image, list_*, stop, rm, run, rmi, rollout) with one Python tool `cluster.py` (~440 LOC, stdlib only). Subcommand architecture; per-subcommand `--include` / `--exclude` filters; module-level password cache for `rollout`; SSH ControlMaster multiplexing baked in. |
@@ -30,6 +31,7 @@
 
 ## Change history
 
+- 2026-05-09: Added 1 insight from the dreamer conventional-fixes session: `20260509_1536_train_py_checkpoint_restore_nnx_skew` (latent train.py orbax-vs-NNX checkpoint-restore skew, surfaced by offline WM-test workaround). No new tags.
 - 2026-05-09: Added 3 insights from the cluster-ops scripting consolidation session: `20260509_0309_cluster_py_consolidation` (8 bash scripts → one Python tool), `20260509_0310_bash_ic_alias_over_ssh` (the alias-over-SSH technique it uses), `20260509_0312_node_num_hostname_in_bashrc` (the bashrc that supplies the aliases). No new tags.
 - 2026-05-08: Added 1 insight: `20260508_1826_statusline_jq_ifs_pct` (Claude Code statusline script gotchas — no `jq` on docker-102, bash `read` IFS-whitespace collapse, and the pre-calculated `context_window.used_percentage` field).
 - 2026-05-08: Added 1 insight: `20260508_1717_ssh_config_match_user_scoping` (scoping the lab SSH config Host block to vncuser via `Match user`, fixing the sungwoo320@host trap; ships in the same evaaa→episode rebuild).
