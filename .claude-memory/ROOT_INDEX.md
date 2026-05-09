@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-05-09
 **Active folders**: 6
-**Total insights**: 34
+**Total insights**: 37
 **Last audit**: (none)
 
 ---
@@ -15,8 +15,8 @@
 
 | Folder | Definition (1 line) | Insights | Last update | Top tags |
 |---|---|---|---|---|
-| `memory_system_design` | Claude memory system's own design decisions | 4 | 2026-05-09 | [memory, design, decision, skill] |
-| `subagent_engineering` | Subagent + worktree usage gotchas | 3 | 2026-05-09 | [meta, learned_lesson, worktree, subagent, decision] |
+| `memory_system_design` | Claude memory system's own design decisions | 6 | 2026-05-09 | [memory, design, decision, skill, meta] |
+| `subagent_engineering` | Subagent + worktree usage gotchas | 4 | 2026-05-09 | [meta, learned_lesson, worktree, subagent, decision] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 6 | 2026-05-09 | [nmn, hypervigilance, film, refutation, learned_lesson] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 4 | 2026-05-09 | [dreamer, hypervigilance, decision, learned_lesson, refutation] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 13 | 2026-05-09 | [meta, training_runner, learned_lesson, decision, dreamer] |
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-09: Captured 3 insights from the NMN meta/continual pivot session: 2 into existing `memory_system_design` (`20260509_1619_summarize_study_skill_design_and_ship` — third documentation layer + skill that automates it; `20260509_1620_documentation_framing_policy` — project-wide plain-language entry-point rule promoted from one skill to all doc-producing surfaces), 1 into existing `subagent_engineering` (`20260509_1621_multi_agent_research_chain_v2_pattern` — append-only sibling versioning under mid-chain user expansion). No new tags promoted (all reused: memory, design, decision, skill, meta, subagent, learned_lesson).
 - 2026-05-09: Captured 4 insights from the dreamer conventional-fixes battery session: 2 into existing `dreamer_diagnosis` (`20260509_1534_wm_reward_head_localized_failure_a1` — offline WM diagnostic localizes failure to the reward head; `20260509_1535_conventional_fixes_battery_verdict_predator_refute` — top-2 conventional causes refuted on predator), 1 into existing `cluster_ops` (`20260509_1536_train_py_checkpoint_restore_nnx_skew` — latent train.py orbax-vs-NNX bug), 1 into existing `subagent_engineering` (`20260509_1537_professor_analysis_resets_exotic_investigation` — routing pattern). No new tags promoted (all reused: dreamer, learned_lesson, decision, refutation, hypervigilance, meta, training_runner, subagent).
 - 2026-05-09: Captured 3 insights from the hypervigilance Round 2 partial-verdict + per-tag metrics ship session: 2 into existing `hypervigilance` (`20260509_1532_sameprop_round2_truncated_verdict`, `20260509_1533_tag_based_distance_supersedes_quadrant`), 1 into existing `subagent_engineering` (`20260509_1534_synthetic_smoke_masks_dict_assembly_bugs`). No new tags promoted (all reused: hypervigilance, refutation, learned_lesson, design, decision, meta, subagent).
 - 2026-05-09: Captured 2 insights into existing `nmn_diagnosis` from the temp_clip[0.5,10.0] re-run analyzer chain: `20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4` (verdict — H1b confirmed on P4, partial-binder reframing) and `20260509_1410_nmn_temp_head_natural_target_3_to_5` (head natural target [3.0, 5.0); canonical FiLM config should adopt [0.5, 5.0]). No new tags (all reused: nmn, hypervigilance, film, refutation, learned_lesson).
