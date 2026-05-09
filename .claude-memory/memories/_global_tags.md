@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 
 ## Change history
 
+- 2026-05-09: 2 insights from the temp_clip[0.5,10.0] re-run analyzer chain (`20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4`, `20260509_1410_nmn_temp_head_natural_target_3_to_5`) reused existing tags `nmn`, `hypervigilance`, `film`, `refutation`, `learned_lesson` — no new tags promoted.
 - 2026-05-09: 4 insights from the cluster-ops scripting consolidation session (`20260509_0309_cluster_py_consolidation`, `20260509_0310_bash_ic_alias_over_ssh`, `20260509_0311_diary_auto_session_backfill`, `20260509_0312_node_num_hostname_in_bashrc`) reused existing tags `meta`, `decision`, `learned_lesson`, `training_runner`, `design`, `memory` — no new tags promoted.
 - 2026-05-08: 2 insights from the NMN heterogeneity-sweep analyzer chain (`20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse`, `20260508_2004_profile_dependent_temp_saturation_mc_film`) promoted `film` from candidate to active and added new active tag `refutation`. Existing tags `nmn`, `hypervigilance`, `learned_lesson` reused.
 - 2026-05-08: 1 insight on Claude Code statusline script gotchas (`20260508_1826_statusline_jq_ifs_pct`) reused existing tags `meta`, `learned_lesson`, `decision` — no new tags promoted.
