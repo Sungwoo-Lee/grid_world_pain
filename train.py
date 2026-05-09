@@ -1190,6 +1190,9 @@ def main():
                     if step_info is not None:
                         for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']:
                             info_np[k] = np.array(getattr(step_info, k))
+                        # Per-instance arrays: shape [num_steps, num_envs, num_entity]
+                        if num_neutral_for_log  > 0: info_np['dist_per_neutral']  = np.array(step_info.dist_per_neutral)
+                        if num_predator_for_log > 0: info_np['dist_per_predator'] = np.array(step_info.dist_per_predator)
 
                     rollout_rew = trajectories.reward
                     rollout_done = trajectories.done
