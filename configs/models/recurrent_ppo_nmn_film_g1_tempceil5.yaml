@@ -1,0 +1,67 @@
+# Agent config — NMN FiLM g1 modulated, temperature ceiling 5.0
+# -------------------------------------------------------------
+# Canonical FiLM modulated agent for the NMN meta + continual pivot study
+# (NMN_META_2x3_MIXTURE_PROBE / NMN_CONTINUAL_DOUBLE_RETURN_PROBE, 2026-05-09).
+#
+# DIFF FROM `recurrent_ppo_nmn_het_film_g1.yaml`:
+#   modulation.temp_clip: [0.5, 3.0]  ->  [0.5, 5.0]
+#
+# Why 5.0 (not 3.0, not 10.0)
+#   The NMN_TEMP_CLIP_CEILING_RERUN (memory insight
+#   `20260509_1410_nmn_temp_head_natural_target_3_to_5`) re-ran the saturated
+#   noise-heterogeneity profiles with the ceiling raised to 10.0. Result:
+#   temp_max landed in [3.0, 5.0) — i.e. the temperature head's natural
+#   target sits in this window, not above it. Conclusions:
+#     * `[0.5, 3.0]`  was BINDING on saturated profiles; do not reuse.
+#     * `[0.5, 10.0]` had unused headroom; not necessary as the canonical default.
+#     * `[0.5, 5.0]`  is the smallest range that keeps the ceiling non-binding
+#       on all heterogeneity profiles tested while staying well within the
+#       architecture's original numerical envelope (default `(0.1, 10.0)` per
+#       `src/models/neuromodulator.py:71`).
+#
+# All other hyperparameters are byte-identical to recurrent_ppo_nmn_het_film_g1.yaml,
+# which itself is the v8 §2.2 controlled config. This keeps the agent diff
+# scope-limited to a single hyperparameter change.
+
+agent:
+  algorithm: "RecurrentPPO"
+  lr_actor: 0.0005
+  lr_critic: 0.0001
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  sequence_length: 128
+  frame_stack: 1
+  fc_layers: [128,128]
+  actor_fc_layers: [128,128]
+  critic_fc_layers: [128,128]
+  hidden_size: 128
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+
+  # v8-anchored parity options (see NMN_PERFORMANCE_DIAGNOSIS_v8 §2.2)
+  rnn_type: "GRU"          # required for gate-bias injection
+  activation: "relu"
+  return_mode: "MC"        # MC: cleaner per v8 (smaller seed variance + lower critic loss)
+
+  encoding_mode: "hierarchical"
+
+  hierarchical_params:
+    default_mlp: [128,128]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+    multimodal_hub: [128,128]
+
+  # FiLM modulator — IDENTICAL to recurrent_ppo_nmn_het_film_g1.yaml EXCEPT temp_clip ceiling
+  modulation:
+    type: "FiLM"
+    mod_hidden_size: 16
+    grouping_size: 1
+    percept_bias_init: 3.0
+    memory_bias_init: 0.0
+    temp_clip: [0.5, 5.0]    # <-- per insight 20260509_1410: head's natural target ∈ [3.0, 5.0)
+    memory_clip: [-2.0, 2.0]

@@ -1,0 +1,376 @@
+# NMN meta 2x3 mixture probe — context (active predator, swapped olfactory)
+# -------------------------------------------------------------------------
+# Specialist cell P3 in `NMN_META_2x3_MIXTURE_PROBE.md` and one of six contexts
+# the modulated/unmodulated head-to-head agents train on.
+#
+# Predator behaviour (m): ACTIVE (full hunt mode, baseline 01-interoNocicept_sameProp).
+# Olfactory assignment (p): SWAPPED.
+#   - predator olfactory = [0, 0, 1, 0, 0]   (canonical basis vector e3 — rabbit's distinct slot)
+#   - rabbit  olfactory = [0, 1, 0, 0, 0]   (canonical basis vector e2 — predator's distinct slot)
+#   - properties_std    = [0, 0, 0, 0, 0]   (zero noise on the olfactory channel)
+#
+# This is the LOAD-BEARING context (per professor-rl/bdl v2 memo §2.3 and
+# postdoc synthesis v2 §6). Olfactory cues here actively MISLEAD: an agent
+# that learned "channel e2 = predator" on distinct-canonical will, on this
+# context, treat the rabbit (now on e2) as if it were a predator. Recovering
+# correct behaviour requires the agent to either (a) re-learn the olfactory
+# → identity mapping per context using the modulator's hidden state, or
+# (b) override olfactory with the predator movement signature. Both routes
+# test the (b)-frame meta-RL claim. Corner-camping does NOT solve swapped
+# (the rabbit corner smells like predator, the predator can be anywhere),
+# so survival here is a clean discriminator unlike matched-context survival
+# where corner-camping confounds the read-out (postdoc synthesis v2 §6).
+#
+# DIFF FROM `01-interoNocicept_sameProp.yaml` (the active+matched baseline):
+#   neutral_animals[0..1].properties: [0,1,0,0,0] (e2) — UNCHANGED, rabbit stays on e2
+#   predators[0].properties:          [0,1,0,0,0] -> [0,0,1,0,0]   (predator moves e2 -> e3)
+# Net: rabbit on e2, predator on e3. Compared to active_distinct.yaml (rabbit
+# on e3, predator on e2), this is the canonical "swap" of the olfactory
+# identities. Predator behaviour params unchanged (active hunt).
+# properties_std stays [0,0,0,0,0]. Everything else byte-identical.
+#
+# Hand-off: env-config-auditor must verify the {active, passive} x {matched,
+# distinct, swapped} = 6 configs share identical bodies / sensor params and
+# differ ONLY along the two design axes (predator behaviour, olfactory assignment).
+
+environment:
+  height: 10
+  width: 10
+  start_pos: [5, 5]
+  max_steps: 500
+  rest_action_enabled: true
+  eat_action_enabled: true
+  random_start_pos: true
+
+  placement:
+    mode: per_entity
+
+  resources:
+    - name: "food" # Top Left
+      type: "food"
+      count: 2
+      spawn_area: [[1, 1], [5, 5]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+
+    - name: "food" # Top Right
+      type: "food"
+      count: 0
+      spawn_area: [[1, 6], [5, 10]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+
+    - name: "food" # Bottom Right
+      type: "food"
+      count: 2
+      spawn_area: [[6, 6], [10, 10]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+
+    - name: "food" # Bottom Left
+      type: "food"
+      count: 0
+      spawn_area: [[6, 1], [10, 5]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+
+    - name: "hiding_predator" # Top Left
+      type: "hiding_predator"
+      count: 1
+      spawn_area: [[1, 1], [5, 5]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: [15.0, 45.0]
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+    - name: "hiding_predator" # Top Right
+      type: "hiding_predator"
+      count: 1
+      spawn_area: [[1, 6], [5, 10]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: [15.0, 45.0]
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+    - name: "hiding_predator" # Bottom Right
+      type: "hiding_predator"
+      count: 1
+      spawn_area: [[6, 6], [10, 10]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: [15.0, 45.0]
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+    - name: "hiding_predator" # Bottom Left
+      type: "hiding_predator"
+      count: 1
+      spawn_area: [[6, 1], [10, 5]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: [15.0, 45.0]
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+
+  neutral_animals:
+    # OLFACTORY: rabbit on e2 (the slot predator occupies in distinct/matched).
+    - name: "rabbit"
+      count: 1
+      properties: [0.0, 1.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      move_interval: 1
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [5, 5]]
+      patrol_area: [[1, 1], [5, 5]]
+      tag: "TL"
+    - name: "rabbit"
+      count: 1
+      properties: [0.0, 1.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      move_interval: 1
+      nociception_intensity: 0.1
+      spawn_area: [[6, 6], [10, 10]]
+      patrol_area: [[6, 6], [10, 10]]
+      tag: "BR"
+
+  predator_enabled: true
+  predators:
+    # ACTIVE: full hunt mode (matches 01-interoNocicept_sameProp.yaml).
+    # OLFACTORY: predator on e3 (the slot rabbit occupies in distinct).
+    - name: "predator" # full-grid patrol
+      count: 1
+      properties: [0.0, 0.0, 1.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      move_interval: 1
+      damage: [15.0, 45.0]
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: 5
+      max_stamina: 30
+      stamina_recovery_rate: 1
+      hunt_stamina_threshold: 0.7
+      attack_delay: 3
+      lose_interest_multiplier: 1.5
+      tag: "full"
+
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [10, 10]]
+    - type: "sand"
+      area: [[0, 0], [0, 0]]
+
+  obstacles:
+    - name: "rock" # Top Left
+      count: 3
+      area: [[1, 1], [5, 5]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+    - name: "rock" # Top Right
+      count: 3
+      area: [[1, 6], [5, 10]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+    - name: "rock" # Bottom Left
+      count: 3
+      area: [[6, 1], [10, 5]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+    - name: "rock" # Bottom Right
+      count: 3
+      area: [[6, 6], [10, 10]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+    - name: "tree"
+      count: 0
+      area: [[5, 15], [5, 15]]
+      blocking: true
+      damage: [0.1, 0.5]
+      nociception_intensity: 0.1
+      properties: [0.0, 0.0, 0.0, 0.0, 1.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+    - name: "bush" # Top Left
+      count: 0
+      area: [[1, 1], [5, 5]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+    - name: "bush" # Top Right
+      count: 5
+      area: [[1, 6], [5, 10]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+    - name: "bush" # Bottom Left
+      count: 5
+      area: [[6, 1], [10, 5]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+    - name: "bush" # Bottom Right
+      count: 0
+      area: [[6, 6], [10, 10]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+
+body:
+  with_satiation: true
+  with_nutrition: true
+  with_injury: true
+  random_start_satiation: false
+  random_start_nutrition: false
+  random_start_injury: false
+  max_satiation: 100
+  max_nutrition: 100
+  max_injury: 100
+  metabolic_cost: 1.0
+  food_nutrition_gain: 6
+  eating_nutrition_cost: 1.0
+  eating_reward_penalty: 0.0
+  nutrition_to_satiation_scaling_factor: 1.0
+  satiation_setpoint: 100
+  start_satiation: 100
+  start_nutrition: 100
+  recovery_base_rate: 0.1
+  recovery_accel_rate: 0.5
+  injury_smoothing_duration: 3
+  use_homeostatic_reward: true
+  death_penalty: 100
+  overeating_death: false
+
+
+sensory:
+  using_sensory: true
+  olfactory_enabled: true
+  sensor_radius: 20
+  vector_size: 5
+  decay_power: 2.0
+  collision_sensor_range: 1
+  location_sensor: false
+  nociception_enabled: true
+  nociception_size: 1
+  visual_sensor_enabled: true
+  visual_sensor_range: 0
+  proprioception_enabled: true
+
+  injury_observable: false
+  nutrition_observable: false
+  interoceptive_nociception_enabled: true
+  interoceptive_convolution_enabled: true
+  interoceptive_kernel_tau: 3.0
+  interoceptive_kernel_length: 12
+
+visualization:
+  local_view_size: 5
+
+perceptual_noise:
+  enabled: false
+  modalities:
+    injury:          # index 0
+      mode: "state_dependent"
+      sigma: 0.0
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    nutrition:       # index 1
+      mode: "state_dependent"
+      sigma: 0.0
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    satiation:       # index 2
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    interoceptive_nociception:  # index 3
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    extero_nociception: # index 4
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0
+    olfaction:       # index 5
+      mode: "state_dependent"
+      sigma: 0.2
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0
+    collision:       # index 6
+      mode: "constant"
+      sigma: 0.01
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    proprioception:  # index 7
+      mode: "constant"
+      sigma: 0.05
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    visual:          # index 8
+      mode: "state_dependent"
+      sigma: 0.2
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0
+    location:        # index 9
+      mode: "constant"
+      sigma: 0.01
+      injury_noise_scale: 0.0
+      clip_min: -1.0
+      clip_max: 1.0

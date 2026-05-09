@@ -1,0 +1,46 @@
+# Continual schedule — NMN abrupt double-return probe (active <-> passive predator)
+# ---------------------------------------------------------------------------------
+# Purpose: 5-stage active -> passive -> active -> passive -> active abrupt schedule
+# for the NMN_CONTINUAL_DOUBLE_RETURN_PROBE experiment (continual-learning vitality
+# check; 2026-05-09). Per professor-neuromodulation §4 (`nmn_continual_lifelong_probe.md`):
+#   - Two returns to stage 1 enable the "monotone vs. non-monotone forgetting" test
+#     that discriminates plain interference (each return retains less) from a Tsuda
+#     2021 hypertube reusable subnetwork (second return >= first return).
+#   - All boundaries ABRUPT — no gradual interpolation arm in round 1 (the gradual
+#     contrast requires a developer interpolator touch; postdoc synthesis v2 §5
+#     dropped the gradual arm to keep the launch config-only on shipped infra).
+#   - Schedule consumed by `train.py:1082` (--continual-schedule + --configs-dir).
+#
+# Stages (alphabetic by filename in --configs-dir; train.py:156 sorts via glob):
+#   01_active_predator.yaml   --> stage 1 (initial)        active predator (e2 olfactory matched)
+#   02_passive_predator.yaml  --> stage 2 (first switch)   passive predator (HUNT-unreachable, e2 matched)
+#   03_active_predator.yaml   --> stage 3 (first return)   active predator
+#   04_passive_predator.yaml  --> stage 4 (second switch)  passive predator
+#   05_active_predator.yaml   --> stage 5 (second return)  active predator
+# Each "active_predator" stage YAML is byte-identical to the canonical
+# `01-interoNocicept_sameProp.yaml`; each "passive_predator" stage YAML is
+# byte-identical to `02-sameProp_R2_passivePredator.yaml`. Both are copied
+# (not symlinked, since the NAS does not support symlinks per CLAUDE.md
+# Git Safety) into the schedule's `--configs-dir`. This duplication is the
+# necessary price of the schedule machinery's "one stage per file in
+# alphabetic order" contract (train.py:156).
+#
+# Episode budget per stage (per professor-neuromod §4):
+#   stage 1:  1500 ep   (initial training to asymptote)
+#   stage 2:  1500 ep   (interference)
+#   stage 3:   700 ep   (first return — measure forgetting + recovery)
+#   stage 4:   700 ep   (second exposure — measure stability gap on second hit)
+#   stage 5:   700 ep   (second return — discriminate monotone vs. non-monotone forgetting)
+# Total = 5100 episodes. Comparable to a single-stage 5000-ep run; ~17h on
+# the lab nodes per professor-neuromod §1 cell-cost estimate.
+#
+# Checkpoint frequencies parallel to stages. Coarse on purpose — this is a
+# probe, not a resumable production run.
+
+continual:
+  # Cumulative episode boundaries. Stage i runs while episode_count < episode_boundaries[i].
+  # Total episodes = episode_boundaries[-1] = 5100.
+  episode_boundaries: [1500, 3000, 3700, 4400, 5100]
+
+  # One int per stage. Coarse (one ckpt per ~half stage) — probe, not resume target.
+  checkpoint_frequencies: [500, 500, 350, 350, 350]
