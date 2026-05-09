@@ -72,20 +72,20 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# NMN meta 2x3 mixture probe — Run 8 (specialist: passive+swapped, unmodulated), launched 2026-05-09
-# Node 105, cuda:1, seed 0. See docs/experiments/active/hypervigilance/NMN_META_2x3_MIXTURE_PROBE.md §3 Launch Manifest Row 8.
-# Cell: SpecPS (spec_passive_swapped). Env config: passive_swapped.yaml (NEW — passive predator + swapped olfactory).
-# predator=[0,0,1,0,0], rabbit=[0,1,0,0,0]. LOAD-BEARING-AND-HARDEST cell: olfactory misleads + no movement signature.
-# Agent config: recurrent_ppo_nmn_het_unmod.yaml (unmodulated baseline — ceiling specialist reference).
+# DreamerV3 zero-init reward/critic fix — Cell Z1 re-run, launched 2026-05-10
+# Node 113, cuda:0, seed 0. See docs/develop/active/diagnosis/dreamer_zero_init_reward_critic_fix.md.
+# Cell: Z1. zero_init_reward_critic: true is set in dreamer_v3_rr06.yaml (config-driven, no CLI flag).
+# Env config: 00-5X5_NoPred.yaml (NoPred baseline). Agent config: dreamer_v3_rr06.yaml (rr=0.0625 + zero-init).
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/experiment/nmn_meta_2x3_mixture/passive_swapped.yaml \
-  --agent_config configs/models/recurrent_ppo_nmn_het_unmod.yaml \
-  --num-envs 128 \
-  --episodes 10000000 \
+  --config configs/experiment/basic/00-5X5_NoPred.yaml \
+  --agent_config configs/models/dreamer_v3_rr06.yaml \
+  --num-envs 16 \
+  --episodes 700000 \
   --seed 0 \
-  --device cuda:1 \
+  --device cuda:0 \
   --log-interval 50 \
-  --wandb-group nmn_meta_2x3_mixture \
-  --wandb-job-type prod \
-  --wandb-name rppo_nmn_meta_spec_passive_swapped_s0 \
-  --tag rppo_nmn_meta_spec_passive_swapped_s0
+  --checkpoint-frequency 100000 \
+  --wandb-group dreamer_zero_init \
+  --wandb-job-type ablation \
+  --wandb-name "dreamer_zinit_NoPred_rr06_s0_n113" \
+  --tag "dreamer_zinit_NoPred_rr06_s0_n113"
