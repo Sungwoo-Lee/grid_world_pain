@@ -5,6 +5,8 @@ status: active
 created: 2026-05-09
 last_updated: 2026-05-09
 phase: 1
+verified_by: senior-developer
+verified_on: 2026-05-09
 ---
 
 # DreamerV3: offline WM-imagination diagnostic (NoPred + rr=0.0625, Cell A1)
@@ -394,11 +396,104 @@ No changes to training hot path — script is read-only diagnostic. No speed mea
 
 ## Verification Report
 
-> **Verified by**: [agent/person]
-> **Date**: [date]
+> **Verified by**: senior-developer
+> **Date**: 2026-05-09
+
+### Diff stats
+
+```
+docs/develop/active/diagnosis/dreamer_offline_wm_imagination_test.md  +404
+scripts/dreamer_offline_wm_test.py                                    +841 (new)
+docs/diary/2026-05-09.md                                                +2
+```
+
+The script is one large new file; insertion-only, no collateral edits. No existing source file modified — matches plan §"NO changes to existing files".
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `scripts/dreamer_offline_wm_test.py` | NEW | | |
+| `scripts/dreamer_offline_wm_test.py` | NEW | PASS | Implements all of plan §Design with 3 minor deviations documented in the Implementation Report; deviations are sound (see per-item review below). |
+| `docs/develop/active/diagnosis/dreamer_offline_wm_imagination_test.md` | EDIT | PASS | Implementation Report filled in; checkpoint table all ticked; deviations explained. |
 
-**Conclusion**: [one-line summary]
+### Per-checklist-item review
+
+**1. Plan-doc compliance**
+
+| Item | Status | Evidence |
+|---|:---:|---|
+| D1 — replay-state-conditional imagination | PASS | `dreamer_offline_wm_test.py:545` builds `start_state` from `post_trace[..][t_start]`, the posterior recorded during the eval rollout (`get_action`'s `next_state` return at line 451–454 stores the post-`rssm.step` posterior). Imagination is independent of real-traj beyond the start (no peeking at real obs inside `run_imagination`). |
+| D2 — horizons {1,2,5,10,15,25,50}, H_max=50 | PASS | Pre-registered constants at line 51 — exact set, no extras, no missing. |
+| D3 — M=200 starts | PASS | `M_DEFAULT=200` (line 54); JSON header records `M=200`, `n_valid_starts=1047` (plenty of budget — pool is 5× M). |
+| D5-A — actor argmax + RSSM categorical mode | PASS | Actor argmax at line 239 (`jnp.argmax(actor_logits, axis=-1)`); RSSM mode applied at line 248 via `_apply_rssm_mode` which replaces `prior['stoch']` with `one_hot(argmax(prior['logits']))` flattened to match `(B, S*D)` (lines 191–197). RSSM internally still samples a categorical at line 134, but mode-replacement immediately overwrites the sample → the rollout is in fact deterministic. |
+| D6 — JSON + Markdown, no WandB | PASS | Both files emitted (`tmp/20260509_wm_imagination_test_A1.json`, `.md`); no `wandb` import in the script. |
+
+**2. Symlog-space discipline**
+
+| Item | Status | Evidence |
+|---|:---:|---|
+| Headline metric is symlog-MSE | PASS | Line 269 applies `symlog` to `obs_true_raw` BEFORE differencing; line 574 computes `(obs_pred - obs_true) ** 2` where both operands are symlog-space (`obs_pred` is the decoder output, which is symlog-space per `dreamer_v3_trainer.py:215` `loss_recon`). |
+| Symlog applied before squaring | PASS | Order verified at lines 268–269 and 574: `symlog(real_obs)` first → squared diff. Not the reversed (and wrong) `symlog((pred - real)^2)`. |
+| Raw-space companion via `symexp` | WARN (minor) | The plan called for raw-MSE-via-`symexp` as an interpretability companion; the script does NOT compute raw-space per-channel MSE (it stops at symlog-space). This is a gap vs the plan but does not affect the verdict — symlog is the official metric. Not blocking. |
+
+**3. Decoder-call discipline**
+
+| Item | Status | Evidence |
+|---|:---:|---|
+| Script explicitly calls `wm.decoder(feat)` | PASS | Line 253: `obs_pred_symlog = wm.decoder(feat)[0]`. Confirmed not a latent comparison. Uses `wm.get_feat(prior)` first (line 251), so the input to decoder matches the trainer's recon path (`trainer.py:214`). |
+
+**4. Replay-state-conditional setup**
+
+| Item | Status | Evidence |
+|---|:---:|---|
+| Starts sampled from real trajectory (not env-reset) | PASS | Lines 421–478: full rollout collected; `post_trace[k][t]` populated from `get_action`'s returned posterior at line 454. Lines 510–528 sample from `valid_starts` filtered for full-`H_max` lookahead within the same episode. |
+| Imagination independent of real obs after start | PASS | `run_imagination` at lines 233–264 only consumes `start_state`, action from the actor's argmax on `feat` (NOT replayed real actions), and decoder output. The real obs trace is read only at line 268 to build ground-truth targets — never fed back into the imagination loop. |
+| Imagined actions come from trained actor argmax on imagined latents | PASS | Lines 237–240: `feat = wm.get_feat(prior)`, `actor_logits = trainer.agent.ac.actor(feat)`, `action_idx = jnp.argmax(actor_logits, axis=-1)`. The actions executed in imagination are the actor's choices on the imagined feature, NOT the actions the agent really took at `t_start+h` in the recorded trajectory. This is the right choice — it isolates WM transition error under the eval-mode actor's policy, which is the regime that matters for value learning. |
+
+**5. Reward-MAE arithmetic**
+
+| Item | Status | Evidence |
+|---|:---:|---|
+| Reward in raw space, not symlog | PASS | Line 254: `from_twohot(wm.reward_head(feat))` — `from_twohot` (`dreamer_v3_util.py:60–76`) explicitly returns `symexp(sym_val)` (raw space). Ground truth `rew_true` (line 270) is the raw env reward. MAE is computed on raw-space pairs. |
+| Per-step reward, not cumulative | PASS | Line 270: `rew_true = real_rew_trace[start_idx+1 : start_idx+h_max+1]` — raw per-step rewards, no cumsum, no discount. |
+| Reward magnitude scale check | PASS (with reframing — see verdict) | NoPred per-step reward scale: dense satiation reward + dp=100 terminal but the latter rarely fires (only at episode end). For modal in-episode steps, reward is dominated by ±0.5-magnitude homeostatic deltas + occasional larger spikes when food is eaten. **Reward MAE 0.39 in raw space** is on the same scale as the modal reward magnitude — i.e. the reward head is wrong by ~the size of one homeostatic increment per step. This is genuinely large and matches the "WM cannot predict food-eating outcomes" interpretation in the developer's failure-mode mapping. |
+
+**6. Proprioception finding sanity-check**
+
+| Item | Status | Evidence |
+|---|:---:|---|
+| What proprioception actually is | **REVISED** | The user's question prompt described proprioception as "the agent's own (x, y) position + orientation — 6-vector", but inspecting `src/environment/sensor.py:300–302, 348–349` shows proprioception is `jax.nn.one_hot(state.last_action, params.action_dim)` — i.e. the **previous-action one-hot** (action_dim=6 here). NOT positional. |
+| h=1 sanity check | WARN (mild — but interpretable) | Proprio symlog-MSE at h=1 is **0.1144**, *higher* than at h=5 (0.1068) and basically pinned around 0.10–0.16 across all horizons. A perfect one-hot prediction in symlog space would have MSE 0. Symlog of a uniform 1/6 prediction would give per-dim MSE roughly `((5×0.154² + (ln 2 − 0.154)²)/6) ≈ 0.068` (`symlog(1/6)≈0.154`, `symlog(1)≈0.693`). Observed 0.107 is **above** the uniform baseline, meaning the WM is putting density on the *wrong* action bin. |
+| Implication | Caveat | Because the decoder reconstructs `prev_action` from `(deter, stoch)` (it is NOT directly fed in — `get_feat` concatenates only deter+stoch, line 561), the decoder must learn a clean read-out of "which action just executed" from the GRU hidden state. The h=1 result says it has not. This IS a real WM finding (the decoder under-predicts a deterministic, fully-observed channel), BUT it is **not** the channel the user thought it was. The implication is "the decoder fails on a trivially deterministic channel" rather than "the WM cannot predict its own (x,y) position". The latter is not measured by this diagnostic at all (no positional channel was enabled for this checkpoint — `location_sensor_enabled=False` and proprio is action-history only). |
+
+**7. Implementation deviations the developer reported**
+
+| Item | Status | Evidence |
+|---|:---:|---|
+| obs_dim=19 not 27 (auto-loaded `config.yaml`) | PASS | Verified at lines 361–364: if `models/config.yaml` exists in the checkpoint dir, the script loads it directly; otherwise falls back to merging `--env-config + --agent-config`. The contract change is sensible (the saved config is the single source of truth for layer shapes), and the JSON header still records both YAML paths for provenance (lines 691–692). The plan's premise that "no top-level config.yaml is saved" was wrong (config.yaml IS saved under `models/` — verifiable via `ls results/JAX_DreamerV3/.../models/config.yaml`); the developer adapted correctly. |
+| Checkpoint key normalization (string→int + `{'value': array}` unwrap) | PASS (with caveat) | The `_normalize_checkpoint` workaround at lines 141–161 handles two real Orbax/NNX-version-skew artifacts: integer-keyed `nnx.Sequential` indices serialized as strings, and `nnx.Variable` leaves serialized as `{'value': array}`. After normalization, `nnx.update` succeeds on `wm`, `actor`, `critic`. **Caveat**: the developer notes that `train.py:981–1000`'s restore path has the same latent skew bug — it would fail on a fresh run with current NNX. This is out of scope for this verification but should be flagged separately. The normalization is structural (key-and-leaf-shape only), not value-changing — it does not corrupt the loaded weights. |
+| Extero Nociception `n/a` threshold | PASS | The plan's §D4 threshold table omitted "Extero Nociception" (the auditor's prior obs breakdown DID list it as 1 dim). The developer assigned `thresh=None` → `n/a` cell in the report — this is the correct conservative choice (don't pass-or-fail on a channel the plan did not pre-register). The plan-table gap is acknowledged in the deviation list. Observed Extero-Noc MSE is < 0.013 across all horizons — would have passed any reasonable threshold, so the gap does not affect the verdict. |
+
+### Verdict on the headline finding
+
+**WM BROKEN at the reward head — methodologically sound, with one terminology caveat.**
+
+- The two failures (reward MAE 0.39 ≫ 0.15, proprio symlog-MSE 0.107 ≫ 0.05) are computed against pre-registered thresholds in the right metric space (raw-MAE for reward, symlog-MSE for obs).
+- Reward MAE is robust: from_twohot is correctly symexp'd; ground truth is raw per-step env reward; the magnitude (~0.39) is on the same scale as the modal homeostatic reward, so the WM is genuinely wrong by ~one full reward step. This is the load-bearing failure for the headline.
+- Proprio is a real failure but its **interpretation** has to be revised: it shows the decoder cannot reconstruct the previous-action one-hot from (deter, stoch), even at h=1. This is still a meaningful WM failure on a deterministic channel, but it does NOT bear on positional prediction (which is not measured here).
+- All passes (Satiation, Olfaction, Collision, Aggregate, Continuation, h50/h5 ratio) are cleanly in-bounds; no spurious failure modes.
+- Replay-state-conditional setup is clean — no information leakage, no real-action injection, no off-policy confound.
+- Reproducibility re-run (Checkpoint 6) reproduces metrics to float32 precision.
+
+**Recommendation: accept, with two follow-up actions for the user (not blockers):**
+
+1. **Update plan §D4 "Proprioception" rationale** to reflect that proprioception is action-history (one-hot last action), NOT positional. The current rationale ("argmax actor → near-deterministic — should be ~0") is correct in spirit (deterministic given the executed action) but the sentence "near-deterministic from action" obscures that proprio IS the action — the prediction question is "can the decoder read off the action that the GRU just consumed?" The threshold (< 0.05) is still defensible but the framing needs a 1-line edit. **Not a blocker**; can be patched later.
+2. **The reward-head failure is the load-bearing finding.** Future Round-2 work (test on A2 / predator) and any "WM is broken" claim should lead with reward MAE, not proprio. The proprio failure is corroborating evidence on a deterministic channel; the reward failure is the diagnostic-significant one for the survival=106 puzzle.
+
+**Speed-change verdict: no regression.** Script is read-only diagnostic, no training-hot-path edit; speed check correctly skipped per protocol.
+
+**Out-of-scope / not blocking:**
+- Raw-space companion MSE (plan §"Symlog handling") not implemented — minor doc-style gap, doesn't affect headline.
+- `train.py:981–1000` has the same latent NNX-version-skew bug as the script's `_normalize_checkpoint` works around — separate bug, separate plan.
+
+**Conclusion**: Headline finding (WM BROKEN, reward-head bottleneck) is methodologically sound. Proceed with downstream interpretation, with the proprio caveat noted above.
+
+Verified by: senior-developer
