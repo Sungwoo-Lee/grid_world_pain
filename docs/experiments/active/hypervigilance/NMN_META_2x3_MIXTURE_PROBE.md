@@ -3,7 +3,7 @@ title: "NMN meta 2x3 mixture probe — does the modulator factorise context acro
 topic: hypervigilance
 status: active
 created: 2026-05-09
-last_updated: 2026-05-09
+last_updated: 2026-05-09T18:42
 phase: 0.5
 wandb_tag: "rppo_nmn_meta_{2x3_mod,2x3_unmod,spec_*}_s0"
 develop_link: docs/develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md
@@ -189,8 +189,8 @@ System-of-record. `experiment-designer` filled the planned columns; `training-ru
 | 2 | planned | 2x3_mix_unmodulated | rppo_nmn_meta_2x3_unmod_s0 | nmn_meta_2x3_mixture | prod | 0 | 102 | cuda:1 | — | — | — |
 | 3 | running | spec_active_matched | rppo_nmn_meta_spec_active_matched_s0 | nmn_meta_2x3_mixture | prod | 0 | 103 | cuda:0 | 2026-05-09T18:33:51 | p9g5kjx3 | logs/20260509_183351.log |
 | 4 | running | spec_active_distinct | rppo_nmn_meta_spec_active_distinct_s0 | nmn_meta_2x3_mixture | prod | 0 | 103 | cuda:1 | 2026-05-09T18:36:05 | iktjhpmm | logs/20260509_183605_rppo_nmn_meta_spec_active_distinct_s0.log |
-| 5 | planned | spec_active_swapped | rppo_nmn_meta_spec_active_swapped_s0 | nmn_meta_2x3_mixture | prod | 0 | 104 | cuda:0 | — | — | — |
-| 6 | planned | spec_passive_matched | rppo_nmn_meta_spec_passive_matched_s0 | nmn_meta_2x3_mixture | prod | 0 | 104 | cuda:1 | — | — | — |
+| 5 | running | spec_active_swapped | rppo_nmn_meta_spec_active_swapped_s0 | nmn_meta_2x3_mixture | prod | 0 | 104 | cuda:0 | 2026-05-09T18:39:09 | 2p5zgdk4 | logs/20260509_183909.log |
+| 6 | running | spec_passive_matched | rppo_nmn_meta_spec_passive_matched_s0 | nmn_meta_2x3_mixture | prod | 0 | 104 | cuda:1 | 2026-05-09T18:42:09 | 958mba24 | logs/20260509_184209.log |
 | 7 | planned | spec_passive_distinct | rppo_nmn_meta_spec_passive_distinct_s0 | nmn_meta_2x3_mixture | prod | 0 | 105 | cuda:0 | — | — | — |
 | 8 | planned | spec_passive_swapped | rppo_nmn_meta_spec_passive_swapped_s0 | nmn_meta_2x3_mixture | prod | 0 | 105 | cuda:1 | — | — | — |
 
