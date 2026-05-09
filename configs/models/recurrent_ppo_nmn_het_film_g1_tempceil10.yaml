@@ -1,0 +1,62 @@
+# Agent config — NMN temp_clip ceiling re-run (follow-up to NMN_NOISE_HETEROGENEITY_SWEEP)
+# Architecture: FiLM modulation, grouping_size = 1, raised temperature ceiling.
+#
+# DIFF FROM `recurrent_ppo_nmn_het_film_g1.yaml`: temp_clip ceiling raised
+# from 3.0 → 10.0. Lower bound (0.5) and all other hyperparameters preserved
+# byte-for-byte for clean attribution of any survival difference.
+#
+# Why 10.0 (not 5.0):
+#   The prior sweep showed temp_max saturated at exactly 3.0 on P3f/P4f/P5f
+#   (temp_max = 2.96 / 2.99 / 3.00). Raising to 5.0 would only test "ceiling
+#   binding by ≤2× headroom"; if temp_max lands at 4.95 we cannot disambiguate
+#   "ceiling still binding" from "head doesn't engage past ~3.0". 10.0 gives
+#   the temperature head 3.3× headroom. If it engages, we will see temp_max
+#   land somewhere in [3.0, 10.0); if it again saturates at 10.0, the
+#   structural verdict (head WANTS more dynamic range than the architecture
+#   allows) is unambiguous.
+#
+# Numerical safety: src/models/neuromodulator.py:71 default is (0.1, 10.0).
+# We are not pushing past the architecture's own original numerical envelope.
+
+agent:
+  algorithm: "RecurrentPPO"
+  lr_actor: 0.0005
+  lr_critic: 0.0001
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  sequence_length: 128
+  frame_stack: 1
+  fc_layers: [128,128]
+  actor_fc_layers: [128,128]
+  critic_fc_layers: [128,128]
+  hidden_size: 128
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+
+  # v8-anchored parity options (see NMN_PERFORMANCE_DIAGNOSIS_v8 §2.2)
+  rnn_type: "GRU"          # required for gate-bias injection
+  activation: "relu"
+  return_mode: "MC"        # MC: cleaner per v8
+
+  encoding_mode: "hierarchical"
+
+  hierarchical_params:
+    default_mlp: [128,128]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+    multimodal_hub: [128,128]
+
+  # FiLM modulator — IDENTICAL to recurrent_ppo_nmn_het_film_g1.yaml EXCEPT temp_clip ceiling
+  modulation:
+    type: "FiLM"
+    mod_hidden_size: 16
+    grouping_size: 1
+    percept_bias_init: 3.0
+    memory_bias_init: 0.0
+    temp_clip: [0.5, 10.0]    # <-- changed from [0.5, 3.0]
+    memory_clip: [-2.0, 2.0]
