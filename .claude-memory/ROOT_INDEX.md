@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-05-09
 **Active folders**: 6
-**Total insights**: 27
+**Total insights**: 30
 **Last audit**: (none)
 
 ---
@@ -16,11 +16,11 @@
 | Folder | Definition (1 line) | Insights | Last update | Top tags |
 |---|---|---|---|---|
 | `memory_system_design` | Claude memory system's own design decisions | 4 | 2026-05-09 | [memory, design, decision, skill] |
-| `subagent_engineering` | Subagent + worktree usage gotchas | 1 | 2026-05-08 | [meta, learned_lesson, worktree, subagent] |
+| `subagent_engineering` | Subagent + worktree usage gotchas | 2 | 2026-05-09 | [meta, learned_lesson, worktree, subagent, decision] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 6 | 2026-05-09 | [nmn, hypervigilance, film, refutation, learned_lesson] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 2 | 2026-05-08 | [dreamer, hypervigilance, decision, learned_lesson] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 12 | 2026-05-09 | [meta, training_runner, learned_lesson, decision] |
-| `hypervigilance` | Hypervigilance experiments | 2 | 2026-05-08 | [hypervigilance, design, learned_lesson, decision] |
+| `hypervigilance` | Hypervigilance experiments | 4 | 2026-05-09 | [hypervigilance, design, learned_lesson, decision, refutation, meta] |
 
 ---
 
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-09: Captured 3 insights from the hypervigilance Round 2 partial-verdict + per-tag metrics ship session: 2 into existing `hypervigilance` (`20260509_1532_sameprop_round2_truncated_verdict`, `20260509_1533_tag_based_distance_supersedes_quadrant`), 1 into existing `subagent_engineering` (`20260509_1534_synthetic_smoke_masks_dict_assembly_bugs`). No new tags promoted (all reused: hypervigilance, refutation, learned_lesson, design, decision, meta, subagent).
 - 2026-05-09: Captured 2 insights into existing `nmn_diagnosis` from the temp_clip[0.5,10.0] re-run analyzer chain: `20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4` (verdict — H1b confirmed on P4, partial-binder reframing) and `20260509_1410_nmn_temp_head_natural_target_3_to_5` (head natural target [3.0, 5.0); canonical FiLM config should adopt [0.5, 5.0]). No new tags (all reused: nmn, hypervigilance, film, refutation, learned_lesson).
 - 2026-05-09: Captured 4 insights from the cluster-ops scripting consolidation session: 3 into existing `cluster_ops` (`20260509_0309_cluster_py_consolidation`, `20260509_0310_bash_ic_alias_over_ssh`, `20260509_0312_node_num_hostname_in_bashrc`) and 1 into existing `memory_system_design` (`20260509_0311_diary_auto_session_backfill`). No new tags (all reused: meta, decision, learned_lesson, training_runner, design, memory).
 - 2026-05-08: Captured 2 insights into existing `nmn_diagnosis` from the heterogeneity-sweep analyzer chain: `20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse` (verdict — H1a/b/c refuted, FiLM consistently worse than Unmod) and `20260508_2004_profile_dependent_temp_saturation_mc_film` (actionable mechanism — temp saturation at R ≥ 5). Promoted `film` from candidate to active and added new active tag `refutation`.
