@@ -72,17 +72,18 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# Hypervigilance Round 2 — Cell A1 (passivePredator), launched 2026-05-08
-# Node 112, cuda:1, seed 43. Run 2 of 2; see docs/experiments/active/hypervigilance/sameprop_round2_design.md §3 Launch Manifest.
+# Hypervigilance Round 2.5 — Cell A1 (passivePredator), launched 2026-05-09
+# Node 106, cuda:1, seed 43. See docs/experiments/active/hypervigilance/sameprop_round25_design.md §3 Launch Manifest.
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml \
   --agent_config configs/models/recurrent_ppo.yaml \
-  --episodes 10000000 \
   --num-envs 128 \
   --seed 43 \
+  --episodes 10000000 \
+  --checkpoint-frequency 100000 \
   --device cuda:1 \
   --log-interval 50 \
   --wandb-group hypervigilance \
   --wandb-job-type prod \
-  --wandb-name "hypervigilance-round2-A1-seed43_n112_gpu1" \
-  --tag "hypervigilance-round2-A1-seed43_n112_gpu1"
+  --wandb-name "hypervigilance-round25-A1-seed43_n106_gpu1" \
+  --tag "hypervigilance-round25-A1-seed43_n106_gpu1"
