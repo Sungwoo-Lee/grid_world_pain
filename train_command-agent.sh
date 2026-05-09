@@ -72,20 +72,20 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# NMN meta 2x3 mixture probe — Run 6 (specialist: passive+matched, unmodulated), launched 2026-05-09
-# Node 104, cuda:1, seed 0. See docs/experiments/active/hypervigilance/NMN_META_2x3_MIXTURE_PROBE.md §3 Launch Manifest Row 6.
-# Cell: spec_passive_matched. Env config: 02-sameProp_R2_passivePredator.yaml (REUSED — passive predator + matched olfactory).
+# NMN meta 2x3 mixture probe — Run 7 (specialist: passive+distinct, unmodulated), launched 2026-05-09
+# Node 105, cuda:0, seed 0. See docs/experiments/active/hypervigilance/NMN_META_2x3_MIXTURE_PROBE.md §3 Launch Manifest Row 7.
+# Cell: SpecPD (spec_passive_distinct). Env config: passive_distinct.yaml (NEW — passive predator + distinct olfactory).
+# predator=[0,1,0,0,0], rabbit=[0,0,1,0,0]. Easiest cell of the 2x3 grid (olfactory separable + passive predator).
 # Agent config: recurrent_ppo_nmn_het_unmod.yaml (unmodulated baseline — ceiling specialist reference).
-# Matched-context note: survival contaminated by corner-camping per insight 20260509_1532; analyzer must report per-quadrant occupancy.
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml \
+  --config configs/experiment/nmn_meta_2x3_mixture/passive_distinct.yaml \
   --agent_config configs/models/recurrent_ppo_nmn_het_unmod.yaml \
   --num-envs 128 \
   --episodes 10000000 \
   --seed 0 \
-  --device cuda:1 \
+  --device cuda:0 \
   --log-interval 50 \
   --wandb-group nmn_meta_2x3_mixture \
   --wandb-job-type prod \
-  --wandb-name rppo_nmn_meta_spec_passive_matched_s0 \
-  --tag rppo_nmn_meta_spec_passive_matched_s0
+  --wandb-name rppo_nmn_meta_spec_passive_distinct_s0 \
+  --tag rppo_nmn_meta_spec_passive_distinct_s0
