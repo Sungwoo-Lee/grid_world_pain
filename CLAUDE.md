@@ -66,6 +66,38 @@ The canonical flows, parallelism heuristics, cross-cutting constraints, and anti
 
 ---
 
+## Documentation framing
+
+Every plan, design, analysis, summary, review, and direction document the project produces must lead with a **plain-language interpretation** that a reader without prior context can follow. Docs in this project get re-read by future-Claude, parallel sessions, the user months later, and (eventually) external collaborators or reviewers — so a doc whose entry point requires the reader to already know `H₁a` / `Δ_SS` / `f96lhxpe` / `01-interoNocicept_sameProp.yaml` is a doc that gates re-readers behind a context tax.
+
+### The rule
+
+The **first body section** of any plan / design / analysis / summary / review / direction doc is a plain-English entry point — title in the family of *Question*, *Purpose*, *Context*, *Headline finding*, *Verdict*, *Study question*, or equivalent. Its 200-word job is to tell a fresh reader **what the doc is about, why it exists, and what it's claiming**.
+
+In that entry-point section:
+
+- **Translate every cited result on first mention.** "The modulator did not beat the baseline (H₁a refuted)", not just "H₁a refuted". The English first; the symbol after, in parens.
+- **No bare WandB run IDs** like `f96lhxpe` — link through the design doc or memory insight that names them.
+- **No bare config paths** like `configs/models/recurrent_ppo_nmn_het_film_g1.yaml` — describe what the config does ("the FiLM agent config with the modulator's temperature ceiling raised from 3.0 to 10.0") and link the path elsewhere.
+- **No bare predicate / shorthand names** (`H₁a`, `H₀`, `Δ_SS`, `Cand. A1`, `Phase 0`, `T/P split`, etc.) without a one-clause translation.
+- **Concrete examples beat abstract claims.** If the doc proposes "a 2-context mixture", show what the two contexts ARE — not just "context A vs. context B".
+
+Symbolic / numerical / file-path / equation-heavy detail belongs in **later sections** of the same doc — Methods, Manifest, Links, Derivations, Tables, Appendix. The rule is about the *entry point*, not the whole document. Math-heavy memos still earn their math; they just have to introduce their question without it.
+
+### The check
+
+Open the document, read the first ~200 words. Could a fresh reader who has not seen the prior memos / design docs / commit history understand what this doc is about, why it exists, and what it's claiming? If yes, it passes. If no, rewrite the entry point.
+
+### Where this rule is encoded
+
+- **Templates**: [docs/TEMPLATES/issue_plan.md](docs/TEMPLATES/issue_plan.md) (Context section) and [docs/TEMPLATES/training_analysis.md](docs/TEMPLATES/training_analysis.md) (Research Question section) enforce the structure at the point new docs are authored.
+- **Agent profiles**: every doc-producing agent (`senior-developer`, `experiment-designer`, `experiment-analyzer`, `research-postdoc`, the four professors, the three reviewers, `literature-reviewer`, `literature-curator`) carries a one-line reference to this rule in its profile.
+- **Worked example**: the `summarize-study` skill ([.claude/skills/summarize-study/SKILL.md](.claude/skills/summarize-study/SKILL.md)) encodes this rule in its strictest form, with a concrete check-and-replace table — read it for a worked example of what good output looks like.
+
+The rule applies to every new doc going forward. **Existing docs are not retroactively rewritten** unless a reader is actively confused by one.
+
+---
+
 ## Session memory
 
 This project carries two memory layers; future-Claude must know which one to write to.
