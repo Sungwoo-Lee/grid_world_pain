@@ -496,10 +496,23 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     dist_to_pred = jnp.min(jnp.linalg.norm(state.pred_pos - new_agent_pos, axis=-1)) if state.pred_pos.shape[0] > 0 else 99.0
     dist_to_neutral = jnp.min(jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)) if state.neutral_pos.shape[0] > 0 else 99.0
     dist_to_hiding_predator = jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 1), jnp.linalg.norm(state.res_pos - new_agent_pos, axis=-1), 99.0)) if state.res_pos.shape[0] > 0 else 99.0
+    # Per-instance unreduced distance vectors for tag-based logging.
+    dist_per_neutral = (
+        jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)
+        if state.neutral_pos.shape[0] > 0
+        else jnp.zeros((0,), dtype=jnp.float32)
+    )
+    dist_per_predator = (
+        jnp.linalg.norm(state.pred_pos - new_agent_pos, axis=-1)
+        if state.pred_pos.shape[0] > 0
+        else jnp.zeros((0,), dtype=jnp.float32)
+    )
     info['dist_to_food'] = dist_to_food
     info['dist_to_pred'] = dist_to_pred
     info['dist_to_neutral'] = dist_to_neutral
     info['dist_to_hiding_predator'] = dist_to_hiding_predator
+    info['dist_per_neutral'] = dist_per_neutral
+    info['dist_per_predator'] = dist_per_predator
 
     # 7. Final State
     new_state = state._replace(

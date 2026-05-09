@@ -662,6 +662,8 @@ class DreamerTrainer(nnx.Module):
                 'dist_to_pred': info['dist_to_pred'],
                 'dist_to_neutral': info['dist_to_neutral'],
                 'dist_to_hiding_predator': info['dist_to_hiding_predator'],
+                'dist_per_neutral': info['dist_per_neutral'],
+                'dist_per_predator': info['dist_per_predator'],
                 'termination_reason': info['termination_reason'].astype(jnp.float32),
             }
             

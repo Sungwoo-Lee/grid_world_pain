@@ -86,6 +86,7 @@ class EnvParams:
     pred_lose_interest_mult: jnp.ndarray # [num_pred]
     predator_enabled: bool = struct.field(pytree_node=False)
     pred_spawn_area: jnp.ndarray # [num_pred, 4]
+    predator_tags: tuple = struct.field(pytree_node=False)  # static metric-label tags, len = num_pred
 
 
     # Obstacles
@@ -106,7 +107,8 @@ class EnvParams:
     neutral_move_int: jnp.ndarray    # [num_neutral]
     neutral_patrol: jnp.ndarray      # [num_neutral, 4]
     neutral_spawn_area: jnp.ndarray  # [num_neutral, 4]
-    
+    neutral_tags: tuple = struct.field(pytree_node=False)  # static metric-label tags, len = num_neutral
+
     # Placement (Type-Level overlap resolution)
     type_areas: jnp.ndarray        # [T, 4] spawn area per type group
     type_counts: jnp.ndarray       # [T] entity count per type group

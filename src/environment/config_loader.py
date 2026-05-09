@@ -3,6 +3,7 @@ Configuration loader for JAX Environment.
 
 Translates YAML config files into JAX-compatible EnvParams.
 """
+import re as _re
 import yaml
 import numpy as np
 import jax.numpy as jnp
@@ -10,6 +11,29 @@ from src.environment.state import EnvParams
 
 from src.utils.config import Config
 import warnings
+
+# Allowed characters in entity tags (used in WandB key 'Episode/MeanDist*_<tag>').
+# Slashes / spaces / dots break the WandB namespace or log key.
+_TAG_RE = _re.compile(r'^[A-Za-z0-9_-]+$')
+
+
+def _normalise_tag(raw, idx, entity_label):
+    """Return a valid metric-suffix string.  Empty / missing → f'idx{idx}'.
+
+    The tag field is optional with a documented default, so this function uses
+    entry.get('tag', None) and normalises in Python.  Do NOT use
+    config.get_mandatory — the field is optional by design.
+    """
+    if raw is None or raw == "":
+        return f"idx{idx}"
+    s = str(raw)
+    if not _TAG_RE.match(s):
+        raise ValueError(
+            f"{entity_label} tag {s!r} must match [A-Za-z0-9_-]+ "
+            f"(used in WandB key suffix; slashes / spaces / dots break the namespace)."
+        )
+    return s
+
 
 def _read_properties(entry, entity_label):
     """Read olfactory signature, preferring `properties` (plural)."""
@@ -123,6 +147,10 @@ def load_env_params(config: Config) -> EnvParams:
         pred_attack_delay = jnp.array([p_get(p, 'attack_delay') for p in expanded_predators], dtype=jnp.int32)
         pred_lose_interest_mult = jnp.array([p.get('lose_interest_multiplier', 2.0) for p in expanded_predators], dtype=jnp.float32)
         predator_enabled = config.get_mandatory('environment.predator_enabled')
+        predator_tags = tuple(
+            _normalise_tag(p.get('tag'), i, 'Predator')
+            for i, p in enumerate(expanded_predators)
+        )
     else:
         pred_property = jnp.zeros((0, 5))
         pred_property_std = jnp.zeros((0, 5))
@@ -138,7 +166,8 @@ def load_env_params(config: Config) -> EnvParams:
         pred_attack_delay = jnp.zeros(0, dtype=jnp.int32)
         pred_lose_interest_mult = jnp.zeros(0, dtype=jnp.float32)
         predator_enabled = config.get_mandatory('environment.predator_enabled')
-    
+        predator_tags = tuple()
+
     # Build Obstacle arrays
     raw_obstacles = config.get_mandatory('environment.obstacles')
     expanded_obstacles = []
@@ -208,6 +237,10 @@ def load_env_params(config: Config) -> EnvParams:
         # Adjust for 0-based min and exclusive max
         neutral_patrol = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('patrol_area', [[1,1],[h,w]]) for n in expanded_neutral]])
         neutral_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('spawn_area', [[1,1],[h,w]]) for n in expanded_neutral]])
+        neutral_tags = tuple(
+            _normalise_tag(n.get('tag'), i, 'Rabbit')
+            for i, n in enumerate(expanded_neutral)
+        )
     else:
         neutral_property = jnp.zeros((0, 5))
         neutral_property_std = jnp.zeros((0, 5))
@@ -215,6 +248,7 @@ def load_env_params(config: Config) -> EnvParams:
         neutral_move_int = jnp.zeros(0, dtype=jnp.int32)
         neutral_patrol = jnp.zeros((0, 4), dtype=jnp.int32)
         neutral_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
+        neutral_tags = tuple()
 
     # Build Grid Location Types
     import numpy as np
@@ -332,6 +366,7 @@ def load_env_params(config: Config) -> EnvParams:
         pred_lose_interest_mult=pred_lose_interest_mult,
         predator_enabled=predator_enabled,
         pred_spawn_area=pred_spawn_area,
+        predator_tags=predator_tags,
         obs_blocking=obs_blocking,
         obs_hides_agent=obs_hides_agent,
         obs_damage=obs_damage,
@@ -347,6 +382,7 @@ def load_env_params(config: Config) -> EnvParams:
         neutral_move_int=neutral_move_int,
         neutral_patrol=neutral_patrol,
         neutral_spawn_area=neutral_spawn_area,
+        neutral_tags=neutral_tags,
         type_areas=jnp.array(type_areas_np, dtype=jnp.int32),
         type_counts=jnp.array(type_counts_list, dtype=jnp.int32),
         type_entity_map=jnp.array(type_entity_map_np, dtype=jnp.int32),

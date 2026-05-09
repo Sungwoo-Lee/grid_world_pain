@@ -944,7 +944,30 @@ def main():
 
     episode_behavior = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_KEYS}
     episode_dist_sums = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_DIST_KEYS}
-    
+
+    # Per-instance (tag-based) accumulators for Round-2 metrics.
+    neutral_tags  = tuple(params.neutral_tags)   # static; possibly empty
+    predator_tags = tuple(params.predator_tags)
+    num_neutral_for_log  = len(neutral_tags)
+    num_predator_for_log = len(predator_tags)
+    episode_dist_per_neutral_sums  = np.zeros((num_envs, num_neutral_for_log),  dtype=np.float32)
+    episode_dist_per_predator_sums = np.zeros((num_envs, num_predator_for_log), dtype=np.float32)
+
+    def _append_per_tag_means(ep_log, iteration_episodes, tags, ep_key_prefix, wandb_key_prefix):
+        """Group ep_data['<ep_key_prefix>_<tag>_raw'] by tag, mean across instances
+        then mean across episodes, write into ep_log[f'{wandb_key_prefix}_{tag}']."""
+        for tag in sorted(set(tags)):
+            matching = [j for j, t in enumerate(tags) if t == tag]
+            per_ep = []
+            for ep in iteration_episodes:
+                vals = [ep[f'{ep_key_prefix}_{tags[j]}_raw']
+                        for j in matching
+                        if f'{ep_key_prefix}_{tags[j]}_raw' in ep]
+                if vals:
+                    per_ep.append(np.mean(vals))
+            if per_ep:
+                ep_log[f'{wandb_key_prefix}_{tag}'] = float(np.mean(per_ep))
+
     # Buffer for episodes that finish across iterations (Stage 3)
     iteration_episodes = []
 
@@ -1085,6 +1108,8 @@ def main():
                             episode_behavior[_bk][:] = 0.0
                         for _bk in BEHAVIOR_DIST_KEYS:
                             episode_dist_sums[_bk][:] = 0.0
+                        if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[:, :]  = 0.0
+                        if num_predator_for_log > 0: episode_dist_per_predator_sums[:, :] = 0.0
 
                         # --- DreamerV3 only: clear replay buffers to prevent
                         # cross-stage dynamics contamination of the world model.
@@ -1193,16 +1218,21 @@ def main():
                                 episode_behavior[k] += info_np[k][t]
                             for k in BEHAVIOR_DIST_KEYS:
                                 episode_dist_sums[k] += info_np[k][t]
+                            # === Per-tag accumulation (Site 1: RecurrentPPO main) ===
+                            if 'dist_per_neutral' in info_np and num_neutral_for_log > 0:
+                                episode_dist_per_neutral_sums  += info_np['dist_per_neutral'][t]
+                            if 'dist_per_predator' in info_np and num_predator_for_log > 0:
+                                episode_dist_per_predator_sums += info_np['dist_per_predator'][t]
 
                         dones_t = done_np[t].astype(bool)
-                        
+
                         if np.any(dones_t):
                             completed_indices = np.where(dones_t)[0]
                             for i in completed_indices:
                                 total_episodes_completed += 1
                                 ep_reward = float(episode_returns[i])
                                 ep_length = int(episode_lengths[i])
-                                
+
                                 ep_data = {'r': ep_reward, 'l': ep_length}
                                 if info_np:
                                     for k in BEHAVIOR_KEYS:
@@ -1210,12 +1240,22 @@ def main():
                                     for k in BEHAVIOR_DIST_KEYS:
                                         ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
                                     ep_data['termination_reason'] = int(info_np['termination_reason'][t][i])
+                                    # Per-tag finalisation
+                                    ep_l_safe = max(ep_length, 1)
+                                    if num_neutral_for_log > 0:
+                                        means = episode_dist_per_neutral_sums[i] / ep_l_safe
+                                        for j, tag in enumerate(neutral_tags):
+                                            ep_data[f'mean_dist_rabbit_{tag}_raw'] = float(means[j])
+                                    if num_predator_for_log > 0:
+                                        means = episode_dist_per_predator_sums[i] / ep_l_safe
+                                        for j, tag in enumerate(predator_tags):
+                                            ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
 
                                 # Store for moving average (tqdm)
                                 ep_info_buffer.append(ep_data)
                                 # Store for iteration-level logging (Stage 3)
                                 iteration_episodes.append(ep_data)
-                                
+
                                 # Reset for next episode in this slot
                                 episode_returns[i] = 0.0
                                 episode_lengths[i] = 0
@@ -1224,7 +1264,9 @@ def main():
                                         episode_behavior[k][i] = 0.0
                                     for k in BEHAVIOR_DIST_KEYS:
                                         episode_dist_sums[k][i] = 0.0
-                    
+                                if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
+                                if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+
                     # Log AGGREGATED stats for the iteration (Stage 3)
                     if wandb_enabled and iteration_episodes and iteration % log_interval == 0:
                         rewards = [ep['r'] for ep in iteration_episodes]
@@ -1261,6 +1303,11 @@ def main():
                             term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                             for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
                                 ep_log[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                            # Per-tag fan-out
+                            _append_per_tag_means(ep_log, iteration_episodes, neutral_tags,
+                                                  'mean_dist_rabbit',   'Episode/MeanDistRabbit')
+                            _append_per_tag_means(ep_log, iteration_episodes, predator_tags,
+                                                  'mean_dist_predator', 'Episode/MeanDistPredator')
                         wandb.log(ep_log)
 
                     # Update progress bar based on total episodes completed
@@ -1415,16 +1462,19 @@ def main():
                     # Update statistics (Vectorized where possible)
                     rew_steps = transitions_np['reward'] # (T, B)
                     done_steps = transitions_np['terminal'] # (T, B)
-                    
-                    # Extract behavioral info arrays [T, B]
+
+                    # Extract behavioral info arrays [T, B] (or [T, B, num_entity] for per-instance)
                     info_steps = {}
                     for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']:
                         if k in transitions_np:
                             info_steps[k] = transitions_np[k]
-                    
+                    # Per-instance keys: shape [T, B, num_entity]
+                    dist_per_neutral_steps  = transitions_np.get('dist_per_neutral')   # [T, B, num_neutral] or None
+                    dist_per_predator_steps = transitions_np.get('dist_per_predator')  # [T, B, num_predator] or None
+
                     # More vectorized stats handling
                     done_indices = np.where(done_steps) # (t_idxs, env_idxs)
-                    
+
                     if done_indices[0].size > 0:
                         # Track episode returns/lengths
                         for i in np.unique(done_indices[1]):
@@ -1433,7 +1483,7 @@ def main():
                             for d_idx in d_idxs:
                                 ep_reward = float(episode_returns[i] + np.sum(rew_steps[curr_start:d_idx+1, i]))
                                 ep_length = int(episode_lengths[i] + (d_idx + 1 - curr_start))
-                                
+
                                 ep_data = {'r': ep_reward, 'l': ep_length}
                                 if info_steps:
                                     for k in BEHAVIOR_KEYS:
@@ -1441,6 +1491,16 @@ def main():
                                     for k in BEHAVIOR_DIST_KEYS:
                                         ep_data[k] = float((episode_dist_sums[k][i] + np.sum(info_steps[k][curr_start:d_idx+1, i])) / max(ep_length, 1))
                                     ep_data['termination_reason'] = int(info_steps['termination_reason'][d_idx, i])
+                                    # Per-tag finalisation (Site 2: DreamerV3 batch)
+                                    ep_l_safe = max(ep_length, 1)
+                                    if num_neutral_for_log > 0 and dist_per_neutral_steps is not None:
+                                        means = (episode_dist_per_neutral_sums[i] + np.sum(dist_per_neutral_steps[curr_start:d_idx+1, i], axis=0)) / ep_l_safe
+                                        for j, tag in enumerate(neutral_tags):
+                                            ep_data[f'mean_dist_rabbit_{tag}_raw'] = float(means[j])
+                                    if num_predator_for_log > 0 and dist_per_predator_steps is not None:
+                                        means = (episode_dist_per_predator_sums[i] + np.sum(dist_per_predator_steps[curr_start:d_idx+1, i], axis=0)) / ep_l_safe
+                                        for j, tag in enumerate(predator_tags):
+                                            ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
 
                                 ep_info_buffer.append(ep_data)
                                 iteration_episodes.append(ep_data)
@@ -1452,8 +1512,10 @@ def main():
                                         episode_behavior[k][i] = 0.0
                                     for k in BEHAVIOR_DIST_KEYS:
                                         episode_dist_sums[k][i] = 0.0
+                                if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
+                                if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
                                 curr_start = d_idx + 1
-                            
+
                             # Add leftover
                             if curr_start < num_steps:
                                 episode_returns[i] += np.sum(rew_steps[curr_start:, i])
@@ -1463,7 +1525,11 @@ def main():
                                         episode_behavior[k][i] += np.sum(info_steps[k][curr_start:, i])
                                     for k in BEHAVIOR_DIST_KEYS:
                                         episode_dist_sums[k][i] += np.sum(info_steps[k][curr_start:, i])
-                        
+                                if num_neutral_for_log  > 0 and dist_per_neutral_steps is not None:
+                                    episode_dist_per_neutral_sums[i]  += np.sum(dist_per_neutral_steps[curr_start:, i], axis=0)
+                                if num_predator_for_log > 0 and dist_per_predator_steps is not None:
+                                    episode_dist_per_predator_sums[i] += np.sum(dist_per_predator_steps[curr_start:, i], axis=0)
+
                         # Environments with NO dones in this batch
                         no_done_mask = np.ones(num_envs, dtype=bool)
                         no_done_mask[done_indices[1]] = False
@@ -1474,6 +1540,10 @@ def main():
                                 episode_behavior[k][no_done_mask] += np.sum(info_steps[k][:, no_done_mask], axis=0)
                             for k in BEHAVIOR_DIST_KEYS:
                                 episode_dist_sums[k][no_done_mask] += np.sum(info_steps[k][:, no_done_mask], axis=0)
+                        if num_neutral_for_log  > 0 and dist_per_neutral_steps is not None:
+                            episode_dist_per_neutral_sums[no_done_mask]  += np.sum(dist_per_neutral_steps[:, no_done_mask], axis=0)
+                        if num_predator_for_log > 0 and dist_per_predator_steps is not None:
+                            episode_dist_per_predator_sums[no_done_mask] += np.sum(dist_per_predator_steps[:, no_done_mask], axis=0)
                     else:
                         # No episodes finished at all
                         episode_returns += np.sum(rew_steps, axis=0)
@@ -1483,7 +1553,11 @@ def main():
                                 episode_behavior[k] += np.sum(info_steps[k], axis=0)
                             for k in BEHAVIOR_DIST_KEYS:
                                 episode_dist_sums[k] += np.sum(info_steps[k], axis=0)
-                    
+                        if num_neutral_for_log  > 0 and dist_per_neutral_steps is not None:
+                            episode_dist_per_neutral_sums  += np.sum(dist_per_neutral_steps, axis=0)
+                        if num_predator_for_log > 0 and dist_per_predator_steps is not None:
+                            episode_dist_per_predator_sums += np.sum(dist_per_predator_steps, axis=0)
+
                     global_step += num_envs * num_steps
 
                     if wandb_enabled and iteration_episodes and iteration % log_interval == 0:
@@ -1521,6 +1595,11 @@ def main():
                             term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                             for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
                                 ep_log[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                            # Per-tag fan-out
+                            _append_per_tag_means(ep_log, iteration_episodes, neutral_tags,
+                                                  'mean_dist_rabbit',   'Episode/MeanDistRabbit')
+                            _append_per_tag_means(ep_log, iteration_episodes, predator_tags,
+                                                  'mean_dist_predator', 'Episode/MeanDistPredator')
                         wandb.log(ep_log)
 
                     # Update progress bar
@@ -1649,6 +1728,11 @@ def main():
                             episode_behavior[k] += info_np_step[k]
                         for k in BEHAVIOR_DIST_KEYS:
                             episode_dist_sums[k] += info_np_step[k]
+                        # === Per-tag accumulation (Site 3: DQN step) ===
+                        if 'dist_per_neutral' in info and num_neutral_for_log > 0:
+                            episode_dist_per_neutral_sums  += np.array(info['dist_per_neutral'])
+                        if 'dist_per_predator' in info and num_predator_for_log > 0:
+                            episode_dist_per_predator_sums += np.array(info['dist_per_predator'])
 
                     dones_np = np.array(done).astype(bool)
                     if np.any(dones_np):
@@ -1657,7 +1741,7 @@ def main():
                             total_episodes_completed += 1
                             ep_reward = float(episode_returns[i])
                             ep_length = int(episode_lengths[i])
-                            
+
                             ep_data = {'r': ep_reward, 'l': ep_length}
                             if info:
                                 for k in BEHAVIOR_KEYS:
@@ -1665,6 +1749,16 @@ def main():
                                 for k in BEHAVIOR_DIST_KEYS:
                                     ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
                                 ep_data['termination_reason'] = int(info_np_step['termination_reason'][i])
+                                # Per-tag finalisation
+                                ep_l_safe = max(ep_length, 1)
+                                if num_neutral_for_log > 0:
+                                    means = episode_dist_per_neutral_sums[i] / ep_l_safe
+                                    for j, tag in enumerate(neutral_tags):
+                                        ep_data[f'mean_dist_rabbit_{tag}_raw'] = float(means[j])
+                                if num_predator_for_log > 0:
+                                    means = episode_dist_per_predator_sums[i] / ep_l_safe
+                                    for j, tag in enumerate(predator_tags):
+                                        ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
 
                             ep_info_buffer.append(ep_data)
                             iteration_episodes.append(ep_data)
@@ -1675,7 +1769,9 @@ def main():
                                     episode_behavior[k][i] = 0.0
                                 for k in BEHAVIOR_DIST_KEYS:
                                     episode_dist_sums[k][i] = 0.0
-                            
+                            if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
+                            if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+
                     # 4. Update Step
                     loss_val = 0.0
                     if dqn_buffer.size > batch_size:
@@ -1731,6 +1827,11 @@ def main():
                                 term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                                 for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
                                     ep_logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                                # Per-tag fan-out (Site 3: DQN)
+                                _append_per_tag_means(ep_logs, iteration_episodes, neutral_tags,
+                                                      'mean_dist_rabbit',   'Episode/MeanDistRabbit')
+                                _append_per_tag_means(ep_logs, iteration_episodes, predator_tags,
+                                                      'mean_dist_predator', 'Episode/MeanDistPredator')
 
                             wandb.log(ep_logs)
 
@@ -1810,6 +1911,11 @@ def main():
                             episode_behavior[k] += info_np_step[k]
                         for k in BEHAVIOR_DIST_KEYS:
                             episode_dist_sums[k] += info_np_step[k]
+                        # === Per-tag accumulation (Site 4: DRQN step) ===
+                        if 'dist_per_neutral' in info and num_neutral_for_log > 0:
+                            episode_dist_per_neutral_sums  += np.array(info['dist_per_neutral'])
+                        if 'dist_per_predator' in info and num_predator_for_log > 0:
+                            episode_dist_per_predator_sums += np.array(info['dist_per_predator'])
 
                     dones_np = np.array(done).astype(bool)
                     if np.any(dones_np):
@@ -1818,7 +1924,7 @@ def main():
                             total_episodes_completed += 1
                             ep_reward = float(episode_returns[i])
                             ep_length = int(episode_lengths[i])
-                            
+
                             ep_data = {'r': ep_reward, 'l': ep_length}
                             if info:
                                 for k in BEHAVIOR_KEYS:
@@ -1826,6 +1932,16 @@ def main():
                                 for k in BEHAVIOR_DIST_KEYS:
                                     ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
                                 ep_data['termination_reason'] = int(info_np_step['termination_reason'][i])
+                                # Per-tag finalisation
+                                ep_l_safe = max(ep_length, 1)
+                                if num_neutral_for_log > 0:
+                                    means = episode_dist_per_neutral_sums[i] / ep_l_safe
+                                    for j, tag in enumerate(neutral_tags):
+                                        ep_data[f'mean_dist_rabbit_{tag}_raw'] = float(means[j])
+                                if num_predator_for_log > 0:
+                                    means = episode_dist_per_predator_sums[i] / ep_l_safe
+                                    for j, tag in enumerate(predator_tags):
+                                        ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
 
                             ep_info_buffer.append(ep_data)
                             iteration_episodes.append(ep_data)
@@ -1836,7 +1952,9 @@ def main():
                                     episode_behavior[k][i] = 0.0
                                 for k in BEHAVIOR_DIST_KEYS:
                                     episode_dist_sums[k][i] = 0.0
-                            
+                            if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
+                            if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+
                     # 4. Update Step
                     loss_val = 0.0
                     if drqn_buffer.size > (trace_length + burn_in_length + batch_size):
@@ -1899,6 +2017,11 @@ def main():
                                 term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                                 for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
                                     ep_logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                                # Per-tag fan-out (Site 4: DRQN)
+                                _append_per_tag_means(ep_logs, iteration_episodes, neutral_tags,
+                                                      'mean_dist_rabbit',   'Episode/MeanDistRabbit')
+                                _append_per_tag_means(ep_logs, iteration_episodes, predator_tags,
+                                                      'mean_dist_predator', 'Episode/MeanDistPredator')
 
                             wandb.log(ep_logs)
 
@@ -1928,19 +2051,27 @@ def main():
                     if step_info is not None:
                         for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']:
                             info_np[k] = np.array(getattr(step_info, k))
+                        # Per-instance arrays: shape [num_steps, num_envs, num_entity]
+                        if num_neutral_for_log  > 0: info_np['dist_per_neutral']  = np.array(step_info.dist_per_neutral)
+                        if num_predator_for_log > 0: info_np['dist_per_predator'] = np.array(step_info.dist_per_predator)
 
                     rew_np = np.array(trajectories.reward)
                     done_np = np.array(trajectories.done)
-                    
+
                     for t in range(num_steps):
                         episode_returns += rew_np[t]
                         episode_lengths += 1
-                        
+
                         if info_np:
                             for k in BEHAVIOR_KEYS:
                                 episode_behavior[k] += info_np[k][t]
                             for k in BEHAVIOR_DIST_KEYS:
                                 episode_dist_sums[k] += info_np[k][t]
+                            # === Per-tag accumulation (Site 5: PPO non-recurrent) ===
+                            if 'dist_per_neutral' in info_np and num_neutral_for_log > 0:
+                                episode_dist_per_neutral_sums  += info_np['dist_per_neutral'][t]
+                            if 'dist_per_predator' in info_np and num_predator_for_log > 0:
+                                episode_dist_per_predator_sums += info_np['dist_per_predator'][t]
 
                         dones_t = done_np[t].astype(bool)
                         if np.any(dones_t):
@@ -1949,7 +2080,7 @@ def main():
                                 total_episodes_completed += 1
                                 ep_reward = float(episode_returns[i])
                                 ep_length = int(episode_lengths[i])
-                                
+
                                 ep_data = {'r': ep_reward, 'l': ep_length}
                                 if info_np:
                                     for k in BEHAVIOR_KEYS:
@@ -1957,6 +2088,16 @@ def main():
                                     for k in BEHAVIOR_DIST_KEYS:
                                         ep_data[k] = float(episode_dist_sums[k][i] / max(ep_length, 1))
                                     ep_data['termination_reason'] = int(info_np['termination_reason'][t][i])
+                                    # Per-tag finalisation
+                                    ep_l_safe = max(ep_length, 1)
+                                    if num_neutral_for_log > 0 and 'dist_per_neutral' in info_np:
+                                        means = episode_dist_per_neutral_sums[i] / ep_l_safe
+                                        for j, tag in enumerate(neutral_tags):
+                                            ep_data[f'mean_dist_rabbit_{tag}_raw'] = float(means[j])
+                                    if num_predator_for_log > 0 and 'dist_per_predator' in info_np:
+                                        means = episode_dist_per_predator_sums[i] / ep_l_safe
+                                        for j, tag in enumerate(predator_tags):
+                                            ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
 
                                 ep_info_buffer.append(ep_data)
                                 iteration_episodes.append(ep_data)
@@ -1967,7 +2108,9 @@ def main():
                                         episode_behavior[k][i] = 0.0
                                     for k in BEHAVIOR_DIST_KEYS:
                                         episode_dist_sums[k][i] = 0.0
-                            
+                                if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
+                                if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+
                     if wandb_enabled and iteration % log_interval == 0:
                         logs = {
                             "iteration": iteration,
@@ -2009,6 +2152,11 @@ def main():
                                 term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
                                 for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
                                     ep_logs[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+                                # Per-tag fan-out (Site 5: PPO non-recurrent)
+                                _append_per_tag_means(ep_logs, iteration_episodes, neutral_tags,
+                                                      'mean_dist_rabbit',   'Episode/MeanDistRabbit')
+                                _append_per_tag_means(ep_logs, iteration_episodes, predator_tags,
+                                                      'mean_dist_predator', 'Episode/MeanDistPredator')
 
                             wandb.log(ep_logs)
 

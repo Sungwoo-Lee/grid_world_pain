@@ -125,6 +125,7 @@ environment:
       nociception_intensity: 0.1
       spawn_area: [[1, 1], [5, 5]]
       patrol_area: [[1, 1], [5, 5]]
+      tag: "TL"
     - name: "rabbit"
       count: 1
       properties: [0.0, 1.0, 0.0, 0.0, 0.0]
@@ -133,10 +134,11 @@ environment:
       nociception_intensity: 0.1
       spawn_area: [[6, 6], [10, 10]]
       patrol_area: [[6, 6], [10, 10]]
+      tag: "BR"
 
   predator_enabled: true
   predators:
-    - name: "predator" #
+    - name: "predator" # full-grid patrol
       count: 1
       properties: [0.0, 1.0, 0.0, 0.0, 0.0]
       properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -151,6 +153,7 @@ environment:
       hunt_stamina_threshold: 0.7
       attack_delay: 3
       lose_interest_multiplier: 1.5
+      tag: "full"
 
   location_areas:
     - type: "grass"

@@ -21,6 +21,8 @@ class StepInfo(NamedTuple):
     dist_to_neutral: jnp.ndarray
     dist_to_hiding_predator: jnp.ndarray
     termination_reason: jnp.ndarray
+    dist_per_neutral: jnp.ndarray   # [num_neutral]  per-rabbit distance, unreduced
+    dist_per_predator: jnp.ndarray  # [num_predator] per-predator distance, unreduced
 
 class Transition(NamedTuple):
     obs: jnp.ndarray
@@ -207,6 +209,8 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
             dist_to_neutral=info['dist_to_neutral'],
             dist_to_hiding_predator=info['dist_to_hiding_predator'],
             termination_reason=info['termination_reason'],
+            dist_per_neutral=info['dist_per_neutral'],
+            dist_per_predator=info['dist_per_predator'],
         )
         trans = Transition(
             obs=obs, action=action, reward=reward, done=done,
