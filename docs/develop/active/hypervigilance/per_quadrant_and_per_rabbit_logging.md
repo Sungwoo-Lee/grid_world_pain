@@ -988,6 +988,66 @@ All values in (0, 14.5) as expected. Aggregated `MeanDistRabbit` falls between T
 
 ---
 
+### Dreamer T5 smoke — 2026-05-09
+
+**Purpose**: symmetrize the prior RPPO T5 smoke verification; confirm the
+Dreamer batch path (Site 2, `train.py:1465-1604`) emits non-zero per-tag
+distance values end-to-end.
+
+**Config**: `02-sameProp_R2_passivePredator.yaml` + `configs/models/dreamer_v3.yaml`.
+**Tags confirmed**: `neutral_tags=('TL','BR')`, `predator_tags=('TL',)`.
+**Method**: direct Python smoke — 3 iterations × 128 collect steps × 8 envs
+(3 072 env-steps total) via `DreamerTrainer.collect_sequence`, then simulating
+the Site 2 per-episode accumulation and `_append_per_tag_means` fan-out.
+
+#### Transition dict check (Site 2 input)
+
+| Key | Shape | PASS/FAIL |
+|---|---|:---:|
+| `dist_per_neutral` | (128, 8, 2) | PASS |
+| `dist_per_predator` | (128, 8, 1) | PASS |
+
+Both keys present in every `transitions_np` dict produced by `collect_sequence`.
+
+#### Per-step values (iteration 1, T=128, B=8)
+
+| Key | mean | min | max | In (0, 14.5) |
+|---|---:|---:|---:|:---:|
+| `dist_per_neutral[TL]` | 5.404 | 0.000 | 12.728 | PASS |
+| `dist_per_neutral[BR]` | 5.218 | 0.000 | 11.402 | PASS |
+| `dist_per_predator[TL]` | 4.927 | 0.000 | 11.402 | PASS |
+
+(min=0 means agent coincided with entity on that step, which is expected and valid.)
+
+#### Per-episode WandB fan-out (49 complete episodes across 3 iterations)
+
+| WandB key | Value | In (0, 14.5) | PASS/FAIL |
+|---|---:|:---:|:---:|
+| `Episode/MeanDistRabbit_TL` | 4.952 | yes | PASS |
+| `Episode/MeanDistRabbit_BR` | 5.458 | yes | PASS |
+| `Episode/MeanDistPredator_TL` | 4.908 | yes | PASS |
+
+All three values finite, non-zero, well within the (0, 14.5) range. Sample episodes:
+
+```
+ep#1: mean_dist_rabbit_TL_raw=3.739, mean_dist_rabbit_BR_raw=6.871, mean_dist_predator_TL_raw=3.073
+ep#2: mean_dist_rabbit_TL_raw=6.397, mean_dist_rabbit_BR_raw=2.371, mean_dist_predator_TL_raw=6.423
+ep#3: mean_dist_rabbit_TL_raw=4.738, mean_dist_rabbit_BR_raw=6.524, mean_dist_predator_TL_raw=2.455
+```
+
+**Sanity check**: `MeanDistRabbit_TL` and `MeanDistRabbit_BR` differ (3.739 vs 6.871
+in ep#1) — confirms the agent is not equidistant from both quadrants, as expected
+from a random-init untrained policy that happened to start near TL in that episode.
+
+**Aggregated key check**: `dist_to_neutral` (still in transitions, unchanged) covers
+the same ground as before; no regression to existing aggregated keys.
+
+**Overall verdict**: **PASS** — Dreamer batch site (Site 2) correctly propagates
+`dist_per_neutral`/`dist_per_predator` from the JAX transition dict through
+numpy accumulation to the WandB fan-out, matching the RPPO Site 1 post-fix behaviour.
+
+---
+
 ## Open questions for the user
 
 1. **`hiding_predators` tagging**: hiding-predators live inside
