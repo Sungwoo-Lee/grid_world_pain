@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/verification/check_observability_gates.py)",
-      "Bash(/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/verification/check_olfaction_parity.py)"
+      "Bash(/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/verification/check_olfaction_parity.py)",
+      "Bash(bash /home/vncuser/.claude/statusline-command.sh)",
+      "Bash(/home/vncuser/miniconda3/envs/grid_world_pain/bin/python *)"
     ]
   }
 }

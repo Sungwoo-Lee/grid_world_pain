@@ -35,7 +35,7 @@ If node + GPU is missing, **halt immediately** and ask the caller. Do **not** tr
 - **Project root** (NAS-mounted CIFS, identical on every node): `/media/nas01/projects/Interoceptive-AI/grid_world_pain`.
 - **Launch driver:** `run_command.py` at the project root. Logs land in `logs/YYYYMMDD_HHMMSS.log` on the NAS (readable from any node).
 - **Your launch script:** `train_command-agent.sh` — contains the actual `python train.py …` invocation. Its header comment lists every `train.py` CLI argument and the WandB-field convention. Read that header on every launch — it's the source of truth for what's available.
-- **Auth:** SSH public-key (`~/.ssh/id_ed25519_gridworld`). No password is ever required at launch time. `~/.ssh/config` routes nodes 101–114 to port 1800 with the right key, so plain `ssh vncuser@192.168.0.10X` works.
+- **Auth:** SSH public-key (`~/.ssh/id_ed25519_gridworld`). No password is ever required at launch time. `~/.ssh/config` routes nodes 101–114 to port 1800 with the right key via a `Match user vncuser` block, so plain `ssh vncuser@192.168.0.10X` works (other users — e.g. `sungwoo320` — fall through to default port 22 against the host's sshd, which is intentional).
 
 ## Setup Preconditions (check on every launch)
 
@@ -46,7 +46,7 @@ Run this check first:
 ```bash
 # Single line: returns OK only if all preconditions hold
 test -f ~/.ssh/id_ed25519_gridworld \
-  && grep -q '^Host 192.168.0.10? 192.168.0.11?' ~/.ssh/config 2>/dev/null \
+  && grep -q '^Match user vncuser host 192.168.0.10?,192.168.0.11?' ~/.ssh/config 2>/dev/null \
   && ssh -o BatchMode=yes -o ConnectTimeout=5 vncuser@192.168.0.101 'true' 2>/dev/null \
   && echo OK || echo BOOTSTRAP_NEEDED
 ```

@@ -82,11 +82,12 @@ else
     cat >> "$SSH_CONFIG" <<EOF
 
 $CONFIG_SENTINEL
-Host ${NETWORK_PREFIX}.10? ${NETWORK_PREFIX}.11?
-  Port $PORT
-  User $USER_REMOTE
-  IdentityFile $KEY
-  IdentitiesOnly yes
+# Scoped to user $USER_REMOTE so the port-$PORT rewrite doesn't capture other
+# users (e.g. host-level SSH on port 22 for the lab admin account).
+Match user $USER_REMOTE host ${NETWORK_PREFIX}.10?,${NETWORK_PREFIX}.11?
+    Port $PORT
+    IdentityFile $KEY
+    IdentitiesOnly yes
 EOF
     ok "config block appended"
 fi

@@ -71,6 +71,74 @@ def resolve_session(arg: str | None, *, full: bool = False) -> str:
 _HEX = re.compile(r"^[0-9a-f]{7,40}$")
 _PATH_HINT = re.compile(r"[/\\]|\.(md|py|yaml|yml|json|toml|sh|txt|html|csv|tsv)$")
 
+# Encoded project path Claude Code uses under ~/.claude/projects/<encoded>/<UUID>.jsonl.
+# Same encoding for the synced copy under claude_data/.claude/projects/.
+_PROJECT_ENCODED = "-media-nas01-projects-Interoceptive-AI-grid-world-pain"
+
+
+def resolve_full_uuid(prefix: str) -> str | None:
+    """Resolve an 8-char hex prefix to a full session UUID.
+
+    Scans Claude Code's project directories — first ~/.claude/projects/<encoded>/
+    (local, fresh sessions), then claude_data/.claude/projects/<encoded>/ (NAS-
+    synced from peers). Returns the first 36-char UUID stem matching the prefix,
+    or None if not found (e.g. for a brand-new session whose JSONL hasn't been
+    flushed yet).
+    """
+    needle = prefix.lower()
+    candidates = [
+        Path.home() / ".claude" / "projects" / _PROJECT_ENCODED,
+        REPO_ROOT / "claude_data" / ".claude" / "projects" / _PROJECT_ENCODED,
+    ]
+    for d in candidates:
+        if not d.is_dir():
+            continue
+        for entry in d.iterdir():
+            stem = entry.name[:-6] if entry.name.endswith(".jsonl") else entry.name
+            if len(stem) >= 36 and stem.lower().startswith(needle):
+                return stem
+    return None
+
+
+def ensure_session_row(text: str, time: str, session_token: str) -> str:
+    """Lazy-backfill a Sessions row when an event arrives from an un-anchored session.
+
+    `session_token` is what appears in the Events / Training runs row — either
+    'f3ab7f37' (top-level) or 'f3ab7f37/training-runner' (sub-agent). The
+    PARENT's full UUID is what we put in the Sessions table (one row per
+    top-level session, regardless of how many sub-agents it spawns).
+
+    Skips silently when:
+      - token is missing, malformed, or 'unknown'
+      - the prefix can't be resolved to a full UUID (no JSONL on disk yet)
+      - a Sessions row containing this full UUID already exists
+    """
+    if not session_token or session_token == "unknown":
+        return text
+    prefix = session_token.split("/")[0]
+    if len(prefix) < 8 or not all(c in "0123456789abcdef" for c in prefix.lower()):
+        return text
+
+    full_uuid = resolve_full_uuid(prefix)
+    if not full_uuid:
+        return text
+
+    # Already anchored?
+    try:
+        body_start, body_end = section_bounds(text, "Sessions")
+    except SystemExit:
+        return text
+    for ln in text.splitlines()[body_start:body_end]:
+        if full_uuid in ln:
+            return text
+
+    row = (
+        f"| {time} | (open) | {full_uuid} | "
+        f"(auto — session-start was not called) | "
+        f"Auto-created on first event. |  |"
+    )
+    return insert_row_at_top(text, "Sessions", row)
+
 
 def format_link(s: str) -> str:
     """Render a single link token in markdown-friendly form.
@@ -333,6 +401,7 @@ def cmd_event(args, type_label):
         time = args.time or now_hhmm()
         link = format_link(args.link)
         sess = resolve_session(args.session)
+        text = ensure_session_row(text, time, sess)
         row = f"| {time} | {sess} | {type_label} | {args.subject} | {link} |"
         text = insert_row_at_top(text, "Events (chronological, newest first)", row)
         write_atomic(path, text)
@@ -347,6 +416,7 @@ def cmd_training_start(args):
         time = args.time or now_hhmm()
         doc_md = format_link(args.doc)
         sess = resolve_session(args.session)
+        text = ensure_session_row(text, time, sess)
         row = (
             f"| {time} |  | {sess} | {args.tag} | {args.node}:{args.gpu} | running | "
             f"{args.cell} | {args.wandb} | — | {doc_md} |"
