@@ -21,29 +21,9 @@ verification_status: pass
 
 ## Context
 
-Round-2 Cell A1 (`02-sameProp_R2_passivePredator.yaml`) at 0.39 M episodes produced
-`Δ ≡ MeanDistPredator − MeanDistRabbit = +3.86` cells — a 10× exceedance of the
-H₁(A1) confirmation margin — but the result is **structurally uninterpretable**.
-With predator quadrant-locked to TL `[[1,1],[5,5]]` and rabbits at TL+BR, an
-agent that camps the BR rabbit corner and never visits TL produces *identical*
-WandB numbers to an agent that learned class-conditional avoidance. The
-aggregate `Episode/MeanDistRabbit = 2.58` could be "agent visits BR rabbit at
-distance ~1.5 and TL rabbit at distance ~3.5" (avoidance of the *co-located*
-rabbit) **or** "agent visits both rabbits at distance ~2.6" (true class
-indifference). The two pictures support opposite verdicts on H₀(A1) vs H₁(A1).
+Last week's hypervigilance experiment (Round 2, Cell A1 — the cell that disabled the predator's hunt mode and shrank its patrol zone to one corner) ran into a metric ambiguity that more training cannot fix. The setup confined the patrolling predator to the top-left 5×5 quadrant of the grid and placed neutral rabbits in the top-left and bottom-right corners, all four entities carrying matched olfactory smells. After about 0.4 million episodes, the WandB log showed predators were a striking 3.86 grid-cells farther from the agent than rabbits — six times the gap measured in the prior Round 1 baseline (which used the same matched-smell setup but a roaming predator and food/rabbit overlap). On its face the gap is well past the experiment's pre-registered "predators kept further than rabbits" confirmation threshold. **But two completely different agent behaviours produce that same number.** Either (a) the agent learned to recognise predators and stays back from them specifically — even from the predator that shares a corner with a rabbit; or (b) the agent learned the top-left corner is dangerous and never goes there at all, so the predator looks far simply because the agent is, and the agent does not actually distinguish the two classes anywhere. The current per-class metrics aggregate over instances and cannot tell those apart, so the experiment as logged is uninterpretable. The Round-2 design doc's failure-mode catalog (§9.10) names this exact contamination and flags it as the gating issue for any re-launch.
 
-The fix is **per-instance L2 distance, surfaced under a YAML-supplied tag**:
-
-```
-Episode/MeanDistRabbit_TL    Episode/MeanDistPredator_TL
-Episode/MeanDistRabbit_BR    Episode/MeanDistPredator_TL  # (only one predator in A1)
-```
-
-Comparing `MeanDistRabbit_TL` against `MeanDistPredator_TL` directly
-disambiguates "agent avoids the TL *location*" from "agent avoids the predator
-*class*" — the metric pair the Round-2 verdict needs. Without it, no amount of
-additional training resolves Cell A1 (see Round-2 §9.10). It is a
-**prerequisite for the Round-2 re-launch**, not optional polish.
+This plan adds an optional `tag` field to each entity instance in the YAML config and emits a pair of per-instance WandB keys at episode-end — `Episode/MeanDistRabbit_<tag>` and `Episode/MeanDistPredator_<tag>` — using whatever string the user wrote in the config. The source code stays geometry-agnostic: it never knows what `"TL"` means; it just attaches the suffix. With those keys the ambiguity resolves directly. If the agent treats the same-corner predator and rabbit identically, `Episode/MeanDistRabbit_TL` and `Episode/MeanDistPredator_TL` agree (location-driven avoidance, the safe-corner camping reading). If it treats them differently, they diverge (class-driven avoidance, the genuine recognition reading). This is therefore a **prerequisite for re-launching Round 2 at the full 10-million-episode budget**, not optional polish — the tooling, not the training horizon, is the bottleneck.
 
 ## Analysis
 
