@@ -46,6 +46,7 @@ A summary that is missing the Links section is broken — the whole point is to 
 
 | Date | Time | File | Study | Scope |
 |---|---|---|---|---|
+| 2026-05-09 | 15:55 | [20260509_1555_dreamer_v3_diagnosis](20260509_1555_dreamer_v3_diagnosis.md) | DreamerV3 diagnosis | Diagnostic battery + probe battery + conventional-fixes battery + offline WM test (4 + 4 + 2 cells + 1 inference-time test, 2026-05-07 → 2026-05-09) |
 | 2026-05-09 | 15:52 | [20260509_1552_sameprop_rabbit_avoidance_study](20260509_1552_sameprop_rabbit_avoidance_study.md) | SameProp rabbit-avoidance | Survey + R1 relog (n=2 seeds) + R2 partial (Cells C+A1, SIGINT'd at 0.4M ep) + per-tag metrics ship (2026-05-07 → 2026-05-09) |
 | 2026-05-09 | 14:21 | [20260509_1421_nmn_comparison_study](20260509_1421_nmn_comparison_study.md) | NMN comparison | Heterogeneity sweep + temp-clip rerun (10 + 5 cells, 2026-05-07 → 2026-05-09) |
 
