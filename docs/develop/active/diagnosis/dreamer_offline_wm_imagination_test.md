@@ -3,7 +3,7 @@ title: "DreamerV3: offline WM-imagination diagnostic on Cell A1 NoPred checkpoin
 topic: diagnosis
 status: active
 created: 2026-05-09
-last_updated: 2026-05-09
+last_updated: 2026-05-09T15:55
 phase: 1
 verified_by: senior-developer
 verified_on: 2026-05-09
@@ -26,14 +26,13 @@ verified_on: 2026-05-09
 
 ## Context
 
-The just-completed conventional-fixes mini-battery produced a sharp question that the existing in-training `imagined_rollout_probe` cannot answer cleanly:
+This plan describes a one-off diagnostic script that loads a trained DreamerV3 checkpoint, runs the world model in imagination, and asks whether it can predict the next several steps of observation, reward, and continuation accurately enough that any downstream learning failure cannot be blamed on a broken world model. It exists because the prior week's training-time experiments refuted every "task-shaping" and "conventional-knob" candidate without explaining the failure — leaving "is the world model itself broken?" as the next question, and that question requires a frozen-checkpoint inference-time test, not another training run.
 
-- **Cell A1** (NoPred + rr=0.0625): no `3zjhap9w`-style collapse, but stuck at survival 106 with T_starv=0.60. The agent stably under-eats in the simplest possible environment (food only, no predator, single-room 5×5).
-- **Cell A2** (predator + rr=0.0625 + dp=1): joint conventional fixes did not unlock the predator task — refutes the top-2 ranked causes from the conventional-failure-mode critique.
+The motivating result is the just-completed conventional-fixes mini-battery on the simplest possible task we can construct (food-only foraging, no predator, replay ratio dropped from our 0.5 to the published DreamerV3 paper default 0.0625). The trained agent reached survival ~106 steps and stably under-eats, with starvation in 60% of episodes — well below the 332-step peak the same task hit on a prior unfixed run before that run collapsed into runaway pessimism. The user's framing: this is the simplest environment we can build; if the world model can't predict the future even here, the architecture itself is the bottleneck and downstream actor / value debugging is moot. If it can, the failure is somewhere outside the world model.
 
-**The structural question** posed by the user: NoPred is the simplest possible environment. The world model should be able to predict food-conditioned future observations and rewards there. **If the WM cannot predict the future on NoPred, that is a fundamental architecture/capacity issue and downstream actor/value debugging is moot. If the WM can predict NoPred fine, then survival=106 is an actor / value-learning failure, not a WM failure.**
+The existing in-training imagined-rollout probe (parent plan, linked above) does **not** answer this question. It measures one thing — whether the continuation head predicts terminations during imagined rollouts — only at the training horizon (15 imagined steps), only on observation channels indirectly, and entangled with the moving target of an actively-training model. We need a post-hoc, frozen-checkpoint, replay-state-conditioned diagnostic that gives a defensible "the world model is / is not working properly on the simplest task" verdict, with per-channel observation reconstruction errors and explicit long-horizon stress (50 imagined steps, more than 3× the training horizon).
 
-The in-training probe ([`dreamer_imagined_rollout_termination_probe.md`](dreamer_imagined_rollout_termination_probe.md)) measures a single question — does the continuation head predict terminations during imagined rollouts? — and only at the training horizon H=15. It does **not** measure observation-channel reconstruction error in imagination, does not stress-test long horizons (H=50/100), and entangles the answer with the moving target of an actively-training WM. We need a **post-hoc, frozen-checkpoint, replay-state-conditioned** diagnostic that gives a defensible "the WM is / is not working properly on NoPred" verdict before we keep blaming downstream components.
+(Detailed cell-level numbers, configs, and run IDs from the motivating mini-battery live in its design doc, linked in the header above; subsequent sections of this plan re-cite those numbers in the technical context they belong to.)
 
 ## Analysis
 
