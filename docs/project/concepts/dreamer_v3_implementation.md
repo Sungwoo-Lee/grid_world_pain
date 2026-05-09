@@ -816,7 +816,554 @@ A reader placing DreamerV3 in the broader model-based-RL landscape may also want
 
 ---
 
-## §8 Review Trail
+## §9 Comparison with sheeprl reference implementation
+
+### §9.1 Why compare against sheeprl, scope, framework caveat
+
+`sheeprl` is the actively-maintained PyTorch + Lightning-Fabric implementation of Hafner 2023 by Eclectic Sheep (https://github.com/Eclectic-Sheep/sheeprl), widely used as a reference. It tracks the preprint exactly (the `dreamer_v3.py` docstring at L1–3 explicitly says "Adapted from the original implementation from https://github.com/danijar/dreamerv3"), with one `decoupled_rssm` extension we ignore here. This section gives a **second paper-grounded check** beyond §3's paper-vs-our-code audit: where sheeprl matches the paper but we do not, the deviation is doubly-confirmed; where we match the paper but sheeprl does not, the sheeprl-side anomaly is logged for the reader's awareness without changing our §6 list.
+
+The walked artefact lives at `tmp/sheeprl/` checked out at git rev `33b6366` (2024-07-12, "Add tanh_normal dist to PPO (#312)"). Files inspected: `algos/dreamer_v3/{agent.py, dreamer_v3.py, loss.py, utils.py, evaluate.py}`, `configs/algo/dreamer_v3{,_XS,_S,_M,_L,_XL}.yaml`, `configs/exp/dreamer_v3.yaml`, plus dependencies in `models/models.py` (`LayerNormGRUCell`), `data/buffers.py` (`SequentialReplayBuffer`, `EnvIndependentReplayBuffer`), `utils/utils.py` (`symlog/symexp`, `Ratio`, `Moments` constants), `utils/distribution.py` (`SymlogDistribution`, `MSEDistribution`, `TwoHotEncodingDistribution`).
+
+**Framework idiom is filtered from algorithmic substance.** PyTorch `nn.Module.forward()` vs Flax NNX `__call__`, `torch.optim.Adam` vs `optax.adam`, `torch.distributions.OneHotCategoricalStraightThrough` vs our hand-rolled `OneHotDist`, `lightning.fabric.clip_gradients` vs `optax.clip_by_global_norm`, `Independent(Bernoulli(...), 1)` vs our `optax.sigmoid_binary_cross_entropy` — all of these are framework idiom and are NOT listed below. Only differences with potential algorithmic effect are flagged.
+
+### §9.2 Three-way comparison frame
+
+Every difference falls into one of five categories:
+
+- **Both match paper, both match each other** — no-op, not listed.
+- **Sheeprl matches paper, ours diverges** — confirms a §6 deviation (cross-link to §6 item N).
+- **Ours matches paper, sheeprl diverges** — sheeprl-side anomaly; flagged for reader awareness; does not change §6.
+- **Both diverge from paper but in different ways** — each side flagged separately.
+- **Both diverge from paper in the SAME way** — paper-vs-community drift; both implementations made the same call. Important if it suggests the deviation is universally adopted by community implementations.
+
+The body of §9 organises findings by component (architecture, losses, buffer, numerics, optimiser, diagnostics, configs); §9.10 is the condensed all-in-one table; §9.11 lists proposed updates to §6.
+
+### §9.3 Architectural differences (RSSM, encoder, decoder, heads)
+
+#### §9.3.1 RSSM cell (recurrent core)
+
+- **Sheeprl** (`algos/dreamer_v3/agent.py:281–342, models/models.py:331–410`):
+  - `RecurrentModel` first runs a *pre-MLP*: `MLP(stoch_state ⊕ action, dense_units, hidden=[dense_units], LayerNorm, SiLU)` (`agent.py:309–317`). The cell's input is therefore `dense_units = 1024 (XL) / 512 (S)` after a SiLU+LN projection, NOT the raw `(stoch ⊕ action)`.
+  - `LayerNormGRUCell` (`models/models.py:331–410`) uses **one fused linear** `Linear(input ⊕ hidden, 3*hidden, bias=False)` followed by **a single LayerNorm** on the fused output, then chunked into `(reset, cand, update)`. Updates: `reset = sigmoid(reset)`, `cand = tanh(reset * cand)` (reset gate **applied** to candidate), `update = sigmoid(update - 1)` (canonical Hafner `-1` bias on update gate), `hx = update * cand + (1 - update) * hx`.
+  - The recurrent state has a **learnable initial state** (`nn.Parameter`, `agent.py:382–385`) passed through `tanh` at use, with `is_first` doing a hard `(1 - is_first) * recurrent_state + is_first * initial_recurrent_state` mix (`agent.py:427–428`) — i.e. the initial state is learned, not zero, and `is_first` *replaces* with the learned state (not zeroes).
+- **Ours** (`src/models/dreamer_v3_nnx.py:18–39, 41–139`):
+  - No pre-MLP. The cell input is `silu(img_in(stoch ⊕ action))` from a single `Linear(stoch_dim*discrete + action_dim, deter_dim)` directly into the cell (`nnx.py:51, 86–88`).
+  - `LayerNormGRUCell` uses **two separate dense projections** (`dense_ih: Linear(hidden, 3*hidden, bias=False)` and `dense_hh: Linear(hidden, 3*hidden, bias=False)`), each followed by **its own LayerNorm** (`ln_ih`, `ln_hh`), then **summed**, then split into `(reset, update, cand)`. Updates: `reset = sigmoid(reset)`, `update = sigmoid(update)` (NO `-1` bias), `cand = tanh(cand)` — **the reset gate is computed but never multiplied into the candidate**, and `update = sigmoid(update)` initialises near 0.5 instead of the canonical near-0 (Hafner uses `sigmoid(x - 1)` ≈ 0.27 at init), `h_new = (1 - update) * h + update * cand`.
+  - Initial state is hard zero (`initial(B)` returns `jnp.zeros`, `nnx.py:61–67`); `is_first` zeroes both `deter` AND `stoch` (already flagged in §3.1, §6 item 15).
+- **Paper.** Hafner's published `dreamerv3/nets.py` GRU uses one fused linear, one LayerNorm, `cand = tanh(reset * cand)`, and `update = sigmoid(update - 1)` (the `-1` bias is the standard Hafner-DreamerV3 convention, present in the published code at `dreamerv3/nets.py:GRU.__call__`). Sheeprl's cell matches this exactly. Our cell deviates on three counts: split LN/dense layout, missing reset-gate application, missing `-1` update bias.
+- **Classification.**
+  - **Split-LN/two-dense layout** — `MINOR DEVIATION (justified, ours)`. Algebraically equivalent to `Linear(input ⊕ hidden, 3h)` only if the LayerNorm is applied AFTER the sum; pre-summing two LNs is *not* equivalent to LN of sum. May change the LN-normalised gate magnitudes slightly. Sheeprl matches paper.
+  - **Missing reset-gate application to candidate** — `MAJOR DEVIATION (suspected unjustified, ours)`. This is a structural GRU change: paper and sheeprl both apply `cand = tanh(reset * cand)`, our code does `cand = tanh(cand)`. The reset gate is computed (`reset = sigmoid(reset)`) but never used. **NEW §6 candidate**. Suggests a refactor that stranded the reset gate; effect on training depends on whether the network learns to compensate via `update` and `cand` magnitudes.
+  - **Missing `-1` bias on update gate** — `MINOR DEVIATION (suspected unjustified, ours)`. Paper convention `sigmoid(x - 1)` ≈ 0.27 at init biases the GRU toward keeping the previous hidden state; our `sigmoid(x)` ≈ 0.5 at init mixes 50/50. Effect: more aggressive mixing of new candidate vs. carry at initialisation. Likely corrected by training but the inductive bias is different.
+  - **Missing pre-MLP before the cell** — `MINOR DEVIATION (justified, ours)`. We project `(stoch ⊕ action)` to `deter_dim` via a single Linear+SiLU; sheeprl does the same with one extra hidden layer (`MLP(..., hidden=[dense_units], ...)`). For our hidden=128 setup vs sheeprl's 1024, this is a width difference more than a structural one.
+  - **Initial state is zero (ours) vs learnable (sheeprl, paper).** `MINOR DEVIATION (suspected unjustified, ours)`. Sheeprl flag `learnable_initial_recurrent_state: True` (`configs/algo/dreamer_v3.yaml:54`) is paper-canonical. Our `initial(B)` returns hard zero. Since `is_first` reset is hard at the first step anyway, the practical effect is small — but for `imagine_step` start states (which use the posterior `deter`, not the initial), this difference does not bite either way. Flag for completeness.
+
+#### §9.3.2 Posterior + prior heads (representation + transition models)
+
+- **Sheeprl** (`agent.py:1018–1051`):
+  - **Representation model**: `MLP(deter_dim + embed_dim, stoch_dim*discrete, hidden=[representation.hidden_size=1024 (XL)/512 (S)], SiLU, LayerNorm)` — a one-hidden-layer MLP, NOT a single Linear.
+  - **Transition model**: `MLP(deter_dim, stoch_dim*discrete, hidden=[transition.hidden_size=1024/512], SiLU, LayerNorm)` — also one hidden layer.
+- **Ours** (`nnx.py:51–58`):
+  - **Posterior head (`obs_out`)**: single `Linear(deter_dim + embed_dim, stoch_dim*discrete)` — no hidden layer.
+  - **Prior head (`img_out`)**: single `Linear(deter_dim, stoch_dim*discrete)` after the GRU — no hidden layer.
+- **Paper.** Hafner published code uses an MLP (one hidden layer) for both heads. Sheeprl matches. Our code is shallower.
+- **Classification.** `MAJOR DEVIATION (suspected unjustified, ours)`. **NEW §6 candidate** — our prior/posterior heads are shallower than paper-canonical. With our small `deter_dim=512` and `embed_dim=128`, removing the hidden layer halves the head capacity; not paper-faithful. Confirmed by sheeprl as intended-paper behaviour.
+
+#### §9.3.3 Encoder
+
+- **Sheeprl** (`agent.py:100–151`): `MLPEncoder` is a flat `MLP(input_dim, [dense_units]*mlp_layers, SiLU, LayerNorm)`. For S profile: `dense_units=512`, `mlp_layers=2`; for XL: `1024 × 5`. Symlog applied inside `forward` (`agent.py:150`). One LayerNorm per linear; final activation is the last hidden's SiLU (no extra "final" SiLU). For vector observations sheeprl has only this flat path (CNN path is for vision). MultiEncoder concatenates CNN + MLP outputs.
+- **Ours** (§3.2, `nnx.py:197–370`): Hierarchical hub (per-sensor MLP → multimodal hub MLP → final SiLU) with embed_dim=128, hidden 128. Three LayerNorms in series at the embed bottleneck when `use_layer_norm=true` (per-linear LN inside body, plus optional `mod_*_ln` LN, plus the body's last linear's own LN). Symlog applied inside `train_step` (not inside the encoder).
+- **Paper.** MLP encoder for vector observations: `mlp_layers × dense_units`, LayerNorm + SiLU. Our hierarchical structure is project-specific.
+- **Classification.**
+  - Hierarchical hub — `EXTENSION (not in paper, ours)`. Already flagged in §3.2 / §6 item 1 as deliberate. Sheeprl confirms paper has only the flat MLP.
+  - Width 128 — `MAJOR DEVIATION (deliberate, ours)`. §3.2 / §6 item 4. Confirmed against sheeprl's S=512, M=640, L=768, XL=1024 — our 128 is below sheeprl XS=256.
+  - Three LNs in series — `MINOR DEVIATION (suspected unjustified, ours)`. §3.2. Sheeprl has one LN per hidden; we have body-LN + (optional) `mod_*_ln`. Confirmed by sheeprl as the more standard pattern.
+  - Symlog applied inside `train_step` (not inside the encoder) — `FRAMEWORK-ONLY`. Sheeprl applies `symlog` inside `MLPEncoder.forward`; we apply it at the call site. Same numerical result; placement difference only.
+
+#### §9.3.4 Decoder
+
+- **Sheeprl** (`agent.py:229–278`): `MLPDecoder` is `MLP(latent_state_size, [dense_units]*mlp_layers, SiLU, LayerNorm)` followed by a per-key `Linear(dense_units, output_dim)` *head*. The decoder body is **shared across MLP keys**, with separate output heads for each. Output prediction is wrapped in `SymlogDistribution(..., dist="mse")` (`utils/distribution.py:152–193`) which computes `(symlog(target) - mode)**2` MSE — i.e. **decoder predicts symlog-space, target is symlog'd before MSE**. This matches our recipe.
+- **Ours** (§3.3, `nnx.py:372–442`): Hierarchical decoder mirrors hierarchical encoder; per-sensor heads after a shared multimodal hub. Loss is `mean(square(recon - symlog(obs)))` in `trainer.py:213–215` — decoder predicts symlog space, target is symlog'd, no `symexp` on output.
+- **Classification.** Same recipe (decoder-in-symlog-space MSE) — both match paper. Hierarchical structure of decoder is `EXTENSION (ours)`.
+
+#### §9.3.5 Reward head
+
+- **Sheeprl** (`agent.py:1099–1112`): `MLP(latent_state_size, output_dim=255 bins, hidden=[dense_units]*mlp_layers, SiLU, LayerNorm)`. The bin count is `cfg.algo.world_model.reward_model.bins = 255`. Wrapped in `TwoHotEncodingDistribution(logits, low=-20, high=20, transfwd=symlog, transbwd=symexp)`.
+- **Ours** (§3.4.1, `nnx.py:530`): `MLP(feat_dim, 255, [128, 128])`. Bin count and range hard-coded in `to_twohot/from_twohot` defaults.
+- **Classification.** Architecture (255-bin logit head with two-hot CE + symlog target) matches in both. **The two-hot bin range is the substantive difference** — see §9.6.
+
+#### §9.3.6 Continue head
+
+- **Sheeprl** (`agent.py:1114–1127`): `MLP(latent_state_size, output_dim=1, hidden=[dense_units]*mlp_layers, SiLU, LayerNorm)`. Wrapped in `Independent(BernoulliSafeMode(logits=...), 1)` (`dreamer_v3.py:167`); BCE via `-pc.log_prob(continue_targets)` where `continue_targets = 1 - terminated` (`dreamer_v3.py:168`).
+- **Ours** (§3.4.2, `nnx.py:531`): Same head structure (`MLP(feat_dim, 1, [128, 128])`), BCE via `optax.sigmoid_binary_cross_entropy(cont_pred, 1.0 - terminal[..., None])`.
+- **Classification.** Both match paper.
+
+#### §9.3.7 Actor head
+
+- **Sheeprl** (`agent.py:694–845`): `Actor` class with `MLP(latent_state_size, [dense_units]*mlp_layers=512×2 (S) / 1024×5 (XL), SiLU, LayerNorm)` body + per-action-component head `nn.Linear(dense_units, action_dim)`. Discrete distribution: `OneHotCategoricalStraightThrough(logits=_uniform_mix(logits))` (`agent.py:832`). Continuous distribution path supports `auto/normal/tanh_normal/scaled_normal` (we don't use). Unimix applied inside `_uniform_mix` (`agent.py:839–845`): `probs = (1 - unimix) * softmax(logits) + unimix / num_classes`, then `logits = probs_to_logits(probs)` — i.e. unimix-mixed logits are returned, and the distribution is constructed from those mixed logits. Unimix value `cfg.algo.unimix = 0.01` is threaded through (`agent.py:1149`).
+- **Ours** (§3.4.3, `nnx.py:572–576`): `MLP(feat_dim, act_dim, [128, 128])` → `OneHotDist(logits, unimix=0.01)`. Unimix mixing inside `OneHotDist.__init__` (`util.py:83–89`). YAML key `agent.unimix` is dead — constructor default is the operative value (§3.7.3, §6 item 10).
+- **Classification.**
+  - Architecture matches paper at structural level; widths differ (§6 item 4).
+  - Actor depth — `MAJOR DEVIATION (deliberate, ours)`. Sheeprl `mlp_layers=2` (S) / 5 (XL). Ours `[128, 128]` = 2 hidden layers. **Depth matches the S profile**, only width differs.
+  - Unimix YAML key being dead — `MINOR DEVIATION (suspected unjustified, ours)`. §6 item 10. Sheeprl threads `cfg.algo.unimix` through; our YAML key `agent.unimix` is not threaded.
+  - Action-clip parameter — `EXTENSION (sheeprl-only, but only used in continuous-action path)`. Sheeprl has `action_clip: 1.0` (`configs/algo/dreamer_v3.yaml:129`) for continuous actions; not relevant to our discrete-action setup.
+
+#### §9.3.8 Critic head
+
+- **Sheeprl** (`agent.py:1153–1166`): `MLP(latent_state_size, output_dim=cfg.algo.critic.bins=255, hidden=[dense_units]*mlp_layers, SiLU, LayerNorm)`. Wrapped in `TwoHotEncodingDistribution(logits, dims=1)`.
+- **Ours** (§3.4.4, `nnx.py:576`): `MLP(feat_dim, 255, [128, 128])`. Same `to_twohot`/`from_twohot` machinery.
+- **Classification.** Architecture matches; width is the §6 item 4 deviation. Actor and critic both depth=2 hidden layers on our side, vs sheeprl S=2 hidden — **depth matches sheeprl S profile exactly**, width is the smallness difference.
+
+#### §9.3.9 Slow target critic
+
+- **Sheeprl** (`dreamer_v3.py:674–680`): The target critic is updated every `cfg.algo.critic.per_rank_target_network_update_freq` gradient steps via `tcp.data.copy_(tau * cp.data + (1 - tau) * tcp.data)` with `tau = 0.02` (config `algo.critic.tau`). Special case at gradient step 0: `tau = 1` (hard copy). This is a **periodic** EMA-style update (every `update_freq` grad steps), defaulting to **every 1 gradient step** with `tau = 0.02` — which makes it identical to per-step EMA in the canonical config. Sheeprl wraps the target_critic via `fabric_player.setup_module(target_critic)` (`agent.py:1220`); it lives outside the training Fabric.
+- **Ours** (§3.4.5, `trainer.py:501–505`): Per-step EMA `0.98 * target + 0.02 * online` after every `train_step`. No update-frequency knob; effectively identical to sheeprl with `update_freq=1, tau=0.02`. **The EMA decay matches.**
+- **Critical difference — what is bootstrapped at λ-return time.**
+  - **Sheeprl** (`dreamer_v3.py:243–256`): `predicted_values = TwoHotEncodingDistribution(critic(imagined_trajectories), dims=1).mean` — uses **the ONLINE/fast critic** for `predicted_values` going into `compute_lambda_values`. The target critic `target_critic` is used **only** in the critic loss (`dreamer_v3.py:307–310`):
+    ```python
+    qv = TwoHotEncodingDistribution(critic(imagined_trajectories.detach()[:-1]), dims=1)
+    predicted_target_values = TwoHotEncodingDistribution(
+        target_critic(imagined_trajectories.detach()[:-1]), dims=1
+    ).mean
+    ...
+    value_loss = -qv.log_prob(lambda_values.detach())
+    value_loss = value_loss - qv.log_prob(predicted_target_values.detach())
+    ```
+    i.e. critic loss = CE on actual `lambda_values` PLUS a self-regularisation CE on `predicted_target_values` (the target critic's own value estimate, used as a soft target). This is paper Eq. 10 verbatim ("regularizing the critic towards predicting the outputs of an exponentially moving average of its own parameters").
+  - **Ours** (`trainer.py:367, 388, 411`): `target_critic` is the bootstrap source for `compute_lambda_values`; the regularisation-via-target-critic CE term (sheeprl's `qv.log_prob(predicted_target_values.detach())`) does **not exist** in our code.
+- **Classification.**
+  - **λ-return bootstrap source uses target critic, not online critic** — `MAJOR DEVIATION (suspected unjustified, ours)`. **CONFIRMS §6 item 3** (`MAJOR DEVIATION (suspected unjustified — corresponds to the preprint's ablated SlowTarget variant)`). Sheeprl confirms paper-canonical recipe. The earlier §3.4.5 evidence (preprint Appendix C item 6 + Nature page 3) is now triply-confirmed: paper text + paper code + sheeprl reference impl all agree.
+  - **Critic self-regularisation term against target critic is missing** — `MAJOR DEVIATION (suspected unjustified, ours)`. **NEW §6 candidate**. Sheeprl `value_loss = -qv.log_prob(lambda_values.detach()) - qv.log_prob(predicted_target_values.detach())` — the second term is paper-Eq.-10 self-EMA regularisation. Our code has only the first term. This is a *separate* deviation from §6 item 3: §6 item 3 is "wrong bootstrap source for λ-returns"; this new finding is "missing regularisation term in critic loss". The two deviations are entangled because both are about how the slow critic enters the loss, but they are distinct mechanisms.
+
+### §9.4 Loss differences (recon, reward, continue, KL dynamics/repr, λ-returns, actor, critic)
+
+#### §9.4.1 Reconstruction loss
+
+- **Sheeprl** (`loss.py:61, dreamer_v3.py:152–161`): `observation_loss = -sum_k po[k].log_prob(observations[k])` where `po[k]` is `MSEDistribution` for CNN keys (raw MSE) or `SymlogDistribution(..., dist="mse")` for MLP keys (`(symlog(target) - mode)^2`). Aggregation: `sum` over the event dims (the trailing observation axis). The `.mean()` happens only at the final `reconstruction_loss = (kl_regularizer * kl_loss + observation_loss + reward_loss + continue_loss).mean()` (`loss.py:80`).
+- **Ours** (§3.5.1, `trainer.py:213–215`): `loss_recon = jnp.mean(jnp.square(recon - obs))` where `obs = symlog(batch['obs'])`. **Mean over all axes**, not sum-over-event-dim then mean-over-batch.
+- **Classification.** `MINOR DEVIATION (suspected unjustified, ours)`. **NEW §6 candidate (low-priority)**. Sheeprl does `sum_dim(squared_error) → mean_over_batch_time`; we do `mean_over_all`. Effect: our loss is sheeprl's divided by `obs_dim`. With `obs_dim ≈ 19` for our gridworld, the implicit weighting of the recon loss is `~19×` smaller than canonical. The relative weight of reconstruction vs other WM losses (which are already in mean form) shifts: in sheeprl `loss_recon` has implicit weight `obs_dim` (because of sum-over-channels then mean), in ours weight 1. Likely a contributor to why our reward head has been observed under-trained relative to recon (because both are scaled equally by us, and the reward head's output is effectively a 255-way classification while the recon is a 19-way regression — but in sheeprl semantics, recon would scale up by ~19 making it dominate).
+
+#### §9.4.2 Reward loss
+
+- **Sheeprl** (`loss.py:62, dreamer_v3.py:164`): `pr = TwoHotEncodingDistribution(world_model.reward_model(latent_states), dims=1)`; `reward_loss = -pr.log_prob(rewards)` where `log_prob` does `target * log_softmax(logits)` summed over the bin axis (`utils/distribution.py:253–276`). Final `.mean()` at the aggregate (`loss.py:80, 85`).
+- **Ours** (§3.5.2, `trainer.py:217–220`): `loss_rew = -jnp.mean(jnp.sum(rew_target * jax.nn.log_softmax(rew_pred), axis=-1))` — sum over bins, mean over batch+time.
+- **Classification.** Both match paper. Same numerical result.
+
+#### §9.4.3 Continue loss
+
+- **Sheeprl** (`loss.py:76–77, dreamer_v3.py:167–168`): `pc = Independent(BernoulliSafeMode(logits=continue_model(latent_states)), 1); continues_targets = 1 - terminated; continue_loss = continue_scale_factor * -pc.log_prob(continues_targets)`. `continue_scale_factor = 1.0` in canonical config (`configs/algo/dreamer_v3.yaml:51`). Final `.mean()` at the aggregate.
+- **Ours** (§3.5.3, `trainer.py:222–224, 251`): `loss_cont = optax.sigmoid_binary_cross_entropy(cont_pred, 1.0 - terminal[..., None]).mean()`; multiplied by `CONT_LOSS_WEIGHT = config.get_mandatory('agent.cont_loss_weight', float)` (canonical 1.0).
+- **Classification.** Both match paper. Both have a configurable `continue_scale_factor` / `cont_loss_weight` knob (default 1.0, both); knob is `EXTENSION` in both implementations. Confirms our §6 §3.5.3 "knob is EXTENSION but defaults match paper" framing.
+
+#### §9.4.4 KL dynamics + KL representation
+
+- **Sheeprl** (`loss.py:64–75, configs/algo/dreamer_v3.yaml:47–49`):
+  ```python
+  dyn_loss = kl = kl_divergence(
+      Independent(OneHotCategoricalStraightThrough(logits=posteriors_logits.detach()), 1),
+      Independent(OneHotCategoricalStraightThrough(logits=priors_logits), 1),
+  )
+  free_nats = torch.full_like(dyn_loss, kl_free_nats)  # 1.0
+  dyn_loss = kl_dynamic * torch.maximum(dyn_loss, free_nats)            # kl_dynamic = 0.5
+  repr_loss = kl_divergence(
+      Independent(OneHotCategoricalStraightThrough(logits=posteriors_logits), 1),
+      Independent(OneHotCategoricalStraightThrough(logits=priors_logits.detach()), 1),
+  )
+  repr_loss = kl_representation * torch.maximum(repr_loss, free_nats)   # kl_representation = 0.1
+  kl_loss = dyn_loss + repr_loss
+  ```
+  Then multiplied by `kl_regularizer = 1.0` and added to the aggregate. Per-state aggregation: `Independent(..., 1)` makes `kl_divergence` sum over the rightmost (stoch_dim, classes) axes — i.e. clipping is per `(B, T)` state, after aggregation, identical to ours.
+- **Ours** (§3.5.4, `trainer.py:17–23, 226–249`): `FREE_NATS = 1.0`, `DYN_SCALE = 0.5`, `REP_SCALE = 0.1`, `KL_SCALE = 1.0` (declared, never used).
+- **Classification.**
+  - **`free_nats = 1.0, dyn_scale = 0.5, rep_scale = 0.1`** — matches paper preprint, matches sheeprl. `MATCHES PAPER (preprint)` for both implementations. Confirms §3.5.4.
+  - **`kl_regularizer = 1.0` is multiplied through in sheeprl, paper Eq. 4.** Our `KL_SCALE = 1.0` is dead. Both produce the same numerical output (since the value is 1.0). `MINOR DEVIATION (suspected unjustified, ours)`. §6 item 9 confirmed; sheeprl actually uses the constant.
+  - **Per-state clipping axis aggregation.** Both sum over class+stoch_group axes BEFORE the `max(., free_nats)` clip. Identical. §3.5.4 / §3.7.5 are correct.
+  - **`dyn_scale = 0.5` deviates from Nature.** §6 item 5. Sheeprl matches preprint (0.5), so this is a paper-vs-Nature deviation, not a sheeprl-vs-us deviation. Both implementations target the preprint.
+
+#### §9.4.5 λ-return computation
+
+- **Sheeprl** (`utils.py:66–77`):
+  ```python
+  def compute_lambda_values(rewards, values, continues, lmbda=0.95):
+      vals = [values[-1:]]
+      interm = rewards + continues * values * (1 - lmbda)
+      for t in reversed(range(len(continues))):
+          vals.append(interm[t] + continues[t] * lmbda * vals[-1])
+      ret = torch.cat(list(reversed(vals))[:-1])
+      return ret
+  ```
+  Caller (`dreamer_v3.py:251–256`):
+  ```python
+  lambda_values = compute_lambda_values(
+      predicted_rewards[1:],
+      predicted_values[1:],
+      continues[1:] * cfg.algo.gamma,
+      lmbda=cfg.algo.lmbda,
+  )
+  ```
+  where `predicted_values = TwoHotEncodingDistribution(critic(imagined_trajectories), dims=1).mean` — **online critic, NOT target critic**. Note also: `predicted_rewards[1:]` and `predicted_values[1:]` slice off the first imagined step (which corresponds to the start state with the initial action); λ-returns are computed for steps 1..H, with the bootstrap at step H+1 = `predicted_values[-1]`. This indexing matches paper Eq. 11 with `R^lambda_T = v(s_T)`.
+- **Ours** (§3.5.5, `trainer.py:28–51, 411–416`): Same recursive structure (one-pass reverse scan, `bootstrap = (1-λ)*v + λ*next_return`, `current = r + c*bootstrap`). **Bootstrap value `v` comes from `target_critic`** at every imagined step, NOT the online critic.
+- **Classification.**
+  - **Recursion math** — both match paper Eq. 11.
+  - **γ folded into `c_t`** — both implementations do this (sheeprl `continues * gamma` at L254; ours `conts * GAMMA` at L416). `MATCHES PAPER` for both.
+  - **Bootstrap source: ours uses target critic, sheeprl uses online critic.** `MAJOR DEVIATION (suspected unjustified, ours)`. **CONFIRMS §6 item 3.** Triply-confirmed: paper text + paper code + sheeprl reference all use the online critic.
+
+#### §9.4.6 Critic loss
+
+- **Sheeprl** (`dreamer_v3.py:307–316`):
+  ```python
+  qv = TwoHotEncodingDistribution(critic(imagined_trajectories.detach()[:-1]), dims=1)
+  predicted_target_values = TwoHotEncodingDistribution(
+      target_critic(imagined_trajectories.detach()[:-1]), dims=1
+  ).mean
+  value_loss = -qv.log_prob(lambda_values.detach())                      # term A: CE on actual lambda_values
+  value_loss = value_loss - qv.log_prob(predicted_target_values.detach()) # term B: self-EMA regularisation against target critic
+  value_loss = torch.mean(value_loss * discount[:-1].squeeze(-1))         # discount-weighted mean
+  ```
+  Critic loss = **two-hot CE on actual `lambda_values`** + **two-hot CE on `predicted_target_values` (the target critic's value estimate as soft regularisation target)**, both summed, then discount-weighted mean. The second term is paper Eq. 10 self-EMA regularisation.
+- **Ours** (§3.5.6, `trainer.py:421–430`): Only term A — `loss_critic = mean(-sum(target_twohot * log_softmax(v_pred_logits), -1) * discount_weights)` where `target_twohot = to_twohot(stop_gradient(lambda_returns))`. The self-EMA regularisation term against `target_critic` is **NOT PRESENT**.
+- **Classification.**
+  - Term A (CE on `lambda_returns`) — matches paper, matches sheeprl.
+  - Term B (self-EMA regularisation against target critic) — `MAJOR DEVIATION (suspected unjustified, ours)`. **NEW §6 candidate**. Already noted in §9.3.9.
+  - **Discount weighting** — both implementations use `cumprod(continues * gamma)` along the time axis as a stop-gradient weight. Both match paper.
+- **Critic-on-RAW-lambda-returns** (no percentile-norm) — both implementations train critic on raw lambda_returns. `MATCHES PAPER` for both.
+
+#### §9.4.7 Actor loss
+
+- **Sheeprl** (`dreamer_v3.py:262–304`):
+  ```python
+  policies = actor(imagined_trajectories.detach())[1]
+  baseline = predicted_values[:-1]                          # online critic, [0..H]
+  offset, invscale = moments(lambda_values, fabric)         # update + read in one call
+  normed_lambda_values = (lambda_values - offset) / invscale
+  normed_baseline = (baseline - offset) / invscale
+  advantage = normed_lambda_values - normed_baseline
+  if is_continuous:
+      objective = advantage
+  else:  # discrete (our path)
+      objective = (
+          torch.stack([p.log_prob(imgnd_act.detach()).unsqueeze(-1)[:-1]
+                       for p, imgnd_act in zip(policies, ...)], dim=-1).sum(dim=-1)
+          * advantage.detach()
+      )
+  entropy = cfg.algo.actor.ent_coef * torch.stack([p.entropy() for p in policies], -1).sum(dim=-1)
+  policy_loss = -torch.mean(discount[:-1].detach() * (objective + entropy.unsqueeze(dim=-1)[:-1]))
+  ```
+  - For discrete: `objective = log_prob(action) * stop_gradient(advantage)` — REINFORCE with normalised advantage, same as ours.
+  - **Both sides of the advantage are normalised** — `normed_lambda_values` AND `normed_baseline`. Same as ours.
+  - Entropy uses `p.entropy()` from PyTorch's distribution; we compute `-sum(softmax(logits) * log_softmax(logits))` manually — same numerical result.
+  - **`ent_coef` (entropy_scale) = 3e-4** in canonical config (`configs/algo/dreamer_v3.yaml:119`). Same as ours.
+  - Discount weighting via `discount[:-1]` — `discount = cumprod(continues * gamma) / gamma` per `dreamer_v3.py:260` (so `discount[0] = 1` because of the divide-by-gamma). Ours: `cumprod` of `concat([1, conts[:-1] * GAMMA])` (`trainer.py:421–423`) — same first-element-1 convention, slightly different formulation but equivalent.
+- **Ours** (§3.5.7, `trainer.py:432–445`): Same advantage formula, same entropy formula, same discount weighting.
+- **Classification.** Both implementations match paper preprint Eq. 11. Both normalise both sides of the advantage (`MATCHES PAPER`, the §6 item 21 "deviation" is algebraically zero). Same `ent_coef = 3e-4`. Confirms §3.5.7.
+
+### §9.5 Buffer + sampling differences
+
+- **Sheeprl** (`data/buffers.py:363–526` `SequentialReplayBuffer`, `:529–...` `EnvIndependentReplayBuffer`):
+  - `EnvIndependentReplayBuffer` instantiates **one independent buffer per env**, each of size `buffer_size // num_envs` (`dreamer_v3.py:478`). `add` dispatches per-env data into per-env buffers (`buffers.py:627–654`).
+  - `sample(batch_size, sequence_length, n_samples)` (`buffers.py:395–465`) draws `batch_size * n_samples` start indices uniformly over `[0, _pos - sequence_length + 1)` (when not full) or `[0, _pos - sequence_length + 1) ∪ [_pos, buffer_size)` excluding the seam (when full). **Each batch row's start index is uniform over valid sub-sequence starts** — NOT block-aligned. Each row may come from a different env (`_get_samples` picks `env_idxes` per batch row, `buffers.py:483`).
+  - **No `prioritize_ends`** in sheeprl's DreamerV3 buffer (the official Hafner code has a `prioritize_ends` knob; sheeprl's port omits it).
+  - **No positive-reward sub-buffer**, no recent-window sub-buffer, no mixture sampling. `SequentialReplayBuffer` is the only buffer.
+  - `sample_tensors` (`dreamer_v3.py:664`) calls `sample` with `n_samples=per_rank_gradient_steps` — i.e. all `n_samples` batches for one Lightning `train_step` are drawn in a single sample call.
+  - Per-env buffer size = `cfg.buffer.size // num_envs = 1_000_000 / num_envs`. So total capacity is `1_000_000` like ours.
+  - Sequence length: `cfg.algo.per_rank_sequence_length = 64` (`exp/dreamer_v3.yaml:14`), matches paper.
+- **Ours** (§3.6, `trainer.py:917–1017`):
+  - **Single env-major buffer** with `sequence_length = 128` block-aligned starts; mixture sampling with positive + recent + uniform sub-pools.
+- **Classification.**
+  - **Mixture sampling + positive-reward buffer** — `EXTENSION (not in paper, not in sheeprl, ours)`. **CONFIRMS §6 item 1a**. Sheeprl confirms the paper baseline is uniform sub-sequence sampling.
+  - **Block-aligned (vs uniform) sub-sequence starts** — `MAJOR DEVIATION (deliberate, ours)`. **CONFIRMS §6 item 1d**. Sheeprl does uniform-over-valid-start indexing, exactly as paper.
+  - **`sequence_length = 128` (vs paper 64, sheeprl 64)** — `MAJOR DEVIATION (deliberate, ours)`. **CONFIRMS §6 item 1c**.
+  - **Per-env buffer (sheeprl) vs single env-major buffer (ours)** — `FRAMEWORK-ONLY-ish`. Sheeprl splits the buffer per env so each env's trajectory is sequentially stored independently; this enables uniform-over-valid-starts without straddling env-boundaries. Ours keeps env-major adjacency in a single buffer with block-aligned starts to enforce the no-straddle property. Different storage mechanisms, but both prevent cross-env contamination in a single sequence.
+  - **`buffer_capacity = 10^6` matches paper preprint, deviates from Nature `5×10^6`** — sheeprl matches preprint (`buffer.size = 1000000` in `exp/dreamer_v3.yaml:25`). Same as ours. §6 item 8 noted Nature deviation; sheeprl confirms preprint baseline.
+  - **No `replay_ratio` mechanism difference** — sheeprl uses the same `Ratio` class (`utils/utils.py:259–298`, "Directly taken from Hafner et al. (2023) implementation"), our `Ratio` (`util.py:162–192`) is functionally identical. Both ratchet `int(step * ratio)` minus a saved high-water mark. Default `replay_ratio` in sheeprl `exp/dreamer_v3.yaml:11`: **1** (one gradient step per env step), but the `algo/dreamer_v3*.yaml` set `replay_ratio: 1` as well. **Sheeprl's canonical default is `1`, NOT `0.0625`** — confirming that "1/16" is a per-benchmark-table default, not a universal canonical (matches §2.5b's Hafner Table A.1 spread). Our `0.5` is between sheeprl's `1` and the "DMC mid-band" Hafner reference of `0.0625`.
+
+### §9.6 Numerical-stability tricks
+
+#### §9.6.1 Symlog / symexp
+
+- **Sheeprl** (`utils/utils.py:148–153`): `symlog(x) = sign(x) * log(1 + abs(x))`, `symexp(x) = sign(x) * (exp(abs(x)) - 1)`. Identical to ours (`util.py:6–17`). Both match paper.
+- **Application sites in sheeprl**: encoder consumes `symlog(obs)` inside `MLPEncoder.forward` (`agent.py:150`); decoder predicts symlog space and `SymlogDistribution.log_prob` does `(symlog(target) - mode)^2` (`utils/distribution.py:177–185`); `TwoHotEncodingDistribution.log_prob` applies `transfwd = symlog` to incoming targets (`utils/distribution.py:253–254`); `TwoHotEncodingDistribution.mean` returns `symexp(probs · bins)` (`utils/distribution.py:246–247`).
+- **Ours**: same set of application sites (§3.7.1). Both match paper.
+
+#### §9.6.2 Two-hot encoding/decoding — **THE LOAD-BEARING DIFFERENCE**
+
+- **Sheeprl** (`utils/distribution.py:224–276`):
+  ```python
+  class TwoHotEncodingDistribution:
+      def __init__(self, logits, dims=0, low=-20, high=20, transfwd=symlog, transbwd=symexp):
+          self.bins = torch.linspace(low, high, logits.shape[-1])  # → linspace(-20, +20, 255) IN SYMLOG SPACE
+          self.transfwd = transfwd  # symlog
+          self.transbwd = transbwd  # symexp
+      @property
+      def mean(self):
+          return self.transbwd((self.probs * self.bins).sum(dim=self.dims, keepdim=True))
+          # → symexp(sum(softmax(logits) * linspace(-20, 20)))
+      def log_prob(self, x):
+          x = self.transfwd(x)  # x = symlog(value)
+          # ... bucketize x in self.bins
+          target = onehot(below)*weight_below + onehot(above)*weight_above  # in symlog space
+          return (target * log_softmax(logits)).sum(dim=self.dims)
+  ```
+  **`bins = linspace(-20, +20, 255)` IS THE SYMLOG-SPACE GRID DIRECTLY.** Decoded raw-space support: `transbwd(linspace(-20, 20)) = symexp([-20, +20]) ≈ [-4.85·10^8, +4.85·10^8]`. **Matches paper exactly** (Hafner published `embodied/jax/heads.py:87–97` constructs `half = symexp(linspace(-20, 0, ...))` then mirrors).
+- **Ours** (`util.py:19–76`):
+  ```python
+  def to_twohot(x, min_v=-20.0, max_v=20.0, num_buckets=255):
+      x = symlog(x)
+      bottom = symlog(min_v); top = symlog(max_v)            # bottom = symlog(-20) ≈ -3.044
+      x = jnp.clip(x, bottom, top)
+      rel = (x - bottom) / (top - bottom) * (num_buckets - 1)
+      ...
+  def from_twohot(logits, min_v=-20.0, max_v=20.0, num_buckets=255):
+      probs = jax.nn.softmax(logits, axis=-1)
+      bucket_vals = jnp.linspace(symlog(min_v), symlog(max_v), num_buckets)
+      sym_val = jnp.sum(probs * bucket_vals, axis=-1)
+      return symexp(sym_val)
+  ```
+  **`bucket_vals = linspace(symlog(-20), symlog(+20), 255) ≈ linspace(-3.044, +3.044, 255)`.** Decoded raw-space support: `symexp(±3.044) ≈ ±20`. **8 orders of magnitude smaller than paper.**
+- **Classification.** **`MAJOR DEVIATION (suspected unjustified, ours)`. CONFIRMS §6 item 2.** Sheeprl confirms the paper convention (`linspace(-20, 20)` IS the symlog-space grid; the symlog-vs-raw confusion is one application of `symlog/symexp`, not two). Our `to_twohot` does `bottom = symlog(min_v)` which **applies `symlog` twice** — once to the input `x` (correct) and once to the range endpoints `±20` (wrong; the endpoints are already in symlog space per the paper convention). This is the underlying mechanism: we are interpreting `min_v=-20, max_v=20` as **raw-space** edges and symlog-ing them to get the symlog-space grid, while the paper interprets `low=-20, high=20` as **symlog-space** edges directly. The bug is one extra `symlog` call on the range constants.
+- **Why this matters for our project.** With our reward magnitudes `|r| ≲ few units`, the practical effect is benign (saturation at `±20` raw never triggers). But the deviation is real, the failure mode is silent (numerical saturation rather than a Python error), and any future scaling exercise hitting returns above `±20` would silently truncate. Sheeprl's reference impl confirms that paper-canonical bin centres span 8 orders of magnitude — designed precisely to avoid the saturation our narrow grid would trigger at higher reward magnitudes.
+
+#### §9.6.3 Unimix
+
+- **Sheeprl** (`agent.py:437–449, 839–845`): RSSM `_uniform_mix` and Actor `_uniform_mix` both use `unimix = cfg.algo.unimix = 0.01` (threaded via `agent.py:1063, 1149`). Mechanism: `probs = softmax(logits); probs = (1-unimix)*probs + unimix/K; logits = probs_to_logits(probs)`. Matches paper.
+- **Ours** (`util.py:78–110`): `OneHotDist(logits, unimix=0.01)`; `unimix=0.01` is the constructor default. The YAML key `agent.unimix` is **not threaded** (§6 item 10).
+- **Classification.** Both produce the same numerical result (0.01). `MINOR DEVIATION (suspected unjustified, ours)` for the dead YAML key — sheeprl threads it, we don't. §6 item 10 confirmed.
+
+#### §9.6.4 Free-nats
+
+- **Sheeprl** (`loss.py:68–74`): `kl_free_nats = 1.0` config (`configs/algo/dreamer_v3.yaml:49`). Applied via `torch.maximum(dyn_loss, free_nats)` AFTER `kl_divergence(Independent(..., 1), Independent(..., 1))` aggregates over (stoch_dim, classes) axes. Per-state clip.
+- **Ours**: Per-state clip after `jnp.sum(..., axis=-1)` over both axes (§3.7.5).
+- **Classification.** Both match paper. Confirms §3.7.5 / §6 item 26 (KL-floor-interaction note).
+
+#### §9.6.5 Percentile return scaling (`Moments`)
+
+- **Sheeprl** (`utils.py:40–63`):
+  ```python
+  class Moments(nn.Module):
+      def __init__(self, decay=0.99, max_=1e8, percentile_low=0.05, percentile_high=0.95):
+          ...
+      def forward(self, x, fabric):
+          gathered_x = fabric.all_gather(x).float().detach()
+          low = torch.quantile(gathered_x, self._percentile_low)
+          high = torch.quantile(gathered_x, self._percentile_high)
+          self.low = self._decay * self.low + (1 - self._decay) * low      # mutate
+          self.high = self._decay * self.high + (1 - self._decay) * high
+          invscale = torch.max(1 / self._max, self.high - self.low)
+          return self.low.detach(), invscale.detach()                       # read post-update
+  ```
+  Note `__init__` default `max_ = 1e8` (so `1 / max_ = 1e-8`, i.e. essentially no lower bound on `invscale`); but the **algo config overrides to `max: 1.0`** (`configs/algo/dreamer_v3.yaml:134`), giving the paper's `max(1, S)` clamp.
+  Order: **update first, return updated value**. Used in actor loss (`dreamer_v3.py:276–278`) where `offset, invscale = moments(lambda_values, fabric)` produces the values used for normalisation in the same call.
+- **Ours** (`util.py:113–159, trainer.py:336–340, 495`):
+  - Default `max_ = 1.0` (passed at instantiation `trainer.py:90`); `1 / max_ = 1.0` → `invscale = max(1.0, high - low)`. Matches paper.
+  - **Read-then-update split**: snapshot `low, high, invscale` at `trainer.py:336–340` BEFORE `nnx.grad`; call `self.moments.update(lambda_returns)` AFTER the gradient at `trainer.py:495`. **Used moments are stale by one step** relative to the data they were updated on.
+- **Classification.**
+  - Default `max_` value differs (sheeprl init default `1e8` vs ours `1.0`). **Sheeprl algo config explicitly sets `max: 1.0` to override**, so behaviour matches in practice. Both end up with `max(1, S)` clamp. `MATCHES PAPER` for both at the config level, but **sheeprl's `Moments.__init__` default `1e8` would be a behaviour-changing bug if a caller forgot to override**. Our default `1.0` is safer.
+  - **Update-order difference**: sheeprl updates inside `forward` and returns the updated value, used in the same step's gradient. Ours snapshots before grad and updates after. The OOM concern in our comment (`trainer.py:337–338`) is JIT-tracing-specific; sheeprl is eager so it doesn't apply. **`FRAMEWORK-ONLY` deviation in essence**, but the numerical effect is one-step-staleness in our path. The Hafner published code reads `self.low.value` / `self.high.value` THEN calls `update`, matching ours. Sheeprl's update-then-read is technically a sheeprl-side deviation from Hafner; flag for completeness.
+- **Note (sheeprl-side anomaly).** `Moments.__init__` initialises `self.low = self.high = torch.zeros(())` (`utils.py:53–54`); in the first forward call `invscale = max(1, 0 - 0) = 1` regardless of EMA, so the first batch is always raw-scale-normalised. Same as our zero-init for `low.value` (and our `high.value = 1.0` init differs slightly: at first call `invscale = max(1, 1 - 0) = 1`, same result). Both safe.
+
+### §9.7 Optimiser + schedule differences
+
+- **Sheeprl** (`dreamer_v3.py:447–459`, `configs/algo/dreamer_v3.yaml:111–143, 156–160`):
+  - Three optimisers, one per module group: `world_model`, `actor`, `critic`. Same as ours.
+  - **All three use Adam** (`/optim@*.optimizer: adam` in `defaults` at `configs/algo/dreamer_v3.yaml:5–7`).
+  - **Learning rates**: `world_model.optimizer.lr = 1e-4`, `actor.optimizer.lr = 8e-5`, `critic.optimizer.lr = 8e-5`.
+  - **Adam epsilon**: `world_model.optimizer.eps = 1e-8`, `actor.optimizer.eps = 1e-5`, `critic.optimizer.eps = 1e-5`. **Asymmetric split, identical to ours.**
+  - **Weight decay**: 0 (none).
+  - **Gradient clipping**: `clip_gradients: 1000.0` (WM), `100.0` (actor), `100.0` (critic). Applied via `fabric.clip_gradients(..., max_norm=..., error_if_nonfinite=False)` (`dreamer_v3.py:194–199, 300–303, 320–325`) which is global-norm clipping. **Matches ours**.
+- **Ours** (§3.8.1):
+  - Adam, `1e-4` (WM) / `3e-5` (actor) / `3e-5` (critic), `eps = 1e-8 / 1e-5 / 1e-5`, `clip_by_global_norm(1000.0 / 100.0 / 100.0)`.
+- **Classification.**
+  - **Optimiser kind (Adam) and grad clip (global-norm 1000/100/100)** — match for both. Both follow preprint Table W.1, both deviate from Nature LaProp+AGC (§6 item 7, item 8).
+  - **Adam epsilon (`1e-8` WM / `1e-5` AC)** — match for both. Both follow preprint Table W.1.
+  - **Actor LR `3e-5` (ours) vs `8e-5` (sheeprl).** **`MAJOR DEVIATION (suspected unjustified, ours)` OR (suspected unjustified, sheeprl)** — depends on which preprint table you look at. The Hafner 2023 preprint Table W.1 specifies `actor lr = 3e-5, critic lr = 3e-5`. Sheeprl's `8e-5` is a sheeprl-side anomaly relative to the preprint, possibly a port from an intermediate version of Hafner's code. **CONFIRMS §3.8.1 / §5.2 actor/critic LR rows match preprint** (ours is correct preprint, sheeprl deviates from preprint upward). **Does NOT change §6** — flag sheeprl's deviation in §9 only.
+  - **No LR schedule (warmup, decay) in either** — match.
+- **Per-rank target update freq.** Sheeprl `cfg.algo.critic.per_rank_target_network_update_freq = 1, tau = 0.02` (canonical); functionally identical to our per-step `0.98 * target + 0.02 * online` EMA (§3.4.5).
+
+### §9.8 Diagnostics + metrics differences
+
+- **Sheeprl logged metrics** (`utils.py:20–36, dreamer_v3.py:331–352`):
+  - `Loss/world_model_loss` — total WM loss (recon+kl+rew+cont aggregate).
+  - `Loss/observation_loss`, `Loss/reward_loss`, `Loss/state_loss` (= `kl_loss`), `Loss/continue_loss`.
+  - `Loss/policy_loss`, `Loss/value_loss`.
+  - `State/kl` — pre-clip mean KL (just the dyn term, not weighted).
+  - `State/post_entropy`, `State/prior_entropy` — categorical entropies.
+  - `Grads/world_model`, `Grads/actor`, `Grads/critic` — global-norm gradient magnitudes.
+  - `Rewards/rew_avg`, `Game/ep_len_avg` — env-side episode metrics.
+  - `Params/replay_ratio` — `cumulative_per_rank_gradient_steps * world_size / policy_step` (running average).
+  - `Time/sps_train`, `Time/sps_env_interaction`.
+- **Our logged metrics** (§4.1, §4.2, §4.3, §4.5):
+  - All of the above, plus:
+    - `model_reward_mae`, `model_reward_mae_pos`, `model_reward_mae_neg` — pos/neg-masked reward MAE in raw space (project-specific).
+    - `model_latent_entropy`, `model_cont_acc` — posterior entropy & continue-head accuracy.
+    - `loss_actor_policy`, `loss_actor_entropy` — split actor sub-terms.
+    - `mean_return`, `mean_norm_return`, `mean_value`, `mean_advantage`, `value_mae` — actor diagnostics.
+    - `imagined_termination_fraction_h8`, `imagined_termination_fraction_h15`, `imagined_first_term_step_mean`, `imagined_term_step_p10/50/90`, `imagined_real_term_step_mean` — the **imagined-rollout probe** (`agent.imagined_rollout_probe = false` canonical; toggled on for diagnostics).
+    - `mod_*` — neuromodulation diagnostics (gated by `modulation_enabled`).
+    - `Params/positive_buffer_blocks`, `Params/positive_buffer_utilization`, `Params/main_buffer_blocks` — buffer telemetry.
+- **Classification.**
+  - **Imagined-rollout probe** — `EXTENSION (not in sheeprl)`. §4.3 / §6 item 24. Sheeprl has no equivalent imagined-termination diagnostic.
+  - **Pos/neg-masked reward MAE** — `EXTENSION (not in sheeprl)`. Ours, project-specific. Reward-head failure-mode investigation surfaced this.
+  - **Per-channel reconstruction MSE** — neither implementation logs this. Sheeprl reports a single `Loss/observation_loss`; ours reports a single `loss_recon`. Future-add candidate (no current proposal).
+  - **Modulation diagnostics** — `EXTENSION (not in sheeprl)`. Ours, project-specific.
+  - **Pre-clip mean KL** — sheeprl logs `State/kl` (pre-clip mean of dyn KL); we log `loss_dyn_kl, loss_rep_kl` (post-clip means). Sheeprl's pre-clip metric is an under-floor saturation diagnostic our metrics do not give. **Future-add candidate**: add a `model_dyn_kl_preclip` / `model_rep_kl_preclip` to detect whether the free-nats floor is consistently saturating.
+  - **Gradient-norm logging** — sheeprl logs `Grads/world_model`, `Grads/actor`, `Grads/critic`. Our codebase logs neither pre- nor post-clip gradient norms in the WM/AC paths. **Future-add candidate** for diagnostic completeness — gradient-norm is a standard health metric. Do NOT queue an experiment off this; flag for the user only.
+
+### §9.9 Config differences (size profiles + canonical defaults)
+
+Sheeprl ships **6 size profiles** for DreamerV3, all defined as overrides of `dreamer_v3.yaml` (the XL canonical):
+
+| Profile | `dense_units` | `mlp_layers` | `cnn_channels_multiplier` | `recurrent_state_size` | `transition.hidden_size` | `representation.hidden_size` |
+|---|---|---|---|---|---|---|
+| XS | 256 | 1 | 24 | 256 | 256 | 256 |
+| S | 512 | 2 | 32 | 512 | 512 | 512 |
+| M | 640 | 3 | 48 | 1024 | 640 | 640 |
+| L | 768 | 4 | 64 | 2048 | 768 | 768 |
+| **XL (canonical)** | **1024** | **5** | **96** | **4096** | **1024** | **1024** |
+
+The exp config `configs/exp/dreamer_v3.yaml` overrides the algo to `dreamer_v3_S` for the canonical Atari run.
+
+Our codebase has **one effective profile**: width `128`, depth `2 hidden layers` for all heads (`encoder_fc_layers=[128,128]`, `decoder_fc_layers=[128,128]`, `reward_fc_layers=[128,128]`, `continue_fc_layers=[128,128]`, `actor_fc_layers=[128,128]`, `critic_fc_layers=[128,128]`), `rssm_deter_dim=512`, `embed_dim=128`. Plus a commented-out XL block at `dreamer_v3.yaml:60–74` that mentions `1024` (dead).
+
+**Comparison.**
+- Our `rssm_deter_dim = 512` matches **sheeprl S** (`recurrent_state_size = 512`). Below sheeprl XS (`256`)? No: XS is 256, ours is 512 — between XS and S on the recurrent axis.
+- Our `dense_units = 128` (effective MLP width) is **half of sheeprl XS** (256), the smallest profile. **Our codebase is below sheeprl's smallest profile on MLP width.**
+- Our `mlp_layers = 2` matches **sheeprl S** (2). Below sheeprl XS (1)? Sheeprl XS has `mlp_layers=1` — ours has 2, so our depth is *one layer more* than XS. This is the only respect in which our active config exceeds any sheeprl profile.
+- **Conclusion**: our active config is approximately "**sheeprl XS-with-128-width**" — narrower than XS on width (128 < 256), one layer deeper than XS, slightly above XS on RSSM deter (512 > 256). **No clean correspondence to any sheeprl profile**; smaller than XS overall in the parameter-count sense (XS has roughly `256² × 1 × 7 ≈ 460k` MLP params per head, ours has `128² × 2 × 7 ≈ 230k` — half the per-head count, but with ~2× the head-stack depth).
+
+**Other config-level differences.**
+- Sheeprl `unimix = 0.01` threaded through to RSSM and Actor; ours has the same value but the YAML key is dead (§9.6.3, §6 item 10).
+- Sheeprl `learnable_initial_recurrent_state: True` (paper-canonical); ours hard zero (§9.3.1).
+- Sheeprl `decoupled_rssm: False` (canonical); we have no such option (we are always coupled).
+- Sheeprl `hafner_initialization: True` (`configs/algo/dreamer_v3.yaml:41`) applies the Hafner-prescribed init to specific output layers (`agent.py:1170–1180`): `actor.mlp_heads ← uniform(1.0)`, `critic[-1] ← uniform(0.0)` (zero-init of critic output), `transition_model[-1] ← uniform(1.0)`, `representation_model[-1] ← uniform(1.0)`, `reward_model[-1] ← uniform(0.0)` (zero-init of reward output), `continue_model[-1] ← uniform(1.0)`, `mlp_decoder.heads ← uniform(1.0)`. Ours has `hafner_init` (`util.py:195`, scale 0.8796) applied uniformly to all `Linear` kernels (§5.2 row "`hafner_init` scale 0.8796"). **`MAJOR DEVIATION (suspected unjustified, ours) — output-layer-specific zero-init missing**.** **NEW §6 candidate.** Sheeprl's `uniform(0.0)` zero-init of the reward and critic output layers means at init both heads emit a flat (uniform softmax) distribution — a known stabiliser for two-hot heads (Hafner published code does this; sheeprl mirrors it). Our uniform `hafner_init` across all layers does NOT zero-init the reward/critic output, so the initial output distribution is non-uniform. **This is directly relevant to the reward-head localized-failure investigation** (forward-link `.claude-memory/memories/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md`) — under-trained reward head + non-uniform init = harder to escape from.
+
+### §9.10 Differences summary table
+
+Severity legend:
+- `MAJOR` = potentially affects training dynamics or loss landscape (>= one-step impact).
+- `MINOR` = code-cleanup, dead-key, or algebraically-equivalent restatement; no impact on dynamics.
+- `FRAMEWORK-ONLY` = pure framework idiom; zero algorithmic effect.
+
+| Component | Paper | Sheeprl | Ours | Cross-ref to §6 / §3 | Severity |
+|---|---|---|---|---|---|
+| **GRU layout** | 1 fused linear, 1 LN | 1 fused linear, 1 LN | 2 split linears, 2 LNs (summed) | (new) §9.3.1 | MINOR |
+| **GRU `cand` reset gate** | `tanh(reset * cand)` | `tanh(reset * cand)` | `tanh(cand)` (reset gate computed but not applied) | (new) §9.3.1 — **NEW §6 candidate** | MAJOR |
+| **GRU `update` `-1` bias** | `sigmoid(x - 1)` (≈ 0.27 at init) | `sigmoid(x - 1)` | `sigmoid(x)` (≈ 0.5 at init) | (new) §9.3.1 | MINOR |
+| **GRU pre-MLP** | yes (1 hidden layer) | yes (1 hidden layer) | no (single Linear+SiLU) | (new) §9.3.1 | MINOR |
+| **Initial recurrent state** | learnable | learnable (`learnable_initial_recurrent_state: True`) | hard zero | (new) §9.3.1 | MINOR |
+| **`is_first` reset semantics** | replace with initial | replace with initial | zero `deter` and `stoch` | §6 item 15 | MINOR |
+| **Posterior + prior heads** | 1 hidden MLP each | 1 hidden MLP each (`representation/transition.hidden_size`) | single Linear each (no hidden) | (new) §9.3.2 — **NEW §6 candidate** | MAJOR |
+| **Encoder structure (vector obs)** | flat MLP | flat MLP | hierarchical (per-sensor + hub) | §6 item 1, item 4 | EXTENSION |
+| **MLP widths** | per-profile (S=512, XL=1024) | per-profile (XS=256 to XL=1024) | 128 (below sheeprl XS=256) | §6 item 4 | MAJOR |
+| **Head depth** | 2 hidden layers (S) | 2 hidden layers (S) | 2 hidden layers | matches sheeprl S | n/a |
+| **Reward + critic output zero-init** | `uniform(0.0)` zero-init (Hafner published) | `uniform(0.0)` (when `hafner_initialization: True`) | uniform `hafner_init(0.8796)` (NOT zero-init) | (new) §9.9 — **NEW §6 candidate** | MAJOR |
+| **Decoder symlog target convention** | symlog-space MSE | symlog-space MSE (`SymlogDistribution(dist="mse")`) | symlog-space MSE | §3.5.1 | n/a |
+| **Recon loss aggregation** | sum over event dims, mean over batch | sum-then-mean | mean over all axes | (new) §9.4.1 — **NEW §6 candidate (low-priority)** | MINOR |
+| **Reward loss** | two-hot CE | two-hot CE | two-hot CE | matches | n/a |
+| **Continue loss** | BCE | BCE (`BernoulliSafeMode.log_prob`) | BCE (`optax.sigmoid_binary_cross_entropy`) | matches | FRAMEWORK-ONLY |
+| **`continue_scale_factor` knob** | 1.0 implicit | 1.0 (`continue_scale_factor`) | 1.0 (`cont_loss_weight`) | §6 item — knob is EXTENSION in both | EXTENSION |
+| **KL free nats** | per-state, 1 nat | per-state, 1 nat (after `Independent(...,1)` aggregation) | per-state, 1 nat (after `jnp.sum(.., axis=-1)`) | §3.7.5 | n/a |
+| **`kl_dynamic, kl_representation`** | 0.5, 0.1 (preprint) | 0.5, 0.1 | 0.5, 0.1 | §3.5.4, §6 item 5 (preprint match, Nature deviation) | MAJOR (vs Nature) |
+| **`kl_regularizer` (× outer KL)** | 1.0 | 1.0 (used) | 1.0 (declared as `KL_SCALE`, never applied) | §6 item 9 | MINOR |
+| **λ-return recursion** | Eq. 11 | Eq. 11 | Eq. 11 | §3.5.5 | n/a |
+| **λ-return bootstrap critic** | online | **online** (`predicted_values = critic(...)`) | **target** (`target_critic(...)`) | §6 item 3 — **CONFIRMED** | MAJOR |
+| **Critic loss term A (CE on `lambda_returns`)** | yes | yes | yes | §3.5.6 | n/a |
+| **Critic loss term B (self-EMA regularisation against target critic)** | yes (paper Eq. 10) | yes (`-qv.log_prob(predicted_target_values)`) | **NOT PRESENT** | (new) §9.3.9, §9.4.6 — **NEW §6 candidate** | MAJOR |
+| **Both-side advantage normalisation** | `(R-v)/scale` | both sides normalised | both sides normalised | §6 item 21 (algebraically equivalent) | n/a |
+| **Entropy coefficient** | 3e-4 | 3e-4 | 3e-4 | §3.5.7 | n/a |
+| **Replay buffer architecture** | uniform sub-sequence | per-env independent buffers, uniform-over-valid-starts | env-major single buffer, block-aligned starts, **mixture sampling + positive-reward sub-buffer** | §6 item 1a/1d — **CONFIRMED** | EXTENSION |
+| **`sequence_length`** | 64 | 64 (`per_rank_sequence_length: 64`) | 128 | §6 item 1c — **CONFIRMED** | MAJOR |
+| **`prioritize_ends`** | yes (Hafner published) | NOT IMPLEMENTED | NOT IMPLEMENTED | (sheeprl-and-us deviation from paper) | MINOR (both impls drop it) |
+| **`replay_ratio`** | benchmark-dependent (Atari200M=64..Minecraft=16, normalised 0.0156–0.0625) | 1 (canonical sheeprl); per-task overrides | 0.5 (canonical); 0.0625 in `_rr06.yaml` | §6 item 1b — **CONFIRMED**; sheeprl uses still-different default | MAJOR |
+| **`Ratio` class** | `embodied/core/when.py` | direct port (`utils/utils.py:259–298`) | direct port (`util.py:162–192`) | §3.8.2 | FRAMEWORK-ONLY |
+| **Symlog/symexp** | identical formula | identical | identical | §3.7.1 | n/a |
+| **Two-hot bin range (raw-space support)** | `±symexp(20) ≈ ±4.85·10^8` | `±symexp(20) ≈ ±4.85·10^8` (`bins = linspace(-20, 20)` is symlog-space directly) | `±20` (extra `symlog(±20)` applied to range constants → symlog-space `±3.04`) | §6 item 2 — **CONFIRMED, +mechanism identified** | MAJOR |
+| **Unimix value** | 0.01 | 0.01 (threaded from config) | 0.01 (constructor default; YAML key dead) | §6 item 10 | MINOR |
+| **`Moments` `max_`** | 1.0 (paper `max(1, S)` clamp) | algo config sets `max: 1.0` (init default `1e8` would be unsafe if not overridden) | 1.0 hard-coded | §3.7.4 | n/a (matches via config) |
+| **`Moments` update order** | read-then-update (Hafner published) | update-then-read | read-then-update (matches Hafner) | §9.6.5 | MINOR (sheeprl-side anomaly) |
+| **Optimiser kind** | Adam (preprint) / LaProp (Nature) | Adam | Adam | §6 item 8 (Nature path missing in both) | MAJOR (vs Nature only) |
+| **WM LR** | `1e-4` (preprint) | `1e-4` | `1e-4` | matches | n/a |
+| **Actor / critic LR** | `3e-5` (preprint Table W.1) | `8e-5` | `3e-5` | (new) §9.7 — **sheeprl-side deviation from preprint** | MAJOR (sheeprl-side; ours matches paper) |
+| **Adam epsilon split** | `1e-8` WM / `1e-5` AC (preprint Table W.1) | `1e-8 / 1e-5 / 1e-5` | `1e-8 / 1e-5 / 1e-5` | §3.7.6 | n/a |
+| **Grad clip** | global-norm 1000/100/100 (preprint) | global-norm 1000/100/100 | global-norm 1000/100/100 | §6 item 7 | MAJOR (vs Nature only) |
+| **Buffer capacity** | `10^6` (preprint) / `5×10^6` (Nature) | `10^6` | `10^6` | matches preprint | n/a |
+| **Per-env vs single-buffer storage** | per-env (Hafner) | per-env (`EnvIndependentReplayBuffer`) | env-major single buffer | (new) §9.5 | FRAMEWORK-ONLY (mostly) |
+| **Imagined-rollout probe** | n/a | n/a | 7 metrics | §6 item 24 | EXTENSION |
+| **Pos/neg-masked reward MAE** | n/a | n/a | logged | §4.1 | EXTENSION |
+| **Modulation block** | n/a | n/a | gated by `modulation.type` | §4.4 | EXTENSION |
+| **Pre-clip KL diagnostic (`State/kl`)** | n/a | logged | NOT logged | (new) §9.8 — future-add candidate | MINOR |
+| **Gradient-norm metrics** | n/a | logged | NOT logged | (new) §9.8 — future-add candidate | MINOR |
+| **Buffer-clearing on stage transitions** | n/a | n/a | yes (`train.py:1116–1136`) | §6 item 20 | EXTENSION |
+
+### §9.11 Findings that update §6
+
+This sub-section lists proposed §6 updates surfaced by §9. **No §6 edits have been applied yet — the user must sign off before any §6 row is rewritten.** All proposals are additive (new items or evidence-strengthening notes) except where explicitly marked as a reframing.
+
+#### §9.11.1 New §6 candidate: GRU reset gate is computed but never applied to candidate
+
+- **Old framing**: §3.1 dismissed the inventory red-flag #22 ("GRU candidate uses tanh, not SiLU") as `MATCHES PAPER`. The reset-gate-vs-candidate question was not asked.
+- **Sheeprl evidence**: `models/models.py:399–401` does `cand = torch.tanh(reset * cand)` after splitting the fused `(reset, cand, update)` from one LayerNorm. Hafner's published `dreamerv3/nets.py` GRU does the same. **Reset gate is multiplied into the candidate before tanh.**
+- **Our code**: `nnx.py:32–36` does `cand = jnp.tanh(cand)` — `reset` is computed (`nnx.py:34`) but never used. The variable is named `reset` but functionally a dead computation.
+- **New framing**: New §6 top-tier item (after item 4 or below the optimiser-related items): **"GRU reset gate computed but not applied to candidate."** `MAJOR DEVIATION (suspected unjustified, ours)`. Code: `nnx.py:32–36`. Severity: structural GRU change; affects every recurrent step. May be a refactor that stranded the reset gate. Cross-link: `.claude-memory/memories/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md` — RSSM dynamics quality is upstream of every WM loss.
+
+#### §9.11.2 New §6 candidate: posterior + prior heads are shallower than paper
+
+- **Old framing**: §3.1 / §6 do not call out head depth.
+- **Sheeprl evidence**: `agent.py:1018–1051` builds `representation_model = MLP(input_dim, output=stoch*disc, hidden=[representation.hidden_size])` — i.e. MLP with one hidden layer. Same for `transition_model`. Hafner published code agrees.
+- **Our code**: `nnx.py:51, 58–59` are single `Linear` projections — no hidden layer.
+- **New framing**: New §6 mid-tier or top-tier item: **"Prior + posterior heads have no hidden layer (paper has 1 hidden layer)."** `MAJOR DEVIATION (suspected unjustified, ours)`. Code: `nnx.py:51, 58–59`. Severity: head capacity halved compared to paper; downstream effect on prior/posterior expressiveness, which is upstream of KL terms and imagined dynamics.
+
+#### §9.11.3 New §6 candidate: critic self-EMA regularisation term is missing
+
+- **Old framing**: §3.4.5 / §3.5.6 / §6 item 3 noted the bootstrap-source deviation but did not separately note the missing self-EMA regularisation term.
+- **Sheeprl evidence**: `dreamer_v3.py:307–316` — `value_loss = -qv.log_prob(lambda_values.detach()) - qv.log_prob(predicted_target_values.detach())`. The second `-qv.log_prob(predicted_target_values.detach())` is paper Eq. 10 self-EMA regularisation: critic outputs are pushed toward the target critic's value estimate. This is **distinct** from the bootstrap-source deviation (§6 item 3) — both are roles played by the slow critic, but they are independent loss-shaping mechanisms.
+- **Our code**: `trainer.py:421–430` — only one CE term, `loss_critic_step = -jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1)`. No `target_critic` term in the loss.
+- **New framing**: New §6 top-tier item (sibling to item 3): **"Critic self-EMA regularisation term against target_critic missing from `loss_critic`."** `MAJOR DEVIATION (suspected unjustified, ours)`. Code: `trainer.py:421–430`. Severity: independent stabiliser absent. *This and §6 item 3 together imply the slow critic plays only one role in our codebase (bootstrap source) when paper-canonical it should play exactly the inverse role (regularisation target only, with online critic for bootstrap).* The user-controlled experiment design follow-up (already noted at §6 item 3) may want to factor both deviations into the comparison condition.
+
+#### §9.11.4 New §6 candidate: reward + critic output layers not zero-initialised
+
+- **Old framing**: §3 / §6 / §5.2 mention `hafner_init` scale `0.8796` but do not call out that the paper / sheeprl apply a per-layer override on output heads.
+- **Sheeprl evidence**: `agent.py:1170–1180` (when `hafner_initialization: True`):
+  - `critic.model[-1].apply(uniform_init_weights(0.0))` — **zero-init critic output layer** (`given_scale=0.0` → `limit = sqrt(0) = 0` → `uniform(0, 0) = 0`).
+  - `world_model.reward_model.model[-1].apply(uniform_init_weights(0.0))` — **zero-init reward output layer**.
+  - Plus uniform-init scale 1.0 on representation/transition/continue/decoder/actor head outputs.
+- **Our code**: `util.py:195` `hafner_init` returns `nnx.initializers.variance_scaling(scale=0.87962566103423978**2, mode='fan_avg', distribution='truncated_normal')`. Applied uniformly to *all* `Linear` kernels in our model construction (`nnx.py`, every `nnx.Linear(..., kernel_init=hafner_init(), rngs=rngs)`). **No special zero-init on reward/critic output layers.**
+- **New framing**: New §6 top-tier or upper-mid item: **"Reward and critic output layers not zero-initialised."** `MAJOR DEVIATION (suspected unjustified, ours)`. Code: `util.py:195`; consequences felt at `nnx.py:530, 576`. Severity: at init, our reward and critic heads emit non-uniform softmax distributions, biasing the very first gradient steps. Paper recipe makes the heads emit a flat distribution at init (uniform softmax over 255 bins), giving clean two-hot CE gradients from step 0. **Directly relevant to the reward-head localized-failure investigation** (forward-link `.claude-memory/memories/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md`).
+
+#### §9.11.5 Reframed: §6 item 2 (twohot bin range) — mechanism now identified
+
+- **Old framing** (current §6 item 2): "Two-hot bin range narrowed by 8 orders of magnitude. Code: `util.py:60–76`. Our `bucket_vals = jnp.linspace(symlog(-20), symlog(+20), 255)` creates symlog-space bins in `linspace(-3.045, +3.045)`..."
+- **Sheeprl evidence (mechanism)**: Sheeprl `bins = torch.linspace(low, high, ...)` with `low=-20, high=20` — **the literals `-20` and `+20` ARE the symlog-space grid endpoints**, with `transbwd = symexp` applied to map to raw space. Paper does the same. The "extra symlog" call on the range constants in our code (`bottom = symlog(min_v); top = symlog(max_v)` at `util.py:24`) is the underlying mechanism — we apply `symlog` twice (once to the input, once to the range bounds).
+- **New framing**: §6 item 2 stays at top-tier; **add to the description**: *"Mechanism: our `to_twohot` applies `symlog` to both the input AND the range constants (`bottom = symlog(min_v)`, `top = symlog(max_v)`), interpreting `min_v=-20, max_v=20` as raw-space edges. Paper convention (and sheeprl) interpret `-20, +20` as symlog-space edges directly — the extra symlog call is the bug. Triply-confirmed by paper text + Hafner published code + sheeprl reference impl."*
+
+#### §9.11.6 Reframed: §6 item 3 (λ-return bootstrap source) — sheeprl confirmation
+
+- **Old framing**: "λ-return bootstrap uses `target_critic`, not online critic." Cited preprint Appendix C item 6 + Nature page 3 + preprint Appendix D.2 ablation.
+- **Sheeprl evidence**: `dreamer_v3.py:243–256` — `predicted_values = TwoHotEncodingDistribution(critic(...)).mean` uses online critic. `target_critic` is used only in the critic loss self-regularisation term (`dreamer_v3.py:307–310`). **Triply-confirmed: paper text + paper code + sheeprl reference all use online critic.**
+- **New framing**: §6 item 3 stays at top-tier; **add to the description**: *"Triply-confirmed: paper text (preprint App C item 6 + Nature page 3) + Hafner published code + sheeprl `dreamer_v3.py:243–256` all use the online critic for λ-return bootstrap and reserve the slow critic for self-regularisation only."* The follow-up experiment-design hand-off note remains.
+
+#### §9.11.7 Reframed (low-priority): §6 item 1c (sequence_length=128) — confirmed
+
+- **Old framing**: §6 item 1c notes 2× canonical sequence length.
+- **Sheeprl evidence**: `configs/exp/dreamer_v3.yaml:14` — `per_rank_sequence_length: 64`. Confirmed.
+- **New framing**: No change; sheeprl confirms the paper-canonical 64.
+
+#### §9.11.8 Reframed: §6 item 1b (replay_ratio) — sheeprl uses yet-another default
+
+- **Old framing**: §6 item 1b notes `replay_ratio: 0.5` is 8× the DMC mid-band of `0.0625` (and the §2.5b spread caveat).
+- **Sheeprl evidence**: `configs/algo/dreamer_v3.yaml:16` and `configs/exp/dreamer_v3.yaml:11` both set `replay_ratio: 1` for the canonical Atari run. Sheeprl's chosen default is `1`, between Hafner's Atari-200M `64`-step normalised default (≈0.0156 grad/env) and the project's `0.5`. **Confirms that "1/16 = 0.0625" is not the universal default — sheeprl uses a different per-task default for Atari.**
+- **New framing**: §6 item 1b stays at top-tier; **add to the description**: *"Sheeprl's canonical Atari default is `1` (one gradient step per env step, see `configs/exp/dreamer_v3.yaml:11`); the per-benchmark Hafner Table A.1 spread plus sheeprl's `1` confirms that 0.0625 was a DMC-specific anchor we have been treating as universal — the actual canonical answer is 'pick by benchmark'."*
+
+#### §9.11.9 No-action items — sheeprl-side deviations not affecting §6
+
+These are sheeprl-side anomalies relative to paper that DO NOT change our §6 list. Logged for reader awareness only.
+
+- **Sheeprl actor / critic LR `8e-5`** vs paper preprint `3e-5`. We are correct; sheeprl deviates upward. (See §9.7.)
+- **Sheeprl `Moments.__init__` default `max_ = 1e8`** would be unsafe if a caller forgot the override. Sheeprl always overrides via algo config. Not a behaviour bug today.
+- **Sheeprl `Moments` update-then-read** vs Hafner's read-then-update. Numerical effect is one-step difference in moments; sheeprl-side anomaly.
+- **`prioritize_ends` is missing from both sheeprl and ours** — Hafner published code has this knob (boost weight on episode endings inside sub-sequence sampling); both ports drop it. Both implementations equally deviate from paper here. Not a sheeprl-vs-us difference.
+
+---
+
 
 Three reviewers ran in parallel in Phase 4 of the pilot. Their reports and the reconciliation actions taken in this revision (Phase 5) are summarised below.
 
@@ -870,6 +1417,13 @@ Three reviewers ran in parallel in Phase 4 of the pilot. Their reports and the r
 
 The 25-item §6 list became 26 items after this reconciliation: removed 1 false-positive (old item 15 Adam-eps) + added 3 new top-tier items (twohot range, SlowTarget critic, Nature optimiser swap) + added 1 new mid-tier item (LayerNorm vs RMSNorm) + added 1 new mid-tier note (KL-floor interaction) + coalesced 4 separate items into 1 top entry with 4 sub-items.
 
+### Sheeprl-comparison addition (§9, 2026-05-10)
+
+| Reviewer | Doc | Verdict | Headline |
+|---|---|---|---|
+| senior-developer | (this document) | ADDED-§9 | Sheeprl-comparison addition; sheeprl checked out at `tmp/sheeprl/` (rev `33b6366`); new §9 covers components / losses / buffers / numerics / optimiser / configs. §9.11 lists 4 NEW §6 candidates (GRU reset gate not applied; prior/posterior heads shallow; missing critic self-EMA regularisation term; reward+critic output not zero-init) and 2 reframings (§6 item 2 mechanism identified; §6 item 3 triply-confirmed). User sign-off required before any §6 edit lands. |
+
 ---
 
 Verified by: senior-developer (Phase 5 reconciliation, 2026-05-09)
+Updated by: senior-developer (Phase 6 sheeprl-comparison addition, 2026-05-10)
