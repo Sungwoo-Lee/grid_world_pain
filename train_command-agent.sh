@@ -72,18 +72,19 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# NMN continual double-return probe — Run 2 (unmodulated, ContUnmod), launched 2026-05-09
-# Node 101, cuda:1, seed 0. See docs/experiments/active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md §3 Launch Manifest Row 2.
-# NO --episodes: continual mode episode budget is governed by the schedule YAML (boundaries [1500,3000,3700,4400,5100]).
+# NMN meta 2x3 mixture probe — Run 4 (specialist: active+distinct, unmodulated), launched 2026-05-09
+# Node 103, cuda:1, seed 0. See docs/experiments/active/hypervigilance/NMN_META_2x3_MIXTURE_PROBE.md §3 Launch Manifest Row 4.
+# Cell: spec_active_distinct. Env config: active_distinct.yaml (NEW — active predator, distinct-canonical olfactory).
+# Agent config: recurrent_ppo_nmn_het_unmod.yaml (unmodulated baseline — ceiling specialist reference).
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --configs-dir configs/continual/nmn_double_return_stages/ \
-  --continual-schedule configs/continual/nmn_double_return.yaml \
+  --config configs/experiment/nmn_meta_2x3_mixture/active_distinct.yaml \
   --agent_config configs/models/recurrent_ppo_nmn_het_unmod.yaml \
   --num-envs 128 \
+  --episodes 10000000 \
   --seed 0 \
   --device cuda:1 \
   --log-interval 50 \
-  --wandb-group nmn_continual_double_return \
+  --wandb-group nmn_meta_2x3_mixture \
   --wandb-job-type prod \
-  --wandb-name rppo_nmn_cont_dr_unmod_s0 \
-  --tag rppo_nmn_cont_dr_unmod_s0
+  --wandb-name rppo_nmn_meta_spec_active_distinct_s0 \
+  --tag rppo_nmn_meta_spec_active_distinct_s0
