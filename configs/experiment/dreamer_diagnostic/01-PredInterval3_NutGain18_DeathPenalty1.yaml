@@ -1,0 +1,261 @@
+# Conventional-fixes battery — predator env with reduced death penalty
+# ----------------------------------------------------------------------------
+# Purpose: One of two cells in the conventional-fixes battery. Tests whether
+# rescaling the death penalty from -100 to -1 (Crafter-style) repairs the
+# DreamerV3 reward-head asymmetry signature on the predator-task hypervigilance
+# baseline. Conventional-failure-mode critique
+# (docs/project/critiques/dreamer_conventional_failure_modes_for_our_setup.md
+# §2.1) ranks this as the #1 most likely conventional cause: the per-step
+# homeostatic reward is ±0.5 (~symlog bin 0.4) but the death penalty is
+# -100 (~symlog bin -4.6). The 4-nat gap maps the two reward regimes into
+# different bin clusters of the 255-bin symlog two-hot reward head, and the
+# rare-but-large terminal is dominated by the dense modal class in cross-
+# entropy training, producing the `model_reward_mae_pos: 0.05 / mae_neg: 0.60`
+# asymmetry observed in qont5dac and the `3zjhap9w` collapse.
+#
+# Provenance: copied verbatim from
+# configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml
+# with exactly ONE delta:
+#
+#     body.death_penalty: 100  ->  1
+#
+# Reward emission code path (env/core.py:478):
+#   reward_homeostatic = jnp.where(done, reward_homeostatic - params.death_penalty, reward_homeostatic)
+# So `death_penalty: 1` produces a terminal reward of `-1` on top of whatever
+# homeostatic reward the final-step would have produced (typically near zero
+# at the death state). This is approximately the Crafter recipe.
+#
+# Used in conjunction with configs/models/dreamer_v3_rr06.yaml (replay_ratio
+# 0.0625) for Cell A2 of the battery — the joint conventional-fixes test.
+#
+# Pre-registered prediction (battery doc §2):
+#   - mae_pos / mae_neg gap remains < 0.15 throughout the run (vs the
+#     0.05/0.60 asymmetry observed at qont5dac/`3zjhap9w` collapse).
+#   - Survival > 100 by 700k env steps = clean confirmation that
+#     reward-scale + replay-ratio jointly fix the predator task.
+#   - Survival ~30 with mae asymmetry resolved = reward scale fixed but
+#     replay-ratio insufficient → predator task is structurally harder.
+#
+# References:
+#   - Conventional-failure-mode critique (the rationale for this knob):
+#     docs/project/critiques/dreamer_conventional_failure_modes_for_our_setup.md
+#   - Strip-down direction memo:
+#     docs/project/directions/dreamer_minimum_viable_strip_down.md
+#   - Battery design doc:
+#     docs/experiments/active/dreamer_diagnosis/DREAMER_CONVENTIONAL_FIXES_BATTERY.md
+#   - Diagnosis being targeted (reward-head asymmetry):
+#     docs/develop/active/diagnosis/dreamer_hypervigilance_learning_failure.md
+#   - Reference failing run (qont5dac signature):
+#     docs/experiments/active/continual_learning/DREAMER_DIAGNOSTIC_BATTERY.md
+
+# Default Configuration for GridWorld Interoceptive AI
+
+environment:
+  height: 5
+  width: 5
+  start_pos: [2, 2]
+  max_steps: 500
+  rest_action_enabled: true
+  eat_action_enabled: true
+  random_start_pos: true
+
+  # Entity placement overlap resolution strategy.
+  # "per_entity": Sequential scan over all entities (fast on small grids ≤100 cells)
+  # "per_type": Type-level lax.scan grouping by spawn area (better for large grids)
+  placement:
+    mode: per_entity
+
+  resources:
+    - name: "food" # Top Left
+      type: "food"
+      count: 1
+      spawn_area: [[1, 1], [5, 5]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+
+    - name: "hiding_predator" # Top Left
+      type: "hiding_predator"
+      count: 1
+      spawn_area: [[1, 1], [5, 5]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: -1
+      damage: [15.0, 45.0]
+      regeneration_delay: 20
+      nociception_intensity: 0.9
+
+  neutral_animals:
+    - name: "rabbit"
+      count: 0
+      properties: [0.0, 0.3, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      move_interval: 1
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+
+  predator_enabled: true
+  predators:
+    - name: "predator" #
+      count: 1
+      properties: [0.0, 1.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      move_interval: 3
+      damage: [15.0, 45.0]
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [5, 5]]
+      patrol_area: [[1, 1], [5, 5]]
+      detection_range: 3
+      max_stamina: 15
+      stamina_recovery_rate: 1
+      hunt_stamina_threshold: 0.7
+      attack_delay: 3
+      lose_interest_multiplier: 1.5
+
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [5, 5]]
+    - type: "sand"
+      area: [[0, 0], [0, 0]]
+
+  obstacles:
+    - name: "rock" # Top Left
+      count: 0
+      area: [[1, 1], [5, 5]]
+      blocking: false
+      damage: [0.1, 0.5]
+      nociception_intensity: 0.3
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+    - name: "bush" # Top Left
+      count: 3
+      area: [[1, 1], [5, 5]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+
+body:
+  # Body state
+  with_satiation: true
+  with_nutrition: true
+  with_injury: true
+  random_start_satiation: false
+  random_start_nutrition: false
+  random_start_injury: false
+  # Body state limits
+  max_satiation: 100
+  max_nutrition: 100
+  max_injury: 100
+  # Nutrition: new_N = clip(prev_N - metabolic_cost + [gain - cost if ate], 0, max_N)
+  metabolic_cost: 1.0
+  food_nutrition_gain: 18
+  eating_nutrition_cost: 1.0
+  eating_reward_penalty: 0.0
+  # Satiation: S = MaxS * (N / MaxN) ^ scaling_factor
+  nutrition_to_satiation_scaling_factor: 1.0
+  satiation_setpoint: 100
+  start_satiation: 100
+  start_nutrition: 100
+  # Recovery: Recovery = base * (1 + accel)^(rest_streak - 1)
+  recovery_base_rate: 0.1
+  recovery_accel_rate: 0.5
+  # Injury: Damage is spread over duration steps (applied_dam = total_dam / duration)
+  injury_smoothing_duration: 3
+  # Reward: if use_homeostatic_reward, Reward = prev_drive - curr_drive
+  # Drive (Euclidean): sqrt((satiation - setpoint)^2 + injury^2)
+  use_homeostatic_reward: true
+  death_penalty: 1   # FIX-DELTA vs basic/01-5X5_PredInterval3_NutGain18.yaml: was 100.
+                     # Crafter-style scale: matches dense per-step homeostatic ±0.5 magnitude.
+                     # Targets reward-scale mismatch (critique §2.1, rank-1 cause).
+  overeating_death: false
+
+
+sensory:
+  using_sensory: true
+  #Olfactory sensor
+  olfactory_enabled: true
+  sensor_radius: 20
+  vector_size: 5
+  decay_power: 2.0
+  #Collision sensor
+  collision_sensor_range: 1
+  #Location sensor
+  location_sensor: false
+  #Nociception sensor
+  nociception_enabled: true
+  nociception_size: 1
+  #Visual sensor
+  visual_sensor_enabled: false
+  visual_sensor_range: 0
+  #Proprioception sensor
+  proprioception_enabled: true
+
+visualization:
+  local_view_size: 5
+
+perceptual_noise:
+  enabled: false
+  # Key order here is the single source of truth for noise array indices (0-8).
+  # config_loader.py reads this order; sensor.py consumes it via params.noise_modality_order.
+  modalities:
+    injury:          # index 0
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    nutrition:       # index 1
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    satiation:       # index 2
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    extero_nociception: # index 3
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0     # Unbounded (pain intensity)
+    olfaction:       # index 4
+      mode: "state_dependent"
+      sigma: 0.2
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0     # Unbounded (aggregated chemical gradient)
+    collision:       # index 5
+      mode: "constant"
+      sigma: 0.01
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    proprioception:  # index 6
+      mode: "constant"
+      sigma: 0.05
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    visual:          # index 7
+      mode: "state_dependent"
+      sigma: 0.2
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0     # Unbounded (one-hot counts)
+    location:        # index 8
+      mode: "constant"
+      sigma: 0.01
+      injury_noise_scale: 0.0
+      clip_min: -1.0       # Normalized to [-1, 1]
+      clip_max: 1.0
