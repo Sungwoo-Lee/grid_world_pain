@@ -1,10 +1,11 @@
 ---
 title: "Per-tag per-instance distance logging (rabbits and predators) — Round-2 escalation"
 topic: hypervigilance
-status: implemented
+status: active
 created: 2026-05-08
 last_updated: 2026-05-09
 phase: 1
+verification_status: pass
 ---
 
 # Per-tag per-instance distance logging (rabbits and predators)
@@ -906,22 +907,84 @@ T5 smoke training:
 
 ## Verification Report
 
-> **Verified by**: [agent/person]
-> **Date**: [date]
+> **Verified by**: senior-developer
+> **Date**: 2026-05-09
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/environment/state.py` | +2 EnvParams fields (`predator_tags`, `neutral_tags`) | | |
-| `src/environment/config_loader.py` | +`_normalise_tag` helper, +2 tag tuples in branches, +2 constructor args | | |
-| `src/environment/core.py` | +2 info keys (`dist_per_neutral`, `dist_per_predator`) | | |
-| `src/models/recurrent_ppo_trainer.py` | +2 StepInfo fields, +2 wiring lines | | |
-| `src/models/dreamer_v3_trainer.py` | +2 transition keys | | |
-| `train.py` (accumulators init + 5 per-step + 5 reset + 1 wipe) | per-tag accumulators | | |
-| `train.py` (5 WandB sites) | `_append_per_tag_means` helper + 5 site calls (×2 for rabbit/predator) | | |
-| `tests/environment/test_per_tag_logging.py` | new (T1–T4) | | |
-| Hypervigilance configs (5 files) | add `tag:` lines per the list | | |
+| `src/environment/state.py` | +2 EnvParams fields (`predator_tags`, `neutral_tags`) | OK | `pytree_node=False` correct; type annotated as plain `tuple` (functionally equivalent to `tuple[str, ...]`) — minor style only |
+| `src/environment/config_loader.py` | +`_normalise_tag` helper, +2 tag tuples in branches, +2 constructor args | OK | Both if/else branches handled; constructor wired correctly; `_TAG_RE` regex matches plan |
+| `src/environment/core.py` | +2 info keys (`dist_per_neutral`, `dist_per_predator`) | OK | Lines 499-509: per-instance L2 norm before reduction; vmap-clean (fixed shape `[num_*]`); zero string refs in JIT scope |
+| `src/models/recurrent_ppo_trainer.py` | +2 StepInfo fields, +2 wiring lines | OK | StepInfo now 17 fields; `collect_trajectories` wires `info['dist_per_*']` |
+| `src/models/dreamer_v3_trainer.py` | +2 transition keys | OK | Lines 665-666: transition dict carries per-instance arrays |
+| `train.py` accumulators init + 5 reset + 1 stage-wipe | per-tag accumulators | OK | Lines 949-954 init; line 1111-1112 stage wipe extends to both arrays correctly |
+| `train.py` Site 1 (RPPO main, lines 1180-1311) — per-step accumulation | populates `info_np` for `dist_per_*` | **FAIL** | **Line 1191 only loads `BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']` into `info_np`. `dist_per_neutral` / `dist_per_predator` are NEVER added — guard at line 1222 always evaluates False; accumulators stay zero; per-tag WandB values are 0.0** |
+| `train.py` Site 2 (Dreamer batch, lines 1438-1604) — per-step accumulation | reads from `transitions_np` | OK | Line 1472-1473 reads `transitions_np.get('dist_per_neutral'/'dist_per_predator')` directly; correct |
+| `train.py` Site 3 (DQN step, lines 1720-1773) — per-step accumulation | reads from `info` directly | OK | Lines 1732-1735 access `info['dist_per_*']` (JAX dict, not `info_np`); correct |
+| `train.py` Site 4 (DRQN step, lines 1908-1956) — per-step accumulation | reads from `info` directly | OK | Lines 1915-1918 same pattern as Site 3; correct |
+| `train.py` Site 5 (Dreamer step, lines 2050-2074) — per-step accumulation | populates `info_np['dist_per_*']` | OK | Lines 2055-2056 explicitly add the keys before the guard at 2071-2074; correct |
+| `train.py` 5 WandB sites — `_append_per_tag_means` calls | 5×2 fan-out calls | OK | Helper at line 956 correct; calls at 1307-1310, 1599-1602, 1831-1834, 2021-2024, 2156-2159 — but Site 1 (RPPO main) values are zero due to upstream bug |
+| `tests/environment/test_per_tag_distance_logging.py` | new (T1–T4) | OK | All 4 tests pass; full suite 7/7 in 23.89s |
+| Hypervigilance configs (5 files) | `tag:` fields added | OK | Tag↔spawn_area mapping verified for all 5 configs (developer's report table is accurate) — see scope-deviation note below |
+| Backward compat — config without `tag` | defaults to `('idx0','idx1',...)` | OK | Verified via inline-stripped A1 config: `neutral_tags=('idx0','idx1')`, `predator_tags=('idx0',)` |
+| Aggregated keys preserved | `MeanDistRabbit`, `MeanDistPredator`, `MeanDistFood`, `MeanDistHidingPredator`, `RabbitHits`, `HidingPredatorHits` | OK | All present at all 5 sites (1295-1300, 1587-1592, 1819-1824, 2009-2014, 2144-2149); offline T5 confirmed numerically (`MeanDistRabbit=3.34`, `MeanDistPredator=7.18`) |
+| T5 smoke training — keys appear in WandB | per-tag emitted with finite values | **FAIL** | Offline-WandB run on `02-sameProp_R2_passivePredator.yaml` (RPPO, 16 envs, 500 episodes, CPU, --no-wandb→offline). Summary parser confirms: `MeanDistRabbit_TL = 0`, `MeanDistRabbit_BR = 0`, `MeanDistPredator_TL = 0` for ALL 9 emissions across 42 iterations. Aggregated `MeanDistRabbit = 3.34` is non-zero — proves bug is in the per-tag accumulation path only |
+| Speed check | <5% RPPO regression | OK | Plan spec is "≤1% expected, >5% blocker"; arithmetic cost is one extra `jnp.linalg.norm` per entity type per step (already-fused with existing reduction), and `O(num_envs × num_entities)` numpy ops per finalisation. No measurable hot-path impact on standard configs (≤2 entities per type). Developer's claim of 466 SPS is plausible and within tolerance |
 
-**Conclusion**: [one-line summary]
+**Conclusion**: **FAIL — RPPO main path emits 0.0 for all per-tag distance keys.** The plan's design is correct; backwards compatibility, JIT/vmap safety, and aggregated keys are all preserved. Site 2 (Dreamer batch), Sites 3/4 (DQN/DRQN), and Site 5 (Dreamer step) are correctly wired. **Site 1 (RPPO main, the most-used training path)** has a single missed wiring step: `info_np` at `train.py:1191` does not include `dist_per_neutral`/`dist_per_predator` from `step_info`, so the `'in info_np'` guard at line 1222 always fails and the accumulators stay zero. Developer's "T5 smoke training" verification used a standalone synthetic script, not actual `train.py` output — that's why the bug was missed.
+
+### Required fix (single ~2-line edit)
+
+In `train.py` at line 1191-1192, extend the `info_np` population loop to include the per-instance keys:
+
+```python
+# BEFORE (lines 1189-1192):
+                    info_np = {}
+                    if step_info is not None:
+                        for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']:
+                            info_np[k] = np.array(getattr(step_info, k))
+
+# AFTER (mirror the Site 5 pattern at lines 2055-2056):
+                    info_np = {}
+                    if step_info is not None:
+                        for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']:
+                            info_np[k] = np.array(getattr(step_info, k))
+                        if num_neutral_for_log  > 0: info_np['dist_per_neutral']  = np.array(step_info.dist_per_neutral)
+                        if num_predator_for_log > 0: info_np['dist_per_predator'] = np.array(step_info.dist_per_predator)
+```
+
+After the fix, re-run the T5 smoke training and confirm `Episode/MeanDistRabbit_TL`, `Episode/MeanDistRabbit_BR`, `Episode/MeanDistPredator_TL` carry finite non-zero values in `[0, 14.5]` (matching the developer's standalone-script values of ~1.5/5.8/2.9).
+
+### Scope-deviation note (process, not blocker)
+
+The developer modified 5 hypervigilance configs (added `tag:` fields) despite the prompt explicitly excluding `configs/` from developer scope. The edits are mechanically correct and required for T5 to produce meaningful per-tag values, so the deviation is materially benign — but it sidesteps the experiment-designer ownership boundary documented in `CLAUDE.md`.
+
+**Recommendation**: formalise a narrow carve-out — "developer may add purely-mechanical metric-label fields (e.g., `tag:`, `name:` aliases) to existing configs as part of implementing a metric feature, with a diff surfaced in the Implementation Report for designer ratification." Anything beyond pure label-fields (changing spawn areas, properties, training hyperparameters) remains experiment-designer territory. This is what the developer effectively did here, just without the explicit policy.
+
+---
+
+### Bug fix — 2026-05-09 (post-verification)
+
+**Patch applied** (commit `6d3d382`):
+
+```python
+# train.py lines 1193-1195 (inside `if step_info is not None:` block, Site 1 RPPO main)
+# Per-instance arrays: shape [num_steps, num_envs, num_entity]
+if num_neutral_for_log  > 0: info_np['dist_per_neutral']  = np.array(step_info.dist_per_neutral)
+if num_predator_for_log > 0: info_np['dist_per_predator'] = np.array(step_info.dist_per_predator)
+```
+
+**T5 smoke re-run** — `02-sameProp_R2_passivePredator.yaml` + `recurrent_ppo.yaml`, 16 envs, 200 episodes, CPU, `--no-wandb`. Per-tag values confirmed non-zero across first 3 completed episodes:
+
+```
+[ep#1] mean_dist_rabbit_TL_raw=8.319, mean_dist_rabbit_BR_raw=3.434, mean_dist_predator_TL_raw=9.559
+[ep#2] mean_dist_rabbit_TL_raw=4.761, mean_dist_rabbit_BR_raw=3.812, mean_dist_predator_TL_raw=3.405
+[ep#3] mean_dist_rabbit_TL_raw=5.498, mean_dist_rabbit_BR_raw=4.823, mean_dist_predator_TL_raw=4.495
+```
+
+All values in (0, 14.5) as expected. Aggregated `MeanDistRabbit` falls between TL and BR per-tag values (sanity check passes).
+
+**Test suite**: 7/7 passed (`pytest tests/ -x -q`, 26.67s).
 
 ---
 
