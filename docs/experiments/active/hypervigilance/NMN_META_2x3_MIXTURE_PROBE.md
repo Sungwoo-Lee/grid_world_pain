@@ -3,7 +3,7 @@ title: "NMN meta 2x3 mixture probe — does the modulator factorise context acro
 topic: hypervigilance
 status: active
 created: 2026-05-09
-last_updated: 2026-05-09T18:45
+last_updated: 2026-05-09T18:50
 phase: 0.5
 wandb_tag: "rppo_nmn_meta_{2x3_mod,2x3_unmod,spec_*}_s0"
 develop_link: docs/develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md
@@ -13,7 +13,7 @@ superseded_by: null
 
 # NMN meta 2x3 mixture probe — does the modulator factorise context across two manipulation axes?
 
-> **Status**: PLANNED — configs and manifest locked 2026-05-09. Mixture-mode resolution: option (a), half-day developer touch routed via senior-developer; design doc launches after the flag lands. Awaiting env-config-auditor pass and user authorisation.
+> **Status**: 6 of 8 cells running (Runs 3–8, specialist arm); 2 head-to-head cells (Runs 1–2, n102) deferred to round 2 pending `--mixture-mode` developer touch via senior-developer.
 > **Date**: 2026-05-09
 > **Author**: experiment-designer
 > **Related**:
@@ -192,7 +192,7 @@ System-of-record. `experiment-designer` filled the planned columns; `training-ru
 | 5 | running | spec_active_swapped | rppo_nmn_meta_spec_active_swapped_s0 | nmn_meta_2x3_mixture | prod | 0 | 104 | cuda:0 | 2026-05-09T18:39:09 | 2p5zgdk4 | logs/20260509_183909.log |
 | 6 | running | spec_passive_matched | rppo_nmn_meta_spec_passive_matched_s0 | nmn_meta_2x3_mixture | prod | 0 | 104 | cuda:1 | 2026-05-09T18:42:09 | 958mba24 | logs/20260509_184209.log |
 | 7 | running | spec_passive_distinct | rppo_nmn_meta_spec_passive_distinct_s0 | nmn_meta_2x3_mixture | prod | 0 | 105 | cuda:0 | 2026-05-09T18:45:13 | z5dfkzw5 | logs/20260509_184513.log |
-| 8 | planned | spec_passive_swapped | rppo_nmn_meta_spec_passive_swapped_s0 | nmn_meta_2x3_mixture | prod | 0 | 105 | cuda:1 | — | — | — |
+| 8 | running | spec_passive_swapped | rppo_nmn_meta_spec_passive_swapped_s0 | nmn_meta_2x3_mixture | prod | 0 | 105 | cuda:1 | 2026-05-09T18:48:36 | 44rumz7m | logs/20260509_184836.log |
 
 ### 3.1 Configs to Produce
 
