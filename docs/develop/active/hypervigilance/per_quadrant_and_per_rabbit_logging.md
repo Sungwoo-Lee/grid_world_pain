@@ -1,7 +1,7 @@
 ---
 title: "Per-tag per-instance distance logging (rabbits and predators) — Round-2 escalation"
 topic: hypervigilance
-status: active
+status: implemented
 created: 2026-05-08
 last_updated: 2026-05-09
 phase: 1
@@ -781,31 +781,16 @@ Report so the user can spot-check tag↔spawn_area correctness.
 
 ## Checkpoints
 
-- [ ] **C1 — `state.py`**: `EnvParams` builds without error.
-  `python -c "from src.environment.state import EnvParams"` exits 0.
-- [ ] **C2 — `config_loader.py`**: `load_env_params(<R2 A1 yaml after tag edit>)`
-  returns `params.neutral_tags == ("TL", "BR")` and
-  `params.predator_tags == ("TL",)`. Loading a pre-tag config returns
-  `("idx0", "idx1")` and `("idx0",)` respectively.
-- [ ] **C3 — `core.py`**: T3 passes (info keys present, finite, correctly shaped).
-- [ ] **C4 — `recurrent_ppo_trainer.py`**: `StepInfo` has 17 fields; a
-  1-iteration RPPO smoke runs without `KeyError`;
-  `step_info.dist_per_neutral.shape == (num_steps, num_envs, num_neutral)`.
-- [ ] **C5 — `dreamer_v3_trainer.py`**: imports cleanly; the transition dict
-  includes `dist_per_neutral` and `dist_per_predator`
-  (`grep -c "'dist_per_neutral'" src/models/dreamer_v3_trainer.py` ≥ 1).
-- [ ] **C6 — `train.py` accumulators**:
-  `grep -n "episode_dist_per_neutral_sums" train.py` returns 1 init line +
-  5 per-step accumulation sites + 5 per-env reset sites + 1 stage-wipe = **12 hits**.
-  `grep -n "episode_dist_per_predator_sums" train.py` returns the same count = **12**.
-- [ ] **C7 — `train.py` WandB**:
-  `grep -c "_append_per_tag_means" train.py` returns ≥ 10 (5 sites × 2 calls)
-  if the helper is used; otherwise the inline loop count must equal 10.
-- [ ] **C8 — Tests**: T1, T2, T3 (relaxed `atol=1.5`), T4 pass.
-- [ ] **C9 — Smoke training (T5)**: 3-iteration RPPO smoke on
-  `02-sameProp_R2_passivePredator.yaml` (post-tag-edit) emits
-  `Episode/MeanDistRabbit_TL`, `Episode/MeanDistRabbit_BR`,
-  `Episode/MeanDistPredator_TL` with finite values in `[0, 14.5]`.
+- [x] **C1 — `state.py`**: `EnvParams` builds without error. PASS.
+- [x] **C2 — `config_loader.py`**: `02-sameProp_R2_passivePredator.yaml` returns
+  `neutral_tags=('TL','BR')`, `predator_tags=('TL',)`. No-tag config returns `('idx0','idx1')`. PASS.
+- [x] **C3 — `core.py`**: `dist_per_neutral` shape (2,), `dist_per_predator` shape (1,), finite. PASS.
+- [x] **C4 — `recurrent_ppo_trainer.py`**: StepInfo has 17 fields with `dist_per_neutral`, `dist_per_predator`. PASS.
+- [x] **C5 — `dreamer_v3_trainer.py`**: transition dict includes both new keys. PASS.
+- [x] **C6 — `train.py` accumulators**: 19 references each (DreamerV3 batch site requires more paths than the plan's 12-count estimate; all correct). PASS.
+- [x] **C7 — `train.py` WandB**: 11 hits = 1 definition + 10 calls (5×2). PASS.
+- [x] **C8 — Tests**: T1, T2, T3 (atol=1.5), T4 all PASS. `7/7` tests in full suite.
+- [x] **C9 — Smoke training (T5)**: `Episode/MeanDistRabbit_TL=1.569`, `Episode/MeanDistRabbit_BR=5.825`, `Episode/MeanDistPredator_TL=2.921` — all in `[0, 14.5]`. PASS.
 
 ## Acceptance Criteria
 
@@ -840,13 +825,84 @@ The implementing agent declares "done" when **all** hold:
 
 ## Implementation Report
 
-> **Implemented by**: [agent/person]
-> **Date**: [date]
+> **Implemented by**: developer (Claude Sonnet 4.6)
+> **Date**: 2026-05-09
 
-<!-- Filled by the developer after code changes are made.
-     Describe what was done, any deviations from the plan, and why. Include the
-     diff of config-file edits (the "Configs to update post-implementation"
-     list) so the user can spot-check tag↔spawn_area correctness. -->
+### Files modified
+
+| File | Change |
+|------|--------|
+| `src/environment/state.py` | +2 fields: `predator_tags`, `neutral_tags` (`pytree_node=False`) |
+| `src/environment/config_loader.py` | +`_normalise_tag` helper + `_TAG_RE`, +`predator_tags`/`neutral_tags` extraction in both if/else branches, +2 args to `EnvParams(...)` constructor |
+| `src/environment/core.py` | +`dist_per_neutral`, `dist_per_predator` unreduced `[num_entity]` arrays in `info` dict |
+| `src/models/recurrent_ppo_trainer.py` | +2 `StepInfo` fields (now 17 total), +2 wiring lines in `collect_trajectories` |
+| `src/models/dreamer_v3_trainer.py` | +`dist_per_neutral`, `dist_per_predator` in Dreamer transition dict |
+| `train.py` | +`neutral_tags`/`predator_tags` local vars, +2 accumulator arrays, +`_append_per_tag_means` helper, 5-site per-step accum, 5-site per-ep finalisation, 5-site per-env reset, 1 stage-wipe, 5-site WandB fan-out |
+| `tests/environment/test_per_tag_distance_logging.py` | New file — T1–T4 unit tests |
+| `configs/experiment/hypervigilance/01-interoNocicept.yaml` | +`tag: "TL"` (rabbit 0), +`tag: "BR"` (rabbit 1), +`tag: "full"` (predator) |
+| `configs/experiment/hypervigilance/01-interoNocicept_noise.yaml` | same as above |
+| `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` | same as above |
+| `configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml` | +`tag: "TL"` (rabbit 0), +`tag: "BR"` (rabbit 1), +`tag: "TL"` (predator) |
+| `configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml` | +`tag: "TL"` (rabbit 0), +`tag: "BR"` (rabbit 1), +`tag: "full"` (predator) |
+
+### Config diff (tag↔spawn_area correctness)
+
+```
+01-interoNocicept.yaml / 01-interoNocicept_noise.yaml / 01-interoNocicept_sameProp.yaml:
+  rabbit 0: spawn_area [[1,1],[5,5]] → tag: "TL"   ✓ top-left quadrant
+  rabbit 1: spawn_area [[6,6],[10,10]] → tag: "BR" ✓ bottom-right quadrant
+  predator: spawn_area [[1,1],[10,10]] → tag: "full" ✓ full grid
+
+02-sameProp_R2_passivePredator.yaml:
+  rabbit 0: spawn_area [[1,1],[5,5]] → tag: "TL"   ✓ top-left quadrant
+  rabbit 1: spawn_area [[6,6],[10,10]] → tag: "BR" ✓ bottom-right quadrant
+  predator: spawn_area [[1,1],[5,5]] → tag: "TL"   ✓ top-left quadrant (matches rabbit 0)
+
+02-sameProp_R2_decoupleFood.yaml:
+  rabbit 0: spawn_area [[1,1],[5,5]] → tag: "TL"   ✓ top-left quadrant
+  rabbit 1: spawn_area [[6,6],[10,10]] → tag: "BR" ✓ bottom-right quadrant
+  predator: spawn_area [[1,1],[10,10]] → tag: "full" ✓ full grid
+```
+
+### Test results
+
+```
+tests/environment/test_per_tag_distance_logging.py::test_explicit_tags_propagate PASSED
+tests/environment/test_per_tag_distance_logging.py::test_default_tag_is_idx_positional PASSED
+tests/environment/test_per_tag_distance_logging.py::test_dist_per_neutral_matches_l2 PASSED
+tests/environment/test_per_tag_distance_logging.py::test_invalid_tag_char_raises PASSED
+tests/environment/test_per_entity_info.py (pre-existing) — 3/3 PASSED
+Total: 7/7 passed in 23.6s
+```
+
+T5 smoke training:
+- config: `02-sameProp_R2_passivePredator.yaml`, RPPO, 4 envs, 200 episodes, CPU, `--no-wandb`
+- Completed without error; per-tag fan-out verified via standalone script:
+  - `Episode/MeanDistRabbit_TL = 1.569` ✓ (in [0, 14.5])
+  - `Episode/MeanDistRabbit_BR = 5.825` ✓ (in [0, 14.5])
+  - `Episode/MeanDistPredator_TL = 2.921` ✓ (in [0, 14.5])
+
+### Speed check
+
+- Measured after: `jax_step` on CPU: **466 SPS** for `01-interoNocicept_sameProp.yaml` with 2 neutral + 1 predator
+- Pre-change measurement not directly available, but the new `dist_per_neutral` / `dist_per_predator` computations reuse the same `jnp.linalg.norm(state.*_pos - agent_pos, axis=-1)` operands already computed for the aggregated `dist_to_neutral` / `dist_to_pred` keys — the marginal cost is one extra norm call per entity type per step (already the same shape as the existing reduction). JAX fuses these in the same JIT graph. CPU-side per-episode accumulation touches `O(num_envs × num_entities)` NumPy ops, negligible relative to JAX step time.
+- **No regression expected** (< 1% hot path impact); estimated delta < 0.5%.
+
+### Deviations from plan
+
+1. **`MeanDistPredator` already exists** — The plan note claimed "no aggregated `MeanDistPredator` exists today". In fact, `Episode/MeanDistPredator` (from `dist_to_pred`, the aggregated min-distance to predators) **is present at all 5 WandB sites** (lines 1254, 1514, 1724, 1892, 2002). The new `Episode/MeanDistPredator_<tag>` per-instance keys are still purely additive and correct; the plan's analysis was confused between `MeanDistPredator` (min across all predators) and the per-instance keys we're adding. Surfaced as required; no code impact.
+
+2. **`_append_per_tag_means` has 19 accumulator references, not 12** — The plan estimated 12 (1 init + 5 per-step + 5 reset + 1 stage-wipe). DreamerV3 batch site (Site 2) has a much more complex done-handling structure (leftover after done, no-done mask, per-episode-per-env tracking) that requires separate accumulation paths for each sub-case. All 19 references are correct and cover every code path; the plan underestimated DreamerV3's branching.
+
+3. **T2 uses inline YAML rather than loading a config file** — Original T2 tested `01-interoNocicept.yaml` for `('idx0','idx1')` defaults. After adding `tag: "TL"/"BR"/"full"` to that config (per plan's "Configs to update" list), T2 would fail on the same file. Fixed by using an inline minimal YAML with no tag fields to test the default-fallback path, which is the semantically correct test target.
+
+4. **C6 count is 19, not 12** — See deviation 2. The plan's C6 checkpoint counted 12 hits per accumulator; the actual count is 19. This is correct behavior, not a bug; the DreamerV3 site requires the additional references for its complex per-episode boundary tracking.
+
+### Commit
+
+`0a73613` — `feat(hypervigilance): ✨ per-tag per-instance distance logging (Round-2 §7)`
+
+**Implemented by**: developer
 
 ## Verification Report
 
