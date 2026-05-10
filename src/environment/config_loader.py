@@ -7,6 +7,8 @@ import re as _re
 import yaml
 import numpy as np
 import jax.numpy as jnp
+from dataclasses import dataclass
+from typing import Tuple
 from src.environment.state import EnvParams
 
 from src.utils.config import Config
@@ -15,6 +17,119 @@ import warnings
 # Allowed characters in entity tags (used in WandB key 'Episode/MeanDist*_<tag>').
 # Slashes / spaces / dots break the WandB namespace or log key.
 _TAG_RE = _re.compile(r'^[A-Za-z0-9_-]+$')
+
+# ---------------------------------------------------------------------------
+# Behavior-measure toolkit v1 schema loader
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class BehaviorMeasureCfg:
+    """Validated configuration for the behavior-measure toolkit v1."""
+    enabled: bool
+    cue_radius: float
+    obs_window: int
+    eval_n_episodes: int
+    eval_seeds: Tuple[int, ...]
+    eval_policy_mode: str            # "deterministic" | "stochastic"
+    eval_max_steps: int
+    eval_obs_noise: str              # "training" | "zero" | "custom"
+    motif_window_K: int
+    motif_features: Tuple[str, ...]
+    motif_kmeans_k: int
+    motif_kmeans_seed: int
+    motif_standardise: str           # "zscore_pooled" | "zscore_per_agent" | "none"
+    eval_output_root: str
+
+
+_ALLOWED_POLICY_MODES = {"deterministic", "stochastic"}
+_ALLOWED_NOISE_MODES = {"training", "zero", "custom"}
+_ALLOWED_STANDARDISE = {"zscore_pooled", "zscore_per_agent", "none"}
+_DEFAULT_FEATURE_NAMES = (
+    "net_displacement", "path_length", "threat_distance_change_rate",
+    "min_threat_distance", "bush_occupancy_fraction", "eat_events_per_window",
+    "action_entropy", "mode_action_fraction", "stay_in_place_fraction",
+    "drive_injury_change",
+)
+
+
+def load_behavior_measure_cfg(config) -> "BehaviorMeasureCfg | None":
+    """Load behavior_measures: from the YAML config.
+
+    Returns None if the top-level key is absent (backwards compatibility — existing
+    configs that pre-date this feature load unchanged).  If the block IS present,
+    every leaf key is mandatory and missing keys raise ValueError.
+    """
+    if config.get("behavior_measures") is None:
+        return None  # backwards-compat: feature off, online accumulators no-op.
+
+    enabled         = config.get_mandatory("behavior_measures.enabled")
+    cue_radius      = config.get_mandatory("behavior_measures.cue_radius", float)
+    obs_window      = config.get_mandatory("behavior_measures.obs_window", int)
+    eval_n_eps      = config.get_mandatory("behavior_measures.eval_n_episodes", int)
+    eval_seeds_raw  = config.get_mandatory("behavior_measures.eval_seeds")
+    eval_pol_mode   = config.get_mandatory("behavior_measures.eval_policy_mode")
+    eval_max_steps  = config.get_mandatory("behavior_measures.eval_max_steps", int)
+    eval_obs_noise  = config.get_mandatory("behavior_measures.eval_obs_noise")
+    motif_K         = config.get_mandatory("behavior_measures.motif_window_K", int)
+    motif_features  = config.get_mandatory("behavior_measures.motif_features")
+    motif_k         = config.get_mandatory("behavior_measures.motif_kmeans_k", int)
+    motif_seed      = config.get_mandatory("behavior_measures.motif_kmeans_seed", int)
+    motif_std       = config.get_mandatory("behavior_measures.motif_standardise")
+    eval_output     = config.get_mandatory("behavior_measures.eval_output_root")
+
+    # ----- validation -----
+    if cue_radius <= 0:
+        raise ValueError(f"behavior_measures.cue_radius must be > 0; got {cue_radius}.")
+    if obs_window < 1:
+        raise ValueError(f"behavior_measures.obs_window must be >= 1; got {obs_window}.")
+    if eval_n_eps < 1:
+        raise ValueError(f"behavior_measures.eval_n_episodes must be >= 1; got {eval_n_eps}.")
+    if not isinstance(eval_seeds_raw, (list, tuple)):
+        raise ValueError(f"behavior_measures.eval_seeds must be a list/tuple; got {type(eval_seeds_raw)}.")
+    if len(eval_seeds_raw) != eval_n_eps:
+        raise ValueError(
+            f"behavior_measures.eval_seeds length ({len(eval_seeds_raw)}) != eval_n_episodes ({eval_n_eps})."
+        )
+    eval_seeds = tuple(int(s) for s in eval_seeds_raw)
+    if len(set(eval_seeds)) != len(eval_seeds):
+        raise ValueError("behavior_measures.eval_seeds contains duplicates.")
+    if eval_pol_mode not in _ALLOWED_POLICY_MODES:
+        raise ValueError(f"behavior_measures.eval_policy_mode must be in {_ALLOWED_POLICY_MODES}; got {eval_pol_mode!r}.")
+    if eval_max_steps < 1:
+        raise ValueError(f"behavior_measures.eval_max_steps must be >= 1; got {eval_max_steps}.")
+    if eval_obs_noise not in _ALLOWED_NOISE_MODES:
+        raise ValueError(f"behavior_measures.eval_obs_noise must be in {_ALLOWED_NOISE_MODES}; got {eval_obs_noise!r}.")
+    if motif_K < 1:
+        raise ValueError(f"behavior_measures.motif_window_K must be >= 1; got {motif_K}.")
+    if not motif_features or not all(isinstance(f, str) for f in motif_features):
+        raise ValueError("behavior_measures.motif_features must be a non-empty list of strings.")
+    unknown_features = set(motif_features) - set(_DEFAULT_FEATURE_NAMES)
+    if unknown_features:
+        raise ValueError(
+            f"behavior_measures.motif_features contains unknown names: {sorted(unknown_features)}. "
+            f"Allowed v1 features: {_DEFAULT_FEATURE_NAMES}."
+        )
+    if motif_k < 2:
+        raise ValueError(f"behavior_measures.motif_kmeans_k must be >= 2; got {motif_k}.")
+    if motif_std not in _ALLOWED_STANDARDISE:
+        raise ValueError(f"behavior_measures.motif_standardise must be in {_ALLOWED_STANDARDISE}; got {motif_std!r}.")
+
+    return BehaviorMeasureCfg(
+        enabled=bool(enabled),
+        cue_radius=float(cue_radius),
+        obs_window=int(obs_window),
+        eval_n_episodes=int(eval_n_eps),
+        eval_seeds=eval_seeds,
+        eval_policy_mode=str(eval_pol_mode),
+        eval_max_steps=int(eval_max_steps),
+        eval_obs_noise=str(eval_obs_noise),
+        motif_window_K=int(motif_K),
+        motif_features=tuple(str(f) for f in motif_features),
+        motif_kmeans_k=int(motif_k),
+        motif_kmeans_seed=int(motif_seed),
+        motif_standardise=str(motif_std),
+        eval_output_root=str(eval_output),
+    )
 
 
 def _normalise_tag(raw, idx, entity_label):
