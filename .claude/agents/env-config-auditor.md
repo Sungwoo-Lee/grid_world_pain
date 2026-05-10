@@ -37,6 +37,13 @@ Run through this list mechanically on every audit. If a check is N/A for the sco
 - When a sensor is added, renamed, or toggled by a flag, walk the breakdown and the noise YAML in parallel.
 - Verify the noise modality **order** matches `get_observation_breakdown`'s emission order (used as `noise_modality_order` static tuple).
 
+### 1.5 Behavior-measures Bush Presence (when `behavior_measures.enabled: true`)
+
+- When `behavior_measures.enabled: true` AND M2 (bush_dive_rate) is in scope,
+  verify `environment.obstacles` contains at least one entry with `hides_agent: true`.
+  Without bushes, `info['agent_in_bush']` is always False, M2 emits NaN, and the
+  measure is structurally uninterpretable.
+
 ### 2. Mandatory-Key Discipline (Configuration Protocol)
 
 - Critical config params **must** be loaded via `config.get_mandatory('key')`, never `config.get('key', default)`. Flag any new YAML key that bypasses this.
