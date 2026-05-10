@@ -63,7 +63,7 @@ from typing import NamedTuple, List, Optional
 from dataclasses import dataclass
 import glob
 
-from src.environment.config_loader import load_env_params
+from src.environment.config_loader import load_env_params, load_behavior_measure_cfg
 from src.environment.wrapper import ParallelEnv
 from src.environment.sensor import get_observation, get_observation_breakdown
 from src.environment.core import jax_step
@@ -953,6 +953,330 @@ def main():
     episode_dist_per_neutral_sums  = np.zeros((num_envs, num_neutral_for_log),  dtype=np.float32)
     episode_dist_per_predator_sums = np.zeros((num_envs, num_predator_for_log), dtype=np.float32)
 
+    # === Behavior-measure toolkit v1: online M1/M2/M5 state ===
+    # Loaded once from config; None when behavior_measures: block is absent (backwards-compat).
+    bm_cfg = load_behavior_measure_cfg(config)
+    bm_enabled = bm_cfg is not None and bm_cfg.enabled
+    if bm_enabled:
+        bm_R = float(bm_cfg.cue_radius)
+        bm_K = int(bm_cfg.obs_window)
+    else:
+        bm_R = 0.0
+        bm_K = 0
+
+    # Per-env, per-class M1/M2/M5 counters (numpy int64; per-class fan-out: 0=predator, 1=rabbit).
+    # Episode-life arrays — reset at done; stage-wipe handled at the stage transition.
+    _NUM_CLASSES = 2  # 0 = predator, 1 = rabbit
+    m1_candidates  = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
+    m1_interrupted = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
+    m2_onsets      = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
+    m2_dives       = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
+    m5_threat_steps = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
+    m5_safe_steps   = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
+    m5_eat_threat   = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
+    m5_eat_safe     = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
+
+    # Per-tag accumulators (mirror the per-class ones).
+    _num_tag_slots = num_predator_for_log + num_neutral_for_log
+    m1_candidates_tag  = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
+    m1_interrupted_tag = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
+    m2_onsets_tag      = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
+    m2_dives_tag       = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
+    m5_threat_steps_tag = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
+    m5_safe_steps_tag   = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
+    m5_eat_threat_tag   = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
+    m5_eat_safe_tag     = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
+    # Per-tag layout: first num_predator_for_log entries = predator tags, then neutral tags.
+    _pred_slice    = slice(0, num_predator_for_log)
+    _neutral_slice = slice(num_predator_for_log, num_predator_for_log + num_neutral_for_log)
+
+    # K-buffer state for M1/M2 (one pending candidate/onset slot per env per class).
+    m1_candidate_age    = np.full((num_envs, _NUM_CLASSES), -1, dtype=np.int32)   # -1 = no pending
+    m1_candidate_tag_idx = np.full((num_envs, _NUM_CLASSES), -1, dtype=np.int32)  # tag-slot index
+    m1_steps_since_eat  = np.zeros((num_envs,), dtype=np.int32)
+    m2_onset_age        = np.full((num_envs, _NUM_CLASSES), -1, dtype=np.int32)
+    m2_onset_tag_idx    = np.full((num_envs, _NUM_CLASSES), -1, dtype=np.int32)
+    m2_in_bush_seen     = np.zeros((num_envs, _NUM_CLASSES), dtype=bool)
+    # Prior-step "threat in radius" state (for M2 onset detection).
+    m_prev_threat_in_R     = np.zeros((num_envs, _NUM_CLASSES), dtype=bool)
+    m_prev_threat_in_R_tag = np.zeros((num_envs, _num_tag_slots), dtype=bool)
+
+    def _bm_reset_env(i):
+        """Reset all behavior-measure accumulators for env i at episode end."""
+        m1_candidates[i, :] = 0;     m1_interrupted[i, :] = 0
+        m2_onsets[i, :] = 0;         m2_dives[i, :] = 0
+        m5_threat_steps[i, :] = 0;   m5_safe_steps[i, :] = 0
+        m5_eat_threat[i, :] = 0;     m5_eat_safe[i, :] = 0
+        m1_candidates_tag[i, :] = 0; m1_interrupted_tag[i, :] = 0
+        m2_onsets_tag[i, :] = 0;     m2_dives_tag[i, :] = 0
+        m5_threat_steps_tag[i, :] = 0; m5_safe_steps_tag[i, :] = 0
+        m5_eat_threat_tag[i, :] = 0;   m5_eat_safe_tag[i, :] = 0
+        m1_candidate_age[i, :] = -1; m1_candidate_tag_idx[i, :] = -1
+        m2_onset_age[i, :] = -1;     m2_onset_tag_idx[i, :] = -1
+        m2_in_bush_seen[i, :] = False
+        m_prev_threat_in_R[i, :] = False
+        m_prev_threat_in_R_tag[i, :] = False
+        m1_steps_since_eat[i] = 0
+
+    def _bm_step_update(info_np_t, done_mask):
+        """One-step update of M1/M2/M5 counters across all envs, both classes.
+
+        info_np_t: dict with per-env arrays for this single step (shape [num_envs] or [num_envs, N]).
+        done_mask: bool array [num_envs] — True for envs that completed an episode this step.
+        Call this BEFORE the per-episode finalisation / reset so the final step counts.
+        """
+        ate_food_t = info_np_t['ate_food'].astype(bool)          # [num_envs]
+        in_bush_t  = info_np_t['agent_in_bush'].astype(bool)     # [num_envs]
+
+        # Per-class threat distances
+        dist_pred_t = info_np_t.get('dist_per_predator')   # [num_envs, num_pred] or None
+        dist_neut_t = info_np_t.get('dist_per_neutral')    # [num_envs, num_neut] or None
+
+        # threat_in_R[env, class]: True iff min distance to class-c entity < bm_R
+        threat_in_R = np.zeros((num_envs, _NUM_CLASSES), dtype=bool)
+        if dist_pred_t is not None and dist_pred_t.shape[1] > 0:
+            threat_in_R[:, 0] = np.min(dist_pred_t, axis=1) < bm_R
+        if dist_neut_t is not None and dist_neut_t.shape[1] > 0:
+            threat_in_R[:, 1] = np.min(dist_neut_t, axis=1) < bm_R
+
+        # threat_in_R_tag[env, tag_slot]: per-tag threat flag
+        threat_in_R_tag = np.zeros((num_envs, _num_tag_slots), dtype=bool)
+        if dist_pred_t is not None and num_predator_for_log > 0:
+            for j in range(min(num_predator_for_log, dist_pred_t.shape[1])):
+                threat_in_R_tag[:, _pred_slice.start + j] = dist_pred_t[:, j] < bm_R
+        if dist_neut_t is not None and num_neutral_for_log > 0:
+            for j in range(min(num_neutral_for_log, dist_neut_t.shape[1])):
+                threat_in_R_tag[:, _neutral_slice.start + j] = dist_neut_t[:, j] < bm_R
+
+        # --- M5: per-class threat/safe step and eat counters ---
+        for c in range(_NUM_CLASSES):
+            under_threat = threat_in_R[:, c]
+            m5_threat_steps[:, c] += under_threat.astype(np.int64)
+            m5_safe_steps[:, c]   += (~under_threat).astype(np.int64)
+            m5_eat_threat[:, c]   += (under_threat & ate_food_t).astype(np.int64)
+            m5_eat_safe[:, c]     += (~under_threat & ate_food_t).astype(np.int64)
+        # M5 per-tag
+        for j in range(_num_tag_slots):
+            ut = threat_in_R_tag[:, j]
+            m5_threat_steps_tag[:, j] += ut.astype(np.int64)
+            m5_safe_steps_tag[:, j]   += (~ut).astype(np.int64)
+            m5_eat_threat_tag[:, j]   += (ut & ate_food_t).astype(np.int64)
+            m5_eat_safe_tag[:, j]     += (~ut & ate_food_t).astype(np.int64)
+
+        # --- M1: interrupted-feeding detection ---
+        # 1. Update steps_since_eat
+        m1_steps_since_eat[:] = np.where(ate_food_t, 0, m1_steps_since_eat + 1)
+
+        for c in range(_NUM_CLASSES):
+            # 2. Age pending candidates FIRST (before recording new ones this step).
+            # This ensures a freshly-set candidate (age=0) is not aged on the same step,
+            # so age reaches bm_K after exactly bm_K subsequent no-eat steps.
+            for env_i in range(num_envs):
+                if m1_candidate_age[env_i, c] >= 0:
+                    m1_candidate_age[env_i, c] += 1
+                    if m1_candidate_age[env_i, c] >= bm_K:
+                        # Resolve: interrupted iff agent has not eaten for >= bm_K steps after
+                        # the candidate event. m1_steps_since_eat accumulates since the last eat.
+                        if m1_steps_since_eat[env_i] >= bm_K:
+                            m1_interrupted[env_i, c] += 1
+                            tag_j = m1_candidate_tag_idx[env_i, c]
+                            if tag_j >= 0:
+                                m1_interrupted_tag[env_i, tag_j] += 1
+                        # Record the candidate for per-tag too
+                        tag_j = m1_candidate_tag_idx[env_i, c]
+                        if tag_j >= 0:
+                            m1_candidates_tag[env_i, tag_j] += 1
+                        m1_candidate_age[env_i, c] = -1
+                        m1_candidate_tag_idx[env_i, c] = -1
+
+            # 3. Record new candidates: ate_food this step AND threat in radius
+            new_cand = ate_food_t & threat_in_R[:, c]
+            for env_i in range(num_envs):
+                if new_cand[env_i]:
+                    # Resolve old pending candidate (conservative: not-interrupted)
+                    # before overwriting with the new one.
+                    if m1_candidate_age[env_i, c] >= 0:
+                        # old candidate not interrupted (we see new eat event → agent is eating)
+                        pass  # counters already incremented at candidate-record time
+                    m1_candidates[env_i, c] += 1
+                    m1_candidate_age[env_i, c] = 0
+                    # Find nearest predator/neutral tag for per-tag bucket
+                    if c == 0 and dist_pred_t is not None and num_predator_for_log > 0 and dist_pred_t.shape[1] > 0:
+                        best_j = int(np.argmin(dist_pred_t[env_i]))
+                        m1_candidate_tag_idx[env_i, c] = _pred_slice.start + min(best_j, num_predator_for_log - 1)
+                    elif c == 1 and dist_neut_t is not None and num_neutral_for_log > 0 and dist_neut_t.shape[1] > 0:
+                        best_j = int(np.argmin(dist_neut_t[env_i]))
+                        m1_candidate_tag_idx[env_i, c] = _neutral_slice.start + min(best_j, num_neutral_for_log - 1)
+                    else:
+                        m1_candidate_tag_idx[env_i, c] = -1
+
+        # --- M2: bush-dive detection ---
+        for c in range(_NUM_CLASSES):
+            threat_now = threat_in_R[:, c]
+
+            for env_i in range(num_envs):
+                # 1. Detect onset: prev not in R, now in R, agent not already in bush
+                if (not m_prev_threat_in_R[env_i, c]) and threat_now[env_i] and (not in_bush_t[env_i]):
+                    # Resolve old pending onset before overwriting
+                    if m2_onset_age[env_i, c] >= 0:
+                        pass  # count will be tallied at age==K
+                    m2_onsets[env_i, c] += 1
+                    m2_onset_age[env_i, c] = 0
+                    m2_in_bush_seen[env_i, c] = False
+                    # Per-tag: find triggering instance
+                    if c == 0 and dist_pred_t is not None and num_predator_for_log > 0 and dist_pred_t.shape[1] > 0:
+                        best_j = int(np.argmin(dist_pred_t[env_i]))
+                        m2_onset_tag_idx[env_i, c] = _pred_slice.start + min(best_j, num_predator_for_log - 1)
+                    elif c == 1 and dist_neut_t is not None and num_neutral_for_log > 0 and dist_neut_t.shape[1] > 0:
+                        best_j = int(np.argmin(dist_neut_t[env_i]))
+                        m2_onset_tag_idx[env_i, c] = _neutral_slice.start + min(best_j, num_neutral_for_log - 1)
+                    else:
+                        m2_onset_tag_idx[env_i, c] = -1
+
+                # 2. Mark if bush entered during window
+                if m2_onset_age[env_i, c] >= 0 and in_bush_t[env_i]:
+                    m2_in_bush_seen[env_i, c] = True
+
+                # 3. Age and resolve
+                if m2_onset_age[env_i, c] >= 0:
+                    m2_onset_age[env_i, c] += 1
+                    if m2_onset_age[env_i, c] >= bm_K:
+                        if m2_in_bush_seen[env_i, c]:
+                            m2_dives[env_i, c] += 1
+                            tag_j = m2_onset_tag_idx[env_i, c]
+                            if tag_j >= 0:
+                                m2_dives_tag[env_i, tag_j] += 1
+                        # Record per-tag onset count
+                        tag_j = m2_onset_tag_idx[env_i, c]
+                        if tag_j >= 0:
+                            m2_onsets_tag[env_i, tag_j] += 1
+                        m2_onset_age[env_i, c] = -1
+                        m2_onset_tag_idx[env_i, c] = -1
+                        m2_in_bush_seen[env_i, c] = False
+
+        # Update prev threat state for next step
+        m_prev_threat_in_R[:, :] = threat_in_R
+        m_prev_threat_in_R_tag[:, :] = threat_in_R_tag
+
+    def _bm_finalise_episode(i, ep_data):
+        """Compute per-episode BM scalars for env i and add to ep_data dict."""
+        EPS = 1e-6
+        for c, cname in enumerate(("predator", "rabbit")):
+            # M1
+            denom = int(m1_candidates[i, c])
+            if denom > 0:
+                ep_data[f"interrupted_feeding_rate_{cname}_raw"] = float(m1_interrupted[i, c]) / float(denom)
+            else:
+                ep_data[f"interrupted_feeding_rate_{cname}_raw"] = float("nan")
+            ep_data[f"interrupted_feeding_denom_{cname}_raw"] = denom
+
+            # M2
+            denom2 = int(m2_onsets[i, c])
+            if denom2 > 0:
+                ep_data[f"bush_dive_rate_{cname}_raw"] = float(m2_dives[i, c]) / float(denom2)
+            else:
+                ep_data[f"bush_dive_rate_{cname}_raw"] = float("nan")
+            ep_data[f"bush_dive_denom_{cname}_raw"] = denom2
+
+            # M5
+            threat_steps = int(m5_threat_steps[i, c])
+            safe_steps   = int(m5_safe_steps[i, c])
+            eat_threat   = int(m5_eat_threat[i, c])
+            eat_safe     = int(m5_eat_safe[i, c])
+            p_eat_threat = (eat_threat / threat_steps) if threat_steps > 0 else float("nan")
+            p_eat_safe   = (eat_safe / safe_steps)     if safe_steps   > 0 else float("nan")
+            ep_data[f"eat_under_threat_rate_{cname}_raw"]       = p_eat_threat
+            ep_data[f"eat_safe_rate_{cname}_raw"]               = p_eat_safe
+            ep_data[f"eat_under_threat_safe_steps_{cname}_raw"] = safe_steps
+            if threat_steps > 0 and safe_steps > 0:
+                ep_data[f"eat_under_threat_ratio_{cname}_raw"] = float(p_eat_threat) / max(float(p_eat_safe), EPS)
+            else:
+                ep_data[f"eat_under_threat_ratio_{cname}_raw"] = float("nan")
+
+        # Per-tag M1, M2, M5
+        for j_in_slice, tag in enumerate(predator_tags):
+            j = _pred_slice.start + j_in_slice
+            _bm_finalise_tag(i, j, tag, "predator", ep_data)
+        for j_in_slice, tag in enumerate(neutral_tags):
+            j = _neutral_slice.start + j_in_slice
+            _bm_finalise_tag(i, j, tag, "rabbit", ep_data)
+
+    def _bm_finalise_tag(i, j, tag, class_name, ep_data):
+        EPS = 1e-6
+        # M1
+        denom = int(m1_candidates_tag[i, j])
+        if denom > 0:
+            ep_data[f"interrupted_feeding_rate_{class_name}_{tag}_raw"] = float(m1_interrupted_tag[i, j]) / float(denom)
+        else:
+            ep_data[f"interrupted_feeding_rate_{class_name}_{tag}_raw"] = float("nan")
+
+        # M2
+        denom2 = int(m2_onsets_tag[i, j])
+        if denom2 > 0:
+            ep_data[f"bush_dive_rate_{class_name}_{tag}_raw"] = float(m2_dives_tag[i, j]) / float(denom2)
+        else:
+            ep_data[f"bush_dive_rate_{class_name}_{tag}_raw"] = float("nan")
+
+        # M5
+        ts  = int(m5_threat_steps_tag[i, j])
+        ss  = int(m5_safe_steps_tag[i, j])
+        et  = int(m5_eat_threat_tag[i, j])
+        es  = int(m5_eat_safe_tag[i, j])
+        pet = (et / ts) if ts > 0 else float("nan")
+        pes = (es / ss) if ss > 0 else float("nan")
+        ep_data[f"eat_under_threat_rate_{class_name}_{tag}_raw"]  = pet
+        ep_data[f"eat_safe_rate_{class_name}_{tag}_raw"]          = pes
+        if ts > 0 and ss > 0:
+            ep_data[f"eat_under_threat_ratio_{class_name}_{tag}_raw"] = float(pet) / max(float(pes), EPS)
+        else:
+            ep_data[f"eat_under_threat_ratio_{class_name}_{tag}_raw"] = float("nan")
+
+    def _append_per_measure_mean(ep_log, iteration_episodes, ep_key_raw, wandb_key):
+        """Mean the same per-episode raw scalar (skipping NaN) across the iteration's episodes."""
+        vals = [ep[ep_key_raw] for ep in iteration_episodes
+                if ep_key_raw in ep and not (isinstance(ep[ep_key_raw], float) and
+                                              ep[ep_key_raw] != ep[ep_key_raw])]  # isnan check
+        if vals:
+            ep_log[wandb_key] = float(np.mean(vals))
+
+    def _bm_log_wandb(ep_log, iteration_episodes):
+        """Append all BM WandB keys to ep_log from the iteration's episodes."""
+        for cname in ("predator", "rabbit"):
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"interrupted_feeding_rate_{cname}_raw", f"Episode/InterruptedFeedingRate_{cname}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"interrupted_feeding_denom_{cname}_raw", f"Episode/InterruptedFeedingDenominator_{cname}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"bush_dive_rate_{cname}_raw", f"Episode/BushDiveRate_{cname}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"bush_dive_denom_{cname}_raw", f"Episode/BushDiveDenominator_{cname}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"eat_under_threat_ratio_{cname}_raw", f"Episode/EatUnderThreatRatio_{cname}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"eat_under_threat_rate_{cname}_raw", f"Episode/EatUnderThreatRate_{cname}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"eat_safe_rate_{cname}_raw", f"Episode/EatSafeRate_{cname}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"eat_under_threat_safe_steps_{cname}_raw", f"Episode/EatUnderThreatSafeSteps_{cname}")
+        for tag in predator_tags:
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"interrupted_feeding_rate_predator_{tag}_raw", f"Episode/InterruptedFeedingRate_predator_{tag}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"bush_dive_rate_predator_{tag}_raw", f"Episode/BushDiveRate_predator_{tag}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"eat_under_threat_ratio_predator_{tag}_raw", f"Episode/EatUnderThreatRatio_predator_{tag}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"eat_under_threat_rate_predator_{tag}_raw", f"Episode/EatUnderThreatRate_predator_{tag}")
+        for tag in neutral_tags:
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"interrupted_feeding_rate_rabbit_{tag}_raw", f"Episode/InterruptedFeedingRate_rabbit_{tag}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"bush_dive_rate_rabbit_{tag}_raw", f"Episode/BushDiveRate_rabbit_{tag}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"eat_under_threat_ratio_rabbit_{tag}_raw", f"Episode/EatUnderThreatRatio_rabbit_{tag}")
+            _append_per_measure_mean(ep_log, iteration_episodes,
+                f"eat_under_threat_rate_rabbit_{tag}_raw", f"Episode/EatUnderThreatRate_rabbit_{tag}")
+
     def _append_per_tag_means(ep_log, iteration_episodes, tags, ep_key_prefix, wandb_key_prefix):
         """Group ep_data['<ep_key_prefix>_<tag>_raw'] by tag, mean across instances
         then mean across episodes, write into ep_log[f'{wandb_key_prefix}_{tag}']."""
@@ -1110,6 +1434,22 @@ def main():
                             episode_dist_sums[_bk][:] = 0.0
                         if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[:, :]  = 0.0
                         if num_predator_for_log > 0: episode_dist_per_predator_sums[:, :] = 0.0
+                        # Behavior-measure toolkit v1: stage-transition wipe
+                        if bm_enabled:
+                            m1_candidates[:, :]  = 0; m1_interrupted[:, :]  = 0
+                            m2_onsets[:, :]      = 0; m2_dives[:, :]        = 0
+                            m5_threat_steps[:, :] = 0; m5_safe_steps[:, :]  = 0
+                            m5_eat_threat[:, :]  = 0; m5_eat_safe[:, :]     = 0
+                            m1_candidates_tag[:, :]  = 0; m1_interrupted_tag[:, :]  = 0
+                            m2_onsets_tag[:, :]      = 0; m2_dives_tag[:, :]        = 0
+                            m5_threat_steps_tag[:, :] = 0; m5_safe_steps_tag[:, :]  = 0
+                            m5_eat_threat_tag[:, :]  = 0; m5_eat_safe_tag[:, :]     = 0
+                            m1_candidate_age[:, :] = -1; m1_candidate_tag_idx[:, :] = -1
+                            m2_onset_age[:, :]     = -1; m2_onset_tag_idx[:, :]     = -1
+                            m2_in_bush_seen[:, :]  = False
+                            m_prev_threat_in_R[:, :]     = False
+                            m_prev_threat_in_R_tag[:, :] = False
+                            m1_steps_since_eat[:] = 0
 
                         # --- DreamerV3 only: clear replay buffers to prevent
                         # cross-stage dynamics contamination of the world model.
@@ -1193,6 +1533,8 @@ def main():
                         # Per-instance arrays: shape [num_steps, num_envs, num_entity]
                         if num_neutral_for_log  > 0: info_np['dist_per_neutral']  = np.array(step_info.dist_per_neutral)
                         if num_predator_for_log > 0: info_np['dist_per_predator'] = np.array(step_info.dist_per_predator)
+                        # Behavior-measure toolkit v1: agent_in_bush (explicit extraction — Site 1 anti-pattern guard)
+                        info_np['agent_in_bush'] = np.array(step_info.agent_in_bush)
 
                     rollout_rew = trajectories.reward
                     rollout_done = trajectories.done
@@ -1215,7 +1557,7 @@ def main():
                     for t in range(num_steps):
                         episode_returns += rew_np[t]
                         episode_lengths += 1
-                        
+
                         if info_np:
                             for k in BEHAVIOR_KEYS:
                                 episode_behavior[k] += info_np[k][t]
@@ -1226,6 +1568,12 @@ def main():
                                 episode_dist_per_neutral_sums  += info_np['dist_per_neutral'][t]
                             if 'dist_per_predator' in info_np and num_predator_for_log > 0:
                                 episode_dist_per_predator_sums += info_np['dist_per_predator'][t]
+                            # === Behavior-measure toolkit v1: per-step accumulation (Site 1) ===
+                            if bm_enabled and 'agent_in_bush' in info_np:
+                                _bm_info_t = {k: info_np[k][t] for k in ('ate_food', 'agent_in_bush')}
+                                if 'dist_per_predator' in info_np: _bm_info_t['dist_per_predator'] = info_np['dist_per_predator'][t]
+                                if 'dist_per_neutral'  in info_np: _bm_info_t['dist_per_neutral']  = info_np['dist_per_neutral'][t]
+                                _bm_step_update(_bm_info_t, done_np[t].astype(bool))
 
                         dones_t = done_np[t].astype(bool)
 
@@ -1253,6 +1601,9 @@ def main():
                                         means = episode_dist_per_predator_sums[i] / ep_l_safe
                                         for j, tag in enumerate(predator_tags):
                                             ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
+                                    # Behavior-measure toolkit v1: per-episode finalisation (Site 1)
+                                    if bm_enabled:
+                                        _bm_finalise_episode(i, ep_data)
 
                                 # Store for moving average (tqdm)
                                 ep_info_buffer.append(ep_data)
@@ -1269,6 +1620,9 @@ def main():
                                         episode_dist_sums[k][i] = 0.0
                                 if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
                                 if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+                                # Behavior-measure toolkit v1: per-env reset (Site 1)
+                                if bm_enabled:
+                                    _bm_reset_env(i)
 
                     # Log AGGREGATED stats for the iteration (Stage 3)
                     if wandb_enabled and iteration_episodes and iteration % log_interval == 0:
@@ -1311,6 +1665,9 @@ def main():
                                                   'mean_dist_rabbit',   'Episode/MeanDistRabbit')
                             _append_per_tag_means(ep_log, iteration_episodes, predator_tags,
                                                   'mean_dist_predator', 'Episode/MeanDistPredator')
+                            # Behavior-measure toolkit v1: WandB fan-out (Site 1)
+                            if bm_enabled:
+                                _bm_log_wandb(ep_log, iteration_episodes)
                         wandb.log(ep_log)
 
                     # Update progress bar based on total episodes completed
@@ -1474,6 +1831,21 @@ def main():
                     # Per-instance keys: shape [T, B, num_entity]
                     dist_per_neutral_steps  = transitions_np.get('dist_per_neutral')   # [T, B, num_neutral] or None
                     dist_per_predator_steps = transitions_np.get('dist_per_predator')  # [T, B, num_predator] or None
+                    # Behavior-measure toolkit v1: agent_in_bush (Site 2 direct extraction)
+                    agent_in_bush_steps = transitions_np.get('agent_in_bush')          # [T, B] or None
+
+                    # Behavior-measure toolkit v1: per-step sequential update for Site 2 (DreamerV3 batch)
+                    # The K-buffer must be driven step-by-step so done-discarding is episode-accurate.
+                    if bm_enabled and agent_in_bush_steps is not None:
+                        T2, B2 = done_steps.shape
+                        for t2 in range(T2):
+                            _bm_info_t2 = {
+                                'ate_food': transitions_np['ate_food'][t2].astype(bool),
+                                'agent_in_bush': agent_in_bush_steps[t2].astype(bool),
+                            }
+                            if dist_per_predator_steps is not None: _bm_info_t2['dist_per_predator'] = dist_per_predator_steps[t2]
+                            if dist_per_neutral_steps  is not None: _bm_info_t2['dist_per_neutral']  = dist_per_neutral_steps[t2]
+                            _bm_step_update(_bm_info_t2, done_steps[t2].astype(bool))
 
                     # More vectorized stats handling
                     done_indices = np.where(done_steps) # (t_idxs, env_idxs)
@@ -1504,6 +1876,9 @@ def main():
                                         means = (episode_dist_per_predator_sums[i] + np.sum(dist_per_predator_steps[curr_start:d_idx+1, i], axis=0)) / ep_l_safe
                                         for j, tag in enumerate(predator_tags):
                                             ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
+                                    # Behavior-measure toolkit v1: per-episode finalisation (Site 2)
+                                    if bm_enabled:
+                                        _bm_finalise_episode(i, ep_data)
 
                                 ep_info_buffer.append(ep_data)
                                 iteration_episodes.append(ep_data)
@@ -1517,6 +1892,9 @@ def main():
                                         episode_dist_sums[k][i] = 0.0
                                 if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
                                 if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+                                # Behavior-measure toolkit v1: per-env reset (Site 2)
+                                if bm_enabled:
+                                    _bm_reset_env(i)
                                 curr_start = d_idx + 1
 
                             # Add leftover
@@ -1603,6 +1981,9 @@ def main():
                                                   'mean_dist_rabbit',   'Episode/MeanDistRabbit')
                             _append_per_tag_means(ep_log, iteration_episodes, predator_tags,
                                                   'mean_dist_predator', 'Episode/MeanDistPredator')
+                            # Behavior-measure toolkit v1: WandB fan-out (Site 2)
+                            if bm_enabled:
+                                _bm_log_wandb(ep_log, iteration_episodes)
                         wandb.log(ep_log)
 
                     # Update progress bar
@@ -1736,6 +2117,13 @@ def main():
                             episode_dist_per_neutral_sums  += np.array(info['dist_per_neutral'])
                         if 'dist_per_predator' in info and num_predator_for_log > 0:
                             episode_dist_per_predator_sums += np.array(info['dist_per_predator'])
+                        # === Behavior-measure toolkit v1: per-step accumulation (Site 3: DQN) ===
+                        if bm_enabled and 'agent_in_bush' in info:
+                            _bm_info_dqn = {'ate_food': np.array(info['ate_food']).astype(bool),
+                                            'agent_in_bush': np.array(info['agent_in_bush']).astype(bool)}
+                            if 'dist_per_predator' in info: _bm_info_dqn['dist_per_predator'] = np.array(info['dist_per_predator'])
+                            if 'dist_per_neutral'  in info: _bm_info_dqn['dist_per_neutral']  = np.array(info['dist_per_neutral'])
+                            _bm_step_update(_bm_info_dqn, np.array(done).astype(bool))
 
                     dones_np = np.array(done).astype(bool)
                     if np.any(dones_np):
@@ -1762,6 +2150,9 @@ def main():
                                     means = episode_dist_per_predator_sums[i] / ep_l_safe
                                     for j, tag in enumerate(predator_tags):
                                         ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
+                                # Behavior-measure toolkit v1: per-episode finalisation (Site 3: DQN)
+                                if bm_enabled:
+                                    _bm_finalise_episode(i, ep_data)
 
                             ep_info_buffer.append(ep_data)
                             iteration_episodes.append(ep_data)
@@ -1774,6 +2165,9 @@ def main():
                                     episode_dist_sums[k][i] = 0.0
                             if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
                             if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+                            # Behavior-measure toolkit v1: per-env reset (Site 3: DQN)
+                            if bm_enabled:
+                                _bm_reset_env(i)
 
                     # 4. Update Step
                     loss_val = 0.0
@@ -1835,6 +2229,9 @@ def main():
                                                       'mean_dist_rabbit',   'Episode/MeanDistRabbit')
                                 _append_per_tag_means(ep_logs, iteration_episodes, predator_tags,
                                                       'mean_dist_predator', 'Episode/MeanDistPredator')
+                                # Behavior-measure toolkit v1: WandB fan-out (Site 3: DQN)
+                                if bm_enabled:
+                                    _bm_log_wandb(ep_logs, iteration_episodes)
 
                             wandb.log(ep_logs)
 
@@ -1919,6 +2316,13 @@ def main():
                             episode_dist_per_neutral_sums  += np.array(info['dist_per_neutral'])
                         if 'dist_per_predator' in info and num_predator_for_log > 0:
                             episode_dist_per_predator_sums += np.array(info['dist_per_predator'])
+                        # === Behavior-measure toolkit v1: per-step accumulation (Site 4: DRQN) ===
+                        if bm_enabled and 'agent_in_bush' in info:
+                            _bm_info_drqn = {'ate_food': np.array(info['ate_food']).astype(bool),
+                                             'agent_in_bush': np.array(info['agent_in_bush']).astype(bool)}
+                            if 'dist_per_predator' in info: _bm_info_drqn['dist_per_predator'] = np.array(info['dist_per_predator'])
+                            if 'dist_per_neutral'  in info: _bm_info_drqn['dist_per_neutral']  = np.array(info['dist_per_neutral'])
+                            _bm_step_update(_bm_info_drqn, np.array(done).astype(bool))
 
                     dones_np = np.array(done).astype(bool)
                     if np.any(dones_np):
@@ -1945,6 +2349,9 @@ def main():
                                     means = episode_dist_per_predator_sums[i] / ep_l_safe
                                     for j, tag in enumerate(predator_tags):
                                         ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
+                                # Behavior-measure toolkit v1: per-episode finalisation (Site 4: DRQN)
+                                if bm_enabled:
+                                    _bm_finalise_episode(i, ep_data)
 
                             ep_info_buffer.append(ep_data)
                             iteration_episodes.append(ep_data)
@@ -1957,6 +2364,9 @@ def main():
                                     episode_dist_sums[k][i] = 0.0
                             if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
                             if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+                            # Behavior-measure toolkit v1: per-env reset (Site 4: DRQN)
+                            if bm_enabled:
+                                _bm_reset_env(i)
 
                     # 4. Update Step
                     loss_val = 0.0
@@ -2025,6 +2435,9 @@ def main():
                                                       'mean_dist_rabbit',   'Episode/MeanDistRabbit')
                                 _append_per_tag_means(ep_logs, iteration_episodes, predator_tags,
                                                       'mean_dist_predator', 'Episode/MeanDistPredator')
+                                # Behavior-measure toolkit v1: WandB fan-out (Site 4: DRQN)
+                                if bm_enabled:
+                                    _bm_log_wandb(ep_logs, iteration_episodes)
 
                             wandb.log(ep_logs)
 
@@ -2057,6 +2470,9 @@ def main():
                         # Per-instance arrays: shape [num_steps, num_envs, num_entity]
                         if num_neutral_for_log  > 0: info_np['dist_per_neutral']  = np.array(step_info.dist_per_neutral)
                         if num_predator_for_log > 0: info_np['dist_per_predator'] = np.array(step_info.dist_per_predator)
+                        # Behavior-measure toolkit v1: agent_in_bush (explicit extraction — Site 5 anti-pattern guard)
+                        if hasattr(step_info, 'agent_in_bush'):
+                            info_np['agent_in_bush'] = np.array(step_info.agent_in_bush)
 
                     rew_np = np.array(trajectories.reward)
                     done_np = np.array(trajectories.done)
@@ -2075,6 +2491,12 @@ def main():
                                 episode_dist_per_neutral_sums  += info_np['dist_per_neutral'][t]
                             if 'dist_per_predator' in info_np and num_predator_for_log > 0:
                                 episode_dist_per_predator_sums += info_np['dist_per_predator'][t]
+                            # === Behavior-measure toolkit v1: per-step accumulation (Site 5: PPO) ===
+                            if bm_enabled and 'agent_in_bush' in info_np:
+                                _bm_info_t5 = {k: info_np[k][t] for k in ('ate_food', 'agent_in_bush')}
+                                if 'dist_per_predator' in info_np: _bm_info_t5['dist_per_predator'] = info_np['dist_per_predator'][t]
+                                if 'dist_per_neutral'  in info_np: _bm_info_t5['dist_per_neutral']  = info_np['dist_per_neutral'][t]
+                                _bm_step_update(_bm_info_t5, done_np[t].astype(bool))
 
                         dones_t = done_np[t].astype(bool)
                         if np.any(dones_t):
@@ -2101,6 +2523,9 @@ def main():
                                         means = episode_dist_per_predator_sums[i] / ep_l_safe
                                         for j, tag in enumerate(predator_tags):
                                             ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
+                                    # Behavior-measure toolkit v1: per-episode finalisation (Site 5: PPO)
+                                    if bm_enabled:
+                                        _bm_finalise_episode(i, ep_data)
 
                                 ep_info_buffer.append(ep_data)
                                 iteration_episodes.append(ep_data)
@@ -2113,6 +2538,9 @@ def main():
                                         episode_dist_sums[k][i] = 0.0
                                 if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
                                 if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+                                # Behavior-measure toolkit v1: per-env reset (Site 5: PPO)
+                                if bm_enabled:
+                                    _bm_reset_env(i)
 
                     if wandb_enabled and iteration % log_interval == 0:
                         logs = {
@@ -2160,6 +2588,9 @@ def main():
                                                       'mean_dist_rabbit',   'Episode/MeanDistRabbit')
                                 _append_per_tag_means(ep_logs, iteration_episodes, predator_tags,
                                                       'mean_dist_predator', 'Episode/MeanDistPredator')
+                                # Behavior-measure toolkit v1: WandB fan-out (Site 5: PPO)
+                                if bm_enabled:
+                                    _bm_log_wandb(ep_logs, iteration_episodes)
 
                             wandb.log(ep_logs)
 
