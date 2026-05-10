@@ -46,6 +46,8 @@ A summary that is missing the Links section is broken — the whole point is to 
 
 | Date | Time | File | Study | Scope |
 |---|---|---|---|---|
+| 2026-05-10 | 22:55 | [20260510_2255_dreamer_v3_fix_cascade](20260510_2255_dreamer_v3_fix_cascade.md) | DreamerV3 fix cascade | Continuation of `dreamer_v3_diagnosis` — sheeprl reference-impl comparison + zero-init reward+critic fix (Z1, finished, H2 partial) + paper-canonical twohot bins fix (Z2, in flight). 1 doc-side event + 1 finished cell + 1 in-flight cell, 2026-05-07 → 2026-05-10 |
+| 2026-05-10 | 22:53 | [20260510_2253_sameprop_rabbit_avoidance_study](20260510_2253_sameprop_rabbit_avoidance_study.md) | SameProp rabbit-avoidance (re-summary) | Adds Round 2.5 verdict (10M ep, n=1 each cell): both hypotheses refuted, no genuine class-conditional avoidance under matched smells; provisional pending Round 2.6 seed 44 (2026-05-07 → 2026-05-10) |
 | 2026-05-09 | 15:55 | [20260509_1555_dreamer_v3_diagnosis](20260509_1555_dreamer_v3_diagnosis.md) | DreamerV3 diagnosis | Diagnostic battery + probe battery + conventional-fixes battery + offline WM test (4 + 4 + 2 cells + 1 inference-time test, 2026-05-07 → 2026-05-09) |
 | 2026-05-09 | 15:52 | [20260509_1552_sameprop_rabbit_avoidance_study](20260509_1552_sameprop_rabbit_avoidance_study.md) | SameProp rabbit-avoidance | Survey + R1 relog (n=2 seeds) + R2 partial (Cells C+A1, SIGINT'd at 0.4M ep) + per-tag metrics ship (2026-05-07 → 2026-05-09) |
 | 2026-05-09 | 14:21 | [20260509_1421_nmn_comparison_study](20260509_1421_nmn_comparison_study.md) | NMN comparison | Heterogeneity sweep + temp-clip rerun (10 + 5 cells, 2026-05-07 → 2026-05-09) |
