@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 
 ## Change history
 
+- 2026-05-10: 3 insights from the dreamer sheeprl-comparison + zero-init cascade session (`20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry`, `20260510_2240_reference_impl_compare_only_act_intersections`, `20260510_2241_residual_error_pattern_directs_next_fix`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `refutation`, `subagent`, `meta` — no new tags promoted.
 - 2026-05-10: 1 insight from the hypervigilance Round 2.5 launch + analysis session (`20260510_2237_sameprop_round25_no_class_avoidance`) reused existing tags `hypervigilance`, `refutation`, `learned_lesson`, `decision` — no new tags promoted.
 - 2026-05-09: 3 insights from the NMN meta/continual pivot session (`20260509_1619_summarize_study_skill_design_and_ship`, `20260509_1620_documentation_framing_policy`, `20260509_1621_multi_agent_research_chain_v2_pattern`) reused existing tags `memory`, `design`, `decision`, `skill`, `meta`, `subagent`, `learned_lesson` — no new tags promoted.
 - 2026-05-09: 4 insights from the dreamer conventional-fixes battery session (`20260509_1534_wm_reward_head_localized_failure_a1`, `20260509_1535_conventional_fixes_battery_verdict_predator_refute`, `20260509_1536_train_py_checkpoint_restore_nnx_skew`, `20260509_1537_professor_analysis_resets_exotic_investigation`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `refutation`, `hypervigilance`, `meta`, `training_runner`, `subagent` — no new tags promoted.
