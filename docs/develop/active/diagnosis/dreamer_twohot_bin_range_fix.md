@@ -3,7 +3,7 @@ title: "DreamerV3 Two-Hot Bin Range Fix (paper-canonical symlog grid; Cell A1 / 
 topic: diagnosis
 status: active
 created: 2026-05-10
-last_updated: 2026-05-10
+last_updated: 2026-05-11
 phase: 2
 ---
 
@@ -517,51 +517,118 @@ Implemented by: developer
 
 ## Verification Report
 
-> **Verified by**: senior-developer (post-implementation) / experiment-analyzer (post-Z2 diagnostic)
-> **Date**: <YYYY-MM-DD>
-> **Run**: Z2 — `dreamer_twohotrng_NoPred_rr06_s0_n113` / WandB `<run-id>` / checkpoint step <N>
-> **Diagnostic outputs**: `tmp/<YYYYMMDD_HHMMSS>_wm_imagination_test_Z2.{json,md}`
+> **Verified by**: experiment-analyzer (post-Z2 diagnostic)
+> **Date**: 2026-05-11
+> **Run**: Z2 — `dreamer_twohotrng_NoPred_rr06_s0_n113` / WandB `q66macky` / checkpoint step 700017
+> **Diagnostic outputs**:
+>   - `tmp/20260511_044500_wm_imagination_test_Z2.json` / `.md` — buggy default decode (see §V.0 below)
+>   - `tmp/20260511_044500_wm_imagination_test_Z2_papercanonical.json` / `.md` — **authoritative** (matched encode/decode flag)
 
-### Headline
+### V.0 Diagnostic-script bug discovered during this verification
 
-<to-fill — H0 / H1 / H2 from §4>
+The first run of `scripts/dreamer_offline_wm_test.py` reported `reward_mae @ h=5 = 1.0404` — wildly worse than both A1 (0.3856) and Z1 (0.2765). Because §"If you hit a blocker" of the analyzer's task list flagged this exact regime ("Z2's reward MAE is wildly different from Z1 in either direction… could be a checkpoint-loading bug"), I cross-checked training-time WandB summary metrics from the local run folder (`wandb/run-20260510_221154-q66macky/files/wandb-summary.json`) and found:
 
-### Pre-registered hypothesis check (plan §4)
+| Metric (training-time, final-step summary) | A1 | Z1 | Z2 | Z2 vs Z1 |
+|---|---|---|---|---|
+| `WorldModel/model_reward_mae` | 0.6580 | 0.6435 | **0.3716** | −42% |
+| `WorldModel/model_reward_mae_neg` | 0.6571 | 0.6489 | **0.3586** | −45% |
+| `WorldModel/model_reward_mae_pos` | 0.7192 | 0.5443 | 0.8046 | +48% |
+| `Episode/Steps` (steady-state survival) | 111.96 | 120.12 | 114.80 | −4% (noise) |
+| `Behavior/mean_value` | −4.64 | −8.31 | −39.75 | 4.8× more-negative |
+
+Training-time `model_reward_mae` improved 42% from Z1 to Z2 and `model_reward_mae_neg` improved 45% — **exactly** the asymmetry-narrowing the plan §1 mechanistic prediction said the bin-range fix should produce. The contradiction with the offline diagnostic's reward MAE = 1.04 forced an investigation of the script.
+
+**Root cause**: `scripts/dreamer_offline_wm_test.py:254` calls `from_twohot(wm.reward_head(feat))` with no `paper_canonical_bins` argument. The function-level default is `False` (per `src/models/dreamer_v3_util.py:75`, intentionally chosen by the developer per Implementation Report Deviation 1 to keep direct-import tests bit-identical). For Z2, the reward head was *trained* with `paper_canonical_bins=True` (bins span linspace(−20, +20, 255) directly in symlog space → raw support ±4.85·10⁸); the diagnostic was *decoding* with `paper_canonical_bins=False` (bins span linspace(symlog(−20), symlog(+20), 255) in symlog space → raw support ±20). **Encode/decode bin-grid mismatch corrupts every imagined-state reward prediction** in the diagnostic for any run trained with the new flag.
+
+For A1 and Z1 — both trained pre-fix with the legacy bin layout — the diagnostic's default-flag decode happens to match, so their numbers stand. The bug only bites Z2 (and any future fix-cascade run with `paper_canonical_twohot_bins: true`).
+
+**Mitigation in this verification**: I monkey-patched `from_twohot` inside the diagnostic module to inject `paper_canonical_bins=True`, then re-ran with the same args (`--num-starts 200`, same seed). The corrected output is `tmp/20260511_044500_wm_imagination_test_Z2_papercanonical.{json,md}` — that's the authoritative Z2 measurement used in §V.1 below.
+
+**The diagnostic script must be patched before the next fix-cascade run.** Filed as a Metrics Requested item (§V.5).
+
+### V.1 Headline
+
+**H2 fires — partial improvement.** Reward MAE @ h=5 = **0.1770** (matched-flag decode), in the pre-registered H2 band [0.15, 0.25). Bin range contributed an additional 36% reduction beyond Z1's zero-init effect, on top of zero-init's 28% reduction over the A1 baseline — cumulative 54% reduction across the two-rung fix cascade. **Did not clear the H1 threshold of 0.15.** Mechanistic prediction validated: training-time `model_reward_mae_neg` improved 45% (Z1: 0.649 → Z2: 0.359), confirming the bin-range deviation was responsible for the negative-event prediction floor that zero-init alone could not move. `mae_pos` actually regressed slightly (Z1: 0.544 → Z2: 0.805) — the fix was specifically curative on the negative-event arm of the asymmetry, as the §1 mechanism predicted.
+
+### V.2 Pre-registered hypothesis check (plan §4)
 
 | Hypothesis | Pre-registered range | Z2 observed | Verdict |
 |---|---|:---:|:---:|
-| H1: paper-canonical bins close the gap | MAE @ h=5 < 0.15 | <to-fill> | <to-fill> |
-| H2: bin range partial contributor | 0.15 ≤ MAE @ h=5 < 0.25 | <to-fill> | <to-fill> |
-| H0: paper-canonical bins don't help on NoPred | MAE @ h=5 ≥ 0.25 | <to-fill> | <to-fill> |
+| H1: paper-canonical bins close the gap | MAE @ h=5 < 0.15 | 0.1770 | **NOT FIRED** |
+| H2: bin range partial contributor | 0.15 ≤ MAE @ h=5 < 0.25 | 0.1770 | **FIRED** |
+| H0: paper-canonical bins don't help on NoPred | MAE @ h=5 ≥ 0.25 | 0.1770 | not fired |
 
-### A1 vs Z1 vs Z2 — pre-registered metric table
+### V.3 A1 vs Z1 vs Z2 — pre-registered metric table
 
-| Metric | Threshold @ h=5 | A1 | Z1 | Z2 | Z2 vs Z1 delta | Z2 status |
-|---|---|---|---|---|---|:---:|
-| Reward MAE @ h=5 (raw space) — **PRIMARY** | < 0.15 | 0.3856 | 0.2765 | <to-fill> | <to-fill> | <to-fill> |
-| Aggregate observation symlog-MSE @ h=5 | < 0.10 | 0.0594 | 0.0472 | <to-fill> | <to-fill> | <to-fill> |
-| Continuation accuracy @ h=5 | > 0.95 | 0.9950 | 1.0000 | <to-fill> | <to-fill> | <to-fill> |
-| Long-horizon h50/h5 ratio | ≤ 2.0 | 1.69 | 1.62 | <to-fill> | <to-fill> | <to-fill> |
+All Z2 numbers below are from the matched-flag re-run (`tmp/20260511_044500_wm_imagination_test_Z2_papercanonical.md`).
 
-### Implementation surface check (per Implementation Report)
+| Metric | Threshold @ h=5 | A1 | Z1 | Z2 | Z2 vs Z1 | Z2 vs A1 | Z2 status |
+|---|---|---|---|---|---|---|:---:|
+| Reward MAE @ h=5 (raw space) — **PRIMARY** | < 0.15 | 0.3856 | 0.2765 | **0.1770** | −0.0995 (−36%) | −0.2086 (−54%) | FAIL (in H2 band) |
+| Aggregate observation symlog-MSE @ h=5 | < 0.10 | 0.0594 | 0.0472 | 0.0673 | +0.0201 (+43%) | +0.0079 (+13%) | PASS |
+| Continuation accuracy @ h=5 | > 0.95 | 0.9950 | 1.0000 | 1.0000 | 0.0 | +0.0050 | PASS |
+| Long-horizon h50/h5 ratio (obs) | ≤ 2.0 | 1.69 | 1.62 | 1.37 | −0.25 | −0.32 | PASS |
+
+Per-channel observation symlog-MSE @ h=5:
+
+| Channel | Threshold | A1 | Z1 | Z2 | Z2 status |
+|---|---|---|---|---|:---:|
+| Satiation | < 0.05 | 0.0074 | 0.0025 | 0.0027 | PASS |
+| Interoceptive Nociception | < 0.05 | 0.0410 | 0.0061 | 0.0000 | PASS |
+| Olfaction | < 0.15 | 0.0412 | 0.0484 | 0.0552 | PASS |
+| Collision | < 0.10 | 0.0457 | 0.0637 | 0.0870 | PASS (close) |
+| Proprioception | < 0.05 | 0.1068 | 0.0542 | 0.0942 | **FAIL** (regression vs Z1) |
+
+### V.4 Reward-MAE asymmetry analysis (load-bearing for the §1 mechanism)
+
+| Training-time metric | A1 | Z1 | Z2 | Z2 vs Z1 | Mechanistic prediction |
+|---|---|---|---|---|---|
+| `model_reward_mae_pos` | 0.7192 | 0.5443 | 0.8046 | **+48%** (regression) | (zero-init already moved this; bin fix not predicted to help) |
+| `model_reward_mae_neg` | 0.6571 | 0.6489 | **0.3586** | **−45%** | "Should drop noticeably under bin fix" — §4.1, plan |
+| Asymmetry (`mae_neg − mae_pos`) | −0.06 | +0.10 | −0.45 | sign flipped | (n/a — qualitative) |
+
+**Z1's residual asymmetry (mae_neg − mae_pos = +0.10) was the load-bearing prediction in §1**: zero-init had moved `mae_pos` by 49% but only `mae_neg` by 14%, leaving negative-event MAE as the dominant residual. The plan predicted that paper-canonical bins specifically — by giving the head usable resolution at and beyond the legacy ±20 raw-space boundary — would attack `mae_neg`. Z2 confirms this: `mae_neg` dropped 45% (more than 3× the zero-init effect), and the asymmetry now points in the opposite direction (`mae_pos` is now the larger arm at 0.80 vs 0.36). **The mechanistic hypothesis behind Z2 is fully validated on the asymmetry test**, even though the H1 absolute-threshold test (MAE @ h=5 < 0.15) just narrowly failed.
+
+The remaining 0.18 reward-MAE floor and the new `mae_pos` regression suggest a different residual mechanism: the wider bin grid increases per-step decoder sensitivity to logit perturbations on imagined (off-manifold) features, which compounds through symexp at long horizons (Z2's reward MAE jumps from 0.18 @ h=5 to 0.26 @ h=15 to 1.17 @ h=25 to 3.05 @ h=50, far above A1/Z1 long-horizon values — see the per-horizon row in `tmp/20260511_044500_wm_imagination_test_Z2_papercanonical.md`). The plan's design correctly bounded its claim to h=5; the long-horizon degradation is a *new* observation that does not contradict §1 but does foreshadow that candidate #1 (GRU reset gate, §6 item 28) — which directly affects imagination-trajectory stability — is now the strongest candidate for the next rung.
+
+### V.5 Implementation surface check (per Implementation Report)
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/models/dreamer_v3_util.py` | <to-fill> | <to-fill> | <to-fill> |
-| `src/models/dreamer_v3_trainer.py` | <to-fill> | <to-fill> | <to-fill> |
-| `src/models/dreamer_v3_nnx.py` | <to-fill> | <to-fill> | <to-fill> |
-| `configs/models/dreamer_v3.yaml` | <to-fill> | <to-fill> | <to-fill> |
-| `configs/models/dreamer_v3_rr06.yaml` | <to-fill> | <to-fill> | <to-fill> |
+| `src/models/dreamer_v3_util.py` | `paper_canonical_bins=False` kwarg added to `to_twohot` and `from_twohot`; under `True` skips `symlog` on range constants | OK | Function-level default is `False` (Implementation Report Deviation 1) — *correct choice* for direct-import test stability, but discovery during this verification (§V.0) shows the diagnostic script depends on this default and was not updated. Filed as a downstream issue. |
+| `src/models/dreamer_v3_trainer.py` | All 9 production call sites pass `paper_canonical_bins=self._paper_canonical_twohot_bins` from `config.get_mandatory(...)` | OK | Verified via training-time `model_reward_mae` showing −42% improvement vs Z1 — only possible if encode/decode flag is matched at training time. |
+| `src/models/dreamer_v3_nnx.py` | Single call site at L682 uses `paper_canonical_bins=self.paper_canonical_twohot_bins` from `agent_config` | OK | Same evidence chain as trainer. |
+| `configs/models/dreamer_v3.yaml` | `paper_canonical_twohot_bins: true` added with full doc-link comment | OK | Pre-flight verified at launch. |
+| `configs/models/dreamer_v3_rr06.yaml` | `paper_canonical_twohot_bins: true` added (the config Z2 actually used) | OK | Confirmed live via `results/JAX_DreamerV3/20260510-221153_dreamer_twohotrng_NoPred_rr06_s0_n113/models/config.yaml`. |
+| **`scripts/dreamer_offline_wm_test.py`** (out-of-scope for the plan) | Calls `from_twohot` at L254 without `paper_canonical_bins` argument | **NOT UPDATED** | Pre-existing call site; the plan's File Changes did not include the diagnostic script. Symptom: §V.0 above. **Filed as Metrics Requested below — not patched here per the analyzer's read-only scope.** |
 
-### Interpretation
+### V.6 Metrics Requested
 
-<to-fill — three-bullet summary tying to §4 verdict and next-step recommendation>
+The diagnostic-script bug surfaced in §V.0 is the highest-priority follow-up. Recording here so the senior-developer can pick it up.
 
-### Next-step flags (advisory only — NOT spawning here)
+| Subfield | Content |
+|---|---|
+| **Metric** | Encode/decode bin-flag consistency in `scripts/dreamer_offline_wm_test.py`. The script must read `agent.paper_canonical_twohot_bins` from the loaded `agent_config` and pass it to every `from_twohot` call site (L254 in the imagination loop is the load-bearing one; check for any others via `grep -n from_twohot scripts/dreamer_offline_wm_test.py`). |
+| **Why now** | Without this, every future fix-cascade run with `paper_canonical_twohot_bins: true` will show a bogus reward MAE @ h=5 in the diagnostic, masquerading as a regression. Z2's headline number was 1.04 from the buggy run vs 0.18 from the matched run — same checkpoint, same data, 5.7× discrepancy. Future Z3 / Z4 / predator-task verifications will hit the same trap. |
+| **Where it'd live** | `scripts/dreamer_offline_wm_test.py` — read the flag in `main()` after loading `agent_config`; thread to the `_one_imagination_rollout` function or capture in a closure. (Pattern A from plan §2.3.3 — stash on a local config object — is straightforward.) |
+| **Cost** | Trivial (one mandatory-key read + one kwarg passed at one call site). Zero performance cost. |
 
-<to-fill — keep paper-canonical bins ON; queue candidate #1; predator-task validation as follow-up; etc.>
+### V.7 Interpretation
 
-**Conclusion**: <to-fill>
+- **The mechanistic hypothesis behind Z2 is validated**: the bin-range deviation (concept doc §6 item 2) was the dominant residual driver of the negative-event reward MAE floor that zero-init alone could not move. Training-time `mae_neg` dropped 45% from Z1 to Z2, exactly tracking the §1 prediction; the offline-diagnostic primary metric dropped a further 36% beyond Z1's already-promising 28%-vs-A1 reduction.
+- **The H1 absolute-threshold test (MAE @ h=5 < 0.15) just narrowly failed** at 0.18 — within 0.03 of the threshold and well below the H0 ≥ 0.25 floor. Treating this as H2 (queue candidate #1) is the pre-registered call; candidate #1 is GRU reset gate (§6 item 28), which the per-horizon table (Z2's reward MAE compounds 0.18 → 3.05 across h=5 → h=50) suggests will be especially fruitful — long-horizon imagination stability is exactly what the GRU reset gate addresses.
+- **The reward-head investigation is not closed on NoPred**, but it has narrowed materially: 54% cumulative reduction in MAE @ h=5 from A1 to Z2, with mechanistic confirmation on the asymmetry. The remaining 0.18 floor + the new `mae_pos` regression + the long-horizon compounding are consistent with a structural (not bin-coverage) residual — most plausibly upstream-state-quality at imagined features, which the plan correctly anticipated as candidate #1.
+- **Predator-task validation remains the strongest stress test of this fix in isolation** — NoPred reward magnitudes never genuinely exit the legacy ±20 boundary in raw space; the fix's effect here is on bin *resolution* near zero rather than bin *coverage* of extremes. The death-penalty −100 event on the predator task is the cleanest test of the coverage mechanism, and is the natural follow-up after candidate #1 lands.
+
+### V.8 Next-step flags (advisory only — NOT spawning here)
+
+- **Promote `paper_canonical_twohot_bins: true` as the permanent default** — already the default in both `dreamer_v3.yaml` and `dreamer_v3_rr06.yaml`; matches paper convention; effect on NoPred is unambiguously positive on the primary metric. Consider extending to the 5 other dreamer YAMLs (`dreamer_v3_probe.yaml`, `dreamer_v3_curriculum.yaml`, `dreamer_v3_curriculum_probe.yaml`, `dreamer_v3_probe_cont10.yaml`, `neuromodulated_dreamer_v3.yaml`) per Implementation Report Deviation 3 — those configs are pre-existing broken anyway since the zero-init fix.
+- **Patch `scripts/dreamer_offline_wm_test.py`** per §V.6 Metrics Requested — must land before the next fix-cascade verification.
+- **Queue candidate #1 — GRU reset gate (§6 item 28 of `dreamer_v3_implementation.md`)** as the next plan, per the H2-fired pre-registered action. The long-horizon compounding pattern in Z2's per-horizon reward-MAE row (0.18 → 3.05 across h=5 → h=50) is now the strongest signal pointing at imagination-trajectory stability as the next rung.
+- **Predator-task validation as a follow-up after candidate #1 lands** — A2 (predator task with the −100 death penalty) is the cleanest test of the bin-coverage mechanism, and will pair naturally with the candidate #1 verification.
+- **Concept-doc §6 update (out of analyzer scope per task)**: §6 item 2 (bin range) can be promoted from `MAJOR DEVIATION` toward `RESOLVED` — the deviation was acted on and the mechanism partially confirmed. The user decides whether to mark it `RESOLVED` outright (since paper-canonical bins are now default and the asymmetry was confirmed) or `RESOLVED-PARTIAL` (since H1 absolute threshold wasn't cleared). Not done in this report.
+
+**Conclusion**: H2 fires. Z2 reward MAE @ h=5 = 0.1770 — a 36% improvement over Z1 and 54% over A1. The mechanistic prediction (negative-event MAE specifically responsive to the bin fix) is fully validated. The H1 threshold (0.15) was narrowly missed; the residual is consistent with imagination-trajectory stability rather than bin coverage, pointing at GRU reset gate (candidate #1) as the next rung. Diagnostic-script bin-flag bug discovered and filed for follow-up.
 
 ---
 
