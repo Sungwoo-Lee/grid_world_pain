@@ -613,6 +613,16 @@ The diagnostic-script bug surfaced in §V.0 is the highest-priority follow-up. R
 | **Where it'd live** | `scripts/dreamer_offline_wm_test.py` — read the flag in `main()` after loading `agent_config`; thread to the `_one_imagination_rollout` function or capture in a closure. (Pattern A from plan §2.3.3 — stash on a local config object — is straightforward.) |
 | **Cost** | Trivial (one mandatory-key read + one kwarg passed at one call site). Zero performance cost. |
 
+**RESOLVED** — Fixed by `developer` (2026-05-11). See `scripts/dreamer_offline_wm_test.py`. Changes:
+1. `main()` reads `agent.paper_canonical_twohot_bins` via `config.get(..., False)` (not `get_mandatory` — absent key = pre-fix checkpoint = legacy False). Prints the resolved value for auditability.
+2. If the key was absent in the saved config.yaml (Z1-era pre-fix checkpoints), injects the resolved value into config before `DreamerTrainer` construction to satisfy `get_mandatory` in the trainer without altering the effective flag.
+3. `run_imagination()` gains a `paper_canonical_bins: bool = False` parameter, threaded to the single `from_twohot` call site.
+4. `paper_canonical_twohot_bins` recorded in JSON metadata output.
+
+Smoke tests (both CPU, M=200, seed=42):
+- **Z2** (`dreamer_twohotrng_NoPred_rr06_s0_n113`, config has `paper_canonical_twohot_bins: true`): flag resolved as `True` → reward MAE @ h=5 = **0.1770** (matches authoritative manual-patch value 0.177 ± 0.001). ✓
+- **Z1** (`dreamer_zinit_NoPred_rr06_s0_n113`, config absent → injected as `False`): flag resolved as `False` → reward MAE @ h=5 = **0.2765** (matches prior Z1 authoritative value 0.277). ✓ No config-vs-actual mismatch detected.
+
 ### V.7 Interpretation
 
 - **The mechanistic hypothesis behind Z2 is validated**: the bin-range deviation (concept doc §6 item 2) was the dominant residual driver of the negative-event reward MAE floor that zero-init alone could not move. Training-time `mae_neg` dropped 45% from Z1 to Z2, exactly tracking the §1 prediction; the offline-diagnostic primary metric dropped a further 36% beyond Z1's already-promising 28%-vs-A1 reduction.
@@ -623,7 +633,7 @@ The diagnostic-script bug surfaced in §V.0 is the highest-priority follow-up. R
 ### V.8 Next-step flags (advisory only — NOT spawning here)
 
 - **Promote `paper_canonical_twohot_bins: true` as the permanent default** — already the default in both `dreamer_v3.yaml` and `dreamer_v3_rr06.yaml`; matches paper convention; effect on NoPred is unambiguously positive on the primary metric. Consider extending to the 5 other dreamer YAMLs (`dreamer_v3_probe.yaml`, `dreamer_v3_curriculum.yaml`, `dreamer_v3_curriculum_probe.yaml`, `dreamer_v3_probe_cont10.yaml`, `neuromodulated_dreamer_v3.yaml`) per Implementation Report Deviation 3 — those configs are pre-existing broken anyway since the zero-init fix.
-- **Patch `scripts/dreamer_offline_wm_test.py`** per §V.6 Metrics Requested — must land before the next fix-cascade verification.
+- **~~Patch `scripts/dreamer_offline_wm_test.py`~~** — DONE (2026-05-11, §V.6 resolution note above). Script now reads the flag from the checkpoint's saved config and routes it through to `from_twohot`; backward-compatible with pre-fix checkpoints.
 - **Queue candidate #1 — GRU reset gate (§6 item 28 of `dreamer_v3_implementation.md`)** as the next plan, per the H2-fired pre-registered action. The long-horizon compounding pattern in Z2's per-horizon reward-MAE row (0.18 → 3.05 across h=5 → h=50) is now the strongest signal pointing at imagination-trajectory stability as the next rung.
 - **Predator-task validation as a follow-up after candidate #1 lands** — A2 (predator task with the −100 death penalty) is the cleanest test of the bin-coverage mechanism, and will pair naturally with the candidate #1 verification.
 - **Concept-doc §6 update (out of analyzer scope per task)**: §6 item 2 (bin range) can be promoted from `MAJOR DEVIATION` toward `RESOLVED` — the deviation was acted on and the mechanism partially confirmed. The user decides whether to mark it `RESOLVED` outright (since paper-canonical bins are now default and the asymmetry was confirmed) or `RESOLVED-PARTIAL` (since H1 absolute threshold wasn't cleared). Not done in this report.

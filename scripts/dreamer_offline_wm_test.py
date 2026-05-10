@@ -205,11 +205,17 @@ def run_imagination(
     start_idx: int,
     h_max: int,
     rng_key,
+    paper_canonical_bins: bool = False,
 ) -> dict:
     """Run one deterministic imagination rollout from start_state.
 
     start_state: dict with keys from RSSM.initial(), values shape (obs_dim-like,)
                  i.e. NO batch dimension.  This function adds B=1 internally.
+
+    paper_canonical_bins: must match the flag used during checkpoint training.
+        Read from `agent.paper_canonical_twohot_bins` in the saved config.yaml;
+        defaults to False (legacy bin layout) for pre-fix checkpoints that lack
+        the key. Passing a mismatched value silently corrupts reward predictions.
 
     Returns per-step dicts with keys:
       obs_pred_symlog: (h_max, obs_dim)
@@ -251,7 +257,7 @@ def run_imagination(
         feat = wm.get_feat(prior)                            # (1, feat_dim)
 
         obs_pred_symlog = wm.decoder(feat)[0]                      # (obs_dim,)
-        rew_pred_raw = float(from_twohot(wm.reward_head(feat)).ravel()[0])  # scalar
+        rew_pred_raw = float(from_twohot(wm.reward_head(feat), paper_canonical_bins=paper_canonical_bins).ravel()[0])  # scalar
         cont_logit = wm.continue_head(feat)                        # (1, 1) or (1,)
         cont_pred = float(jax.nn.sigmoid(cont_logit.ravel()[0]))   # scalar
 
@@ -388,6 +394,26 @@ def main():
         checkpoint_dir = ckpt_arg  # user passed the models/ dir directly
 
     print(f"[offline-wm] Checkpoint dir: {checkpoint_dir}")
+
+    # Read paper_canonical_twohot_bins from saved config.
+    # Use config.get (not get_mandatory) with default=False: if the key is absent, the
+    # checkpoint was trained before the bin-range fix landed (legacy bin layout = False).
+    # This preserves backward compatibility for Z1-era checkpoints whose saved config.yaml
+    # does not contain this key.
+    paper_canonical_bins = bool(config.get('agent.paper_canonical_twohot_bins', False))
+    print(f"[offline-wm] paper_canonical_twohot_bins={paper_canonical_bins} "
+          f"(from checkpoint config; False=legacy ±20 raw-space support, True=paper-canonical ±4.85e8)")
+
+    # Ensure the key is present in the config before building DreamerTrainer.
+    # DreamerTrainer.__init__ calls config.get_mandatory('agent.paper_canonical_twohot_bins')
+    # and will crash on pre-fix checkpoints whose saved config.yaml lacks this key.
+    # We inject the value we already derived (the resolved paper_canonical_bins bool) so
+    # the mandatory-key check passes, while the decode flag used below still matches the
+    # checkpoint's actual training-time setting.
+    if config.get('agent.paper_canonical_twohot_bins') is None:
+        config.set('agent.paper_canonical_twohot_bins', paper_canonical_bins)
+        print(f"[offline-wm] Injected agent.paper_canonical_twohot_bins={paper_canonical_bins} "
+              f"into config (key absent in saved config.yaml — pre-fix checkpoint).")
 
     dreamer_mod_config = config.get('agent.modulation')
     if dreamer_mod_config is not None and dreamer_mod_config.get('type') is None:
@@ -555,6 +581,7 @@ def main():
             start_idx=t_start,
             h_max=h_max,
             rng_key=imag_key,
+            paper_canonical_bins=paper_canonical_bins,
         )
 
         obs_pred  = result['obs_pred_symlog']  # (H, obs_dim)
@@ -697,6 +724,7 @@ def main():
             'horizons':        HORIZONS,
             'actor_mode':      'argmax',
             'rssm_mode':       'argmax_categorical',
+            'paper_canonical_twohot_bins': paper_canonical_bins,
             'obs_dim':         obs_dim,
             'act_dim':         act_dim,
             'obs_breakdown':   dict(obs_breakdown),
