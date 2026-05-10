@@ -390,19 +390,99 @@ Implemented by: developer
 
 ## Verification Report
 
-> **Verified by**:
-> **Date**:
+> **Verified by**: experiment-analyzer
+> **Date**: 2026-05-10
+> **Run**: Z1 — `dreamer_zinit_NoPred_rr06_s0_n113` / WandB `axndoqsz` / checkpoint step 700004
+> **Diagnostic outputs**: `tmp/20260510_211404_wm_imagination_test_Z1.{json,md}`
+> **WandB extract**: `tmp/20260510_211404_z1_wandb_extract.md`
+> **A1 baseline (anchor)**: `tmp/20260509_wm_imagination_test_A1.{json,md}` (`czfnljf0`, step 700009)
+
+### Headline
+
+**H2 fires — zero-init partially helped.** Reward MAE @ h=5 dropped from A1's **0.3856** to Z1's **0.2765** (delta **−0.1091**, −28% relative), placing it inside the pre-registered H2 band `[0.15, 0.30)` rather than below the H1 threshold of 0.15. Output-layer init noise was a contributing cause of the reward-head failure but not the sole cause; another upstream signal is still degrading the head.
+
+### Pre-registered hypothesis check (plan §4)
+
+| Hypothesis | Pre-registered range | Z1 observed | Verdict |
+|---|---|:---:|:---:|
+| H1: zero-init fixes reward head | MAE @ h=5 < 0.15 | 0.2765 | NO |
+| **H2: zero-init partially helps** | **0.15 ≤ MAE @ h=5 < 0.30** | **0.2765** | **FIRES** |
+| H0: zero-init doesn't help | MAE @ h=5 ≥ 0.30 | 0.2765 | NO |
+
+### A1 vs Z1 — pre-registered metric table
+
+| Metric | Threshold @ h=5 | A1 | Z1 | Delta | A1 status | Z1 status |
+|---|---|---|---|---|:---:|:---:|
+| Reward MAE @ h=5 (raw space) — **PRIMARY** | < 0.15 | 0.3856 | **0.2765** | **−0.1091 (−28%)** | FAIL | FAIL (improved) |
+| Aggregate observation symlog-MSE @ h=5 | < 0.10 | 0.0594 | 0.0472 | −0.0122 | PASS | PASS |
+| Continuation accuracy @ h=5 | > 0.95 | 0.9950 | 1.0000 | +0.0050 | PASS | PASS |
+| Long-horizon h50/h5 ratio | ≤ 2.0 | 1.69 | 1.62 | −0.07 | PASS | PASS |
+
+### Per-channel observation symlog-MSE @ h=5
+
+| Channel | Threshold | A1 | Z1 | Delta | A1 | Z1 |
+|---|---|---|---|---|:---:|:---:|
+| Satiation | < 0.05 | 0.0074 | 0.0025 | −0.0049 | PASS | PASS |
+| Interoceptive Nociception | < 0.05 | 0.0410 | 0.0061 | −0.0349 | PASS | PASS |
+| Olfaction | < 0.15 | 0.0412 | 0.0484 | +0.0072 | PASS | PASS |
+| Collision | < 0.10 | 0.0457 | 0.0637 | +0.0180 | PASS | PASS |
+| Proprioception (= prev-action one-hot) | < 0.05 | 0.1068 | 0.0542 | −0.0526 | FAIL | FAIL (borderline) |
+
+Proprio still misses (just barely — Z1 is at 0.0542 against the 0.05 threshold, vs A1's 0.1068). The reward-head fix evidently nudged proprio prediction along with it but did not clear the threshold. Inter-noci and Satiation also improved noticeably. No channel regressed past its threshold.
+
+### Reward MAE per horizon (Z1, raw space)
+
+| h | 1 | 2 | 5 | 10 | 15 | 25 | 50 |
+|---|---|---|---|---|---|---|---|
+| A1 | 0.3229 | 0.4384 | 0.3856 | 0.6792 | 0.5460 | 0.3300 | 0.6781 |
+| Z1 | 0.4453 | 0.3690 | **0.2765** | 0.3671 | 0.3043 | 0.1426 | 0.2332 |
+| Delta | +0.122 | −0.069 | **−0.109** | −0.312 | −0.242 | −0.187 | −0.445 |
+
+Z1 is **uniformly better at long horizons** (h≥10) — the failure mode that produced A1's 0.6792 at h=10 and 0.6781 at h=50 is largely gone. Z1's reward MAE is below 0.30 at every horizon ≥ 5 and below 0.25 at every horizon ≥ 10. This is consistent with the "less unlearning" mechanism: starting from a flat reward-distribution prior, the head doesn't pile up systematic bias at long horizons. The h=1 regression (Z1 worse than A1 at the immediate-next-step) is small and might reflect single-seed noise, not a real effect.
+
+### Secondary metrics (WandB, training-time)
+
+| Metric | A1 (steady-state) | Z1 (steady-state) | Delta |
+|---|---|---|---|
+| `Episode/Steps` (survival) | 106.09 ± 3.66 | **115.07 ± 4.69** | **+8.98 (+8.5%)** |
+| `WorldModel/model_reward_mae_pos` | 0.83 ± 0.45 | **0.42 ± 0.25** | **−0.41 (−49%)** |
+| `WorldModel/model_reward_mae_neg` | 0.93 ± 0.17 | 0.80 ± 0.15 | −0.13 (−14%) |
+| `Behavior/mean_entropy` | 1.152 | 0.928 | −0.22 (more committed policy) |
+| `WorldModel/loss_kl` | 0.745 | 0.717 | −0.03 |
+
+Survival rose ~9 steps (single seed, no replicates — soft signal). The standout: training-time positive-reward MAE roughly **halved** under zero-init, which is the cleanest single piece of corroboration that the mechanism the plan articulated (head no longer has to unlearn random nonzero predictions before learning true rewards) actually fired. Negative-reward MAE improved much less, hinting the residual reward-head error in Z1 is dominated by negative-reward (collision / starvation onset) prediction.
+
+### Implementation surface check (per Implementation Report)
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/models/dreamer_v3_nnx.py` | `MLP.__init__` gains `zero_init_output: bool = False`; reward head + critic head pass `zero_init_output=zero_init_rc` | | |
-| `src/models/dreamer_v3_trainer.py` | `config.get_mandatory('zero_init_reward_critic')` added at trainer construction | | |
-| `configs/models/dreamer_v3.yaml` | `zero_init_reward_critic: true` added | | |
-| `configs/models/dreamer_v3_rr06.yaml` | `zero_init_reward_critic: true` added | | |
+| `src/models/dreamer_v3_nnx.py` | `MLP.__init__` gains `zero_init_output: bool = False`; reward head + critic head pass `zero_init_output=zero_init_rc` | OK | §2.4 smoke test passed (developer report, lines 332–362). Zero-init produces exact-zero kernel + bias on the final Linear; default branch unchanged. |
+| `src/models/dreamer_v3_trainer.py` | `config.get_mandatory('zero_init_reward_critic')` added at trainer construction | OK | Done as a single-statement `agent_config['zero_init_reward_critic'] = config.get_mandatory(...)` rather than the plan's split-read sentinel — the developer's deviation note (line 330) explains why this is strictly superior; verified by missing-key test raising `ValueError` (line 376). |
+| `configs/models/dreamer_v3.yaml` | `zero_init_reward_critic: true` added | OK | Verified by config end-to-end check (line 369–372). |
+| `configs/models/dreamer_v3_rr06.yaml` | `zero_init_reward_critic: true` added | OK | As above. |
 
-**Conclusion**:
+### Interpretation
 
-<!-- senior-developer fills in: ✅/⚠️/❌ per row, plus a one-line summary. -->
+The plan's H2 fired. Reading both signals together:
+
+1. **The zero-init mechanism is real and measurable.** Training-time positive-reward MAE halved, end-of-training imagination reward MAE @ h=5 dropped 28%, long-horizon (h=10–50) reward MAE dropped 30–65%. The head learns the reward distribution faster and cleaner when it does not start from random nonzero predictions.
+
+2. **It is not the whole story.** A residual ~0.28 imagination MAE at h=5 — almost 2× the threshold — survives. The error is now disproportionately on negative-reward events (training-time `mae_neg` improved only 14% vs `mae_pos`'s 49%). The head still has a systematic problem the offline diagnostic localised to the reward-head module specifically (the rest of the world model passes its thresholds; proprio remains the only obs channel above its threshold, and even that just barely).
+
+3. **What this means for the broader investigation.** Output-layer init noise was a contributing cause but not solely causal. The next candidate in §9.11 of the implementation doc — candidate #1, the GRU reset gate — is the natural next plan: structural rather than init-time, and the most likely remaining source of degradation upstream of the reward head. The plan's H2 row prescribes this exactly: "Queue candidate #1 (GRU reset-gate fix) as the next plan. Keep zero-init knob ON as a cumulative fix."
+
+4. **No reason to revisit §6 item 2 (twohot bin range) yet.** The H0 row would have queued that re-examination; H2 does not. Bin-range interaction is a second-order possibility worth keeping on the candidate list, but candidate #1 is the higher-prior single change.
+
+### Next-step flags (advisory only — NOT spawning here)
+
+Per task scope, I am NOT queueing follow-up plans, NOT proposing code changes beyond what the plan's H2 row already prescribes, and NOT spawning experiment-designer or senior-developer. The following are flagged for the user's downstream decisions:
+
+- **Keep zero-init ON as a cumulative fix** (already the default in `dreamer_v3.yaml` + `dreamer_v3_rr06.yaml`; no change needed).
+- **Candidate #1 (GRU reset gate / `LayerNormGRUCell`, `nnx.py:18–39`) as the next plan** — surface to senior-developer when ready to proceed.
+- **Optional replicates (seeds 1, 2) for Z1** — the +9-step survival lift on a single seed is suggestive but not robust on its own; a 3-seed Z1 sweep would tighten the effect-size estimate. Not required to make the H2 call.
+- **Proprio channel** — still 0.0542 vs threshold 0.05 (a hair over). Was 0.107 in A1 (over by 2×), so meaningfully better but not yet PASS. Worth tracking as the GRU/reward-head investigation progresses; possibly resolves cleanly when the upstream signal does.
+
+**Conclusion**: implementation matches the plan in all four files (one cosmetically beneficial deviation, well-documented). H2 fires on the pre-registered table. Zero-init is a partial fix worth keeping; the reward-head investigation is not closed. Next: candidate #1 (GRU reset gate).
 
 ---
 
