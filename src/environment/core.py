@@ -514,6 +514,16 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     info['dist_per_neutral'] = dist_per_neutral
     info['dist_per_predator'] = dist_per_predator
 
+    # Bush occupancy: True iff agent is standing on an obstacle marked hides_agent.
+    # Mirrors the agent_hidden computation inside update_predators (line ~150);
+    # recomputed here at minimal cost because EnvParams is in scope and we want it on `info`.
+    # Uses new_agent_pos (post-step position) — correct for M2's "agent dives into bush" semantics.
+    agent_in_bush = jnp.any(jnp.logical_and(
+        jnp.all(state.obs_pos == new_agent_pos, axis=-1),
+        params.obs_hides_agent
+    )) if state.obs_pos.shape[0] > 0 else jnp.array(False)
+    info['agent_in_bush'] = agent_in_bush
+
     # 7. Final State
     new_state = state._replace(
         agent_pos=new_agent_pos,
