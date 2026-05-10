@@ -23,6 +23,7 @@ class StepInfo(NamedTuple):
     termination_reason: jnp.ndarray
     dist_per_neutral: jnp.ndarray   # [num_neutral]  per-rabbit distance, unreduced
     dist_per_predator: jnp.ndarray  # [num_predator] per-predator distance, unreduced
+    agent_in_bush: jnp.ndarray      # bool — True iff agent is on a hides_agent obstacle (behavior toolkit v1)
 
 class Transition(NamedTuple):
     obs: jnp.ndarray
@@ -211,6 +212,7 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
             termination_reason=info['termination_reason'],
             dist_per_neutral=info['dist_per_neutral'],
             dist_per_predator=info['dist_per_predator'],
+            agent_in_bush=info['agent_in_bush'],
         )
         trans = Transition(
             obs=obs, action=action, reward=reward, done=done,

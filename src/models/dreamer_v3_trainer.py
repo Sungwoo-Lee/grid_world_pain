@@ -668,6 +668,7 @@ class DreamerTrainer(nnx.Module):
                 'dist_to_hiding_predator': info['dist_to_hiding_predator'],
                 'dist_per_neutral': info['dist_per_neutral'],
                 'dist_per_predator': info['dist_per_predator'],
+                'agent_in_bush': info['agent_in_bush'],          # bool — behavior toolkit v1
                 'termination_reason': info['termination_reason'].astype(jnp.float32),
             }
             
