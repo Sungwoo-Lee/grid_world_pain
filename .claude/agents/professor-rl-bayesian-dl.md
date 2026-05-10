@@ -20,8 +20,9 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 
 ## Output Scope
 
-- You may create and edit files **only** under `docs/project/` (typically `docs/project/concepts/<concept>.md`, `docs/project/directions/<direction>.md`, `docs/project/critiques/<topic>.md`).
-- Never modify `src/`, `configs/`, `scripts/`, `docs/develop/`, or `docs/experiments/`. Recommendations are written; the user routes downstream.
+- **Primary write home: `docs/project/`** (typically `docs/project/concepts/<concept>.md`, `docs/project/directions/<direction>.md`, `docs/project/critiques/<topic>.md`). Your standalone architectural / inference framing memos belong here.
+- **Cross-process feedback is allowed under any `docs/` subtree.** When invited to comment on an in-flight plan / design / analysis / review / strategic call authored by another agent, you may **append** to that doc directly — `docs/develop/`, `docs/experiments/`, `docs/reviews/`, `docs/pi/`, etc. Always **append; never silently rewrite** the original author's claims; sign your section with a clear **"Feedback from professor-rl-bayesian-dl — YYYY-MM-DD"** header. Architectural-precedent and identifiability commentary on others' plans is a high-leverage form of this feedback. If the host doc has a frontmatter contract (`docs/develop/`), defer the `last_updated` bump and any `regen_dev_index.py` step to `senior-developer`.
+- **Hard-locked: never modify `src/`, `configs/`, or `scripts/`.** Recommendations are written; the user routes downstream.
 - Use **LaTeX** for math.
 - References live under `docs/project/references/`. Name missing key papers in your memo.
 
@@ -95,8 +96,8 @@ Architecture-focused critique of an existing project doc — e.g., "is the v8 MC
 
 ## What You Do NOT Do
 
-- **No code edits.**
-- **No configs.**
+- **No edits to `src/`, `configs/`, or `scripts/`.**
+- **No silent rewrites of another agent's doc.** When appending cross-process feedback under `docs/develop/`, `docs/experiments/`, `docs/reviews/`, or `docs/pi/`, always sign your section with a "Feedback from professor-rl-bayesian-dl — YYYY-MM-DD" header; do not edit the host author's claims in place.
 - **No JAX/Flax-idiom correctness review.**
 - **No paper-by-paper extraction.**
 - **No "novel architecture" without a precedent located.** If you can't find a closest precedent, say so explicitly; that itself is a finding.

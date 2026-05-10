@@ -5,6 +5,7 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 | Agent | Model | Role | Scope |
 |---|---|---|---|
 | [agent-manager](.claude/agents/agent-manager.md) | opus | Plan multi-agent flows; route + sequence + parallelize. Returns a routing plan to the parent (top-level Claude), which spawns the sub-agents | returns plan; writes nothing; does NOT spawn |
+| [pi](.claude/agents/pi.md) | opus | Principal Investigator — portfolio-level focus-vs-explore calls at major decision points. Surfaces 2–4 candidate paths via `AskUserQuestion`; user decides; PI logs the call. Manual + proactive triggers (pre-launch, post-analysis, roadmap-level plan, new-direction proposal) | `docs/pi/` (primary); cross-process feedback append-allowed under any `docs/` subtree |
 | [senior-developer](.claude/agents/senior-developer.md) | opus | Platform-development planning + post-impl verification | `docs/develop/` |
 | [developer](.claude/agents/developer.md) | sonnet | Implement approved plans, test, report | full code |
 | [code-reviewer](.claude/agents/code-reviewer.md) | opus | JAX/Flax/vmap/PRNG correctness review | `docs/reviews/` |
@@ -16,9 +17,9 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 
 ### Researchers
 
-Domain-expert agents that generate mathematical concepts, literature reviews, and publication-direction memos for the project. They write **only** to `docs/project/` and do not edit code, configs, or develop / experiment docs. Recommendations that imply downstream work are handed off (named) to `senior-developer`, `experiment-designer`, etc.
+Domain-expert agents that generate mathematical concepts, literature reviews, and publication-direction memos for the project. Their **primary write home is `docs/project/`** (their own standalone memos), but they may also **append cross-process feedback** to any doc under `docs/` — including `docs/develop/`, `docs/experiments/`, `docs/reviews/`, `docs/pi/` — when invited to comment on an in-flight plan, design, analysis, or strategic call. They **never** edit `src/`, `configs/`, or `scripts/`. Cross-process feedback must always **append** (never silently rewrite) and be signed with a clear "Feedback from `<agent-name>`" header so the original author's voice stays distinct. Recommendations that imply code or experiment changes are handed off (named) to `senior-developer`, `experiment-designer`, etc.
 
-| Agent | Model | Role | Scope (under `docs/project/`) |
+| Agent | Model | Role | Primary write home (under `docs/project/`) |
 |---|---|---|---|
 | [research-postdoc](.claude/agents/research-postdoc.md) | opus | First responder for open-ended research questions; triages to professors or writes first-pass synthesis | `ideas/`, `triage/` |
 | [professor-bayesian-brain](.claude/agents/professor-bayesian-brain.md) | opus | Perceptual decision making, predictive coding, active inference, Bayesian decision theory | `concepts/`, `directions/`, `critiques/` |
@@ -30,7 +31,9 @@ Domain-expert agents that generate mathematical concepts, literature reviews, an
 
 **Researcher routing:** open-ended research questions ("what direction?", "is there a connection between …?", "give me ideas") default to `research-postdoc`, which triages and either writes a first-pass synthesis or hands off to one or more professors / literature agents. Direct invocation is fine when the question is unambiguously in one agent's domain (e.g., "review these PDFs" → `literature-reviewer`, "regroup the lit review by theme" → `literature-curator`).
 
-**Default routing:** for any task involving 2+ agents in sequence — feature add, bug fix, training experiment, literature review of 10+ papers, post-impl verification — spawn `agent-manager` to get a routing plan, then **spawn the named sub-agents yourself** (top-level Claude executes the plan; the manager has no `Agent` tool). Single-agent tasks (e.g., "audit this config", "review this PR", "ask a professor") bypass the manager and route directly.
+**Default routing:** for any task involving 2+ agents in sequence — feature add, bug fix, training experiment, literature review of 10+ papers, post-impl verification — spawn `agent-manager` to get a routing plan, then **spawn the named sub-agents yourself** (top-level Claude executes the plan; the manager has no `Agent` tool). Single-agent tasks (e.g., "audit this config", "review this PR", "ask a professor", "/pi") bypass the manager and route directly.
+
+**PI consultation (proactive):** at the major decision points named in [.claude/agents/pi.md](.claude/agents/pi.md) — pre-launch of a multi-run experiment, post-analysis of a multi-run comparison, a roadmap-level plan, a new research-direction proposal — the `agent-manager` flags PI consultation as a canonical step in its routing plan; the parent then spawns `pi`, which surfaces the focus-vs-explore trade-off to the user via `AskUserQuestion`. The user makes the final call. The PI does not run for bug fixes, single-config tweaks, or one-off launches.
 
 The canonical flows, parallelism heuristics, cross-cutting constraints, and anti-patterns are documented in [docs/AGENT_PLAYBOOK.md](docs/AGENT_PLAYBOOK.md). The manager reads this whenever it produces a routing plan; other agents may reference it for context.
 

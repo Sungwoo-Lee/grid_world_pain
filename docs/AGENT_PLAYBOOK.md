@@ -9,6 +9,8 @@ Keep this doc small. Anything agent-specific belongs in the agent's profile. Onl
 ### Adding a new feature / capability to the platform
 
 ```
+[pi consultation — only for roadmap-level / multi-week plans]
+        ↓
 senior-developer (plan, docs/develop/)        ← User approves plan
         ↓
 developer       (implement, dirty tree)
@@ -21,6 +23,8 @@ env-config-auditor (parallel) — only if the diff touches configs/, src/environ
 ```
 
 Plan-first is non-negotiable: the user approves the *plan* before any code changes. Developer leaves the working tree dirty so verification sees the exact diff.
+
+`pi` is invoked **only** when the planned scope is roadmap-level (multi-week) or when the plan is platform-only without a clear paper hook — to confirm the work fits the active publication tracks before `senior-developer` invests planning effort. Routine feature adds and bug fixes skip the PI.
 
 ### Fixing a bug
 
@@ -44,6 +48,11 @@ experiment-designer (design doc + configs + LAUNCH MANIFEST §3)
         ↓
 env-config-auditor  (audit; resolve all 🔴 before launch)
         ↓
+pi                  (portfolio-level focus-vs-explore call; AskUserQuestion;
+                     log under docs/pi/calls/)
+                    Skipped for one-off ad-hoc launches; required for any
+                    multi-run / multi-day experiment series.
+        ↓
 USER APPROVAL  +  collect target node + GPU index per run (AskUserQuestion)
         ↓
 training-runner     (one spawn per manifest row)
@@ -57,6 +66,10 @@ USER waits for training (and updates Status=completed/failed/cancelled per row)
         ↓
 experiment-analyzer (Mode A; reads manifest as authoritative run inventory;
                      fills Results / Analysis / Conclusions of the same doc)
+        ↓
+pi                  (post-comparison: deepen / pivot / shelve?
+                     AskUserQuestion; log under docs/pi/calls/)
+                    Required after any multi-run comparison; user decides next move.
 ```
 
 The Launch Manifest is the **system-of-record** binding experimental cells to WandB folders. Three agents share it with **strict column ownership**:
@@ -77,9 +90,26 @@ If an experiment-analyzer or experiment-designer adds a `## Metrics Requested` s
 
 ```
 experiment-analyzer (Mode B — retroactive hypothesis frame, full doc to docs/experiments/)
+        ↓
+pi                  (only if the analysis spans 3+ runs or changes a track-level
+                     question; otherwise skip)
 ```
 
 If the analysis surfaces a bug → fork to bug-fix flow. If a missing metric → fork to feature flow.
+
+### New-direction proposal from a researcher
+
+```
+research-postdoc OR literature-curator OR a professor
+        ↓
+pi                  (does this fit an active track, open a new one, or get shelved?
+                     AskUserQuestion; log under docs/pi/calls/)
+        ↓
+USER decision → hand off to experiment-designer / senior-developer /
+                another researcher per the user's pick
+```
+
+The PI is the gate between researcher-generated direction memos and downstream commitment of GPU-weeks or engineering-weeks.
 
 ### Reviewing a corpus of papers
 
@@ -101,6 +131,7 @@ Sharding rules for the parallel case:
 
 These apply across multiple flows. The `agent-manager` flags them as preconditions in its routing plan; the **parent** enforces them at spawn time. Other invoking agents (when bypassing the manager for single-agent tasks) enforce them directly.
 
+- **PI consultation at major decision points.** The `agent-manager` flags `pi` as a canonical step before launching a multi-run experiment (after `env-config-auditor` clean, before `training-runner`), after `experiment-analyzer` finishes a multi-run comparison, when `senior-developer` drafts a roadmap-level plan, and when `research-postdoc` / `literature-curator` propose a new direction. `pi` uses `AskUserQuestion` to surface the focus-vs-explore call; the user makes the final pick. `pi` does NOT run for bug fixes, single-config tweaks, doc-only edits, single-paper literature reviews, or one-off ad-hoc launches.
 - **env-config-auditor in parallel** with senior-developer's verification, whenever the diff touches configs/, src/environment/, or sensor/observation/noise code. Two orthogonal checks: SD verifies plan adherence; auditor verifies env↔config soundness.
 - **WandB analysis uses local files only.** `wandb/run-YYYYMMDD_HHMMSS-<id>/` — never the WandB web API.
 - **Survival steps as headline metric** for any RL evaluation. Cumulative reward is at best a secondary diagnostic.
@@ -117,6 +148,7 @@ The `agent-manager` flags these in its routing plan; the parent (or any directly
 - **"Analysis but no design exists"** — user asks for analysis of pre-registered hypothesis but there's no design doc. Push back: do you want Mode B post-hoc (weaker), or should we design first?
 - **"Bug fix but the plan rewrites the design"** — root cause is a project-design issue, not a localized bug. Escalate to feature flow.
 - **"Skip user approval because the plan looks obvious"** — there is no such thing as an obviously correct plan. Always pause at user-approval gates.
+- **"Skip the PI on a multi-week / multi-paper-shaped commitment"** — the PI's whole purpose is the focus-vs-explore call at portfolio scope. A roadmap-level plan or a multi-run experiment series that goes straight from `experiment-designer` to `training-runner` without a PI call is a missed opportunity to ask "is this the right thing to spend GPU-weeks on?". Conversely, **invoking `pi` for a one-line config tweak or a routine bug fix** is also wrong — the PI declines and tells the user.
 - **"Implementer also verifies"** — never. The verifier is a separate spawn.
 - **"Commit before verify"** — never. The dirty diff IS the verification signal.
 - **"Bundle unrelated cleanups into a bugfix"** — verifier will (rightly) flag as out-of-scope. Surface this and split into separate plans.

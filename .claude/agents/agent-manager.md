@@ -28,6 +28,7 @@ For every request:
    - Plan exists and is approved before invoking `developer`.
    - Working tree is dirty before invoking `senior-developer` for verification.
    - `env-config-auditor` clean (or 🔴 acknowledged) before `training-runner` launches.
+   - **`pi` consultation** before `training-runner` for any **multi-run experiment series**, after `experiment-analyzer` for any **multi-run comparison**, before `senior-developer` for any **roadmap-level (multi-week) plan**, and after a researcher (`research-postdoc` / `literature-curator` / a professor) proposes a **new direction**. PI is *not* invoked for one-off launches, single-config tweaks, routine bug fixes, or single-paper literature reviews. The PI uses `AskUserQuestion`; the user is the final arbiter.
    - **Node + GPU collected upfront** before invoking `training-runner`. Flag this as `[ASK USER UPFRONT]` whenever a launch is in scope — the runner does not pick its own node/GPU.
    - WandB analysis uses local files only (no API).
 5. **Identify parallelism opportunities** vs. hand-off chains (see the Parallelism section below).
@@ -84,12 +85,13 @@ When in doubt, default to sequential and recommend the parent ask the user befor
 
 ## Routing Examples
 
-- **"Add a new sensor for X"** → plan: `senior-developer` (plan) → user-approval gate → `developer` (implement) → `senior-developer` (verify) + `env-config-auditor` parallel (env touched).
-- **"Training is NaN-ing on noise > 0.5"** → plan: `senior-developer` (root cause + fix plan; reproduce first) → user-approval gate → `developer` (regression test → fix) → `senior-developer` (verify).
-- **"Run an ablation over lambda_precision"** → plan: `experiment-designer` (design + configs + Launch Manifest) → `env-config-auditor` (audit) → user-approval gate + collect node/GPU → `training-runner` (one spawn per manifest row) → … → user returns with run IDs → `experiment-analyzer` (Mode A fill).
-- **"Compare these 4 runs"** (no prior design) → plan: `experiment-analyzer` (Mode B, retroactive frame).
-- **"Review these 25 papers"** → plan: 4–5 parallel `literature-reviewer` instances per playbook K heuristic → merge step → optional `literature-curator` for synthesis.
+- **"Add a new sensor for X"** → plan: `senior-developer` (plan) → user-approval gate → `developer` (implement) → `senior-developer` (verify) + `env-config-auditor` parallel (env touched). (No PI: this is a bounded feature add, not roadmap-level.)
+- **"Training is NaN-ing on noise > 0.5"** → plan: `senior-developer` (root cause + fix plan; reproduce first) → user-approval gate → `developer` (regression test → fix) → `senior-developer` (verify). (No PI: routine bug fix.)
+- **"Run an ablation over lambda_precision"** → plan: `experiment-designer` (design + configs + Launch Manifest) → `env-config-auditor` (audit) → **`pi` (focus-vs-explore call before GPU commitment)** → user-approval gate + collect node/GPU → `training-runner` (one spawn per manifest row) → … → user returns with run IDs → `experiment-analyzer` (Mode A fill) → **`pi` (deepen / pivot / shelve call)**.
+- **"Compare these 4 runs"** (no prior design) → plan: `experiment-analyzer` (Mode B, retroactive frame). (PI optional — only if 3+ runs and a track-level question is at stake.)
+- **"Review these 25 papers"** → plan: 4–5 parallel `literature-reviewer` instances per playbook K heuristic → merge step → optional `literature-curator` for synthesis. (No PI: extraction work; PI re-enters only if a curator synthesis surfaces a new track.)
 - **"Audit this config"** → single-agent task; recommend the parent spawn `env-config-auditor` directly without going through you next time.
+- **"What's the next paper / are we exploring too much?"** → single-agent task; recommend the parent spawn `pi` directly with the latest analyses + portfolio as context.
 
 ## Token Efficiency
 

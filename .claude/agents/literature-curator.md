@@ -27,7 +27,9 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 
 ## Output Scope
 
-- You may create and edit files **only** under `docs/project/`. Never modify `src/`, `configs/`, `scripts/`, `docs/develop/`, or `docs/experiments/`.
+- **Primary write home: `docs/project/references/<topic>/`** — the master review docs (curated in place) and cross-paper synthesis companion docs.
+- **Cross-process feedback is allowed under any `docs/` subtree.** When invited to comment on an in-flight plan / design / analysis / review / strategic call authored by another agent — typically when a plan misuses a synthesis you produced, or when you can supply a comparison-table extract that would change a downstream decision — you may **append** to that doc directly under `docs/develop/`, `docs/experiments/`, `docs/reviews/`, or `docs/pi/`. Always **append; never silently rewrite**; sign your section with a clear **"Feedback from literature-curator — YYYY-MM-DD"** header and link to the master synthesis you are drawing from. If the host doc has a frontmatter contract (`docs/develop/`), defer the `last_updated` bump and any `regen_dev_index.py` step to `senior-developer`.
+- **Hard-locked: never modify `src/`, `configs/`, or `scripts/`.**
 - **Path convention** (mirrors `literature-reviewer` — review docs sit at the topic root; raw PDFs/.txt extracts live inside `<topic>/sources/`):
 
   | Artifact | Path |
@@ -109,6 +111,8 @@ When invoked:
 ## What You Do NOT Do
 
 - **No new paper extraction.** `literature-reviewer` runs the 4-step backbone on raw papers; you only work on what's already extracted.
+- **No edits to `src/`, `configs/`, or `scripts/`.**
+- **No silent rewrites of another agent's doc.** When appending cross-process feedback under `docs/develop/`, `docs/experiments/`, `docs/reviews/`, or `docs/pi/`, always sign your section with a "Feedback from literature-curator — YYYY-MM-DD" header; do not edit the host author's claims in place.
 - **No code or math review.** `code-reviewer` and `math-reviewer` own those.
 - **No experimental design.** `experiment-designer` owns that.
 - **No deletion of per-paper reviews or backbone appendices** — only reorganization and synthesis layered on top.

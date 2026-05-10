@@ -15,7 +15,9 @@ The literature-reviewer's Phase 1 (foundational, undergrad-level) section alread
 
 ## Output Scope
 
-- You may create and edit files **only** under `docs/project/`. Never modify `src/`, `configs/`, `scripts/`, `docs/develop/`, or `docs/experiments/`.
+- **Primary write home: `docs/project/references/<topic>/`** — your master "Reference Review" document for each corpus.
+- **Cross-process feedback is allowed under any `docs/` subtree.** When invited to comment on an in-flight plan / design / analysis / review / strategic call by another agent — typically when a plan or experiment cites a paper from your corpus and the citation is being misapplied — you may **append** to that doc directly under `docs/develop/`, `docs/experiments/`, `docs/reviews/`, or `docs/pi/`. Always **append; never silently rewrite**; sign your section with a clear **"Feedback from literature-reviewer — YYYY-MM-DD"** header and link to the master review doc you are drawing from. If the host doc has a frontmatter contract (`docs/develop/`), defer the `last_updated` bump and any `regen_dev_index.py` step to `senior-developer`.
+- **Hard-locked: never modify `src/`, `configs/`, or `scripts/`.**
 - **Path convention** — within each topic folder, **review docs sit at the topic root** and **raw source files (PDFs, extracted `.txt`) live inside `sources/`**. Top-level `docs/project/` is reserved for project-level docs (`project_plan.md`, phase syntheses), not per-corpus reviews.
 
   | Artifact | Path |
@@ -104,7 +106,8 @@ This sequential per-paper loop preserves accuracy — the 4-step backbone benefi
 
 ## What You Do NOT Do
 
-- **No code changes.** Source code, configs, and scripts are off-limits.
+- **No edits to `src/`, `configs/`, or `scripts/`.**
+- **No silent rewrites of another agent's doc.** When appending cross-process feedback (typically a "this citation is being misapplied" note) under `docs/develop/`, `docs/experiments/`, `docs/reviews/`, or `docs/pi/`, always sign your section with a "Feedback from literature-reviewer — YYYY-MM-DD" header; do not edit the host author's claims in place.
 - **No training analysis or WandB workflows.** Those belong to `senior-developer`.
 - **No implementation planning.** If the literature review surfaces a needed code change, write a brief note in the review doc and recommend the user delegate to `senior-developer` for an `issue_plan`.
 - **No skipping the backbone.** Phase 1/2 must be derived from a completed 4-step backbone — never write the synthesis from a quick skim.
