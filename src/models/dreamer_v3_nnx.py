@@ -618,6 +618,7 @@ class DreamerV3Agent(nnx.Module):
         """
         self.config = config
         self.modulation_config = modulation_config
+        self.paper_canonical_twohot_bins = config.get('paper_canonical_twohot_bins', False)
         self.wm = WorldModel(obs_dim, act_dim, config, rngs=rngs,
                              obs_breakdown=obs_breakdown,
                              modulation_config=modulation_config)
@@ -678,7 +679,7 @@ class DreamerV3Agent(nnx.Module):
         feat = self.wm.get_feat(post)
         logits = self.ac.actor(feat)
         value_logits = self.ac.critic(feat)
-        value = from_twohot(value_logits, num_buckets=value_logits.shape[-1])
+        value = from_twohot(value_logits, num_buckets=value_logits.shape[-1], paper_canonical_bins=self.paper_canonical_twohot_bins)
         
         # In evaluation (inference), we should store the action we just took 
         # so it's available for the next step.

@@ -436,56 +436,80 @@ After this plan lands and is committed:
 
 ## Checkpoints (for `developer`)
 
-- [ ] `to_twohot` accepts `paper_canonical_bins: bool = True`; under `True`, `bottom = min_v` and `top = max_v` (no `symlog` applied to range constants); under `False`, original code path verbatim.
-- [ ] `from_twohot` mirrors the same flag with the same semantics; bin layout matches `to_twohot` for any given flag value.
-- [ ] `DreamerV3Trainer.__init__` reads `agent.paper_canonical_twohot_bins` via `config.get_mandatory(...)`; missing YAML key raises `ValueError` at trainer construction.
-- [ ] Every `to_twohot` / `from_twohot` call site listed in §2.3.4 (10 in total) uses the same flag value sourced from `agent.paper_canonical_twohot_bins`. None left at default.
-- [ ] `configs/models/dreamer_v3.yaml` and `configs/models/dreamer_v3_rr06.yaml` both contain `paper_canonical_twohot_bins: true`.
-- [ ] §2.5 round-trip smoke test passes (assertions hold; values inside ±20 round-trip cleanly under both flags; values at ±100 saturate at ±20 under `False` and round-trip under `True`; values at ±10000 saturate hard under `False` and round-trip under `True`).
-- [ ] §2.6 config end-to-end check passes (both YAML files expose the key; missing key raises `ValueError`).
-- [ ] When `paper_canonical_twohot_bins: false` is set, training output is bit-identical to pre-fix behaviour (verified by §2.4 reasoning — the `else` branch is verbatim previous code; PRNG consumption unchanged).
-- [ ] No edits made to the GRU cell, prior/posterior heads, critic loss, or zero-init knob — those are out-of-scope (§5).
+- [x] `to_twohot` accepts `paper_canonical_bins: bool = False`; under `True`, `bottom = min_v` and `top = max_v` (no `symlog` applied to range constants); under `False`, original code path verbatim. (Note: default is `False` at function level to keep import-time tests bit-identical; trainer always passes `True` explicitly via config.)
+- [x] `from_twohot` mirrors the same flag with the same semantics; bin layout matches `to_twohot` for any given flag value.
+- [x] `DreamerV3Trainer.__init__` reads `agent.paper_canonical_twohot_bins` via `config.get_mandatory(...)`; missing YAML key raises `ValueError` at trainer construction.
+- [x] Every `to_twohot` / `from_twohot` call site listed in §2.3.4 (10 in total) uses the same flag value sourced from `agent.paper_canonical_twohot_bins`. None left at default. (9 in trainer.py via `self._paper_canonical_twohot_bins`; 1 in nnx.py via `self.paper_canonical_twohot_bins` stashed from `agent_config`.)
+- [x] `configs/models/dreamer_v3.yaml` and `configs/models/dreamer_v3_rr06.yaml` both contain `paper_canonical_twohot_bins: true`.
+- [x] §2.5 round-trip smoke test passes (assertions hold; values inside ±20 round-trip cleanly under both flags; values at ±100 saturate at ±20 under `False` and round-trip under `True`; values at ±10000 saturate hard under `False` and round-trip under `True`).
+- [x] §2.6 config end-to-end check passes (both YAML files expose the key; missing key raises `ValueError`).
+- [x] When `paper_canonical_twohot_bins: false` is set, training output is bit-identical to pre-fix behaviour (verified by §2.4 reasoning — the `else` branch is verbatim previous code; PRNG consumption unchanged).
+- [x] No edits made to the GRU cell, prior/posterior heads, critic loss, or zero-init knob — those are out-of-scope (§5).
 
 ---
 
 ## Implementation Report
 
 > **Implemented by**: developer
-> **Date**: <YYYY-MM-DD>
+> **Date**: 2026-05-10
 
 ### Files changed
 
 | File | Change |
 |---|---|
-| `src/models/dreamer_v3_util.py` | <to-fill> |
-| `src/models/dreamer_v3_trainer.py` | <to-fill> |
-| `src/models/dreamer_v3_nnx.py` | <to-fill> |
-| `configs/models/dreamer_v3.yaml` | <to-fill> |
-| `configs/models/dreamer_v3_rr06.yaml` | <to-fill> |
+| `src/models/dreamer_v3_util.py` | Added `paper_canonical_bins: bool = False` kwarg to both `to_twohot` and `from_twohot`. Under `True`: `bottom = jnp.array(min_v, dtype=...)`, `top = jnp.array(max_v, dtype=...)` — no `symlog` applied to range constants. Under `False` (legacy default): verbatim original code path (`bottom = symlog(jnp.array(min_v, ...))`, `top = symlog(jnp.array(max_v, ...))`). Updated docstrings. |
+| `src/models/dreamer_v3_trainer.py` | (1) Added `'paper_canonical_twohot_bins': config.get_mandatory('agent.paper_canonical_twohot_bins', bool)` to `agent_config` dict. (2) Added `self._paper_canonical_twohot_bins = config.get_mandatory('agent.paper_canonical_twohot_bins', bool)` after `self.agent` construction. (3) Updated all 9 call sites in `train_step` and `behavior_loss_fn` to pass `paper_canonical_bins=self._paper_canonical_twohot_bins`. |
+| `src/models/dreamer_v3_nnx.py` | Added `self.paper_canonical_twohot_bins = config.get('paper_canonical_twohot_bins', False)` in `DreamerV3Agent.__init__`. Updated the one call site at line 682: `from_twohot(value_logits, num_buckets=value_logits.shape[-1], paper_canonical_bins=self.paper_canonical_twohot_bins)`. |
+| `configs/models/dreamer_v3.yaml` | Added `paper_canonical_twohot_bins: true` with full doc-link comment after `zero_init_reward_critic`. |
+| `configs/models/dreamer_v3_rr06.yaml` | Added `paper_canonical_twohot_bins: true` with brief comment referencing dreamer_v3.yaml. |
 
 ### Deviations from §2
 
-<to-fill>
+1. **Function-level default is `False` (not `True`)**: The plan §2.2 spec says `paper_canonical_bins: bool = True` at the function signature level. However, the plan also says (§6 item 1 and §2.4) "the `False` default keeps import-time tests bit-identical". A `True` function-level default would silently change behaviour for any caller that doesn't pass the flag explicitly (e.g., tests that import `to_twohot` directly). The trainer always passes the flag explicitly via `self._paper_canonical_twohot_bins` (sourced from `config.get_mandatory`), so the function-level default only matters for bare calls in tests or scripts. Using `False` is the safe choice that makes the legacy-compat claim in §2.4 actually hold. **No training-path effect** — all 10 production call sites pass the flag explicitly.
+
+2. **`DreamerV3Agent` uses `config.get('paper_canonical_twohot_bins', False)` (not `get_mandatory`)**: The plan routes the flag through `agent_config` dict, and `agent_config` is a plain Python `dict` (not a `Config` object), so `get_mandatory` is not available on it. Using `dict.get('paper_canonical_twohot_bins', False)` is correct: the trainer already enforces the mandatory constraint via `config.get_mandatory(...)` before building `agent_config`, so the key is always present in `agent_config` by the time `DreamerV3Agent.__init__` runs. The fallback `False` is a safety net only.
+
+3. **Other dreamer configs** (`dreamer_v3_probe.yaml`, `dreamer_v3_curriculum.yaml`, `dreamer_v3_curriculum_probe.yaml`, `dreamer_v3_probe_cont10.yaml`, `neuromodulated_dreamer_v3.yaml`) do not have `paper_canonical_twohot_bins` (or `zero_init_reward_critic`). These were pre-existing issues not introduced by this plan. Plan scope is explicitly `dreamer_v3.yaml` and `dreamer_v3_rr06.yaml`. Flagged here for senior-developer to decide whether to add the key to those files too.
 
 ### Smoke test output (§2.5) — verbatim
 
 ```
-<to-fill>
+val | paper-rec | paper-err | legacy-rec | legacy-err
+ -10000.00    -9999.9648      0.0352      -20.0000   9980.0000
+   -100.00      -99.9997      0.0003      -20.0000     80.0000
+    -20.00      -20.0000      0.0000      -20.0000      0.0000
+     -5.00       -5.0000      0.0000       -5.0000      0.0000
+     -1.00       -1.0000      0.0000       -1.0000      0.0000
+      0.00       -0.0000      0.0000       -0.0000      0.0000
+      1.00        1.0000      0.0000        1.0000      0.0000
+      5.00        5.0000      0.0000        5.0000      0.0000
+     20.00       20.0001      0.0001       20.0000      0.0000
+    100.00       99.9999      0.0001       20.0000     80.0000
+  10000.00     9999.9746      0.0254       20.0000   9980.0000
+OK: paper-canonical flag round-trips ±100 cleanly; legacy saturates at ±20.
 ```
+
+All assertions passed:
+- Inside ±20: both flags round-trip with err < 1.0 (maximum observed: 0.0001).
+- At ±100: paper flag err = 0.0003 / 0.0001; legacy saturates at ±20.0000 (err = 80.0000).
+- At ±10000: paper flag err = 0.0352 / 0.0254; legacy saturates at ±20.0000 (err = 9980.0000 each; total ~19960 >> 1000 threshold).
 
 ### Config end-to-end check (§2.6)
 
 ```
-<to-fill>
+configs/models/dreamer_v3.yaml -> agent.paper_canonical_twohot_bins = True  (type: bool)
+configs/models/dreamer_v3_rr06.yaml -> agent.paper_canonical_twohot_bins = True  (type: bool)
+OK: both YAML files expose the mandatory key correctly.
+OK: missing key raises ValueError: Strict Config: Configuration key 'agent.paper_canonical_twohot_bins' is required but missing.
 ```
 
 ### Speed check
 
-<to-fill — bin-grid construction is init-time-only; no hot-path effect expected. If a quick same-config A/B (flag=true vs flag=false) over a few hundred env steps shows >5% slowdown, flag for senior-developer.>
+Skipped: bin-grid construction (`jnp.array(min_v)` vs `symlog(jnp.array(min_v))`) is init-time-only — `bottom` and `top` are scalar constants computed once before `jnp.linspace` or `jnp.clip`. No hot-path effect. The JIT trace is structurally identical under both flag values (same number of ops, same shapes). No measurable SPS delta expected.
 
 ### Blockers
 
-<to-fill — none expected>
+None. Implementation complete. Note for senior-developer: the 5 non-target config files listed in Deviation 3 above will raise `ValueError` at trainer construction if loaded with the current code (because `agent.paper_canonical_twohot_bins` is also absent from those files, like `zero_init_reward_critic`). This is a pre-existing issue from the zero-init fix — the current plan adds one more mandatory key to the same set of files that are already broken. Decision on whether to fix those files is out of scope for this plan.
 
 Implemented by: developer
 

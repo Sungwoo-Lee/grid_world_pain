@@ -74,6 +74,7 @@ class DreamerTrainer(nnx.Module):
             'critic_fc_layers': config.get_mandatory('agent.critic_fc_layers'),
             'use_layer_norm': config.get_mandatory('agent.use_layer_norm', bool),
             'zero_init_reward_critic': config.get_mandatory('agent.zero_init_reward_critic', bool),
+            'paper_canonical_twohot_bins': config.get_mandatory('agent.paper_canonical_twohot_bins', bool),  # NEW
 
             # Hierarchical Encoding Params
             'encoding_mode': config.get_mandatory('agent.encoding_mode', str),
@@ -83,6 +84,8 @@ class DreamerTrainer(nnx.Module):
         self.agent = DreamerV3Agent(obs_dim, act_dim, agent_config, rngs=rngs,
                                     obs_breakdown=obs_breakdown,
                                     modulation_config=modulation_config)
+
+        self._paper_canonical_twohot_bins = config.get_mandatory('agent.paper_canonical_twohot_bins', bool)
 
         feat_dim = self.agent.wm.deter_dim + self.agent.wm.stoch_dim * self.agent.wm.discrete
         self.target_critic = ActorCritic(feat_dim, act_dim, agent_config, rngs=rngs).critic
@@ -217,7 +220,7 @@ class DreamerTrainer(nnx.Module):
 
                 # Reward Loss
                 rew_pred = wm.reward_head(feat)
-                rew_target = to_twohot(reward)
+                rew_target = to_twohot(reward, paper_canonical_bins=self._paper_canonical_twohot_bins)
                 loss_rew = -jnp.mean(jnp.sum(rew_target * jax.nn.log_softmax(rew_pred), axis=-1))
 
                 # Continue Loss
@@ -253,7 +256,7 @@ class DreamerTrainer(nnx.Module):
                 total_loss = loss_recon + loss_rew + CONT_LOSS_WEIGHT * loss_cont + loss_kl
 
             # Error metrics (non-gradient)
-            rew_pred_val = from_twohot(rew_pred)
+            rew_pred_val = from_twohot(rew_pred, paper_canonical_bins=self._paper_canonical_twohot_bins)
             rew_error = jnp.mean(jnp.abs(rew_pred_val - reward))
             
             # Directional Reward MAE
@@ -360,12 +363,12 @@ class DreamerTrainer(nnx.Module):
                         gate_bias=mod_output.z_memory)
 
                     next_feat = self.agent.wm.get_feat(prior)
-                    rew = from_twohot(self.agent.wm.reward_head(next_feat))
+                    rew = from_twohot(self.agent.wm.reward_head(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
                     # Injection C: Reward interpretation scale (imagination only)
                     rew = rew * mod_output.z_reward.squeeze(-1)
                     cont = nnx.sigmoid(
                         self.agent.wm.continue_head(next_feat)).squeeze(-1)
-                    val = from_twohot(self.target_critic(next_feat))
+                    val = from_twohot(self.target_critic(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
 
                     step_info = {
                         'reward': rew, 'continue': cont, 'value': val,
@@ -383,10 +386,10 @@ class DreamerTrainer(nnx.Module):
                     prior = self.agent.wm.rssm.imagine_step(prev_state, action, key)
 
                     next_feat = self.agent.wm.get_feat(prior)
-                    rew = from_twohot(self.agent.wm.reward_head(next_feat))
+                    rew = from_twohot(self.agent.wm.reward_head(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
                     cont = nnx.sigmoid(
                         self.agent.wm.continue_head(next_feat)).squeeze(-1)
-                    val = from_twohot(self.target_critic(next_feat))
+                    val = from_twohot(self.target_critic(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
 
                     step_info = {
                         'reward': rew, 'continue': cont, 'value': val,
@@ -409,7 +412,7 @@ class DreamerTrainer(nnx.Module):
                 vals = rollouts['value']
 
                 start_feat = self.agent.wm.get_feat(start_state)
-                v_start = from_twohot(self.target_critic(start_feat))
+                v_start = from_twohot(self.target_critic(start_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
 
                 all_vals = jnp.concatenate([v_start[None], vals], axis=0)
 
@@ -426,12 +429,12 @@ class DreamerTrainer(nnx.Module):
 
                 # Critic Loss — train on RAW lambda_returns (canonical DreamerV3)
                 v_pred_logits = critic(rollouts['feat'])
-                target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns))
+                target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns), paper_canonical_bins=self._paper_canonical_twohot_bins)
                 loss_critic_step = -jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1)
                 loss_critic = jnp.mean(loss_critic_step * discount_weights)
 
                 # Actor Loss — normalize BOTH sides for consistent advantage
-                baseline = from_twohot(v_pred_logits)
+                baseline = from_twohot(v_pred_logits, paper_canonical_bins=self._paper_canonical_twohot_bins)
                 norm_baseline = (baseline - moments_low) / moments_invscale
                 advantage = jax.lax.stop_gradient(norm_returns - norm_baseline)
 

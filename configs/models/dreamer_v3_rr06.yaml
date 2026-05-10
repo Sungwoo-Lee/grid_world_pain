@@ -83,6 +83,7 @@ agent:
   zero_init_reward_critic: true   # Output-layer zero-init for reward + critic heads (Hafner/sheeprl recipe).
                                    # See docs/develop/active/diagnosis/dreamer_zero_init_reward_critic_fix.md.
                                    # When false, reward/critic output Linear uses hafner_init (pre-knob behaviour, bit-identical).
+  paper_canonical_twohot_bins: true   # See configs/models/dreamer_v3.yaml for full comment.
   use_layer_norm: true  # Orthogonal to modulation.type — applies LayerNorm to encoder pre-activations.
                          # Mirrors recurrent_ppo.yaml:20 / neuromodulated_ppo.yaml:20. Mandatory since commit f1db0f0.
 

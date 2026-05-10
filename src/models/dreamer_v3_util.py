@@ -16,63 +16,88 @@ def symexp(x):
     """
     return jnp.sign(x) * (jnp.exp(jnp.abs(x)) - 1.0)
 
-def to_twohot(x, min_v=-20.0, max_v=20.0, num_buckets=255):
+def to_twohot(x, min_v=-20.0, max_v=20.0, num_buckets=255, paper_canonical_bins=False):
     """
     Converts a scalar to a Two-Hot distribution (soft discretization).
     Used for Value and Reward targets in DreamerV3.
+
+    Args:
+        x: scalar(s), in raw space.
+        min_v, max_v: bin-grid edges in SYMLOG space when paper_canonical_bins=True
+            (paper-canonical convention: ±20 are already symlog-space edges; raw-space
+            bin centres span ±symexp(20) ≈ ±4.85·10⁸). Matches Hafner
+            embodied/jax/heads.py:87–97 and sheeprl TwoHotEncodingDistribution.
+        num_buckets: 255 (paper).
+        paper_canonical_bins: if True, use ±20 as symlog-space edges directly
+            (paper-canonical; raw-space support ±4.85e8). If False (legacy default),
+            apply symlog(±20) to the edges (legacy buggy behaviour; raw-space support
+            narrows to ±20). The trainer always passes this flag explicitly via
+            agent.paper_canonical_twohot_bins; the False default keeps import-time
+            tests bit-identical.
     """
     x = symlog(x)
-    # Using raw values for boundaries as per common implementations, but mapped to symlog space?
-    # Actually DreamerV3 paper uses symlog(x) for targets.
-    # We define buckets in the TRANSFORMED space usually, or raw?
-    # The official implementation defines buckets in SYMLOG space.
-    # range: symlog(-20) ~ -3 to symlog(20) ~ 3.
-    
-    # Let's interpret min_v and max_v as RAW values, and we transform them.
-    bottom = symlog(jnp.array(min_v))
-    top = symlog(jnp.array(max_v))
-    
-    # Clip value to range
+
+    if paper_canonical_bins:
+        # Paper-canonical: min_v, max_v are already symlog-space edges.
+        bottom = jnp.array(min_v, dtype=x.dtype)
+        top    = jnp.array(max_v, dtype=x.dtype)
+    else:
+        # Legacy behaviour: treat min_v, max_v as raw-space edges and apply symlog.
+        # Reproduces pre-fix bin layout (raw-space support ±20).
+        bottom = symlog(jnp.array(min_v, dtype=x.dtype))
+        top    = symlog(jnp.array(max_v, dtype=x.dtype))
+
+    # Clip value to range (in symlog space)
     x = jnp.clip(x, bottom, top)
-    
+
     # Map to [0, num_buckets - 1]
     rel = (x - bottom) / (top - bottom) * (num_buckets - 1)
-    
+
     floor = jnp.floor(rel).astype(jnp.int32)
     ceil = jnp.ceil(rel).astype(jnp.int32)
-    
+
     prob_ceil = rel - floor
     prob_floor = 1.0 - prob_ceil
-    
+
     # One-hot encoding
     # We return the target PROBABILITIES directly
     # Shape: (*x.shape, num_buckets)
-    
+
     def scatter(idx, val):
         # idx shape: (...)
         # val shape: (...)
         # output shape: (..., num_buckets)
         return jax.nn.one_hot(idx, num_buckets) * val[..., None]
-        
+
     target = scatter(floor, prob_floor) + scatter(ceil, prob_ceil)
     return target
 
-def from_twohot(logits, min_v=-20.0, max_v=20.0, num_buckets=255):
+def from_twohot(logits, min_v=-20.0, max_v=20.0, num_buckets=255, paper_canonical_bins=False):
     """
     Converts logits from Two-Hot distribution back to scalar (expectation).
     Returns value in RAW space (inverse symlog).
+
+    Args mirror `to_twohot` — see that docstring for the `paper_canonical_bins`
+    flag semantics. Bin layout in this function MUST match the layout used in
+    `to_twohot` (same flag value).
     """
     probs = jax.nn.softmax(logits, axis=-1)
-    
-    bottom = symlog(jnp.array(min_v))
-    top = symlog(jnp.array(max_v))
-    
-    # Bucket values in symlog space
+
+    if paper_canonical_bins:
+        # Paper-canonical: min_v, max_v are already symlog-space edges.
+        bottom = jnp.array(min_v, dtype=probs.dtype)
+        top    = jnp.array(max_v, dtype=probs.dtype)
+    else:
+        # Legacy behaviour: apply symlog to min_v, max_v.
+        bottom = symlog(jnp.array(min_v, dtype=probs.dtype))
+        top    = symlog(jnp.array(max_v, dtype=probs.dtype))
+
+    # Bucket centres in symlog space.
     bucket_vals = jnp.linspace(bottom, top, num_buckets)
-    
-    # Expected value in symlog space
+
+    # Expected value in symlog space, then mapped back to raw via symexp.
     sym_val = jnp.sum(probs * bucket_vals, axis=-1)
-    
+
     return symexp(sym_val)
 
 class OneHotDist:
