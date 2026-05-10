@@ -4,9 +4,9 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-05-09
+**Last updated**: 2026-05-10
 **Active folders**: 6
-**Total insights**: 37
+**Total insights**: 38
 **Last audit**: (none)
 
 ---
@@ -20,7 +20,7 @@
 | `nmn_diagnosis` | NMN performance diagnosis findings | 6 | 2026-05-09 | [nmn, hypervigilance, film, refutation, learned_lesson] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 4 | 2026-05-09 | [dreamer, hypervigilance, decision, learned_lesson, refutation] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 13 | 2026-05-09 | [meta, training_runner, learned_lesson, decision, dreamer] |
-| `hypervigilance` | Hypervigilance experiments | 4 | 2026-05-09 | [hypervigilance, design, learned_lesson, decision, refutation, meta] |
+| `hypervigilance` | Hypervigilance experiments | 5 | 2026-05-10 | [hypervigilance, design, learned_lesson, decision, refutation, meta] |
 
 ---
 
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-10: Captured 1 insight into existing `hypervigilance` from the Round 2.5 launch + analysis session: `20260510_2237_sameprop_round25_no_class_avoidance` (both pre-registered hypotheses refuted at 10M ep — Cell A1 H₀ confirmed at 75× margin via per-tag Δ_TL=+0.004; Cell C aggregated Δ=−0.53 sign-flipped, lands in Inverted band; original sameProp survey effect decomposes into two confounds with no genuine class-conditional avoidance under matched smells; provisional pending Round 2.6 seed 44 for Cell C). No new tags promoted (all reused: hypervigilance, refutation, learned_lesson, decision).
 - 2026-05-09: Captured 3 insights from the NMN meta/continual pivot session: 2 into existing `memory_system_design` (`20260509_1619_summarize_study_skill_design_and_ship` — third documentation layer + skill that automates it; `20260509_1620_documentation_framing_policy` — project-wide plain-language entry-point rule promoted from one skill to all doc-producing surfaces), 1 into existing `subagent_engineering` (`20260509_1621_multi_agent_research_chain_v2_pattern` — append-only sibling versioning under mid-chain user expansion). No new tags promoted (all reused: memory, design, decision, skill, meta, subagent, learned_lesson).
 - 2026-05-09: Captured 4 insights from the dreamer conventional-fixes battery session: 2 into existing `dreamer_diagnosis` (`20260509_1534_wm_reward_head_localized_failure_a1` — offline WM diagnostic localizes failure to the reward head; `20260509_1535_conventional_fixes_battery_verdict_predator_refute` — top-2 conventional causes refuted on predator), 1 into existing `cluster_ops` (`20260509_1536_train_py_checkpoint_restore_nnx_skew` — latent train.py orbax-vs-NNX bug), 1 into existing `subagent_engineering` (`20260509_1537_professor_analysis_resets_exotic_investigation` — routing pattern). No new tags promoted (all reused: dreamer, learned_lesson, decision, refutation, hypervigilance, meta, training_runner, subagent).
 - 2026-05-09: Captured 3 insights from the hypervigilance Round 2 partial-verdict + per-tag metrics ship session: 2 into existing `hypervigilance` (`20260509_1532_sameprop_round2_truncated_verdict`, `20260509_1533_tag_based_distance_supersedes_quadrant`), 1 into existing `subagent_engineering` (`20260509_1534_synthetic_smoke_masks_dict_assembly_bugs`). No new tags promoted (all reused: hypervigilance, refutation, learned_lesson, design, decision, meta, subagent).
