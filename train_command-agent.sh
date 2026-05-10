@@ -72,10 +72,10 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# DreamerV3 zero-init reward/critic fix — Cell Z1 re-run, launched 2026-05-10
-# Node 113, cuda:0, seed 0. See docs/develop/active/diagnosis/dreamer_zero_init_reward_critic_fix.md.
-# Cell: Z1. zero_init_reward_critic: true is set in dreamer_v3_rr06.yaml (config-driven, no CLI flag).
-# Env config: 00-5X5_NoPred.yaml (NoPred baseline). Agent config: dreamer_v3_rr06.yaml (rr=0.0625 + zero-init).
+# DreamerV3 paper-canonical twohot bins — Cell Z2 re-run, launched 2026-05-10
+# Node 113, cuda:0, seed 0. See docs/develop/active/diagnosis/dreamer_twohot_bin_range_fix.md.
+# Cell: Z2. Cumulative test: rr=0.0625 + zero_init_reward_critic + paper_canonical_twohot_bins (all in rr06.yaml).
+# Env config: 00-5X5_NoPred.yaml (NoPred baseline). Agent config: dreamer_v3_rr06.yaml.
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/basic/00-5X5_NoPred.yaml \
   --agent_config configs/models/dreamer_v3_rr06.yaml \
@@ -85,7 +85,7 @@
   --device cuda:0 \
   --log-interval 50 \
   --checkpoint-frequency 100000 \
-  --wandb-group dreamer_zero_init \
+  --wandb-group dreamer_paper_canonical_bins \
   --wandb-job-type ablation \
-  --wandb-name "dreamer_zinit_NoPred_rr06_s0_n113" \
-  --tag "dreamer_zinit_NoPred_rr06_s0_n113"
+  --wandb-name "dreamer_twohotrng_NoPred_rr06_s0_n113" \
+  --tag "dreamer_twohotrng_NoPred_rr06_s0_n113"
