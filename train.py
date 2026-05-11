@@ -1188,8 +1188,11 @@ def main():
             ep_data[f"eat_under_threat_rate_{cname}_raw"]       = p_eat_threat
             ep_data[f"eat_safe_rate_{cname}_raw"]               = p_eat_safe
             ep_data[f"eat_under_threat_safe_steps_{cname}_raw"] = safe_steps
-            if threat_steps > 0 and safe_steps > 0:
-                ep_data[f"eat_under_threat_ratio_{cname}_raw"] = float(p_eat_threat) / max(float(p_eat_safe), EPS)
+            if threat_steps > 0 and eat_safe > 0:
+                # eat_safe > 0 (not safe_steps > 0): ratio is undefined when no safe-window
+                # eating occurred, even if safe steps exist (avoids 1e6 inflation when
+                # eat_safe == 0 but safe_steps > 0).
+                ep_data[f"eat_under_threat_ratio_{cname}_raw"] = float(p_eat_threat) / float(p_eat_safe)
             else:
                 ep_data[f"eat_under_threat_ratio_{cname}_raw"] = float("nan")
 
@@ -1226,8 +1229,10 @@ def main():
         pes = (es / ss) if ss > 0 else float("nan")
         ep_data[f"eat_under_threat_rate_{class_name}_{tag}_raw"]  = pet
         ep_data[f"eat_safe_rate_{class_name}_{tag}_raw"]          = pes
-        if ts > 0 and ss > 0:
-            ep_data[f"eat_under_threat_ratio_{class_name}_{tag}_raw"] = float(pet) / max(float(pes), EPS)
+        if ts > 0 and es > 0:
+            # es > 0 (not ss > 0): ratio is undefined when no safe-window eating occurred
+            # (avoids 1e6 inflation when es == 0 but ss > 0).
+            ep_data[f"eat_under_threat_ratio_{class_name}_{tag}_raw"] = float(pet) / float(pes)
         else:
             ep_data[f"eat_under_threat_ratio_{class_name}_{tag}_raw"] = float("nan")
 

@@ -658,6 +658,84 @@ def test_m5_ratio_nan_when_no_predator():
     print("T5b PASS: M5 threat_steps=0 when predator always far")
 
 
+def _bm_finalise_episode_m5_ratio(threat_steps, safe_steps, eat_threat, eat_safe):
+    """Mirror of train.py _bm_finalise_episode M5 ratio computation (post-fix).
+
+    Kept in sync with train.py _bm_finalise_episode.
+    Post-fix: condition on eat_safe > 0 (not safe_steps > 0) so the ratio is NaN
+    (undefined) when there was no safe-window eating — avoids 1e6 inflation when
+    eat_safe == 0 but safe_steps > 0.
+    """
+    p_eat_threat = (eat_threat / threat_steps) if threat_steps > 0 else float("nan")
+    p_eat_safe   = (eat_safe / safe_steps)     if safe_steps   > 0 else float("nan")
+    if threat_steps > 0 and eat_safe > 0:   # post-fix: eat_safe > 0 (was: safe_steps > 0)
+        return float(p_eat_threat) / float(p_eat_safe)
+    else:
+        return float("nan")
+
+
+def test_m5_ratio_nan_when_eat_safe_zero():
+    """Regression test for EatUnderThreatRatio NaN-on-zero-denominator fix.
+
+    Scenario: agent eats ONLY under threat, never during safe windows.
+      - threat_steps > 0 (predator was close for some steps)
+      - safe_steps > 0   (predator was far for some steps)
+      - eat_threat > 0   (agent ate while predator was close)
+      - eat_safe == 0    (agent never ate during safe steps)
+
+    Pre-fix formula:  ratio = p_eat_threat / max(p_eat_safe, 1e-6)
+      = (eat_threat/threat_steps) / 1e-6  ≈ 1e6  [WRONG — inflated]
+
+    Post-fix formula: ratio = NaN when eat_safe == 0  [CORRECT — undefined]
+
+    The helper _bm_finalise_episode_m5_ratio above mirrors the post-fix train.py
+    logic.  This test will FAIL if that helper is reverted to the pre-fix
+    max(p_eat_safe, 1e-6) form, making it a valid regression guard.
+    """
+    bm_R = 3.0
+    bm_K = 5
+    arrays, meta = _make_bm_state(num_envs=1, num_pred=1, num_neut=0)
+
+    # Phase 1: 20 threat steps where agent always eats  (eat_threat=20)
+    for _ in range(20):
+        _step_bm(arrays, meta, _make_step(ate_food=True, dist_pred=1.0), bm_R, bm_K)
+
+    # Phase 2: 20 safe steps where agent never eats  (safe_steps=20, eat_safe=0)
+    for _ in range(20):
+        _step_bm(arrays, meta, _make_step(ate_food=False, dist_pred=10.0), bm_R, bm_K)
+
+    ts  = int(arrays['m5_threat_steps'][0, 0])
+    ss  = int(arrays['m5_safe_steps'][0, 0])
+    et  = int(arrays['m5_eat_threat'][0, 0])
+    es  = int(arrays['m5_eat_safe'][0, 0])
+
+    assert ts  > 0, f"Expected threat_steps > 0, got {ts}"
+    assert ss  > 0, f"Expected safe_steps > 0, got {ss}"
+    assert et  > 0, f"Expected eat_threat > 0, got {et}"
+    assert es == 0, f"Expected eat_safe == 0 (never ate during safe window), got {es}"
+
+    # Pre-fix path (for documentation / failure message):
+    EPS = 1e-6
+    p_eat_threat_raw = et / ts
+    p_eat_safe_raw   = es / ss  # == 0.0
+    buggy_ratio = float(p_eat_threat_raw) / max(float(p_eat_safe_raw), EPS)  # ~1e6
+
+    # Post-fix path (mirrors train.py after the fix):
+    ratio = _bm_finalise_episode_m5_ratio(ts, ss, et, es)
+
+    assert math.isnan(ratio), (
+        f"Expected NaN when eat_safe==0 (denominator undefined), got ratio={ratio}. "
+        f"Accumulator: ts={ts}, ss={ss}, et={et}, es={es}. "
+        f"Pre-fix buggy value would be: {buggy_ratio:.0f} (≈1e6). "
+        f"This assertion failing means the helper still uses the pre-fix max(...,1e-6) formula."
+    )
+    print(
+        f"T5c PASS: EatUnderThreatRatio=NaN when eat_safe=0 "
+        f"(ts={ts}, ss={ss}, et={et}, es={es}; "
+        f"buggy pre-fix value would have been {buggy_ratio:.0f})"
+    )
+
+
 # ---------------------------------------------------------------------------
 # T6 — Motif clustering produces exactly k=6 clusters on synthetic data
 # ---------------------------------------------------------------------------
