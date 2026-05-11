@@ -3,9 +3,9 @@ title: "NMN continual double-return probe — does the modulator resist catastro
 topic: hypervigilance
 status: active
 created: 2026-05-09
-last_updated: 2026-05-09
+last_updated: 2026-05-11
 phase: 0.5
-wandb_tag: "rppo_nmn_cont_dr_{mod,unmod}_s0"
+wandb_tag: "rppo_nmn_cont_dr_{mod,unmod}_s0_r2"
 develop_link: docs/develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md
 supersedes: null
 superseded_by: null
@@ -129,19 +129,83 @@ seed: 0 (per cell)
 
 System-of-record. `experiment-designer` filled the planned columns (Tag, Cell, Seed, wandb-group/job-type); `training-runner` will fill the actuals at launch. Single seed per cell per the §1.3 trade-off.
 
+### 3.1 Round 1 manifest — BUGGED (data discarded; preserved for audit)
+
+> **Why these rows are tagged `round1_bugged`.** The Round 1 schedule
+> (`configs/continual/nmn_double_return.yaml` as written 2026-05-09) had a
+> ~1000× episode-budget error: cumulative boundary 5100 episodes instead of
+> the intended ~5.1M. Both cells finished in ~10 minutes on 2026-05-09
+> (PIDs exited cleanly that evening), producing no useful continual-learning
+> data. **Rows preserved unchanged so future readers can see the
+> 10-minute-cell artefact and trace it to the original schedule file's git
+> history.** See §3.2 below for the re-launch (Round 2) with the corrected
+> 5.1M-episode budget.
+
 | Run | Status | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Node | GPU | Launched at | WandB run ID | Log path |
 |-----|--------|------|--------------------|-------------|----------------|------|------|-----|-------------|--------------|----------|
-| 1 | running | continual_modulated | rppo_nmn_cont_dr_mod_s0 | nmn_continual_double_return | prod | 0 | 101 | cuda:0 | 2026-05-09T18:27:03 | 9wckyb5k | logs/20260509_182703.log |
-| 2 | running | continual_unmodulated | rppo_nmn_cont_dr_unmod_s0 | nmn_continual_double_return | prod | 0 | 101 | cuda:1 | 2026-05-09T18:29:57 | jknwa5xu | logs/20260509_182957.log |
+| 1 | round1_bugged | continual_modulated | rppo_nmn_cont_dr_mod_s0 | nmn_continual_double_return | prod | 0 | 101 | cuda:0 | 2026-05-09T18:27:03 | 9wckyb5k | logs/20260509_182703.log |
+| 2 | round1_bugged | continual_unmodulated | rppo_nmn_cont_dr_unmod_s0 | nmn_continual_double_return | prod | 0 | 101 | cuda:1 | 2026-05-09T18:29:57 | jknwa5xu | logs/20260509_182957.log |
 
-### 3.1 Configs to Produce
+### 3.2 Round 2 — Episode-budget fix re-launch
+
+**Plain-language summary.** The Round 1 schedule had a 1000× error in its
+episode-count boundaries: it asked the agent to train for 5100 episodes
+total across 5 stages (a literal reading of the professor-neuromodulation
+direction memo's "1500 ep / 700 ep" language), but the project's other
+training cells run at ~10M episodes — so both Round 1 cells finished in
+~10 minutes on 2026-05-09 and produced no continual-learning data. This
+section is the re-launch with the corrected budget: per-stage targets
+scaled ×1000 to **1.5M / 1.5M / 700K / 700K / 700K episodes** (total
+5.1M episodes per cell, comparable in scale to a single 10M-episode
+production cell). Same two-cell modulated-vs-unmodulated contrast as
+Round 1; same node, same GPUs (n101 free as of 2026-05-10 after the
+Round 1 cells exited). The hypothesis tests in §1 and the analysis plan
+in §4 below apply unchanged to Round 2 — the bug was purely a budget
+error, not a design error.
+
+**Schedule changes (Round 2 vs. Round 1).**
+
+| Field | Round 1 (bugged) | Round 2 (corrected) |
+|---|---|---|
+| `episode_boundaries` | `[1500, 3000, 3700, 4400, 5100]` | `[1500000, 3000000, 3700000, 4400000, 5100000]` |
+| `checkpoint_frequencies` | `[500, 500, 350, 350, 350]` | `[100000, 100000, 50000, 50000, 50000]` |
+| Total episodes per cell | 5100 | 5,100,000 |
+| Observed/expected wallclock per cell | ~10 min (observed) | ~30-50 h (expected, current cluster load ~150K ep/h on slow nodes) |
+
+**Stage YAMLs unchanged.** The 5 files in `configs/continual/nmn_double_return_stages/` are byte-identical to Round 1; only the schedule's boundaries + checkpoint frequencies were rewritten.
+
+**Round 2 manifest.**
+
+| Run | Status | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Node | GPU | Launched at | WandB run ID | Log path |
+|-----|--------|------|--------------------|-------------|----------------|------|------|-----|-------------|--------------|----------|
+| R2.1 | running | continual_modulated_r2 | rppo_nmn_cont_dr_mod_s0_r2 | nmn_continual_double_return | prod | 0 | 101 | cuda:0 | 2026-05-11T17:50:30 | 4lcp4vuf | logs/20260511_175030.log |
+| R2.2 | planned | continual_unmodulated_r2 | rppo_nmn_cont_dr_unmod_s0_r2 | nmn_continual_double_return | prod | 0 | 101 | cuda:1 | — | — | — |
+
+The `wandb-group` is unchanged (`nmn_continual_double_return`) — Round 1 and Round 2 sit in the same group; the `_r2` suffix on the run tags is what disambiguates Round 2 data from Round 1 data in any downstream filter/grep. Tags are unique across the manifest.
+
+**Configs to Produce — Round 2 (same as Round 1 except the schedule file is updated in place).**
 
 | Run | Config (env / schedule) | Config (agent) |
 |-----|--------------------------|----------------|
-| 1 | `--configs-dir configs/continual/nmn_double_return_stages/` `--continual-schedule configs/continual/nmn_double_return.yaml` | `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` |
-| 2 | (same) | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
+| R2.1 | `--configs-dir configs/continual/nmn_double_return_stages/` `--continual-schedule configs/continual/nmn_double_return.yaml` (rewritten 2026-05-11) | `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` |
+| R2.2 | (same) | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` |
 
-**New files this experiment produces:**
+### 3.3 Analyzer guidance — Round 1 vs. Round 2 data
+
+When the `experiment-analyzer` opens this experiment, it must apply the following data-eligibility rule:
+
+- **Round 1 runs (`rppo_nmn_cont_dr_mod_s0`, `rppo_nmn_cont_dr_unmod_s0`, both wandb-group `nmn_continual_double_return`, launched 2026-05-09): EXCLUDE from analysis.** These cells ran for ~10 minutes on a 5100-episode budget (1000× under-scale); their per-stage segments contain at most ~hundreds of episodes each, which is below the asymptotic-convergence floor required by every threshold in §4.2. Treat the Round 1 WandB runs as historical artefacts; do not fold their numbers into any of the H₀/H₁a/H₁b/H₁c verdicts.
+- **Round 2 runs (`rppo_nmn_cont_dr_mod_s0_r2`, `rppo_nmn_cont_dr_unmod_s0_r2`, same wandb-group, launched 2026-05-11+): the real probe.** All §4 analyses, all §1.2 / §5 verdicts, and all §1.1 hypothesis tests are evaluated against Round 2 data only. The pre-registered effect-size thresholds in §4.2 apply unchanged to Round 2.
+- Single-seed caveat in §1.3 still applies to Round 2 (one seed per cell). Within-cell statistical power is unchanged by the budget fix.
+
+### 3.4 Configs to Produce (Round 1 — historical)
+
+| Run | Config (env / schedule) | Config (agent) |
+|-----|--------------------------|----------------|
+| 1 | `--configs-dir configs/continual/nmn_double_return_stages/` `--continual-schedule configs/continual/nmn_double_return.yaml` (Round 1 version, 5100-ep budget — see git history of the schedule file for the pre-2026-05-11 form) | `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` |
+| 2 | (same) | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` |
+
+### 3.5 File inventory (this experiment's writes — Round 1 + Round 2)
 
 - `configs/continual/nmn_double_return.yaml` — schedule (5 boundaries / 5 ckpt freqs).
 - `configs/continual/nmn_double_return_stages/01_active_predator.yaml` (header + body byte-identical to `01-interoNocicept_sameProp.yaml`).
@@ -227,10 +291,11 @@ Plot survival vs. episode for both cells across all 5 stages, with stage boundar
    - the new agent config `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` for parity with `recurrent_ppo_nmn_het_film_g1.yaml` modulo the `temp_clip` change.
    - obs↔noise invariants (no env-spec changes that would shift modality dimensions).
 2. **User authorisation** — review the auditor pass + this design doc; greenlight the launch.
-3. **`training-runner`** (after authorisation). Launch the two cells per the manifest:
-   - Cell 1 (modulated) on **node 101 GPU 0** with `--tag rppo_nmn_cont_dr_mod_s0 --wandb-name rppo_nmn_cont_dr_mod_s0 --wandb-group nmn_continual_double_return --wandb-job-type prod --seed 0 --configs-dir configs/continual/nmn_double_return_stages/ --continual-schedule configs/continual/nmn_double_return.yaml --agent_config configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml`.
-   - Cell 2 (unmodulated) on **node 101 GPU 1** with `--tag rppo_nmn_cont_dr_unmod_s0 --wandb-name rppo_nmn_cont_dr_unmod_s0 --wandb-group nmn_continual_double_return --wandb-job-type prod --seed 0 --configs-dir configs/continual/nmn_double_return_stages/ --continual-schedule configs/continual/nmn_double_return.yaml --agent_config configs/models/recurrent_ppo_nmn_het_unmod.yaml`.
+3. **`training-runner`** (after authorisation). Launch the two **Round 2** cells per §3.2:
+   - Run R2.1 (modulated) on **node 101 GPU 0** with `--tag rppo_nmn_cont_dr_mod_s0_r2 --wandb-name rppo_nmn_cont_dr_mod_s0_r2 --wandb-group nmn_continual_double_return --wandb-job-type prod --seed 0 --configs-dir configs/continual/nmn_double_return_stages/ --continual-schedule configs/continual/nmn_double_return.yaml --agent_config configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml`.
+   - Run R2.2 (unmodulated) on **node 101 GPU 1** with `--tag rppo_nmn_cont_dr_unmod_s0_r2 --wandb-name rppo_nmn_cont_dr_unmod_s0_r2 --wandb-group nmn_continual_double_return --wandb-job-type prod --seed 0 --configs-dir configs/continual/nmn_double_return_stages/ --continual-schedule configs/continual/nmn_double_return.yaml --agent_config configs/models/recurrent_ppo_nmn_het_unmod.yaml`.
    - Per project memory rule `feedback_runner_post_launch_pgrep`: verify exactly one PID per tag after launch.
+   - Round 1 launch commands (using the un-suffixed `*_s0` tags) are obsolete — do NOT re-issue them; the Round 1 data is discarded.
 4. **`experiment-analyzer`** (after training completes). Fill §4 / §5 / §6 of this doc per the analysis plan above. Cross-reference with the sister meta-probe doc (NMN_META_2x3_MIXTURE_PROBE) for the joint architecture-vitality verdict.
 5. **`experiment-designer`** (return). Fill §6 Conclusions per the locked H₀/H₁a/H₁b/H₁c predicates once the analyzer has reported.
 6. **`senior-developer`** (conditional, only if H₀ confirmed full null on both this experiment AND the meta sister): plan Phase 0 architecture upgrades (T/P split + precision head per project_plan §3.2 / §3.4).

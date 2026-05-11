@@ -72,20 +72,18 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# DreamerV3 paper-canonical twohot bins — Cell Z2 re-run, launched 2026-05-10
-# Node 113, cuda:0, seed 0. See docs/develop/active/diagnosis/dreamer_twohot_bin_range_fix.md.
-# Cell: Z2. Cumulative test: rr=0.0625 + zero_init_reward_critic + paper_canonical_twohot_bins (all in rr06.yaml).
-# Env config: 00-5X5_NoPred.yaml (NoPred baseline). Agent config: dreamer_v3_rr06.yaml.
+# NMN continual double-return probe — Round 2, Run R2.1 (modulated FiLM g1 temp_clip [0.5,5.0])
+# Node 101, cuda:0, seed 0. Plan doc: docs/experiments/active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md §3.2
+# Cell: continual_modulated_r2. Round 1 was bugged (5100-ep budget); this is the corrected 5.1M-ep re-launch.
+# --episodes intentionally omitted: continual mode reads the budget from the schedule YAML.
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/experiment/basic/00-5X5_NoPred.yaml \
-  --agent_config configs/models/dreamer_v3_rr06.yaml \
-  --num-envs 16 \
-  --episodes 700000 \
+  --configs-dir configs/continual/nmn_double_return_stages/ \
+  --continual-schedule configs/continual/nmn_double_return.yaml \
+  --agent_config configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml \
   --seed 0 \
   --device cuda:0 \
   --log-interval 50 \
-  --checkpoint-frequency 100000 \
-  --wandb-group dreamer_paper_canonical_bins \
-  --wandb-job-type ablation \
-  --wandb-name "dreamer_twohotrng_NoPred_rr06_s0_n113" \
-  --tag "dreamer_twohotrng_NoPred_rr06_s0_n113"
+  --wandb-group nmn_continual_double_return \
+  --wandb-job-type prod \
+  --wandb-name "rppo_nmn_cont_dr_mod_s0_r2" \
+  --tag "rppo_nmn_cont_dr_mod_s0_r2"
