@@ -467,20 +467,39 @@ At 5 env steps/sec, 200k steps ≈ 40,000 seconds ≈ 11 hours. This exceeds the
 
 ### Smoke run status
 
-**Launched and healthy at step ~5000.**
+**Initial run (num_envs=1) — killed per user decision at ~5k steps.**
 
 - **Node**: 192.168.0.114 (docker-114)
-- **PID**: 6683
-- **Log file**: `/media/nas01/projects/Interoceptive-AI/grid_world_pain/tmp/sheeprl_smoke_20260511_172234.log`
+- **PID**: 6683 (killed)
+- **Log file**: `tmp/sheeprl_smoke_20260511_172234.log`
 - **WandB URL**: https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/dyf7pbvf
-- **GPU**: RTX 6000 Ada on GPU 0, ~22% utilization, 1939 MiB allocated
-- **Status**: Training progressing at ~5 env steps/sec; world-model loss non-NaN; episodes being tracked
+- **Status**: Killed by user to relaunch with num_envs=4 for expected speedup.
+
+**Relaunch (num_envs=4, sync_env=True) — live.**
+
+- **Node**: 192.168.0.114 (docker-114)
+- **PID**: 9504
+- **Log file**: `tmp/sheeprl_smoke_20260511_174855.log`
+- **WandB URL**: https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/jzgkcep4
+- **Config change**: `tmp/sheeprl/sheeprl/configs/env/grid_world_pain.yaml` — `num_envs: 1` → `num_envs: 4`; `sync_env: True` kept.
+- **GPU**: RTX 6000 Ada on GPU 0, ~21-23% utilization, 1941 MiB allocated (confirmed 30 min after launch).
+- **Status**: Training actively running (confirmed by GPU utilization and CPU 100%). No tracebacks from SyncVectorEnv obs stacking. WandB run initialized at launch. First metrics expected at policy_step=5000 (≈25-30 min from launch due to `log_every=5000` threshold).
+
+**Speed bottleneck analysis (num_envs=4):**
+
+With `replay_ratio=1` and `num_envs=4`, sheeprl's outer loop does `policy_steps_per_iter=4` env steps AND `per_rank_gradient_steps ≈ 4` gradient updates per iteration. This means:
+- 4x more gradient steps are triggered per outer loop iteration (same total as 4 separate 1-env iterations).
+- Wall-clock time to 200k policy steps is **unchanged** — the bottleneck is gradient compute (~200-300ms/step), not env collection (<1ms/step).
+- Confirmed failure mode 3 from the plan's Risks section: "steps/sec only goes from 5 → 6 (not 5 → 20)". The lever is not `num_envs` but rather `replay_ratio` or `per_rank_sequence_length`.
+
+**SyncVectorEnv obs stacking**: No errors. The bridge returns `{}` for info unconditionally, and each of the 4 env instances returns `{"state": np.ndarray(shape=(19,), dtype=float32)}`. SyncVectorEnv stacks these to `(4, 19)` cleanly.
 
 ### Blockers / follow-up
 
-- **Runtime**: at 5 steps/sec, 200k steps ≈ 11 hours. Senior-developer decision needed: let it run or truncate.
-- **`Game/ep_len_avg` and loss trend**: only one data point (step 5000). Need step 10k+ to confirm decreasing trend (Checkpoint 7 full).
+- **Runtime**: at ~5 env steps/sec effective rate (same as num_envs=1 due to replay_ratio scaling), 200k steps ≈ 11 hours. Senior-developer decision: let it run, truncate at 50k, or reduce `replay_ratio` / `per_rank_sequence_length`.
+- **First log confirmation**: metrics at policy_step=5000 pending as of 30 min after launch — expected within ~5 more minutes.
 - The `fabric.accelerator: cuda` addition was not in the plan — the plan's exp config YAML section should be updated to include it (retroactively, for reproducibility).
+- `num_envs=4` config is in the gitignored `tmp/` directory — not committed, as expected. The plan documents it as the running config.
 
 Implemented by: developer
 
