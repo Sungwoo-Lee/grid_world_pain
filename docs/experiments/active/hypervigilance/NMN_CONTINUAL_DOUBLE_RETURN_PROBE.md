@@ -178,7 +178,7 @@ error, not a design error.
 
 | Run | Status | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Node | GPU | Launched at | WandB run ID | Log path |
 |-----|--------|------|--------------------|-------------|----------------|------|------|-----|-------------|--------------|----------|
-| R2.1 | running | continual_modulated_r2 | rppo_nmn_cont_dr_mod_s0_r2 | nmn_continual_double_return | prod | 0 | 101 | cuda:0 | 2026-05-11T17:50:30 | 4lcp4vuf | logs/20260511_175030.log |
+| R2.1 | running (re-launched n106; prev n101:0 stub 4lcp4vuf killed at ~6 min — node-reallocation, no useful data) | continual_modulated_r2 | rppo_nmn_cont_dr_mod_s0_r2 | nmn_continual_double_return | prod | 0 | 106 | cuda:0 | 2026-05-11T17:58:24 | 8eorbxhq | logs/20260511_175824.log |
 | R2.2 | planned | continual_unmodulated_r2 | rppo_nmn_cont_dr_unmod_s0_r2 | nmn_continual_double_return | prod | 0 | 101 | cuda:1 | — | — | — |
 
 The `wandb-group` is unchanged (`nmn_continual_double_return`) — Round 1 and Round 2 sit in the same group; the `_r2` suffix on the run tags is what disambiguates Round 2 data from Round 1 data in any downstream filter/grep. Tags are unique across the manifest.

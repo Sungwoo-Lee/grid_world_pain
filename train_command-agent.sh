@@ -72,10 +72,10 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# NMN continual double-return probe — Round 2, Run R2.1 (modulated FiLM g1 temp_clip [0.5,5.0])
-# Node 101, cuda:0, seed 0. Plan doc: docs/experiments/active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md §3.2
-# Cell: continual_modulated_r2. Round 1 was bugged (5100-ep budget); this is the corrected 5.1M-ep re-launch.
-# --episodes intentionally omitted: continual mode reads the budget from the schedule YAML.
+# NMN continual double-return probe — Round 2, Run R2.1 (modulated FiLM g1, temp_clip [0.5,5.0])
+# RE-LAUNCH: was n101:0 (killed at ~6 min, WandB stub 4lcp4vuf); re-launched on n106:0 2026-05-11.
+# Node 106, cuda:0, seed 0. Plan doc: docs/experiments/active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md §3.2
+# Cell: continual_modulated_r2. No --episodes: 5.1M-episode budget from schedule YAML.
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --configs-dir configs/continual/nmn_double_return_stages/ \
   --continual-schedule configs/continual/nmn_double_return.yaml \
