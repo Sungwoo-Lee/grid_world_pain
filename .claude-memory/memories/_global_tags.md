@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 
 ## Change history
 
+- 2026-05-11: 2 insights from the Z2 verdict + diagnostic-bug-fix session (`20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt`, `20260511_1535_encode_decode_flag_mismatch_silent_class_bug`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `refutation`, `meta` — no new tags promoted.
 - 2026-05-10: 3 insights from the dreamer sheeprl-comparison + zero-init cascade session (`20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry`, `20260510_2240_reference_impl_compare_only_act_intersections`, `20260510_2241_residual_error_pattern_directs_next_fix`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `refutation`, `subagent`, `meta` — no new tags promoted.
 - 2026-05-10: 1 insight from the hypervigilance Round 2.5 launch + analysis session (`20260510_2237_sameprop_round25_no_class_avoidance`) reused existing tags `hypervigilance`, `refutation`, `learned_lesson`, `decision` — no new tags promoted.
 - 2026-05-09: 3 insights from the NMN meta/continual pivot session (`20260509_1619_summarize_study_skill_design_and_ship`, `20260509_1620_documentation_framing_policy`, `20260509_1621_multi_agent_research_chain_v2_pattern`) reused existing tags `memory`, `design`, `decision`, `skill`, `meta`, `subagent`, `learned_lesson` — no new tags promoted.

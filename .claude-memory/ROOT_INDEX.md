@@ -4,9 +4,9 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-05-10
+**Last updated**: 2026-05-11
 **Active folders**: 6
-**Total insights**: 41
+**Total insights**: 43
 **Last audit**: (none)
 
 ---
@@ -18,8 +18,8 @@
 | `memory_system_design` | Claude memory system's own design decisions | 6 | 2026-05-09 | [memory, design, decision, skill, meta] |
 | `subagent_engineering` | Subagent + worktree usage gotchas | 6 | 2026-05-10 | [meta, learned_lesson, worktree, subagent, decision] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 6 | 2026-05-09 | [nmn, hypervigilance, film, refutation, learned_lesson] |
-| `dreamer_diagnosis` | DreamerV3 failure investigation | 5 | 2026-05-10 | [dreamer, hypervigilance, decision, learned_lesson, refutation] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 13 | 2026-05-09 | [meta, training_runner, learned_lesson, decision, dreamer] |
+| `dreamer_diagnosis` | DreamerV3 failure investigation | 6 | 2026-05-11 | [dreamer, hypervigilance, decision, learned_lesson, refutation] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 14 | 2026-05-11 | [meta, training_runner, learned_lesson, decision, dreamer] |
 | `hypervigilance` | Hypervigilance experiments | 5 | 2026-05-10 | [hypervigilance, design, learned_lesson, decision, refutation, meta] |
 
 ---
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-11: Captured 2 insights from the Z2 verdict + diagnostic-bug-fix session: 1 into existing `dreamer_diagnosis` (`20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt` — paper-canonical bins H2 partial fix; cumulative cascade −54%; new long-horizon-compounding residual selects GRU reset gate as next candidate), 1 into existing `cluster_ops` (`20260511_1535_encode_decode_flag_mismatch_silent_class_bug` — silent failure-mode class when knob-gated encode/decode change ships without updating auxiliary tooling; cross-check against training-time logger as trip-wire). No new tags promoted (all reused: dreamer, learned_lesson, decision, refutation, meta).
 - 2026-05-10: Captured 3 insights from the dreamer sheeprl-comparison + zero-init cascade session: 1 into existing `dreamer_diagnosis` (`20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry` — Z1 H2 partial fix; pos/neg reward-MAE asymmetry directs next candidate), 2 into existing `subagent_engineering` (`20260510_2240_reference_impl_compare_only_act_intersections` — document-by-default rule for reference-impl comparators; `20260510_2241_residual_error_pattern_directs_next_fix` — residual-error pattern dictates next fix in iterative cascades). No new tags promoted (all reused: dreamer, learned_lesson, decision, refutation, subagent, meta).
 - 2026-05-10: Captured 1 insight into existing `hypervigilance` from the Round 2.5 launch + analysis session: `20260510_2237_sameprop_round25_no_class_avoidance` (both pre-registered hypotheses refuted at 10M ep — Cell A1 H₀ confirmed at 75× margin via per-tag Δ_TL=+0.004; Cell C aggregated Δ=−0.53 sign-flipped, lands in Inverted band; original sameProp survey effect decomposes into two confounds with no genuine class-conditional avoidance under matched smells; provisional pending Round 2.6 seed 44 for Cell C). No new tags promoted (all reused: hypervigilance, refutation, learned_lesson, decision).
 - 2026-05-09: Captured 3 insights from the NMN meta/continual pivot session: 2 into existing `memory_system_design` (`20260509_1619_summarize_study_skill_design_and_ship` — third documentation layer + skill that automates it; `20260509_1620_documentation_framing_policy` — project-wide plain-language entry-point rule promoted from one skill to all doc-producing surfaces), 1 into existing `subagent_engineering` (`20260509_1621_multi_agent_research_chain_v2_pattern` — append-only sibling versioning under mid-chain user expansion). No new tags promoted (all reused: memory, design, decision, skill, meta, subagent, learned_lesson).

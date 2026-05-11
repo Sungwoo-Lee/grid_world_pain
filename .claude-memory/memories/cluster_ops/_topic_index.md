@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 13
-**Last updated**: 2026-05-09
+**Insights**: 14
+**Last updated**: 2026-05-11
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-11 | 15:35 | `20260511_1535_encode_decode_flag_mismatch_silent_class_bug` | When a knob-gated encode/decode change lands in production training code, every auxiliary script that touches the same code path must be updated in lockstep — otherwise the trained model speaks the new layout, the auxiliary script listens in the old layout, and the output is silent garbage (no error, just wrong numbers). Concrete instance: `scripts/dreamer_offline_wm_test.py` missed the new `paper_canonical_bins` flag after the Z2 trainer change; first Z2 diagnostic run reported MAE = 1.04 (5.7× the true value 0.177). Generalizable heuristic: cross-check at least one metric against the training-time logger on the same checkpoint, as a silent-failure-mode trip-wire. |
 | 2026-05-09 | 15:36 | `20260509_1536_train_py_checkpoint_restore_nnx_skew` | Latent infrastructure bug surfaced during the offline WM-test build: `train.py:981–1000` orbax restore would fail with current NNX on a fresh checkpoint restore due to a string-key + `{'value': array}` leaf skew that `nnx.update` does not accept. Workaround in offline-test script via `_normalize_checkpoint`; trainer not yet fixed. Any future `train.py --resume` would fail. |
 | 2026-05-09 | 03:12 | `20260509_0312_node_num_hostname_in_bashrc` | Bashrc derives `NODE_NUM` from primary lab IP last octet; every `doc-run-*` alias passes `--hostname="docker-${NODE_NUM}"`. Container prompts read `vncuser@docker-101` … `vncuser@docker-114`, instant disambiguation when shelling between cluster containers. Variable expands at alias-use time because aliases are macro-substituted before re-parsing. |
 | 2026-05-09 | 03:10 | `20260509_0310_bash_ic_alias_over_ssh` | To invoke a bash alias from a remote `~/.bashrc` over SSH, use `bash -ic '<alias>'` — non-interactive shells skip alias expansion, and the standard Ubuntu bashrc returns early in non-interactive mode (`case $- in *i*) ;; *) return ;; esac`). The 'no job control' notice is harmless; filter with `grep -v`. |
@@ -31,6 +32,7 @@
 
 ## Change history
 
+- 2026-05-11: Added 1 insight from the Z2 verdict session: `20260511_1535_encode_decode_flag_mismatch_silent_class_bug` (second instance of the auxiliary-tooling-falls-out-of-sync-with-production bug class; cross-check against training-time logger as anti-silent-failure-mode trip-wire). No new tags.
 - 2026-05-09: Added 1 insight from the dreamer conventional-fixes session: `20260509_1536_train_py_checkpoint_restore_nnx_skew` (latent train.py orbax-vs-NNX checkpoint-restore skew, surfaced by offline WM-test workaround). No new tags.
 - 2026-05-09: Added 3 insights from the cluster-ops scripting consolidation session: `20260509_0309_cluster_py_consolidation` (8 bash scripts → one Python tool), `20260509_0310_bash_ic_alias_over_ssh` (the alias-over-SSH technique it uses), `20260509_0312_node_num_hostname_in_bashrc` (the bashrc that supplies the aliases). No new tags.
 - 2026-05-08: Added 1 insight: `20260508_1826_statusline_jq_ifs_pct` (Claude Code statusline script gotchas — no `jq` on docker-102, bash `read` IFS-whitespace collapse, and the pre-calculated `context_window.used_percentage` field).
