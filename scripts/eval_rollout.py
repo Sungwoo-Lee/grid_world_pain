@@ -49,6 +49,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.environment.config_loader import Config, load_env_params, load_behavior_measure_cfg
 from src.environment.core import jax_reset, jax_step
+from src.environment.sensor import get_observation, get_observation_breakdown
 
 
 def _get_git_commit() -> str:
@@ -62,29 +63,6 @@ def _get_git_commit() -> str:
     except Exception:
         return "unknown"
 
-
-def _load_rppo_policy(checkpoint_path: str, device: str):
-    """Load RecurrentPPO policy from an orbax checkpoint directory.
-
-    Returns (trainer, key) where trainer.agent can be called for inference.
-    """
-    from src.environment.config_loader import Config
-    # We import the trainer lazily to avoid device-init on import
-    import importlib
-    rppo_mod = importlib.import_module("src.models.recurrent_ppo_trainer")
-    RecurrentPPOTrainer = rppo_mod.RecurrentPPOTrainer
-
-    # Load the saved config alongside the checkpoint
-    ckpt_dir = Path(checkpoint_path)
-    config_path = ckpt_dir.parent / "config.yaml"
-    if not config_path.exists():
-        # Try grandparent (results/<run>/checkpoints/<step>/ layout)
-        config_path = ckpt_dir.parent.parent / "config.yaml"
-    if not config_path.exists():
-        raise FileNotFoundError(f"Could not find config.yaml near checkpoint: {checkpoint_path}")
-
-    agent_cfg = Config.load_yaml(str(config_path))
-    return RecurrentPPOTrainer, agent_cfg, ckpt_dir
 
 
 def _run_episode(
@@ -414,33 +392,148 @@ def main():
         print(f"[eval_rollout] Agent type: {agent_type}", flush=True)
 
     if agent_type == "rppo":
-        from src.models.recurrent_ppo_trainer import RecurrentPPOTrainer
-        agent_config = Config.load_yaml(args.agent_config) if args.agent_config else Config({})
-        trainer = RecurrentPPOTrainer(params, agent_config)
+        import flax.nnx as nnx
+        from src.models.recurrent_ppo_network import ActorCriticRNN, get_action_and_value_nnx
 
-        restore_mngr = ocp.CheckpointManager(str(ckpt_path))
-        step = restore_mngr.latest_step()
+        # --- Locate agent config ---
+        # Prefer an explicit --agent_config; fall back to config.yaml saved alongside
+        # the checkpoint (written by train.py at checkpoint-save time).
+        # The config.yaml lives in the CheckpointManager root directory; check
+        # both ckpt_path itself and its parent (handles step-dir vs. root-dir arg).
+        if args.agent_config:
+            agent_config = Config.load_yaml(args.agent_config)
+        else:
+            saved_cfg = ckpt_path / "config.yaml"
+            if not saved_cfg.exists():
+                saved_cfg = ckpt_path.parent / "config.yaml"
+            if saved_cfg.exists():
+                agent_config = Config.load_yaml(str(saved_cfg))
+            else:
+                raise FileNotFoundError(
+                    f"No --agent_config provided and no config.yaml found near "
+                    f"checkpoint: {ckpt_path}. Pass --agent_config explicitly."
+                )
+
+        # --- Derive model dimensions from env params ---
+        obs_breakdown = get_observation_breakdown(params)
+        input_dim  = sum(obs_breakdown.values())
+        action_dim = 4 + int(params.rest_action_enabled) + int(params.eat_action_enabled)
+
+        # --- Read model hyper-params from saved agent config ---
+        hidden_size       = agent_config.get_mandatory("agent.hidden_size")
+        rnn_type          = agent_config.get_mandatory("agent.rnn_type")
+        activation        = agent_config.get_mandatory("agent.activation")
+        encoding_config   = agent_config.to_dict().get("agent", {})
+        modulation_config = agent_config.get("agent.modulation")
+        if modulation_config is not None and modulation_config.get("type") is None:
+            modulation_config = None
+
+        if not args.quiet:
+            print(
+                f"[eval_rollout] Building ActorCriticRNN: input_dim={input_dim}, "
+                f"action_dim={action_dim}, hidden={hidden_size}, rnn={rnn_type}",
+                flush=True,
+            )
+
+        # --- Build a fresh model with the same architecture ---
+        init_key = jax.random.PRNGKey(0)
+        model = ActorCriticRNN(
+            input_dim=input_dim,
+            action_dim=action_dim,
+            hidden_size=hidden_size,
+            rngs=nnx.Rngs(init_key),
+            rnn_type=rnn_type,
+            activation=activation,
+            modulation_config=modulation_config,
+            observation_breakdown=obs_breakdown,
+            encoding_config=encoding_config,
+        )
+
+        # --- Restore checkpoint weights (mirrors train.py lines ~1327-1368) ---
+        # Auto-detect: if ckpt_path is a step directory (integer name), open its
+        # parent as the CheckpointManager root and use that step; otherwise treat
+        # ckpt_path as the root and let orbax pick the latest step.
+        try:
+            _explicit_step = int(ckpt_path.name)
+            _ckpt_root     = ckpt_path.parent
+        except ValueError:
+            _explicit_step = None
+            _ckpt_root     = ckpt_path
+
+        restore_mngr = ocp.CheckpointManager(str(_ckpt_root))
+        step = _explicit_step if _explicit_step is not None else restore_mngr.latest_step()
         if not args.quiet:
             print(f"[eval_rollout] Restoring RPPO checkpoint at step {step}", flush=True)
-        restored = restore_mngr.restore(step, args=ocp.args.PyTreeRestore())
-        import flax.nnx as nnx
-        from flax.nnx import graph as nnx_graph
-        restored_model_state = restored["model"]
-        flat_restored, _ = jax.tree_util.tree_flatten_with_path(restored_model_state)
-        restored_dict = {str(k): v for k, v in flat_restored}
-        flat_current, tree_def = jax.tree_util.tree_flatten_with_path(
-            nnx.state(trainer.agent)
+
+        # Build restore_args with explicit CPU sharding so orbax can restore a
+        # GPU-saved checkpoint to CPU (PyTreeRestore() without a target fails when
+        # the checkpoint has no sharding metadata for the target device).
+        current_model_state = nnx.state(model)
+        _cpu_device = jax.local_devices()[0]
+
+        def _cpu_restore_arg(_x):
+            return ocp.ArrayRestoreArgs(
+                restore_type=jax.Array,
+                sharding=jax.sharding.SingleDeviceSharding(_cpu_device),
+            )
+
+        _restore_args = jax.tree_util.tree_map(_cpu_restore_arg, current_model_state)
+        restored = restore_mngr.restore(
+            step,
+            args=ocp.args.PyTreeRestore(
+                item={"model": current_model_state},
+                restore_args={"model": _restore_args},
+                partial_restore=True,
+            ),
         )
-        valid_flat = [restored_dict.get(str(k), v) for k, v in flat_current]
-        new_state = jax.tree_util.tree_unflatten(tree_def, valid_flat)
-        nnx.update(trainer.agent, new_state)
+
+        restored_model_state = restored["model"]
+
+        flat_restored, _        = jax.tree_util.tree_flatten_with_path(restored_model_state)
+        flat_current,  tree_def = jax.tree_util.tree_flatten_with_path(current_model_state)
+
+        restored_dict = {str(k): v for k, v in flat_restored}
+
+        # Strict architecture check (same as train.py)
+        mismatches = []
+        for k, cur_v in flat_current:
+            k_str = str(k)
+            if k_str not in restored_dict:
+                mismatches.append(
+                    f"Missing in checkpoint: '{k_str}' "
+                    f"(current shape {getattr(cur_v, 'shape', '?')})"
+                )
+            elif getattr(cur_v, "shape", None) != getattr(restored_dict[k_str], "shape", None):
+                mismatches.append(
+                    f"Shape mismatch '{k_str}': ckpt "
+                    f"{getattr(restored_dict[k_str], 'shape', '?')} "
+                    f"vs model {getattr(cur_v, 'shape', '?')}"
+                )
+        if mismatches:
+            raise ValueError(
+                "Architecture mismatch between checkpoint and env params:\n"
+                + "\n".join(f"  {m}" for m in mismatches)
+            )
+
+        valid_flat  = [restored_dict[str(k)] for k, _ in flat_current]
+        valid_tree  = jax.tree_util.tree_unflatten(tree_def, valid_flat)
+        nnx.update(model, valid_tree)
+
+        if not args.quiet:
+            print(f"[eval_rollout] RPPO model restored from step {step}.", flush=True)
+
+        # --- Policy closure ---
+        h_init = model.initial_state(batch_size=None)  # no batch dim for single-agent eval
 
         def policy_fn(state, carry, key, deterministic=True):
-            obs = trainer._get_obs(state)
+            obs = get_observation(state, params)   # (input_dim,)
             if carry is None:
-                carry = trainer.agent.initialize_hidden(batch_size=1)
-            action, carry = trainer.agent.get_action(obs[None], carry, key, deterministic=deterministic)
-            return action[0], carry
+                carry = h_init
+            action, _log_prob, _value, h_new, _mod = get_action_and_value_nnx(
+                model, obs, carry, key=key if not deterministic else None,
+                eval_mode=deterministic,
+            )
+            return action, h_new
     else:
         raise NotImplementedError(f"Agent type '{agent_type}' not yet supported by eval_rollout.py. "
                                   f"Implement DreamerV3 checkpoint loading and add here.")
