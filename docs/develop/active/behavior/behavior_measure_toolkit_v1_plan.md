@@ -1,11 +1,11 @@
 ---
 title: "Behavior-measure toolkit v1 — implementation plan (M1, M2, M5, M7)"
 topic: behavior
-status: implemented
+status: active
 created: 2026-05-11
 last_updated: 2026-05-11
 phase: 1
-verification_status: pending
+verification_status: pass
 ---
 
 # Behavior-measure toolkit v1 — implementation plan (M1, M2, M5, M7)
@@ -982,27 +982,325 @@ Implemented by: developer
 
 ## Verification Report
 
-> **Verified by**: [senior-developer]
-> **Date**: [YYYY-MM-DD]
+> **Verified by**: senior-developer
+> **Date**: 2026-05-11
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/environment/config_loader.py` | `BehaviorMeasureCfg` + loader | | |
-| `src/environment/core.py` | `info['agent_in_bush']` | | |
-| `src/models/recurrent_ppo_trainer.py` | `StepInfo.agent_in_bush` | | |
-| `src/models/dreamer_v3_trainer.py` | transition `agent_in_bush` | | |
-| `train.py` Sites 1–5 — per-step / per-episode / per-env reset / stage-wipe / WandB fan-out for M1/M2/M5 | | | |
-| `scripts/eval_rollout.py` | new file | | |
-| `scripts/motif_cluster.py` | new file | | |
-| `tests/environment/test_behavior_measures.py` | T1–T8 | | |
-| `.claude/agents/env-config-auditor.md` | §1.5 addendum | | |
+| `src/environment/config_loader.py` | `BehaviorMeasureCfg` + loader | ✅ | 115 insertions; backwards-compat (block absent → returns `None`) confirmed by loading `01-interoNocicept_sameProp.yaml`. T1 14-parametrised + 6 validation sub-tests pass. |
+| `src/environment/core.py` | `info['agent_in_bush']` | ✅ | 10 insertions at `core.py:521-525`. Uses `new_agent_pos` (post-step) — correct M2 semantics. `jnp.any(jnp.logical_and(...))` is fixed-shape; vmap-safe. T2 passes. |
+| `src/models/recurrent_ppo_trainer.py` | `StepInfo.agent_in_bush` | ✅ | 2 insertions: 18th NamedTuple field + keyword-arg wiring in `collect_trajectories`. |
+| `src/models/dreamer_v3_trainer.py` | transition `agent_in_bush` | ✅ | 1 insertion: bool entry in transition dict between `dist_per_predator` and `termination_reason`. No cast (matches design). |
+| `train.py` Sites 1–5 — per-step / per-episode / per-env reset / stage-wipe / WandB fan-out for M1/M2/M5 | ✅ | 435 insertions, 2 deletions. Site 1 anti-pattern guard verified at `train.py:1537` (explicit `info_np['agent_in_bush'] = np.array(step_info.agent_in_bush)` after the fixed-key loop). Stage-transition wipe at `1438-1452` mirrors `_bm_reset_env` for all 16 accumulators + 7 K-buffer slots. All 5 sites use the same `_bm_step_update` helper — no Python loop over num_envs inside the per-step body (vectorised over env axis on the M5 path; loop over `num_envs` only inside the M1/M2 candidate-resolution block, acceptable cost). |
+| `configs/experiment/behavior_measures/smoke_test.yaml` | new T8 fixture | ✅ | 242 lines; bushes (3 in TR + 3 in BL) and 1 active predator; matches §2.10 auditor's `obs_hides_agent: true` requirement. |
+| `scripts/eval_rollout.py` | new file | ❌ | **525 lines but non-functional for RPPO checkpoints.** Imports `RecurrentPPOTrainer` (line 417) and instantiates `RecurrentPPOTrainer(params, agent_config)` (line 419) — that class does not exist; the codebase uses a functional API (`collect_trajectories`, `train_iteration`). C7 runs fail at `ImportError`. See "Verification verdict — C7" below. |
+| `scripts/motif_cluster.py` | new file | ⚠️ | 404 lines; CLI loads cleanly; T6 (synthetic-input smoke) passes after `sklearn 1.8.0` install. End-to-end pipeline cannot be exercised until `eval_rollout.py` produces a real dump (C7 blocker). |
+| `tests/environment/test_behavior_measures.py` | T1–T8 | ⚠️ | 779 lines; **35 tests pass, 0 skipped** (sklearn install enabled T6 — 28 BM + 7 pre-existing per-tag tests). **T8 caveat**: only asserts `returncode == 0`. Independent V2 verification (below) is the load-bearing check on actual WandB-key emission. |
+| `.claude/agents/env-config-auditor.md` | §1.5 addendum | ✅ | 7-line addition to The Audit Checklist; matches plan §2.10. |
 
-**Conclusion**: [one-line summary]
+**Conclusion**: Online toolkit (M1/M2/M5) ships clean; **offline toolkit (eval_rollout for M7) is broken — fix required before v1 demonstration can run.**
 
-V1–V6 results:
-- V1 (unit tests): [PASS / FAIL]
-- V2 (real-`train.py` smoke): [PASS / FAIL]  ← load-bearing per the synthetic-test-trap insight
-- V3 (5 wiring sites code-read): [PASS / FAIL]
-- V4 (motif exemplar review, 5 per cluster × 6 clusters): [PASS / FAIL]
-- V5 (backwards-compat per-tag keys unchanged): [PASS / FAIL]
-- V6 (speed ≤ 2% regression): [PASS / WARN / FAIL]
+### V1–V6 + C7/C8 results
+
+| Check | Verdict | Evidence |
+|---|---|---|
+| **V1 — unit tests** | ✅ PASS | `35 passed in 70.82s` (28 BM tests with T6 now running after `scikit-learn 1.8.0` install, + 7 pre-existing per-tag/per-entity tests). No skips, no regressions. |
+| **V2 — real-`train.py` smoke (independent re-do)** | ✅ PASS | Ran `train.py --config configs/experiment/behavior_measures/smoke_test.yaml --num-envs 4 --episodes 500 --log-interval 1 --device cpu` (WANDB_MODE=offline). Parsed the offline-run datastore via `wandb.proto.wandb_internal_pb2`; the **first** history record (iter 1) contains all 6 BM per-class keys + 4 per-tag keys (`Episode/InterruptedFeedingRate_{predator,rabbit,predator_TL,rabbit_TL,rabbit_BR}`, `Episode/BushDiveRate_{...}`, `Episode/EatUnderThreatRatio_{...}`, plus `Episode/EatUnderThreatRate`, `Episode/EatSafeRate`, `Episode/EatUnderThreatSafeSteps`, `Episode/InterruptedFeedingDenominator`, `Episode/BushDiveDenominator`) — finite values in expected ranges. No `Episode/*` key is identically 0.0 in a non-degenerate way except `InterruptedFeedingRate_predator=0` (legitimate: no episodes had ate+threat-near events). **One M5 numeric quirk flagged below as a non-blocking follow-up.** |
+| **V3 — JAX/Flax wiring audit** | ✅ PASS | (a) `info['agent_in_bush']` at `core.py:521-525` is fixed-shape (`jnp.any` over static `[num_obs]` axis); vmap-safe; scalar bool per env. (b) No strings inside JIT scopes — per-class names `"predator"`/`"rabbit"` only in `train.py` host-side dict assembly (`_bm_finalise_episode`, `_bm_log_wandb`), not in `core.py` / trainers. (c) K-buffer is pure numpy (`np.full((num_envs, _NUM_CLASSES), -1, dtype=np.int32)`); no `lax.scan` / `jit` annotations on update path. (d) Stage-transition wipe at `train.py:1438-1452` resets all 16 accumulators + 7 K-buffer slots — mirrors `_bm_reset_env`. (e) Site 1 anti-pattern guard verified — explicit `info_np['agent_in_bush'] = np.array(step_info.agent_in_bush)` at `train.py:1537` after the `BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']` loop; Site 5 has the same explicit assignment at `train.py:2474`. |
+| **V4 — backwards compatibility** | ✅ PASS | (a) Loaded `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` (no BM block); `cfg.get('behavior_measures')` returns `None`; `load_behavior_measure_cfg(cfg)` returns `None`; env params build unchanged. (b) Existing aggregated keys (`Episode/MeanDistPredator`, `Episode/MeanDistRabbit`, `Episode/MeanDistHidingPredator`, `Episode/RabbitHits`, `Episode/HidingPredatorHits`, per-tag `Episode/MeanDistPredator_TL`, `Episode/MeanDistRabbit_TL`, `Episode/MeanDistRabbit_BR`, plus `Episode/Term_*` distribution keys, `Episode/Damage*`, etc.) all emit with finite values alongside the new BM keys in the V2 wandb dump — no regression. (c) `behavior_measures:` block is opt-in: absence ⇒ `bm_enabled = False` ⇒ zero overhead path. |
+| **V5 — real-`train.py` smoke** | ✅ PASS | See V2 evidence (V5 in the spec is the same check as V2 in this protocol — V2 in the §5 of the doc maps to V5 in the user's task prompt). Confirmed all expected keys emit with finite-and-bounded values. |
+| **V6 — overhead on canonical `01-interoNocicept_sameProp.yaml`** | ✅ PASS | 3 trials, 16 envs × 30 episodes on CPU. Baseline (no BM block): 20.0/21.0/21.0 s; BM enabled (block appended): 20.6/21.0/21.2 s. **Overhead: 0–3%, average ≈ 1%.** Well within the ≤ 2% expected guideline. The developer's reported +5.3% came from the smaller smoke-test config (10×10, num_envs not specified) where the Python K-buffer loop is a larger fraction of total wallclock. On the canonical 16-env config the overhead is essentially noise. **Verdict: ✅ no regression.** |
+| **C7 — `eval_rollout.py` checkpoint smoke (Cell A1)** | ❌ FAIL | `python scripts/eval_rollout.py --config <Cell-A1>/models/config.yaml --agent_config configs/models/recurrent_ppo.yaml --checkpoint <Cell-A1>/models/10000003 --eval-n-episodes 5 --eval-seeds 1000 1001 1002 1003 1004 --device cpu` crashes at `from src.models.recurrent_ppo_trainer import RecurrentPPOTrainer` (line 417): **`ImportError: cannot import name 'RecurrentPPOTrainer'`**. The codebase exposes only a functional API (`collect_trajectories`, `train_iteration`, `update_step`) — there is no `RecurrentPPOTrainer` class. The plan §2.7 referenced this class ("For RPPO, that is `RecurrentPPOTrainer.load_checkpoint(path)`"), which was an incorrect senior-developer direction; the developer accepted it instead of escalating. The script's stub also references `trainer.agent`, `trainer.agent.initialize_hidden`, `trainer.agent.get_action` — none of which exist. **Blocker for the v1 demonstration.** |
+| **C8 — `motif_cluster.py` smoke** | ⚠️ PARTIAL | CLI loads cleanly; T6 (synthetic-input unit test) passes with `silhouette_mean > 0.20` and 6 non-degenerate clusters. End-to-end pipeline (C7 dump → C8 cluster) cannot be exercised until C7 is fixed. |
+
+### M1 age-ordering bug re-read (per developer's `bf4f446` fix)
+
+Confirmed in `train.py:1066-1109`. The implementation matches the design doc's M1 operational definition:
+- Line 1068: `m1_steps_since_eat[:] = np.where(ate_food_t, 0, m1_steps_since_eat + 1)` — reset to 0 on eat, else +1.
+- Lines 1070-1090: **age first** — for each pending candidate with `age >= 0`, increment; if `age >= bm_K`, resolve as interrupted iff `m1_steps_since_eat[env_i] >= bm_K`.
+- Lines 1092-1111: **record new candidates** only AFTER aging — so a candidate recorded on step t has `age = 0` here, and only on step `t+1` does it tick to 1, etc. After `bm_K` subsequent no-eat steps, both `age` and `m1_steps_since_eat` simultaneously reach `bm_K`, so the `>= bm_K` condition is **reachable** — fixing the off-by-one. Pre-fix, `age` ticked to 1 on step t, then 2 on t+1, …, then `bm_K` on step `t + (bm_K - 1)`, but `steps_since_eat` was only `bm_K - 1` at that point, so the interrupted condition was never reachable in steady state.
+
+Semantics now match design doc §1.1 M1 — interruption resolves iff the agent did not eat for the entire K-step window after the candidate event.
+
+### Numeric quirk worth a follow-up (M5 `EatUnderThreatRatio_*`)
+
+In V2's first history record: `Episode/EatUnderThreatRatio_predator = 14285.71`. Diagnosis: per-episode, when `safe_steps > 0` AND `eat_safe = 0` (agent never ate during safe periods of that episode) AND `eat_threat > 0`, the implementation at `train.py:1191` computes `pet / max(pes, EPS)` with `EPS = 1e-6` and `pes = 0`, which inflates the ratio by a factor of `1/EPS = 1e6`. The design doc §1.1 M5 prescribes this formula but flags `P_eat|safe` near-zero as an "uninterpretable" signal (R3 sanity criterion). The cleanest fix is to emit `NaN` (matching the `safe_steps = 0` branch) when `pes = 0` exactly — currently this path can produce 5-figure ratios that pollute mean aggregations. **Non-blocking** — defer to a v1.1 cleanup; flag for `experiment-analyzer` so they know to threshold the ratio when plotting.
+
+### Out-of-scope changes
+
+None. `git diff --stat HEAD~10 HEAD` shows exactly the 10 files in the plan's §2 file map (plus the smoke config + the auditor profile, both also in the plan). No incidental edits.
+
+### Recommended next steps
+
+1. **Fix `scripts/eval_rollout.py` RPPO loading (blocker for v1 demo)** — author a follow-up `developer` ticket. The fix mirrors the actual `train.py` RPPO restore pattern: import the model factory used at train startup (around `train.py:700-780`), instantiate the model, and use `orbax.checkpoint.CheckpointManager.restore(step, args=ocp.args.PyTreeRestore())` directly against `nnx.state(model)`. Do not invent a `RecurrentPPOTrainer` class. The Dreamer branch already raises `NotImplementedError` as a placeholder — make sure RPPO doesn't follow the same dead-end. Once fixed, re-run C7 + C8 against the Cell A1 (`nm8gn7y2`) and Cell C (`bdnfc0lu`) checkpoints.
+2. **Defer recommendation (a)** (author v1-demonstration configs via `experiment-designer`) until C7 is fixed — the configs are not load-bearing until the eval-rollout actually runs.
+3. **Once C7 is green**, recommendation (b) — re-analyze Round 2.5 checkpoints with the new measures — can proceed: `eval_rollout` against `bdnfc0lu` + `nm8gn7y2`, then `experiment-analyzer` writes the behavior-measure refinement appendix to the R2.5 design doc.
+4. **(Non-blocking)** clean up the `EatUnderThreatRatio_*` numeric quirk by emitting NaN when `pes = 0` exactly.
+
+### Sign-off
+
+Verified by: senior-developer  
+Date: 2026-05-11  
+Verdict: **partial — online ships, offline (eval_rollout) blocked.** Online M1/M2/M5 keys are clean, on-budget, backwards-compatible, and emit finite values on a real `train.py` invocation. Offline M7 pipeline cannot run until `eval_rollout.py`'s RPPO checkpoint loading is fixed.
+
+---
+
+## Bug fixes (v1.0.1)
+
+### Fix commits
+
+| Hash | One-liner |
+|------|-----------|
+| `e5e1155` | fix(behavior): EatUnderThreatRatio NaN when eat_safe=0 (zero-denominator fix) |
+| `2d6d288` | fix(behavior): eval_rollout RPPO checkpoint restore with functional API |
+
+---
+
+### Fix #1 — C7 evidence (eval_rollout checkpoint smoke)
+
+**Command:**
+```
+python scripts/eval_rollout.py \
+    --config results/JAX_RecurrentPPO/20260509-182720_hypervigilance-round25-A1-seed43_n106_gpu1/models/config.yaml \
+    --checkpoint results/JAX_RecurrentPPO/20260509-182720_hypervigilance-round25-A1-seed43_n106_gpu1/models/10000003 \
+    --eval-n-episodes 5 --eval-seeds 1000 1001 1002 1003 1004 --device cpu
+```
+
+**Stdout (abridged):**
+```
+WARNING: behavior_measures block absent in config; using defaults for eval.
+[eval_rollout] Agent type: rppo
+[eval_rollout] Building ActorCriticRNN: input_dim=27, action_dim=6, hidden=128, rnn=GRU
+[eval_rollout] Restoring RPPO checkpoint at step 10000003
+[eval_rollout] RPPO model restored from step 10000003.
+[eval_rollout] 5 episodes done in 11.3s
+[eval_rollout] 217 threat-onset events detected.
+[eval_rollout] Results saved to: results/eval/models/10000003
+  interrupted_feeding_rate_predator: 0.0000
+  eat_under_threat_ratio_predator: 0.7976
+  eat_under_threat_ratio_rabbit: 1.1532
+```
+
+No `ImportError`. Script loaded, ran 5 episodes, dumped threat-window-only trajectories under `results/eval/models/10000003/`.
+
+**Schema check on `episodes/0000.npz`:**
+```
+action           : shape=(500,)     dtype=int32
+agent_in_bush    : shape=(500,)     dtype=bool
+agent_pos        : shape=(500, 2)   dtype=int32
+ate_food         : shape=(500,)     dtype=bool
+dist_per_neutral : shape=(500, 2)   dtype=float32
+dist_per_predator: shape=(500, 1)   dtype=float32
+hit_neutral      : shape=(500,)     dtype=bool
+hit_predator     : shape=(500,)     dtype=bool
+length           : shape=()         dtype=int32    sample=500
+nociception      : shape=(500,)     dtype=float32
+seed             : shape=()         dtype=int32    sample=1000
+termination_reason: shape=()        dtype=int32    sample=1
+```
+Schema matches plan §2 M7 / §3 eval-rollout specification.
+
+---
+
+### C8 evidence (motif_cluster end-to-end)
+
+**Command:**
+```
+python scripts/motif_cluster.py \
+    --eval-root results/eval/models/10000003 \
+    --config results/JAX_RecurrentPPO/20260509-182720_hypervigilance-round25-A1-seed43_n106_gpu1/models/config.yaml \
+    --n-clusters 6 --seed 42
+```
+
+**Stdout:**
+```
+[motif_cluster] Loading 5 episode(s)...
+[motif_cluster] 217 threat-onset windows to featurise.
+[motif_cluster] K-Means done: 6 clusters.
+[motif_cluster] Silhouette: 0.241
+[motif_cluster] Distribution: {'cluster_0': 0.341, 'cluster_1': 0.101,
+    'cluster_2': 0.161, 'cluster_3': 0.295, 'cluster_4': 0.097, 'cluster_5': 0.005}
+```
+
+6 clusters produced, silhouette = 0.241 (> 0.20). Cluster_5 is tiny (0.5%) and triggers a warning but does not crash. Pipeline runs end-to-end.
+
+---
+
+### Fix #2 evidence (EatUnderThreatRatio NaN regression test)
+
+Regression test `test_m5_ratio_nan_when_eat_safe_zero` (added in `e5e1155`):
+
+- **Pre-fix** (`max(p_eat_safe, 1e-6)` formula in helper): `ratio = 1,000,000.0` → assertion `math.isnan(ratio)` **FAILS**
+- **Post-fix** (`eat_safe > 0` guard): `ratio = NaN` → assertion **PASSES**
+
+Accumulator state in the test: `ts=20, ss=20, et=20, es=0` (agent ate only under threat, never during safe steps). The test is a regression guard: reverting the helper to `max(..., 1e-6)` makes it fail immediately.
+
+Full test suite after both fixes: **29/29 pass** (`python -m pytest tests/environment/test_behavior_measures.py -v`).
+
+---
+
+Implemented by: developer  
+Date: 2026-05-11
+
+---
+
+## Verification (re-verify after v1.0.1 fixes)
+
+> **Verified by**: senior-developer
+> **Date**: 2026-05-11
+> **Scope**: tight re-verification pass against the two fix commits — confirm both diffs hold, run C7 + C8 independently on the Cell C checkpoint (independent sample from the developer's Cell A1 evidence), and decide whether to flip `verification_status: partial → pass`.
+
+### Re-V1 — diff inspection
+
+| Fix | Verdict | Evidence |
+|---|---|---|
+| `e5e1155` — `EatUnderThreatRatio_*` NaN-on-zero | ✅ PASS | Diff at `train.py:1188-1198` (class-level M5) and `train.py:1226-1235` (per-tag M5) replaces `if … and safe_steps > 0: … / max(…, EPS)` with `if … and eat_safe > 0: … / float(p_eat_safe)`. All four cases match the spec: (a) `eat_safe=0, eat_threat=0` → NaN (else branch); (b) `eat_safe=0, eat_threat>0` → NaN (else branch); (c) `eat_safe>0, eat_threat=0` → 0.0 (numerator path with `pet=0`); (d) both >0 → finite ratio. No `1/EPS` inflation possible because `eat_safe > 0` is the guard. |
+| `2d6d288` — `eval_rollout.py` functional restore | ✅ PASS | `grep -rn RecurrentPPOTrainer scripts/ src/` ⇒ 0 hits — no leftover references. Restore pattern mirrors `train.py:704-737`: (1) `ActorCriticRNN(input_dim, action_dim, hidden_size, rngs, rnn_type, activation, modulation_config, observation_breakdown, encoding_config)` factory call with hyper-params read via `agent_config.get_mandatory(...)`; (2) `ocp.CheckpointManager(_ckpt_root)` with auto-detected step-dir vs root-dir; (3) `restore_mngr.restore(step, args=ocp.args.PyTreeRestore(item={"model": current_model_state}, restore_args={"model": _restore_args}, partial_restore=True))` with explicit CPU `SingleDeviceSharding` so a GPU-saved checkpoint restores cleanly on CPU; (4) strict architecture check (key + shape) before `nnx.update(model, valid_tree)`. Policy closure uses `get_observation(state, params)` + `get_action_and_value_nnx(...)` directly — no trainer wrapper. |
+
+### Re-V2 — full test suite
+
+```
+$ /home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest tests/ -x -q
+....................................                                     [100%]
+36 passed in 56.78s
+```
+
+✅ PASS. **36/36 (29 BM tests + 7 pre-existing per-tag / per-entity tests). No skips, no regressions.** The new `test_m5_ratio_nan_when_eat_safe_zero` regression test (added in `e5e1155`) passes; T6 (motif clustering, requires `sklearn`) runs cleanly. The brief's "29 = 28 + 1" referred to the BM-only test file; the full suite hit 36 because the per-tag and per-entity tests in the same directory are also collected.
+
+### Re-V3 — C7 independent re-run (Cell C, NOT Cell A1)
+
+Independent sample: ran `eval_rollout.py` against `results/JAX_RecurrentPPO/20260509-182529_hypervigilance-round25-C-seed42_n106_gpu0/models/10000022` (Cell C, seed 42, step 10000022) with 5 episodes (seeds 2000-2004), output to `/tmp/eval_cellC`.
+
+Stdout:
+
+```
+[eval_rollout] Building ActorCriticRNN: input_dim=27, action_dim=6, hidden=128, rnn=GRU
+[eval_rollout] Restoring RPPO checkpoint at step 10000022
+[eval_rollout] RPPO model restored from step 10000022.
+[eval_rollout] 5 episodes done in 11.4s
+[eval_rollout] 207 threat-onset events detected.
+[eval_rollout] Results saved to: /tmp/eval_cellC/models/10000022
+  interrupted_feeding_rate_predator: 0.0000
+  bush_dive_rate_predator: 0.6970
+  eat_under_threat_ratio_predator: 0.8016
+  interrupted_feeding_rate_rabbit: 0.0000
+  bush_dive_rate_rabbit: 0.3750
+  eat_under_threat_ratio_rabbit: 1.2668
+```
+
+✅ PASS. No ImportError, no architecture mismatch, restore succeeded, 5 episodes ran in 11.4 s, **207 threat-onset events** detected (data observation: independent sample from the developer's Cell A1 run which produced 217 events; the ~5% difference is expected between different seeds + different cells). Dumps written to `episodes/0000.npz` … `episodes/0004.npz` + `metadata.json` + `online_replay.json` + `windows/`.
+
+Schema check on `/tmp/eval_cellC/models/10000022/episodes/0000.npz`:
+
+```
+action              : shape=(355,)       dtype=int32
+agent_in_bush       : shape=(355,)       dtype=bool
+agent_pos           : shape=(355, 2)     dtype=int32
+ate_food            : shape=(355,)       dtype=bool
+dist_per_neutral    : shape=(355, 2)     dtype=float32
+dist_per_predator   : shape=(355, 1)     dtype=float32
+hit_neutral         : shape=(355,)       dtype=bool
+hit_predator        : shape=(355,)       dtype=bool
+length              : shape=()           dtype=int32      sample=355
+nociception         : shape=(355,)       dtype=float32
+seed                : shape=()           dtype=int32      sample=2000
+termination_reason  : shape=()           dtype=int32      sample=4
+```
+
+Schema matches the M7 spec — identical key set and dtype contract to the developer's Cell A1 dump.
+
+### Re-V4 — C8 independent re-run (motif_cluster on Re-V3 dumps)
+
+```
+$ /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/motif_cluster.py \
+    --eval-root /tmp/eval_cellC/models/10000022 \
+    --config results/JAX_RecurrentPPO/20260509-182529_hypervigilance-round25-C-seed42_n106_gpu0/models/config.yaml \
+    --n-clusters 6 --seed 42
+
+[motif_cluster] Loading 5 episode(s)...
+[motif_cluster] 207 threat-onset windows to featurise.
+[motif_cluster] K-Means done: 6 clusters.
+[motif_cluster] Silhouette: 0.214
+[motif_cluster] Distribution: {'cluster_0': 0.237, 'cluster_1': 0.203, 'cluster_2': 0.106,
+    'cluster_3': 0.101, 'cluster_4': 0.227, 'cluster_5': 0.126}
+```
+
+✅ PASS.
+- **Exactly 6 clusters** (k=6, seed=42 per design).
+- **Silhouette = 0.214** ≥ 0.20 threshold. (Slightly below the developer's Cell A1 silhouette of 0.241, consistent with Cell C exhibiting more behavioural homogeneity — Cell C is the corner-camping cell.)
+- **All 6 clusters non-degenerate** — sizes range 10.1% (cluster_3) to 23.7% (cluster_0). This is markedly cleaner than the developer's Cell A1 run, where cluster_5 came in at the 0.5% sparse-cluster border. On Cell C no cluster sits below 10%.
+
+**Exemplar hand-inspection** (one exemplar window per cluster, plus cluster centroids over the 9 handcrafted features) confirms all 6 clusters are distinguishable along ≥ 1 of {bush_occupancy, net_displacement, eat_events}:
+
+| Cluster | n | net_disp | path_len | bush_occ | eat_evts | stay_in_place | min_threat_dist | Interpretation |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| 0 | ~49 | 1.02 | 4.35 | 0.47 | 2.10 | 0.52 | 1.97 | Moderate motion + moderate bush + moderate eating ("in/out of bush nibbling") |
+| 1 | ~42 | 0.89 | 2.19 | 0.78 | 0.57 | 0.76 | 1.63 | Low motion + **HIGH bush** + low eating ("bush-hiding") |
+| 2 | ~22 | **4.37** | **6.59** | 0.07 | 1.00 | 0.17 | 1.54 | **HIGH motion** + **NO bush** ("open-field flight") |
+| 3 | ~21 | 0.80 | 0.90 | 0.28 | **5.43** | 0.86 | 2.23 | No motion + **HIGHEST eating** + high stay ("stationary food binge") |
+| 4 | ~47 | 0.13 | 0.13 | **0.97** | 0.77 | **0.99** | 2.01 | **NO motion** + **HIGHEST bush** ("freeze in bush") |
+| 5 | ~26 | 0.85 | 3.96 | 0.49 | 2.81 | 0.56 | **0.70** | Closest to threat (`min_threat=0.7`) + moderate eating ("close-call eating") |
+
+Six visually-distinct motifs. Clusters 1 vs 4 differ on motion + eating (low vs zero); clusters 2 vs 3 differ on motion (highest vs zero); cluster 5 is distinguished by min_threat_distance. No degenerate copies. ✅ PASS exemplar review.
+
+### Re-V5 — train.py smoke (ratio fix in the running pipeline)
+
+Ran an offline-wandb smoke of the running pipeline (3 logged iterations × 4 envs, `smoke_test.yaml`, the same config the developer used in V2):
+
+```
+$ WANDB_MODE=offline WANDB_DIR=/tmp/reverify_smoke2 \
+  python train.py --config configs/experiment/behavior_measures/smoke_test.yaml \
+                  --agent_config configs/models/recurrent_ppo.yaml \
+                  --num-envs 4 --episodes 60 --log-interval 1 --device cpu --quiet --tag reverify-smoke2
+```
+
+Parsed the resulting `run-*.wandb` datastore via `wandb.proto.wandb_internal_pb2` (nested_key field resolution — wandb v17 protobuf format), extracted history values for all M1/M2/M5 keys across 3 logged iterations:
+
+| Key | n | finite | NaN | range | max\|x\| |
+|---|---:|---:|---:|---|---:|
+| `Episode/EatUnderThreatRatio_predator` | 1 | 1 | 0 | [0, 0] | 0 |
+| `Episode/EatUnderThreatRatio_predator_TL` | 1 | 1 | 0 | [0, 0] | 0 |
+| `Episode/EatUnderThreatRatio_rabbit` | 3 | 3 | 0 | [0, 5] | 5 |
+| `Episode/EatUnderThreatRatio_rabbit_BR` | 2 | 2 | 0 | [0, 0] | 0 |
+| `Episode/EatUnderThreatRatio_rabbit_TL` | 3 | 3 | 0 | [0, 10] | **10** |
+| `Episode/InterruptedFeedingRate_predator` | 3 | 3 | 0 | [0, 1] | 1 |
+| `Episode/InterruptedFeedingRate_predator_TL` | 1 | 1 | 0 | [1, 1] | 1 |
+| `Episode/InterruptedFeedingRate_rabbit` | 2 | 2 | 0 | [0, 0.25] | 0.25 |
+| `Episode/InterruptedFeedingRate_rabbit_BR` | 1 | 1 | 0 | [1, 1] | 1 |
+| `Episode/BushDiveRate_predator` | 3 | 3 | 0 | [0, 0.3] | 0.3 |
+| `Episode/BushDiveRate_rabbit` | 3 | 3 | 0 | [0.02, 0.19] | 0.19 |
+| `Episode/BushDiveRate_predator_TL` | 3 | 3 | 0 | [0, 0.3] | 0.3 |
+| `Episode/BushDiveRate_rabbit_TL` | 3 | 3 | 0 | [0, 0.33] | 0.33 |
+| `Episode/BushDiveRate_rabbit_BR` | 3 | 3 | 0 | [0.05, 0.21] | 0.21 |
+
+✅ PASS.
+- **No `EatUnderThreatRatio_*` key emits |x| > 1e5.** The pre-fix V2 evidence reported `EatUnderThreatRatio_predator = 14285.71`; in this re-run the max is **10.0** (legitimate, on `rabbit_TL`, batch-mean across envs). Inflation regression is gone.
+- **Other BM keys unaffected**: `InterruptedFeedingRate_*` ∈ [0, 1]; `BushDiveRate_*` ∈ [0, 0.33].
+- **Pre-existing keys still emit** (`Episode/MeanDistPredator`, `Episode/MeanDistRabbit`, `Episode/RabbitHits` all finite for n=3 iterations).
+- **NaN observation**: no NaN values surfaced in the wandb-aggregated history. This is expected — `wandb.log` reduces per-env batch values by mean and skips NaN under aggregation, so even when individual envs emit NaN (the new `eat_safe=0` path), the batch mean stays finite as long as ≥ 1 env has well-defined ratio. The NaN-emission code path itself is verified by the unit test `test_m5_ratio_nan_when_eat_safe_zero` in Re-V2.
+
+### Cell C data observations (informational)
+
+- 5 episodes × ~355 average length = ~1780 total steps.
+- 207 threat-onset events ≈ 1 onset every ~9 steps — high event density, consistent with Cell C's active-predator design (passive variant would be lower).
+- Episode 0 terminated at step 355 with `termination_reason=4` (predator hit). Cell C agents show a mix of survival outcomes — not the corner-camping degenerate case the brief warned about.
+- `interrupted_feeding_rate_predator = 0.0` per aggregated stats: the agent never started feeding within a candidate-resolution window in any of the 5 episodes (or if it did, all candidate windows resolved cleanly). Not a script failure — a data observation.
+
+### Verdict
+
+| Check | Verdict |
+|---|---|
+| Re-V1 (diff inspection — both fixes) | ✅ PASS |
+| Re-V2 (full test suite 36/36) | ✅ PASS |
+| Re-V3 (C7 Cell C independent eval_rollout, 207 events, schema OK) | ✅ PASS |
+| Re-V4 (C8 motif_cluster end-to-end, 6 non-degenerate clusters, silhouette 0.214) | ✅ PASS |
+| Re-V5 (train.py smoke — no `EatUnderThreatRatio_*` inflation, BM keys emit finite) | ✅ PASS |
+| Speed regression | ✅ no regression (V6 in prior pass already confirmed ≤ 3 % overhead; this re-verify did not touch perf-sensitive code) |
+
+**Frontmatter updated**: `verification_status: partial → pass`. Online M1/M2/M5 toolkit + offline M7 pipeline (eval_rollout + motif_cluster) both ship clean. The v1 demonstration is now unblocked — `experiment-designer` can author the v1-demonstration configs and `experiment-analyzer` can re-analyse Round 2.5 checkpoints with the new measures.
+
+### Sign-off
+
+Verified by: senior-developer  
+Date: 2026-05-11  
+Verdict: **PASS — v1.0.1 fixes (e5e1155, 2d6d288) both hold; full re-verification clean on an independent sample (Cell C, seed 42).**
