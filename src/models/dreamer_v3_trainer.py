@@ -74,7 +74,8 @@ class DreamerTrainer(nnx.Module):
             'critic_fc_layers': config.get_mandatory('agent.critic_fc_layers'),
             'use_layer_norm': config.get_mandatory('agent.use_layer_norm', bool),
             'zero_init_reward_critic': config.get_mandatory('agent.zero_init_reward_critic', bool),
-            'paper_canonical_twohot_bins': config.get_mandatory('agent.paper_canonical_twohot_bins', bool),  # NEW
+            'paper_canonical_twohot_bins': config.get_mandatory('agent.paper_canonical_twohot_bins', bool),
+            'apply_gru_reset_gate':        config.get_mandatory('agent.apply_gru_reset_gate', bool),  # NEW (Z3)
 
             # Hierarchical Encoding Params
             'encoding_mode': config.get_mandatory('agent.encoding_mode', str),

@@ -51,6 +51,13 @@ agent:
                                        # raw-space support clipped to ±20). See
                                        # docs/develop/active/diagnosis/dreamer_twohot_bin_range_fix.md
                                        # and §6 item 2 of dreamer_v3_implementation.md.
+  apply_gru_reset_gate: true   # Apply the GRU reset gate to the candidate
+                                # update: cand = tanh(reset * cand). Matches
+                                # paper / Hafner published / sheeprl. When
+                                # false, computes reset but never uses it
+                                # (legacy bug; bit-identical pre-fix). See
+                                # docs/develop/active/diagnosis/dreamer_gru_reset_gate_fix.md
+                                # and §6 item 28 of dreamer_v3_implementation.md.
   use_layer_norm: true  # Orthogonal to modulation.type — applies LayerNorm to encoder pre-activations.
                          # Mirrors recurrent_ppo.yaml:20 / neuromodulated_ppo.yaml:20. Mandatory since commit f1db0f0.
 

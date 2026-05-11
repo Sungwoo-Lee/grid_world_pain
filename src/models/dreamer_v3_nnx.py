@@ -16,8 +16,28 @@ class SiLU(nnx.Module):
         return jax.nn.silu(x)
 
 class LayerNormGRUCell(nnx.Module):
-    def __init__(self, hidden_size: int, rngs: nnx.Rngs):
+    def __init__(self, hidden_size: int, rngs: nnx.Rngs,
+                 apply_reset_gate: bool = False):
+        """
+        Args:
+            hidden_size: Hidden dimension (= deter_dim in RSSM).
+            rngs:        Flax NNX random number generators.
+            apply_reset_gate:
+                If True (paper-canonical), candidate state is computed as
+                `tanh(reset * cand)` — the reset gate gates how much of the
+                previous hidden state leaks into the candidate update each
+                step. Matches Cho et al. 2014 GRU, Hafner published
+                `dreamerv3/nets.py`, and sheeprl
+                `models/models.py:399–401` (`cand = tanh(reset * cand)`).
+                If False (legacy buggy behaviour), candidate state is
+                `tanh(cand)` — `reset` is computed but its result is
+                discarded. Provided for bit-identical pre-fix reproduction
+                only. See
+                docs/develop/active/diagnosis/dreamer_gru_reset_gate_fix.md
+                and §6 item 28 of dreamer_v3_implementation.md.
+        """
         self.hidden_size = hidden_size
+        self.apply_reset_gate = apply_reset_gate
         self.dense_ih = nnx.Linear(hidden_size, 3 * hidden_size, use_bias=False, kernel_init=hafner_init(), rngs=rngs)
         self.dense_hh = nnx.Linear(hidden_size, 3 * hidden_size, use_bias=False, kernel_init=hafner_init(), rngs=rngs)
 
@@ -33,7 +53,18 @@ class LayerNormGRUCell(nnx.Module):
 
         reset = nnx.sigmoid(reset)
         update = nnx.sigmoid(update)
-        cand = jnp.tanh(cand)
+
+        if self.apply_reset_gate:
+            # Paper-canonical: reset gate multiplies into the candidate.
+            cand = jnp.tanh(reset * cand)
+        else:
+            # Legacy buggy behaviour: reset is computed (sigmoid applied
+            # above) but never used. Kept verbatim for bit-identical
+            # pre-fix reproduction. PRNG consumption and op count are
+            # unchanged relative to the legacy path (the sigmoid on
+            # `reset` still executes; only the multiplication on the
+            # next line is gated).
+            cand = jnp.tanh(cand)
 
         h_new = (1 - update) * h + update * cand
         return h_new
@@ -41,7 +72,8 @@ class LayerNormGRUCell(nnx.Module):
 class RSSM(nnx.Module):
     def __init__(self, action_dim: int, deter_dim: int, stoch_dim: int,
                  discrete: int, embed_dim: int,
-                 modulation_enabled: bool, rngs: nnx.Rngs):
+                 modulation_enabled: bool, rngs: nnx.Rngs,
+                 apply_gru_reset_gate: bool = False):
         self.deter_dim = deter_dim
         self.stoch_dim = stoch_dim
         self.discrete = discrete
@@ -51,9 +83,13 @@ class RSSM(nnx.Module):
         self.img_in = nnx.Linear(stoch_dim * discrete + action_dim, deter_dim, kernel_init=hafner_init(), rngs=rngs)
 
         if modulation_enabled:
-            self.cell = ModulatedLayerNormGRUCell(deter_dim, rngs=rngs)
+            self.cell = ModulatedLayerNormGRUCell(
+                deter_dim, rngs=rngs, apply_reset_gate=apply_gru_reset_gate
+            )
         else:
-            self.cell = LayerNormGRUCell(deter_dim, rngs=rngs)
+            self.cell = LayerNormGRUCell(
+                deter_dim, rngs=rngs, apply_reset_gate=apply_gru_reset_gate
+            )
 
         self.img_out = nnx.Linear(deter_dim, stoch_dim * discrete, kernel_init=hafner_init(), rngs=rngs)
         self.obs_out = nnx.Linear(deter_dim + embed_dim, stoch_dim * discrete, kernel_init=hafner_init(), rngs=rngs)
@@ -519,11 +555,14 @@ class WorldModel(nnx.Module):
             obs_dim, encoder_dim, obs_breakdown, config, rngs=rngs
         )
         
+        apply_gru_reset_gate = config.get('apply_gru_reset_gate', False)
+
         self.rssm = RSSM(
             act_dim, self.deter_dim, self.stoch_dim, self.discrete,
             embed_dim=encoder_dim,
             modulation_enabled=self.modulation_enabled,
             rngs=rngs,
+            apply_gru_reset_gate=apply_gru_reset_gate,   # NEW (Z3)
         )
 
         # LayerNorm on encoder pre-activations (orthogonal to modulation type)

@@ -612,48 +612,94 @@ After this plan lands and is committed:
 
 ## Checkpoints (for `developer`)
 
-- [ ] `LayerNormGRUCell.__init__` accepts `apply_reset_gate: bool = False`; under `True`, `__call__` computes `cand = jnp.tanh(reset * cand)`; under `False`, `cand = jnp.tanh(cand)` (verbatim previous code). The `reset = nnx.sigmoid(reset)` line runs unchanged under both flags.
-- [ ] `ModulatedLayerNormGRUCell.__init__` mirrors the same flag with the same semantics; the `gate_bias` modulation branch on the update gate is untouched.
-- [ ] `RSSM.__init__` accepts `apply_gru_reset_gate: bool = False` and passes it to both cell constructors (modulated and non-modulated branches both updated).
-- [ ] `WorldModel.__init__` reads `config.get('apply_gru_reset_gate', False)` from `agent_config` and forwards it to `RSSM(...)`.
-- [ ] `DreamerV3Trainer.__init__` adds `'apply_gru_reset_gate': config.get_mandatory('agent.apply_gru_reset_gate', bool)` to the `agent_config` dict alongside the existing `paper_canonical_twohot_bins` entry; missing YAML key raises `ValueError` at trainer construction.
-- [ ] `configs/models/dreamer_v3.yaml` and `configs/models/dreamer_v3_rr06.yaml` both contain `apply_gru_reset_gate: true`.
-- [ ] §2.5 smoke test passes: (a) paper-flag and legacy-flag cell outputs diverge by max |Δ| > 1e-3 on the same input/state/weights; (b) legacy-flag output matches hand-computed legacy reference within 1e-6; (c) paper-flag output matches hand-computed paper reference within 1e-6; (d) both assertions hold for `ModulatedLayerNormGRUCell` (with `gate_bias=None`).
-- [ ] §2.6 config end-to-end check passes (both YAML files expose the key; missing key raises `ValueError`).
-- [ ] When `apply_gru_reset_gate: false` is set, training output is bit-identical to pre-fix behaviour (verified by §2.4 reasoning — the `else` branch is verbatim previous code; PRNG consumption unchanged; op count identical except for one extra `jnp.multiply` only under `True`).
-- [ ] No edits made to the prior/posterior heads, critic loss, zero-init, two-hot bin grid, or the diagnostic script — those are out-of-scope (§5, §6 pre-hand-off grep).
-- [ ] Speed sanity check at smoke-test scale: one nnx-JIT-warmed forward pass of `LayerNormGRUCell` under both flag values should show <5% wall-clock delta (the change is one elementwise multiply per cell call; no measurable hot-path effect expected). Report the measurement in the Implementation Report.
+- [x] `LayerNormGRUCell.__init__` accepts `apply_reset_gate: bool = False`; under `True`, `__call__` computes `cand = jnp.tanh(reset * cand)`; under `False`, `cand = jnp.tanh(cand)` (verbatim previous code). The `reset = nnx.sigmoid(reset)` line runs unchanged under both flags.
+- [x] `ModulatedLayerNormGRUCell.__init__` mirrors the same flag with the same semantics; the `gate_bias` modulation branch on the update gate is untouched.
+- [x] `RSSM.__init__` accepts `apply_gru_reset_gate: bool = False` and passes it to both cell constructors (modulated and non-modulated branches both updated).
+- [x] `WorldModel.__init__` reads `config.get('apply_gru_reset_gate', False)` from `agent_config` and forwards it to `RSSM(...)`.
+- [x] `DreamerV3Trainer.__init__` adds `'apply_gru_reset_gate': config.get_mandatory('agent.apply_gru_reset_gate', bool)` to the `agent_config` dict alongside the existing `paper_canonical_twohot_bins` entry; missing YAML key raises `ValueError` at trainer construction.
+- [x] `configs/models/dreamer_v3.yaml` and `configs/models/dreamer_v3_rr06.yaml` both contain `apply_gru_reset_gate: true`.
+- [x] §2.5 smoke test passes: (a) paper-flag and legacy-flag cell outputs diverge by max |Δ| > 1e-3 on the same input/state/weights (observed: 0.641342); (b) legacy-flag output matches hand-computed legacy reference within 1e-6; (c) paper-flag output matches hand-computed paper reference within 1e-6; (d) both assertions hold for `ModulatedLayerNormGRUCell` (with `gate_bias=None`).
+- [x] §2.6 config end-to-end check passes (both YAML files expose the key; missing key raises `ValueError`).
+- [x] When `apply_gru_reset_gate: false` is set, training output is bit-identical to pre-fix behaviour (verified by §2.4 reasoning — the `else` branch is verbatim previous code; PRNG consumption unchanged; op count identical except for one extra `jnp.multiply` only under `True`).
+- [x] No edits made to the prior/posterior heads, critic loss, zero-init, two-hot bin grid, or the diagnostic script — those are out-of-scope (§5, §6 pre-hand-off grep confirmed only two instantiation sites, both in `RSSM.__init__`).
+- [x] Speed sanity check at smoke-test scale: 500-call JIT-warmed forward pass shows paper-flag 107.2 µs/call vs legacy-flag 112.2 µs/call (−4.4%); well within ±5% noise floor; no regression.
 
 ---
 
 ## Implementation Report
 
 > **Implemented by**: developer
-> **Date**: <to fill>
+> **Date**: 2026-05-11
 
 ### Files changed
 
-<one row per file with a one-sentence summary of the change; mirror Z2's table format>
+| File | Change |
+|---|---|
+| `src/models/dreamer_v3_nnx.py` (`LayerNormGRUCell`) | Added `apply_reset_gate: bool = False` kwarg to `__init__`; stored as `self.apply_reset_gate`; added docstring. In `__call__`, added `if self.apply_reset_gate: cand = jnp.tanh(reset * cand)` branch; `else: cand = jnp.tanh(cand)` (verbatim previous code). |
+| `src/models/dreamer_v3_nnx.py` (`RSSM`) | Added `apply_gru_reset_gate: bool = False` kwarg to `__init__`; passes `apply_reset_gate=apply_gru_reset_gate` to both `ModulatedLayerNormGRUCell(...)` and `LayerNormGRUCell(...)` constructors. |
+| `src/models/dreamer_v3_nnx.py` (`WorldModel`) | Added `apply_gru_reset_gate = config.get('apply_gru_reset_gate', False)` read from agent_config before `self.rssm = RSSM(...)`, forwarded as `apply_gru_reset_gate=apply_gru_reset_gate`. |
+| `src/models/modulated_layer_norm_gru_cell.py` | Added `apply_reset_gate: bool = False` kwarg to `__init__`; stored as `self.apply_reset_gate`; updated class docstring. In `__call__`, added `if self.apply_reset_gate: cand = jnp.tanh(reset * cand)` branch; `else: cand = jnp.tanh(cand)` (verbatim previous code). Gate_bias modulation branch on update gate is untouched. |
+| `src/models/dreamer_v3_trainer.py` | Added `'apply_gru_reset_gate': config.get_mandatory('agent.apply_gru_reset_gate', bool)` to `agent_config` dict, right after the `paper_canonical_twohot_bins` entry. |
+| `configs/models/dreamer_v3.yaml` | Added `apply_gru_reset_gate: true` with full 7-line doc-link comment, inserted after the `paper_canonical_twohot_bins` block and before `use_layer_norm`. |
+| `configs/models/dreamer_v3_rr06.yaml` | Added `apply_gru_reset_gate: true` with brief back-reference comment, inserted after `paper_canonical_twohot_bins` and before `use_layer_norm`. |
 
 ### Deviations from §2
 
-<list any place the implementation deviated from §2's spec, with justification; mirror Z2's Deviation 1 / Deviation 2 / Deviation 3 entries>
+1. **Function-level default is `False` (not `True`)**: Matching Z2's Deviation 1. The plan's spec describes the semantics but the function-level default `False` is the safe choice: the trainer always passes the flag explicitly via `config.get_mandatory`; the `False` default keeps any direct-import tests or scripts bit-identical to pre-fix behaviour. No training-path effect — the trainer enforces `get_mandatory` and always passes the resolved value.
+
+2. **`WorldModel` uses `config.get('apply_gru_reset_gate', False)` (not `get_mandatory`)**: Matching Z2's Deviation 2. The `agent_config` dict is a plain Python dict (not a Config object), so `get_mandatory` is not available on it. The trainer already enforces the mandatory constraint via `config.get_mandatory(...)` before building the dict, so the key is always present when `WorldModel.__init__` runs. The `False` fallback is a safety net only.
+
+3. **Pre-existing config files** (`dreamer_v3_probe.yaml`, `dreamer_v3_curriculum.yaml`, etc.) were already broken under the Z1+Z2 mandatory-key set. This plan adds one more mandatory key to the same set. Out of scope per §2.3.3; flagged for senior-developer. The Z3 launch only needs `dreamer_v3_rr06.yaml`, which has the key.
 
 ### Smoke test output (§2.5) — verbatim
 
-<paste the verbatim stdout of the smoke test, including all assertions>
+```
+LayerNormGRUCell — same x, h, same weights, different flag:
+  max |h_paper - h_legacy| = 0.641342
+  mean|h_paper - h_legacy| = 0.110876
+OK: paper-flag and legacy-flag outputs differ as expected; each matches its hand-computed reference; both cells.
+```
+
+All four assertions passed:
+- `max |h_paper - h_legacy| = 0.641342` > 1e-3 (flag is wired in; typical O(0.6) on random hidden = 64 inputs — well above the O(0.1) expected per §2.5).
+- Legacy-flag output matches hand-computed legacy reference within 1e-6 (`cand = tanh(cand)` path).
+- Paper-flag output matches hand-computed paper reference within 1e-6 (`cand = tanh(reset * cand)` path).
+- `ModulatedLayerNormGRUCell` (gate_bias=None) exhibits the same divergence pattern (same assertion, different cell class).
 
 ### Config end-to-end check (§2.6)
 
-<paste verbatim stdout>
+```
+configs/models/dreamer_v3.yaml -> agent.apply_gru_reset_gate = True  (type: bool)
+configs/models/dreamer_v3_rr06.yaml -> agent.apply_gru_reset_gate = True  (type: bool)
+OK: both YAML files expose the mandatory key correctly.
+OK: missing key raises ValueError: Strict Config: Configuration key 'agent.apply_gru_reset_gate' is required but missing.
+```
+
+Trainer dry-construction paranoia check:
+```
+Trainer construction OK — apply_gru_reset_gate read without error.
+  RSSM cell type: LayerNormGRUCell
+  apply_reset_gate on cell: True
+```
+The flag flows correctly from YAML → `get_mandatory` → `agent_config` → `WorldModel` → `RSSM` → `LayerNormGRUCell.apply_reset_gate = True`.
 
 ### Speed check
 
-<state hardware, config, seed, step budget; report measured SPS or wall-clock delta between flag values; verdict: no regression / small regression accepted / blocker>
+**Hardware**: CPU (JAX platform=cpu; NAS node, Intel). **Cell**: `LayerNormGRUCell` with `hidden=512` (production deter_dim), `B=32`, JIT-compiled. **Method**: 500 forward calls timed after 3 warm-up calls, averaged.
+
+| Flag | us/call |
+|---|---|
+| `apply_reset_gate=True` (paper-canonical) | 107.2 |
+| `apply_reset_gate=False` (legacy) | 112.2 |
+| Delta | −4.4% (paper-flag is faster, within noise) |
+
+**Verdict**: no regression. The single `jnp.multiply(reset, cand)` added in the True branch is dominated by the existing LayerNorm + Linear ops. Delta is well within the ±5% noise floor on CPU timing; the change is hot-path neutral as predicted by §2.4.
 
 ### Blockers
 
-<note any blockers; if none, write "None. Implementation complete.">
+None. Implementation complete.
+
+Pre-existing config breakage (Deviation 3): 5 other dreamer YAML files will raise `ValueError` at trainer construction if loaded (missing `apply_gru_reset_gate`, same as for `zero_init_reward_critic` and `paper_canonical_twohot_bins` from Z1/Z2). Already broken pre-Z3; flagged for senior-developer cleanup plan, out of Z3 scope.
 
 Implemented by: developer
 
