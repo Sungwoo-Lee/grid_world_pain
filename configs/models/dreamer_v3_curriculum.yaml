@@ -71,6 +71,8 @@ agent:
   cont_loss_weight: 5.0    # CURRICULUM-DELTA vs dreamer_v3.yaml (1.0 -> 5.0, 5x boost)
   imagined_rollout_probe: false  # Flip to true to enable diagnostic probe.
   unimix: 0.01
+  zero_init_reward_critic: true   # See dreamer_v3.yaml for full comment + doc links.
+  paper_canonical_twohot_bins: true   # See dreamer_v3.yaml for full comment + doc links.
   use_layer_norm: true  # Orthogonal to modulation.type — applies LayerNorm to encoder pre-activations.
                          # Mirrors recurrent_ppo.yaml:20 / neuromodulated_ppo.yaml:20. Mandatory since commit f1db0f0.
 

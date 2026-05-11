@@ -66,6 +66,8 @@ agent:
   cont_loss_weight: 10.0    # E2-DELTA vs dreamer_v3.yaml (1.0 -> 10.0, 10x boost; diagnosis §7.3 priority-2 recommendation).
   imagined_rollout_probe: true  # PROBE-DELTA vs dreamer_v3.yaml (false -> true).
   unimix: 0.01
+  zero_init_reward_critic: true   # See dreamer_v3.yaml for full comment + doc links.
+  paper_canonical_twohot_bins: true   # See dreamer_v3.yaml for full comment + doc links.
   use_layer_norm: true  # Orthogonal to modulation.type — applies LayerNorm to encoder pre-activations.
                          # Mirrors recurrent_ppo.yaml:20 / neuromodulated_ppo.yaml:20. Mandatory since commit f1db0f0.
 
