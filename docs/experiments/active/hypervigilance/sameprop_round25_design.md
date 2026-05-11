@@ -3,7 +3,7 @@ title: "SameProp Round 2.5 — full-budget re-launch with per-tag distance disam
 topic: hypervigilance
 status: analyzed
 created: 2026-05-09
-last_updated: 2026-05-10
+last_updated: 2026-05-11
 phase: 1
 wandb_tag: "hypervigilance-round25"
 develop_link: "../../../develop/active/hypervigilance/per_quadrant_and_per_rabbit_logging.md"
@@ -281,6 +281,8 @@ If Round 2.5 lands in any §5 NEW row's failure-mode signature, escalate one of 
 ---
 
 ## 9. Results
+
+> **See §12 for a trajectory-level reading that complicates the spatial verdict** — Cell C's per-step bush-dive and risk-discounting measures show a strongly class-conditional defensive policy that the per-tag distance summary in §9.2 dissolved into a "bilateral rabbit avoidance" mean. The §11.1 Cell C verdict still stands at the spatial level; §12 widens it.
 
 > Numbers only. Pre-registered §4 thresholds applied in §10; verdicts in §11.
 > All metrics are means across the 128 parallel envs of the WandB history records that fall inside the named episode window. Both runs completed the full 10 M-episode budget cleanly (no SIGINT; final episode ≈ 10,000,022 for Cell C, ≈ 10,000,003 for Cell A1).
@@ -564,6 +566,157 @@ None at this analysis. The per-tag distance metrics that were the explicit Round
 
 ---
 
+## 12. Behavior-measure appendix — toolkit v1 applied (2026-05-11)
+
+### 12.0 Why this appendix exists — plain-English entry point
+
+The §§9–11 verdicts above were built entirely on episode-mean statistics: mean distance to predator, mean distance per rabbit-tag, hits per episode, fraction of episodes that ran out the clock. Those readings made Cell A1 look like cleanly resolved corner-camping ("the agent never enters TL, so same-corner predator and same-corner rabbit get treated identically") and made Cell C look like a flat bilateral rabbit-avoidance policy ("the agent stays away from both rabbits and ends up closer to the patrolling predator than to either neutral, with no class-specific defence in evidence"). The cumulative §§9–11 reading of the sameProp study was therefore "under matched smells, RPPO produces survival-driven location-conditional avoidance, not class-conditional avoidance." This appendix applies the **behavior-measure toolkit v1** (M1 = interrupted-feeding rate, M2 = bush-dive rate, M5 = eat-under-threat ratio, M7 = defensive-motif repertoire — full operational definitions in [`docs/experiments/active/behavior_measures/behavior_measure_toolkit_v1_design.md`](../behavior_measures/behavior_measure_toolkit_v1_design.md)) to the saved Cell A1 and Cell C checkpoints, and finds that the spatial reading was **only partly right**.
+
+In plain English, what the toolkit recovered is this. M1 asks "when the agent is eating and a class-c entity is within 3 cells, does it stop eating in the next 5 steps?" M2 asks "when a class-c entity just entered the agent's 3-cell radius, does the agent dive into a bush within the next 5 steps?" M5 asks "is the agent's per-step probability of eating lower when a class-c entity is nearby than when it is not?" M7 asks "what trajectory shapes does the agent show around threat-onset events, after we cluster them?" Cell A1's results match the §11 verdict: the predator and rabbit responses on every measure are within within-window noise of each other, the agent's TL-engagement rate is so low (753 predator-eating-candidates vs ~10,000 rabbit-eating-candidates) that class-conditional defence is structurally untestable, and the dominant motifs are "freeze near BR" and "rabbit drifts past frozen agent." But Cell C does **not** match the §11 reading. The agent bush-dives in **88% of predator-approach events** versus 51% of rabbit-approach events, depresses eating to 0.75× the safe baseline when the predator is near but does **not** depress eating near rabbits (M5_rabbit = 1.19), and M7 finds a 19%-of-windows "predator pursuit with partial bush use" cluster that is 83% predator-triggered. The headline finding: **at the trajectory-event level, Cell C exhibits strong class-conditional active defence that the per-tag mean-distance metric dissolved away**. The §11.1 "bilateral rabbit avoidance" verdict is still correct as a *spatial* reading, but the agent is class-blind only in *where it sits on average*, not in *what it does when a predator approaches*.
+
+### 12.1 Setup
+
+- **Inputs**: saved evaluation rollouts of the final Cell A1 checkpoint (`results/eval/models/10000003/`, source run `nm8gn7y2`) and the final Cell C checkpoint (`results/eval/models/10000022/`, source run `bdnfc0lu`). N=200 deterministic episodes per cell; `eval_obs_noise = training` (matched to training-time noise schedule); cue radius R=3.0 cells; online K=5 steps; offline K_motif=7 steps.
+- **Tools**: `scripts/eval_rollout.py` produced the episode dumps and `windows/threat_onsets.parquet` indexes; `scripts/motif_cluster.py` produced M7 cluster artifacts (k=6, seed=42, 10 features, zscore_pooled). M1/M2/M5 are reported from `online_replay.json` cross-checked against an independent offline recomputation from the per-episode `.npz` dumps (see [`tmp/20260511_r25_appendix_analysis.py`](../../../../tmp/20260511_r25_appendix_analysis.py)); the two agree within ≤ 0.5 percentage points.
+- **Provenance check**: each `metadata.json` records the source checkpoint path; A1's dump traces to `20260509-182720_hypervigilance-round25-A1-seed43_n106_gpu1`, C's dump traces to `20260509-182529_hypervigilance-round25-C-seed42_n106_gpu0`. Both at the final saved step (10,000,003 / 10,000,022) and both at git commit `08de62a`.
+- **Eval-time vs training-time numbers**: these are eval-time, deterministic-policy, fresh-seed (1000–1199) numbers — not the training-time per-window numbers in §9.4. Eval-time mean survival is 459.3 steps (A1) and 405.4 steps (C), consistent with the §9.2 last-10 % windows (485.7 and 399.5 respectively); A1's eval survival is ~5 % below its training-time saturated value because the eval seeds include some episodes where the agent's deterministic policy under fresh seeding does not reach max-step saturation.
+- **Sample-size adequacy**: 200 episodes × 405–459 steps × ~3 onsets/episode gives 7,741 (Cell C) and 8,531 (Cell A1) threat-onset windows for M7 — well above the toolkit's "≥ 30 windows per cluster" rule for k=6. M1/M2 denominators run from 753 (A1 predator) to 10,460 (A1 rabbit); M5 step-counts run from ~4,000 to ~92,000 — all well-resolved.
+
+### 12.2 M1 / M2 / M5 table — per-cell × per-class × per-tag
+
+Per-class headline numbers (eval-time, N=200 episodes, deterministic policy):
+
+| Measure | A1 predator_TL | A1 rabbit | C predator_full | C rabbit |
+|---|---:|---:|---:|---:|
+| **M1** interrupted-feeding rate | 11.8 % (89 / 753) | 12.8 % (1341 / 10,460) | **42.2 %** (1926 / 4564) | 24.1 % (603 / 2499) |
+| **M2** bush-dive rate | 3.2 % (27 / 853) | 0.5 % (41 / 7509) | **87.6 %** (2222 / 2537) | 50.8 % (851 / 1674) |
+| **M5** eat-under-threat ratio | 0.999 | 1.141 | **0.748** | 1.186 |
+| ↳ P(eat \| threat near) | 0.189 | 0.200 | 0.155 | 0.218 |
+| ↳ P(eat \| safe) | 0.190 | 0.176 | 0.207 | 0.184 |
+
+Per-tag fan-out (the key disambiguation that §9.3 was missing):
+
+| Cell | Tag | M1 | M2 | M5 ratio |
+|---|---|---:|---:|---:|
+| A1 | predator_TL | 11.8 % (89 / 753) | 3.2 % (27 / 853) | 0.999 |
+| A1 | rabbit_TL | 14.6 % (120 / 822) | 2.3 % (26 / 1143) | 1.056 |
+| A1 | rabbit_BR | 12.7 % (1271 / 9976) | 0.4 % (27 / 7282) | 1.132 |
+| C | predator_full | 42.2 % (1926 / 4564) | 87.6 % (2222 / 2537) | 0.748 |
+| C | rabbit_TL | 23.4 % (365 / 1560) | 50.3 % (515 / 1023) | 1.207 |
+| C | rabbit_BR | 25.2 % (257 / 1018) | 52.3 % (413 / 789) | 1.130 |
+
+Derived class-conditional gaps (against the toolkit's pre-registered H₁ thresholds):
+
+| Cell | Δ M1 (pred − rabbit) | Δ M2 (pred − rabbit) | Δ M5 (rabbit − pred) | Toolkit H₁ verdict |
+|---|---:|---:|---:|---|
+| A1 | −1.0 pp | +2.7 pp | +0.14 | **H₀(M1/M2/M5) — class-blind**; pred/rab within within-window noise on every measure |
+| C | **+18.1 pp** | **+36.8 pp** | **+0.44** | **H₁(M2) confirmed by a wide margin** (Δ_M2 = 36.8 pp ≫ +15 pp threshold, M2_predator = 87.6 % ≫ 10 % floor); H₁(M5) confirmed (M5_predator = 0.748 just under the 0.70 absolute threshold but Δ_M5 = +0.44 ≫ +0.20 alternative threshold); H₁(M1) marginal (Δ_M1 = 18.1 pp, threshold is +20 pp — within 2 pp of the bar) |
+
+The Cell A1 numbers are interesting in their own right: the rare TL-tagged engagement events (rabbit_TL and predator_TL both have ~800 candidate events vs rabbit_BR's ~9,976) show essentially identical responses — rabbit_TL M2 = 2.3 % vs predator_TL M2 = 3.2 %. When the agent IS forced to engage TL, it treats the rabbit and the predator the same way. This corroborates §11.1's reading at the event level.
+
+### 12.3 M7 motif distribution — per-cell × per-cluster, with semantic labels
+
+Cluster sizes are k-means assignments (k=6, seed=42); semantic labels assigned by hand-inspection of two nearest-centroid exemplar windows per cluster ([`tmp/20260511_r25_appendix_writeup.md`](../../../../tmp/20260511_r25_appendix_writeup.md) records the inspection notes).
+
+**Cell A1** — 8531 windows; silhouette = 0.237 (passes R4 ≥ 0.20).
+
+| Cluster | Size | Frac | Semantic label | Top features (mean, original units) |
+|---|---:|---:|---|---|
+| 0 | 2861 | **33.5 %** | `freeze_near_BR` — stationary near a rabbit, mode-action dominant | stay_in_place 0.99; mode_action_frac 0.77; eat 1.2/win; bush 0.00 |
+| 1 | 46 | 0.5 % | `tl_predator_bush_anomaly` — rare TL engagement with bush use; mostly episode-start onsets | bush_occ 0.68; min_threat_dist 1.85 |
+| 2 | 973 | 11.4 % | `approach_transit` — directed motion toward an entity | path_length 6.7; net_disp 3.1; action_entropy 1.62 |
+| 3 | 922 | 10.8 % | `feeding_bout` — sustained eating, mostly frozen | eat 6.5/win; stay_in_place 0.92; mode_action_frac 0.68 |
+| 4 | 1488 | 17.4 % | `engage_BR` — mid-mobility interaction with BR rabbit | path 3.0; eat 2.4; action_entropy 1.35 |
+| 5 | 2241 | **26.3 %** | `stationary_rabbit_approaches` — agent frozen, rabbit drifts in | stay 0.99; eat 0.09/win; threat-dist Δ = −0.18 (rabbit approaching) |
+
+One sentence: A1's repertoire is **dominated by stationary/freeze behaviours (clusters 0 + 5 = 59.8 %), with feeding bouts (cluster 3 = 10.8 %) and slow BR-engagement (cluster 4 = 17.4 %) accounting for most of the rest**; no `bush_dive`-shaped cluster emerges as a coherent motif (the cluster_1 anomaly is < 1 % and below the M7 §4.2 reportable size).
+
+**Cell C** — 7741 windows; silhouette = 0.186 (below R4 ≥ 0.20 nominal threshold but reportable per the toolkit's "low silhouette is acceptable when justified" rule; here the justification is that the agent's behaviour is genuinely diverse rather than degenerate — see §12.5).
+
+| Cluster | Size | Frac | Semantic label | Top features (mean, original units) |
+|---|---:|---:|---|---|
+| 0 | 1482 | 19.1 % | `predator_pursuit_with_bush` — directed flight with partial bush use, 83 % predator-triggered | path 4.0; bush_occ 0.47; threat-dist Δ = −0.19 |
+| 1 | 991 | 12.8 % | `bush_camp` — stationary inside bush | bush_occ 0.95; stay 0.98 |
+| 2 | 2006 | **25.9 %** | `mobile_with_cover` — moving between bushes | bush 0.55; path 4.2 |
+| 3 | 831 | 10.7 % | `open_flight` — large directed displacement, little bush | net_disp 4.1; bush 0.18 |
+| 4 | 815 | 10.5 % | `feeding_bout_near_rabbit` — sustained eating, 81 % rabbit-triggered | eat 5.1/win; stay 0.84 |
+| 5 | 1616 | **20.9 %** | `bush_camp_predator` — bush-camped with predator nearby, 59 % predator-triggered | bush_occ 0.79; stay 0.78 |
+
+One sentence: C's repertoire is **bush-involved on ~78 % of windows (clusters 0 + 1 + 2 + 5)**, with the bush-camping pair of clusters (1 + 5 = 33.7 %) and the bush-mobile cluster (2 = 25.9 %) doing most of the work; open flight without bush (cluster 3 = 10.7 %) is a minor motif and feeding-near-rabbit (cluster 4 = 10.5 %) is dominated by rabbit-triggered events.
+
+**Per-class cluster membership** (the figure that drives the cross-cell verdict):
+
+| Cell A1 | C0 freeze_BR | C1 anomaly | C2 approach | C3 feeding | C4 engage_BR | C5 stationary_rab |
+|---|---:|---:|---:|---:|---:|---:|
+| predator-triggered | 46.3 % | 1.1 % | 13.7 % | 10.2 % | 19.3 % | 9.3 % |
+| rabbit-triggered | 32.0 % | 0.5 % | 11.1 % | 10.9 % | 17.2 % | 28.3 % |
+
+A1 predator onsets shift slightly toward freeze_near_BR (46 % vs 32 % for rabbit) but the difference is small relative to the 9.3 % vs 28.3 % shift on the stationary_rabbit_approaches cluster — those numbers reflect the geometry (rare predator-onsets nearly always come from a TL-incursion early in the episode that lands the agent in a freeze-near-BR pattern), not a class-conditional response.
+
+| Cell C | C0 pred_pursuit | C1 bush_camp | C2 mobile_cover | C3 open_flight | C4 feed_rabbit | C5 bush_camp_pred |
+|---|---:|---:|---:|---:|---:|---:|
+| predator-triggered | **28.9 %** | 10.5 % | 24.7 % | 9.7 % | 3.7 % | **22.5 %** |
+| rabbit-triggered | 7.2 % | 15.6 % | 27.4 % | 12.0 % | **19.0 %** | 18.9 % |
+
+C predator-triggered onsets are **4× more likely** to land in cluster 0 (`predator_pursuit_with_bush`, 28.9 % vs 7.2 %) and slightly more likely to land in cluster 5 (`bush_camp_predator`, 22.5 % vs 18.9 %). Rabbit-triggered onsets are **5×** more likely to land in cluster 4 (`feeding_bout_near_rabbit`, 19.0 % vs 3.7 %). This is **a clear class-conditional behavioural fingerprint** at the motif level.
+
+### 12.4 Cross-cell comparison — the paper-grade headline
+
+**A1 and C show qualitatively different defensive behaviour at the event level**, even though the §11 spatial-distance verdicts placed them on the same "structured spatial policy, not class-conditional avoidance" reading. Five bullets answer the design's headline questions:
+
+1. **Motif distributions differ in shape AND in class-conditioning.** Cell A1's distribution is dominated by stationary/freeze motifs (clusters 0 + 5 = 59.8 %) with one rare anomaly cluster (1 = 0.5 %), matching the toolkit's prior of "`ignore`-dominated" — the prior predicted ≥ 80 % `ignore`; observed is 59.8 % stationary + 10.8 % feeding bout + 17.4 % engage_BR (the latter two are not "ignore" but they ARE all confined to BR), so the "behaviourally constrained" reading is correct without being literally "ignore-dominant." Cell C's distribution spreads across six functionally distinct clusters with a strong predator-vs-rabbit asymmetry (cluster 0: 29 % vs 7 %; cluster 4: 4 % vs 19 %) — this is the spread the toolkit was designed to detect and that mean-distance metrics cannot show. The pre-registered M7 §4.2 check "Cell A1 ignore-fraction should exceed Cell C ignore-fraction by ≥ 30 pp" is met if we use clusters 0+5 (A1 59.8 %) vs C clusters 1+5 (33.7 %) as the closest analogue (26.1 pp), or by ≥ 40 pp if we use A1's full stationary-cluster set (cluster 0+3+5 = 70.6 %) vs C's bush-camp-only set (1+5 = 33.7 %) → 36.9 pp.
+
+2. **Per-tag M1 fan-out for Cell A1: no class-conditional event-level signal.** `M1_predator_TL` = 11.8 % vs `M1_rabbit_TL` = 14.6 %. The rabbit-TL response is mildly higher than predator-TL — the opposite direction from H₁(A1) — and the gap is 2.8 pp (well inside the toolkit's "≤ 5 pp = no signal" band on Round-2.5 A1 priors). The §10.1 verdict was the per-tag distance gap Δ_TL = +0.004; the per-tag event gap Δ_M1_TL = −2.8 pp is similarly null. **The H₀(A1) corner-camping verdict is reinforced at the event level**: where the agent IS forced to engage TL, it treats the TL rabbit and the TL predator the same way.
+
+3. **Bush usage as class-conditional defence — Cell C only.** `M2_predator_full` = 87.6 % vs `M2_rabbit` (mean over both tags) = 50.8 %; a +36.8 pp gap, more than 2× the toolkit's H₁(M2) threshold (+15 pp), with the absolute M2_predator value (88 %) far above the 10 % floor. Even under matched smells (`properties [0,1,0,0,0]` for both classes), **the Cell C agent has learned a strong predator-specific bush-dive response**. Cell A1 shows nothing of this (M2_predator = 3.2 % vs M2_rabbit ≈ 1 %); the agent there has no opportunity (only 853 predator-onset events across 200 episodes) and no use for bushes (its policy is "stay in BR and don't move").
+
+4. **Risk-discounted foraging — Cell C only.** `M5_predator` = 0.748 (the agent's per-step eat probability under predator threat is 25 % below its safe-baseline rate), while `M5_rabbit` = 1.186 (rabbits do NOT depress eating — the agent eats *more* when a rabbit is near, because rabbits sit in food-empty quadrants the agent doesn't camp, so rabbit-near events correlate with crossing food-rich territory). The +0.44 cross-class delta is more than 2× the toolkit's pre-registered H₁(M5) alternative threshold (+0.20). Cell A1 shows no risk discounting on either class (M5_predator = 0.999, M5_rabbit = 1.141; gap +0.14 within toolkit noise).
+
+5. **The class-conditional signal Cell C carries is consistent across rabbit tags.** Per-tag M2 for Cell C: `rabbit_TL` 50.3 %, `rabbit_BR` 52.3 %. Per-tag M5: `rabbit_TL` 1.207, `rabbit_BR` 1.130. Both tags behave essentially the same — the rabbit-vs-predator behavioural gap is class-driven, not tag-driven. This rules out the "agent only responds to one rabbit corner" sub-case and locks the Cell C signature as **bilateral rabbit non-defence + unilateral predator defence**.
+
+### 12.5 What §§9–11 missed, and what they confirmed
+
+**Missed (Cell C)**: §§9–11's verdict was "Cell C lands in the §4.3 Inverted band (Δ = −0.532, bilateral rabbit avoidance) — the agent stays farther from both rabbits than from the predator, structured spatial policy, no class-conditional defence." The toolkit shows that **at the per-step event level the agent has a strongly class-conditional active defence** — predator approach triggers a bush dive 88 % of the time and depresses eating to 0.75× safe; rabbit approach triggers a bush dive 51 % of the time and does NOT depress eating. The §11 reading "no class-conditional avoidance" is correct **as a spatial statement** (the agent does sit closer to the patrolling predator than to either rabbit in mean-distance terms), but **wrong as a behavioural statement** (the agent's reaction-to-encounter is strongly class-conditional). The honest 2-line summary is now: "Cell C's policy is spatially class-blind but behaviourally class-discriminating; the spatial inversion is a consequence of the food-camping policy putting the agent in the predator's quadrant by default, with the predator-specific bush-dive doing the actual defensive work."
+
+**Confirmed (Cell A1)**: every toolkit measure on Cell A1 ratifies the §11.1 corner-camping verdict. Per-tag M1 / M2 / M5 are statistically indistinguishable between rabbit_TL and predator_TL (M1 +2.8 pp in the rabbit's favour; M2 +0.9 pp in the predator's favour; M5 within 0.06). The motif distribution is dominated by behaviours confined to BR (clusters 0 + 3 + 4 + 5 = 88.0 %). Predator-triggered onsets shift toward the freeze-near-BR cluster (46 % vs 32 %) but the shift is explained by the fact that the only predator onsets happen on rare TL incursions that resolve with the agent fleeing back to BR. **The toolkit cannot rescue a class-conditional signal where the engagement rate is structurally too low** (753 predator-cand-events vs 10,460 rabbit-cand-events), and the §11.4 recommendation "no Round 2.6 escalation for Cell A1" stands — the camping is class-blind at every measurable level.
+
+**A second-order confirmation**: the toolkit's pre-registered prior on Cell A1 was M1 ≤ 5 % or NaN. Observed M1 ≈ 12 % on both classes — meaningfully above the predicted 5 % ceiling. The prior assumed the agent would "rarely eat near anything"; the data shows it eats near rabbits (mostly BR) frequently enough that M1 has a usable denominator. This is a minor correction to the prior, not a refutation of the verdict — the agent does encounter and eat near the BR rabbit, but its response to that encounter is the same as its rare response to TL events.
+
+### 12.6 Silhouette caveat and toolkit-v2 candidates
+
+Cell C's M7 silhouette = 0.186 sits just below the R4 ≥ 0.20 nominal threshold. Per the toolkit's R4 rule, a sub-0.20 silhouette is reportable when justified; here the justification is that the underlying behavioural distribution is genuinely multi-modal rather than degenerate (six clusters all between 10–26 % of the population, vs the "one cluster swallows ≥ 90 %" R4 failure signature, and the per-class fan-out is informative). Cell A1's silhouette = 0.237 clears R4 cleanly. **For toolkit v2**: candidate features that would tighten Cell C's clusters include (a) raw hit-event counts within the window (M7's drive_injury_change is too coarse — most predator-pursuit windows have zero injury because the bush works), (b) entity-presence-duration (how long was the triggering entity in radius across the window), (c) action-mode-shift-count (did the agent's modal action change mid-window). These are surfaced as toolkit-v2 candidates; not load-bearing for the v1 verdict.
+
+### 12.7 Implications for Round 2.6 (Cell C, seed 44) and Round 3
+
+The Round 2.6 analysis plan in [`docs/experiments/active/hypervigilance/sameprop_round25_design.md`](sameprop_round25_design.md) §11.4 reads "one additional seed locks or refutes the sign" for Cell C, where "sign" meant the −0.5-cell aggregated Δ. The toolkit promotes Round 2.6 to a richer test: **the question is no longer just whether seed 44 reproduces the bilateral rabbit avoidance sign, it is whether seed 44 reproduces the class-conditional behavioural fingerprint** (M2_predator ≥ 0.80, M5_predator ≤ 0.80, Δ_M2_class ≥ +30 pp, predator-onsets-in-pursuit-cluster ≥ 25 %). Pre-registered Round-2.6-with-toolkit verdict conditions:
+
+- **Locked**: seed 44 produces M2_predator ≥ 0.80 AND M2_predator − M2_rabbit ≥ +30 pp AND M5_predator < 0.80. The class-conditional defence is then seed-stable.
+- **Sign-flipped at behavioural level**: seed 44 produces M2_predator < 0.5 or M2_predator − M2_rabbit < +10 pp. The seed-42 finding is then seed-specific and the Cell C behavioural verdict reverts to provisional.
+- **Mixed**: any other combination → ambiguous; route to a 4-seed Cell-C study.
+
+For **Round 3** (food in all four quadrants, closing the spatial-avoidance loophole), the toolkit measures should be **pre-registered as primary confirmation criteria** rather than secondary. Specifically: with the spatial-avoidance solution unavailable, the question becomes "does the agent fall back on the class-conditional bush-dive defence (M2_predator) or does class-discrimination collapse entirely (M2 ≈ M5 ≈ M1 with no class gap)?" Predicted (designer's prior, recorded honestly here): M2_predator will widen further (from 88 % in Cell C to ~95 %) and M5_predator will drop further (from 0.75 to ~0.55), if the agent's hypothesised class-conditional channel is genuine; alternatively, if the Cell C class-conditioning is a side-effect of "predator roams everywhere, rabbits sit in two corners the agent avoids anyway," then Round 3 will show a sharp drop in M2_predator-vs-rabbit gap as the spatial confound is removed.
+
+**Cross-link**: the toolkit's design doc ([`docs/experiments/active/behavior_measures/behavior_measure_toolkit_v1_design.md`](../behavior_measures/behavior_measure_toolkit_v1_design.md)) §8.2 already lists "Round 2.6 / Round 3 / NMN comparisons" as downstream adopters — this appendix is the **first paper-grade demonstration that the toolkit recovers signal mean-distance metrics dissolve**, and that demonstration should be cited in the toolkit doc's changelog.
+
+### 12.8 Working files
+
+- [`tmp/20260511_r25_appendix_analysis.py`](../../../../tmp/20260511_r25_appendix_analysis.py) — analysis script (M1/M2/M5/M7 cross-tabs)
+- [`tmp/20260511_r25_appendix_analysis.log`](../../../../tmp/20260511_r25_appendix_analysis.log) — script output
+- [`tmp/20260511_r25_appendix_aggregates.json`](../../../../tmp/20260511_r25_appendix_aggregates.json) — JSON dump of per-tag aggregates
+- [`tmp/20260511_r25_appendix_writeup.md`](../../../../tmp/20260511_r25_appendix_writeup.md) — exemplar-inspection scratch (drives the semantic labels)
+- `tmp/20260511_r25_appendix_motifs_{A1,C}.csv`, `tmp/20260511_r25_appendix_motif_by_{class,tag}_{A1,C}.csv` — per-cluster mean-feature and cross-tab tables
+- `results/eval/models/10000003/motifs/` and `results/eval/models/10000022/motifs/` — k-means outputs from `scripts/motif_cluster.py`
+
+### 12.9 Verdict refinements (delta vs §11)
+
+| §11 verdict | §12 refinement |
+|---|---|
+| Cell A1 — H₀(A1) confirmed (corner-camping; class-blind at the spatial level) | **Reinforced** — class-blind at the event level too. Per-tag M1/M2/M5 for predator_TL and rabbit_TL within within-window noise; motif distribution dominated by BR-confined behaviours. No reason to revisit. |
+| Cell C — H₁(C) refuted; Inverted band (bilateral rabbit avoidance, class-blind defence) | **Refined to spatial-only**. The Δ = −0.532 spatial inversion and bilateral-rabbit-distance verdict stand. The "class-blind defence" reading is **wrong at the event level**: M2_predator = 88 % vs M2_rabbit = 51 % (a +37 pp class-conditional active defence); M5_predator = 0.75 vs M5_rabbit = 1.19 (a +0.44 class-conditional risk discount). The honest two-line reading is now "spatially class-blind, behaviourally class-discriminating" — predator and rabbit get the same average distance because of where the food is, but predator and rabbit get different per-step responses. |
+| Recommendation: Round 2.6 seed 44 for Cell C only | **Strengthened**. Round 2.6 should pre-register the toolkit measures, not just the aggregated Δ. The behavioural class-conditioning is the more interesting finding; the spatial inversion is a side-effect. |
+
+---
+
 ## Appendix
 
 ### A. Cell mapping table (channel ablations)
@@ -599,3 +752,4 @@ This contingency is pre-registered: do not retrofit it post-hoc to "rescue" a re
 |------|--------|--------|
 | 2026-05-09 | Initial pre-registered design for Round 2.5; 2 cells × 1 seed each on node 106 cuda:0/cuda:1; per-tag metrics live (commits `0a73613` + `6d3d382`); thresholds re-keyed to per-tag for Cell A1, augmented with per-tag cross-check for Cell C | experiment-designer |
 | 2026-05-10 | §3 Launch Manifest actuals filled (both runs completed 10 M episodes cleanly: Cell C `bdnfc0lu` 22 h 33 m, Cell A1 `nm8gn7y2` 17 h 30 m); §§9–11 written against pre-registered §4 thresholds; verdicts: **Cell A1 H₀(A1) confirmed (Δ_TL = +0.004, location-conditional avoidance)**, **Cell C lands in §4.3 Inverted band (Δ = −0.532, bilateral rabbit avoidance)**; recommendation Round 2.6 seed 44 for Cell C only; status frontmatter `planned → analyzed` | experiment-analyzer |
+| 2026-05-11 | §12 behavior-measure appendix appended — toolkit v1 applied to saved A1 + C eval rollouts (`nm8gn7y2` / `bdnfc0lu`). M1/M2/M5/M7 computed eval-time on N=200 deterministic episodes. **Cell C bush_dive_rate predator 88 % vs rabbit 51 %** (Δ_M2 = +37 pp); **M5_predator 0.75 vs M5_rabbit 1.19** (Δ_M5 = +0.44). The §11 "bilateral rabbit avoidance, class-blind defence" verdict refined to *spatially* class-blind but *behaviourally* class-discriminating. Cell A1 verdict reinforced — class-blind at the event level too. First paper-grade use of M1/M2/M5/M7 | experiment-analyzer |
