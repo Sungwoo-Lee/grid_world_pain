@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `hypervigilance` topic.
 
 **Folder definition**: Hypervigilance experiments
-**Insights**: 5
-**Last updated**: 2026-05-10
+**Insights**: 6
+**Last updated**: 2026-05-12
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-12 | 14:28 | `20260512_1428_sameprop_class_discriminating_defence_event_level` | Round 2.5 toolkit-v1 appendix refines the verdict — under sameProp matched smells, the agent IS class-discriminating, but at the EVENT level (bush-dive rate +37 pp predator vs rabbit; eat-under-threat 0.75× near predator vs 1.19× near rabbit), not the spatial-trajectory level (mean distance). Per-tag fan-out across rabbit_TL / rabbit_BR within noise — rules out single-instance artifacts. Complements `20260510_2237_sameprop_round25_no_class_avoidance`, does not supersede. |
 | 2026-05-10 | 22:37 | `20260510_2237_sameprop_round25_no_class_avoidance` | Round 2.5 (10M ep, n=1 each cell) refutes both pre-registered hypotheses: per-tag Δ_TL = +0.004 cells in Cell A1 (75× inside the H₀ band) confirms location-conditional corner-camping, not class recognition; Cell C aggregated Δ = −0.53 cells (sign-flipped vs R1's +0.63) with bilateral rabbit avoidance lands in §4.3 Inverted. The original sameProp survey effect (+0.6 cells) decomposes into two confounds (food/quadrant overlap + spatial-avoidance camouflage) — no genuine class-conditional avoidance under matched olfactory smells. Provisional pending Round 2.6 seed 44 for Cell C. |
 | 2026-05-09 | 15:33 | `20260509_1533_tag_based_distance_supersedes_quadrant` | Tag-based per-instance distance design (optional `tag: <string>` per entity in YAML, source code geometry-agnostic) supersedes the originally-planned quadrant-hardcoded approach. `MeanDistRabbit_<tag>` vs `MeanDistPredator_<tag>` (same tag) is a more direct disambiguator for quadrant-vs-class avoidance than `QuadrantOccupancy_*` would have been. |
 | 2026-05-09 | 15:32 | `20260509_1532_sameprop_round2_truncated_verdict` | Round 2 SIGINT'd at 0.4M ep / 3.5h: H1(C) provisionally refuted (Δ=−0.43 sign-flipped vs R1's +0.63); Cell A1's striking Δ=+3.86 is structurally uninterpretable because the agent survives 482/500 steps in the BR corner — §5 row-2 failure mode is active and cannot be discounted without per-tag distance metrics. |
@@ -23,6 +24,7 @@
 
 ## Change history
 
+- 2026-05-12: Added insight `20260512_1428_sameprop_class_discriminating_defence_event_level` from the behavior-measure toolkit v1 application to the R2.5 checkpoints — refines (not supersedes) the prior `_no_class_avoidance` verdict. Under sameProp the agent IS class-discriminating at the event level (bush-dive rate, eat-suppression) even though it is class-blind in mean distances. No new tags promoted (all reused: hypervigilance, learned_lesson, decision).
 - 2026-05-10: Added insight `20260510_2237_sameprop_round25_no_class_avoidance` from the Round 2.5 launch + analysis session — both pre-registered hypotheses refuted; sameProp survey effect decomposed into two confounds, no genuine class-conditional avoidance. Provisional pending Round 2.6 seed 44 (Cell C only). No new tags promoted (all reused: hypervigilance, refutation, learned_lesson, decision).
 - 2026-05-09: Added 2 insights from the hypervigilance Round 2 partial-verdict + per-tag metrics ship session: `20260509_1532_sameprop_round2_truncated_verdict` (Round 2 SIGINT'd at 0.4M ep; H1(C) refuted, Cell A1 contaminated), `20260509_1533_tag_based_distance_supersedes_quadrant` (tag-based design replaces quadrant-hardcoded). No new tags promoted (all reused: hypervigilance, refutation, learned_lesson, design, decision, meta).
 - 2026-05-08: Folder created. Added 2 insights from the hypervigilance/sameProp Round 1 + Round 2 design session: `20260508_1444_sameprop_round1_finding_and_confound`, `20260508_1445_sameprop_discriminating_channels`.
