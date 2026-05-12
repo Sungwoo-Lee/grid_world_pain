@@ -281,6 +281,39 @@ What the implementing agent should verify during implementation. Each checkpoint
 
 8. **`get_observation` `apply_noise=False` was a deliberate smoke-era choice.** Re-reading [`sheeprl_drop_in_test.md`](../diagnosis/sheeprl_drop_in_test.md) Implementation Report, the rationale wasn't documented — it appears to have been "noise doesn't matter for food-only NoPred." That's true for the smoke task but is exactly wrong for the modulation paper. Flagging in case the developer wants to confirm with the user before flipping the default.
 
+## Decisions (updated by developer, 2026-05-12)
+
+Two user directives issued at implementation time modified the original plan scope:
+
+### D1 — WandB project name (overrides plan §Step 2)
+
+**Original plan**: rename `grid_world_pain_sheeprl_test` → `grid_world_pain_sheeprl` (sheeprl-specific project, separate from JAX runs).
+
+**User directive**: use the SAME WandB project as all existing rPPO and JAX Dreamer training, so all runs are visible in one place.
+
+**Chosen project**: `grid_world_pain`
+
+**Confirmation source**: `configs/logger/wandb.yaml` (line 3): `project: "grid_world_pain"` and `train_command-agent.sh` (line 77): "Defaults from configs/logger/wandb.yaml: project=grid_world_pain, entity=sungwoolee". Both the JAX-side WandB config and the agent launch script confirm this is the canonical project name for all in-house training.
+
+**Implemented**: `tmp/sheeprl/sheeprl/configs/logger/wandb.yaml` updated from `grid_world_pain_sheeprl_test` → `grid_world_pain`. The smoke-era `grid_world_pain_sheeprl_test` project keeps its history (jzgkcep4 remains there); new production runs go to `grid_world_pain`.
+
+### D2 — pyproject.toml / conda-env setup (overrides plan §Step 3 from "document" to "automated")
+
+**Original plan**: document per-node setup (§Step 3 said "minor edit to §5").
+
+**User directive**: make it automated — ensure `pyproject.toml` supports reproducible install.
+
+**Chosen option**: option (b) — `tmp/sheeprl/pyproject.toml` (the vendored upstream sheeprl package) already exists and specifies all sheeprl bridge deps (PyTorch, Lightning Fabric, Hydra, gymnasium, etc.). These deps are incompatible with the main `grid_world_pain` conda env's JAX/Flax stack, so a separate `sheeprl_bridge` env is correct. The install is `pip install -e /path/to/tmp/sheeprl` on top of a fresh Python 3.11 env.
+
+**Install command (canonical)**:
+```bash
+pip install -e /media/nas01/projects/Interoceptive-AI/grid_world_pain/tmp/sheeprl
+pip install "jax[cpu]" flax omegaconf pyyaml wandb
+pip install -e /media/nas01/projects/Interoceptive-AI/grid_world_pain
+```
+
+**Implemented**: `sheeprl_training_howto.md` §5 updated with the canonical install command, the "run once per node" instruction, the NAS-shared-home check, and the rationale for why option (b) is used (torch/jax incompatibility).
+
 ## Implementation Report
 
 > **Implemented by**: [pending — `developer` agent]

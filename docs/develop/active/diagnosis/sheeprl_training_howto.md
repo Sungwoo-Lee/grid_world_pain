@@ -15,6 +15,7 @@ phase: usage-guide
 
 > **What this is NOT**. Not a re-implementation plan. Not an analysis of why sheeprl outperforms our DreamerV3. See:
 > - The original plan + analysis: [`sheeprl_drop_in_test.md`](sheeprl_drop_in_test.md)
+> - The minimum-bridge implementation plan (adopted sheeprl as the project's primary Dreamer backend): [`../sheeprl_bridge/IMPLEMENTATION_PLAN.md`](../sheeprl_bridge/IMPLEMENTATION_PLAN.md)
 > - The line-by-line code walkthrough of sheeprl: [`../../../project/references/sheeprl_dreamer_v3/INDEX.md`](../../../project/references/sheeprl_dreamer_v3/INDEX.md)
 > - The fix-cascade summary: [`../../../experiments/summaries/20260511_1559_dreamer_v3_fix_cascade.md`](../../../experiments/summaries/20260511_1559_dreamer_v3_fix_cascade.md)
 
@@ -29,7 +30,7 @@ The lab cluster keeps the project mounted at `/media/nas01/projects/Interoceptiv
     configs/experiment/dreamer_curriculum/01_food_only.yaml 0 gwp_food_only"
 ```
 
-That fires a 200,000-env-step training (~11 hours on a single RTX 6000 Ada) with `dreamer_v3_XS`, WandB logging to project `grid_world_pain_sheeprl_test`, log at `logs/YYYYMMDD_HHMMSS.log`. Tail the log or open WandB to watch it.
+That fires a 200,000-env-step training (~11 hours on a single RTX 6000 Ada) with `dreamer_v3_XS`, WandB logging to project `grid_world_pain` (same project as all JAX/rPPO runs — sheeprl and in-house runs share one project, filterable by algorithm), log at `logs/YYYYMMDD_HHMMSS.log`. Tail the log or open WandB to watch it.
 
 Positional args to `launch_sheeprl.sh` are `<config-yaml> <gpu-index> <env-id-tag> [total-steps]`. The script handles `cd` to project root, sets `GWP_CONFIG_PATH` + `JAX_PLATFORMS=cpu` + `CUDA_VISIBLE_DEVICES=<gpu>`, and invokes the `sheeprl_bridge` Python explicitly — you don't have to think about any of that. For variations (different env config, different model size, different step budget) see §6 below.
 
@@ -101,11 +102,13 @@ algo:
 **`logger/wandb.yaml`** — Lightning's PyTorch-side WandB logger (sheeprl ships only TensorBoard + MLflow by default):
 ```yaml
 _target_: lightning.pytorch.loggers.WandbLogger
-project: grid_world_pain_sheeprl_test
+project: grid_world_pain
 name: ${run_name}
 save_dir: logs/runs/${root_dir}
 log_model: False
 ```
+
+Sheeprl runs land in the same WandB project (`grid_world_pain`) as all in-house JAX/rPPO training — no separate project. The smoke-era project `grid_world_pain_sheeprl_test` is historical only; new runs go to `grid_world_pain`.
 
 All three are tracked in git (committed under `tmp/sheeprl/` because we vendor sheeprl into the repo).
 
@@ -190,6 +193,20 @@ Two trainings on the same node, different GPUs, different configs — each WandB
 
 ## §5. Setting up a new node (only if not node 114)
 
+**Run §5 once per new node before the first sheeprl launch on that node.** The `sheeprl_bridge` conda environment is per-node (not shared). Node 114 already has it. For other nodes: first check if `/home/vncuser/` is NAS-mounted at the same path (common on this cluster) — if so, the env created on node 114 is already visible on the new node; verify with the §2.3 `ls` check before assuming creation is needed.
+
+**Why a separate conda env?** The sheeprl bridge uses PyTorch + Lightning Fabric + Hydra (from `tmp/sheeprl/pyproject.toml`, sheeprl's own package spec). These deps conflict with the main `grid_world_pain` env's JAX/Flax/CUDA stack. The install is option (b) — a separate `pip install -e tmp/sheeprl` on top of a fresh base env. Do NOT install sheeprl into the main `grid_world_pain` conda env.
+
+**Install command for the `sheeprl_bridge` env (canonical, run once per node):**
+
+```bash
+pip install -e /media/nas01/projects/Interoceptive-AI/grid_world_pain/tmp/sheeprl
+pip install "jax[cpu]" flax omegaconf pyyaml wandb
+pip install -e /media/nas01/projects/Interoceptive-AI/grid_world_pain
+```
+
+After `pip install -e tmp/sheeprl`, updates to bridge files (`grid_world_pain.py`, `grid_world_pain.yaml`, `wandb.yaml`) are picked up immediately on all nodes that share the NAS path — no re-install needed. If `tmp/sheeprl/pyproject.toml` deps change (e.g. sheeprl version bump), re-run `pip install -e tmp/sheeprl` on each node.
+
 If the conda env doesn't exist on your target node (`ls /home/vncuser/miniconda3/envs/sheeprl_bridge` fails), create it. **Takes ~5 minutes**.
 
 ```bash
@@ -273,7 +290,7 @@ At sheeprl's default `replay_ratio=1`, throughput on RTX 6000 Ada with XS is ~5 
 ... tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain seed=44
 ```
 
-Each goes to its own WandB run. WandB project `grid_world_pain_sheeprl_test` will accumulate runs across seeds.
+Each goes to its own WandB run. WandB project `grid_world_pain` will accumulate runs across seeds (alongside all in-house JAX/rPPO runs).
 
 ### 6.5 Faster logging (default flushes every 5000 steps)
 
@@ -295,7 +312,7 @@ That's 4× faster but does 4× fewer gradient updates per env step. **Do not use
 
 ### 6.7 Different WandB project
 
-Edit `tmp/sheeprl/sheeprl/configs/logger/wandb.yaml` and change the `project:` field. Commit the change.
+The current default is `project: grid_world_pain` (same as all in-house JAX/rPPO runs). To override for a specific experiment or diagnostic run, edit `tmp/sheeprl/sheeprl/configs/logger/wandb.yaml` and change the `project:` field. Note that `tmp/sheeprl/` is gitignored so the change lives on the NAS and is not committed.
 
 ---
 
@@ -311,7 +328,7 @@ The log shows: Hydra config dump at start, WandB run URL, then periodic `Rank-0:
 
 ### 7.2 WandB UI
 
-Open `https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test` — every run lives in this project. The smoke run's URL was https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/jzgkcep4. Key panels:
+Open `https://wandb.ai/sungwoolee/grid_world_pain` — all in-house and sheeprl runs share this project. The smoke run's URL was https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/jzgkcep4 (historical — that run landed in the old smoke-era project; new runs go to `grid_world_pain`). Key panels:
 
 - `Game/ep_len_avg` — **survival steps** (= our `Episode/Steps`). Compare against A1=106, Z2=~115.
 - `Rewards/rew_avg` — cumulative episode return.
@@ -386,9 +403,9 @@ These were all surfaced during the 2026-05-11 smoke. Read them before debugging.
 
 ### WandB
 
-- Project: `grid_world_pain_sheeprl_test`
+- Project: `grid_world_pain` (same as all in-house JAX/rPPO runs — user directive 2026-05-12)
 - Entity: `sungwoolee`
-- Smoke reference run: `jzgkcep4` (https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/jzgkcep4)
+- Smoke reference run: `jzgkcep4` (https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/jzgkcep4) — landed in old smoke-era project; new runs go to `grid_world_pain`
 
 ### Last validated
 
@@ -399,6 +416,7 @@ These were all surfaced during the 2026-05-11 smoke. Read them before debugging.
 ## §10. Related docs
 
 - [`sheeprl_drop_in_test.md`](sheeprl_drop_in_test.md) — the original plan + Results/Analysis from the smoke. Read for "why this exists" + the original Implementation Report.
+- [`../sheeprl_bridge/IMPLEMENTATION_PLAN.md`](../sheeprl_bridge/IMPLEMENTATION_PLAN.md) — the minimum-bridge plan that adopted sheeprl as the project's primary Dreamer backend (PI call 2026-05-12). Covers the six residual gaps and the NMN-port feasibility check.
 - [`../../../project/references/sheeprl_dreamer_v3/INDEX.md`](../../../project/references/sheeprl_dreamer_v3/INDEX.md) — line-by-line walkthrough of the sheeprl DreamerV3 source code (9 files, 226 functions, ~6,800 doc lines). For "what the sheeprl code actually does" questions.
 - [`../../../experiments/summaries/20260511_1559_dreamer_v3_fix_cascade.md`](../../../experiments/summaries/20260511_1559_dreamer_v3_fix_cascade.md) — the fix-cascade story this sheeprl test exists to compare against.
 - [`../../../project/concepts/dreamer_v3_implementation.md`](../../../project/concepts/dreamer_v3_implementation.md) — the paper-to-implementation reference doc; §6 is the 30-item deviation list against our codebase, §9 is the sheeprl-comparison section.
