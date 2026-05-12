@@ -105,23 +105,42 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
     fabric.print(f"Log dir: {log_dir}")
 
     # Environment setup
-    vectorized_env = gym.vector.SyncVectorEnv if cfg.env.sync_env else gym.vector.AsyncVectorEnv
-    envs = vectorized_env(
-        [
-            partial(
-                RestartOnException,
-                make_env(
-                    cfg,
-                    cfg.seed + rank * cfg.env.num_envs + i,
-                    rank * cfg.env.num_envs,
-                    log_dir if rank == 0 else None,
-                    "train",
-                    vector_env_idx=i,
-                ),
-            )
-            for i in range(cfg.env.num_envs)
-        ]
-    )
+    # -----------------------------------------------------------------------
+    # GWP-PATCH-C: optional vmap-batched JAXVectorEnv (v1, smoke-only).
+    # When cfg.env.use_jax_vector_env is true, instantiate JAXVectorEnv
+    # directly and skip the gym.vector wrappers. Reads the env YAML path
+    # from the env wrapper config (same as the single-env path).
+    # -----------------------------------------------------------------------
+    if getattr(cfg.env, "use_jax_vector_env", False):
+        from pytorch_agents.envs.jax_vector_env import JAXVectorEnv
+        envs = JAXVectorEnv(
+            config_path=cfg.env.wrapper.config_path,
+            num_envs=int(cfg.env.num_envs),
+            seed=int(cfg.seed),
+        )
+        fabric.print(
+            f"GWP-PATCH-C: JAXVectorEnv enabled (num_envs={cfg.env.num_envs}, "
+            f"seed={cfg.seed}); SyncVectorEnv bypassed."
+        )
+    else:
+        vectorized_env = gym.vector.SyncVectorEnv if cfg.env.sync_env else gym.vector.AsyncVectorEnv
+        envs = vectorized_env(
+            [
+                partial(
+                    RestartOnException,
+                    make_env(
+                        cfg,
+                        cfg.seed + rank * cfg.env.num_envs + i,
+                        rank * cfg.env.num_envs,
+                        log_dir if rank == 0 else None,
+                        "train",
+                        vector_env_idx=i,
+                    ),
+                )
+                for i in range(cfg.env.num_envs)
+            ]
+        )
+    # -----------------------------------------------------------------------
     action_space = envs.single_action_space
     observation_space = envs.single_observation_space
 
