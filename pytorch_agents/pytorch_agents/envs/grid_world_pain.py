@@ -7,6 +7,12 @@ Our project provides: env step/reset logic and YAML config.
 
 JAX must run on CPU here — sheeprl's torch owns the GPU.  The env-step is
 microseconds on a 5x5 grid so there is no meaningful overhead.
+
+The wrapper accumulates per-step episode signals (M1/M2/M5 behavior measures
+and per-tag distance means) using the shared src/behavior/* modules and
+places them on the terminal info dict at episode-done, so sheeprl's
+SyncVectorEnv auto-promotes them to infos["final_info"][i].  The sheeprl
+main loop can then update its MetricAggregator from these keys.
 """
 
 # Force JAX to CPU before any JAX import so torch can claim the GPU.
@@ -29,9 +35,16 @@ import jax.numpy as jnp
 import numpy as np
 
 from src.utils.config import Config, get_default_config
-from src.environment.config_loader import load_env_params
+from src.environment.config_loader import load_env_params, load_behavior_measure_cfg
 from src.environment.core import jax_reset, jax_step
 from src.environment.sensor import get_observation
+from src.behavior.accumulators import (
+    make_bm_state, bm_step_update, bm_reset_env,
+    bm_finalise_episode, bm_finalise_to_wandb_keys,
+)
+from src.behavior.distance_aggregator import (
+    make_dist_state, dist_step_update, dist_reset_env, dist_finalise_episode,
+)
 
 
 class GridWorldPainWrapper(gym.Env):
@@ -87,6 +100,27 @@ class GridWorldPainWrapper(gym.Env):
 
         self._step_count = 0
 
+        # --- Behavior-measure and distance accumulators ---
+        # Tags come from env YAML params (possibly empty for food-only configs).
+        self._neutral_tags  = tuple(self._params.neutral_tags)
+        self._predator_tags = tuple(self._params.predator_tags)
+
+        bm_cfg = load_behavior_measure_cfg(cfg)
+        self._bm_enabled = bm_cfg is not None and bm_cfg.enabled
+        if self._bm_enabled:
+            self._bm_state = make_bm_state(
+                num_envs=1,  # single-instance; sheeprl vectorizes externally
+                num_predator_tags=len(self._predator_tags),
+                num_neutral_tags=len(self._neutral_tags),
+                bm_R=float(bm_cfg.cue_radius),
+                bm_K=int(bm_cfg.obs_window),
+            )
+        else:
+            self._bm_state = None
+        self._dist_state = make_dist_state(
+            1, len(self._predator_tags), len(self._neutral_tags)
+        )
+
     def reset(self, *, seed=None, options=None):
         if seed is not None:
             self._rng = jax.random.PRNGKey(int(seed))
@@ -98,11 +132,16 @@ class GridWorldPainWrapper(gym.Env):
             get_observation(self._state, self._params, apply_noise=self._apply_noise),
             dtype=np.float32,
         )
+        # Reset accumulators in case sheeprl calls reset() mid-episode
+        # (unusual but possible at training-start).
+        if self._bm_enabled:
+            bm_reset_env(self._bm_state, 0)
+        dist_reset_env(self._dist_state, 0)
         return {"state": obs}, {}
 
     def step(self, action):
         a = int(action)
-        self._state, reward, done, info = jax_step(self._state, a, self._params)
+        self._state, reward, done, info_jax = jax_step(self._state, a, self._params)
         self._step_count += 1
 
         obs = np.asarray(
@@ -113,9 +152,48 @@ class GridWorldPainWrapper(gym.Env):
         terminated = bool(np.asarray(done))
         truncated = False  # max_steps handled inside our env via done flag
 
-        # Drop info entirely — SyncVectorEnv cannot stack JAX arrays across
-        # env workers, and info is unused by the DreamerV3 training loop.
-        return {"state": obs}, r, terminated, truncated, {}
+        # Unpack JAX info to numpy with [1, ...] batch axis so accumulator code
+        # (written for [num_envs, ...]) works unchanged with num_envs=1.
+        dist_per_pred_raw = np.asarray(info_jax['dist_per_predator'])
+        dist_per_neut_raw = np.asarray(info_jax['dist_per_neutral'])
+        info_np_t = {
+            'ate_food':      np.asarray(info_jax['ate_food']).reshape(1).astype(bool),
+            'agent_in_bush': np.asarray(info_jax['agent_in_bush']).reshape(1).astype(bool),
+            'dist_to_food':  np.asarray(info_jax['dist_to_food']).reshape(1).astype(np.float32),
+            'dist_to_pred':  np.asarray(info_jax['dist_to_pred']).reshape(1).astype(np.float32),
+            'dist_to_neutral': np.asarray(info_jax['dist_to_neutral']).reshape(1).astype(np.float32),
+            'dist_to_hiding_predator': np.asarray(info_jax['dist_to_hiding_predator']).reshape(1).astype(np.float32),
+            'dist_per_predator': dist_per_pred_raw.reshape(1, -1).astype(np.float32),
+            'dist_per_neutral':  dist_per_neut_raw.reshape(1, -1).astype(np.float32),
+        }
+        done_mask = np.array([terminated], dtype=bool)
+
+        # Per-step accumulation
+        if self._bm_enabled:
+            bm_step_update(self._bm_state, info_np_t, done_mask)
+        dist_step_update(self._dist_state, info_np_t)
+
+        # At episode-done: finalise and build terminal info dict
+        info_out: dict = {}
+        if terminated:
+            if self._bm_enabled:
+                ep_data_raw = bm_finalise_episode(
+                    self._bm_state, 0, self._predator_tags, self._neutral_tags
+                )
+                info_out.update(
+                    bm_finalise_to_wandb_keys(
+                        ep_data_raw, self._predator_tags, self._neutral_tags
+                    )
+                )
+                bm_reset_env(self._bm_state, 0)
+            info_out.update(
+                dist_finalise_episode(
+                    self._dist_state, 0, self._neutral_tags, self._predator_tags
+                )
+            )
+            dist_reset_env(self._dist_state, 0)
+
+        return {"state": obs}, r, terminated, truncated, info_out
 
     def close(self):
         pass
