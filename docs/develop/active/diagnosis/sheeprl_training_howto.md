@@ -22,26 +22,16 @@ phase: usage-guide
 
 ## §1. TL;DR — launch a training in one paragraph
 
-The lab cluster keeps the project mounted at `/media/nas01/projects/Interoceptive-AI/grid_world_pain/` on every node (NAS-shared). The `sheeprl_bridge` conda environment is **per-node** at `/home/vncuser/miniconda3/envs/sheeprl_bridge/` — it exists on **node 114** (where the smoke ran) and **not yet on any other node**. To launch a training on node 114:
+The lab cluster keeps the project mounted at `/media/nas01/projects/Interoceptive-AI/grid_world_pain/` on every node (NAS-shared). The `sheeprl_bridge` conda environment is **per-node** at `/home/vncuser/miniconda3/envs/sheeprl_bridge/` — it exists on **node 114** (where the smoke ran) and **not yet on any other node**. The recommended launch path is the project's `run_command.py` (port-1800 SSH multiplexed, backgrounds + logs automatically) calling the reusable workload `scripts/launch_sheeprl.sh`:
 
 ```bash
-ssh vncuser@192.168.0.114 'bash -lc "\
-cd /media/nas01/projects/Interoceptive-AI/grid_world_pain && \
-mkdir -p tmp && \
-LOG=tmp/sheeprl_run_$(date +%Y%m%d_%H%M%S).log && \
-GWP_CONFIG_PATH=\$PWD/configs/experiment/dreamer_curriculum/01_food_only.yaml \
-JAX_PLATFORMS=cpu \
-CUDA_VISIBLE_DEVICES=0 \
-nohup /home/vncuser/miniconda3/envs/sheeprl_bridge/bin/python \
-  tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain \
-  > \$LOG 2>&1 & \
-echo \$! > tmp/sheeprl_run.pid && \
-echo LOG=\$LOG PID=\$(cat tmp/sheeprl_run.pid)"'
+./run_command.py 114 "bash scripts/launch_sheeprl.sh \
+    configs/experiment/dreamer_curriculum/01_food_only.yaml 0 gwp_food_only"
 ```
 
-That fires a 200,000-env-step training (~11 hours on a single RTX 6000 Ada) with `dreamer_v3_XS`, WandB logging to project `grid_world_pain_sheeprl_test`, results in the named log file. Tail the log or open WandB to watch it.
+That fires a 200,000-env-step training (~11 hours on a single RTX 6000 Ada) with `dreamer_v3_XS`, WandB logging to project `grid_world_pain_sheeprl_test`, log at `logs/YYYYMMDD_HHMMSS.log`. Tail the log or open WandB to watch it.
 
-For variations (different env config, different model size, different step budget) see §6 below.
+Positional args to `launch_sheeprl.sh` are `<config-yaml> <gpu-index> <env-id-tag> [total-steps]`. The script handles `cd` to project root, sets `GWP_CONFIG_PATH` + `JAX_PLATFORMS=cpu` + `CUDA_VISIBLE_DEVICES=<gpu>`, and invokes the `sheeprl_bridge` Python explicitly — you don't have to think about any of that. For variations (different env config, different model size, different step budget) see §6 below.
 
 ---
 
@@ -151,37 +141,50 @@ If any fails, fix it before launching. The training will fail fast and obviously
 
 ---
 
-## §4. The full launch command, explained line by line
+## §4. The full launch flow, explained
+
+The recommended launch is a single `run_command.py` call into `scripts/launch_sheeprl.sh`:
 
 ```bash
-ssh vncuser@192.168.0.114 'bash -lc "\                                       # (1)
-cd /media/nas01/projects/Interoceptive-AI/grid_world_pain && \                # (2)
-mkdir -p tmp && \                                                            # (3)
-LOG=tmp/sheeprl_run_$(date +%Y%m%d_%H%M%S).log && \                          # (4)
-GWP_CONFIG_PATH=\$PWD/configs/experiment/dreamer_curriculum/01_food_only.yaml \  # (5)
-JAX_PLATFORMS=cpu \                                                           # (6)
-CUDA_VISIBLE_DEVICES=0 \                                                      # (7)
-nohup /home/vncuser/miniconda3/envs/sheeprl_bridge/bin/python \              # (8)
-  tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain \                    # (9)
-  > \$LOG 2>&1 & \                                                            # (10)
-echo \$! > tmp/sheeprl_run.pid && \                                           # (11)
-echo LOG=\$LOG PID=\$(cat tmp/sheeprl_run.pid)"'                              # (12)
+./run_command.py 114 "bash scripts/launch_sheeprl.sh <config> <gpu> <tag> [steps]"
 ```
 
-| Line | What it does |
-|---|---|
-| 1 | SSH into the target node. Use `bash -lc` so the login shell sources `/etc/profile` (needed if your shell uses something exotic — safe default). |
-| 2 | Land in the project root. All relative paths are relative to here. |
-| 3 | Make `tmp/` if missing — log + PID file go there. `tmp/` is gitignored. |
-| 4 | Compute a timestamped log filename so multiple launches don't clobber each other. |
-| 5 | **Critical**: tell the bridge which env YAML to load. The bridge's `config_path` parameter reads from this env var. Use an absolute path. |
-| 6 | **Critical**: force JAX onto CPU so it doesn't fight torch for the GPU. Skipping this leads to either `CUDA_OUT_OF_MEMORY` or silent JAX-on-GPU contention. |
-| 7 | Choose the GPU index. `0` for the first GPU; check `nvidia-smi` if a node has multiple. |
-| 8 | Use the `sheeprl_bridge` Python interpreter explicitly. `python` from anywhere else may not have sheeprl installed. |
-| 9 | Launch sheeprl with the experiment named `dreamer_v3_grid_world_pain` (the YAML at `configs/exp/dreamer_v3_grid_world_pain.yaml`). |
-| 10 | `nohup` + redirect to log + background — survives SSH disconnect. |
-| 11 | Save the PID so you can kill / monitor it later. |
-| 12 | Echo back the log path + PID for confirmation. |
+Two pieces, each with a separate job:
+
+### `run_command.py` — the thin SSH wrapper
+
+After the 2026-05-12 refactor, `run_command.py` does only this:
+- Open an SSH-multiplexed connection to the target node on port 1800 (`vncuser@192.168.0.<node>`, key auth).
+- Run the passed command under `nohup bash -c "<cmd>" > logs/YYYYMMDD_HHMMSS.log 2>&1 &` on the remote side.
+- Optionally auto-tail the log (default; pass `--no-tail` to skip; `--foreground` for synchronous output).
+
+It does NOT `cd` anywhere, NOT activate any conda env, NOT validate the command. Those responsibilities are inside the bash script.
+
+### `scripts/launch_sheeprl.sh` — the workload
+
+The bash script you actually run takes 3 positional args + 1 optional:
+- `$1` — config YAML (relative-to-project-root or absolute)
+- `$2` — GPU index (0, 1, 2, …)
+- `$3` — env-id tag (becomes part of the WandB run name)
+- `$4` — total env steps (default `200_000`)
+
+At launch it:
+- `cd /media/nas01/projects/Interoceptive-AI/grid_world_pain` (so relative paths work)
+- `export GWP_CONFIG_PATH=$(realpath "$1")` (absolute path for the bridge)
+- `export JAX_PLATFORMS=cpu` (keep GPU for torch)
+- `export CUDA_VISIBLE_DEVICES=$2` (the GPU index)
+- `exec /home/vncuser/miniconda3/envs/sheeprl_bridge/bin/python tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain env.id="$3" algo.total_steps="$STEPS"`
+
+Read the script: 50 lines, no magic.
+
+### Concrete launches from the 2026-05-12 session
+
+```bash
+./run_command.py 114 "bash scripts/launch_sheeprl.sh configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml 0 gwp_5x5_pred"
+./run_command.py 114 "bash scripts/launch_sheeprl.sh configs/experiment/hypervigilance/01-interoNocicept.yaml 1 gwp_10x10_intero"
+```
+
+Two trainings on the same node, different GPUs, different configs — each WandB run named uniquely by the `tag` argument.
 
 ---
 
