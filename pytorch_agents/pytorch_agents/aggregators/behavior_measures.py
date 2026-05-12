@@ -15,7 +15,18 @@ Called from ``pytorch_agents.run_dreamer_v3`` at two hook points:
 """
 from __future__ import annotations
 
+import os
+import sys
 from typing import Iterable
+
+# Ensure the grid_world_pain project root is on sys.path so that ``src.*``
+# imports resolve.  The sheeprl_bridge conda env adds only ``.../src`` and
+# ``.../pytorch_agents`` to sys.path, not the project root itself.
+_PROJECT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..")
+)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
 
 from torchmetrics import MeanMetric  # sheeprl already depends on torchmetrics
 
