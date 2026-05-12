@@ -64,6 +64,10 @@ from dataclasses import dataclass
 import glob
 
 from src.environment.config_loader import load_env_params, load_behavior_measure_cfg
+from src.behavior.accumulators import (
+    make_bm_state, bm_step_update, bm_reset_env,
+    bm_finalise_episode as _bm_finalise_episode_shared,
+)
 from src.environment.wrapper import ParallelEnv
 from src.environment.sensor import get_observation, get_observation_breakdown
 from src.environment.core import jax_step
@@ -964,277 +968,34 @@ def main():
         bm_R = 0.0
         bm_K = 0
 
-    # Per-env, per-class M1/M2/M5 counters (numpy int64; per-class fan-out: 0=predator, 1=rabbit).
-    # Episode-life arrays — reset at done; stage-wipe handled at the stage transition.
-    _NUM_CLASSES = 2  # 0 = predator, 1 = rabbit
-    m1_candidates  = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
-    m1_interrupted = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
-    m2_onsets      = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
-    m2_dives       = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
-    m5_threat_steps = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
-    m5_safe_steps   = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
-    m5_eat_threat   = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
-    m5_eat_safe     = np.zeros((num_envs, _NUM_CLASSES), dtype=np.int64)
-
-    # Per-tag accumulators (mirror the per-class ones).
-    _num_tag_slots = num_predator_for_log + num_neutral_for_log
-    m1_candidates_tag  = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
-    m1_interrupted_tag = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
-    m2_onsets_tag      = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
-    m2_dives_tag       = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
-    m5_threat_steps_tag = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
-    m5_safe_steps_tag   = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
-    m5_eat_threat_tag   = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
-    m5_eat_safe_tag     = np.zeros((num_envs, _num_tag_slots), dtype=np.int64)
-    # Per-tag layout: first num_predator_for_log entries = predator tags, then neutral tags.
-    _pred_slice    = slice(0, num_predator_for_log)
-    _neutral_slice = slice(num_predator_for_log, num_predator_for_log + num_neutral_for_log)
-
-    # K-buffer state for M1/M2 (one pending candidate/onset slot per env per class).
-    m1_candidate_age    = np.full((num_envs, _NUM_CLASSES), -1, dtype=np.int32)   # -1 = no pending
-    m1_candidate_tag_idx = np.full((num_envs, _NUM_CLASSES), -1, dtype=np.int32)  # tag-slot index
-    m1_steps_since_eat  = np.zeros((num_envs,), dtype=np.int32)
-    m2_onset_age        = np.full((num_envs, _NUM_CLASSES), -1, dtype=np.int32)
-    m2_onset_tag_idx    = np.full((num_envs, _NUM_CLASSES), -1, dtype=np.int32)
-    m2_in_bush_seen     = np.zeros((num_envs, _NUM_CLASSES), dtype=bool)
-    # Prior-step "threat in radius" state (for M2 onset detection).
-    m_prev_threat_in_R     = np.zeros((num_envs, _NUM_CLASSES), dtype=bool)
-    m_prev_threat_in_R_tag = np.zeros((num_envs, _num_tag_slots), dtype=bool)
+    # Behavior-measure toolkit v1: M1/M2/M5 state via shared module (src.behavior.accumulators).
+    # All 16 per-class/per-tag numpy arrays and K-buffer state are encapsulated in BMState.
+    if bm_enabled:
+        _bm_state = make_bm_state(
+            num_envs=num_envs,
+            num_predator_tags=num_predator_for_log,
+            num_neutral_tags=num_neutral_for_log,
+            bm_R=bm_R,
+            bm_K=bm_K,
+        )
+    else:
+        _bm_state = None
 
     def _bm_reset_env(i):
         """Reset all behavior-measure accumulators for env i at episode end."""
-        m1_candidates[i, :] = 0;     m1_interrupted[i, :] = 0
-        m2_onsets[i, :] = 0;         m2_dives[i, :] = 0
-        m5_threat_steps[i, :] = 0;   m5_safe_steps[i, :] = 0
-        m5_eat_threat[i, :] = 0;     m5_eat_safe[i, :] = 0
-        m1_candidates_tag[i, :] = 0; m1_interrupted_tag[i, :] = 0
-        m2_onsets_tag[i, :] = 0;     m2_dives_tag[i, :] = 0
-        m5_threat_steps_tag[i, :] = 0; m5_safe_steps_tag[i, :] = 0
-        m5_eat_threat_tag[i, :] = 0;   m5_eat_safe_tag[i, :] = 0
-        m1_candidate_age[i, :] = -1; m1_candidate_tag_idx[i, :] = -1
-        m2_onset_age[i, :] = -1;     m2_onset_tag_idx[i, :] = -1
-        m2_in_bush_seen[i, :] = False
-        m_prev_threat_in_R[i, :] = False
-        m_prev_threat_in_R_tag[i, :] = False
-        m1_steps_since_eat[i] = 0
+        if _bm_state is not None:
+            bm_reset_env(_bm_state, i)
 
     def _bm_step_update(info_np_t, done_mask):
-        """One-step update of M1/M2/M5 counters across all envs, both classes.
-
-        info_np_t: dict with per-env arrays for this single step (shape [num_envs] or [num_envs, N]).
-        done_mask: bool array [num_envs] — True for envs that completed an episode this step.
-        Call this BEFORE the per-episode finalisation / reset so the final step counts.
-        """
-        ate_food_t = info_np_t['ate_food'].astype(bool)          # [num_envs]
-        in_bush_t  = info_np_t['agent_in_bush'].astype(bool)     # [num_envs]
-
-        # Per-class threat distances
-        dist_pred_t = info_np_t.get('dist_per_predator')   # [num_envs, num_pred] or None
-        dist_neut_t = info_np_t.get('dist_per_neutral')    # [num_envs, num_neut] or None
-
-        # threat_in_R[env, class]: True iff min distance to class-c entity < bm_R
-        threat_in_R = np.zeros((num_envs, _NUM_CLASSES), dtype=bool)
-        if dist_pred_t is not None and dist_pred_t.shape[1] > 0:
-            threat_in_R[:, 0] = np.min(dist_pred_t, axis=1) < bm_R
-        if dist_neut_t is not None and dist_neut_t.shape[1] > 0:
-            threat_in_R[:, 1] = np.min(dist_neut_t, axis=1) < bm_R
-
-        # threat_in_R_tag[env, tag_slot]: per-tag threat flag
-        threat_in_R_tag = np.zeros((num_envs, _num_tag_slots), dtype=bool)
-        if dist_pred_t is not None and num_predator_for_log > 0:
-            for j in range(min(num_predator_for_log, dist_pred_t.shape[1])):
-                threat_in_R_tag[:, _pred_slice.start + j] = dist_pred_t[:, j] < bm_R
-        if dist_neut_t is not None and num_neutral_for_log > 0:
-            for j in range(min(num_neutral_for_log, dist_neut_t.shape[1])):
-                threat_in_R_tag[:, _neutral_slice.start + j] = dist_neut_t[:, j] < bm_R
-
-        # --- M5: per-class threat/safe step and eat counters ---
-        for c in range(_NUM_CLASSES):
-            under_threat = threat_in_R[:, c]
-            m5_threat_steps[:, c] += under_threat.astype(np.int64)
-            m5_safe_steps[:, c]   += (~under_threat).astype(np.int64)
-            m5_eat_threat[:, c]   += (under_threat & ate_food_t).astype(np.int64)
-            m5_eat_safe[:, c]     += (~under_threat & ate_food_t).astype(np.int64)
-        # M5 per-tag
-        for j in range(_num_tag_slots):
-            ut = threat_in_R_tag[:, j]
-            m5_threat_steps_tag[:, j] += ut.astype(np.int64)
-            m5_safe_steps_tag[:, j]   += (~ut).astype(np.int64)
-            m5_eat_threat_tag[:, j]   += (ut & ate_food_t).astype(np.int64)
-            m5_eat_safe_tag[:, j]     += (~ut & ate_food_t).astype(np.int64)
-
-        # --- M1: interrupted-feeding detection ---
-        # 1. Update steps_since_eat
-        m1_steps_since_eat[:] = np.where(ate_food_t, 0, m1_steps_since_eat + 1)
-
-        for c in range(_NUM_CLASSES):
-            # 2. Age pending candidates FIRST (before recording new ones this step).
-            # This ensures a freshly-set candidate (age=0) is not aged on the same step,
-            # so age reaches bm_K after exactly bm_K subsequent no-eat steps.
-            for env_i in range(num_envs):
-                if m1_candidate_age[env_i, c] >= 0:
-                    m1_candidate_age[env_i, c] += 1
-                    if m1_candidate_age[env_i, c] >= bm_K:
-                        # Resolve: interrupted iff agent has not eaten for >= bm_K steps after
-                        # the candidate event. m1_steps_since_eat accumulates since the last eat.
-                        if m1_steps_since_eat[env_i] >= bm_K:
-                            m1_interrupted[env_i, c] += 1
-                            tag_j = m1_candidate_tag_idx[env_i, c]
-                            if tag_j >= 0:
-                                m1_interrupted_tag[env_i, tag_j] += 1
-                        # Record the candidate for per-tag too
-                        tag_j = m1_candidate_tag_idx[env_i, c]
-                        if tag_j >= 0:
-                            m1_candidates_tag[env_i, tag_j] += 1
-                        m1_candidate_age[env_i, c] = -1
-                        m1_candidate_tag_idx[env_i, c] = -1
-
-            # 3. Record new candidates: ate_food this step AND threat in radius
-            new_cand = ate_food_t & threat_in_R[:, c]
-            for env_i in range(num_envs):
-                if new_cand[env_i]:
-                    # Resolve old pending candidate (conservative: not-interrupted)
-                    # before overwriting with the new one.
-                    if m1_candidate_age[env_i, c] >= 0:
-                        # old candidate not interrupted (we see new eat event → agent is eating)
-                        pass  # counters already incremented at candidate-record time
-                    m1_candidates[env_i, c] += 1
-                    m1_candidate_age[env_i, c] = 0
-                    # Find nearest predator/neutral tag for per-tag bucket
-                    if c == 0 and dist_pred_t is not None and num_predator_for_log > 0 and dist_pred_t.shape[1] > 0:
-                        best_j = int(np.argmin(dist_pred_t[env_i]))
-                        m1_candidate_tag_idx[env_i, c] = _pred_slice.start + min(best_j, num_predator_for_log - 1)
-                    elif c == 1 and dist_neut_t is not None and num_neutral_for_log > 0 and dist_neut_t.shape[1] > 0:
-                        best_j = int(np.argmin(dist_neut_t[env_i]))
-                        m1_candidate_tag_idx[env_i, c] = _neutral_slice.start + min(best_j, num_neutral_for_log - 1)
-                    else:
-                        m1_candidate_tag_idx[env_i, c] = -1
-
-        # --- M2: bush-dive detection ---
-        for c in range(_NUM_CLASSES):
-            threat_now = threat_in_R[:, c]
-
-            for env_i in range(num_envs):
-                # 1. Detect onset: prev not in R, now in R, agent not already in bush
-                if (not m_prev_threat_in_R[env_i, c]) and threat_now[env_i] and (not in_bush_t[env_i]):
-                    # Resolve old pending onset before overwriting
-                    if m2_onset_age[env_i, c] >= 0:
-                        pass  # count will be tallied at age==K
-                    m2_onsets[env_i, c] += 1
-                    m2_onset_age[env_i, c] = 0
-                    m2_in_bush_seen[env_i, c] = False
-                    # Per-tag: find triggering instance
-                    if c == 0 and dist_pred_t is not None and num_predator_for_log > 0 and dist_pred_t.shape[1] > 0:
-                        best_j = int(np.argmin(dist_pred_t[env_i]))
-                        m2_onset_tag_idx[env_i, c] = _pred_slice.start + min(best_j, num_predator_for_log - 1)
-                    elif c == 1 and dist_neut_t is not None and num_neutral_for_log > 0 and dist_neut_t.shape[1] > 0:
-                        best_j = int(np.argmin(dist_neut_t[env_i]))
-                        m2_onset_tag_idx[env_i, c] = _neutral_slice.start + min(best_j, num_neutral_for_log - 1)
-                    else:
-                        m2_onset_tag_idx[env_i, c] = -1
-
-                # 2. Mark if bush entered during window
-                if m2_onset_age[env_i, c] >= 0 and in_bush_t[env_i]:
-                    m2_in_bush_seen[env_i, c] = True
-
-                # 3. Age and resolve
-                if m2_onset_age[env_i, c] >= 0:
-                    m2_onset_age[env_i, c] += 1
-                    if m2_onset_age[env_i, c] >= bm_K:
-                        if m2_in_bush_seen[env_i, c]:
-                            m2_dives[env_i, c] += 1
-                            tag_j = m2_onset_tag_idx[env_i, c]
-                            if tag_j >= 0:
-                                m2_dives_tag[env_i, tag_j] += 1
-                        # Record per-tag onset count
-                        tag_j = m2_onset_tag_idx[env_i, c]
-                        if tag_j >= 0:
-                            m2_onsets_tag[env_i, tag_j] += 1
-                        m2_onset_age[env_i, c] = -1
-                        m2_onset_tag_idx[env_i, c] = -1
-                        m2_in_bush_seen[env_i, c] = False
-
-        # Update prev threat state for next step
-        m_prev_threat_in_R[:, :] = threat_in_R
-        m_prev_threat_in_R_tag[:, :] = threat_in_R_tag
+        """One-step update of M1/M2/M5 counters. Delegates to shared module."""
+        if _bm_state is not None:
+            bm_step_update(_bm_state, info_np_t, done_mask)
 
     def _bm_finalise_episode(i, ep_data):
-        """Compute per-episode BM scalars for env i and add to ep_data dict."""
-        EPS = 1e-6
-        for c, cname in enumerate(("predator", "rabbit")):
-            # M1
-            denom = int(m1_candidates[i, c])
-            if denom > 0:
-                ep_data[f"interrupted_feeding_rate_{cname}_raw"] = float(m1_interrupted[i, c]) / float(denom)
-            else:
-                ep_data[f"interrupted_feeding_rate_{cname}_raw"] = float("nan")
-            ep_data[f"interrupted_feeding_denom_{cname}_raw"] = denom
-
-            # M2
-            denom2 = int(m2_onsets[i, c])
-            if denom2 > 0:
-                ep_data[f"bush_dive_rate_{cname}_raw"] = float(m2_dives[i, c]) / float(denom2)
-            else:
-                ep_data[f"bush_dive_rate_{cname}_raw"] = float("nan")
-            ep_data[f"bush_dive_denom_{cname}_raw"] = denom2
-
-            # M5
-            threat_steps = int(m5_threat_steps[i, c])
-            safe_steps   = int(m5_safe_steps[i, c])
-            eat_threat   = int(m5_eat_threat[i, c])
-            eat_safe     = int(m5_eat_safe[i, c])
-            p_eat_threat = (eat_threat / threat_steps) if threat_steps > 0 else float("nan")
-            p_eat_safe   = (eat_safe / safe_steps)     if safe_steps   > 0 else float("nan")
-            ep_data[f"eat_under_threat_rate_{cname}_raw"]       = p_eat_threat
-            ep_data[f"eat_safe_rate_{cname}_raw"]               = p_eat_safe
-            ep_data[f"eat_under_threat_safe_steps_{cname}_raw"] = safe_steps
-            if threat_steps > 0 and eat_safe > 0:
-                # eat_safe > 0 (not safe_steps > 0): ratio is undefined when no safe-window
-                # eating occurred, even if safe steps exist (avoids 1e6 inflation when
-                # eat_safe == 0 but safe_steps > 0).
-                ep_data[f"eat_under_threat_ratio_{cname}_raw"] = float(p_eat_threat) / float(p_eat_safe)
-            else:
-                ep_data[f"eat_under_threat_ratio_{cname}_raw"] = float("nan")
-
-        # Per-tag M1, M2, M5
-        for j_in_slice, tag in enumerate(predator_tags):
-            j = _pred_slice.start + j_in_slice
-            _bm_finalise_tag(i, j, tag, "predator", ep_data)
-        for j_in_slice, tag in enumerate(neutral_tags):
-            j = _neutral_slice.start + j_in_slice
-            _bm_finalise_tag(i, j, tag, "rabbit", ep_data)
-
-    def _bm_finalise_tag(i, j, tag, class_name, ep_data):
-        EPS = 1e-6
-        # M1
-        denom = int(m1_candidates_tag[i, j])
-        if denom > 0:
-            ep_data[f"interrupted_feeding_rate_{class_name}_{tag}_raw"] = float(m1_interrupted_tag[i, j]) / float(denom)
-        else:
-            ep_data[f"interrupted_feeding_rate_{class_name}_{tag}_raw"] = float("nan")
-
-        # M2
-        denom2 = int(m2_onsets_tag[i, j])
-        if denom2 > 0:
-            ep_data[f"bush_dive_rate_{class_name}_{tag}_raw"] = float(m2_dives_tag[i, j]) / float(denom2)
-        else:
-            ep_data[f"bush_dive_rate_{class_name}_{tag}_raw"] = float("nan")
-
-        # M5
-        ts  = int(m5_threat_steps_tag[i, j])
-        ss  = int(m5_safe_steps_tag[i, j])
-        et  = int(m5_eat_threat_tag[i, j])
-        es  = int(m5_eat_safe_tag[i, j])
-        pet = (et / ts) if ts > 0 else float("nan")
-        pes = (es / ss) if ss > 0 else float("nan")
-        ep_data[f"eat_under_threat_rate_{class_name}_{tag}_raw"]  = pet
-        ep_data[f"eat_safe_rate_{class_name}_{tag}_raw"]          = pes
-        if ts > 0 and es > 0:
-            # es > 0 (not ss > 0): ratio is undefined when no safe-window eating occurred
-            # (avoids 1e6 inflation when es == 0 but ss > 0).
-            ep_data[f"eat_under_threat_ratio_{class_name}_{tag}_raw"] = float(pet) / float(pes)
-        else:
-            ep_data[f"eat_under_threat_ratio_{class_name}_{tag}_raw"] = float("nan")
+        """Compute per-episode BM scalars for env i and add to ep_data dict.
+        Delegates to shared module."""
+        if _bm_state is not None:
+            ep_data.update(_bm_finalise_episode_shared(_bm_state, i, predator_tags, neutral_tags))
 
     def _append_per_measure_mean(ep_log, iteration_episodes, ep_key_raw, wandb_key):
         """Mean the same per-episode raw scalar (skipping NaN) across the iteration's episodes."""
