@@ -81,6 +81,37 @@ The caller has supplied a target node and GPU index in your spawn prompt.
 - Confirm the node is in the valid range 101–114. Reject anything outside.
 - If either value is missing from your spawn prompt, **halt** and ask the caller for it. Do not proceed with a default.
 
+### 2b. Pre-flight the target node's conda env (GPU-compile check)
+
+Verify that the chosen node's `grid_world_pain` env can actually run a JAX GPU op before launching. An import-only check is insufficient — JAX often imports fine but JIT-compile crashes on the first real GPU op when ptxas is missing. Run this from the launcher:
+
+```bash
+ssh -p 1800 vncuser@192.168.0.<NODE> '/home/vncuser/miniconda3/envs/grid_world_pain/bin/python -c "
+import jax, flax, optax, orbax.checkpoint, chex
+from src.environment import config_loader
+x = jax.numpy.ones((4,4))
+y = (x @ x).block_until_ready()
+print(jax.__version__, y.sum())
+"'
+```
+
+The 4×4 matmul + `block_until_ready()` forces a real JIT compile, surfacing three failure modes that an import-only check misses:
+
+1. **Missing flax/optax/orbax/chex** — on 2026-05-07 node 101 had only `jax + numpy + wandb`; the runner saw `ModuleNotFoundError: optax` *after* the launch had detached.
+2. **JAX/jaxlib version mismatch between nodes** — node 101 had jax 0.10.0 while the rest of the cluster ran 0.9.0.1. Different XLA, confounds cross-node experiments.
+3. **Missing `nvidia-cuda-nvcc-cu12` (provides ptxas)** — JAX imports cleanly but JIT compile crashes with `No PTX compilation provider is available`. Only surfaces on first GPU op.
+
+If any of these fail, **halt** with a specific defect message rather than wasting a launch slot. Recovery — version-match the broken node to a working peer:
+
+```bash
+ssh 192.168.0.102 '/home/vncuser/miniconda3/envs/grid_world_pain/bin/pip list --format=freeze' > /tmp/peer_pkgs.txt
+grep -v -E '^(grid-world-pain|grid_world_pain)' /tmp/peer_pkgs.txt > /tmp/peer_pkgs_filtered.txt
+# Surgical install (full freeze-file install fails on two known resolver conflicts: grid-world-pain numpy pin vs flax, and tensorflow-cpu vs protobuf 6.x):
+ssh 192.168.0.<NODE> '/home/vncuser/miniconda3/envs/grid_world_pain/bin/pip install --upgrade numpy==2.3.5 jax==0.9.0.1 jaxlib==0.9.0.1 jax-cuda12-pjrt==0.9.0.1 jax-cuda12-plugin==0.9.0.1 nvidia-cuda-nvcc-cu12==12.9.86 flax==0.12.4 optax==0.2.6 orbax-checkpoint==0.11.33 chex==0.1.91 jaxtyping==0.3.9 treescope==0.1.10 absl-py==2.4.0'
+```
+
+Reason this rule exists: on 2026-05-07 the NMN noise-heterogeneity sweep launched 8 of 10 cells cleanly on nodes 102–105, but cells 1–2 on node 101 were blocked because node 101's env had `torch` but no `jax`. Two launch attempts wasted before the missing-JAX root cause was diagnosed. The GPU-compile check above catches all three failure modes pre-launch.
+
 ### 3. Edit `train_command-agent.sh` ONLY
 
 - Edit only `train_command-agent.sh`. The `configs/` tree is read-only for you, and `train_command-new.sh` is the user's.
