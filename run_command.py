@@ -1,29 +1,32 @@
 #!/usr/bin/env python3
 """
-Lab Server Background Execution — Launch scripts on 14-node Ubuntu cluster.
+Run a shell command on a lab cluster node (101-114).
 
-This script allows you to execute commands on remote nodes in the background,
-with automated conda environment activation and timestamped logging.
+Thin SSH wrapper. Backgrounds the remote command under nohup, redirects
+stdout/stderr to a timestamped log file under `<PROJECT_ROOT>/logs/`, and
+optionally tails the log until Ctrl+C.
 
-Architecture:
-    - 14 nodes (101-114).
-    - IPs: 192.168.0.101 to 192.168.0.114.
-    - SSH Port: 1800 (mapped to docker port 22).
+What this script does NOT do (push these into your bash workload script):
+  - `cd` into the project root
+  - Activate a conda environment
+  - Validate configs or pre-flight the env
 
-Execution Flow:
-    1. Connects to the specified node via SSH.
-    2. Changes directory to the project root.
-    3. Executes the command using 'nohup' and 'conda run'.
-    4. Redirects stdout and stderr to logs/YYYYMMDD_HHMMSS.log.
-    5. Disconnects while the process continues to run on the node.
+The intent is "just run this command on that node" — everything project-
+specific lives in the bash script you pass in.
 
-Usage Examples:
-    ./run_command.py 101 grid_world_pain "bash train_command.sh"
-    ./run_command.py 114 grid_world_pain "python3 main.py --epochs 10"
+Cluster facts (hardcoded — change here only if the cluster changes):
+  - Nodes 101-114 map to IPs 192.168.0.101-114.
+  - SSH port: 1800 (docker-mapped).
+  - User: vncuser (SSH key auth via ~/.ssh/id_ed25519_gridworld).
+  - Project root (NAS-mounted, same path on every node):
+    /media/nas01/projects/Interoceptive-AI/grid_world_pain
 
-Notes:
-    - Logs are stored at: /media/nas01/projects/Interoceptive-AI/grid_world_pain/logs/
-    - Use 'tail -f logs/<timestamp>.log' on the remote node to monitor progress.
+Usage:
+    ./run_command.py 113 "bash train_command-new.sh"
+    ./run_command.py 114 "bash scripts/launch_sheeprl.sh basic/01-5X5_Pred.yaml 0 gwp_5x5"
+    ./run_command.py --foreground 113 "nvidia-smi"
+    ./run_command.py --no-tail 114 "bash my_overnight_run.sh"
+    ./run_command.py --log /tmp/custom.log 113 "echo hello"
 """
 
 import argparse
@@ -33,105 +36,129 @@ import sys
 import time
 from datetime import datetime
 
-# --- Configuration ---
+# --- Cluster constants ---
 PROJECT_ROOT = "/media/nas01/projects/Interoceptive-AI/grid_world_pain"
-CONDA_BIN = "/home/vncuser/miniconda3/bin/conda"
 REMOTE_USER = "vncuser"
 SSH_PORT = 1800
+DEFAULT_LOG_DIR = os.path.join(PROJECT_ROOT, "logs")
+
 
 def get_node_ip(node_id):
-    """Map node_id (101-114) to IP address (192.168.0.101-114)."""
     if 101 <= node_id <= 114:
         return f"192.168.0.{node_id}"
-    else:
-        print(f"Error: Invalid node_id {node_id}. Must be between 101 and 114.")
-        sys.exit(1)
+    print(f"Error: invalid node_id {node_id}. Must be 101-114.")
+    sys.exit(1)
 
-def run_remote(node_id, conda_env, script_cmd, dry_run=False):
+
+def build_ssh_opts():
+    return [
+        "-p", str(SSH_PORT),
+        "-o", "ControlMaster=auto",
+        "-o", "ControlPath=/tmp/ssh_mux_%h_%p_%r",
+        "-o", "ControlPersist=600",
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=5",
+    ]
+
+
+def run_foreground(node_id, command, dry_run=False):
+    ip = get_node_ip(node_id)
+    ssh_cmd = ["ssh", *build_ssh_opts(), f"{REMOTE_USER}@{ip}", command]
+    print(f"Node {node_id} ({ip}:{SSH_PORT}) [foreground]")
+    print(f"Cmd:  {command}")
+    if dry_run:
+        print(f"\n[DRY RUN] {' '.join(ssh_cmd)}")
+        return
+    subprocess.run(ssh_cmd)
+
+
+def run_background(node_id, command, log_path=None, tail=True, dry_run=False):
     ip = get_node_ip(node_id)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    full_log_dir = os.path.join(PROJECT_ROOT, "logs")
-    log_file = os.path.join(full_log_dir, f"{timestamp}.log")
+    if log_path is None:
+        log_path = os.path.join(DEFAULT_LOG_DIR, f"{timestamp}.log")
 
-    # Construct the remote command
-    # Using bash -c for safe execution of complex commands
-    safe_script_cmd = script_cmd.replace('"', '\\"')
+    # Build the remote command. The remote user runs `<command>` under
+    # nohup, redirected to the log, and backgrounded. No cd, no conda.
+    safe_cmd = command.replace('"', '\\"')
     remote_cmd = (
-        f"cd {PROJECT_ROOT} && "
-        f"nohup {CONDA_BIN} run --no-capture-output -n {conda_env} bash -c \"{safe_script_cmd}\" "
-        f"> {log_file} 2>&1 &"
+        f'mkdir -p "$(dirname {log_path})" && '
+        f'nohup bash -c "{safe_cmd}" > {log_path} 2>&1 &'
     )
 
-    # SSH Multiplexing Options
-    # %h: host, %p: port, %r: remote user
-    control_path = "/tmp/ssh_mux_%h_%p_%r"
-    ssh_opts = [
-        "-o", "ControlMaster=auto",
-        "-o", f"ControlPath={control_path}",
-        "-o", "ControlPersist=600" # Persist for 10 minutes
-    ]
+    ssh_cmd = ["ssh", *build_ssh_opts(), f"{REMOTE_USER}@{ip}", remote_cmd]
 
-    ssh_cmd = [
-        "ssh", "-p", str(SSH_PORT),
-    ] + ssh_opts + [
-        f"{REMOTE_USER}@{ip}",
-        remote_cmd
-    ]
+    print(f"Node {node_id} ({ip}:{SSH_PORT})")
+    print(f"Log:  {log_path}")
+    print(f"Cmd:  {command}")
 
-    print(f"🚀 Executing on Node {node_id} (IP {ip}, Port {SSH_PORT})...")
     if dry_run:
-        print(f"DEBUG: [DRY RUN] Command: {' '.join(ssh_cmd)}")
+        print(f"\n[DRY RUN] {' '.join(ssh_cmd)}")
         return
 
-    print(f"📂 Project: {PROJECT_ROOT}")
-    print(f"🐍 Env: {conda_env}")
-    print(f"📝 Log: {log_file}")
-    print(f"💻 Command: {script_cmd}")
-    
     try:
-        # Run SSH command.
         subprocess.run(ssh_cmd, check=True)
-        print(f"\n✅ Successfully started in background!")
-        
-        # Automatic tailing
-        print(f"\n📺 Automatically tailing logs... (Press Ctrl+C to stop viewing, the process will keep running)")
-        time.sleep(1) # Give a moment for the file to be started
-        
-        tail_cmd = [
-            "ssh", "-p", str(SSH_PORT),
-            "-o", f"ControlPath={control_path}",
-            f"{REMOTE_USER}@{ip}",
-            f"tail -n 20 -f {log_file}"
-        ]
-        
-        try:
-            subprocess.run(tail_cmd)
-        except KeyboardInterrupt:
-            print("\n👋 Stopped tailing. The process is still running remotely.")
-            
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ Error executing SSH command: {e}")
+        print(f"\nError: SSH launch failed: {e}")
         sys.exit(1)
+
+    print("Launched in background.")
+
+    if not tail:
+        return
+
+    time.sleep(1)
+    print(f"\nTailing {log_path} (Ctrl+C to stop tailing; remote keeps running)\n")
+    tail_cmd = ["ssh", *build_ssh_opts(), f"{REMOTE_USER}@{ip}", f"tail -n 20 -f {log_path}"]
+    try:
+        subprocess.run(tail_cmd)
+    except KeyboardInterrupt:
+        print("\nStopped tailing.")
+
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run background script on Lab Server nodes.",
+        description="Run a shell command on a lab cluster node (101-114).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 examples:
-  %(prog)s 101 grid_world_pain "bash train_command.sh"
-  %(prog)s 105 grid_world_pain "python3 train.py"
-        """
+  %(prog)s 113 "bash train_command-new.sh"
+  %(prog)s 114 "bash scripts/launch_sheeprl.sh configs/experiment/basic/01-5X5_Pred.yaml 0 tag"
+  %(prog)s --foreground 113 "nvidia-smi"
+  %(prog)s --no-tail 114 "bash long_running.sh"
+""",
     )
-    parser.add_argument("node", type=int, help="Node ID (101-114)")
-    parser.add_argument("env", type=str, help="Conda environment name (e.g., 'grid_world_pain')")
-    parser.add_argument("script", type=str, help="Script/command to execute (wrapped in quotes if it has spaces)")
-    parser.add_argument("--dry-run", action="store_true", help="Print the command without executing it")
-    
+    parser.add_argument("node", type=int, help="Node ID (101-114).")
+    parser.add_argument("command", type=str, help="Shell command to execute on the node.")
+    parser.add_argument(
+        "--log", type=str, default=None,
+        help=f"Log path on the remote node. Default: {DEFAULT_LOG_DIR}/<timestamp>.log",
+    )
+    parser.add_argument(
+        "--no-tail", action="store_true",
+        help="Don't auto-tail the log after launching.",
+    )
+    parser.add_argument(
+        "--foreground", action="store_true",
+        help="Run synchronously, stream output to terminal. No nohup, no log. "
+             "Use for short commands (nvidia-smi, pgrep, ls).",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Print the SSH command without executing.",
+    )
     args = parser.parse_args()
-    
-    run_remote(args.node, args.env, args.script, dry_run=args.dry_run)
+
+    if args.foreground:
+        if args.log:
+            print("Warning: --log ignored in --foreground mode.")
+        run_foreground(args.node, args.command, dry_run=args.dry_run)
+    else:
+        run_background(
+            args.node, args.command,
+            log_path=args.log, tail=not args.no_tail, dry_run=args.dry_run,
+        )
+
 
 if __name__ == "__main__":
     main()

@@ -128,7 +128,7 @@ If a Path B launch deviates from this convention (e.g., the user explicitly asks
 
 ### 4. Launch — use the CIFS-bypass pattern
 
-**Default approach is broken on at least node 114** because of CIFS client-side inode caching. Editing `train_command-agent.sh` on the NAS, then immediately calling `python3 run_command.py <node> ... "bash train_command-agent.sh"`, can launch the OLD content on the remote node — it reads the cached inode, not your fresh edit. This caused 2+ unwanted duplicate launches on 2026-05-07.
+**Default approach is broken on at least node 114** because of CIFS client-side inode caching. Editing `train_command-agent.sh` on the NAS, then immediately calling `python3 run_command.py <node> "bash train_command-agent.sh"`, can launch the OLD content on the remote node — it reads the cached inode, not your fresh edit. This caused 2+ unwanted duplicate launches on 2026-05-07.
 
 **Use this CIFS-bypass pattern on every launch:**
 
@@ -144,15 +144,15 @@ If a Path B launch deviates from this convention (e.g., the user explicitly asks
      <other flags matching train_command-agent.sh exactly>
    EOF
    ```
-3. Launch via `run_command.py` pointing at the /tmp script (NOT `train_command-agent.sh`):
+3. Launch via `run_command.py` pointing at the /tmp script (NOT `train_command-agent.sh`). As of the 2026-05-12 refactor, `run_command.py` takes just `<node> "<command>"` — no conda env arg, no project-root cd inside the wrapper. Your bash script is responsible for its own `cd` + interpreter path (`train_command-agent.sh` already has both at the top):
    ```bash
-   python3 run_command.py <NODE> grid_world_pain "bash $TMP_SCRIPT"
+   python3 run_command.py <NODE> "bash $TMP_SCRIPT"
    ```
 
 The content of `train_command-agent.sh` and `$TMP_SCRIPT` MUST match (modulo the `#!/bin/bash` shebang in the /tmp variant). The Edit on the NAS is the audit artifact; the /tmp copy is what actually runs.
 
 Notes:
-- `run_command.py` SSHes to the chosen node, `cd`s into the project root (same path on every node — CIFS), and starts the training under `nohup` + `conda run -n grid_world_pain`. Stdout/stderr go to `logs/YYYYMMDD_HHMMSS.log`.
+- `run_command.py` SSHes to the chosen node and starts the bash script under `nohup`, redirected to `logs/YYYYMMDD_HHMMSS.log`. It does **not** `cd` to the project root or activate any conda env — `train_command-agent.sh` (and its `/tmp` mirror) does both at its top (`cd /media/nas01/projects/Interoceptive-AI/grid_world_pain` + explicit interpreter path).
 - The script then opens an interactive `tail -f` of that log. That's fine — you don't need to manage it; the user can Ctrl-C the tail without affecting the remote nohup'd process.
 - If the SSH succeeds but the remote process exits within ~5 seconds (visible in the log tail), assume the launch failed (config error, missing GPU, syntax error in the launch script) and surface the error rather than declaring success.
 - Do NOT reuse a `/tmp` path across launches — always include `$(date +%s)_${RANDOM}` (or similar uniqueness) so a stale CIFS cache on the same path is impossible.

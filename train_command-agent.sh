@@ -1,4 +1,10 @@
 #!/bin/bash
+set -euo pipefail
+
+# This script is launched via `run_command.py` which no longer cds to the
+# project root or activates a conda env. Both responsibilities live here.
+cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
+
 #
 # train_command-agent.sh
 # ----------------------
@@ -72,18 +78,18 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# NMN continual double-return probe — Round 2, Run R2.1 (modulated FiLM g1, temp_clip [0.5,5.0])
-# RE-LAUNCH: was n101:0 (killed at ~6 min, WandB stub 4lcp4vuf); re-launched on n106:0 2026-05-11.
-# Node 106, cuda:0, seed 0. Plan doc: docs/experiments/active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md §3.2
-# Cell: continual_modulated_r2. No --episodes: 5.1M-episode budget from schedule YAML.
+# DreamerV3 GRU reset gate fix — fix cascade Cell Z3
+# Node 113, cuda:0, seed 0. Design doc: docs/develop/active/diagnosis/dreamer_gru_reset_gate_fix.md
+# Cell: Z3. Fix stack: replay_ratio=0.0625 + zero_init_reward_critic + paper_canonical_twohot_bins + apply_gru_reset_gate (all true in rr06).
+# Task: NoPred 5x5. 700,000 env steps.
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --configs-dir configs/continual/nmn_double_return_stages/ \
-  --continual-schedule configs/continual/nmn_double_return.yaml \
-  --agent_config configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml \
+  --config configs/experiment/basic/00-5X5_NoPred.yaml \
+  --agent_config configs/models/dreamer_v3_rr06.yaml \
   --seed 0 \
   --device cuda:0 \
+  --total-timesteps 700000 \
   --log-interval 50 \
-  --wandb-group nmn_continual_double_return \
+  --wandb-group dreamer_gru_reset_gate \
   --wandb-job-type prod \
-  --wandb-name "rppo_nmn_cont_dr_mod_s0_r2" \
-  --tag "rppo_nmn_cont_dr_mod_s0_r2"
+  --wandb-name "dreamer_gru_NoPred_rr06_s0_n113" \
+  --tag "dreamer_gru_NoPred_rr06_s0_n113"
