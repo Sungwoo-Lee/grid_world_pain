@@ -32,6 +32,7 @@ from torchmetrics import MeanMetric  # sheeprl already depends on torchmetrics
 
 from src.behavior.accumulators import bm_wandb_keys
 from src.behavior.distance_aggregator import dist_wandb_keys
+from src.behavior.episode_metrics import episode_wandb_keys
 
 
 def register_dynamic_keys(
@@ -40,10 +41,14 @@ def register_dynamic_keys(
     predator_tags: Iterable[str],
     device: str = "cpu",
 ) -> None:
-    """Add per-tag distance + behavior-measure MeanMetrics to the aggregator.
+    """Add per-tag distance + behavior-measure + episode MeanMetrics to the aggregator.
 
     Safe to call post-instantiation — MetricAggregator.add() does not lock
     the metrics dict after to().  Idempotent: skips keys already present.
+
+    Special case: Episode/Number is registered as MaxMetric where available
+    (to preserve the monotonically-increasing episode count across the run),
+    falling back to MeanMetric if MaxMetric is unavailable or errors.
 
     Args:
         aggregator:    sheeprl MetricAggregator instance.
@@ -58,10 +63,27 @@ def register_dynamic_keys(
     all_keys = (
         dist_wandb_keys(neutral_tags, predator_tags)
         + bm_wandb_keys(predator_tags, neutral_tags)
+        + episode_wandb_keys()
     )
+    try:
+        from torchmetrics import MaxMetric
+        _max_metric_available = True
+    except ImportError:
+        _max_metric_available = False
+
     for k in all_keys:
         if k not in aggregator.metrics:
-            aggregator.add(k, MeanMetric().to(device))
+            try:
+                if k == "Episode/Number" and _max_metric_available:
+                    aggregator.add(k, MaxMetric().to(device))
+                else:
+                    aggregator.add(k, MeanMetric().to(device))
+            except Exception:
+                # Fallback: always safe to register as MeanMetric
+                try:
+                    aggregator.add(k, MeanMetric().to(device))
+                except Exception:
+                    pass  # Key may already be registered; skip silently
 
 
 def update_from_final_info(aggregator, agent_ep_info: dict) -> None:
