@@ -9,9 +9,11 @@ phase: analysis-complete
 
 # Sheeprl Drop-In Test: Can Stock DreamerV3 Train on Our Env?
 
-> **Status**: PLANNED
+> **Status**: PLANNED (v1 Implementation Complete 2026-05-12 · v2 restructure 2026-05-12)
 > **Opened**: 2026-05-11
 > **Related**: [Cascade re-summary 2026-05-11](../../../experiments/summaries/20260511_1559_dreamer_v3_fix_cascade.md)
+>
+> **v2 reader note (2026-05-12)**: the bridge files built during this plan's v1 implementation have been relocated from `tmp/sheeprl/sheeprl/` (gitignored) to `pytorch_agents/pytorch_agents/` (git-tracked) as part of the sheeprl v2 restructure. All `tmp/sheeprl/sheeprl/` references within this document are historical — they describe what existed at the time of the 2026-05-11 smoke. For current file locations and the updated install recipe, see [`sheeprl_training_howto.md`](sheeprl_training_howto.md) §2 and §5.
 
 ---
 
@@ -733,4 +735,4 @@ None opened. No bugs in our codebase were surfaced by this run (the run was on s
 - [`docs/develop/active/diagnosis/dreamer_zero_init_reward_critic_fix.md`](dreamer_zero_init_reward_critic_fix.md) — cascade fix #2 (zero-init heads, landed)
 - [`docs/develop/active/diagnosis/dreamer_twohot_bin_range_fix.md`](dreamer_twohot_bin_range_fix.md) — cascade fix #27 (paper-canonical bins, landed)
 - [`CLAUDE.md`](../../../../CLAUDE.md) — project-wide rules: conda env, no-fallback-defaults, git safety on the no-symlink NAS
-- [`tmp/sheeprl/howto/add_environment.md`](../../../../tmp/sheeprl/howto/add_environment.md) — sheeprl's own guide for adding a new env, which this plan follows
+- sheeprl's `howto/add_environment.md` — sheeprl's own guide for adding a new env, which this plan follows (the file previously at `tmp/sheeprl/howto/add_environment.md` — now accessible via the installed sheeprl package or GitHub at `https://github.com/Eclectic-Sheep/sheeprl/blob/33b636681fd8b5340b284f2528db8821ab8dcd0b/howto/add_environment.md`)

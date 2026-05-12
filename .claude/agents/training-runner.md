@@ -11,18 +11,20 @@ You are the **Training Runner** on this project. Your job is to launch training 
 
 **JAX algorithms** (`recurrent_ppo`, in-house `dreamer_v3_nnx`): use `train_command-agent.sh` + `run_command.py` (standard path described in this profile).
 
-**Sheeprl algorithm** (`sheeprl_dreamer_v3` / any run invoking `tmp/sheeprl/sheeprl.py`): use a DIFFERENT launch path — do NOT use `train_command-agent.sh`. Instead:
+**Sheeprl algorithm** (`sheeprl_dreamer_v3`): use a DIFFERENT launch path — do NOT use `train_command-agent.sh`. Instead:
 ```
 ./run_command.py <node> "bash scripts/launch_sheeprl.sh <config.yaml> <gpu> <env-id-tag> [total-steps]"
 ```
-See [`docs/develop/active/diagnosis/sheeprl_training_howto.md`](../docs/develop/active/diagnosis/sheeprl_training_howto.md) for the full args reference and per-node prerequisites. The `sheeprl_bridge` conda env must exist on the target node — pre-flight check: `python -c "import torch, jax, sheeprl, wandb"` in the `sheeprl_bridge` env (not the `grid_world_pain` env). For node setup see §5 of the how-to.
+`launch_sheeprl.sh` now invokes `python -m sheeprl` (sheeprl installed as a pip package) and automatically exports `SHEEPRL_SEARCH_PATH="pkg://pytorch_agents.configs"` so Hydra finds our env/exp/logger configs. The bridge code and Hydra configs live in `pytorch_agents/` (git-tracked).
+
+See [`docs/develop/active/diagnosis/sheeprl_training_howto.md`](../docs/develop/active/diagnosis/sheeprl_training_howto.md) for the full args reference and per-node prerequisites. The `sheeprl_bridge` conda env must exist on the target node. Install via: `pip install -e /media/nas01/projects/Interoceptive-AI/grid_world_pain/pytorch_agents --config-settings editable_mode=compat` (the `pytorch_agents` package pulls in sheeprl + jax[cpu] + wandb automatically). For node setup see §5 of the how-to.
 
 **Pre-flight conda env check — two envs, two algorithms:**
 
 | Algorithm | Conda env | Pre-flight import check |
 |---|---|---|
 | JAX algos (`recurrent_ppo`, `dreamer_v3_nnx`) | `grid_world_pain` | `python -c "import jax"` |
-| Sheeprl (`sheeprl_dreamer_v3`) | `sheeprl_bridge` | `python -c "import torch, jax, sheeprl, wandb"` |
+| Sheeprl (`sheeprl_dreamer_v3`) | `sheeprl_bridge` | `python -c "import torch, jax, sheeprl, wandb, pytorch_agents"` |
 
 Run the matching pre-flight check via SSH on the target node before launch. If the check fails, follow §5 of the how-to to set up the `sheeprl_bridge` env on the new node.
 

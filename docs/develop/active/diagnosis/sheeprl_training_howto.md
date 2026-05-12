@@ -42,7 +42,8 @@ The system has four pieces. All four already exist; you do not create anything f
 
 ### 2.1 The env bridge
 
-**File**: `tmp/sheeprl/sheeprl/envs/grid_world_pain.py`
+**File**: `pytorch_agents/pytorch_agents/envs/grid_world_pain.py`
+*(v2 location, git-tracked — moved here from `tmp/sheeprl/sheeprl/envs/grid_world_pain.py` on 2026-05-12)*
 
 A 113-line Python module defining `GridWorldPainWrapper(gym.Env)`. It:
 
@@ -54,16 +55,20 @@ A 113-line Python module defining `GridWorldPainWrapper(gym.Env)`. It:
 
 ### 2.2 The three sheeprl YAML configs
 
-All in `tmp/sheeprl/sheeprl/configs/`:
+All in `pytorch_agents/pytorch_agents/configs/`:
+*(v2 location, git-tracked — moved here from `tmp/sheeprl/sheeprl/configs/` on 2026-05-12)*
+
+Sheeprl discovers these via `SHEEPRL_SEARCH_PATH="pkg://pytorch_agents.configs"` (exported by `launch_sheeprl.sh` automatically).
 
 **`env/grid_world_pain.yaml`** — registers our wrapper as the env target:
 ```yaml
 defaults: [default, _self_]
 id: grid_world_pain
 wrapper:
-  _target_: sheeprl.envs.grid_world_pain.GridWorldPainWrapper
+  _target_: pytorch_agents.envs.grid_world_pain.GridWorldPainWrapper
   config_path: ${oc.env:GWP_CONFIG_PATH}   # read from env var at launch time
   seed: ${seed}
+  apply_noise: ${oc.env:GWP_APPLY_NOISE,true}   # default True for production
 num_envs: 4
 sync_env: True
 capture_video: False
@@ -110,7 +115,7 @@ log_model: False
 
 Sheeprl runs land in the same WandB project (`grid_world_pain`) as all in-house JAX/rPPO training — no separate project. The smoke-era project `grid_world_pain_sheeprl_test` is historical only; new runs go to `grid_world_pain`.
 
-All three are tracked in git (committed under `tmp/sheeprl/` because we vendor sheeprl into the repo).
+All four files (bridge + 3 configs) are tracked in git under `pytorch_agents/`. Sheeprl itself is installed as a pip dep (pinned to commit `33b6366`) — NOT vendored. See `pytorch_agents/pyproject.toml` for the exact pin.
 
 ### 2.3 The `sheeprl_bridge` conda environment
 
@@ -135,8 +140,8 @@ The launch command relies on this — the `GWP_CONFIG_PATH` env var points at a 
 Before launching anything, confirm all five:
 
 1. **Target node accessible**: `ssh vncuser@192.168.0.<NODE>` works without password (key-based).
-2. **Conda env present** (§2.3): `import torch, jax, sheeprl, wandb` succeeds on the target node.
-3. **Project mounted**: `ls /media/nas01/projects/Interoceptive-AI/grid_world_pain/tmp/sheeprl/sheeprl.py` succeeds on the target node.
+2. **Conda env present** (§2.3): `import torch, jax, sheeprl, wandb, pytorch_agents` succeeds on the target node.
+3. **Project mounted**: `ls /media/nas01/projects/Interoceptive-AI/grid_world_pain/pytorch_agents/pytorch_agents/envs/grid_world_pain.py` succeeds on the target node.
 4. **WandB credentials**: `cat ~/.netrc | grep -A1 wandb` shows a valid `password` line. The shared key file is at `/media/nas01/projects/Interoceptive-AI/grid_world_pain/.wandb_api_key` (gitignored). If `wandb.login()` fails inside the run, copy the key into `~/.netrc` on the target node or run `wandb login` interactively once.
 5. **GPU free**: `ssh vncuser@192.168.0.<NODE> nvidia-smi` shows the chosen GPU index has <1 GB used. Sheeprl_XS will consume ~2 GB.
 
@@ -176,9 +181,10 @@ At launch it:
 - `export GWP_CONFIG_PATH=$(realpath "$1")` (absolute path for the bridge)
 - `export JAX_PLATFORMS=cpu` (keep GPU for torch)
 - `export CUDA_VISIBLE_DEVICES=$2` (the GPU index)
-- `exec /home/vncuser/miniconda3/envs/sheeprl_bridge/bin/python tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain env.id="$3" algo.total_steps="$STEPS"`
+- `export SHEEPRL_SEARCH_PATH="pkg://pytorch_agents.configs"` (so Hydra finds our env/exp/logger configs)
+- `exec /home/vncuser/miniconda3/envs/sheeprl_bridge/bin/python -m sheeprl exp=dreamer_v3_grid_world_pain env.id="$3" algo.total_steps="$STEPS"` (sheeprl is now an installed package, not a path)
 
-Read the script: 50 lines, no magic.
+Read the script: ~60 lines, no magic.
 
 ### Concrete launches from the 2026-05-12 session
 
@@ -195,17 +201,30 @@ Two trainings on the same node, different GPUs, different configs — each WandB
 
 **Run §5 once per new node before the first sheeprl launch on that node.** The `sheeprl_bridge` conda environment is per-node (not shared). Node 114 already has it. For other nodes: first check if `/home/vncuser/` is NAS-mounted at the same path (common on this cluster) — if so, the env created on node 114 is already visible on the new node; verify with the §2.3 `ls` check before assuming creation is needed.
 
-**Why a separate conda env?** The sheeprl bridge uses PyTorch + Lightning Fabric + Hydra (from `tmp/sheeprl/pyproject.toml`, sheeprl's own package spec). These deps conflict with the main `grid_world_pain` env's JAX/Flax/CUDA stack. The install is option (b) — a separate `pip install -e tmp/sheeprl` on top of a fresh base env. Do NOT install sheeprl into the main `grid_world_pain` conda env.
+**Why a separate conda env?** The sheeprl bridge uses PyTorch + Lightning Fabric + Hydra. These deps conflict with the main `grid_world_pain` env's JAX/Flax/CUDA stack. Install into a separate `sheeprl_bridge` env. Do NOT install sheeprl into the main `grid_world_pain` conda env.
 
-**Install command for the `sheeprl_bridge` env (canonical, run once per node):**
+**v2 install command for the `sheeprl_bridge` env (canonical, run once per node):**
 
 ```bash
-pip install -e /media/nas01/projects/Interoceptive-AI/grid_world_pain/tmp/sheeprl
-pip install "jax[cpu]" flax omegaconf pyyaml wandb
+# If upgrading an existing node (e.g. node 114 which had the v1 tmp/sheeprl editable install):
+pip uninstall sheeprl -y   # removes the old tmp/sheeprl editable reference
+
+# v2 install: pytorch_agents/pyproject.toml pulls in sheeprl (pinned to commit 33b6366),
+# jax[cpu], wandb, pyyaml automatically.
+# IMPORTANT: use --config-settings editable_mode=compat so pkg://pytorch_agents.configs
+# resolves correctly when python -m sheeprl runs from the repo root.
+pip install -e /media/nas01/projects/Interoceptive-AI/grid_world_pain/pytorch_agents \
+    --config-settings editable_mode=compat
+
+# Re-install the main project so `from src.xxx` works inside the bridge:
 pip install -e /media/nas01/projects/Interoceptive-AI/grid_world_pain
 ```
 
-After `pip install -e tmp/sheeprl`, updates to bridge files (`grid_world_pain.py`, `grid_world_pain.yaml`, `wandb.yaml`) are picked up immediately on all nodes that share the NAS path — no re-install needed. If `tmp/sheeprl/pyproject.toml` deps change (e.g. sheeprl version bump), re-run `pip install -e tmp/sheeprl` on each node.
+After `pip install -e pytorch_agents/`, updates to bridge files (`grid_world_pain.py`, `grid_world_pain.yaml`, `wandb.yaml`) are picked up immediately on all nodes that share the NAS path — no re-install needed. If `pytorch_agents/pyproject.toml` deps change (e.g. sheeprl version bump), re-run `pip install -e pytorch_agents/ --config-settings editable_mode=compat` on each node.
+
+**Why `editable_mode=compat`?** Setuptools' default editable install appends its finder to `sys.meta_path`, but Python's namespace-package discovery (which runs first) would find the outer `pytorch_agents/` directory before the finder reaches the inner package with the `__init__.py`. The compat mode adds the package directory directly to `sys.path` via a `.pth` file, which correctly takes priority over the namespace fallback.
+
+*(v1 historical note: the old recipe was `pip install -e tmp/sheeprl && pip install "jax[cpu]" flax omegaconf pyyaml wandb && pip install -e .`. The v1 recipe installed sheeprl as an editable package from the gitignored `tmp/sheeprl/` directory. v2 replaces this.)*
 
 If the conda env doesn't exist on your target node (`ls /home/vncuser/miniconda3/envs/sheeprl_bridge` fails), create it. **Takes ~5 minutes**.
 
@@ -229,14 +248,14 @@ ssh vncuser@192.168.0.<NODE> '/home/vncuser/miniconda3/envs/sheeprl_bridge/bin/p
 
 # Then for both:
 ssh vncuser@192.168.0.<NODE> '/home/vncuser/miniconda3/envs/sheeprl_bridge/bin/pip install \
-    -e /media/nas01/projects/Interoceptive-AI/grid_world_pain/tmp/sheeprl && \
-    /home/vncuser/miniconda3/envs/sheeprl_bridge/bin/pip install "jax[cpu]" flax omegaconf pyyaml wandb && \
+    -e /media/nas01/projects/Interoceptive-AI/grid_world_pain/pytorch_agents \
+    --config-settings editable_mode=compat && \
     /home/vncuser/miniconda3/envs/sheeprl_bridge/bin/pip install \
     -e /media/nas01/projects/Interoceptive-AI/grid_world_pain'
 
-# Verify:
+# Verify (v2 pre-flight check includes pytorch_agents):
 ssh vncuser@192.168.0.<NODE> '/home/vncuser/miniconda3/envs/sheeprl_bridge/bin/python \
-    -c "import torch, jax, sheeprl, wandb; print(\"OK\", torch.__version__, jax.__version__)"'
+    -c "import torch, jax, sheeprl, wandb, pytorch_agents; print(\"OK\", torch.__version__, jax.__version__, pytorch_agents.__version__)"'
 ```
 
 WandB credentials are per-machine — copy `~/.netrc` from a working node, or run `wandb login` interactively once on the new node.
@@ -262,7 +281,7 @@ The bridge will pick up the new obs/action shapes automatically (no config chang
 Sheeprl ships five model variants. Override `algo` on the CLI:
 
 ```bash
-... tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain algo=dreamer_v3_S
+... python -m sheeprl exp=dreamer_v3_grid_world_pain algo=dreamer_v3_S
 ```
 
 | Variant | dense_units | mlp_layers | recurrent_size | When |
@@ -278,7 +297,7 @@ Caveat: large models on our tiny env are dramatically over-parameterized. XS is 
 ### 6.3 Different total steps
 
 ```bash
-... tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain algo.total_steps=500_000
+... python -m sheeprl exp=dreamer_v3_grid_world_pain algo.total_steps=500_000
 ```
 
 At sheeprl's default `replay_ratio=1`, throughput on RTX 6000 Ada with XS is ~5 env steps/sec, so wall-clock ≈ steps / 5 / 3600 hours. 200k = ~11h; 500k = ~28h; 1M = ~55h.
@@ -286,8 +305,8 @@ At sheeprl's default `replay_ratio=1`, throughput on RTX 6000 Ada with XS is ~5 
 ### 6.4 Different seed (multi-seed sweep)
 
 ```bash
-... tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain seed=43
-... tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain seed=44
+... python -m sheeprl exp=dreamer_v3_grid_world_pain seed=43
+... python -m sheeprl exp=dreamer_v3_grid_world_pain seed=44
 ```
 
 Each goes to its own WandB run. WandB project `grid_world_pain` will accumulate runs across seeds (alongside all in-house JAX/rPPO runs).
@@ -295,7 +314,7 @@ Each goes to its own WandB run. WandB project `grid_world_pain` will accumulate 
 ### 6.5 Faster logging (default flushes every 5000 steps)
 
 ```bash
-... tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain metric.log_every=500
+... python -m sheeprl exp=dreamer_v3_grid_world_pain metric.log_every=500
 ```
 
 Drops the WandB flush cadence from every 5000 → every 500 policy steps. First chart point appears ~8 minutes in instead of ~83 minutes. Algorithm unchanged; useful for short smokes.
@@ -305,14 +324,14 @@ Drops the WandB flush cadence from every 5000 → every 500 policy steps. First 
 The wall-clock bottleneck is sheeprl's default `replay_ratio=1` (one gradient update per env step). To trade learning fidelity for speed:
 
 ```bash
-... tmp/sheeprl/sheeprl.py exp=dreamer_v3_grid_world_pain algo.replay_ratio=0.25
+... python -m sheeprl exp=dreamer_v3_grid_world_pain algo.replay_ratio=0.25
 ```
 
 That's 4× faster but does 4× fewer gradient updates per env step. **Do not use this if you're comparing against the published sheeprl results** — those use `replay_ratio=1`.
 
 ### 6.7 Different WandB project
 
-The current default is `project: grid_world_pain` (same as all in-house JAX/rPPO runs). To override for a specific experiment or diagnostic run, edit `tmp/sheeprl/sheeprl/configs/logger/wandb.yaml` and change the `project:` field. Note that `tmp/sheeprl/` is gitignored so the change lives on the NAS and is not committed.
+The current default is `project: grid_world_pain` (same as all in-house JAX/rPPO runs). To override for a specific experiment or diagnostic run, edit `pytorch_agents/pytorch_agents/configs/logger/wandb.yaml` and change the `project:` field. This file is now git-tracked, so commit the change if it's intentional.
 
 ---
 
@@ -321,7 +340,7 @@ The current default is `project: grid_world_pain` (same as all in-house JAX/rPPO
 ### 7.1 Tail the log
 
 ```bash
-ssh vncuser@192.168.0.114 'tail -f /media/nas01/projects/Interoceptive-AI/grid_world_pain/tmp/sheeprl_run_<TIMESTAMP>.log'
+ssh vncuser@192.168.0.114 'tail -f /media/nas01/projects/Interoceptive-AI/grid_world_pain/logs/<TIMESTAMP>.log'
 ```
 
 The log shows: Hydra config dump at start, WandB run URL, then periodic `Rank-0: policy_step=X, reward_env_i=Y` lines per env episode end.
@@ -338,10 +357,10 @@ Open `https://wandb.ai/sungwoolee/grid_world_pain` — all in-house and sheeprl 
 ### 7.3 Verify exactly one PID is running
 
 ```bash
-ssh vncuser@192.168.0.114 'pgrep -af sheeprl.py'
+ssh vncuser@192.168.0.114 'pgrep -af sheeprl'
 ```
 
-Expect exactly one line containing the launch command. Two = duplicate launch (kill the older one). Zero = it crashed (read the log).
+Expect exactly one line containing the launch command (something like `python -m sheeprl exp=dreamer_v3_grid_world_pain ...`). Two = duplicate launch (kill the older one). Zero = it crashed (read the log).
 
 ### 7.4 Check GPU usage
 
@@ -354,8 +373,12 @@ XS should use ~1.9 GB. Utilization 20–30% is normal (the env-step is on CPU, s
 ### 7.5 Kill a run
 
 ```bash
-ssh vncuser@192.168.0.114 'kill $(cat /media/nas01/projects/Interoceptive-AI/grid_world_pain/tmp/sheeprl_run.pid)'
-ssh vncuser@192.168.0.114 'pgrep -af sheeprl.py'   # confirm gone
+# Find the PID first:
+ssh vncuser@192.168.0.114 'pgrep -af sheeprl'
+# Then kill by PID:
+ssh vncuser@192.168.0.114 'kill <PID>'
+ssh vncuser@192.168.0.114 'pgrep -af sheeprl'   # confirm gone
+# Or use the project's terminate_command.py for a safer flow (see training-runner.md §4c).
 ```
 
 The WandB run will be marked "crashed" in the UI; you can manually mark it "killed" if you want.
@@ -369,10 +392,10 @@ These were all surfaced during the 2026-05-11 smoke. Read them before debugging.
 | Symptom | Cause | Fix |
 |---|---|---|
 | `CUDA driver version is insufficient` at startup | Default sheeprl_bridge pip install grabs `torch+cu130` but the node's CUDA driver is older (e.g., node 114 = 12.2). | Reinstall torch with the matching cu-suffix (see §5). |
-| `RuntimeError: ... fabric.accelerator` | Sheeprl's default fabric is CPU. Our exp config sets `fabric.accelerator: cuda` — confirm that line is still there. | Check `tmp/sheeprl/sheeprl/configs/exp/dreamer_v3_grid_world_pain.yaml`. |
+| `RuntimeError: ... fabric.accelerator` | Sheeprl's default fabric is CPU. Our exp config sets `fabric.accelerator: cuda` — confirm that line is still there. | Check `pytorch_agents/pytorch_agents/configs/exp/dreamer_v3_grid_world_pain.yaml`. |
 | Mysterious `SyncVectorEnv` stacking error | Something inside our env's info dict is a JAX array; sync vector can't stack it across N envs. | The bridge already returns `{}` for info — if you extend it, make sure info values are numpy or Python scalars. |
 | First WandB chart point takes ~1 hour to appear | Sheeprl's default `metric.log_every=5000` policy steps × `replay_ratio=1` × ~1s/grad-step = ~1.4 hours wall-clock. | Drop `log_every` (see §6.5) for short smokes. Or just wait. |
-| `from src.utils.config import ...` fails | `sys.path` doesn't include the project root because Hydra changed cwd. | The bridge already injects `_PROJECT_ROOT` into `sys.path`. If you move the bridge file, update the `_PROJECT_ROOT = ...` calculation (four `..` levels up). |
+| `from src.utils.config import ...` fails | `sys.path` doesn't include the project root because Hydra changed cwd. | The bridge already injects `_PROJECT_ROOT` into `sys.path`. If you move the bridge file, update the `_PROJECT_ROOT = ...` calculation (three `..` levels up from `pytorch_agents/pytorch_agents/envs/`). |
 | Training runs at ~5 env steps/sec; "shouldn't num_envs=4 give 4× speedup?" | No — with `replay_ratio=1`, sheeprl fires 4 grad steps per outer iteration when `num_envs=4`, and grad steps dominate wall time. `num_envs` doesn't help on tiny envs where the env-step is microseconds. | Accept it, or drop `replay_ratio` per §6.6 (not apples-to-apples then). |
 | Node 114 CIFS staleness on `train_command-agent.sh` | Stale cached file on node 114's CIFS mount. | Not relevant here — we don't use `train_command-agent.sh` for sheeprl. Mentioned for completeness; project memory rule. |
 
@@ -384,11 +407,11 @@ These were all surfaced during the 2026-05-11 smoke. Read them before debugging.
 
 | Thing | Path |
 |---|---|
-| Bridge | `tmp/sheeprl/sheeprl/envs/grid_world_pain.py` |
-| Env YAML | `tmp/sheeprl/sheeprl/configs/env/grid_world_pain.yaml` |
-| Exp YAML | `tmp/sheeprl/sheeprl/configs/exp/dreamer_v3_grid_world_pain.yaml` |
-| Logger YAML | `tmp/sheeprl/sheeprl/configs/logger/wandb.yaml` |
-| Sheeprl entry | `tmp/sheeprl/sheeprl.py` |
+| Bridge | `pytorch_agents/pytorch_agents/envs/grid_world_pain.py` |
+| Env YAML | `pytorch_agents/pytorch_agents/configs/env/grid_world_pain.yaml` |
+| Exp YAML | `pytorch_agents/pytorch_agents/configs/exp/dreamer_v3_grid_world_pain.yaml` |
+| Logger YAML | `pytorch_agents/pytorch_agents/configs/logger/wandb.yaml` |
+| Sheeprl entry | `python -m sheeprl` (installed package; no path) |
 | Conda env (per node) | `/home/vncuser/miniconda3/envs/sheeprl_bridge/` |
 | Project root (NAS) | `/media/nas01/projects/Interoceptive-AI/grid_world_pain/` |
 | Default task config | `configs/experiment/dreamer_curriculum/01_food_only.yaml` |
@@ -400,6 +423,7 @@ These were all surfaced during the 2026-05-11 smoke. Read them before debugging.
 | `GWP_CONFIG_PATH` | Absolute path to a YAML the bridge can load | Tells the bridge which task to run |
 | `JAX_PLATFORMS` | `cpu` | Stops JAX from grabbing the GPU |
 | `CUDA_VISIBLE_DEVICES` | `0` (or `1`, `2`, ...) | Which GPU torch uses |
+| `SHEEPRL_SEARCH_PATH` | `pkg://pytorch_agents.configs` | Tells Hydra where to find our env/exp/logger YAML configs; set automatically by `launch_sheeprl.sh` |
 
 ### WandB
 
