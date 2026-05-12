@@ -78,18 +78,18 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# DreamerV3 GRU reset gate fix — fix cascade Cell Z3
-# Node 113, cuda:0, seed 0. Design doc: docs/develop/active/diagnosis/dreamer_gru_reset_gate_fix.md
-# Cell: Z3. Fix stack: replay_ratio=0.0625 + zero_init_reward_critic + paper_canonical_twohot_bins + apply_gru_reset_gate (all true in rr06).
-# Task: NoPred 5x5. 700,000 env steps.
+# SameProp Round 2.6 — Cell C (decoupleFood), seed 44
+# Node 106, cuda:0. Design doc: docs/experiments/active/hypervigilance/sameprop_round26_design.md
+# Run 1 of 2 in the Round 2.6 manifest.
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/experiment/basic/00-5X5_NoPred.yaml \
-  --agent_config configs/models/dreamer_v3_rr06.yaml \
-  --seed 0 \
+  --config configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml \
+  --agent_config configs/models/recurrent_ppo.yaml \
+  --episodes 10000000 \
+  --num-envs 128 \
+  --seed 44 \
   --device cuda:0 \
-  --total-timesteps 700000 \
   --log-interval 50 \
-  --wandb-group dreamer_gru_reset_gate \
+  --wandb-group hypervigilance \
   --wandb-job-type prod \
-  --wandb-name "dreamer_gru_NoPred_rr06_s0_n113" \
-  --tag "dreamer_gru_NoPred_rr06_s0_n113"
+  --wandb-name "hypervigilance-round26-C-seed44_n106_gpu0" \
+  --tag "hypervigilance-round26-C-seed44_n106_gpu0"
