@@ -45,6 +45,10 @@ from src.behavior.accumulators import (
 from src.behavior.distance_aggregator import (
     make_dist_state, dist_step_update, dist_reset_env, dist_finalise_episode,
 )
+from src.behavior.episode_metrics import (
+    make_episode_state, episode_reset_env,
+    episode_step_update, episode_finalise_episode, episode_wandb_keys,
+)
 
 
 class GridWorldPainWrapper(gym.Env):
@@ -120,6 +124,7 @@ class GridWorldPainWrapper(gym.Env):
         self._dist_state = make_dist_state(
             1, len(self._predator_tags), len(self._neutral_tags)
         )
+        self._ep_state = make_episode_state(num_envs=1)
 
     def reset(self, *, seed=None, options=None):
         if seed is not None:
@@ -137,6 +142,7 @@ class GridWorldPainWrapper(gym.Env):
         if self._bm_enabled:
             bm_reset_env(self._bm_state, 0)
         dist_reset_env(self._dist_state, 0)
+        episode_reset_env(self._ep_state, 0)
         return {"state": obs}, {}
 
     def step(self, action):
@@ -157,6 +163,7 @@ class GridWorldPainWrapper(gym.Env):
         dist_per_pred_raw = np.asarray(info_jax['dist_per_predator'])
         dist_per_neut_raw = np.asarray(info_jax['dist_per_neutral'])
         info_np_t = {
+            # Keys consumed by BM / distance accumulators (pre-existing)
             'ate_food':      np.asarray(info_jax['ate_food']).reshape(1).astype(bool),
             'agent_in_bush': np.asarray(info_jax['agent_in_bush']).reshape(1).astype(bool),
             'dist_to_food':  np.asarray(info_jax['dist_to_food']).reshape(1).astype(np.float32),
@@ -165,6 +172,17 @@ class GridWorldPainWrapper(gym.Env):
             'dist_to_hiding_predator': np.asarray(info_jax['dist_to_hiding_predator']).reshape(1).astype(np.float32),
             'dist_per_predator': dist_per_pred_raw.reshape(1, -1).astype(np.float32),
             'dist_per_neutral':  dist_per_neut_raw.reshape(1, -1).astype(np.float32),
+            # Keys consumed by EpisodeAccumulator (new)
+            'reward':                 np.array([r], dtype=np.float32),
+            'damage':                 np.asarray(info_jax['damage']).reshape(1).astype(np.float32),
+            'damage_predator':        np.asarray(info_jax['damage_predator']).reshape(1).astype(np.float32),
+            'damage_hiding_predator': np.asarray(info_jax['damage_hiding_predator']).reshape(1).astype(np.float32),
+            'damage_obstacle':        np.asarray(info_jax['damage_obstacle']).reshape(1).astype(np.float32),
+            'hit_predator':           np.asarray(info_jax['hit_predator']).reshape(1).astype(bool),
+            'hit_hiding_predator':    np.asarray(info_jax['hit_hiding_predator']).reshape(1).astype(bool),
+            'hit_neutral':            np.asarray(info_jax['hit_neutral']).reshape(1).astype(bool),
+            'rested':                 np.asarray(info_jax['rested']).reshape(1).astype(bool),
+            'event_collided':         np.asarray(info_jax['event_collided']).reshape(1).astype(bool),
         }
         done_mask = np.array([terminated], dtype=bool)
 
@@ -172,10 +190,18 @@ class GridWorldPainWrapper(gym.Env):
         if self._bm_enabled:
             bm_step_update(self._bm_state, info_np_t, done_mask)
         dist_step_update(self._dist_state, info_np_t)
+        episode_step_update(self._ep_state, info_np_t, done_mask)
 
         # At episode-done: finalise and build terminal info dict
         info_out: dict = {}
         if terminated:
+            # Episode/* scalars (20 keys) — merged first so BM/dist keys can override if needed
+            ep_scalar_dict = episode_finalise_episode(
+                self._ep_state, 0, int(np.asarray(info_jax['termination_reason']))
+            )
+            info_out.update(ep_scalar_dict)
+            episode_reset_env(self._ep_state, 0)
+
             if self._bm_enabled:
                 ep_data_raw = bm_finalise_episode(
                     self._bm_state, 0, self._predator_tags, self._neutral_tags
