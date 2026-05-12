@@ -55,7 +55,7 @@ echo
 export SHEEPRL_SEARCH_PATH="pkg://pytorch_agents.configs"
 
 exec /home/vncuser/miniconda3/envs/sheeprl_bridge/bin/python \
-    -m sheeprl \
+    -m pytorch_agents.run_dreamer_v3 \
     exp=dreamer_v3_grid_world_pain \
     env.id="$TAG" \
     algo.total_steps="$STEPS"
