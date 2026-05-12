@@ -537,7 +537,15 @@ def main(fabric: Fabric, cfg: Dict[str, Any]):
 # MetricAggregator.disabled, etc. — we call it after injecting our ``main``
 # into the algorithm_registry under a new name "dreamer_v3_gwp".
 # ---------------------------------------------------------------------------
-@hydra.main(version_base="1.3", config_path="configs", config_name="config")
+# Hydra's @hydra.main resolves ``config_path`` relative to THIS file's dir,
+# which would land in ``pytorch_agents/pytorch_agents/configs/`` (only env/exp/logger
+# subdirs, no top-level config.yaml). The primary config.yaml lives inside sheeprl's
+# installed package — derive its absolute path so the decorator resolves correctly.
+import sheeprl as _sheeprl_pkg
+_SHEEPRL_CONFIG_DIR = os.path.join(os.path.dirname(_sheeprl_pkg.__file__), "configs")
+
+
+@hydra.main(version_base="1.3", config_path=_SHEEPRL_CONFIG_DIR, config_name="config")
 def cli(cfg: DictConfig) -> None:
     """Hydra entry point for pytorch_agents.run_dreamer_v3.
 
