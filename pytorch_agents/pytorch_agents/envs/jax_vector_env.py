@@ -36,6 +36,17 @@ from src.environment.core import jax_reset, jax_step
 from src.environment.sensor import get_observation
 
 
+def _to_numpy(x, dtype=None):
+    """Convert a JAX array to a writable numpy array.
+
+    np.asarray() returns a zero-copy view into the immutable JAX buffer, which
+    is read-only and will cause a ValueError when sheeprl tries to write into
+    the returned array (e.g. zeroing rewards on done episodes). np.array()
+    forces a copy that is writable.
+    """
+    return np.array(x, dtype=dtype)
+
+
 class JAXVectorEnv:
     """vmap-batched gym vector env.
 
@@ -84,7 +95,7 @@ class JAXVectorEnv:
         self._rng, sub = jax.random.split(self._rng)
         init_keys = jax.random.split(sub, self.num_envs)
         self._state = self._vmap_reset(self._params, init_keys)
-        obs0 = np.asarray(self._vmap_obs(self._state, self._params), dtype=np.float32)
+        obs0 = _to_numpy(self._vmap_obs(self._state, self._params), dtype=np.float32)
 
         # Per-env obs space (strip batch dim from obs0 for single_observation_space).
         obs_dim = obs0.shape[1:]
@@ -128,7 +139,7 @@ class JAXVectorEnv:
         self._rng, sub = jax.random.split(self._rng)
         keys = jax.random.split(sub, self.num_envs)
         self._state = self._vmap_reset(self._params, keys)
-        obs = np.asarray(self._vmap_obs(self._state, self._params), dtype=np.float32)
+        obs = _to_numpy(self._vmap_obs(self._state, self._params), dtype=np.float32)
         return {"state": obs}, [{} for _ in range(self.num_envs)]
 
     def step(self, actions):
@@ -153,9 +164,9 @@ class JAXVectorEnv:
 
         # 4. Compute obs from the BLENDED state (gym convention: obs at t+1
         #    after auto-reset is the obs OF the new episode, not the dead one).
-        obs = np.asarray(self._vmap_obs(self._state, self._params), dtype=np.float32)
-        r = np.asarray(reward, dtype=np.float32)
-        d_np = np.asarray(done, dtype=bool)
+        obs = _to_numpy(self._vmap_obs(self._state, self._params), dtype=np.float32)
+        r = _to_numpy(reward, dtype=np.float32)
+        d_np = _to_numpy(done, dtype=bool)
         # truncated tracked inside jax_step's termination_reason==1; lumped into
         # done for v1 simplicity. SyncVectorEnv's separation of terminated vs
         # truncated affects bootstrapping in sheeprl — for the smoke at
