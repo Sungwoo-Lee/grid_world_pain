@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-05-13
+**Last updated**: 2026-05-12
 
 ---
 
@@ -55,7 +55,6 @@ These are not yet active — they become active when first used in an insight. R
 
 ## Change history
 
-- 2026-05-13: 5 insights from the NMN R2 continual + 6-specialist analyzer verdict session (`20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin`, `20260513_0015_active_swapped_geq_matched_reframes_meta`, `20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric`, `20260513_0017_mod_h_logging_gap_blocks_cka_precheck`, `20260513_0018_train_py_orphan_render_workers_on_sigint`) reused existing tags `nmn`, `film`, `hypervigilance`, `decision`, `learned_lesson`, `design`, `meta`, `training_runner`, `refutation` — no new tags promoted.
 - 2026-05-12: 3 insights from the dreamer-srl plan + PI pivot to sheeprl-direct session (`20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned`, `20260512_1755_pytorch_agents_pip_dep_layout`, `20260512_1756_pip_install_namespace_shadow_numpy_cap`) reused existing tags `dreamer`, `decision`, `learned_lesson`, `refutation`, `meta`, `design`, `training_runner` — no new tags promoted.
 - 2026-05-12: 1 insight from the behavior-measure toolkit v1 application to R2.5 (`20260512_1428_sameprop_class_discriminating_defence_event_level`) reused existing tags `hypervigilance`, `learned_lesson`, `decision` — no new tags promoted.
 - 2026-05-11: 2 insights from the Z2 verdict + diagnostic-bug-fix session (`20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt`, `20260511_1535_encode_decode_flag_mismatch_silent_class_bug`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `refutation`, `meta` — no new tags promoted.

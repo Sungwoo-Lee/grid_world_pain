@@ -47,7 +47,11 @@ if [ ! -f "$CONFIG" ]; then
 fi
 
 export GWP_CONFIG_PATH="$CONFIG"
-export JAX_PLATFORMS=cpu
+# v2 spike: JAX shares the same GPU as torch (bound to 20% of GPU memory).
+# Preallocate=false is mandatory — otherwise JAX would grab 90% at startup
+# and OOM-fight torch's parameter slabs.
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.2
 export CUDA_VISIBLE_DEVICES="$GPU"
 
 echo "Launch:  sheeprl DreamerV3 XS"

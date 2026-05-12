@@ -13,10 +13,12 @@ v1 scope (smoke-only):
 Production parity (full accumulator support, noise, per-env seed) is v2.
 """
 
-# Force JAX to CPU before any JAX import (PyTorch owns the GPU).
+# JAX device is controlled by the launcher (XLA_PYTHON_CLIENT_*); do NOT
+# force a platform here. v2 spike places JAX on the same GPU as torch so the
+# vmap kernel runs as real parallel hardware work; v1 forced CPU and missed
+# the speedup bar. See JAX_VECTOR_ENV_V2_GPU_SPIKE.md for the design.
 import os
 import sys
-os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 _PROJECT_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..")

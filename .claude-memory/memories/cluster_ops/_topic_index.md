@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 17
-**Last updated**: 2026-05-13
+**Insights**: 16
+**Last updated**: 2026-05-12
 
 ---
 
@@ -13,7 +13,6 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
-| 2026-05-13 | 00:18 | `20260513_0018_train_py_orphan_render_workers_on_sigint` | When `train.py` is terminated mid-run via SIGINT (e.g., via `terminate_command.py`), the parent process exits cleanly and flushes WandB, but the ~16-20 `render_recordings.py` worker subprocesses it spawned to render gameplay videos do NOT receive the signal automatically. They keep running as orphans on the node, all targeting the same recordings directory (with `--skip-existing` they do no useful work). A second `terminate_command.py … 'render_recordings.py'` call is needed to clean them up — or send the SIGINT to the process group rather than the parent. |
 | 2026-05-12 | 17:56 | `20260512_1756_pip_install_namespace_shadow_numpy_cap` | Two pip-install gotchas during node-114 sheeprl_bridge rebuild: outer/inner namespace shadow (fix `editable_mode=compat`); sheeprl@33b6366 spurious numpy<2.0 cap (fix `--no-deps`). |
 | 2026-05-12 | 17:55 | `20260512_1755_pytorch_agents_pip_dep_layout` | Third-party RL frameworks integrate as pip-installed git-pinned deps + extensions in sibling in-repo package (`pytorch_agents/`), not as `tmp/` clones — `tmp/` is gitignored and silently loses edits. |
 | 2026-05-11 | 15:35 | `20260511_1535_encode_decode_flag_mismatch_silent_class_bug` | When a knob-gated encode/decode change lands in production training code, every auxiliary script that touches the same code path must be updated in lockstep — otherwise the trained model speaks the new layout, the auxiliary script listens in the old layout, and the output is silent garbage (no error, just wrong numbers). Concrete instance: `scripts/dreamer_offline_wm_test.py` missed the new `paper_canonical_bins` flag after the Z2 trainer change; first Z2 diagnostic run reported MAE = 1.04 (5.7× the true value 0.177). Generalizable heuristic: cross-check at least one metric against the training-time logger on the same checkpoint, as a silent-failure-mode trip-wire. |
@@ -35,7 +34,6 @@
 
 ## Change history
 
-- 2026-05-13: Added 1 insight from the NMN R2 continual + 6-specialist analyzer verdict session: `20260513_0018_train_py_orphan_render_workers_on_sigint` (train.py SIGINT leaves render_recordings.py multiprocessing pool workers orphaned; current workaround is a second terminate_command.py call, future fix candidates are kill-via-process-group or signal-handled pool.close). No new tags promoted (all reused: meta, learned_lesson, training_runner).
 - 2026-05-11: Added 1 insight from the Z2 verdict session: `20260511_1535_encode_decode_flag_mismatch_silent_class_bug` (second instance of the auxiliary-tooling-falls-out-of-sync-with-production bug class; cross-check against training-time logger as anti-silent-failure-mode trip-wire). No new tags.
 - 2026-05-09: Added 1 insight from the dreamer conventional-fixes session: `20260509_1536_train_py_checkpoint_restore_nnx_skew` (latent train.py orbax-vs-NNX checkpoint-restore skew, surfaced by offline WM-test workaround). No new tags.
 - 2026-05-09: Added 3 insights from the cluster-ops scripting consolidation session: `20260509_0309_cluster_py_consolidation` (8 bash scripts → one Python tool), `20260509_0310_bash_ic_alias_over_ssh` (the alias-over-SSH technique it uses), `20260509_0312_node_num_hostname_in_bashrc` (the bashrc that supplies the aliases). No new tags.
