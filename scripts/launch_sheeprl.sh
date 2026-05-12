@@ -50,8 +50,12 @@ echo "  tag:    $TAG"
 echo "  steps:  $STEPS"
 echo
 
+# Tell sheeprl's Hydra search-path plugin where to find our env/exp/logger
+# configs (Hydra resolves `pkg://pytorch_agents.configs` via importlib).
+export SHEEPRL_SEARCH_PATH="pkg://pytorch_agents.configs"
+
 exec /home/vncuser/miniconda3/envs/sheeprl_bridge/bin/python \
-    tmp/sheeprl/sheeprl.py \
+    -m sheeprl \
     exp=dreamer_v3_grid_world_pain \
     env.id="$TAG" \
     algo.total_steps="$STEPS"
