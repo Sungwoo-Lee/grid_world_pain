@@ -3,7 +3,7 @@ title: "NMN meta 2x3 mixture probe — does the modulator factorise context acro
 topic: hypervigilance
 status: active
 created: 2026-05-09
-last_updated: 2026-05-09T18:50
+last_updated: 2026-05-13
 phase: 0.5
 wandb_tag: "rppo_nmn_meta_{2x3_mod,2x3_unmod,spec_*}_s0"
 develop_link: docs/develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md
@@ -13,7 +13,7 @@ superseded_by: null
 
 # NMN meta 2x3 mixture probe — does the modulator factorise context across two manipulation axes?
 
-> **Status**: 6 of 8 cells running (Runs 3–8, specialist arm); 2 head-to-head cells (Runs 1–2, n102) deferred to round 2 pending `--mixture-mode` developer touch via senior-developer.
+> **Status**: 6 of 8 cells FINISHED (Runs 3-8, specialist arm — analyzed 2026-05-13, per-world ceilings in §5.5); 2 head-to-head cells (Runs 1-2, n102) **still blocked** pending `--mixture-mode` developer touch via `feature-workflow`. Sister continual probe ([NMN_CONTINUAL_DOUBLE_RETURN_PROBE](NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md)) returned a strong positive on 2026-05-13 (modulator wins on continual returns by ~107-132 survival steps; H₁b + H₁c confirmed).
 > **Date**: 2026-05-09
 > **Author**: experiment-designer
 > **Related**:
@@ -187,12 +187,12 @@ System-of-record. `experiment-designer` filled the planned columns; `training-ru
 |-----|--------|------|--------------------|-------------|----------------|------|------|-----|-------------|--------------|----------|
 | 1 | planned | 2x3_mix_modulated | rppo_nmn_meta_2x3_mod_s0 | nmn_meta_2x3_mixture | prod | 0 | 102 | cuda:0 | — | — | — |
 | 2 | planned | 2x3_mix_unmodulated | rppo_nmn_meta_2x3_unmod_s0 | nmn_meta_2x3_mixture | prod | 0 | 102 | cuda:1 | — | — | — |
-| 3 | running | spec_active_matched | rppo_nmn_meta_spec_active_matched_s0 | nmn_meta_2x3_mixture | prod | 0 | 103 | cuda:0 | 2026-05-09T18:33:51 | p9g5kjx3 | logs/20260509_183351.log |
-| 4 | running | spec_active_distinct | rppo_nmn_meta_spec_active_distinct_s0 | nmn_meta_2x3_mixture | prod | 0 | 103 | cuda:1 | 2026-05-09T18:36:05 | iktjhpmm | logs/20260509_183605_rppo_nmn_meta_spec_active_distinct_s0.log |
-| 5 | running | spec_active_swapped | rppo_nmn_meta_spec_active_swapped_s0 | nmn_meta_2x3_mixture | prod | 0 | 104 | cuda:0 | 2026-05-09T18:39:09 | 2p5zgdk4 | logs/20260509_183909.log |
-| 6 | running | spec_passive_matched | rppo_nmn_meta_spec_passive_matched_s0 | nmn_meta_2x3_mixture | prod | 0 | 104 | cuda:1 | 2026-05-09T18:42:09 | 958mba24 | logs/20260509_184209.log |
-| 7 | running | spec_passive_distinct | rppo_nmn_meta_spec_passive_distinct_s0 | nmn_meta_2x3_mixture | prod | 0 | 105 | cuda:0 | 2026-05-09T18:45:13 | z5dfkzw5 | logs/20260509_184513.log |
-| 8 | running | spec_passive_swapped | rppo_nmn_meta_spec_passive_swapped_s0 | nmn_meta_2x3_mixture | prod | 0 | 105 | cuda:1 | 2026-05-09T18:48:36 | 44rumz7m | logs/20260509_184836.log |
+| 3 | crashed (9.97M/10M; analyzed) | spec_active_matched | rppo_nmn_meta_spec_active_matched_s0 | nmn_meta_2x3_mixture | prod | 0 | 103 | cuda:0 | 2026-05-09T18:33:51 | p9g5kjx3 | logs/20260509_183351.log |
+| 4 | completed (analyzed) | spec_active_distinct | rppo_nmn_meta_spec_active_distinct_s0 | nmn_meta_2x3_mixture | prod | 0 | 103 | cuda:1 | 2026-05-09T18:36:05 | iktjhpmm | logs/20260509_183605_rppo_nmn_meta_spec_active_distinct_s0.log |
+| 5 | completed (analyzed) | spec_active_swapped | rppo_nmn_meta_spec_active_swapped_s0 | nmn_meta_2x3_mixture | prod | 0 | 104 | cuda:0 | 2026-05-09T18:39:09 | 2p5zgdk4 | logs/20260509_183909.log |
+| 6 | sigint @ 9.67M/10M; analyzed | spec_passive_matched | rppo_nmn_meta_spec_passive_matched_s0 | nmn_meta_2x3_mixture | prod | 0 | 104 | cuda:1 | 2026-05-09T18:42:09 | 958mba24 | logs/20260509_184209.log |
+| 7 | completed (analyzed) | spec_passive_distinct | rppo_nmn_meta_spec_passive_distinct_s0 | nmn_meta_2x3_mixture | prod | 0 | 105 | cuda:0 | 2026-05-09T18:45:13 | z5dfkzw5 | logs/20260509_184513.log |
+| 8 | completed (analyzed) | spec_passive_swapped | rppo_nmn_meta_spec_passive_swapped_s0 | nmn_meta_2x3_mixture | prod | 0 | 105 | cuda:1 | 2026-05-09T18:48:36 | 44rumz7m | logs/20260509_184836.log |
 
 ### 3.1 Configs to Produce
 
@@ -271,18 +271,117 @@ Per professor-rl/bdl v2 memo §3, a follow-up eval pass (`--obs-clamp olfactory`
 | Single-seed contrast says "modulated is WORSE on swap" by > 5 steps | Same disambiguation problem as the continual sister: cannot distinguish "modulator is genuinely harmful" from "unlucky seed" without replication. Pre-register the request for a 3-seed swap replication. |
 | Either head-to-head cell NaNs or the mixture sampler segfaults / leaks | Halt; route to developer. |
 
+---
+
+## 5.5 Specialist ceiling results (added 2026-05-13 by `experiment-analyzer`)
+
+> **What this section answers in plain English.** This design has two arms: a head-to-head pair (rows 1-2 of the manifest, modulated vs. unmodulated agent trained on a uniform random mixture over six worlds) and a six-cell **specialist arm** (rows 3-8, one unmodulated agent trained on each individual world). The head-to-head arm is **still blocked** on the `--mixture-mode` developer touch from §2.4 and has not yet run. The six specialists **did run** overnight 2026-05-09 → 2026-05-12 and provide the project's first proper per-world survival ceilings. Those ceilings are the reference points that any future modulated mixture-trained agent will be measured against: "given the same 10M-episode budget but training on only one world, how well does the plain (unmodulated) recurrent baseline do?" The headline is below; the six numbers are the §5.5.1 table; the implications for §6 are summarised at the bottom of this section.
+>
+> **Headline.** All six specialists trained ~10M episodes on a single (predator-behaviour × olfactory) world cell. **Survival ceilings, in descending order**: passive_matched 491, passive_swapped 463 (median 488), passive_distinct 457, active_swapped 402, active_distinct 382, active_matched 338. Two patterns matter for the future meta head-to-head: (a) every passive cell ceilings near the 500-step max-steps cap (the agent solves passive worlds essentially trivially given a 10M-ep budget); (b) on the active worlds, **swapped olfactory is not harder than matched** for an unmodulated specialist — `active_swapped` (402) > `active_distinct` (382) > `active_matched` (338). This last observation is informative: the specialist agent learns to either ignore the misleading olfactory channel or invert the mapping, on the swapped cell, so **the future mixture-trained head-to-head's swapped cell will not falsifying-test the modulator unless the modulator's gain comes from *handling the conflict between worlds*, not from solving swap-in-isolation.**
+
+### 5.5.1 Per-world ceiling table
+
+Mean of `Episode/Steps` over the final ~5% of training (~500K episodes for full 10M runs; less for the two partial runs).
+
+| Cell # | Wandb ID | World | Episodes | End state | **Final mean ± std** (n tail rows) | Median | Stability (drift between [85-95%] and final 5% windows) |
+|---|---|---|---|---|---|---|---|
+| 3 | [`p9g5kjx3`](https://wandb.ai/sungwoolee/grid_world_pain/runs/p9g5kjx3) | active_matched | 9.97M | **crashed** at 99.7% (Python `onerror(os.rmdir,…)` exception, no graceful shutdown 2026-05-12 13:18) | **337.6 ± 4.8** (75) | 337.5 | stable (drift <5 steps); the crash happened *after* the tail window so does not contaminate the ceiling estimate |
+| 4 | [`iktjhpmm`](https://wandb.ai/sungwoolee/grid_world_pain/runs/iktjhpmm) | active_distinct | 10.00M | finished clean | **381.5 ± 5.7** (73) | 381.2 | stable (drift <5) |
+| 5 | [`2p5zgdk4`](https://wandb.ai/sungwoolee/grid_world_pain/runs/2p5zgdk4) | active_swapped | 10.00M | finished clean | **401.7 ± 10.3** (76) | 405.3 | drift +7.2 — mild upward at end, near-asymptote |
+| 6 | [`958mba24`](https://wandb.ai/sungwoolee/grid_world_pain/runs/958mba24) | passive_matched | 9.67M | **SIGINT** terminated at 96.7% (graceful, WandB flushed 2026-05-12 23:25) | **491.5 ± 6.6** (73) | 492.4 | drift +23 — still gaining, but the ceiling is the 500-step max-steps cap |
+| 7 | [`z5dfkzw5`](https://wandb.ai/sungwoolee/grid_world_pain/runs/z5dfkzw5) | passive_distinct | 10.00M | finished clean | **456.7 ± 12.3** (74) | 460.5 | drift +60 — strong upward recovery after a mid-training collapse (see §5.5.2) |
+| 8 | [`44rumz7m`](https://wandb.ai/sungwoolee/grid_world_pain/runs/44rumz7m) | passive_swapped | 10.00M | finished clean | **462.7 ± 85.7** (73) | **487.8** | drift −5.6; the high std reflects bimodal episodes — **median (487.8) is the cleaner ceiling estimate** |
+
+**Use the median, not the mean, for `passive_swapped`** — the agent is bimodal between full-survival episodes and occasional collapses. For all other cells mean ≈ median, so the choice is not load-bearing.
+
+**Use the latest reliable point for the two partial runs**:
+- `active_matched` (crashed at 9.97M): the crash happened *after* WandB synced the final-window iterations; the tail window mean is stable (std 4.8) and drift <5 over the prior 5% — the 337.6 number is the true converged ceiling, not a transient near-crash artefact.
+- `passive_matched` (SIGINT at 9.67M): the final-window mean of 491.5 was still drifting upward (+23 over the previous 5%) when the run was terminated. The agent was approaching the 500-step max-steps cap; the true ceiling is probably 492-498 (within seed-noise of the cap). For the future head-to-head this is fine — both matched cells essentially cash out at the cap.
+
+### 5.5.2 Temporal evolution and the passive-cell mid-training collapses
+
+10-window mean of `Episode/Steps` across each run:
+
+| World | W01 | W02 | W03 | W04 | W05 | W06 | W07 | W08 | W09 | W10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| active_matched | 221.5 | 283.5 | 300.2 | 309.6 | 318.6 | 322.9 | 327.8 | 331.4 | 334.1 | 336.6 |
+| active_distinct | 292.4 | 347.5 | 358.0 | 364.2 | 369.2 | 372.6 | 376.3 | 380.8 | 379.3 | 379.6 |
+| active_swapped | 280.1 | 363.7 | 378.5 | 388.0 | 394.0 | 398.3 | 389.6 | 402.9 | 387.5 | 401.0 |
+| passive_matched | 480.3 | 480.7 | 477.0 | 473.9 | **361.2** | 443.6 | 454.0 | 470.3 | 468.8 | 484.9 |
+| passive_distinct | 475.2 | 495.7 | 496.9 | 497.3 | **245.1** | **94.8** | **145.0** | 318.6 | 460.2 | 392.8 |
+| passive_swapped | 483.6 | 494.2 | 488.5 | 453.4 | **297.3** | 461.9 | 471.9 | 470.4 | 459.1 | 478.3 |
+
+The three active cells climb monotonically to their ceilings. **All three passive cells show a mid-training collapse around windows W05-W07 (5-7 M episodes).** The deepest collapse is `passive_distinct` (495 → 95 step survival, then partial recovery to ~460). The recovery is real and the final-window numbers are usable as ceilings, but the collapse pattern is worth flagging — it is consistent across all three passive cells and suggests a **systemic learning-dynamic issue with the passive-predator regime around the 5-7 M-ep range**, not a per-cell artefact. Cause unknown without further forensics; likely an exploration→exploitation rebalance crisis common in long sparse-reward training. **For the future meta head-to-head this is informative**: a mixture-trained agent that has to learn passive-world policies alongside active-world policies will probably hit similar collapses, and the modulator's value over the baseline may come partly from how it *recovers* from these collapses rather than from preventing them.
+
+### 5.5.3 Secondary diagnostics (final-window means)
+
+| World | Reward | T_Starv % | T_Injury % | T_MaxSteps % | PredHits | PredDmg | Dist_BR | Dist_TL |
+|---|---|---|---|---|---|---|---|---|
+| active_matched | -202.9 | 34.0 | 36.7 | 29.3 | 3.22 | 96.8 | 6.28 | 4.96 |
+| active_distinct | -185.7 | 33.5 | 21.8 | 44.7 | 1.57 | 47.0 | 6.17 | 5.07 |
+| active_swapped | -176.8 | 29.5 | 17.7 | **52.8** | 1.35 | 40.4 | 6.13 | 5.02 |
+| passive_matched | -118.3 | 1.7 | 2.9 | **95.5** | 0.81 | 24.3 | 3.03 | 6.35 |
+| passive_distinct | -136.8 | 15.9 | 5.6 | 78.4 | 1.14 | 34.3 | 3.58 | 5.92 |
+| passive_swapped | -132.4 | 10.3 | 4.3 | 85.4 | 0.39 | 11.6 | 3.18 | 6.64 |
+
+Two notable patterns:
+- **`active_swapped` has the lowest predator damage (40.4) and the highest T_MaxSteps fraction (52.8%) of the active cells.** Naively, swapped olfactory should *hurt* an agent that has learned a smell-based predator-rabbit discrimination. That it does not, on this single specialist, means **the specialist did not rely on olfactory in the first place** — it's discriminating from movement signature via the recurrent state. Per the design doc §1's framing, this is consistent with the matched-cell agent doing the same (matched olfactory = no olfactory information). The 2×3 design's "swapped is load-bearing because olfactory misleads" assumption is therefore **partially weakened**: if the specialist baseline can already solve swapped without using olfactory, the modulator's job in the mixture-trained head-to-head is not to *override* a misleading olfactory channel but to *factorise* across (movement-signature × olfactory) such that the same backbone handles all three olfactory regimes simultaneously. This is the CKA factorisation arm of the design (H₁b in the design's hypothesis numbering — distinct from the continual sister's H₁b), not the survival arm.
+- **`passive_matched` reaches 95.5% T_MaxSteps** — the agent essentially survives every episode to the 500-step max-steps cap. With predator activity essentially zero (passive predator doesn't hunt) and matched olfactory providing no information, the agent's strategy is likely to park in a corner near food. The `Dist_BR` 3.03 (close) vs. `Dist_TL` 6.35 (far) is consistent with the BR-camping pattern flagged in memory insight `20260509_1532_sameprop_round2_truncated_verdict`. This means **passive_matched ceiling survival is contaminated by camping, just as the design's §1.3 / §4.3 calibration anticipated.** Survival numbers on the passive cells should be interpreted as "the agent learned to survive the easy passive world" — the discriminative content is in the active cells.
+
+### 5.5.4 Quadrant-occupancy diagnostic is unavailable
+
+The design's §4.3 calibration requirement was per-quadrant occupancy on every matched cell to disentangle "modulator does context-conditioning" from "modulator does different escape policies". The current logging does **not** include explicit quadrant occupancy keys (`Episode/Occupancy_TL/TR/BL/BR` or similar). What is available:
+- `Episode/MeanDistRabbit_BR`, `Episode/MeanDistRabbit_TL` — agent's mean distance to entities in those corners (proxy: low distance = agent spent time in / near that corner).
+- `Episode/MeanDistPredator_full`, `Episode/MeanDistPredator_TL` — same for predator.
+
+**This is a directional proxy, not an occupancy fraction.** For the future meta head-to-head's matched cells, the camping diagnostic will need to be either (a) re-extracted from saved checkpoints via offline eval (requires the rollout machinery), or (b) added as a `train.py` log line — see §8 below for the Metrics Requested item. The current ceilings are reportable, but **the design's pre-registered matched-cell discrimination diagnostic is gated on this metric**, and the head-to-head conclusion on matched cells will be similarly gated.
+
+### 5.5.5 What this means for the future head-to-head verdict
+
+The six specialist ceilings give the **anchor points** the future modulated and unmodulated mixture-trained head-to-head agents will be compared against. Three observations matter most:
+
+1. **Specialist separation is real** (per §5 failure-mode catalog row 2): the six ceilings span 338-491 survival steps, a 153-step range that comfortably exceeds the 10-step "specialists fail to separate" threshold. The 2×3 mix is therefore a **non-degenerate** test design — the head-to-head agents will meaningfully be measured against per-world ceilings.
+2. **The swapped cells do not lower the active ceiling** (active_swapped 402 > active_matched 338). The original design's framing that "swap is load-bearing because olfactory misleads" needs to be softened: **for the unmodulated specialist baseline, swap is not harder than matched.** The modulator's value in the mixture-trained head-to-head will therefore live in **factorisation across olfactory regimes simultaneously** (the CKA arm), not in survival on swap-in-isolation. The H₁c "modulated wins on swap by >5 steps" predicate, as written, depends on the modulator giving a per-world boost that the specialist baseline already does not lose to.
+3. **The continual sister verdict ([NMN_CONTINUAL_DOUBLE_RETURN_PROBE](NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md) §6 — written today)** is the first **positive** architecture-vitality finding for the FiLM modulator in this project. With continual positive in hand, the meta head-to-head no longer needs to single-handedly carry the architecture-vitality verdict. The right framing for the future head-to-head is: **does the modulator's continual-learning win transfer to a stationary-but-multi-world regime?**, rather than the original "does the modulator pass any vitality test at all?". The user's senior-developer Phase-0 decision (per design doc §7 step 8) is now informed by a sister positive — Phase 0 is no longer the obvious next step if the meta head-to-head also turns positive.
+
+---
+
 ## 6. Conclusions
 
-*(Filled after analysis by `experiment-analyzer` per the v2 synthesis hand-off chain.)*
-
 ### 6.1 Summary
-*(blank)*
+
+**Two-paragraph headline.** This experiment had two arms; only the specialist arm ran. The two **head-to-head cells** (modulated vs. unmodulated agent on a uniform mixture over six worlds) are still **blocked** on the `--mixture-mode` developer touch from §2.4 and §7 step 1 — the user has not yet routed this via `feature-workflow`. The six **specialist cells** (one unmodulated agent per (predator-behaviour × olfactory) world) ran on n103-n105 overnight 2026-05-09 → 2026-05-12 and provide the per-world survival ceilings the future head-to-head will be measured against: passive_matched 491, passive_swapped 463 (median 488), passive_distinct 457, active_swapped 402, active_distinct 382, active_matched 338. All six ceilings come from a single seed of an unmodulated agent trained for ~10M episodes; the standard ±4.4-step seed-noise caveat applies. Two partial runs (`p9g5kjx3` crashed at 9.97M; `958mba24` SIGINT-terminated at 9.67M) had stable final-window numbers and are usable as ceilings.
+
+**The original hypothesis tests in §1.1 (H₀, H₁a, H₁b, H₁c) cannot yet be evaluated** because they all require the head-to-head modulated cell. The specialist arm produces three calibration findings that inform how those tests will be read once the head-to-head arm runs: (a) specialist separation is non-degenerate (153-step ceiling range, well above the 10-step floor), so the 2×3 design itself is a real architecture-vitality test rather than a degenerate one; (b) the swapped olfactory is **not harder** than matched for the unmodulated specialist baseline (`active_swapped` 402 > `active_matched` 338), meaning the H₁c "modulator wins on swap by >5 steps" predicate is testable only if the modulator's value comes from cross-world factorisation, not from solving swap-in-isolation; (c) the matched cells are contaminated by corner-camping (`passive_matched` T_MaxSteps 95.5%, Dist_BR 3.03 vs. Dist_TL 6.35) per the design's §4.3 calibration anticipation, so the future head-to-head's matched-cell discrimination test is gated on the quadrant-occupancy metric not currently logged (see §8).
+
+**Per-hypothesis scoring (specialist-arm-only).**
+
+| Hypothesis | Status as of 2026-05-13 |
+|---|---|
+| H₀ (full null) | **NOT YET TESTABLE** — head-to-head cells still blocked on `--mixture-mode` developer touch |
+| H₁a (CKA within > between) | **NOT YET TESTABLE** — requires `mod_h` stratified by context, which requires the mixture-mode cells |
+| H₁b (CKA factorisation) | **NOT YET TESTABLE** — same |
+| H₁c (swap-context survival win) | **NOT YET TESTABLE** — requires both head-to-head cells; the specialist baseline (`active_swapped` 402, `passive_swapped` 463) provides the per-world ceiling reference |
+| Specialists separate | **CONFIRMED** — 153-step range vs. 10-step threshold |
+| Matched-cell camping | **CONFIRMED present** (insight `20260509_1532` extended to full-10M-ep training) — passive_matched T_MaxSteps 95.5%, Dist_BR < Dist_TL; the future head-to-head matched-cell verdict is gated on quadrant logging |
 
 ### 6.2 Limitations & Open Questions
-*(blank)*
+
+- **Head-to-head arm still blocked**. The `--mixture-mode` developer touch from §2.4 / §7 step 1 has not landed. The two head-to-head cells (rows 1-2 of the launch manifest §3) are still `planned`. The verdict on the design's primary architecture-vitality hypothesis (P3 / H₁b factorisation) cannot move until this lands. The user's `feature-workflow` invocation for this is the next blocking action.
+- **Single seed per cell**. The six specialist ceilings are each based on one seed. Seed-noise floor ±4.4 steps. The five-step gaps between adjacent active-world ceilings (`active_matched` 338, `active_distinct` 382, `active_swapped` 402) are roughly 9-10× seed noise — robust. The two-step gap between `passive_matched` 491.5 and the 500-step max-steps cap is **within seed noise** and effectively saturated.
+- **No quadrant occupancy logging**. Per §5.5.4 — the matched-cell camping diagnostic, which the design's §4.3 calibration explicitly requires for valid matched-cell verdicts, cannot be performed against the current logging. Surfaced in §8 as a Metrics Requested item.
+- **Passive cells show mid-training collapses around 5-7 M episodes**. Cause unknown. The collapses recover, so the final-window ceilings are usable, but the variance during training is real and may affect the future mixture-trained agent's ability to learn passive-world policies stably in a mix.
+- **Active_swapped is not harder than matched for the specialist baseline**. This re-frames how H₁c should be read once the head-to-head runs. The modulator's expected gain on swap-in-the-mixture is not "handle a hard world" but "handle the contradiction between worlds simultaneously"; per the design doc §2.6 / §1, this is exactly what the CKA factorisation arm (H₁b) is designed to test, and the survival arm (H₁c) may show a smaller effect than originally anticipated.
 
 ### 6.3 Recommended Next Experiments
-*(blank)*
+
+In priority order:
+
+1. **Route the `--mixture-mode` developer touch via `feature-workflow`** per §2.4 and §7 step 1. Includes the per-episode `context_id` logging from §8 (current doc) and the quadrant-occupancy metric from §8 of this analysis. Until this lands, the head-to-head arm cannot run. **This is the blocking action.**
+2. **Run the two head-to-head cells** once #1 lands; per the manifest, n102:0 (modulated, agent config `recurrent_ppo_nmn_film_g1_tempceil5.yaml`) and n102:1 (unmodulated, agent config `recurrent_ppo_nmn_het_unmod.yaml`). The continual sister's positive verdict (today) lowers the priority on Phase 0 architectural redesign and **raises** the priority on completing this experiment — the joint continual-positive + meta-positive (if it comes) is the strongest possible architecture-vitality finding for the FiLM family.
+3. **Add quadrant-occupancy logging** (Metrics Requested §8 of this analysis). The future head-to-head's matched-cell verdict is gated on this.
+4. **Investigate the passive-cell mid-training collapses**. Lower priority; doesn't block head-to-head launch. Likely cause is exploration→exploitation rebalance crisis in long sparse-reward training; could be diagnosed by inspecting entropy_loss and value_loss trajectories around windows W05-W07 of `z5dfkzw5`.
+5. **3-seed specialist replication on `active_swapped`**. The single observation that swap is not harder than matched for an unmodulated specialist is informative for the design but rests on one seed; a 3-seed replication of the `active_swapped` cell would lock this in. Lowest priority — only needed if a follow-up paper argument hinges on this.
 
 ---
 
@@ -310,3 +409,18 @@ Per professor-rl/bdl v2 memo §3, a follow-up eval pass (`--obs-clamp olfactory`
 | **Cost** | Cheap (scalar, per episode end). |
 
 This metric is part of the same `--mixture-mode` developer touch in §2.4 — it is not a separate ask, but listed here so the analyzer's data-availability constraints are explicit. The user's `feature-workflow` invocation for the mixture-mode plan should include this.
+
+### §8.2 (added 2026-05-13) Per-quadrant occupancy for the matched-cell calibration
+
+| Subfield | Content |
+|---|---|
+| **Metric** | `Episode/Occupancy_TL`, `Episode/Occupancy_TR`, `Episode/Occupancy_BL`, `Episode/Occupancy_BR` — fraction of episode steps the agent spent in each 5×5 grid quadrant. Four scalars per episode end (or one length-4 vector). |
+| **Why now** | The design's §4.3 calibration explicitly requires per-quadrant occupancy on every matched-context cell to disentangle "modulator does context-conditioning" from "modulator does different escape policies". The 2026-05-13 specialist-arm analysis (§5.5) confirmed via proxies (`MeanDistRabbit_BR=3.03 vs. MeanDistRabbit_TL=6.35` on `passive_matched`) that corner-camping is happening, but **the actual occupancy fraction is not directly observable**. Without this metric the future head-to-head's matched-cell verdict is gated. |
+| **Where it'd live** | `train.py`'s episode-end logging block (~line 1230) alongside the existing per-episode behaviour accumulators. The agent's grid position is already tracked internally by the env-step function; the addition is just accumulating per-step `(quadrant_from_pos)` and emitting the fraction at episode end. |
+| **Cost** | Cheap (four scalars per episode end). |
+
+This metric is **not** part of the `--mixture-mode` touch — it can be added separately as a smaller follow-on `feature-workflow` invocation, or bundled. Either path is fine; surfaced here for the user's awareness.
+
+### §8.3 (added 2026-05-13) Cross-reference to the continual-sister analyzer findings
+
+The continual-sister probe ([NMN_CONTINUAL_DOUBLE_RETURN_PROBE](NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md) §8) also surfaced two Metrics Requested items: (1) `modulator/mod_h_norm` per-step logging (so the formal Mahalanobis-distance mechanism arm of H₁a / §4.3 / §4.4 is evaluable in future continual probes) and (2) `Episode/Term_Predator` distinct terminal cause (so death-by-predator vs. death-by-starvation can be disambiguated). These are not directly required by this design's hypothesis set but **would make the future modulated mixture-trained agent's per-context CKA stratification cleaner** — if `mod_h_norm` is logged with `context_id`, the 6×6 CKA Gram matrix can be computed directly from WandB history rather than requiring a separate offline rollout pass. The user's `feature-workflow` invocation for the `--mixture-mode` touch may want to include both of those continual-arm asks in one PR.

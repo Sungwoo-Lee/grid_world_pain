@@ -3,7 +3,7 @@ title: "NMN continual double-return probe — does the modulator resist catastro
 topic: hypervigilance
 status: active
 created: 2026-05-09
-last_updated: 2026-05-11
+last_updated: 2026-05-13
 phase: 0.5
 wandb_tag: "rppo_nmn_cont_dr_{mod,unmod}_s0_r2"
 develop_link: docs/develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md
@@ -13,7 +13,7 @@ superseded_by: null
 
 # NMN continual double-return probe — does the modulator resist catastrophic forgetting and reuse subnetworks?
 
-> **Status**: PLANNED — configs and manifest locked 2026-05-09. Awaiting env-config-auditor pass and user authorisation before launch.
+> **Status**: ANALYZED — both Round 2 cells finished 2026-05-12; Results / Analysis / Conclusions filled 2026-05-13 by `experiment-analyzer`. **Headline: modulated agent wins by ~107-132 survival steps (~25× seed-noise floor) on the return-to-active stages; H₁b and H₁c confirmed.**
 > **Date**: 2026-05-09
 > **Author**: experiment-designer
 > **Related**:
@@ -179,7 +179,7 @@ error, not a design error.
 | Run | Status | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Node | GPU | Launched at | WandB run ID | Log path |
 |-----|--------|------|--------------------|-------------|----------------|------|------|-----|-------------|--------------|----------|
 | R2.1 | running (re-launched n106; prev n101:0 stub 4lcp4vuf killed at ~6 min — node-reallocation, no useful data) | continual_modulated_r2 | rppo_nmn_cont_dr_mod_s0_r2 | nmn_continual_double_return | prod | 0 | 106 | cuda:0 | 2026-05-11T17:58:24 | 8eorbxhq | logs/20260511_175824.log |
-| R2.2 | planned | continual_unmodulated_r2 | rppo_nmn_cont_dr_unmod_s0_r2 | nmn_continual_double_return | prod | 0 | 101 | cuda:1 | — | — | — |
+| R2.2 | running | continual_unmodulated_r2 | rppo_nmn_cont_dr_unmod_s0_r2 | nmn_continual_double_return | prod | 0 | 106 | cuda:1 | 2026-05-11T18:01:32 | lrzvg8k6 | logs/20260511_180132.log |
 
 The `wandb-group` is unchanged (`nmn_continual_double_return`) — Round 1 and Round 2 sit in the same group; the `_r2` suffix on the run tags is what disambiguates Round 2 data from Round 1 data in any downstream filter/grep. Tags are unique across the manifest.
 
@@ -268,18 +268,130 @@ Plot survival vs. episode for both cells across all 5 stages, with stage boundar
 | Headline contrast within ±5 steps on H₁a/H₁b but |r| > 0.5 on the mod_h-vs-dip cross-correlation | "Modulator moves but doesn't matter" — soft null with mechanism preserved. Useful for shaping Phase 0 (the modulator is engaged but downstream-redundant; precision head + T/P split needed to make the engagement productive). |
 | Single-seed contrast says "modulated is WORSE" by > 5 steps on either H₁a or H₁b | Either the modulator is genuinely harmful in continual (a publishable negative finding) OR the seed is unlucky in the worst direction. **Cannot disambiguate from this experiment alone**; pre-register the request for a 3-seed continual replication if this outcome lands. |
 
+---
+
+## 5.5 Results (added 2026-05-13 by `experiment-analyzer`)
+
+> **Headline in one paragraph.** Both Round 2 cells finished cleanly on 2026-05-12 — the modulated and unmodulated agents each trained for ~5.1 million episodes across the five-stage schedule. The plain English answer is **the modulator wins, clearly, on this schedule**. After the world switches twice from active predator to passive and back, the unmodulated baseline survives roughly 110-130 steps per episode on the two return-to-active stages, while the modulated agent survives 237-243 steps — about **2.0× the unmodulated agent's survival** on the return stages, with single-seed effect sizes (107 and 132 survival steps) that are roughly **25-30× the 4-5-step seed-noise floor** flagged in §1.3. The unmodulated baseline shows the classic monotone-decay pattern of catastrophic forgetting (return-2 worse than return-1: 110.8 vs. 130.6); the modulated agent shows the opposite — return-2 is *slightly higher* than return-1 (243.3 vs. 237.5). The pre-registered effect-size thresholds for **H₁b (catastrophic-forgetting resistance, ≤ half the unmodulated forgetting)** and **H₁c (Tsuda hypertube reusable subnetwork, stage 5 ≥ stage 3)** are both passed comfortably. The originally-formalised **H₁a** ("half the post-switch dip on stage 2") is unevaluable as written because stage 2 is the *passive* (easier) stage where survival jumps *upward*, not downward — see §5.5.4. Detailed numbers, modulator-state engagement signal, and training-health below.
+
+### 5.5.1 Run identity confirmation
+
+- **R2.1 modulated** (WandB run [`8eorbxhq`](https://wandb.ai/sungwoolee/grid_world_pain/runs/8eorbxhq), display name `rppo_nmn_cont_dr_mod_s0_r2`): agent config `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` (FiLM modulator, `temp_clip=[0.5, 5.0]`). Confirmed from the local wandb config; the user-supplied launch-table line that paired this run with `het_unmod.yaml` was a documentation typo — the actual run uses the modulated config. 5,097,472 episodes; 13.3 h wallclock; `Episode/Steps` final-iter = 246.0.
+- **R2.2 unmodulated** (WandB run [`lrzvg8k6`](https://wandb.ai/sungwoolee/grid_world_pain/runs/lrzvg8k6), display name `rppo_nmn_cont_dr_unmod_s0_r2`): agent config `configs/models/recurrent_ppo_nmn_het_unmod.yaml` (no modulation). 5,093,982 episodes; 9.5 h wallclock; `Episode/Steps` final-iter = 87.9.
+- Both: seed 0, n106, schedule `configs/continual/nmn_double_return.yaml` boundaries `[1.5M, 3.0M, 3.7M, 4.4M, 5.1M]`.
+
+### 5.5.2 Per-stage survival statistics
+
+Mean of `Episode/Steps` over the final ~10% of each stage's episodes (the "tail mean" — the project's pre-registered §4.1 statistic, with the tail window approximated from downsampled history rather than the literal final-200 episodes because the WandB downsampler returns one row per ~1,250 episodes; each tail aggregates 16-20 such rows = ~20-25K episodes).
+
+| Stage | R2.1 modulated (tail mean ± std) | R2.2 unmodulated (tail mean ± std) | Δ (mod − unmod) |
+|---|---|---|---|
+| 1 active (initial) | **289.5 ± 4.2** | **278.3 ± 3.5** | +11.2 |
+| 2 passive (1st switch) | 485.9 ± 17.3 | 487.9 ± 4.2 | −2.0 |
+| 3 active (**1st return**) | **237.5 ± 6.0** | **130.6 ± 7.4** | **+106.9** |
+| 4 passive (2nd switch) | 495.1 ± 1.8 | 492.3 ± 1.3 | +2.8 |
+| 5 active (**2nd return**) | **243.3 ± 7.0** | **110.8 ± 13.8** | **+132.5** |
+
+Bold rows are the load-bearing comparisons: the return-to-active stages are where forgetting and reusable-subnetwork claims live. Passive stages are both at the 500-step max-steps ceiling — both architectures essentially "win" passive trivially.
+
+### 5.5.3 Pre-registered statistics (§4.1) and verdicts
+
+| Quantity | Definition | R2.1 mod | R2.2 unmod | Threshold | Verdict |
+|---|---|---|---|---|---|
+| **Δforget_3** (1st return) | `survival(stage 3 tail) − survival(stage 1 tail)` | **−51.9** | **−147.7** | mod ≤ ½ unmod ⇒ ≤ 73.8 | **H₁b confirmed**: 51.9 < 73.8 ✓ (mod forgets 65% less than unmod; gap is 95.8 survival steps) |
+| **Δforget_5** (2nd return) | `survival(stage 5 tail) − survival(stage 1 tail)` | **−46.2** | **−167.5** | (same) ≤ 83.7 | **H₁b extended-confirmed**: 46.2 < 83.7 ✓ (mod forgets 72% less than unmod on the 2nd return; gap is 121 survival steps) |
+| **Hypertube** | `survival(stage 5) − survival(stage 3)` | **+5.75** | **−19.79** | mod ≥ 0 AND unmod < 0 | **H₁c confirmed**: mod 2nd return ≥ 1st return ✓ (small +5.75 within seed-noise but **signed correctly**); unmod monotone decay ✓ (−19.8 step further forgetting on the 2nd return) |
+
+The seed-noise floor flagged in §1.3 was ±4.4 steps. The Δforget_3 / Δforget_5 contrasts of 95.8 and 121 survival-step gaps are ~22-28× the seed-noise floor — these effects survive the single-seed caveat with a wide margin. The hypertube signal (+5.75 mod, −19.8 unmod) is smaller in magnitude (the absolute difference, ~25 steps, is ~6× seed noise) but the **sign-flip** (mod positive, unmod negative) is the load-bearing read-out per §1.2, and it survives.
+
+### 5.5.4 H₁a re-interpretation — the pre-registered dip-depth formalisation is schedule-asymmetric
+
+H₁a as written in §1.1 says "on stage 2 (the first switch), the modulated agent's post-switch survival dip $d_2^{\text{mod}}$ is at most half the unmodulated agent's $d_2^{\text{unmod}}$." But on this 5-stage schedule **stage 2 is the passive stage** — passive is *easier* than active, so the agent's survival **jumps up** rather than dipping down at the 1→2 boundary. Computing $d_2$ literally per §4.1 gives a **negative dip** for both arms (mod −79.3, unmod −190.2) — i.e. survival rose by 79/190 steps. The "half the dip" predicate is therefore not interpretable on this transition.
+
+The load-bearing dips happen on the **passive→active** transitions (stages 2→3 and 4→5), where the policy trained on the easy passive world has to re-engage active predators. On those transitions both arms suffer roughly equal dip depths (mod 425, 417; unmod 432, 446 — the unmod dips are slightly *deeper* by 7-29 steps but the absolute scale dwarfs the contrast). What separates the two arms is **recovery, not dip depth**: the modulated agent climbs back to ~240 steps within a single rollback window; the unmodulated agent plateaus around 110-130 and never reaches its stage-1 level (278.3).
+
+Practical reading: **H₁a as formalised is unevaluable on this schedule** (the design-doc formal definition was schedule-asymmetric). H₁a's intended *spirit* — "the modulator attenuates the stability gap" — is partially addressed by Δforget_3/5 (mod recovers further) but the immediate dip-depth comparison shows no large effect either way. Mark **H₁a inconclusive** on this experiment as written; recommend re-formalising the dip-depth metric for the active-reintroduction events in any follow-up.
+
+### 5.5.5 Modulator engagement (mechanism arm)
+
+`mod_h` per-step Mahalanobis was **not available** — the project's current `train.py` modulator-diagnostic plumbing logs scalar summary stats of the modulator output (mean/std of gamma_uni, gamma_multi, beta_uni, beta_multi, z_memory; mean/max/min of temperature; grad_norm) rather than the raw `mod_h` hidden vector. The H₁a Mahalanobis check predicted in §1.1 cannot be performed against the 2σ threshold; the surrogate read-out is whether the available summary statistics show **boundary-locked transients** at each stage flip.
+
+Boundary deltas (first ~5% of new stage − last ~5% of previous stage):
+
+| Transition | Δtemperature_mean | Δgamma_uni_mean | Δgrad_norm |
+|---|---|---|---|
+| 1→2 (active→passive) | +0.001 | −0.060 | **+0.227** |
+| 2→3 (passive→active) | **−0.374** | +0.089 | −0.429 |
+| 3→4 (active→passive) | **+0.366** | −0.095 | +0.135 |
+| 4→5 (passive→active) | **−0.202** | +0.084 | −0.744 |
+
+Three of four boundaries show `temperature_mean` shifts ≥ 0.2 (intra-stage std ~0.07, so ≥ 3σ). Sign is consistent: **temperature drops on entering active stages** and **rises on entering passive stages** — i.e. the modulator's policy-head temperature output sharpens (low value, more deterministic) when discriminating an active predator, and softens when the world becomes passive. `grad_norm` shows large transients at every boundary (range +0.23 to −0.74). The modulator **is engaged** at the boundaries in a behaviourally consistent way; we just lack the formal `mod_h` Mahalanobis statistic.
+
+### 5.5.6 Modulator per-stage means (R2.1 only)
+
+| Stage | temp_mean | temp_max | gamma_uni_mean | gamma_uni_std | gamma_multi_mean | z_memory_std | grad_norm |
+|---|---|---|---|---|---|---|---|
+| 1 active | 0.70 | 0.94 | 0.82 | 0.58 | 0.96 | 0.69 | 0.10 |
+| 2 passive | 0.90 | 1.62 | 0.51 | 0.67 | 0.88 | 0.76 | 0.60 |
+| 3 active | 1.12 | 3.02 | 0.56 | 0.83 | 0.91 | 0.84 | 0.28 |
+| 4 passive | 1.06 | 3.03 | 0.46 | 0.94 | 0.89 | 0.94 | 0.63 |
+| 5 active | 1.22 | 3.17 | 0.59 | 0.98 | 0.85 | 1.05 | 0.35 |
+
+`temperature_max` climbs from 0.94 (stage 1) to ~3.0 (stages 2-5), well below the new `[0.5, 5.0]` clip ceiling — the head is *not* saturating against the raised cap (good; the cap change was on-target). `z_memory_std` grows from 0.69 to 1.05 across the schedule — modulator state is becoming progressively more varied, consistent with the GRU continuing to encode new context information as the schedule cycles.
+
+### 5.5.7 Training-health snapshot (final 5% of each stage)
+
+| Stage | R2.1 mod (entropy_loss / T_starv / T_injury / T_maxsteps / grad) | R2.2 unmod (entropy_loss / T_starv / T_injury / T_maxsteps / grad) |
+|---|---|---|
+| 1 active | -0.50 / 51% / 32% / 17% / 0.34 | -0.51 / 48% / 37% / 15% / 0.38 |
+| 2 passive | -0.66 / 3% / 3% / 94% / 3.10 | -0.47 / 3% / 4% / 93% / 2.53 |
+| 3 active | -0.44 / 49% / 43% / **8%** | -0.21 / 72% / 28% / **0.1%** |
+| 4 passive | -0.65 / 1% / 3% / 96% / 2.16 | -0.51 / 3% / 2% / 95% / 2.08 |
+| 5 active | -0.45 / 47% / 44% / **9%** | -0.34 / 68% / 32% / **0.0%** |
+
+Both runs stable, no NaN, value-loss steady at 0.25-0.40 throughout. Two informative contrasts on the active-return stages:
+- **T_MaxSteps fraction**: mod reaches the 500-step horizon ~8-9% of episodes on returns; unmod essentially never does (0.0-0.1%). The modulated agent has a small but real population of fully-surviving episodes; the unmodulated agent does not.
+- **Termination cause on returns**: mod splits ~50/45 between starvation and injury; unmod skews ~68-72% starvation. The unmodulated agent on returns is more often **starving** than being killed by the predator, suggesting its policy has collapsed into something that doesn't successfully forage rather than something that successfully forages but gets caught — fundamental policy disruption, not just gain-loss.
+- **Entropy_loss** on active returns: mod ~−0.45, unmod ~−0.21 to −0.34. The unmodulated agent's policy is **more concentrated** on returns — it has narrowed onto a (failing) deterministic fallback, while the modulated agent retains exploratory bandwidth.
+
+---
+
 ## 6. Conclusions
 
-*(Filled after analysis by `experiment-analyzer` per the v2 synthesis hand-off chain.)*
-
 ### 6.1 Summary
-*(blank)*
+
+**One-paragraph headline.** The five-stage continual probe gives the modulated agent a clear, large-effect win over the unmodulated baseline. On the two return-to-active stages — the load-bearing measurement targets — the modulated agent achieves ~240 survival steps versus the unmodulated baseline's ~110-130, a ~107-132 survival-step gap that is 25× the project's measured seed-to-seed noise floor (±4.4 steps) and roughly the strongest single-experiment positive the architecture-vitality program has produced this month. The pre-registered hypotheses are scored as: **H₁b (catastrophic-forgetting resistance) CONFIRMED** with high margin (mod forgets 65-72% less than unmod on the two returns), **H₁c (Tsuda hypertube reusable subnetwork) CONFIRMED** with the correct sign-flip (mod return-2 ≥ return-1 by +5.75; unmod monotone decay −19.8), and **H₁a (post-switch dip attenuation) INCONCLUSIVE** because the §4.1 dip-depth formalisation was schedule-asymmetric — the load-bearing dips happen on passive→active transitions where both arms drop equivalently, and the modulator's contribution lives in **recovery speed**, not in dip-depth attenuation. The modulator's behavioural engagement at the stage boundaries is consistent with the Lee 2024 / Tsuda 2021 mechanisms (temperature head shifts ≥3σ in 3/4 transitions; sign of the shift is task-consistent — sharper temperature for active discrimination, softer for passive) — but the formal `mod_h` Mahalanobis test from §1.1 / §4.3 is unevaluable because the project does not currently log the raw `mod_h` hidden vector. Single-seed caveat (§1.3) still applies but the effect sizes are far above the seed-noise floor; a 3-seed replication would strengthen the result but is not load-bearing for the verdict.
+
+**Per-hypothesis scoring table.**
+
+| Hypothesis | Predicate (from §1.1 / §4.2) | Outcome | Magnitude vs. threshold |
+|---|---|---|---|
+| **H₀** (null) | All three contrasts ≤ 5 steps + no mod transient | **REFUTED** | All three contrasts > 5; modulator transients present |
+| **H₁a** (dip attenuation) | $d_2^{\text{mod}} \leq \tfrac12 d_2^{\text{unmod}}$ | **INCONCLUSIVE** (formal predicate ill-posed on this schedule) | Dip-depth analysis showed passive→active dips of ~420-445 steps on both arms; mod recovers faster, but the "half the dip" predicate cannot be evaluated as written |
+| **H₁b** (forgetting resistance) | $|\Delta_3^{\text{mod}}| \leq \tfrac12 |\Delta_3^{\text{unmod}}|$ | **CONFIRMED** (high margin) | 51.9 ≤ 73.8 (= ½·147.7); 65% less forgetting on 1st return, 72% less on 2nd |
+| **H₁c** (hypertube reuse) | mod stage5 ≥ stage3 AND unmod stage5 < stage3 | **CONFIRMED** (sign-flip clean) | mod +5.75 (positive); unmod −19.79 (monotone decay) |
+
+This is the **first positive architecture-vitality finding for the FiLM modulator in this project** after a month of null results on the noise-heterogeneity and temperature-ceiling sweeps. The modulator does **not** help under noisy sensors (per the §0 summary [`20260509_1421_nmn_comparison_study.md`](../../summaries/20260509_1421_nmn_comparison_study.md)); it **does** help under abrupt env-structure switches with returns. The two findings together pin the regime where the architecture earns its name.
 
 ### 6.2 Limitations & Open Questions
-*(blank)*
+
+- **Single seed per cell**. The Δforget contrasts (95.8 and 121 steps) are 22-28× the seed-noise floor and survive the single-seed caveat with a wide margin. The hypertube sign-flip is smaller (absolute difference ~25 steps, ~6× seed noise) and is the strongest argument for a follow-up 3-seed replication; the H₁b contrast does not need replication for the verdict to hold.
+- **`mod_h` raw vector is not logged**. The H₁a / §4.3 / §4.4 Mahalanobis-distance mechanism arm is **unavailable** by current logging. Summary-statistic proxies (temperature_mean, gamma_uni_mean, grad_norm) show consistent boundary-locked transients, but the formal 2σ predicate cannot be evaluated. Surfaced in §8.1 as a Metrics Requested item.
+- **H₁a's formal dip-depth predicate is schedule-asymmetric**. Stage 2 in this schedule is the easier passive stage, so the agent's survival rises rather than dips at the 1→2 boundary; the §4.1 formalisation gives a "negative dip" that the §4.2 threshold cannot interpret. The load-bearing dips happen on passive→active transitions; a follow-up should re-formalise H₁a per active-reintroduction event (or write the dip as a signed quantity measured against the *prior asymptote in that world*, not the immediately-prior stage's asymptote).
+- **`Episode/Term_Predator` is missing**. The unmodulated agent's elevated `T_Starvation` on returns (68-72%, vs. mod's ~50%) is highly suggestive — the unmod policy collapses into a starvation pattern rather than failing on predator encounters — but the project does not currently log a `T_Predator` (deaths-by-predator) terminal cause separately from `T_Injury` (deaths-by-cumulative-injury). Surfaced in §8.2.
+- **Stage 1 may not have converged** before the 1.5M-ep budget. R2.1 stage 1 tail mean = 289.5 (vs. specialist `active_matched` ceiling 337.6 — the §B 10M-ep unmodulated specialist on the same env) and R2.2 stage 1 tail mean = 278.3 (vs. same 337.6 ceiling). Both continual cells are at ~83% of the specialist ceiling for stage 1; the Δforget metric subtracts off the same stage-1 floor for each arm, so the *contrast* is undisturbed, but **absolute** forgetting numbers are biased toward "less forgetting" because the stage-1 baseline is below ceiling. The verdict is unchanged.
+- **No follow-up gradual-interpolation arm** (per §2.2 — the gradual transition was deferred in v2 synthesis). The abrupt-only design tests the **architectural** claim; the gradual arm would test whether the modulator's contribution is specifically about boundary detection vs. just about general context-switching. Out of scope for this round; recommend it as a future follow-up.
 
 ### 6.3 Recommended Next Experiments
-*(blank)*
+
+In priority order:
+
+1. **3-seed continual replication** (cheap, single-seed → 3 seeds on the same schedule for the modulated arm only). Locks in the H₁b margin and gives a proper CI on the hypertube sign-flip. ~30 h × 3 GPU-slots. Routes via `experiment-designer`.
+2. **Add `Episode/Term_Predator` terminal-cause logging** (one line in `train.py`'s episode-end accumulator block; tiny). Settles the "starvation collapse vs. predator failure" hypothesis on the unmodulated baseline's return-stage behavior. Routes via `feature-workflow` (`senior-developer` → `developer`); see §8.2.
+3. **Add raw `mod_h` per-step logging or its quartile-summary** (so future continual probes can run the formal Mahalanobis check). Routes via `feature-workflow`; see §8.1.
+4. **Re-formalise the H₁a dip-depth metric** per active-reintroduction event (or per relative-to-prior-asymptote-in-this-world) and re-evaluate against the existing R2 data — no new training needed, only a re-extraction. Doc-only follow-up under this same design doc.
+5. **Cross-link with the meta sister verdict** ([`NMN_META_2x3_MIXTURE_PROBE`](NMN_META_2x3_MIXTURE_PROBE.md)) once the `--mixture-mode` developer touch lands and the head-to-head cells run. The joint verdict is the relevant input to the senior-developer Phase-0 decision; with continual positive and meta still-pending, **Phase 0 is no longer the obvious next step** — the modulator architecture earns its keep in at least one regime.
+6. **Gradual-interpolation arm** of this same probe (boundary blur over ~50K episodes instead of abrupt). Tests whether the modulator's contribution is specifically about boundary detection or about reusable subnetworks more broadly. Lowest priority — only if the user wants to deepen the continual story.
 
 ---
 
@@ -296,10 +408,32 @@ Plot survival vs. episode for both cells across all 5 stages, with stage boundar
    - Run R2.2 (unmodulated) on **node 101 GPU 1** with `--tag rppo_nmn_cont_dr_unmod_s0_r2 --wandb-name rppo_nmn_cont_dr_unmod_s0_r2 --wandb-group nmn_continual_double_return --wandb-job-type prod --seed 0 --configs-dir configs/continual/nmn_double_return_stages/ --continual-schedule configs/continual/nmn_double_return.yaml --agent_config configs/models/recurrent_ppo_nmn_het_unmod.yaml`.
    - Per project memory rule `feedback_runner_post_launch_pgrep`: verify exactly one PID per tag after launch.
    - Round 1 launch commands (using the un-suffixed `*_s0` tags) are obsolete — do NOT re-issue them; the Round 1 data is discarded.
-4. **`experiment-analyzer`** (after training completes). Fill §4 / §5 / §6 of this doc per the analysis plan above. Cross-reference with the sister meta-probe doc (NMN_META_2x3_MIXTURE_PROBE) for the joint architecture-vitality verdict.
-5. **`experiment-designer`** (return). Fill §6 Conclusions per the locked H₀/H₁a/H₁b/H₁c predicates once the analyzer has reported.
-6. **`senior-developer`** (conditional, only if H₀ confirmed full null on both this experiment AND the meta sister): plan Phase 0 architecture upgrades (T/P split + precision head per project_plan §3.2 / §3.4).
+4. **`experiment-analyzer`** (after training completes). Fill §4 / §5 / §6 of this doc per the analysis plan above. Cross-reference with the sister meta-probe doc (NMN_META_2x3_MIXTURE_PROBE) for the joint architecture-vitality verdict. **[DONE — 2026-05-13]**
+5. **`experiment-designer`** (return). Fill §6 Conclusions per the locked H₀/H₁a/H₁b/H₁c predicates once the analyzer has reported. **[NOT NEEDED — analyzer filled §6 directly per project convention; the predicate scoring is in §5.5.3 / §6.1.]**
+6. **`senior-developer`** (conditional, only if H₀ confirmed full null on both this experiment AND the meta sister): plan Phase 0 architecture upgrades (T/P split + precision head per project_plan §3.2 / §3.4). **[CONDITION NOT MET — H₀ refuted on this experiment; Phase 0 routing is therefore deprioritised pending the meta sister verdict.]**
 
-## 8. Metrics Requested (none new)
+---
 
-The experiment can be evaluated cleanly with metrics already logged: per-episode survival (always logged), `mod_h` per-step (logged for FiLM architectures via existing diagnostic plumbing), `sigma(z_uni)` / `tau_pi` / `gamma_multi` (logged), stage transition markers (logged at train.py:1156-1160). No `feature-workflow` developer touch needed for this experiment.
+## 8. Metrics Requested
+
+### 8.1 (analyzer-added 2026-05-13) `modulator/mod_h_*` per-step logging
+
+| Subfield | Content |
+|---|---|
+| **Metric** | `modulator/mod_h_norm` (scalar, L2-norm of mod_h per step) AND optionally `modulator/mod_h_quartiles` (4 scalars: q25/q50/q75 per dim, averaged across dims, per step). Cheaper alternative to dumping the full 16-d vector. |
+| **Why now** | The H₁a mechanism arm (`mod_h` Mahalanobis > 2σ within first 50 episodes of a stage transition) cannot be evaluated against the §4.2 threshold because only summary stats of the *output* of the modulator (gamma, temperature, beta, z_memory) are logged, not the modulator's own hidden state. The summary-stat proxies (temperature_mean, gamma_uni_mean) gave a *positive* boundary-locked signal in this experiment, but the formal predicate was unevaluable. |
+| **Where it'd live** | `train.py`'s per-iteration logging block where `modulator/gamma_*` and `modulator/temperature_*` are emitted (~line 1200-1230). The modulator's `nmn_step` function already returns `mod_h` — it's just not being logged. |
+| **Cost** | Cheap. One scalar (L2 norm) per iteration is negligible. Four scalars (quartile summary) still negligible. Full 16-d vector would be ~16× current, still cheap. |
+
+### 8.2 (analyzer-added 2026-05-13) `Episode/Term_Predator` distinct terminal cause
+
+| Subfield | Content |
+|---|---|
+| **Metric** | `Episode/Term_Predator` — fraction of episodes ending due to predator-inflicted death (separate from `Term_Injury` which currently lumps predator-damage and cumulative-injury). |
+| **Why now** | On the active-return stages the unmodulated agent has `T_Starvation` ~68-72% vs. the modulated agent's ~50%, suggesting the unmod policy collapses into a starvation mode rather than a predator-failure mode. The current logging cannot disambiguate "the agent gets killed by the predator more often" from "the agent stops eating because the policy is disrupted". |
+| **Where it'd live** | `train.py`'s episode-end logging block alongside `Term_Starvation` / `Term_Injury` / `Term_MaxSteps`. The terminal-cause signal already exists internally in the env step function. |
+| **Cost** | Cheap (scalar fraction per episode end). |
+
+Both items are listed for the user's awareness; the user decides whether to route them via `feature-workflow`. They are **not blocking** for the verdict in §6.
+
+> **Pre-launch claim (now corrected):** the original §8 of this design doc said "The experiment can be evaluated cleanly with metrics already logged ... `mod_h` per-step (logged for FiLM architectures via existing diagnostic plumbing)". This turned out to be **wrong** — only summary statistics of the modulator's *outputs* (gamma, beta, temperature, z_memory) are logged, not the raw modulator hidden state `mod_h`. The formal Mahalanobis mechanism arm was therefore unevaluable; summary-stat proxies stood in. Surfaced here so a future analyzer does not repeat the mistake.
