@@ -21,11 +21,12 @@ set -euo pipefail
 # Examples:
 #   bash scripts/launch_sheeprl.sh configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml 0 gwp_5x5_pred
 #   bash scripts/launch_sheeprl.sh configs/experiment/hypervigilance/01-interoNocicept.yaml 1 gwp_10x10_intero 500000
+#   bash scripts/launch_sheeprl.sh configs/experiment/hypervigilance/01-interoNocicept.yaml 3 sps_n4 5000 4
 
 cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 
 if [ "$#" -lt 3 ]; then
-    echo "Usage: $0 <config-yaml> <gpu-index> <env-id-tag> [total-steps]" >&2
+    echo "Usage: $0 <config-yaml> <gpu-index> <env-id-tag> [total-steps] [num-envs]" >&2
     exit 1
 fi
 
@@ -33,6 +34,7 @@ CONFIG="$(realpath "$1")"
 GPU="$2"
 TAG="$3"
 STEPS="${4:-200_000}"
+NUM_ENVS="${5:-1}"
 
 if [ ! -f "$CONFIG" ]; then
     echo "Error: config not found: $CONFIG" >&2
@@ -44,10 +46,11 @@ export JAX_PLATFORMS=cpu
 export CUDA_VISIBLE_DEVICES="$GPU"
 
 echo "Launch:  sheeprl DreamerV3 XS"
-echo "  config: $CONFIG"
-echo "  gpu:    cuda:$GPU"
-echo "  tag:    $TAG"
-echo "  steps:  $STEPS"
+echo "  config:   $CONFIG"
+echo "  gpu:      cuda:$GPU"
+echo "  tag:      $TAG"
+echo "  steps:    $STEPS"
+echo "  num_envs: $NUM_ENVS"
 echo
 
 # Tell sheeprl's Hydra search-path plugin where to find our env/exp/logger
@@ -58,4 +61,5 @@ exec /home/vncuser/miniconda3/envs/sheeprl_bridge/bin/python \
     -m pytorch_agents.run_dreamer_v3 \
     exp=dreamer_v3_grid_world_pain \
     env.id="$TAG" \
-    algo.total_steps="$STEPS"
+    algo.total_steps="$STEPS" \
+    env.num_envs="$NUM_ENVS"
