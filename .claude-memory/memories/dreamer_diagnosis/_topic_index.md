@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `dreamer_diagnosis` topic.
 
 **Folder definition**: DreamerV3 failure investigation
-**Insights**: 6
-**Last updated**: 2026-05-11
+**Insights**: 7
+**Last updated**: 2026-05-12
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-12 | 17:54 | `20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned` | After 3-reviewer ✅ PASS on a 1033-line JAX re-implementation plan, user pivoted via PI call to sheeprl PyTorch direct; static review of plan-against-paper does not predict integration-layer execution success. |
 | 2026-05-11 | 15:34 | `20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt` | Cell Z2 (paper-canonical twohot bins on top of Z1's zero-init) re-ran the no-predator task and fired H2 — partial fix. Reward MAE @ h=5: 0.386 → 0.277 → 0.177 (cumulative cascade −54% from A1; H1 < 0.15 narrowly missed by 0.027). Mechanistic prediction validated: training-time `model_reward_mae_neg` dropped 45% Z1→Z2. New residual pattern: long-horizon reward MAE compounds 0.18 → 3.05 across h=5 → h=50 — mechanistically points at GRU reset gate (§6 item 28) as the next candidate. |
 | 2026-05-10 | 22:39 | `20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry` | Cell Z1 (zero-init reward+critic output layers, sheeprl candidate #4) re-run on the simplest food-only task fired H2 — partial fix. Reward MAE @ h=5 dropped 0.386 → 0.277 (28%). Mechanistic headline: training-time positive-reward MAE improved 49% but negative-reward MAE only 14%. The pos/neg asymmetry directed the next fix candidate (twohot bin range, §6 item 2) since negative rewards of magnitude > 20 sit outside our head's representable bin support. |
 | 2026-05-09 | 15:35 | `20260509_1535_conventional_fixes_battery_verdict_predator_refute` | 2-cell DreamerV3 conventional-fixes mini-battery (n113, 700k env-steps each): top-2 ranked conventional causes (reward-scale + replay-ratio) refuted on predator (Cell A2 H₀, survival 27 ≈ unmodified anchor). NoPred (Cell A1) collapse prevented by replay-ratio fix but stuck at survival 106 starvation equilibrium (H₂-with-caveat). Predator blockage is downstream of the reward head. |

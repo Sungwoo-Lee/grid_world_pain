@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-05-12
 **Active folders**: 6
-**Total insights**: 44
+**Total insights**: 47
 **Last audit**: (none)
 
 ---
@@ -18,8 +18,8 @@
 | `memory_system_design` | Claude memory system's own design decisions | 6 | 2026-05-09 | [memory, design, decision, skill, meta] |
 | `subagent_engineering` | Subagent + worktree usage gotchas | 6 | 2026-05-10 | [meta, learned_lesson, worktree, subagent, decision] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 6 | 2026-05-09 | [nmn, hypervigilance, film, refutation, learned_lesson] |
-| `dreamer_diagnosis` | DreamerV3 failure investigation | 6 | 2026-05-11 | [dreamer, hypervigilance, decision, learned_lesson, refutation] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 14 | 2026-05-11 | [meta, training_runner, learned_lesson, decision, dreamer] |
+| `dreamer_diagnosis` | DreamerV3 failure investigation | 7 | 2026-05-12 | [dreamer, decision, learned_lesson, refutation, meta] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 16 | 2026-05-12 | [meta, training_runner, learned_lesson, decision, design] |
 | `hypervigilance` | Hypervigilance experiments | 6 | 2026-05-12 | [hypervigilance, design, learned_lesson, decision, refutation, meta] |
 
 ---
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-12: Captured 3 insights from the dreamer-srl plan + PI pivot to sheeprl-direct session: 1 into existing `dreamer_diagnosis` (`20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned` — after 3-reviewer ✅ PASS on a 1033-line JAX re-implementation plan, user pivoted via PI call to sheeprl PyTorch direct; meta-lesson: static review does not predict integration-layer execution success, the cascade-debugging history was a stronger prior), 2 into existing `cluster_ops` (`20260512_1755_pytorch_agents_pip_dep_layout` — third-party RL frameworks integrate as pip-installed git-pinned deps + extensions in sibling in-repo package, not `tmp/` clones; `20260512_1756_pip_install_namespace_shadow_numpy_cap` — two pip-install gotchas during node-114 env rebuild: outer/inner namespace shadow `editable_mode=compat` and sheeprl@33b6366 spurious numpy<2.0 cap `--no-deps`). No new tags promoted (all reused: dreamer, decision, learned_lesson, refutation, meta, design, training_runner).
 - 2026-05-12: Captured 1 insight into existing `hypervigilance` from the behavior-measure toolkit v1 application to R2.5 checkpoints: `20260512_1428_sameprop_class_discriminating_defence_event_level` — refines (not supersedes) the prior `_no_class_avoidance` verdict. Under sameProp the agent IS class-discriminating at the event level (bush-dive rate +37 pp predator vs rabbit; eat-under-threat 0.75× near predator vs 1.19× near rabbit; per-tag rabbit_TL/rabbit_BR within noise), even though mean distances dissolve this signal. Two-level interpretation: spatially class-blind, behaviourally class-discriminating. No new tags promoted (all reused: hypervigilance, learned_lesson, decision).
 - 2026-05-11: Captured 2 insights from the Z2 verdict + diagnostic-bug-fix session: 1 into existing `dreamer_diagnosis` (`20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt` — paper-canonical bins H2 partial fix; cumulative cascade −54%; new long-horizon-compounding residual selects GRU reset gate as next candidate), 1 into existing `cluster_ops` (`20260511_1535_encode_decode_flag_mismatch_silent_class_bug` — silent failure-mode class when knob-gated encode/decode change ships without updating auxiliary tooling; cross-check against training-time logger as trip-wire). No new tags promoted (all reused: dreamer, learned_lesson, decision, refutation, meta).
 - 2026-05-10: Captured 3 insights from the dreamer sheeprl-comparison + zero-init cascade session: 1 into existing `dreamer_diagnosis` (`20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry` — Z1 H2 partial fix; pos/neg reward-MAE asymmetry directs next candidate), 2 into existing `subagent_engineering` (`20260510_2240_reference_impl_compare_only_act_intersections` — document-by-default rule for reference-impl comparators; `20260510_2241_residual_error_pattern_directs_next_fix` — residual-error pattern dictates next fix in iterative cascades). No new tags promoted (all reused: dreamer, learned_lesson, decision, refutation, subagent, meta).

@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 14
-**Last updated**: 2026-05-11
+**Insights**: 16
+**Last updated**: 2026-05-12
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-12 | 17:56 | `20260512_1756_pip_install_namespace_shadow_numpy_cap` | Two pip-install gotchas during node-114 sheeprl_bridge rebuild: outer/inner namespace shadow (fix `editable_mode=compat`); sheeprl@33b6366 spurious numpy<2.0 cap (fix `--no-deps`). |
+| 2026-05-12 | 17:55 | `20260512_1755_pytorch_agents_pip_dep_layout` | Third-party RL frameworks integrate as pip-installed git-pinned deps + extensions in sibling in-repo package (`pytorch_agents/`), not as `tmp/` clones — `tmp/` is gitignored and silently loses edits. |
 | 2026-05-11 | 15:35 | `20260511_1535_encode_decode_flag_mismatch_silent_class_bug` | When a knob-gated encode/decode change lands in production training code, every auxiliary script that touches the same code path must be updated in lockstep — otherwise the trained model speaks the new layout, the auxiliary script listens in the old layout, and the output is silent garbage (no error, just wrong numbers). Concrete instance: `scripts/dreamer_offline_wm_test.py` missed the new `paper_canonical_bins` flag after the Z2 trainer change; first Z2 diagnostic run reported MAE = 1.04 (5.7× the true value 0.177). Generalizable heuristic: cross-check at least one metric against the training-time logger on the same checkpoint, as a silent-failure-mode trip-wire. |
 | 2026-05-09 | 15:36 | `20260509_1536_train_py_checkpoint_restore_nnx_skew` | Latent infrastructure bug surfaced during the offline WM-test build: `train.py:981–1000` orbax restore would fail with current NNX on a fresh checkpoint restore due to a string-key + `{'value': array}` leaf skew that `nnx.update` does not accept. Workaround in offline-test script via `_normalize_checkpoint`; trainer not yet fixed. Any future `train.py --resume` would fail. |
 | 2026-05-09 | 03:12 | `20260509_0312_node_num_hostname_in_bashrc` | Bashrc derives `NODE_NUM` from primary lab IP last octet; every `doc-run-*` alias passes `--hostname="docker-${NODE_NUM}"`. Container prompts read `vncuser@docker-101` … `vncuser@docker-114`, instant disambiguation when shelling between cluster containers. Variable expands at alias-use time because aliases are macro-substituted before re-parsing. |

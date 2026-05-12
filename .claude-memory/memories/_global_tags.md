@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 
 ## Change history
 
+- 2026-05-12: 3 insights from the dreamer-srl plan + PI pivot to sheeprl-direct session (`20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned`, `20260512_1755_pytorch_agents_pip_dep_layout`, `20260512_1756_pip_install_namespace_shadow_numpy_cap`) reused existing tags `dreamer`, `decision`, `learned_lesson`, `refutation`, `meta`, `design`, `training_runner` — no new tags promoted.
 - 2026-05-12: 1 insight from the behavior-measure toolkit v1 application to R2.5 (`20260512_1428_sameprop_class_discriminating_defence_event_level`) reused existing tags `hypervigilance`, `learned_lesson`, `decision` — no new tags promoted.
 - 2026-05-11: 2 insights from the Z2 verdict + diagnostic-bug-fix session (`20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt`, `20260511_1535_encode_decode_flag_mismatch_silent_class_bug`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `refutation`, `meta` — no new tags promoted.
 - 2026-05-10: 3 insights from the dreamer sheeprl-comparison + zero-init cascade session (`20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry`, `20260510_2240_reference_impl_compare_only_act_intersections`, `20260510_2241_residual_error_pattern_directs_next_fix`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `refutation`, `subagent`, `meta` — no new tags promoted.
