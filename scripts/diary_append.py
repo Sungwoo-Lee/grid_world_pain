@@ -11,6 +11,8 @@ CLI subcommands:
     insight          --subject S --link L [--time HH:MM]
     training-start   --tag T --node N --gpu G --cell C --wandb W --doc D [--time HH:MM]
     training-done    --tag T --result R [--analysis A] [--time HH:MM]
+    progress-report  --title T --what-this-did W --headline H --whats-next N
+                     --sources S [--session SESS] [--time HH:MM]
     note             --text T
 
 All commands accept --date YYYY-MM-DD (default: today, local Asia/Seoul time).
@@ -325,6 +327,151 @@ def edit_session_end_row(text: str, label: str, ended: str, commits: str | None)
     return "\n".join(new_lines) + ("\n" if text.endswith("\n") else "")
 
 
+def section_freeform_bounds(text: str, header: str) -> tuple[int, int]:
+    """Return (start_line, end_line) of a freeform (non-table) section's body.
+
+    body_start = line immediately after `## <header>`.
+    body_end   = first line at next `## ` heading, or EOF.
+
+    Unlike `section_bounds` (which targets table bodies), this helper makes no
+    assumption about the section's content shape, so it is suitable for the
+    `## Progress reports` section (which holds `### Session …` blocks separated
+    by `---` rules rather than a markdown table).
+    """
+    lines = text.splitlines()
+    start = None
+    for i, ln in enumerate(lines):
+        if ln.strip() == f"## {header}":
+            start = i
+            break
+    if start is None:
+        sys.exit(f"ERROR: section '{header}' not found in daily file")
+    body_start = start + 1
+    body_end = len(lines)
+    for i in range(body_start, len(lines)):
+        if lines[i].startswith("## "):
+            body_end = i
+            break
+    return body_start, body_end
+
+
+def append_progress_report(
+    text: str,
+    session_token: str,
+    title: str,
+    what_this_did: str,
+    headline: str,
+    whats_next: str,
+    sources: str,
+) -> str:
+    """Append or update a per-session Progress report under `## Progress reports`.
+
+    Layout of a single entry:
+
+        ### Session `<prefix>` — <title>
+
+        **Full session UUID** (for `claude --resume`): `<full UUID or prefix>`
+
+        **What this session did** (in plain words):
+
+        <what_this_did>
+
+        **Headline finding**:
+
+        <headline>
+
+        **What's next**:
+
+        <whats_next>
+
+        **Detailed sources**:
+
+        <sources>
+
+    **One progress report per session.** If an entry for the calling session's
+    prefix already exists in today's `## Progress reports` section, it is
+    REPLACED in place (preserving position). This keeps the diary compact —
+    multiple `progress-report` calls within the same session do not stack.
+
+    For entries from *different* sessions, the section grows oldest-first,
+    entries separated by a horizontal rule (`---`). The first entry on a fresh
+    day replaces the placeholder `_(no progress reports yet today)_`.
+    """
+    body_start, body_end = section_freeform_bounds(text, "Progress reports")
+    lines = text.splitlines(keepends=False)
+    body = lines[body_start:body_end]
+
+    prefix = (session_token or "unknown").split("/")[0]
+    full_uuid = resolve_full_uuid(prefix) if prefix and prefix != "unknown" else None
+    uuid_display = full_uuid or (prefix if prefix != "unknown" else "(unresolved)")
+
+    entry_lines = [
+        f"### Session `{prefix}` — {title}",
+        "",
+        f"**Full session UUID** (for `claude --resume`): `{uuid_display}`",
+        "",
+        "**What this session did** (in plain words):",
+        "",
+        what_this_did.rstrip(),
+        "",
+        "**Headline finding**:",
+        "",
+        headline.rstrip(),
+        "",
+        "**What's next**:",
+        "",
+        whats_next.rstrip(),
+        "",
+        "**Detailed sources**:",
+        "",
+        sources.rstrip(),
+    ]
+
+    # Look for an existing entry for THIS session's prefix — if found, replace
+    # in place rather than appending a new section.
+    existing_header = f"### Session `{prefix}` —"
+    existing_start = None
+    for i, ln in enumerate(body):
+        if ln.startswith(existing_header):
+            existing_start = i
+            break
+
+    if existing_start is not None:
+        # Find the end of this entry: the next `### Session` header (which
+        # belongs to a different session), then walk back through trailing
+        # blank lines and the `---` separator that precedes the next entry.
+        existing_end = len(body)
+        for i in range(existing_start + 1, len(body)):
+            if body[i].startswith("### Session "):
+                end = i
+                while end > existing_start + 1 and body[end - 1].strip() in ("", "---"):
+                    end -= 1
+                existing_end = end
+                break
+        else:
+            # Last entry in section — trim trailing blank lines only.
+            while existing_end > existing_start + 1 and body[existing_end - 1].strip() == "":
+                existing_end -= 1
+        new_body = body[:existing_start] + entry_lines + body[existing_end:]
+    else:
+        has_entries = any(ln.startswith("### Session") for ln in body)
+        if not has_entries:
+            # First report: drop placeholder, write the entry at the bottom of
+            # the quote block.
+            kept = [ln for ln in body if "_(no progress reports yet today)_" not in ln]
+            while kept and kept[-1].strip() in ("", "---"):
+                kept.pop()
+            new_body = kept + ["", *entry_lines, ""]
+        else:
+            kept = list(body)
+            while kept and kept[-1].strip() in ("", "---"):
+                kept.pop()
+            new_body = kept + ["", "---", "", *entry_lines, ""]
+
+    new_lines = lines[:body_start] + new_body + lines[body_end:]
+    return "\n".join(new_lines) + ("\n" if text.endswith("\n") else "")
+
+
 def append_note(text: str, note: str) -> str:
     """Append a free-form bullet to the Notes section."""
     lines = text.splitlines(keepends=False)
@@ -439,6 +586,28 @@ def cmd_training_done(args):
     with_lock(args.date, go)
 
 
+def cmd_progress_report(args):
+    def go():
+        path = ensure_daily_file(args.date)
+        text = path.read_text()
+        time = args.time or now_hhmm()
+        sess = resolve_session(args.session)
+        text = ensure_session_row(text, time, sess)
+        text = append_progress_report(
+            text,
+            session_token=sess,
+            title=args.title,
+            what_this_did=args.what_this_did,
+            headline=args.headline,
+            whats_next=args.whats_next,
+            sources=args.sources,
+        )
+        write_atomic(path, text)
+        prefix = (sess or "unknown").split("/")[0]
+        print(f"progress-report logged at {time} (session={prefix}) into {path.name}")
+    with_lock(args.date, go)
+
+
 def cmd_note(args):
     def go():
         path = ensure_daily_file(args.date)
@@ -475,6 +644,15 @@ def main():
     s = sub.add_parser("training-done"); s.add_argument("--tag", required=True)
     s.add_argument("--result", required=True); s.add_argument("--analysis", default=None)
     s.add_argument("--time"); s.set_defaults(func=cmd_training_done)
+
+    s = sub.add_parser("progress-report")
+    s.add_argument("--title", required=True)
+    s.add_argument("--what-this-did", required=True)
+    s.add_argument("--headline", required=True)
+    s.add_argument("--whats-next", required=True)
+    s.add_argument("--sources", required=True)
+    s.add_argument("--time"); s.add_argument("--session")
+    s.set_defaults(func=cmd_progress_report)
 
     s = sub.add_parser("note"); s.add_argument("--text", required=True)
     s.set_defaults(func=cmd_note)

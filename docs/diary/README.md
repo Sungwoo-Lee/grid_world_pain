@@ -10,12 +10,13 @@ The diary is intentionally compact. For details, each row links to the authorita
 
 ## Daily file structure
 
-Each daily file (`docs/diary/YYYY-MM-DD.md`) has four sections in this order:
+Each daily file (`docs/diary/YYYY-MM-DD.md`) has five sections in this order:
 
 1. **`## Sessions`** — start/end of top-level Claude sessions, one row each.
 2. **`## Events (chronological)`** — one row per implementation, verification, or insight capture, reverse-chronological at the top.
 3. **`## Training runs`** — one row per training, with start time, status, end time, result, and links. Rows are edited in place (status changes from `running` → `done` when analysis completes).
-4. **`## Notes`** — free-form bullets for anything that doesn't fit the above.
+4. **`## Progress reports`** — one concise per-session wrap-up in plain language, separate from the row tables above. Fired on `session-end` of multi-step sessions. **One entry per session prefix** — a second `progress-report` call from the same session REPLACES that session's entry in place (keeps the section scannable); a call from a different session appends below, separated by a `---` rule (oldest-first).
+5. **`## Notes`** — free-form bullets for anything that doesn't fit the above.
 
 See `TEMPLATE.md` for the canonical layout.
 

@@ -1,6 +1,6 @@
 ---
 name: diary
-description: "Append an event to the project's daily diary at docs/diary/YYYY-MM-DD.md. ALWAYS use this skill when one of these moments fires, even if the user does not ask for it: (a) a top-level Claude session is starting or wrapping up, (b) the developer agent finishes implementing a plan or the senior-developer finishes verifying one, (c) /memorize captures one or more insights, (d) the training-runner launches a training run on a lab node, (e) the experiment-analyzer finishes analyzing a training run. Also trigger on the explicit slash command /diary or natural-language phrases like 'log this in the diary', 'add to today's diary', 'note this'. The skill records a single short row per event and links out to the authoritative document — it does NOT duplicate plans, insights, or analyses. For training runs the same row is edited from 'running' to 'done' when the analysis completes, so the diary is a single-glance status board across parallel sessions. The skill calls scripts/diary_append.py, which uses an exclusive flock to handle concurrent writes from parallel Claude sessions."
+description: "Append an event to the project's daily diary at docs/diary/YYYY-MM-DD.md. ALWAYS use this skill when one of these moments fires, even if the user does not ask for it: (a) a top-level Claude session is starting or wrapping up, (b) the developer agent finishes implementing a plan or the senior-developer finishes verifying one, (c) /memorize captures one or more insights, (d) the training-runner launches a training run on a lab node, (e) the experiment-analyzer finishes analyzing a training run, (f) a multi-step session is wrapping up — in addition to session-end, fire progress-report to write a concise plain-language summary into the Progress reports section. Also trigger on the explicit slash command /diary or natural-language phrases like 'log this in the diary', 'add to today's diary', 'note this'. The skill records a single short row per event (or one concise Progress report per session — re-calls within the same session REPLACE the existing entry in place rather than appending a new one, keeping the diary scannable) and links out to the authoritative document — it does NOT duplicate plans, insights, or analyses. For training runs the same row is edited from 'running' to 'done' when the analysis completes, so the diary is a single-glance status board across parallel sessions. The skill calls scripts/diary_append.py, which uses an exclusive flock to handle concurrent writes from parallel Claude sessions."
 ---
 
 # Diary — log short-timeline events to `docs/diary/YYYY-MM-DD.md`
@@ -19,6 +19,7 @@ ALWAYS invoke at these moments, even without an explicit user request:
 |---|---|
 | Top-level Claude session is starting an obviously-multi-step task | `session-start` |
 | Same session is wrapping up (commit boundary, "we're done", explicit `/wrap`) | `session-end` |
+| Same session is wrapping up AND it did multi-step work (≥1 `implemented` / `verified` / `training-start` / `training-done` event, or a captured `insight`) | `progress-report` **in addition to** `session-end` |
 | `developer` agent reports an implementation complete | `implemented` |
 | `senior-developer` reports a verification complete | `verified` |
 | `/memorize` writes 1+ insight files | `insight` (one call per insight) |
@@ -105,6 +106,67 @@ Inserts a row into `## Training runs` with `Status = running` and `Ended` blank.
 
 Edits the matching `Training runs` row in place: sets `Ended = HH:MM`, `Status = done HH:MM`, fills `Result`, replaces `Doc` with the analysis doc.
 
+### `progress-report` — plain-language wrap-up for a multi-step session
+
+When a session that did real multi-step work is wrapping up, write a Progress report **in addition to** `session-end`. The report goes into a dedicated `## Progress reports` section in today's diary, separate from the row-oriented tables above. It is the artifact a reader-without-context will read first.
+
+**One report per session.** A session gets exactly ONE entry under `## Progress reports`, identified by its 8-char session prefix. If you call `progress-report` again from the same session — e.g., a long arc that wraps up multiple sub-deliverables, or a re-run after a correction — the script REPLACES the existing entry in place rather than appending a new one. Update the entry's contents to reflect the cumulative state of the session (you may roll earlier work into the narrative as a brief earlier-in-session bullet). Do not create a second header for the same session.
+
+**Fire when**: this session's row in the Sessions table will be closed AND the session produced at least one of: a captured `insight`, an `implemented` row, a `verified` row, a `training-start`, or a `training-done`. A session that did nothing but a typo fix or a one-line config tweak does NOT get a Progress report — that's what the Events row is for. A session that touched multiple agents, shipped real work, or captured a finding DOES.
+
+**Order**: fire `progress-report` BEFORE `session-end`. The report describes what the session did; `session-end` then closes the row. (Order does not affect correctness — both subcommands touch different sections — but this is the natural narrative flow.)
+
+**Conciseness — strongly preferred.** The diary is meant to be scannable across many sessions; an over-long progress report defeats that. Aim for:
+
+- `--what-this-did`: ≤ 6 short bullets (or a 3–5 sentence paragraph). One line per agent step is plenty; do not narrate every tool call.
+- `--headline`: a single sentence — the one thing a stranger should remember. If you cannot compress to one sentence, the headline is too broad.
+- `--whats-next`: ≤ 4 numbered items. Anything finer-grained belongs in the design doc, not the diary.
+- `--sources`: ≤ 5 bullets. Each bullet is a pointer (insight / design doc / commits), not a summary. Group commits onto one bullet rather than one bullet per commit.
+
+If the cumulative report would blow past these bounds, prune older details into a single "earlier in session" bullet and keep the latest deliverable in front. The authoritative narrative lives in the insight / design doc / analysis — the diary just points there.
+
+**Fields** (all required):
+
+- `--title` — short title for the section header (e.g. `"Behavior-measure toolkit shipped + Round 2.5 verdict refined"`). Combined with the session prefix to form `### Session \`<prefix>\` — <title>`. On a re-call within the same session, update the title to reflect the cumulative arc.
+- `--what-this-did` — plain-English narrative of what the session accomplished, in the voice of a colleague who has NOT seen the agent chain. Markdown allowed (numbered steps, bold, links). No bare predicate names (`H₁a`, `Δ_SS`) — translate them on first mention per the project's documentation-framing rule.
+- `--headline` — the single most important finding from this session. Concrete numbers if available; in-text translation of any symbolic shorthand.
+- `--whats-next` — what the next session should pick up. Numbered list preferred.
+- `--sources` — markdown bullets pointing at the authoritative docs / commits / insights this session produced. The script does NOT format these for you (unlike `--link` on other subcommands) — write the markdown yourself, including `[stem](path)` links and `` `<hash>` `` for commits.
+
+**Invocation** (use heredocs for the multi-line fields; keep bodies tight):
+
+```bash
+.../python scripts/diary_append.py progress-report \
+  --title "Behavior-measure toolkit shipped + Round 2.6 launched" \
+  --what-this-did "$(cat <<'EOF'
+- Built a four-measure behavior-analysis toolkit (event-level + spatial), 29 tests.
+- Re-ran Round 2.5 with the new measures; refined the verdict.
+- Designed Round 2.6 (one seed-lock) and launched it on node 106 GPU 0.
+EOF
+)" \
+  --headline "Under matched smells the agent IS class-discriminating, but at the EVENT level (bush-dive rate +37 pp predator vs rabbit), not the spatial-trajectory level." \
+  --whats-next "$(cat <<'EOF'
+1. Wait for Round 2.6 to finish; analyze with experiment-analyzer.
+2. If Cell C inverted-Δ is seed-stable, design Round 3 (food in all four quadrants).
+EOF
+)" \
+  --sources "$(cat <<'EOF'
+- Insight: [`20260512_1428_sameprop_class_discriminating_defence_event_level`](../../.claude-memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md)
+- Design: [`sameprop_round26_design`](../experiments/active/hypervigilance/sameprop_round26_design.md)
+- Commits: `c110a2c`, `ed5cff3`, `dbd0e64`
+EOF
+)"
+```
+
+**Section behavior**:
+
+- The first Progress report of the day replaces the placeholder `_(no progress reports yet today)_`.
+- A subsequent `progress-report` call from the **same session prefix** REPLACES that session's existing entry in place — position in the section is preserved, content is overwritten.
+- A `progress-report` call from a **different session** appends a new entry below, separated by a `---` horizontal rule (oldest-first, natural reading order).
+- The `### Session` header uses the **8-char prefix** (compactness); the `**Full session UUID**` line below it carries the full UUID for `claude --resume`. The script resolves the prefix → full UUID by scanning Claude Code's project directories; if the session's JSONL hasn't been flushed yet, it falls back to the prefix alone.
+
+**Session value**: pass `--session "<parent-prefix>"` (e.g. `${CLAUDE_CODE_SESSION_ID:0:8}`) — NOT the `<parent>/<role>` form used for event subcommands. Progress reports are session-level, not agent-level. Top-level Claude can omit `--session` and the script defaults from `$CLAUDE_CODE_SESSION_ID`. The session prefix is what the replace-in-place behavior keys on — sub-agent role suffixes are stripped before lookup, so a re-call from a sub-agent in the same parent session also updates the parent's entry rather than creating a new one.
+
 ### `note` — free-form
 
 ```bash
@@ -181,6 +243,7 @@ Subject pattern by subcommand (keep ≤ ~70 chars total):
 | `insight`       | `docs(diary): 📚 insight: <copy of --subject>` (only when called outside /memorize) |
 | `training-start` | `docs(diary): 📚 training-start: <TAG> on node N gpu G` |
 | `training-done`  | `docs(diary): 📚 training-done: <TAG> — <one-line result>` |
+| `progress-report` | `docs(diary): 📚 progress-report: <--title>` (truncate title to keep total ≤ ~70 chars) |
 | `note`          | `docs(diary): 📚 note: <first ~50 chars of --text>` |
 
 Hard rules for the commit:
