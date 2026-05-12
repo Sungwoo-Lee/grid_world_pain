@@ -51,7 +51,16 @@ The canonical flows, parallelism heuristics, cross-cutting constraints, and anti
 
 ## Project-Wide Rules
 
-- **Conda env.** All Python is run inside the `grid_world_pain` conda env. Invoke the interpreter directly at `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python <script>`. Do not use `conda run` / `conda activate`, and never invoke the system `python3`.
+- **Conda env.** All Python is run inside the `grid_world_pain` conda env. Invoke the interpreter directly at `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python <script>`. Do not use `conda run` / `conda activate`, and never invoke the system `python3`. (Per-experiment exception: the `sheeprl_bridge` env exists for the upstream-sheeprl drop-in test under [`docs/develop/active/diagnosis/sheeprl_training_howto.md`](docs/develop/active/diagnosis/sheeprl_training_howto.md). Same explicit-interpreter rule — never `conda run`.)
+- **Launching training on lab nodes.** Always use `./run_command.py <node> "<command>"` — never raw SSH. The wrapper handles port 1800, SSH multiplexing, `nohup`, and timestamped logs under `<PROJECT_ROOT>/logs/<timestamp>.log` (NAS-shared, visible from any node and from the launcher). It deliberately does **not** `cd` to the project root or activate any conda env — the bash command you pass in owns both. So every launch script must start with:
+    ```bash
+    #!/bin/bash
+    set -euo pipefail
+    cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
+    # ... then call the explicit interpreter:
+    /home/vncuser/miniconda3/envs/<env>/bin/python <script.py> <args>
+    ```
+    Reusable workloads go in `scripts/launch_*.sh` (see `scripts/launch_sheeprl.sh` as a template — takes `<config-yaml> <gpu> <tag> [steps]`). The 2026-05-12 refactor moved `cd`/conda out of the wrapper after raw-SSH launches landed in `$HOME/` and died silently. Past templates: `train_command-new.sh` (user-edited), `train_command-agent.sh` (training-runner-edited), `scripts/launch_sheeprl.sh` (sheeprl).
 - **Survival-step evaluation.** Performance is measured in survival steps, never cumulative reward.
 - **No fallback defaults.** Critical configs use `config.get_mandatory('key')`; missing key → `ValueError`. New keys listed in the plan's File Changes section.
 - **Templates.** Plans go in `docs/` using [issue_plan](docs/TEMPLATES/issue_plan.md) (what to build/fix) or [training_analysis](docs/TEMPLATES/training_analysis.md) (what happened — hypothesis-driven). Cross-link related docs both directions.
@@ -127,6 +136,7 @@ The mechanism is the `/diary` skill ([.claude/skills/diary/SKILL.md](.claude/ski
 | `/memorize` writes 1+ insights | already chained — `/memorize` Step 8 calls `diary_append.py insight ...` once per insight |
 | `training-runner` launches a training | `training-start --tag … --node … --gpu … --cell … --wandb … --doc <design-doc>` |
 | `experiment-analyzer` finishes an analysis | `training-done --tag <same-as-start> --result "<one-line>" --analysis <analysis-doc>` |
+| Multi-step session is wrapping up (in addition to `session-end`) | `progress-report --title … --what-this-did … --headline … --whats-next … --sources …` |
 
 Pass **raw values** (commit hashes, repo-relative paths) to `--link` / `--doc` / `--analysis` / `--commits` — the script auto-formats them as `commit `<hash>`` or `[stem](relative-path)`. Tags must match between `training-start` and `training-done`; session labels must match between `session-start` and `session-end`.
 
