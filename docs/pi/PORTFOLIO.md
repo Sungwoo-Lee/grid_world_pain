@@ -25,10 +25,22 @@ Most PI decisions are some variant of "does this fit one of the active tracks, o
 |---|---|---|---|
 | _TBD_ | — | — | — |
 
+## Recent calls
+
+(Newest first. Calls that touch the portfolio but pre-date track ratification anchor here until tracks are named.)
+
+| Date | Call | One-line outcome | Call log |
+|---|---|---|---|
+| 2026-05-12 | Dreamer backend: in-house JAX rebuild vs. sheeprl-direct | User picked sheeprl-direct (minimal bridge); `dreamer-srl` v2 plan and 6 reviewer files shelved; `senior-developer` drafts sheeprl-bridge integration plan next | [2026-05-12_dreamer_backend](calls/2026-05-12_dreamer_backend.md) |
+
 ## Recent portfolio changes
 
 (Newest first. Each row links to the call log that ratified the change.)
 
 | Date | Change | Call log |
 |---|---|---|
-| _TBD_ | _Initial portfolio draft_ | _TBD_ |
+| _TBD_ | _Initial portfolio draft — active tracks still pending PI call_ | _TBD_ |
+
+## PI follow-up queue
+
+- **First-track ratification.** The active publication tracks have never been formally named. Until they are, every other PI call (including the 2026-05-12 dreamer-backend call above) is structurally illegible — there is no portfolio for the call to anchor against. The neuromodulation / pain-modeling paper is the obvious candidate for Track A. A separate PI call to ratify Track A (and decide whether a Track B exists) should land soon.
