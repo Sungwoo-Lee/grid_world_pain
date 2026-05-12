@@ -1,0 +1,31 @@
+[project]
+name = "pytorch_agents"
+version = "0.1.0"
+description = "PyTorch-side agents for the grid_world_pain project. Houses the sheeprl-DreamerV3 bridge and (in future) PyTorch ports of rPPO and other algorithms."
+authors = [
+    {name = "Sungwoo Lee", email = "sungwoo320@gmail.com"},
+]
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    # Sheeprl pinned to the commit that the 2026-05-11 smoke (jzgkcep4) validated.
+    # Update only when an experiment requires a newer sheeprl feature and the parity
+    # gate is re-run to confirm the bump is benign.
+    "sheeprl @ git+https://github.com/Eclectic-Sheep/sheeprl@33b636681fd8b5340b284f2528db8821ab8dcd0b",
+    # Sheeprl's transitive deps cover torch, lightning, hydra-core, gymnasium, etc.
+    # We additionally need:
+    "jax[cpu]>=0.9.0",         # bridge wrapper imports JAX (CPU-only — sheeprl owns the GPU via torch)
+    "wandb>=0.24.0",           # logger
+    "pyyaml>=6.0",             # bridge wrapper reads our project YAML configs
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["pytorch_agents", "pytorch_agents.*"]
+
+[tool.setuptools.package-data]
+# Required so Hydra can resolve `pkg://pytorch_agents.configs/...`. Without this
+# the YAMLs would be excluded from the editable install's package-data manifest.
+"pytorch_agents" = ["configs/**/*.yaml"]

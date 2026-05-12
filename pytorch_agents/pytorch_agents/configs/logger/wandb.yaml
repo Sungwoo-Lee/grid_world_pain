@@ -1,0 +1,5 @@
+_target_: lightning.pytorch.loggers.WandbLogger
+project: grid_world_pain
+name: ${run_name}
+save_dir: logs/runs/${root_dir}
+log_model: False
