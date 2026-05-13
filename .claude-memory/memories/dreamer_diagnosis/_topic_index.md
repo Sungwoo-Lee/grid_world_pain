@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `dreamer_diagnosis` topic.
 
 **Folder definition**: DreamerV3 failure investigation
-**Insights**: 8
+**Insights**: 9
 **Last updated**: 2026-05-13
 
 ---
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-13 | 23:08 | `20260513_2308_strong_strategy_validates_on_cp1` | The Strong (A+B+C+D) deviation-prevention strategy paid off on the first checkpoint (CP1, utils.py port) of the dreamer-srl v3 rebuild — caught a pre-CP0 gitignore blocker that would have broken Lever D + Lever A on a fresh clone, surfaced a latent wrong-reference bug in the D-002 distribution test when we tightened its threshold, and let the PI cleanly batch-approve all 3 deviations (D-001/D-002/D-003). ~50% overhead vs naive port; the previous plan-only review process let the twohot encoding bug through — the strategy closes that loop. |
 | 2026-05-13 | 14:17 | `20260513_1417_jax_vmap_no_speedup_tiny_env` | JAX-vmap parallel env over our 5x5 NoPred gridworld delivered no speedup vs sheeprl's SyncVectorEnv, on CPU (v1: 1.01x at N=4) or GPU (v2: 0.47x at N=4). Root cause is the Python↔JAX boundary cost dominating microsecond-cheap env-step compute — naive `np.array()` round-trip plus `jax.tree.map` auto-reset blend. Closes the spike; only DLPack zero-copy bridge could plausibly win, and that is a separate fresh plan. |
 | 2026-05-12 | 17:54 | `20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned` | After 3-reviewer ✅ PASS on a 1033-line JAX re-implementation plan, user pivoted via PI call to sheeprl PyTorch direct; static review of plan-against-paper does not predict integration-layer execution success. |
 | 2026-05-11 | 15:34 | `20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt` | Cell Z2 (paper-canonical twohot bins on top of Z1's zero-init) re-ran the no-predator task and fired H2 — partial fix. Reward MAE @ h=5: 0.386 → 0.277 → 0.177 (cumulative cascade −54% from A1; H1 < 0.15 narrowly missed by 0.027). Mechanistic prediction validated: training-time `model_reward_mae_neg` dropped 45% Z1→Z2. New residual pattern: long-horizon reward MAE compounds 0.18 → 3.05 across h=5 → h=50 — mechanistically points at GRU reset gate (§6 item 28) as the next candidate. |
@@ -26,6 +27,7 @@
 
 ## Change history
 
+- 2026-05-13: Added 1 insight from the dreamer-srl v3 CP1 closure: `20260513_2308_strong_strategy_validates_on_cp1` (Strong A+B+C+D deviation-prevention strategy fired its catches at three concrete moments on CP1 — pre-CP0 gitignore blocker, F2 latent wrong-reference bug in D-002 distribution test surfaced via threshold tighten, PI clean batch-approval of 3 deviations under "nothing has to be changed in the meaning of functions" criterion). No new tags (all reused: dreamer, learned_lesson, decision, meta, design).
 - 2026-05-13: Added 1 insight from the JAXVectorEnv v1+v2 spike closure: `20260513_1417_jax_vmap_no_speedup_tiny_env` (vmap on tiny envs with naive numpy boundary doesn't deliver speedup, CPU or GPU; only DLPack zero-copy bridge could plausibly win; spike closed; generalizable heuristic: measure per-step compute time before betting on vmap). No new tags (all reused: dreamer, learned_lesson, refutation, decision, meta).
 - 2026-05-11: Added 1 insight from the Z2 verdict session: `20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt` (paper-canonical bins H2 partial fix; cumulative cascade −54%; mae_neg 45% drop validates mechanism; new long-horizon-compounding residual selects GRU reset gate as next candidate). No new tags.
 - 2026-05-10: Added 1 insight from the dreamer sheeprl-comparison + zero-init session: `20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry` (Cell Z1 H2 partial fix; pos/neg reward-MAE asymmetry directs next candidate toward bin-range fix). No new tags (all reused: dreamer, learned_lesson, decision, refutation).

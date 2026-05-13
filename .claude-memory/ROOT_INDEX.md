@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-05-13
 **Active folders**: 6
-**Total insights**: 53
+**Total insights**: 56
 **Last audit**: (none)
 
 ---
@@ -15,11 +15,11 @@
 
 | Folder | Definition (1 line) | Insights | Last update | Top tags |
 |---|---|---|---|---|
-| `memory_system_design` | Claude memory system's own design decisions | 6 | 2026-05-09 | [memory, design, decision, skill, meta] |
+| `memory_system_design` | Claude memory system's own design decisions | 7 | 2026-05-13 | [memory, design, decision, skill, meta, learned_lesson] |
 | `subagent_engineering` | Subagent + worktree usage gotchas | 6 | 2026-05-10 | [meta, learned_lesson, worktree, subagent, decision] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 9 | 2026-05-13 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation] |
-| `dreamer_diagnosis` | DreamerV3 failure investigation | 8 | 2026-05-13 | [dreamer, decision, learned_lesson, refutation, meta] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 17 | 2026-05-13 | [meta, training_runner, learned_lesson, decision, design] |
+| `dreamer_diagnosis` | DreamerV3 failure investigation | 9 | 2026-05-13 | [dreamer, decision, learned_lesson, refutation, meta, design] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 18 | 2026-05-13 | [meta, training_runner, learned_lesson, decision, design] |
 | `hypervigilance` | Hypervigilance experiments | 7 | 2026-05-13 | [hypervigilance, design, learned_lesson, decision, refutation, meta] |
 
 ---
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-13: Captured 3 insights from the dreamer-srl v3 CP1 closure session: 1 into existing `dreamer_diagnosis` (`20260513_2308_strong_strategy_validates_on_cp1` — Strong A+B+C+D deviation-prevention strategy paid off on CP1; caught a pre-CP0 gitignore blocker, surfaced a latent wrong-reference bug in the D-002 distribution test via threshold tighten, PI clean batch-approval of all 3 deviations), 1 into existing `cluster_ops` (`20260513_2309_merge_path_manifest_tripwire` — path-manifest tripwire instead of full cp -a backup for the 165GB of gitignored data on this repo; validated 0-delta on v1.3→develop→v1.4 fast-forward merge), 1 into existing `memory_system_design` (`20260513_2310_orphan_memory_branch_rewrite` — rewrite-on-base pattern for synthetic `.claude-memory/` index conflicts when a worktree branch falls behind its base). No new tags promoted (all reused: dreamer, learned_lesson, decision, meta, design, memory).
 - 2026-05-13: Captured 1 insight into existing `dreamer_diagnosis` from the JAXVectorEnv v1+v2 spike closure session: `20260513_1417_jax_vmap_no_speedup_tiny_env` — JAX-vmap parallel env over 5x5 NoPred gridworld delivers no speedup vs SyncVectorEnv (v1 CPU: 1.01x at N=4; v2 GPU: 0.47x at N=4); Python-JAX boundary dominates microsecond env-step compute; only DLPack zero-copy bridge could plausibly win (separate fresh plan). Env-install chain side-effects captured (cudnn 9.10.2.21, nvcc 12.9.86, jax downgrade to 0.9.0.1, torch 2.5 to 2.8 upgrade). No new tags promoted (all reused: dreamer, learned_lesson, refutation, decision, meta).
 - 2026-05-13: Captured 5 insights from the NMN R2 continual + 6-specialist analyzer verdict session: 3 into existing `nmn_diagnosis` (`20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin` — first positive FiLM finding, H₁b + H₁c confirmed at ~25× seed-noise floor on the 5-stage continual schedule, +107/+132 steps on the two return-to-active stages; `20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric` — H₁a predicate is methodologically malformed for the active↔passive schedule shape, modulator wins via recovery speed not dip-depth; `20260513_0017_mod_h_logging_gap_blocks_cka_precheck` — raw modulator hidden vector never logged, Mahalanobis / CKA tests unevaluable, 3 metrics + 1 artifact hook requested), 1 into existing `hypervigilance` (`20260513_0015_active_swapped_geq_matched_reframes_meta` — specialist ceiling table inverts design-time intuition, active_swapped > active_matched, reframes upcoming meta head-to-head as a CKA-factorisation test), 1 into existing `cluster_ops` (`20260513_0018_train_py_orphan_render_workers_on_sigint` — train.py SIGINT leaves render_recordings.py multiprocessing pool workers orphaned, two-call terminate_command.py workaround). No new tags promoted (all reused: nmn, film, hypervigilance, decision, learned_lesson, design, meta, training_runner, refutation).
 - 2026-05-12: Captured 3 insights from the dreamer-srl plan + PI pivot to sheeprl-direct session: 1 into existing `dreamer_diagnosis` (`20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned` — after 3-reviewer ✅ PASS on a 1033-line JAX re-implementation plan, user pivoted via PI call to sheeprl PyTorch direct; meta-lesson: static review does not predict integration-layer execution success, the cascade-debugging history was a stronger prior), 2 into existing `cluster_ops` (`20260512_1755_pytorch_agents_pip_dep_layout` — third-party RL frameworks integrate as pip-installed git-pinned deps + extensions in sibling in-repo package, not `tmp/` clones; `20260512_1756_pip_install_namespace_shadow_numpy_cap` — two pip-install gotchas during node-114 env rebuild: outer/inner namespace shadow `editable_mode=compat` and sheeprl@33b6366 spurious numpy<2.0 cap `--no-deps`). No new tags promoted (all reused: dreamer, decision, learned_lesson, refutation, meta, design, training_runner).
