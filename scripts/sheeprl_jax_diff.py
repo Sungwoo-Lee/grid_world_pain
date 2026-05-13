@@ -910,6 +910,353 @@ def _run_action_shift(fixture) -> tuple:
 
 
 # ---------------------------------------------------------------------------
+# CP4 runners (agent.py) — added when CP4 + CP4b landed
+# ---------------------------------------------------------------------------
+
+def _load_rssm_from_fixture_diff(f):
+    """Build a JAX RSSM and load parameters from a CP4/CP4b fixture.
+
+    Helper shared by all 5 CP4/CP4b runners.  Mirrors _load_rssm_from_fixture()
+    in tests/algorithms/dreamer_srl/test_agent.py — kept in sync manually.
+
+    PyTorch Linear.weight is [out, in]; JAX nnx.Linear.kernel is [in, out],
+    so all Linear weights are transposed on load.  LayerNorm scale/bias are
+    [features] — no transposition needed.
+
+    Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L281-L498
+    CP4 Lever-A helper.
+    """
+    import jax
+    import jax.numpy as jnp
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from flax import nnx
+    from src.algorithms.dreamer_srl.agent import RSSM
+
+    recurrent_state_size  = int(f["recurrent_state_size"])
+    recurrent_dense_units = int(f["recurrent_dense_units"])
+    action_dim            = int(f["action_dim"])
+    stochastic_size       = int(f["stochastic_size"])
+    num_categoricals      = int(f["num_categoricals"])
+    num_classes           = int(f["num_classes"])
+    transition_hidden_size = int(f["transition_hidden_size"])
+    repr_hidden_size      = int(f["repr_hidden_size"])
+    encoder_output_dim    = int(f["encoder_output_dim"])
+
+    rngs = nnx.Rngs(jax.random.PRNGKey(0))
+    rssm = RSSM(
+        recurrent_state_size=recurrent_state_size,
+        recurrent_dense_units=recurrent_dense_units,
+        action_dim=action_dim,
+        stochastic_size=stochastic_size,
+        transition_hidden_size=transition_hidden_size,
+        repr_hidden_size=repr_hidden_size,
+        num_categoricals=num_categoricals,
+        num_classes=num_classes,
+        encoder_output_dim=encoder_output_dim,
+        unimix=0.01,
+        rngs=rngs,
+    )
+
+    # Recurrent MLP pre-projection
+    rssm.recurrent_mlp_linear.kernel = nnx.Param(
+        jnp.asarray(f["recurrent_mlp_linear_weight"]).T)
+    rssm.recurrent_mlp_norm.scale = nnx.Param(jnp.asarray(f["recurrent_mlp_norm_weight"]))
+    rssm.recurrent_mlp_norm.bias  = nnx.Param(jnp.asarray(f["recurrent_mlp_norm_bias"]))
+
+    # GRU cell
+    rssm.gru_cell.linear.kernel = nnx.Param(
+        jnp.asarray(f["gru_linear_weight"]).T)
+    if rssm.gru_cell.linear.use_bias:
+        rssm.gru_cell.linear.bias = nnx.Param(jnp.asarray(f["gru_linear_bias"]))
+    rssm.gru_cell.layer_norm.scale = nnx.Param(jnp.asarray(f["gru_norm_weight"]))
+    rssm.gru_cell.layer_norm.bias  = nnx.Param(jnp.asarray(f["gru_norm_bias"]))
+
+    # Transition model
+    rssm.transition_hidden.kernel = nnx.Param(
+        jnp.asarray(f["transition_hidden_weight"]).T)
+    rssm.transition_norm.scale = nnx.Param(jnp.asarray(f["transition_norm_weight"]))
+    rssm.transition_norm.bias  = nnx.Param(jnp.asarray(f["transition_norm_bias"]))
+    rssm.transition_out.kernel = nnx.Param(
+        jnp.asarray(f["transition_out_weight"]).T)
+    rssm.transition_out.bias   = nnx.Param(jnp.asarray(f["transition_out_bias"]))
+
+    # Representation model
+    rssm.repr_hidden.kernel = nnx.Param(
+        jnp.asarray(f["repr_hidden_weight"]).T)
+    rssm.repr_norm.scale = nnx.Param(jnp.asarray(f["repr_norm_weight"]))
+    rssm.repr_norm.bias  = nnx.Param(jnp.asarray(f["repr_norm_bias"]))
+    rssm.repr_out.kernel = nnx.Param(
+        jnp.asarray(f["repr_out_weight"]).T)
+    rssm.repr_out.bias   = nnx.Param(jnp.asarray(f["repr_out_bias"]))
+
+    # Learnable initial recurrent state
+    rssm.initial_recurrent_state = nnx.Param(
+        jnp.asarray(f["initial_recurrent_state"]))
+
+    return rssm
+
+
+def _run_rssm_transition(fixture) -> tuple:
+    """RSSM._transition: transition (prior) model parity — DEVIATION D-008.
+
+    Calls _transition(recurrent_state, sample_state=False) — mode output,
+    no PRNG consumed — and compares prior_logits + prior_state (mode)
+    against sheeprl@33b6366 reference.
+
+    D-008: JAX XLA float32 matmul accumulation for RSSM MLP (deeper than D-007).
+    Measured max_abs_diff: 6.838e-4 (logits). Threshold relaxed to 2e-3.
+    Any semantic error (wrong MLP depth, missing LayerNorm) produces O(0.1)
+    deviation — 143x above threshold — so architecture bugs are still caught.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L467-L480
+    CP4 Lever-A test (cascade fix #30 — one-hidden-MLP, NOT bare Linear).
+    """
+    import jax.numpy as jnp
+    import numpy as np
+
+    rssm = _load_rssm_from_fixture_diff(fixture)
+
+    recurrent_state_np = fixture["recurrent_state"]   # [B, H_rec]
+    torch_logits_np    = fixture["torch_out_logits"]  # [B, S*D]
+    torch_state_np     = fixture["torch_out_state"]   # [B, S, D]
+
+    jax_logits, jax_state = rssm._transition(
+        jnp.asarray(recurrent_state_np), sample_state=False, key=None
+    )
+
+    # Concatenate logits + flattened state for a single compare() call
+    jax_out   = np.concatenate([np.asarray(jax_logits).ravel(),
+                                 np.asarray(jax_state).ravel()])
+    torch_out = np.concatenate([np.asarray(torch_logits_np).ravel(),
+                                 np.asarray(torch_state_np).ravel()])
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L467-L480\n"
+        f"  jax:     src/algorithms/dreamer_srl/agent.py:RSSM._transition\n"
+        f"  fixture: recurrent_state.shape={recurrent_state_np.shape}, seed=0xD3EAF\n"
+        f"  NOTE: D-008 — JAX XLA float32 matmul ULP cascade; threshold 2e-3; "
+        f"semantic errors produce O(0.1) deviation"
+    )
+    return jax_out, torch_out, metadata
+
+
+def _run_rssm_representation(fixture) -> tuple:
+    """RSSM._representation: representation (posterior) logits parity — DEVIATION D-008.
+
+    Manually computes repr logits (repr_hidden + LayerNorm + SiLU + repr_out +
+    _uniform_mix) and _compute_stochastic_state in mode form to avoid PRNG.
+    Compares logits + mode state against sheeprl@33b6366 reference.
+
+    D-008: same class as D-007 (substrate-mechanical float32 matmul ULP).
+    Measured max_abs_diff: 7.193e-4 (logits). Threshold 2e-3.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L451-L465
+    CP4 Lever-A test (cascade fix #30 — one-hidden-MLP in repr model).
+    """
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+
+    rssm = _load_rssm_from_fixture_diff(fixture)
+
+    recurrent_state_np = fixture["recurrent_state"]   # [B, H_rec]
+    embedded_obs_np    = fixture["embedded_obs"]      # [B, enc_dim]
+    torch_logits_np    = fixture["torch_out_logits"]  # [B, S*D]
+    torch_state_np     = fixture["torch_out_state"]   # [B, S, D]
+
+    # Manual repr logits (deterministic — avoids PRNG divergence)
+    x = jnp.concatenate([
+        jnp.asarray(recurrent_state_np), jnp.asarray(embedded_obs_np)
+    ], axis=-1)
+    h = rssm.repr_hidden(x)
+    h = rssm.repr_norm(h)
+    h = jax.nn.silu(h)
+    logits = rssm.repr_out(h)
+    jax_logits = rssm._uniform_mix(logits)
+
+    jax_state = rssm._compute_stochastic_state(jax_logits, sample=False, key=None)
+
+    jax_out   = np.concatenate([np.asarray(jax_logits).ravel(),
+                                 np.asarray(jax_state).ravel()])
+    torch_out = np.concatenate([np.asarray(torch_logits_np).ravel(),
+                                 np.asarray(torch_state_np).ravel()])
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L451-L465\n"
+        f"  jax:     src/algorithms/dreamer_srl/agent.py:RSSM._representation\n"
+        f"  fixture: recurrent_state.shape={recurrent_state_np.shape}, "
+        f"embedded_obs.shape={embedded_obs_np.shape}, seed=0xD3EAF\n"
+        f"  NOTE: D-008 — JAX XLA float32 matmul ULP cascade; threshold 2e-3"
+    )
+    return jax_out, torch_out, metadata
+
+
+def _run_get_initial_states(fixture) -> tuple:
+    """RSSM.get_initial_states: returns mode (no PRNG consumed) — DEVIATION D-008.
+
+    get_initial_states(batch_size) must NOT have a `key` parameter.
+    Returns (initial_hx, initial_z) where initial_hx = tanh(zeros) ≈ 0,
+    and initial_z = _transition(initial_hx, sample_state=False)[1] (mode).
+
+    D-008: same class as D-007. initial_hx is ~0 (no drift); initial_z goes
+    through transition MLP so D-008 drift may appear.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L391-L394
+    CP4 Lever-A test (determinism + no-PRNG discipline).
+    """
+    import inspect
+    import jax.numpy as jnp
+    import numpy as np
+
+    rssm = _load_rssm_from_fixture_diff(fixture)
+
+    batch_size  = int(fixture["batch_size"])
+    torch_hx_np = fixture["torch_out_hx"]  # [B, H_rec]
+    torch_z_np  = fixture["torch_out_z"]   # [B, S, D]
+
+    # Signature check: must NOT have a `key` parameter
+    sig = inspect.signature(rssm.get_initial_states)
+    if "key" in sig.parameters:
+        raise AssertionError(
+            "get_initial_states has a `key` parameter — this violates the no-PRNG mandate. "
+            "Remove it: the method must be deterministic (returns mode)."
+        )
+
+    jax_hx, jax_z = rssm.get_initial_states(batch_size)
+
+    jax_out   = np.concatenate([np.asarray(jax_hx).ravel(),
+                                 np.asarray(jax_z).ravel()])
+    torch_out = np.concatenate([np.asarray(torch_hx_np).ravel(),
+                                 np.asarray(torch_z_np).ravel()])
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L391-L394\n"
+        f"  jax:     src/algorithms/dreamer_srl/agent.py:RSSM.get_initial_states\n"
+        f"  fixture: batch_size={batch_size}, seed=0xD3EAF\n"
+        f"  NOTE: D-008 — initial_hx=tanh(zeros)≈0 (no drift); initial_z through "
+        f"transition MLP may show D-008 ULP drift; threshold 2e-3"
+    )
+    return jax_out, torch_out, metadata
+
+
+def _run_is_first_force_set(fixture) -> tuple:
+    """RSSM.dynamic: is_first=1 resets the first env's states; others unchanged.
+
+    Calls dynamic(posterior, recurrent_state, action, embedded_obs, is_first=[1,0,0,0],
+    key) and compares h output against sheeprl reference.
+
+    §S4 three-quantity arithmetic-mask form:
+        action          = (1 - is_first) * action
+        recurrent_state = (1 - is_first) * recurrent_state + is_first * initial_hx
+        posterior_flat  = (1 - is_first) * posterior_flat  + is_first * initial_z_flat
+    FORM: arithmetic mask, NOT jnp.where.
+
+    D-008: measured h diff ≤ 5.597e-4; threshold 2e-3.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L423-L435
+    CP4b Lever-A test (§S4 three-quantity arithmetic-mask reset, force-set).
+    """
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+
+    rssm = _load_rssm_from_fixture_diff(fixture)
+
+    posterior_np       = fixture["posterior"]            # [B, S, D]
+    recurrent_state_np = fixture["recurrent_state"]     # [B, H_rec]
+    action_np          = fixture["action"]               # [B, A]
+    embedded_obs_np    = fixture["embedded_obs"]         # [B, enc_dim]
+    is_first_np        = fixture["is_first"]             # [B, 1]
+    torch_h_np         = fixture["torch_out_h"]          # [B, H_rec]
+
+    key = jax.random.PRNGKey(0)
+    h_out, post_out, prior_out, _, _ = rssm.dynamic(
+        jnp.asarray(posterior_np),
+        jnp.asarray(recurrent_state_np),
+        jnp.asarray(action_np),
+        jnp.asarray(embedded_obs_np),
+        jnp.asarray(is_first_np),
+        key,
+    )
+
+    jax_out   = np.asarray(h_out)
+    torch_out = np.asarray(torch_h_np)
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L423-L435\n"
+        f"  jax:     src/algorithms/dreamer_srl/agent.py:RSSM.dynamic\n"
+        f"  fixture: is_first=[1,0,0,0] (env 0 reset), batch_size={posterior_np.shape[0]}, "
+        f"seed=0xD3EAF\n"
+        f"  NOTE: D-008 — h comparison only (posterior is stochastic, D-009 applies); "
+        f"threshold 2e-3; §S4 arithmetic-mask form (NOT jnp.where)"
+    )
+    return jax_out, torch_out, metadata
+
+
+def _run_is_first_three_quantity_reset(fixture) -> tuple:
+    """RSSM.dynamic: all 3 quantities reset at done boundary in a 10-step rollout.
+
+    Drives T=10 steps of dynamic() step-by-step, with done_at=5 (is_first=1 at t=6).
+    Compares h (recurrent state) rollout against sheeprl@33b6366 reference.
+    Posterior comparison is skipped — DEVIATION D-009: different platform PRNG
+    (PyTorch rsample vs JAX gumbel-softmax) makes cross-platform stochastic comparison
+    impossible.  h is deterministic given the same fixture inputs.
+
+    D-008: measured h_seq diff ≤ 5.597e-4; threshold 2e-3.
+    D-009: posterior comparison not performed (stochastic, different RNG streams).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L423-L435
+    CP4b Lever-A test (§S4 three-quantity arithmetic-mask reset, rollout boundary).
+    """
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+
+    rssm = _load_rssm_from_fixture_diff(fixture)
+
+    posterior_seq_np    = fixture["posterior_seq"]      # [T, B, S, D]
+    recurrent_seq_np    = fixture["recurrent_seq"]      # [T, B, H_rec]
+    action_seq_np       = fixture["action_seq"]         # [T, B, A]
+    embedded_obs_seq_np = fixture["embedded_obs_seq"]   # [T, B, enc_dim]
+    is_first_seq_np     = fixture["is_first_seq"]       # [T, B, 1]
+    torch_h_seq_np      = fixture["torch_out_h_seq"]    # [T, B, H_rec]
+    T                   = int(fixture["seq_len"])
+    done_at             = int(fixture["done_at"])
+    is_first_at         = int(fixture["is_first_at"])
+
+    key = jax.random.PRNGKey(0)
+    jax_h_seq = []
+
+    for t in range(T):
+        key, step_key = jax.random.split(key)
+        h_t, _, _, _, _ = rssm.dynamic(
+            jnp.asarray(posterior_seq_np[t]),
+            jnp.asarray(recurrent_seq_np[t]),
+            jnp.asarray(action_seq_np[t]),
+            jnp.asarray(embedded_obs_seq_np[t]),
+            jnp.asarray(is_first_seq_np[t]),
+            step_key,
+        )
+        jax_h_seq.append(np.asarray(h_t))
+
+    jax_h_arr = np.stack(jax_h_seq, axis=0)   # [T, B, H_rec]
+
+    jax_out   = jax_h_arr.ravel()
+    torch_out = np.asarray(torch_h_seq_np).ravel()
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L423-L435\n"
+        f"  jax:     src/algorithms/dreamer_srl/agent.py:RSSM.dynamic (T={T}-step rollout)\n"
+        f"  fixture: T={T}, done_at={done_at}, is_first_at={is_first_at}, "
+        f"batch_size={posterior_seq_np.shape[1]}, seed=0xD3EAF\n"
+        f"  NOTE: D-008 threshold 2e-3; D-009 — posterior comparison skipped "
+        f"(stochastic, different RNG streams across platforms)"
+    )
+    return jax_out, torch_out, metadata
+
+
+# ---------------------------------------------------------------------------
 # CP5 runners (loss.py) — added when CP5 landed
 # ---------------------------------------------------------------------------
 
@@ -1057,6 +1404,13 @@ FUNCTION_REGISTRY: dict[str, callable] = {
     "buffer_parallel_env_lane_non_interference":            _run_buffer_parallel_env_lane_non_interference,
     "cadence_yaml_key_parity_with_sheeprl_xs":              _run_cadence_yaml_key_parity_with_sheeprl_xs,
     "cadence_env_grad_step_trace_5000_iters":               _run_cadence_env_grad_step_trace_5000_iters,
+    # CP4 — agent.py (RSSM, cascade fix #30)
+    "rssm_transition":               _run_rssm_transition,
+    "rssm_representation":           _run_rssm_representation,
+    "get_initial_states":            _run_get_initial_states,
+    # CP4b — agent.py (§S4 three-quantity arithmetic-mask reset)
+    "is_first_force_set":            _run_is_first_force_set,
+    "is_first_three_quantity_reset": _run_is_first_three_quantity_reset,
     # CP5 — loss.py
     "twohot_bins_endpoints": _run_twohot_bins_endpoints,
     "twohot_encode":         _run_twohot_encode,
@@ -1077,6 +1431,18 @@ FUNCTION_THRESHOLDS: dict[str, float] = {
     "symexp": 2e-5,
     # D-002: init_weights/uniform_init_weights are stochastic; runner encodes
     # pass/fail as 0.0/large_diff, so threshold doesn't matter — kept at 1e-6.
+    # D-008: RSSM MLP float32 matmul ULP cascade — deeper than D-007 (two Linear layers
+    # + LayerNorm + SiLU in transition/repr/recurrent-pre-projection MLP chains).
+    # Measured max_abs_diff: transition logits 6.838e-4, repr logits 7.193e-4,
+    # rollout h 5.597e-4. Threshold relaxed to 2e-3 (3x margin above 7.193e-4).
+    # CRITICAL: any semantic error (wrong MLP depth, missing LayerNorm, missing pre-proj)
+    # produces O(0.1) deviation — 143x above threshold — so architecture bugs are caught.
+    # Substrate-mechanical class (same as D-007). PI sign-off required at CP4 gate.
+    "rssm_transition":               2e-3,
+    "rssm_representation":           2e-3,
+    "get_initial_states":            2e-3,
+    "is_first_force_set":            2e-3,
+    "is_first_three_quantity_reset": 2e-3,
     # D-006: JAX jnp.linspace vs PyTorch torch.linspace ULP difference at midpoint.
     # bins[127]: JAX=0.0, PyTorch=7.45e-8 (1 float32 ULP at step 40/254*127).
     # This cascades: bins 1.9e-6, encode 6.1e-6, log_prob 1.8e-5 (rel diff 2.4e-6).
