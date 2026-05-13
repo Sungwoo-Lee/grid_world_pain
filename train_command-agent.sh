@@ -78,18 +78,18 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# SameProp Round 2.6 — Cell C (decoupleFood), seed 44
-# Node 106, cuda:0. Design doc: docs/experiments/active/hypervigilance/sameprop_round26_design.md
-# Run 1 of 2 in the Round 2.6 manifest.
+# JAX matched-config SPS measurement Run A — num_envs=4 (apples-to-apples)
+# Node 113, cuda:0. Design doc: docs/experiments/active/sheeprl_bridge/JAX_SHEEPRL_MATCHED_SPS_DESIGN.md
+# Measures JAX DreamerV3 env-SPS under sheeprl-XS matched recipe (replay_ratio=1.0, smaller model).
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
-  --episodes 10000000 \
-  --num-envs 128 \
-  --seed 44 \
+  --config configs/experiment/dreamer_curriculum/01_food_only.yaml \
+  --agent_config configs/models/dreamer_v3_sheeprl_matched.yaml \
+  --num-envs 4 \
+  --total-timesteps 1500000 \
+  --seed 0 \
   --device cuda:0 \
   --log-interval 50 \
-  --wandb-group hypervigilance \
-  --wandb-job-type prod \
-  --wandb-name "hypervigilance-round26-C-seed44_n106_gpu0" \
-  --tag "hypervigilance-round26-C-seed44_n106_gpu0"
+  --wandb-group sheeprl_bridge \
+  --wandb-job-type sps_measurement \
+  --wandb-name jax_sheeprl_matched_n4_s0 \
+  --tag jax_sheeprl_matched_n4_s0

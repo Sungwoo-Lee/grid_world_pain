@@ -1,10 +1,19 @@
 ---
 title: "JAXVectorEnv v1 — minimum-smoke vmap-batched vector env for sheeprl"
 topic: dreamer
-status: active
+status: superseded
 created: 2026-05-12
-last_updated: 2026-05-12
+last_updated: 2026-05-13
+superseded_by: JAX_VECTOR_ENV_V2_GPU_SPIKE.md
 ---
+
+> **Superseded 2026-05-13** — v1's G3 sweep on n114 cuda:3 (CPU JAX) showed no
+> speedup at any N (0.52× at N=1, 1.01× at N=4). Diagnosis: vmap on CPU has no
+> work to parallelise for a 5×5 env; the Python↔JAX boundary cost dominates at
+> low N. Successor [JAX_VECTOR_ENV_V2_GPU_SPIKE.md](JAX_VECTOR_ENV_V2_GPU_SPIKE.md)
+> places JAX on the same GPU as torch to test whether real parallel hardware
+> work clears the 1.5× bar.
+
 
 # JAXVectorEnv v1 — minimum-smoke vmap-batched vector env for sheeprl
 
@@ -528,3 +537,46 @@ Implemented by: developer
 | `pytorch_agents/pytorch_agents/run_dreamer_v3.py` | +~20 lines (GWP-PATCH-C block) | | |
 
 **Conclusion**: (one-line — to fill)
+
+---
+
+## Bug-Fix Implementation Report — G2 Read-Only Buffer Crash
+
+> **Date**: 2026-05-13
+> **Bug**: WandB run `mhee43g2` crashed on the first env step with `ValueError: assignment destination is read-only`
+> **Root cause**: `JAXVectorEnv.reset()` and `step()` returned `np.asarray(jax_array)` — a zero-copy view into the immutable JAX buffer. Sheeprl's training loop writes into returned arrays (zeroing rewards on done episodes at line 420 of `run_dreamer_v3.py`), hitting the read-only flag.
+> **Fix commit**: `d729e2c`
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `pytorch_agents/pytorch_agents/envs/jax_vector_env.py` | Added `_to_numpy()` helper (wraps `np.array()` — forced copy, writable). Replaced 4 `np.asarray(jax_value)` calls in `__init__`, `reset()`, and `step()` with `_to_numpy()`. |
+
+### Regression test (G1 writability check)
+
+Ran a direct instantiation smoke: `JAXVectorEnv(num_envs=4)`, called `reset()` then `step()`, then performed fancy-index writes into every returned array (`obs`, `rewards`, `terminated`).
+
+**Pre-fix state**: would have raised `ValueError: assignment destination is read-only` (same failure mode as G2 crash).
+
+**Post-fix state**:
+
+```
+reset obs shape: (4, 27), writable: True
+reset obs write: OK
+step obs shape: (4, 27), writable: True
+step rewards writable: True
+step terminated writable: True
+step array writes: OK
+ALL CHECKS PASSED
+```
+
+### Speed check
+
+Not applicable — this is a one-line data-type change (`np.asarray` → `np.array`) at the output boundary only. The JAX kernel execution path is identical; the only difference is a CPU memcpy of the small output buffers (obs, reward, done) once per step. This is negligible compared to the JAX computation itself. No before/after measurement taken.
+
+### Deviations from plan
+
+None. The fix matches the plan exactly — `_to_numpy()` helper added near imports, all `np.asarray(jax_value)` sites in `reset()` and `step()` replaced.
+
+Implemented by: developer
