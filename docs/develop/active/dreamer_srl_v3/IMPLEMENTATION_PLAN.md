@@ -3,7 +3,7 @@ title: "dreamer-srl v3 — JAX rebuild of sheeprl DreamerV3 with deviation-preve
 topic: dreamer
 status: active
 created: 2026-05-13
-last_updated: 2026-05-13  # CP3b promotion (buffer + cadence state-evolution gate)
+last_updated: 2026-05-14  # CP3b → CP-PASS
 supersedes: IMPLEMENTATION_PLAN.md
 phase: 2
 ---
@@ -516,7 +516,7 @@ For the algorithmic content of each CP, follow the link to the v2 row.
 | **CP2** | `agent.py` `LayerNormGRUCell` cascade fix #28 — [v2 Checkpoint 2](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_layernorm_gru_cell_matches_sheeprl` (1+1 fused-gate form; chunk order `(reset, cand, update)`; reset gate inside `tanh`) | code → math → professor | ☐ none | NOT STARTED |
 | **CP2b** | Action-shift §S2 test | `test_action_shift_matches_sheeprl` (prepend-zero, drop-last; `[0] == 0`, `[1:] == actions[:-1]`) | code → math → professor | ☐ none | NOT STARTED |
 | **CP3** | `agent.py` `build_agent` cascade fix #27 — [v2 Checkpoint 3](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_zero_init_reward_head`, `test_zero_init_critic_head` (kernel + bias both exactly zero) | code → math → professor | ☐ none | NOT STARTED |
-| **CP3b** | `buffers.py` `SequentialReplayBuffer` (state-evolution parity) + training-cadence wiring (`Ratio` × `replay_ratio` × `collect_interval` × `learning_starts` × `prefill_steps`) — see [CP3B_SPEC.md](CP3B_SPEC.md) | `test_buffer_storage_state_after_deterministic_adds`, `test_buffer_sample_at_indices_matches_sheeprl`, `test_buffer_is_first_marker_placement_in_straddling_window`, `test_buffer_parallel_env_lane_non_interference`, `test_cadence_yaml_key_parity_with_sheeprl_xs`, `test_cadence_env_grad_step_trace_5000_iters` | code → math → professor | D-004 ☐ pending PI ratification (memmap omission) | NOT STARTED |
+| **CP3b** | `buffers.py` `SequentialReplayBuffer` (state-evolution parity) + training-cadence wiring (`Ratio` × `replay_ratio` × `collect_interval` × `learning_starts` × `prefill_steps`) — see [CP3B_SPEC.md](CP3B_SPEC.md) | `test_buffer_storage_state_after_deterministic_adds`, `test_buffer_sample_at_indices_matches_sheeprl`, `test_buffer_is_first_marker_placement_in_straddling_window`, `test_buffer_parallel_env_lane_non_interference`, `test_cadence_yaml_key_parity_with_sheeprl_xs`, `test_cadence_env_grad_step_trace_5000_iters` | code → math → professor | D-004 ✅, D-005 ✅ | **CP-PASS (2026-05-14)** — implementation `9c57c06`; 6/6 Lever-A PASS at `max_abs_diff = 0.000e+00`; code + math + professor reviews ✅ PASS on disk (`ef36099`); PI sign-off on D-004 + D-005 at [`7007723`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp3b_deviations.md). |
 | **CP4** | `agent.py` RSSM cascade fix #30 + `get_initial_states` mode-not-sample — [v2 Checkpoint 4](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_rssm_transition_2layer_mlp`, `test_rssm_representation_2layer_mlp`, `test_get_initial_states_no_prng`, `test_get_initial_states_matches_sheeprl_mode` | code → math → professor | ☐ none | NOT STARTED |
 | **CP4b** | RSSM `is_first` reset §S1+§S4 — [v2 Checkpoint 4b](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_is_first_force_set_step0`, `test_is_first_three_quantity_reset` (arithmetic-mask form, posterior reshape-flatten BEFORE masking) | code → math → professor | ☐ none | NOT STARTED |
 | **CP5** | `loss.py` two-hot distribution cascade fix #2 (symlog space) — [v2 Checkpoint 5](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_twohot_bins_endpoints` (`bins[0]=-20, bins[127]=0, bins[254]=+20`, in symlog space), `test_twohot_encode_matches_sheeprl`, `test_twohot_log_prob_target_symlog_encoded` | code → math → professor | ☐ none | NOT STARTED |
@@ -695,13 +695,15 @@ remains the spine. The v3 changes:
    to the historical-scar argument for CP5 (twohot bins). Implement the
    buffer/cadence discipline early so the state-evolution-parity pattern is
    visible to all downstream CPs. Eligible to start immediately after CP1
-   (no dependencies on CP2/CP3/CP4/CP5). D-004 (memmap omission) goes to PI for
-   ratification alongside this CP's launch. → Lever-A tests (4 storage/sample +
-   2 cadence) → 3-reviewer gate → CP-PASS. **← NEXT** (eligible once user
-   authorizes; do not start without authorization).
+   (no dependencies on CP2/CP3/CP4/CP5). D-004 (memmap omission) + D-005
+   (test-scope unfilled-region exclusion) go to PI for ratification alongside
+   this CP's launch. → Lever-A tests (4 storage/sample + 2 cadence) →
+   3-reviewer gate → CP-PASS. **DONE 2026-05-14** — `9c57c06` (implementation);
+   reviewer chain on disk at `ef36099`; PI sign-off on D-004 + D-005 at `7007723`.
 3. **CP5 — `loss.py` two-hot distribution** (moved earlier; the two-hot bug is
    the historical scar — implement it third so the symlog-space discipline is
-   set early and visible) → Lever-A tests → 3-reviewer gate → CP-PASS.
+   set early and visible) → Lever-A tests → 3-reviewer gate → CP-PASS. **← NEXT**
+   (eligible once user authorizes; do not start without authorization).
 4. **CP2 + CP2b** → tests → gate → CP-PASS.
 5. **CP3** → tests → gate → CP-PASS.
 6. **CP4 + CP4b** → tests → gate → CP-PASS.
@@ -879,6 +881,83 @@ Plain-language summary of the CP-PASS decision. CP1 (the JAX port of sheeprl's `
 
 **Verified by**: senior-developer
 **Date**: 2026-05-13
+
+### CP3b — `buffers.py` + training-cadence wiring
+
+**Implemented by**: developer agent | **Date**: 2026-05-14
+
+#### Files created / changed
+| File | Action |
+|---|---|
+| `src/algorithms/dreamer_srl/buffers.py` | Created — `SequentialReplayBuffer` (ring-buffer, parallel-env-lane storage, `add` + `sample` + `_sample_at_indices` + `is_first` marker placement) + `Ratio` × `replay_ratio` cadence helpers |
+| `configs/dreamer_srl/agent_xs.yaml` | Updated — 9 cadence keys added (`buffer_size`, `replay_ratio`, `collect_interval`, `learning_starts`, `prefill_steps`, etc.) matching sheeprl XS at `33b6366` |
+| `tests/algorithms/dreamer_srl/test_buffers.py` | Created — 6 Lever-A state-evolution bit-identity tests |
+| `tests/fixtures/dreamer_srl/test_buffer_storage_state_after_deterministic_adds_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/test_buffer_sample_at_indices_matches_sheeprl_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/test_buffer_is_first_marker_placement_in_straddling_window_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/test_buffer_parallel_env_lane_non_interference_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/test_cadence_yaml_key_parity_with_sheeprl_xs_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/test_cadence_env_grad_step_trace_5000_iters_input.npz` | Created |
+| `scripts/fixtures/gen_cp3b_fixtures.py` | Created — deterministic CP3b fixture generator (sheeprl_bridge env) |
+| `scripts/sheeprl_jax_diff.py` | Updated — CP3b runners added to FUNCTION_REGISTRY + CHECKPOINT_REGISTRY |
+| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Updated — D-004 + D-005 logged |
+| `docs/develop/active/dreamer_srl_v3/CP3B_SPEC.md` | Updated — implementation notes appended |
+
+#### Lever-A test results
+```
+pytest tests/algorithms/dreamer_srl/test_buffers.py -v
+6 passed
+```
+
+#### Diff tool sweep — `python scripts/sheeprl_jax_diff.py --checkpoint CP3b`
+```
+buffer_storage_state_after_deterministic_adds          PASS  max_abs_diff=0.000e+00 (filled region; D-005)
+buffer_sample_at_indices_matches_sheeprl               PASS  max_abs_diff=0.000e+00
+buffer_is_first_marker_placement_in_straddling_window  PASS  is_first=1 at expected offset
+buffer_parallel_env_lane_non_interference              PASS  4 env lanes, no cross-lane leakage
+cadence_yaml_key_parity_with_sheeprl_xs                PASS  9 keys match sheeprl XS @ 33b6366
+cadence_env_grad_step_trace_5000_iters                 PASS  5000-iter (env_step, grad_step) trace bit-identical
+```
+
+Exit code: 0.
+
+#### Deviation-log entries for CP3b
+- **D-004**: `SequentialReplayBuffer` — `memmap` / `memmap_dir` / `memmap_mode` argument trio omitted entirely; in-RAM storage only. Pre-declared at v2 design stage; substrate-mechanical (storage backend, not algorithm semantics). **PI verdict: ✅ APPROVED 2026-05-14**
+- **D-005**: `test_buffer_state_evolution_matches_sheeprl` — bit-identity comparison restricted to filled region `[:_pos]`; unfilled tail excluded because `np.empty` allocation is uninitialised by contract. Filled region byte-identical at `0.000e+00`; `_pos` + `_full` independently asserted. **PI verdict: ✅ APPROVED 2026-05-14**
+
+#### Speed check
+CP3b code paths (buffer `add` / `sample` / `_sample_at_indices`) are CPU-side and live outside the JIT'd training step; the cadence helpers (`Ratio`, `replay_ratio`) are integer arithmetic. No training-loop hot path touched at this checkpoint. Speed check skipped per protocol; the wall-clock budget verdict lives at CP10.
+
+#### Reviewer chain
+- [x] `code-reviewer` ✅ PASS → [`docs/reviews/dreamer_srl_v3_cp3b_code_review.md`](../../../reviews/dreamer_srl_v3_cp3b_code_review.md) (committed `ef36099`).
+- [x] `math-reviewer` ✅ PASS → [`docs/reviews/dreamer_srl_v3_cp3b_math_review.md`](../../../reviews/dreamer_srl_v3_cp3b_math_review.md) (committed `ef36099`). All 8 equations match sheeprl@33b6366 line-for-line.
+- [x] `professor-rl-bayesian-dl` ✅ PASS → [`docs/reviews/dreamer_srl_v3_cp3b_professor_rl_bayesian_dl_review.md`](../../../reviews/dreamer_srl_v3_cp3b_professor_rl_bayesian_dl_review.md) (committed `ef36099`). All 8 critical algorithm-points covered; §S scope verified.
+- [x] PI sign-off on D-004, D-005 — both ✅ APPROVED at [`docs/pi/calls/2026-05-14_dreamer_srl_v3_cp3b_deviations.md`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp3b_deviations.md) (committed `7007723`).
+
+Status: **CP-PASS (2026-05-14)** — implementation `9c57c06`; all four gates closed; PI cleared deviation log; CP5 is next eligible.
+
+---
+
+#### Verification (senior-developer, 2026-05-14)
+
+Plain-language summary of the CP-PASS decision. CP3b (the JAX port of sheeprl's replay buffer `SequentialReplayBuffer` plus the training-cadence wiring that schedules environment-step vs. gradient-step ratios — the layer whose 16× semantic drift was caught at the v2 parity gate and motivated the CP3b promotion in the first place) has cleared all four gates the v3 plan requires. (a) Every state-evolution bit-identity test passes at `max_abs_diff = 0.000e+00` — the tightest possible floor: storage state after a deterministic add-sequence, `_sample_at_indices` at sheeprl-precomputed indices, `is_first` marker placement in a window straddling a done boundary, four-env-lane non-interference, the 9-key cadence YAML matches sheeprl XS at `33b6366`, and a 5000-iteration `(env_step, grad_step)` cadence trace is byte-for-byte identical. (b) The source-citation discipline (`Ported from sheeprl@33b6366:<path>:<line-range>` headers + GOTCHA paragraphs + Bit-identity-test references) is present on every public function in `buffers.py` and was line-checked by the math-reviewer. (c) The three-reviewer chain closed cleanly — code, math, and professor-rl-bayesian-dl audits all persisted to disk at `ef36099` (no missing-file gap this time, unlike CP1). (d) The PI signed off on both deviations (D-004 memmap omission as substrate-mechanical; D-005 unfilled-region exclusion as test-scope honesty about `np.empty`'s uninitialised-tail contract).
+
+| Lever / gate | Verdict | Evidence |
+|---|---|---|
+| Lever A — state-evolution bit-identity tests | ✅ | 6/6 PASS at `max_abs_diff = 0.000e+00`; diff-tool sweep at `9c57c06` (`scripts/sheeprl_jax_diff.py --checkpoint CP3b` exits 0); pytest `6 passed` recorded in CP3b Implementation Report |
+| Lever B — source citations | ✅ | math-reviewer line-checked the docstring headers and cited line ranges against `vendor/sheeprl/sheeprl/data/buffers.py` @ `33b6366`; verdict `✅ PASS` in `docs/reviews/dreamer_srl_v3_cp3b_math_review.md` |
+| Lever C — code-reviewer | ✅ PASS | [`docs/reviews/dreamer_srl_v3_cp3b_code_review.md`](../../../reviews/dreamer_srl_v3_cp3b_code_review.md) (`ef36099`). 0.000e+00 results verified genuine (fixtures generated via vendored sheeprl side, JAX tested against stored bytes — no self-comparison); source-citation line ranges accurate; isolation rule + memmap rule honored. One nit (non-blocker): `SequentialReplayBuffer` is a plain Python class not a `flax.struct.dataclass`; rationale (CPU-side, never crosses JIT; matches sheeprl OOP + CP1's `Ratio` precedent) accepted. |
+| Lever C — math-reviewer | ✅ PASS | [`docs/reviews/dreamer_srl_v3_cp3b_math_review.md`](../../../reviews/dreamer_srl_v3_cp3b_math_review.md) (`ef36099`). All 8 equations match sheeprl@`33b6366` line-for-line: ring-buffer wrap, modular sample-window, valid-start arithmetic, env-tiled flat-index time-major C-order, `is_first` offset, prefill off-by-one, ratio shift, `Ratio` scheduler. D-004 + D-005 math-invariant. |
+| Lever C — professor-rl-bayesian-dl | ✅ PASS | [`docs/reviews/dreamer_srl_v3_cp3b_professor_rl_bayesian_dl_review.md`](../../../reviews/dreamer_srl_v3_cp3b_professor_rl_bayesian_dl_review.md) (`ef36099`). All 8 critical algorithm-points covered. §S-rules correctly scoped (CP3b substrates §S1, §S2-half, §S3-gate-arithmetic-half, §S4; §S2 call-site + §S3 random-action-prefill correctly deferred to CP9b). Hand-off notes for CP4b, CP2b, CP9b downstream reviewers included. |
+| Lever D — diff tool | ✅ | `scripts/sheeprl_jax_diff.py --checkpoint CP3b` runs all 6 CP3b tests against `vendor/sheeprl/sheeprl/data/buffers.py` @ `33b6366` and prints PASS for each at `max_abs_diff = 0.000e+00` (Test 1 over the filled region per D-005) |
+| Lever E — PI sign-off | ✅ | Both D-004 and D-005 ✅ APPROVED at [`docs/pi/calls/2026-05-14_dreamer_srl_v3_cp3b_deviations.md`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp3b_deviations.md) (`7007723`); DEVIATION_LOG.md table updated with approval anchors |
+| Speed check | n/a | CP3b code paths are CPU-side (buffer `add`/`sample`/`_sample_at_indices`) outside the JIT'd training step; cadence helpers are integer arithmetic. No training-loop hot path touched at this CP. Wall-clock budget verdict lives at CP10. |
+| Scope drift | none flagged | All changed paths are inside the CP3b-scoped set: `src/algorithms/dreamer_srl/buffers.py`, `configs/dreamer_srl/agent_xs.yaml`, paired tests, six fixtures, the fixture generator, the diff-tool registries, DEVIATION_LOG, this plan, three review files, one PI doc. No out-of-scope source modifications. |
+
+**Conclusion.** CP3b → **CP-PASS** at `9c57c06`. CP5 is the next eligible checkpoint per the v3 implementation order (slot #3 — `loss.py` two-hot symlog-space distribution, the historical-scar function whose previous bug took weeks to find because the bin grid was implemented in real reward space instead of symlog space). The user authorizes the CP3b → CP5 transition; the senior-developer does not spawn `developer` for CP5 without that authorization.
+
+**Verified by**: senior-developer
+**Date**: 2026-05-14
 
 ### CP2 — `LayerNormGRUCell`
 ... (one block per CP; filled by developer)
