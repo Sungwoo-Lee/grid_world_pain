@@ -160,10 +160,11 @@ def compare(
 #
 # CP1 (utils.py):       symlog, symexp, init_weights, uniform_init_weights,
 #                        compute_lambda_values, moments_update, ratio, prepare_obs
-# CP2 (agent.py):        layernorm_gru_cell, action_shift
+# CP2 (agent.py):        layernorm_gru_cell
+# CP2b (train.py):       action_shift
 # CP3 (agent.py):        zero_init_reward_head, zero_init_critic_head
-# CP4 (agent.py):        rssm_transition, rssm_representation, get_initial_states,
-#                         is_first_force_set, is_first_three_quantity_reset
+# CP4 (agent.py):        rssm_transition, rssm_representation, get_initial_states
+# CP4b (agent.py):       is_first_force_set, is_first_three_quantity_reset
 # CP5 (loss.py):         twohot_bins_endpoints, twohot_encode, twohot_log_prob
 # CP6 (train.py):        critic_loss_two_terms, critic_target_lambda, discount_weighting
 # CP7 (train.py):        polyak_first_call, polyak_subsequent_call, polyak_before_train
@@ -181,11 +182,10 @@ FUNCTION_REGISTRY: dict[str, callable] = {
 CHECKPOINT_REGISTRY: dict[str, list[str]] = {
     "CP1":  ["symlog", "symexp", "init_weights", "uniform_init_weights",
              "compute_lambda_values", "moments_update", "ratio", "prepare_obs"],
-    "CP2":  ["layernorm_gru_cell", "action_shift"],
+    "CP2":  ["layernorm_gru_cell"],
     "CP2b": ["action_shift"],
     "CP3":  ["zero_init_reward_head", "zero_init_critic_head"],
-    "CP4":  ["rssm_transition", "rssm_representation", "get_initial_states",
-             "is_first_force_set"],
+    "CP4":  ["rssm_transition", "rssm_representation", "get_initial_states"],
     "CP4b": ["is_first_force_set", "is_first_three_quantity_reset"],
     "CP5":  ["twohot_bins_endpoints", "twohot_encode", "twohot_log_prob"],
     "CP6":  ["critic_loss_two_terms", "critic_target_lambda", "discount_weighting"],

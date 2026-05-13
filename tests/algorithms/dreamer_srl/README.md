@@ -60,10 +60,10 @@ tests/algorithms/dreamer_srl/
 ├── __init__.py
 ├── README.md                 # this file
 ├── test_utils.py             # CP1: symlog, symexp, init_weights, compute_lambda_values, Moments, Ratio, prepare_obs
-├── test_buffers.py           # CP3: SequentialReplayBuffer
-├── test_agent.py             # CP2/CP3/CP4/CP4b: LayerNormGRUCell, MLP, encoder/decoder, RSSM, Actor, Critic, build_agent
+├── test_buffers.py           # (no CP — buffers.py is an inter-CP sanity round-trip; see plan §"Implementation order" step 3)
+├── test_agent.py             # CP2 (LayerNormGRUCell), CP3 (build_agent zero-init heads), CP4 (RSSM + get_initial_states), CP4b (is_first reset)
 ├── test_loss.py              # CP5: TwoHotEncoding, Symlog, MSE, BernoulliSafeMode, reconstruction_loss
-└── test_train.py             # CP6/CP7: one_train_step, collect_step, polyak_update
+└── test_train.py             # CP2b (action_shift), CP6 (critic loss), CP7 (Polyak update)
 ```
 
 ## Paired diff tool
