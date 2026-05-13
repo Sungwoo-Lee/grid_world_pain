@@ -19,10 +19,14 @@ Contents
 --------
     LayerNormGRUCell    CP2  — recurrent GRU cell with LayerNorm + 1+1 fused gates
     action_shift        CP2b — §S2 action-shift: prepend-zero, drop-last
+    RewardHead          CP3  — reward MLP head with zero-init output linear (cascade fix #27)
+    CriticHead          CP3  — critic MLP head with zero-init output linear (cascade fix #27)
 """
 import jax
 import jax.numpy as jnp
 from flax import nnx
+
+from src.algorithms.dreamer_srl.utils import uniform_init_weights
 
 
 # ---------------------------------------------------------------------------
@@ -194,3 +198,153 @@ def action_shift(actions: jax.Array) -> jax.Array:
     """
     zeros = jnp.zeros_like(actions[:1])   # [1, B, A]
     return jnp.concatenate([zeros, actions[:-1]], axis=0)   # [T, B, A]
+
+
+# ---------------------------------------------------------------------------
+# CP3 — RewardHead (zero-init output linear, cascade fix #27)
+# ---------------------------------------------------------------------------
+
+class RewardHead(nnx.Module):
+    """Single-layer output head for the reward model with zero-init output linear.
+
+    # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L1170-L1180
+
+    Cascade fix #27: the output linear layer (kernel + bias) is initialized to
+    all-zeros via uniform_init_weights(scale=0.0). This forces the reward head to
+    start as an uninformative predictor, preventing spurious high-magnitude gradient
+    signals from random-init logits on the first training step.
+
+    In sheeprl the zero-init is applied in the build_agent final-init phase (L1175):
+        world_model.reward_model.model[-1].apply(uniform_init_weights(0.0))
+
+    Architecture (this class exposes only the output linear — the full MLP body is
+    wired in CP4. For CP3 we test only the zero-init discipline on the output linear):
+        output_linear : Linear(in_features, out_features)  ← zero-init kernel + bias
+
+    GOTCHA: uniform_init_weights(scale=0.0) produces limit = sqrt(3 * 0) = 0, so
+    uniform(-0, 0) = 0.0 for all elements. This is the intended behavior (all-zeros
+    is the sentinel for "uninformative at init"). The scale=0.0 case is not a
+    degenerate input — it is cascade fix #27's explicit mechanism.
+
+    Bit-identity test:
+        tests/algorithms/dreamer_srl/test_agent.py::test_zero_init_reward_head_matches_sheeprl
+
+    Args:
+        in_features  (int): size of the MLP body's last hidden state (dense_units).
+        out_features (int): number of two-hot bins (255 for DreamerV3 XS).
+        key          (jax.Array): PRNG key used for zero-init (produces all-zeros
+                     regardless of key value — supplied for API consistency with
+                     uniform_init_weights).
+        rngs         (nnx.Rngs): Flax NNX RNG container — used only during __init__
+                     to construct the nnx.Linear; NOT stored on the module.
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        key: jax.Array,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.in_features = in_features
+        self.out_features = out_features
+
+        # Initialize the output linear with placeholder random init (rngs),
+        # then immediately overwrite with zero-init kernel + zero bias.
+        # This matches sheeprl's two-phase init:
+        #   1. build_agent constructs the module (random or truncated-normal init)
+        #   2. build_agent applies uniform_init_weights(0.0) to model[-1] (L1175)
+        self.output_linear = nnx.Linear(
+            in_features=in_features,
+            out_features=out_features,
+            use_bias=True,
+            rngs=rngs,
+        )
+
+        # Zero-init kernel (cascade fix #27) — uniform_init_weights(scale=0.0)
+        # produces all-zeros (limit = sqrt(3 * 0 / denom) = 0).
+        zero_kernel = uniform_init_weights(0.0, in_features, out_features, key)
+        zero_bias = jnp.zeros((out_features,), dtype=jnp.float32)
+
+        self.output_linear.kernel = nnx.Param(zero_kernel)
+        self.output_linear.bias   = nnx.Param(zero_bias)
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        """Forward pass: linear projection of the final hidden state.
+
+        Args:
+            x : [..., in_features]
+
+        Returns:
+            logits : [..., out_features]  (two-hot bin logits over 255 bins)
+        """
+        return self.output_linear(x)
+
+
+# ---------------------------------------------------------------------------
+# CP3 — CriticHead (zero-init output linear, cascade fix #27)
+# ---------------------------------------------------------------------------
+
+class CriticHead(nnx.Module):
+    """Single-layer output head for the critic with zero-init output linear.
+
+    # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L1170-L1180
+
+    Cascade fix #27 (critic branch): the output linear layer is initialized to
+    all-zeros via uniform_init_weights(scale=0.0). Same rationale as RewardHead —
+    forces the critic to start as an uninformative value predictor.
+
+    In sheeprl the zero-init is applied in the build_agent final-init phase (L1172):
+        critic.model[-1].apply(uniform_init_weights(0.0))
+
+    Architecture: mirrors RewardHead exactly (same in/out dimensions in XS config).
+
+    GOTCHA: same as RewardHead — scale=0.0 is the intentional mechanism, not an edge
+    case. The PRNG key is consumed but irrelevant (limit=0 → all-zeros output).
+
+    Bit-identity test:
+        tests/algorithms/dreamer_srl/test_agent.py::test_zero_init_critic_head_matches_sheeprl
+
+    Args:
+        in_features  (int): size of the MLP body's last hidden state (dense_units).
+        out_features (int): number of two-hot bins (255 for DreamerV3 XS).
+        key          (jax.Array): PRNG key (result is all-zeros regardless of value).
+        rngs         (nnx.Rngs): Flax NNX RNG container — used only during __init__.
+    """
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        key: jax.Array,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.in_features = in_features
+        self.out_features = out_features
+
+        self.output_linear = nnx.Linear(
+            in_features=in_features,
+            out_features=out_features,
+            use_bias=True,
+            rngs=rngs,
+        )
+
+        # Zero-init kernel (cascade fix #27)
+        zero_kernel = uniform_init_weights(0.0, in_features, out_features, key)
+        zero_bias = jnp.zeros((out_features,), dtype=jnp.float32)
+
+        self.output_linear.kernel = nnx.Param(zero_kernel)
+        self.output_linear.bias   = nnx.Param(zero_bias)
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        """Forward pass: linear projection of the final hidden state.
+
+        Args:
+            x : [..., in_features]
+
+        Returns:
+            logits : [..., out_features]  (two-hot bin logits over 255 bins)
+        """
+        return self.output_linear(x)

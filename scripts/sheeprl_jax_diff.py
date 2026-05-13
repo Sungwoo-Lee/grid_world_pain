@@ -741,6 +741,93 @@ def _run_cadence_env_grad_step_trace_5000_iters(fixture) -> tuple:
 
 
 # ---------------------------------------------------------------------------
+# CP3 runners (agent.py) — added when CP3 landed
+# ---------------------------------------------------------------------------
+
+def _run_zero_init_reward_head(fixture) -> tuple:
+    """RewardHead output linear is zero-initialized (cascade fix #27).
+
+    Both kernel and bias must be all-zeros after construction with scale=0.0.
+    Zero is zero on both platforms — max_abs_diff = 0.0 expected (no D-### relaxation).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L1175
+    """
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from flax import nnx
+    from src.algorithms.dreamer_srl.agent import RewardHead
+
+    in_features  = int(fixture["in_features"])
+    out_features = int(fixture["out_features"])
+    torch_kernel = fixture["torch_kernel"]  # [in_features, out_features] all-zeros
+    torch_bias   = fixture["torch_bias"]    # [out_features] all-zeros
+
+    key  = jax.random.PRNGKey(0xD3EAF)
+    rngs = nnx.Rngs(jax.random.PRNGKey(0))
+    head = RewardHead(in_features=in_features, out_features=out_features, key=key, rngs=rngs)
+
+    jax_kernel = np.asarray(head.output_linear.kernel[...])  # [in_features, out_features]
+    jax_bias   = np.asarray(head.output_linear.bias[...])    # [out_features]
+
+    # Concatenate kernel + bias into a single comparison array
+    jax_out   = np.concatenate([jax_kernel.ravel(), jax_bias.ravel()])
+    torch_out = np.concatenate([np.asarray(torch_kernel).ravel(), np.asarray(torch_bias).ravel()])
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L1175\n"
+        f"  jax:     src/algorithms/dreamer_srl/agent.py:RewardHead.__init__\n"
+        f"  fixture: in_features={in_features}, out_features={out_features}, seed=0xD3EAF\n"
+        f"  NOTE: cascade fix #27 — uniform_init_weights(scale=0.0) → all-zeros; "
+        f"max_abs_diff=0.0 expected (no platform ULP drift for zero)"
+    )
+    return jax_out, torch_out, metadata
+
+
+def _run_zero_init_critic_head(fixture) -> tuple:
+    """CriticHead output linear is zero-initialized (cascade fix #27).
+
+    Both kernel and bias must be all-zeros after construction with scale=0.0.
+    Zero is zero on both platforms — max_abs_diff = 0.0 expected (no D-### relaxation).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L1172
+    """
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from flax import nnx
+    from src.algorithms.dreamer_srl.agent import CriticHead
+
+    in_features  = int(fixture["in_features"])
+    out_features = int(fixture["out_features"])
+    torch_kernel = fixture["torch_kernel"]  # [in_features, out_features] all-zeros
+    torch_bias   = fixture["torch_bias"]    # [out_features] all-zeros
+
+    key  = jax.random.PRNGKey(0xD3EAF)
+    rngs = nnx.Rngs(jax.random.PRNGKey(0))
+    head = CriticHead(in_features=in_features, out_features=out_features, key=key, rngs=rngs)
+
+    jax_kernel = np.asarray(head.output_linear.kernel[...])  # [in_features, out_features]
+    jax_bias   = np.asarray(head.output_linear.bias[...])    # [out_features]
+
+    jax_out   = np.concatenate([jax_kernel.ravel(), jax_bias.ravel()])
+    torch_out = np.concatenate([np.asarray(torch_kernel).ravel(), np.asarray(torch_bias).ravel()])
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L1172\n"
+        f"  jax:     src/algorithms/dreamer_srl/agent.py:CriticHead.__init__\n"
+        f"  fixture: in_features={in_features}, out_features={out_features}, seed=0xD3EAF\n"
+        f"  NOTE: cascade fix #27 — uniform_init_weights(scale=0.0) → all-zeros; "
+        f"max_abs_diff=0.0 expected (no platform ULP drift for zero)"
+    )
+    return jax_out, torch_out, metadata
+
+
+# ---------------------------------------------------------------------------
 # CP2 runners (agent.py) — added when CP2 + CP2b landed
 # ---------------------------------------------------------------------------
 
@@ -948,6 +1035,9 @@ def _run_twohot_log_prob(fixture) -> tuple:
 
 
 FUNCTION_REGISTRY: dict[str, callable] = {
+    # CP3 — agent.py (zero-init output linears, cascade fix #27)
+    "zero_init_reward_head": _run_zero_init_reward_head,
+    "zero_init_critic_head": _run_zero_init_critic_head,
     # CP2 — agent.py
     "layernorm_gru_cell":    _run_layernorm_gru_cell,
     "action_shift":          _run_action_shift,
