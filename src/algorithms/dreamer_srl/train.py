@@ -13,9 +13,12 @@ CP scope implemented here:
         compute_discount: §S6 discount cumprod weighting
         compute_critic_loss: two-term NLL + discount weighting
 
-    CP7+ (not yet implemented):
-        actor loss (REINFORCE + entropy + §S6 discount weighting)
-        polyak_update (EMA target-critic update)
+    CP7 — Polyak target-critic EMA update + actor REINFORCE objective (§S5/§S7):
+        polyak_update: EMA blend of online → target critic weights
+        compute_imagined_returns: §S5 true-continue splice + lambda-value computation
+        compute_actor_objective: REINFORCE objective with §S7 advantage normalization
+
+    CP8+ (not yet implemented):
         one_train_step (full training-step orchestration)
 
 ========================================================================
@@ -53,6 +56,79 @@ In JAX we use IndependentBernoulli (from loss.py) which wraps BernoulliSafeMode
 and applies the event-dim sum in log_prob.
 
 ========================================================================
+CP7 — Polyak target-critic EMA update (§S7 ordering)
+========================================================================
+Sheeprl dreamer_v3.py:L673-L680 (inside the inner gradient-step loop):
+    if cumulative_per_rank_gradient_steps % ... == 0:
+        tau = 1 if cumulative_per_rank_gradient_steps == 0 else cfg.algo.critic.tau
+        for cp, tcp in zip(critic.module.parameters(), target_critic.parameters()):
+            tcp.data.copy_(tau * cp.data + (1 - tau) * tcp.data)
+    batch = {k: v[i].float() for k, v in local_data.items()}
+    train(...)   ← train() is called AFTER the polyak update in this iteration
+
+Key invariants:
+  1. First call (step 0): tau=1.0 → hard copy: target = online (byte-identical).
+  2. Subsequent calls: tau=0.02 (XS default) → EMA blend:
+       target = (1 - tau) * target + tau * online
+       (NOTE: sheeprl writes this as `tau * cp + (1 - tau) * tcp` which is the
+       same formula with online=cp, target=tcp.)
+  3. Call order: polyak fires BEFORE `one_train_step` (= sheeprl's `train()`)
+     in the outer loop. This means the target critic used inside `train()` for
+     value prediction is the FRESHLY UPDATED target, not the pre-step target.
+
+JAX implementation: `polyak_update(online_params, target_params, tau)` returns
+a NEW params dict (pure functional — no in-place mutation). The caller replaces
+the target critic's parameter dict with the returned value.
+
+========================================================================
+CP7 — §S5 true-continue splice (compute_imagined_returns)
+========================================================================
+Sheeprl dreamer_v3.py:L246-L248 (inside `train()`, inside the `with ... no_grad` context):
+    continues = Independent(BernoulliSafeMode(logits=world_model.continue_model(imagined_trajectories)), 1).mode
+    true_continue = (1 - data["terminated"]).flatten().reshape(1, -1, 1)
+    continues = torch.cat((true_continue, continues[1:]))
+
+The §S5 splice replaces `continues[0]` (the first IMAGINED continue, which
+could be wrong for the first step right after a real env step) with the
+OBSERVED continue: `1 - terminated_observed`. This ensures the first discount
+weight is grounded in reality rather than the world model's prediction.
+
+`compute_imagined_returns` centralizes:
+  1. The §S5 splice of continues.
+  2. The `compute_lambda_values` call.
+  3. The `compute_discount` call.
+All three are consumed by both actor and critic loss.
+
+========================================================================
+CP7 — Actor REINFORCE objective with §S7 advantage normalization
+========================================================================
+Sheeprl dreamer_v3.py:L274-L297 (actor optimization section):
+    baseline = predicted_values[:-1]
+    offset, invscale = moments(lambda_values, fabric)
+    normed_lambda_values = (lambda_values - offset) / invscale
+    normed_baseline = (baseline - offset) / invscale
+    advantage = normed_lambda_values - normed_baseline
+    # For discrete actions (our case — grid-world is discrete):
+    objective = (
+        sum_over_action_dims(log_prob(stop_gradient(action))) * advantage.detach()
+    )
+    entropy = ent_coef * sum(p.entropy() for p in policies)
+    policy_loss = -mean(discount[:-1].detach() * (objective + entropy[:-1]))
+
+§S7 advantage computation (offset cancellation):
+    advantage = normed_lambda - normed_baseline
+              = (lambda_values - offset) / invscale - (baseline - offset) / invscale
+    The `offset` cancels algebraically: advantage = (lambda - baseline) / invscale.
+    However, per-term normalization matches sheeprl's code structure exactly.
+    We compute BOTH terms separately (as sheeprl does), even though the algebra
+    shows the offset cancels. This preserves bit-identity with sheeprl.
+
+`stop_gradient` discipline (sheeprl L287):
+    - action: `imgnd_act.detach()` → `jax.lax.stop_gradient(imagined_action)`
+    - advantage: `.detach()` → `jax.lax.stop_gradient(advantage)`
+    Both are stop_gradient'd in the REINFORCE log-prob-times-advantage product.
+
+========================================================================
 CP6 — cascade fix #29 (two-term critic loss, Hafner §3.3 slow-target reg)
 ========================================================================
 Sheeprl dreamer_v3.py:L307-L316:
@@ -73,12 +149,13 @@ Two key points:
 """
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Dict, Tuple
 
 import jax
 import jax.numpy as jnp
 
 from src.algorithms.dreamer_srl.loss import TwoHotEncoding
+from src.algorithms.dreamer_srl.utils import compute_lambda_values
 
 
 # ---------------------------------------------------------------------------
@@ -243,3 +320,283 @@ def compute_critic_loss(
     value_loss = jnp.mean((neg_lp1 + neg_lp2) * discount_weights)  # scalar
 
     return value_loss, neg_lp1, neg_lp2
+
+
+# ---------------------------------------------------------------------------
+# CP7 — polyak_update (EMA target-critic update)
+# ---------------------------------------------------------------------------
+
+def polyak_update(
+    online_params: Dict[str, jax.Array],
+    target_params: Dict[str, jax.Array],
+    tau: float,
+) -> Dict[str, jax.Array]:
+    """Pure-functional Polyak (EMA) update: target = (1-tau)*target + tau*online.
+
+    Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L678-L680
+    (inside the inner gradient-step loop, BEFORE the `train()` call):
+
+    sheeprl L678-L680:
+        tau = 1 if cumulative_per_rank_gradient_steps == 0 else cfg.algo.critic.tau
+        for cp, tcp in zip(critic.module.parameters(), target_critic.parameters()):
+            tcp.data.copy_(tau * cp.data + (1 - tau) * tcp.data)
+
+    Sheeprl writes the blend as `tau * online + (1-tau) * target` (i.e. `cp` is
+    the online param, `tcp` is the target param). This is equivalent to the more
+    common EMA form `target = (1-tau)*target + tau*online` — same algebra.
+
+    CALL ORDER (§S7 ordering — sheeprl L673-L697):
+        The polyak update fires BEFORE `train()` (= `one_train_step`) in sheeprl's
+        inner gradient-step loop. The target critic used inside `train()` for value
+        prediction is the FRESHLY UPDATED target from this iteration's polyak call.
+
+    First call (tau=1.0 — hard copy):
+        target = 1.0 * online + 0.0 * target = online  (byte-identical)
+        This initializes the target network to match the online network at step 0.
+
+    Subsequent calls (tau=0.02 — EMA blend, sheeprl XS default):
+        target = 0.98 * target + 0.02 * online
+        Slowly tracks the online network, providing a stable value bootstrap.
+
+    JAX implementation (pure-functional):
+        Sheeprl uses in-place mutation (`tcp.data.copy_(...)`). JAX cannot mutate
+        arrays inside JIT. We instead return a NEW params dict. The caller replaces
+        the target critic's parameter dict with the returned value. This is logged
+        in DEVIATION_LOG.md as structural (same class as D-001: in-place mutation
+        → pure-functional return).
+
+    Args:
+        online_params: flat dict {name: array} of online critic parameters.
+                       Must have the same keys as target_params.
+        target_params: flat dict {name: array} of target critic parameters.
+                       Must have the same keys as online_params.
+        tau:           EMA coefficient. tau=1.0 → hard copy. tau=0.02 → slow blend.
+                       sheeprl default (XS config): tau=0.02.
+
+    Returns:
+        new_target_params: updated dict with the same keys as target_params.
+                           Each array is `(1-tau) * target + tau * online`.
+
+    Bit-identity tests:
+        tests/algorithms/dreamer_srl/test_train.py::test_polyak_first_call_hard_copy
+        tests/algorithms/dreamer_srl/test_train.py::test_polyak_subsequent_call_blend
+    """
+    return {
+        k: (1.0 - tau) * target_params[k] + tau * online_params[k]
+        for k in online_params
+    }
+
+
+# ---------------------------------------------------------------------------
+# CP7 — compute_imagined_returns (§S5 true-continue splice + lambda values)
+# ---------------------------------------------------------------------------
+
+def compute_imagined_returns(
+    predicted_rewards: jax.Array,
+    predicted_values: jax.Array,
+    continues_predicted: jax.Array,
+    terminated_observed: jax.Array,
+    gamma: float,
+    lmbda: float,
+) -> Tuple[jax.Array, jax.Array, jax.Array]:
+    """§S5 true-continue splice + lambda-value computation + discount weighting.
+
+    Centralizes the three computations consumed by both actor and critic loss:
+      1. §S5 true-continue splice: replace continues[0] with observed continue.
+      2. compute_lambda_values: TD-lambda return estimation.
+      3. compute_discount: §S6 cumprod discount mask.
+
+    §S5 splice — ported from sheeprl@33b6366:
+        dreamer_v3.py:L246-L248 (inside `train()` after imagination rollout):
+            continues = Independent(BernoulliSafeMode(logits=...), 1).mode
+            true_continue = (1 - data["terminated"]).flatten().reshape(1, -1, 1)
+            continues = torch.cat((true_continue, continues[1:]))
+
+    The splice replaces `continues[0]` — the world model's predicted continue
+    for the first imagined step — with the REAL env continue from the replay
+    buffer (`1 - terminated`). This grounds the first discount weight in reality:
+      - If the agent was actually terminated, continues[0] = 0 → discount[0] = 0
+        (the first imagined step contributes nothing, which is correct — there is
+        no continuation from a terminal state).
+      - If the agent was NOT terminated, continues[0] = 1 → discount[0] = 1.0
+        (the first step is fully weighted).
+
+    Lambda-values — ported from sheeprl@33b6366:
+        dreamer_v3.py:L251-L256 (compute_lambda_values call):
+            lambda_values = compute_lambda_values(
+                predicted_rewards[1:],
+                predicted_values[1:],
+                continues[1:] * cfg.algo.gamma,
+                lmbda=cfg.algo.lmbda,
+            )
+
+    Note: `continues[1:] * gamma` matches sheeprl's call signature where the
+    `continues` argument to `compute_lambda_values` already includes the gamma
+    factor. This is consistent with `utils.py:compute_lambda_values`.
+
+    Args:
+        predicted_rewards: [H+1, BT, 1] predicted rewards over the imagination
+                           horizon. The `[1:]` slice (dropping step 0) is applied
+                           here, matching sheeprl L253.
+        predicted_values:  [H+1, BT, 1] predicted values over the imagination
+                           horizon. The `[1:]` slice is applied here, matching
+                           sheeprl L254.
+        continues_predicted: [H+1, BT, 1] continue probabilities (mode of the
+                             world model's Bernoulli continue head).
+                             continues_predicted[0] is REPLACED by §S5 splice.
+                             continues_predicted[1:] are used as-is.
+        terminated_observed: [1, BT, 1] or [BT, 1] observed termination flag from
+                             the replay buffer for this batch. Converted to
+                             true_continue = 1 - terminated_observed.
+        gamma: discount factor (float). Used in compute_lambda_values (via
+               continues * gamma) and in compute_discount.
+        lmbda: lambda mixing coefficient (float, default 0.95).
+
+    Returns:
+        (lambda_values, continues_spliced, discount)
+        lambda_values:     [H, BT, 1] TD-lambda return targets (un-normalised).
+                           Used by critic (raw) and actor (Moments-normalised).
+        continues_spliced: [H+1, BT, 1] continues after §S5 splice.
+                           continues_spliced[0] = 1 - terminated_observed.
+                           continues_spliced[1:] = continues_predicted[1:].
+        discount:          [H+1, BT, 1] from compute_discount(continues_spliced, gamma).
+                           Already stop_gradient'd. Used by both actor and critic.
+
+    Bit-identity test:
+        Tests for lambda_values and discount are covered by the CP1 and CP6 tests
+        respectively. The §S5 splice itself is a concat+slice — no numerical test
+        needed beyond the structural shape assertion.
+    """
+    # §S5 splice: replace continues[0] with observed continue (1 - terminated)
+    # sheeprl L247: true_continue = (1 - data["terminated"]).flatten().reshape(1, -1, 1)
+    # terminated_observed may be [1, BT, 1] or [BT, 1] — ensure shape [1, BT, 1]
+    true_continue = (1.0 - terminated_observed).reshape(1, continues_predicted.shape[1], 1)
+    # sheeprl L248: continues = torch.cat((true_continue, continues[1:]))
+    continues_spliced = jnp.concatenate(
+        [true_continue, continues_predicted[1:]], axis=0
+    )  # [H+1, BT, 1]
+
+    # Lambda-value computation (sheeprl L251-L256)
+    # sheeprl passes continues[1:] * gamma to compute_lambda_values
+    lambda_vals = compute_lambda_values(
+        predicted_rewards[1:],               # [H, BT, 1]
+        predicted_values[1:],                # [H, BT, 1]
+        continues_spliced[1:] * gamma,       # [H, BT, 1] — includes gamma factor
+        lmbda=lmbda,
+    )  # [H, BT, 1]
+
+    # §S6 discount (sheeprl L259-L260)
+    discount = compute_discount(continues_spliced, gamma)  # [H+1, BT, 1]
+
+    return lambda_vals, continues_spliced, discount
+
+
+# ---------------------------------------------------------------------------
+# CP7 — compute_actor_objective (REINFORCE with §S7 advantage normalization)
+# ---------------------------------------------------------------------------
+
+def compute_actor_objective(
+    log_probs: jax.Array,
+    lambda_values: jax.Array,
+    predicted_values: jax.Array,
+    moments_offset: jax.Array,
+    moments_invscale: jax.Array,
+    entropy: jax.Array,
+    discount: jax.Array,
+    ent_coef: float,
+) -> Tuple[jax.Array, jax.Array, jax.Array]:
+    """Actor REINFORCE objective with §S7 advantage normalization.
+
+    Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L274-L297
+    (actor optimization section of `train()`).
+
+    sheeprl L274-L297:
+        baseline = predicted_values[:-1]
+        offset, invscale = moments(lambda_values, fabric)
+        normed_lambda_values = (lambda_values - offset) / invscale
+        normed_baseline = (baseline - offset) / invscale
+        advantage = normed_lambda_values - normed_baseline
+        # discrete action case (grid-world):
+        objective = sum_log_prob(stop_gradient(action)) * advantage.detach()
+        entropy = ent_coef * sum(p.entropy() for p in policies)
+        policy_loss = -mean(discount[:-1].detach() * (objective + entropy[:-1]))
+
+    §S7 advantage computation (offset cancellation note):
+        advantage = (lambda - offset) / invscale - (baseline - offset) / invscale
+                  = (lambda - baseline) / invscale    (algebra shows offset cancels)
+        However, sheeprl computes BOTH normed terms SEPARATELY before subtracting.
+        We match this per-term form for bit-identity (even though the offset
+        cancels algebraically, floating-point evaluation of the two forms may
+        produce different rounding errors in edge cases).
+
+    STOP_GRADIENT discipline (sheeprl L287):
+        - action log_probs: the `p.log_prob(imgnd_act.detach())` form —
+          log_probs is computed with stop_gradient on the action.
+        - advantage: `.detach()` → `jax.lax.stop_gradient(advantage)`.
+          The gradient flows through log_probs (the policy distribution
+          parameters), NOT through advantage.
+
+    Args:
+        log_probs: [H, BT, 1] sum of log-probs over action dimensions,
+                   with stop_gradient already applied to the sampled action
+                   (caller applies stop_gradient to the action before log_prob).
+                   Shape: [H, BT, 1] (matching [:-1] slice of imagined_trajectories).
+                   Sheeprl L284-L287: `p.log_prob(imgnd_act.detach()).unsqueeze(-1)[:-1]`
+                   summed over action dimensions.
+        lambda_values: [H, BT, 1] un-normalised lambda-return targets
+                       (from compute_imagined_returns).
+        predicted_values: [H+1, BT, 1] critic-predicted values on imagined
+                          trajectories. baseline = predicted_values[:-1] applied here.
+        moments_offset: scalar — `offset` from moments_update (low EMA).
+                        Sheeprl L275: `offset, invscale = moments(lambda_values, fabric)`.
+        moments_invscale: scalar — `invscale` from moments_update.
+        entropy: [H+1, BT, 1] per-step policy entropy over imagined trajectories
+                 (unsqueezed to [H+1, BT, 1]). The `[:-1]` slice is applied here,
+                 matching sheeprl L295: `entropy.unsqueeze(dim=-1)[:-1]`.
+        discount: [H+1, BT, 1] from compute_discount (already stop_gradient'd).
+                  The `[:-1]` slice is applied here, matching sheeprl L296.
+        ent_coef: entropy regularization coefficient (float, sheeprl XS default 3e-4).
+
+    Returns:
+        (policy_loss, objective, advantage)
+        policy_loss: scalar — the final actor loss (to be minimized via gradient).
+        objective:   [H, BT, 1] — log_probs * stop_gradient(advantage).
+                     For continuous actions (not used in grid-world), this would
+                     be just `advantage`. For discrete, it's log_probs * advantage.
+        advantage:   [H, BT, 1] — normed_lambda - normed_baseline (before stop_grad).
+
+    Bit-identity tests:
+        tests/algorithms/dreamer_srl/test_train.py::test_actor_objective_advantage
+        (these tests are CP7 Lever-A)
+    """
+    # sheeprl L274: baseline = predicted_values[:-1]
+    baseline = predicted_values[:-1]  # [H, BT, 1]
+
+    # §S7 per-term normalization (sheeprl L275-L278)
+    # sheeprl L277: normed_lambda_values = (lambda_values - offset) / invscale
+    normed_lambda_values = (lambda_values - moments_offset) / moments_invscale  # [H, BT, 1]
+    # sheeprl L278: normed_baseline = (baseline - offset) / invscale
+    normed_baseline = (baseline - moments_offset) / moments_invscale             # [H, BT, 1]
+
+    # sheeprl L279: advantage = normed_lambda_values - normed_baseline
+    # NOTE: offset cancels algebraically; we keep per-term form for bit-identity
+    advantage = normed_lambda_values - normed_baseline  # [H, BT, 1]
+
+    # sheeprl L281-L290 (discrete action case — grid-world is always discrete):
+    # objective = log_prob(stop_gradient(action)) * advantage.detach()
+    # log_probs already has stop_gradient on the action (caller's responsibility).
+    # We apply stop_gradient on advantage here (sheeprl L290: `.detach()`).
+    objective = log_probs * jax.lax.stop_gradient(advantage)  # [H, BT, 1]
+
+    # sheeprl L295: entropy.unsqueeze(dim=-1)[:-1]  →  entropy[:-1]  (in our notation)
+    entropy_term = ent_coef * entropy[:-1]  # [H, BT, 1]
+
+    # sheeprl L296-L297:
+    # discount[:-1].detach() * (objective + entropy[:-1])
+    # policy_loss = -mean(...)
+    # discount is already stop_gradient'd by compute_discount (= torch.no_grad())
+    discount_weights = discount[:-1]  # [H, BT, 1] — stop_gradient already applied
+
+    policy_loss = -jnp.mean(discount_weights * (objective + entropy_term))  # scalar
+
+    return policy_loss, objective, advantage

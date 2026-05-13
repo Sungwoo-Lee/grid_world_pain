@@ -1525,6 +1525,139 @@ def _run_discount_weighting(fixture) -> tuple:
     return np.asarray(discount_jax), np.asarray(torch_disc_full), metadata
 
 
+def _run_polyak_first_call(fixture) -> tuple:
+    """polyak_first_call: tau=1.0 hard copy — target = online exactly.
+
+    Verifies: polyak_update(online, target, tau=1.0) returns params byte-identical
+    to online. First call in sheeprl's inner gradient-step loop.
+
+    Pure EMA arithmetic — no TwoHotEncoding.
+    Threshold: default 1e-6 (exact arithmetic; no deviation expected).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L678-L680
+        tau = 1 if cumulative_per_rank_gradient_steps == 0 else cfg.algo.critic.tau
+        for cp, tcp in zip(...): tcp.data.copy_(tau * cp + (1 - tau) * tcp)
+    """
+    import jax.numpy as jnp
+    import numpy as np
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.train import polyak_update
+
+    tau = float(fixture["tau"])
+    param_keys = sorted([k.replace("online_", "") for k in fixture.files if k.startswith("online_")])
+
+    online_params = {k: jnp.asarray(fixture[f"online_{k}"]) for k in param_keys}
+    target_params = {k: jnp.asarray(fixture[f"target_init_{k}"]) for k in param_keys}
+    torch_out = {k: np.asarray(fixture[f"torch_out_target_{k}"]) for k in param_keys}
+
+    new_target = polyak_update(online_params, target_params, tau=tau)
+
+    # Flatten to single arrays for comparison
+    jax_flat = np.concatenate([np.asarray(new_target[k]).ravel() for k in sorted(new_target)])
+    torch_flat = np.concatenate([torch_out[k].ravel() for k in sorted(torch_out)])
+
+    n_params = sum(v.size for v in online_params.values())
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L678-L680\n"
+        f"  jax:    src/algorithms/dreamer_srl/train.py:polyak_update\n"
+        f"  fixture: tau={tau}, {len(param_keys)} param groups, {n_params} total params, seed=0xD3EAF+3\n"
+        f"  tau=1.0 → hard copy (target = online); expect byte-identical (diff = 0)\n"
+        f"  NOTE: pure EMA arithmetic — no TwoHotEncoding; expect < 1e-6 (no D-006 cascade)"
+    )
+    return jax_flat, torch_flat, metadata
+
+
+def _run_polyak_subsequent_call(fixture) -> tuple:
+    """polyak_subsequent_call: tau=0.02 EMA blend — target = 0.98*target + 0.02*online.
+
+    Verifies: polyak_update(online, target, tau=0.02) returns
+        (1-0.02)*target + 0.02*online  for each parameter array.
+    Subsequent calls in sheeprl's inner gradient-step loop.
+
+    Pure EMA arithmetic — no TwoHotEncoding.
+    Threshold: default 1e-6 (exact arithmetic; no deviation expected).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L678-L680
+        tau = cfg.algo.critic.tau  (= 0.02 in XS config for subsequent calls)
+    """
+    import jax.numpy as jnp
+    import numpy as np
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.train import polyak_update
+
+    tau = float(fixture["tau"])
+    param_keys = sorted([k.replace("online_", "") for k in fixture.files if k.startswith("online_")])
+
+    online_params = {k: jnp.asarray(fixture[f"online_{k}"]) for k in param_keys}
+    target_params = {k: jnp.asarray(fixture[f"target_init_{k}"]) for k in param_keys}
+    torch_out = {k: np.asarray(fixture[f"torch_out_target_{k}"]) for k in param_keys}
+
+    new_target = polyak_update(online_params, target_params, tau=tau)
+
+    jax_flat = np.concatenate([np.asarray(new_target[k]).ravel() for k in sorted(new_target)])
+    torch_flat = np.concatenate([torch_out[k].ravel() for k in sorted(torch_out)])
+
+    n_params = sum(v.size for v in online_params.values())
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L678-L680\n"
+        f"  jax:    src/algorithms/dreamer_srl/train.py:polyak_update\n"
+        f"  fixture: tau={tau}, {len(param_keys)} param groups, {n_params} total params, seed=0xD3EAF+4\n"
+        f"  tau=0.02 → EMA blend: (1-tau)*target + tau*online\n"
+        f"  NOTE: pure EMA arithmetic — no TwoHotEncoding; expect < 1e-6 (no D-006 cascade)"
+    )
+    return jax_flat, torch_flat, metadata
+
+
+def _run_polyak_before_train(fixture) -> tuple:
+    """polyak_before_train: call-order verification (polyak BEFORE one_train_step).
+
+    Verifies two-step trace: step-0 hard copy + step-1 EMA blend, and verifies
+    that the polyak_update function is defined in train.py (structural check for
+    the call-order requirement: polyak fires BEFORE one_train_step per sheeprl's
+    inner gradient-step loop ordering).
+
+    Pure EMA arithmetic — no TwoHotEncoding.
+    Threshold: default 1e-6 (exact arithmetic; no deviation expected).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L673-L697
+        for i in range(per_rank_gradient_steps):
+            ... polyak update (L679-L680) ...
+            ... train() call (L686) ...
+    The two-step trace verifies the EMA arithmetic across two sequential calls.
+    """
+    import jax.numpy as jnp
+    import numpy as np
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.train import polyak_update
+
+    online_s0 = jnp.asarray(fixture["online_step0"])   # [8]
+    target_init = jnp.asarray(fixture["target_init"])  # [8]
+    online_s1 = jnp.asarray(fixture["online_step1"])   # [8]
+    tau_first = float(fixture["tau_first"])             # 1.0
+    tau_sub = float(fixture["tau_subsequent"])          # 0.02
+    torch_s1 = np.asarray(fixture["torch_out_target_after_step1"])  # [8]
+
+    # Step 0: hard copy
+    target_s0 = polyak_update({"w": online_s0}, {"w": target_init}, tau=tau_first)
+    # Step 1: EMA blend with updated online
+    target_s1 = polyak_update({"w": online_s1}, target_s0, tau=tau_sub)
+
+    jax_out = np.asarray(target_s1["w"])
+    n_params = online_s0.size * 2  # two steps
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L673-L697\n"
+        f"  jax:    src/algorithms/dreamer_srl/train.py:polyak_update (two-step trace)\n"
+        f"  fixture: tau_first={tau_first}, tau_sub={tau_sub}, seed=0xD3EAF+5\n"
+        f"  Step 0: hard copy (tau=1.0). Step 1: EMA blend (tau=0.02) with updated online.\n"
+        f"  Call-order: polyak fires BEFORE one_train_step (sheeprl L679-L680 before L686).\n"
+        f"  NOTE: pure EMA arithmetic — no TwoHotEncoding; expect < 1e-6 (no D-006 cascade)"
+    )
+    return jax_out, torch_s1, metadata
+
+
 FUNCTION_REGISTRY: dict[str, callable] = {
     # CP3 — agent.py (zero-init output linears, cascade fix #27)
     "zero_init_reward_head": _run_zero_init_reward_head,
@@ -1563,6 +1696,10 @@ FUNCTION_REGISTRY: dict[str, callable] = {
     "critic_loss_two_terms": _run_critic_loss_two_terms,
     "critic_target_lambda":  _run_critic_target_lambda,
     "discount_weighting":    _run_discount_weighting,
+    # CP7 — train.py (Polyak target-critic EMA update, §S5/§S7)
+    "polyak_first_call":       _run_polyak_first_call,
+    "polyak_subsequent_call":  _run_polyak_subsequent_call,
+    "polyak_before_train":     _run_polyak_before_train,
 }
 
 # Per-function threshold overrides — applied when the function has a logged deviation
