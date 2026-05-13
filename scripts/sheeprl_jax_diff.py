@@ -18,7 +18,7 @@ Usage
     python scripts/sheeprl_jax_diff.py --checkpoint CP5
 
 Output (PASS)
-    sheeprl: vendor/sheeprl/sheeprl/utils/distribution.py:L185-L260
+    sheeprl: vendor/sheeprl/sheeprl/utils/distribution.py:L224-L276
     jax:     src/algorithms/dreamer_srl/loss.py:TwoHotEncoding
     fixture: shape=(16, 4, 255) logits + (16, 4, 1) target, seed=0xD3EAF
     max_abs_diff = 1.2e-7

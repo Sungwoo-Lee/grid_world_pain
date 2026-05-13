@@ -3,7 +3,7 @@ title: "dreamer-srl v3 — JAX rebuild of sheeprl DreamerV3 with deviation-preve
 topic: dreamer
 status: active
 created: 2026-05-13
-last_updated: 2026-05-14  # CP5 IN PROGRESS — loss.py TwoHotEncoding + D-006 logged
+last_updated: 2026-05-14  # CP5 → CP-PASS (historical-scar checkpoint closed — all 4 gates verified)
 supersedes: IMPLEMENTATION_PLAN.md
 phase: 2
 ---
@@ -519,7 +519,7 @@ For the algorithmic content of each CP, follow the link to the v2 row.
 | **CP3b** | `buffers.py` `SequentialReplayBuffer` (state-evolution parity) + training-cadence wiring (`Ratio` × `replay_ratio` × `collect_interval` × `learning_starts` × `prefill_steps`) — see [CP3B_SPEC.md](CP3B_SPEC.md) | `test_buffer_storage_state_after_deterministic_adds`, `test_buffer_sample_at_indices_matches_sheeprl`, `test_buffer_is_first_marker_placement_in_straddling_window`, `test_buffer_parallel_env_lane_non_interference`, `test_cadence_yaml_key_parity_with_sheeprl_xs`, `test_cadence_env_grad_step_trace_5000_iters` | code → math → professor | D-004 ✅, D-005 ✅ | **CP-PASS (2026-05-14)** — implementation `9c57c06`; 6/6 Lever-A PASS at `max_abs_diff = 0.000e+00`; code + math + professor reviews ✅ PASS on disk (`ef36099`); PI sign-off on D-004 + D-005 at [`7007723`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp3b_deviations.md). |
 | **CP4** | `agent.py` RSSM cascade fix #30 + `get_initial_states` mode-not-sample — [v2 Checkpoint 4](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_rssm_transition_2layer_mlp`, `test_rssm_representation_2layer_mlp`, `test_get_initial_states_no_prng`, `test_get_initial_states_matches_sheeprl_mode` | code → math → professor | ☐ none | NOT STARTED |
 | **CP4b** | RSSM `is_first` reset §S1+§S4 — [v2 Checkpoint 4b](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_is_first_force_set_step0`, `test_is_first_three_quantity_reset` (arithmetic-mask form, posterior reshape-flatten BEFORE masking) | code → math → professor | ☐ none | NOT STARTED |
-| **CP5** | `loss.py` two-hot distribution cascade fix #2 (symlog space) — [v2 Checkpoint 5](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_twohot_bins_endpoints` (`bins[0]=-20, bins[127]≈0, bins[254]=+20`, in symlog space), `test_twohot_encode_matches_sheeprl`, `test_twohot_log_prob_target_symlog_encoded` | code → math → professor | D-006 ☐ pending PI sign-off | **IN PROGRESS (2026-05-14)** — implementation `src/algorithms/dreamer_srl/loss.py`; 5/5 tests PASS (3 Lever-A + 2 structural); diff-tool PASS at D-006 threshold 3e-5; D-006 logged (JAX/PyTorch linspace ULP difference at midpoint bin). Reviewer chain pending. |
+| **CP5** | `loss.py` two-hot distribution cascade fix #2 (symlog space) — [v2 Checkpoint 5](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_twohot_bins_endpoints` (`bins[0]=-20, bins[127]≈0, bins[254]=+20`, in symlog space), `test_twohot_encode_matches_sheeprl`, `test_twohot_log_prob_target_symlog_encoded` | code → math → professor | D-006 ✅ | **CP-PASS (2026-05-14)** — implementation `fdb09da` (`src/algorithms/dreamer_srl/loss.py` `TwoHotEncoding`); 5/5 tests PASS (3 Lever-A + 2 structural) at D-006 relaxed threshold 3e-5; diff-tool PASS; code + math + professor reviews ✅ PASS on disk (`ff30e77`); PI sign-off on D-006 at [`b2dd5de`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp5_deviations.md). Historical-scar bug class (`symexp(linspace)` in real-reward-space) structurally prevented at 14-OOM margin by `test_bins_not_symexp_at_storage`. |
 | **CP6** | `train.py` critic loss cascade fix #29 — [v2 Checkpoint 6](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_critic_loss_two_terms`, `test_critic_target_un_normalised_lambda`, `test_discount_weighting_critic` (slice `[:-1].squeeze(-1)`) | code → math → professor | ☐ none | NOT STARTED |
 | **CP7** | `train.py` Polyak update — [v2 Checkpoint 7](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_polyak_first_call_hard_copy` (tau=1), `test_polyak_subsequent_call_blend` (tau=0.02), `test_polyak_fires_before_train_step` | code → math → professor | ☐ none | NOT STARTED |
 | **CP8** | End-to-end forward parity (`scripts/dreamer_srl_offline_check.py`) — [v2 Checkpoint 8](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | All previous Lever-A tests rerun + the offline forward-pass cross-framework parity check (PyTorch sheeprl-trained ckpt vs JAX dreamer-srl freshly initialised at same param count) | code → math → professor | ☐ none (CP8 is the merge-gate — log must be empty of pending entries) | NOT STARTED |
@@ -702,9 +702,13 @@ remains the spine. The v3 changes:
    reviewer chain on disk at `ef36099`; PI sign-off on D-004 + D-005 at `7007723`.
 3. **CP5 — `loss.py` two-hot distribution** (moved earlier; the two-hot bug is
    the historical scar — implement it third so the symlog-space discipline is
-   set early and visible) → Lever-A tests → 3-reviewer gate → CP-PASS. **← NEXT**
-   (eligible once user authorizes; do not start without authorization).
-4. **CP2 + CP2b** → tests → gate → CP-PASS.
+   set early and visible) → Lever-A tests → 3-reviewer gate → CP-PASS. **DONE 2026-05-14** —
+   `fdb09da` (implementation: `TwoHotEncoding` class in `src/algorithms/dreamer_srl/loss.py`);
+   reviewer chain on disk at `ff30e77`; PI sign-off on D-006 at `b2dd5de`. Historical-
+   scar bug class structurally prevented at 14-OOM margin.
+4. **CP2 + CP2b** → tests → gate → CP-PASS. **← NEXT** (single developer task can cover
+   both since they share `src/algorithms/dreamer_srl/agent.py`; eligible once user
+   authorizes; do not start without authorization).
 5. **CP3** → tests → gate → CP-PASS.
 6. **CP4 + CP4b** → tests → gate → CP-PASS.
 7. **CP6** → tests → gate → CP-PASS.
@@ -955,6 +959,85 @@ Plain-language summary of the CP-PASS decision. CP3b (the JAX port of sheeprl's 
 | Scope drift | none flagged | All changed paths are inside the CP3b-scoped set: `src/algorithms/dreamer_srl/buffers.py`, `configs/dreamer_srl/agent_xs.yaml`, paired tests, six fixtures, the fixture generator, the diff-tool registries, DEVIATION_LOG, this plan, three review files, one PI doc. No out-of-scope source modifications. |
 
 **Conclusion.** CP3b → **CP-PASS** at `9c57c06`. CP5 is the next eligible checkpoint per the v3 implementation order (slot #3 — `loss.py` two-hot symlog-space distribution, the historical-scar function whose previous bug took weeks to find because the bin grid was implemented in real reward space instead of symlog space). The user authorizes the CP3b → CP5 transition; the senior-developer does not spawn `developer` for CP5 without that authorization.
+
+**Verified by**: senior-developer
+**Date**: 2026-05-14
+
+### CP5 — `loss.py` `TwoHotEncoding`
+
+**Implemented by**: developer agent | **Date**: 2026-05-14
+
+#### Files created / changed
+| File | Action |
+|---|---|
+| `src/algorithms/dreamer_srl/loss.py` | Created — `TwoHotEncoding` class (one class, four methods: `__init__` storing `logits`/`probs`/`bins`/`dims`; `mean` and `mode` properties applying `symexp` at consumption time; `log_prob(x)` symlog-encoding the target before bin-lookup and reducing the soft cross-entropy) ported from `vendor/sheeprl/sheeprl/utils/distribution.py:L224-L276` (`TwoHotEncodingDistribution`) |
+| `tests/algorithms/dreamer_srl/test_loss.py` | Created — 5 tests (3 Lever-A: `test_twohot_bins_endpoints`, `test_twohot_encode_matches_sheeprl`, `test_twohot_log_prob_target_symlog_encoded`; 2 structural: `test_bins_not_symexp_at_storage` historical-scar trap, `test_loss_module_does_not_import_from_src_models` isolation rule) |
+| `tests/fixtures/dreamer_srl/twohot_bins_endpoints_input.npz` | Created (seed 0xD3EAF) |
+| `tests/fixtures/dreamer_srl/twohot_encode_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/twohot_log_prob_input.npz` | Created |
+| `scripts/fixtures/gen_cp5_fixtures.py` | Created — deterministic CP5 fixture generator (sheeprl_bridge env) |
+| `scripts/sheeprl_jax_diff.py` | Updated — three CP5 runners (`_run_twohot_bins_endpoints`, `_run_twohot_encode`, `_run_twohot_log_prob`) added to FUNCTION_REGISTRY; CHECKPOINT_REGISTRY `CP5` slot populated; FUNCTION_THRESHOLDS updated with the D-006 3e-5 relaxation |
+| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Updated — D-006 logged + ✅ APPROVED 2026-05-14 |
+
+#### Lever-A test results
+```
+pytest tests/algorithms/dreamer_srl/test_loss.py -v
+5 passed (3 Lever-A bit-identity + 2 structural)
+
+Full suite: pytest tests/algorithms/dreamer_srl/
+19/19 PASS (CP1: 8 + CP3b: 6 + CP5: 5, no regressions)
+```
+
+#### Diff tool sweep — `python scripts/sheeprl_jax_diff.py --checkpoint CP5`
+```
+twohot_bins_endpoints   PASS  max_abs_diff=1.907e-06 (< 3.0e-05 D-006 threshold)
+twohot_encode           PASS  max_abs_diff=6.080e-06 (< 3.0e-05 D-006 threshold)
+twohot_log_prob         PASS  max_abs_diff=1.812e-05 (< 3.0e-05 D-006 threshold)
+```
+
+Exit code: 0.
+
+#### Symlog-space discipline verification
+```
+grep "symexp(self.bins)" src/algorithms/dreamer_srl/loss.py      → empty (storage is bare linspace; symexp only at mean/mode consumption time)
+grep "from src.models.dreamer_v3" src/algorithms/dreamer_srl/    → empty (isolation rule honored)
+```
+Triple-consistency contract (v2 plan cascade row #2, v3 plan CP5 row, `loss.py` class) all state "linspace in symlog space — NOT `symexp`'d". Historical-scar trap `test_bins_not_symexp_at_storage` would fire at 14 orders of magnitude (real-space `bins[0]` = `-4.85e8` vs symlog-space `bins[0]` = `-20.0`) if a future developer re-introduced the bug.
+
+#### Deviation-log entries for CP5
+- **D-006**: `TwoHotEncoding.__init__` + all three CP5 functions — JAX `jnp.linspace(-20, 20, 255)` produces `bins[127] = 0.0` exactly; PyTorch `torch.linspace(...)` produces `bins[127] = 7.45e-8` (1 float32 ULP). Cascades through bin-lookup + two-hot weights + log-prob reduction to `max_abs_diff = 1.812e-5` on `log_prob` (relative `2.4e-6`, < 0.25 ULP relative — platform float32 arithmetic drift, NOT semantic). Threshold relaxed to 3e-5 (same class as PI-approved D-003 for CP1 `symexp`). **PI verdict: ✅ APPROVED 2026-05-14** ([pi/calls/2026-05-14_dreamer_srl_v3_cp5_deviations.md](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp5_deviations.md)).
+
+#### Speed check
+CP5 code (`TwoHotEncoding` class constructed fresh per loss computation, methods are JAX array ops inside JIT-traced loss functions) is consumed by CP6 (critic loss) and downstream world-model loss; it does not itself contain a training-loop hot path. No isolated speed measurement possible at this CP. Wall-clock budget verdict lives at CP10 once the full training step is assembled.
+
+#### Reviewer chain
+- [x] `code-reviewer` ✅ PASS → [`docs/reviews/dreamer_srl_v3_cp5_code_review.md`](../../../reviews/dreamer_srl_v3_cp5_code_review.md) (committed `ff30e77`). Symlog-space discipline confirmed across 7 sites (storage, mean, mode, log_prob, v3 plan, v2 plan, sheeprl source). `test_bins_not_symexp_at_storage` confirmed to genuinely catch the recurrence at 14-OOM margin. All 12 inline sub-citations in `log_prob` verified line-by-line against sheeprl. One 🟢 nit (non-blocker): stale `L185-L260` citation in `scripts/sheeprl_jax_diff.py:21` example output (v2-plan era when sheeprl lived at `tmp/sheeprl/`) — folded into this CP-PASS commit as `L224-L276`.
+- [x] `math-reviewer` ✅ PASS → [`docs/reviews/dreamer_srl_v3_cp5_math_review.md`](../../../reviews/dreamer_srl_v3_cp5_math_review.md) (committed `ff30e77`). All 5 equations match sheeprl `distribution.py:L224-L276` term-for-term. D-006 cascade re-derived analytically (10× amplification expected, observed within 1.5× of prediction). ±20 range confirmed against Hafner 2023 §B. Sheeprl mode == mean (both `symexp(E[bin])`), correctly followed by JAX code.
+- [x] `professor-rl-bayesian-dl` ✅ PASS → [`docs/reviews/dreamer_srl_v3_cp5_professor_rl_bayesian_dl_review.md`](../../../reviews/dreamer_srl_v3_cp5_professor_rl_bayesian_dl_review.md) (committed `ff30e77`). All 8 algorithm-integration properties verified (TwoHotEncoding is a proper probability distribution; historical-scar contract intact bidirectionally; `sample()` correctly absent matching sheeprl; `Independent(TwoHotEncoding, 1)` correctly absent — `dims=1` ctor arg handles event reduction; CP6/CP7 consumption signatures match). D-006 gradient-flow analysis: forward drift invisible to optimization (depends on differences, not absolute log_prob).
+- [x] PI sign-off on D-006 — ✅ APPROVED at [`docs/pi/calls/2026-05-14_dreamer_srl_v3_cp5_deviations.md`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp5_deviations.md) (committed `b2dd5de`).
+
+Status: **CP-PASS (2026-05-14)** — implementation `fdb09da`; all four gates closed; PI cleared deviation log; CP2/CP2b is next eligible.
+
+---
+
+#### Verification (senior-developer, 2026-05-14)
+
+Plain-language summary of the CP-PASS decision. CP5 (the JAX port of sheeprl's `TwoHotEncodingDistribution` — the 255-bin grid the world-model's reward head and the critic head use to predict scalar values as a soft histogram) is the **historical-scar checkpoint**: the previous in-house DreamerV3 stored the bin grid in *real reward space* (linspace wrapped with `symexp`) while sheeprl stores it in *symlog space*, and the v1 of this project trained to a different basin because three reviewers reading a 1056-line static plan never caught the divergence. The whole v3 plan exists to mechanically prevent that bug class. CP5 has now cleared all four gates the plan requires. (a) Five tests pass — three Lever-A bit-identity tests (`twohot_bins_endpoints` `1.9e-6`, `twohot_encode` `6.1e-6`, `twohot_log_prob` `1.8e-5`, all within the D-006 3e-5 relaxed threshold; D-006 is the JAX-vs-PyTorch float32 ULP drift in `linspace` at the midpoint bin) and two structural tests (`test_bins_not_symexp_at_storage` would catch the historical-bug recurrence at 14 orders of magnitude; `test_loss_module_does_not_import_from_src_models` enforces module isolation from the legacy in-house Dreamer). (b) The source-citation discipline (`Ported from sheeprl@33b6366:<path>:<line-range>` headers, GOTCHA paragraphs, Bit-identity-test references) is present on the class and all four methods; math-reviewer line-checked all 12 inline sub-citations in `log_prob` against the vendored sheeprl file. (c) The three-reviewer chain closed cleanly — code, math, and professor-rl-bayesian-dl audits all persisted to disk at `ff30e77` (no missing-file gap, matching the CP3b clean pattern rather than the CP1 missing-write gap). (d) The PI signed off on the one deviation D-006 (substrate-mechanical platform float32 drift, same class as the PI-approved D-003 for CP1 `symexp`; gradient flow is invisible to the drift because `bins` is non-trainable and `log_prob` only enters the loss as a difference of logits). The historical-scar bug class is structurally prevented at three independent sites — the bare `jnp.linspace` at `loss.py:111` with no `symexp` wrap, the 14-OOM-margin trap test, and the seven cross-citation sites all agreeing on symlog-space storage.
+
+| Lever / gate | Verdict | Evidence |
+|---|---|---|
+| Lever A — bit-identity tests | ✅ | 5/5 PASS (3 Lever-A bit-identity + 2 structural) at the D-006 relaxed threshold; diff-tool sweep at `fdb09da` (`scripts/sheeprl_jax_diff.py --checkpoint CP5` exits 0 with `1.9e-6` / `6.1e-6` / `1.8e-5`); full-suite pytest `19/19 PASS` (CP1+CP3b+CP5, no regressions) recorded in CP5 Implementation Report |
+| Lever B — source citations | ✅ | math-reviewer line-checked the docstring headers and all 12 inline sub-citations against `vendor/sheeprl/sheeprl/utils/distribution.py:L224-L276` @ `33b6366`; verdict `✅ PASS` in `docs/reviews/dreamer_srl_v3_cp5_math_review.md` |
+| Lever C — code-reviewer | ✅ PASS | [`docs/reviews/dreamer_srl_v3_cp5_code_review.md`](../../../reviews/dreamer_srl_v3_cp5_code_review.md) (`ff30e77`). Symlog-space discipline confirmed across 7 sites; `test_bins_not_symexp_at_storage` genuinely catches recurrence at 14-OOM margin; D-006 cascade plausibility checked. One 🟢 nit (stale `L185-L260` in `scripts/sheeprl_jax_diff.py:21` docstring example) folded into this CP-PASS commit. |
+| Lever C — math-reviewer | ✅ PASS | [`docs/reviews/dreamer_srl_v3_cp5_math_review.md`](../../../reviews/dreamer_srl_v3_cp5_math_review.md) (`ff30e77`). All 5 equations match sheeprl `distribution.py:L224-L276` term-for-term; D-006 10× cascade re-derived analytically; ±20 range confirmed against Hafner 2023 §B. |
+| Lever C — professor-rl-bayesian-dl | ✅ PASS | [`docs/reviews/dreamer_srl_v3_cp5_professor_rl_bayesian_dl_review.md`](../../../reviews/dreamer_srl_v3_cp5_professor_rl_bayesian_dl_review.md) (`ff30e77`). All 8 algorithm-integration properties verified; D-006 gradient-flow analysis confirms forward drift invisible to optimization. |
+| Lever D — diff tool | ✅ | `scripts/sheeprl_jax_diff.py --checkpoint CP5` runs all 3 CP5 functions against `vendor/sheeprl/sheeprl/utils/distribution.py:L224-L276` @ `33b6366` and prints PASS for each at the D-006 3e-5 relaxed threshold |
+| Lever E — PI sign-off | ✅ | D-006 ✅ APPROVED at [`docs/pi/calls/2026-05-14_dreamer_srl_v3_cp5_deviations.md`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp5_deviations.md) (`b2dd5de`); DEVIATION_LOG.md table updated with approval anchor |
+| Historical-scar prevention | ✅ | `grep "symexp(self.bins)"` returns empty; `bins` stored at `loss.py:111` as bare `jnp.linspace(low, high, n_bins)`; `symexp` calls only at lines 134 (mean) and 146 (mode), exactly matching sheeprl's consumption-time placement; `test_bins_not_symexp_at_storage` trap fires at 14 orders of magnitude (real-space `bins[0] = -4.85e8` vs symlog-space `bins[0] = -20.0`) — the v1 bug class is structurally prevented |
+| Speed check | n/a | CP5 code is a probability-distribution helper class consumed by CP6 (critic loss) and the world-model loss; it does not itself contain a training-loop hot path. Wall-clock budget verdict lives at CP10 once the full training step is assembled. |
+| Scope drift | none flagged | All changed paths in `fdb09da` + `ff30e77` + `b2dd5de` are inside the CP5-scoped set: `src/algorithms/dreamer_srl/loss.py`, paired tests, three fixtures, the fixture generator, the diff-tool registries, DEVIATION_LOG, this plan, three review files, one PI doc. No out-of-scope source modifications. The stale-docstring nit fix in `scripts/sheeprl_jax_diff.py:21` (L185-L260 → L224-L276) is folded into this CP-PASS commit. |
+
+**Conclusion.** CP5 → **CP-PASS** at `fdb09da`. The historical-scar bug class (`symexp(linspace)` storing bins in real reward space) is structurally prevented at three independent sites, mechanically caught at 14-OOM margin if it ever recurs. CP2/CP2b is the next eligible checkpoint per the v3 implementation order (slot #4 — `agent.py` `LayerNormGRUCell` cascade fix #28 + the §S2 action-shift wiring; single developer task can cover both since they share the same file). The user authorizes the CP5 → CP2/CP2b transition; the senior-developer does not spawn `developer` for CP2/CP2b without that authorization.
 
 **Verified by**: senior-developer
 **Date**: 2026-05-14
