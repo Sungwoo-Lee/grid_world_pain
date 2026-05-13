@@ -740,6 +740,131 @@ def _run_cadence_env_grad_step_trace_5000_iters(fixture) -> tuple:
     return jax_out, torch_out, metadata
 
 
+# ---------------------------------------------------------------------------
+# CP5 runners (loss.py) — added when CP5 landed
+# ---------------------------------------------------------------------------
+
+def _run_twohot_bins_endpoints(fixture) -> tuple:
+    """twohot_bins_endpoints: linspace(-20,+20,255) grid — DEVIATION D-006.
+
+    JAX jnp.linspace and PyTorch torch.linspace produce different float32 values
+    at the midpoint (bin[127]): JAX=0.0, PyTorch=7.45e-8. This is a 1-ULP
+    linspace implementation difference that cascades to max_abs_diff=1.9e-6.
+    Threshold relaxed to 3e-5 (D-006 logged; pending PI sign-off at CP5 gate).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/utils/distribution.py:L237
+    """
+    import jax.numpy as jnp
+    import numpy as np
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.loss import TwoHotEncoding
+
+    torch_bins = fixture["torch_bins"]  # [255] from sheeprl PyTorch
+    n_bins = int(fixture["n_bins"])
+    low = float(fixture["low"])
+    high = float(fixture["high"])
+
+    dummy_logits = jnp.zeros((1, n_bins))
+    jax_dist = TwoHotEncoding(dummy_logits, dims=0, low=int(low), high=int(high))
+    jax_bins = jax_dist.bins  # [255]
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/utils/distribution.py:L237\n"
+        f"  jax:     src/algorithms/dreamer_srl/loss.py:TwoHotEncoding.__init__\n"
+        f"  fixture: bins.shape={torch_bins.shape}, low={low}, high={high}, seed=0xD3EAF\n"
+        f"  NOTE: D-006 — JAX linspace midpoint=0.0; PyTorch=7.45e-8 (1 ULP); threshold 3e-5"
+    )
+    return jax_bins, torch_bins, metadata
+
+
+def _run_twohot_encode(fixture) -> tuple:
+    """twohot_encode: two-hot target [T,B,255] from [T,B,1] targets — DEVIATION D-006.
+
+    THIS IS THE TEST THAT CATCHES THE HISTORICAL BUG.
+    If bins are stored in real reward space (symexp applied at storage), the bin
+    lookup would use wrong indices and the two-hot weights would mismatch by orders
+    of magnitude. max_abs_diff < 1e-2 is the historical-bug scale; < 3e-5 is the
+    D-006 float32 platform drift.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/utils/distribution.py:L253-L274
+    """
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.loss import TwoHotEncoding
+    from src.algorithms.dreamer_srl.utils import symlog
+
+    logits_np = fixture["logits"]          # [T, B, 255]
+    targets_np = fixture["targets"]        # [T, B, 1]
+    torch_twohot = fixture["torch_out_twohot"]  # [T, B, 255]
+
+    logits_jax = jnp.asarray(logits_np)
+    targets_jax = jnp.asarray(targets_np)
+    jax_dist = TwoHotEncoding(logits_jax, dims=1, low=-20, high=20)
+    n_bins = jax_dist.bins.shape[0]
+
+    # Replicate the two-hot encoding (the internal bin-lookup path from log_prob)
+    # Ported from sheeprl@33b6366:sheeprl/utils/distribution.py:L253-L274
+    x = symlog(targets_jax)
+    below = (jax_dist.bins <= x).astype(jnp.int32).sum(axis=-1, keepdims=True) - 1
+    above = below + 1
+    above = jnp.minimum(above, n_bins - 1)
+    below = jnp.maximum(below, 0)
+    equal = below == above
+    dist_to_below = jnp.where(equal, jnp.ones_like(x), jnp.abs(jax_dist.bins[below] - x))
+    dist_to_above = jnp.where(equal, jnp.ones_like(x), jnp.abs(jax_dist.bins[above] - x))
+    total = dist_to_below + dist_to_above
+    weight_below = dist_to_above / total
+    weight_above = dist_to_below / total
+    jax_twohot = (
+        jax.nn.one_hot(below, n_bins) * weight_below[..., None]
+        + jax.nn.one_hot(above, n_bins) * weight_above[..., None]
+    )
+    jax_twohot = jnp.squeeze(jax_twohot, axis=-2)  # [T, B, 255]
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/utils/distribution.py:L253-L274\n"
+        f"  jax:     src/algorithms/dreamer_srl/loss.py:TwoHotEncoding.log_prob (encode path)\n"
+        f"  fixture: logits.shape={logits_np.shape}, targets.shape={targets_np.shape}, seed=0xD3EAF\n"
+        f"  NOTE: D-006 — linspace ULP cascades to encode; threshold 3e-5"
+    )
+    return jax_twohot, torch_twohot, metadata
+
+
+def _run_twohot_log_prob(fixture) -> tuple:
+    """twohot_log_prob: log_prob(target) for [T,B,1] targets — DEVIATION D-006.
+
+    Tests both encode (D-006 linspace ULP) and log-pred (logsumexp float32) paths.
+    max_abs_diff measured: 1.8e-5; relative diff: 2.4e-6 — float32 platform drift.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/utils/distribution.py:L253-L276
+    """
+    import jax.numpy as jnp
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.loss import TwoHotEncoding
+
+    logits_np = fixture["logits"]                    # [T, B, 255]
+    targets_np = fixture["targets"]                  # [T, B, 1]
+    torch_log_prob = fixture["torch_out_log_prob"]   # [T, B]
+
+    logits_jax = jnp.asarray(logits_np)
+    targets_jax = jnp.asarray(targets_np)
+    jax_dist = TwoHotEncoding(logits_jax, dims=1, low=-20, high=20)
+    jax_log_prob = jax_dist.log_prob(targets_jax)   # [T, B]
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/utils/distribution.py:L253-L276\n"
+        f"  jax:     src/algorithms/dreamer_srl/loss.py:TwoHotEncoding.log_prob\n"
+        f"  fixture: logits.shape={logits_np.shape}, targets.shape={targets_np.shape}, seed=0xD3EAF\n"
+        f"  NOTE: D-006 — linspace+logsumexp float32 cascade; threshold 3e-5 (rel diff 2.4e-6)"
+    )
+    return jax_log_prob, torch_log_prob, metadata
+
+
 FUNCTION_REGISTRY: dict[str, callable] = {
     # CP1 — utils.py
     "symlog":                _run_symlog,
@@ -757,6 +882,10 @@ FUNCTION_REGISTRY: dict[str, callable] = {
     "buffer_parallel_env_lane_non_interference":            _run_buffer_parallel_env_lane_non_interference,
     "cadence_yaml_key_parity_with_sheeprl_xs":              _run_cadence_yaml_key_parity_with_sheeprl_xs,
     "cadence_env_grad_step_trace_5000_iters":               _run_cadence_env_grad_step_trace_5000_iters,
+    # CP5 — loss.py
+    "twohot_bins_endpoints": _run_twohot_bins_endpoints,
+    "twohot_encode":         _run_twohot_encode,
+    "twohot_log_prob":       _run_twohot_log_prob,
 }
 
 # Per-function threshold overrides — applied when the function has a logged deviation
@@ -768,6 +897,14 @@ FUNCTION_THRESHOLDS: dict[str, float] = {
     "symexp": 2e-5,
     # D-002: init_weights/uniform_init_weights are stochastic; runner encodes
     # pass/fail as 0.0/large_diff, so threshold doesn't matter — kept at 1e-6.
+    # D-006: JAX jnp.linspace vs PyTorch torch.linspace ULP difference at midpoint.
+    # bins[127]: JAX=0.0, PyTorch=7.45e-8 (1 float32 ULP at step 40/254*127).
+    # This cascades: bins 1.9e-6, encode 6.1e-6, log_prob 1.8e-5 (rel diff 2.4e-6).
+    # Relaxed to 3e-5 (same order as D-003; well below any semantic-error scale).
+    # Pending PI sign-off at CP5 gate.
+    "twohot_bins_endpoints": 3e-5,
+    "twohot_encode": 3e-5,
+    "twohot_log_prob": 3e-5,
 }
 
 # Maps checkpoint name → list of function names registered for that CP.
