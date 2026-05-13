@@ -13,6 +13,7 @@ results/
 dist/
 build/
 sheeprl/
+!vendor/sheeprl/
 evaaa/
 temp_configs/
 wandb/
