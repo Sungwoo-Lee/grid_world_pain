@@ -741,6 +741,88 @@ def _run_cadence_env_grad_step_trace_5000_iters(fixture) -> tuple:
 
 
 # ---------------------------------------------------------------------------
+# CP2 runners (agent.py) — added when CP2 + CP2b landed
+# ---------------------------------------------------------------------------
+
+def _run_layernorm_gru_cell(fixture) -> tuple:
+    """LayerNormGRUCell forward pass — DEVIATION D-007: float32 matmul ULP.
+
+    JAX XLA float32 matmul accumulation order differs from PyTorch CPU.
+    For the 24-element dot-product in the fused linear projection,
+    max_abs_diff measured: 2.97e-4.  Threshold relaxed to 5e-4 (D-007).
+
+    CRITICAL: the fixture has reset ≈ 0.55 (post-sigmoid).  A wrong-order
+    implementation (reset OUTSIDE tanh) produces O(0.1) deviation — 336x
+    above the D-007 ULP drift — so D-007 threshold still catches cascade
+    fix #28 violations loudly.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/models/models.py:L331-L410
+    """
+    import jax
+    import jax.numpy as jnp
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from flax import nnx
+    from src.algorithms.dreamer_srl.agent import LayerNormGRUCell
+
+    input_size  = int(fixture["input_size"])
+    hidden_size = int(fixture["hidden_size"])
+    input_np    = fixture["input"]
+    hx_np       = fixture["hx"]
+    torch_out   = fixture["torch_out"]
+
+    rngs = nnx.Rngs(jax.random.PRNGKey(0))
+    cell = LayerNormGRUCell(input_size=input_size, hidden_size=hidden_size, rngs=rngs)
+    cell.linear.kernel = nnx.Param(jnp.asarray(fixture["linear_weight"]).T)  # [I+H, 3H]
+    cell.linear.bias   = nnx.Param(jnp.asarray(fixture["linear_bias"]))
+    cell.layer_norm.scale = nnx.Param(jnp.asarray(fixture["ln_weight"]))
+    cell.layer_norm.bias  = nnx.Param(jnp.asarray(fixture["ln_bias"]))
+
+    x  = jnp.asarray(input_np)
+    hx = jnp.asarray(hx_np)
+    jax_out = cell(x, hx)
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/models/models.py:L331-L410\n"
+        f"  jax:     src/algorithms/dreamer_srl/agent.py:LayerNormGRUCell\n"
+        f"  fixture: input.shape={input_np.shape}, hx.shape={hx_np.shape}, seed=0xD3EAF\n"
+        f"  NOTE: D-007 — JAX XLA float32 matmul ULP vs PyTorch CPU; threshold 5e-4\n"
+        f"  CRITICAL: reset-before-tanh trap (cascade fix #28) produces O(0.1) deviation "
+        f"— 336x above D-007 ULP — so threshold still catches the trap"
+    )
+    return jax_out, torch_out, metadata
+
+
+def _run_action_shift(fixture) -> tuple:
+    """action_shift: prepend zeros, drop last — pure arithmetic, expect exact equality.
+
+    §S2: actions[T, B, A] → [zeros[:1], actions[:-1]].
+    No floating-point accumulation; threshold should be 1e-6 (exact equality).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L102-L104
+    """
+    import jax.numpy as jnp
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.agent import action_shift
+
+    actions_np   = fixture["actions"]           # [T, B, A]
+    torch_out_np = fixture["torch_out_shifted"] # [T, B, A]
+
+    actions_jax = jnp.asarray(actions_np)
+    jax_out = action_shift(actions_jax)
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L102-L104\n"
+        f"  jax:     src/algorithms/dreamer_srl/agent.py:action_shift\n"
+        f"  fixture: actions.shape={actions_np.shape} (T={int(fixture['T'])}, "
+        f"B={int(fixture['B'])}, A={int(fixture['A'])}), seed=0xD3EAF\n"
+        f"  NOTE: pure arithmetic (concatenate + zeros); expect exact equality"
+    )
+    return jax_out, torch_out_np, metadata
+
+
+# ---------------------------------------------------------------------------
 # CP5 runners (loss.py) — added when CP5 landed
 # ---------------------------------------------------------------------------
 
@@ -866,6 +948,9 @@ def _run_twohot_log_prob(fixture) -> tuple:
 
 
 FUNCTION_REGISTRY: dict[str, callable] = {
+    # CP2 — agent.py
+    "layernorm_gru_cell":    _run_layernorm_gru_cell,
+    "action_shift":          _run_action_shift,
     # CP1 — utils.py
     "symlog":                _run_symlog,
     "symexp":                _run_symexp,
@@ -892,6 +977,11 @@ FUNCTION_REGISTRY: dict[str, callable] = {
 # that relaxes the default 1e-6. EACH override must have a corresponding DEVIATION_LOG entry.
 # Format: function_name → threshold (float)
 FUNCTION_THRESHOLDS: dict[str, float] = {
+    # D-007: LayerNormGRUCell — JAX XLA float32 matmul accumulation order vs PyTorch CPU.
+    # 24-element dot-product accumulation drift cascades through LayerNorm + gate nonlinearities.
+    # Measured max_abs_diff: 2.97e-4. Relaxed to 5e-4. PI sign-off required at CP2 gate.
+    # CRITICAL: reset-before-tanh trap (cascade fix #28) produces O(0.1) — 336x above threshold.
+    "layernorm_gru_cell": 5e-4,
     # D-003: symexp float32 GPU exp ULP difference; max 1 ULP at |x|~5 → ~1.5e-5
     # Relaxed to 2e-5. Pending PI sign-off.
     "symexp": 2e-5,

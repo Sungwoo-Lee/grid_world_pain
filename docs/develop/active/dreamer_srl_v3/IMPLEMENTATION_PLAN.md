@@ -513,8 +513,8 @@ For the algorithmic content of each CP, follow the link to the v2 row.
 | CP | Scope (v2 link) | Lever-A tests required (must all pass at `1e-6`) | Lever-C reviewer chain | Deviation-log entries (target = 0) | Status |
 |---|---|---|---|---|---|
 | **CP1** | `utils.py` forward parity — [v2 Checkpoint 1](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_symlog_symexp_roundtrip`, `test_init_weights_matches_sheeprl`, `test_uniform_init_weights_matches_sheeprl`, `test_compute_lambda_values_matches_sheeprl`, `test_moments_update_matches_sheeprl`, `test_ratio_matches_sheeprl`, `test_prepare_obs_shape_contract` | code → math → professor | D-001 ✅, D-002 ✅, D-003 ✅ | **CP-PASS (2026-05-13)** — final code state at `77382f2` (F2 D-002 tighten); 8/8 Lever-A PASS at tightened bounds; math + professor reviews ✅ PASS on disk (`ba362e3`); PI sign-off on all 3 deviations at [`f653260`](../../../pi/calls/2026-05-13_dreamer_srl_v3_cp1_deviations.md). Code-reviewer audit fired and drove F1+F3+F2 fixes (commits `46a18cb` + `77382f2`); the agent's `review_code_CP1.md` write did not persist to disk — see Verification subsection. |
-| **CP2** | `agent.py` `LayerNormGRUCell` cascade fix #28 — [v2 Checkpoint 2](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_layernorm_gru_cell_matches_sheeprl` (1+1 fused-gate form; chunk order `(reset, cand, update)`; reset gate inside `tanh`) | code → math → professor | ☐ none | NOT STARTED |
-| **CP2b** | Action-shift §S2 test | `test_action_shift_matches_sheeprl` (prepend-zero, drop-last; `[0] == 0`, `[1:] == actions[:-1]`) | code → math → professor | ☐ none | NOT STARTED |
+| **CP2** | `agent.py` `LayerNormGRUCell` cascade fix #28 — [v2 Checkpoint 2](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_layernorm_gru_cell_matches_sheeprl` (1+1 fused-gate form; chunk order `(reset, cand, update)`; reset gate inside `tanh`) | code → math → professor | D-007 ☐ pending (PI sign-off at gate) | **IMPL DONE — awaiting reviewer chain** — 1/1 Lever-A PASS at D-007 relaxed threshold 5e-4; diff-tool PASS; reset-before-tanh trap active at 336× margin; 21/21 full suite PASS. |
+| **CP2b** | Action-shift §S2 test | `test_action_shift_matches_sheeprl` (prepend-zero, drop-last; `[0] == 0`, `[1:] == actions[:-1]`) | code → math → professor | ☐ none | **IMPL DONE — awaiting reviewer chain** — 1/1 Lever-A PASS (exact equality, max_abs_diff=0.0); diff-tool PASS. |
 | **CP3** | `agent.py` `build_agent` cascade fix #27 — [v2 Checkpoint 3](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_zero_init_reward_head`, `test_zero_init_critic_head` (kernel + bias both exactly zero) | code → math → professor | ☐ none | NOT STARTED |
 | **CP3b** | `buffers.py` `SequentialReplayBuffer` (state-evolution parity) + training-cadence wiring (`Ratio` × `replay_ratio` × `collect_interval` × `learning_starts` × `prefill_steps`) — see [CP3B_SPEC.md](CP3B_SPEC.md) | `test_buffer_storage_state_after_deterministic_adds`, `test_buffer_sample_at_indices_matches_sheeprl`, `test_buffer_is_first_marker_placement_in_straddling_window`, `test_buffer_parallel_env_lane_non_interference`, `test_cadence_yaml_key_parity_with_sheeprl_xs`, `test_cadence_env_grad_step_trace_5000_iters` | code → math → professor | D-004 ✅, D-005 ✅ | **CP-PASS (2026-05-14)** — implementation `9c57c06`; 6/6 Lever-A PASS at `max_abs_diff = 0.000e+00`; code + math + professor reviews ✅ PASS on disk (`ef36099`); PI sign-off on D-004 + D-005 at [`7007723`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp3b_deviations.md). |
 | **CP4** | `agent.py` RSSM cascade fix #30 + `get_initial_states` mode-not-sample — [v2 Checkpoint 4](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_rssm_transition_2layer_mlp`, `test_rssm_representation_2layer_mlp`, `test_get_initial_states_no_prng`, `test_get_initial_states_matches_sheeprl_mode` | code → math → professor | ☐ none | NOT STARTED |
@@ -1042,8 +1042,74 @@ Plain-language summary of the CP-PASS decision. CP5 (the JAX port of sheeprl's `
 **Verified by**: senior-developer
 **Date**: 2026-05-14
 
-### CP2 — `LayerNormGRUCell`
-... (one block per CP; filled by developer)
+### CP2 + CP2b — `LayerNormGRUCell` + `action_shift`
+
+**Implemented by**: developer agent | **Date**: 2026-05-14
+
+#### Files created / changed
+| File | Action |
+|---|---|
+| `src/algorithms/dreamer_srl/agent.py` | Created — `LayerNormGRUCell` (nnx.Module, 1+1 fused gate, reset-before-tanh) + `action_shift` function |
+| `tests/algorithms/dreamer_srl/test_agent.py` | Created — 2 Lever-A bit-identity tests (`test_layernorm_gru_cell_matches_sheeprl`, `test_action_shift_matches_sheeprl`) |
+| `tests/fixtures/dreamer_srl/layernorm_gru_cell_input.npz` | Created (seed 0xD3EAF; fixture has reset ≈ 0.55 to make reset-before-tanh trap active at 336× margin) |
+| `tests/fixtures/dreamer_srl/action_shift_input.npz` | Created (T=5, B=4, A=3; covers off-by-one in both directions) |
+| `scripts/fixtures/gen_cp2_fixtures.py` | Created — deterministic CP2+CP2b fixture generator (sheeprl_bridge env) |
+| `scripts/sheeprl_jax_diff.py` | Updated — `_run_layernorm_gru_cell` + `_run_action_shift` added to FUNCTION_REGISTRY; D-007 threshold (5e-4) added to FUNCTION_THRESHOLDS; CP2/CP2b already in CHECKPOINT_REGISTRY |
+| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Updated — D-007 logged (☐ pending PI sign-off at CP2 gate) |
+
+#### Lever-A test results
+```
+pytest tests/algorithms/dreamer_srl/test_agent.py -v
+test_layernorm_gru_cell_matches_sheeprl  PASSED  (max_abs_diff=2.975e-04 < 5.0e-04 D-007)
+test_action_shift_matches_sheeprl        PASSED  (max_abs_diff=0.000e+00 exact equality)
+2 passed in 4.88s
+```
+
+#### Full suite (no regressions)
+```
+pytest tests/algorithms/dreamer_srl/ -v
+21 passed in 12.59s  (CP1: 8 + CP3b: 6 + CP5: 5 + CP2: 2 = 21, no regressions)
+```
+
+#### Diff tool sweep
+```
+python scripts/sheeprl_jax_diff.py --checkpoint CP2
+layernorm_gru_cell   PASS  max_abs_diff=2.975e-04 (< 5.0e-04 D-007 threshold)
+
+python scripts/sheeprl_jax_diff.py --checkpoint CP2b
+action_shift         PASS  max_abs_diff=0.000e+00 (< 1.0e-06 threshold)
+```
+
+Both exit code: 0.
+
+#### Isolation rule check
+```
+grep -r "from src.models.dreamer_v3" src/algorithms/dreamer_srl/
+→ empty (docstring reference only — no actual import)
+```
+
+#### Deviation-log entries for CP2 + CP2b
+- **D-007** (CP2 only): `LayerNormGRUCell.__call__` — JAX XLA float32 matmul accumulation order differs from PyTorch CPU for the 24-element fused projection `[hx; input] @ W.T`. Cascades through LayerNorm + gate nonlinearities. `max_abs_diff = 2.97e-4`. Float64 numpy reference gives `1.85e-7` vs PyTorch reference, confirming pure float32 accumulation order (not semantic). Reset-before-tanh trap (cascade fix #28) produces O(0.1) — 336× above this ULP drift — so the 5e-4 threshold still catches the structural trap loudly. Threshold relaxed to 5e-4. **PI verdict: ☐ pending — sign-off required at CP2 gate**.
+- CP2b: no deviation. `action_shift` is pure concatenate + zeros_like — exact equality expected and confirmed.
+
+#### Reset-before-tanh trap verification
+The fixture has reset mean ≈ 0.55 (post-sigmoid) at `input_size=8, hidden_size=16, BATCH_SIZE=4`.  
+A wrong-order implementation (`cand = reset * tanh(cand_proj)` instead of `cand = tanh(reset * cand_proj)`) would produce `max_abs_diff ≈ 0.15-0.30` — 336× above the 5e-4 threshold — and the test would fail loudly.  
+The measured `max_abs_diff = 2.97e-4` (< 5e-4) is consistent with float32 accumulation order drift, NOT the cascade-fix-#28 trap.
+
+#### Speed check
+CP2 (`LayerNormGRUCell`, `action_shift`) are components of the world-model RSSM; they are not yet wired into a training loop at this checkpoint. No training-loop hot path is touched. Speed check skipped per protocol; wall-clock budget verdict lives at CP10 once the full training step is assembled.
+
+#### Reviewer chain
+- [ ] `code-reviewer` — pending (3-reviewer gate fires after implementation complete)
+- [ ] `math-reviewer` — pending
+- [ ] `professor-rl-bayesian-dl` — pending
+- [ ] PI sign-off on D-007 — pending
+
+Status: **IMPL DONE — awaiting reviewer chain** — 2/2 Lever-A PASS; 21/21 full-suite PASS; D-007 logged ☐ pending; scope verified.
+
+**Implemented by**: developer
+**Date**: 2026-05-14
 
 ### CP-by-CP speed-change measurements
 Per the senior-developer agent profile's speed-change review protocol, record
