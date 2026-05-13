@@ -3,7 +3,7 @@ title: "dreamer-srl v3 — JAX rebuild of sheeprl DreamerV3 with deviation-preve
 topic: dreamer
 status: active
 created: 2026-05-13
-last_updated: 2026-05-13  # CP1 → CP-PASS
+last_updated: 2026-05-13  # CP3b promotion (buffer + cadence state-evolution gate)
 supersedes: IMPLEMENTATION_PLAN.md
 phase: 2
 ---
@@ -51,6 +51,36 @@ module that passes a parity gate of mean survival ≥ ~500 steps on the food-onl
 NoPred task across 3 seeds. The cost is roughly 2× the naive v2 effort estimate
 because of the per-checkpoint review gates and bit-identity test fixtures — this
 is the trade the user explicitly chose.
+
+### Plain-language note on the 2026-05-13 CP3b revision
+
+The original v3 sketch listed the replay buffer plus the training-cadence wiring as
+*"no Lever-A gate; integration smoke only"* — meaning we would only check that
+the buffer rounds data through without crashing. The user pushed back, citing
+empirical evidence: in the matched-config speed measurement (see
+[SPS_COMPARISON_JAX_VS_SHEEPRL.md §3.6](../../../experiments/active/sheeprl_bridge/SPS_COMPARISON_JAX_VS_SHEEPRL.md#36-where-the-jax-advantage-is-coming-from)),
+we discovered that JAX and sheeprl have a 16× difference in how often gradient
+updates fire per environment step, even though both YAMLs say `replay_ratio: 1.0`.
+The difference is in the *meaning* of the knob (sheeprl: per env step; JAX:
+per `collect_interval`-normalised macro-step). We found this **at the parity
+gate**, which is the silent-divergence failure mode this whole v3 plan exists to
+prevent. Three more details in the same layer — how the buffer stores N parallel
+envs' transitions, whether sample windows are allowed to cross episode boundaries,
+and the exact `learning_starts` off-by-one (`prefill_steps = learning_starts -
+int(learning_starts > 0)`) — would be just as silent if they drifted.
+
+The revision promotes the buffer + cadence layer to a real checkpoint, **CP3b**.
+"State-evolution bit-identity" (drive both implementations with the same
+deterministic input sequence; assert resulting state and sample-index sequences
+match) is achievable here even though pure-function bit-identity is not (because
+the PyTorch buffer's RNG differs from JAX's, declared deviation D-002 class). The
+new CP slots into the build queue right after CP1 and before CP5 — historical-scar
+gates fire early so the discipline is visible to all downstream CPs. See the
+sibling spec doc [CP3B_SPEC.md](CP3B_SPEC.md) for the full scope (8 high-risk
+items with sheeprl-source citations, 6 Lever-A tests, per-trap reviewer chain,
+file-change spec for `developer`), §"Implementation order (revised)" for the new
+build sequence, and [DEVIATION_LOG.md D-004](DEVIATION_LOG.md#deviation-table)
+for the pre-declared `memmap` omission entry.
 
 ## How v3 relates to v2
 
@@ -486,6 +516,7 @@ For the algorithmic content of each CP, follow the link to the v2 row.
 | **CP2** | `agent.py` `LayerNormGRUCell` cascade fix #28 — [v2 Checkpoint 2](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_layernorm_gru_cell_matches_sheeprl` (1+1 fused-gate form; chunk order `(reset, cand, update)`; reset gate inside `tanh`) | code → math → professor | ☐ none | NOT STARTED |
 | **CP2b** | Action-shift §S2 test | `test_action_shift_matches_sheeprl` (prepend-zero, drop-last; `[0] == 0`, `[1:] == actions[:-1]`) | code → math → professor | ☐ none | NOT STARTED |
 | **CP3** | `agent.py` `build_agent` cascade fix #27 — [v2 Checkpoint 3](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_zero_init_reward_head`, `test_zero_init_critic_head` (kernel + bias both exactly zero) | code → math → professor | ☐ none | NOT STARTED |
+| **CP3b** | `buffers.py` `SequentialReplayBuffer` (state-evolution parity) + training-cadence wiring (`Ratio` × `replay_ratio` × `collect_interval` × `learning_starts` × `prefill_steps`) — see [CP3B_SPEC.md](CP3B_SPEC.md) | `test_buffer_storage_state_after_deterministic_adds`, `test_buffer_sample_at_indices_matches_sheeprl`, `test_buffer_is_first_marker_placement_in_straddling_window`, `test_buffer_parallel_env_lane_non_interference`, `test_cadence_yaml_key_parity_with_sheeprl_xs`, `test_cadence_env_grad_step_trace_5000_iters` | code → math → professor | D-004 ☐ pending PI ratification (memmap omission) | NOT STARTED |
 | **CP4** | `agent.py` RSSM cascade fix #30 + `get_initial_states` mode-not-sample — [v2 Checkpoint 4](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_rssm_transition_2layer_mlp`, `test_rssm_representation_2layer_mlp`, `test_get_initial_states_no_prng`, `test_get_initial_states_matches_sheeprl_mode` | code → math → professor | ☐ none | NOT STARTED |
 | **CP4b** | RSSM `is_first` reset §S1+§S4 — [v2 Checkpoint 4b](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_is_first_force_set_step0`, `test_is_first_three_quantity_reset` (arithmetic-mask form, posterior reshape-flatten BEFORE masking) | code → math → professor | ☐ none | NOT STARTED |
 | **CP5** | `loss.py` two-hot distribution cascade fix #2 (symlog space) — [v2 Checkpoint 5](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_twohot_bins_endpoints` (`bins[0]=-20, bins[127]=0, bins[254]=+20`, in symlog space), `test_twohot_encode_matches_sheeprl`, `test_twohot_log_prob_target_symlog_encoded` | code → math → professor | ☐ none | NOT STARTED |
@@ -503,12 +534,35 @@ unchanged: 3 seeds, mean survival ≥ ~480, ≤ 25 h wall-clock per seed.
 
 **CP-ids in this table are stable numerical labels, NOT implementation-order slots.** `CP5` means "two-hot symlog-space bins" for the lifetime of this plan, regardless of when it is built. Two consequences:
 
-1. **Execution order ≠ CP-id order.** §"Implementation order (revised)" moves CP5 to slot #2 (built right after CP1) without renumbering. The label `CP5` stays attached to two-hot bins; only the position in the build queue changes.
-2. **`buffers.py` (SequentialReplayBuffer) has no CP-id.** Per §"Implementation order" step 3 it is an inter-CP sanity round-trip with no Lever-A gate, no reviewer chain, and no row in this table. It must not be labelled `CP3` (or any other CP) in downstream artifacts.
+1. **Execution order ≠ CP-id order.** §"Implementation order (revised)" moves CP5 to slot #3 (built after CP1 and CP3b) without renumbering. The label `CP5` stays attached to two-hot bins; only the position in the build queue changes.
+2. **New CP-ids may be introduced via the `Nb` suffix convention.** A `CP<N>b` row attaches a state-evolution or §S-rule mini-checkpoint to its closest base CP<N>; it does NOT renumber CP<N+1> or later rows. Existing examples: `CP2b` (action shift), `CP4b` (is_first three-quantity reset), `CP9b` (`learning_starts` prefill gating). On 2026-05-13 the convention extended to module-level state-evolution gates with **`CP3b`** (buffer + cadence), promoted from the original "no-CP sanity round-trip" status because of the empirical 16× `replay_ratio` semantic drift caught at the parity gate (see [SPS §3.6](../../../experiments/active/sheeprl_bridge/SPS_COMPARISON_JAX_VS_SHEEPRL.md#36-where-the-jax-advantage-is-coming-from)).
 
 **Every downstream artifact** — `scripts/sheeprl_jax_diff.py:CHECKPOINT_REGISTRY`, `tests/algorithms/dreamer_srl/README.md` file-layout comments, the per-CP review filenames `review_{code,math,professor_rl_bayesian_dl}_CP<N>.md`, deviation-log IDs cross-referencing CPs, fixture filenames — uses **this table's CP-id**, not the implementation-order slot. If a checkpoint is later split, merged, or removed, the affected row's CP-id is retired; the others do **not** renumber.
 
 When unsure: search for the function name in this table's "Scope" column; the row's CP-id is canonical.
+
+### CP3b spec — see sibling doc
+
+The full CP3b spec (8 high-risk items with sheeprl-source citations, 6 Lever-A
+tests, per-trap reviewer chain, file-change spec for `developer`, what's
+explicitly out of scope) lives in [CP3B_SPEC.md](CP3B_SPEC.md). One-paragraph
+summary here so the plan stands on its own:
+
+CP3b promotes the `buffers.py` + training-cadence wiring from "sanity round-trip
+only" to a full Lever-A checkpoint, using **state-evolution bit-identity** (drive
+both implementations with the same deterministic input; assert resulting state
+matches byte-for-byte) instead of pure-function bit-identity (which is impossible
+because PyTorch and JAX have different PRNG streams — D-002 class). The 6 Lever-A
+tests cover: storage state after deterministic adds (test 1), sample at
+pre-computed sheeprl indices (test 2), `is_first` marker placement in straddling
+windows (test 3), parallel-env lane non-interference (test 4), `agent_xs.yaml`
+key parity with sheeprl XS (cadence test 5), and a 5000-iteration `(env_step,
+grad_step)` cadence trace bit-identity (cadence test 6). The whole CP exists
+because of the 2026-05-13 SPS finding (16× `replay_ratio` semantic drift caught
+at the parity gate); CP9b's `learning_starts` spot-check at the training-loop
+level remains the downstream consumer-side complement to CP3b's upstream cadence-
+trace bit-identity. Deviation [D-004](DEVIATION_LOG.md#deviation-table) (memmap
+omission) is pre-declared for PI ratification alongside CP3b's launch.
 
 ### Updating the table
 
@@ -596,6 +650,7 @@ trace + JAX-side fixture that matches the trace.
 |---|---|---|---|
 | Pre-CP0 setup | n/a | 2–3 days | Vendor sheeprl; diff-tool skeleton; fixture directory; NNX convention read |
 | CP1 (utils.py — 7 functions) | 2 days | 4–5 days | 7 Lever-A tests + fixtures; 3-reviewer gate; ~2 deviation-log entries likely |
+| CP3b (buffers.py + cadence — 6 tests) | n/a (was "integration smoke only" — promoted 2026-05-13) | 3–4 days | 4 storage/sample state-evolution tests + 2 cadence-trace tests + fixtures; 3-reviewer gate; D-004 (memmap omission) pre-declared for PI ratification |
 | CP2 + CP2b (LayerNormGRUCell + action shift) | 1 day | 2–3 days | 2 Lever-A tests + fixtures; 3-reviewer gate (LayerNormGRU is the highest-risk silent-pattern-match item; review will be slow) |
 | CP3 (build_agent zero-init heads) | 0.5 day | 1 day | 2 Lever-A tests; quick gate |
 | CP4 + CP4b (RSSM hidden layers + is_first reset) | 2 days | 4–5 days | 4 Lever-A tests + fixtures; 3-reviewer gate; `is_first` three-quantity reset is the second-highest-risk item |
@@ -605,15 +660,17 @@ trace + JAX-side fixture that matches the trace.
 | CP8 (end-to-end forward parity) | 2 days | 3–4 days | All previous tests rerun + offline forward-pass check; 3-reviewer gate is the merge-gate |
 | CP9 / CP9b / CP10 (integration smokes + speed check) | 1–2 days | 2 days | Mostly unchanged — no new Lever-A overhead |
 | Parity-gate launch (3 seeds) | 1 week wall-clock | 1 week wall-clock | Unchanged — only the launch waits |
-| **Total** | **~3 weeks dev + 1 week run = 4 weeks** | **~5 weeks dev + 1 week run = 6 weeks** | ~1.5× overhead from guardrails |
+| **Total** | **~3 weeks dev + 1 week run = 4 weeks** | **~5.5 weeks dev + 1 week run = 6.5 weeks** | ~1.6× overhead from guardrails (was 1.5× before CP3b promotion; +3–4 days) |
 
-**Caveat to the user.** The 1.5× overhead is the rough estimate, NOT 2×. If
-the bit-identity tests find more deviations than expected (more than ~2 per CP
-on average, i.e. > ~16 total), the deviation-log + PI-sign-off cycle adds more
-time. If they find fewer (i.e. the v2 plan was as precise as the v2 reviewers
-claimed), the overhead is closer to 1.2×. The user explicitly chose maximum
-safety net, so this overhead is the accepted cost of preventing another
-weeks-long twohot-bug-style debugging session.
+**Caveat to the user.** The 1.6× overhead is the rough estimate, NOT 2×. The
+CP3b promotion (2026-05-13) added ~3–4 days for the buffer + cadence state-
+evolution gate; the user chose this trade explicitly because the alternative is
+finding cadence/storage drift at the parity gate (where the 16× `replay_ratio`
+mismatch was actually found). If the bit-identity tests find more deviations
+than expected (more than ~2 per CP on average, i.e. > ~16 total), the
+deviation-log + PI-sign-off cycle adds more time. If they find fewer (i.e. the
+v2 plan was as precise as the v2 reviewers claimed), the overhead is closer to
+1.3×.
 
 If the user wants to lower the cost: dropping Lever C (per-checkpoint 3-reviewer
 gate) and keeping only Levers A + B + D + E reduces the overhead to ~1.2×,
@@ -631,10 +688,20 @@ remains the spine. The v3 changes:
    test dirs, NNX-convention read, mandatory-key audit. **All five sub-steps must
    complete and be committed before CP1 begins.** **DONE** — `0bcf5c6` + `292dd3a`.
 1. **CP1 — `utils.py`** → Lever-A tests → 3-reviewer gate → CP-PASS. **DONE 2026-05-13** — `77382f2` (final F2 state); math + professor on disk at `ba362e3`; PI sign-off `f653260`.
-2. **CP5 — `loss.py` two-hot distribution** (moved earlier; the two-hot bug is
-   the historical scar — implement it second so the symlog-space discipline is
-   set early and visible) → Lever-A tests → 3-reviewer gate → CP-PASS. **← NEXT** (eligible once user authorizes; do not start without authorization).
-3. **(buffers.py + sanity round-trip — no Lever-A gate; integration smoke only)**.
+2. **CP3b — `buffers.py` (state-evolution parity) + training-cadence wiring** —
+   moved into the build queue ahead of CP5 because the historical-scar argument
+   for CP3b (the 2026-05-13 SPS finding of 16× `replay_ratio` semantic drift
+   between JAX and sheeprl, caught at the parity gate) is structurally identical
+   to the historical-scar argument for CP5 (twohot bins). Implement the
+   buffer/cadence discipline early so the state-evolution-parity pattern is
+   visible to all downstream CPs. Eligible to start immediately after CP1
+   (no dependencies on CP2/CP3/CP4/CP5). D-004 (memmap omission) goes to PI for
+   ratification alongside this CP's launch. → Lever-A tests (4 storage/sample +
+   2 cadence) → 3-reviewer gate → CP-PASS. **← NEXT** (eligible once user
+   authorizes; do not start without authorization).
+3. **CP5 — `loss.py` two-hot distribution** (moved earlier; the two-hot bug is
+   the historical scar — implement it third so the symlog-space discipline is
+   set early and visible) → Lever-A tests → 3-reviewer gate → CP-PASS.
 4. **CP2 + CP2b** → tests → gate → CP-PASS.
 5. **CP3** → tests → gate → CP-PASS.
 6. **CP4 + CP4b** → tests → gate → CP-PASS.
@@ -642,7 +709,10 @@ remains the spine. The v3 changes:
 8. **CP7** → tests → gate → CP-PASS.
 9. **CP8 — end-to-end forward parity** → all previous tests rerun + offline
    forward-pass check → merge-gate review → CP-PASS.
-10. **CP9 + CP9b** → integration smoke → CP-PASS.
+10. **CP9 + CP9b** → integration smoke → CP-PASS. (CP9b's `learning_starts`
+    spot-check at the training-loop level is now the consumer-side complement to
+    CP3b's upstream cadence-trace bit-identity; the two checkpoints share no
+    test functions.)
 11. **CP10** → wall-clock budget → senior-developer speed verdict.
 12. **Parity-gate launch** → 3 seeds via `training-runner` → `experiment-analyzer`
     writes the verdict report under `docs/experiments/active/diagnosis/`.
