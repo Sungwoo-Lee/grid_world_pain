@@ -30,3 +30,8 @@ requires-python = ">=3.11.14"
 [build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests as end-to-end integration tests (may be slower than unit tests)",
+]
