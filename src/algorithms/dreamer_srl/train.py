@@ -153,9 +153,11 @@ from typing import Dict, Tuple
 
 import jax
 import jax.numpy as jnp
+from flax import nnx
 
-from src.algorithms.dreamer_srl.loss import TwoHotEncoding
-from src.algorithms.dreamer_srl.utils import compute_lambda_values
+from src.algorithms.dreamer_srl.loss import TwoHotEncoding, IndependentBernoulli, reconstruction_loss
+from src.algorithms.dreamer_srl.utils import compute_lambda_values, moments_update, MomentsState
+from src.algorithms.dreamer_srl.agent import action_shift
 
 
 # ---------------------------------------------------------------------------
@@ -600,3 +602,312 @@ def compute_actor_objective(
     policy_loss = -jnp.mean(discount_weights * (objective + entropy_term))  # scalar
 
     return policy_loss, objective, advantage
+
+
+# ---------------------------------------------------------------------------
+# CP9 — one_train_step (full training-step orchestration)
+# Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L48-L358
+# (train() function)
+# ---------------------------------------------------------------------------
+
+def make_train_step(
+    horizon: int,
+    gamma: float,
+    lmbda: float,
+    ent_coef: float,
+    kl_dynamic: float,
+    kl_representation: float,
+    kl_free_nats: float,
+    kl_regularizer: float = 1.0,
+    continue_scale_factor: float = 1.0,
+    moments_decay: float = 0.99,
+    moments_max: float = 1.0,
+    moments_pct_low: float = 0.05,
+    moments_pct_high: float = 0.95,
+):
+    """Factory: returns a JIT'd one_train_step with static hyperparams baked in.
+
+    Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L48-L358.
+
+    The `horizon` must be a static Python int (not a JAX array) because
+    WorldModel.imagine uses it in a Python for-loop. Baking it into the
+    closure prevents it from being traced as a JAX array.
+
+    Usage::
+
+        train_step = make_train_step(horizon=15, gamma=0.99, ...)
+        new_moments, losses = train_step(
+            world_model, actor, critic, target_critic,
+            wm_opt, actor_opt, critic_opt, moments, batch, key,
+        )
+    """
+    from src.algorithms.dreamer_srl.utils import symlog as _symlog
+
+    H_plus_1 = horizon + 1  # captured as Python int in the closure
+
+    @nnx.jit
+    def one_train_step(
+        world_model,
+        actor,
+        critic,
+        target_critic,
+        wm_opt: nnx.Optimizer,
+        actor_opt: nnx.Optimizer,
+        critic_opt: nnx.Optimizer,
+        moments: MomentsState,
+        batch: Dict[str, jax.Array],
+        key: jax.Array,
+    ) -> Tuple[MomentsState, Dict[str, jax.Array]]:
+        """Inner JIT'd training step. See make_train_step for parameter docs.
+
+        Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L48-L358
+        (train() function, Fabric-stripped, single-process JAX/NNX form).
+
+        Order (mirroring sheeprl L93-L317):
+          1. §S1 force-set is_first[0] = 1 (sheeprl L100)
+          2. §S2 action_shift(batch["actions"]) (sheeprl L104)
+          3. WM forward: world_model.observe(obs, shifted_actions, is_first, key)
+          4. WM losses: reconstruction_loss(decoder, reward, continue, KL terms)
+          5. WM optimizer step (nnx.value_and_grad + wm_opt.update)
+          6. Imagined trajectory rollout (horizon steps from posterior)
+          7. §S5 true-continue splice + lambda values + discount
+          8. Moments update
+          9. NOTE: Polyak update fires in the main loop BEFORE one_train_step.
+         10. Actor objective (compute_actor_objective, §S7 advantage normalization)
+         11. Actor optimizer step
+         12. Critic loss (two-term cascade fix #29, compute_critic_loss)
+         13. Critic optimizer step
+        """
+        # -----------------------------------------------------------------------
+        # §S1: force-set is_first[0] = 1 (sheeprl L100)
+        # Sheeprl: data["is_first"][0, :] = torch.ones_like(data["is_first"][0, :])
+        # JAX: functional index update (no in-place mutation in JIT)
+        # -----------------------------------------------------------------------
+        is_first = batch["is_first"]  # [T, B, 1]
+        is_first = is_first.at[0].set(jnp.ones_like(is_first[0]))  # first row forced to 1.0
+
+        # -----------------------------------------------------------------------
+        # §S2: action-shift (sheeprl L104)
+        # Sheeprl: batch_actions = cat(zeros[:1], data["actions"][:-1], dim=0)
+        # -----------------------------------------------------------------------
+        shifted_actions = action_shift(batch["actions"])  # [T, B, action_dim]
+
+        # -----------------------------------------------------------------------
+        # Sub-steps 3-5: World Model forward + losses + optimizer step
+        # -----------------------------------------------------------------------
+        key, k_wm = jax.random.split(key)
+
+        def wm_loss_fn(wm):
+            """WM loss (reconstruction + KL). Returns (total_loss, aux_dict)."""
+            wm_outputs = wm.observe(batch["obs"], shifted_actions, is_first, k_wm)
+
+            # Observation NLL — SymlogDistribution: Normal(symlog(pred), 1).log_prob(symlog(target))
+            # sheeprl L152-L162: po[k] = SymlogDistribution(reconstructed_obs[k], dims=1)
+            # dims=1 sums over the last 1 event dim (obs_dim axis)
+            reconstructed_obs = wm_outputs["reconstructed_obs"]  # [T, B, obs_dim]
+            obs_target = batch["obs"]                            # [T, B, obs_dim]
+            obs_log_prob = -0.5 * jnp.sum(
+                (_symlog(reconstructed_obs) - _symlog(obs_target)) ** 2, axis=-1
+            )  # [T, B]
+            obs_loss_unreduced = -obs_log_prob  # [T, B] — positive NLL
+
+            # Reward NLL (TwoHotEncoding)
+            pr = TwoHotEncoding(wm_outputs["reward_logits"], dims=1)  # [T, B, 255]
+            reward_loss_unreduced = -pr.log_prob(batch["rewards"])    # [T, B]
+
+            # Continue NLL (IndependentBernoulli — §S9)
+            pc = IndependentBernoulli(wm_outputs["continue_logits"])   # logits: [T, B, 1]
+            # §S10: continue target = 1 - terminated (NO gamma multiplier)
+            # sheeprl L168: continues_targets = 1 - data["terminated"]
+            continue_targets = 1.0 - batch["terminated"]               # [T, B, 1]
+            cont_loss_unreduced = continue_scale_factor * (-pc.log_prob(continue_targets))  # [T, B]
+
+            # KL losses (§S8: free-nats per-element BEFORE mean)
+            num_cat = wm.rssm.num_categoricals
+            num_cls = wm.rssm.num_classes
+            post_logits = wm_outputs["posterior_logits"].reshape(
+                *wm_outputs["posterior_logits"].shape[:2], num_cat, num_cls
+            )  # [T, B, S, D]
+            prior_logits = wm_outputs["prior_logits"].reshape(
+                *wm_outputs["prior_logits"].shape[:2], num_cat, num_cls
+            )  # [T, B, S, D]
+
+            log_post = jax.nn.log_softmax(post_logits, axis=-1)   # [T, B, S, D]
+            log_prior = jax.nn.log_softmax(prior_logits, axis=-1)  # [T, B, S, D]
+
+            def _kl(lp, lq):
+                """KL(p||q) summed over S categoricals and D classes → [T, B]."""
+                p = jnp.exp(lp)
+                return (p * (lp - lq)).sum(axis=-1).sum(axis=-1)  # [T, B]
+
+            kl_dyn = _kl(jax.lax.stop_gradient(log_post), log_prior)  # [T, B]
+            kl_repr = _kl(log_post, jax.lax.stop_gradient(log_prior))  # [T, B]
+            kl_raw = kl_dyn  # for logging
+
+            dyn_loss = kl_dynamic * jnp.maximum(kl_dyn, kl_free_nats)     # §S8 floor
+            repr_loss = kl_representation * jnp.maximum(kl_repr, kl_free_nats)
+            kl_loss_2d = dyn_loss + repr_loss  # [T, B]
+
+            total = (kl_regularizer * kl_loss_2d + obs_loss_unreduced + reward_loss_unreduced + cont_loss_unreduced).mean()
+
+            aux = {
+                "wm_outputs": wm_outputs,
+                "kl_mean": kl_raw.mean(),
+                "kl_loss_mean": kl_loss_2d.mean(),
+                "reward_loss_mean": reward_loss_unreduced.mean(),
+                "obs_loss_mean": obs_loss_unreduced.mean(),
+                "cont_loss_mean": cont_loss_unreduced.mean(),
+            }
+            return total, aux
+
+        (wm_total_loss, wm_aux), wm_grads = nnx.value_and_grad(
+            wm_loss_fn, has_aux=True
+        )(world_model)
+        wm_outputs = wm_aux["wm_outputs"]
+        wm_opt.update(world_model, wm_grads)
+
+        # -----------------------------------------------------------------------
+        # Sub-step 6: Imagined trajectory rollout (from posterior latent)
+        # sheeprl L202-L241
+        # -----------------------------------------------------------------------
+        posteriors = jax.lax.stop_gradient(wm_outputs["posteriors"])     # [T, B, S, D]
+        recurrent_states = jax.lax.stop_gradient(wm_outputs["recurrent_states"])  # [T, B, hx]
+
+        T_val = posteriors.shape[0]
+        B_val = posteriors.shape[1]
+        BT = T_val * B_val
+
+        stoch_flat = posteriors.reshape(T_val, B_val, -1)  # [T, B, S*D]
+        init_prior_flat = stoch_flat.reshape(BT, -1)        # [BT, S*D]
+        init_recurrent = recurrent_states.reshape(BT, -1)   # [BT, hx]
+        init_latent = jnp.concatenate([init_prior_flat, init_recurrent], axis=-1)  # [BT, latent_dim]
+
+        key, k_imag = jax.random.split(key)
+        imag_outputs = world_model.imagine(init_latent, actor, horizon, k_imag)
+
+        imagined_latents = imag_outputs["imagined_latents"]    # [H+1, BT, latent_dim]
+
+        # Predict rewards, values, continues on imagined trajectories (sheeprl L244-L248)
+        imag_flat = imagined_latents.reshape(H_plus_1 * BT, -1)
+
+        predicted_rewards_logits = jax.vmap(world_model.reward_model)(imag_flat)
+        predicted_rewards = TwoHotEncoding(
+            predicted_rewards_logits.reshape(H_plus_1, BT, -1), dims=1
+        ).mean  # [H+1, BT, 1]
+
+        predicted_values_logits = jax.vmap(target_critic)(imag_flat)
+        predicted_values = TwoHotEncoding(
+            predicted_values_logits.reshape(H_plus_1, BT, -1), dims=1
+        ).mean  # [H+1, BT, 1]
+
+        continues_logits = jax.vmap(world_model.continue_model)(imag_flat)
+        continues_predicted = IndependentBernoulli(
+            continues_logits.reshape(H_plus_1, BT, 1)
+        ).mode   # [H+1, BT, 1]
+
+        # §S5: true-continue splice + lambda values + discount
+        terminated_flat = batch["terminated"].reshape(BT, 1)  # [BT, 1]
+
+        lambda_values, continues_spliced, discount = compute_imagined_returns(
+            predicted_rewards=predicted_rewards,
+            predicted_values=predicted_values,
+            continues_predicted=continues_predicted,
+            terminated_observed=terminated_flat,
+            gamma=gamma,
+            lmbda=lmbda,
+        )  # lambda_values: [H, BT, 1], discount: [H+1, BT, 1]
+
+        # -----------------------------------------------------------------------
+        # Sub-step 8: Moments update (sheeprl L262-L270)
+        # -----------------------------------------------------------------------
+        new_moments, moments_offset, moments_invscale = moments_update(
+            moments,
+            lambda_values,
+            decay=moments_decay,
+            max_=moments_max,
+            percentile_low=moments_pct_low,
+            percentile_high=moments_pct_high,
+        )
+
+        # -----------------------------------------------------------------------
+        # Sub-step 10: Actor objective + optimizer step (sheeprl L272-L304)
+        # Re-run actor on stop_gradient'd latents to get differentiable log_probs.
+        # Gradient flows through actor logits; sg(action) applied inside Actor.__call__.
+        # -----------------------------------------------------------------------
+        actor_keys = jax.random.split(jax.random.PRNGKey(0), H_plus_1)
+        sg_latents = jax.lax.stop_gradient(imagined_latents)  # [H+1, BT, latent_dim]
+
+        def actor_loss_fn(actor_module):
+            """Actor loss: REINFORCE + entropy, §S7 advantage normalization."""
+            all_log_probs = []
+            all_entropies = []
+            for h in range(H_plus_1):  # Python loop — H_plus_1 is a static Python int
+                _, lp_h, ent_h = actor_module(sg_latents[h], actor_keys[h])
+                all_log_probs.append(lp_h)   # [BT, 1]
+                all_entropies.append(ent_h)  # [BT]
+            log_probs_arr = jnp.stack(all_log_probs, axis=0)   # [H+1, BT, 1]
+            entropies_arr = jnp.stack(all_entropies, axis=0)   # [H+1, BT]
+
+            log_probs_sliced = log_probs_arr[:-1]               # [H, BT, 1]
+            entropy_for_obj = entropies_arr[..., None]          # [H+1, BT, 1]
+
+            policy_loss, _, _ = compute_actor_objective(
+                log_probs=log_probs_sliced,
+                lambda_values=jax.lax.stop_gradient(lambda_values),
+                predicted_values=jax.lax.stop_gradient(predicted_values),
+                moments_offset=jax.lax.stop_gradient(moments_offset),
+                moments_invscale=jax.lax.stop_gradient(moments_invscale),
+                entropy=entropy_for_obj,
+                discount=discount,
+                ent_coef=ent_coef,
+            )
+            return policy_loss
+
+        (actor_policy_loss, actor_grads) = nnx.value_and_grad(actor_loss_fn)(actor)
+        actor_opt.update(actor, actor_grads)
+
+        # -----------------------------------------------------------------------
+        # Sub-step 12: Critic loss + optimizer step (sheeprl L306-L326)
+        # sheeprl L307: qv = TwoHotEncodingDistribution(critic(imag_traj.detach()[:-1]), dims=1)
+        # -----------------------------------------------------------------------
+        sg_latents_h = jax.lax.stop_gradient(imagined_latents[:-1])  # [H, BT, latent_dim]
+
+        target_critic_logits = jax.vmap(target_critic)(
+            sg_latents_h.reshape(horizon * BT, -1)
+        ).reshape(horizon, BT, -1)  # [H, BT, 255]
+        target_critic_values = TwoHotEncoding(target_critic_logits, dims=1).mean  # [H, BT, 1]
+
+        def critic_loss_fn(critic_module):
+            """Two-term critic NLL with EMA target (cascade fix #29)."""
+            critic_logits = jax.vmap(critic_module)(
+                sg_latents_h.reshape(horizon * BT, -1)
+            ).reshape(horizon, BT, -1)  # [H, BT, 255]
+
+            value_loss, _, _ = compute_critic_loss(
+                qv_logits=critic_logits,
+                lambda_values=lambda_values,
+                target_critic_values=target_critic_values,
+                discount=discount,
+            )
+            return value_loss
+
+        (critic_value_loss, critic_grads) = nnx.value_and_grad(critic_loss_fn)(critic)
+        critic_opt.update(critic, critic_grads)
+
+        # -----------------------------------------------------------------------
+        # Return losses for logging (sheeprl L330-L346)
+        # -----------------------------------------------------------------------
+        losses = {
+            "world_model_loss": wm_total_loss,
+            "observation_loss": wm_aux["obs_loss_mean"],
+            "reward_loss": wm_aux["reward_loss_mean"],
+            "state_loss": wm_aux["kl_loss_mean"],
+            "continue_loss": wm_aux["cont_loss_mean"],
+            "value_loss": critic_value_loss,
+            "policy_loss": actor_policy_loss,
+            "moments_invscale": moments_invscale,
+        }
+
+        return new_moments, losses
+
+    return one_train_step
