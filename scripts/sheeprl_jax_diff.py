@@ -1459,7 +1459,8 @@ def _run_critic_target_lambda(fixture) -> tuple:
     The sheeprl critic at L314 uses `lambda_values.detach()` before Moments normalization.
 
     D-006 class: TwoHotEncoding linspace ULP drift cascades to log_prob.
-    Threshold: 4e-5 (slightly wider; different RNG seed in fixture; same-order D-006).
+    Threshold: 5e-5 (D-010, PI-raised at CP6 gate 2026-05-14 from initial 4e-5 log entry
+    for margin-band consistency with D-006/D-007/D-008; same-order D-006 mechanism).
 
     Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L251-L256, L314
     """
@@ -1482,7 +1483,7 @@ def _run_critic_target_lambda(fixture) -> tuple:
         f"  jax:     src/algorithms/dreamer_srl/loss.py:TwoHotEncoding.log_prob\n"
         f"  fixture: qv_logits.shape={qv_logits_np.shape}, lambda_values.shape={lambda_val_np.shape}, "
         f"seed=0xD3EAF+1\n"
-        f"  NOTE: D-006 class (linspace ULP drift); threshold 4e-5\n"
+        f"  NOTE: D-006 class (linspace ULP drift); D-010 PI-ratified threshold 5e-5\n"
         f"  KEY: critic must use UN-normalised lambda_values (raw), NOT Moments-normed (sheeprl L314)"
     )
     return jax_lp_raw, torch_lp_raw_np, metadata
@@ -1600,12 +1601,14 @@ FUNCTION_THRESHOLDS: dict[str, float] = {
     "twohot_log_prob": 3e-5,
     # CP6 — D-006 class cascades to critic log_prob terms.
     # critic_loss_two_terms: two log_prob terms summed; max_abs_diff measured ≈ same as D-006.
-    # critic_target_lambda: single log_prob with different seed; measured ≈ 3.1e-5.
-    # Threshold: 4e-5 (slightly wider than 3e-5 due to different RNG seed in fixture;
-    # same-order D-006 class; well below semantic-error scale O(0.1)).
+    # critic_target_lambda: single log_prob with different seed; measured ≈ 3.1e-5 (D-010).
+    # Threshold for critic_target_lambda raised 4e-5 → 5e-5 by PI at CP6 gate
+    # (2026-05-14, pi/calls/2026-05-14_dreamer_srl_v3_cp6_deviations.md) — margin-band
+    # consistency with D-006 (1.65x) / D-007 (1.68x) / D-008 (2.78x); D-010 measured
+    # 3.099e-5 at 1.61x margin against 5e-5. Still 2000x below O(0.1) semantic-error scale.
     # discount_weighting: pure cumprod arithmetic; expect < 1e-6 (no D-006 cascade).
     "critic_loss_two_terms": 4e-5,
-    "critic_target_lambda":  4e-5,
+    "critic_target_lambda":  5e-5,
     # discount_weighting: no TwoHotEncoding involved; cumprod is exact arithmetic.
     # No threshold override needed — default 1e-6 applies.
 }

@@ -40,7 +40,12 @@ THRESHOLD NOTE
 --------------
 These tests compare against pre-computed PyTorch (sheeprl) outputs.
 TwoHotEncoding.log_prob involves the same float32 linspace ULP drift as CP5
-(D-006 class). Threshold relaxed to 3e-5 for log_prob comparisons (same class).
+(D-006 class). Threshold raised to 5e-5 for log_prob comparisons by PI at the
+CP6 gate (D-010 ratification, 2026-05-14, see docs/pi/calls/2026-05-14_dreamer_srl_v3_cp6_deviations.md):
+the critic_target_lambda fixture (seed 0xD3EAF+1) lands targets closer to bin
+boundaries than CP5's seed did, amplifying the D-006 1.812e-5 by ~1.71x to a
+measured 3.099e-5; 5e-5 gives a 1.61x margin consistent with the established
+substrate-mechanical class (D-006/D-007/D-008 in the 1.5-2.8x band).
 The scalar value_loss comparison uses a tighter threshold of 1e-4 (mean over
 many elements reduces ULP accumulation, but the discount multiplication adds
 another layer).
@@ -71,11 +76,15 @@ FIXTURE_DIR = os.path.join(_REPO_ROOT, "tests", "fixtures", "dreamer_srl")
 THRESHOLD_DEFAULT = 1e-6
 
 # D-006 class: TwoHotEncoding float32 linspace ULP drift cascades to log_prob.
-# Same class as CP5 (D-006). Threshold relaxed to 4e-5 (slightly wider than the 3e-5 used in
-# CP5 because the critic_target_lambda fixture uses a different seed, which can produce up to
-# ~3.1e-5 measured max_abs_diff — still same-order D-006 platform ULP drift, no semantic error).
-# NOTE: If measured deviation exceeds 4e-5 for a new reason, log D-010+ in DEVIATION_LOG.md.
-THRESHOLD_TWOHOT_LP = 4e-5
+# Same class as CP5 (D-006). Threshold raised 4e-5 -> 5e-5 by PI at CP6 gate
+# (D-010 ratification, 2026-05-14, docs/pi/calls/2026-05-14_dreamer_srl_v3_cp6_deviations.md):
+# the critic_target_lambda fixture uses PRNG seed 0xD3EAF+1 which lands targets closer to bin
+# boundaries (two-hot weight sensitivity dw/db ~ 6.35), amplifying D-006's 1.812e-5 by ~1.71x
+# to a measured 3.099e-5. Raised to 5e-5 for margin-band consistency with the established
+# substrate-mechanical class (D-006 1.65x, D-007 1.68x, D-008 2.78x); D-010 sits at 1.61x.
+# Still 2000x below the O(0.1) semantic-error signature.
+# NOTE: If a future measurement exceeds 5e-5 for a new reason, log D-011+ in DEVIATION_LOG.md.
+THRESHOLD_TWOHOT_LP = 5e-5
 
 # Scalar loss comparison: mean over H*BT elements; threshold slightly tighter than single-element.
 THRESHOLD_SCALAR_LOSS = 1e-4
@@ -141,8 +150,8 @@ def test_critic_loss_two_terms():
         f"max_abs_diff={diff_lp1:.3e} >= threshold={THRESHOLD_TWOHOT_LP:.1e}\n"
         f"  Sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L314\n"
         f"  JAX: src/algorithms/dreamer_srl/train.py:compute_critic_loss (neg_lp1)\n"
-        f"  NOTE: D-006 class (TwoHotEncoding linspace ULP drift). If diff > 3e-5, "
-        f"log new deviation D-010+ in DEVIATION_LOG.md (pending PI ratification)."
+        f"  NOTE: D-006 class (TwoHotEncoding linspace ULP drift). D-010 PI-ratified threshold 5e-5. "
+        f"If diff > 5e-5, log new deviation D-011+ in DEVIATION_LOG.md (pending PI ratification)."
     )
 
     # --- Check term 2: -qv.log_prob(target_critic_values) — CASCADE FIX #29
@@ -154,7 +163,7 @@ def test_critic_loss_two_terms():
         f"  Sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L315\n"
         f"  JAX: src/algorithms/dreamer_srl/train.py:compute_critic_loss (neg_lp2)\n"
         f"  CASCADE FIX #29: if neg_lp2 is all-zeros, the second term is missing!\n"
-        f"  NOTE: D-006 class. Log D-010+ if diff > 3e-5."
+        f"  NOTE: D-006 class. D-010 PI-ratified threshold 5e-5; log D-011+ if diff > 5e-5."
     )
 
     # Sanity check: neg_lp2 is NOT all zeros (catches the missing-term bug)
