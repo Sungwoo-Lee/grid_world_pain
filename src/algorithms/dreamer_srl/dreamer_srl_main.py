@@ -384,15 +384,22 @@ def main() -> None:
         # -------------------------------------------------------------------
         t_env_start = time.time()
 
-        # Get actions from player (or random if before learning_starts)
-        # CP9: learning_starts=0, so no random-action branch exercised
+        # Get actions from player, OR uniform-random if before learning_starts (§S3).
+        # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L558-L571.
+        # Gate is inclusive (`<=`): iteration `learning_starts` is the LAST prefill
+        # iteration; iteration `learning_starts + 1` is the first policy iteration.
+        # The train-gate at L483 uses `>=`, so iteration `learning_starts` itself adds
+        # zero gradient steps (ratio(0) == 0), preserving the
+        # "no gradient before learning_starts" invariant.
         key, k_player = jax.random.split(key)
         if iter_num <= learning_starts:
-            # §S3 random-action prefill — deferred to CP9b; learning_starts=0 in CP9
-            actions_oh = np.zeros((num_envs, action_dim), dtype=np.float32)
-            for b in range(num_envs):
-                idx = np.random.randint(0, action_dim)
-                actions_oh[b, idx] = 1.0
+            # §S3 uniform-random prefill — seeds the buffer with diverse data.
+            action_idx = jax.random.randint(
+                k_player, shape=(num_envs,), minval=0, maxval=action_dim
+            )  # [B] int32 in [0, action_dim)
+            actions_oh = np.asarray(
+                jax.nn.one_hot(action_idx, num_classes=action_dim, dtype=jnp.float32)
+            )  # [B, action_dim]
         else:
             actions_oh = player.get_actions(obs, is_first, k_player)  # [B, action_dim]
 
