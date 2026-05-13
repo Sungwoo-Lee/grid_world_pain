@@ -3,7 +3,7 @@ title: "dreamer-srl v3 — JAX rebuild of sheeprl DreamerV3 with deviation-preve
 topic: dreamer
 status: active
 created: 2026-05-13
-last_updated: 2026-05-14  # CP2 + CP2b → CP-PASS (LayerNormGRUCell + action_shift closed — LayerNorm eps catch validated guardrails)
+last_updated: 2026-05-14  # CP3 — zero-init reward + critic heads implemented (cascade fix #27)
 supersedes: IMPLEMENTATION_PLAN.md
 phase: 2
 ---
@@ -1173,3 +1173,95 @@ warrants discussion, > 15% blocks merge unless the plan explicitly accepts it.
 
 **Parity-gate launch verdict**: [populated post-launch by `experiment-analyzer`,
 linked from this row]
+
+---
+
+## Implementation Report — CP3 (developer)
+
+**Date**: 2026-05-14
+**Implemented by**: developer
+
+### Summary
+
+CP3 ports the `build_agent` final-init phase for the reward model and critic output
+linear layers from `vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L1170-L1180`.
+With `hafner_initialization=True`, sheeprl applies `uniform_init_weights(scale=0.0)`
+to both heads, forcing all-zeros kernel + bias at construction (cascade fix #27).
+This is a small, self-contained checkpoint — no deviations encountered.
+
+### File-by-file changes
+
+| File | Action | Notes |
+|---|---|---|
+| `src/algorithms/dreamer_srl/agent.py` | Extended | Added `RewardHead` + `CriticHead` classes; added `from src.algorithms.dreamer_srl.utils import uniform_init_weights` import; updated module docstring Contents section |
+| `tests/algorithms/dreamer_srl/test_agent.py` | Extended | Added `test_zero_init_reward_head_matches_sheeprl` + `test_zero_init_critic_head_matches_sheeprl`; updated module docstring; extended import to include `RewardHead, CriticHead` |
+| `scripts/sheeprl_jax_diff.py` | Extended | Added `_run_zero_init_reward_head` + `_run_zero_init_critic_head` runners; registered both in `FUNCTION_REGISTRY` |
+| `scripts/fixtures/gen_cp3_fixtures.py` | Created | New fixture generator (sheeprl_bridge env); generates `zero_init_{reward,critic}_head_input.npz` |
+| `tests/fixtures/dreamer_srl/zero_init_reward_head_input.npz` | Created | Fixture: in=512, out=255, torch_kernel all-zeros, torch_bias all-zeros |
+| `tests/fixtures/dreamer_srl/zero_init_critic_head_input.npz` | Created | Fixture: in=512, out=255, torch_kernel all-zeros, torch_bias all-zeros |
+| `docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md` | Extended | Appended Implementation Report; updated `last_updated` frontmatter |
+
+All changed paths are in the CP3-scoped set. No out-of-scope source modifications.
+
+### Test results
+
+**Verification step 1 — diff tool:**
+
+```
+python scripts/sheeprl_jax_diff.py --checkpoint CP3
+```
+- `zero_init_reward_head`: max_abs_diff = 0.000e+00  PASS (< 1e-6)
+- `zero_init_critic_head`: max_abs_diff = 0.000e+00  PASS (< 1e-6)
+- Exit code: 0
+
+**Verification step 2 — test_agent.py (4/4):**
+
+```
+pytest tests/algorithms/dreamer_srl/test_agent.py -v
+```
+- `test_layernorm_gru_cell_matches_sheeprl`    PASS (< 5e-4 D-007)
+- `test_action_shift_matches_sheeprl`          PASS (0.000e+00)
+- `test_zero_init_reward_head_matches_sheeprl` PASS (0.000e+00)
+- `test_zero_init_critic_head_matches_sheeprl` PASS (0.000e+00)
+- **4/4 PASS** in 6.27 s
+
+**Verification step 3 — full dreamer_srl suite (23/23):**
+
+```
+pytest tests/algorithms/dreamer_srl/ -v
+```
+- **23/23 PASS** in 13.12 s — no regressions
+
+**Verification step 4 — isolation check:**
+
+```
+grep -r "from src.models.dreamer_v3" src/algorithms/dreamer_srl/
+```
+Returns nothing (docstring mention only — no actual import).
+
+### Speed check
+
+CP3 adds module classes (`RewardHead`, `CriticHead`) with no training-loop hot-path
+changes. These are instantiated once at build time; no vmap/jit/scan boundary is
+modified. Speed check skipped per protocol (provably cannot affect runtime at this stage).
+
+### Deviations
+
+None. Zero is zero on both platforms — max_abs_diff = 0.000e+00, no D-### log entry required.
+The CP3 risk profile was correctly assessed as "low" in the task spec.
+
+### Commit
+
+`21e7f50` — `feat(dreamer-srl): ✨ CP3 — zero-init reward + critic heads (cascade fix #27)`
+Working tree clean after commit. Streak: 5 clean CP-PASS flips + 5 clean implementation commits.
+
+### Checkpoints completed
+
+- [x] CP3 Lever-A tests: 2/2 PASS at strict 1e-6 threshold (max_abs_diff = 0.0 exact)
+- [x] Diff tool exit 0 for `--checkpoint CP3`
+- [x] Full suite 23/23 PASS (no regressions)
+- [x] Isolation check: no `src.models.dreamer_v3` imports in dreamer_srl module
+- [x] Lever-B citation headers on both `RewardHead` and `CriticHead` constructors: `# Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L1170-L1180`
+- [x] CP1's `uniform_init_weights` used — no reinvention of zero-init
+
+**Implemented by**: developer
