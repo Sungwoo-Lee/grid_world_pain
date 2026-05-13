@@ -3,7 +3,7 @@ title: "SameProp Round 2.6 — seed-lock of Round 2.5 with behavior-toolkit meas
 topic: hypervigilance
 status: planned
 created: 2026-05-12
-last_updated: 2026-05-12T17:02
+last_updated: 2026-05-12T17:04
 phase: 2
 wandb_tag: "hypervigilance-round26"
 supersedes: []
@@ -77,7 +77,7 @@ The env-level configs are correct as-is; the tag assignments that the per-tag pi
 | Run | Status | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Node | GPU | Launched at | WandB run ID | Log path |
 |-----|--------|------|--------------------|-------------|----------------|------|------|-----|-------------|--------------|----------|
 | 1 | running | C — decoupleFood | `hypervigilance-round26-C-seed44_n106_gpu0` | hypervigilance | prod | 44 | 106 | cuda:0 | 2026-05-12T17:01:10 | s3k03eua | logs/20260512_170110.log |
-| 2 | planned | A1 — passivePredator | `hypervigilance-round26-A1-seed45_n106_gpu1` | hypervigilance | prod | 45 | 106 | cuda:1 | — | — | — |
+| 2 | running | A1 — passivePredator | `hypervigilance-round26-A1-seed45_n106_gpu1` | hypervigilance | prod | 45 | 106 | cuda:1 | 2026-05-12T17:03:45 | k08v38af | logs/20260512_170345_hypervigilance-round26-A1-seed45_n106_gpu1.log |
 
 Tag uniqueness verified against R2.5 (`hypervigilance-round25-*`) — `round26` prefix collides with neither.
 
