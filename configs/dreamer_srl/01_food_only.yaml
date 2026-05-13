@@ -1,0 +1,106 @@
+# dreamer-srl CP9 dry-run config — food-only NoPred 5x5
+#
+# Full hyperparameter set for the first smoke run.
+# Extends agent_xs.yaml cadence keys with algo + model + optimizer keys.
+#
+# D-012 (pre-declared): learning_starts: 0  (CP9-only deviation — §S3 prefill
+#   deferred to CP9b; here we gate training from step 0 so the 5k budget is
+#   used entirely for integration debugging, not prefill.)
+#
+# Sheeprl reference: vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml
+#   + vendor/sheeprl/sheeprl/configs/exp/dreamer_v3.yaml
+
+# Cadence (overrides agent_xs.yaml where needed for smoke run)
+algo:
+  learning_starts: 0           # D-012 deviation: 0 for CP9 (XS default is 1024)
+  replay_ratio: 1
+  per_rank_gradient_steps: 1
+  per_rank_sequence_length: 64
+  per_rank_batch_size: 16
+  per_rank_pretrain_steps: 0
+  total_steps: 5000            # smoke budget (XS default is 5000000)
+
+  # Core dreamer algorithm
+  gamma: 0.996840347           # sheeprl dreamer_v3.yaml:L22
+  lmbda: 0.95                  # sheeprl dreamer_v3.yaml:L23
+  horizon: 15                  # sheeprl dreamer_v3.yaml:L24
+  unimix: 0.01                 # sheeprl dreamer_v3.yaml:L25
+
+  # KL balance
+  kl_dynamic: 0.5              # sheeprl dreamer_v3.yaml:L29 (world_model.kl.dynamic)
+  kl_representation: 0.1       # sheeprl dreamer_v3.yaml:L30 (world_model.kl.representation)
+  kl_free_nats: 1.0            # sheeprl dreamer_v3.yaml:L31 (world_model.kl.free_nats)
+  kl_regularizer: 1.0          # sheeprl dreamer_v3.yaml:L28 (world_model.kl.regularizer)
+  continue_scale_factor: 1.0   # sheeprl dreamer_v3.yaml:L52
+
+  # Obs keys (MLP-only — grid-world is vector obs, no CNN)
+  cnn_keys:
+    encoder: []
+    decoder: []
+  mlp_keys:
+    encoder: ["obs"]
+    decoder: ["obs"]
+
+  # World model architecture
+  world_model:
+    encoder:
+      dense_units: 1024        # sheeprl exp/dreamer_v3.yaml:L31 (encoder.dense_units)
+      mlp_layers: 5            # sheeprl exp/dreamer_v3.yaml:L32 (encoder.mlp_layers)
+    decoder:
+      dense_units: 1024        # symmetric with encoder
+      mlp_layers: 5
+    recurrent_model:
+      recurrent_state_size: 4096   # sheeprl exp/dreamer_v3.yaml:L25 (recurrent_model.recurrent_state_size)
+      dense_units: 1024            # sheeprl exp/dreamer_v3.yaml:L26 (recurrent_model.dense_units)
+    transition_model:
+      hidden_size: 1024        # sheeprl exp/dreamer_v3.yaml:L29 (transition_model.hidden_size)
+    representation_model:
+      hidden_size: 1024        # sheeprl exp/dreamer_v3.yaml:L28 (representation_model.hidden_size)
+    reward_model:
+      dense_units: 1024        # sheeprl exp/dreamer_v3.yaml:L38 (reward_model.dense_units)
+      mlp_layers: 5            # sheeprl exp/dreamer_v3.yaml:L39 (reward_model.mlp_layers)
+      bins: 255                # sheeprl dreamer_v3.yaml:L36 (reward_model.bins)
+    continue_model:
+      dense_units: 1024        # sheeprl exp/dreamer_v3.yaml:L44 (continue_model.dense_units)
+      mlp_layers: 5            # sheeprl exp/dreamer_v3.yaml:L45 (continue_model.mlp_layers)
+    stochastic_size: 32        # num_categoricals (S); sheeprl exp/dreamer_v3.yaml:L23
+    discrete_size: 32          # num_classes per categorical (D); sheeprl exp/dreamer_v3.yaml:L24
+    optimizer:
+      lr: 1.0e-4               # sheeprl dreamer_v3.yaml:L14
+      eps: 1.0e-8              # sheeprl dreamer_v3.yaml:L15
+
+  # Actor architecture + optimizer
+  actor:
+    dense_units: 1024          # sheeprl exp/dreamer_v3.yaml:L49
+    mlp_layers: 5              # sheeprl exp/dreamer_v3.yaml:L50
+    ent_coef: 3.0e-4           # sheeprl dreamer_v3.yaml:L63
+    moments:
+      decay: 0.99              # sheeprl dreamer_v3.yaml:L68 (actor.moments.decay)
+      max: 1.0                 # sheeprl dreamer_v3.yaml:L69 (actor.moments.max)
+      percentile:
+        low: 0.05              # sheeprl dreamer_v3.yaml:L71
+        high: 0.95             # sheeprl dreamer_v3.yaml:L72
+    optimizer:
+      lr: 8.0e-5               # sheeprl dreamer_v3.yaml:L57
+      eps: 1.0e-5              # sheeprl dreamer_v3.yaml:L58
+
+  # Critic architecture + optimizer
+  critic:
+    dense_units: 1024          # sheeprl exp/dreamer_v3.yaml:L53
+    mlp_layers: 5              # sheeprl exp/dreamer_v3.yaml:L54
+    bins: 255                  # sheeprl dreamer_v3.yaml:L82
+    tau: 0.02                  # sheeprl dreamer_v3.yaml:L77
+    per_rank_target_network_update_freq: 1  # sheeprl dreamer_v3.yaml:L151
+    optimizer:
+      lr: 8.0e-5               # sheeprl dreamer_v3.yaml:L75
+      eps: 1.0e-5              # sheeprl dreamer_v3.yaml:L76
+
+# Buffer
+buffer:
+  size: 1000000
+  validate_args: false
+  from_numpy: false
+
+# Env
+env:
+  num_envs: 1                  # XS default (sheeprl env/default.yaml:L1)

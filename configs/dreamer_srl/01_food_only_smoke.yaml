@@ -1,0 +1,105 @@
+# dreamer-srl CP9 smoke config — REDUCED size for OOM-safe dry-run
+#
+# Architecture is structurally identical to 01_food_only.yaml but with
+# smaller dimensions that fit on a single RTX 4090 (24GB GPU).
+# The full XS dimensions (1024 units, 4096 recurrent, 32x32 stochastic)
+# cause OOM at training time; these reduced dimensions are for the
+# integration smoke only.
+#
+# Differences from 01_food_only.yaml (XS sizes):
+#   dense_units:           1024 → 256
+#   recurrent_state_size:  4096 → 512
+#   stochastic_size:       32   → 8
+#   discrete_size:         32   → 8
+#   mlp_layers:            5    → 3 (encoder/decoder/reward/continue/actor/critic)
+#   per_rank_batch_size:   16   → 4
+#   per_rank_sequence_length: 64 → 16
+#   horizon:               15   → 7
+#
+# D-012 (pre-declared): learning_starts: 0 (same as 01_food_only.yaml)
+
+algo:
+  learning_starts: 0
+  replay_ratio: 1
+  per_rank_gradient_steps: 1
+  per_rank_sequence_length: 16
+  per_rank_batch_size: 4
+  per_rank_pretrain_steps: 0
+  total_steps: 5000
+
+  gamma: 0.996840347
+  lmbda: 0.95
+  horizon: 7
+  unimix: 0.01
+
+  kl_dynamic: 0.5
+  kl_representation: 0.1
+  kl_free_nats: 1.0
+  kl_regularizer: 1.0
+  continue_scale_factor: 1.0
+
+  cnn_keys:
+    encoder: []
+    decoder: []
+  mlp_keys:
+    encoder: ["obs"]
+    decoder: ["obs"]
+
+  world_model:
+    encoder:
+      dense_units: 256
+      mlp_layers: 3
+    decoder:
+      dense_units: 256
+      mlp_layers: 3
+    recurrent_model:
+      recurrent_state_size: 512
+      dense_units: 256
+    transition_model:
+      hidden_size: 256
+    representation_model:
+      hidden_size: 256
+    reward_model:
+      dense_units: 256
+      mlp_layers: 3
+      bins: 255
+    continue_model:
+      dense_units: 256
+      mlp_layers: 3
+    stochastic_size: 8
+    discrete_size: 8
+    optimizer:
+      lr: 1.0e-4
+      eps: 1.0e-8
+
+  actor:
+    dense_units: 256
+    mlp_layers: 3
+    ent_coef: 3.0e-4
+    moments:
+      decay: 0.99
+      max: 1.0
+      percentile:
+        low: 0.05
+        high: 0.95
+    optimizer:
+      lr: 8.0e-5
+      eps: 1.0e-5
+
+  critic:
+    dense_units: 256
+    mlp_layers: 3
+    bins: 255
+    tau: 0.02
+    per_rank_target_network_update_freq: 1
+    optimizer:
+      lr: 8.0e-5
+      eps: 1.0e-5
+
+buffer:
+  size: 1000000
+  validate_args: false
+  from_numpy: false
+
+env:
+  num_envs: 1
