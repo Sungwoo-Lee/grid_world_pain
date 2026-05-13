@@ -499,6 +499,17 @@ For the algorithmic content of each CP, follow the link to the v2 row.
 After CP10 passes, the parity-gate launch follows [v2 §"Parity-verification protocol"](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#parity-verification-protocol-after-checkpoints-110-pass)
 unchanged: 3 seeds, mean survival ≥ ~480, ≤ 25 h wall-clock per seed.
 
+### CP-id convention (canonical — read before editing CP references)
+
+**CP-ids in this table are stable numerical labels, NOT implementation-order slots.** `CP5` means "two-hot symlog-space bins" for the lifetime of this plan, regardless of when it is built. Two consequences:
+
+1. **Execution order ≠ CP-id order.** §"Implementation order (revised)" moves CP5 to slot #2 (built right after CP1) without renumbering. The label `CP5` stays attached to two-hot bins; only the position in the build queue changes.
+2. **`buffers.py` (SequentialReplayBuffer) has no CP-id.** Per §"Implementation order" step 3 it is an inter-CP sanity round-trip with no Lever-A gate, no reviewer chain, and no row in this table. It must not be labelled `CP3` (or any other CP) in downstream artifacts.
+
+**Every downstream artifact** — `scripts/sheeprl_jax_diff.py:CHECKPOINT_REGISTRY`, `tests/algorithms/dreamer_srl/README.md` file-layout comments, the per-CP review filenames `review_{code,math,professor_rl_bayesian_dl}_CP<N>.md`, deviation-log IDs cross-referencing CPs, fixture filenames — uses **this table's CP-id**, not the implementation-order slot. If a checkpoint is later split, merged, or removed, the affected row's CP-id is retired; the others do **not** renumber.
+
+When unsure: search for the function name in this table's "Scope" column; the row's CP-id is canonical.
+
 ### Updating the table
 
 The developer updates the `Status` column at each step:

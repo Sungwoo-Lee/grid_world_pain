@@ -17,8 +17,12 @@
 #   dense_units:          128 -> 256       (encoder_fc_layers, MLP-head sizes)
 #   mlp_layers:           2   -> 1         (1-layer-deep MLPs instead of 2)
 #   sequence_length:      128 -> 64
-#   replay_ratio:         0.0625 -> 1.0    (16x more grad updates per env step)
 #   encoding_mode: hierarchical -> flat    (sheeprl uses a flat MLP encoder)
+#
+# Plus one delta against the cascade-side Hafner-Atari replay_ratio baseline
+# (configs/models/dreamer_v3_rr06.yaml, NOT dreamer_v3.yaml which sits at 0.5):
+#
+#   replay_ratio:         0.0625 -> 1.0    (16x more grad updates per env step)
 #
 # Unchanged (matched-or-acceptable):
 #   batch_size:           16                (already matched to sheeprl)
@@ -51,8 +55,9 @@ agent:
   algorithm: "DreamerV3"
   batch_size: 16
   sequence_length: 64        # OVERRIDE vs dreamer_v3.yaml (128 -> 64). Mirrors sheeprl per_rank_sequence_length=64.
-  replay_ratio: 1.0          # OVERRIDE vs dreamer_v3.yaml (0.0625 -> 1.0). Mirrors sheeprl replay_ratio=1
-                             # (1 gradient update per env step per env).
+  replay_ratio: 1.0          # OVERRIDE vs dreamer_v3_rr06.yaml (0.0625 -> 1.0). The 0.0625 baseline is the
+                             # Hafner-2023 Atari/DMC default that the cascade-side runs use; dreamer_v3.yaml
+                             # itself sits at 0.5. Mirrors sheeprl replay_ratio=1 (1 grad update per env step per env).
   collect_interval: 128      # Unchanged. JAX-loop scan length; the effective per-env grad/env ratio
                              # is governed by replay_ratio above.
   train_steps: 64            # Unchanged. Effective per-iter grad updates = Ratio(replay_ratio)(global_step / collect_interval).
