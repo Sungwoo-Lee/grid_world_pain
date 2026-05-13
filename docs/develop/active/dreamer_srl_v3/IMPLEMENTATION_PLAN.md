@@ -1745,7 +1745,7 @@ Offline check summary (18/18 PASS):
 - Part A: predicted_rewards, predicted_values — max_diff ≤ 0 (budget 5e-5)
 - Part B: §S5 splice value=0, splice visibility=1.0, lambda_values=0, continues_spliced=0, discount=0
 - Part C: moments_offset=0, moments_invscale=0, advantage=0 (two paths)
-- Part D: value_loss=0, neg_lp1=0, neg_lp2=4.77e-7 (budget 5e-5), cascade_fix_29 guard via source inspection
+- Part D: value_loss=0, neg_lp1=0, neg_lp2=0 vs fixture; |neg_lp1-neg_lp2| inter-term diff=4.77e-7 (1 ULP at float32 magnitude 4, informational, not budget-bearing); cascade_fix_29 guard via AST parsing of function body (excludes docstrings/comments)
 - Part E: polyak tau=1.0 exact=0, importability check, sg(advantage) source check
 - Part F: reward_loss_mean=0 (budget 1e-4)
 
