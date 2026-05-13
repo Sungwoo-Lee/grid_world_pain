@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 17
+**Insights**: 18
 **Last updated**: 2026-05-13
 
 ---
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-13 | 23:09 | `20260513_2309_merge_path_manifest_tripwire` | When a project carries 165GB of gitignored training data and CLAUDE.md mandates "snapshot critical data before any merge", full cp -a is infeasible. Instead, save a path manifest (find -printf '%p %s\n', ~16MB, 128k lines) as tripwire, verify the op is structurally non-destructive (fast-forward only, no clean -x, no force-checkout), and post-op diff the manifest against current find count. Validated on v1.3 → develop → v1.4: delta=0. |
 | 2026-05-13 | 00:18 | `20260513_0018_train_py_orphan_render_workers_on_sigint` | When `train.py` is terminated mid-run via SIGINT (e.g., via `terminate_command.py`), the parent process exits cleanly and flushes WandB, but the ~16-20 `render_recordings.py` worker subprocesses it spawned to render gameplay videos do NOT receive the signal automatically. They keep running as orphans on the node, all targeting the same recordings directory (with `--skip-existing` they do no useful work). A second `terminate_command.py … 'render_recordings.py'` call is needed to clean them up — or send the SIGINT to the process group rather than the parent. |
 | 2026-05-12 | 17:56 | `20260512_1756_pip_install_namespace_shadow_numpy_cap` | Two pip-install gotchas during node-114 sheeprl_bridge rebuild: outer/inner namespace shadow (fix `editable_mode=compat`); sheeprl@33b6366 spurious numpy<2.0 cap (fix `--no-deps`). |
 | 2026-05-12 | 17:55 | `20260512_1755_pytorch_agents_pip_dep_layout` | Third-party RL frameworks integrate as pip-installed git-pinned deps + extensions in sibling in-repo package (`pytorch_agents/`), not as `tmp/` clones — `tmp/` is gitignored and silently loses edits. |
@@ -35,6 +36,7 @@
 
 ## Change history
 
+- 2026-05-13: Added 1 insight from the v1.3 → develop → v1.4 merge session: `20260513_2309_merge_path_manifest_tripwire` (165GB of gitignored data makes full cp -a infeasible; path-manifest tripwire via `find -printf` + post-op delta-diff is the cheaper protocol when the op is structurally non-destructive; validated 0-delta on the v1.3→develop→v1.4 fast-forward merge). No new tags (all reused: meta, learned_lesson, decision, design).
 - 2026-05-13: Added 1 insight from the NMN R2 continual + 6-specialist analyzer verdict session: `20260513_0018_train_py_orphan_render_workers_on_sigint` (train.py SIGINT leaves render_recordings.py multiprocessing pool workers orphaned; current workaround is a second terminate_command.py call, future fix candidates are kill-via-process-group or signal-handled pool.close). No new tags promoted (all reused: meta, learned_lesson, training_runner).
 - 2026-05-11: Added 1 insight from the Z2 verdict session: `20260511_1535_encode_decode_flag_mismatch_silent_class_bug` (second instance of the auxiliary-tooling-falls-out-of-sync-with-production bug class; cross-check against training-time logger as anti-silent-failure-mode trip-wire). No new tags.
 - 2026-05-09: Added 1 insight from the dreamer conventional-fixes session: `20260509_1536_train_py_checkpoint_restore_nnx_skew` (latent train.py orbax-vs-NNX checkpoint-restore skew, surfaced by offline WM-test workaround). No new tags.
