@@ -1,0 +1,54 @@
+# Agent config — NMN Noise Heterogeneity Sweep
+# Architecture: FiLM modulation, grouping_size = 1 (per-neuron γ/β)
+# Hyperparameters anchored to v8 §2.2 (MC_FiLM_Noise_g1 template).
+#
+# g1 is chosen as the FiLM cell of the sweep because:
+#   - v8 §4.1.3 showed g1 has the highest gamma_multi diversity (std 1.41 for MC,
+#     1.22 for GAE) — the architecture's most-discriminative configuration.
+#   - g16/g32 attenuate gates to ~0.4 (gradual death-spiral approach);
+#     g1 maintains near-identity gates (~0.93–0.97), preserving discriminative
+#     capacity that heterogeneity can in principle exploit.
+#   - If g1 cannot exploit P5 heterogeneity, no other grouping size will.
+
+agent:
+  algorithm: "RecurrentPPO"
+  lr_actor: 0.0005
+  lr_critic: 0.0001
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  sequence_length: 128
+  frame_stack: 1
+  fc_layers: [128,128]
+  actor_fc_layers: [128,128]
+  critic_fc_layers: [128,128]
+  hidden_size: 128
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+
+  # v8-anchored parity options (see NMN_PERFORMANCE_DIAGNOSIS_v8 §2.2)
+  rnn_type: "GRU"          # required for gate-bias injection
+  activation: "relu"
+  return_mode: "MC"        # MC: cleaner per v8
+
+  encoding_mode: "hierarchical"
+
+  hierarchical_params:
+    default_mlp: [128,128]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+    multimodal_hub: [128,128]
+
+  # FiLM modulator (v8 §2.2 controlled config; grouping_size = 1)
+  modulation:
+    type: "FiLM"
+    mod_hidden_size: 16
+    grouping_size: 1
+    percept_bias_init: 3.0
+    memory_bias_init: 0.0
+    temp_clip: [0.5, 3.0]
+    memory_clip: [-2.0, 2.0]

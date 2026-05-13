@@ -1,0 +1,71 @@
+# Continual schedule — NMN abrupt double-return probe (active <-> passive predator)
+# ---------------------------------------------------------------------------------
+# ROUND 2 — EPISODE-BUDGET FIX (2026-05-11)
+# -----------------------------------------
+# Round 1 (launched 2026-05-09 18:27 / 18:29 KST, tags
+# rppo_nmn_cont_dr_{mod,unmod}_s0) finished in ~10 minutes per cell because
+# this schedule's episode budget was off by ~1000×: the original literal
+# reading of professor-neuromod §4 ("1500 ep", "700 ep") was 5100 total
+# episodes, which on this hardware is ~10 minutes and produces no useful
+# continual-learning data. The professor's normal-scale intent was ~1.5M /
+# 700K episodes per stage — comparable to the project's other ~10M-episode
+# cells (heterogeneity sweep, temp_clip rerun, specialist sweep).
+#
+# This file is the Round 2 corrected schedule. Round 1 manifest rows remain
+# in the design doc annotated `status: round1_bugged` (data discarded; new
+# tags `*_r2` for Round 2). See
+# `docs/experiments/active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md`
+# §3.2 (Round 2 manifest) for the re-launch plan.
+#
+# Purpose: 5-stage active -> passive -> active -> passive -> active abrupt schedule
+# for the NMN_CONTINUAL_DOUBLE_RETURN_PROBE experiment (continual-learning vitality
+# check; 2026-05-09 design, 2026-05-11 re-launch). Per professor-neuromodulation §4
+# (`nmn_continual_lifelong_probe.md`):
+#   - Two returns to stage 1 enable the "monotone vs. non-monotone forgetting" test
+#     that discriminates plain interference (each return retains less) from a Tsuda
+#     2021 hypertube reusable subnetwork (second return >= first return).
+#   - All boundaries ABRUPT — no gradual interpolation arm in round 1 (the gradual
+#     contrast requires a developer interpolator touch; postdoc synthesis v2 §5
+#     dropped the gradual arm to keep the launch config-only on shipped infra).
+#   - Schedule consumed by `train.py:1082` (--continual-schedule + --configs-dir).
+#
+# Stages (alphabetic by filename in --configs-dir; train.py:156 sorts via glob):
+#   01_active_predator.yaml   --> stage 1 (initial)        active predator (e2 olfactory matched)
+#   02_passive_predator.yaml  --> stage 2 (first switch)   passive predator (HUNT-unreachable, e2 matched)
+#   03_active_predator.yaml   --> stage 3 (first return)   active predator
+#   04_passive_predator.yaml  --> stage 4 (second switch)  passive predator
+#   05_active_predator.yaml   --> stage 5 (second return)  active predator
+# Each "active_predator" stage YAML is byte-identical to the canonical
+# `01-interoNocicept_sameProp.yaml`; each "passive_predator" stage YAML is
+# byte-identical to `02-sameProp_R2_passivePredator.yaml`. Both are copied
+# (not symlinked, since the NAS does not support symlinks per CLAUDE.md
+# Git Safety) into the schedule's `--configs-dir`. This duplication is the
+# necessary price of the schedule machinery's "one stage per file in
+# alphabetic order" contract (train.py:156).
+#
+# Episode budget per stage (Round 2, 1000× rescaled to project-standard scale):
+#   stage 1:  1,500,000 ep   (initial training to asymptote)
+#   stage 2:  1,500,000 ep   (interference)
+#   stage 3:    700,000 ep   (first return — measure forgetting + recovery)
+#   stage 4:    700,000 ep   (second exposure — measure stability gap on second hit)
+#   stage 5:    700,000 ep   (second return — discriminate monotone vs. non-monotone forgetting)
+# Total = 5,100,000 episodes. Comparable in scale to a single 10M-episode cell
+# (e.g., the heterogeneity sweep and specialist sweep cells); expected
+# wallclock ~30-50h per cell on current cluster load (vs. the misleading
+# "~17h" estimate in the Round 1 header, which was inconsistent with the
+# 5100-ep literal budget anyway). Two cells in parallel on n101 cuda:{0,1}.
+#
+# Checkpoint frequencies parallel to stages. Cadence matches the project's
+# standard ~100K-episode checkpoint convention — ~15 checkpoints per long
+# stage (1.5M ep / 100K) and ~14 per short stage (700K / 50K), enough for
+# the per-stage convergence + post-boundary recovery traces in the analysis
+# plan (§4.3 temporal evolution).
+
+continual:
+  # Cumulative episode boundaries. Stage i runs while episode_count < episode_boundaries[i].
+  # Total episodes = episode_boundaries[-1] = 5,100,000.
+  episode_boundaries: [1500000, 3000000, 3700000, 4400000, 5100000]
+
+  # One int per stage. ~100K-ep cadence for long stages (1.5M ep), ~50K for
+  # short stages (700K ep) — ~15 ckpts/stage at project-standard cadence.
+  checkpoint_frequencies: [100000, 100000, 50000, 50000, 50000]

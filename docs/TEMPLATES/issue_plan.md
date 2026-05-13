@@ -10,7 +10,18 @@
 
 What is the problem? Why does it matter? How was it discovered?
 
-<!-- Keep this concise — 2-5 sentences. Link to external evidence (WandB runs, logs) if applicable. -->
+<!-- This is the doc's plain-language entry point per CLAUDE.md "Documentation framing".
+     A reader without prior context should be able to read this section alone and
+     understand what the doc is about, why it exists, and what it's claiming.
+
+     - Keep concise — 2-5 sentences.
+     - Translate cited results on first mention: "the modulator did not beat the
+       baseline (H₁a refuted)", not just "H₁a refuted".
+     - No bare WandB run IDs, no bare config paths, no bare predicate / shorthand
+       names without translation. Path-shaped detail moves to "File Changes".
+     - Link to external evidence (WandB runs, logs, prior docs) at the end of the
+       paragraph rather than in-line. -->
+
 
 ## Analysis
 

@@ -30,10 +30,19 @@ class ModulatedLayerNormGRUCell(nnx.Module):
     Args:
         hidden_size: Dimension of the hidden state (= deter_dim in RSSM).
         rngs: Flax NNX random number generators.
+        apply_reset_gate:
+            Mirrors LayerNormGRUCell.apply_reset_gate. See that
+            docstring + the plan at
+            docs/develop/active/diagnosis/dreamer_gru_reset_gate_fix.md
+            for semantics. Default False keeps direct-import / test
+            behaviour bit-identical pre-fix; the RSSM constructor passes
+            the configured value explicitly via agent_config.
     """
 
-    def __init__(self, hidden_size: int, rngs: nnx.Rngs):
+    def __init__(self, hidden_size: int, rngs: nnx.Rngs,
+                 apply_reset_gate: bool = False):
         self.hidden_size = hidden_size
+        self.apply_reset_gate = apply_reset_gate
 
         self.dense_ih = nnx.Linear(hidden_size, 3 * hidden_size, use_bias=False, rngs=rngs)
         self.dense_hh = nnx.Linear(hidden_size, 3 * hidden_size, use_bias=False, rngs=rngs)
@@ -72,7 +81,10 @@ class ModulatedLayerNormGRUCell(nnx.Module):
         else:
             update = nnx.sigmoid(update)
 
-        cand = jnp.tanh(cand)
+        if self.apply_reset_gate:
+            cand = jnp.tanh(reset * cand)
+        else:
+            cand = jnp.tanh(cand)
 
         h_new = (1.0 - update) * h + update * cand
         return h_new

@@ -1,0 +1,96 @@
+# DreamerV3 — probe-enabled variant (anchor + No-Pred control cells)
+# ----------------------------------------------------------------------------
+# Provenance: byte-identical copy of configs/models/dreamer_v3.yaml with
+# exactly ONE delta:
+#
+#     imagined_rollout_probe: false  ->  true
+#
+# All other Hafner-2023 defaults preserved (entropy_scale=3e-4,
+# cont_loss_weight=1.0, lr triple, mixture sampling, hierarchical encoder,
+# rssm 512/32x32). Used by the imagined-rollout-termination probe battery's
+# E1 (anchor + probe; failing-task confirmation) and E3 (No-Pred + probe;
+# positive control). E2 has its own variant with cont_loss_weight=10.0.
+#
+# When this config is loaded, train.py emits six new keys per WandB
+# log_interval (50 iterations on the planned battery):
+#   WorldModel/imagined_termination_fraction_h{8,15}
+#   WorldModel/imagined_first_term_step_mean
+#   WorldModel/imagined_term_step_p{10,50,90}
+#   WorldModel/imagined_real_term_step_mean
+#
+# References:
+#   - Probe plan (instrumentation contract):
+#     docs/develop/active/diagnosis/dreamer_imagined_rollout_termination_probe.md
+#   - Battery design doc:
+#     docs/experiments/active/continual_learning/DREAMER_PROBE_BATTERY.md
+#   - Diagnosis (the surviving structural hypothesis this probe tests):
+#     docs/develop/active/diagnosis/dreamer_hypervigilance_learning_failure.md
+#   - Diagnostic-battery refutations that motivated the probe:
+#     docs/experiments/active/continual_learning/DREAMER_DIAGNOSTIC_BATTERY.md (§11–§12)
+
+agent:
+  algorithm: "DreamerV3"
+  batch_size: 16
+  sequence_length: 128   # Steps per trajectory (same concept as Recurrent PPO sequence_length)
+  replay_ratio: 0.5
+  collect_interval: 128     # Env steps per iteration per env. 1 = sheeprl-style (canonical), 128 = full sequence (JAX-optimized)
+  train_steps: 64
+  model_lr: 1e-4
+  actor_lr: 3e-5
+  value_lr: 3e-5
+
+  # Buffer Configuration
+  buffer_device: "gpu"   # "gpu" (JAX array, zero-copy, fast) or "cpu" (numpy array, transfer overhead)
+  buffer_capacity: 1000000
+
+  # Mixture sampling (DreamerV4-inspired two-buffer architecture)
+  # Set sampling_mode: "uniform" to disable (default backward-compatible behavior)
+  sampling_mode: "mixture"                # "uniform" or "mixture"
+  mixture_positive_slots: 5               # batch slots for positive-reward sequences
+  mixture_recent_slots: 5                 # batch slots for recent sequences
+  mixture_recent_window: 10000            # "recent" = last N transitions in main buffer
+  positive_buffer_capacity: 100000        # dedicated positive-reward buffer (100K transitions = 16 MB)
+
+  # Network Configuration (Comparative Alignment with Recurrent PPO)
+  encoder_dim: 128
+  encoder_fc_layers: [128, 128]
+
+  rssm_deter_dim: 512
+  rssm_stoch_dim: 32
+  rssm_classes: 32
+
+  decoder_fc_layers: [128, 128]
+
+  reward_fc_layers: [128, 128]
+  continue_fc_layers: [128, 128]
+
+  actor_fc_layers: [128, 128]
+  critic_fc_layers: [128, 128]
+
+  entropy_scale: 3e-4  # Hafner 2023 standard value
+  cont_loss_weight: 1.0  # Continuation-head loss multiplier. 1.0 = pre-knob behavior.
+  imagined_rollout_probe: true  # PROBE-DELTA vs dreamer_v3.yaml (false -> true). Logs imagined-rollout termination stats per log_interval.
+  unimix: 0.01
+  zero_init_reward_critic: true   # See dreamer_v3.yaml for full comment + doc links.
+  paper_canonical_twohot_bins: true   # See dreamer_v3.yaml for full comment + doc links.
+  apply_gru_reset_gate: true   # See dreamer_v3.yaml for full comment + doc links.
+  use_layer_norm: true  # Orthogonal to modulation.type — applies LayerNorm to encoder pre-activations.
+                         # Mirrors recurrent_ppo.yaml:20 / neuromodulated_ppo.yaml:20. Mandatory since commit f1db0f0.
+
+  # Encoding Configuration
+  encoding_mode: "hierarchical"  # "flat" or "hierarchical"
+
+  hierarchical_params:
+    # Unimodal Phase 1: Independent MLPs for each sensor
+    # Available sensor names for overrides:
+    # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
+    default_mlp: [128,128]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+    multimodal_hub: [128,128]
+
+  # Neuromodulation: DISABLED
+  # For neuromodulated variant, use: configs/models/neuromodulated_dreamer_v3.yaml
+  modulation:
+    type: null

@@ -1,0 +1,26 @@
+{
+  "skill_name": "recall",
+  "evals": [
+    {
+      "id": 1,
+      "name": "default-flat-listing",
+      "prompt": "/recall",
+      "expected_output": "Flat reverse-chronological list of up to 10 most recent insights in natural-language format. Each row: 'YYYY-MM-DD HH:MM — <summary> — *<folder definition>*'. Must use folder DEFINITIONS (italic), not raw folder names. Ends with a drill-down prompt. Should NOT include Today/Yesterday headers (no time hint given).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "time-grouped-yesterday",
+      "prompt": "What did we work on yesterday and today?",
+      "expected_output": "Time-grouped output with '## Today' and '## Yesterday' headers (always shown; 'No new entries today/yesterday.' if empty). Reverse-chrono within each group. Folder definitions in italics, not raw folder names. No L0-L4 codes or fragmentation jargon. Ends with drill-down prompt.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "technical-query-root-index",
+      "prompt": "Show me ROOT_INDEX and the tag dictionary.",
+      "expected_output": "Technical mode. Raw ROOT_INDEX.md content (folder names, counts, last update, tags). Verbatim active-tags table from _global_tags.md. No drill-down prompt at the end (this is a registry dump, not a listing).",
+      "files": []
+    }
+  ]
+}

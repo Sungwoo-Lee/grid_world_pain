@@ -11,11 +11,24 @@
 
 State the specific question this experiment answers. Frame as a testable hypothesis.
 
-> **H₀** (null): [e.g., "Modulation type has no effect on episode reward compared to baseline."]
-> **H₁** (alternative): [e.g., "Multiplicative modulation with h=16 achieves higher reward than baseline."]
+This section is the doc's plain-language entry point per CLAUDE.md "Documentation framing". A reader without prior context should be able to read this section alone and understand what the experiment is asking, why it exists, and what would count as a positive vs. negative result. Open with one paragraph in plain prose, *then* state the formal hypothesis.
 
-<!-- Keep hypotheses falsifiable and tied to observable metrics.
-     Multiple hypotheses are fine — number them H₁a, H₁b, etc. -->
+**Plain-language framing example.** "Does the modulated agent survive longer than the unmodulated baseline when the world's noise pattern shifts heterogeneously between sensory channels? The modulator's job is to dynamically reweight which channels the policy reads — so if it works anywhere, it should work here."
+
+**Formal hypothesis (after the plain-language framing):**
+
+> **H₀** (null — *the modulator does not help*): [e.g., "Modulation type has no effect on survival steps compared to the unmodulated baseline."]
+> **H₁** (alternative — *the modulator helps*): [e.g., "Multiplicative modulation with h=16 produces higher survival steps than the unmodulated baseline."]
+
+<!-- Plain-language framing rule per CLAUDE.md "Documentation framing":
+     - Translate the formal hypothesis on first mention. The English description
+       comes BEFORE the H₀ / H₁ symbols, not after.
+     - No bare WandB run IDs in this section, no bare config paths, no
+       project-internal jargon (Cand. A1, Phase 0, T/P split, etc.) without a
+       one-clause translation. Path-shaped detail moves to §3 Launch Manifest.
+     - Multiple hypotheses are fine — number them H₁a, H₁b, etc., and translate
+       each on first mention. -->
+
 
 ## 2. Experimental Design
 

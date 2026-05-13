@@ -1,4 +1,10 @@
 #!/bin/bash
+set -euo pipefail
+
+# This script is launched via `run_command.py` which no longer cds to the
+# project root or activates a conda env. Both responsibilities live here.
+cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
+
 #
 # train_command-agent.sh
 # ----------------------
@@ -72,15 +78,20 @@
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
+# JAX matched-config SPS measurement Run B — num_envs=16 (JAX-architectural parallelism)
+# Node 113, cuda:0. Design doc: docs/experiments/active/sheeprl_bridge/JAX_SHEEPRL_MATCHED_SPS_DESIGN.md
+# Measures JAX DreamerV3 env-SPS under sheeprl-XS matched recipe (replay_ratio=1.0) with JAX vmap parallelism.
+# --episodes 0 required: env YAML pins episodes:100 which overrides --total-timesteps without this flag.
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/experiment/basic/00-5X5_NoPred.yaml \
-  --agent_config configs/models/dreamer_v3.yaml \
+  --config configs/experiment/dreamer_curriculum/01_food_only.yaml \
+  --agent_config configs/models/dreamer_v3_sheeprl_matched.yaml \
   --num-envs 16 \
-  --episodes 10000000 \
-  --checkpoint-frequency 100000 \
+  --episodes 0 \
+  --total-timesteps 3000000 \
+  --seed 0 \
   --device cuda:0 \
   --log-interval 50 \
-  --wandb-group basic \
-  --wandb-job-type prod \
-  --wandb-name dreamer_v3_00-5X5_NoPred_n113 \
-  --tag dreamer_v3_00-5X5_NoPred_n113
+  --wandb-group sheeprl_bridge \
+  --wandb-job-type sps_measurement \
+  --wandb-name jax_sheeprl_matched_n16_s0 \
+  --tag jax_sheeprl_matched_n16_s0

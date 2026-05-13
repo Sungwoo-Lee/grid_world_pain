@@ -73,7 +73,10 @@ class DreamerTrainer(nnx.Module):
             'actor_fc_layers': config.get_mandatory('agent.actor_fc_layers'),
             'critic_fc_layers': config.get_mandatory('agent.critic_fc_layers'),
             'use_layer_norm': config.get_mandatory('agent.use_layer_norm', bool),
-            
+            'zero_init_reward_critic': config.get_mandatory('agent.zero_init_reward_critic', bool),
+            'paper_canonical_twohot_bins': config.get_mandatory('agent.paper_canonical_twohot_bins', bool),
+            'apply_gru_reset_gate':        config.get_mandatory('agent.apply_gru_reset_gate', bool),  # NEW (Z3)
+
             # Hierarchical Encoding Params
             'encoding_mode': config.get_mandatory('agent.encoding_mode', str),
             'hierarchical_params': config.to_dict().get('agent', {}).get('hierarchical_params', {})
@@ -82,6 +85,8 @@ class DreamerTrainer(nnx.Module):
         self.agent = DreamerV3Agent(obs_dim, act_dim, agent_config, rngs=rngs,
                                     obs_breakdown=obs_breakdown,
                                     modulation_config=modulation_config)
+
+        self._paper_canonical_twohot_bins = config.get_mandatory('agent.paper_canonical_twohot_bins', bool)
 
         feat_dim = self.agent.wm.deter_dim + self.agent.wm.stoch_dim * self.agent.wm.discrete
         self.target_critic = ActorCritic(feat_dim, act_dim, agent_config, rngs=rngs).critic
@@ -127,6 +132,7 @@ class DreamerTrainer(nnx.Module):
 
         B, T, _ = obs.shape
         modulation_enabled = self.agent.wm.modulation_enabled
+        IMG_PROBE = self.config.get_mandatory('agent.imagined_rollout_probe', bool)
 
         # --- 1. World Model Learning ---
         def model_loss_fn(wm, rng):
@@ -215,7 +221,7 @@ class DreamerTrainer(nnx.Module):
 
                 # Reward Loss
                 rew_pred = wm.reward_head(feat)
-                rew_target = to_twohot(reward)
+                rew_target = to_twohot(reward, paper_canonical_bins=self._paper_canonical_twohot_bins)
                 loss_rew = -jnp.mean(jnp.sum(rew_target * jax.nn.log_softmax(rew_pred), axis=-1))
 
                 # Continue Loss
@@ -247,10 +253,11 @@ class DreamerTrainer(nnx.Module):
 
                 loss_kl = DYN_SCALE * jnp.mean(dyn_kl) + REP_SCALE * jnp.mean(rep_kl)
 
-                total_loss = loss_recon + loss_rew + loss_cont + loss_kl
+                CONT_LOSS_WEIGHT = self.config.get_mandatory('agent.cont_loss_weight', float)
+                total_loss = loss_recon + loss_rew + CONT_LOSS_WEIGHT * loss_cont + loss_kl
 
             # Error metrics (non-gradient)
-            rew_pred_val = from_twohot(rew_pred)
+            rew_pred_val = from_twohot(rew_pred, paper_canonical_bins=self._paper_canonical_twohot_bins)
             rew_error = jnp.mean(jnp.abs(rew_pred_val - reward))
             
             # Directional Reward MAE
@@ -281,6 +288,15 @@ class DreamerTrainer(nnx.Module):
                 'model_latent_entropy': latent_entropy,
                 'model_cont_acc': cont_acc,
             }
+
+            if IMG_PROBE:
+                # Real replay-batch first-termination step for parity with imagined probe.
+                t_mask = (terminal > 0.5).astype(jnp.float32)             # (B, T)
+                any_t = jnp.any(t_mask > 0, axis=1)                       # (B,)
+                first_t = jnp.argmax(t_mask, axis=1)
+                first_t = jnp.where(any_t, first_t, terminal.shape[1])    # T sentinel if no terminal in this row
+                real_term_step_mean = jnp.mean(first_t.astype(jnp.float32))
+                metrics.update({'imagined_real_term_step_mean': real_term_step_mean})
 
             if modulation_enabled:
                 if wm.modulation_type == "FiLM":
@@ -348,12 +364,12 @@ class DreamerTrainer(nnx.Module):
                         gate_bias=mod_output.z_memory)
 
                     next_feat = self.agent.wm.get_feat(prior)
-                    rew = from_twohot(self.agent.wm.reward_head(next_feat))
+                    rew = from_twohot(self.agent.wm.reward_head(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
                     # Injection C: Reward interpretation scale (imagination only)
                     rew = rew * mod_output.z_reward.squeeze(-1)
                     cont = nnx.sigmoid(
                         self.agent.wm.continue_head(next_feat)).squeeze(-1)
-                    val = from_twohot(self.target_critic(next_feat))
+                    val = from_twohot(self.target_critic(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
 
                     step_info = {
                         'reward': rew, 'continue': cont, 'value': val,
@@ -371,10 +387,10 @@ class DreamerTrainer(nnx.Module):
                     prior = self.agent.wm.rssm.imagine_step(prev_state, action, key)
 
                     next_feat = self.agent.wm.get_feat(prior)
-                    rew = from_twohot(self.agent.wm.reward_head(next_feat))
+                    rew = from_twohot(self.agent.wm.reward_head(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
                     cont = nnx.sigmoid(
                         self.agent.wm.continue_head(next_feat)).squeeze(-1)
-                    val = from_twohot(self.target_critic(next_feat))
+                    val = from_twohot(self.target_critic(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
 
                     step_info = {
                         'reward': rew, 'continue': cont, 'value': val,
@@ -397,7 +413,7 @@ class DreamerTrainer(nnx.Module):
                 vals = rollouts['value']
 
                 start_feat = self.agent.wm.get_feat(start_state)
-                v_start = from_twohot(self.target_critic(start_feat))
+                v_start = from_twohot(self.target_critic(start_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
 
                 all_vals = jnp.concatenate([v_start[None], vals], axis=0)
 
@@ -414,12 +430,12 @@ class DreamerTrainer(nnx.Module):
 
                 # Critic Loss — train on RAW lambda_returns (canonical DreamerV3)
                 v_pred_logits = critic(rollouts['feat'])
-                target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns))
+                target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns), paper_canonical_bins=self._paper_canonical_twohot_bins)
                 loss_critic_step = -jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1)
                 loss_critic = jnp.mean(loss_critic_step * discount_weights)
 
                 # Actor Loss — normalize BOTH sides for consistent advantage
-                baseline = from_twohot(v_pred_logits)
+                baseline = from_twohot(v_pred_logits, paper_canonical_bins=self._paper_canonical_twohot_bins)
                 norm_baseline = (baseline - moments_low) / moments_invscale
                 advantage = jax.lax.stop_gradient(norm_returns - norm_baseline)
 
@@ -433,6 +449,22 @@ class DreamerTrainer(nnx.Module):
                 loss_actor_step = -(log_probs * advantage + ENTROPY_SCALE * entropy)
                 loss_actor = jnp.mean(loss_actor_step * discount_weights)
 
+                if IMG_PROBE:
+                    # Imagined-rollout termination probe.
+                    # conts: (H, B) post-sigmoid continue prob. Termination ≡ cont < 0.5.
+                    term_mask = (conts < 0.5).astype(jnp.float32)            # (H, B)
+                    any_term = jnp.any(term_mask > 0, axis=0)                 # (B,)
+                    first_term_step = jnp.argmax(term_mask, axis=0)           # (B,) — argmax of bool returns first True; 0 if none
+                    first_term_step = jnp.where(any_term, first_term_step, HORIZON)  # HORIZON sentinel if never terminates
+                    first_term_step_f = first_term_step.astype(jnp.float32)
+
+                    imag_term_frac_h8  = jnp.mean(jnp.any(term_mask[:8] > 0, axis=0).astype(jnp.float32))
+                    imag_term_frac_h15 = jnp.mean(any_term.astype(jnp.float32))   # full HORIZON
+                    imag_first_term_mean = jnp.mean(first_term_step_f)
+                    imag_first_term_p10  = jnp.percentile(first_term_step_f, 10.0)
+                    imag_first_term_p50  = jnp.percentile(first_term_step_f, 50.0)
+                    imag_first_term_p90  = jnp.percentile(first_term_step_f, 90.0)
+
                 metrics = {
                     'loss_critic': loss_critic,
                     'loss_actor': loss_actor,
@@ -445,6 +477,16 @@ class DreamerTrainer(nnx.Module):
                     'mean_entropy': jnp.mean(entropy),
                     'value_mae': jnp.mean(jnp.abs(baseline - jax.lax.stop_gradient(lambda_returns)))
                 }
+
+                if IMG_PROBE:
+                    metrics.update({
+                        'imagined_termination_fraction_h8':  imag_term_frac_h8,
+                        'imagined_termination_fraction_h15': imag_term_frac_h15,
+                        'imagined_first_term_step_mean':     imag_first_term_mean,
+                        'imagined_term_step_p10':            imag_first_term_p10,
+                        'imagined_term_step_p50':            imag_first_term_p50,
+                        'imagined_term_step_p90':            imag_first_term_p90,
+                    })
             return (loss_actor + loss_critic), (metrics, lambda_returns)
 
         with jax.named_scope("dreamer_optim"):
@@ -614,6 +656,7 @@ class DreamerTrainer(nnx.Module):
                 'ate_food': info['ate_food'].astype(jnp.float32),
                 'hit_predator': info['hit_predator'].astype(jnp.float32),
                 'hit_hiding_predator': info['hit_hiding_predator'].astype(jnp.float32),
+                'hit_neutral': info['hit_neutral'].astype(jnp.float32),
                 'event_collided': info['event_collided'].astype(jnp.float32),
                 'rested': info['rested'].astype(jnp.float32),
                 'damage': info['damage'],
@@ -622,6 +665,11 @@ class DreamerTrainer(nnx.Module):
                 'damage_obstacle': info['damage_obstacle'],
                 'dist_to_food': info['dist_to_food'],
                 'dist_to_pred': info['dist_to_pred'],
+                'dist_to_neutral': info['dist_to_neutral'],
+                'dist_to_hiding_predator': info['dist_to_hiding_predator'],
+                'dist_per_neutral': info['dist_per_neutral'],
+                'dist_per_predator': info['dist_per_predator'],
+                'agent_in_bush': info['agent_in_bush'],          # bool — behavior toolkit v1
                 'termination_reason': info['termination_reason'].astype(jnp.float32),
             }
             

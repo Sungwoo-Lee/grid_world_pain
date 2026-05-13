@@ -1,0 +1,20 @@
+defaults:
+  - default
+  - _self_
+
+id: grid_world_pain
+wrapper:
+  _target_: pytorch_agents.envs.grid_world_pain.GridWorldPainWrapper
+  config_path: ${oc.env:GWP_CONFIG_PATH}
+  seed: ${seed}
+  apply_noise: ${oc.env:GWP_APPLY_NOISE,true}
+num_envs: 4
+sync_env: True
+use_jax_vector_env: false  # v1 opt-in; true → vmap-batched JAXVectorEnv (smoke-only, no accumulators)
+capture_video: False
+frame_stack: 1
+action_repeat: 1
+clip_rewards: False
+grayscale: False
+screen_size: 64
+max_episode_steps: null

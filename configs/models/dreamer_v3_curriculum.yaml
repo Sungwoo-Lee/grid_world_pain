@@ -1,0 +1,96 @@
+# DreamerV3 — curriculum variant for the food→predator hypervigilance recovery
+# ----------------------------------------------------------------------------
+# Provenance: copied from configs/models/dreamer_v3.yaml. The ONLY deltas vs
+# that base are entropy_scale and cont_loss_weight, both motivated by the
+# diagnosis below.
+#
+# Lever 1 — entropy_scale: 3e-4 -> 1e-3 (~3.3x boost; lower edge of range).
+#   Rationale (diagnosis §4.3.4 / §7.3 priority 5): rPPO's effective entropy
+#   bonus is ~30x stronger than DreamerV3's at the Hafner-2023 default 3e-4.
+#   When the policy gradient is anaemic (constant advantage of -0.19), a
+#   too-weak entropy regularizer cannot keep exploration alive. We pick
+#   1e-3 (still well below rPPO's effective 1.7e-2) as the conservative end
+#   of the user's range so the actor maintains exploration without becoming
+#   uniform-noise.
+#
+# Lever 2 — cont_loss_weight: 1.0 -> 5.0 (5x boost).
+#   Rationale (diagnosis §4.3.3 / §7.3 priority 2): the continuation head
+#   exploits class imbalance and scores ~98% accuracy by predicting "alive",
+#   so imagined rollouts almost never terminate and the actor never sees the
+#   death-penalty gradient. Boosting cont_loss_weight makes the WM pay a
+#   larger price for missing terminations. 5x is the conservative end of the
+#   diagnosis's "10x" recommendation; we pair it with the curriculum (Stage 2
+#   delivers a much higher death-event density per step than Stage 3 anchor)
+#   so the head sees enough positive class samples to actually learn.
+#
+# References:
+#   - Diagnosis: docs/develop/active/diagnosis/dreamer_hypervigilance_learning_failure.md
+#   - Schema-add plan: docs/develop/active/diagnosis/dreamer_cont_loss_weight_knob.md
+#   - Design doc: docs/experiments/active/continual_learning/DREAMER_CURRICULUM_FOOD_THEN_PREDATOR.md
+
+agent:
+  algorithm: "DreamerV3"
+  batch_size: 16
+  sequence_length: 128   # Steps per trajectory (same concept as Recurrent PPO sequence_length)
+  replay_ratio: 0.5
+  collect_interval: 128     # Env steps per iteration per env. 1 = sheeprl-style (canonical), 128 = full sequence (JAX-optimized)
+  train_steps: 64
+  model_lr: 1e-4
+  actor_lr: 3e-5
+  value_lr: 3e-5
+
+  # Buffer Configuration
+  buffer_device: "gpu"   # "gpu" (JAX array, zero-copy, fast) or "cpu" (numpy array, transfer overhead)
+  buffer_capacity: 1000000
+
+  # Mixture sampling (DreamerV4-inspired two-buffer architecture)
+  # Set sampling_mode: "uniform" to disable (default backward-compatible behavior)
+  sampling_mode: "mixture"                # "uniform" or "mixture"
+  mixture_positive_slots: 5               # batch slots for positive-reward sequences
+  mixture_recent_slots: 5                 # batch slots for recent sequences
+  mixture_recent_window: 10000            # "recent" = last N transitions in main buffer
+  positive_buffer_capacity: 100000        # dedicated positive-reward buffer (100K transitions = 16 MB)
+
+  # Network Configuration (Comparative Alignment with Recurrent PPO)
+  encoder_dim: 128
+  encoder_fc_layers: [128, 128]
+
+  rssm_deter_dim: 512
+  rssm_stoch_dim: 32
+  rssm_classes: 32
+
+  decoder_fc_layers: [128, 128]
+
+  reward_fc_layers: [128, 128]
+  continue_fc_layers: [128, 128]
+
+  actor_fc_layers: [128, 128]
+  critic_fc_layers: [128, 128]
+
+  entropy_scale: 1e-3      # CURRICULUM-DELTA vs dreamer_v3.yaml (3e-4 -> 1e-3, ~3.3x boost)
+  cont_loss_weight: 5.0    # CURRICULUM-DELTA vs dreamer_v3.yaml (1.0 -> 5.0, 5x boost)
+  imagined_rollout_probe: false  # Flip to true to enable diagnostic probe.
+  unimix: 0.01
+  zero_init_reward_critic: true   # See dreamer_v3.yaml for full comment + doc links.
+  paper_canonical_twohot_bins: true   # See dreamer_v3.yaml for full comment + doc links.
+  apply_gru_reset_gate: true   # See dreamer_v3.yaml for full comment + doc links.
+  use_layer_norm: true  # Orthogonal to modulation.type — applies LayerNorm to encoder pre-activations.
+                         # Mirrors recurrent_ppo.yaml:20 / neuromodulated_ppo.yaml:20. Mandatory since commit f1db0f0.
+
+  # Encoding Configuration
+  encoding_mode: "hierarchical"  # "flat" or "hierarchical"
+
+  hierarchical_params:
+    # Unimodal Phase 1: Independent MLPs for each sensor
+    # Available sensor names for overrides:
+    # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
+    default_mlp: [128,128]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+    multimodal_hub: [128,128]
+
+  # Neuromodulation: DISABLED
+  # For neuromodulated variant, use: configs/models/neuromodulated_dreamer_v3.yaml
+  modulation:
+    type: null

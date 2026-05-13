@@ -12,7 +12,8 @@
 results/
 dist/
 build/
-sheeprl/
+/sheeprl/
+!vendor/sheeprl/
 evaaa/
 temp_configs/
 wandb/
@@ -35,3 +36,16 @@ claude_data/
 skills/notebooklm/data/
 skills/notebooklm/.venv/
 !skills/
+
+# Claude session-memory soft-delete bin (track placeholder, ignore the rest)
+.claude-memory/.trash/*
+!.claude-memory/.trash/.gitkeep
+
+# (deprecated) Claude session-memory raw archives — superseded by claude_data/
+# (raw conversations are now read directly from the synced JSONL under
+#  claude_data/.claude/projects/<proj>/<UUID>.jsonl; the local _archive/
+#  directory was removed when /memorize Step 7 changed to point at the JSONL)
+
+# Skill eval workspaces — iteration outputs are transient
+.claude/skills/*-workspace/
+.claude/worktrees/

@@ -1,0 +1,71 @@
+# Continual schedule: dreamer_curriculum_food_then_predator
+# ----------------------------------------------------------------------------
+# Three-stage curriculum to recover DreamerV3 from the documented hypervigilance
+# failure on the 5x5 task (see docs/develop/active/diagnosis/
+# dreamer_hypervigilance_learning_failure.md).
+#
+# Stage source (alphabetic order in configs/experiment/dreamer_curriculum/):
+#   01_food_only.yaml         -- predators[0].count=0, hiding_predator.count=0
+#   02_predator_slow.yaml     -- 1 mobile predator, slowed (move_int=8, attack_delay=8,
+#                                damage [5,15], detection_range=2); hiding_predator.count=1
+#   03_predator_full.yaml     -- failing-task anchor (verbatim copy of basic/01-...)
+#
+# Cross-stage modality fingerprint match: VERIFIED (see design doc §4).
+# All sensor flags, body params, grid params, and action enables are byte-
+# identical across the three stages. The only env deltas are predator/lethal-
+# entity counts and parameters on predators[0].
+#
+# Boundaries — env-step back-calculation
+# -----------------------------------------
+# Anchor: failing DreamerV3 run (qont5dac) ran 27.1 M env-steps in ~3 h 13 min
+# at 2330 env-steps/sec on cuda:3 with num_envs=16. We budget ~4 h total,
+# i.e. ~33.5 M env-steps (= 4 h x 60 x 60 x 2330).
+#
+# Per-stage env-step budgets (rough; the schedule is on EPISODES, not env-steps,
+# because the train.py contract is episode-cumulative-boundaries):
+#   Stage 1 (food_only):     ~2.4 M env-steps  (16 K eps x ~150 steps/ep
+#                              — episodes long because no death events)
+#   Stage 2 (predator_slow): ~5.0 M env-steps  (50 K eps x ~100 steps/ep
+#                              — slowed predator, longer survival)
+#   Stage 3 (predator_full): ~25 M env-steps  (700 K eps x ~30-40 steps/ep
+#                              — same regime as the failing run if the actor
+#                              is still struggling; longer if recovery starts)
+#   Total: ~32-33 M env-steps. Within ~4 h budget.
+#
+# Why these numbers in particular
+# -----------------------------------------
+# - Stage 1 = 16 K episodes. Enough for the WM's reward head to sample the
+#   small-positive (eating) tail repeatedly and for the actor to leave uniform.
+#   At ~150 steps/ep this is ~2.4 M env-steps; rPPO crosses survival 50 at
+#   ~8 M env-steps on a HARDER task, so 2.4 M of the EASIER task is plausibly
+#   sufficient (this is a budget-allocation hypothesis the experiment tests).
+# - Stage 2 = 50 K episodes (delta = 50 K). Deliberately the longest stage in
+#   episode count because this is the bridge stage where the death-event signal
+#   first appears. The continuation head needs many positive-class samples
+#   (per-stage) to break free of the class-imbalance regime.
+# - Stage 3 = 700 K episodes (delta = 700 K). The failing run completed ~910 K
+#   episodes in ~3 h. We allow ~700 K episodes for the curriculum-trained agent
+#   to demonstrate transfer to the full task within budget. If the agent is
+#   surviving longer than 30 steps the actual episode count will be smaller
+#   (longer episodes -> fewer episodes per env-step), giving a wider step budget.
+#
+# Checkpoint frequencies
+# -----------------------------------------
+# Stage 1: 8 K (= 2 ckpts in stage). Stage is short; we want a mid-stage and
+#   end-of-stage checkpoint for offline analysis.
+# Stage 2: 25 K (= 2 ckpts in stage). Same logic.
+# Stage 3: 100 K (= 7 ckpts in stage). Coarse to keep disk usage manageable on
+#   the long final stage; fine enough to identify when survival inflects.
+#
+# Design doc:
+#   docs/experiments/active/continual_learning/DREAMER_CURRICULUM_FOOD_THEN_PREDATOR.md
+
+continual:
+  # Cumulative episode boundaries.
+  # Stage 0 (01_food_only)        runs while ep_count <  16000.
+  # Stage 1 (02_predator_slow)    runs from ep 16000  until ep  66000.
+  # Stage 2 (03_predator_full)    runs from ep 66000  until ep 766000 = total.
+  episode_boundaries: [16000, 66000, 766000]
+
+  # One int per stage. Parallel to episode_boundaries above.
+  checkpoint_frequencies: [8000, 25000, 100000]

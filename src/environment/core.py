@@ -437,6 +437,10 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         'rested': rested,
         'hit_hiding_predator': jnp.any(jnp.logical_and(interact_resource, is_hiding_predator)),
         'hit_predator': jnp.any(at_predator),
+        'hit_neutral': (
+            jnp.any(jnp.all(state.neutral_pos == new_agent_pos, axis=-1))
+            if state.neutral_pos.shape[0] > 0 else jnp.array(False)
+        ),
     }
     
     new_satiation, new_nutrition, new_injury, next_injury_buffer, next_nociception_history, new_rest_streak, done = update_body(state, info, params)
@@ -490,8 +494,35 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # GPU-side distance calculations for stats
     dist_to_food = jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 0), jnp.linalg.norm(state.res_pos - new_agent_pos, axis=-1), 99.0)) if state.res_pos.shape[0] > 0 else 99.0
     dist_to_pred = jnp.min(jnp.linalg.norm(state.pred_pos - new_agent_pos, axis=-1)) if state.pred_pos.shape[0] > 0 else 99.0
+    dist_to_neutral = jnp.min(jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)) if state.neutral_pos.shape[0] > 0 else 99.0
+    dist_to_hiding_predator = jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 1), jnp.linalg.norm(state.res_pos - new_agent_pos, axis=-1), 99.0)) if state.res_pos.shape[0] > 0 else 99.0
+    # Per-instance unreduced distance vectors for tag-based logging.
+    dist_per_neutral = (
+        jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)
+        if state.neutral_pos.shape[0] > 0
+        else jnp.zeros((0,), dtype=jnp.float32)
+    )
+    dist_per_predator = (
+        jnp.linalg.norm(state.pred_pos - new_agent_pos, axis=-1)
+        if state.pred_pos.shape[0] > 0
+        else jnp.zeros((0,), dtype=jnp.float32)
+    )
     info['dist_to_food'] = dist_to_food
     info['dist_to_pred'] = dist_to_pred
+    info['dist_to_neutral'] = dist_to_neutral
+    info['dist_to_hiding_predator'] = dist_to_hiding_predator
+    info['dist_per_neutral'] = dist_per_neutral
+    info['dist_per_predator'] = dist_per_predator
+
+    # Bush occupancy: True iff agent is standing on an obstacle marked hides_agent.
+    # Mirrors the agent_hidden computation inside update_predators (line ~150);
+    # recomputed here at minimal cost because EnvParams is in scope and we want it on `info`.
+    # Uses new_agent_pos (post-step position) — correct for M2's "agent dives into bush" semantics.
+    agent_in_bush = jnp.any(jnp.logical_and(
+        jnp.all(state.obs_pos == new_agent_pos, axis=-1),
+        params.obs_hides_agent
+    )) if state.obs_pos.shape[0] > 0 else jnp.array(False)
+    info['agent_in_bush'] = agent_in_bush
 
     # 7. Final State
     new_state = state._replace(

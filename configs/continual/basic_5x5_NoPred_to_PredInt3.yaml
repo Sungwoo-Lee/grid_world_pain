@@ -1,0 +1,40 @@
+# Continual schedule: 5x5 basic, no-predator -> predator_interval=3
+# ----------------------------------------------------------------
+# Purpose: fast plumbing/visualization demo of train.py's --configs-dir /
+#   --continual-schedule path. The single WandB run produced by this
+#   schedule shows a clear two-stage learning curve with a logged
+#   `stage/transition` marker at the boundary on the Episode/Number axis.
+#
+# Stage source (alphabetic order in configs/experiment/basic/):
+#   00-5X5_NoPred.yaml                 -- predators[0].count = 0
+#   01-5X5_PredInterval3_NutGain18.yaml -- predators[0].count = 1
+#
+# The two stages differ only in `environment.predators[0].count` (0 -> 1).
+# All sensor flags, action enables, body params, and grid params are byte-
+# identical, so the startup obs/action-dim probe and the modality fingerprint
+# check (Fix 3) both pass.
+#
+# Recurrent state is reset at the boundary (Fix 4); policy/value/optimizer
+# parameters persist (the standard continual-RL choice). RecurrentPPO is
+# on-policy so there is no replay buffer to clear.
+#
+# Design doc:
+#   docs/experiments/active/continual_learning/CONTINUAL_5X5_NOPRED_TO_PREDINT3_DEMO.md
+#
+# Rationale for boundaries (see design doc §2):
+#   - 800 episodes per phase gives a recognizable learning curve on 5x5 RPPO
+#     (enough to see initial improvement and roughly plateau) without the
+#     ~10M-episode budget of a real run.
+#   - Coarse checkpoints (400 ep) since the user is not resuming from these.
+#   - Total = 1600 episodes; expected wall-clock ~3-5 min on a single GPU
+#     at num_envs=16, RecurrentPPO. Includes one mid-run env rebuild JIT
+#     recompile at the boundary.
+
+continual:
+  # Cumulative episode boundaries.
+  # Stage 0 (NoPred) runs while ep_count < 800.
+  # Stage 1 (PredInterval3) runs from ep 800 until ep 1600 = total.
+  episode_boundaries: [800, 1600]
+
+  # One int per stage. Coarse on purpose -- demo run, no resume planned.
+  checkpoint_frequencies: [400, 400]
