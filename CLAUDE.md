@@ -46,6 +46,7 @@ The canonical flows, parallelism heuristics, cross-cutting constraints, and anti
 - **Simplicity first.** Minimum code that solves the stated problem. No speculative features, abstractions for single-use code, configurability that wasn't requested, or error handling for impossible scenarios. If 200 lines could be 50, rewrite.
 - **Surgical changes.** Every changed line should trace to the request. Don't "improve" adjacent code, refactor what isn't broken, or restyle to your preference. Remove orphans your changes created; don't delete pre-existing dead code unless asked — mention it instead.
 - **Goal-driven execution.** Reframe tasks as verifiable goals before starting ("fix the bug" → "write a test that reproduces it, then make it pass"). For multi-step work, state a short plan with a verification check per step so you can loop without re-asking.
+- **Plain-language default, details on demand.** When answering — plans, experiment-result analyses, explanations, anything — treat the user as new to the topic. Explain in plain English; translate jargon and shorthand (`H₁a`, `Δ_SS`, FiLM, WandB run IDs, bare config paths) on first use. Don't dump details inline by default — point at the document path that owns the answer (e.g. "details in [`docs/experiments/active/foo/foo.md`](docs/experiments/active/foo/foo.md)") and let the user open it. Go deep only when the user explicitly asks for the details.
 
 ---
 
@@ -114,23 +115,6 @@ When memory work is requested, read `.claude-memory/CLAUDE.md` (operating manual
 
 ## Diary protocol
 
-The project keeps a daily event log at [docs/diary/YYYY-MM-DD.md](docs/diary/) — a single-glance status board across all parallel Claude sessions. **Update it whenever a notable event fires, even without an explicit user request.** The diary is the cross-session index; missing entries create invisible gaps when another session looks at "what's happening today".
+The project keeps a daily event log at [docs/diary/YYYY-MM-DD.md](docs/diary/) — a single-glance status board across all parallel Claude sessions. **Update it whenever a notable event fires, even without an explicit user request.** Missing entries create invisible gaps when a parallel session looks at "what's happening today". Top-level Claude is responsible for `session-start` / `session-end` and `progress-report` on multi-step wrap-up; sub-agents fire their own subcommand on completion; `/memorize` chains `insight` rows automatically.
 
-The mechanism is the `/diary` skill ([.claude/skills/diary/SKILL.md](.claude/skills/diary/SKILL.md)), which calls `scripts/diary_append.py` (flock-protected, safe under parallel calls). Subcommand-to-event mapping:
-
-| When this happens | Call this subcommand |
-|---|---|
-| Top-level Claude session begins a multi-step task | `session-start --label … --summary … [--link plan-or-doc]` |
-| Same session wraps up | `session-end --label … --commits "<hashes>"` |
-| `developer` reports an implementation complete | `implemented --subject … --link <commit-hash-or-plan-doc>` |
-| `senior-developer` reports a verification complete | `verified --subject … --link <plan-doc>` |
-| `/memorize` writes 1+ insights | already chained — `/memorize` Step 8 calls `diary_append.py insight ...` once per insight |
-| `training-runner` launches a training | `training-start --tag … --node … --gpu … --cell … --wandb … --doc <design-doc>` |
-| `experiment-analyzer` finishes an analysis | `training-done --tag <same-as-start> --result "<one-line>" --analysis <analysis-doc>` |
-| Multi-step session is wrapping up (in addition to `session-end`) | `progress-report --title … --what-this-did … --headline … --whats-next … --sources …` |
-
-Pass **raw values** (commit hashes, repo-relative paths) to `--link` / `--doc` / `--analysis` / `--commits` — the script auto-formats them as `commit `<hash>`` or `[stem](relative-path)`. Tags must match between `training-start` and `training-done`; session labels must match between `session-start` and `session-end`.
-
-Every row carries a **Session** column showing which Claude session wrote it. The Sessions table carries the **full UUID** (copy-paste into `claude --resume <UUID>` to resume the session in a new terminal); Events and Training runs carry the **8-char prefix** for compactness — cross-reference back to the Sessions row to recover the full UUID. Top-level Claude calls inherit both formats automatically from `$CLAUDE_CODE_SESSION_ID`. Sub-agents must pass `--session "${CLAUDE_CODE_SESSION_ID:0:8}/<role>"` explicitly so rows read `f3ab7f37/developer`, `f3ab7f37/training-runner`, etc. — the slash separator makes parent→sub-agent lineage visible at a glance. Each agent profile under `.claude/agents/` documents its exact `--session` value.
-
-Agent profiles in `.claude/agents/` carry their own diary-update reminder for their specific subcommand. Top-level Claude is responsible for `session-start` / `session-end`. The `/memorize` chain handles `insight` rows automatically.
+The full contract — subcommand-to-event mapping, Session-column convention (full UUID vs. 8-char prefix, sub-agent `parent/role` form), link auto-formatting rules, and the per-call auto-commit pattern — lives in the `/diary` skill at [.claude/skills/diary/SKILL.md](.claude/skills/diary/SKILL.md). The skill calls `scripts/diary_append.py`, which holds a `flock` so parallel sessions queue rather than clobber.
