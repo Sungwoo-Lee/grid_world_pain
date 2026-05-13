@@ -1316,3 +1316,68 @@ Plain-language summary of the CP-PASS decision. CP3 (the JAX port of sheeprl's `
 
 **Verified by**: senior-developer
 **Date**: 2026-05-14
+
+---
+
+## Implementation Report — CP4 + CP4b (developer)
+
+**Date**: 2026-05-14
+**Branch**: v1.4
+**Implemented by**: developer
+
+### Summary
+
+CP4 (RSSM transition + representation + get_initial_states) and CP4b (§S4 three-quantity arithmetic-mask `is_first` reset) are complete. The previous developer session had written `src/algorithms/dreamer_srl/agent.py` (658 lines) but stopped without tests, fixtures, sweeps, or commits. This session completed all remaining tasks.
+
+**Two structural bugs identified and fixed before tests were written:**
+
+1. **Missing MLP pre-projection before GRU**: The RSSM was wiring `[posterior_flat, action]` directly into the `LayerNormGRUCell`. Sheeprl's `RecurrentModel` passes the concatenated input through `Linear(S*D+A → dense_units, bias=False) → LayerNorm(dense_units, eps=1e-3) → SiLU` before the GRU. Without this, the GRU would receive wrong-shape input (S*D+A instead of dense_units) and the recurrent path would be architecturally incorrect.
+2. **`LayerNormGRUCell` lacked `use_bias` parameter**: Sheeprl's `RecurrentModel` instantiates the GRU with `bias=False`, but the JAX cell only supported `use_bias=True`. Added `use_bias: bool = True` param with `False` used at RSSM construction.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `src/algorithms/dreamer_srl/agent.py` | Bug fix: added `use_bias` to `LayerNormGRUCell`; added `recurrent_dense_units` + `action_dim` params + MLP pre-projection layers to `RSSM.__init__`; updated `dynamic()` to route through MLP→GRU; applied Hafner init to `recurrent_mlp_linear.kernel`; fixed `.value` → `[...]` deprecation (8 occurrences) |
+| `tests/algorithms/dreamer_srl/test_agent.py` | Added `THRESHOLD_RSSM = 2e-3`, `_load_rssm_from_fixture()` helper, and 5 CP4/CP4b Lever-A tests (Tests 5–9) |
+| `scripts/fixtures/gen_cp4_fixtures.py` | New file — generates 5 `.npz` fixtures using sheeprl PyTorch RSSM; handles sheeprl `_uniform_mix` ≥3D tensor requirement via `unsqueeze(0)` / `squeeze(0)` wrappers |
+| `tests/fixtures/dreamer_srl/` | 5 new `.npz` fixtures: `rssm_transition`, `rssm_representation`, `get_initial_states`, `is_first_force_set`, `is_first_three_quantity_reset` |
+| `scripts/sheeprl_jax_diff.py` | Added `_load_rssm_from_fixture_diff()` helper + 5 `_run_*` functions; registered all 5 in `FUNCTION_REGISTRY`; added D-008 threshold overrides (2e-3) in `FUNCTION_THRESHOLDS` |
+| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Added D-008 + D-009; both approved autonomously per established class precedents |
+
+### Test results
+
+**CP4 sweep** (`python scripts/sheeprl_jax_diff.py --checkpoint CP4`):
+```
+rssm_transition      max_abs_diff = 6.838e-04  PASS (< 2e-3)
+rssm_representation  max_abs_diff = 7.193e-04  PASS (< 2e-3)
+get_initial_states   max_abs_diff = 0.000e+00  PASS (< 2e-3)
+```
+
+**CP4b sweep** (`python scripts/sheeprl_jax_diff.py --checkpoint CP4b`):
+```
+is_first_force_set            max_abs_diff = 4.306e-04  PASS (< 2e-3)
+is_first_three_quantity_reset max_abs_diff = 5.597e-04  PASS (< 2e-3)
+```
+
+**Full pytest suite** (`python -m pytest tests/algorithms/dreamer_srl/ -v`):
+```
+28 passed, 0 warnings in 23.91s
+```
+
+### Deviations logged
+
+- **D-008** (CP4/CP4b): RSSM MLP float32 matmul ULP cascade. Measured max: 7.193e-4 (repr logits). Threshold: 2e-3 (3× margin). Semantic errors produce O(0.1) deviation (143× above threshold). Autonomous approval per substrate-mechanical class precedent.
+- **D-009** (CP4b): Stochastic posterior comparison not possible across JAX gumbel-softmax vs PyTorch rsample. `h` rollout used as proxy — deterministic and catches all §S4 semantic failures. Autonomous approval per mathematical-fundamental class (same as D-002).
+
+### Speed check
+
+Skipped. CP4 adds `RSSM` module construction (one-time at agent build time); no hot path (vmap/jit/scan) modified at this stage. Speed check deferred to CP9/CP10 where the RSSM is wired into the training loop.
+
+### Key implementation notes
+
+- **sheeprl `_uniform_mix` requires ≥3D tensors**: Fixture generator wraps all sheeprl calls with `unsqueeze(0)` (add T=1 dim) and `squeeze(0)` on output.
+- **D-009 proxy justification**: The test loops use fixture `posterior_seq` as input to each `dynamic()` step (not a carried JAX scan state), so `h_t` is deterministic. Any missing §S4 quantity diverges `h` by O(0.1) — far above D-008's threshold.
+- **Flax NNX `.value` deprecation**: Fixed 8 occurrences; replaced with `[...]` form per Flax NNX updated API. Confirmed no warnings after fix.
+
+**Implemented by**: developer
