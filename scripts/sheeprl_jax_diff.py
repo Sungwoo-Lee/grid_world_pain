@@ -35,8 +35,17 @@ FUNCTION_REGISTRY mapping the function name to a Callable that:
   1. Loads inputs from the fixture (passed as a numpy NpzFile).
   2. Runs the PyTorch (sheeprl) side and the JAX (dreamer-srl) side.
   3. Returns (jax_out: jnp.ndarray, torch_out: np.ndarray, metadata: str)
-     where metadata is a short string describing the fixture shapes printed
-     in the header line above max_abs_diff.
+     where metadata is a multi-line string assembled by the runner that should
+     include the sheeprl source location, the JAX function location, and the
+     fixture shape/seed description — matching the intended output format::
+
+       sheeprl: vendor/sheeprl/sheeprl/utils/distribution.py:L185-L260
+       jax:     src/algorithms/dreamer_srl/loss.py:TwoHotEncoding
+       fixture: shape=(16, 4, 255) logits + (16, 4, 1) target, seed=0xD3EAF
+
+     compare() then prints ``fixture: <metadata>`` followed by max_abs_diff and
+     PASS/FAIL.  The runner is responsible for assembling the header lines
+     (sheeprl: ..., jax: ...) so compare() itself stays simple.
 
 The compare() helper below converts torch → JAX, computes max-abs-diff,
 and formats the PASS/FAIL message — comparison runners do NOT call
@@ -114,16 +123,18 @@ def compare(
         if isinstance(torch_out, _torch.Tensor):
             torch_out = torch_out.detach().numpy()
 
-    # Convert JAX array → numpy
-    if _JAX_AVAILABLE:
-        if isinstance(jax_out, type(jnp.zeros(0))):  # jnp.ndarray check
-            jax_out_np = np.asarray(jax_out)
-        else:
-            jax_out_np = np.asarray(jax_out)
-    else:
-        jax_out_np = np.asarray(jax_out)
+    # Convert JAX array → numpy (np.asarray handles both JAX arrays and numpy arrays)
+    jax_out_np = np.asarray(jax_out)
 
     torch_out_np = np.asarray(torch_out)
+
+    # Explicit shape check — a numpy broadcast error here is opaque; name both sides.
+    if jax_out_np.shape != torch_out_np.shape:
+        raise ValueError(
+            f"Shape mismatch: jax={jax_out_np.shape} torch={torch_out_np.shape}. "
+            f"This is a structural deviation, not a numerical one — "
+            f"log it in DEVIATION_LOG.md with the sheeprl source line."
+        )
 
     max_abs_diff = float(np.max(np.abs(jax_out_np - torch_out_np)))
     passed = max_abs_diff < threshold
@@ -206,7 +217,17 @@ def run_single(function_name: str, fixture_path: str, threshold: float) -> bool:
 
 
 def run_checkpoint(checkpoint: str, threshold: float) -> bool:
-    """Run all functions registered for a checkpoint.  Returns True if all PASS."""
+    """Run all functions registered for a checkpoint.  Returns True if all PASS.
+
+    Exit semantics:
+      - All registered functions PASS → True  (caller exits 0)
+      - Any registered function FAILs → False (caller exits 1)
+      - All expected functions are SKIP (none ported yet) → False (caller exits 1)
+        This prevents a silent green light when the developer forgets to register a
+        function in FUNCTION_REGISTRY.  The CP-level no-Lever-A checkpoints (CP8,
+        CP9, CP10) are the only ones that legitimately return True with zero tests —
+        they are explicitly empty lists by design.
+    """
     if checkpoint not in CHECKPOINT_REGISTRY:
         print(f"ERROR: unknown checkpoint '{checkpoint}'.  "
               f"Valid: {sorted(CHECKPOINT_REGISTRY.keys())}", file=sys.stderr)
@@ -214,6 +235,7 @@ def run_checkpoint(checkpoint: str, threshold: float) -> bool:
 
     fns = CHECKPOINT_REGISTRY[checkpoint]
     if not fns:
+        # Explicitly empty by design (integration / speed CP — no Lever-A tests).
         print(f"{checkpoint}: no Lever-A functions registered (integration / speed CP).")
         return True
 
@@ -240,16 +262,25 @@ def run_checkpoint(checkpoint: str, threshold: float) -> bool:
     print(f"\n{'='*60}")
     print(f" {checkpoint} summary")
     print(f"{'='*60}")
+    any_ran = False
     all_pass = True
     for fn, result in results.items():
         if result is None:
             status = "SKIP (not ported)"
         elif result:
             status = "PASS"
+            any_ran = True
         else:
             status = "FAIL"
             all_pass = False
+            any_ran = True
         print(f"  {fn:<50s} {status}")
+
+    if not any_ran:
+        print(f"\n  WARN: 0 functions ran for {checkpoint} — all were SKIP (not yet ported).")
+        print(f"  Register function(s) in FUNCTION_REGISTRY before marking {checkpoint} PASS.")
+        all_pass = False
+
     print()
     return all_pass
 
