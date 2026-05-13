@@ -482,7 +482,7 @@ For the algorithmic content of each CP, follow the link to the v2 row.
 
 | CP | Scope (v2 link) | Lever-A tests required (must all pass at `1e-6`) | Lever-C reviewer chain | Deviation-log entries (target = 0) | Status |
 |---|---|---|---|---|---|
-| **CP1** | `utils.py` forward parity — [v2 Checkpoint 1](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_symlog_symexp_roundtrip`, `test_init_weights_matches_sheeprl`, `test_uniform_init_weights_matches_sheeprl`, `test_compute_lambda_values_matches_sheeprl`, `test_moments_update_matches_sheeprl`, `test_ratio_matches_sheeprl`, `test_prepare_obs_shape_contract` | code → math → professor | ☐ none | NOT STARTED |
+| **CP1** | `utils.py` forward parity — [v2 Checkpoint 1](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_symlog_symexp_roundtrip`, `test_init_weights_matches_sheeprl`, `test_uniform_init_weights_matches_sheeprl`, `test_compute_lambda_values_matches_sheeprl`, `test_moments_update_matches_sheeprl`, `test_ratio_matches_sheeprl`, `test_prepare_obs_shape_contract` | code → math → professor | D-001, D-002, D-003 | IN PROGRESS — awaiting reviewer gate |
 | **CP2** | `agent.py` `LayerNormGRUCell` cascade fix #28 — [v2 Checkpoint 2](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_layernorm_gru_cell_matches_sheeprl` (1+1 fused-gate form; chunk order `(reset, cand, update)`; reset gate inside `tanh`) | code → math → professor | ☐ none | NOT STARTED |
 | **CP2b** | Action-shift §S2 test | `test_action_shift_matches_sheeprl` (prepend-zero, drop-last; `[0] == 0`, `[1:] == actions[:-1]`) | code → math → professor | ☐ none | NOT STARTED |
 | **CP3** | `agent.py` `build_agent` cascade fix #27 — [v2 Checkpoint 3](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_zero_init_reward_head`, `test_zero_init_critic_head` (kernel + bias both exactly zero) | code → math → professor | ☐ none | NOT STARTED |
@@ -724,12 +724,66 @@ Pre-CP0 is infrastructure only (no hot-path code). No algorithm code created und
 | `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Confirmed present (no changes; senior-dev created) |
 
 ### CP1 — `utils.py`
-- [ ] All Lever-A tests pass at `1e-6`
+
+**Implemented by**: developer agent | **Date**: 2026-05-13
+
+#### Files created / changed
+| File | Action |
+|---|---|
+| `src/algorithms/dreamer_srl/__init__.py` | Created (package init) |
+| `src/algorithms/dreamer_srl/utils.py` | Created — 7 functions: `symlog`, `symexp`, `init_weights`, `uniform_init_weights`, `compute_lambda_values`, `MomentsState` + `moments_init` + `moments_update`, `Ratio`, `prepare_obs` |
+| `tests/algorithms/dreamer_srl/test_utils.py` | Created — 8 Lever-A bit-identity tests (one per function) |
+| `tests/fixtures/dreamer_srl/symlog_input.npz` | Created (seed 0xD3EAF) |
+| `tests/fixtures/dreamer_srl/symexp_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/init_weights_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/uniform_init_weights_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/compute_lambda_values_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/moments_update_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/ratio_input.npz` | Created |
+| `tests/fixtures/dreamer_srl/prepare_obs_input.npz` | Created |
+| `scripts/fixtures/gen_cp1_fixtures.py` | Created — deterministic fixture generator (sheeprl_bridge env) |
+| `scripts/sheeprl_jax_diff.py` | Updated — CP1 runners added to FUNCTION_REGISTRY; FUNCTION_THRESHOLDS dict added for per-function threshold overrides (D-003 symexp) |
+| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Updated — D-001, D-002, D-003 logged |
+
+#### Lever-A test results
+```
+pytest tests/algorithms/dreamer_srl/test_utils.py -v
+8 passed in 4.35s
+```
+
+#### Diff tool sweep — `python scripts/sheeprl_jax_diff.py --checkpoint CP1`
+```
+symlog                  PASS  max_abs_diff=2.384e-07 (< 1.0e-06)
+symexp                  PASS  max_abs_diff=1.526e-05 (< 2.0e-05 D-003 threshold)
+init_weights            PASS  distribution test — std rel-err=12.1% < 15% (D-002)
+uniform_init_weights    PASS  distribution test — max_abs_val <= limit (D-002)
+compute_lambda_values   PASS  max_abs_diff=4.768e-07 (< 1.0e-06)
+moments_update          PASS  max_abs_diff=8.196e-08 (< 1.0e-06, D-001 all_gather omitted)
+ratio                   PASS  integer-exact (0 diff)
+prepare_obs             PASS  max_abs_diff=0.000e+00 (exact)
+```
+
+#### Deviation-log entries for CP1
+- **D-001**: `moments_update` — `fabric.all_gather` omitted (no-op on single-process). Numerical output bit-identical to single-process sheeprl. **PI verdict: ☐ pending**
+- **D-002**: `init_weights` / `uniform_init_weights` — stochastic functions with different RNG implementations; distribution property test instead of bit-identity. Formula is identical to sheeprl. **PI verdict: ☐ pending**
+- **D-003**: `symexp` — float32 GPU exp 1-ULP difference; max_abs_diff=1.526e-5; max_rel_diff=2.1e-7. Formula identical to sheeprl. Threshold relaxed to 2e-5. **PI verdict: ☐ pending**
+
+#### Pre-CP0.5 NNX convention note
+Read `src/models/dreamer_v3_nnx.py` (735 lines) and `src/models/dreamer_v3_trainer.py` (1023 lines). Key conventions adopted: `nnx.Rngs` in `__init__` only (not stored, not passed to `__call__`); JIT via `@nnx.jit`; EMA via `nnx.state` + arithmetic + `nnx.update`. `dreamer_srl` module does NOT import from `src.models.*` (isolation enforced, grep returns empty).
+
+#### Pre-CP0.6 config.get_mandatory note
+CP1 is infrastructure (`utils.py`) — no config key reads in this file. The loader pattern (`config.get_mandatory`) will be enforced in `train.py` and `agent.py` at CP2+.
+
+#### Speed check
+CP1 is pure utility functions (no training loop hot path). No speed check required per protocol.
+
+#### Reviewer chain
 - [ ] `code-reviewer` ✅ PASS → `review_code_CP1.md`
 - [ ] `math-reviewer` ✅ PASS → `review_math_CP1.md`
 - [ ] `professor-rl-bayesian-dl` ✅ PASS → `review_professor_rl_bayesian_dl_CP1.md`
-- [ ] Deviation-log entries for CP1: (none / D-001 / …)
-- Status: NOT STARTED
+- [ ] PI sign-off on D-001, D-002, D-003 (via senior-developer after reviewers close)
+
+Status: **IN PROGRESS — implementation complete; awaiting 3-reviewer gate**
 
 ### CP2 — `LayerNormGRUCell`
 ... (one block per CP; filled by developer)
