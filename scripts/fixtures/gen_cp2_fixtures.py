@@ -69,7 +69,12 @@ INPUT_SIZE = 8
 HIDDEN_SIZE = 16
 BATCH_SIZE = 4
 
-# Instantiate the sheeprl cell with LayerNorm
+# Instantiate the sheeprl cell with LayerNorm.
+# layer_norm_kw={"eps": 1e-3} matches the sheeprl production RSSM wire-up
+# (vendor/sheeprl/sheeprl/algos/dreamer_v3/agent.py:L305-L306), which passes
+# layer_norm_kw={"eps": 1e-3} to LayerNormGRUCell. Using the PyTorch default
+# eps=1e-5 (via layer_norm_kw={}) would mismatch the production configuration
+# and allow a silent 1.72e-3 forward-pass drift in the JAX cell at CP4 wire-up.
 torch.manual_seed(SEED)
 cell = LayerNormGRUCell(
     input_size=INPUT_SIZE,
@@ -77,7 +82,7 @@ cell = LayerNormGRUCell(
     bias=True,
     batch_first=False,
     layer_norm_cls=nn.LayerNorm,
-    layer_norm_kw={},
+    layer_norm_kw={"eps": 1e-3},  # production eps — NOT PyTorch default 1e-5
 )
 cell.eval()
 

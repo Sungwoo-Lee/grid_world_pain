@@ -63,11 +63,22 @@ class LayerNormGRUCell(nnx.Module):
     Args:
         input_size  (int): size of the input vector.
         hidden_size (int): size of the hidden (recurrent) state.
+        eps         (float): LayerNorm epsilon. Default 1e-3 matches sheeprl
+                    production CP4 wire-up (agent.py:L305-L306), NOT the nnx
+                    default 1e-6. Using nnx default produces 1.72e-3 forward-pass
+                    drift vs the production RSSM, silently degrading CP4 parity.
         rngs        (nnx.Rngs): Flax NNX RNG container — used only during __init__
                     for parameter initialization.  NOT stored on the module.
     """
 
-    def __init__(self, input_size: int, hidden_size: int, rngs: nnx.Rngs) -> None:
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        eps: float = 1e-3,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
         self.input_size = input_size
         self.hidden_size = hidden_size
 
@@ -84,9 +95,12 @@ class LayerNormGRUCell(nnx.Module):
         # LayerNorm over the projected dimension (3 * hidden_size)
         # Matches sheeprl L368:
         #   self.layer_norm = layer_norm_cls(3 * hidden_size, **layer_norm_kw)
-        # where layer_norm_cls = nn.LayerNorm and layer_norm_kw = {}.
+        # where layer_norm_cls = nn.LayerNorm and layer_norm_kw = {"eps": 1e-3}.
+        # epsilon=1e-3 matches sheeprl production CP4 wire-up (agent.py:L305-L306),
+        # NOT the nnx default 1e-6.
         self.layer_norm = nnx.LayerNorm(
             num_features=3 * hidden_size,
+            epsilon=eps,
             rngs=rngs,
         )
 
