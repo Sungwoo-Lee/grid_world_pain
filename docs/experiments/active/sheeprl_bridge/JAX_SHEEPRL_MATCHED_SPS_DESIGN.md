@@ -15,6 +15,11 @@ cross_links:
 
 # JAX DreamerV3 matched-config SPS measurement vs sheeprl XS
 
+## 0. Change log
+
+- **2026-05-13** — §4.2 and §4.3 launch commands amended to add `--episodes 0`. The env YAML `configs/experiment/dreamer_curriculum/01_food_only.yaml` pins `episodes: 100`, and `train.py:1165` makes the episode-based loop the controlling stop condition whenever `episodes > 0`, silently ignoring `--total-timesteps`. Without the CLI override, Run A stopped after 100 episodes / ~110 s on WandB `pz66mhu0`, far below the §6.1 acceptance floor (`_runtime ≥ 600 s`). `--episodes 0` flips the loop to the `else` branch at line 1165 so `--total-timesteps` controls. Re-launch Run A and launch Run B with the amended commands.
+- **2026-05-13** — §2 `replay_ratio` row re-pointed. The `0.0625` baseline lives in `configs/models/dreamer_v3_rr06.yaml` (the Hafner-2023 Atari/DMC default the cascade-side runs use), not in `configs/models/dreamer_v3.yaml` (which sits at `replay_ratio: 0.5`). The numerical 16× factor — 0.0625 → 1.0 — is the cascade-relevant one and stands. The structural-delta rows (rssm dim, MLP layers/widths, sequence_length, encoding_mode) are correctly baselined against `dreamer_v3.yaml` (both files share that arch).
+
 ## 1. Context (plain English)
 
 A previous analysis showed our in-house JAX DreamerV3 trains around 2,600 times more environment steps per second than the sheeprl PyTorch DreamerV3 we adopted as the primary backend. After accounting for the fact that JAX was doing 16 times fewer gradient updates per environment step (and processing 2x larger gradient batches), the gradient-compute throughput advantage shrank to about 325-650x, depending on how you normalize. That residual gap was still large enough that the analyst recommended re-opening the question: if we rebuilt JAX with the same hyperparameters sheeprl uses (smaller recurrent state, wider but shallower MLPs, shorter sequences, and one gradient update per environment step), would JAX still be much faster, or would the apparent advantage shrink to a few times?
@@ -27,7 +32,7 @@ The new model config is at `configs/models/dreamer_v3_sheeprl_matched.yaml`. The
 
 ## 2. The matched-config recipe
 
-Every knob audited in §2 of the SPS-comparison memo, with the override decision. "Override" means the new YAML differs from `configs/models/dreamer_v3.yaml`; "matched" means the JAX value already matches sheeprl.
+Every knob audited in §2 of the SPS-comparison memo, with the override decision. "Override" means the new YAML differs from `configs/models/dreamer_v3.yaml`; "matched" means the JAX value already matches sheeprl. **One exception:** the `replay_ratio` row is baselined against `configs/models/dreamer_v3_rr06.yaml` (the Hafner-2023 Atari/DMC default the cascade-side runs use, sitting at `0.0625`), NOT against `dreamer_v3.yaml` itself (which sits at `replay_ratio: 0.5`). The numerical 16× factor — 0.0625 → 1.0 — is the cascade-relevant one and stands.
 
 | Knob | Current JAX (`dreamer_v3.yaml`) | sheeprl XS | New value in `dreamer_v3_sheeprl_matched.yaml` | Action | Rationale |
 |---|---|---|---|---|---|
@@ -40,7 +45,7 @@ Every knob audited in §2 of the SPS-comparison memo, with the override decision
 | `actor_fc_layers` | `[128, 128]` | `[256]` | `[256]` | **override** | Same. |
 | `critic_fc_layers` | `[128, 128]` | `[256]` | `[256]` | **override** | Same. |
 | `sequence_length` | 128 | 64 | 64 | **override** | Mirror sheeprl `per_rank_sequence_length=64`. Halves the gradient batch (`batch_size × sequence_length`). |
-| `replay_ratio` | 0.0625 (1 grad / 16 env steps) | 1 (1 grad / 1 env step) | 1.0 | **override** | The single biggest SPS lever. Mirror sheeprl recipe. |
+| `replay_ratio` | 0.0625 (1 grad / 16 env steps) — from `dreamer_v3_rr06.yaml`; `dreamer_v3.yaml` itself is `0.5` | 1 (1 grad / 1 env step) | 1.0 | **override** | The single biggest SPS lever. Mirror sheeprl recipe. |
 | `batch_size` | 16 | 16 | 16 | matched (no change) | Already aligned. |
 | `encoding_mode` | `hierarchical` (per-sensor MLPs + multimodal hub) | flat MLP | `flat` | **override** | sheeprl uses a flat encoder. Hierarchical adds modest JAX-side compute that is not part of sheeprl's baseline; including it would muddy the matched comparison. |
 | `rssm_stoch_dim` | 32 | 32 | 32 | matched | Aligned (categorical latent dimension). |
@@ -94,6 +99,7 @@ The user can downgrade to A or B at launch time if compute is tighter than expec
   --config configs/experiment/dreamer_curriculum/01_food_only.yaml \
   --agent_config configs/models/dreamer_v3_sheeprl_matched.yaml \
   --num-envs 4 \
+  --episodes 0 \
   --total-timesteps 1500000 \
   --seed 0 \
   --device cuda:<gpu> \
@@ -106,6 +112,7 @@ The user can downgrade to A or B at launch time if compute is tighter than expec
 
 - **Step budget rationale.** At `num_envs=4, replay_ratio=1.0`, we expect ~500-1,200 env-SPS (sheeprl-side sps_env_interaction is ~600; JAX's flat-encoder + halved model with 1:1 grad:env should be 1-2x sheeprl's number — see §6.1 of the SPS memo for the env-collection-only floor). 1.5M env-steps = ~25 min upper bound, ~20 min lower bound. Comfortably amortizes JIT compile (one-time ~30-60 s).
 - **Stability of SPS reading.** The SPS-comparison memo §3 extracted stable SPS from JAX runs after ~1M env-steps. 1.5M gives a margin.
+- **`--episodes 0` rationale.** The env YAML `configs/experiment/dreamer_curriculum/01_food_only.yaml` sets `episodes: 100`, and `train.py:1165` uses the episode-based loop whenever `episodes > 0` — which means `--total-timesteps` is silently ignored. CLI override `--episodes 0` flips the loop to the `else` branch at line 1165 (`global_step < total_timesteps`), making `--total-timesteps` the controlling stop condition. Without this flag, Run A would stop after 100 episodes / ~110 s (this is exactly what happened on wandb=pz66mhu0 — far below the §6.1 acceptance floor `_runtime ≥ 600 s`).
 
 ### 4.3 Run B — `num_envs=16` (architectural)
 
@@ -114,6 +121,7 @@ The user can downgrade to A or B at launch time if compute is tighter than expec
   --config configs/experiment/dreamer_curriculum/01_food_only.yaml \
   --agent_config configs/models/dreamer_v3_sheeprl_matched.yaml \
   --num-envs 16 \
+  --episodes 0 \
   --total-timesteps 3000000 \
   --seed 0 \
   --device cuda:<gpu> \
@@ -125,6 +133,7 @@ The user can downgrade to A or B at launch time if compute is tighter than expec
 ```
 
 - **Step budget rationale.** At `num_envs=16, replay_ratio=1.0`, we expect ~1,500-3,000 env-SPS. 3M env-steps = ~17-33 min. Same justification as Run A — amortizes compile, reaches steady state.
+- **`--episodes 0` rationale.** Same as Run A — the env YAML pins `episodes: 100`, which silently overrides `--total-timesteps` unless CLI sets `--episodes 0`. See §4.2 note.
 - **GPU pinning.** `<gpu>` is filled at launch by `training-runner`. Avoid `cuda:2` on `n114` (held by the running sheeprl replica `kfsvh1qk`). Prefer `n113` or `n114:cuda:0/1/3` (RTX 4090 / RTX 6000 Ada — same hardware class the JAX SPS numbers in the memo were measured on; do not switch GPU class or the comparison drifts).
 
 ### 4.4 WandB conventions
@@ -138,8 +147,8 @@ The user can downgrade to A or B at launch time if compute is tighter than expec
 
 | Run | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | num_envs | Status | Node | GPU | Launched at | WandB run ID | Log path |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| A | matched-n4 | `jax_sheeprl_matched_n4_s0` | sheeprl_bridge | sps_measurement | 0 | 4 | planned | — | — | — | — | — |
-| B | matched-n16 | `jax_sheeprl_matched_n16_s0` | sheeprl_bridge | sps_measurement | 0 | 16 | planned | — | — | — | — | — |
+| A | matched-n4 | `jax_sheeprl_matched_n4_s0` | sheeprl_bridge | sps_measurement | 0 | 4 | completed | 113 | cuda:0 | 2026-05-13T15:43:11 | kmf1574r | logs/20260513_154311.log |
+| B | matched-n16 | `jax_sheeprl_matched_n16_s0` | sheeprl_bridge | sps_measurement | 0 | 16 | completed | 113 | cuda:0 | 2026-05-13T15:54:11 | deizzwp4 | logs/20260513_155411.log |
 
 The `training-runner` fills Node / GPU / Launched-at / WandB-run-ID / Log-path at launch.
 
