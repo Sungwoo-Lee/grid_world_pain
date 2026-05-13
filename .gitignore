@@ -12,7 +12,7 @@
 results/
 dist/
 build/
-sheeprl/
+/sheeprl/
 !vendor/sheeprl/
 evaaa/
 temp_configs/
