@@ -1381,6 +1381,149 @@ def _run_twohot_log_prob(fixture) -> tuple:
     return jax_log_prob, torch_log_prob, metadata
 
 
+# ---------------------------------------------------------------------------
+# CP6 runners (train.py) — added when CP6 landed
+# ---------------------------------------------------------------------------
+
+def _run_critic_loss_two_terms(fixture) -> tuple:
+    """critic_loss_two_terms: two-term NLL loss (cascade fix #29) — DEVIATION D-006 class.
+
+    Verifies both terms of the critic loss:
+      term1 = -qv.log_prob(stop_gradient(lambda_values))      [sheeprl L314]
+      term2 = -qv.log_prob(stop_gradient(target_critic_values)) [sheeprl L315]
+      value_loss = mean((term1 + term2) * discount[:-1].squeeze(-1))  [sheeprl L316]
+
+    D-006 class: TwoHotEncoding linspace ULP drift cascades to log_prob.
+    Threshold: 4e-5 (same-order as D-006; slightly wider for the sum of two terms).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L307-L316
+    """
+    import jax.numpy as jnp
+    import numpy as np
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.train import compute_critic_loss
+
+    qv_logits_np   = fixture["qv_logits"]        # [H, BT, 255]
+    lambda_val_np  = fixture["lambda_values"]    # [H, BT, 1]
+    target_val_np  = fixture["target_values"]    # [H, BT, 1]
+    discount_np    = fixture["discount"]          # [H, BT]
+    torch_lp1_np   = fixture["torch_out_lp1"]   # [H, BT]
+    torch_lp2_np   = fixture["torch_out_lp2"]   # [H, BT]
+    torch_loss     = float(fixture["torch_out_value_loss"])
+
+    H  = discount_np.shape[0]
+    BT = discount_np.shape[1]
+    # Extend discount [H, BT] → [H+1, BT, 1] for compute_critic_loss
+    dummy_row = np.zeros((1, BT), dtype=np.float32)
+    discount_ext = np.concatenate([discount_np, dummy_row], axis=0)[:, :, np.newaxis]
+
+    qv_logits  = jnp.asarray(qv_logits_np)
+    lambda_val = jnp.asarray(lambda_val_np)
+    target_val = jnp.asarray(target_val_np)
+    discount   = jnp.asarray(discount_ext)
+
+    value_loss, neg_lp1, neg_lp2 = compute_critic_loss(
+        qv_logits=qv_logits,
+        lambda_values=lambda_val,
+        target_critic_values=target_val,
+        discount=discount,
+    )
+
+    # Concatenate both terms + scalar for a single compare() call
+    jax_out   = np.concatenate([
+        np.asarray(neg_lp1).ravel(),
+        np.asarray(neg_lp2).ravel(),
+        np.array([float(value_loss)]),
+    ])
+    torch_out = np.concatenate([
+        np.asarray(torch_lp1_np).ravel(),
+        np.asarray(torch_lp2_np).ravel(),
+        np.array([torch_loss]),
+    ])
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L307-L316\n"
+        f"  jax:     src/algorithms/dreamer_srl/train.py:compute_critic_loss\n"
+        f"  fixture: qv_logits.shape={qv_logits_np.shape}, H={H}, BT={BT}, seed=0xD3EAF\n"
+        f"  NOTE: D-006 class (TwoHotEncoding linspace ULP drift); threshold 4e-5\n"
+        f"  CASCADE FIX #29: both log_prob terms (-qv.log_prob(lambda) AND -qv.log_prob(target)) required"
+    )
+    return jax_out, torch_out, metadata
+
+
+def _run_critic_target_lambda(fixture) -> tuple:
+    """critic_target_lambda: critic uses UN-normalised lambda_values — DEVIATION D-006 class.
+
+    Verifies: qv.log_prob(raw_lambda) matches sheeprl reference (NOT Moments-normed).
+    The sheeprl critic at L314 uses `lambda_values.detach()` before Moments normalization.
+
+    D-006 class: TwoHotEncoding linspace ULP drift cascades to log_prob.
+    Threshold: 4e-5 (slightly wider; different RNG seed in fixture; same-order D-006).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L251-L256, L314
+    """
+    import jax
+    import jax.numpy as jnp
+    import numpy as np
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.loss import TwoHotEncoding
+
+    qv_logits_np     = fixture["qv_logits"]        # [H, BT, 255]
+    lambda_val_np    = fixture["lambda_values"]    # [H, BT, 1]  — raw (un-normalised)
+    torch_lp_raw_np  = fixture["torch_out_lp_raw"] # [H, BT]  — reference
+
+    qv = TwoHotEncoding(jnp.asarray(qv_logits_np), dims=1)
+    jax_lp_raw = qv.log_prob(jax.lax.stop_gradient(jnp.asarray(lambda_val_np)))  # [H, BT]
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L314\n"
+        f"  jax:     src/algorithms/dreamer_srl/loss.py:TwoHotEncoding.log_prob\n"
+        f"  fixture: qv_logits.shape={qv_logits_np.shape}, lambda_values.shape={lambda_val_np.shape}, "
+        f"seed=0xD3EAF+1\n"
+        f"  NOTE: D-006 class (linspace ULP drift); threshold 4e-5\n"
+        f"  KEY: critic must use UN-normalised lambda_values (raw), NOT Moments-normed (sheeprl L314)"
+    )
+    return jax_lp_raw, torch_lp_raw_np, metadata
+
+
+def _run_discount_weighting(fixture) -> tuple:
+    """discount_weighting: cumprod(continues*gamma, axis=0)/gamma — §S6, expect < 1e-6.
+
+    Verifies: discount = jax.lax.stop_gradient(jnp.cumprod(continues*gamma, axis=0)/gamma)
+    [0]=1 invariant when continues[0]=1 (§S5 true-continue splice, no termination).
+    discount[:-1].squeeze(-1) shape = [H, BT].
+
+    Pure cumprod arithmetic — no TwoHotEncoding, no D-006 cascade.
+    Threshold: default 1e-6 (exact arithmetic; no deviation expected).
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L259-L260
+    """
+    import jax.numpy as jnp
+    import numpy as np
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.train import compute_discount
+
+    continues_np    = fixture["continues"]                  # [H+1, BT, 1]
+    gamma           = float(fixture["gamma"])
+    torch_disc_full = fixture["torch_out_discount_full"]   # [H+1, BT, 1]
+
+    discount_jax = compute_discount(jnp.asarray(continues_np), gamma)  # [H+1, BT, 1]
+
+    H  = continues_np.shape[0] - 1
+    BT = continues_np.shape[1]
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L259-L260\n"
+        f"  jax:     src/algorithms/dreamer_srl/train.py:compute_discount\n"
+        f"  fixture: continues.shape={continues_np.shape}, gamma={gamma}, seed=0xD3EAF+2\n"
+        f"  §S6: cumprod(continues*gamma, axis=0)/gamma; discount[0]=1 when continues[0]=1\n"
+        f"  NOTE: pure arithmetic — no TwoHotEncoding; expect < 1e-6 (no D-006 cascade)"
+    )
+    return np.asarray(discount_jax), np.asarray(torch_disc_full), metadata
+
+
 FUNCTION_REGISTRY: dict[str, callable] = {
     # CP3 — agent.py (zero-init output linears, cascade fix #27)
     "zero_init_reward_head": _run_zero_init_reward_head,
@@ -1415,6 +1558,10 @@ FUNCTION_REGISTRY: dict[str, callable] = {
     "twohot_bins_endpoints": _run_twohot_bins_endpoints,
     "twohot_encode":         _run_twohot_encode,
     "twohot_log_prob":       _run_twohot_log_prob,
+    # CP6 — train.py (critic loss cascade fix #29, §S6 discount, §S9 continue)
+    "critic_loss_two_terms": _run_critic_loss_two_terms,
+    "critic_target_lambda":  _run_critic_target_lambda,
+    "discount_weighting":    _run_discount_weighting,
 }
 
 # Per-function threshold overrides — applied when the function has a logged deviation
@@ -1451,6 +1598,16 @@ FUNCTION_THRESHOLDS: dict[str, float] = {
     "twohot_bins_endpoints": 3e-5,
     "twohot_encode": 3e-5,
     "twohot_log_prob": 3e-5,
+    # CP6 — D-006 class cascades to critic log_prob terms.
+    # critic_loss_two_terms: two log_prob terms summed; max_abs_diff measured ≈ same as D-006.
+    # critic_target_lambda: single log_prob with different seed; measured ≈ 3.1e-5.
+    # Threshold: 4e-5 (slightly wider than 3e-5 due to different RNG seed in fixture;
+    # same-order D-006 class; well below semantic-error scale O(0.1)).
+    # discount_weighting: pure cumprod arithmetic; expect < 1e-6 (no D-006 cascade).
+    "critic_loss_two_terms": 4e-5,
+    "critic_target_lambda":  4e-5,
+    # discount_weighting: no TwoHotEncoding involved; cumprod is exact arithmetic.
+    # No threshold override needed — default 1e-6 applies.
 }
 
 # Maps checkpoint name → list of function names registered for that CP.

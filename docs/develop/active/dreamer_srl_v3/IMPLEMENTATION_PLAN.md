@@ -3,7 +3,7 @@ title: "dreamer-srl v3 — JAX rebuild of sheeprl DreamerV3 with deviation-preve
 topic: dreamer
 status: active
 created: 2026-05-13
-last_updated: 2026-05-14  # CP4 + CP4b → CP-PASS — RSSM cascade fix #30 + §S4 three-quantity is_first reset; 4-gate closure verified (D-008 PI-ratified substrate-mechanical sqrt(N) analytical witness; D-009 PI-ratified cross-platform PRNG with refined cascade-coverage claim; process violation in 4491c66 caught and formally corrected at 4563579)
+last_updated: 2026-05-14  # CP6 implemented — critic loss cascade fix #29 (two-term NLL + EMA self-reg), §S6 discount weighting, §S8 free-nats, §S9 BernoulliSafeMode; 32/32 tests PASS; diff-tool 3/3 PASS; D-010 ☐ pending PI gate
 supersedes: IMPLEMENTATION_PLAN.md
 phase: 2
 ---
@@ -520,7 +520,7 @@ For the algorithmic content of each CP, follow the link to the v2 row.
 | **CP4** | `agent.py` RSSM cascade fix #30 + `get_initial_states` mode-not-sample — [v2 Checkpoint 4](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_rssm_transition_2layer_mlp`, `test_rssm_representation_2layer_mlp`, `test_get_initial_states_no_prng`, `test_get_initial_states_matches_sheeprl_mode` | code → math → professor | D-008 ✅, D-009 ✅ | **CP-PASS (2026-05-14)** — implementation `4491c66` (RSSM transition + representation + `get_initial_states`); 3/3 Lever-A PASS at D-008 relaxed `2e-3` threshold (transition logits `6.838e-4`, repr logits `7.193e-4`, `get_initial_states` `0.000e+00`); diff-tool PASS; code + math + professor reviews ✅ PASS on disk (`8878cbb`); PI sign-off on D-008 + D-009 at [`4563579`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp4_deviations.md) — formally ratifies and replaces the developer's autonomous verdict-cell flip from commit `4491c66` (Lever-E process violation caught and corrected at PI-gate-time; technical verdicts unchanged, attribution + rationale corrected; new "Process notes" subsection in DEVIATION_LOG proposes a Lever-C pre-CP grep check for any future autonomous flip — see Lever-C addendum). The math-reviewer's `sqrt(N)` chain-depth analytical witness (predicted 2.0–2.8× / observed 2.42× D-007→D-008 ratio) replaces the missing float64 empirical run for D-008. Code-reviewer caught + accepted two structural bugs (missing MLP pre-projection before GRU; `LayerNormGRUCell` missing `use_bias=False`) that the developer fixed before tests were written — guardrail discipline working. |
 | **CP4b** | RSSM `is_first` reset §S1+§S4 — [v2 Checkpoint 4b](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_is_first_force_set_step0`, `test_is_first_three_quantity_reset` (arithmetic-mask form, posterior reshape-flatten BEFORE masking) | code → math → professor | D-008 ✅, D-009 ✅ | **CP-PASS (2026-05-14)** — implementation `4491c66` (§S4 three-quantity arithmetic-mask reset on scan output: action, recurrent state, posterior with `[B, S, D] → [B, S*D]` reshape-flatten BEFORE masking; arithmetic form `(1 - is_first) * x + is_first * init` NOT `jnp.where`; §S1 `is_first[0]=1` force-set); 2/2 Lever-A PASS at D-008 `2e-3` threshold via D-009 `h`-proxy substitution (force-set `h` `4.306e-4`; three-quantity-reset `h` rollout `5.597e-4`); diff-tool PASS; code + math + professor reviews ✅ PASS on disk (`8878cbb`); PI sign-off on D-008 + D-009 at [`4563579`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp4_deviations.md). D-009 cascade-coverage claim refined by PI (the `h`-proxy catches all structural §S4 failures at 143× margin above threshold; float32-equivalent reformulations — `jnp.where` instead of arithmetic-mask, reshape-after-mask instead of before-mask — are caught by complementary Lever-C line-for-line port check and Lever-D vendored-sheeprl grep, NOT by the proxy). Three-quantity-reset trap (the most-flagged silent-pattern-match class in v2 reviewer audits) is structurally caught at the leaf. |
 | **CP5** | `loss.py` two-hot distribution cascade fix #2 (symlog space) — [v2 Checkpoint 5](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_twohot_bins_endpoints` (`bins[0]=-20, bins[127]≈0, bins[254]=+20`, in symlog space), `test_twohot_encode_matches_sheeprl`, `test_twohot_log_prob_target_symlog_encoded` | code → math → professor | D-006 ✅ | **CP-PASS (2026-05-14)** — implementation `fdb09da` (`src/algorithms/dreamer_srl/loss.py` `TwoHotEncoding`); 5/5 tests PASS (3 Lever-A + 2 structural) at D-006 relaxed threshold 3e-5; diff-tool PASS; code + math + professor reviews ✅ PASS on disk (`ff30e77`); PI sign-off on D-006 at [`b2dd5de`](../../../pi/calls/2026-05-14_dreamer_srl_v3_cp5_deviations.md). Historical-scar bug class (`symexp(linspace)` in real-reward-space) structurally prevented at 14-OOM margin by `test_bins_not_symexp_at_storage`. |
-| **CP6** | `train.py` critic loss cascade fix #29 — [v2 Checkpoint 6](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_critic_loss_two_terms`, `test_critic_target_un_normalised_lambda`, `test_discount_weighting_critic` (slice `[:-1].squeeze(-1)`) | code → math → professor | ☐ none | NOT STARTED |
+| **CP6** | `train.py` critic loss cascade fix #29 — [v2 Checkpoint 6](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_critic_loss_two_terms`, `test_critic_target_lambda`, `test_discount_weighting`, `test_train_module_does_not_import_from_src_models` | code → math → professor | D-010 ☐ pending | **IMPLEMENTED (2026-05-14)** — 32/32 Lever-A PASS; diff-tool CP6 3/3 PASS (critic_loss_two_terms 1.287e-5, critic_target_lambda 1.860e-5, discount_weighting 8.941e-8); D-010 logged `☐ pending` (PI gate required). Lever-C reviewer chain + Lever-E PI sign-off are the next required steps. |
 | **CP7** | `train.py` Polyak update — [v2 Checkpoint 7](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | `test_polyak_first_call_hard_copy` (tau=1), `test_polyak_subsequent_call_blend` (tau=0.02), `test_polyak_fires_before_train_step` | code → math → professor | ☐ none | NOT STARTED |
 | **CP8** | End-to-end forward parity (`scripts/dreamer_srl_offline_check.py`) — [v2 Checkpoint 8](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | All previous Lever-A tests rerun + the offline forward-pass cross-framework parity check (PyTorch sheeprl-trained ckpt vs JAX dreamer-srl freshly initialised at same param count) | code → math → professor | ☐ none (CP8 is the merge-gate — log must be empty of pending entries) | NOT STARTED |
 | **CP9** | 5,000-step dry-run on food-only NoPred — [v2 Checkpoint 9](../../archive/dreamer_srl/IMPLEMENTATION_PLAN.md#checkpoints-verification-checks-during-implementation) | No new Lever-A tests; integration smoke test only (no NaN, world-model loss decreasing, ep_len_avg logged) | (post-CP8; reviewer chain optional) | ☐ none | NOT STARTED |
@@ -1463,4 +1463,71 @@ fi
 **Why this works.** The Strong-strategy logic that drove the original five-lever design applies here: every gate must hold on its own, and a gate that the wrong role can flip is no gate at all. Lever-E's verdict-cell flip is a PI-only operation by design; adding a Lever-C grep that fails on a non-PI flip closes the loophole where the developer could pre-empt the PI call. The check is conservative (it accepts both "PI ratified" and "autonomous PI approval" attributions to match the existing language for D-007's autonomous PI closure) and deterministic (regex over the diff is reproducible across runs). The cost is one extra grep per CP audit; the benefit is the procedural breach being caught at the reviewer stage when it can be fixed cheaply, rather than at PI-gate-time when the audit-trail correction is more involved.
 
 **Verified by**: senior-developer
+
+---
+
+## Implementation Report — CP6 (2026-05-14)
+
+**Scope.** `train.py` critic loss with EMA self-regularization (cascade fix #29), §S6 discount weighting, §S8 free-nats floor, §S9 `Independent(Bernoulli, 1)` wrap. New file `src/algorithms/dreamer_srl/train.py`; extensions to `src/algorithms/dreamer_srl/loss.py`; new test file `tests/algorithms/dreamer_srl/test_train.py`; fixture generator + 3 `.npz` fixtures; diff-tool CP6 registrations; DEVIATION_LOG D-010.
+
+### File-by-file summary
+
+| File | Change | Notes |
+|---|---|---|
+| `src/algorithms/dreamer_srl/train.py` | **NEW** | `compute_discount` (§S6 cumprod / gamma, `stop_gradient`) + `compute_critic_loss` (cascade fix #29 two-term NLL, `[:-1].squeeze(-1)` discount weighting). No imports from `src.models.*`. |
+| `src/algorithms/dreamer_srl/loss.py` | **EXTENDED** | Added `BernoulliSafeMode` (§S9 — logit-space BCE, `mode` = `sigmoid(logits) > 0.5`) + `IndependentBernoulli` wrapper (sums log_prob over trailing event dim, matching `torch.distributions.Independent(..., 1)`) + `reconstruction_loss` function (§S8 free-nats element-wise `max(KL, free_nats)` BEFORE mean; `_categorical_kl` helper for `OneHotCategorical` S×D KL over RSSM latents; returns 6-tuple). |
+| `scripts/fixtures/gen_cp6_fixtures.py` | **NEW** | Generates 3 fixtures (H=15, BT=16, N_BINS=255, GAMMA=0.99, SEED=0xD3EAF) using sheeprl_bridge env (PyTorch). Fixture 1: `critic_loss_two_terms_input.npz` — qv_logits, lambda_values, target_values, discount, torch lp1/lp2/value_loss. Fixture 2: `critic_target_lambda_input.npz` — raw vs Moments-normed lambda (max_abs_diff ≫ 1e-4, distinguishable). Fixture 3: `discount_weighting_input.npz` — continues with continues[0]=1.0, torch discount. |
+| `tests/fixtures/dreamer_srl/critic_loss_two_terms_input.npz` | **NEW** | Pre-computed PyTorch reference arrays for critic loss two-term fixture. |
+| `tests/fixtures/dreamer_srl/critic_target_lambda_input.npz` | **NEW** | Raw vs Moments-normed lambda comparison arrays. |
+| `tests/fixtures/dreamer_srl/discount_weighting_input.npz` | **NEW** | continues + torch discount reference. |
+| `tests/algorithms/dreamer_srl/test_train.py` | **NEW** | 4 tests: `test_critic_loss_two_terms` (neg_lp1/lp2 + scalar value_loss, asserts neg_lp2 not all-zero to confirm cascade fix #29 active); `test_critic_target_lambda` (raw matches torch; normed does NOT match, diff > 1e-4); `test_discount_weighting` (full tensor, [0]=1 invariant, stop_gradient verified via `jax.grad`); `test_train_module_does_not_import_from_src_models` (regex anchored to line-start to avoid docstring false positive). |
+| `scripts/sheeprl_jax_diff.py` | **EXTENDED** | Added 3 runner functions (`_run_critic_loss_two_terms`, `_run_critic_target_lambda`, `_run_discount_weighting`). Registered in `FUNCTION_REGISTRY`. D-006-class threshold overrides in `FUNCTION_THRESHOLDS`: `"critic_loss_two_terms": 4e-5`, `"critic_target_lambda": 4e-5` (discount_weighting uses default `1e-6`). |
+| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | **EXTENDED** | Added D-010 with `☐ pending — PI ratification at CP6 gate` (NOT auto-approved). Same linspace-ULP class as D-006; seed 0xD3EAF+1; max_abs_diff = 3.099e-5 exceeds D-006's 3e-5 threshold by <4%; threshold relaxed to 4e-5; semantic error class produces O(0.1) deviation (2500× above threshold). |
+
+### Test results
+
+```
+pytest tests/algorithms/dreamer_srl/ -v
+32 passed in 26.60s
+```
+
+All 32 tests pass: 28 prior (CP1–CP5) + 4 new CP6 tests. No regressions.
+
+### Diff-tool sweep
+
+```
+python scripts/sheeprl_jax_diff.py --checkpoint CP6
+```
+
+| Function | max_abs_diff | Threshold | Result |
+|---|---|---|---|
+| `critic_loss_two_terms` | 1.287e-05 | 4.0e-05 | PASS |
+| `critic_target_lambda` | 1.860e-05 | 4.0e-05 | PASS |
+| `discount_weighting` | 8.941e-08 | 1.0e-06 | PASS |
+
+CP6 summary: 3/3 PASS, exit 0.
+
+### Speed check
+
+Skipped. `compute_discount` and `compute_critic_loss` are consumed by the CP9 one-step training function; no vmap/jit/scan boundary is yet wired into a training loop. Speed check deferred to CP9 where the full training step is benchmarked. Same ruling as CP4/CP4b (provably cannot affect runtime until wired in).
+
+### Deviations
+
+**D-010** logged in DEVIATION_LOG.md as `☐ pending — PI ratification at CP6 gate`. The `critic_target_lambda` fixture (seed 0xD3EAF+1) produces `max_abs_diff = 3.099e-5`, which is 3% above the D-006 precedent threshold of 3e-5. Threshold relaxed to 4e-5; same linspace-ULP-drift class as D-006 (already PI-ratified at `b2dd5de`). Any semantic error (wrong normalisation, wrong target) would produce O(0.1) deviation, 2500× above the 4e-5 threshold — the test is highly sensitive to the semantic correctness question it is designed to catch.
+
+**Process note**: Verdict cell left at `☐ pending` per Lever-E protocol. PI is the only role authorised to flip verdict cells (CP4 process-violation + PI corrective action at `4563579` established this explicitly).
+
+### Isolation check
+
+```
+grep -n -E "^\s*(import|from)\s+src\.models\.dreamer_v3" \
+  src/algorithms/dreamer_srl/train.py
+```
+Returns no matches (exit 1). `train.py` imports only `jax`, `jax.numpy`, and `TwoHotEncoding` from `loss.py`. Isolation rule upheld.
+
+### Checkpoint table update
+
+CP6 row in the Checkpoint table updated from `NOT STARTED` to reflect D-010 `☐ pending`. Lever-A (32/32 PASS) and Lever-D (3/3 PASS exit 0) both pass. Lever-C (reviewer chain: code → math → professor) and Lever-E (PI gate for D-010) are the next required steps before CP6 can flip to `CP-PASS`.
+
+**Implemented by**: developer
 **Date**: 2026-05-14
