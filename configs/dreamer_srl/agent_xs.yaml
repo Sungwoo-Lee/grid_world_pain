@@ -1,0 +1,36 @@
+# dreamer-srl XS configuration
+#
+# CP3b canonical key list — these keys are byte-identical with sheeprl XS at
+# commit 33b6366. Any change requires updating both this YAML and the test
+# fixture at tests/fixtures/dreamer_srl/cadence_yaml_key_parity_input.npz.
+# Source: vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml
+#   + vendor/sheeprl/sheeprl/configs/exp/dreamer_v3.yaml
+#   + vendor/sheeprl/sheeprl/configs/env/default.yaml
+#
+# Cadence parity contract (enforced by test_cadence_yaml_key_parity_with_sheeprl_xs):
+#   - algo.learning_starts       = 1024    (sheeprl dreamer_v3.yaml:L17)
+#   - algo.replay_ratio          = 1       (sheeprl dreamer_v3.yaml:L16)
+#   - algo.per_rank_gradient_steps = 1     (Ratio(1.0)(1/1)=1; steady-state per-iter)
+#   - algo.per_rank_sequence_length = 64   (sheeprl exp/dreamer_v3.yaml:L15)
+#   - algo.per_rank_batch_size   = 16      (sheeprl exp/dreamer_v3.yaml:L14)
+#   - algo.per_rank_pretrain_steps = 0     (sheeprl dreamer_v3.yaml:L18)
+#   - algo.critic.per_rank_target_network_update_freq = 1  (sheeprl dreamer_v3.yaml:L151)
+#   - algo.total_steps           = 5000000 (sheeprl exp/dreamer_v3.yaml:L13)
+#   - env.num_envs               = 1       (XS uses 1 env; sheeprl env/default.yaml:L1)
+
+algo:
+  learning_starts: 1024
+  replay_ratio: 1
+  per_rank_gradient_steps: 1
+  per_rank_sequence_length: 64
+  per_rank_batch_size: 16
+  per_rank_pretrain_steps: 0
+  total_steps: 5000000
+  critic:
+    per_rank_target_network_update_freq: 1
+
+env:
+  num_envs: 1
+
+buffer:
+  size: 1000000

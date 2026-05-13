@@ -163,6 +163,14 @@ def compare(
 # CP2 (agent.py):        layernorm_gru_cell
 # CP2b (train.py):       action_shift
 # CP3 (agent.py):        zero_init_reward_head, zero_init_critic_head
+# CP3b (buffers.py + train.py): buffer_storage_state_after_deterministic_adds,
+#                        buffer_sample_at_indices_matches_sheeprl,
+#                        buffer_is_first_marker_placement_in_straddling_window,
+#                        buffer_parallel_env_lane_non_interference,
+#                        cadence_yaml_key_parity_with_sheeprl_xs,
+#                        cadence_env_grad_step_trace_5000_iters
+#                        (State-evolution bit-identity, not pure-function;
+#                        D-004 memmap omission + D-005 unfilled-region exclusion pre-declared.)
 # CP4 (agent.py):        rssm_transition, rssm_representation, get_initial_states
 # CP4b (agent.py):       is_first_force_set, is_first_three_quantity_reset
 # CP5 (loss.py):         twohot_bins_endpoints, twohot_encode, twohot_log_prob
@@ -379,6 +387,359 @@ def _run_prepare_obs(fixture) -> tuple:
     return jax_out, torch_out, metadata
 
 
+# ---------------------------------------------------------------------------
+# CP3b runners (buffers.py + cadence wiring) — added when CP3b landed
+# ---------------------------------------------------------------------------
+
+def _run_buffer_storage_state_after_deterministic_adds(fixture) -> tuple:
+    """State-evolution test: drive JAX buffer with identical add() sequence.
+
+    Compares the filled region [:_pos] of both buffers' stored arrays.
+    Unfilled region [_pos:] is excluded (np.empty — undefined memory).
+    DEVIATION D-005: unfilled-region exclusion.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/data/buffers.py:L145-L221
+    """
+    import sys, os
+    import numpy as np
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
+
+    buffer_size = int(fixture["buffer_size"])
+    n_envs = int(fixture["n_envs"])
+    n_steps = int(fixture["n_steps"])
+    expected_pos = int(fixture["sheeprl_pos"])
+    step_keys = ["observations", "actions", "rewards", "terminated", "truncated", "is_first"]
+
+    # Reconstruct add() sequence
+    jax_rb = SequentialReplayBuffer(buffer_size=buffer_size, n_envs=n_envs)
+    for i in range(n_steps):
+        step = {}
+        for k in step_keys:
+            arr = fixture[f"step_{k}"]
+            step[k] = arr[i]
+        jax_rb.add(step)
+
+    # Concatenate all keys' filled regions for comparison
+    jax_parts = []
+    sheeprl_parts = []
+    for k in step_keys:
+        jax_parts.append(jax_rb._buf[k][:expected_pos].ravel())
+        sheeprl_parts.append(np.asarray(fixture[f"buf_{k}"])[:expected_pos].ravel())
+
+    jax_out = np.concatenate(jax_parts)
+    torch_out = np.concatenate(sheeprl_parts)
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/data/buffers.py:L145-L221\n"
+        f"  jax:     src/algorithms/dreamer_srl/buffers.py:SequentialReplayBuffer.add\n"
+        f"  fixture: buffer_size={buffer_size}, n_envs={n_envs}, n_steps={n_steps}, "
+        f"seed=0xD3EAF\n"
+        f"  NOTE: D-005 — comparing filled region [:_pos={expected_pos}] only; "
+        f"unfilled [_pos:] excluded (np.empty uninitialized memory)"
+    )
+    return jax_out, torch_out, metadata
+
+
+def _run_buffer_sample_at_indices_matches_sheeprl(fixture) -> tuple:
+    """State-evolution test: _sample_at_indices with pre-computed indices.
+
+    Bypasses PRNG — pre-computed start_idxes and env_idxes from sheeprl's RNG.
+    Compares _get_samples output byte-for-byte.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/data/buffers.py:L467-L526
+    """
+    import sys, os
+    import numpy as np
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
+
+    buffer_size = int(fixture["buffer_size"])
+    n_envs = int(fixture["n_envs"])
+    n_steps = int(fixture["n_steps"])
+    sequence_length = int(fixture["sequence_length"])
+    batch_size = int(fixture["batch_size"])
+    n_samples = int(fixture["n_samples"])
+    precomputed_start_idxes = fixture["precomputed_start_idxes"].astype(np.intp)
+    precomputed_env_idxes = fixture["precomputed_env_idxes"].astype(np.intp)
+    step_keys = ["observations", "actions", "rewards", "terminated", "truncated", "is_first"]
+
+    jax_rb = SequentialReplayBuffer(buffer_size=buffer_size, n_envs=n_envs)
+    for i in range(n_steps):
+        step = {}
+        for k in step_keys:
+            step[k] = fixture[f"step_{k}"][i]
+        jax_rb.add(step)
+
+    jax_samples = jax_rb._sample_at_indices(
+        precomputed_start_idxes=precomputed_start_idxes,
+        env_idxes=precomputed_env_idxes,
+        sequence_length=sequence_length,
+        batch_size=batch_size,
+        n_samples=n_samples,
+    )
+
+    jax_parts = []
+    sheeprl_parts = []
+    for k in step_keys:
+        jax_parts.append(jax_samples[k].ravel())
+        sheeprl_parts.append(np.asarray(fixture[f"sheeprl_sample_{k}"]).ravel())
+
+    jax_out = np.concatenate(jax_parts)
+    torch_out = np.concatenate(sheeprl_parts)
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/data/buffers.py:L467-L526\n"
+        f"  jax:     src/algorithms/dreamer_srl/buffers.py:SequentialReplayBuffer._sample_at_indices\n"
+        f"  fixture: buffer_size={buffer_size}, n_envs={n_envs}, "
+        f"seq_len={sequence_length}, batch_size={batch_size}, seed=0xD3EAF\n"
+        f"  NOTE: D-002 class — PRNG bypassed; indices pre-computed from sheeprl's RNG"
+    )
+    return jax_out, torch_out, metadata
+
+
+def _run_buffer_is_first_marker_placement_in_straddling_window(fixture) -> tuple:
+    """State-evolution test: is_first=1 lands at correct offset in straddling window.
+
+    Buffer has done at step DONE_AT, is_first=1 at DONE_AT+1.
+    Window starting at START_IDX straddles the boundary.
+    Compares JAX vs sheeprl _get_samples output for is_first and all keys.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/data/buffers.py:L395-L526
+    """
+    import sys, os
+    import numpy as np
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
+
+    buffer_size = int(fixture["buffer_size"])
+    n_envs = int(fixture["n_envs"])
+    n_steps = int(fixture["n_steps"])
+    start_idx = int(fixture["start_idx"])
+    sequence_length = int(fixture["sequence_length"])
+    step_keys = ["observations", "actions", "rewards", "terminated", "truncated", "is_first"]
+
+    jax_rb = SequentialReplayBuffer(buffer_size=buffer_size, n_envs=n_envs)
+    for i in range(n_steps):
+        step = {}
+        for k in step_keys:
+            step[k] = fixture[f"step_{k}"][i]
+        jax_rb.add(step)
+
+    start_idx_arr = np.array([start_idx], dtype=np.intp)
+    env_idxes_arr = np.array([0], dtype=np.intp)
+    jax_samples = jax_rb._sample_at_indices(
+        precomputed_start_idxes=start_idx_arr,
+        env_idxes=env_idxes_arr,
+        sequence_length=sequence_length,
+        batch_size=1,
+        n_samples=1,
+    )
+
+    jax_parts = []
+    sheeprl_parts = []
+    for k in step_keys:
+        jax_parts.append(jax_samples[k].ravel())
+        sheeprl_parts.append(np.asarray(fixture[f"sheeprl_sample_{k}"]).ravel())
+
+    jax_out = np.concatenate(jax_parts)
+    torch_out = np.concatenate(sheeprl_parts)
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/data/buffers.py:L395-L526\n"
+        f"  jax:     src/algorithms/dreamer_srl/buffers.py:SequentialReplayBuffer._sample_at_indices\n"
+        f"  fixture: buffer_size={buffer_size}, start_idx={start_idx}, "
+        f"seq_len={sequence_length}, seed=0xD3EAF\n"
+        f"  NOTE: is_first=1 at offset {int(fixture['is_first_expected_offset'])} "
+        f"(done_at={int(fixture['done_at'])}, is_first_at={int(fixture['is_first_at'])})"
+    )
+    return jax_out, torch_out, metadata
+
+
+def _run_buffer_parallel_env_lane_non_interference(fixture) -> tuple:
+    """State-evolution test: no cross-lane leakage across N parallel env lanes.
+
+    Env column i has sentinel obs value (i+1). Windows sampled from each lane
+    must contain only that lane's sentinel. Returns max_abs_diff=0 if no leakage.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/data/buffers.py:L480-L489
+    """
+    import sys, os
+    import numpy as np
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
+
+    buffer_size = int(fixture["buffer_size"])
+    n_envs = int(fixture["n_envs"])
+    n_steps = int(fixture["n_steps"])
+    sequence_length = int(fixture["sequence_length"])
+    step_keys = ["observations", "actions", "rewards", "terminated", "truncated", "is_first"]
+
+    jax_rb = SequentialReplayBuffer(buffer_size=buffer_size, n_envs=n_envs)
+    for i in range(n_steps):
+        step = {}
+        for k in step_keys:
+            step[k] = fixture[f"step_{k}"][i]
+        jax_rb.add(step)
+
+    max_start = jax_rb._pos - sequence_length
+    n_windows = min(int(fixture["n_windows"]), max_start + 1)
+    start_idxes = np.arange(0, n_windows, dtype=np.intp)
+    all_pass = True
+    worst_diff = 0.0
+
+    for env_idx in range(n_envs):
+        sentinel = float(env_idx + 1)
+        env_idxes = np.full(n_windows, env_idx, dtype=np.intp)
+        samples = jax_rb._sample_at_indices(
+            precomputed_start_idxes=start_idxes,
+            env_idxes=env_idxes,
+            sequence_length=sequence_length,
+            batch_size=n_windows,
+            n_samples=1,
+        )
+        obs = samples["observations"].ravel()
+        diff = float(np.max(np.abs(obs - sentinel)))
+        worst_diff = max(worst_diff, diff)
+        if diff > 0:
+            all_pass = False
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/data/buffers.py:L480-L489\n"
+        f"  jax:     src/algorithms/dreamer_srl/buffers.py:SequentialReplayBuffer._sample_at_indices\n"
+        f"  fixture: buffer_size={buffer_size}, n_envs={n_envs}, "
+        f"n_steps={n_steps}, seq_len={sequence_length}, seed=0xD3EAF\n"
+        f"  NOTE: cross-lane contamination → max_abs_diff > 0; clean isolation → 0.0"
+    )
+    # Return sentinel check as 0.0 (pass) or worst_diff (fail)
+    return np.array([0.0]), np.array([worst_diff]), metadata
+
+
+def _run_cadence_yaml_key_parity_with_sheeprl_xs(fixture) -> tuple:
+    """Cadence test: agent_xs.yaml keys match sheeprl XS defaults.
+
+    Loads configs/dreamer_srl/agent_xs.yaml and checks 9 cadence keys.
+    Returns 0.0 diff if all keys match, else fails with mismatch values.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml,
+                    vendor/sheeprl/sheeprl/configs/exp/dreamer_v3.yaml
+    """
+    import sys, os
+    import numpy as np
+    import yaml
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+    yaml_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "configs", "dreamer_srl", "agent_xs.yaml",
+    )
+    with open(yaml_path) as fh:
+        cfg = yaml.safe_load(fh)
+
+    algo = cfg.get("algo", {})
+    env = cfg.get("env", {})
+    critic = algo.get("critic", {})
+
+    expected = {
+        "learning_starts": int(fixture["expected_learning_starts"]),
+        "replay_ratio": int(fixture["expected_replay_ratio"]),
+        "per_rank_gradient_steps": int(fixture["expected_per_rank_gradient_steps"]),
+        "per_rank_sequence_length": int(fixture["expected_per_rank_sequence_length"]),
+        "per_rank_batch_size": int(fixture["expected_per_rank_batch_size"]),
+        "per_rank_pretrain_steps": int(fixture["expected_per_rank_pretrain_steps"]),
+        "per_rank_target_network_update_freq": int(fixture["expected_per_rank_target_network_update_freq"]),
+        "total_steps": int(fixture["expected_total_steps"]),
+        "num_envs": int(fixture["expected_num_envs"]),
+    }
+
+    actual = {
+        "learning_starts": algo.get("learning_starts"),
+        "replay_ratio": algo.get("replay_ratio"),
+        "per_rank_gradient_steps": algo.get("per_rank_gradient_steps"),
+        "per_rank_sequence_length": algo.get("per_rank_sequence_length"),
+        "per_rank_batch_size": algo.get("per_rank_batch_size"),
+        "per_rank_pretrain_steps": algo.get("per_rank_pretrain_steps"),
+        "per_rank_target_network_update_freq": critic.get("per_rank_target_network_update_freq"),
+        "total_steps": algo.get("total_steps"),
+        "num_envs": env.get("num_envs"),
+    }
+
+    mismatches = {k: (actual[k], expected[k]) for k in expected if actual[k] != expected[k]}
+    if mismatches:
+        # Force fail by returning non-zero diff
+        diff = float(len(mismatches))
+        metadata = (
+            f"sheeprl: vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml\n"
+            f"  jax:     configs/dreamer_srl/agent_xs.yaml\n"
+            f"  fixture: expected cadence keys from sheeprl XS at 33b6366\n"
+            f"  MISMATCH: {mismatches}"
+        )
+        return np.array([diff]), np.array([0.0]), metadata
+
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml\n"
+        f"  jax:     configs/dreamer_srl/agent_xs.yaml\n"
+        f"  fixture: expected cadence keys from sheeprl XS at 33b6366\n"
+        f"  All 9 cadence keys match: {list(expected.keys())}"
+    )
+    return np.array([0.0]), np.array([0.0]), metadata
+
+
+def _run_cadence_env_grad_step_trace_5000_iters(fixture) -> tuple:
+    """Cadence test: (env_step, grad_step, per_rank_gs) trace is bit-identical.
+
+    Drives 5000 iterations of the training-cadence loop with XS config.
+    Compares against sheeprl's pre-computed trace (generated by gen_cp3b_fixtures.py).
+    A mismatch here is the 16x replay-ratio-class divergence — halt and investigate.
+
+    Sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L505-L515,
+                    L550-L551, L661-L662
+    """
+    import sys, os
+    import numpy as np
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.algorithms.dreamer_srl.utils import Ratio
+
+    num_envs = int(fixture["num_envs"])
+    world_size = int(fixture["world_size"])
+    total_iters = int(fixture["total_iters"])
+    replay_ratio = float(fixture["replay_ratio"])
+    learning_starts_steps = int(fixture["learning_starts_steps"])
+    per_rank_pretrain_steps = int(fixture["per_rank_pretrain_steps"])
+    expected_trace = fixture["expected_trace"]  # [N, 3]
+
+    policy_steps_per_iter = int(num_envs * world_size)
+    learning_starts = learning_starts_steps // policy_steps_per_iter
+    prefill_steps = learning_starts - int(learning_starts > 0)
+
+    ratio = Ratio(replay_ratio, pretrain_steps=per_rank_pretrain_steps)
+
+    policy_step = 0
+    cumulative_grad_steps = 0
+    jax_trace = []
+
+    for iter_num in range(1, total_iters + 1):
+        policy_step += policy_steps_per_iter
+        per_rank_gradient_steps = 0
+        if iter_num >= learning_starts:
+            ratio_steps = policy_step - prefill_steps * policy_steps_per_iter
+            per_rank_gradient_steps = ratio(ratio_steps / world_size)
+            cumulative_grad_steps += per_rank_gradient_steps
+        jax_trace.append((policy_step, cumulative_grad_steps, per_rank_gradient_steps))
+
+    jax_trace_arr = np.array(jax_trace, dtype=np.int64)
+    expected_trace_arr = np.asarray(expected_trace, dtype=np.int64)
+
+    # Return flattened traces for compare() to compute max-abs-diff
+    jax_out = jax_trace_arr.ravel().astype(np.float64)
+    torch_out = expected_trace_arr.ravel().astype(np.float64)
+    metadata = (
+        f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L505-L515, L661-L662\n"
+        f"  jax:     src/algorithms/dreamer_srl/utils.py:Ratio + cadence arithmetic\n"
+        f"  fixture: {total_iters} iters, replay_ratio={replay_ratio}, "
+        f"learning_starts={learning_starts_steps}, seed=0xD3EAF\n"
+        f"  NOTE: max_abs_diff > 0 = 16x replay-ratio-class divergence — halt and investigate"
+    )
+    return jax_out, torch_out, metadata
+
+
 FUNCTION_REGISTRY: dict[str, callable] = {
     # CP1 — utils.py
     "symlog":                _run_symlog,
@@ -389,6 +750,13 @@ FUNCTION_REGISTRY: dict[str, callable] = {
     "moments_update":        _run_moments_update,
     "ratio":                 _run_ratio,
     "prepare_obs":           _run_prepare_obs,
+    # CP3b — buffers.py + cadence wiring
+    "buffer_storage_state_after_deterministic_adds":        _run_buffer_storage_state_after_deterministic_adds,
+    "buffer_sample_at_indices_matches_sheeprl":             _run_buffer_sample_at_indices_matches_sheeprl,
+    "buffer_is_first_marker_placement_in_straddling_window": _run_buffer_is_first_marker_placement_in_straddling_window,
+    "buffer_parallel_env_lane_non_interference":            _run_buffer_parallel_env_lane_non_interference,
+    "cadence_yaml_key_parity_with_sheeprl_xs":              _run_cadence_yaml_key_parity_with_sheeprl_xs,
+    "cadence_env_grad_step_trace_5000_iters":               _run_cadence_env_grad_step_trace_5000_iters,
 }
 
 # Per-function threshold overrides — applied when the function has a logged deviation
@@ -409,6 +777,12 @@ CHECKPOINT_REGISTRY: dict[str, list[str]] = {
     "CP2":  ["layernorm_gru_cell"],
     "CP2b": ["action_shift"],
     "CP3":  ["zero_init_reward_head", "zero_init_critic_head"],
+    "CP3b": ["buffer_storage_state_after_deterministic_adds",
+             "buffer_sample_at_indices_matches_sheeprl",
+             "buffer_is_first_marker_placement_in_straddling_window",
+             "buffer_parallel_env_lane_non_interference",
+             "cadence_yaml_key_parity_with_sheeprl_xs",
+             "cadence_env_grad_step_trace_5000_iters"],
     "CP4":  ["rssm_transition", "rssm_representation", "get_initial_states"],
     "CP4b": ["is_first_force_set", "is_first_three_quantity_reset"],
     "CP5":  ["twohot_bins_endpoints", "twohot_encode", "twohot_log_prob"],

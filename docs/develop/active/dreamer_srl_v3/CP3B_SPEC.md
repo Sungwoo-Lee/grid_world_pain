@@ -3,7 +3,7 @@ title: "dreamer-srl v3 — CP3b spec: buffer + cadence state-evolution gate"
 topic: dreamer
 status: active
 created: 2026-05-13
-last_updated: 2026-05-13
+last_updated: 2026-05-14
 phase: 2
 ---
 
@@ -226,3 +226,76 @@ achievable state-evolution variant. Same `1e-6` threshold, same fixed seed
 - Code-reviewer Finding-6 ruling on stable CP-IDs: [docs/reviews/dreamer_srl_v3_pre_cp0_code_review.md](../../../reviews/dreamer_srl_v3_pre_cp0_code_review.md) —
   the basis for choosing the `Nb`-suffix convention for CP3b rather than
   renumbering downstream CPs.
+
+---
+
+## Implementation Report
+
+**Implemented by: developer**
+**Date: 2026-05-14**
+**Branch: v1.4**
+
+### Summary of changes (file-by-file)
+
+| File | Status | Notes |
+|---|---|---|
+| `src/algorithms/dreamer_srl/buffers.py` | New | `SequentialReplayBuffer` ported from sheeprl@33b6366:sheeprl/data/buffers.py:L363-L526. In-memory only (D-004). Added `_sample_at_indices()` for CP3b explicit-index test path (not in sheeprl). All methods carry Lever-B citation headers. |
+| `configs/dreamer_srl/agent_xs.yaml` | New | 9 cadence keys matching sheeprl XS defaults at commit 33b6366. Top-of-file CP3b canonical-key-list block comment. |
+| `scripts/fixtures/gen_cp3b_fixtures.py` | New | Generates 6 `.npz` fixture files using sheeprl's Ratio + SRB. Seed 0xD3EAF. Run in `sheeprl_bridge` env. |
+| `tests/algorithms/dreamer_srl/test_buffers.py` | New | 6 Lever-A tests (state-evolution bit-identity). All fixtures loaded from pre-computed `.npz` — no PyTorch needed at test time. |
+| `tests/fixtures/dreamer_srl/*.npz` (6 files) | New | Pre-computed reference fixtures for CP3b. |
+| `scripts/sheeprl_jax_diff.py` | Edited | CP3b added to `CHECKPOINT_REGISTRY` (between CP3 and CP4). 6 `_run_*` runners added to `FUNCTION_REGISTRY`. CP-comment ledger updated. |
+| `tests/algorithms/dreamer_srl/README.md` | Edited | Line 63 updated from `(no CP — buffers.py is an inter-CP sanity round-trip...)` to CP3b status. |
+| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Edited | D-005 logged: filled-region-only comparison for test 1 (unfilled `np.empty` garbage excluded). |
+
+### Test results
+
+```
+pytest tests/algorithms/dreamer_srl/test_buffers.py -v
+  14/14 passed (6 CP3b + 8 CP1 regression)
+
+python scripts/sheeprl_jax_diff.py --checkpoint CP3b → exit 0
+  buffer_storage_state_after_deterministic_adds      PASS  max_abs_diff=0.000e+00
+  buffer_sample_at_indices_matches_sheeprl           PASS  max_abs_diff=0.000e+00
+  buffer_is_first_marker_placement_in_straddling_window PASS  max_abs_diff=0.000e+00
+  buffer_parallel_env_lane_non_interference          PASS  max_abs_diff=0.000e+00
+  cadence_yaml_key_parity_with_sheeprl_xs            PASS  max_abs_diff=0.000e+00
+  cadence_env_grad_step_trace_5000_iters             PASS  max_abs_diff=0.000e+00
+```
+
+### Speed check
+
+Skipped — CP3b adds no hot-path code (buffer is CPU NumPy; the JAX training hot path is not yet wired). No changes to `src/models/` or JAX-compiled functions. Speed measurement is not applicable at this stage.
+
+### Deviations from plan
+
+| ID | Description | Logged before commit |
+|---|---|---|
+| D-004 | memmap omission — pre-declared | Yes (pre-existing in DEVIATION_LOG.md) |
+| D-005 | Test 1 compares only filled region `[:_pos]`; unfilled `[_pos:]` has undefined `np.empty` garbage that is not semantically meaningful | Yes (logged in DEVIATION_LOG.md before commit) |
+
+**D-005 detail:** Both sheeprl and our JAX buffer allocate with `np.empty`. The uninitialized portion `[_pos:]` of the buffer contains garbage values from the host allocator — these differ between the two Python processes and cannot be compared. The test was originally written to compare the full buffer array, which caused `max_abs_diff=nan` (NaN from comparing uninitialized floats). The fix restricts the comparison to `[:_pos]` — the only region with semantically defined content. This is not a logic deviation; it is a test-scope constraint from the shared `np.empty` allocation pattern. The written state is byte-identical (confirmed by `max_abs_diff=0.000e+00`).
+
+### YAML cadence keys confirmed
+
+All 9 keys in `configs/dreamer_srl/agent_xs.yaml` match sheeprl XS defaults at commit 33b6366:
+`learning_starts=1024`, `replay_ratio=1`, `per_rank_gradient_steps=1`, `per_rank_sequence_length=64`,
+`per_rank_batch_size=16`, `per_rank_pretrain_steps=0`, `per_rank_target_network_update_freq=1`,
+`total_steps=5000000`, `num_envs=1`.
+
+### Isolation rule confirmed
+
+`grep -r "from src.models.dreamer_v3" src/algorithms/dreamer_srl/` → no output.
+
+### Checkpoints
+
+- [x] `buffers.py` created with Lever-B citation headers on all methods
+- [x] `agent_xs.yaml` created with CP3b canonical-key block comment
+- [x] `gen_cp3b_fixtures.py` created, fixtures generated, all 6 `.npz` files written
+- [x] `test_buffers.py` created, all 6 tests pass
+- [x] `sheeprl_jax_diff.py` updated, `--checkpoint CP3b` exits 0
+- [x] `README.md` updated
+- [x] `DEVIATION_LOG.md` updated with D-005
+- [x] No memmap code in `buffers.py` or `test_buffers.py`
+- [x] No imports from `src.models.dreamer_v3_*`
+- [x] D-004 + D-005 logged before commit
