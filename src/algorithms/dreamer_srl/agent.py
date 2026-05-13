@@ -24,11 +24,17 @@ Contents
     RSSM                CP4  — recurrent state-space model (cascade fix #30 one-hidden-MLP)
                         CP4b — §S4 three-quantity arithmetic-mask reset (action + recurrent +
                                posterior; arithmetic-mask form, posterior reshape before mask)
+    MLPEncoder          CP9  — MLP encoder for single-key vector observations (symlog input)
+    MLPDecoder          CP9  — MLP decoder from latent state to observation dimension
+    ContinueHead        CP9  — Bernoulli continue head (logits output)
+    Actor               CP9  — discrete actor MLP with unimix + Hafner-init final layer
+    WorldModel          CP9  — composite module: encoder + RSSM + decoder + reward + continue
+    build_agent         CP9  — factory: constructs all modules, applies zero-init + Hafner-init
 """
 import jax
 import jax.numpy as jnp
 from flax import nnx
-from typing import Tuple
+from typing import Dict, List, Tuple
 
 from src.algorithms.dreamer_srl.utils import uniform_init_weights, init_weights
 
@@ -1099,3 +1105,1013 @@ class RSSM(nnx.Module):
         )  # posterior_logits: [B, S*D], posterior: [B, S, D]
 
         return recurrent_state, posterior, prior, posterior_logits, prior_logits
+
+
+# ---------------------------------------------------------------------------
+# CP9 — MLPEncoder
+# Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L100-L153
+# ---------------------------------------------------------------------------
+
+class MLPEncoder(nnx.Module):
+    """MLP encoder for single-key vector observations (no CNN — gridworld is vector obs).
+
+    # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L100-L153
+    # (MLPEncoder class, MLP-only single-key variant)
+
+    Architecture per sheeprl MLPEncoder.__init__ (L137-L146) using MLP miniblock():
+        For each of mlp_layers layers:
+            Linear(in, dense_units, bias=False)   ← bias=False when LayerNorm follows
+            LayerNorm(dense_units, eps=1e-3)
+            SiLU
+        Final layer: one more Linear(dense_units, dense_units, bias=False) + LN + SiLU
+        (sheeprl MLP with hidden_sizes=[dense_units]*mlp_layers, output_dim=None)
+        output_dim = dense_units (the final hidden size after the last hidden layer)
+
+    Sheeprl symlog input (L150):
+        x = torch.cat([symlog(obs[k]) if self.symlog_inputs else obs[k] for k in self.keys], -1)
+    We apply symlog to the flat observation vector before the MLP.
+
+    Init: apply Hafner init_weights to all Linear kernels (sheeprl L1129 encoder.apply(init_weights)).
+
+    Args:
+        obs_dim (int): flat observation vector size (sum of input_dims for all mlp keys).
+        dense_units (int): width of each hidden layer (and encoder output_dim).
+        mlp_layers (int): number of hidden layers.
+        rngs (nnx.Rngs): NNX RNG container — used only during __init__.
+    """
+
+    def __init__(
+        self,
+        obs_dim: int,
+        dense_units: int,
+        mlp_layers: int,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.obs_dim = obs_dim
+        self.dense_units = dense_units
+        self.mlp_layers = mlp_layers
+        self.output_dim = dense_units  # matches sheeprl MLPEncoder.output_dim = dense_units
+
+        # Build mlp_layers hidden layers: each is Linear(bias=False) + LayerNorm + SiLU
+        # Sheeprl MLP with hidden_sizes=[dense_units]*mlp_layers, output_dim=None
+        # miniblock order: Linear(in, hidden, bias=False) → LayerNorm → SiLU (L95)
+        # NNX requires nnx.List for storing lists of submodules inside a Module.
+        linears = []
+        norms = []
+        in_size = obs_dim
+        for _ in range(mlp_layers):
+            lin = nnx.Linear(in_size, dense_units, use_bias=False, rngs=rngs)
+            norm = nnx.LayerNorm(num_features=dense_units, epsilon=1e-3, rngs=rngs)
+            linears.append(lin)
+            norms.append(norm)
+            in_size = dense_units
+        self.hidden_linears = nnx.List(linears)
+        self.hidden_norms = nnx.List(norms)
+
+        # Apply Hafner init_weights to all Linear kernels
+        # Sheeprl L1129: encoder.apply(init_weights)
+        key = rngs.params()
+        for lin in self.hidden_linears:
+            key, k = jax.random.split(key)
+            I, O = lin.kernel[...].shape
+            lin.kernel = nnx.Param(init_weights(I, O, k))
+
+    def __call__(self, obs: jax.Array) -> jax.Array:
+        """Forward pass: symlog(obs) → MLP hidden layers → dense_units output.
+
+        Args:
+            obs: [..., obs_dim] float array (raw observation, not symlog'd)
+
+        Returns:
+            embedded: [..., dense_units]
+        """
+        from src.algorithms.dreamer_srl.utils import symlog as _symlog
+        x = _symlog(obs)
+        for lin, norm in zip(self.hidden_linears, self.hidden_norms):
+            x = lin(x)
+            x = norm(x)
+            x = jax.nn.silu(x)
+        return x
+
+
+# ---------------------------------------------------------------------------
+# CP9 — MLPDecoder
+# Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L229-L279
+# ---------------------------------------------------------------------------
+
+class MLPDecoder(nnx.Module):
+    """MLP decoder from latent state to reconstructed observation.
+
+    # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L229-L279
+    # (MLPDecoder class, single-key variant)
+
+    Architecture per sheeprl MLPDecoder.__init__ (L265-L274):
+        MLP body: mlp_layers hidden layers each:
+            Linear(in, dense_units, bias=False)
+            LayerNorm(dense_units, eps=1e-3)
+            SiLU
+        Output head: Linear(dense_units, obs_dim)  — matches sheeprl L274:
+            self.heads = nn.ModuleList([nn.Linear(dense_units, mlp_dim) for mlp_dim in self.output_dims])
+
+    Forward (L276-L278):
+        x = self.model(latent_states)
+        return {k: h(x) for k, h in zip(self.keys, self.heads)}
+    We return the raw output tensor (single key, no dict wrapping needed in caller).
+
+    The output head uses Hafner init with scale=1.0 (sheeprl L1178:
+        mlp_decoder.heads.apply(uniform_init_weights(1.0))
+    )
+
+    Args:
+        latent_dim (int): input latent state size (stochastic_size + recurrent_state_size).
+        obs_dim (int): output observation dimension.
+        dense_units (int): hidden layer width.
+        mlp_layers (int): number of hidden layers.
+        rngs (nnx.Rngs): NNX RNG container.
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        obs_dim: int,
+        dense_units: int,
+        mlp_layers: int,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.latent_dim = latent_dim
+        self.obs_dim = obs_dim
+        self.dense_units = dense_units
+        self.mlp_layers = mlp_layers
+
+        # MLP body: mlp_layers hidden layers
+        linears = []
+        norms = []
+        in_size = latent_dim
+        for _ in range(mlp_layers):
+            lin = nnx.Linear(in_size, dense_units, use_bias=False, rngs=rngs)
+            norm = nnx.LayerNorm(num_features=dense_units, epsilon=1e-3, rngs=rngs)
+            linears.append(lin)
+            norms.append(norm)
+            in_size = dense_units
+        self.hidden_linears = nnx.List(linears)
+        self.hidden_norms = nnx.List(norms)
+
+        # Output head: Linear(dense_units, obs_dim) — sheeprl L274
+        self.output_head = nnx.Linear(dense_units, obs_dim, use_bias=True, rngs=rngs)
+
+        # Apply Hafner init_weights to all Linear kernels in the body
+        # Sheeprl L1129: observation_model.apply(init_weights) (world_model contains decoder)
+        key = rngs.params()
+        for lin in self.hidden_linears:
+            key, k = jax.random.split(key)
+            I, O = lin.kernel[...].shape
+            lin.kernel = nnx.Param(init_weights(I, O, k))
+        # Output head: uniform_init_weights(1.0) — sheeprl L1178
+        key, k = jax.random.split(key)
+        I, O = self.output_head.kernel[...].shape
+        self.output_head.kernel = nnx.Param(uniform_init_weights(1.0, I, O, k))
+
+    def __call__(self, latent: jax.Array) -> jax.Array:
+        """Forward pass: latent → MLP body → output head → obs_dim.
+
+        Args:
+            latent: [..., latent_dim]
+
+        Returns:
+            reconstructed_obs: [..., obs_dim]
+        """
+        x = latent
+        for lin, norm in zip(self.hidden_linears, self.hidden_norms):
+            x = lin(x)
+            x = norm(x)
+            x = jax.nn.silu(x)
+        return self.output_head(x)
+
+
+# ---------------------------------------------------------------------------
+# CP9 — ContinueHead
+# Sheeprl builds inline at agent.py:L1114-L1127 (discount_model = MLP(..., output_dim=1, ...))
+# and L1176: world_model.continue_model.model[-1].apply(uniform_init_weights(1.0))
+# ---------------------------------------------------------------------------
+
+class ContinueHead(nnx.Module):
+    """Continue (discount) head — Bernoulli logit over latent state.
+
+    # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L1114-L1127
+    # (continue_model / discount_model inline construction in build_agent)
+
+    Architecture: same as RewardHead / CriticHead structure but output_dim=1.
+        mlp_layers hidden layers:
+            Linear(in, dense_units, bias=False)
+            LayerNorm(dense_units, eps=1e-3)
+            SiLU
+        Output linear: Linear(dense_units, 1)
+            Hafner init_weights(1.0) applied to output linear (sheeprl L1176)
+
+    Forward returns raw logit (scalar per batch element). The IndependentBernoulli
+    wrap happens in train.py / one_train_step (§S9 compliance).
+
+    Args:
+        latent_dim (int): input latent state size.
+        dense_units (int): hidden layer width.
+        mlp_layers (int): number of hidden layers.
+        rngs (nnx.Rngs): NNX RNG container.
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        dense_units: int,
+        mlp_layers: int,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.latent_dim = latent_dim
+        self.dense_units = dense_units
+        self.mlp_layers = mlp_layers
+
+        # MLP body
+        linears = []
+        norms = []
+        in_size = latent_dim
+        for _ in range(mlp_layers):
+            lin = nnx.Linear(in_size, dense_units, use_bias=False, rngs=rngs)
+            norm = nnx.LayerNorm(num_features=dense_units, epsilon=1e-3, rngs=rngs)
+            linears.append(lin)
+            norms.append(norm)
+            in_size = dense_units
+        self.hidden_linears = nnx.List(linears)
+        self.hidden_norms = nnx.List(norms)
+
+        # Output linear → single logit
+        self.output_linear = nnx.Linear(dense_units, 1, use_bias=True, rngs=rngs)
+
+        # Apply Hafner init_weights to body linears
+        # Sheeprl L1129: continue_model.apply(init_weights) via world_model
+        key = rngs.params()
+        for lin in self.hidden_linears:
+            key, k = jax.random.split(key)
+            I, O = lin.kernel[...].shape
+            lin.kernel = nnx.Param(init_weights(I, O, k))
+        # Output linear: uniform_init_weights(1.0) — sheeprl L1176
+        key, k = jax.random.split(key)
+        I, O = self.output_linear.kernel[...].shape
+        self.output_linear.kernel = nnx.Param(uniform_init_weights(1.0, I, O, k))
+
+    def __call__(self, latent: jax.Array) -> jax.Array:
+        """Forward pass: latent → MLP body → scalar logit.
+
+        Args:
+            latent: [..., latent_dim]
+
+        Returns:
+            logits: [..., 1]  (single Bernoulli logit per batch element)
+        """
+        x = latent
+        for lin, norm in zip(self.hidden_linears, self.hidden_norms):
+            x = lin(x)
+            x = norm(x)
+            x = jax.nn.silu(x)
+        return self.output_linear(x)
+
+
+# ---------------------------------------------------------------------------
+# CP9 — Actor
+# Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L694-L846
+# (Actor class, discrete-action branch only — gridworld is always discrete)
+# ---------------------------------------------------------------------------
+
+class Actor(nnx.Module):
+    """Discrete actor — MLP body + categorical head over actions.
+
+    # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L694-L846
+    # (Actor class, discrete-action branch only — grid-world is always discrete)
+
+    Architecture (sheeprl L761-L774):
+        MLP body: mlp_layers hidden layers each:
+            Linear(in, dense_units, bias=False)
+            LayerNorm(dense_units, eps=1e-3)
+            SiLU
+        Output head: Linear(dense_units, action_dim) with Hafner init scale=1.0
+            sheeprl L1171: actor.mlp_heads.apply(uniform_init_weights(1.0))
+        Then apply Hafner init_weights (truncated-normal) to all body linears.
+            sheeprl L1167-L1168: actor.apply(init_weights)
+
+    Unimix (sheeprl L839-L845):
+        if unimix > 0:
+            probs = logits.softmax(dim=-1)
+            uniform = ones_like(probs) / probs.shape[-1]
+            probs = (1 - unimix) * probs + unimix * uniform
+            logits = log(probs)  # probs_to_logits for Categorical
+
+    Forward returns (actions, log_probs):
+        actions: [..., action_dim] one-hot via straight-through Gumbel-softmax
+        log_probs: [..., 1] sum of log-probs (scalar per batch, matching sheeprl)
+        entropy: [...] entropy of the Categorical distribution
+
+    §S7 sg(action) discipline: the caller (one_train_step) must apply
+        jax.lax.stop_gradient(actions) before passing to log_prob computation.
+        This class computes log_probs internally from the distribution logits
+        (not from the stop_gradient'd action) so gradients flow through the actor.
+
+    Args:
+        latent_dim (int): input latent state size (stochastic_size + recurrent_state_size).
+        action_dim (int): total action space size (for single discrete action head).
+        dense_units (int): hidden layer width.
+        mlp_layers (int): number of hidden layers.
+        unimix (float): uniform mixing coefficient.
+        rngs (nnx.Rngs): NNX RNG container.
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        action_dim: int,
+        dense_units: int,
+        mlp_layers: int,
+        unimix: float,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.latent_dim = latent_dim
+        self.action_dim = action_dim
+        self.dense_units = dense_units
+        self.mlp_layers = mlp_layers
+        self.unimix = unimix
+
+        # MLP body: mlp_layers hidden layers
+        linears = []
+        norms = []
+        in_size = latent_dim
+        for _ in range(mlp_layers):
+            lin = nnx.Linear(in_size, dense_units, use_bias=False, rngs=rngs)
+            norm = nnx.LayerNorm(num_features=dense_units, epsilon=1e-3, rngs=rngs)
+            linears.append(lin)
+            norms.append(norm)
+            in_size = dense_units
+        self.hidden_linears = nnx.List(linears)
+        self.hidden_norms = nnx.List(norms)
+
+        # Output head: Linear(dense_units, action_dim)
+        # sheeprl L774: self.mlp_heads = nn.ModuleList([nn.Linear(dense_units, action_dim)])
+        self.output_linear = nnx.Linear(dense_units, action_dim, use_bias=True, rngs=rngs)
+
+        # Hafner init: apply init_weights to all body linears (sheeprl L1167: actor.apply(init_weights))
+        key = rngs.params()
+        for lin in self.hidden_linears:
+            key, k = jax.random.split(key)
+            I, O = lin.kernel[...].shape
+            lin.kernel = nnx.Param(init_weights(I, O, k))
+        # Output head: uniform_init_weights(1.0) — sheeprl L1171: actor.mlp_heads.apply(uniform_init_weights(1.0))
+        key, k = jax.random.split(key)
+        I, O = self.output_linear.kernel[...].shape
+        self.output_linear.kernel = nnx.Param(uniform_init_weights(1.0, I, O, k))
+
+    def _uniform_mix(self, logits: jax.Array) -> jax.Array:
+        """Apply unimix smoothing to logits — sheeprl Actor._uniform_mix (L839-L845).
+
+        Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L839-L845.
+        """
+        if self.unimix > 0.0:
+            probs = jax.nn.softmax(logits, axis=-1)
+            uniform = jnp.ones_like(probs) / probs.shape[-1]
+            probs = (1.0 - self.unimix) * probs + self.unimix * uniform
+            logits = jnp.log(probs)  # probs_to_logits for Categorical
+        return logits
+
+    def __call__(
+        self, latent: jax.Array, key: jax.Array
+    ) -> Tuple[jax.Array, jax.Array, jax.Array]:
+        """Forward pass: latent → MLP → logits → action + log_prob + entropy.
+
+        Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L783-L837
+        (Actor.forward, discrete branch).
+
+        §S7 stop_gradient discipline:
+            log_probs returned here are computed from the DISTRIBUTION LOGITS
+            (with gradient flowing through the actor parameters).
+            The CALLER must apply jax.lax.stop_gradient(actions) before passing
+            to compute_actor_objective — the stop_gradient is on the sampled
+            action TOKEN, not on the log_prob computation itself.
+
+        Args:
+            latent: [..., latent_dim]
+            key: PRNG key for straight-through Gumbel-softmax sampling
+
+        Returns:
+            actions: [..., action_dim] one-hot via straight-through Gumbel-softmax
+            log_probs: [..., 1] sum of log-probs over action dim (matching sheeprl L286)
+            entropy: [...] entropy of the Categorical distribution
+        """
+        # MLP body
+        x = latent
+        for lin, norm in zip(self.hidden_linears, self.hidden_norms):
+            x = lin(x)
+            x = norm(x)
+            x = jax.nn.silu(x)
+
+        # Output head + unimix
+        raw_logits = self.output_linear(x)          # [..., action_dim]
+        logits = self._uniform_mix(raw_logits)       # [..., action_dim] after unimix
+
+        # Straight-through Gumbel-softmax sample (sheeprl L834: actions_dist[-1].rsample())
+        gumbel_noise = jax.random.gumbel(key, shape=logits.shape)
+        perturbed = logits + gumbel_noise
+        hard_indices = jnp.argmax(perturbed, axis=-1)  # [...] int indices
+        hard = jax.nn.one_hot(hard_indices, self.action_dim)  # [..., action_dim]
+        soft = jax.nn.softmax(logits, axis=-1)
+        # STE: forward = hard, backward through soft
+        actions = hard - jax.lax.stop_gradient(soft) + soft   # [..., action_dim]
+
+        # Log-prob from distribution logits (NOT from stop_gradient'd action)
+        # sheeprl L286: p.log_prob(imgnd_act.detach()).unsqueeze(-1)[:-1]
+        # For discrete: log_prob = sum(one_hot * log_softmax(logits), axis=-1)
+        # We use STOP_GRADIENT on the action token here to match §S7 from the actor side.
+        # The caller's compute_actor_objective receives these log_probs and uses them.
+        log_softmax_logits = jax.nn.log_softmax(logits, axis=-1)  # [..., action_dim]
+        # stop_gradient on the sampled action (§S7 sg(action) discipline)
+        sg_actions = jax.lax.stop_gradient(actions)
+        log_probs = jnp.sum(sg_actions * log_softmax_logits, axis=-1, keepdims=True)  # [..., 1]
+
+        # Entropy of Categorical: -sum(p * log p, axis=-1)
+        probs = jax.nn.softmax(logits, axis=-1)
+        entropy = -jnp.sum(probs * jnp.log(probs + 1e-8), axis=-1)  # [...]
+
+        return actions, log_probs, entropy
+
+
+# ---------------------------------------------------------------------------
+# CP9 — WorldModel
+# Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L600-L692
+# (PlayerDV3 class for the inference path + dreamer_v3.py train() for the train path)
+# ---------------------------------------------------------------------------
+
+class WorldModel(nnx.Module):
+    """Composite world model: encoder + RSSM + decoder + reward head + continue head.
+
+    # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L596-L692
+    # (WorldModel container class + PlayerDV3 inference path)
+    # Training-time observe() and imagination() follow dreamer_v3.py:L107-L241.
+
+    Holds references to:
+        encoder      — MLPEncoder (obs → dense_units embedding)
+        rssm         — RSSM (observe/imagine dynamics)
+        decoder      — MLPDecoder (latent → reconstructed obs)
+        reward_model — RewardHead (latent → 255-bin reward logits, zero-init)
+        continue_model — ContinueHead (latent → 1-dim Bernoulli logit)
+
+    observe():
+        Training-time forward. Runs encoder over the full [T, B] sequence, then
+        RSSM.dynamic step-by-step (Python loop for T steps, like sheeprl L134-L145),
+        returns all RSSM outputs + decoder/reward/continue predictions.
+
+    imagine():
+        Imagination rollout. Starts from posterior latent states, rolls forward
+        `horizon` steps using actor's sampled actions through RSSM.imagination
+        (transition model only — no observation encoder during imagination).
+
+    Note on RSSM.imagination (sheeprl agent.py:L396 via dreamer_v3.py:L236):
+        imagined_prior, recurrent_state = world_model.rssm.imagination(imagined_prior, recurrent_state, actions)
+        This is the RSSM's prior-only step (no observation conditioning).
+        In our JAX RSSM, the equivalent is _transition(recurrent_state) after running
+        the recurrent step with the action.
+
+    Args:
+        encoder (MLPEncoder): the observation encoder.
+        rssm (RSSM): the recurrent state-space model.
+        decoder (MLPDecoder): the observation decoder.
+        reward_model (RewardHead): the reward head.
+        continue_model (ContinueHead): the continue head.
+    """
+
+    def __init__(
+        self,
+        encoder: "MLPEncoder",
+        rssm: RSSM,
+        decoder: "MLPDecoder",
+        reward_model: RewardHead,
+        continue_model: "ContinueHead",
+    ) -> None:
+        self.encoder = encoder
+        self.rssm = rssm
+        self.decoder = decoder
+        self.reward_model = reward_model
+        self.continue_model = continue_model
+
+    def observe(
+        self,
+        obs: jax.Array,
+        actions: jax.Array,
+        is_first: jax.Array,
+        key: jax.Array,
+    ) -> Dict[str, jax.Array]:
+        """Training-time world-model forward over a [T, B] sequence.
+
+        Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L112-L149
+        (train() dynamic-learning section).
+
+        Steps:
+        1. Encode all T observations: embedded_obs = encoder(obs)  → [T, B, dense_units]
+        2. RSSM observe loop (Python for-loop, T steps):
+           a. rssm.dynamic(posterior, recurrent_state, actions[t], embedded_obs[t], is_first[t], key_t)
+           b. Collect recurrent_states, posterior_logits, prior_logits, posteriors
+        3. Build latent_states = cat(posteriors_flat, recurrent_states) → [T, B, latent_dim]
+        4. Compute decoder, reward, continue predictions.
+
+        Args:
+            obs:       [T, B, obs_dim] float — raw observations (symlog applied in encoder)
+            actions:   [T, B, action_dim] float — action-shifted (§S2 already applied by caller)
+            is_first:  [T, B, 1] float — is-first flags (§S1 already applied by caller)
+            key:       PRNG key — split into T per-step keys
+
+        Returns:
+            dict with keys:
+                latent_states:       [T, B, latent_dim]
+                posteriors:          [T, B, num_cat, num_cls]
+                recurrent_states:    [T, B, recurrent_state_size]
+                posterior_logits:    [T, B, stochastic_size]
+                prior_logits:        [T, B, stochastic_size]
+                reconstructed_obs:   [T, B, obs_dim]
+                reward_logits:       [T, B, bins]
+                continue_logits:     [T, B, 1]
+        """
+        T, B = obs.shape[:2]
+        stochastic_size = self.rssm.stochastic_size
+        num_categoricals = self.rssm.num_categoricals
+        num_classes = self.rssm.num_classes
+        recurrent_state_size = self.rssm.recurrent_state_size
+
+        # Encode all observations
+        # sheeprl L113: embedded_obs = world_model.encoder(batch_obs)
+        embedded_obs = jax.vmap(self.encoder)(obs.reshape(T * B, -1)).reshape(T, B, -1)
+
+        # Initialize RSSM state
+        # sheeprl L108-L109: recurrent_state = zeros; posterior = zeros with [S,D] shape
+        recurrent_state, posterior_state = self.rssm.get_initial_states(B)
+        # recurrent_state: [B, recurrent_state_size], posterior_state: [B, S, D]
+
+        # Split key into T per-step keys
+        step_keys = jax.random.split(key, T)
+
+        # Python loop over sequence (matches sheeprl L134-L145)
+        all_recurrent = []
+        all_posterior = []
+        all_posterior_logits = []
+        all_prior_logits = []
+
+        for t in range(T):
+            recurrent_state, posterior_state, prior_state, post_logits, prior_logits = \
+                self.rssm.dynamic(
+                    posterior_state,
+                    recurrent_state,
+                    actions[t],      # [B, action_dim] — already action-shifted
+                    embedded_obs[t], # [B, dense_units]
+                    is_first[t],     # [B, 1]
+                    step_keys[t],
+                )
+            all_recurrent.append(recurrent_state)
+            all_posterior.append(posterior_state)
+            all_posterior_logits.append(post_logits)
+            all_prior_logits.append(prior_logits)
+
+        # Stack into [T, B, ...] tensors
+        recurrent_states = jnp.stack(all_recurrent, axis=0)    # [T, B, recurrent_state_size]
+        posteriors = jnp.stack(all_posterior, axis=0)           # [T, B, S, D]
+        posterior_logits = jnp.stack(all_posterior_logits, axis=0)  # [T, B, S*D]
+        prior_logits = jnp.stack(all_prior_logits, axis=0)     # [T, B, S*D]
+
+        # Build latent states (sheeprl L146):
+        # latent_states = cat(posteriors.view(T, B, -1), recurrent_states, dim=-1)
+        posteriors_flat = posteriors.reshape(T, B, -1)            # [T, B, S*D]
+        latent_states = jnp.concatenate([posteriors_flat, recurrent_states], axis=-1)  # [T, B, latent_dim]
+
+        # Decoder, reward, continue predictions (sheeprl L149-L167)
+        # Reshape to [T*B, latent_dim] for batched forward, then reshape back
+        latent_flat = latent_states.reshape(T * B, -1)
+        reconstructed_obs = jax.vmap(self.decoder)(latent_flat).reshape(T, B, -1)
+        reward_logits = jax.vmap(self.reward_model)(latent_flat).reshape(T, B, -1)
+        continue_logits = jax.vmap(self.continue_model)(latent_flat).reshape(T, B, 1)
+
+        return {
+            "latent_states":     latent_states,
+            "posteriors":        posteriors,
+            "recurrent_states":  recurrent_states,
+            "posterior_logits":  posterior_logits,
+            "prior_logits":      prior_logits,
+            "reconstructed_obs": reconstructed_obs,
+            "reward_logits":     reward_logits,
+            "continue_logits":   continue_logits,
+        }
+
+    def imagine(
+        self,
+        init_latent: jax.Array,
+        actor: "Actor",
+        horizon: int,
+        key: jax.Array,
+    ) -> Dict[str, jax.Array]:
+        """Imagination rollout for behavior learning.
+
+        Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L202-L244
+        (train() imagination-rollout section).
+
+        Starts from the initial latent state (posterior from observe()), runs
+        `horizon` steps using actor's sampled actions through the RSSM transition
+        model (prior-only — no observation encoder).
+
+        Args:
+            init_latent:  [BT, latent_dim] — flattened posterior latent from observe()
+                          (posteriors_flat + recurrent_states concatenated, then reshaped)
+            actor:        the Actor module
+            horizon:      number of imagination steps (H)
+            key:          PRNG key
+
+        Returns:
+            dict with keys:
+                imagined_latents:  [H+1, BT, latent_dim]
+                imagined_actions:  [H+1, BT, action_dim]
+                imagined_log_probs:[H+1, BT, 1]   log_probs from actor
+                imagined_entropies:[H+1, BT]       entropy from actor
+        """
+        BT = init_latent.shape[0]
+        latent_dim = init_latent.shape[1]
+        stochastic_size = self.rssm.stochastic_size      # S*D flat
+        recurrent_state_size = self.rssm.recurrent_state_size
+
+        imagined_latents = [init_latent]                  # [BT, latent_dim]
+        imagined_actions = []
+        imagined_log_probs = []
+        imagined_entropies = []
+
+        # Decode initial latent into prior + recurrent components
+        # init_latent = cat(posterior_flat [BT, S*D], recurrent [BT, H])
+        imagined_prior_flat = init_latent[:, :stochastic_size]   # [BT, S*D]
+        recurrent_state = init_latent[:, stochastic_size:]        # [BT, recurrent_state_size]
+
+        # Step 0: actor action from initial latent
+        key, k_act = jax.random.split(key)
+        actions_0, log_probs_0, entropy_0 = actor(init_latent, k_act)
+        imagined_actions.append(actions_0)
+        imagined_log_probs.append(log_probs_0)
+        imagined_entropies.append(entropy_0)
+
+        # Reshape prior to [BT, S, D] for RSSM imagination step
+        num_cat = self.rssm.num_categoricals
+        num_cls = self.rssm.num_classes
+        imagined_prior = imagined_prior_flat.reshape(BT, num_cat, num_cls)
+
+        # Imagination loop (sheeprl L235-L241)
+        for i in range(1, horizon + 1):
+            key, k_rssm, k_act = jax.random.split(key, 3)
+
+            # RSSM imagination step: prior transition only (no observation)
+            # sheeprl L236: imagined_prior, recurrent_state = rssm.imagination(prior, recurrent_state, actions)
+            # Our RSSM equivalent: recurrent_mlp + GRU + _transition (no _representation)
+            prior_flat = imagined_prior.reshape(BT, -1)   # [BT, S*D]
+            action = imagined_actions[-1]                  # [BT, action_dim]
+
+            # RecurrentModel forward (MLP pre-projection + GRU)
+            recurrent_input = jnp.concatenate([prior_flat, action], axis=-1)
+            recurrent_feat = self.rssm.recurrent_mlp_linear(recurrent_input)
+            recurrent_feat = self.rssm.recurrent_mlp_norm(recurrent_feat)
+            recurrent_feat = jax.nn.silu(recurrent_feat)
+            recurrent_state = self.rssm.gru_cell(recurrent_feat, recurrent_state)
+
+            # Transition model → prior logits + state
+            prior_logits_new, imagined_prior = self.rssm._transition(
+                recurrent_state, sample_state=True, key=k_rssm
+            )
+
+            # Build new latent = cat(prior_flat_new, recurrent_state)
+            prior_flat_new = imagined_prior.reshape(BT, -1)
+            new_latent = jnp.concatenate([prior_flat_new, recurrent_state], axis=-1)
+            imagined_latents.append(new_latent)
+
+            # Actor forward from new latent
+            actions_i, log_probs_i, entropy_i = actor(new_latent, k_act)
+            imagined_actions.append(actions_i)
+            imagined_log_probs.append(log_probs_i)
+            imagined_entropies.append(entropy_i)
+
+        imagined_latents_arr = jnp.stack(imagined_latents, axis=0)   # [H+1, BT, latent_dim]
+        imagined_actions_arr = jnp.stack(imagined_actions, axis=0)   # [H+1, BT, action_dim]
+        imagined_log_probs_arr = jnp.stack(imagined_log_probs, axis=0)  # [H+1, BT, 1]
+        imagined_entropies_arr = jnp.stack(imagined_entropies, axis=0)  # [H+1, BT]
+
+        return {
+            "imagined_latents":   imagined_latents_arr,
+            "imagined_actions":   imagined_actions_arr,
+            "imagined_log_probs": imagined_log_probs_arr,
+            "imagined_entropies": imagined_entropies_arr,
+        }
+
+
+# ---------------------------------------------------------------------------
+# CP9 — FullMLPHead
+# Full MLP head with configurable hidden layers + output linear.
+# Used by build_agent for reward_model, continue_model, and critic.
+# ---------------------------------------------------------------------------
+
+class FullMLPHead(nnx.Module):
+    """Full MLP head: mlp_layers hidden layers (Linear+LN+SiLU) + output linear.
+
+    # CP9 helper — not a direct sheeprl port, but faithfully implements the
+    # sheeprl MLP(hidden_sizes=[du]*layers, output_dim=bins) structure used
+    # in build_agent for reward, continue, and critic models.
+    # Sheeprl reference: vendor/sheeprl/sheeprl/models/models.py:L87-L115 (MLP class)
+
+    The output linear is initialized with either:
+    - zero_init_output=True  → uniform_init_weights(0.0) — cascade fix #27 (reward, critic)
+    - zero_init_output=False → uniform_init_weights(1.0) — Hafner scale=1 (continue head)
+
+    All body linears are initialized with Hafner init_weights (truncated-normal fan-avg).
+
+    Args:
+        in_dim (int): input dimension (latent_dim).
+        out_dim (int): output dimension (bins or 1).
+        dense_units (int): hidden layer width.
+        mlp_layers (int): number of hidden layers.
+        zero_init_output (bool): if True, zero-init output linear (cascade fix #27).
+                                  if False, use uniform_init_weights(1.0) Hafner scale.
+        rngs (nnx.Rngs): NNX RNG container.
+    """
+
+    def __init__(
+        self,
+        in_dim: int,
+        out_dim: int,
+        dense_units: int,
+        mlp_layers: int,
+        zero_init_output: bool,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.dense_units = dense_units
+        self.mlp_layers = mlp_layers
+
+        # Hidden layers
+        linears = []
+        norms = []
+        in_size = in_dim
+        for _ in range(mlp_layers):
+            lin = nnx.Linear(in_size, dense_units, use_bias=False, rngs=rngs)
+            norm = nnx.LayerNorm(num_features=dense_units, epsilon=1e-3, rngs=rngs)
+            linears.append(lin)
+            norms.append(norm)
+            in_size = dense_units
+        self.hidden_linears = nnx.List(linears)
+        self.hidden_norms = nnx.List(norms)
+
+        # Output linear
+        self.output_linear = nnx.Linear(in_size, out_dim, use_bias=True, rngs=rngs)
+
+        # Init: Hafner truncated-normal for body linears
+        key = rngs.params()
+        for lin in self.hidden_linears:
+            key, k = jax.random.split(key)
+            I, O = lin.kernel[...].shape
+            lin.kernel = nnx.Param(init_weights(I, O, k))
+
+        # Output linear init
+        key, k = jax.random.split(key)
+        I, O = self.output_linear.kernel[...].shape
+        if zero_init_output:
+            # Cascade fix #27: zero-init the output linear
+            # Sheeprl: world_model.reward_model.model[-1].apply(uniform_init_weights(0.0))
+            # Sheeprl: critic.model[-1].apply(uniform_init_weights(0.0))
+            self.output_linear.kernel = nnx.Param(uniform_init_weights(0.0, I, O, k))
+            self.output_linear.bias = nnx.Param(jnp.zeros((O,), dtype=jnp.float32))
+        else:
+            # Hafner scale=1.0 for continue head and decoder heads
+            # Sheeprl: world_model.continue_model.model[-1].apply(uniform_init_weights(1.0))
+            self.output_linear.kernel = nnx.Param(uniform_init_weights(1.0, I, O, k))
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        """Forward pass: hidden layers → output linear.
+
+        Args:
+            x: [..., in_dim]
+
+        Returns:
+            out: [..., out_dim]
+        """
+        for lin, norm in zip(self.hidden_linears, self.hidden_norms):
+            x = lin(x)
+            x = norm(x)
+            x = jax.nn.silu(x)
+        return self.output_linear(x)
+
+
+# ---------------------------------------------------------------------------
+# CP9 — build_agent
+# Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L935-L1237
+# (build_agent function, MLP-only single-key variant)
+# ---------------------------------------------------------------------------
+
+def build_agent(
+    obs_dim: int,
+    action_dim: int,
+    cfg: dict,
+    rngs: nnx.Rngs,
+) -> Tuple["WorldModel", "Actor", CriticHead, CriticHead]:
+    """Factory: construct WorldModel, Actor, Critic, target_critic.
+
+    # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L935-L1237
+    # (build_agent function, Fabric-stripped, MLP-only single-key variant)
+
+    Construction order (matches sheeprl L970-L1220):
+    1. encoder = MLPEncoder(obs_dim, dense_units, mlp_layers)
+    2. rssm = RSSM(...)
+    3. decoder = MLPDecoder(latent_dim, obs_dim, dense_units, mlp_layers)
+    4. reward_model = RewardHead(latent_dim, bins)
+    5. continue_model = ContinueHead(latent_dim, dense_units, mlp_layers)
+    6. world_model = WorldModel(encoder, rssm, decoder, reward_model, continue_model)
+    7. actor = Actor(latent_dim, action_dim, dense_units, mlp_layers, unimix)
+    8. critic = CriticHead(latent_dim, bins)
+    9. target_critic = CriticHead(latent_dim, bins) — same arch, separate params
+
+    Zero-init enforcement (cascade fix #27):
+        reward_model.output_linear.kernel -> zero (already in RewardHead.__init__)
+        critic.output_linear.kernel -> zero (already in CriticHead.__init__)
+    Sanity check at startup:
+        assert max(|reward_model.output_linear.kernel|) == 0.0
+        assert max(|critic.output_linear.kernel|) == 0.0
+
+    Polyak init: target_critic starts as a COPY of critic (tau=1.0 on first call).
+        This is handled in the main loop (first polyak_update call with tau=1.0).
+
+    Args:
+        obs_dim (int): flat observation vector size.
+        action_dim (int): action space size (number of discrete actions).
+        cfg (dict): configuration dictionary. Required keys:
+            cfg['algo']['world_model']['encoder']['dense_units']
+            cfg['algo']['world_model']['encoder']['mlp_layers']
+            cfg['algo']['world_model']['recurrent_model']['recurrent_state_size']
+            cfg['algo']['world_model']['recurrent_model']['dense_units']
+            cfg['algo']['world_model']['transition_model']['hidden_size']
+            cfg['algo']['world_model']['representation_model']['hidden_size']
+            cfg['algo']['world_model']['reward_model']['bins']
+            cfg['algo']['world_model']['reward_model']['dense_units']
+            cfg['algo']['world_model']['reward_model']['mlp_layers']
+            cfg['algo']['world_model']['continue_model']['dense_units']
+            cfg['algo']['world_model']['continue_model']['mlp_layers']
+            cfg['algo']['world_model']['stochastic_size']
+            cfg['algo']['world_model']['discrete_size']
+            cfg['algo']['actor']['dense_units']
+            cfg['algo']['actor']['mlp_layers']
+            cfg['algo']['critic']['dense_units']
+            cfg['algo']['critic']['mlp_layers']
+            cfg['algo']['critic']['bins']
+            cfg['algo']['unimix']
+        rngs (nnx.Rngs): NNX RNG container.
+
+    Returns:
+        (world_model, actor, critic, target_critic)
+    """
+    # Extract config values (no fallback defaults — missing key raises KeyError)
+    wm_cfg = cfg['algo']['world_model']
+    actor_cfg = cfg['algo']['actor']
+    critic_cfg = cfg['algo']['critic']
+
+    enc_dense_units = wm_cfg['encoder']['dense_units']
+    enc_mlp_layers = wm_cfg['encoder']['mlp_layers']
+
+    recurrent_state_size = wm_cfg['recurrent_model']['recurrent_state_size']
+    recurrent_dense_units = wm_cfg['recurrent_model']['dense_units']
+    transition_hidden_size = wm_cfg['transition_model']['hidden_size']
+    repr_hidden_size = wm_cfg['representation_model']['hidden_size']
+
+    stochastic_size = wm_cfg['stochastic_size']   # num_categoricals (S)
+    discrete_size = wm_cfg['discrete_size']        # num_classes per categorical (D)
+    stoch_flat_size = stochastic_size * discrete_size  # S*D
+    latent_dim = stoch_flat_size + recurrent_state_size
+
+    reward_bins = wm_cfg['reward_model']['bins']
+    reward_dense_units = wm_cfg['reward_model']['dense_units']
+    reward_mlp_layers = wm_cfg['reward_model']['mlp_layers']
+
+    continue_dense_units = wm_cfg['continue_model']['dense_units']
+    continue_mlp_layers = wm_cfg['continue_model']['mlp_layers']
+
+    actor_dense_units = actor_cfg['dense_units']
+    actor_mlp_layers = actor_cfg['mlp_layers']
+
+    critic_dense_units = critic_cfg['dense_units']
+    critic_mlp_layers = critic_cfg['mlp_layers']
+    critic_bins = critic_cfg['bins']
+
+    unimix = cfg['algo']['unimix']
+
+    # 1. Encoder
+    encoder = MLPEncoder(
+        obs_dim=obs_dim,
+        dense_units=enc_dense_units,
+        mlp_layers=enc_mlp_layers,
+        rngs=rngs,
+    )
+
+    # 2. RSSM
+    rssm = RSSM(
+        recurrent_state_size=recurrent_state_size,
+        recurrent_dense_units=recurrent_dense_units,
+        action_dim=action_dim,
+        stochastic_size=stoch_flat_size,
+        transition_hidden_size=transition_hidden_size,
+        repr_hidden_size=repr_hidden_size,
+        num_categoricals=stochastic_size,
+        num_classes=discrete_size,
+        encoder_output_dim=enc_dense_units,
+        unimix=unimix,
+        rngs=rngs,
+    )
+
+    # 3. Decoder
+    decoder = MLPDecoder(
+        latent_dim=latent_dim,
+        obs_dim=obs_dim,
+        dense_units=enc_dense_units,    # matches encoder dense_units (symmetric)
+        mlp_layers=enc_mlp_layers,
+        rngs=rngs,
+    )
+
+    # 4. RewardMLP — full MLP with zero-init output linear (cascade fix #27)
+    # Sheeprl L1100-L1112: reward_model = MLP(input_dims=latent, output_dim=bins, hidden_sizes=[du]*layers, ...)
+    # then L1175: world_model.reward_model.model[-1].apply(uniform_init_weights(0.0))
+    # We use FullMLPHead which has hidden layers + zero-init output linear.
+    reward_model = FullMLPHead(
+        in_dim=latent_dim,
+        out_dim=reward_bins,
+        dense_units=reward_dense_units,
+        mlp_layers=reward_mlp_layers,
+        zero_init_output=True,   # cascade fix #27
+        rngs=rngs,
+    )
+
+    # 5. ContinueHead (full MLP) — Hafner init (scale=1.0) on output linear (sheeprl L1176)
+    continue_model = FullMLPHead(
+        in_dim=latent_dim,
+        out_dim=1,
+        dense_units=continue_dense_units,
+        mlp_layers=continue_mlp_layers,
+        zero_init_output=False,  # Hafner scale=1.0 (not zero) — sheeprl L1176
+        rngs=rngs,
+    )
+
+    # 6. WorldModel
+    world_model = WorldModel(
+        encoder=encoder,
+        rssm=rssm,
+        decoder=decoder,
+        reward_model=reward_model,
+        continue_model=continue_model,
+    )
+
+    # 7. Actor
+    actor = Actor(
+        latent_dim=latent_dim,
+        action_dim=action_dim,
+        dense_units=actor_dense_units,
+        mlp_layers=actor_mlp_layers,
+        unimix=unimix,
+        rngs=rngs,
+    )
+
+    # 8. Critic (full MLP) — zero-init output (cascade fix #27)
+    # Sheeprl L1154-L1166: critic = MLP(...)  then L1172: critic.model[-1].apply(uniform_init_weights(0.0))
+    critic = FullMLPHead(
+        in_dim=latent_dim,
+        out_dim=critic_bins,
+        dense_units=critic_dense_units,
+        mlp_layers=critic_mlp_layers,
+        zero_init_output=True,   # cascade fix #27
+        rngs=rngs,
+    )
+
+    # 9. Target critic — same arch, separate params (zero-init on fresh init, then tau=1.0 polyak copies)
+    target_critic = FullMLPHead(
+        in_dim=latent_dim,
+        out_dim=critic_bins,
+        dense_units=critic_dense_units,
+        mlp_layers=critic_mlp_layers,
+        zero_init_output=True,
+        rngs=rngs,
+    )
+
+    # Sanity check: zero-init enforcement (cascade fix #27)
+    # These assertions catch any future regression where the output linear is not zero-initialized.
+    reward_kernel_max = jnp.abs(reward_model.output_linear.kernel[...]).max()
+    critic_kernel_max = jnp.abs(critic.output_linear.kernel[...]).max()
+    if float(reward_kernel_max) != 0.0:
+        raise RuntimeError(
+            f"CP3 zero-init regression: reward_model.output_linear.kernel max = {float(reward_kernel_max):.3e} != 0.0"
+        )
+    if float(critic_kernel_max) != 0.0:
+        raise RuntimeError(
+            f"CP3 zero-init regression: critic.output_linear.kernel max = {float(critic_kernel_max):.3e} != 0.0"
+        )
+
+    return world_model, actor, critic, target_critic
