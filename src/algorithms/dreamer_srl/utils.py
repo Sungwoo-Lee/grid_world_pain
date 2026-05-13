@@ -12,8 +12,9 @@ in src.models. The only allowed shared import is src.utils.config.Config.
 from __future__ import annotations
 
 import warnings
-from typing import Any, Dict, Mapping, NamedTuple, Optional, Sequence
+from typing import Any, Dict, Mapping, Optional, Sequence
 
+import flax.struct
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -169,11 +170,14 @@ def compute_lambda_values(
 # Moments — pure-functional pytree
 # ---------------------------------------------------------------------------
 
-class MomentsState(NamedTuple):
+@flax.struct.dataclass
+class MomentsState:
     """Pure-functional state for the Moments percentile-EMA normalizer.
 
-    Both fields are scalar float32 JAX arrays. This is a NamedTuple so JAX's
-    pytree machinery handles it automatically (no custom registration needed).
+    Both fields are scalar float32 JAX arrays. Using flax.struct.dataclass
+    per the v3 implementation plan (IMPLEMENTATION_PLAN.md line 328) — both
+    flax.struct.dataclass and NamedTuple are JAX pytrees, so the numerical
+    behavior is identical.
 
     DEVIATION NOTE: Sheeprl's Moments is a PyTorch nn.Module that mutates
     self.low / self.high in-place via register_buffer (L53-L54, L60-L61).
@@ -218,7 +222,7 @@ def moments_update(
     percentile_low: float = 0.05,
     percentile_high: float = 0.95,
 ) -> tuple[MomentsState, jax.Array, jax.Array]:
-    """Update the EMA percentile statistics and return (new_state, offset, invscale).
+    """Update the EMA percentile statistics and return (new_state, new_low, invscale).
 
     This is the JAX port of sheeprl's Moments.forward (L56-L63). Single-process
     version: no fabric.all_gather (we run single-process; see DEVIATION_LOG D-001).
@@ -237,7 +241,8 @@ def moments_update(
 
     Returns:
         new_state : updated MomentsState
-        offset    : low EMA (detached scalar) — used as advantage baseline
+        new_low   : low EMA (detached scalar) — used as advantage baseline
+                    (sheeprl names this ``offset`` at the call site)
         invscale  : max(1/max_, high - low) — advantage scale
 
     Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/utils.py:L40-L63
