@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-05-13
 **Active folders**: 6
-**Total insights**: 52
+**Total insights**: 53
 **Last audit**: (none)
 
 ---
@@ -18,7 +18,7 @@
 | `memory_system_design` | Claude memory system's own design decisions | 6 | 2026-05-09 | [memory, design, decision, skill, meta] |
 | `subagent_engineering` | Subagent + worktree usage gotchas | 6 | 2026-05-10 | [meta, learned_lesson, worktree, subagent, decision] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 9 | 2026-05-13 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation] |
-| `dreamer_diagnosis` | DreamerV3 failure investigation | 7 | 2026-05-12 | [dreamer, decision, learned_lesson, refutation, meta] |
+| `dreamer_diagnosis` | DreamerV3 failure investigation | 8 | 2026-05-13 | [dreamer, decision, learned_lesson, refutation, meta] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 17 | 2026-05-13 | [meta, training_runner, learned_lesson, decision, design] |
 | `hypervigilance` | Hypervigilance experiments | 7 | 2026-05-13 | [hypervigilance, design, learned_lesson, decision, refutation, meta] |
 
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-13: Captured 1 insight into existing `dreamer_diagnosis` from the JAXVectorEnv v1+v2 spike closure session: `20260513_1417_jax_vmap_no_speedup_tiny_env` — JAX-vmap parallel env over 5x5 NoPred gridworld delivers no speedup vs SyncVectorEnv (v1 CPU: 1.01x at N=4; v2 GPU: 0.47x at N=4); Python-JAX boundary dominates microsecond env-step compute; only DLPack zero-copy bridge could plausibly win (separate fresh plan). Env-install chain side-effects captured (cudnn 9.10.2.21, nvcc 12.9.86, jax downgrade to 0.9.0.1, torch 2.5 to 2.8 upgrade). No new tags promoted (all reused: dreamer, learned_lesson, refutation, decision, meta).
 - 2026-05-13: Captured 5 insights from the NMN R2 continual + 6-specialist analyzer verdict session: 3 into existing `nmn_diagnosis` (`20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin` — first positive FiLM finding, H₁b + H₁c confirmed at ~25× seed-noise floor on the 5-stage continual schedule, +107/+132 steps on the two return-to-active stages; `20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric` — H₁a predicate is methodologically malformed for the active↔passive schedule shape, modulator wins via recovery speed not dip-depth; `20260513_0017_mod_h_logging_gap_blocks_cka_precheck` — raw modulator hidden vector never logged, Mahalanobis / CKA tests unevaluable, 3 metrics + 1 artifact hook requested), 1 into existing `hypervigilance` (`20260513_0015_active_swapped_geq_matched_reframes_meta` — specialist ceiling table inverts design-time intuition, active_swapped > active_matched, reframes upcoming meta head-to-head as a CKA-factorisation test), 1 into existing `cluster_ops` (`20260513_0018_train_py_orphan_render_workers_on_sigint` — train.py SIGINT leaves render_recordings.py multiprocessing pool workers orphaned, two-call terminate_command.py workaround). No new tags promoted (all reused: nmn, film, hypervigilance, decision, learned_lesson, design, meta, training_runner, refutation).
 - 2026-05-12: Captured 3 insights from the dreamer-srl plan + PI pivot to sheeprl-direct session: 1 into existing `dreamer_diagnosis` (`20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned` — after 3-reviewer ✅ PASS on a 1033-line JAX re-implementation plan, user pivoted via PI call to sheeprl PyTorch direct; meta-lesson: static review does not predict integration-layer execution success, the cascade-debugging history was a stronger prior), 2 into existing `cluster_ops` (`20260512_1755_pytorch_agents_pip_dep_layout` — third-party RL frameworks integrate as pip-installed git-pinned deps + extensions in sibling in-repo package, not `tmp/` clones; `20260512_1756_pip_install_namespace_shadow_numpy_cap` — two pip-install gotchas during node-114 env rebuild: outer/inner namespace shadow `editable_mode=compat` and sheeprl@33b6366 spurious numpy<2.0 cap `--no-deps`). No new tags promoted (all reused: dreamer, decision, learned_lesson, refutation, meta, design, training_runner).
 - 2026-05-12: Captured 1 insight into existing `hypervigilance` from the behavior-measure toolkit v1 application to R2.5 checkpoints: `20260512_1428_sameprop_class_discriminating_defence_event_level` — refines (not supersedes) the prior `_no_class_avoidance` verdict. Under sameProp the agent IS class-discriminating at the event level (bush-dive rate +37 pp predator vs rabbit; eat-under-threat 0.75× near predator vs 1.19× near rabbit; per-tag rabbit_TL/rabbit_BR within noise), even though mean distances dissolve this signal. Two-level interpretation: spatially class-blind, behaviourally class-discriminating. No new tags promoted (all reused: hypervigilance, learned_lesson, decision).
