@@ -76,7 +76,7 @@ print(f"  symexp_input.npz  x.shape={x_symexp.shape}  torch_out.shape={torch_sym
 # individual values (DEVIATION D-002).
 # ---------------------------------------------------------------------------
 in_features = 76
-out_features = 256
+out_features = 16384
 denoms = (in_features + out_features) / 2.0
 scale_iw = 1.0 / denoms
 std_theoretical = float(np.sqrt(scale_iw) / 0.87962566103423978)

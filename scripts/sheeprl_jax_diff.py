@@ -219,30 +219,41 @@ def _run_symexp(fixture) -> tuple:
 
 
 def _run_init_weights(fixture) -> tuple:
-    """init_weights: Hafner truncated-normal — DEVIATION D-002: distribution test only."""
+    """init_weights: Hafner truncated-normal — DEVIATION D-002: distribution test only.
+
+    F2 tighten (CP1): fixture out_features=16384 (N=1.24M elements); threshold
+    tightened from 15% to 1%. Comparison is against std_target = std_theoretical *
+    HAFNER_CONST (the actual expected std after ±2-sigma truncation), not against
+    the inflated input-std (std_theoretical). The 12% gap in earlier tests was not
+    a bug — it was comparing sampled-std vs inflated-input-std.
+    """
     import jax
     import jax.numpy as jnp
     import numpy as np
     import sys, os
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from src.algorithms.dreamer_srl.utils import init_weights
+    # Precise Hafner constant — must match src/algorithms/dreamer_srl/utils.py
+    HAFNER_CONST = 0.87962566103423978
     in_features = int(fixture["in_features"])
     out_features = int(fixture["out_features"])
     std_theoretical = float(fixture["std_theoretical"])
+    # std_target is the actual expected std of the sampled distribution (after truncation)
+    std_target = std_theoretical * HAFNER_CONST
     key = jax.random.PRNGKey(int(fixture["jax_seed"]))
     jax_kernel = init_weights(in_features, out_features, key)
     jax_std = float(jnp.std(jax_kernel))
-    rel_err = abs(jax_std - std_theoretical) / std_theoretical
+    rel_err = abs(jax_std - std_target) / std_target
     metadata = (
         f"sheeprl: vendor/sheeprl/sheeprl/algos/dreamer_v3/utils.py:L143-L166\n"
         f"  jax:     src/algorithms/dreamer_srl/utils.py:init_weights\n"
         f"  fixture: in={in_features}, out={out_features}, std_theoretical={std_theoretical:.6f}\n"
-        f"  NOTE: D-002 — stochastic, different RNG; testing std rel-err={rel_err:.4f} < 0.15"
+        f"  NOTE: D-002 — stochastic, different RNG; testing std rel-err={rel_err:.4f} < 0.01 "
+        f"(vs std_target={std_target:.6f} = std_theoretical*HAFNER_CONST)"
     )
-    # For distribution tests: compare std values as scalars (should be within 15%)
-    # We return rel_err vs 0 so the compare() threshold is irrelevant; pass/fail
-    # is determined by the 15% check below.
-    if rel_err >= 0.15:
+    # F2: threshold tightened to 1% (was 15%). N=16384 → SE of std ≈ 0.06%, so
+    # a 1% bound reliably catches the historical 0.8796 truncation bug class.
+    if rel_err >= 0.01:
         # Force fail by returning a large diff
         return np.array([rel_err]), np.array([0.0]), metadata
     # Pass: return identical scalars so compare() sees 0 diff

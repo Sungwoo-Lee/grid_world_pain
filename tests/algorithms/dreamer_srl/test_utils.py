@@ -130,17 +130,31 @@ def test_init_weights_matches_sheeprl():
     RNG implementations. We verify:
       1. Shape: (in_features, out_features)
       2. |mean| < 0.01 (theoretical = 0)
-      3. std within 15% of theoretical
-      4. All values within truncation bounds [-2*std, +2*std]
+      3. std within 1% of std_target, where std_target = std_theoretical * HAFNER_CONST
+         (N=16384 × 76 = 1.24M elements → SE of std ≈ 0.06%, well below 1%)
+      4. All values within truncation bounds [-2*std_theoretical, +2*std_theoretical]
+
+    RATIONALE: std_theoretical = sqrt(scale) / HAFNER_CONST is the *inflated input-std*
+    passed to trunc_normal_ so that the actual sampled std lands at sqrt(scale).
+    Both PyTorch trunc_normal_ and JAX truncated_normal produce actual std equal to
+    std_theoretical * HAFNER_CONST (≈ 0.8796×) after truncation at ±2 sigma.
+    The 12% gap observed in earlier tests was not a bug — it was comparing the
+    sampled std against the inflated input-std instead of the true target.
 
     Logged as DEVIATION D-002 in DEVIATION_LOG.md.
     sheeprl source: vendor/sheeprl/sheeprl/algos/dreamer_v3/utils.py:L143-L166
     Fixture: tests/fixtures/dreamer_srl/init_weights_input.npz
     """
+    # Precise Hafner constant — same as src/algorithms/dreamer_srl/utils.py
+    HAFNER_CONST = 0.87962566103423978
+
     fixture = _load("init_weights_input.npz")
     in_features = int(fixture["in_features"])
     out_features = int(fixture["out_features"])
     std_theoretical = float(fixture["std_theoretical"])
+
+    # std_target is the actual expected std after truncation at ±2 sigma
+    std_target = std_theoretical * HAFNER_CONST
 
     key = jax.random.PRNGKey(int(fixture["jax_seed"]))
     jax_kernel = init_weights(in_features, out_features, key)
@@ -155,8 +169,9 @@ def test_init_weights_matches_sheeprl():
     assert abs(jax_mean) < 0.01, (
         f"init_weights mean {jax_mean:.4f} too large (expected ~0)"
     )
-    assert abs(jax_std - std_theoretical) / std_theoretical < 0.15, (
-        f"init_weights std {jax_std:.6f} vs theoretical {std_theoretical:.6f} (> 15% relative)"
+    assert abs(jax_std - std_target) / std_target < 0.01, (
+        f"init_weights std {jax_std:.6f} vs std_target {std_target:.6f} "
+        f"(std_theoretical={std_theoretical:.6f}, > 1% relative error)"
     )
     max_abs_val = float(jnp.max(jnp.abs(jax_kernel)))
     assert max_abs_val <= bound + 1e-5, (
