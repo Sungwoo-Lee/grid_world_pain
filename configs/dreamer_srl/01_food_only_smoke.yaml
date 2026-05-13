@@ -16,7 +16,12 @@
 #   per_rank_sequence_length: 64 → 16
 #   horizon:               15   → 7
 #
-# D-012 (pre-declared): learning_starts: 0 (same as 01_food_only.yaml)
+# Smoke-only deviation: learning_starts: 0 — keeps the 5,000-step smoke budget
+# focused on integration debugging. The parity-track config (01_food_only.yaml)
+# uses learning_starts: 1024 (sheeprl XS default) after CP9b restored §S3
+# prefill. The zero-init actor (cascade fix #27) acts effectively uniform-random
+# for the first ~100 steps, so the smoke's integration-surface coverage is
+# unchanged by the local deviation.
 
 algo:
   learning_starts: 0

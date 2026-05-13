@@ -1,18 +1,18 @@
-# dreamer-srl CP9 dry-run config — food-only NoPred 5x5
+# dreamer-srl parity-track config — food-only NoPred 5x5
 #
-# Full hyperparameter set for the first smoke run.
+# Full XS hyperparameter set for parity-launch training runs.
 # Extends agent_xs.yaml cadence keys with algo + model + optimizer keys.
 #
-# D-012 (pre-declared): learning_starts: 0  (CP9-only deviation — §S3 prefill
-#   deferred to CP9b; here we gate training from step 0 so the 5k budget is
-#   used entirely for integration debugging, not prefill.)
+# CP9b: learning_starts restored to 1024 (sheeprl XS default), reverting
+#   the D-012 deviation used during CP9 smoke. §S3 random-action prefill
+#   is now active; see CP9B_PLAN.md for implementation details.
 #
 # Sheeprl reference: vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml
 #   + vendor/sheeprl/sheeprl/configs/exp/dreamer_v3.yaml
 
-# Cadence (overrides agent_xs.yaml where needed for smoke run)
+# Cadence (overrides agent_xs.yaml where needed)
 algo:
-  learning_starts: 0           # D-012 deviation: 0 for CP9 (XS default is 1024)
+  learning_starts: 1024        # XS default — §S3 prefill (CP9b restores from D-012)
   replay_ratio: 1
   per_rank_gradient_steps: 1
   per_rank_sequence_length: 64
