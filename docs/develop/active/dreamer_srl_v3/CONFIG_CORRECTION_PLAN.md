@@ -555,11 +555,86 @@ Half a day of `developer` time for: the YAML edit (one file, ~12 sites), the cor
 
 ## Implementation Report
 
-> **Implemented by**: [TBD — `developer` agent]
-> **Date**: [TBD]
+> **Implemented by**: `developer` agent (Claude Sonnet 4.6)
+> **Date**: 2026-05-14
 
-<!-- Filled by the `developer` agent after the YAML edit + correction-note sweep + CP10B_SPEC.md scope-update edits land.
-     Describe what was done, any deviations from the plan, and why. Cite commit hash(es). -->
+### Summary
+
+Implemented config-only correction per the File Changes manifest in three commits.
+
+**Commit 1 — `4fe3d8b` — YAML config edits**
+
+- `configs/dreamer_srl/01_food_only.yaml`: applied all sheeprl XS overlay values at every site:
+  - Header comment updated ("Full XS" → "Full sheeprl-XS" + CORRECTION paragraph)
+  - `world_model.encoder`: `dense_units 1024→256`, `mlp_layers 5→1`, `cnn_channels_multiplier: 24` added
+  - `world_model.decoder`: `dense_units 1024→256`, `mlp_layers 5→1`
+  - `world_model.recurrent_model`: `recurrent_state_size 4096→256`, `dense_units 1024→256`
+  - `world_model.transition_model`: `hidden_size 1024→256`
+  - `world_model.representation_model`: `hidden_size 1024→256`
+  - `world_model.reward_model`: `dense_units 1024→256`, `mlp_layers 5→1`
+  - `world_model.continue_model`: `dense_units 1024→256`, `mlp_layers 5→1`
+  - `actor`: `dense_units 1024→256`, `mlp_layers 5→1`
+  - `critic`: `dense_units 1024→256`, `mlp_layers 5→1`
+  - All preserved keys verified unchanged: `learning_starts=1024`, `replay_ratio=1`, `per_rank_sequence_length=64`, `per_rank_batch_size=16`, `horizon=15`, `stochastic_size=32`, `discrete_size=32`, `reward_model.bins=255`, `critic.bins=255`
+- `configs/dreamer_srl/01_food_only_smoke.yaml`: header comment block rewritten (lines 1–24 → 1–42); body YAML unchanged. Reductions now framed as "smaller than real XS" rather than "smaller than XL-mis-named-XS".
+
+**Commit 2 — `4460883` — Correction notes: 4 plan docs**
+
+Added canonical correction-note block after frontmatter (before H1) in:
+- `IMPLEMENTATION_PLAN.md`
+- `CP9_PLAN.md`
+- `CP9B_PLAN.md` (includes CP9B-specific addendum on `learning_starts` references being correct)
+- `DEVIATION_LOG.md`
+
+Original body text preserved verbatim in each doc.
+
+**Commit 3 — `e319fb5` — CP10B_SPEC scope updates + INDEX**
+
+- `CP10B_SPEC.md`: correction-note block added after frontmatter + Edits 1–4 applied:
+  - Edit 1 (Purpose): reframed from "OOM blocks XS" to "config-correction disposed D-013"
+  - Edit 2 (When CP10b runs): ✅ DISPOSED 2026-05-14 state for gate 1; concrete implementation gate 2
+  - Edit 3 (What CP10b measures): concrete corrected-XS spec on single GPU
+  - Edit 4 (Acceptance criteria 1): "no OOM at corrected XS on single 24 GB GPU" as D-013 empirical closure
+- `docs/develop/INDEX.md`: regenerated via `scripts/regen_dev_index.py` (109 docs indexed, picks up `CONFIG_CORRECTION_PLAN.md`)
+
+### Checkpoint status
+
+- [x] **CP-A** — YAML loads without error. Verified via `yaml.safe_load` + `json.dumps`.
+- [x] **CP-B** — All dimensions at XS values. Programmatic assertion: 256 at all dense/hidden/recurrent sites, mlp_layers=1, cnn_channels_multiplier=24.
+- [x] **CP-C** — All preserved keys unchanged. `learning_starts=1024`, `replay_ratio=1`, `per_rank_sequence_length=64`, `per_rank_batch_size=16`, `horizon=15`, `stochastic_size=32`, `discrete_size=32`, `reward_model.bins=255`, `critic.bins=255` — all verified.
+- [x] **CP-D** — pytest 38/38 PASS (pre-commit and post-commit); offline_check 17/17 PASS (pre-commit and post-commit).
+- [x] **CP-E** — Correction-note block present (exactly 1 occurrence) in all 5 docs. Verified by grep.
+- [x] **CP-F** — CP10B_SPEC.md scope-update edits landed. `DISPOSED 2026-05-14` and `config-correction` wording confirmed by grep.
+- [x] **CP-G** — `01_food_only_smoke.yaml` body unchanged. Only the header comment block changed (lines 1–24 replaced by lines 1–42). All `algo:` / `buffer:` / `env:` key values are byte-identical to pre-edit.
+- [x] **CP-H** — INDEX regenerated (109 docs, includes `CONFIG_CORRECTION_PLAN.md`).
+
+### Test results
+
+Pre-commit:
+- `pytest tests/algorithms/dreamer_srl/ -x --tb=short -q`: **38/38 PASS** (67.70 s)
+- `scripts/dreamer_srl_offline_check.py`: **17/17 PASS**
+
+Post-commit:
+- `pytest tests/algorithms/dreamer_srl/ -x --tb=short -q`: **38/38 PASS** (68.73 s)
+- `scripts/dreamer_srl_offline_check.py`: **17/17 PASS**
+
+### Speed check
+
+Not applicable — this is a config-only + docs-only change. No `src/` code was touched. Runtime speed is what CP10b measures (empirically, on the corrected XS config).
+
+### Deviations from plan
+
+None. The plan was followed exactly: every site listed in the File Changes manifest was edited; no unlisted files were modified; no silent rewrites occurred in the docs (correction notes are additive blocks).
+
+### No JIT compile attempted
+
+Confirmed — no training was launched. Config-only change.
+
+### No other XL-equivalent values lurk
+
+`grep -n "1024\|4096\|mlp_layers.*5" configs/dreamer_srl/01_food_only.yaml` confirms: remaining `1024` hits are comments only (correction note + `learning_starts=1024` cadence key). No `4096` or `mlp_layers.*5` in data section.
+
+**Implemented by**: developer
 
 ---
 
