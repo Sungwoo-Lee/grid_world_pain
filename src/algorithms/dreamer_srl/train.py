@@ -795,7 +795,16 @@ def make_train_step(
             predicted_rewards_logits.reshape(H_plus_1, BT, -1), dims=1
         ).mean  # [H+1, BT, 1]
 
-        predicted_values_logits = jax.vmap(target_critic)(imag_flat)
+        # CP5-P1 / CP3-A3 fix: use live critic (not target_critic) for the predicted
+        # values that feed the λ-return bootstrap and the actor's advantage baseline.
+        # Sheeprl uses the live critic at dreamer_v3.py:L244:
+        #   predicted_values = TwoHotEncodingDistribution(critic(imagined_trajectories), dims=1).mean
+        # target_critic is reserved for the two-term critic loss at L307-L315 only.
+        # Authorized by: docs/reviews/dreamer_srl_v2_cp5_imagined_returns_review.md §P1
+        #                docs/reviews/dreamer_srl_v2_cp3_actor_objective_review.md §A3
+        #                docs/reviews/dreamer_srl_v2_cp6_orchestrator_review.md §3.4
+        # Ported from sheeprl@33b6366:dreamer_v3.py:L244
+        predicted_values_logits = jax.vmap(critic)(imag_flat)
         predicted_values = TwoHotEncoding(
             predicted_values_logits.reshape(H_plus_1, BT, -1), dims=1
         ).mean  # [H+1, BT, 1]
