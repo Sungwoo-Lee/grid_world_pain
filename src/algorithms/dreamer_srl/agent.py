@@ -1481,6 +1481,33 @@ class Actor(nnx.Module):
             logits = jnp.log(probs)  # probs_to_logits for Categorical
         return logits
 
+    def forward_logits(self, latent: jax.Array) -> jax.Array:
+        """Return post-unimix logits for a given latent, WITHOUT sampling.
+
+        Used by the actor-loss path in train.py to compute log_prob on the
+        rollout-time imagined actions (not on a freshly-sampled action).
+        Gradient flows through the actor MLP parameters via this method.
+
+        Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/agent.py:L828-L835
+        (the logits path inside Actor.forward, before the rsample() call).
+        Authorized by: docs/reviews/dreamer_srl_v2_cp3_actor_objective_review.md §2.4
+                       docs/reviews/dreamer_srl_v2_cp6_orchestrator_review.md §3.5
+
+        Args:
+            latent: [..., latent_dim]
+
+        Returns:
+            logits: [..., action_dim] post-unimix logits (equivalent to the
+                    logits fed into OneHotCategoricalStraightThrough in sheeprl).
+        """
+        x = latent
+        for lin, norm in zip(self.hidden_linears, self.hidden_norms):
+            x = lin(x)
+            x = norm(x)
+            x = jax.nn.silu(x)
+        raw_logits = self.output_linear(x)
+        return self._uniform_mix(raw_logits)
+
     def __call__(
         self, latent: jax.Array, key: jax.Array
     ) -> Tuple[jax.Array, jax.Array, jax.Array]:
@@ -1505,16 +1532,8 @@ class Actor(nnx.Module):
             log_probs: [..., 1] sum of log-probs over action dim (matching sheeprl L286)
             entropy: [...] entropy of the Categorical distribution
         """
-        # MLP body
-        x = latent
-        for lin, norm in zip(self.hidden_linears, self.hidden_norms):
-            x = lin(x)
-            x = norm(x)
-            x = jax.nn.silu(x)
-
-        # Output head + unimix
-        raw_logits = self.output_linear(x)          # [..., action_dim]
-        logits = self._uniform_mix(raw_logits)       # [..., action_dim] after unimix
+        # MLP body + output head + unimix (reuse forward_logits for DRY principle)
+        logits = self.forward_logits(latent)  # [..., action_dim] post-unimix
 
         # Straight-through Gumbel-softmax sample (sheeprl L834: actions_dist[-1].rsample())
         gumbel_noise = jax.random.gumbel(key, shape=logits.shape)

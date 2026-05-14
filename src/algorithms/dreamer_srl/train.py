@@ -786,6 +786,14 @@ def make_train_step(
         imag_outputs = world_model.imagine(init_latent, actor, horizon, k_imag)
 
         imagined_latents = imag_outputs["imagined_latents"]    # [H+1, BT, latent_dim]
+        # CP8-P1 / CP3-A1 fix: thread rollout actions so actor_loss_fn can compute
+        # log_prob(a_rollout) instead of log_prob(a_fresh_resample).
+        # Sheeprl: p.log_prob(imgnd_act.detach()) at dreamer_v3.py:L286
+        # Authorized by: docs/reviews/dreamer_srl_v2_cp8_wrappers_review.md §P1
+        #                docs/reviews/dreamer_srl_v2_cp3_actor_objective_review.md §A1
+        #                docs/reviews/dreamer_srl_v2_cp6_orchestrator_review.md §3.5
+        # Ported from sheeprl@33b6366:dreamer_v3.py:L286
+        imagined_actions = imag_outputs["imagined_actions"]    # [H+1, BT, n_actions]
 
         # Predict rewards, values, continues on imagined trajectories (sheeprl L244-L248)
         imag_flat = imagined_latents.reshape(H_plus_1 * BT, -1)
@@ -840,18 +848,36 @@ def make_train_step(
 
         # -----------------------------------------------------------------------
         # Sub-step 10: Actor objective + optimizer step (sheeprl L272-L304)
-        # Re-run actor on stop_gradient'd latents to get differentiable log_probs.
-        # Gradient flows through actor logits; sg(action) applied inside Actor.__call__.
-        # -----------------------------------------------------------------------
-        actor_keys = jax.random.split(jax.random.PRNGKey(0), H_plus_1)
-        sg_latents = jax.lax.stop_gradient(imagined_latents)  # [H+1, BT, latent_dim]
+        # CP8-P1 / CP3-A1+A2 fix: compute log_prob on stop_gradient'd rollout actions
+        # (imagined_actions) via forward_logits — no PRNG resample, no constant seed.
+        # Sheeprl: p.log_prob(imgnd_act.detach()) at dreamer_v3.py:L286
+        # Authorized by: docs/reviews/dreamer_srl_v2_cp8_wrappers_review.md §P1
+        #                docs/reviews/dreamer_srl_v2_cp3_actor_objective_review.md §A1,A2
+        #                docs/reviews/dreamer_srl_v2_cp6_orchestrator_review.md §3.5
+        # Ported from sheeprl@33b6366:dreamer_v3.py:L280-L293
+        sg_latents = jax.lax.stop_gradient(imagined_latents)            # [H+1, BT, latent_dim]
+        sg_imagined_actions = jax.lax.stop_gradient(imagined_actions)  # [H+1, BT, n_actions]
 
         def actor_loss_fn(actor_module):
-            """Actor loss: REINFORCE + entropy, §S7 advantage normalization."""
+            """Actor loss: REINFORCE + entropy, §S7 advantage normalization.
+
+            log_prob computed as sum(sg(a_rollout) * log_softmax(logits), axis=-1)
+            where a_rollout is the one-hot action drawn during imagination rollout.
+            No PRNG resample; no fresh sample.  Gradient flows only through logits.
+            """
             all_log_probs = []
             all_entropies = []
             for h in range(H_plus_1):  # Python loop — H_plus_1 is a static Python int
-                _, lp_h, ent_h = actor_module(sg_latents[h], actor_keys[h])
+                # Recompute logits (with unimix) from stop_gradient'd latent
+                logits_h = actor_module.forward_logits(sg_latents[h])          # [BT, n_actions]
+                log_softmax_h = jax.nn.log_softmax(logits_h, axis=-1)          # [BT, n_actions]
+                # log_prob of rollout action: sum over action dim (one-hot dot product)
+                lp_h = jnp.sum(
+                    sg_imagined_actions[h] * log_softmax_h, axis=-1, keepdims=True
+                )                                                                # [BT, 1]
+                # Entropy: -sum(softmax * log_softmax)
+                probs_h = jax.nn.softmax(logits_h, axis=-1)
+                ent_h = -jnp.sum(probs_h * jnp.log(probs_h + 1e-8), axis=-1)  # [BT]
                 all_log_probs.append(lp_h)   # [BT, 1]
                 all_entropies.append(ent_h)  # [BT]
             log_probs_arr = jnp.stack(all_log_probs, axis=0)   # [H+1, BT, 1]
