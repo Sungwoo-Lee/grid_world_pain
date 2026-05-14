@@ -78,20 +78,20 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# JAX matched-config SPS measurement Run B — num_envs=16 (JAX-architectural parallelism)
-# Node 113, cuda:0. Design doc: docs/experiments/active/sheeprl_bridge/JAX_SHEEPRL_MATCHED_SPS_DESIGN.md
-# Measures JAX DreamerV3 env-SPS under sheeprl-XS matched recipe (replay_ratio=1.0) with JAX vmap parallelism.
-# --episodes 0 required: env YAML pins episodes:100 which overrides --total-timesteps without this flag.
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/experiment/dreamer_curriculum/01_food_only.yaml \
-  --agent_config configs/models/dreamer_v3_sheeprl_matched.yaml \
-  --num-envs 16 \
-  --episodes 0 \
-  --total-timesteps 3000000 \
+# Dreamer-SRL v3 SPS × num_envs × size feasibility sweep — 2026-05-14
+# Node 114, GPUs 1/2/3 (GPU 0 reserved for CP10b). Design: docs/experiments/active/dreamer_srl_v3/SPS_SIZE_NUM_ENVS_SWEEP.md
+# 25 cells: size {XS,S,M,L,XL} × num_envs {1,2,4,8,16}. Launched in 9 batches of ≤3 cells.
+# Each cell is written to /tmp/sweep_<SIZE>_envs<N>_<TS>.sh on node 114 (CIFS bypass).
+# XS uses total-steps=2048 (1024 prefill + ~1024 train); S/M/L/XL use total-steps=1000.
+# Template below shows cell (XS, num_envs=1) on GPU 1 as the canonical reference:
+export CUDA_VISIBLE_DEVICES=1
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+  src/algorithms/dreamer_srl/dreamer_srl_main.py \
+  --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \
+  --agent-config configs/dreamer_srl/01_food_only.yaml \
+  --total-steps 2048 \
+  --num-envs 1 \
   --seed 0 \
-  --device cuda:0 \
-  --log-interval 50 \
-  --wandb-group sheeprl_bridge \
-  --wandb-job-type sps_measurement \
-  --wandb-name jax_sheeprl_matched_n16_s0 \
-  --tag jax_sheeprl_matched_n16_s0
+  --wandb-project grid_world_pain_dreamer_srl_sweep \
+  --wandb-name dreamer_srl_sweep_XS_envs1
