@@ -8,6 +8,29 @@ supersedes: IMPLEMENTATION_PLAN.md
 phase: 2
 ---
 
+> **CORRECTION NOTE (2026-05-14, PI call [`3c8b9f8`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md))**
+>
+> References below to "XS-default" / "XS default" / "the full XS configuration" / "the XS config"
+> as the content of `configs/dreamer_srl/01_food_only.yaml` **pre-date the discovery** that this
+> file was mis-ported from the sheeprl base config (`vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml`)
+> rather than the sheeprl XS overlay (`vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml`).
+> The base config carries **sheeprl-XL-equivalent** values (`dense_units=1024`, `mlp_layers=5`,
+> `recurrent_state_size=4096`, `transition/representation hidden_size=1024`, `cnn_channels_multiplier=96`);
+> the real sheeprl XS preset is **`256 / 1 / 256 / 256 / 24`** — i.e. roughly 16× smaller on the
+> dominant recurrent-state axis. The 14.38 GB JIT-compile OOM that surfaced as D-013 at CP9 was
+> measured at the XL-equivalent values, not at real XS.
+>
+> **User disposition (verbatim):** *"Go with XS"* — fix `01_food_only.yaml` to mirror the real
+> sheeprl XS preset; single-GPU is the natural substrate; no multi-GPU plumbing and no gradient
+> checkpointing. See [`CONFIG_CORRECTION_PLAN.md`](CONFIG_CORRECTION_PLAN.md) for the corrected
+> values and the file-by-file diff.
+>
+> **The historical wording below is preserved unchanged** — the correction is additive, per the
+> PI call's explicit "no silent rewrite" rule. Read every subsequent "XS-default" / "XS config"
+> mention as "the XL-equivalent values then mis-named XS"; the corrected parity target lives in
+> [`CONFIG_CORRECTION_PLAN.md`](CONFIG_CORRECTION_PLAN.md) and its post-correction wall-clock
+> measurement lives in [`CP10B_SPEC.md`](CP10B_SPEC.md).
+
 <!--
 NOTE on `supersedes:` — the archived v2 plan lives at
 `docs/develop/archive/dreamer_srl/IMPLEMENTATION_PLAN.md`. The frontmatter field
