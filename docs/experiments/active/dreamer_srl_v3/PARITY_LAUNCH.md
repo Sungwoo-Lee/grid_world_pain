@@ -6,7 +6,7 @@ created: 2026-05-14
 last_updated: 2026-05-14
 launched_at: 2026-05-14T17:03:10
 wandb_tag: dreamer_srl_parity
-phase: pre-launch-design
+phase: results-in
 cross_links:
   - docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md
   - docs/experiments/active/dreamer_srl_v3/SPS_SIZE_NUM_ENVS_SWEEP.md
@@ -119,9 +119,9 @@ All 3 runs share:
 
 | Run | Status | Tag (= wandb-name) | Seed | GPU | Launched at | WandB run ID | Log path |
 |---|---|---|---|---|---|---|---|
-| 1 | running | `dreamer_srl_parity_s0` | 0 | cuda:1 | 2026-05-14T17:03:10 | h666pcrv | logs/20260514_170310.log |
-| 2 | running | `dreamer_srl_parity_s1` | 1 | cuda:2 | 2026-05-14T17:03:13 | ny3npz68 | logs/20260514_170313.log |
-| 3 | running | `dreamer_srl_parity_s2` | 2 | cuda:3 | 2026-05-14T17:03:18 | hzsa984v | logs/20260514_170318.log |
+| 1 | completed | `dreamer_srl_parity_s0` | 0 | cuda:1 | 2026-05-14T17:03:10 | h666pcrv | logs/20260514_170310.log |
+| 2 | completed | `dreamer_srl_parity_s1` | 1 | cuda:2 | 2026-05-14T17:03:13 | ny3npz68 | logs/20260514_170313.log |
+| 3 | completed | `dreamer_srl_parity_s2` | 2 | cuda:3 | 2026-05-14T17:03:18 | hzsa984v | logs/20260514_170318.log |
 
 **Tag-naming rule** — every Tag value is unique and identical to its wandb-name (so `dreamer_srl_main.py` does not synthesize a name and the analyzer can grep by tag). Format: `dreamer_srl_parity_s<seed>`. The wandb-group above ties the 3 rows together for WandB-side filtering.
 
@@ -307,8 +307,128 @@ After the user authorizes:
 
 ## 10. Results
 
-_To be filled by `experiment-analyzer` after all 3 seeds complete. Format per §5.5._
+### 10.1 Headline (plain language, ~200 words)
+
+**The parity gate failed at the random-policy floor.** All 3 JAX dreamer-srl seeds trained cleanly for the full 200,000 environment-step budget — no NaN, no OOM, world-model loss converged to the same ~1.37 value CP10b reached at 20k steps — but the agent never learned to eat food. Across the full last-20% window (env-steps 160,000–200,000) every seed's mean `Game/ep_len_avg` (the survival statistic — how many steps the agent stays alive before starving, capped at 500) sits at **~101–105 steps**, which is the random-policy baseline (the agent walks around, never eats, dies of starvation at metabolic_cost × 100 nutrition). The 3-seed mean is **103.8 steps**. The pass bar was 450; we are 346 steps short. The sheeprl reference implementation on the identical config (same env YAML, same XS preset, same 200k budget) reached the env-cap `Game/ep_len_avg = 500` by env-step 25,000 — i.e. learned the task in ~12% of the budget. The JAX rebuild has not crossed `ep_len = 400` even once across 597,000 cumulative env-steps of training. The trajectory is essentially flat at the floor with brief excursions to ep_len ≈ 200–322 that decay back. The world model is healthy; the actor–critic loop is the failure point.
+
+### 10.2 Per-seed table (§5.5 format)
+
+| Seed | WandB ID | M_seed (steps 160k–200k) | World-model loss (final) | Value loss (early → late) | Policy loss (early → late) | `moments_invscale=1.0` (floor) frac in [100k, 200k] | SPS (steady) | Wall-clock | Verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | [h666pcrv](https://wandb.ai/sungwoolee/grid_world_pain_dreamer_srl_parity/runs/h666pcrv) | **101.3** | 1.362 | 1.854 → 1.267 | −0.286 → −0.019 | 35.3% | 17.4 | 3.30 h | FAIL — random-policy floor |
+| 1 | [ny3npz68](https://wandb.ai/sungwoolee/grid_world_pain_dreamer_srl_parity/runs/ny3npz68) | **104.7** | 1.414 | 1.920 → 1.254 | −0.278 → −0.001 | 21.6% | 17.6 | 3.27 h | FAIL — random-policy floor |
+| 2 | [hzsa984v](https://wandb.ai/sungwoolee/grid_world_pain_dreamer_srl_parity/runs/hzsa984v) | **105.4** | 1.367 | 1.910 → 1.185 | −0.224 → +0.015 | 58.8% | 17.5 | 3.29 h | FAIL — random-policy floor |
+| **mean** | — | **103.8** | 1.381 | — | — | 38.6% | 17.5 | 3.29 h | — |
+
+`M_JAX = 103.8`, `min_per_seed = 101.3`, per-seed range = 4.1 steps (essentially zero spread — all three seeds collapse to the same floor).
+
+### 10.3 Trajectory evolution (env-step buckets)
+
+Three seeds, `Game/ep_len_avg` mean per env-step bucket — never substantively departs from ~101:
+
+| Env-step bucket | Seed 0 | Seed 1 | Seed 2 | Sheeprl `kfsvh1qk` (env-step proxy via `trainer/global_step`) |
+|---|---|---|---|---|
+| [0, 5k) | 102.7 | 103.1 | 105.3 | 101.8 (start) |
+| [5k, 25k) | 101.2 | 101.3 | 101.4 | climbing: 100.7 → 151.1 → **500** by step 25k |
+| [25k, 50k) | 103.3 | 101.1 | 101.2 | 500 (saturated) |
+| [50k, 100k) | 102.9 | 102.9 | 103.4 | 500 |
+| [100k, 150k) | 104.0 | 105.2 | 101.3 | 500 |
+| [150k, 200k) | 103.1 | 103.9 | 104.7 | 500 |
+
+**First env-step at which `ep_len_avg ≥ 400` (the §5.4 within-run health gate is ≥ 400 at env-step 100k):**
+
+| Run | First step ≥ 200 | First step ≥ 300 | First step ≥ 400 | Step-100k health gate (target ≥ 400) |
+|---|---|---|---|---|
+| Seed 0 (h666pcrv) | 46,547 | 145,847 | **never** | **101.0 — FAIL** |
+| Seed 1 (ny3npz68) | 64,178 | 106,596 | **never** | **101.0 — FAIL** |
+| Seed 2 (hzsa984v) | 61,544 | **never** | **never** | **101.0 — FAIL** |
+| Sheeprl kfsvh1qk | ≤ 20,000 | ≤ 20,000 | **≤ 25,000** | (n/a — already saturated) |
+
+### 10.4 Sheeprl-baseline comparison (the empirical centerpiece)
+
+Sheeprl's two known 200k-step runs on this identical recipe ([kfsvh1qk](https://wandb.ai/sungwoolee/grid_world_pain/runs/kfsvh1qk) and [jzgkcep4](https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/jzgkcep4)):
+
+| Statistic | Sheeprl `kfsvh1qk` | Sheeprl `jzgkcep4` | Dreamer-srl 3-seed mean |
+|---|---|---|---|
+| Last-20% mean `Game/ep_len_avg` | **500.0** (saturated, n=9, range [500, 500]) | **500.0** (saturated, n=9, range [500, 500]) | **103.8** |
+| First env-step at ep_len = 500 | env-step 25,000 (5% of budget) | env-step ≤ 20,000 (≤ 10% of budget) | never |
+| Ratio of budget to reach saturation | ~12% | ~10% | n/a |
+
+Sheeprl's pre-25k trajectory shape (`ep_len_avg` at the trailing env-step landmarks): 5k = 101.8, 10k = 100.7, 15k = 106.6, 20k = 151.1, **25k = 500.0**. Sheeprl spends ~20k env-steps at the same random-policy floor the JAX rebuild is stuck on, then breaks away over a ~5k-step window. The JAX rebuild does not show that break-away phase even 8× later. **This is the key signal: it is not a "needs more steps" pattern — it is a "the actor never finds the food-eating policy" pattern.**
+
+### 10.5 Training-health diagnostics
+
+The runs are **operationally healthy** — every secondary metric the design pre-registered for stability passed:
+
+- **World-model loss** converged on the CP10b trajectory: ~1.47 → 1.42 → 1.39 → 1.38 → 1.37–1.38 plateau across env-step buckets. Final values 1.362 / 1.414 / 1.367 vs CP10b's 1.404. The world model is learning the dynamics.
+- **Value loss** decreased (early ~1.9 → late ~1.2) on all 3 seeds — consistent with a critic that is learning to predict the (mostly-negative-301) returns of a starving agent.
+- **Policy loss** drifted toward zero on all 3 seeds (−0.28 → −0.02 to +0.01) — the actor's gradient signal collapsed to near-zero.
+- **`moments_invscale = 1.0` floor fraction** in the [100k, 200k] window: 35.3% / 21.6% / **58.8%** of logged points. Seed 2 spent the majority of late training with no return-spread to normalize against — the actor's imagined-rollout advantage is structurally flat for that seed.
+- **No NaN, no OOM, SPS 17.4–17.6** (above the CP10b 16.0 projection; the parity-budget run was actually faster per step than the smoke).
+
+**Wall-clock**: all 3 seeds finished in 3.27–3.30 h, well inside the projected 3.47 h and the §4.3 6-h kill-rule.
+
+### 10.6 CP10b comparison — same pattern, 10× the budget
+
+[CP10b](../../../develop/active/dreamer_srl_v3/CP10B_SPEC.md) (WandB `s31wc1a1`, 20k env-steps, seed 0, same configs as this launch) also ended at `Game/ep_len_avg = 101` and `Rewards/rew_avg = -301`. CP10b's verdict was operational-PASS (no NaN, no divergence, world-model loss 1.40 ≈ CP10b reference). **CP10b never claimed the agent learned the task** — it claimed the training loop is numerically stable. The parity launch reproduces CP10b's flat-floor trajectory at 10× the env-step budget. That is, the issue is not a training-budget question; the same regime persists.
+
+---
 
 ## 11. Conclusions
 
-_To be filled by `experiment-analyzer` after applying the §5.3 verdict rule to §10 results. Format: a 4–6-sentence plain-language verdict that translates the predicate to English, references the threshold met, names the surviving / failing seeds, and routes the next experiment per §6._
+### 11.1 Verdict (per §5.3)
+
+**❌ FAIL (H₀ confirmed — complete collapse to the random-policy floor).**
+
+Applying the §5.3 deterministic rule to the §10.2 numbers:
+- `M_JAX = 103.8 < 425` → criterion-cell **FAIL**.
+- `min_per_seed = 101.3 < 350` → criterion-cell **FAIL**.
+- Step-100k within-run health gate (§5.4): all 3 seeds at 101 — **FAIL on every seed**.
+- §6 failure-mode catalog row "Mean ≤ 110 (random-policy floor)" fires: **FAIL — complete collapse**.
+
+This is not a borderline call. The PASS bar was 450; we are 346 steps short, with zero per-seed spread (range 4.1 steps), and a sheeprl reference that learned the same task in 12% of the budget. The H₀ predicate is unambiguously confirmed.
+
+### 11.2 Failure-mode diagnosis (the world model is fine; the actor/critic loop is broken)
+
+The 3-row diagnostic picture, in plain English:
+1. **World model** learns the dynamics — its loss tracks CP10b verbatim. The imagination simulator is not broken.
+2. **Critic** learns a value function, but the value function it's learning is "the agent is starving everywhere, expected return is approximately −300" — consistent with what the actor actually does. So the critic is healthy *given* the policy it's evaluating; it does not pull the policy toward food-eating because there is no positive-return signal in the rollouts.
+3. **Actor** does not generate meaningfully different imagined rollouts. The `moments_invscale = 1.0` floor fraction (35–59% of late training) is the canonical "flat returns across imagined trajectories" signature. With no advantage variance, REINFORCE gradient ≈ 0 (`Loss/policy_loss` drifts to ~0 in all 3 seeds), and the actor never learns to prefer food-eating actions over wandering.
+
+The mechanism is a **classic imagined-rollout return collapse**: the world model can imagine a 15-step horizon, but every imagined trajectory under the current policy ends with a starving agent, so every imagined return is approximately equal, so the advantage signal vanishes, so the policy doesn't update toward the (rarely-sampled) food-eating action. Sheeprl with the same config breaks out of this in ~5k env-steps — something about sheeprl's exploration, target-network update, or λ-return computation pushes the policy past the random-policy floor where it can begin to see the +18-reward food signal often enough to bootstrap. **The JAX rebuild does not have that breakout dynamic.**
+
+### 11.3 Ranked hypotheses for the breakout-gap (most likely first)
+
+1. **Actor exploration / entropy regularization mis-port (HIGH confidence).** Sheeprl's actor includes an entropy bonus on the categorical distribution; in the JAX rebuild this may be present but mis-weighted, or the temperature on the categorical may be wrong, so the policy concentrates too quickly on the random-walk modes before discovering food. CP7's actor-REINFORCE block is the suspect. **Audit target**: `src/algorithms/dreamer_srl/` actor loss — is `policy_entropy` weighted at the same coefficient (typically 3e-4 for DreamerV3 XS) and is it summed correctly into `Loss/policy_loss`?
+
+2. **`learning_starts = 1024` may be too short OR the random-action prefill may be wrong (MEDIUM confidence).** The first 1024 env-steps are supposed to be uniform-random actions to seed the replay buffer. If the prefill is using the policy network from the start (i.e. an untrained categorical that's biased toward one action), the buffer is filled with degenerate trajectories that the world model learns, the value function fits, and the actor inherits — and we're stuck. **Audit target**: §S3 random-action prefill in `dreamer_srl_main.py` around the `learning_starts` branch — confirm `act = env.action_space.sample()` (or equivalent uniform-categorical) is in force for `step < learning_starts`, and that the actor is not being called for action selection during that window.
+
+3. **λ-return / discount / continue-flag scaling bug in imagination (MEDIUM-LOW confidence).** If the imagined-rollout returns are computed with the wrong discount, a wrong continue-flag (e.g. `continues` always 1 instead of `(1 - terminal)`), or a sign error on the reward inside imagination, the advantage signal would be structurally suppressed. CP6's critic loss + CP7's λ-return are the suspect lines. **Audit target**: the imagination-rollout return computation in the dreamer-srl module — sanity-check that `imagined_return[t] = imagined_reward[t] + gamma * (1 - terminal[t]) * lambda_return[t+1]`-equivalent, that gamma matches sheeprl's 0.997, and that the reward is signed correctly.
+
+### 11.4 Named next experiments (project-routed)
+
+- **Audit-first, re-launch-second** (RECOMMENDED). Hand off to `senior-developer` to write an audit plan covering the three hypotheses above against the corresponding lines in sheeprl's `algos/dreamer_v3/agent.py` and `dreamer_v3.py`. The audit should produce either a single named regression (likely actor-entropy weighting per H1) or a verified "no regression — likely a hyperparameter/exploration recipe difference" finding. The latter would mean we need to look at sheeprl's `train_step` for any non-XS-preset behavior we missed.
+- **Do not extend `total_steps` to 400k.** The §6 catalog row for "Mean ≤ 110" pre-decided this. The trajectory is flat, not slow — extending the budget on a flat-trajectory regime burns 6 more hours of compute to reproduce the same number. Sheeprl gets to 500 in 25k steps; budget is not the binding constraint.
+- **Reproducibility check**: re-run sheeprl's `kfsvh1qk` config on the same node 114 with seed = 0 (already done as `kfsvh1qk`), seed = 1 (already done as `jzgkcep4`). Sheeprl variance is already known to be ~0 here; we don't need to spend more compute on baseline replication.
+
+### 11.5 Implications for the project
+
+- **CP10b's "PASS" verdict is technically correct** (its acceptance criterion was world-model-loss-convergence + no-NaN, not task-learning) — but it should be flagged as **insufficient as a parity-blocker**. A useful CP-line going forward needs at least one CP that gates on `Game/ep_len_avg ≥ 200` at some env-step before declaring the rebuild ready for parity. Surface this to `senior-developer` as a recommendation; **do not flip CP10b's verdict** — this analyzer does not have that authority per project hard rules.
+- **The parity-track is blocked** until the actor-loop audit completes. The downstream phase of the v3 plan (neuromodulation hook integration) cannot be honestly bootstrapped on a backbone that has not demonstrated task-learning. **Hand off to `pi`** for a portfolio-level call: is the right next move (a) the actor-loop audit + re-launch, or (b) freeze the dreamer-srl rebuild and continue the publication track on the sheeprl bridge (which already learns this task at the env-cap)?
+- **No re-opening of an earlier CP-PASS verdict by this analyzer.** CP6 / CP7 are flagged as audit-targets for `senior-developer`; the analyzer does not have CP-flip authority.
+
+### 11.6 Cross-references
+
+- Design + criteria (this doc, §1–§9): hypothesis was pre-registered; the verdict follows the §5.3 rule deterministically.
+- CP10b (the 20k-step smoke): [`docs/develop/active/dreamer_srl_v3/CP10B_SPEC.md`](../../../develop/active/dreamer_srl_v3/CP10B_SPEC.md). CP10b WandB run `s31wc1a1` also ended at ep_len = 101.
+- Sheeprl baseline `kfsvh1qk`: 200k env-steps, `Game/ep_len_avg = 500` (saturated cap, first hit at env-step 25k).
+- PI call that authorized this launch: [`docs/pi/calls/2026-05-14_d013_parity_launch_disposition.md`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md).
+
+### 11.7 Metrics Requested
+
+None new. Every metric needed for this verdict is already logged. The diagnostic in §11.2 was constructed entirely from existing WandB scalars (`Game/ep_len_avg`, `Loss/world_model_loss`, `Loss/value_loss`, `Loss/policy_loss`, `Diagnostic/moments_invscale`, `Time/sps_env`).
+
+### 11.8 Related Issues
+
+- **`senior-developer` audit** on actor-loop / exploration / imagined-return computation per §11.3 hypotheses. Three ranked targets, all auditable from existing source.
+- **`pi` consultation** for portfolio-level scope: continue debugging the JAX rebuild, or shift the publication track to the sheeprl bridge that already works on this task.
