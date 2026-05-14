@@ -388,9 +388,15 @@ def main() -> None:
         # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L558-L571.
         # Gate is inclusive (`<=`): iteration `learning_starts` is the LAST prefill
         # iteration; iteration `learning_starts + 1` is the first policy iteration.
-        # The train-gate at L483 uses `>=`, so iteration `learning_starts` itself adds
-        # zero gradient steps (ratio(0) == 0), preserving the
-        # "no gradient before learning_starts" invariant.
+        # The train-gate at L490 uses `>=` and does NOT subtract `prefill_steps`
+        # from `policy_step` (unlike sheeprl L661 — see D-014). At iter_num ==
+        # learning_starts the train-gate fires for the first time and the Ratio
+        # scheduler returns `int(learning_starts * replay_ratio)` grad steps in a
+        # one-shot debt-repayment burst, then steady-state `replay_ratio` per iter
+        # from learning_starts+1 onwards. The "no gradient before learning_starts"
+        # hard invariant is preserved by the OUTER `if iter_num >= learning_starts`
+        # guard at L490 — NOT by `ratio(0) == 0`. Long-run replay ratio matches
+        # sheeprl by construction (Ratio class's self-correcting design).
         key, k_player = jax.random.split(key)
         if iter_num <= learning_starts:
             # §S3 uniform-random prefill — seeds the buffer with diverse data.
