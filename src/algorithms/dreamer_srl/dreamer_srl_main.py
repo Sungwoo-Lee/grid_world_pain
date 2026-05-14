@@ -422,13 +422,17 @@ def main() -> None:
         rewards = np.asarray(rewards_jax)              # [B]
         dones = np.asarray(dones_jax).astype(bool)     # [B]
 
-        # Extract terminated flag from env state (§S10: terminated ≠ truncated)
-        # Our env's done = terminated_by_injury_or_starvation OR truncated_by_maxsteps
-        # For §S10, we want ONLY the hard-termination events (not max-steps truncation)
-        # The env stores this in states.terminated — we treat done as terminated for CP9
-        # (fine because food-only has no death events, so done = truncated = maxsteps)
-        terminated_np = dones.astype(np.float32)[:, np.newaxis]  # [B, 1]
-        truncated_np = dones.astype(np.float32)[:, np.newaxis]   # [B, 1] (same for now)
+        # CP7-P2 fix: separate terminated vs truncated using env's termination_reason.
+        # reason==1 → max-steps (truncated); reason>=2 → death event (terminated).
+        # §S5 true-continue splice must zero bootstrap only on hard terminations, not
+        # truncations — conflating them makes the agent treat every episode end as death,
+        # giving a misleading value signal in food-only (where all dones are truncations).
+        # Sheeprl ref: env returns separate terminated/truncated booleans natively.
+        # Authorized by: docs/reviews/dreamer_srl_v2_cp7_driver_review.md §P2
+        # Ported from sheeprl@33b6366:dreamer_v3.py:L600-L610 (env API separation)
+        term_reason = np.asarray(infos['termination_reason'])    # [B] int32
+        terminated_np = (term_reason >= 2).astype(np.float32)[:, np.newaxis]  # [B, 1]
+        truncated_np  = (term_reason == 1).astype(np.float32)[:, np.newaxis]  # [B, 1]
 
         t_env_total += time.time() - t_env_start
 
