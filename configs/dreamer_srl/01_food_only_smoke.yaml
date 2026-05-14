@@ -1,27 +1,44 @@
 # dreamer-srl CP9 smoke config — REDUCED size for OOM-safe dry-run
 #
 # Architecture is structurally identical to 01_food_only.yaml but with
-# smaller dimensions that fit on a single RTX 4090 (24GB GPU).
-# The full XS dimensions (1024 units, 4096 recurrent, 32x32 stochastic)
-# cause OOM at training time; these reduced dimensions are for the
-# integration smoke only.
+# smaller dimensions that fit on a single RTX 4090 (24 GB GPU) with
+# generous JIT headroom. Tuned for integration-smoke speed, not parity.
 #
-# Differences from 01_food_only.yaml (XS sizes):
-#   dense_units:           1024 → 256
-#   recurrent_state_size:  4096 → 512
-#   stochastic_size:       32   → 8
-#   discrete_size:         32   → 8
-#   mlp_layers:            5    → 3 (encoder/decoder/reward/continue/actor/critic)
-#   per_rank_batch_size:   16   → 4
-#   per_rank_sequence_length: 64 → 16
-#   horizon:               15   → 7
+# CORRECTION (2026-05-14, PI call docs/pi/calls/2026-05-14_d013_parity_launch_disposition.md):
+#   Prior to 2026-05-14 this comment block claimed the reductions below
+#   were "from XS sizes (1024 / 4096 / 32×32)" — but those source values
+#   were actually sheeprl XL-equivalent, mis-named as XS in the
+#   dreamer-srl plan (see CONFIG_CORRECTION_PLAN.md). After 01_food_only.yaml
+#   was corrected to real sheeprl XS (256 / 256 / 32×32 / mlp_layers=1),
+#   this smoke config's reductions are now best understood as
+#   "OOM-safe-but-still-smaller-than-real-XS" — chiefly to keep horizon,
+#   per_rank_batch_size, and per_rank_sequence_length small for fast
+#   integration iteration. Numeric values in this file have NOT been
+#   changed by the correction; only this comment block has.
 #
-# Smoke-only deviation: learning_starts: 0 — keeps the 5,000-step smoke budget
-# focused on integration debugging. The parity-track config (01_food_only.yaml)
-# uses learning_starts: 1024 (sheeprl XS default) after CP9b restored §S3
-# prefill. The zero-init actor (cascade fix #27) acts effectively uniform-random
-# for the first ~100 steps, so the smoke's integration-surface coverage is
-# unchanged by the local deviation.
+# Reductions vs. 01_food_only.yaml (corrected real-XS parity target):
+#   dense_units:              256 (matches parity target — no reduction)
+#   recurrent_state_size:     256 → 512  (slight INCREASE — pre-correction artifact)
+#   stochastic_size:          32  → 8    (reduction for integration smoke)
+#   discrete_size:            32  → 8    (reduction for integration smoke)
+#   mlp_layers:               1   → 3    (slight INCREASE — pre-correction artifact)
+#   per_rank_batch_size:      16  → 4    (reduction for fast iteration)
+#   per_rank_sequence_length: 64  → 16   (reduction for fast iteration)
+#   horizon:                  15  → 7    (reduction for fast iteration)
+#
+# NOTE: the smoke config is OOM-safe but not minimally-sized; it pre-dates
+# the discovery that the parity target itself was mis-sized. A future
+# refactor may revisit whether the smoke should match parity-XS on
+# dense_units / recurrent_state_size / mlp_layers and shrink ONLY the
+# fast-iteration knobs (horizon, batch, seq). Out of scope for this plan.
+#
+# Smoke-only deviation: learning_starts: 0 — keeps the 5,000-step smoke
+# budget focused on integration debugging. The parity-track config
+# (01_food_only.yaml) uses learning_starts: 1024 (sheeprl XS default)
+# after CP9b restored §S3 prefill. The zero-init actor (cascade fix #27)
+# acts effectively uniform-random for the first ~100 steps, so the
+# smoke's integration-surface coverage is unchanged by the local
+# deviation.
 
 algo:
   learning_starts: 0
