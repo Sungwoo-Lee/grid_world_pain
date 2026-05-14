@@ -31,6 +31,7 @@ Most PI decisions are some variant of "does this fit one of the active tracks, o
 
 | Date | Call | One-line outcome | Call log |
 |---|---|---|---|
+| 2026-05-14 | D-013 / parity-launch disposition (single-GPU OOM on the dreamer-srl "XS" config) | User picked "Go with XS" — config-correction (not substrate-change): the 14.38 GB OOM was an XL-equivalent config mis-labeled "XS default"; fix `01_food_only.yaml` to mirror real sheeprl XS (256/256/mlp_layers=1/cnn_multiplier=24); single-GPU is the natural substrate, multi-GPU + gradient-checkpointing both rejected; senior-developer scopes the config-fix + correction-note sweep next | [2026-05-14_d013_parity_launch_disposition](calls/2026-05-14_d013_parity_launch_disposition.md) |
 | 2026-05-12 | Dreamer backend: in-house JAX rebuild vs. sheeprl-direct | User picked sheeprl-direct (minimal bridge); `dreamer-srl` v2 plan and 6 reviewer files shelved; `senior-developer` drafts sheeprl-bridge integration plan next | [2026-05-12_dreamer_backend](calls/2026-05-12_dreamer_backend.md) |
 
 ## Recent portfolio changes
