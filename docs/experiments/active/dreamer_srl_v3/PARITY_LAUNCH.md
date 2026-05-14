@@ -4,6 +4,7 @@ topic: dreamer
 status: active
 created: 2026-05-14
 last_updated: 2026-05-14
+launched_at: 2026-05-14T17:03:10
 wandb_tag: dreamer_srl_parity
 phase: pre-launch-design
 cross_links:
@@ -118,9 +119,9 @@ All 3 runs share:
 
 | Run | Status | Tag (= wandb-name) | Seed | GPU | Launched at | WandB run ID | Log path |
 |---|---|---|---|---|---|---|---|
-| 1 | planned | `dreamer_srl_parity_s0` | 0 | cuda:? (runner picks) | — | — | — |
-| 2 | planned | `dreamer_srl_parity_s1` | 1 | cuda:? (runner picks) | — | — | — |
-| 3 | planned | `dreamer_srl_parity_s2` | 2 | cuda:? (runner picks) | — | — | — |
+| 1 | running | `dreamer_srl_parity_s0` | 0 | cuda:1 | 2026-05-14T17:03:10 | h666pcrv | logs/20260514_170310.log |
+| 2 | running | `dreamer_srl_parity_s1` | 1 | cuda:2 | 2026-05-14T17:03:13 | ny3npz68 | logs/20260514_170313.log |
+| 3 | running | `dreamer_srl_parity_s2` | 2 | cuda:3 | 2026-05-14T17:03:18 | hzsa984v | logs/20260514_170318.log |
 
 **Tag-naming rule** — every Tag value is unique and identical to its wandb-name (so `dreamer_srl_main.py` does not synthesize a name and the analyzer can grep by tag). Format: `dreamer_srl_parity_s<seed>`. The wandb-group above ties the 3 rows together for WandB-side filtering.
 
