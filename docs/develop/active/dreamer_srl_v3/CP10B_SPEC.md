@@ -3,7 +3,7 @@ title: "dreamer-srl v3 — CP10b spec: XS like-for-like wall-clock comparison vs
 topic: dreamer
 status: active
 created: 2026-05-14
-last_updated: 2026-05-14
+last_updated: 2026-05-14  # Gate 3 re-scoped from "WM-loss drop ≥ 20% step-200 → final" (descent-window measurement) to "final WM-loss within ±10% of CP10's final 1.410" (parity-of-end-state measurement) per user disposition β at the CP10b verification halt. The original Gate 3 was inherited from CP9 / CP10 where `learning_starts: 0` made the first logged WM-loss essentially equal to the initialization-peak loss — so the "drop" measurement spanned the full descent. CP10b runs at parity-track `learning_starts: 1024`, which means the first logged WM-loss arrives AFTER 1024 grad steps have already fired in the D-014 debt-repayment burst at iter 1024; the descent has already happened before the first log line. The cleanest fix is to replace "≥ 20% drop from first log to final" with "final WM-loss within ±10% of CP10's final" — what we actually care about, i.e. that the corrected XS config converges to the same WM-loss floor as CP10's reduced-dim config did, validating that the smaller config doesn't damage algorithmic learning. CP10b's measured final WM-loss 1.4044 vs CP10's 1.4100 is a −0.4% delta, well inside ±10% — Gate 3 PASS under the re-scoped criterion. Empirical record: WandB [s31wc1a1](https://wandb.ai/sungwoolee/grid_world_pain_dreamer_srl_smoke/runs/s31wc1a1).
 phase: 2
 ---
 
@@ -85,6 +85,22 @@ Both F1 and F3 are non-blockers for CP10b's CP-PASS — they are diagnostic addi
 3. **Like-for-like comparison**: projected per-seed parity-launch wall-clock (`200,000 / steady_state_SPS`) recorded; compared against sheeprl's 12.5h baseline.
 4. **Speed verdict**: ✅ inside 25 h budget (= 2× sheeprl's 12.5h) ⇒ parity launch can proceed at this configuration; ⚠ outside 25 h but inside 30 h ⇒ user discusses with PI whether budget extension is acceptable; ❌ outside 30 h ⇒ disposition revisit (re-fire PI consultation).
 5. **Training-loop health**: zero NaN, WM-loss drop ≥ 20% step-200 → final, `moments_invscale` ≥ 1.0 throughout, `replay_ratio` converges to within 1% of sheeprl-spec target.
+
+   > **Gate 3 re-scope (added 2026-05-14 by senior-developer, post-CP10b verification halt; user disposition β at the AskUserQuestion):**
+   >
+   > The "WM-loss drop ≥ 20% step-200 → final" sub-criterion is **superseded** by:
+   >
+   > **Gate 3 (re-scoped) — Final WM-loss parity vs CP10 (within ±10%)**
+   >
+   > Acceptance: `|CP10b_final_WM_loss − CP10_final_WM_loss| / CP10_final_WM_loss ≤ 0.10`.
+   >
+   > Reference: CP10 final WM-loss = `1.4100` (WandB run [`u0erf4bj`](https://wandb.ai/sungwoolee/grid_world_pain_dreamer_srl_smoke/runs/u0erf4bj)).
+   >
+   > **Methodology rationale.** The original "≥ 20% drop step-200 → final" rule was inherited from CP9 / CP10 where `learning_starts: 0` made the first logged WM-loss essentially equal to the initialization-peak loss — so the "drop" measurement spanned the full descent. CP10b runs at `learning_starts: 1024` (parity-track default), which means the first logged WM-loss arrives AFTER 1024 gradient steps have already fired in the D-014 debt-repayment burst at iter 1024. The descent has already happened before the first log line. The 10.21% drop CP10b actually shows is NOT a learning-failure — it is measuring a different (later) window than CP10 did. The cleanest fix is to replace the descent-window measurement with a **parity-of-end-state** measurement — which is what we actually care about: that the corrected XS config converges to the same WM-loss floor as CP10's reduced-dim config did, validating that the smaller config does not damage algorithmic learning.
+   >
+   > **Original wording preserved** above per the v3 plan's "no silent rewrite" convention; the re-scoped rule is the operative one at CP10b CP-PASS time.
+   >
+   > **The zero-NaN, `moments_invscale ≥ 1.0`, and `replay_ratio` sub-criteria of item 5 are unchanged.**
 6. **CP9b forward-looking diagnostics surfaced** (F1 action-log + F3 debt-repayment-burst trace), both informationally.
 
 ## Out of scope for CP10b
