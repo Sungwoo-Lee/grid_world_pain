@@ -519,8 +519,14 @@ def main() -> None:
         # TRAIN GATE (sheeprl L660-L698)
         # -------------------------------------------------------------------
         if iter_num >= learning_starts:
-            # Compute how many gradient steps are owed
-            ratio_steps = policy_step
+            # Compute how many gradient steps are owed.
+            # D-014 fix: subtract prefill env-steps so the Ratio scheduler sees only
+            # policy-phase steps, not the accumulated prefill debt.  At learning_starts=0
+            # (D-012, food-only config) this is a no-op (prefill_steps * num_envs == 0).
+            # Sheeprl: ratio_steps = policy_step - prefill_steps * policy_steps_per_iter
+            # Ported from sheeprl@33b6366:dreamer_v3.py:L661
+            # Authorized by: docs/reviews/dreamer_srl_v2_cp7_driver_review.md §P3
+            ratio_steps = policy_step - learning_starts * num_envs
             n_grad_steps = ratio(ratio_steps)
 
             if n_grad_steps > 0 and buffer._pos >= seq_len:
