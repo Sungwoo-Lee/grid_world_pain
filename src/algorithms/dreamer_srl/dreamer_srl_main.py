@@ -457,10 +457,31 @@ def main() -> None:
                 if not args.quiet:
                     print(f"[iter {iter_num}] episode done: env={i} ep_len={ep_len} ep_rew={ep_rew:.3f}")
 
+            # CP7-P1 fix: write reset_data second buffer entry at done boundaries.
+            # Sheeprl writes TWO rows per done: (1) the normal step_data row (already
+            # done via buffer.add(step_data) above), and (2) this reset_data row with
+            # the real terminal obs (before auto-reset) and is_first=0.  The RSSM
+            # reads is_first=1 from the NEXT step_data row to gate hidden-state reset.
+            # Ported from sheeprl@33b6366:dreamer_v3.py:L639-L657
+            # Authorized by: docs/reviews/dreamer_srl_v2_cp7_driver_review.md §P1
+            reset_envs = len(dones_idxes)
+            # next_obs still holds the true terminal obs (env auto-reset not yet run)
+            reset_data = {
+                "obs":        next_obs[dones_idxes][np.newaxis],                         # [1, R, obs_dim]
+                "actions":    np.zeros((1, reset_envs, actions_oh.shape[-1]),
+                                       dtype=np.float32),                                 # [1, R, action_dim]
+                "rewards":    step_data["rewards"][:, dones_idxes],                      # [1, R, 1]
+                "terminated": step_data["terminated"][:, dones_idxes],                   # [1, R, 1]
+                "truncated":  step_data["truncated"][:, dones_idxes],                    # [1, R, 1]
+                "is_first":   np.zeros((1, reset_envs, 1), dtype=np.float32),            # [1, R, 1]
+            }
+            buffer.add(reset_data, env_idxes=dones_idxes, validate_args=False)
+
             # Reset player state for done envs
             player.init_states(reset_envs=dones_idxes)
 
-            # Set is_first for the next obs of done envs
+            # Set is_first=1 in step_data so the NEXT row written has is_first=1
+            # (sheeprl L656: step_data["is_first"][:, dones_idxes] = ones_like(...))
             is_first_next[dones_idxes] = 1.0
             step_data["is_first"][:, dones_idxes] = 1.0
 

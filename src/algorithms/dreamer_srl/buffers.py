@@ -20,7 +20,7 @@ explicit-index sampling, bypassing the PRNG, for CP3b's bit-identity tests.
 """
 from __future__ import annotations
 
-from typing import Dict, Optional, Sequence
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
@@ -102,7 +102,12 @@ class SequentialReplayBuffer:
     # add()
     # ------------------------------------------------------------------
 
-    def add(self, data: Dict[str, np.ndarray], validate_args: bool = False) -> None:
+    def add(
+        self,
+        data: Dict[str, np.ndarray],
+        env_idxes: Optional[List[int]] = None,
+        validate_args: bool = False,
+    ) -> None:
         """Add data to the replay buffer (ring-buffer semantics).
 
         Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L145-L221
@@ -112,9 +117,21 @@ class SequentialReplayBuffer:
         Data must be a dict of numpy arrays with shape [sequence_length, n_envs, ...].
         If the buffer is full, oldest data is overwritten.
 
+        CP7-P1 fix: when env_idxes is provided (non-None), data contains only
+        len(env_idxes) env-columns and is written into those specific columns of
+        the full buffer.  This enables the reset_data second write at done
+        boundaries (sheeprl@33b6366:dreamer_v3.py:L650:
+            rb.add(reset_data, dones_idxes, validate_args=...)).
+
         Args:
             data (Dict[str, np.ndarray]): transitions to add, each array shaped
-                [sequence_length, n_envs, ...].
+                [sequence_length, n_envs, ...] when env_idxes is None, or
+                [sequence_length, len(env_idxes), ...] when env_idxes is given.
+            env_idxes (Optional[List[int]]): env column indices to write into.
+                None → write all env columns (legacy behaviour, no shape change).
+                Authorized by: docs/reviews/dreamer_srl_v2_cp7_driver_review.md §P1
+                Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L193-L221
+                              sheeprl@33b6366:dreamer_v3.py:L650
             validate_args (bool): if True, validate shapes. Defaults to False.
         """
         if validate_args:
@@ -160,7 +177,26 @@ class SequentialReplayBuffer:
             data_to_store = {k: v[-self._buffer_size - next_pos:] for k, v in data.items()}
         else:
             data_to_store = data
-        if self.empty:
+
+        if env_idxes is not None:
+            # CP7-P1: per-env-subset write for reset_data at done boundaries.
+            # data shape: [seq_len, len(env_idxes), ...]; write only into env columns env_idxes.
+            # Non-selected env columns at this time slot are left as stale ring-buffer data
+            # (acceptable — sequences are sampled per-env and non-done envs are not done here).
+            # Ported from sheeprl@33b6366:dreamer_v3.py:L650
+            #             sheeprl@33b6366:sheeprl/data/buffers.py:L193-L221 (add with env_idxes)
+            if self.empty:
+                # Initialize buffer with zeros for all envs before writing subset.
+                # Use first key to determine trailing shape, then init full buffer.
+                for k, v in data_to_store.items():
+                    self._buf[k] = np.zeros(
+                        shape=(self._buffer_size, self._n_envs, *v.shape[2:]), dtype=v.dtype
+                    )
+                    self._buf[k][np.ix_(idxes, env_idxes)] = data_to_store[k]
+            else:
+                for k, v in data_to_store.items():
+                    self._buf[k][np.ix_(idxes, env_idxes)] = data_to_store[k]
+        elif self.empty:
             for k, v in data_to_store.items():
                 self._buf[k] = np.empty(
                     shape=(self._buffer_size, self._n_envs, *v.shape[2:]), dtype=v.dtype
