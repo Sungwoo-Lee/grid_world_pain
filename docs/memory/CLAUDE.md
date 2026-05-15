@@ -3,7 +3,7 @@
 > Authoritative single source for this memory layer's policies, workflows, and templates.
 > The project root `CLAUDE.md` routes future-Claude here. Do not duplicate this content elsewhere.
 
-**Last updated**: 2026-05-16
+**Last updated**: 2026-05-16  <!-- Phase E: schema extended to 16 fields -->
 **Related**: [project CLAUDE.md](../CLAUDE.md), [ROOT_INDEX.md](ROOT_INDEX.md), [design plan](../docs/develop/active/meta/claude_memory_system_design.md)
 
 ---
@@ -72,7 +72,7 @@ Anti-patterns to avoid:
 
 **Filename**: `YYYYMMDD_HHMM_<english_snake_case_slug>.md` — `HHMM` disambiguates same-day insights; slug is ≤ ~6 words.
 
-Full template (14 frontmatter fields + 5 sections):
+Full template (16 frontmatter fields + 5 sections):
 
 ```markdown
 ---
@@ -87,6 +87,8 @@ session_origin: claude_code | claude_web
 session_label: "<free-form session identifier>"
 importance: high | medium | low
 status: active | settled | superseded
+valid_until: YYYY-MM-DD | null
+confidence: high | medium | low | null
 supersedes: []
 raw_source: _archive/raw_conversations/<id>.md   # or "none"
 raw_completeness: full | approximate | none
@@ -114,9 +116,19 @@ raw_completeness: full | approximate | none
 Field semantics:
 
 - `id` matches the filename stem and must be unique across the whole memory tree.
+- `date` is the capture date (`YYYY-MM-DD`); `time` is the capture time (`HH:MM`).
 - `folder` must equal the folder the file lives under — required for self-description if the file is extracted.
+- `tags` reuse from `_global_tags.md`; new tags require a row in that file.
+- `summary` is the 1-2 sentence plain-English summary surfaced in recall listings.
+- `related` is auto-populated from body `[[id]]` tokens by `scripts/regen_memory_links.py` — do not hand-type.
+- `session_origin` is `claude_code` for Claude Code sessions; `claude_web` for Claude.ai web sessions.
+- `session_label` is a free-form string identifying the session (e.g., a branch name or task theme).
+- `importance` is `high`, `medium`, or `low` — how important this insight is for future recall.
 - `status: settled` means the conclusion holds and is not under active revision; `active` means still being shaped; `superseded` mirrors the develop-doc lifecycle.
+- `valid_until: YYYY-MM-DD | null` — the date on or after which this insight's claim should NOT be relied on without re-verification. `null` means "indefinite / no known invalidation date." Use this for time-sensitive findings (e.g., a verdict tied to a code version that's likely to be revisited). Distinct from `status: superseded` — a `valid_until` date passing does not automatically flip the status; it just signals "re-check before acting." A later capture can supersede the insight, in which case `superseded_by:` should also be set.
+- `confidence: high | medium | low | null` — distinct from `status`. `status` is lifecycle (`active` / `settled` / `superseded`); `confidence` is "how strong is the evidence?" A `settled` + `high` insight is rock-solid; a `settled` + `low` insight is "we decided to act on this but the evidence base is thin." `null` means "not assessed at capture time" — acceptable but discouraged for new insights. Existing pre-E insights have `null` confidence by default.
 - `supersedes` and the symmetric `superseded_by` (added when superseding occurs) work like the develop-doc contract — the older insight keeps its file but flips `status` to `superseded`.
+- `raw_source` points at the JSONL path for the raw conversation (or `none` if no archive).
 - `raw_completeness: full` when the archive was produced by `scripts/claude_jsonl_to_md.py`; `approximate` when Claude wrote a summary inline at session-end; `none` when no archive was kept.
 - When `raw_source` points at a local-only archive: note in the `## References` section that this link is local-only (will be a broken link on a fresh clone).
 
@@ -181,7 +193,7 @@ Rules:
 - Use the folder's 1-line definition from `ROOT_INDEX.md` as context, not the raw folder name.
 - `Today` and `Yesterday` headers always appear; `This week` and `Earlier` only appear if non-empty.
 
-**Do not expose** in natural-language mode: folder names verbatim, lazy-load level codes (L0–L4), `max_bytes`, `audit`, `fragmentation`, frontmatter field names, raw tag strings, or token costs. Size warnings (section 10) are an exception — they stay even in natural mode.
+**Do not expose** in natural-language mode: folder names verbatim, lazy-load level codes (L0–L4), `max_bytes`, `audit`, `fragmentation`, frontmatter field names, raw tag strings, or token costs. Size warnings (section 10) are an exception — they stay even in natural mode. `valid_until` expiry warnings are also an exception: when an insight's `valid_until` date is in the past, append a one-line warning to its rendered output: `⚠️  This insight's valid_until passed on YYYY-MM-DD — re-verify before acting.`
 
 ---
 

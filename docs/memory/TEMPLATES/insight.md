@@ -13,6 +13,8 @@ session_origin: claude_code
 session_label: "<free-form session identifier>"
 importance: high | medium | low
 status: active | settled | superseded
+valid_until: null
+confidence: null
 supersedes: []
 raw_source: none
 raw_completeness: none
