@@ -845,6 +845,85 @@ Implemented by: developer
 
 ---
 
+### Phase C verification — 2026-05-16
+
+> **Verified by**: senior-developer
+> **Date**: 2026-05-16
+> **Commits verified**: `d23cf71` (§13 + Step 4.5) + `1474149` (implementation report) + `33f98b6` (cross-phase hotfix) + `12b85d4` (hotfix note in Phase B section)
+
+#### Plain-language entry point
+
+Phase C added a "contradiction check" step to the `/memorize` flow: before writing a new insight, scan related settled insights for likely conflicts, and surface a Y/S/N prompt if one is found. No new scripts — it is a docs + skill-contract change only. This verification audits five things: (1) the §13 operating-manual contract is clear and self-contained; (2) the SKILL.md Step 4.5 sub-step is correctly placed and just-terse-enough; (3) the false-positive eval the developer ran is interpreted correctly (1,244 candidate pairs sound scary but the per-capture cost is ~30 conclusion comparisons, which is fine); (4) the cross-phase hotfix the developer surfaced is genuinely Phase B's bug and the fix is functionally equivalent to the existing graph-regenerator strip; (5) no out-of-scope edits. **Verdict: proceed to Phase D**, with two non-blocking documentation suggestions for the next developer to fold in.
+
+#### 1. §13 operating-manual audit
+
+| Item | Status | Notes |
+|---|:---:|---|
+| 5-step protocol (scope → compare → surface → resolve → non-interactive default) | ✅ | Each step has unambiguous behavior. Step 2 specifies the LLM-judge return shape `{"contradicts": <id\|null>, "rationale": "<one sentence>"}` explicitly. Step 3 splits the prompt block from the proceed path cleanly. |
+| Y / S / N wording | ✅ | "Y = save as a new insight (both stay live) / S = supersede the prior / N = skip this capture entirely" — matches the design spec's semantics. A cold reader of §13 alone would know what each branch does. |
+| Tag-overlap scope rule documented | ⚠️ | The rule "≥ 1 default, tighten to ≥ 2 if > 5 candidates" is documented. **But** the developer's eval shows every single insight in the corpus has > 5 candidates at ≥ 1 overlap (53/53), so the documented "default" never actually applies. See "Recommended doc revisions" below — not a blocker. |
+| `status: settled` filter explicit | ✅ | §13 line 282 + §13 tag-overlap scope rules block lines 305–306 both call out: settled in scope, active out of scope, superseded out of scope. |
+| Cross-folder candidates explicit | ✅ | §13 line 304: "Folders are NOT used to scope (cross-folder contradictions are real and the most important to catch)." |
+| Failure modes (FP + FN) discussed | ✅ | §13 lines 308–311. FP = one extra prompt, acceptable; FN = v1 baseline, acceptable. The "Why no separate script" closing paragraph at lines 313–315 explains the design choice. |
+| `supersedes` / `superseded_by` re-use is byte-compatible with §5 | ✅ | §5 line 119: "the older insight keeps its file but flips `status` to `superseded`." §13 Step 4 S branch lines 295–296: "flip the prior insight to `status: superseded` with `superseded_by: ["<new_id>"]` added to its frontmatter. This re-uses the existing supersession mechanism." Same contract. No new lifecycle field invented. |
+
+#### 2. SKILL.md Step 4.5 audit
+
+| Item | Status | Notes |
+|---|:---:|---|
+| Position between timestamp-compute (Step 4 item 1) and file-write (Step 4 item 2) | ✅ | SKILL.md lines 86–104. Step 4.5 lives inside Step 4, after item 1, before item 2 — exactly where the design plan placed it. |
+| Cross-link path `../../../docs/memory/CLAUDE.md` | ✅ | `readlink -f` from `.claude/skills/memorize/` resolves to the actual operating manual. Path is correct relative to the SKILL file location. |
+| Anchor `#13-contradiction-handling-at-ingest` matches GitHub auto-anchor convention | ✅ | §13 header literal `## 13. Contradiction handling at ingest` produces GitHub anchor `#13-contradiction-handling-at-ingest` (numbers + dashes preserved, period dropped, lowercase). Obsidian uses the same convention. The cross-link resolves on both renderers. |
+| Step 4.5 is terse but self-sufficient for the basic Y/S/N flow | ✅ | Five numbered sub-steps name the candidate set, the comparison, the prompt obligation, and the Y/S/N outcomes inline ("**Y** → proceed... **S** → set `supersedes`... **N** → skip"). A reader does not need to bounce to §13 just to act on the prompt. §13 is only required for the choice-block exact wording. |
+| Closing line "This is a hard step. A capture that skips it creates the risk..." | ✅ | Mirrors the diary-step convention ("This is a hard step, not optional") established in Step 8. Stylistically consistent. |
+| Does Step 4.5 leak content that should live in §13 only? | ✅ | No leakage. Step 4.5 names the outcomes; §13 carries the prompt wording, scope rules, failure modes, and rationale. Clean contract split. |
+
+#### 3. False-positive eval interpretation
+
+The developer's eval reports 1,244 total candidate pairs across 53 settled insights at ≥ 1 tag overlap, with the per-insight candidate set at median 50 / mean 47 at ≥ 1 and median 29 / mean 29 at ≥ 2.
+
+**Per-capture realistic workload.** A typical new insight with tags like `[dreamer, learned_lesson, decision]` would, at ≥ 2 overlap, face ~29 candidates (the median). That is "scan 29 `## Key conclusion` paragraphs in the current Claude session and emit one decision per pair." No separate API call; the comparisons happen inside the same reasoning step the rest of `/memorize` already runs.
+
+**Cost analysis.** 29 short-paragraph comparisons inside one session is well within Claude's working-context budget — each conclusion paragraph is ~1–3 sentences. The dominant cost is reading the candidate set's frontmatter + `## Key conclusion` (29 × ~300 tokens ≈ 9k tokens of input context). For a `/memorize` flow that already loads `CLAUDE.md`, `ROOT_INDEX.md`, and `_global_tags.md`, an extra 9k tokens is small. **Latency is acceptable.**
+
+**Verdict on the developer's "noise-acceptable" call.** Defensible. The 1,244 figure is the corpus-wide pair count, not the per-capture workload. The per-capture workload is the candidate-set median (~29 at ≥ 2). No reason to tighten §13's scope to ≥ 3 — that would risk genuine cross-topic conflicts being missed, and the cost gain is small relative to the contract-clarity loss. **Phase C does not need pre-merge revision on this axis.**
+
+#### 4. Cross-phase hotfix sanity (`33f98b6`)
+
+| Item | Status | Notes |
+|---|:---:|---|
+| Root cause is genuinely Phase B, not Phase C | ✅ | Phase B's BACKLINKS-block injection happened in `5500ec2`/`fe26f0c` (Phase B implementation). `regen_memory_links.py` originated in Phase A (`fb9d954`) and never accounted for blocks that wouldn't exist until Phase B. The bug was latent until Phase B ran, and Phase C just made running `--check` part of the verification gates. The fix correctly belongs in `scripts/regen_memory_links.py`. |
+| Strip logic is functionally equivalent to graph regenerator's strip | ✅ | Tested via in-context regex eval (Python `-c`). Sample insight with one body `[[id]]` outside the block and one inside: the new `BACKLINKS_BLOCK_RE` regex `<!-- BACKLINKS.*?<!-- END BACKLINKS -->\s*` with `re.DOTALL` strips the entire block; only the body `[[id]]` survives. Same outcome the graph regenerator achieves via `body.find(BACKLINKS_START)` + slice. |
+| Byte-equivalent to graph regenerator's strip? | ⚠️ | **Not byte-equivalent**, but **behaviorally equivalent** for the canonical Phase B file shape. Graph: `find()` on the full start marker + slice-to-end. Links: regex non-greedy match `<!-- BACKLINKS .*? <!-- END BACKLINKS -->`. If a file ever had content after `<!-- END BACKLINKS -->`, graph would drop it from the scan; links would keep it. Per Phase B contract the block is always file-tail, so this edge case does not arise. Acceptable. |
+| Both `--check` exit 0 at HEAD | ✅ | Re-ran independently: `regen_memory_links.py --check` → "OK — no files would change." exit 0. `regen_memory_graph.py --check` → "OK — no files would change." exit 0. |
+| Phase B verification section note (`12b85d4`) is informative, not muddy | ✅ | The "Cross-phase hotfix note — 2026-05-16" subsection at line 773 is clearly labeled, dated, and links the commit. It does not retroactively change the Phase B verdict (which remains "Phase B verified — proceed to Phase C") — it just appends a chronologically-correct addendum. Future readers can see Phase B passed verification when it was first written, then a later phase surfaced a latent issue that was patched in `33f98b6`. Good record-keeping. |
+
+#### 5. Out-of-scope check
+
+| Commit | Expected files | Actual | Status |
+|---|---|---|:---:|
+| `d23cf71` (§13 + Step 4.5) | `docs/memory/CLAUDE.md`, `.claude/skills/memorize/SKILL.md`, `docs/develop/active/meta/claude_memory_system_v2_design.md` | Exactly those three: +43, +12, +69 lines (Implementation Report appendage). | ✅ |
+| `1474149` (implementation report) | folded into `d23cf71` above per the diff stat range | (combined commit shown in the +69 above) | ✅ |
+| `33f98b6` (hotfix) | `scripts/regen_memory_links.py` only | +12 / -2 in one file. | ✅ |
+| `12b85d4` (Phase B note) | `docs/develop/active/meta/claude_memory_system_v2_design.md` only | +8 / -0. | ✅ |
+
+No out-of-scope changes. The only working-tree drift is `docs/diary/2026-05-16.md` (uncommitted developer + senior-developer diary rows) — expected and not part of the verification scope.
+
+#### Recommended doc revisions (non-blocking; next developer can act on these)
+
+1. **§13 tag-overlap default could flip to ≥ 2.** Given the eval's finding that 53/53 insights have > 5 candidates at ≥ 1 overlap, the documented "≥ 1 default, tighten if > 5" is misleading on this corpus — the tighten branch always fires. A small wording revision would help: keep the ≥ 1 / ≥ 2 / ≥ 3 ladder, but note that ≥ 2 is the effective default on the current corpus because the tag vocabulary has 3 very-common tags (`learned_lesson`, `decision`, `meta`). The next developer can add one sentence to §13's "Tag-overlap scope rules" subsection.
+2. **§13 could mention the in-session reasoning cost.** Add a one-line "Cost note" near "Why no separate script": at ≥ 2 overlap the per-capture candidate set is ~29 conclusion paragraphs, well within a single Claude session's context budget. This documents what the senior-developer just verified, so a future audit doesn't need to re-derive it.
+
+Neither revision is required to ship Phase C. They are clarifications to make §13 better-calibrated to the current corpus.
+
+#### Conclusion
+
+**Phase C verified — proceed to Phase D.** All five audit areas pass. §13 + Step 4.5 are clear, the cross-phase hotfix is correctly attributed and functionally equivalent to the existing strip, the false-positive eval supports the "noise-acceptable" verdict, and no out-of-scope edits slipped in.
+
+Verified by: senior-developer
+
+---
+
 ## References
 
 - v1 design: [claude_memory_system_design.md](claude_memory_system_design.md) — to be marked `superseded_by` this doc only after Phase 0 ships.
