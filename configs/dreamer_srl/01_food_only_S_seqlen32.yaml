@@ -36,7 +36,7 @@
 
 # Cadence (sweep budget; learning_starts=0 per smoke deviation)
 algo:
-  learning_starts: 0           # sweep-only deviation (skip §S3 prefill)
+  learning_starts: 1024           # parity-track default (was 0 for SPS sweep)
   replay_ratio: 1
   per_rank_gradient_steps: 1
   per_rank_sequence_length: 32
