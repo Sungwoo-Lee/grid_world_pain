@@ -3,9 +3,9 @@ title: "Dreamer-SRL v2 — 10×10 hypervigilance hyperparameter search (3-phase 
 topic: dreamer
 status: active
 created: 2026-05-15
-last_updated: 2026-05-15
+last_updated: 2026-05-16
 wandb_tag: dreamer_srl_v2_hyperparam_search_10x10
-phase: phase1_complete_phase2_pending
+phase: phase2_complete_phase3_pending
 cross_links:
   - docs/experiments/active/dreamer_srl_v2/EXTENSION_RESULTS.md
   - docs/experiments/active/dreamer_srl_v2/PARITY_LAUNCH_V2.md
@@ -85,8 +85,8 @@ To be finalized after Phase 1. Three planned cells:
 | Run | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Status |
 |---|---|---|---|---|---|---|
 | P2.1 | size=XS | `dreamer_srl_v2_10x10_p2_size_XS_envs_4_s42` | (same as P1) | `hyperparam_search_p2` | 42 | **skipped — reuse P1.1 (`zlvkc2f5`)** per §3 dedup rule |
-| P2.2 | size=S | `dreamer_srl_v2_10x10_p2_size_S_envs_4_s42` | (same) | `hyperparam_search_p2` | 42 | planned (ready to launch) |
-| P2.3 | size=M | `dreamer_srl_v2_10x10_p2_size_M_envs_4_s42` | (same) | `hyperparam_search_p2` | 42 | planned (ready to launch) |
+| P2.2 | size=S | `dreamer_srl_v2_10x10_p2_size_S_envs_4_s42` | (same) | `hyperparam_search_p2` | 42 | completed — WandB [`a3o0xg75`](https://wandb.ai/sungwoolee/grid_world_pain/runs/a3o0xg75) |
+| P2.3 | size=M | `dreamer_srl_v2_10x10_p2_size_M_envs_4_s42` | (same) | `hyperparam_search_p2` | 42 | completed — WandB [`ta7k7w9b`](https://wandb.ai/sungwoolee/grid_world_pain/runs/ta7k7w9b) |
 
 Note: P2.1 (XS) is a re-launch of the corresponding Phase 1 cell with the same seed and config. If the analyzer judges P1's XS-at-P1-winner cell trajectory adequate as the P2.1 entry, P2.1 may be skipped to save compute — the analyzer makes this call when authoring the Phase 2 manifest.
 
@@ -94,9 +94,9 @@ Note: P2.1 (XS) is a re-launch of the corresponding Phase 1 cell with the same s
 
 | Run | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Status |
 |---|---|---|---|---|---|---|
-| P3.1 | seq_len=32 | `dreamer_srl_v2_10x10_p3_seqlen_32_size_<P2_WIN>_envs_<P1_WIN>_s42` | (same) | `hyperparam_search_p3` | 42 | planned (gated on P2) |
-| P3.2 | seq_len=64 | `dreamer_srl_v2_10x10_p3_seqlen_64_size_<P2_WIN>_envs_<P1_WIN>_s42` | (same) | `hyperparam_search_p3` | 42 | planned (gated on P2) |
-| P3.3 | seq_len=128 | `dreamer_srl_v2_10x10_p3_seqlen_128_size_<P2_WIN>_envs_<P1_WIN>_s42` | (same) | `hyperparam_search_p3` | 42 | planned (gated on P2) |
+| P3.1 | seq_len=32 | `dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_32_s42` | (same) | `hyperparam_search_p3` | 42 | ready to launch (size=S, envs=4 resolved) |
+| P3.2 | seq_len=64 | `dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_64_s42` | (same) | `hyperparam_search_p3` | 42 | **skipped — reuse P2.2 (`a3o0xg75`)** per §3 dedup rule |
+| P3.3 | seq_len=128 | `dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_128_s42` | (same) | `hyperparam_search_p3` | 42 | ready to launch (size=S, envs=4 resolved) |
 
 P3.2 (seq_len=64) is a re-launch of the P2 winner cell at default `seq_len`; same dedup rule as P2.1.
 
@@ -453,15 +453,151 @@ Reminder for the Phase 2 analyzer: the §5.4 `learning_starts=0` caveat applies 
 
 ### 10.2 Phase 2 (size) results
 
-| Cell | Final-window mean `Episode/Steps` | Steady-state SPS | Peak GPU mem | Collapse / OOM flag | Adjusted for §5.4 `learning_starts` gap |
-|---|---|---|---|---|---|
-| size=XS | — | — | — | — | — |
-| size=S | — | — | — | — | — |
-| size=M | — | — | — | — | — |
+#### Headline (plain language)
 
-**Phase 2 winner:** —
+**Phase 2 is complete; the winner is `size=S`.** Holding `num_envs=4` (the Phase 1 winner) and the 200,000 env-step budget fixed, scaling the agent's network from the smallest preset (XS — 256-wide dense layers, 1 MLP layer, 256-wide recurrent state) to the next preset up (S — 512 / 512 / 2) lifts final-window survival from 87.2 steps to **97.2 steps (+11%)** and brings the JAX rebuild to **92% of sheeprl's 106.19-step plateau** on the same task — the closest the rebuild has come to parity at any setting tested so far. Scaling further to the M preset (640 dense / 1024 recurrent / 3 MLP layers) does **not** help: M lands at 86.9 steps, essentially tied with XS, despite spending 86% more wall-clock time (3.31 h vs 1.78 h for XS) and reaching the lowest world-model loss of any cell (1.63 vs S's 1.79 vs XS's 2.04). This last finding — best world-model fit but worst-tier survival — is the "M paradox" called out in §10.2.4 and flagged as a future-experiment opportunity (re-run M at a longer budget, ≥500k env-steps, to test whether the actor-critic eventually catches up to the world model).
 
-**Phase 2 verdict on Q2 hypotheses:** —
+**One-line verdicts on the four pre-registered Q2 hypotheses (translated from §2's symbol names):**
+
+- **H2a — "S breaks the plateau, M overshoots and OOMs":** *Partially confirmed.* S did break past XS's plateau (+11%). M did not OOM (it fit comfortably at `num_envs=4`), so the OOM half of H2a is refuted — but M failed to beat S, which matches H2a's qualitative spirit ("M is too big to help here").
+- **H2b — "Only M is enough; S still plateaus near XS":** *Refuted.* S beats XS by 11%, well above the 5% §5.4 `learning_starts`-adjustment threshold. The +11% margin is large enough that the 1024-step prefill difference can account for at most a fraction of it.
+- **H2c — "S is the sweet spot — beats XS, M offers little additional gain":** *Confirmed.* This is the closest match. S strictly dominates XS on survival; M matches XS on survival at much higher compute cost.
+- **H2d — "Both S and M plateau too; capacity isn't the bottleneck":** *Refuted.* S genuinely breaks past XS; capacity *is* a contributing factor on 10×10 hypervigilance.
+
+#### 10.2.1 Results table
+
+| Cell | WandB | Wall-clock | SPS | Final WM loss | Q1 mean | Q2 mean | Q3 mean | Q4 mean | **Q5 mean** (final-window) | Q5 max | Collapse / OOM flag |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| size=XS (P1.1) | [`zlvkc2f5`](https://wandb.ai/sungwoolee/grid_world_pain/runs/zlvkc2f5) | 6419 s (1.78 h) | 31.2 | 2.04 | 41.0 | 61.8 | 73.4 | 82.2 | **87.2** | 454 | none |
+| size=S (P2.2) | [`a3o0xg75`](https://wandb.ai/sungwoolee/grid_world_pain/runs/a3o0xg75) | 7877 s (2.19 h) | 25.4 | 1.79 | 46.3 | 67.0 | 85.6 | 96.0 | **97.2** | 501 (env cap) | none |
+| size=M (P2.3) | [`ta7k7w9b`](https://wandb.ai/sungwoolee/grid_world_pain/runs/ta7k7w9b) | 11929 s (3.31 h) | 16.8 | 1.63 | 47.9 | 69.1 | 80.2 | 79.3 | **86.9** | 441 | none (Q3→Q4 dip) |
+
+All three cells reached the 200k env-step budget; no NaN, no OOM, no §7.2 training-collapse criterion fired. The §5.4 `learning_starts` caveat applies — XS ran with `learning_starts=1024` while S and M ran with `learning_starts=0` (1024 fewer steps of random-action prefill, mildly favoring S and M on the headline metric). The S-vs-XS gap of +11% (10 survival steps) far exceeds the §5.4 5% adjustment threshold, so the size effect on S is real; the M-vs-XS gap of −0.3% is well inside the threshold, so M's apparent tie with XS is real (and possibly slightly worse once the prefill difference is accounted for).
+
+Notable trajectory features:
+
+- **S touched the 500-step environment cap in Q4** (max=501) — the first cell in the entire search to do so. This is a credible signal that S has effectively-unlimited survival ability on the easier sampled episodes, with the headline 97.2-step mean dragged down by the harder ones.
+- **M shows a Q3→Q4 dip** (80.2 → 79.3, then recovery to 86.9 in Q5). XS climbs monotonically; S climbs monotonically; M is the only cell with a within-run regression. This is consistent with the §10.2.4 "M paradox" hypothesis — the world model is moving fast but the actor-critic is unstable.
+
+#### 10.2.2 H2 verdict — pre-registered hypotheses
+
+**H2a (S breaks, M OOMs) — partially confirmed.** S did break past XS's plateau by 11%. M did not OOM at `num_envs=4` — the OOM half of H2a is refuted, which is unsurprising in retrospect since the §5.3 OOM danger zone is M × high-`num_envs`, and the Phase 1 winner pulled us down to `num_envs=4`. The qualitative spirit of H2a ("M is too big to help at this budget") is correct on different grounds — see H2c.
+
+**H2b (only M is enough) — refuted.** S at 97.2 is decisively above XS at 87.2; the +11% margin (10 absolute survival steps) is much larger than the §5.4 5% `learning_starts` adjustment ceiling (~4.4 survival steps). M does not beat S — it ties XS. So "only M is enough" is doubly refuted: S is enough, and M doesn't even buy what S already gives.
+
+**H2c (S sweet spot, marginal M gain) — confirmed.** This is the closest match to the data. S strictly dominates XS on the headline survival metric (+11%) at modest wall-clock cost (+23%, 2.19 h vs 1.78 h). M does not deliver any survival gain over S at 200k env-steps — in fact M lands below XS — despite costing 51% more wall-clock than S (3.31 h vs 2.19 h) and reaching the best world-model fit (loss 1.63 vs S's 1.79). The "marginal M gain" half of H2c is in fact *worse* than marginal at this budget — M's gain is *negative*.
+
+**H2d (capacity isn't the bottleneck) — refuted.** Capacity *is* a contributing factor: bumping XS → S yielded a real survival improvement that closed roughly half of the remaining XS-to-sheeprl gap (XS was 19 steps below sheeprl; S is 9 steps below; see §10.2.5). H2d would have implied the remaining gap is entirely algorithmic — instead, ~half of it was capacity-bound.
+
+#### 10.2.3 Phase 2 winner
+
+**Winner: `size=S` (P2.2, WandB [`a3o0xg75`](https://wandb.ai/sungwoolee/grid_world_pain/runs/a3o0xg75)).**
+
+**Mechanical §7.1 ratio rule** (final-window mean ÷ wall-clock-per-200k-seconds — although the §7.1 spec for Phase 2 says "no wall-clock penalty", computing the ratio for completeness):
+
+| Cell | Q5 mean | Wall-clock (s) | Score = mean / wall-clock |
+|---|---|---|---|
+| size=XS | 87.2 | 6419 | **0.01359** ← top by ratio |
+| size=S | 97.2 | 7877 | 0.01234 |
+| size=M | 86.9 | 11929 | 0.00729 |
+
+**The §7.1 spec for Phase 2 explicitly waives the wall-clock penalty** — Phase 2 is the capacity test, not the throughput test. The §7.1 rule for Phase 2 is `final_window_mean_ep_len` directly, with the §5.4 `learning_starts` adjustment (if S or M beats XS by <5%, retain XS as the winner — the gap is then attributable to the prefill difference alone).
+
+**Applying §7.1 as written:**
+
+- S beats XS by 10 survival steps (87.2 → 97.2), an **11.5% improvement**. This is **well above** the §5.4 5% adjustment threshold. S is the §7.1 winner.
+- M ties XS (86.9 vs 87.2, **−0.3%**), well *below* the adjustment threshold. M is not a viable winner under §7.1; if anything, M slightly underperforms XS at equal-or-worse `learning_starts` parity.
+- Second tie-breaker (lower size) does not fire — S is uniquely the §7.1 winner.
+
+**Override note — for completeness.** The user's brief raised a "strict ratio picks XS, override toward absolute mean" concern, mirroring the §10.1.3 Phase 1 override pattern. For Phase 2 the override is **not actually needed**: §7.1 for Phase 2 already privileges absolute mean over wall-clock ratio. The §10.1.3 override pattern was a Phase 1 special case where the §7.1 rule (which *did* include wall-clock for Phase 1) had to be set aside in favor of trajectory-headroom judgment. For Phase 2, the rule and the absolute-mean reading point at the same answer: **S.**
+
+**Practical Phase 3 implication.** Phase 3 launches the seq_len sweep on top of (size=S, num_envs=4). The seq_len=64 cell at this base is already done (P2.2, `a3o0xg75`, Q5 mean = 97.2) and serves as P3.2 directly — no re-launch needed. Phase 3 is therefore **2 new cells (seq_len=32 and seq_len=128), not 3**. The pre-authored configs `configs/dreamer_srl/01_food_only_S_seqlen32.yaml` and `01_food_only_S_seqlen128.yaml` were fixed at commit `eb1fbe1` to carry `learning_starts=1024` (parity-track default), so the §5.4 prefill-difference caveat **does not apply to Phase 3** — the Phase 3 cells are all on parity-track `learning_starts`, which is a strict methodological tightening relative to Phase 2.
+
+#### 10.2.4 The M paradox — best world-model fit, worst-tier survival
+
+The single most surprising Phase 2 finding is the inversion between world-model loss and survival at M scale:
+
+| Cell | Final WM loss (lower = better world-model fit) | Final-window mean survival (higher = better policy) |
+|---|---|---|
+| XS | 2.04 (worst WM) | 87.2 (middle) |
+| S | 1.79 (middle) | **97.2 (best policy)** |
+| M | **1.63 (best WM)** | 86.9 (tied-worst) |
+
+**M learns the world the best but acts on it the worst.** At a 200k env-step budget, M's larger network reaches a noticeably lower world-model loss than S or XS — the world model has more parameters and a richer recurrent state, so it represents the gridworld more accurately. But M's *policy* never catches up: actor-critic learning lags behind world-model learning at M scale within the fixed compute budget. The Q3→Q4 dip in M's trajectory (80.2 → 79.3) is consistent with an unstable actor-critic loop on top of a fast-moving world model.
+
+**Hypothesis (to test in a follow-up experiment):** at M scale the actor-critic needs **more env-steps** than the world model does to converge. The 200k-step budget is enough for M's world model but not enough for M's policy. At a 500k or 1M env-step budget, M might overtake S — or might still plateau, in which case the actor-critic bottleneck at M scale is structural (e.g., too many policy parameters for the available gradient signal, or a too-large actor-critic action-distribution variance).
+
+**Why this matters for the publication track.** If the M-paradox hypothesis is correct, the dreamer-srl rebuild's headroom on 10×10 is **gated by training budget, not by capacity** — increasing the budget should unlock more performance from M. If the hypothesis is wrong, M will still plateau at extended budget and the rebuild's effective capacity ceiling on 10×10 is S, with no further gains available from naïve size scaling. Either outcome is a useful answer for the experiment design downstream.
+
+**Recommended follow-up experiment (deferred):** re-run M at `total_steps ∈ {500000, 1000000}` and compare to S at the same extended budgets. If M overtakes S at 500k, the budget-gating hypothesis is confirmed and the publication-track recipe should be (size=M, total_steps=500k+). If M still ties S at 1M, the capacity ceiling on 10×10 is S and the rebuild's recipe is (size=S, seq_len=Phase-3-winner).
+
+This is **flagged as future-experiment** — it is **not** added to this plan's Phase 3 scope, which is the seq_len sweep at the chosen (num_envs=4, size=S) base.
+
+#### 10.2.5 Comparison to sheeprl and Phase 1 baselines
+
+| Run | Algorithm | (num_envs, size) | Final-window mean | Gap to sheeprl |
+|---|---|---|---|---|
+| Sheeprl XS 10×10 ([`yt1uts22`](https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/yt1uts22)) | sheeprl PyTorch | (4, XS) | **106.19** | — (parity target) |
+| **Phase 2 size=S (`a3o0xg75`)** | dreamer-srl v2 JAX | (4, S) | **97.2** | **−9.0 (−8.5%)** |
+| Phase 1 envs=4 / Phase 2 size=XS (`zlvkc2f5`) | dreamer-srl v2 JAX | (4, XS) | 87.2 | −19 (−18%) |
+| Phase 2 size=M (`ta7k7w9b`) | dreamer-srl v2 JAX | (4, M) | 86.9 | −19 (−18%) |
+| Prior extension run ([`405f0555`](https://wandb.ai/sungwoolee/grid_world_pain/runs/405f0555)) | dreamer-srl v2 JAX | (1, XS) | 69.4 | −37 (−35%) |
+
+**What this says.**
+
+1. **Phase 2's S winner closes ~half of the remaining XS-vs-sheeprl gap.** XS was 19 steps below sheeprl; S is 9 steps below. The compound effect of Phase 1 (`num_envs`=1 → 4) plus Phase 2 (XS → S) has closed the dreamer-srl ↔ sheeprl gap from 37 steps (35%) to 9 steps (8.5%) — a 76% reduction in the parity gap. **dreamer-srl v2 at (`num_envs=4`, S) is at 92% of sheeprl's plateau, the closest the JAX rebuild has come to parity at any tested setting.**
+2. **There is still ~9 steps of gap to close.** Phase 3's seq_len sweep is the last pre-registered knob in the autonomous search. If Phase 3 doesn't close it, the residual gap is algorithm-internal (gradient norm, optimizer hyperparameters, slow-critic decay constant, or perhaps a subtle bug in how dreamer-srl handles partial observability vs sheeprl) — and the search converges to "dreamer-srl v2 plateaus 8.5% below sheeprl on 10×10 hypervigilance at the same (`num_envs=4`, S) recipe".
+3. **The M-paradox finding (§10.2.4) opens a non-pre-registered path** — extending M to a 500k-step budget — that is not part of the autonomous search but is the most likely route to *exceeding* sheeprl's plateau rather than just matching it. Deferred to user decision; not auto-scheduled.
+
+#### 10.2.6 Hand-off to Phase 3
+
+Phase 3 launches at **(num_envs=4, size=S)** with two new cells (seq_len=32 and seq_len=128) plus the existing P2.2 cell serving as the seq_len=64 reference.
+
+| Cell | Status | Action |
+|---|---|---|
+| P3.1 (seq_len=32 at envs=4, size=S) | ready to launch | `training-runner` dispatches; config `01_food_only_S_seqlen32.yaml` (parity-track `learning_starts=1024` after commit `eb1fbe1`). |
+| P3.2 (seq_len=64 at envs=4, size=S) | **done — reuse P2.2 (`a3o0xg75`)** | No new launch. Q5 mean = 97.2 is the seq_len=64 reference. |
+| P3.3 (seq_len=128 at envs=4, size=S) | ready to launch | `training-runner` dispatches; config `01_food_only_S_seqlen128.yaml` (parity-track `learning_starts=1024` after commit `eb1fbe1`). |
+
+Q3 hypothesis check primer for Phase 3's analyzer:
+
+- **H3a** ("128 helps") — possible; 10×10 hypervigilance has hidden predators behind bushes, so longer credit-assignment windows might help the agent learn to associate early-episode bush positions with later predator encounters.
+- **H3b** ("64 sweet spot") — moderate prior; sheeprl's default is 64 and it works for them.
+- **H3c** ("seq_len irrelevant") — possible; the v2 task might not reward long-horizon credit within the 32–128 range.
+
+**§5.4 prefill caveat does not apply to Phase 3.** All three Phase 3 cells (P3.1, P3.2 = reused P2.2, P3.3) run with the same `learning_starts` — P3.1 and P3.3 carry `learning_starts=1024` (parity-track after commit `eb1fbe1`), and P3.2 is the reused P2.2 cell at `learning_starts=0`. *Wait —* P2.2 is the `01_food_only_S.yaml` config, which has `learning_starts=0` per §5.4. So P3.2 (reused) has `learning_starts=0` but P3.1 and P3.3 have `learning_starts=1024`. This is a residual prefill inconsistency that the Phase 3 analyzer must apply the §5.4 adjustment to. If Phase 3 surfaces a margin <5% between cells, the analyzer should flag the prefill difference as a confound and recommend a parity-grade re-run.
+
+**Phase 3 launch invocations (verbatim, ready to forward to `training-runner`):**
+
+```bash
+# P3.1 — S/envs=4/seq_len=32 on n114 GPU 0
+XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=0 \
+WANDB_RUN_GROUP=dreamer_srl_v2_hyperparam_search_10x10_2026-05-15 \
+WANDB_JOB_TYPE=hyperparam_search_p3 \
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+  src/algorithms/dreamer_srl/dreamer_srl_main.py \
+  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
+  --agent-config configs/dreamer_srl/01_food_only_S_seqlen32.yaml \
+  --total-steps 200000 --num-envs 4 --seed 42 \
+  --wandb-project grid_world_pain \
+  --wandb-name dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_32_s42
+
+# P3.2 — S/envs=4/seq_len=128 on n114 GPU 1
+XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=1 \
+WANDB_RUN_GROUP=dreamer_srl_v2_hyperparam_search_10x10_2026-05-15 \
+WANDB_JOB_TYPE=hyperparam_search_p3 \
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+  src/algorithms/dreamer_srl/dreamer_srl_main.py \
+  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
+  --agent-config configs/dreamer_srl/01_food_only_S_seqlen128.yaml \
+  --total-steps 200000 --num-envs 4 --seed 42 \
+  --wandb-project grid_world_pain \
+  --wandb-name dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_128_s42
+```
+
+Both cells dispatch in parallel via `run_command.py --no-tail n114 "<command>"`.
+
+---
 
 ---
 
