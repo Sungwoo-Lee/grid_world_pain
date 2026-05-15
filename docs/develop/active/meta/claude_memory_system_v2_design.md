@@ -4,7 +4,7 @@ topic: meta
 status: active
 created: 2026-05-15
 last_updated: 2026-05-16
-phase: phase-0-verification-failed
+phase: phase-0-verified
 ---
 
 # Memory System v2 — Graph + Wiki Integrations to `.claude-memory/`
@@ -450,6 +450,19 @@ A small fix-up commit on this branch:
 ### Conclusion
 
 **Phase 0 NOT fully verified — fix-up commit required before Phase A.** G2/G3/G4/G6–G10 (7 gates) pass; G1 and G5 (2 gates) fail because the sed pass left ~30 stale `.claude-memory/` path strings inside the moved folder at HEAD. The fix is mechanical (re-run the same sed inside `docs/memory/`); the existing uncommitted working-tree edits appear to already contain it. After the fix-up commit, this verification can be re-issued. Until then, Phase A should not start: agents that read `docs/memory/CLAUDE.md` (the operating manual) at HEAD will see contradictory path guidance.
+
+### Phase 0 re-verification (post fix-up) — 2026-05-16
+
+Fix-up commit `fa5d0c5` landed the 14 working-tree edits flagged by the senior-developer. Re-running both blocker gates against the new HEAD:
+
+| Gate | Re-check command | Result | Notes |
+|---|---|:---:|---|
+| G1 | `git grep -l '\.claude-memory/' -- '*.md' '*.py' '*.sh' '*.json'` excluding the v2 design doc + today's diary row | ✅ | Zero matches at HEAD. Only intentional historical references in `claude_memory_system_v2_design.md` (this doc, 27 historical refs) and `docs/diary/2026-05-16.md` (single Phase 0 event row) remain — both acceptable per the spec. |
+| G5 | `head -1 docs/memory/CLAUDE.md` content smell-test | ✅ | Title now `# CLAUDE.md — \`docs/memory/\` Operating Manual`. §1 body and §2 layer-table rows updated to `docs/memory/`. |
+
+**Phase 0 verified — proceed to Phase A.** Frontmatter `phase:` updated from `phase-0-verification-failed` to `phase-0-verified`. The original FAILED block above stays for historical record; the re-verification supersedes it.
+
+Verified by: Claude (re-check) on `fa5d0c5`.
 
 ---
 
