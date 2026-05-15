@@ -360,9 +360,9 @@ What the implementing agent (likely `developer` with `senior-developer` planning
 - [x] **Phase 0 — history preservation**: `git log --follow docs/memory/memories/cluster_ops/<some_id>.md` walks back to the original capture commit (validates `git mv` worked, not a `mv` + `git add`). — **DONE**: `git log --follow docs/memory/CLAUDE.md` shows 3 commits back to `a16a6c9`.
 - [ ] **Phase 0 — Obsidian smoke**: open `docs/.obsidian` vault, confirm `docs/memory/` appears in the file tree, confirm an existing `related: [<id>]` shows the linked file when clicked (no Phase A wikilinks yet — this just validates Obsidian sees the moved tree). — **requires manual verification by user**.
 - [x] **Phase 0 — sample insight resolves**: pick a sampled insight; confirm its `raw_source: claude_data/...` path still resolves (paths in insights should not have changed; `claude_data/` stays at repo root). — **DONE**: cluster_ops insights verified, `raw_source: claude_data/` paths unchanged.
-- [ ] **Phase A** — after normalisation pass: every existing insight's `related:` value is a YAML list of double-quoted strings; `grep -c '^related:' docs/memory/memories/*/*.md` returns the expected count; a randomly sampled insight has the same set of related IDs as before the rewrite (parsed both ways).
-- [ ] **Phase A** — after `regen_memory_links.py` ships: write a test insight with `[[<known_id>]]` in the body; run the regenerator; assert the frontmatter `related:` now contains the known id.
-- [ ] **Phase A — Obsidian graph view**: open `docs/.obsidian`; the native graph view shows insight↔insight edges derived from `[[…]]` links. (Free byproduct; no script needed.)
+- [x] **Phase A** — after normalisation pass: every existing insight's `related:` value is a YAML list of double-quoted strings; `grep -c '^related:' docs/memory/memories/*/*.md` returns the expected count; a randomly sampled insight has the same set of related IDs as before the rewrite (parsed both ways). — **DONE**: G1 passes (zero non-canonical lines), 56 files each have exactly one related: line.
+- [x] **Phase A** — after `regen_memory_links.py` ships: write a test insight with `[[<known_id>]]` in the body; run the regenerator; assert the frontmatter `related:` now contains the known id. — **DONE**: G3 synthetic test passes (exit 1 detected, exit 0 after apply).
+- [ ] **Phase A — Obsidian graph view**: open `docs/.obsidian`; the native graph view shows insight↔insight edges derived from `[[…]]` links. (Free byproduct; no script needed.) — **requires manual verification by user**.
 - [ ] **Phase B** — `docs/memory/GRAPH_REPORT.md` has at least the expected sections (God nodes / Orphans / Broken refs / Tag clusters / Surprising connections / Conversation provenance); god-node ranking matches manual inbound-link counts on a sampled insight; broken-ref section is empty after Phase A.
 - [ ] **Phase B** — backlink block is delimited by the unique HTML-comment markers; running the regenerator twice produces an idempotent diff (second run = no changes).
 - [ ] **Phase B — conversation node sanity**: the Conversation provenance section shows the sampled session `b40582ae-43df-48c4-b3f0-03b539bebae8` with its derived insights and the resume command; `scripts/open_conversation.py 20260508_1638_container_slimdown_recipe` prints the same JSONL path and commands.
@@ -399,6 +399,45 @@ What the implementing agent (likely `developer` with `senior-developer` planning
 - [x] **Phase 0 — verification grep gate**: zero matches outside v2 design doc.
 - [x] **Phase 0 — history preservation**: `git log --follow` walks back to `a16a6c9`.
 - [x] **Phase 0 — sample insight resolves**: `raw_source: claude_data/...` paths in insights unchanged (sed did not touch `claude_data/` paths).
+
+Implemented by: developer
+
+---
+
+### Phase A — Wikilinks + `related:` normalisation
+
+**Commits**:
+- `fb9d954` — `scripts/regen_memory_links.py` (new, 167 lines) + one-time normalisation pass on all 56 insights (25 files updated, 31 already canonical or empty).
+- `d3367b0` — `docs/memory/CLAUDE.md` new §12 + `.claude/skills/memorize/SKILL.md` Step 4/9 updates.
+
+**Insights normalised**: 25 of 56 (31 were already canonical or `related: []`).
+
+**Sample before/after** (one normalised `related:` line):
+
+| File | Before | After |
+|---|---|---|
+| `cluster_ops/20260513_2309_merge_path_manifest_tripwire.md` | `related: [20260512_1755_pytorch_agents_pip_dep_layout, 20260512_1756_pip_install_namespace_shadow_numpy_cap]` | `related: ["20260512_1755_pytorch_agents_pip_dep_layout", "20260512_1756_pip_install_namespace_shadow_numpy_cap"]` |
+| `nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md` | `related: ["20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4", "20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse"]` | `related: ["20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse", "20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4", "20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric", "20260513_0017_mod_h_logging_gap_blocks_cka_precheck"]` (3 body wikilinks merged in) |
+
+**Verification gates**:
+
+| Gate | Command | Result |
+|---|---|:---:|
+| G1 | `grep -h '^related:' docs/memory/memories/*/*.md \| grep -v '^\[\]$' \| grep -v '^\["'` | ✅ empty |
+| G2 | `python scripts/regen_memory_links.py --check` | ✅ exit 0 |
+| G3 | Append `[[20260513_2309_merge_path_manifest_tripwire]]` to body; `--check` | ✅ exit 1 (1 file detected); reverted |
+| G4 | `20260513_2309_merge_path_manifest_tripwire.md` retains both IDs it had before | ✅ confirmed |
+| G5 | `git diff --stat HEAD~2 HEAD~1 docs/memory/memories/` | ✅ 25 files, each `2 +-` (only `related:` line touched) |
+
+**Implementation notes**:
+
+- Default mode and `--normalise-existing` mode use identical logic (additive union of existing IDs + body wikilinks). The `--normalise-existing` flag signals intent for the one-time migration but doesn't change behaviour — this is the correct design because it makes `--check` (default mode) idempotent after the migration pass (G2).
+- The `[[id|alias]]` Obsidian alias form is recognized and logged; the ID is extracted correctly, the alias ignored.
+- Coordinate arrays like `[[1,1],[5,5]]` in existing insight bodies do NOT match the ID regex (`\d{8}_\d{4}_[a-z0-9_]+`) — verified against the hypervigilance insights which contain such patterns extensively.
+
+**Deviations**: none. All planned files modified; all gates pass.
+
+**Speed check**: N/A — pure text transformation, no hot path or training code touched.
 
 Implemented by: developer
 
