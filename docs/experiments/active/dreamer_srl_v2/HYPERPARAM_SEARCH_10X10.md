@@ -5,7 +5,7 @@ status: active
 created: 2026-05-15
 last_updated: 2026-05-16
 wandb_tag: dreamer_srl_v2_hyperparam_search_10x10
-phase: phase2_complete_phase3_pending
+phase: phase2_complete_phase3_running_longbudget_validation_running
 cross_links:
   - docs/experiments/active/dreamer_srl_v2/EXTENSION_RESULTS.md
   - docs/experiments/active/dreamer_srl_v2/PARITY_LAUNCH_V2.md
@@ -668,6 +668,23 @@ WANDB_JOB_TYPE=hyperparam_search_p1 \
 **P1.4 — envs=128:** same as P1.1 with `--num-envs 128` and `--wandb-name dreamer_srl_v2_10x10_p1_envs_128_s42`.
 
 All four cells dispatch in parallel via `run_command.py --no-tail <node> "<command>"`.
+
+---
+
+## 11. Long-budget validation (2026-05-16)
+
+**Why this follow-up.** Phase 1 ran each cell for 200k env-steps. The user noted an analogy to rPPO: that algorithm needs 1–2M episodes before performance rises and 5M to plateau (4–12h wall-clock). The high-num_envs Dreamer cells have 2–3× the SPS of envs=4 — if their learning curve eventually catches up given a larger training budget, the higher throughput could deliver a faster wall-clock path to the survival target.
+
+**Cells launched** (node 113, seed 42, XS model, 2M env-steps = 10× Phase 1 budget):
+
+| Cell | num_envs | GPU | WandB run | PID | ETA (from ~01:24 UTC) |
+|---|---|---|---|---|---|
+| LB-1 | 16 | cuda:0 | [bzc2x3pl](https://wandb.ai/sungwoolee/grid_world_pain/runs/bzc2x3pl) `dreamer_srl_v2_10x10_longbudget_envs_16_XS_2M_s42` | 430782 | ~15:50 UTC (13.4h) |
+| LB-2 | 64 | cuda:1 | [15uiw4kg](https://wandb.ai/sungwoolee/grid_world_pain/runs/15uiw4kg) `dreamer_srl_v2_10x10_longbudget_envs_64_XS_2M_s42` | 431216 | ~11:15 UTC (9.8h) |
+
+**Decision rule for analysis.** `experiment-analyzer` compares each cell's survival-step trajectory at 1M, 1.5M, 2M env-steps vs. Phase 1's envs=4 winner at 200k (87 survival steps). If either long-budget cell's trajectory at any checkpoint meets or exceeds 87, the higher SPS buys wall-clock efficiency and that num_envs becomes the new default for subsequent phases.
+
+Note: `dreamer_srl_main.py` does not support `--wandb-group` / `--wandb-job-type` flags — these runs are ungrouped in WandB. Filter by wandb-name prefix `dreamer_srl_v2_10x10_longbudget_*`.
 
 ---
 

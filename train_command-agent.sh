@@ -78,20 +78,32 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# Dreamer-SRL v3 SPS × num_envs × size feasibility sweep — 2026-05-14
-# Node 114, GPUs 1/2/3 (GPU 0 reserved for CP10b). Design: docs/experiments/active/dreamer_srl_v3/SPS_SIZE_NUM_ENVS_SWEEP.md
-# 25 cells: size {XS,S,M,L,XL} × num_envs {1,2,4,8,16}. Launched in 9 batches of ≤3 cells.
-# Each cell is written to /tmp/sweep_<SIZE>_envs<N>_<TS>.sh on node 114 (CIFS bypass).
-# XS uses total-steps=2048 (1024 prefill + ~1024 train); S/M/L/XL use total-steps=1000.
-# Template below shows cell (XS, num_envs=1) on GPU 1 as the canonical reference:
-export CUDA_VISIBLE_DEVICES=1
-export XLA_PYTHON_CLIENT_PREALLOCATE=false
+# dreamer_srl long-budget validation — 10×10 hyperparam search follow-up
+# Node 113, GPU 0 (cell 1: envs=16) + GPU 1 (cell 2: envs=64). Seed 42. Steps: 2_000_000.
+# Env: configs/experiment/hypervigilance/01-interoNocicept.yaml
+# Agent: configs/dreamer_srl/01_food_only.yaml (XS size, learning_starts=1024)
+# Purpose: test whether high-num_envs cells catch up at 10× budget (Phase 1 winner: envs=4 @ 87 survival-steps).
+# WandB group: dreamer_srl_v2_hyperparam_search_10x10_2026-05-15, job-type: long_budget_validation
+# Date: 2026-05-16. Launch path: CIFS bypass via /tmp (cell 1 on GPU 0, cell 2 on GPU 1).
+# Cell 1:
+XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=0 \
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
   src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \
+  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
   --agent-config configs/dreamer_srl/01_food_only.yaml \
-  --total-steps 2048 \
-  --num-envs 1 \
-  --seed 0 \
-  --wandb-project grid_world_pain_dreamer_srl_sweep \
-  --wandb-name dreamer_srl_sweep_XS_envs1
+  --total-steps 2000000 --num-envs 16 --seed 42 \
+  --wandb-project grid_world_pain \
+  --wandb-group dreamer_srl_v2_hyperparam_search_10x10_2026-05-15 \
+  --wandb-job-type long_budget_validation \
+  --wandb-name dreamer_srl_v2_10x10_longbudget_envs_16_XS_2M_s42
+# Cell 2:
+XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=1 \
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+  src/algorithms/dreamer_srl/dreamer_srl_main.py \
+  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
+  --agent-config configs/dreamer_srl/01_food_only.yaml \
+  --total-steps 2000000 --num-envs 64 --seed 42 \
+  --wandb-project grid_world_pain \
+  --wandb-group dreamer_srl_v2_hyperparam_search_10x10_2026-05-15 \
+  --wandb-job-type long_budget_validation \
+  --wandb-name dreamer_srl_v2_10x10_longbudget_envs_64_XS_2M_s42
