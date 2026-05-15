@@ -1091,3 +1091,66 @@ Reviewed by: code-reviewer
 - State of AI Agent Memory 2026 (mem0): https://mem0.ai/blog/state-of-ai-agent-memory-2026
 - Bitemporal KG for LLM agent memory (n1n): https://explore.n1n.ai/blog/building-bitemporal-knowledge-graph-llm-agent-memory-longmemeval-2026-04-11
 - Beyond RAG — LLM Wiki Pattern (Level Up Coding): https://levelup.gitconnected.com/beyond-rag-how-andrej-karpathys-llm-wiki-pattern-builds-knowledge-that-actually-compounds-31a08528665e
+
+---
+
+## Phase E Implementation Report
+
+**Date**: 2026-05-16
+**Implemented by**: developer
+
+### Summary of changes (file by file)
+
+| File | Change |
+|---|---|
+| `docs/memory/CLAUDE.md` | §5 template: 16-field header + `valid_until` + `confidence` added after `status:`; full field-semantics list added (15 bullets covering all 16 fields — `date`/`time` share one bullet per pre-existing style); §8 "Do not expose" updated with `valid_until` expiry warning exception. |
+| `docs/memory/TEMPLATES/insight.md` | Added `valid_until: null` and `confidence: null` after `status:` line. Template is now 16 fields. |
+| `.claude/skills/memorize/SKILL.md` | Description updated `14-field` → `16-field`; Quick-reference table updated `14 fields` → `16 fields` with full field list; Step 4 sub-bullet added for `valid_until` + `confidence` guidance. |
+| `.claude/skills/recall/SKILL.md` | Hard-rules section: new `valid_until` expiry warning rule (exception to "do not expose frontmatter"). Step 4 (drill-down): added post-render check for expired `valid_until` with warning line. |
+| `scripts/lint_memory.py` | Phase D nit #2 fixed: `TODAY = date(2026, 5, 16)` → `TODAY = date.today()` with `--today YYYY-MM-DD` CLI override. `Insight` class extended with `valid_until` + `confidence` slots. Check 10 (`valid_until` must be YYYY-MM-DD or null/absent) and Check 11 (`confidence` must be `high`/`medium`/`low`/`null`/absent) added. TOTAL bumped 9→11. Both JSON and human-readable output paths updated. Summary error-counting updated. |
+
+### Test results
+
+All 6 verification gates passed:
+
+| Gate | Command / check | Result |
+|---|---|---|
+| G1 | Field-semantics bullets in `docs/memory/CLAUDE.md` cover all 16 fields | ✅ 15 bullets (date+time share one, per existing style); both `valid_until` and `confidence` bullets present |
+| G2 | `grep -c` for `valid_until:` and `confidence:` in `TEMPLATES/insight.md` | ✅ 2 |
+| G3 | `regen_memory_links.py --check` | ✅ exit 0 ("OK — no files would change") |
+| G3 | `regen_memory_graph.py --check` | ✅ exit 0 ("OK — no files would change") |
+| G4 | `lint_memory.py` full run on 56 existing insights | ✅ exit 0, checks [10/11] and [11/11] both pass |
+| G5a | Inject `valid_until: not-a-date` into sample insight; run lint | ✅ exit 1, `[10/11]` error reported |
+| G5b | Inject `confidence: maybe` into sample insight; run lint | ✅ exit 1, `[11/11]` error reported |
+| Phase D nit | `--today 2026-01-01` overrides `TODAY` in header; invalid arg → exit 2 | ✅ |
+
+Lint output on clean 56-insight tree:
+```
+[10/11] valid_until date format
+  All valid_until values are absent, null, or valid YYYY-MM-DD dates.
+[11/11] confidence allowed values
+  All confidence values are absent, null, high, medium, or low.
+Summary: 0 errors. 2 warning(s) (see above).  ← warnings are pre-existing claude_data/ skip
+```
+
+### Speed check
+
+Not applicable — no hot-path code changed (documentation and lint script only).
+
+### Commits
+
+1. `1589ac6` — `docs(memory): 📝 Phase E — extend frontmatter schema to 16 fields (valid_until + confidence)`
+2. `b6be4b8` — `docs(memory): 📝 Phase E — memorize + recall skills know the new fields`
+3. `e655424` — `feat(memory): ✨ Phase E — lint_memory.py learns valid_until + confidence checks`
+4. (this report commit — see below)
+
+### Deviations from plan
+
+- **G1 grep count**: The plan's G1 verification command expected 16 (one bullet per field). The implementation uses 15 bullets because `date` and `time` share one bullet (`- \`date\` is the capture date (\`YYYY-MM-DD\`); \`time\` is the capture time (\`HH:MM\`).`) — consistent with the pre-existing field semantics style in the original §5. All 16 fields are documented; the grep count differs only because of this combined bullet. Not a regression.
+- **Field-semantics expansion**: The plan asked to add bullets for `valid_until` and `confidence` only; I also added explicit bullets for the 9 pre-existing fields that had no semantics bullets (`date/time`, `tags`, `summary`, `related`, `session_origin`, `session_label`, `importance`, `raw_source`). This makes the semantics section complete and consistent. All added bullets are accurate per the operating manual.
+
+### Blockers
+
+None.
+
+Implemented by: developer
