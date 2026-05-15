@@ -270,3 +270,46 @@ Step 9 (auto-commit) **must** run `scripts/regen_memory_links.py` before staging
 ### `[[id|alias]]` form
 
 If you encounter `[[id|alias]]` (Obsidian alias syntax), the regenerator captures `id` and logs the alias. Alias support is not used in this project yet; use plain `[[id]]` only.
+
+---
+
+## 13. Contradiction handling at ingest
+
+When `/memorize` writes a new insight, it MUST first check for likely contradictions against existing `status: settled` insights. Karpathy-style "flag, don't resolve" — surface possible conflicts to the user, do not silently merge.
+
+### The check (Step 4.5 of `/memorize`)
+
+1. **Scope the candidate set.** Read every `status: settled` insight in folders that share ≥ 1 tag with the new insight's `tags:`. Skip if the candidate set is empty (no overlapping settled insights).
+2. **Compare conclusions.** For each candidate, compare the new insight's `## Key conclusion` paragraph against the candidate's `## Key conclusion`. Use the same conversational context (no separate API call). Return a single best-match decision: `{"contradicts": <id|null>, "rationale": "<one sentence>"}`.
+3. **Surface or proceed.**
+   - If `contradicts: null` → proceed to Step 5 (topic-folder routing).
+   - If non-null → halt the write and ask the user:
+
+     > Possible contradiction with `<prior_id>` (<prior_summary>).
+     > Prior says: "<prior_key_conclusion_excerpt>"
+     > New says: "<new_key_conclusion_excerpt>"
+     > Rationale: <one-sentence reason from the check>
+     > Choose: Y = save as a new insight (both stay live) / S = supersede the prior / N = skip this capture entirely
+
+4. **Resolve.**
+   - **Y**: write the new insight normally; both remain `status: settled` (or whatever the user picked); user has accepted the divergence consciously.
+   - **S**: write the new insight with `supersedes: ["<prior_id>"]`; flip the prior insight to `status: superseded` with `superseded_by: ["<new_id>"]` added to its frontmatter. This re-uses the existing supersession mechanism.
+   - **N**: abort the capture for this insight only (other candidates in the same `/memorize` batch can still proceed). Surface a one-line note.
+
+5. **Non-interactive default.** In subagent / eval / batch runs (no human user), default to Y — flag in the Implementation Report or wherever appropriate, but do not block. False positives are tolerable.
+
+### Tag-overlap scope rules
+
+- "Shares ≥ 1 tag" is the default scope. If a candidate insight matches > 5 candidates, that's likely too noisy — increase to ≥ 2 tag overlap and re-scope. Print a one-line note if scope was tightened.
+- Folders are NOT used to scope (cross-folder contradictions are real and the most important to catch).
+- `status: active` insights are NOT in scope (they're still being shaped; conflict is expected).
+- `status: superseded` insights are NOT in scope (already known to be replaced).
+
+### Failure modes
+
+- **False positive**: the user types N or Y to override. Cost: one extra prompt per `/memorize`. Acceptable.
+- **False negative**: matches v1 baseline (no check at all). Acceptable; this is a "best effort" surface, not a guarantee.
+
+### Why no separate script
+
+The contradiction check is reasoning-shaped, not algorithm-shaped. A Python script would have to embed an LLM call to do the comparison, which the `/memorize` flow already has access to natively. Keeping the check inside the skill flow avoids an extra round-trip and keeps the contract auditable in one place.

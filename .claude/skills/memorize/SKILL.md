@@ -89,6 +89,18 @@ For each confirmed insight:
 
 1. Compute `YYYYMMDD_HHMM` from `date +%Y%m%d_%H%M` (Bash). Use the same value in the filename, the `id` frontmatter field, and the `time` field consistently. If two insights share an `HHMM`, bump the second by one minute.
 
+### Step 4.5 — Contradiction check (before each write)
+
+Before writing a new insight, scan `status: settled` insights in folders sharing ≥ 1 tag. Per [CLAUDE.md §13](../../../docs/memory/CLAUDE.md#13-contradiction-handling-at-ingest):
+
+1. Identify candidate set.
+2. Compare the candidate's `## Key conclusion` against each settled candidate's conclusion (using the current Claude session, no separate API call).
+3. If a likely contradiction is found, halt this insight's write and prompt the user with the choice block (Y / S / N) — see §13 for the exact wording.
+4. **Y** → proceed to write. **S** → set `supersedes: ["<prior_id>"]` on the new insight and flip the prior to `status: superseded` with `superseded_by: ["<new_id>"]`. **N** → skip this insight; other candidates in the batch may still proceed.
+5. Non-interactive (eval, subagent): default to Y; log the flagged candidate in the run.
+
+This is a hard step. A capture that skips it creates the risk of two contradictory settled insights, which §13 explicitly forbids.
+
 2. Write to `docs/memory/memories/<topic>/<id>.md`. Start from `docs/memory/TEMPLATES/insight.md`. Fill all 14 frontmatter fields:
    - `folder` must match the parent directory.
    - `tags` reuse from `_global_tags.md`; new tags allowed but require a row in step 6.
