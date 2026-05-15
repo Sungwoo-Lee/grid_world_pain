@@ -4,6 +4,7 @@ topic: meta
 status: active
 created: 2026-05-15
 last_updated: 2026-05-16
+phase: phase-0-verification-failed
 ---
 
 # Memory System v2 — Graph + Wiki Integrations to `.claude-memory/`
@@ -355,7 +356,7 @@ Each phase ends with a commit; each commit independently revertable. Phase 0 is 
 
 What the implementing agent (likely `developer` with `senior-developer` planning) should verify during each phase.
 
-- [x] **Phase 0 — verification grep gate**: after `git mv` + sed pass, `grep -r '\.claude-memory/' --include='*.md' --include='*.py' --include='*.sh' --include='*.json' --exclude-dir='claude_data' --exclude-dir='.claude/worktrees' --exclude-dir='.git' .` returns zero matches. If non-zero, the relocation is incomplete; do not commit. — **DONE**: zero matches outside v2 design doc (commit `6d9f7e9`).
+- [ ] **Phase 0 — verification grep gate**: after `git mv` + sed pass, `grep -r '\.claude-memory/' --include='*.md' --include='*.py' --include='*.sh' --include='*.json' --exclude-dir='claude_data' --exclude-dir='.claude/worktrees' --exclude-dir='.git' .` returns zero matches. If non-zero, the relocation is incomplete; do not commit. — **FAILED at HEAD** (senior-developer verification, 2026-05-16): `git grep '\.claude-memory/' HEAD -- '*.md'` returns 13 files inside `docs/memory/` whose internal refs were not updated by the sed pass. Working-tree edits exist but were not committed. Fix-up commit required — see Verification Report for details.
 - [x] **Phase 0 — history preservation**: `git log --follow docs/memory/memories/cluster_ops/<some_id>.md` walks back to the original capture commit (validates `git mv` worked, not a `mv` + `git add`). — **DONE**: `git log --follow docs/memory/CLAUDE.md` shows 3 commits back to `a16a6c9`.
 - [ ] **Phase 0 — Obsidian smoke**: open `docs/.obsidian` vault, confirm `docs/memory/` appears in the file tree, confirm an existing `related: [<id>]` shows the linked file when clicked (no Phase A wikilinks yet — this just validates Obsidian sees the moved tree). — **requires manual verification by user**.
 - [x] **Phase 0 — sample insight resolves**: pick a sampled insight; confirm its `raw_source: claude_data/...` path still resolves (paths in insights should not have changed; `claude_data/` stays at repo root). — **DONE**: cluster_ops insights verified, `raw_source: claude_data/` paths unchanged.
@@ -403,14 +404,52 @@ Implemented by: developer
 
 ## Verification Report
 
-> **Verified by**: TBD
-> **Date**: TBD
+> **Verified by**: senior-developer
+> **Date**: 2026-05-16
+> **Commits verified**: `6d9f7e9` (relocation, 110 files) + `990c800` (Phase 0 implementation report)
 
-| File | Change | Status | Notes |
-|------|--------|:------:|-------|
-| | | | |
+### Diff stats sanity check
 
-**Conclusion**: TBD
+`git diff --stat HEAD~2 HEAD~1` shows 110 files, 302 insertions, 301 deletions. With `-M` rename detection 67 files collapse to pure renames (`{.claude-memory => docs/memory}/...` at 100% similarity, 0 ins / 0 del) — these are the insight files plus the operating-manual-class files inside the moved folder. The remaining 43 files (outside the moved folder) show small symmetric ins/del counts consistent with a path-string sed pass (most files: 2/2, 4/4, 8/8). One large outlier: `docs/develop/active/meta/claude_memory_system_design.md` (v1) at 131/131 — large but in-scope: this is the primary v1 documentation of the layer, dense with path references, plus the planned `superseded_by:` frontmatter addition.
+
+**However, the 100% similarity on the 67 renames is itself the red flag** (see G1 finding below): files INSIDE the moved folder were renamed but their internal `.claude-memory/` references were NOT updated by sed. The sed pass evidently operated on files outside the source folder only.
+
+### Hard verification gates (re-run independently against HEAD, not working tree)
+
+| Gate | Check | Status | Notes |
+|------|-------|:------:|-------|
+| G1 | `git grep '\.claude-memory/'` at HEAD, outside v2 design doc + diary row | ❌ | **BLOCKER.** `git grep -l '\.claude-memory/' HEAD -- '*.md' '*.py' '*.sh' '*.json'` returns 14 files at HEAD. Of these: 1 is the v2 design doc (intentional), and **13 are files INSIDE `docs/memory/`** whose internal references were not updated by the sed pass. Counts at HEAD: `docs/memory/CLAUDE.md` (6 refs), `docs/memory/ROOT_INDEX.md` (5), `docs/memory/memories/_global_tags.md` (1), `docs/memory/memories/cluster_ops/20260508_1717_ssh_config_match_user_scoping.md` (1), `docs/memory/memories/memory_system_design/{20260508_0315_claude_memory_system_genesis (5), 20260508_0429_memorize_skill_design_and_ship, 20260508_0447_recall_skill_design_and_ship, 20260509_1619_summarize_study_skill_design_and_ship, 20260509_1620_documentation_framing_policy, 20260513_2310_orphan_memory_branch_rewrite, _topic_index (3)}`, `docs/memory/memories/subagent_engineering/{20260508_0430_worktree_isolation_path_safety (6), 20260509_1621_multi_agent_research_chain_v2_pattern}`. Total residue at HEAD: dozens of stale path strings. The earlier developer-reported "zero matches" check apparently ran against the working tree at a moment when a separate (unrelated, uncommitted) edit pass had already started patching these files — a state that is NOT in either committed commit. |
+| G2 | `git log --follow docs/memory/CLAUDE.md` walks back pre-Phase-0 | ✅ | Returns 3 commits: `6d9f7e9` (today) → `4feaf25` (raw_source pointing at JSONL) → `a16a6c9` (original in-repo memory system commit). `git mv` preserved history. |
+| G3 | 4 sentinel files present at new path | ✅ | All exist: `docs/memory/CLAUDE.md`, `docs/memory/ROOT_INDEX.md`, `docs/memory/memories/_global_tags.md`, `docs/memory/TEMPLATES/insight.md`. |
+| G4 | Old `.claude-memory/` does NOT exist | ✅ | `ls .claude-memory/`: `No such file or directory`. |
+| G5 | `head -10 docs/memory/CLAUDE.md` content smell-test against HEAD | ❌ | HEAD's title is still `# CLAUDE.md — \`.claude-memory/\` Operating Manual` (line 1) and body §1 still reads "This layer — `.claude-memory/` —". The path-string sed did not touch this file. Working-tree edits exist but are not committed. |
+| G6 | `raw_source:` in insights still points at `claude_data/`, NOT `docs/memory/` | ✅ | cluster_ops sample: 16 `claude_data/` refs, 0 `docs/memory/` refs. Sed correctly left `claude_data/` paths alone in insights. (Note: a handful of legacy `_archive/raw_conversations/...` paths from pre-JSONL-sync insights also remain untouched, as expected.) |
+| G7 | 6 topic folders under `docs/memory/memories/` | ✅ | `cluster_ops`, `dreamer_diagnosis`, `hypervigilance`, `memory_system_design`, `nmn_diagnosis`, `subagent_engineering`. |
+| G8 | 56 insight files (excluding `_topic_index.md`, `_global_tags.md`) | ✅ | `find docs/memory/memories -name '*.md' -not -name '_topic_index.md' -not -name '_global_tags.md' \| wc -l` = 56. |
+| G9 | v1 design doc has `superseded_by: claude_memory_system_v2_design.md` in frontmatter | ✅ | Line 7 of `docs/develop/active/meta/claude_memory_system_design.md`. Title also updated to `In-repo Session Memory System (docs/memory/)`. |
+| G10 | Out-of-scope file flag | ✅ | All 110 changed files in the commit map to the Phase 0 manifest. No scope creep. |
+
+### Root cause analysis (G1/G5 blocker)
+
+The Phase 0 sed pass operated on files OUTSIDE the source folder (`.claude/skills/...`, `docs/diary/...`, `docs/develop/...`, `scripts/...`, project-root `CLAUDE.md`, `.gitignore`) and updated their references successfully — the 43 non-rename files in the commit prove this. But the sed pass did not recurse into `.claude-memory/` itself before (or after) the `git mv`. Net result: every internal cross-reference within the memory layer (the operating manual `CLAUDE.md`, the topic registry `ROOT_INDEX.md`, the global tag dictionary, every `_topic_index.md`, and ~10 insight files whose bodies reference the layer's own path) still says `.claude-memory/` at HEAD.
+
+The plan's Phase 0 verification gate (Checkpoints line: "after `git mv` + sed pass, `grep ... .` returns zero matches") is **not satisfied** by the current HEAD. The Implementation Report's claim of "Zero matches outside v2 design doc" was true of the working tree at the moment the developer measured, but that state included uncommitted edits that did not land in `6d9f7e9` — only the rename half of the operation was committed.
+
+### Notes on developer's reported deviations
+
+The two deviations the developer flagged (`.gitignore` missed by find glob; v2 design doc accidentally sed'd) were correctly mitigated and the committed `.gitignore`/v2-design-doc states are clean. Those are not the issue here. The issue is a third, unreported deviation: the sed pass did not touch the contents of files inside the source folder being moved.
+
+### Required follow-up before Phase A starts
+
+A small fix-up commit on this branch:
+
+1. Stage the existing working-tree edits to the 13 affected files (they appear to already contain the correct sed replacements — verify by re-running `grep -c '\.claude-memory/'` on each working-tree file; the spot checks during verification showed `docs/memory/CLAUDE.md` working-tree count = 0).
+2. Re-run the Phase 0 verification grep gate against HEAD (`git grep '\.claude-memory/' HEAD -- ...`) and confirm only the v2 design doc and the diary row remain.
+3. Commit as `fix(memory): 📦 complete Phase 0 — update internal references inside docs/memory/` (separate from `6d9f7e9` so the fix is reviewable independently).
+
+### Conclusion
+
+**Phase 0 NOT fully verified — fix-up commit required before Phase A.** G2/G3/G4/G6–G10 (7 gates) pass; G1 and G5 (2 gates) fail because the sed pass left ~30 stale `.claude-memory/` path strings inside the moved folder at HEAD. The fix is mechanical (re-run the same sed inside `docs/memory/`); the existing uncommitted working-tree edits appear to already contain it. After the fix-up commit, this verification can be re-issued. Until then, Phase A should not start: agents that read `docs/memory/CLAUDE.md` (the operating manual) at HEAD will see contradictory path guidance.
 
 ---
 
