@@ -1001,6 +1001,47 @@ bundle. The 12-checkpoint v2 chain is closed.
 
 ---
 
+### Post-CP12 work — metric schema migration (2026-05-15)
+
+> **Status**: closed PASS. Not a checkpoint; the 12-checkpoint v2 chain
+> remains the formal closure boundary above.
+> **Linked plan**: [MIGRATION_PLAN.md](MIGRATION_PLAN.md)
+> **Linked verification**: [dreamer_srl_v2_metric_migration_verification.md](../../../reviews/dreamer_srl_v2_metric_migration_verification.md)
+
+**What landed.** Right after v2-CP12 closure, the standalone dreamer-srl
+trainer was logging ~25 keys into a separate WandB project
+(`grid_world_pain_dreamer_srl_v2`) under its own schema (`Game/ep_len_avg`,
+`Loss/world_model_loss`, etc.). The master project's rPPO and JAX-DreamerV3
+drivers in `train.py` log a unified 48-key schema (`Episode/*`,
+`WorldModel/*`, `Behavior/*`, plus three cross-cutting keys) into the
+shared `grid_world_pain` WandB project. To make dreamer-srl runs
+co-pilotable with the master dashboards going forward, the 7-chunk
+metric-migration plan
+([`MIGRATION_PLAN.md`](MIGRATION_PLAN.md)) was executed across
+five commits `e917187` → `f90a183` on branch `v1.4`, adding **49 unified
+keys** (the 48 master keys plus `Time/sps_env` symmetrically added to all
+three drivers).
+
+**Verification verdict: PASS.** All four numerical gates land clean:
+pytest 49/49 PASS, offline_check 17/17 PASS, smoke run `91xxe64y` lands
+49 expected metric keys with **zero missing and zero unexpected extras**,
+and the two new `Time/sps_env` log-sites in master `train.py` (rPPO L1485,
+JAX-DreamerV3 L1791) compute throughput consistently with the dreamer-srl
+site (`steps / max(elapsed, 1e-9)`). One nit: the plan sketched
+`src.behavior.config` for `load_behavior_measure_cfg`, but the canonical
+location is `src.environment.config_loader`; corrected at the import site
+without scope impact. Full per-key PASS/FAIL table in the verification
+doc.
+
+**Relaunch unblocked.** The two trainings killed at the start of this
+migration cycle (5×5 + predator on node 114 GPU 0; 10×10 hypervigilance
+on node 114 GPU 1) are authorized to relaunch under
+`--wandb-project grid_world_pain` with `WANDB_RUN_GROUP=dreamer_srl_v2_extension_2026-05-15`.
+Launch invocations are in the verification doc and were handed back to
+the parent for `training-runner` dispatch.
+
+---
+
 ## Verification Report
 
 > **Verified by**: senior-developer (this plan's authoring); per-CP verification chains
