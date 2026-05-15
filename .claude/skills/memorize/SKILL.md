@@ -155,21 +155,31 @@ This is a hard step, not optional — the diary is the project's cross-session s
 
 After all writes succeed, bundle every file this skill touched into a single commit. The user has standing auto-commit authorization — do not ask. One coherent commit per `/memorize` run, regardless of how many insights or diary rows were produced.
 
-Before staging, run the link regenerator so any `[[id]]` tokens in the new insight produce the correct `related:` field, and any older insight whose body already contained a `[[new_id]]` token gets updated too:
+Before staging, run both regenerators in order:
+
+1. **Link regenerator** — populates `related:` from body `[[id]]` tokens and normalises any hand-typed values:
 
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/regen_memory_links.py
 ```
 
-Then stage by name only — include any insight files the regenerator touched (it prints which files it updated):
+2. **Graph regenerator** — rebuilds `GRAPH_REPORT.md` and injects per-insight Backlinks blocks (idempotent):
+
+```bash
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/regen_memory_graph.py
+```
+
+Then stage by name only — include any insight files either regenerator touched (each prints which files it updated):
 
 ```bash
 git add docs/memory/ROOT_INDEX.md \
         docs/memory/memories/_global_tags.md \
         docs/memory/memories/<topic>/_topic_index.md \
         docs/memory/memories/<topic>/<id>.md \
-        docs/diary/<YYYY-MM-DD>.md
+        docs/diary/<YYYY-MM-DD>.md \
+        docs/memory/GRAPH_REPORT.md
 # If regen_memory_links.py updated older insights, add those paths too.
+# If regen_memory_graph.py updated Backlinks blocks in older insights, add those paths too.
 # repeat the topic-index and insight paths for every (topic, id) pair written
 
 git commit -m "$(cat <<'EOF'
