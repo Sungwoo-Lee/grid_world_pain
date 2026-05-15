@@ -363,9 +363,9 @@ What the implementing agent (likely `developer` with `senior-developer` planning
 - [x] **Phase A** — after normalisation pass: every existing insight's `related:` value is a YAML list of double-quoted strings; `grep -c '^related:' docs/memory/memories/*/*.md` returns the expected count; a randomly sampled insight has the same set of related IDs as before the rewrite (parsed both ways). — **DONE**: G1 passes (zero non-canonical lines), 56 files each have exactly one related: line.
 - [x] **Phase A** — after `regen_memory_links.py` ships: write a test insight with `[[<known_id>]]` in the body; run the regenerator; assert the frontmatter `related:` now contains the known id. — **DONE**: G3 synthetic test passes (exit 1 detected, exit 0 after apply).
 - [ ] **Phase A — Obsidian graph view**: open `docs/.obsidian`; the native graph view shows insight↔insight edges derived from `[[…]]` links. (Free byproduct; no script needed.) — **requires manual verification by user**.
-- [ ] **Phase B** — `docs/memory/GRAPH_REPORT.md` has at least the expected sections (God nodes / Orphans / Broken refs / Tag clusters / Surprising connections / Conversation provenance); god-node ranking matches manual inbound-link counts on a sampled insight; broken-ref section is empty after Phase A.
-- [ ] **Phase B** — backlink block is delimited by the unique HTML-comment markers; running the regenerator twice produces an idempotent diff (second run = no changes).
-- [ ] **Phase B — conversation node sanity**: the Conversation provenance section shows the sampled session `b40582ae-43df-48c4-b3f0-03b539bebae8` with its derived insights and the resume command; `scripts/open_conversation.py 20260508_1638_container_slimdown_recipe` prints the same JSONL path and commands.
+- [x] **Phase B** — `docs/memory/GRAPH_REPORT.md` has at least the expected sections (God nodes / Orphans / Broken refs / Tag clusters / Surprising connections / Conversation provenance); god-node ranking matches manual inbound-link counts on a sampled insight; broken-ref section is empty after Phase A. — **DONE**: `grep -c '^## ' GRAPH_REPORT.md` = 6; broken-ref section = "None — all wikilinks resolve."
+- [x] **Phase B** — backlink block is delimited by the unique HTML-comment markers; running the regenerator twice produces an idempotent diff (second run = no changes). — **DONE**: G2 (`--check` after regen) exits 0.
+- [x] **Phase B — conversation node sanity**: the Conversation provenance section shows the sampled session `b40582ae-43df-48c4-b3f0-03b539bebae8` with its derived insights and the resume command; `scripts/open_conversation.py 20260508_1638_container_slimdown_recipe` prints the same JSONL path and commands. — **DONE**: G5 passes; session b40582ae present in GRAPH_REPORT.md provenance section with 8 derived insights.
 - [ ] **Phase C** — set up a synthetic contradiction (write two insights that disagree on the same tagged claim); confirm the second capture is flagged; confirm the supersede-path correctly flips the prior insight's `status` and `superseded_by`.
 - [ ] **Phase C** — eval the false-positive rate on the 56 existing insights pairwise; if > N% of pairs flag, the judge prompt needs tightening before the feature ships.
 - [ ] **Phase D** — lint passes cleanly against the post-Phase-B state; introduce a broken `[[id]]` and confirm the lint catches it; introduce a broken `raw_source` path and confirm the lint catches it.
@@ -572,6 +572,76 @@ No scope creep across any of the three Phase A commits.
 **Phase A verified — proceed to Phase B.** All five hard gates pass; the script is correct for the corpus and handles every input form actually present in the 56 insights; SKILL + operating-manual wiring is consistent and the conda Python path is valid; no out-of-scope changes were committed. One ⚠️ (block-style YAML `related:` is unsupported but no insight uses it) and two 🟢 nits (defensive self-link filter, atomic write) are documented for the Phase B / Phase D agent to consider but do not block progression.
 
 Verified by: code-reviewer
+
+---
+
+### Phase B — Backlinks + GRAPH_REPORT + open_conversation helper
+
+> **Implemented by**: developer (Claude Sonnet 4.6)
+> **Date**: 2026-05-16
+> **Commits**:
+> - `5500ec2` — scripts/regen_memory_graph.py (622 lines) + scripts/open_conversation.py (226 lines)
+> - `fe26f0c` — docs/memory/GRAPH_REPORT.md (new) + Backlinks blocks injected into all 56 insights (57 files)
+> - `7053da5` — .claude/skills/memorize/SKILL.md Step 9 wiring
+
+**Summary of what was implemented (file-by-file)**:
+
+1. `scripts/regen_memory_graph.py` (622 lines, stdlib-only, executable):
+   - Walks `docs/memory/memories/`, parses frontmatter + body, builds `InsightNode` and `SessionNode` in-memory graph.
+   - **Idempotency fix**: on parse, strips any existing `<!-- BACKLINKS … -->` block from the body *before* extracting `[[id]]` tokens. Without this, the first run's backlinks blocks would inject spurious outbound edges on the second run (discovered and fixed during G2 testing).
+   - **GRAPH_REPORT.md**: 6 sections (God nodes, Orphans, Broken refs, Tag clusters, Surprising connections, Conversation provenance). Timestamp-aware comparison: `--check` ignores the `> Last generated:` wall-clock line so a one-minute gap between runs does not produce a false positive.
+   - **Per-insight Backlinks blocks**: delimited by `<!-- BACKLINKS … -->` / `<!-- END BACKLINKS -->` HTML-comment markers. On first run, appends block; on subsequent runs, locates and replaces only the content between markers. Self-link defensive filter applied.
+   - CLI: `--check` (exit 0/1), `--with-turn-counts` (slow JSONL line-count mode), `--root` override.
+   - Pre-sync insight grouping: insights with `raw_source: _archive/...` (4 insights) are grouped under a synthetic `pre-sync` session node.
+
+2. `scripts/open_conversation.py` (226 lines, stdlib-only, executable):
+   - Accepts an insight ID (YYYYMMDD_HHMM_slug) or session UUID (8-4-4-4-12 hex).
+   - Resolves `raw_source` to UUID, assembles JSONL path, enumerates all sibling insights from the same session.
+   - Prints structured output with `claude --resume` and `scripts/claude_jsonl_to_md.py` restore commands.
+   - Graceful degradation: when JSONL is missing locally, shows `(not present locally)` and the sync hint.
+   - Exit codes: 0 = success, 1 = not found, 2 = pre-sync genesis (no UUID in `raw_source`).
+
+3. `.claude/skills/memorize/SKILL.md` Step 9:
+   - Added second regenerator call (`regen_memory_graph.py`) after `regen_memory_links.py`.
+   - Added `docs/memory/GRAPH_REPORT.md` to the staging list.
+   - Clarified that both regenerators' touched files should be staged by name.
+
+**Test results (verification gates)**:
+
+| Gate | Command | Result |
+|---|---|:---:|
+| G1 | Initial regen run | ✅ 57 files written (1 GRAPH_REPORT + 56 backlink blocks) |
+| G2 | `--check` after regen | ✅ exit 0 — "OK — no files would change." |
+| G3 | Section count in GRAPH_REPORT.md | ✅ `grep -c '^## ' docs/memory/GRAPH_REPORT.md` = 6 |
+| G4 | Every insight has BACKLINKS block | ✅ N=56, M=56 |
+| G5 | `open_conversation.py 20260508_1638_container_slimdown_recipe` | ✅ exit 0, structured output printed |
+| G6 | Genesis insight (`20260508_1431_diagnostic_battery_refutes_four_fixes`) | ✅ exit 2, "pre-sync genesis" message (see deviation below) |
+| G7 | Non-existent ID | ✅ exit 1 |
+| G8 | Self-link filter | ✅ no self-links found in any backlinks block |
+
+**Deviations from plan**:
+
+1. **G6 test ID mismatch**: The plan specifies `20260508_0315_claude_memory_system_genesis` for G6 (expected exit 2), but that insight has `raw_source: claude_data/.../.../f3ab7f37-....jsonl` — a real UUID, not an archive source. It correctly exits 0 and prints a working session lookup. The actual pre-sync (archive-source) insights are `20260508_1431_diagnostic_battery_refutes_four_fixes`, `20260508_1432_probe_refutes_imagined_death_absence`, `20260508_1433_cifs_bypass_for_run_command`, and `20260508_1434_terminate_command_key_auth_refactor`. Testing against `20260508_1431_diagnostic_battery_refutes_four_fixes` produces exit 2 with the correct message. The logic is correct; the plan's test ID was wrong about which insight is "genesis" (the actual 4 pre-sync insights have `_archive/raw_conversations/...` raw_source values, not `raw_source: none`).
+
+2. **Pre-sync grouping**: The plan says "4 genesis insights with `raw_source: none`" but the actual data shows `raw_source: _archive/raw_conversations/...`. The script handles this correctly by grouping any non-UUID `raw_source` under the `pre-sync` placeholder node. No schema change needed.
+
+3. **Timestamp in GRAPH_REPORT.md `--check`**: The plan says `--check` exits 0 if no files would change. Since the timestamp line always changes, a strict byte-comparison would exit 1 on every run. Implemented: `--check` ignores the `> Last generated:` line for comparison purposes (substantive-content only). Normal runs always refresh the timestamp. This is the correct interpretation of "no files would change" for a report with a wall-clock timestamp.
+
+**Phase A reviewer notes addressed**:
+- Self-link filter: ✅ implemented in `_inject_backlinks` — an insight's own ID is filtered from its Backlinks block.
+- Atomic write: N/A for Phase B (reviewer said "not required").
+- Block-style YAML `related:`: no insight uses it; out of scope here as confirmed.
+
+**claude_data/ presence in worktree**: NO — worktree does not have `claude_data/`. All 56 JSONL files show `(not present locally)` in GRAPH_REPORT.md and open_conversation.py. Script degrades gracefully (no exceptions, exits 0).
+
+**Speed check**: N/A — scripts/regen_memory_graph.py is a one-shot text tool; no training hot path or model code touched.
+
+**Sessions found**: 12 real UUIDs + 1 pre-sync placeholder = 13 total.
+**Edges (insight→insight)**: 22 directed edges.
+**Cross-folder "surprising" edges**: 5.
+**Insights with Backlinks blocks**: 56/56.
+
+Implemented by: developer
 
 ---
 
