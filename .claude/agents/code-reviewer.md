@@ -68,6 +68,12 @@ These are documented in [ENVIRONMENT_SUMMARY.md §Cross-Doc Clarifications](../.
 - `property` vs `properties` (plural is canonical) — flag use of legacy `property` key.
 - `terminated` (stored on `EnvState`) and `done` (per-step return) carry the same information. Flag desyncs.
 
+## Code-side Wiki
+
+When answering a codebase question or starting a review, check `graphify-out/GRAPH_REPORT.md`
+(if present — it is gitignored and regenerated on demand via `python scripts/regen_code_graph.py`).
+If absent or stale, fall back to grep / Read. See `scripts/regen_code_graph.py` for install steps.
+
 ## Review Workflow
 
 When invoked on a diff or PR:

@@ -60,6 +60,12 @@ Optional: `supersedes`, `superseded_by`, `phase`. Read [FRONTMATTER_CONTRACT.md]
 - Always cross-reference related docs in both directions.
 - Include enough detail (file paths, line numbers, code snippets) for the `developer` agent to execute without ambiguity.
 
+## Code-side Wiki
+
+When answering a codebase question or writing a plan, check `graphify-out/GRAPH_REPORT.md`
+(if present — it is gitignored and regenerated on demand via `python scripts/regen_code_graph.py`).
+If absent or stale, fall back to grep / Read. See `scripts/regen_code_graph.py` for install steps.
+
 ## Configuration Protocol
 
 - **No fallback defaults** for critical config params. The `developer` agent must use `config.get_mandatory('key')` — missing YAML key → `ValueError`.
