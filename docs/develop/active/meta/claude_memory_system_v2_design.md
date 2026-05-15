@@ -770,6 +770,14 @@ This is a docs-and-tooling phase, so the JAX/Flax conventions (pytree, JIT, vmap
 
 Reviewed by: code-reviewer
 
+#### Cross-phase hotfix note — 2026-05-16
+
+**Issue (found in Phase C verification)**: Phase B's `<!-- BACKLINKS … -->` block injection caused `regen_memory_links.py` to pick up the `[[id]]` tokens inside those blocks as new outbound wikilinks, polluting `related:` frontmatter. `--check` exited 1 with 16 files that would be incorrectly modified. Phase B's `regen_memory_graph.py` already stripped BACKLINKS blocks before scanning (lines 206-211) but `regen_memory_links.py` did not.
+
+**Fix**: Added `BACKLINKS_BLOCK_RE` regex stripping in `scripts/regen_memory_links.py` (12-line change, mirroring the same exclusion). All four verification gates pass: G1 (`--check` exits 0), G2 (no diff after full run), G3 (`regen_memory_graph.py --check` still exits 0), G4 (real body wikilinks still detected).
+
+**Hotfix commit**: `33f98b6` — cross-phase issue closed.
+
 ---
 
 ### Phase C — Contradiction flag at ingest
