@@ -50,7 +50,7 @@ Built `.claude/skills/recall/` and shipped at commit `3705ece`. The memory layer
 
 - Skill: `.claude/skills/recall/SKILL.md`
 - Eval definitions: `.claude/skills/recall/evals/evals.json`
-- Operating manual: `.claude-memory/CLAUDE.md` §8 (natural-language recall format), §9 (lazy-load), §10 (large-file warning protocol)
+- Operating manual: `docs/memory/CLAUDE.md` §8 (natural-language recall format), §9 (lazy-load), §10 (large-file warning protocol)
 - Companion skill: `.claude/skills/memorize/SKILL.md`
 - Paired insight: `20260508_0429_memorize_skill_design_and_ship` (write counterpart)
 - Genesis: `20260508_0315_claude_memory_system_genesis`

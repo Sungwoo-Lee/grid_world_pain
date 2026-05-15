@@ -4,7 +4,7 @@ date: 2026-05-08
 time: "03:15"
 folder: memory_system_design
 tags: [memory, design, decision, meta]
-summary: "The in-repo `.claude-memory/` layer coexists with the built-in auto-memory MEMORY.md; the two layers split by insight density — short typed rules stay in the built-in layer, multi-section session insights go in `.claude-memory/`. Raw conversation archives are local-only and gitignored."
+summary: "The in-repo `docs/memory/` layer coexists with the built-in auto-memory MEMORY.md; the two layers split by insight density — short typed rules stay in the built-in layer, multi-section session insights go in `docs/memory/`. Raw conversation archives are local-only and gitignored."
 related: []
 session_origin: claude_code
 session_label: "claude-memory genesis"
@@ -19,7 +19,7 @@ raw_completeness: full
 
 ## Key conclusion
 
-The in-repo `.claude-memory/` layer is created alongside (not replacing) the Claude Code built-in auto-memory at `~/.claude/.../memory/MEMORY.md`. The two layers split by **insight density**: short typed rules that any agent must obey on every invocation stay in the built-in layer; multi-section session insights with rationale, decisions, follow-ups, and raw-conversation traceability go in `.claude-memory/`. Raw conversation archives are local-only (gitignored by default) — the insight file (with `raw_source` field) is committed; the archive itself is not.
+The in-repo `docs/memory/` layer is created alongside (not replacing) the Claude Code built-in auto-memory at `~/.claude/.../memory/MEMORY.md`. The two layers split by **insight density**: short typed rules that any agent must obey on every invocation stay in the built-in layer; multi-section session insights with rationale, decisions, follow-ups, and raw-conversation traceability go in `docs/memory/`. Raw conversation archives are local-only (gitignored by default) — the insight file (with `raw_source` field) is committed; the archive itself is not.
 
 ## Evidence, measurements, facts
 
@@ -27,7 +27,7 @@ The in-repo `.claude-memory/` layer is created alongside (not replacing) the Cla
 - Reference implementation inspected: `tmp/Claude-memory/` (Korean operating manual, different project — Mac mini MCP/Cloudflare setup). Ported design to English; dropped attachments system and MCP-tool table.
 - Four user decisions recorded in the plan (resolved 2026-05-08):
   - **Coexist** with built-in MEMORY.md (not replace it).
-  - **Location**: `.claude-memory/` at repo root.
+  - **Location**: `docs/memory/` at repo root.
   - **Scope**: core insight files committed; raw archives local-only.
   - **Language**: English throughout (not Korean as in the reference).
 - Five open questions resolved by the user before implementation:
@@ -45,9 +45,9 @@ The in-repo `.claude-memory/` layer is created alongside (not replacing) the Cla
 
 ## Decisions and actions
 
-- Created `.claude-memory/` skeleton at repo root: `CLAUDE.md`, `ROOT_INDEX.md`, `memories/_global_tags.md`, `TEMPLATES/insight.md`, `_archive/raw_conversations/.gitkeep`, `.trash/.gitkeep`, `memories/memory_system_design/_topic_index.md`, and this genesis insight file.
+- Created `docs/memory/` skeleton at repo root: `CLAUDE.md`, `ROOT_INDEX.md`, `memories/_global_tags.md`, `TEMPLATES/insight.md`, `_archive/raw_conversations/.gitkeep`, `.trash/.gitkeep`, `memories/memory_system_design/_topic_index.md`, and this genesis insight file.
 - Created `scripts/claude_jsonl_to_md.py` — converts Claude Code transcript JSONL to chronological markdown export for the raw-archive capture path.
-- Appended "Session memory" section to project root `CLAUDE.md` routing future-Claude to `.claude-memory/CLAUDE.md` and `ROOT_INDEX.md`.
+- Appended "Session memory" section to project root `CLAUDE.md` routing future-Claude to `docs/memory/CLAUDE.md` and `ROOT_INDEX.md`.
 - Added `.gitignore` rules: `_archive/raw_conversations/*.md` (with `!.gitkeep` exception) and `.trash/*` (with `!.gitkeep` exception).
 - `ROOT_INDEX.md` populated with `memory_system_design` folder row (1 insight, top tags: `[memory, design, decision]`).
 - `_global_tags.md` populated with initial active tags: `memory`, `design`, `decision`, `meta`.

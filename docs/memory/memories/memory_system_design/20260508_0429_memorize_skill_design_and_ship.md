@@ -4,7 +4,7 @@ date: 2026-05-08
 time: 04:29
 folder: memory_system_design
 tags: [memory, design, decision, skill]
-summary: "Designed and shipped the /memorize Claude Code skill (.claude/skills/memorize/) that captures conversations into the in-repo .claude-memory/ layer; validated end-to-end via a 3-eval benchmark with +33pt with-vs-without skill delta."
+summary: "Designed and shipped the /memorize Claude Code skill (.claude/skills/memorize/) that captures conversations into the in-repo docs/memory/ layer; validated end-to-end via a 3-eval benchmark with +33pt with-vs-without skill delta."
 related: [20260508_0315_claude_memory_system_genesis]
 session_origin: claude_code
 session_label: "memorize skill rollout"
@@ -19,7 +19,7 @@ raw_completeness: full
 
 ## Key conclusion
 
-Built `.claude/skills/memorize/` — a project-local Claude Code skill that captures the current conversation as one or more 5-section insight files in the `.claude-memory/` layer, updates the topic and global indexes, and optionally archives the raw conversation. Shipped at commit `f878873`. The skill is now the canonical capture path (Step-by-step flow in `.claude-memory/CLAUDE.md` §4); future `/memorize` invocations use it.
+Built `.claude/skills/memorize/` — a project-local Claude Code skill that captures the current conversation as one or more 5-section insight files in the `docs/memory/` layer, updates the topic and global indexes, and optionally archives the raw conversation. Shipped at commit `f878873`. The skill is now the canonical capture path (Step-by-step flow in `docs/memory/CLAUDE.md` §4); future `/memorize` invocations use it.
 
 ## Evidence, measurements, facts
 
@@ -31,12 +31,12 @@ Built `.claude/skills/memorize/` — a project-local Claude Code skill that capt
   - Test setup: **full eval loop** (skill-creator's draft → run → grade → benchmark workflow).
 - **Eval results (iteration-1, 3 evals × 2 configs = 6 subagent runs in worktrees)**:
   - eval-1 single-decision: with_skill 9/10 (90%), without_skill 2/10 (20%).
-  - eval-2 multi-insight: with_skill 2/10 (20%, **timed out at 6 min before substantive writes**), without_skill 8/10 (80%, but the agent wrote to the main repo's `.claude-memory/` and to `~/.claude/.../memory/MEMORY.md` — boundary violation, see paired insight `20260508_0430_worktree_isolation_path_safety`).
+  - eval-2 multi-insight: with_skill 2/10 (20%, **timed out at 6 min before substantive writes**), without_skill 8/10 (80%, but the agent wrote to the main repo's `docs/memory/` and to `~/.claude/.../memory/MEMORY.md` — boundary violation, see paired insight `20260508_0430_worktree_isolation_path_safety`).
   - eval-3 raw-archive: with_skill 10/10 (100%), without_skill 1/10 (10% — invented its own `insights/`, `raw/`, `topics/` folders, ignored the contract).
   - **Mean: with_skill 70%, without_skill 37%, delta +33 pts.**
-- **Iteration-2 changes applied directly** (user opted to skip a second eval round): added a quick-reference table at the top of SKILL.md (saves time + tokens by avoiding re-reads of `.claude-memory/CLAUDE.md` for every step), explicit "repo-relative paths only" hard rule (prevents the boundary-violation pattern observed in the eval-2 baseline), loosened the eval-1 assertion from "exactly one insight" to "one or two" (the agent's split of scope-decision from supporting pilot finding was defensible).
+- **Iteration-2 changes applied directly** (user opted to skip a second eval round): added a quick-reference table at the top of SKILL.md (saves time + tokens by avoiding re-reads of `docs/memory/CLAUDE.md` for every step), explicit "repo-relative paths only" hard rule (prevents the boundary-violation pattern observed in the eval-2 baseline), loosened the eval-1 assertion from "exactly one insight" to "one or two" (the agent's split of scope-decision from supporting pilot finding was defensible).
 - **Tooling shipped**: `.claude/skills/memorize-workspace/grade.py` (programmatic assertion grader), `.claude/skills/memorize-workspace/build_benchmark.py` (turns grading.json files into benchmark.json). Workspace dirs gitignored as transient.
-- **Coexistence rule** (from operating manual §2): short typed rules another agent must obey on every invocation → built-in `~/.claude/.../memory/MEMORY.md`; multi-section session insights → `.claude-memory/`. The skill enforces this by hard rule and never writes to MEMORY.md.
+- **Coexistence rule** (from operating manual §2): short typed rules another agent must obey on every invocation → built-in `~/.claude/.../memory/MEMORY.md`; multi-section session insights → `docs/memory/`. The skill enforces this by hard rule and never writes to MEMORY.md.
 
 ## Decisions and actions
 
@@ -55,7 +55,7 @@ Built `.claude/skills/memorize/` — a project-local Claude Code skill that capt
 
 - Skill: `.claude/skills/memorize/SKILL.md`
 - Eval definitions: `.claude/skills/memorize/evals/evals.json`
-- Operating manual: `.claude-memory/CLAUDE.md` (the contract this skill enforces)
+- Operating manual: `docs/memory/CLAUDE.md` (the contract this skill enforces)
 - Genesis insight: `20260508_0315_claude_memory_system_genesis` (paired — same folder, sequential decisions)
 - Paired insight in this session: `20260508_0430_worktree_isolation_path_safety` (the engineering finding from running the evals)
 - Design plan: `docs/develop/active/meta/claude_memory_system_design.md`

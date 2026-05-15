@@ -42,7 +42,7 @@ The convenience block that `bootstrap_lab_ssh.sh` writes to `~/.ssh/config` (`Ho
 - Edited `.claude/agents/training-runner.md` line 38 (doc claim) to describe the `Match user` scoping and explicitly note that `sungwoo320` falls through to port 22.
 - Edited `.claude/agents/training-runner.md` line 49 (precondition check `grep` pattern) to match the new `Match user vncuser host …` line so the agent's precondition still says `OK` after the change.
 - Did NOT edit `~/.ssh/config` to remove the rewrite entirely — chose `Match user` over removal so the daily ergonomic of bare `ssh vncuser@…` and `ssh 192.168.0.103` (defaulting to local user vncuser) is preserved.
-- Did NOT edit `.claude-memory/memories/cluster_ops/20260508_1428_node_env_recovery_recipe.md` — the bare-ssh examples there implicitly use vncuser (the local user inside the container), which still routes correctly via the new `Match` block. No edit needed.
+- Did NOT edit `docs/memory/memories/cluster_ops/20260508_1428_node_env_recovery_recipe.md` — the bare-ssh examples there implicitly use vncuser (the local user inside the container), which still routes correctly via the new `Match` block. No edit needed.
 - All four edits live in either the docker writable layer (`/home/vncuser/.ssh/config`) or the NAS-mounted repo (`scripts/`, `.claude/agents/`), so they propagate via the next `docker export | docker import` to `episode:v1`.
 
 ## Open questions and follow-ups

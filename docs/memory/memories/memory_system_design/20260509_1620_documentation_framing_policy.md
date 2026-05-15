@@ -50,5 +50,5 @@ After the user observed that a research-synthesis memo was effectively unreadabl
 - Templates: `docs/TEMPLATES/issue_plan.md`, `docs/TEMPLATES/training_analysis.md`.
 - First retro-application: `docs/project/ideas/nmn_meta_continual_synthesis_v2.md` `## TL;DR` section (commit `5c5adf3`).
 - Companion insight (this session): `20260509_1619_summarize_study_skill_design_and_ship` — the skill that motivated promoting the rule project-wide.
-- Genesis insight: `20260508_0315_claude_memory_system_genesis` — the original `.claude-memory/` design, which this policy generalises to all doc-producing surfaces.
+- Genesis insight: `20260508_0315_claude_memory_system_genesis` — the original `docs/memory/` design, which this policy generalises to all doc-producing surfaces.
 - Raw conversation: synced via `./sync-agent-data.sh claude push`. To read on another node: `./sync-agent-data.sh claude pull`, then either `claude --resume 6bbe7739-79ae-4486-b230-d8b7b8263893` (re-enter the session) or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot markdown view).

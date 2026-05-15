@@ -11,7 +11,7 @@
 
 | Tag | First-use insight ID | Definition |
 |---|---|---|
-| `memory` | `20260508_0315_claude_memory_system_genesis` | Relates to the `.claude-memory/` layer itself |
+| `memory` | `20260508_0315_claude_memory_system_genesis` | Relates to the `docs/memory/` layer itself |
 | `design` | `20260508_0315_claude_memory_system_genesis` | Architecture or system-design decision |
 | `decision` | `20260508_0315_claude_memory_system_genesis` | A specific choice made with rationale |
 | `meta` | `20260508_0315_claude_memory_system_genesis` | About the project tooling / infrastructure, not the science |

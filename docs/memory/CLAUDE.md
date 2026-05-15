@@ -1,4 +1,4 @@
-# CLAUDE.md — `.claude-memory/` Operating Manual
+# CLAUDE.md — `docs/memory/` Operating Manual
 
 > Authoritative single source for this memory layer's policies, workflows, and templates.
 > The project root `CLAUDE.md` routes future-Claude here. Do not duplicate this content elsewhere.
@@ -10,7 +10,7 @@
 
 ## 1. Purpose and scope
 
-This layer — `.claude-memory/` — is an **in-repo, version-controlled** session memory system. It stores multi-section session insights with rationale, decisions, follow-ups, and an optional raw-conversation archive. It coexists with the Claude Code built-in auto-memory at `~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/memory/MEMORY.md` and does **not** replace it.
+This layer — `docs/memory/` — is an **in-repo, version-controlled** session memory system. It stores multi-section session insights with rationale, decisions, follow-ups, and an optional raw-conversation archive. It coexists with the Claude Code built-in auto-memory at `~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/memory/MEMORY.md` and does **not** replace it.
 
 This layer is designed for:
 
@@ -28,16 +28,16 @@ The two layers split by **insight density**. Use the decision rule below; when i
 | Layer | Owner | Density | When to write here |
 |---|---|---|---|
 | Built-in `~/.claude/.../memory/MEMORY.md` | Claude Code harness + user | One-line rule + sibling `feedback_*.md` | Short typed rule another agent must obey on every invocation; user-and-machine local. |
-| In-repo `.claude-memory/` | This repo + Claude Code | Per-session insight (frontmatter + 5 sections) | Decision with rationale, rejected alternatives, debugging arc, or finding the team needs to retrace later. |
+| In-repo `docs/memory/` | This repo + Claude Code | Per-session insight (frontmatter + 5 sections) | Decision with rationale, rejected alternatives, debugging arc, or finding the team needs to retrace later. |
 
-**If both fit**: write to `.claude-memory/` and add a one-line entry in `MEMORY.md` only if another agent needs the rule on every invocation.
+**If both fit**: write to `docs/memory/` and add a one-line entry in `MEMORY.md` only if another agent needs the rule on every invocation.
 
 Concrete routing examples:
 
 | Scenario | Goes to | Why |
 |---|---|---|
 | "Training-runner must `pgrep -af '<TAG>'` after every launch." | Built-in `MEMORY.md` | Short typed rule; no rationale chain. |
-| "We chose FiLM over gate-only for three reasons." | `.claude-memory/memories/<topic>/<id>.md` | Decision with reasons; future-Claude must retrace. |
+| "We chose FiLM over gate-only for three reasons." | `docs/memory/memories/<topic>/<id>.md` | Decision with reasons; future-Claude must retrace. |
 | "Don't use `python3` — use the conda env interpreter." | Project root `CLAUDE.md` | Project-wide invariant; not a session insight. |
 
 ---
@@ -189,7 +189,7 @@ Rules:
 
 | Level | What | When |
 |---|---|---|
-| L0 | `.claude-memory/CLAUDE.md` (this file) | Whenever the user mentions memory/recall, or at the start of any session touching this layer. |
+| L0 | `docs/memory/CLAUDE.md` (this file) | Whenever the user mentions memory/recall, or at the start of any session touching this layer. |
 | L1 | `ROOT_INDEX.md` + `memories/_global_tags.md` | First read of any memory operation (capture, recall, audit). |
 | L2 | `memories/<topic>/_topic_index.md` | When the user's question narrows to one topic. |
 | L3 | `memories/<topic>/<id>.md` | When the user wants details on a specific insight, or when an L2 entry's one-line summary is insufficient. |
