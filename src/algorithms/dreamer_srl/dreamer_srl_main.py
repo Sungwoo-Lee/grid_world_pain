@@ -328,6 +328,13 @@ def main() -> None:
                 },
             )
             print(f"[dreamer-srl] WandB run: {run.url}")
+            # Commit 2: define_metric so Episode/* keys plot against Episode/Number
+            # Mirrors train.py:L625-L634
+            wandb.define_metric("iteration")
+            wandb.define_metric("timesteps")
+            wandb.define_metric("Episode/Number")
+            wandb.define_metric("*", step_metric="timesteps")
+            wandb.define_metric("Episode/*", step_metric="Episode/Number")
         except ImportError:
             print("[dreamer-srl] WandB not installed — disabling WandB logging")
             use_wandb = False
@@ -358,6 +365,53 @@ def main() -> None:
     episode_lengths = np.zeros(num_envs, dtype=np.int32)
     episode_rewards = np.zeros(num_envs, dtype=np.float32)
     is_first = np.ones((num_envs, 1), dtype=np.float32)  # for player inference
+
+    # Commit 2: per-iteration episode buffer + total episode counter
+    # Mirrors train.py:L1062 (Dreamer) and train.py:L1349 (rPPO)
+    iteration_episodes: list = []          # cleared each log_every window
+    total_episodes_completed: int = 0      # running total for Episode/Number step metric
+
+    # Commit 3: per-env behavior-event + distance accumulators.
+    # Mirrors train.py:L943-L950
+    BEHAVIOR_KEYS = ['ate_food', 'hit_predator', 'hit_hiding_predator',
+                     'hit_neutral', 'event_collided', 'rested',
+                     'damage', 'damage_predator', 'damage_hiding_predator',
+                     'damage_obstacle']
+    BEHAVIOR_DIST_KEYS = ['dist_to_food', 'dist_to_pred',
+                          'dist_to_neutral', 'dist_to_hiding_predator']
+    episode_behavior  = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_KEYS}
+    episode_dist_sums = {k: np.zeros(num_envs, dtype=np.float32) for k in BEHAVIOR_DIST_KEYS}
+
+    # Commit 4: per-instance (tag-based) accumulators.
+    # Mirrors train.py:L953-L958
+    neutral_tags  = tuple(env_params.neutral_tags)
+    predator_tags = tuple(env_params.predator_tags)
+    num_neutral_for_log  = len(neutral_tags)
+    num_predator_for_log = len(predator_tags)
+    episode_dist_per_neutral_sums  = np.zeros((num_envs, num_neutral_for_log),  dtype=np.float32)
+    episode_dist_per_predator_sums = np.zeros((num_envs, num_predator_for_log), dtype=np.float32)
+
+    # Commit 5: Behavior-Measure toolkit v1 state.
+    # Mirrors train.py:L962-L982
+    from src.behavior.accumulators import (
+        make_bm_state, bm_step_update, bm_reset_env,
+        bm_finalise_episode as _bm_finalise_episode_shared,
+    )
+    from src.environment.config_loader import load_behavior_measure_cfg
+    bm_cfg = load_behavior_measure_cfg(env_cfg)
+    bm_enabled = bm_cfg is not None and bm_cfg.enabled
+    if bm_enabled:
+        bm_R = float(bm_cfg.cue_radius)
+        bm_K = int(bm_cfg.obs_window)
+        _bm_state = make_bm_state(
+            num_envs=num_envs,
+            num_predator_tags=num_predator_for_log,
+            num_neutral_tags=num_neutral_for_log,
+            bm_R=bm_R,
+            bm_K=bm_K,
+        )
+    else:
+        _bm_state = None
 
     # -----------------------------------------------------------------------
     # 12. Training loop (sheeprl main() L550-L765)
@@ -435,6 +489,34 @@ def main() -> None:
         terminated_np = (term_reason >= 2).astype(np.float32)[:, np.newaxis]  # [B, 1]
         truncated_np  = (term_reason == 1).astype(np.float32)[:, np.newaxis]  # [B, 1]
 
+        # Commit 3: per-step behavior-event + distance accumulation.
+        # Mirrors train.py:L1327-L1332
+        info_np_t = {k: np.asarray(infos[k]) for k in (BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason'])}
+        for k in BEHAVIOR_KEYS:
+            episode_behavior[k] += info_np_t[k]
+        for k in BEHAVIOR_DIST_KEYS:
+            episode_dist_sums[k] += info_np_t[k]
+
+        # Commit 4: per-tag distance accumulation.
+        # Mirrors train.py:L1340-L1341
+        if num_neutral_for_log > 0 and 'dist_per_neutral' in infos:
+            episode_dist_per_neutral_sums  += np.asarray(infos['dist_per_neutral'])
+        if num_predator_for_log > 0 and 'dist_per_predator' in infos:
+            episode_dist_per_predator_sums += np.asarray(infos['dist_per_predator'])
+
+        # Commit 5: BM toolkit per-step update.
+        # Mirrors train.py:L1339-L1342
+        if bm_enabled:
+            _bm_info_t = {
+                'ate_food':      np.asarray(infos['ate_food']),
+                'agent_in_bush': np.asarray(infos['agent_in_bush']),
+            }
+            if 'dist_per_predator' in infos:
+                _bm_info_t['dist_per_predator'] = np.asarray(infos['dist_per_predator'])
+            if 'dist_per_neutral' in infos:
+                _bm_info_t['dist_per_neutral']  = np.asarray(infos['dist_per_neutral'])
+            bm_step_update(_bm_state, _bm_info_t, dones.astype(bool))
+
         t_env_total += time.time() - t_env_start
 
         # Update step_data for next iteration (sheeprl L628-L638)
@@ -449,14 +531,43 @@ def main() -> None:
         dones_idxes = list(np.where(dones)[0])
         if dones_idxes:
             # Log episode info BEFORE resetting (sheeprl L610-L618)
+            # Commits 2/3/4/5: buffer episodes for per-iteration aggregation with
+            # behavior-event, per-tag distance, termination-reason and BM fields.
+            # Mirrors train.py:L1349-L1377 (rPPO)
             for i in dones_idxes:
                 ep_len = int(episode_lengths[i]) + 1
                 ep_rew = float(episode_rewards[i]) + float(rewards[i])
-                if use_wandb:
-                    # Commit 1: renamed Game/ep_len_avg → Episode/Steps, Rewards/rew_avg → Episode/Reward
-                    # Aggregation is still raw-per-done-env here; switches to per-iteration in Commit 2.
-                    wandb.log({"Episode/Steps": ep_len, "Episode/Reward": ep_rew},
-                              step=policy_step)
+                total_episodes_completed += 1
+                ep_data = {'r': ep_rew, 'l': ep_len}
+
+                # Commit 3: behavior-event + dist + termination_reason.
+                # Mirrors train.py:L1354-L1359
+                for k in BEHAVIOR_KEYS:
+                    ep_data[k] = float(episode_behavior[k][i])
+                for k in BEHAVIOR_DIST_KEYS:
+                    ep_data[k] = float(episode_dist_sums[k][i] / max(ep_len, 1))
+                ep_data['termination_reason'] = int(info_np_t['termination_reason'][i])
+
+                # Commit 4: per-tag distance means.
+                # Mirrors train.py:L1361-L1369
+                ep_l_safe = max(ep_len, 1)
+                if num_neutral_for_log > 0:
+                    means = episode_dist_per_neutral_sums[i] / ep_l_safe
+                    for j, tag in enumerate(neutral_tags):
+                        ep_data[f'mean_dist_rabbit_{tag}_raw'] = float(means[j])
+                if num_predator_for_log > 0:
+                    means = episode_dist_per_predator_sums[i] / ep_l_safe
+                    for j, tag in enumerate(predator_tags):
+                        ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
+
+                # Commit 5: BM per-episode finalisation.
+                # Mirrors train.py:L1371-L1372
+                if bm_enabled:
+                    ep_data.update(_bm_finalise_episode_shared(
+                        _bm_state, i, predator_tags, neutral_tags,
+                    ))
+
+                iteration_episodes.append(ep_data)
                 if not args.quiet:
                     print(f"[iter {iter_num}] episode done: env={i} ep_len={ep_len} ep_rew={ep_rew:.3f}")
 
@@ -491,6 +602,18 @@ def main() -> None:
             # Reset episode tracking for done envs
             episode_lengths[list(dones_idxes)] = 0
             episode_rewards[list(dones_idxes)] = 0.0
+            # Commits 3/4/5: reset per-env behavior + per-tag + BM accumulators.
+            # Mirrors train.py:L1382-L1391
+            for i in dones_idxes:
+                for k in BEHAVIOR_KEYS:
+                    episode_behavior[k][i] = 0.0
+                for k in BEHAVIOR_DIST_KEYS:
+                    episode_dist_sums[k][i] = 0.0
+                if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
+                if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
+                # Commit 5: BM per-env reset. Mirrors train.py:L1390-L1391
+                if bm_enabled:
+                    bm_reset_env(_bm_state, i)
 
             # Env auto-reset: get fresh obs for done envs
             key, k_autoreset = jax.random.split(key)
@@ -591,23 +714,105 @@ def main() -> None:
         if last_losses and (iter_num - last_log_step >= log_every or iter_num == total_iters):
             last_log_step = iter_num
             sps_env = policy_step / max(time.time() - t_start, 1e-9)
+
+            # Commit 2: per-iteration episode aggregation block.
+            # Mirrors train.py:L1397-L1404 (rPPO) and train.py:L1713-L1720 (Dreamer).
+            # One WandB row per log_every iterations, averaged over all episodes in the window.
+            if use_wandb and iteration_episodes:
+                ep_rewards = [ep['r'] for ep in iteration_episodes]
+                ep_lengths = [ep['l'] for ep in iteration_episodes]
+                ep_log = {
+                    "Episode/Reward":     float(np.mean(ep_rewards)),
+                    "Episode/Reward_Min": float(np.min(ep_rewards)),
+                    "Episode/Reward_Max": float(np.max(ep_rewards)),
+                    "Episode/Steps":      float(np.mean(ep_lengths)),
+                    "Episode/Number":     total_episodes_completed,
+                }
+
+                # Commit 3: behavior-event + distance + termination fan-out
+                # Mirrors train.py:L1406-L1428
+                if 'ate_food' in iteration_episodes[0]:
+                    ep_log.update({
+                        "Episode/FoodEaten":     float(np.mean([ep['ate_food']             for ep in iteration_episodes])),
+                        "Episode/PredatorHits":  float(np.mean([ep['hit_predator']         for ep in iteration_episodes])),
+                        "Episode/DangerHits":    float(np.mean([ep['hit_hiding_predator']  for ep in iteration_episodes])),
+                        "Episode/RestCount":     float(np.mean([ep['rested']               for ep in iteration_episodes])),
+                        "Episode/Collisions":    float(np.mean([ep['event_collided']       for ep in iteration_episodes])),
+                        "Episode/TotalDamage":   float(np.mean([ep['damage']               for ep in iteration_episodes])),
+                        "Episode/DamagePredator":float(np.mean([ep['damage_predator']      for ep in iteration_episodes])),
+                        "Episode/DamageDanger":  float(np.mean([ep['damage_hiding_predator'] for ep in iteration_episodes])),
+                        "Episode/DamageObstacle":float(np.mean([ep['damage_obstacle']      for ep in iteration_episodes])),
+                        "Episode/MeanDistFood":  float(np.mean([ep['dist_to_food']         for ep in iteration_episodes])),
+                        "Episode/MeanDistPredator":        float(np.mean([ep['dist_to_pred']              for ep in iteration_episodes])),
+                        "Episode/MeanDistRabbit":          float(np.mean([ep['dist_to_neutral']           for ep in iteration_episodes])),
+                        "Episode/MeanDistHidingPredator":  float(np.mean([ep['dist_to_hiding_predator']   for ep in iteration_episodes])),
+                        "Episode/RabbitHits":              float(np.mean([ep['hit_neutral']               for ep in iteration_episodes])),
+                        "Episode/HidingPredatorHits":      float(np.mean([ep['hit_hiding_predator']       for ep in iteration_episodes])),
+                    })
+                    term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
+                    for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
+                        ep_log[f"Episode/Term_{name}"] = float(np.mean([1.0 if r == code else 0.0 for r in term_reasons]))
+
+                    # Commit 4: per-tag fan-out for distance keys.
+                    # Mirrors train.py:L1430-L1433
+                    from src.utils.episode_logging import append_per_tag_means
+                    append_per_tag_means(ep_log, iteration_episodes, neutral_tags,
+                                         'mean_dist_rabbit',   'Episode/MeanDistRabbit')
+                    append_per_tag_means(ep_log, iteration_episodes, predator_tags,
+                                         'mean_dist_predator', 'Episode/MeanDistPredator')
+
+                    # Commit 5: BM toolkit fan-out (gated on bm_enabled).
+                    # Mirrors train.py:L1434-L1436
+                    if bm_enabled:
+                        from src.utils.episode_logging import bm_log_wandb
+                        bm_log_wandb(ep_log, iteration_episodes, predator_tags, neutral_tags)
+
+                wandb.log(ep_log, step=policy_step)
+                iteration_episodes = []  # clear for next window
+
+            # Commit 6: Dreamer-style prefix-sorted loss dict.
+            # Replaces the flat Loss/* mapping with WorldModel/* + Behavior/* routing.
+            # Mirrors train.py:L1797-L1810 prefix-sort routing.
             log_dict = {
-                "Loss/world_model_loss": float(last_losses.get("world_model_loss", float("nan"))),
-                "Loss/observation_loss": float(last_losses.get("observation_loss", float("nan"))),
-                "Loss/reward_loss":      float(last_losses.get("reward_loss", float("nan"))),
-                "Loss/state_loss":       float(last_losses.get("state_loss", float("nan"))),
-                "Loss/continue_loss":    float(last_losses.get("continue_loss", float("nan"))),
-                "Loss/value_loss":       float(last_losses.get("value_loss", float("nan"))),
-                "Loss/policy_loss":      float(last_losses.get("policy_loss", float("nan"))),
-                "Params/replay_ratio":   cumulative_grad_steps / max(policy_step, 1),
-                "Time/sps_env":          sps_env,
-                "Diagnostic/moments_invscale": float(last_losses.get("moments_invscale", float("nan"))),
+                "Params/effective_replay_ratio": cumulative_grad_steps / max(policy_step, 1),
+                "Time/sps_env":                  sps_env,
+                "Diagnostic/moments_invscale":   float(last_losses.get("moments_invscale", float("nan"))),
             }
+            for mk, mv in last_losses.items():
+                v = float(mv)
+                if mk.startswith('loss_actor') or mk.startswith('mean_') or mk == 'entropy' \
+                        or mk in ('value_mae',):
+                    log_dict[f"Behavior/{mk}"] = v
+                elif mk.startswith('loss_model') or mk.startswith('loss_recon') or \
+                     mk.startswith('loss_kl') or mk.startswith('loss_rew') or \
+                     mk.startswith('loss_cont') or mk.startswith('loss_dyn') or \
+                     mk.startswith('loss_rep')  or mk.startswith('model_'):
+                    log_dict[f"WorldModel/{mk}"] = v
+                elif mk in ('world_model_loss', 'observation_loss', 'reward_loss',
+                            'state_loss', 'continue_loss'):
+                    # Legacy sheeprl-style keys → re-namespace under WorldModel
+                    # Mirrors train.py:L1801 WorldModel/* routing
+                    alias = {
+                        'world_model_loss': 'loss_model',
+                        'observation_loss': 'loss_recon',
+                        'reward_loss':      'loss_rew',
+                        'state_loss':       'loss_kl',
+                        'continue_loss':    'loss_cont',
+                    }[mk]
+                    log_dict[f"WorldModel/{alias}"] = v
+                elif mk in ('value_loss', 'policy_loss'):
+                    alias = {'value_loss': 'loss_critic', 'policy_loss': 'loss_actor'}[mk]
+                    log_dict[f"Behavior/{alias}"] = v
+                elif mk == 'moments_invscale':
+                    pass  # already added at top of dict
+                else:
+                    log_dict[mk] = v
+
             if use_wandb:
                 wandb.log(log_dict, step=policy_step)
 
             if not args.quiet:
-                wm_loss = log_dict["Loss/world_model_loss"]
+                wm_loss = log_dict.get("WorldModel/loss_model", float("nan"))
                 inv_s = log_dict["Diagnostic/moments_invscale"]
                 print(
                     f"[iter {iter_num}/{total_iters}] "
