@@ -1,6 +1,7 @@
 ---
-title: "NMN as scaling-and-shifting implementation of RL-hyperparameter modulation (v2 — after professor review)"
-status: draft
+title: "NMN as scaling-and-shifting implementation of RL-hyperparameter modulation (v2 — superseded by v3)"
+status: superseded
+superseded_by: docs/project/directions/20260516_nmn_scaling_shifting_as_hyperparameter_modulation_v3.md
 audience: user, pi, experiment-designer, senior-developer
 last_updated: 2026-05-16
 supersedes: docs/project/directions/20260516_nmn_scaling_shifting_as_hyperparameter_modulation.md
