@@ -5,7 +5,7 @@ time: 04:47
 folder: memory_system_design
 tags: [memory, design, decision, skill]
 summary: "Designed and shipped the /recall Claude Code skill (.claude/skills/recall/), completing the /memorize ↔ /recall capture-recall pair; default behavior is a 10-most-recent flat reverse-chrono list, overriding the operating manual §8 time-grouped default in favor of a simpler default."
-related: [20260508_0429_memorize_skill_design_and_ship, 20260508_0315_claude_memory_system_genesis]
+related: ["20260508_0315_claude_memory_system_genesis", "20260508_0429_memorize_skill_design_and_ship"]
 session_origin: claude_code
 session_label: "recall skill rollout"
 importance: high

@@ -5,7 +5,7 @@ time: "15:34"
 folder: dreamer_diagnosis
 tags: [dreamer, learned_lesson, decision, refutation]
 summary: "Cell Z2 (paper-canonical twohot bins on top of Z1's zero-init) re-ran the no-predator task and fired H2 — partial fix. Reward MAE @ h=5: 0.386 → 0.277 → 0.177 (cumulative cascade −54% from A1; H1 < 0.15 narrowly missed by 0.027). Mechanistic prediction validated: training-time `model_reward_mae_neg` dropped 45% Z1→Z2 (0.649 → 0.359), exactly the negative-event-error narrowing the bin-coverage mechanism predicted. New residual pattern observed: long-horizon reward MAE compounds 0.18 → 3.05 across h=5 → h=50 (Z1 was 0.28 → 0.23) — mechanistically points at GRU reset gate (§6 item 28) as the next candidate."
-related: ["20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry", "20260510_2241_residual_error_pattern_directs_next_fix", "20260509_1534_wm_reward_head_localized_failure_a1"]
+related: ["20260509_1534_wm_reward_head_localized_failure_a1", "20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry", "20260510_2241_residual_error_pattern_directs_next_fix"]
 session_origin: claude_code
 session_label: "dreamer_sheeprl_compare_and_zero_init_2026-05-10"
 importance: high

@@ -5,7 +5,7 @@ time: "16:39"
 folder: cluster_ops
 tags: [meta, learned_lesson, training_runner]
 summary: "`docker export` snapshots the writable filesystem including `/etc/ssh/ssh_host_*` and `~vncuser/.ssh/{id_rsa,authorized_keys,known_hosts}`. When the same flattened image is rolled to all 14 lab nodes, this is what enables `run_command.py`'s passwordless SSH between containers (shared id_rsa + authorized_keys + pre-trusted known_hosts), but it also collapses host keys to a single shared identity and creates a host-key-reconciliation gotcha if the prior image regenerated host keys per-container. `/tmp/ssh_mux_*` ControlMaster sockets stay on tmpfs and do not propagate."
-related: ["20260508_1637_nas_automount_fstab_actimeo", "20260508_1638_container_slimdown_recipe", "20260508_1434_terminate_command_key_auth_refactor"]
+related: ["20260508_1434_terminate_command_key_auth_refactor", "20260508_1637_nas_automount_fstab_actimeo", "20260508_1638_container_slimdown_recipe"]
 session_origin: claude_code
 session_label: "container_image_rebuild_evaaa_to_episode_v1_2026-05-08"
 importance: medium

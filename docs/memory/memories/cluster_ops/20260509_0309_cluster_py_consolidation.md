@@ -5,7 +5,7 @@ time: "03:09"
 folder: cluster_ops
 tags: [meta, decision, training_runner, learned_lesson]
 summary: "Replaced 8 single-purpose bash scripts (distribute_image, list_containers_all, list_images_all, stop_container_all, rm_container_all, run_container_all, remove_docker_image_all, roll_to_episode) with one Python tool `cluster.py` (~440 LOC, stdlib only). Subcommands via argparse; per-subcommand `--include` / `--exclude` filters with range syntax (`101-105`, `101..103`, `192.168.0.108`); module-level password cache for the `rollout` orchestrator; SSH ControlMaster multiplexing baked into the shared SSH-opts list."
-related: ["20260509_0310_bash_ic_alias_over_ssh", "20260508_1638_container_slimdown_recipe", "20260508_1639_ssh_credentials_in_shared_image"]
+related: ["20260508_1638_container_slimdown_recipe", "20260508_1639_ssh_credentials_in_shared_image", "20260509_0310_bash_ic_alias_over_ssh"]
 session_origin: claude_code
 session_label: "container_image_rebuild_evaaa_to_episode_v1_2026-05-08"
 importance: high

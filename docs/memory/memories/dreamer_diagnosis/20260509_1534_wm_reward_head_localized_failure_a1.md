@@ -5,7 +5,7 @@ time: "15:34"
 folder: dreamer_diagnosis
 tags: [dreamer, learned_lesson, decision, refutation]
 summary: "Offline WM-imagination diagnostic on Cell A1's NoPred checkpoint pinpoints the failure: encoder/decoder + continuation head are sound (aggregate obs symlog-MSE 0.059 PASS, cont accuracy 0.995 PASS, autoregressive drift healthy at h50/h5=1.69), but reward MAE 0.386 (2.6× threshold) at h=5 even on the simplest food-only task. Localizes the bottleneck to the reward head specifically."
-related: ["20260508_1432_probe_refutes_imagined_death_absence", "20260508_1431_diagnostic_battery_refutes_four_fixes"]
+related: ["20260508_1431_diagnostic_battery_refutes_four_fixes", "20260508_1432_probe_refutes_imagined_death_absence"]
 session_origin: claude_code
 session_label: "dreamer_conventional_fixes_battery_2026-05-09"
 importance: high

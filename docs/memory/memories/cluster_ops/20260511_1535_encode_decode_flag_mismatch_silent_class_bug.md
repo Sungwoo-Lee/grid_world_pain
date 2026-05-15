@@ -5,7 +5,7 @@ time: "15:35"
 folder: cluster_ops
 tags: [dreamer, learned_lesson, meta, decision]
 summary: "When a knob-gated encode/decode change lands in production training code, every auxiliary script that touches the same code path must be updated in lockstep — otherwise the trained model speaks the new layout, the auxiliary script listens in the old layout, and the output is silent garbage (no error, just wrong numbers). Concrete instance: `scripts/dreamer_offline_wm_test.py` missed the new `paper_canonical_bins` flag after the Z2 trainer change; first Z2 diagnostic run reported MAE = 1.04 (5.7× the true value 0.177) looking like a catastrophic regression. Generalizable heuristic that caught it: any diagnostic that decodes a trained model's outputs should cross-check at least one metric against the training-time logger on the same checkpoint, as a silent-failure-mode trip-wire."
-related: ["20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt", "20260509_1536_train_py_checkpoint_restore_nnx_skew", "20260510_2241_residual_error_pattern_directs_next_fix"]
+related: ["20260509_1536_train_py_checkpoint_restore_nnx_skew", "20260510_2241_residual_error_pattern_directs_next_fix", "20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt"]
 session_origin: claude_code
 session_label: "dreamer_sheeprl_compare_and_zero_init_2026-05-10"
 importance: medium

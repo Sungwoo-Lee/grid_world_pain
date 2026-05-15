@@ -5,7 +5,7 @@ time: "22:41"
 folder: subagent_engineering
 tags: [subagent, learned_lesson, decision, meta]
 summary: "Methodology pattern: when a partial fix lands (H2-band outcome), the residual-error pattern in the diagnostic output identifies the next-best candidate, NOT the original list-order or the plan's prescribed-next-step. Concretely: Z1's residual error was disproportionate on negative rewards → bin-range deviation (§6 item 2, mechanistic match) was selected over the plan §4 H2 prescription (candidate #1, GRU reset gate)."
-related: ["20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry", "20260510_2240_reference_impl_compare_only_act_intersections", "20260509_1537_professor_analysis_resets_exotic_investigation"]
+related: ["20260509_1537_professor_analysis_resets_exotic_investigation", "20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry", "20260510_2240_reference_impl_compare_only_act_intersections"]
 session_origin: claude_code
 session_label: "dreamer_sheeprl_compare_and_zero_init_2026-05-10"
 importance: medium

@@ -5,7 +5,7 @@ time: "23:08"
 folder: dreamer_diagnosis
 tags: [dreamer, learned_lesson, decision, meta, design]
 summary: "The Strong (A+B+C+D) deviation-prevention strategy paid off on the first checkpoint (CP1, utils.py port) of the dreamer-srl v3 rebuild — caught a pre-CP0 gitignore blocker that would have broken Lever D + Lever A on a fresh clone, surfaced a latent wrong-reference bug in the D-002 distribution test when we tightened its threshold, and let the PI cleanly batch-approve all 3 deviations (D-001/D-002/D-003) under the user's 'nothing has to be changed in the meaning of functions' criterion. ~50% dev-time overhead vs naive impl, but the previous plan-only review process let the twohot encoding bug through — the strategy closes that loop."
-related: [20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned, 20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt, 20260510_2240_reference_impl_compare_only_act_intersections]
+related: ["20260510_2240_reference_impl_compare_only_act_intersections", "20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt", "20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned"]
 session_origin: claude_code
 session_label: "dreamer-srl v3 CP1 closure — Strong (A+B+C+D) strategy validation"
 importance: high

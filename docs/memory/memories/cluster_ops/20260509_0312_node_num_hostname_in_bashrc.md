@@ -5,7 +5,7 @@ time: "03:12"
 folder: cluster_ops
 tags: [meta, learned_lesson, training_runner]
 summary: "The host's `/home/sungwoo320/.bashrc` derives `NODE_NUM` from the primary lab IP's last octet (`hostname -I | grep '^192\\.168\\.0\\.' | awk -F. '{print $4}'`) and every `doc-run-*` alias passes `--hostname=\"docker-${NODE_NUM}\"`. After rollout, the in-container prompt reads `vncuser@docker-102` on node 102 and `vncuser@docker-114` on node 114 — instant disambiguation when shelling between cluster containers. Variable expands at alias-use time (not definition time) because aliases are macro-substituted before re-parsing."
-related: ["20260509_0309_cluster_py_consolidation", "20260509_0310_bash_ic_alias_over_ssh", "20260508_1639_ssh_credentials_in_shared_image"]
+related: ["20260508_1639_ssh_credentials_in_shared_image", "20260509_0309_cluster_py_consolidation", "20260509_0310_bash_ic_alias_over_ssh"]
 session_origin: claude_code
 session_label: "container_image_rebuild_evaaa_to_episode_v1_2026-05-08"
 importance: medium

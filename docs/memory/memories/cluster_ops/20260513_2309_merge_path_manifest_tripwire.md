@@ -5,7 +5,7 @@ time: "23:09"
 folder: cluster_ops
 tags: [meta, learned_lesson, decision, design]
 summary: "When a project carries 165GB of gitignored training data (results 39GB, wandb 119GB, logs 4GB, etc.) and CLAUDE.md mandates 'snapshot critical data before any merge / rebase / branch switch', the full cp -a backup is infeasible. Instead, save a path manifest (find -printf '%p %s\\n', ~16MB, 128k lines) as a tripwire, verify the operation is structurally non-destructive (fast-forward only, no clean -x, no force-checkout), and post-op diff the manifest against current `find` count to detect silent loss. Validated end-to-end on v1.3 → develop → v1.4: delta = 0 files."
-related: [20260512_1755_pytorch_agents_pip_dep_layout, 20260512_1756_pip_install_namespace_shadow_numpy_cap]
+related: ["20260512_1755_pytorch_agents_pip_dep_layout", "20260512_1756_pip_install_namespace_shadow_numpy_cap"]
 session_origin: claude_code
 session_label: "dreamer-srl v3 CP1 closure — v1.3→develop→v1.4 merge"
 importance: medium

@@ -5,7 +5,7 @@ time: 04:29
 folder: memory_system_design
 tags: [memory, design, decision, skill]
 summary: "Designed and shipped the /memorize Claude Code skill (.claude/skills/memorize/) that captures conversations into the in-repo docs/memory/ layer; validated end-to-end via a 3-eval benchmark with +33pt with-vs-without skill delta."
-related: [20260508_0315_claude_memory_system_genesis]
+related: ["20260508_0315_claude_memory_system_genesis"]
 session_origin: claude_code
 session_label: "memorize skill rollout"
 importance: high

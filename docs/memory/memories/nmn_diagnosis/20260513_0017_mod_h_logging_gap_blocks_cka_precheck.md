@@ -5,7 +5,7 @@ time: "00:17"
 folder: nmn_diagnosis
 tags: [nmn, learned_lesson, meta, training_runner]
 summary: "The R2 continual probe's modulator-engagement Mahalanobis check is unevaluable because the project never logs the raw modulator hidden vector — only summary statistics (mean, std). Three new WandB metrics requested: `modulator/mod_h_norm`, `Episode/Term_Predator`, `Episode/Occupancy_*`. Without `eval/h_mod_samples` hook + `mod_h_norm`, no CKA pre-check or representation-similarity test is possible on existing or future NMN runs."
-related: ["20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin", "20260509_1410_nmn_temp_head_natural_target_3_to_5"]
+related: ["20260509_1410_nmn_temp_head_natural_target_3_to_5", "20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin", "20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric"]
 session_origin: claude_code
 session_label: "NMN R2 continual + 6-specialist analyzer verdict — first positive FiLM finding"
 importance: medium

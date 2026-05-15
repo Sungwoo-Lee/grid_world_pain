@@ -5,7 +5,7 @@ time: "20:04"
 folder: nmn_diagnosis
 tags: [nmn, hypervigilance, film, learned_lesson]
 summary: "MC FiLM temp_max saturates at the temp_clip 3.0 ceiling for P3f/P4f/P5f (R ≥ 5) but stays at 1.50–2.30 for P1f/P2f. Saturation is profile-dependent at R ≈ 5; raising temp_clip ceiling and re-running P3–P5 is the minimum-viable architectural test before any FiLM redesign."
-related: ["20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse", "20260508_1427_nmn_heterogeneity_sweep_design"]
+related: ["20260508_1427_nmn_heterogeneity_sweep_design", "20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse"]
 session_origin: claude_code
 session_label: "nmn_noise_heterogeneity_sweep_launch_2026-05-07/08"
 importance: high

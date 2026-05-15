@@ -5,7 +5,7 @@ time: "15:33"
 folder: hypervigilance
 tags: [hypervigilance, design, decision, meta]
 summary: "Tag-based per-instance distance design (optional `tag: <string>` per entity in YAML, source code geometry-agnostic) supersedes the originally-planned quadrant-hardcoded approach. `MeanDistRabbit_<tag>` vs `MeanDistPredator_<tag>` (same tag) is a more direct disambiguator for quadrant-vs-class avoidance than `QuadrantOccupancy_*` would have been."
-related: [20260509_1532_sameprop_round2_truncated_verdict, 20260509_1534_synthetic_smoke_masks_dict_assembly_bugs]
+related: ["20260509_1532_sameprop_round2_truncated_verdict", "20260509_1534_synthetic_smoke_masks_dict_assembly_bugs"]
 session_origin: claude_code
 session_label: "hypervigilance Round 2 partial-verdict + per-tag metrics ship"
 importance: high

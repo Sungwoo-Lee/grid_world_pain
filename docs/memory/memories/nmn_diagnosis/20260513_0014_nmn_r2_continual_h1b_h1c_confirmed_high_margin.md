@@ -5,7 +5,7 @@ time: "00:14"
 folder: nmn_diagnosis
 tags: [nmn, film, hypervigilance, decision, learned_lesson]
 summary: "R2 continual sister-pair probe (5.1M ep, 5-stage active↔passive schedule) delivers the first clearly-positive architecture-vitality finding for the FiLM modulator: H₁b (catastrophic-forgetting resistance) and H₁c (Tsuda-style reusable subnetwork) both CONFIRMED at ~25× the seed-noise floor. Modulator beats unmodulated baseline by +107 steps on the 1st return-to-active stage and +132 steps on the 2nd; modulator's 2nd return ≥ 1st (+5.75), baseline shows monotone decay (−19.79)."
-related: ["20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4", "20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse"]
+related: ["20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse", "20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4", "20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric", "20260513_0017_mod_h_logging_gap_blocks_cka_precheck"]
 session_origin: claude_code
 session_label: "NMN R2 continual + 6-specialist analyzer verdict — first positive FiLM finding"
 importance: high

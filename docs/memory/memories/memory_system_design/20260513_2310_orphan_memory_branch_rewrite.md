@@ -5,7 +5,7 @@ time: "23:10"
 folder: memory_system_design
 tags: [memory, design, learned_lesson, decision, meta]
 summary: "When a worktree branch carrying a single .claude-memory insight commit falls behind its base by N commits and another session edits the same docs/memory/ index files (ROOT_INDEX counts, _topic_index rows, _global_tags history) in the meantime, the merge produces synthetic conflicts on the index files only — the insight body itself is usually unique on the orphan branch. Rather than resolve the synthetic index-count conflicts by hand, the cleaner pattern is to rewrite the insight on the current base: copy the insight body via `git show <orphan-branch>:<path>`, regenerate the indexes from the CURRENT counts on the base, drop the orphan branch. Costs ~5 minutes; produces linear history; preserves the insight content; the orphan commit hash survives in the reflog as 30-day safety net."
-related: [20260508_0429_memorize_skill_design_and_ship, 20260509_0311_diary_auto_session_backfill, 20260508_0430_worktree_isolation_path_safety]
+related: ["20260508_0429_memorize_skill_design_and_ship", "20260508_0430_worktree_isolation_path_safety", "20260509_0311_diary_auto_session_backfill"]
 session_origin: claude_code
 session_label: "dreamer-srl v3 CP1 closure — JAXVectorEnv insight orphan branch resolution"
 importance: medium

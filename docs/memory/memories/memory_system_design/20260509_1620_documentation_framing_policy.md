@@ -5,7 +5,7 @@ time: "16:20"
 folder: memory_system_design
 tags: [design, decision, meta]
 summary: "Established a project-wide Documentation framing policy in CLAUDE.md: every plan/design/analysis/summary/review/direction doc must lead with a plain-language entry-point section a reader without prior context can follow. No bare WandB IDs, config paths, or predicate names in the entry-point. 16 files updated in commit 62f96b9 (CLAUDE.md + 2 templates + 13 doc-producing agent profiles); first retro-application to v2 synthesis (commit 5c5adf3) added a 350-word TL;DR. The /summarize-study skill is the worked example."
-related: ["20260509_1619_summarize_study_skill_design_and_ship", "20260508_0315_claude_memory_system_genesis"]
+related: ["20260508_0315_claude_memory_system_genesis", "20260509_1619_summarize_study_skill_design_and_ship"]
 session_origin: claude_code
 session_label: "nmn_meta_continual_pivot_2026-05-09"
 importance: high

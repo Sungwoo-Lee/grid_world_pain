@@ -5,7 +5,7 @@ time: "14:17"
 folder: dreamer_diagnosis
 tags: [dreamer, learned_lesson, refutation, decision, meta]
 summary: "JAX-vmap parallel env over our 5×5 NoPred gridworld delivered no speedup vs sheeprl's SyncVectorEnv, on CPU (v1: 1.01× at N=4) or GPU (v2: 0.47× at N=4). Root cause is the Python↔JAX boundary cost dominating microsecond-cheap env-step compute — naive `np.array()` round-trip plus `jax.tree.map` auto-reset blend. Closes the spike; only DLPack zero-copy bridge could plausibly win, and that is a separate fresh plan."
-related: [20260512_1755_pytorch_agents_pip_dep_layout, 20260512_1756_pip_install_namespace_shadow_numpy_cap, 20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned]
+related: ["20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned", "20260512_1755_pytorch_agents_pip_dep_layout", "20260512_1756_pip_install_namespace_shadow_numpy_cap"]
 session_origin: claude_code
 session_label: "JAXVectorEnv v1+v2 spike — vmap on tiny envs doesn't deliver speedup, CPU or GPU"
 importance: high

@@ -5,7 +5,7 @@ time: 04:30
 folder: subagent_engineering
 tags: [meta, learned_lesson, worktree, subagent]
 summary: "Agent-tool worktree isolation is filesystem isolation only — NOT path-namespace isolation. Subagents using absolute paths escape the sandbox. Future subagent prompts using worktree isolation must explicitly enforce repo-relative paths."
-related: [20260508_0429_memorize_skill_design_and_ship]
+related: ["20260508_0429_memorize_skill_design_and_ship"]
 session_origin: claude_code
 session_label: "memorize skill rollout"
 importance: high

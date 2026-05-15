@@ -5,7 +5,7 @@ time: "17:17"
 folder: cluster_ops
 tags: [meta, decision, learned_lesson, training_runner]
 summary: "OpenSSH `Host` directives match by destination only — not by user. The lab SSH config written by `bootstrap_lab_ssh.sh` (commit d7b4f1f) silently rewrote `ssh sungwoo320@192.168.0.10X` from port 22 to port 1800, hitting the docker container's sshd (which has no sungwoo320 account) and producing a 'Permission denied' that masquerades as a wrong-password error. Fix: replace the global `Host` block with `Match user vncuser host 192.168.0.10?,192.168.0.11?` so only vncuser routes to 1800. All four propagation surfaces (`~/.ssh/config`, `scripts/bootstrap_lab_ssh.sh`, `.claude/agents/training-runner.md` lines 38 + 49) updated together. Audit confirmed every SSH-using script (`run_command.py`, `terminate_command.py`, `bootstrap_lab_ssh.sh`) passes `-p 1800` explicitly, so the config block is convenience-only — agents are unaffected by the scoping."
-related: ["20260508_1638_container_slimdown_recipe", "20260508_1639_ssh_credentials_in_shared_image", "20260508_1428_node_env_recovery_recipe", "20260508_1434_terminate_command_key_auth_refactor"]
+related: ["20260508_1428_node_env_recovery_recipe", "20260508_1434_terminate_command_key_auth_refactor", "20260508_1638_container_slimdown_recipe", "20260508_1639_ssh_credentials_in_shared_image"]
 session_origin: claude_code
 session_label: "container_image_rebuild_evaaa_to_episode_v1_2026-05-08"
 importance: high

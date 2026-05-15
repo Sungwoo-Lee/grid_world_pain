@@ -5,7 +5,7 @@ time: "22:37"
 folder: hypervigilance
 tags: [hypervigilance, refutation, learned_lesson, decision]
 summary: "Round 2.5 (10M ep, n=1 each cell) refutes both pre-registered hypotheses: per-tag Δ_TL = +0.004 cells in Cell A1 (75× inside the H₀ band) confirms location-conditional corner-camping, not class recognition; Cell C aggregated Δ = −0.53 cells (sign-flipped vs R1's +0.63) with bilateral rabbit avoidance lands in §4.3 Inverted. The original sameProp survey effect (+0.6 cells, RPPO appears to keep predators farther than rabbits) decomposes into two confounds working in concert — food/quadrant overlap and spatial-avoidance camouflage — with no genuine class-conditional avoidance under matched olfactory smells. Provisional pending Round 2.6 seed 44 for Cell C; Cell A1's verdict is unconditional."
-related: [20260508_1444_sameprop_round1_finding_and_confound, 20260509_1532_sameprop_round2_truncated_verdict, 20260509_1533_tag_based_distance_supersedes_quadrant]
+related: ["20260508_1444_sameprop_round1_finding_and_confound", "20260509_1532_sameprop_round2_truncated_verdict", "20260509_1533_tag_based_distance_supersedes_quadrant"]
 session_origin: claude_code
 session_label: "hypervigilance Round 2.5 launch + analysis"
 importance: high

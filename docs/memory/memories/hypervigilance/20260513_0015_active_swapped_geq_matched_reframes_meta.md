@@ -5,7 +5,7 @@ time: "00:15"
 folder: hypervigilance
 tags: [hypervigilance, learned_lesson, refutation, design]
 summary: "Specialist ceiling table from the 6-world unmodulated probe (single-seed, 10M ep each) shows active_swapped (402 steps) > active_matched (338 steps). Swap is NOT harder than matched in isolation, which refutes the original 'swap is load-bearing' framing for the upcoming meta head-to-head and reframes it as a CKA-factorisation test instead."
-related: ["20260512_1428_sameprop_class_discriminating_defence_event_level", "20260510_2237_sameprop_round25_no_class_avoidance"]
+related: ["20260510_2237_sameprop_round25_no_class_avoidance", "20260512_1428_sameprop_class_discriminating_defence_event_level", "20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin"]
 session_origin: claude_code
 session_label: "NMN R2 continual + 6-specialist analyzer verdict — first positive FiLM finding"
 importance: high

@@ -5,7 +5,7 @@ time: "15:32"
 folder: hypervigilance
 tags: [hypervigilance, refutation, learned_lesson]
 summary: "Round 2 SIGINT'd at 0.4M ep / 3.5h: H1(C) provisionally refuted (Δ=−0.43 sign-flipped vs R1's +0.63); Cell A1's striking Δ=+3.86 is structurally uninterpretable because the agent survives 482/500 steps in the BR corner — §5 row-2 failure mode is active and cannot be discounted without per-tag distance metrics."
-related: [20260508_1444_sameprop_round1_finding_and_confound, 20260508_1445_sameprop_discriminating_channels]
+related: ["20260508_1444_sameprop_round1_finding_and_confound", "20260508_1445_sameprop_discriminating_channels"]
 session_origin: claude_code
 session_label: "hypervigilance Round 2 partial-verdict + per-tag metrics ship"
 importance: high

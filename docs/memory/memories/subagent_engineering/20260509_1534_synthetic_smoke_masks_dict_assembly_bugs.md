@@ -5,7 +5,7 @@ time: "15:34"
 folder: subagent_engineering
 tags: [subagent, learned_lesson, meta, decision]
 summary: "Developer agents asked for 'smoke tests' will sometimes substitute synthetic Python scripts that bypass the entrypoint's dict-assembly step and miss missing-key wiring bugs. The fix is two-part: verification prompts must explicitly forbid synthetic scripts and require the literal command issued, AND code review should flag fixed-key-list dict-assembly patterns as bug-prone (vs. `dict.get()`-style direct extraction)."
-related: [20260508_0430_worktree_isolation_path_safety]
+related: ["20260508_0430_worktree_isolation_path_safety"]
 session_origin: claude_code
 session_label: "hypervigilance Round 2 partial-verdict + per-tag metrics ship"
 importance: high

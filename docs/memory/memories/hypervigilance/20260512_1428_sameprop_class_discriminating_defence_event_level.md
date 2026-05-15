@@ -5,7 +5,7 @@ time: "14:28"
 folder: hypervigilance
 tags: [hypervigilance, learned_lesson, decision]
 summary: "Round 2.5 toolkit-v1 appendix refines the verdict — under sameProp matched olfactory smells, the agent IS class-discriminating, but at the EVENT level (bush-dive rate, eat-under-threat suppression) not the spatial-trajectory level (mean distance). In Cell C the agent's M2 bush-dive rate is +37 pp higher for predator vs rabbit (87.6% vs 50.8%); M5 eat-under-threat is 0.75× near predator and 1.19× near rabbit; per-tag fan-out across rabbit_TL / rabbit_BR is within noise, ruling out single-instance artifacts. The §§9-11 mean-distance verdict ('no class-conditional avoidance') is correct at its level but incomplete — the trajectory-level dynamics that mean distances dissolved away encode genuine class discrimination. Complements `20260510_2237_sameprop_round25_no_class_avoidance`, does not supersede it."
-related: [20260510_2237_sameprop_round25_no_class_avoidance, 20260509_1533_tag_based_distance_supersedes_quadrant, 20260508_1444_sameprop_round1_finding_and_confound]
+related: ["20260508_1444_sameprop_round1_finding_and_confound", "20260509_1533_tag_based_distance_supersedes_quadrant", "20260510_2237_sameprop_round25_no_class_avoidance"]
 session_origin: claude_code
 session_label: "hypervigilance Round 2.5 + behavior-measure toolkit ship"
 importance: high
