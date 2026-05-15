@@ -1481,6 +1481,8 @@ def main():
                         wandb_logs.update({
                             "timesteps": global_step,
                             "iteration": iteration,
+                            # Commit 7: Time/sps_env for rPPO branch. Mirrors dreamer_srl_main.py:L590
+                            "Time/sps_env": global_step / max((datetime.now() - start_time).total_seconds(), 1e-9),
                             **_stage_tag(),
                         })
                         wandb.log(wandb_logs)
@@ -1784,7 +1786,9 @@ def main():
                     if wandb_enabled and iteration % log_interval == 0:
                         wandb_logs = {
                             "timesteps": global_step,                             "iteration": iteration,
-                             "Params/effective_replay_ratio": cumulative_gradient_steps / max(1, global_step)
+                             "Params/effective_replay_ratio": cumulative_gradient_steps / max(1, global_step),
+                             # Commit 7: Time/sps_env for Dreamer branch. Mirrors dreamer_srl_main.py:L590
+                             "Time/sps_env": global_step / max((datetime.now() - start_time).total_seconds(), 1e-9),
                         }
                         if positive_buffer is not None:
                             pos_blocks = positive_buffer.size // positive_buffer.sequence_length
