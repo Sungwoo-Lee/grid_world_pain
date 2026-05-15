@@ -65,10 +65,7 @@ The R2 continual-learning win (the FiLM agent surviving +107 / +132 steps on the
 
 ## 8. Professor feedback
 
-> The two subsections below are inlined from standalone signed sidecar files at
-> [`20260516_nmn_scaling_shifting_as_hyperparameter_modulation.professor-neuromodulation_feedback.md`](20260516_nmn_scaling_shifting_as_hyperparameter_modulation.professor-neuromodulation_feedback.md) and
-> [`20260516_nmn_scaling_shifting_as_hyperparameter_modulation.professor-rl-bayesian-dl_feedback.md`](20260516_nmn_scaling_shifting_as_hyperparameter_modulation.professor-rl-bayesian-dl_feedback.md).
-> Header levels demoted by two to fit under §8. **Both professors independently flagged the Tsuda 2021 mis-citation in §3 and prediction (b); `professor-rl-bayesian-dl` additionally flagged a Doya/Yu-Dayan branch confusion in the §2 ACh row.** These are the load-bearing fixes the user should weigh before the postdoc revises.
+> Reviews from `professor-neuromodulation` and `professor-rl-bayesian-dl`, each having read the postdoc's draft and the project's reference corpus at `docs/project/references/neuromodulatory_algorithms/`. **Both professors independently flagged the Tsuda 2021 mis-citation in §3 and prediction (b); `professor-rl-bayesian-dl` additionally flagged a Doya/Yu-Dayan branch confusion in the §2 ACh row.** These are the load-bearing fixes to weigh before the postdoc revises.
 
 ### Feedback from professor-neuromodulation
 
