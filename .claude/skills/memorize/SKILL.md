@@ -97,6 +97,7 @@ For each confirmed insight:
    - `raw_source: none` and `raw_completeness: none` for now (Step 7 may overwrite).
 
 3. Fill all 5 body sections in plain English. `## Open questions and follow-ups` writes "None" if there are none. `## References` includes the "Why a new folder" line if applicable.
+   - When referencing another insight, write `[[<insight_id>]]` inline in the body section (typically `## References` or `## Decisions and actions`). The `related:` frontmatter is auto-populated by `scripts/regen_memory_links.py` — do not hand-type it.
 
 ### Step 5 — Update the topic index
 
@@ -154,12 +155,21 @@ This is a hard step, not optional — the diary is the project's cross-session s
 
 After all writes succeed, bundle every file this skill touched into a single commit. The user has standing auto-commit authorization — do not ask. One coherent commit per `/memorize` run, regardless of how many insights or diary rows were produced.
 
+Before staging, run the link regenerator so any `[[id]]` tokens in the new insight produce the correct `related:` field, and any older insight whose body already contained a `[[new_id]]` token gets updated too:
+
+```bash
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/regen_memory_links.py
+```
+
+Then stage by name only — include any insight files the regenerator touched (it prints which files it updated):
+
 ```bash
 git add docs/memory/ROOT_INDEX.md \
         docs/memory/memories/_global_tags.md \
         docs/memory/memories/<topic>/_topic_index.md \
         docs/memory/memories/<topic>/<id>.md \
         docs/diary/<YYYY-MM-DD>.md
+# If regen_memory_links.py updated older insights, add those paths too.
 # repeat the topic-index and insight paths for every (topic, id) pair written
 
 git commit -m "$(cat <<'EOF'

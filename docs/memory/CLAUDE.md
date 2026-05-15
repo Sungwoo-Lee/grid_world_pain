@@ -3,7 +3,7 @@
 > Authoritative single source for this memory layer's policies, workflows, and templates.
 > The project root `CLAUDE.md` routes future-Claude here. Do not duplicate this content elsewhere.
 
-**Last updated**: 2026-05-08
+**Last updated**: 2026-05-16
 **Related**: [project CLAUDE.md](../CLAUDE.md), [ROOT_INDEX.md](ROOT_INDEX.md), [design plan](../docs/develop/active/meta/claude_memory_system_design.md)
 
 ---
@@ -224,3 +224,49 @@ Large file warning
 - **Filename format**: `YYYYMMDD_HHMM_<english_snake_case_slug>.md`. English only, snake_case, no hyphens, no camelCase.
 - **Folder naming**: English snake_case, ≤ ~3 words, no hyphens. 1-line definition ≤ ~30 characters in `ROOT_INDEX.md`.
 - **Policy changes**: edit this file directly. Do not put policy in the built-in `MEMORY.md` — it is a pointer only.
+
+---
+
+## 12. Wikilinks and graph regeneration
+
+### Writing wikilinks
+
+The body of an insight MAY contain `[[<id>]]` inline tokens that link to other insights. `<id>` is the filename stem: `YYYYMMDD_HHMM_<slug>`. Example:
+
+```
+See also [[20260508_0315_claude_memory_system_genesis]] for the genesis rationale.
+```
+
+Place wikilinks wherever they are naturally meaningful — in `## Decisions and actions`, `## References`, or inline in prose. Prefer `[[id]]` over hand-typing the ID into `related:`.
+
+Obsidian renders `[[<id>]]` as a clickable link in the `docs/.obsidian` vault; the regenerator script keeps the `related:` frontmatter in sync with those tokens.
+
+### `related:` frontmatter
+
+`related:` is **auto-populated** from body `[[id]]` tokens by `scripts/regen_memory_links.py`. Do not hand-type it. The canonical form is:
+
+```yaml
+related: ["id1", "id2"]    # sorted, double-quoted, single-line
+related: []                # when no links
+```
+
+The regenerator is additive: it merges any `[[id]]` tokens it finds with whatever is already in `related:`, never removes existing IDs. Running it twice in a row is always idempotent.
+
+### `scripts/regen_memory_links.py`
+
+| Mode | Command | Effect |
+|---|---|---|
+| Default | `python scripts/regen_memory_links.py` | Walk all insights; add body `[[id]]` tokens to `related:` in canonical form. |
+| One-time migration | `python scripts/regen_memory_links.py --normalise-existing` | Same algorithm; explicitly documented as the migration pass for pre-existing hand-typed `related:` values. |
+| Pre-commit check | `python scripts/regen_memory_links.py --check` | Read-only; exits 0 if no files would change, 1 if any would. |
+| Custom root | `python scripts/regen_memory_links.py --root <path>` | Override the default `docs/memory` root. |
+
+The script is stdlib-only (no PyYAML); it parses frontmatter with regex and rewrites only the `related:` line, preserving every other byte of the file.
+
+### `/memorize` Step 9 contract
+
+Step 9 (auto-commit) **must** run `scripts/regen_memory_links.py` before staging, so any `[[id]]` tokens written in the body during Step 4 are reflected in `related:` before the commit lands. See `.claude/skills/memorize/SKILL.md` Step 9 for the exact command.
+
+### `[[id|alias]]` form
+
+If you encounter `[[id|alias]]` (Obsidian alias syntax), the regenerator captures `id` and logs the alias. Alias support is not used in this project yet; use plain `[[id]]` only.
