@@ -969,6 +969,114 @@ Implemented by: developer (partial) + top-level Claude (wrap-up)
 
 ---
 
+### Phase D verification — 2026-05-16
+
+> **Verified by**: code-reviewer
+> **Date**: 2026-05-16
+> **Commits verified**: `1408672` (script) + `7c9c034` (operating-manual wiring) + `f8d8d01` (Phase D implementation report)
+
+#### Plain-language entry point
+
+Phase D shipped one read-only audit script (`scripts/lint_memory.py`, 613 lines, stdlib only) and one one-line wiring update in the memory layer's operating manual at `docs/memory/CLAUDE.md` §6 layer 4 that points the audit trigger at the new script. The script runs nine checks: broken `[[id]]` wikilinks, broken `related:` IDs, `folder:` frontmatter ↔ parent-directory mismatch, duplicate `id:` across the tree, tags missing from the global tag dictionary, near-duplicate folder definitions in the topic registry, old orphan insights (no links, > 30 days), broken `raw_source` JSONL pointers, and a reverse-check that every referenced JSONL appears in the auto-generated graph report's Conversation provenance section. Verification re-ran the developer's G3 synthetic-edit gate that top-level Claude only verified by code inspection, plus independently exercised G4–G6 plus a defensive G3 on a fresh sample, plus exercised the unit-tested-but-not-gated Checks 2, 6, and 7. All synthetic-edit gates fire correctly; the Phase A + B regenerators still report clean trees; no out-of-scope edits in the Phase D commit set. **Verdict: proceed to Phase E**, with two non-blocking nits documented below.
+
+#### 1. Per-check code-correctness audit (Checks 1–9)
+
+Audit performed by reading `scripts/lint_memory.py` end-to-end and cross-referencing the BACKLINKS-strip regex against `scripts/regen_memory_links.py` and `scripts/regen_memory_graph.py`.
+
+| # | Check | Audit verdict | Notes |
+|---|-------|:---:|-------|
+| 1 | Wikilink `[[id]]` resolution | ✅ | `BACKLINKS_BLOCK_RE = re.compile(r"<!-- BACKLINKS.*?<!-- END BACKLINKS -->\s*", re.DOTALL)` at lint_memory.py:26 is byte-identical to the regex in `regen_memory_links.py:25`. The Phase A hotfix logic is mirrored exactly. `ID_PATTERN` (`r"\[\[(\d{8}_\d{4}_[a-z0-9_]+)(?:\|[^\]]+)?\]\]"`, line 23) correctly excludes coordinate arrays `[[1,1],[5,5]]` and handles the alias form `[[id\|alias]]`. |
+| 2 | `related:` resolution | ✅ | `_parse_related` (lines 58–72) handles `[]`, empty value, bracket+quoted form, bracket+unquoted form, and bare-ID fallback. The `if raw in ("[]", "")` early-return prevents false positives on empty lists. |
+| 3 | `folder:` matches parent | ✅ | `collect_insights` (lines 104–117) excludes `_archive` and `.trash` from the walk by `set(p.parts)` containment, which correctly rejects both top-level and nested archive/trash directories. Index files (`_topic_index.md`, `_global_tags.md`) are also excluded. |
+| 4 | Unique `id:` cross-tree | ✅ | `check_unique_ids` (lines 200–211) compares with `==` (case-sensitive). IDs are by convention all-lowercase `YYYYMMDD_HHMM_<slug>`, so case sensitivity is correct, not a bug. |
+| 5 | Tags in `_global_tags.md` | ✅ | `load_global_tags` (lines 365–387) reads only the rows between `## Active tags` and the next `## ` heading, and skips the `Tag` header row. The `TAG_ROW_RE = re.compile(r"^\|\s*\`([^\`]+)\`\s*\|")` matches the actual table format in `memories/_global_tags.md`. Robust to extra columns; not robust to backtick-less entries (none exist). |
+| 6 | Folder-definition overlap ≥ 0.7 | ✅ | Uses **word-level Jaccard** (`_jaccard_similarity`, lines 86–101). The threshold and the choice of word-level (not character-level) is documented in the docstring with an explicit false-positive example — sound engineering. Synthetic test (set two folder definitions identical) yields 1.00 overlap; threshold detected as expected. |
+| 7 | Old orphans (> 30 days) | ✅ | Definition: 0 inbound AND 0 outbound wikilinks (lines 274–278), age computed from `date:` frontmatter against the canonical `TODAY = date(2026, 5, 16)` (line 17). Reasonable. The "AND not OR" semantics means a fully-disconnected insight only — insights with inbound-only or outbound-only are not flagged. This matches the v1 design's looser orphan definition. |
+| 8 | `raw_source` resolution (Feature 5d) | ✅ | When `claude_data/` is absent, returns a **single** warning, not per-insight flags (lines 301–307); confirmed by simulation (created empty `claude_data/.claude/projects/foo/` skeleton — switched to per-insight resolution; removed the dir — back to single-warning skip). `ARCHIVE_RAW_RE` correctly skips legacy `_archive/raw_conversations/...md` pre-sync placeholders per the v1 design §7 note (line 315) — defensive, since post-Phase-B backfill replaced all such pointers with JSONL paths. |
+| 9 | Reverse JSONL ↔ GRAPH_REPORT.md | ✅ | Graceful degradation when `claude_data/` is absent (lines 332–334) OR when `GRAPH_REPORT.md` is missing (lines 336–338). Substring match on lowercased report text — pragmatic given UUIDs are unique 8-4-4-4-12 hex. |
+
+**Output format**: matches the spec's `[N/9]` per-check layout with summary at the bottom — confirmed by running the script (see Gate G1 below).
+
+**Exit codes**: `genuine_errors` (line 489 / line 563) excludes Checks 7 (orphans, warning-only) and 9 (reverse, warning-only) and graceful-skip warnings of Check 8 — only "real" failures cause exit 1. Verified by running G3–G6 (all exit 1) and the baseline (exit 0).
+
+**CLI**: `--json`, `--quiet`, `--root` all exercised:
+- `--json` produces valid JSON (parsed with `json.load`).
+- `--quiet` suppresses per-check headers but still prints issue rows.
+- `--root` accepts a `Path` override.
+
+**Stdlib only**: imports are `argparse, json, re, sys, datetime, pathlib` — all stdlib. ✅
+
+**Read-only**: grep `write_text\|write(\|os\.remove\|shutil\|rename\|unlink` in `scripts/lint_memory.py` returns zero matches. ✅
+
+#### 2. Synthetic-edit hard gates (independent re-run)
+
+All gates executed on the clean-tree HEAD `f8d8d01`. Synthetic edits reverted with `git checkout --` after each gate; final `git status` shows clean working tree.
+
+| Gate | Edit | Expected | Observed | Verdict |
+|---|---|---|---|:---:|
+| G1 (baseline) | None | Exit 0, 2 graceful-skip warnings (Checks 8 + 9 — `claude_data/` not present in this worktree) | Exit 0, "Summary: 0 errors. 2 warning(s)" | ✅ |
+| G3 (broken wikilink) | Appended `[[20260101_0000_nonexistent_insight]]` to the body of `20260508_1717_ssh_config_match_user_scoping.md` | Exit 1, Check [1] flags `broken [[20260101_0000_nonexistent_insight]]` | Exit 1, Check [1] flagged exactly that token | ✅ |
+| G3' (broken `related:`) | Inserted `"20260101_0000_bogus_target"` into the same insight's `related:` array | Exit 1, Check [2] flags `unknown id '20260101_0000_bogus_target'` | Exit 1, Check [2] flagged exactly that ID | ✅ |
+| G4 (folder mismatch) | `sed 's/^folder: cluster_ops$/folder: wrong_folder/'` | Exit 1, Check [3] flags `folder: 'wrong_folder' but parent dir is 'cluster_ops'` | Exit 1, Check [3] flagged exactly that | ✅ |
+| G5 (duplicate id) | Overwrote `id:` of `20260508_1638_container_slimdown_recipe.md` to match the SSH-scoping insight's ID | Exit 1, Check [4] flags `Duplicate id '20260508_1717_ssh_config_match_user_scoping'` with both file paths | Exit 1, Check [4] flagged exactly that, both paths listed | ✅ |
+| G6 (unknown tag) | Prepended `zzz_unknown_tag` to the tags array | Exit 1, Check [5] flags `unknown tag 'zzz_unknown_tag'` | Exit 1, Check [5] flagged exactly that | ✅ |
+| G6' (folder-def overlap) | Edited `ROOT_INDEX.md` to make `cluster_ops` definition identical to `memory_system_design` | Exit 1, Check [6] flags overlap 1.00 ≥ 0.7 | Exit 1, Check [6] flagged exactly that with both folder names and definitions | ✅ |
+| G6'' (old orphan) | Created a synthetic insight `20260101_0000_test_orphan_for_lint.md` (135 days old, empty `related: []`, no body wikilinks) | Exit 0 (warning-only), Check [7] flags 1 orphan | Exit 0, Check [7] flagged 1 orphan with age 135 days | ✅ |
+| G7 (regenerators clean) | None — re-ran `regen_memory_links.py --check` and `regen_memory_graph.py --check` after all G3–G6 reverts | Both exit 0 | links exit 0, graph exit 0 | ✅ |
+
+#### 3. Operating-manual wiring sanity
+
+| Check | Status | Detail |
+|---|:---:|---|
+| `docs/memory/CLAUDE.md` §6 layer 4 names `scripts/lint_memory.py` | ✅ | Line 132 reads: "run `scripts/lint_memory.py` to produce the full punch list (broken refs, orphans, tag-dictionary drift, near-duplicate folder definitions, `raw_source` resolution)". |
+| §6 layer 4 wording matches the script's actual coverage | ✅ | The 5 items listed map to Checks 1–2, 7, 5, 6, 8 respectively. Check 3 (folder ↔ parent), Check 4 (duplicate id), Check 9 (reverse JSONL) are not enumerated in the manual but are covered under the umbrella "broken refs" / "punch list". Acceptable summarisation — full enumeration is in the script's docstring. |
+| "Last updated" bumped to 2026-05-16 | ✅ | `docs/memory/CLAUDE.md` line 6: `**Last updated**: 2026-05-16`. |
+
+#### 4. Out-of-scope check
+
+`git diff --stat 1408672~1 HEAD` (covers commits `1408672`, `7c9c034`, `f8d8d01`):
+
+| File | Lines | In-scope? |
+|---|---|:---:|
+| `scripts/lint_memory.py` | +613 (new) | ✅ (Phase D Feature 4a + 5d) |
+| `docs/memory/CLAUDE.md` | +1/-1 | ✅ (§6 layer 4 wiring) |
+| `docs/develop/active/meta/claude_memory_system_v2_design.md` | +45 | ✅ (Phase D implementation report) |
+
+Three files total, all in-scope. No source code, configs, or scripts touched outside the explicit Phase D manifest.
+
+#### 5. Defects and follow-ups
+
+Two non-blocking nits surfaced; neither rises to "blocker" or "concern" severity.
+
+| Severity | Location | Issue | Suggested action |
+|---|---|---|---|
+| 🟢 nit | `scripts/lint_memory.py:572` (`warnings_only` computation) | The third disjunct `(not issues_reverse or issues_reverse[0].strip().startswith("claude_data/"))` evaluates to `True` even when there are zero warnings (because `not [] == True`). Combined with `genuine_errors == False`, the summary line then reads `"Summary: 0 errors. 0 warning(s) (see above)."` instead of the more pleasant `"Summary: ✅ All checks passed — memory layer is clean."` reachable only via the final `else` branch. Cosmetic only — exit code is correct (0). | Tighten the `warnings_only` predicate to require `total_warnings > 0`, or restructure the summary as a single `if total_warnings == 0 and not genuine_errors` clean-branch. Optional Phase E cleanup. |
+| 🟢 nit | `scripts/lint_memory.py:17` (`TODAY = date(2026, 5, 16)` hardcoded) | The canonical date is hardcoded rather than using `date.today()`. This means Check 7 (orphan-age) ages will become stale as time passes. Defensible for reproducibility during Phase D verification, but in production the script will under-flag orphans as the calendar moves forward. | Switch to `date.today()` in Phase E or add a `--today YYYY-MM-DD` CLI override for reproducible audits. The 2026-05-16 anchor is explicitly per-spec, so this is by design at landing, not a defect. |
+
+No 🔴 blockers. No 🟡 concerns. Both nits are below the threshold for Phase D rework.
+
+#### 6. Conventions audit checklist
+
+| Check | Result |
+|---|:---:|
+| BACKLINKS-strip regex matches `regen_memory_links.py` / `regen_memory_graph.py` | ✅ |
+| Read-only (no `write_text`, no mutations) | ✅ |
+| Stdlib-only imports | ✅ |
+| Graceful degradation when `claude_data/` absent | ✅ |
+| Graceful degradation when `GRAPH_REPORT.md` absent | ✅ |
+| Exit code 1 only on genuine errors; warnings keep exit 0 | ✅ |
+| `--json` / `--quiet` / `--root` CLI all functional | ✅ |
+| Operating-manual wiring names the script | ✅ |
+| Out-of-scope edits | none |
+
+#### Conclusion
+
+**Phase D verified — proceed to Phase E.** All 9 lint checks audit clean; all synthetic-edit gates (G3, G3', G4, G5, G6, G6', G6'') fire with the expected exit code and diagnostic; the Phase A + B regenerators still produce clean trees; operating-manual wiring matches the script; out-of-scope check clean. Two cosmetic nits documented for optional Phase E cleanup.
+
+Reviewed by: code-reviewer
+
+---
+
 ## References
 
 - v1 design: [claude_memory_system_design.md](claude_memory_system_design.md) — to be marked `superseded_by` this doc only after Phase 0 ships.
