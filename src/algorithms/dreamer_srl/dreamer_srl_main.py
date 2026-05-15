@@ -302,30 +302,43 @@ def main() -> None:
 
     # -----------------------------------------------------------------------
     # 9. Init WandB
+    # Ported from train.py:L599-L617 — flatten full env + agent config trees
+    # into wandb.init config so runs are filterable by agent.algorithm, etc.
     # -----------------------------------------------------------------------
     use_wandb = not args.no_wandb
     if use_wandb:
         try:
             import wandb
+            # Build flat config payload mirroring train.py:L599-L617
+            env_config_dict = env_cfg.to_dict()
+            agent_config_dict = agent_cfg.to_dict()
+            wandb_config = {
+                # Explicit top-level identifiers (mirrors train.py:L600-L601)
+                "algorithm": "DreamerV3",
+                "framework": "JAX/Flax NNX",
+                # Backward-compat scalars (previously hand-picked subset)
+                "env_config": args.env_config,
+                "agent_config": args.agent_config,
+                "total_steps": total_steps,
+                "num_envs": num_envs,
+                "seed": args.seed,
+                "obs_dim": obs_dim,
+                "action_dim": action_dim,
+                "horizon": horizon,
+                "gamma": gamma,
+                "lmbda": lmbda,
+                "learning_starts": learning_starts,
+                "seq_len": seq_len,
+                "batch_size": batch_size,
+                # Full config trees — agent.algorithm becomes filterable in WandB UI
+                "env": env_config_dict,
+                "agent": agent_config_dict,
+            }
             run = wandb.init(
                 project=args.wandb_project,
                 entity="sungwoolee",   # Mirrors configs/logger/wandb.yaml:L4
                 name=args.wandb_name,
-                config={
-                    "env_config": args.env_config,
-                    "agent_config": args.agent_config,
-                    "total_steps": total_steps,
-                    "num_envs": num_envs,
-                    "seed": args.seed,
-                    "obs_dim": obs_dim,
-                    "action_dim": action_dim,
-                    "horizon": horizon,
-                    "gamma": gamma,
-                    "lmbda": lmbda,
-                    "learning_starts": learning_starts,
-                    "seq_len": seq_len,
-                    "batch_size": batch_size,
-                },
+                config=wandb_config,
             )
             print(f"[dreamer-srl] WandB run: {run.url}")
             # Commit 2: define_metric so Episode/* keys plot against Episode/Number

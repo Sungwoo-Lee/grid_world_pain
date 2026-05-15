@@ -22,6 +22,11 @@
 #   - XS overlay (the values applied here): vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml
 #   - Experiment defaults: vendor/sheeprl/sheeprl/configs/exp/dreamer_v3.yaml
 
+# Agent identity — mirrors configs/models/dreamer_v3_rr06.yaml:L40-L41
+# Required for WandB filter: agent.algorithm = DreamerV3
+agent:
+  algorithm: "DreamerV3"
+
 # Cadence (overrides agent_xs.yaml where needed)
 algo:
   learning_starts: 1024        # XS default — §S3 prefill (CP9b restores from D-012)
