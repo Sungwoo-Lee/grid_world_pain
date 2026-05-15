@@ -1154,3 +1154,92 @@ Not applicable — no hot-path code changed (documentation and lint script only)
 None.
 
 Implemented by: developer
+
+---
+
+### Phase E verification — 2026-05-16
+
+Verified the four Phase E commits (`1589ac6` schema, `b6be4b8` skills, `e655424` lint + nit fix, `1ecbf35` report) against the Feature 4b spec and the seven hard-gates G1–G7 from the verification brief.
+
+#### 1. Schema correctness audit
+
+| Item | Check | Result |
+|---|---|:---:|
+| `docs/memory/CLAUDE.md` §5 template block | `valid_until` and `confidence` present, placed after `status:` (lifecycle-adjacent) | ✅ |
+| §5 header rewording | "14 frontmatter fields + 5 sections" → "16 frontmatter fields + 5 sections" | ✅ |
+| §5 field-semantics list | Both new fields have a bullet that distinguishes `valid_until` from `status: superseded` and `confidence` from `status` lifecycle | ✅ |
+| §8 "Do not expose" carve-out | One-line `valid_until` warning explicitly permitted in natural-language mode | ✅ |
+| `docs/memory/TEMPLATES/insight.md` | Skeleton gains `valid_until: null` and `confidence: null` (correct backward-compatible default) | ✅ |
+| Backward compatibility | `regen_memory_links.py --check` exit 0, `regen_memory_graph.py --check` exit 0, `lint_memory.py` exit 0 on 56 existing pre-E insights | ✅ |
+
+#### 2. Skill wiring audit
+
+| Item | Check | Result |
+|---|---|:---:|
+| `memorize/SKILL.md` description | 14-field → 16-field | ✅ |
+| `memorize/SKILL.md` quick-reference table | Lists all 16 fields including `valid_until` + `confidence` in canonical order | ✅ |
+| `memorize/SKILL.md` Step 4 sub-bullet | Documents `valid_until` (time-sensitive findings) and `confidence` (encouraged, default `medium`, `null` accepted but discouraged) — matches operating-manual semantics | ✅ |
+| `recall/SKILL.md` Hard-rule | Past `valid_until` triggers single-line `⚠️ ...` warning; explicit exception to §8 "do not expose frontmatter"; only fires when date is strictly before today | ✅ |
+| `recall/SKILL.md` Step 4 post-render | Same warning re-asserted in the drill-down render flow | ✅ |
+| Confidence is encouraged, not mandatory | `null` is accepted for both pre-E and new insights — spec-compliant | ✅ |
+
+#### 3. Lint extension audit (`scripts/lint_memory.py`)
+
+| Item | Check | Result |
+|---|---|:---:|
+| `Insight.__slots__` | Extended with `valid_until` + `confidence` | ✅ |
+| `Insight.__init__` | Pulls both fields from frontmatter with empty-string default (absent ↔ null) | ✅ |
+| Check 10 (`check_valid_until_format`) | Accepts absent / `null` / valid `YYYY-MM-DD`; rejects malformed dates | ✅ |
+| Check 11 (`check_confidence_values`) | Accepts absent / `null` / `high` / `medium` / `low` (case-insensitive lower); rejects others (e.g., `maybe`) | ✅ |
+| TOTAL counter | 9 → 11 | ✅ |
+| Both JSON and human-readable paths updated | Sections [10/11] and [11/11] emitted; `--json` records included | ✅ |
+| Error-counting paths | `genuine_errors` and `total_issues` both account for new checks | ✅ |
+| Phase D nit #2 fix | `TODAY: date = date.today()` with `--today YYYY-MM-DD` override; invalid arg exits 2 | ✅ |
+
+#### 4. Synthetic hard-gates (G1–G7)
+
+| Gate | Command | Expected | Observed | Result |
+|---|---|---|---|:---:|
+| G1 | `grep -c '^[a-z_]*: ' docs/memory/TEMPLATES/insight.md` | 16 fields | 16 | ✅ |
+| G2a | `regen_memory_links.py --check` | exit 0 | `OK — no files would change.` exit 0 | ✅ |
+| G2b | `regen_memory_graph.py --check` | exit 0 | `OK — no files would change.` exit 0 | ✅ |
+| G3 | `lint_memory.py` on HEAD; count `^[` headers | exit 0; 11 headers | exit 0; 11 headers; `Summary: 0 errors. 2 warning(s)` (pre-existing `claude_data/` skip) | ✅ |
+| G4 | Inject `valid_until: 99-99-99-bad` → re-lint | exit 1, Check 10 flag | exit 1; `[10/11] valid_until '99-99-99-bad' is not a valid YYYY-MM-DD date` | ✅ |
+| G5 | Inject `confidence: maybe` → re-lint | exit 1, Check 11 flag | exit 1; `[11/11] confidence 'maybe' is not one of: high, medium, low, null` | ✅ |
+| G6 | Inject past `valid_until: 2025-01-01` → re-lint | exit 0 (past dates are valid; only warned at recall, never at lint) | exit 0; `All valid_until values are absent, null, or valid YYYY-MM-DD dates.` | ✅ |
+| G7a | `lint_memory.py --today 2027-01-01` | exit 0; header shows override date | exit 0; header line `docs/memory/ lint report — 2027-01-01 03:22` | ✅ |
+| G7b | `lint_memory.py --today bogus` | exit 2 | exit 2; `Error: --today 'bogus' is not a valid YYYY-MM-DD date.` | ✅ |
+
+All synthetic edits reverted via `git checkout -- $SAMPLE`; worktree is clean of test artefacts (the only `M` is `docs/diary/2026-05-16.md` from the Phase D verification entry, not Phase E).
+
+#### 5. Out-of-scope check
+
+`git diff --stat 1589ac6~1 1ecbf35` reports six files, all in-scope:
+
+| File | Insertions | Deletions | In plan? |
+|---|---:|---:|:---:|
+| `docs/memory/CLAUDE.md` | +15 | −3 | ✅ §5 template + semantics + §8 carve-out |
+| `docs/memory/TEMPLATES/insight.md` | +2 | −0 | ✅ |
+| `.claude/skills/memorize/SKILL.md` | +4 | −3 | ✅ description, quick-ref table, Step 4 bullet |
+| `.claude/skills/recall/SKILL.md` | +4 | −1 | ✅ Hard-rule + Step 4 post-render |
+| `scripts/lint_memory.py` | +78 | −3 | ✅ Checks 10+11, `--today`, TOTAL bump |
+| `docs/develop/active/meta/claude_memory_system_v2_design.md` | +63 | −0 | ✅ Implementation Report |
+
+No out-of-scope files modified.
+
+#### 6. Deviation assessment
+
+- **G1 grep count = 15 not 16.** Developer's report says 15 bullets because `date` and `time` share a single bullet ("the capture date ... the capture time ..."). This is consistent with the pre-existing §5 style (combining date/time was already the convention before Phase E), and all 16 fields are accounted for in the semantics list. **Accepted — not a regression.** Note: my own G1 measured 16 against `TEMPLATES/insight.md` (one line per field including `date` and `time` separately), which is the gate the brief actually specified — that gate passes cleanly at 16.
+- **Field-semantics expansion (additive).** Developer also added explicit bullets for 9 pre-existing fields (`date/time`, `tags`, `summary`, `related`, `session_origin`, `session_label`, `importance`, `raw_source`) that had no semantics bullets in the original §5. Spot-checked each new bullet against the operating manual; all are accurate restatements of existing behavior with **no semantic change** to the 9 pre-existing fields. **Accepted — strictly additive improvement.**
+
+Neither deviation alters the schema's behavior or the public contract; both improve documentation completeness.
+
+#### 7. Speed check
+
+Not applicable. No hot-path code changed. The lint script is invoked manually (Step 9 of `memorize`, ad-hoc audit); the new checks add two single-pass iterations over the in-memory insight list, well below any measurable threshold. Developer correctly skipped speed measurement.
+
+#### Conclusion
+
+**Phase E verified — proceed to Phase F.** All four commits implement the spec faithfully; all seven hard-gates (G1–G7) fire with the expected exit codes and diagnostics; the 56 pre-E insights remain backward-compatible (regenerators and lint all exit 0); skill wiring on both `memorize` and `recall` correctly references the 16-field schema and the new `valid_until` recall warning; the Phase D nit #2 (hardcoded `TODAY`) is fixed with a `--today` CLI override; no out-of-scope edits. Two deviations are documented and accepted (combined `date/time` bullet, additive semantics for 9 pre-existing fields).
+
+Verified by: senior-developer
