@@ -19,6 +19,11 @@ ID_PATTERN = re.compile(r"\[\[(\d{8}_\d{4}_[a-z0-9_]+)(?:\|[^\]]+)?\]\]")
 # Matches the entire related: line (single-line only; multi-line YAML not used).
 RELATED_LINE_RE = re.compile(r"^related:[ \t]*(.*)", re.MULTILINE)
 
+# Strips auto-generated BACKLINKS blocks before scanning body for [[id]] tokens —
+# mirrors the same exclusion in regen_memory_graph.py (lines 206-211) so that
+# Phase B's injected backlink IDs are not picked up as outbound wikilinks.
+BACKLINKS_BLOCK_RE = re.compile(r"<!-- BACKLINKS.*?<!-- END BACKLINKS -->\s*", re.DOTALL)
+
 
 def _canonical(ids: list[str]) -> str:
     """Format a deduplicated sorted list of IDs as canonical related: value."""
@@ -74,10 +79,15 @@ def process_file(path: Path, dry_run: bool = False) -> bool:
     existing_raw = m.group(1).strip()
     existing_ids = _parse_existing_related(existing_raw)
 
+    # Strip any auto-generated BACKLINKS block before scanning for [[id]] tokens —
+    # otherwise the backlink IDs injected by regen_memory_graph.py would pollute
+    # the related: frontmatter with spurious cross-references.
+    body_clean = BACKLINKS_BLOCK_RE.sub("", body)
+
     # Extract [[id]] tokens from the body only (not from frontmatter).
     # [[id|alias]] form: capture the id, log the alias presence.
-    wikilink_ids = ID_PATTERN.findall(body)
-    for alias_match in re.finditer(r"\[\[(\d{8}_\d{4}_[a-z0-9_]+)\|([^\]]+)\]\]", body):
+    wikilink_ids = ID_PATTERN.findall(body_clean)
+    for alias_match in re.finditer(r"\[\[(\d{8}_\d{4}_[a-z0-9_]+)\|([^\]]+)\]\]", body_clean):
         print(f"note: {path.name} has alias form [[{alias_match.group(1)}|{alias_match.group(2)}]] — treating as [[{alias_match.group(1)}]]")
 
     # Union: preserve existing related IDs and add any body [[id]] tokens.
