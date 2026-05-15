@@ -1,6 +1,6 @@
 ---
 name: memorize
-description: "Capture the current conversation as one or more session-insight files in this project's in-repo memory system at docs/memory/. Use whenever the user says 'remember this', 'save this', 'memorize this', '/memorize', 'save to memory', or session-end phrases like 'wrap up', 'wrapping up', 'we're done', 'good night', 'end of session', 'let's call it'. Also trigger when the user asks to capture a decision, finding, debugging conclusion, design rationale, rejected alternative, or 'what we learned' for future retrieval. The skill writes 14-field-frontmatter + 5-section insight files, updates the topic and global indexes under docs/memory/, and optionally archives a raw conversation. Use proactively at end-of-session even if the user does not name memory explicitly. Do NOT use for short typed rules another agent must obey on every invocation — those go to the built-in Claude Code auto-memory at ~/.claude/.../memory/MEMORY.md, which is a different layer with a different mechanism."
+description: "Capture the current conversation as one or more session-insight files in this project's in-repo memory system at docs/memory/. Use whenever the user says 'remember this', 'save this', 'memorize this', '/memorize', 'save to memory', or session-end phrases like 'wrap up', 'wrapping up', 'we're done', 'good night', 'end of session', 'let's call it'. Also trigger when the user asks to capture a decision, finding, debugging conclusion, design rationale, rejected alternative, or 'what we learned' for future retrieval. The skill writes 16-field-frontmatter + 5-section insight files, updates the topic and global indexes under docs/memory/, and optionally archives a raw conversation. Use proactively at end-of-session even if the user does not name memory explicitly. Do NOT use for short typed rules another agent must obey on every invocation — those go to the built-in Claude Code auto-memory at ~/.claude/.../memory/MEMORY.md, which is a different layer with a different mechanism."
 ---
 
 # Memorize — capture conversation insights into `docs/memory/`
@@ -33,7 +33,7 @@ Do **not** use for:
 | Insight template | `docs/memory/TEMPLATES/insight.md` | Copy as starting point. |
 | Insight path | `docs/memory/memories/<topic>/<id>.md` | `<topic>` is English snake_case ≤ ~3 words. |
 | Insight filename | `YYYYMMDD_HHMM_<slug>.md` | `date +%Y%m%d_%H%M`; slug ≤ ~6 words English snake_case. |
-| Frontmatter | 14 fields | id, date, time, folder, tags, summary, related, session_origin, session_label, importance, status, supersedes, raw_source, raw_completeness. |
+| Frontmatter | 16 fields | id, date, time, folder, tags, summary, related, session_origin, session_label, importance, status, valid_until, confidence, supersedes, raw_source, raw_completeness. |
 | Body sections | 5 named, in order | `## Key conclusion` / `## Evidence, measurements, facts` / `## Decisions and actions` / `## Open questions and follow-ups` / `## References`. |
 | Raw archive | `docs/memory/_archive/raw_conversations/<id>.md` | Gitignored (local-only). Pointed at by insight `raw_source`. |
 | Full-raw helper | `scripts/claude_jsonl_to_md.py <jsonl> <out>` | Use conda Python `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python`. |
@@ -101,11 +101,12 @@ Before writing a new insight, scan `status: settled` insights in folders sharing
 
 This is a hard step. A capture that skips it creates the risk of two contradictory settled insights, which §13 explicitly forbids.
 
-2. Write to `docs/memory/memories/<topic>/<id>.md`. Start from `docs/memory/TEMPLATES/insight.md`. Fill all 14 frontmatter fields:
+2. Write to `docs/memory/memories/<topic>/<id>.md`. Start from `docs/memory/TEMPLATES/insight.md`. Fill all 16 frontmatter fields:
    - `folder` must match the parent directory.
    - `tags` reuse from `_global_tags.md`; new tags allowed but require a row in step 6.
    - `session_origin: claude_code` for any Claude Code session.
    - `status: settled` if the conclusion holds firmly; `active` if still being shaped.
+   - `valid_until` and `confidence`: if the insight's claim is time-sensitive (tied to a code version, env, or condition that may change), set `valid_until: YYYY-MM-DD` to the date you'd want to re-verify by. Otherwise `valid_until: null`. `confidence: high | medium | low` is the strength of evidence behind `## Key conclusion` — fill it for all new insights (default `medium` unless evidence pushes the rating up or down); `null` is accepted for backward compatibility but discouraged for new captures.
    - `raw_source: none` and `raw_completeness: none` for now (Step 7 may overwrite).
 
 3. Fill all 5 body sections in plain English. `## Open questions and follow-ups` writes "None" if there are none. `## References` includes the "Why a new folder" line if applicable.

@@ -163,6 +163,8 @@ If the user replies after the listing with:
 (Evidence and References sections available — say "more" to expand.)
 ```
 
+After rendering, check the insight's `valid_until` field. If non-null and in the past, append: `⚠️  This insight's valid_until passed on YYYY-MM-DD — re-verify before acting.`
+
 By default skip `## Evidence, measurements, facts` and `## References` to keep the response tight. Surface them only on a "more" or "show evidence" follow-up.
 
 If the insight's `raw_source` is non-`none` and the user explicitly asks for the raw conversation archive, apply the operating-manual §10 large-file warning protocol before reading. Do NOT load `_archive/raw_conversations/*.md` proactively.
@@ -174,7 +176,8 @@ If the match is ambiguous (multiple insights match the user's reply), list the c
 - **Repo-relative paths only.** Read only inside `docs/memory/`. Never read `~/.claude/projects/.../memory/MEMORY.md` from this skill (different layer; recall there is the harness's job).
 - **Lazy-load discipline**: read `ROOT_INDEX.md` + topic indexes for the listing. Read individual insight files only on drill-down. Read raw archives never, unless the user explicitly asks AND confirms after the size-warning prompt.
 - **Natural-language mode hides**: raw folder names, L0/L1/L2/L3/L4, frontmatter field names, raw tag strings, token costs, "audit" / "fragmentation" jargon. Operating manual §8 forbids exposing them in this mode.
-- All output in English; no emojis unless the user explicitly asks.
+- **`valid_until` expiry warning (exception to "do not expose frontmatter")**: when surfacing any insight in natural-language output (flat list, time-grouped, or drill-down), check the insight's `valid_until` field. If it is non-null and its date is in the past (strictly before today's date), append this one-line warning immediately after the insight's summary line: `⚠️  This insight's valid_until passed on YYYY-MM-DD — re-verify before acting.` This warning is user-facing safety signal and IS permitted in natural-language mode. If `valid_until` is `null` or absent, do not emit any warning.
+- All output in English; no emojis in warnings unless the user explicitly asks (the ⚠️ glyph is a safety signal, not decoration — it is always included).
 - **Do not capture** anything from this skill. If the listing reveals something the user wants to save, route them to `/memorize`.
 - If `docs/memory/CLAUDE.md` and this SKILL.md disagree, the operating manual wins — flag and ask.
 
