@@ -9,7 +9,7 @@ Isolation rule (v2 Risks §13):
     Only shared imports allowed: src.utils.config.Config (for config.get_mandatory)
     and src.environment.* (if needed in train.py).
 
-NNX conventions (docs/develop/active/dreamer_srl_v3/NNX_CONVENTIONS.md):
+NNX conventions (docs/develop/active/dreamer_srl_v1/NNX_CONVENTIONS.md):
     - Every nnx.Module.__init__ takes `rngs: nnx.Rngs` as its last positional arg.
     - rngs is NOT stored on the module — only used during __init__.
     - Forward-pass randomness uses explicit `key: jax.Array` args, NOT rngs.

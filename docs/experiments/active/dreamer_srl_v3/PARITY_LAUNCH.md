@@ -8,10 +8,10 @@ launched_at: 2026-05-14T17:03:10
 wandb_tag: dreamer_srl_parity
 phase: results-in
 cross_links:
-  - docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md
+  - docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md
   - docs/experiments/active/dreamer_srl_v3/SPS_SIZE_NUM_ENVS_SWEEP.md
   - docs/pi/calls/2026-05-14_d013_parity_launch_disposition.md
-  - docs/develop/active/dreamer_srl_v3/CP10B_SPEC.md
+  - docs/develop/active/dreamer_srl_v1/CP10B_SPEC.md
   - docs/experiments/active/sheeprl_bridge/JAX_SHEEPRL_MATCHED_SPS_DESIGN.md
 ---
 
@@ -420,7 +420,7 @@ The mechanism is a **classic imagined-rollout return collapse**: the world model
 ### 11.6 Cross-references
 
 - Design + criteria (this doc, §1–§9): hypothesis was pre-registered; the verdict follows the §5.3 rule deterministically.
-- CP10b (the 20k-step smoke): [`docs/develop/active/dreamer_srl_v3/CP10B_SPEC.md`](../../../develop/active/dreamer_srl_v3/CP10B_SPEC.md). CP10b WandB run `s31wc1a1` also ended at ep_len = 101.
+- CP10b (the 20k-step smoke): [`docs/develop/active/dreamer_srl_v1/CP10B_SPEC.md`](../../../develop/active/dreamer_srl_v3/CP10B_SPEC.md). CP10b WandB run `s31wc1a1` also ended at ep_len = 101.
 - Sheeprl baseline `kfsvh1qk`: 200k env-steps, `Game/ep_len_avg = 500` (saturated cap, first hit at env-step 25k).
 - PI call that authorized this launch: [`docs/pi/calls/2026-05-14_d013_parity_launch_disposition.md`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md).
 

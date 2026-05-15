@@ -335,7 +335,7 @@ The single deviation we **add** (and pre-declare in `DEVIATION_LOG.md`):
 
 The factory function follows
 `vendor/sheeprl/.../dreamer_v3/agent.py:L935-L1180` with NNX
-substitutions per `docs/develop/active/dreamer_srl_v3/NNX_CONVENTIONS.md`.
+substitutions per `docs/develop/active/dreamer_srl_v1/NNX_CONVENTIONS.md`.
 Construction order (matches sheeprl L948-L1180):
 
 1. `encoder = MLPEncoder(obs_dim, dense_units, mlp_layers, activation=SiLU, layer_norm=True)` — port from `vendor/.../agent.py:L100-L153`.
@@ -710,8 +710,8 @@ verification.
 | `configs/dreamer_srl/01_food_only.yaml` | NEW — full hyperparameter config | ~80 | developer |
 | `configs/dreamer_srl/agent_xs.yaml` | NO CHANGE | 0 | — |
 | `tests/algorithms/dreamer_srl/test_build_agent.py` | NEW (optional) | ~50 | developer |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | EDIT — add D-012 entry | ~15 | developer |
-| `docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md` | EDIT — CP9 row Status `NOT STARTED` → `IN PROGRESS` (developer), then → `CP-PASS` (senior-developer only) | 1 row | both |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | EDIT — add D-012 entry | ~15 | developer |
+| `docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` | EDIT — CP9 row Status `NOT STARTED` → `IN PROGRESS` (developer), then → `CP-PASS` (senior-developer only) | 1 row | both |
 
 **Files NOT touched** (out of scope for CP9):
 

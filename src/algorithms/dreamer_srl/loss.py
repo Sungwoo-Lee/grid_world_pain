@@ -21,7 +21,7 @@ These three locations all say the same thing about where bins live:
 
   2. v3 plan Checkpoint 5 spec:
        "bins[0]=-20, bins[127]≈0, bins[254]=+20 (in symlog space)"
-     (docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md §CP5 row)
+     (docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md §CP5 row)
 
   3. This file (TwoHotEncoding class):
        self.bins = jnp.linspace(-20.0, 20.0, 255)  — SYMLOG-space grid

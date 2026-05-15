@@ -12,7 +12,7 @@ phase: 2-closure
 > **Naming convention.** "v2" here means the **second iteration of the implementation-plan series**,
 > NOT a second iteration of the rebuild itself. The codebase under
 > [`src/algorithms/dreamer_srl/`](../../../../src/algorithms/dreamer_srl/) was authored under the
-> "v3" implementation plan at [`docs/develop/active/dreamer_srl_v3/`](../dreamer_srl_v3/) (the
+> "v3" implementation plan at [`docs/develop/active/dreamer_srl_v1/`](../dreamer_srl_v3/) (the
 > historical numbering reflects v1/v2/v3 of the **rebuild attempts**; this v2 plan is the
 > **second master implementation-plan document**, supplanting the v3 plan as the authoritative
 > spec going forward). Cross-link below in §"Migration plan from v1".
@@ -392,16 +392,16 @@ broader-fixture grad test and re-run.
 | [`tests/fixtures/dreamer_srl/`](../../../../tests/fixtures/dreamer_srl/) (`*.npz` fixtures, seed `0xD3EAF` and `0xD3EAF + 1`) | **Stays in place.** v2 adds new grad fixtures with seed convention `0xD3EAF + 0x100*<cp_id>` to avoid collision. |
 | [`vendor/sheeprl/`](../../../../vendor/sheeprl/) (pinned commit `33b6366`) | **Stays in place.** v2 re-reads from the same pinned commit. |
 | [`scripts/sheeprl_jax_diff.py`](../../../../scripts/sheeprl_jax_diff.py) | **Extended in place at v2-CP2.** New `register_grad_diff(...)` helper added; existing forward-diff registry not modified. |
-| [`docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md`](../dreamer_srl_v3/IMPLEMENTATION_PLAN.md) (v1 master plan, "v3" by historical naming) | **Stays active.** v2 references it as historical context; does NOT set `superseded_by`. The v1 plan documented the CP1–CP10b PASS chain — that history is preserved unchanged. v2 is a follow-on audit, not a replacement. |
-| [`docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md`](../dreamer_srl_v3/DEVIATION_LOG.md) (D-001 through D-014) | **Stays active.** v2's new deviations append to a new log at [`DEVIATION_LOG.md`](DEVIATION_LOG.md) in this directory, starting at D-015. Cross-link both ways. |
-| [`docs/develop/active/dreamer_srl_v3/CP9_PLAN.md`](../dreamer_srl_v3/CP9_PLAN.md), [`CP9B_PLAN.md`](../dreamer_srl_v3/CP9B_PLAN.md), [`CP10B_SPEC.md`](../dreamer_srl_v3/CP10B_SPEC.md), [`CP3B_SPEC.md`](../dreamer_srl_v3/CP3B_SPEC.md), [`CONFIG_CORRECTION_PLAN.md`](../dreamer_srl_v3/CONFIG_CORRECTION_PLAN.md), [`NNX_CONVENTIONS.md`](../dreamer_srl_v3/NNX_CONVENTIONS.md) | **Stay active in the v1 directory.** v2 cross-references them as needed; does not modify them silently. |
+| [`docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md`](../dreamer_srl_v3/IMPLEMENTATION_PLAN.md) (v1 master plan, "v3" by historical naming) | **Stays active.** v2 references it as historical context; does NOT set `superseded_by`. The v1 plan documented the CP1–CP10b PASS chain — that history is preserved unchanged. v2 is a follow-on audit, not a replacement. |
+| [`docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md`](../dreamer_srl_v3/DEVIATION_LOG.md) (D-001 through D-014) | **Stays active.** v2's new deviations append to a new log at [`DEVIATION_LOG.md`](DEVIATION_LOG.md) in this directory, starting at D-015. Cross-link both ways. |
+| [`docs/develop/active/dreamer_srl_v1/CP9_PLAN.md`](../dreamer_srl_v3/CP9_PLAN.md), [`CP9B_PLAN.md`](../dreamer_srl_v3/CP9B_PLAN.md), [`CP10B_SPEC.md`](../dreamer_srl_v3/CP10B_SPEC.md), [`CP3B_SPEC.md`](../dreamer_srl_v3/CP3B_SPEC.md), [`CONFIG_CORRECTION_PLAN.md`](../dreamer_srl_v3/CONFIG_CORRECTION_PLAN.md), [`NNX_CONVENTIONS.md`](../dreamer_srl_v3/NNX_CONVENTIONS.md) | **Stay active in the v1 directory.** v2 cross-references them as needed; does not modify them silently. |
 | `docs/reviews/dreamer_srl_v3_cp<N>_<reviewer>.md` (existing v1 reviews) | **Stay in place.** v1 review files are EXPLICITLY UNTRUSTED as authoritative for v2 verdicts (per user directive). v2 reviews land as `docs/reviews/dreamer_srl_v2_cp<N>_<reviewer>.md` (new sibling files). |
 | [`docs/experiments/active/dreamer_srl_v3/PARITY_LAUNCH.md`](../../../experiments/active/dreamer_srl_v3/PARITY_LAUNCH.md) (v1 parity FAIL artifact) | **Stays in place.** v2 cross-references it as the failure-mode evidence; v2's re-parity launch artifact lands as a new file under `docs/experiments/active/dreamer_srl_v2/PARITY_LAUNCH.md` (created at v2-CP11 by `experiment-designer` + `experiment-analyzer`, not in this plan's scope). |
 | [`configs/dreamer_srl/01_food_only.yaml`](../../../../configs/dreamer_srl/01_food_only.yaml) (corrected XS post-config-correction) | **Stays in place.** v2-CP9 may modify if v2 fixes require a new mandatory config key; if so it is listed in §9 below. |
 
 **No silent rewrites.** Any inline modification to a v1 doc carries an inline
 correction note matching the v1 convention from
-[`docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md`](../dreamer_srl_v3/IMPLEMENTATION_PLAN.md)
+[`docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md`](../dreamer_srl_v3/IMPLEMENTATION_PLAN.md)
 (see the "CORRECTION NOTE (2026-05-14, PI call …)" block at the top of the file).
 Originals stay; corrections are additive.
 
@@ -460,7 +460,7 @@ Under [`docs/pi/calls/`](../../../pi/calls/):
 ### v1 files v2 will NOT modify
 
 - v1 reviews under `docs/reviews/dreamer_srl_v3_*` — untrusted but preserved.
-- v1 plan docs under `docs/develop/active/dreamer_srl_v3/*` — preserved unchanged.
+- v1 plan docs under `docs/develop/active/dreamer_srl_v1/*` — preserved unchanged.
 - v1 deviation log — preserved; v2 deviations append to v2's own log.
 
 ---

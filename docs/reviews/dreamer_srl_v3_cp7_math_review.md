@@ -27,7 +27,7 @@ audited_doc: src/algorithms/dreamer_srl/train.py (CP7 additions; commits 3c5be0c
 | Implementation | `src/algorithms/dreamer_srl/train.py` lines 329–602 (CP7 additions) |
 | Sheeprl reference | `vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py` L246–L297, L673–L697 |
 | Code review (gate 1) | `docs/reviews/dreamer_srl_v3_cp7_code_review.md` (PASS) |
-| Deviation log | `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` row D-011 |
+| Deviation log | `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` row D-011 |
 | Commits under review | `3c5be0c` (impl), `f71eecb` (diary) |
 | Precedent for D-011 | D-001 (CP1 `moments_update` — pure-functional dict replacing in-place buffer mutation, also `max_abs_diff = 0.000e+00`-class) |
 

@@ -124,7 +124,7 @@ And the verification table row (line 1236 area) gets a similar entry.
 - The PI consultation will likely take the form of an `AskUserQuestion` from `pi` listing 2–4 candidate dispositions. The user picks one. The PI logs the call.
 - After the PI consultation closes, the senior-developer:
   1. Reads the PI call doc under `docs/pi/calls/<date>_dreamer_srl_v3_parity_launch_disposition.md`.
-  2. If the disposition needs code work (multi-GPU wiring, gradient checkpointing wiring), writes an implementation plan under `docs/develop/active/dreamer_srl_v3/<plan_name>.md`, hands off to `developer`, verifies the implementation.
+  2. If the disposition needs code work (multi-GPU wiring, gradient checkpointing wiring), writes an implementation plan under `docs/develop/active/dreamer_srl_v1/<plan_name>.md`, hands off to `developer`, verifies the implementation.
   3. Authorizes CP10b under the disposed configuration.
   4. Runs the CP10b protocol exactly as CP10 ran (single-node, single-or-multi-GPU per the disposition, with WandB logging).
   5. Writes a CP10b verification report subsection in IMPLEMENTATION_PLAN.md mirroring CP10's structure.

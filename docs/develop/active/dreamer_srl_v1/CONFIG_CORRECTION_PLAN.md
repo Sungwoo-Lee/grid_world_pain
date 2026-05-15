@@ -397,11 +397,11 @@ The five doc paths and per-doc placement:
 
 | # | Doc | Insertion point | Notes |
 |---|---|---|---|
-| 1 | `docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md` | After the closing `---` of the YAML frontmatter (line 8, just before the H1) | The doc's `last_updated:` frontmatter comment already references this PI call; the inline note is the body-level surfacing. |
-| 2 | `docs/develop/active/dreamer_srl_v3/CP9_PLAN.md` | After the closing `---` of the YAML frontmatter (line 8, just before the H1 at line 10) | The doc has 20+ "XS" mentions in the body (lines 46, 77, 99, 301, 351, 416, 443, 448, 643, 671, 784, 870, 920, 922, 924) that the correction note retroactively covers. |
-| 3 | `docs/develop/active/dreamer_srl_v3/CP9B_PLAN.md` | After the closing `---` of the YAML frontmatter, before the H1 | The doc references "sheeprl XS default" at lines 26, 275, 279, 302, 622, 695 — most of these are about `learning_starts` (which IS sheeprl XS) rather than dimensions (which were the mis-named XL-equivalents), so the correction note should clarify that the `learning_starts: 1024` references remain correct; only the dimension-bearing references retroactively flip from "XS" to "XL-mis-named-as-XS". An extra sentence is appended to the note for CP9B_PLAN.md specifically — see addendum below. |
-| 4 | `docs/develop/active/dreamer_srl_v3/CP10B_SPEC.md` | After the closing `---` of the YAML frontmatter (line 8, before the H1 at line 10) | This doc also gets a scope update — see the "CP10B_SPEC.md scope update" section below. |
-| 5 | `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | The D-013 row's verdict cell already carries an inline correction sub-clause as part of the resolution narrative; the body-level note here goes after the closing `---` of frontmatter (line 8, before the H1 at line 10) and primarily serves rows D-012 and D-013. | D-013 row needs no further textual change; D-012 row's "sheeprl XS default" reference (line 78) is about `learning_starts` and is correct. |
+| 1 | `docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` | After the closing `---` of the YAML frontmatter (line 8, just before the H1) | The doc's `last_updated:` frontmatter comment already references this PI call; the inline note is the body-level surfacing. |
+| 2 | `docs/develop/active/dreamer_srl_v1/CP9_PLAN.md` | After the closing `---` of the YAML frontmatter (line 8, just before the H1 at line 10) | The doc has 20+ "XS" mentions in the body (lines 46, 77, 99, 301, 351, 416, 443, 448, 643, 671, 784, 870, 920, 922, 924) that the correction note retroactively covers. |
+| 3 | `docs/develop/active/dreamer_srl_v1/CP9B_PLAN.md` | After the closing `---` of the YAML frontmatter, before the H1 | The doc references "sheeprl XS default" at lines 26, 275, 279, 302, 622, 695 — most of these are about `learning_starts` (which IS sheeprl XS) rather than dimensions (which were the mis-named XL-equivalents), so the correction note should clarify that the `learning_starts: 1024` references remain correct; only the dimension-bearing references retroactively flip from "XS" to "XL-mis-named-as-XS". An extra sentence is appended to the note for CP9B_PLAN.md specifically — see addendum below. |
+| 4 | `docs/develop/active/dreamer_srl_v1/CP10B_SPEC.md` | After the closing `---` of the YAML frontmatter (line 8, before the H1 at line 10) | This doc also gets a scope update — see the "CP10B_SPEC.md scope update" section below. |
+| 5 | `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | The D-013 row's verdict cell already carries an inline correction sub-clause as part of the resolution narrative; the body-level note here goes after the closing `---` of frontmatter (line 8, before the H1 at line 10) and primarily serves rows D-012 and D-013. | D-013 row needs no further textual change; D-012 row's "sheeprl XS default" reference (line 78) is about `learning_starts` and is correct. |
 
 **Addendum line for CP9B_PLAN.md only** (append to the canonical note above):
 
@@ -647,11 +647,11 @@ Confirmed — no training was launched. Config-only change.
 |------|--------|:------:|-------|
 | `configs/dreamer_srl/01_food_only.yaml` | XL-equivalent values → real sheeprl XS at every site listed in File Changes | | |
 | `configs/dreamer_srl/01_food_only_smoke.yaml` | Header comment block corrected; body unchanged | | |
-| `docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md` | Inline correction note added after frontmatter | | |
-| `docs/develop/active/dreamer_srl_v3/CP9_PLAN.md` | Inline correction note added after frontmatter | | |
-| `docs/develop/active/dreamer_srl_v3/CP9B_PLAN.md` | Inline correction note + CP9B-specific addendum added after frontmatter | | |
-| `docs/develop/active/dreamer_srl_v3/CP10B_SPEC.md` | Inline correction note + scope-update edits (Edits 1–4) | | |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Inline correction note added after frontmatter (D-013 row already carries inline resolution) | | |
+| `docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` | Inline correction note added after frontmatter | | |
+| `docs/develop/active/dreamer_srl_v1/CP9_PLAN.md` | Inline correction note added after frontmatter | | |
+| `docs/develop/active/dreamer_srl_v1/CP9B_PLAN.md` | Inline correction note + CP9B-specific addendum added after frontmatter | | |
+| `docs/develop/active/dreamer_srl_v1/CP10B_SPEC.md` | Inline correction note + scope-update edits (Edits 1–4) | | |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | Inline correction note added after frontmatter (D-013 row already carries inline resolution) | | |
 | `docs/develop/INDEX.md` | Regenerated by `scripts/regen_dev_index.py` to pick up `CONFIG_CORRECTION_PLAN.md` | | |
 
 **Speed-change review**: not applicable at the senior-developer verification step — the YAML edit is config-only and does not change `src/` code. The runtime-speed verification happens at **CP10b** (single-GPU corrected-XS wall-clock measurement, separate sign-off).

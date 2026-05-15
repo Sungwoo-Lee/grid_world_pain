@@ -246,7 +246,7 @@ achievable state-evolution variant. Same `1e-6` threshold, same fixed seed
 | `tests/fixtures/dreamer_srl/*.npz` (6 files) | New | Pre-computed reference fixtures for CP3b. |
 | `scripts/sheeprl_jax_diff.py` | Edited | CP3b added to `CHECKPOINT_REGISTRY` (between CP3 and CP4). 6 `_run_*` runners added to `FUNCTION_REGISTRY`. CP-comment ledger updated. |
 | `tests/algorithms/dreamer_srl/README.md` | Edited | Line 63 updated from `(no CP — buffers.py is an inter-CP sanity round-trip...)` to CP3b status. |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Edited | D-005 logged: filled-region-only comparison for test 1 (unfilled `np.empty` garbage excluded). |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | Edited | D-005 logged: filled-region-only comparison for test 1 (unfilled `np.empty` garbage excluded). |
 
 ### Test results
 

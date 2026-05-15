@@ -10,7 +10,7 @@ phase: verdict-in
 cross_links:
   - docs/develop/active/dreamer_srl_v2/IMPLEMENTATION_PLAN.md
   - docs/experiments/active/dreamer_srl_v3/PARITY_LAUNCH.md
-  - docs/develop/active/dreamer_srl_v3/CP10B_SPEC.md
+  - docs/develop/active/dreamer_srl_v1/CP10B_SPEC.md
 supersedes: docs/experiments/active/dreamer_srl_v3/PARITY_LAUNCH.md
 ---
 
@@ -520,7 +520,7 @@ script.
 
 - **v2 IMPLEMENTATION_PLAN** (the design spec): [docs/develop/active/dreamer_srl_v2/IMPLEMENTATION_PLAN.md](../../../develop/active/dreamer_srl_v2/IMPLEMENTATION_PLAN.md)
 - **v1 PARITY_LAUNCH** (the failed-at-floor predecessor): [docs/experiments/active/dreamer_srl_v3/PARITY_LAUNCH.md](../dreamer_srl_v3/PARITY_LAUNCH.md)
-- **v1-CP10b spec** (the structural CP that PASSed but did not catch the silent fail): [docs/develop/active/dreamer_srl_v3/CP10B_SPEC.md](../../../develop/active/dreamer_srl_v3/CP10B_SPEC.md)
+- **v1-CP10b spec** (the structural CP that PASSed but did not catch the silent fail): [docs/develop/active/dreamer_srl_v1/CP10B_SPEC.md](../../../develop/active/dreamer_srl_v3/CP10B_SPEC.md)
 - **v2-CP9 fix bundle commits** (the five named blockers + 11 grad tests): `1d4c1f9` / `f47818a` / `0bbe852` / `8cf7630` / `4fefd26` / `b813d48` (in chronological landing order)
 - **Sheeprl baseline runs (parity targets)**: [`kfsvh1qk`](https://wandb.ai/sungwoolee/grid_world_pain/runs/kfsvh1qk), [`jzgkcep4`](https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/jzgkcep4), [`i4ulpn95`](https://wandb.ai/sungwoolee/grid_world_pain/runs/i4ulpn95)
 - **v2-CP10 closure** (the policy-learning gate that PASSed in extension): WandB [`j8vc155o`](https://wandb.ai/sungwoolee/grid_world_pain_dreamer_srl_v2/runs/j8vc155o)

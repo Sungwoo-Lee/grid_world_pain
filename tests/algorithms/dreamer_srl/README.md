@@ -3,7 +3,7 @@
 This directory holds the per-function bit-identity tests for the dreamer-srl v3
 JAX rebuild. Each test asserts that the JAX implementation agrees with the
 vendored sheeprl@33b6366 reference to within `1e-6` max-absolute-difference
-(Lever A in [IMPLEMENTATION_PLAN.md](../../../docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md)).
+(Lever A in [IMPLEMENTATION_PLAN.md](../../../docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md)).
 
 ## Test naming convention
 
@@ -77,11 +77,11 @@ python scripts/sheeprl_jax_diff.py \
 ```
 
 The diff tool is used by reviewers at each CP gate to produce the PASS/FAIL
-table in the review doc (`docs/develop/active/dreamer_srl_v3/review_code_CP<N>.md`).
+table in the review doc (`docs/develop/active/dreamer_srl_v1/review_code_CP<N>.md`).
 
 ## Deviation log
 
 If a test cannot pass at `1e-6` (e.g. JAX-platform float32/float64 mismatch),
 the developer logs the deviation in
-[DEVIATION_LOG.md](../../../docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md)
+[DEVIATION_LOG.md](../../../docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md)
 and waits for PI sign-off before marking the function done.

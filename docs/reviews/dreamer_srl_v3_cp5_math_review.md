@@ -473,7 +473,7 @@ on that single bin. ✅
 - `scripts/fixtures/gen_cp5_fixtures.py` — fixture generator (sheeprl_bridge env)
 - `vendor/sheeprl/sheeprl/utils/distribution.py:L224-L276` — vendored reference
 - `vendor/sheeprl/sheeprl/utils/utils.py:L148-L153` — vendored symlog/symexp
-- `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` D-006 — JAX/PyTorch linspace ULP
+- `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` D-006 — JAX/PyTorch linspace ULP
 
 ---
 

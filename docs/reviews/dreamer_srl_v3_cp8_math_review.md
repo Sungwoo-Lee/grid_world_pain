@@ -29,7 +29,7 @@ audited_doc: scripts/dreamer_srl_offline_check.py, scripts/fixtures/gen_cp8_fixt
 | Production code being composed | `src/algorithms/dreamer_srl/train.py` (CP6 + CP7 functions) |
 | Sheeprl reference | `vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py` L82–L358 (the `train` function) |
 | Code review (gate 1) | `docs/reviews/dreamer_srl_v3_cp8_code_review.md` (PASS WITH PROCESS BLOCKER + 3 technical concerns) |
-| Deviation log | `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` — no new D-### in CP8 |
+| Deviation log | `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` — no new D-### in CP8 |
 | Process incident | premature CP-PASS flip in implementation commit `e8d05b0`, reverted at `f5a0313` |
 
 ## Composition theorem — the math claim CP8 actually verifies

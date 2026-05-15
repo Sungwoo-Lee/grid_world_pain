@@ -1,5 +1,5 @@
 ---
-title: "dreamer-srl v3 — JAX rebuild of sheeprl DreamerV3 with deviation-prevention guardrails"
+title: "dreamer-srl v1 — JAX rebuild of sheeprl DreamerV3 with deviation-prevention guardrails"
 topic: dreamer
 status: active
 created: 2026-05-13
@@ -7,6 +7,18 @@ last_updated: 2026-05-14  # CP10b → ✅ **CP-PASS** (post user-disposition β 
 supersedes: IMPLEMENTATION_PLAN.md
 phase: 2
 ---
+
+> **Renaming history (2026-05-15)**
+>
+> This plan was originally titled "dreamer-srl v3" because it was the 3rd revision of the
+> implementation-plan document: the ad-hoc v1 was an informal scratch attempt; the formal v2
+> lives at `docs/develop/archive/dreamer_srl/`. The folder was therefore named `dreamer_srl_v3/`
+> at creation. On 2026-05-15 the user renamed it to `dreamer_srl_v1/` to match the mental model
+> that the active folder set now uses: **v1 = the initial rebuild attempt that parity-failed**;
+> **v2 = the audit-and-fix attempt that parity-passed** (see `docs/develop/active/dreamer_srl_v2/`).
+> PI call docs and review files (e.g. `docs/reviews/dreamer_srl_v3_cp*_*.md`,
+> `docs/pi/calls/2026-05-14_dreamer_srl_v3_*.md`) retain the historical `v3` name in their
+> filenames as an audit trail; only path references inside their content were updated.
 
 > **CORRECTION NOTE (2026-05-14, PI call [`3c8b9f8`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md))**
 >
@@ -39,7 +51,7 @@ INDEX resolver matches by filename across `active/` + `archive/`.
 -->
 
 
-# dreamer-srl v3 — JAX rebuild of sheeprl DreamerV3 with deviation-prevention guardrails
+# dreamer-srl v1 — JAX rebuild of sheeprl DreamerV3 with deviation-prevention guardrails
 
 ## Plain-language entry point
 
@@ -334,7 +346,7 @@ The developer:
 3. Records the test pass/fail and any speed-change measurements in an
    "Implementation Report — CP<N>" block in this plan doc.
 4. **Halts implementation.** Spawns `code-reviewer`. When `code-reviewer` writes
-   its review at `docs/develop/active/dreamer_srl_v3/review_code_CP<N>.md` with
+   its review at `docs/develop/active/dreamer_srl_v1/review_code_CP<N>.md` with
    verdict `✅ PASS`, spawns `math-reviewer`. When `math-reviewer` writes its
    review with `✅ PASS`, spawns `professor-rl-bayesian-dl`. When all three are
    `✅ PASS`, the developer may proceed to CP<N+1>.
@@ -345,7 +357,7 @@ The developer:
 ### Reviewer-output layout
 
 ```
-docs/develop/active/dreamer_srl_v3/
+docs/develop/active/dreamer_srl_v1/
 ├── IMPLEMENTATION_PLAN.md                          # this doc
 ├── DEVIATION_LOG.md                                # §Lever E
 ├── review_code_CP1.md
@@ -483,7 +495,7 @@ The tool:
 
 ### What it is
 
-A single document at `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` that
+A single document at `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` that
 lists every place we deviated from sheeprl, with PI sign-off per entry. The
 file template lives at [DEVIATION_LOG.md](DEVIATION_LOG.md) (created in
 pre-CP0).
@@ -873,7 +885,7 @@ The plan's structure:
 - [x] Pre-CP0.2 — `scripts/sheeprl_jax_diff.py` skeleton (argparse, fixture loader, compare(), FUNCTION_REGISTRY, CHECKPOINT_REGISTRY; `--help` prints without crash)
 - [x] Pre-CP0.3 — `tests/algorithms/dreamer_srl/__init__.py` + README; `tests/fixtures/dreamer_srl/README.md` (seed 0xD3EAF, naming convention, generation script convention)
 - [x] Pre-CP0.4 — `DEVIATION_LOG.md` confirmed present with schema header (7-column table + enforcement rules + approved/rejected sections)
-- [x] Pre-CP0.5 — NNX-convention read complete; `docs/develop/active/dreamer_srl_v3/NNX_CONVENTIONS.md` written (~50 lines). Summary: `nnx.Rngs` passed to `__init__` only (never stored, never passed to `__call__`); forward-pass PRNG via explicit `jax.random.PRNGKey` args; JIT boundary via `@nnx.jit` (or `nnx.split`/`nnx.merge`/`nnx.state`/`nnx.update` for plain-`jax.jit` boundaries); EMA via `nnx.state` + arithmetic + `nnx.update`. Isolation confirmed: dreamer-srl will not import from `src.models.dreamer_v3_*`.
+- [x] Pre-CP0.5 — NNX-convention read complete; `docs/develop/active/dreamer_srl_v1/NNX_CONVENTIONS.md` written (~50 lines). Summary: `nnx.Rngs` passed to `__init__` only (never stored, never passed to `__call__`); forward-pass PRNG via explicit `jax.random.PRNGKey` args; JIT boundary via `@nnx.jit` (or `nnx.split`/`nnx.merge`/`nnx.state`/`nnx.update` for plain-`jax.jit` boundaries); EMA via `nnx.state` + arithmetic + `nnx.update`. Isolation confirmed: dreamer-srl will not import from `src.models.dreamer_v3_*`.
 - [x] Pre-CP0.6 — `config.get_mandatory` smoke test (3 cases: present key, missing key raises `ValueError`, nested missing key raises `ValueError`); all PASS. CP1 loader pattern: every YAML key via `config.get_mandatory('key', type_converter)`; no `config.get('key', default)` anywhere in `src/algorithms/dreamer_srl/`.
 
 #### Speed check
@@ -889,8 +901,8 @@ Pre-CP0 is infrastructure only (no hot-path code). No algorithm code created und
 | `tests/algorithms/dreamer_srl/__init__.py` | Created (empty) |
 | `tests/algorithms/dreamer_srl/README.md` | Created (naming convention + Lever-A gate rule + template) |
 | `tests/fixtures/dreamer_srl/README.md` | Created (seed 0xD3EAF + naming + shapes table) |
-| `docs/develop/active/dreamer_srl_v3/NNX_CONVENTIONS.md` | Created (NNX pattern reference for CP1+) |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Confirmed present (no changes; senior-dev created) |
+| `docs/develop/active/dreamer_srl_v1/NNX_CONVENTIONS.md` | Created (NNX pattern reference for CP1+) |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | Confirmed present (no changes; senior-dev created) |
 
 ### CP1 — `utils.py`
 
@@ -912,7 +924,7 @@ Pre-CP0 is infrastructure only (no hot-path code). No algorithm code created und
 | `tests/fixtures/dreamer_srl/prepare_obs_input.npz` | Created |
 | `scripts/fixtures/gen_cp1_fixtures.py` | Created — deterministic fixture generator (sheeprl_bridge env) |
 | `scripts/sheeprl_jax_diff.py` | Updated — CP1 runners added to FUNCTION_REGISTRY; FUNCTION_THRESHOLDS dict added for per-function threshold overrides (D-003 symexp) |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Updated — D-001, D-002, D-003 logged |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | Updated — D-001, D-002, D-003 logged |
 
 #### Lever-A test results
 ```
@@ -997,8 +1009,8 @@ Plain-language summary of the CP-PASS decision. CP1 (the JAX port of sheeprl's `
 | `tests/fixtures/dreamer_srl/test_cadence_env_grad_step_trace_5000_iters_input.npz` | Created |
 | `scripts/fixtures/gen_cp3b_fixtures.py` | Created — deterministic CP3b fixture generator (sheeprl_bridge env) |
 | `scripts/sheeprl_jax_diff.py` | Updated — CP3b runners added to FUNCTION_REGISTRY + CHECKPOINT_REGISTRY |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Updated — D-004 + D-005 logged |
-| `docs/develop/active/dreamer_srl_v3/CP3B_SPEC.md` | Updated — implementation notes appended |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | Updated — D-004 + D-005 logged |
+| `docs/develop/active/dreamer_srl_v1/CP3B_SPEC.md` | Updated — implementation notes appended |
 
 #### Lever-A test results
 ```
@@ -1070,7 +1082,7 @@ Plain-language summary of the CP-PASS decision. CP3b (the JAX port of sheeprl's 
 | `tests/fixtures/dreamer_srl/twohot_log_prob_input.npz` | Created |
 | `scripts/fixtures/gen_cp5_fixtures.py` | Created — deterministic CP5 fixture generator (sheeprl_bridge env) |
 | `scripts/sheeprl_jax_diff.py` | Updated — three CP5 runners (`_run_twohot_bins_endpoints`, `_run_twohot_encode`, `_run_twohot_log_prob`) added to FUNCTION_REGISTRY; CHECKPOINT_REGISTRY `CP5` slot populated; FUNCTION_THRESHOLDS updated with the D-006 3e-5 relaxation |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Updated — D-006 logged + ✅ APPROVED 2026-05-14 |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | Updated — D-006 logged + ✅ APPROVED 2026-05-14 |
 
 #### Lever-A test results
 ```
@@ -1148,7 +1160,7 @@ Plain-language summary of the CP-PASS decision. CP5 (the JAX port of sheeprl's `
 | `tests/fixtures/dreamer_srl/action_shift_input.npz` | Created (T=5, B=4, A=3; covers off-by-one in both directions) |
 | `scripts/fixtures/gen_cp2_fixtures.py` | Created — deterministic CP2+CP2b fixture generator (sheeprl_bridge env) |
 | `scripts/sheeprl_jax_diff.py` | Updated — `_run_layernorm_gru_cell` + `_run_action_shift` added to FUNCTION_REGISTRY; D-007 threshold (5e-4) added to FUNCTION_THRESHOLDS; CP2/CP2b already in CHECKPOINT_REGISTRY |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Updated — D-007 logged (☐ pending PI sign-off at CP2 gate) |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | Updated — D-007 logged (☐ pending PI sign-off at CP2 gate) |
 
 #### Lever-A test results
 ```
@@ -1289,7 +1301,7 @@ This is a small, self-contained checkpoint — no deviations encountered.
 | `scripts/fixtures/gen_cp3_fixtures.py` | Created | New fixture generator (sheeprl_bridge env); generates `zero_init_{reward,critic}_head_input.npz` |
 | `tests/fixtures/dreamer_srl/zero_init_reward_head_input.npz` | Created | Fixture: in=512, out=255, torch_kernel all-zeros, torch_bias all-zeros |
 | `tests/fixtures/dreamer_srl/zero_init_critic_head_input.npz` | Created | Fixture: in=512, out=255, torch_kernel all-zeros, torch_bias all-zeros |
-| `docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md` | Extended | Appended Implementation Report; updated `last_updated` frontmatter |
+| `docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` | Extended | Appended Implementation Report; updated `last_updated` frontmatter |
 
 All changed paths are in the CP3-scoped set. No out-of-scope source modifications.
 
@@ -1416,7 +1428,7 @@ CP4 (RSSM transition + representation + get_initial_states) and CP4b (§S4 three
 | `scripts/fixtures/gen_cp4_fixtures.py` | New file — generates 5 `.npz` fixtures using sheeprl PyTorch RSSM; handles sheeprl `_uniform_mix` ≥3D tensor requirement via `unsqueeze(0)` / `squeeze(0)` wrappers |
 | `tests/fixtures/dreamer_srl/` | 5 new `.npz` fixtures: `rssm_transition`, `rssm_representation`, `get_initial_states`, `is_first_force_set`, `is_first_three_quantity_reset` |
 | `scripts/sheeprl_jax_diff.py` | Added `_load_rssm_from_fixture_diff()` helper + 5 `_run_*` functions; registered all 5 in `FUNCTION_REGISTRY`; added D-008 threshold overrides (2e-3) in `FUNCTION_THRESHOLDS` |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | Added D-008 + D-009; both approved autonomously per established class precedents |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | Added D-008 + D-009; both approved autonomously per established class precedents |
 
 ### Test results
 
@@ -1501,7 +1513,7 @@ Captured from the PI call at `4563579` and the new "Process notes" subsection in
 ```bash
 # Inside code-reviewer's pre-CP audit playbook (CP6 onward).
 # Run from repo root with $RANGE = git revision range scoped to the current CP.
-suspect_flips=$(git log --diff-filter=M -p "$RANGE" -- docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md \
+suspect_flips=$(git log --diff-filter=M -p "$RANGE" -- docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md \
   | grep -E '^\+.*\|.*✅ APPROVED.*\|' \
   | grep -v -E '(PI ratified|autonomous PI approval|pi/calls/)')
 if [ -n "$suspect_flips" ]; then
@@ -1535,7 +1547,7 @@ fi
 | `tests/fixtures/dreamer_srl/discount_weighting_input.npz` | **NEW** | continues + torch discount reference. |
 | `tests/algorithms/dreamer_srl/test_train.py` | **NEW** | 4 tests: `test_critic_loss_two_terms` (neg_lp1/lp2 + scalar value_loss, asserts neg_lp2 not all-zero to confirm cascade fix #29 active); `test_critic_target_lambda` (raw matches torch; normed does NOT match, diff > 1e-4); `test_discount_weighting` (full tensor, [0]=1 invariant, stop_gradient verified via `jax.grad`); `test_train_module_does_not_import_from_src_models` (regex anchored to line-start to avoid docstring false positive). |
 | `scripts/sheeprl_jax_diff.py` | **EXTENDED** | Added 3 runner functions (`_run_critic_loss_two_terms`, `_run_critic_target_lambda`, `_run_discount_weighting`). Registered in `FUNCTION_REGISTRY`. D-006-class threshold overrides in `FUNCTION_THRESHOLDS`: `"critic_loss_two_terms": 4e-5`, `"critic_target_lambda": 4e-5` (discount_weighting uses default `1e-6`). |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | **EXTENDED** | Added D-010 with `☐ pending — PI ratification at CP6 gate` (NOT auto-approved). Same linspace-ULP class as D-006; seed 0xD3EAF+1; max_abs_diff = 3.099e-5 exceeds D-006's 3e-5 threshold by <4%; threshold relaxed to 4e-5; semantic error class produces O(0.1) deviation (2500× above threshold). |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | **EXTENDED** | Added D-010 with `☐ pending — PI ratification at CP6 gate` (NOT auto-approved). Same linspace-ULP class as D-006; seed 0xD3EAF+1; max_abs_diff = 3.099e-5 exceeds D-006's 3e-5 threshold by <4%; threshold relaxed to 4e-5; semantic error class produces O(0.1) deviation (2500× above threshold). |
 
 ### Test results
 
@@ -1632,7 +1644,7 @@ The PI call doc explicitly documents this as the **first clean Lever-E cycle sin
 | `tests/fixtures/dreamer_srl/polyak_before_train_input.npz` | **NEW** | Two-step trace + call-order fixture. |
 | `tests/algorithms/dreamer_srl/test_train.py` | **EXTENDED** | Added 3 Lever-A tests: `test_polyak_first_call_hard_copy` (tau=1.0 hard copy; asserts online and target_init are detectably different; asserts new target == online to < 1e-6); `test_polyak_subsequent_call_blend` (tau=0.02 EMA formula check + torch cross-check); `test_polyak_fires_before_train_step` (code inspection + two-step trace: step-0 hard copy + step-1 EMA). Added `THRESHOLD_POLYAK = 1e-6` constant; updated module docstring + `__main__`. |
 | `scripts/sheeprl_jax_diff.py` | **EXTENDED** | Added 3 runner functions (`_run_polyak_first_call`, `_run_polyak_subsequent_call`, `_run_polyak_before_train`) and registered in `FUNCTION_REGISTRY` as `"polyak_first_call"`, `"polyak_subsequent_call"`, `"polyak_before_train"`. No threshold override needed (pure arithmetic; default 1e-6 applies). |
-| `docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` | **EXTENDED** | Added D-011 with `☐ pending` verdict: `polyak_update` pure-functional return vs sheeprl in-place `tcp.data.copy_()` mutation — same structural class as D-001 (JAX-mechanical, functionally equivalent). `max_abs_diff = 0.000e+00` (pure arithmetic). NOT auto-approved per Lever-E protocol. |
+| `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | **EXTENDED** | Added D-011 with `☐ pending` verdict: `polyak_update` pure-functional return vs sheeprl in-place `tcp.data.copy_()` mutation — same structural class as D-001 (JAX-mechanical, functionally equivalent). `max_abs_diff = 0.000e+00` (pure arithmetic). NOT auto-approved per Lever-E protocol. |
 
 ### Test results
 
@@ -1737,7 +1749,7 @@ CP8 is the end-to-end forward parity merge-gate. Unlike CP1-CP7 which each have 
 | `scripts/dreamer_srl_offline_check.py` | NEW | Integration check: loads fixture intermediates, feeds them into composed pipeline (deterministic path only, avoiding PRNG non-determinism). 18 checks across 6 parts. Exits 0 on full PASS. |
 | `tests/algorithms/dreamer_srl/test_end_to_end_parity.py` | NEW | Pytest wrapper: `test_end_to_end_parity()` runs the offline check script, asserts exit 0. |
 | `pyproject.toml` | EXTENDED | Added `[tool.pytest.ini_options]` section with `integration` marker registration to suppress PytestUnknownMarkWarning. |
-| `docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md` | EXTENDED | Checkpoint table CP8 row updated; this Implementation Report appended. |
+| `docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` | EXTENDED | Checkpoint table CP8 row updated; this Implementation Report appended. |
 
 **No changes to `DEVIATION_LOG.md`** — CP8 introduced no new deviations. All 18 integration checks pass within the approved CP1-CP7 deviation budgets (D-006 through D-011). The DEVIATION_LOG remains at D-011 as the final entry.
 
@@ -1799,7 +1811,7 @@ None. All changed paths are CP8-scoped:
 - `scripts/dreamer_srl_offline_check.py` (NEW) — offline integration check
 - `tests/algorithms/dreamer_srl/test_end_to_end_parity.py` (NEW) — pytest wrapper
 - `pyproject.toml` (EXTENDED) — marker registration only
-- `docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md` (EXTENDED) — this report
+- `docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` (EXTENDED) — this report
 
 No out-of-scope source modifications.
 
@@ -1864,7 +1876,7 @@ The **four smoke gates** all closed cleanly. (a) **Pre-flight Lever-A regression
 
 **Two deviations close at CP9.** D-012 was pre-declared at the CP9 plan-time: the CP9 smoke configs set `learning_starts: 0` (i.e. no random-action prefill before training begins) whereas the sheeprl XS default is `learning_starts: 1024`. The rationale is that the zero-init actor (cascade fix #27, PI-approved at CP3) outputs uniform action logits at step 0, so the live behaviour for the first ~100 steps is effectively the same uniform-random distribution that §S3 prefill would have produced — exercising the same integration surface without burning 20% of the smoke budget on a pre-training phase that doesn't test integration bugs. The plan-time disposition was "senior-developer flips at CP9 verification" (encoded in D-012's verdict cell before implementation), and that flip happens in this verification subsection. **§S3 prefill is not gone**; it returns at CP9b, which has two Lever-A tests (`test_prefill_uniform_entropy_below_learning_starts`, `test_no_gradient_step_before_learning_starts`) committed for that code path. D-013 is the **new** deviation surfaced today: the OOM on the full XS config. D-013 is substrate-class (hardware-memory constraint, not algorithm semantics) and its disposition is portfolio-level — "what config does the parity launch actually run at?" — which sits squarely in PI consultation territory per the PI agent's pre-launch trigger. Per my senior-developer charter, D-013 stays `☐ pending` at CP9 and waits for the parity-launch planning step. The CP9 smoke does not need D-013 closed to pass: the reduced-dim config exercises the same integration surface, and that's what CP9 was scoped to verify.
 
-The **process discipline carries forward**. The developer correctly logged D-012 truthfully at plan-time and did NOT flip its verdict cell in the implementation commits; the developer logged D-013 only in the commit message of `f841723` and **did NOT touch the IMPLEMENTATION_PLAN.md Verification Report row** (verified by `git diff f841723 -- docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md` returning empty for that file). The senior-developer's verdict-cell flips for both deviations and the CP9 row happen here, in this verification commit. CP9 is the **fifth consecutive clean Lever-E cycle** since the CP4 incident — CP5 D-006, CP6 D-010, CP7 D-011, CP8 Verification Report row, and now CP9 D-012 + D-013 all properly logged at the right verdict-cell state by the right role, with the only role-difference at CP9 being that the verdict-cell author is the senior-developer rather than the PI (a CP9-design choice baked into the plan at line 526, not a process slip).
+The **process discipline carries forward**. The developer correctly logged D-012 truthfully at plan-time and did NOT flip its verdict cell in the implementation commits; the developer logged D-013 only in the commit message of `f841723` and **did NOT touch the IMPLEMENTATION_PLAN.md Verification Report row** (verified by `git diff f841723 -- docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` returning empty for that file). The senior-developer's verdict-cell flips for both deviations and the CP9 row happen here, in this verification commit. CP9 is the **fifth consecutive clean Lever-E cycle** since the CP4 incident — CP5 D-006, CP6 D-010, CP7 D-011, CP8 Verification Report row, and now CP9 D-012 + D-013 all properly logged at the right verdict-cell state by the right role, with the only role-difference at CP9 being that the verdict-cell author is the senior-developer rather than the PI (a CP9-design choice baked into the plan at line 526, not a process slip).
 
 ##### Verification Report — CP9
 
@@ -1880,8 +1892,8 @@ The **process discipline carries forward**. The developer correctly logged D-012
 | Live smoke — Sanity 3 (ep_len logged ≥ 3 distinct) | ✅ PASS (3 distinct across 49 boundaries) | `Game/ep_len_avg` was logged at 49 episode boundaries with 3 distinct values across the run; the values cluster in 100–101 steps (food-only NoPred survival window for a near-random actor). The plan-prescribed threshold is ≥ 3 distinct non-NaN values; met exactly. (Developer's CP9_PLAN.md report row line 905 phrased this as "49 distinct ep_len values" — that wording is a typo for "49 samples, 3 distinct"; the underlying sanity check is correct and met. Noted for plan-doc cleanup, does not block CP-PASS.) |
 | Live smoke — Sanity 4 (CP8 hand-off guard moments_invscale ≥ 1.0) | ✅ PASS (min 1.0000, max 6.5517) | The CP7 actor REINFORCE objective uses `moments_invscale = 1.0 / max(p95 - p5, 1.0)` to normalize the advantage; the `max(..., 1.0)` floor guards against dividing by near-zero advantage scales early in training (the CP8 professor's P2 finding). Across the 5,000-step smoke, the floor was active at step 0 (value head at zero, no advantage signal yet), the metric started at exactly 1.0000, and the value head learned to discriminate state values fast enough that by step 5000 the metric had risen to 6.5517 — the safe-floor regime is exited cleanly. The pattern the CP8 professor flagged ("the near-zero `moments_invscale` amplification will reappear whenever early-training data lands in the `lambda ≈ 0` regime") is bounded by the safe floor exactly as designed; no production-time amplification. |
 | Speed check | n/a (first runtime path; baseline at 7.10 SPS on reduced-dim) | CP9 is the first checkpoint with a live runtime path — all CP4/CP4b/CP6/CP7 speed checks were deferred to "when the training loop is wired in." The 5,000-step smoke ran in 704.5 s wall-clock = 7.10 environment-steps-per-second on the reduced-dim config (single RTX 4090, food-only NoPred, batch_size=16, seq_len=64). This is the **baseline-establishment** measurement for the dreamer-srl line; the parity-gate wall-clock budget (≤ 2× sheeprl's 12.5 h on the same substrate at full XS) is measured at CP10 after the D-013 disposition fixes the parity-launch config. No prior speed-baseline exists to regress against, so the speed check is **N/A by construction at CP9**, not "skipped pending wiring." |
-| Scope drift | none flagged | All changed paths across `b7ea9bb` + `d71d7d4` + `bd8ff91` + `f841723` are inside the CP9-scoped set: `src/algorithms/dreamer_srl/agent.py` (EXTENDED — Encoder, Decoder, ContinueHead, Actor, WorldModel, FullMLPHead, build_agent additions), `src/algorithms/dreamer_srl/train.py` (EXTENDED — `make_train_step` factory + `one_train_step` ~315 lines), `src/algorithms/dreamer_srl/dreamer_srl_main.py` (NEW driver, 590 lines), `configs/dreamer_srl/01_food_only.yaml` (NEW), `configs/dreamer_srl/01_food_only_smoke.yaml` (NEW), `docs/develop/active/dreamer_srl_v3/CP9_PLAN.md` (EXTENDED — implementation report). Diff stat: 5 files changed, 2131 insertions, 3 deletions — proportionate to a 600-line driver + 315-line training step + two YAML configs; no unexplained adjacent edits. |
-| Process-discipline durability | ✅ fifth clean cycle (and first senior-developer-flip CP) | **Fifth consecutive clean Lever-E cycle** since the CP4 incident — CP5 D-006, CP6 D-010, CP7 D-011, CP8 Verification Report row, CP9 D-012 + D-013 all properly logged at the right verdict-cell state by the right role. CP9 is the first CP where the verdict-cell author is the senior-developer rather than the PI, a plan-time design choice baked into the reviewer-optional scope (line 526), not a process slip. The developer correctly logged both deviations as `☐ pending` in the implementation commits and did NOT touch the IMPLEMENTATION_PLAN.md Verification Report row (`git diff f841723 -- docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md` empty); the senior-developer's flips for D-012, D-013 (stays pending, deferred to parity-launch PI), and the CP9 row happen in this verification commit. |
+| Scope drift | none flagged | All changed paths across `b7ea9bb` + `d71d7d4` + `bd8ff91` + `f841723` are inside the CP9-scoped set: `src/algorithms/dreamer_srl/agent.py` (EXTENDED — Encoder, Decoder, ContinueHead, Actor, WorldModel, FullMLPHead, build_agent additions), `src/algorithms/dreamer_srl/train.py` (EXTENDED — `make_train_step` factory + `one_train_step` ~315 lines), `src/algorithms/dreamer_srl/dreamer_srl_main.py` (NEW driver, 590 lines), `configs/dreamer_srl/01_food_only.yaml` (NEW), `configs/dreamer_srl/01_food_only_smoke.yaml` (NEW), `docs/develop/active/dreamer_srl_v1/CP9_PLAN.md` (EXTENDED — implementation report). Diff stat: 5 files changed, 2131 insertions, 3 deletions — proportionate to a 600-line driver + 315-line training step + two YAML configs; no unexplained adjacent edits. |
+| Process-discipline durability | ✅ fifth clean cycle (and first senior-developer-flip CP) | **Fifth consecutive clean Lever-E cycle** since the CP4 incident — CP5 D-006, CP6 D-010, CP7 D-011, CP8 Verification Report row, CP9 D-012 + D-013 all properly logged at the right verdict-cell state by the right role. CP9 is the first CP where the verdict-cell author is the senior-developer rather than the PI, a plan-time design choice baked into the reviewer-optional scope (line 526), not a process slip. The developer correctly logged both deviations as `☐ pending` in the implementation commits and did NOT touch the IMPLEMENTATION_PLAN.md Verification Report row (`git diff f841723 -- docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` empty); the senior-developer's flips for D-012, D-013 (stays pending, deferred to parity-launch PI), and the CP9 row happen in this verification commit. |
 
 ##### Conclusion
 
@@ -1917,8 +1929,8 @@ The **process discipline** carries forward unbroken. The developer correctly lef
 | Manual smoke — `learning_starts=8` gate trace | ✅ §S3 hard invariant + D-014 burst observed | In-session smoke traced `grad_step_at_iter` over iters 1..12 with `learning_starts=8, replay_ratio=1, num_envs=1, action_dim=4`: `[0, 0, 0, 0, 0, 0, 0, 8, 1, 1, 1, 1]`. Zero grad steps for iters 1..7 (the §S3 invariant), 8 grad steps at iter 8 (the D-014 debt-repayment burst at boundary inclusive per sheeprl `>=`), steady-state 1 grad step per iter from iter 9 onward. Empirical prefill action distribution: `[2, 3, 2, 1]` across 8 samples — non-degenerate, all 4 bins covered. |
 | Gate E — DEVIATION_LOG state | ✅ D-014 APPROVED substrate-class | D-014 logged as substrate-class match with D-001 (`moments_update` functional return) and D-011 (`polyak_update` functional return) — JAX driver omits sheeprl's `ratio_steps = policy_step - prefill_steps × policy_steps_per_iter` subtraction at `dreamer_srl_main.py:L492`; both paths preserve the §S3 hard invariant and the long-run replay ratio, only the boundary debt distribution differs. Senior-developer disposition: log-but-approve, code unchanged, production comment at L391-L399 fixed at this verification to remove the false `ratio(0) == 0` claim and document the debt-repayment-burst pattern; CP9B_PLAN.md §Analysis + §Test 2 amended to match implementation. ✅ APPROVED by senior-developer per CP9b reviewer-optional/no-PI scope (v3 plan line 527) and the substrate-class precedent established by D-001 and D-011's PI approvals. |
 | Speed check | n/a (in-loop overhead < 1% per developer micro-benchmark) | Developer's CP9b.8 measurement: micro-benchmark of the prefill-action sample step in isolation showed ~1.04 ms/iter (warm JAX) vs the full-driver iter at ~140 ms/iter (7.10 SPS baseline from CP9). Prefill-action overhead is < 1% of total iteration time, and applies only during the first 1024 iters of a run (the prefill window); after `learning_starts`, both CP9 and CP9b paths use the identical `player.get_actions()` path. The 311% delta in a pure action-sample micro-benchmark is misleading (measures only the isolated JAX-dispatch overhead vs numpy, with no env/buffer/logging in the loop). Authoritative full-driver SPS measurement happens at CP10 (the wall-clock budget measurement on the parity-track config). Speed verdict at CP9b: ✅ no regression (full-driver impact < 1% per micro-benchmark; well inside the 5% threshold). |
-| Scope drift | none flagged | All changed paths across `5bacc0b` + `ab2b678` + `e4a94d6` + `51822cc` are inside the CP9b-scoped set per the plan: `src/algorithms/dreamer_srl/dreamer_srl_main.py` (8 lines replaced by 18 — the §S3 prefill branch), `tests/algorithms/dreamer_srl/test_prefill.py` (NEW file, 2 property tests), `configs/dreamer_srl/01_food_only.yaml` (header comment + `learning_starts: 0 → 1024`), `configs/dreamer_srl/01_food_only_smoke.yaml` (header comment only; body unchanged), `docs/develop/active/dreamer_srl_v3/CP9B_PLAN.md` (implementation report appended, checkpoints ticked). No out-of-scope edits. |
-| Process-discipline durability | ✅ sixth clean Lever-E cycle | **Sixth consecutive clean Lever-E cycle** since the CP4 incident (CP5 D-006, CP6 D-010, CP7 D-011, CP8 Verification Report row, CP9 D-012+D-013, CP9b D-014). Developer correctly logged D-014's surface (the plan-reality discrepancy in the Implementation Report, "no D-014 filed" pending senior-developer decision) and did NOT flip the CP9b verdict cell — `grep "CP9b" docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md | grep "NOT STARTED"` would have returned the row in the `NOT STARTED` state at HEAD `51822cc` (pre-verification). The verdict-cell flip and D-014 entry happen here in this verification commit. Second consecutive CP where the verdict-cell author is the senior-developer rather than the PI (CP9 by design at reviewer-optional scope, CP9b by design at reviewer-optional scope + substrate-class deviation precedent). |
+| Scope drift | none flagged | All changed paths across `5bacc0b` + `ab2b678` + `e4a94d6` + `51822cc` are inside the CP9b-scoped set per the plan: `src/algorithms/dreamer_srl/dreamer_srl_main.py` (8 lines replaced by 18 — the §S3 prefill branch), `tests/algorithms/dreamer_srl/test_prefill.py` (NEW file, 2 property tests), `configs/dreamer_srl/01_food_only.yaml` (header comment + `learning_starts: 0 → 1024`), `configs/dreamer_srl/01_food_only_smoke.yaml` (header comment only; body unchanged), `docs/develop/active/dreamer_srl_v1/CP9B_PLAN.md` (implementation report appended, checkpoints ticked). No out-of-scope edits. |
+| Process-discipline durability | ✅ sixth clean Lever-E cycle | **Sixth consecutive clean Lever-E cycle** since the CP4 incident (CP5 D-006, CP6 D-010, CP7 D-011, CP8 Verification Report row, CP9 D-012+D-013, CP9b D-014). Developer correctly logged D-014's surface (the plan-reality discrepancy in the Implementation Report, "no D-014 filed" pending senior-developer decision) and did NOT flip the CP9b verdict cell — `grep "CP9b" docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md | grep "NOT STARTED"` would have returned the row in the `NOT STARTED` state at HEAD `51822cc` (pre-verification). The verdict-cell flip and D-014 entry happen here in this verification commit. Second consecutive CP where the verdict-cell author is the senior-developer rather than the PI (CP9 by design at reviewer-optional scope, CP9b by design at reviewer-optional scope + substrate-class deviation precedent). |
 
 ##### Conclusion
 
@@ -1964,7 +1976,7 @@ CP10 is the **wall-clock-budget gate** that originally promised: *"the JAX dream
 | Like-for-like sheeprl XS comparison | ⚠ deferred to CP10b (NOT done at CP10) | Sheeprl's 12.5h XS baseline ([`jzgkcep4`](https://wandb.ai/sungwoolee/grid_world_pain_dreamer_srl_smoke/runs/jzgkcep4) at 4.43 env-SPS, [SPS_COMPARISON_JAX_VS_SHEEPRL.md §3.1](../../../experiments/active/sheeprl_bridge/SPS_COMPARISON_JAX_VS_SHEEPRL.md#31-end-to-end-environment-steps-per-second)) ran the full XS recipe (1024 dense / 32×32 stoch / horizon=15) which OOMs on a single RTX 4090 (D-013). Cannot be measured at CP10 under the autonomous-run constraint that excludes the user-facing PI gate. CP10b authored. |
 | Proxy XS projection | ⚠ informational — 1.0–1.4 SPS single-GPU range projects 41–58 h for 200k steps (well outside 25h budget) | Reduced-dim-to-XS compute proxy: matmul width 256→1024 (~6× wall-clock cost on small-matrix-bandwidth-bound matmuls), stochastic state 64→1024 (16× sampling work), horizon 7→15 (2.14× scan steps), dominant cost decomposition WM rollout 50% / imagination rollout 30% / heads 20%. Midpoint XS-vs-reduced ≈ 8×, range 6–10×; projected XS steady-state 0.95–1.58 SPS, midpoint 1.19 SPS. **Sheeprl-XS-vs-dreamer-srl-XS single-GPU projection: 3.5–4.5× slower** (the opposite direction from un-matched-recipe Z1-vs-sheeprl 17.9× advantage), strongly suggesting the parity launch needs the multi-GPU disposition for D-013 (4× RTX 4090 projects ~10–14 h, inside 25 h budget). Proxy ≠ measurement; CP10b converts to a real number. |
 | Speed-check verdict | ✅ no regression | Comparing CP10's 9.50 steady-state SPS vs CP9's 7.10 aggregate SPS on the same code path on the same hardware on the same config — the 34% delta is entirely a JIT-cost-share amortization artifact (CP9's 5,000-step budget had JIT cost-share ~24%; CP10's 20,000-step budget has JIT cost-share ~7%). The steady-state SPS itself is unchanged within measurement noise. No production-code regression. |
-| Scope drift | none flagged | This verification only edited docs under `docs/develop/active/dreamer_srl_v3/`. No `src/`, `configs/`, `scripts/`, or `tests/` modifications. The measurement run used the unmodified `01_food_only_smoke.yaml` config and the unmodified `dreamer_srl_main.py` driver from CP9b's HEAD. |
+| Scope drift | none flagged | This verification only edited docs under `docs/develop/active/dreamer_srl_v1/`. No `src/`, `configs/`, `scripts/`, or `tests/` modifications. The measurement run used the unmodified `01_food_only_smoke.yaml` config and the unmodified `dreamer_srl_main.py` driver from CP9b's HEAD. |
 
 ##### Conclusion
 

@@ -52,7 +52,7 @@ docstring; no blockers. Math-reviewer can begin.
 | Consumption (mean) | `src/algorithms/dreamer_srl/loss.py` | 134 | `return symexp(jnp.sum(self.probs * self.bins, axis=self.dims, keepdims=True))` | ✅ |
 | Consumption (mode) | `src/algorithms/dreamer_srl/loss.py` | 146 | `return symexp(jnp.sum(self.probs * self.bins, axis=self.dims, keepdims=True))` | ✅ |
 | log_prob (target) | `src/algorithms/dreamer_srl/loss.py` | 192 | `x = symlog(x)` — target symlog-encoded BEFORE bin lookup | ✅ |
-| v3 plan CP5 row | `docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md` | L522 | "`bins[0]=-20, bins[127]≈0, bins[254]=+20`, in symlog space" | ✅ |
+| v3 plan CP5 row | `docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` | L522 | "`bins[0]=-20, bins[127]≈0, bins[254]=+20`, in symlog space" | ✅ |
 | v2 archived plan cascade row #2 | `docs/develop/archive/dreamer_srl/IMPLEMENTATION_PLAN.md` | L82 | "stored in *symlog space*" with explicit warning DO NOT `symexp(linspace)` | ✅ |
 | Sheeprl source (vendored) | `vendor/sheeprl/sheeprl/utils/distribution.py` | 237 | `self.bins = torch.linspace(low, high, logits.shape[-1], device=logits.device)` — bare linspace, no transbwd | ✅ |
 

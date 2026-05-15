@@ -30,7 +30,7 @@ phase: 2
 | Implementation | [`src/algorithms/dreamer_srl/train.py`](../../src/algorithms/dreamer_srl/train.py) lines 329–602 (CP7 new code) |
 | Tests | [`tests/algorithms/dreamer_srl/test_train.py`](../../tests/algorithms/dreamer_srl/test_train.py) tests 4–6 (`test_polyak_first_call_hard_copy`, `test_polyak_subsequent_call_blend`, `test_polyak_fires_before_train_step`) |
 | Diff-tool runners | [`scripts/sheeprl_jax_diff.py`](../../scripts/sheeprl_jax_diff.py) lines 1528–1664 (3 new runners, registry entries lines 1700–1702, CP7 entry line 1770) |
-| Deviation log | [`docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md`](../develop/active/dreamer_srl_v3/DEVIATION_LOG.md) row D-011 |
+| Deviation log | [`docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md`](../develop/active/dreamer_srl_v3/DEVIATION_LOG.md) row D-011 |
 | Sheeprl reference | [`vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py`](../../vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py) L246–L297 (actor/lambda/splice/discount), L307–L316 (critic — CP6, untouched), L673–L697 (outer-loop polyak before train), L678–L680 (polyak update itself) |
 | Commit under review | `3c5be0c` (impl), `f71eecb` (diary) |
 
@@ -58,7 +58,7 @@ phase: 2
 | Lever-B source citations (line ranges) | ✅ | Polyak L678–L680, splice L246–L248, lambda L251–L256, discount L259–L260, actor L274–L297, REINFORCE-discrete L283–L290, sign+entropy L294–L297, outer loop L673–L697 — all match the vendored source |
 | Lever-B isolation rule (no `from src.models.dreamer_v3_*` import) | ✅ | `grep -rn "from src.models.dreamer_v3" src/algorithms/dreamer_srl/` returns only docstring text in `agent.py:L7` and `train.py:L8`; `test_train_module_does_not_import_from_src_models` PASS |
 | D-011 logged as `☐ pending` (NOT autonomously flipped) | ✅ | DEVIATION_LOG.md row D-011 verdict cell = `☐ pending` (verified in commit `3c5be0c` diff) |
-| Lever-E grep over commit range — no PI-attribution flips by non-PI author | ✅ | `git diff eeba638 3c5be0c -- docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md` shows only the D-011 `☐ pending` addition; no `✅ APPROVED` flips in the range |
+| Lever-E grep over commit range — no PI-attribution flips by non-PI author | ✅ | `git diff eeba638 3c5be0c -- docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` shows only the D-011 `☐ pending` addition; no `✅ APPROVED` flips in the range |
 | Diff-tool registry entries (3 new, in `RUNNERS` + `CHECKPOINT_REGISTRY[CP7]`) | ✅ | Lines 1700–1702 in `RUNNERS`, line 1770 in `CHECKPOINT_REGISTRY` |
 | Diff-tool threshold for Polyak (strict 1e-6, no relaxation since arithmetic is exact) | ✅ | No `FUNCTION_THRESHOLDS` override for polyak runners → default 1e-6; achieved 0.000e+00 |
 | 3/3 CP7 diff-tool runners PASS at 0.000e+00 | ✅ | Verified by re-running `python scripts/sheeprl_jax_diff.py --checkpoint CP7` |
@@ -84,9 +84,9 @@ The developer correctly logged D-011 as `☐ pending` and did NOT autonomously f
 
 ## Cross-references
 
-- v3 plan: [`docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md`](../develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md)
+- v3 plan: [`docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md`](../develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md)
 - v2 §S5 (true-continue splice) + §S7 (per-term advantage normalization) — embedded in the plan above
-- Deviation log: [`docs/develop/active/dreamer_srl_v3/DEVIATION_LOG.md`](../develop/active/dreamer_srl_v3/DEVIATION_LOG.md) — D-011 (CP7), D-001 (CP1 precedent, same structural class)
+- Deviation log: [`docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md`](../develop/active/dreamer_srl_v3/DEVIATION_LOG.md) — D-011 (CP7), D-001 (CP1 precedent, same structural class)
 - Prior CP code reviews: [`dreamer_srl_v3_cp6_code_review.md`](dreamer_srl_v3_cp6_code_review.md), [`dreamer_srl_v3_cp5_code_review.md`](dreamer_srl_v3_cp5_code_review.md), [`dreamer_srl_v3_cp4_code_review.md`](dreamer_srl_v3_cp4_code_review.md)
 - Vendored sheeprl reference:
   - `vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:L246-L297` (splice + lambda + discount + actor)

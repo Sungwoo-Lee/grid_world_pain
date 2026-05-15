@@ -307,7 +307,7 @@ D-012 fully closes on the parity-track config; the smoke retains `learning_start
 
 ### F2 — CP9B_PLAN.md L468-L479 plan-text precision (documentary, not blocking)
 
-**Where.** `docs/develop/active/dreamer_srl_v3/CP9B_PLAN.md:L468-L479`.
+**Where.** `docs/develop/active/dreamer_srl_v1/CP9B_PLAN.md:L468-L479`.
 
 **What.** The plan asserts `ratio(policy_step) at the boundary returns 0`. This is false for the JAX driver (which omits sheeprl's `prefill_steps` subtraction by design). The correct boundary behaviour for the JAX driver is `int(learning_starts * replay_ratio)` (debt repayment); for sheeprl it is `int(num_envs * replay_ratio)` (per-iter rate). Both preserve the §S3 hard invariant ("zero gradient before iter `learning_starts`"), which is what Test 2 correctly verifies.
 
@@ -336,7 +336,7 @@ D-012 fully closes on the parity-track config; the smoke retains `learning_start
 **Action items for senior-developer at CP9b verification:**
 
 1. Confirm code-reviewer's parallel gate passes (the line-for-line audit of `dreamer_srl_main.py:L394-L402` against sheeprl L558-L571 is their authority, not mine).
-2. Flip the CP9b row in `docs/develop/active/dreamer_srl_v3/IMPLEMENTATION_PLAN.md:L527` from `NOT STARTED` to `CP-PASS` (developer correctly did NOT flip per the post-CP4 reviewer-gate strengthening rule).
+2. Flip the CP9b row in `docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md:L527` from `NOT STARTED` to `CP-PASS` (developer correctly did NOT flip per the post-CP4 reviewer-gate strengthening rule).
 3. Amend `CP9B_PLAN.md:L468-L479` with a one-sentence note about the boundary debt-repayment behaviour (F2).
 4. Hand off to CP10 with the F1 + F3 diagnostic recommendations (WandB log keys for prefill-action histogram and gradient-step burst).
 5. No PI consultation needed at CP9b. The next PI trigger is the parity-launch decision after CP10.
