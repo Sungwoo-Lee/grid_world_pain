@@ -355,10 +355,10 @@ Each phase ends with a commit; each commit independently revertable. Phase 0 is 
 
 What the implementing agent (likely `developer` with `senior-developer` planning) should verify during each phase.
 
-- [ ] **Phase 0 — verification grep gate**: after `git mv` + sed pass, `grep -r '\.claude-memory/' --include='*.md' --include='*.py' --include='*.sh' --include='*.json' --exclude-dir='claude_data' --exclude-dir='.claude/worktrees' --exclude-dir='.git' .` returns zero matches. If non-zero, the relocation is incomplete; do not commit.
-- [ ] **Phase 0 — history preservation**: `git log --follow docs/memory/memories/cluster_ops/<some_id>.md` walks back to the original capture commit (validates `git mv` worked, not a `mv` + `git add`).
-- [ ] **Phase 0 — Obsidian smoke**: open `docs/.obsidian` vault, confirm `docs/memory/` appears in the file tree, confirm an existing `related: [<id>]` shows the linked file when clicked (no Phase A wikilinks yet — this just validates Obsidian sees the moved tree).
-- [ ] **Phase 0 — sample insight resolves**: pick a sampled insight; confirm its `raw_source: claude_data/...` path still resolves (paths in insights should not have changed; `claude_data/` stays at repo root).
+- [x] **Phase 0 — verification grep gate**: after `git mv` + sed pass, `grep -r '\.claude-memory/' --include='*.md' --include='*.py' --include='*.sh' --include='*.json' --exclude-dir='claude_data' --exclude-dir='.claude/worktrees' --exclude-dir='.git' .` returns zero matches. If non-zero, the relocation is incomplete; do not commit. — **DONE**: zero matches outside v2 design doc (commit `6d9f7e9`).
+- [x] **Phase 0 — history preservation**: `git log --follow docs/memory/memories/cluster_ops/<some_id>.md` walks back to the original capture commit (validates `git mv` worked, not a `mv` + `git add`). — **DONE**: `git log --follow docs/memory/CLAUDE.md` shows 3 commits back to `a16a6c9`.
+- [ ] **Phase 0 — Obsidian smoke**: open `docs/.obsidian` vault, confirm `docs/memory/` appears in the file tree, confirm an existing `related: [<id>]` shows the linked file when clicked (no Phase A wikilinks yet — this just validates Obsidian sees the moved tree). — **requires manual verification by user**.
+- [x] **Phase 0 — sample insight resolves**: pick a sampled insight; confirm its `raw_source: claude_data/...` path still resolves (paths in insights should not have changed; `claude_data/` stays at repo root). — **DONE**: cluster_ops insights verified, `raw_source: claude_data/` paths unchanged.
 - [ ] **Phase A** — after normalisation pass: every existing insight's `related:` value is a YAML list of double-quoted strings; `grep -c '^related:' docs/memory/memories/*/*.md` returns the expected count; a randomly sampled insight has the same set of related IDs as before the rewrite (parsed both ways).
 - [ ] **Phase A** — after `regen_memory_links.py` ships: write a test insight with `[[<known_id>]]` in the body; run the regenerator; assert the frontmatter `related:` now contains the known id.
 - [ ] **Phase A — Obsidian graph view**: open `docs/.obsidian`; the native graph view shows insight↔insight edges derived from `[[…]]` links. (Free byproduct; no script needed.)
@@ -373,10 +373,33 @@ What the implementing agent (likely `developer` with `senior-developer` planning
 
 ## Implementation Report
 
-> **Implemented by**: TBD
-> **Date**: TBD
+> **Implemented by**: developer (Claude Sonnet 4.6)
+> **Date**: 2026-05-16
 
-_To be filled by the implementing agent after each phase._
+### Phase 0 — Relocate `.claude-memory/` → `docs/memory/`
+
+**Commit (relocation)**: `6d9f7e9` — 110 files changed, 302 insertions(+), 301 deletions(-)
+
+**Files touched by sed**: 43 files modified (sed pass updated path strings); 67 files renamed via `git mv` (the insight files themselves, with 100% similarity).
+
+**Verification grep result**: Zero matches outside `docs/develop/active/meta/claude_memory_system_v2_design.md`. All 27 remaining `.claude-memory/` matches are intentional — they describe the v1 historical state in the design doc that was excluded from the sed pass per spec.
+
+**History preservation**: `git log --follow docs/memory/CLAUDE.md` returns 3 commits, walking back to `a16a6c9` (the original "in-repo session-memory system" commit, predating Phase 0 by weeks). All 67 renames used `git mv`, not `mv` + `git add`.
+
+**Deviations from spec**:
+
+1. `.gitignore` not touched by the `find ... -name '*.md' -o -name '*.json' -o -name '*.py' -o -name '*.sh'` sed pass because `.gitignore` has no file extension. Caught and fixed manually: updated `.claude-memory/.trash/*` → `docs/memory/.trash/*` and `!.claude-memory/.trash/.gitkeep` → `!docs/memory/.trash/.gitkeep` before commit.
+
+2. The `find ... -not -path '*/docs/develop/active/meta/claude_memory_system_v2_design.md'` exclusion matched relative paths starting with `./` but not the path without the `./` prefix, causing the v2 design doc to be modified by the initial sed pass. Caught before commit: restored the doc to HEAD via `git checkout HEAD -- <path>` before committing. The committed v2 design doc is identical to its HEAD state (all 27 `.claude-memory/` references preserved).
+
+3. Harness MEMORY.md (`~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/memory/MEMORY.md`) checked: zero `.claude-memory` references found. No manual update needed.
+
+**Checkpoints marked complete**:
+- [x] **Phase 0 — verification grep gate**: zero matches outside v2 design doc.
+- [x] **Phase 0 — history preservation**: `git log --follow` walks back to `a16a6c9`.
+- [x] **Phase 0 — sample insight resolves**: `raw_source: claude_data/...` paths in insights unchanged (sed did not touch `claude_data/` paths).
+
+Implemented by: developer
 
 ## Verification Report
 
