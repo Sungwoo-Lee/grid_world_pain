@@ -181,15 +181,33 @@ def main() -> None:
                         help="Disable WandB logging (for Checkpoint D micro-dry-run)")
     parser.add_argument("--quiet", action="store_true",
                         help="Suppress per-step stdout (for Checkpoint D)")
+    parser.add_argument("--results-dir", type=str, default=None,
+                        help="Override results directory (default: results/JAX_DreamerSRL/<run-name>/)")
+    parser.add_argument("--debug", action="store_true",
+                        help="Print debug info at startup")
     args = parser.parse_args()
 
     # -----------------------------------------------------------------------
     # 2. Load configs (env + agent)
-    # Load default env config first, then merge the experiment config on top.
-    # This mirrors train.py:L295-L359 (get_default_config() + merge).
+    # Load default env config first, then merge training/eval/viz defaults on
+    # top, then the experiment config.  Mirrors train.py:L295-L367.
     # -----------------------------------------------------------------------
+    import os as _os
+    _project_root = '/media/nas01/projects/Interoceptive-AI/grid_world_pain'
     from src.utils.config import get_default_config
     env_cfg = get_default_config()  # loads configs/environment/default.yaml
+
+    # Merge Training defaults (training.checkpoint_frequency etc.)
+    # Ported from train.py:L297-L327
+    for _cfg_rel in [
+        'configs/train/default.yaml',
+        'configs/evaluation/default.yaml',
+        'configs/visualization/default.yaml',
+    ]:
+        _cfg_path = _os.path.join(_project_root, _cfg_rel)
+        if _os.path.exists(_cfg_path):
+            env_cfg.merge(Config.load_yaml(_cfg_path))
+
     env_cfg.merge(Config.load_yaml(args.env_config))  # experiment-specific overrides
     agent_cfg = Config.load_yaml(args.agent_config)
 
@@ -227,6 +245,28 @@ def main() -> None:
     critic_eps = agent_cfg.get_mandatory("algo.critic.optimizer.eps", float)
 
     num_envs = args.num_envs  # CLI sets this; config is just documentation
+
+    # -----------------------------------------------------------------------
+    # 2b. Eval-video config — read from env_cfg (which now holds training.*,
+    #     visualization.*, testing.* merged in above).
+    #     Ported from train.py:L2429-L2435
+    # -----------------------------------------------------------------------
+    video_during_training = env_cfg.get_mandatory('training.video_during_training')
+    eval_video_episodes   = env_cfg.get_mandatory('training.eval_video_episodes', int)
+    stats_during_training = env_cfg.get_mandatory('training.stats_during_training')
+    eval_stats_episodes   = env_cfg.get_mandatory('training.eval_stats_episodes', int)
+    eval_stats_num_envs   = env_cfg.get_mandatory('training.eval_stats_num_envs', int)
+    checkpoint_frequency  = env_cfg.get_mandatory('training.checkpoint_frequency', int)
+    max_checkpoints_keep  = env_cfg.get_mandatory('training.max_checkpoints_to_keep', int)
+    viz_enabled           = env_cfg.get_mandatory('visualization.enabled')
+    viz_fps               = env_cfg.get_mandatory('visualization.fps', int)
+    auto_render           = env_cfg.get_mandatory('testing.auto_render_after_eval')
+
+    if args.debug:
+        print(f"[dreamer-srl] eval config: video_during_training={video_during_training}, "
+              f"eval_video_episodes={eval_video_episodes}, stats_during_training={stats_during_training}, "
+              f"checkpoint_frequency={checkpoint_frequency}, viz_fps={viz_fps}, "
+              f"auto_render={auto_render}, max_checkpoints_keep={max_checkpoints_keep}")
 
     # -----------------------------------------------------------------------
     # 3. Seed + JAX device setup
@@ -348,11 +388,34 @@ def main() -> None:
             wandb.define_metric("Episode/Number")
             wandb.define_metric("*", step_metric="timesteps")
             wandb.define_metric("Episode/*", step_metric="Episode/Number")
+            # Commit A (eval-video): Eval/* step metric + checkpoint_episode
+            # Mirrors train.py:L2466-L2467 Eval/* pattern
+            wandb.define_metric("eval/checkpoint_episode")
+            wandb.define_metric("Eval/*", step_metric="timesteps")
         except ImportError:
             print("[dreamer-srl] WandB not installed — disabling WandB logging")
             use_wandb = False
     else:
         print("[dreamer-srl] WandB disabled (--no-wandb)")
+
+    # -----------------------------------------------------------------------
+    # 9b. Results directory — mirrors train.py:L540-L547 JAX_DreamerV3 convention.
+    # Convention: results/JAX_DreamerSRL/<wandb-run-name>/ (parallel to DreamerV3).
+    # Falls back to tmp/JAX_DreamerSRL_<timestamp>/ when --no-wandb.
+    # -----------------------------------------------------------------------
+    import time as _time_mod
+    if args.results_dir:
+        results_dir = args.results_dir
+    elif use_wandb and wandb.run is not None:
+        results_dir = _os.path.join(_project_root, 'results', 'JAX_DreamerSRL', wandb.run.name)
+    else:
+        _ts = int(_time_mod.time())
+        results_dir = _os.path.join(_project_root, 'tmp', f'JAX_DreamerSRL_{_ts}')
+    _os.makedirs(results_dir, exist_ok=True)
+    print(f"[dreamer-srl] results_dir={results_dir}")
+
+    # Checkpoint state for Commit B
+    last_ckpt_episode: int = 0   # tracks last episode count at which we saved
 
     # -----------------------------------------------------------------------
     # 10. Initial env reset + player state init
