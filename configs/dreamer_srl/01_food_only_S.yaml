@@ -23,13 +23,13 @@
 
 # Cadence (sweep budget; learning_starts=0 per smoke deviation)
 algo:
-  learning_starts: 0           # sweep-only deviation (skip §S3 prefill)
+  learning_starts: 1024        # parity-track default (XS uses 1024) — was 0 for SPS sweep, restored for production
   replay_ratio: 1
   per_rank_gradient_steps: 1
   per_rank_sequence_length: 64
   per_rank_batch_size: 16
   per_rank_pretrain_steps: 0
-  total_steps: 1000            # sweep step budget
+  total_steps: 5000000         # parity-track default (XS default is 5000000); CLI overrides
 
   # Core dreamer algorithm (unchanged from XS parity)
   gamma: 0.996840347           # sheeprl dreamer_v3.yaml:L22
