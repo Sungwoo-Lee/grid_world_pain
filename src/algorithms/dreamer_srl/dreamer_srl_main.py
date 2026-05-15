@@ -14,8 +14,8 @@ Usage::
         --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \\
         --agent-config configs/dreamer_srl/01_food_only.yaml \\
         --total-steps 5000 --num-envs 1 --seed 0 \\
-        --wandb-project grid_world_pain_dreamer_srl_smoke \\
-        --wandb-name dreamer_srl_cp9_dryrun_s0
+        --wandb-project grid_world_pain \\
+        --wandb-name dreamer_srl_v3_schema_migration_smoke_s0
 
 CP9 note: learning_starts=0 (D-012 pre-declared in DEVIATION_LOG.md).
 """
@@ -173,7 +173,7 @@ def main() -> None:
                         help="Number of parallel environments")
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--wandb-project", type=str,
-                        default="grid_world_pain_dreamer_srl_smoke",
+                        default="grid_world_pain",
                         help="WandB project name")
     parser.add_argument("--wandb-name", type=str, default=None,
                         help="WandB run name")
@@ -309,6 +309,7 @@ def main() -> None:
             import wandb
             run = wandb.init(
                 project=args.wandb_project,
+                entity="sungwoolee",   # Mirrors configs/logger/wandb.yaml:L4
                 name=args.wandb_name,
                 config={
                     "env_config": args.env_config,
@@ -452,7 +453,9 @@ def main() -> None:
                 ep_len = int(episode_lengths[i]) + 1
                 ep_rew = float(episode_rewards[i]) + float(rewards[i])
                 if use_wandb:
-                    wandb.log({"Game/ep_len_avg": ep_len, "Rewards/rew_avg": ep_rew},
+                    # Commit 1: renamed Game/ep_len_avg → Episode/Steps, Rewards/rew_avg → Episode/Reward
+                    # Aggregation is still raw-per-done-env here; switches to per-iteration in Commit 2.
+                    wandb.log({"Episode/Steps": ep_len, "Episode/Reward": ep_rew},
                               step=policy_step)
                 if not args.quiet:
                     print(f"[iter {iter_num}] episode done: env={i} ep_len={ep_len} ep_rew={ep_rew:.3f}")
