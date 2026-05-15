@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only lint script for docs/memory/: 9 checks, punch-list output, exit 0/1."""
+"""Read-only lint script for docs/memory/: 11 checks, punch-list output, exit 0/1."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ROOT = ROOT / "docs" / "memory"
-TODAY = date(2026, 5, 16)  # canonical today per task spec
+TODAY: date = date.today()  # overridable with --today YYYY-MM-DD for deterministic testing
 ORPHAN_DAYS = 30
 FOLDER_OVERLAP_THRESHOLD = 0.7
 
@@ -124,6 +124,7 @@ class Insight:
     __slots__ = (
         "path", "id", "folder_fm", "folder_actual", "date_str",
         "tags", "related_ids", "raw_source", "outbound_wikilinks",
+        "valid_until", "confidence",
     )
 
     def __init__(self, path: Path, fm: dict[str, str], body_clean: str) -> None:
@@ -137,6 +138,9 @@ class Insight:
         self.related_ids = _parse_related(rel_raw)
         self.raw_source = fm.get("raw_source", "").strip()
         self.outbound_wikilinks: list[str] = list(dict.fromkeys(ID_PATTERN.findall(body_clean)))
+        # Phase E fields (absent = null = valid for pre-E insights)
+        self.valid_until: str = fm.get("valid_until", "").strip()
+        self.confidence: str = fm.get("confidence", "").strip()
 
 
 def load_all_insights(paths: list[Path]) -> list[Insight]:
@@ -359,6 +363,38 @@ def check_raw_source_reverse(
     return issues
 
 
+def check_valid_until_format(insights: list[Insight]) -> list[str]:
+    """[10/11] valid_until, if non-null/absent, must be YYYY-MM-DD."""
+    issues = []
+    for ins in insights:
+        val = ins.valid_until
+        # Absent or "null" are both valid
+        if not val or val.lower() == "null":
+            continue
+        try:
+            datetime.strptime(val, "%Y-%m-%d")
+        except ValueError:
+            rel = ins.path.relative_to(ROOT)
+            issues.append(
+                f"  {rel}: valid_until '{val}' is not a valid YYYY-MM-DD date"
+            )
+    return issues
+
+
+def check_confidence_values(insights: list[Insight]) -> list[str]:
+    """[11/11] confidence must be high, medium, low, null, or absent."""
+    VALID = {"high", "medium", "low", "null", ""}
+    issues = []
+    for ins in insights:
+        val = ins.confidence.lower() if ins.confidence else ""
+        if val not in VALID:
+            rel = ins.path.relative_to(ROOT)
+            issues.append(
+                f"  {rel}: confidence '{ins.confidence}' is not one of: high, medium, low, null"
+            )
+    return issues
+
+
 # ─── Global tags loading ─────────────────────────────────────────────────────
 
 
@@ -412,6 +448,8 @@ def _format_section(
 
 
 def main() -> int:
+    global TODAY
+
     parser = argparse.ArgumentParser(
         description="Read-only lint for docs/memory/ — emits a punch list of issues."
     )
@@ -432,7 +470,21 @@ def main() -> int:
         action="store_true",
         help="Only print issues, no per-check headers.",
     )
+    parser.add_argument(
+        "--today",
+        type=str,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Override today's date for deterministic testing (default: date.today()).",
+    )
     args = parser.parse_args()
+
+    if args.today:
+        try:
+            TODAY = datetime.strptime(args.today, "%Y-%m-%d").date()
+        except ValueError:
+            print(f"Error: --today '{args.today}' is not a valid YYYY-MM-DD date.", file=sys.stderr)
+            return 2
 
     memory_root: Path = args.root
 
@@ -447,7 +499,7 @@ def main() -> int:
     global_tags = load_global_tags(memory_root)
 
     # ── Run checks ───────────────────────────────────────────────────────────
-    TOTAL = 9
+    TOTAL = 11
     now_str = datetime.now().strftime("%H:%M")
     header = (
         f"{'='*40}\n"
@@ -464,6 +516,8 @@ def main() -> int:
     issues_orphans = check_old_orphans(insights)
     issues_raw_src, skipped_raw = check_raw_source_resolution(insights, memory_root)
     issues_reverse = check_raw_source_reverse(insights, memory_root)
+    issues_valid_until = check_valid_until_format(insights)
+    issues_confidence = check_confidence_values(insights)
 
     n_insights = len(insights)
 
@@ -484,6 +538,8 @@ def main() -> int:
         _add("old_orphans", issues_orphans, "warning")
         _add("raw_source_resolution", issues_raw_src, "warning" if skipped_raw else "error")
         _add("raw_source_reverse", issues_reverse, "warning")
+        _add("valid_until_format", issues_valid_until)
+        _add("confidence_values", issues_confidence)
 
         print(json.dumps(records, indent=2))
         # Exit code: 1 if any genuine errors (not just warnings about missing claude_data)
@@ -495,6 +551,8 @@ def main() -> int:
             or issues_tags
             or issues_overlap
             or (issues_raw_src and not skipped_raw)
+            or issues_valid_until
+            or issues_confidence
         )
         return 1 if genuine_errors else 0
 
@@ -559,6 +617,18 @@ def main() -> int:
     elif not args.quiet:
         out.append("  ✅ All referenced sessions appear in GRAPH_REPORT.md.")
 
+    # Section [10]
+    out.extend(_format_section(
+        10, TOTAL, "valid_until date format", issues_valid_until,
+        "All valid_until values are absent, null, or valid YYYY-MM-DD dates.", args.quiet,
+    ))
+
+    # Section [11]
+    out.extend(_format_section(
+        11, TOTAL, "confidence allowed values", issues_confidence,
+        "All confidence values are absent, null, high, medium, or low.", args.quiet,
+    ))
+
     # ── Summary ───────────────────────────────────────────────────────────────
     genuine_errors = (
         issues_wikilink
@@ -568,6 +638,8 @@ def main() -> int:
         or issues_tags
         or issues_overlap
         or (issues_raw_src and not skipped_raw)
+        or issues_valid_until
+        or issues_confidence
     )
     warnings_only = issues_orphans or skipped_raw or (not issues_reverse or issues_reverse[0].strip().startswith("claude_data/"))
 
@@ -579,6 +651,8 @@ def main() -> int:
         + len(issues_tags)
         + len(issues_overlap)
         + (len(issues_raw_src) if not skipped_raw else 0)
+        + len(issues_valid_until)
+        + len(issues_confidence)
     )
     total_warnings = (
         len(issues_orphans)
@@ -594,6 +668,7 @@ def main() -> int:
                 bool(issues_wikilink), bool(issues_related), bool(issues_folder),
                 bool(issues_dup_id), bool(issues_tags), bool(issues_overlap),
                 bool(issues_raw_src and not skipped_raw),
+                bool(issues_valid_until), bool(issues_confidence),
             ])
             out.append(
                 f"Summary: {total_issues} error(s) across {checks_with_errors} check(s)"
