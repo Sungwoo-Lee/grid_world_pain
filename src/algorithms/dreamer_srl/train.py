@@ -750,13 +750,43 @@ def make_train_step(
 
             total = (kl_regularizer * kl_loss_2d + obs_loss_unreduced + reward_loss_unreduced + cont_loss_unreduced).mean()
 
+            # Commit 6: additional WM quality probes.
+            # Mirrors src/models/dreamer_v3_trainer.py:L260-L289
+            # Reward MAE — absolute error between predicted and actual reward
+            rew_pred_mean = TwoHotEncoding(wm_outputs["reward_logits"], dims=1).mean  # [T, B, 1]
+            rew_target = batch["rewards"]                             # [T, B, 1]
+            rew_mae = jnp.mean(jnp.abs(rew_pred_mean - rew_target))
+            pos_mask = (rew_target > 0.01).astype(jnp.float32)
+            neg_mask = (rew_target < -0.01).astype(jnp.float32)
+            rew_mae_pos = jnp.sum(jnp.abs(rew_pred_mean - rew_target) * pos_mask) / (jnp.sum(pos_mask) + 1e-8)
+            rew_mae_neg = jnp.sum(jnp.abs(rew_pred_mean - rew_target) * neg_mask) / (jnp.sum(neg_mask) + 1e-8)
+            # Latent entropy — posterior categorical entropy
+            # Mirrors src/models/dreamer_v3_trainer.py:L270-L271
+            q_dist = jax.nn.softmax(post_logits, axis=-1)    # [T, B, S, D]
+            latent_entropy = -jnp.sum(q_dist * jax.nn.log_softmax(post_logits, axis=-1), axis=-1).mean()
+            # Continue-head classification accuracy
+            # Mirrors src/models/dreamer_v3_trainer.py:L274-L275
+            cont_target_bool = continue_targets.astype(jnp.bool_)  # [T, B, 1]
+            from flax import nnx as _nnx
+            cont_acc = jnp.mean(
+                (_nnx.sigmoid(wm_outputs["continue_logits"]) > 0.5) == cont_target_bool
+            )
+
             aux = {
                 "wm_outputs": wm_outputs,
                 "kl_mean": kl_raw.mean(),
                 "kl_loss_mean": kl_loss_2d.mean(),
+                "dyn_kl_mean":  dyn_loss.mean(),   # Commit 6: dynamic KL component
+                "rep_kl_mean":  repr_loss.mean(),  # Commit 6: representation KL component
                 "reward_loss_mean": reward_loss_unreduced.mean(),
                 "obs_loss_mean": obs_loss_unreduced.mean(),
                 "cont_loss_mean": cont_loss_unreduced.mean(),
+                # Commit 6: WM quality probes — mirrors dreamer_v3_trainer.py:L277-L289
+                "reward_mae":        rew_mae,
+                "reward_mae_pos":    rew_mae_pos,
+                "reward_mae_neg":    rew_mae_neg,
+                "latent_entropy":    latent_entropy,
+                "cont_acc":          cont_acc,
             }
             return total, aux
 
@@ -864,6 +894,9 @@ def make_train_step(
             log_prob computed as sum(sg(a_rollout) * log_softmax(logits), axis=-1)
             where a_rollout is the one-hot action drawn during imagination rollout.
             No PRNG resample; no fresh sample.  Gradient flows only through logits.
+
+            Commit 6: returns (policy_loss, aux_dict) for has_aux=True.
+            Aux mirrors src/models/dreamer_v3_trainer.py:L468-L478.
             """
             all_log_probs = []
             all_entropies = []
@@ -886,7 +919,7 @@ def make_train_step(
             log_probs_sliced = log_probs_arr[:-1]               # [H, BT, 1]
             entropy_for_obj = entropies_arr[..., None]          # [H+1, BT, 1]
 
-            policy_loss, _, _ = compute_actor_objective(
+            policy_loss, objective, advantage = compute_actor_objective(
                 log_probs=log_probs_sliced,
                 lambda_values=jax.lax.stop_gradient(lambda_values),
                 predicted_values=jax.lax.stop_gradient(predicted_values),
@@ -896,9 +929,28 @@ def make_train_step(
                 discount=discount,
                 ent_coef=ent_coef,
             )
-            return policy_loss
 
-        (actor_policy_loss, actor_grads) = nnx.value_and_grad(actor_loss_fn)(actor)
+            # Commit 6: actor aux for Behavior/* metrics.
+            # Mirrors src/models/dreamer_v3_trainer.py:L468-L478
+            discount_weights = discount[:-1]  # [H, BT, 1]
+            entropy_sliced = entropies_arr[:-1][..., None]  # [H, BT, 1]
+            actor_aux = {
+                "loss_actor_policy":  jnp.mean(-log_probs_sliced * jax.lax.stop_gradient(advantage) * discount_weights),
+                "loss_actor_entropy": jnp.mean(-ent_coef * entropy_sliced * discount_weights),
+                "mean_return":       jnp.mean(lambda_values),
+                "mean_norm_return":  jnp.mean((lambda_values - jax.lax.stop_gradient(moments_offset)) / jax.lax.stop_gradient(moments_invscale)),
+                "mean_value":        jnp.mean(predicted_values[:-1]),
+                "mean_advantage":    jnp.mean(advantage),
+                "mean_entropy":      jnp.mean(entropies_arr[:-1]),
+                "value_mae":         jnp.mean(jnp.abs(predicted_values[:-1] - jax.lax.stop_gradient(lambda_values))),
+            }
+            return policy_loss, actor_aux
+
+        # Commit 6: has_aux=True to receive actor_aux alongside loss + grads.
+        # Mirrors src/models/dreamer_v3_trainer.py:L468-L490 pattern.
+        (actor_policy_loss, actor_aux), actor_grads = nnx.value_and_grad(
+            actor_loss_fn, has_aux=True
+        )(actor)
         actor_opt.update(actor, actor_grads)
 
         # -----------------------------------------------------------------------
@@ -931,16 +983,38 @@ def make_train_step(
 
         # -----------------------------------------------------------------------
         # Return losses for logging (sheeprl L330-L346)
+        # Commit 6: extended with WorldModel/* quality probes + Behavior/* stats.
+        # Mirrors src/models/dreamer_v3_trainer.py:L277-L290 (WM) + L468-L478 (Behavior).
         # -----------------------------------------------------------------------
         losses = {
-            "world_model_loss": wm_total_loss,
-            "observation_loss": wm_aux["obs_loss_mean"],
-            "reward_loss": wm_aux["reward_loss_mean"],
-            "state_loss": wm_aux["kl_loss_mean"],
-            "continue_loss": wm_aux["cont_loss_mean"],
-            "value_loss": critic_value_loss,
-            "policy_loss": actor_policy_loss,
-            "moments_invscale": moments_invscale,
+            # World-model (legacy sheeprl keys — re-namespaced by driver prefix-sort)
+            "world_model_loss":   wm_total_loss,
+            "observation_loss":   wm_aux["obs_loss_mean"],
+            "reward_loss":        wm_aux["reward_loss_mean"],
+            "state_loss":         wm_aux["kl_loss_mean"],
+            "continue_loss":      wm_aux["cont_loss_mean"],
+            # Commit 6: KL split + WM quality probes
+            "loss_dyn_kl":        wm_aux["dyn_kl_mean"],
+            "loss_rep_kl":        wm_aux["rep_kl_mean"],
+            "model_reward_mae":   wm_aux["reward_mae"],
+            "model_reward_mae_pos": wm_aux["reward_mae_pos"],
+            "model_reward_mae_neg": wm_aux["reward_mae_neg"],
+            "model_latent_entropy": wm_aux["latent_entropy"],
+            "model_cont_acc":     wm_aux["cont_acc"],
+            # Behavior
+            "value_loss":         critic_value_loss,
+            "policy_loss":        actor_policy_loss,  # total actor loss (sheeprl alias kept)
+            # Commit 6: actor decomposition + rollout stats
+            "loss_actor_policy":  actor_aux["loss_actor_policy"],
+            "loss_actor_entropy": actor_aux["loss_actor_entropy"],
+            "mean_return":        actor_aux["mean_return"],
+            "mean_norm_return":   actor_aux["mean_norm_return"],
+            "mean_value":         actor_aux["mean_value"],
+            "mean_advantage":     actor_aux["mean_advantage"],
+            "mean_entropy":       actor_aux["mean_entropy"],
+            "value_mae":          actor_aux["value_mae"],
+            # Bookkeeping
+            "moments_invscale":   moments_invscale,
         }
 
         return new_moments, losses
