@@ -417,6 +417,12 @@ def main() -> None:
     # Checkpoint state for Commit B
     last_ckpt_episode: int = 0   # tracks last episode count at which we saved
 
+    # Initialize Orbax CheckpointManager — Commit B
+    # Ported from train.py:L555-L559
+    from src.algorithms.dreamer_srl.checkpoint import make_checkpoint_manager, save_checkpoint as _save_checkpoint
+    _ckpt_manager = make_checkpoint_manager(results_dir, max_to_keep=max_checkpoints_keep)
+    print(f"[dreamer-srl] Checkpoint manager ready at {results_dir}/checkpoints/")
+
     # -----------------------------------------------------------------------
     # 10. Initial env reset + player state init
     #     Matches sheeprl main() L540-L547
@@ -706,8 +712,38 @@ def main() -> None:
                     lambda s, ns: s.at[env_idx].set(ns), states, new_state
                 )
                 next_obs[env_idx] = np.asarray(new_obs_single)
+
+            # -------------------------------------------------------------------
+            # Commit B — Orbax checkpoint trigger (episode-based).
+            # Ported from train.py:L2398-L2426 checkpoint-save block.
+            # Fires when total_episodes_completed crosses a new multiple of
+            # checkpoint_frequency (mirrors train.py:L2395 episode modulo gate).
+            # -------------------------------------------------------------------
+            _just_saved_ckpt = False
+            if (total_episodes_completed > 0 and
+                    total_episodes_completed // checkpoint_frequency >
+                    last_ckpt_episode // checkpoint_frequency):
+                print(f"[dreamer-srl] Saving checkpoint @ episode {total_episodes_completed}...")
+                _save_checkpoint(
+                    _ckpt_manager,
+                    episode=total_episodes_completed,
+                    world_model=world_model,
+                    actor=actor,
+                    critic=critic,
+                    target_critic=target_critic,
+                    moments=moments,
+                    key=key,
+                    iter_num=iter_num,
+                    policy_step=policy_step,
+                    total_episodes_completed=total_episodes_completed,
+                    cumulative_grad_steps=cumulative_grad_steps,
+                )
+                last_ckpt_episode = total_episodes_completed
+                _just_saved_ckpt = True
+                print(f"[dreamer-srl] Checkpoint saved.")
+
         else:
-            pass
+            _just_saved_ckpt = False
 
         # Update obs + is_first for next iteration
         obs = next_obs
