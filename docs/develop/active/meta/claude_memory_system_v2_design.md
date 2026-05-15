@@ -4,7 +4,7 @@ topic: meta
 status: active
 created: 2026-05-15
 last_updated: 2026-05-16
-phase: phase-0-verified
+phase: build-complete
 ---
 
 # Memory System v2 — Graph + Wiki Integrations to `.claude-memory/`
@@ -1295,7 +1295,7 @@ All six phases shipped and verified. Reference table for the complete build:
 | C | Contradiction flag at ingest | `d23cf71` (§13 + Step 4.5) | ✅ Verified |
 | D | Lint script (`lint_memory.py`) | `1408672` (script) + `7c9c034` (manual wiring) | ✅ Verified |
 | E | Bitemporal fields (`valid_until` + `confidence`) | `1589ac6` (schema) + `b6be4b8` (skills) + `e655424` (lint ext.) | ✅ Verified |
-| F | Code-side wiki (graphify wrapper) | `a5d291b` (script + .gitignore) + `afe1ce0` (agent profiles) | awaiting verification |
+| F | Code-side wiki (graphify wrapper) | `a5d291b` (script + .gitignore) + `afe1ce0` (agent profiles) | ✅ Verified (stub mode) |
 
 **To enable the code-side wiki** (once graphify is published to PyPI or installed from source):
 
@@ -1317,3 +1317,71 @@ python scripts/regen_code_graph.py --scope all  # full repo
 Not applicable — no hot-path, model, or training code modified. Pure tooling and documentation.
 
 Implemented by: developer
+
+---
+
+### Phase F verification — 2026-05-16
+
+> **Verifier**: senior-developer
+> **Commits reviewed**: `a5d291b`, `afe1ce0`, `0f966cc`
+> **Diff scope**: `git diff --stat a5d291b~1 0f966cc` → 5 files, +225/−1 lines.
+
+#### What was verified
+
+| File | Expected change | Observed | Verdict |
+|---|---|---|---|
+| `scripts/regen_code_graph.py` | New, ~120 lines, executable, stub-mode + real-mode, stdlib only, `--scope src\|all` CLI. | New, 135 lines, executable (`-rwx`), pure stdlib (`argparse, os, shutil, subprocess, sys, pathlib`), `_stub_exit()` + real-invoke paths, `--scope` choices `src/all` (default `src`). | ✅ |
+| `.gitignore` | Add `graphify-out/`. | +3 lines: blank line, `# Code-side wiki ...` comment, `graphify-out/`. Grep `^graphify-out/` matches. | ✅ |
+| `.claude/agents/code-reviewer.md` | Small `## Code-side Wiki` section pointing at `graphify-out/GRAPH_REPORT.md` with grep/Read fallback. Must not change role/tool scope. | +6 lines, new `## Code-side Wiki` section inserted before `## Review Workflow`. No role/tool changes. | ✅ |
+| `.claude/agents/senior-developer.md` | Same as code-reviewer. | +6 lines, new `## Code-side Wiki` section inserted before `## Configuration Protocol`. No role/tool changes. | ✅ |
+| `docs/develop/active/meta/claude_memory_system_v2_design.md` | Implementation Report + checkpoint update for Phase F. | +76 lines: Phase F implementation report subsection, deviations, speed check, commit-summary table. Phase F checkpoint marked `[x] DONE` at line 373. | ✅ |
+
+No out-of-scope files modified.
+
+#### Hard gates
+
+| Gate | Command | Expected | Observed |
+|---|---|---|:---:|
+| G1a | `test -x scripts/regen_code_graph.py` | exec bit set | ✅ |
+| G1b | `python scripts/regen_code_graph.py; echo $?` | exit 0 with install hint | ✅ exit 0, prints `pip install graphify`, hub URL, fall-back note |
+| G1c | `python scripts/regen_code_graph.py --scope all` | same stub behaviour | ✅ exit 0 (graphify still absent) |
+| G1d | `python scripts/regen_code_graph.py --scope bogus` | argparse error, non-zero | ✅ argparse rejects; exit 2 |
+| G2 | `grep -q '^graphify-out/' .gitignore` | match | ✅ |
+| G3-links | `regen_memory_links.py --check` | exit 0 | ✅ "OK — no files would change" |
+| G3-graph | `regen_memory_graph.py --check` | exit 0 | ✅ "OK — no files would change" |
+| G3-lint | `lint_memory.py` | exit 0 | ✅ exit 0, 0 errors, 2 warnings (both pre-existing `claude_data/ not present locally` notices — unrelated to Phase F) |
+
+All gates pass. Cross-phase regression is clean: phases 0–E remain green.
+
+#### Stub-mode design assessment
+
+- **Right call.** `graphify` (https://github.com/safishamsi/graphify) is not on PyPI under that name as of 2026-05-16 — `pip install --dry-run graphify` confirmed no matching distribution. Stub mode is the correct graceful-degradation design: the wrapper exists, agent profiles reference `graphify-out/GRAPH_REPORT.md`, and the moment someone installs graphify from source the script becomes a real generator with no further edits required.
+- **Install hint accuracy.** The script's stub message points users at `pip install graphify` and the GitHub URL. This is the standard install path the README is expected to support; if the upstream package is later only installable via `pip install git+https://github.com/safishamsi/graphify`, the stub message will need a one-line update — flagged as a minor follow-up, not a blocker.
+- **CLI invocation.** Real-mode runs `graphify <scan_target>` from repo root, which per the README writes to `./graphify-out/` by default — matches the gitignored output dir. A `WARNING:` is printed (but exit 0 kept) if `graphify-out/GRAPH_REPORT.md` is missing post-run, hedging against future graphify versions that rename the report file.
+- **User workflow** is documented in three places: the script docstring (Prerequisites + Usage + TODO), the Phase F implementation report ("To enable the code-side wiki"), and the agent profiles ("regenerated on demand via `python scripts/regen_code_graph.py`"). Clear.
+
+Minor nit (non-blocking): the stub hint hardcodes the absolute path `/home/vncuser/miniconda3/envs/grid_world_pain/bin/pip` — fine on the lab boxes, slightly less portable. Left as-is for v2; will be revisited if the project ever leaves this hardware.
+
+#### Conclusion
+
+**Phase F verified.** Stub-mode wrapper is implemented correctly, the gitignore entry lands, both agent profiles get a small advisory section without touching their role or tool scope, all hard gates pass, all phase 0–E regressions remain green, no out-of-scope changes. The implementation report at lines 1249–1319 above is faithful to the actual diff.
+
+Verified by: senior-developer
+
+---
+
+### Memory System v2 — build complete — 2026-05-16
+
+| Phase | Feature | Implemented at | Verified at | Status |
+|---|---|---|---|---|
+| 0 | Relocate `.claude-memory/` → `docs/memory/` | `6d9f7e9` (+ `fa5d0c5` fix-up) | `458aa4d` | ✅ |
+| A | Wikilinks + `related:` normalisation | `fb9d954` | `8bef2d8` | ✅ |
+| B | Backlinks + GRAPH_REPORT + conversation provenance | `5500ec2` | `3b053bf` | ✅ |
+| C | Contradiction flag at ingest | `d23cf71` | `6135ae7` | ✅ |
+| D | Lint script | `1408672` | `8657960` | ✅ |
+| E | Bitemporal + confidence fields | `1589ac6` | `9293710` | ✅ |
+| F | Graphify code wiki | `a5d291b` | (this verification commit) | ✅ stub |
+
+Before Phase 0, the memory system was a flat `.claude-memory/` tree readable only by Claude Code's bespoke `recall`/`memorize` skills. After v2, the same insights live under `docs/memory/` and render as a first-class Obsidian vault: wikilinks (`[[id]]`) resolve in both Obsidian and the in-repo regenerators, every insight carries a generated `## Backlinks` block + a graph adjacency table (`GRAPH_REPORT.md`), and `raw_source:` points back at the originating conversation archive so any claim is provenance-traceable. New insights are auto-flagged for contradiction against the existing corpus at ingest time, a lint script (`lint_memory.py`) enforces frontmatter integrity, dead links, orphans, and folder-definition overlap as part of CLAUDE.md §6 audits, and the 16-field frontmatter schema now supports `valid_until` (bitemporal expiry) + `confidence` (high/medium/low) so stale or speculative claims surface immediately during recall. Phase F adds an optional code-side wiki by wrapping `graphify` (stub mode while the package is unpublished); when installed, `graphify-out/GRAPH_REPORT.md` becomes the read-before-answer surface for `code-reviewer` and `senior-developer`, with a transparent grep/Read fallback when the artefact is absent.
+
+**Memory System v2 — phases complete.** Frontmatter `status:` of this doc can flip to `superseded`-by-itself when v3 is planned; until then, this doc remains `active`.
