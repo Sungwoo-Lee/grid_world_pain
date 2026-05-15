@@ -49,3 +49,6 @@ docs/memory/.trash/*
 # Skill eval workspaces — iteration outputs are transient
 .claude/skills/*-workspace/
 .claude/worktrees/
+
+# Code-side wiki (graphify artefacts — large, per-machine, regenerated on demand)
+graphify-out/
