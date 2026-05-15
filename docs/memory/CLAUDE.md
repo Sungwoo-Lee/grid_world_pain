@@ -129,7 +129,7 @@ All four layers are mandatory — skipping any of them is a regression.
 1. **Pre-classification**: before writing an insight, read `ROOT_INDEX.md`. Match against existing folder definitions. Strong match → use that folder. Medium match → ask the user. No match → proceed to layer 2.
 2. **New-folder justification**: any new folder requires a one-line "Why a new folder" justification in the insight's `## References` section, naming the closest existing folder and explaining why the new insight does not fit there.
 3. **Definition lock in `ROOT_INDEX.md`**: when creating a new folder, append a row with `folder | 1-line definition (≤ ~30 chars) | count=1 | last_update=YYYY-MM-DD | tags=[…]`. Future-Claude must match against this definition verbatim — if it needs to change, that is an audit-level event.
-4. **Audit trigger**: when active-folder count ≥ 10 OR last audit older than 30 days, surface a brief audit prompt listing folders with low counts and similar tag overlap, suggesting merges. Log audit in `ROOT_INDEX.md` "Change history".
+4. **Audit trigger**: when active folder count ≥ 10 OR last audit > 30 days, run `scripts/lint_memory.py` to produce the full punch list (broken refs, orphans, tag-dictionary drift, near-duplicate folder definitions, `raw_source` resolution). Review the output with the user and log the audit in `ROOT_INDEX.md` "Change history".
 
 ---
 
