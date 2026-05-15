@@ -386,12 +386,21 @@ def main() -> None:
             wandb.define_metric("iteration")
             wandb.define_metric("timesteps")
             wandb.define_metric("Episode/Number")
-            wandb.define_metric("*", step_metric="timesteps")
-            wandb.define_metric("Episode/*", step_metric="Episode/Number")
+            wandb.define_metric("*",            step_metric="timesteps")            # catch-all fallback
+            wandb.define_metric("Episode/*",    step_metric="Episode/Number")
+            # Explicit prefix routes so metrics don't silently rely on the catch-all.
+            # Uppercase prefixes match the actual logged keys (WandB patterns are case-sensitive).
+            # Ported from train.py:L630-L632 — corrected to uppercase.
+            wandb.define_metric("Loss/*",       step_metric="timesteps")            # Ported from train.py:L630
+            wandb.define_metric("WorldModel/*", step_metric="timesteps")            # Ported from train.py:L632 (new)
+            wandb.define_metric("Behavior/*",   step_metric="timesteps")            # Ported from train.py:L632
+            wandb.define_metric("Time/*",       step_metric="timesteps")
+            wandb.define_metric("Params/*",     step_metric="timesteps")
+            wandb.define_metric("Diagnostic/*", step_metric="timesteps")
             # Commit A (eval-video): Eval/* step metric + checkpoint_episode
             # Mirrors train.py:L2466-L2467 Eval/* pattern
             wandb.define_metric("eval/checkpoint_episode")
-            wandb.define_metric("Eval/*", step_metric="timesteps")
+            wandb.define_metric("Eval/*",       step_metric="timesteps")
         except ImportError:
             print("[dreamer-srl] WandB not installed — disabling WandB logging")
             use_wandb = False
@@ -742,6 +751,73 @@ def main() -> None:
                 _just_saved_ckpt = True
                 print(f"[dreamer-srl] Checkpoint saved.")
 
+                # -----------------------------------------------------------
+                # Commit F — Checkpoint-triggered eval (mirrors train.py:L2429-L2467)
+                # -----------------------------------------------------------
+                if video_during_training or stats_during_training:
+                    from src.algorithms.dreamer_srl.eval import (
+                        dreamer_srl_eval_rollout, _render_and_upload,
+                    )
+                    # Pass 1: Video
+                    if video_during_training:
+                        if not args.quiet:
+                            print(f'[eval] checkpoint @ ep={total_episodes_completed}: video pass')
+                        _eval_result = dreamer_srl_eval_rollout(
+                            world_model=world_model,
+                            actor=actor,
+                            env_params=env_params,
+                            config=env_cfg,
+                            num_episodes=eval_video_episodes,
+                            seed=args.seed,
+                            results_dir=results_dir,
+                            checkpoint_pct=total_episodes_completed,
+                            render_video=True,
+                            quiet=args.quiet,
+                        )
+                        if auto_render and _eval_result['recordings_dir']:
+                            _render_and_upload(
+                                recordings_dir=_eval_result['recordings_dir'],
+                                results_dir=results_dir,
+                                checkpoint_pct=total_episodes_completed,
+                                fps=viz_fps,
+                                wandb_enabled=use_wandb,
+                                quiet=args.quiet,
+                            )
+                        # Log Eval/* to WandB (mirrors train.py:L2466-L2467)
+                        if use_wandb:
+                            import wandb as _wandb
+                            _wandb.log({
+                                'Eval/MeanReward': _eval_result['mean_reward'],
+                                'Eval/MeanLength': _eval_result['mean_length'],
+                                'iteration':       iter_num,
+                                'timesteps':       policy_step,
+                            }, step=policy_step)
+
+                    # Pass 2: Stats (no video; just scalar metrics)
+                    if stats_during_training:
+                        if not args.quiet:
+                            print(f'[eval] checkpoint @ ep={total_episodes_completed}: stats pass')
+                        _stats_result = dreamer_srl_eval_rollout(
+                            world_model=world_model,
+                            actor=actor,
+                            env_params=env_params,
+                            config=env_cfg,
+                            num_episodes=eval_stats_episodes,
+                            seed=args.seed,
+                            results_dir=results_dir,
+                            checkpoint_pct=total_episodes_completed,
+                            render_video=False,
+                            quiet=args.quiet,
+                        )
+                        if use_wandb:
+                            import wandb as _wandb
+                            _wandb.log({
+                                'Eval/MeanReward': _stats_result['mean_reward'],
+                                'Eval/MeanLength': _stats_result['mean_length'],
+                                'iteration':       iter_num,
+                                'timesteps':       policy_step,
+                            }, step=policy_step)
+
         else:
             _just_saved_ckpt = False
 
@@ -889,6 +965,10 @@ def main() -> None:
                 "Params/effective_replay_ratio": cumulative_grad_steps / max(policy_step, 1),
                 "Time/sps_env":                  sps_env,
                 "Diagnostic/moments_invscale":   float(last_losses.get("moments_invscale", float("nan"))),
+                # X-axis keys: required so define_metric("*", step_metric="timesteps") has a
+                # value to plot against.  Mirrors train.py:L1482-L1483 + L1788.
+                "timesteps":                     int(policy_step),   # Ported from train.py:L1788
+                "iteration":                     int(iter_num),      # Ported from train.py:L1483
             }
             for mk, mv in last_losses.items():
                 v = float(mv)

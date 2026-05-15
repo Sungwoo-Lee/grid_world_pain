@@ -627,9 +627,13 @@ def main():
         wandb.define_metric("Episode/Number")
         wandb.define_metric("*", step_metric="timesteps")
         wandb.define_metric("Episode/*", step_metric="Episode/Number")
-        wandb.define_metric("loss/*", step_metric="iteration")
-        wandb.define_metric("modulator/*", step_metric="iteration")
-        wandb.define_metric("behavior/*", step_metric="timesteps")
+        # Fix: WandB define_metric patterns are case-sensitive.  Actual logged keys use
+        # uppercase prefixes (Loss/*, Modulator/*, Behavior/*, WorldModel/*) so lowercase
+        # patterns silently fall through to the "*" catch-all.  Ported from train.py:L630-L632.
+        wandb.define_metric("Loss/*",       step_metric="iteration")   # was "loss/*" — uppercase fix
+        wandb.define_metric("Modulator/*",  step_metric="iteration")   # was "modulator/*" — uppercase fix
+        wandb.define_metric("Behavior/*",   step_metric="iteration")   # was "behavior/*" (lowercase + timesteps)
+        wandb.define_metric("WorldModel/*", step_metric="iteration")   # new — no pattern existed before
         wandb.define_metric("stage/index",      step_metric="Episode/Number")
         wandb.define_metric("stage/transition", step_metric="Episode/Number")
 
