@@ -1,14 +1,16 @@
 ---
-title: "NMN as scaling-and-shifting implementation of RL-hyperparameter modulation"
-status: draft-with-feedback
+title: "NMN as scaling-and-shifting implementation of RL-hyperparameter modulation (v1 — superseded)"
+status: superseded
 audience: user, professor-neuromodulation, professor-rl-bayesian-dl, pi, experiment-designer
 last_updated: 2026-05-16
 supersedes: docs/project/directions/nmn_continual_lifelong_probe.md
+superseded_by: docs/project/directions/20260516_nmn_scaling_shifting_as_hyperparameter_modulation_v2.md
 related:
   - docs/project/directions/nmn_meta_context_conditioning_v2.md
   - docs/project/ideas/20260515_continual_learning_probe_program.md
   - docs/experiments/summaries/20260513_0321_nmn_comparison_study.md
 empirical_anchor: .claude-memory/memories/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md
+retained_for: "Audit trail — §8 carries the full professor reviews and §9 the convergence note used to author v2."
 ---
 
 # NMN as scaling-and-shifting implementation of RL-hyperparameter modulation
