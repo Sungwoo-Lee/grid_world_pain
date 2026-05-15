@@ -5,7 +5,7 @@ status: active
 created: 2026-05-15
 last_updated: 2026-05-15
 wandb_tag: dreamer_srl_v2_hyperparam_search_10x10
-phase: planned
+phase: running_phase1
 cross_links:
   - docs/experiments/active/dreamer_srl_v2/EXTENSION_RESULTS.md
   - docs/experiments/active/dreamer_srl_v2/PARITY_LAUNCH_V2.md
@@ -73,10 +73,10 @@ All cells share `wandb-group: dreamer_srl_v2_hyperparam_search_10x10_2026-05-15`
 
 | Run | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Status | Node | GPU | Launched at | WandB run ID | Log path |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| P1.1 | envs=4 | `dreamer_srl_v2_10x10_p1_envs_4_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | planned | — | — | — | — | — |
-| P1.2 | envs=16 | `dreamer_srl_v2_10x10_p1_envs_16_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | planned | — | — | — | — | — |
-| P1.3 | envs=64 | `dreamer_srl_v2_10x10_p1_envs_64_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | planned | — | — | — | — | — |
-| P1.4 | envs=128 | `dreamer_srl_v2_10x10_p1_envs_128_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | planned | — | — | — | — | — |
+| P1.1 | envs=4 | `dreamer_srl_v2_10x10_p1_envs_4_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | running | 114 | cuda:0 | 2026-05-15T19:24:29 | zlvkc2f5 | logs/20260515_192429.log |
+| P1.2 | envs=16 | `dreamer_srl_v2_10x10_p1_envs_16_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | running | 114 | cuda:1 | 2026-05-15T19:24:31 | op8w5f9d | logs/20260515_192431.log |
+| P1.3 | envs=64 | `dreamer_srl_v2_10x10_p1_envs_64_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | running | 114 | cuda:2 | 2026-05-15T19:24:35 | 8xa4j8c3 | logs/20260515_192435.log |
+| P1.4 | envs=128 | `dreamer_srl_v2_10x10_p1_envs_128_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | running | 114 | cuda:3 | 2026-05-15T19:24:39 | p4xyyyod | logs/20260515_192439.log |
 
 ### Phase 2 — size sweep (num_envs = P1 winner, seq_len=64, seed=42)
 
