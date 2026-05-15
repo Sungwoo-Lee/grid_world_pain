@@ -784,6 +784,11 @@ def main() -> None:
                                 quiet=args.quiet,
                             )
                         # Log Eval/* to WandB (mirrors train.py:L2466-L2467)
+                        # Note: no explicit step= kwarg — render subprocess (~13s) advances
+                        # WandB's internal step counter during eval, so passing the old
+                        # policy_step triggers "Tried to log to step N < current step M".
+                        # define_metric("Eval/*", step_metric="timesteps") routes the
+                        # X-axis via the "timesteps" key in the dict instead.
                         if use_wandb:
                             import wandb as _wandb
                             _wandb.log({
@@ -791,7 +796,7 @@ def main() -> None:
                                 'Eval/MeanLength': _eval_result['mean_length'],
                                 'iteration':       iter_num,
                                 'timesteps':       policy_step,
-                            }, step=policy_step)
+                            })
 
                     # Pass 2: Stats (no video; just scalar metrics)
                     if stats_during_training:
@@ -816,7 +821,7 @@ def main() -> None:
                                 'Eval/MeanLength': _stats_result['mean_length'],
                                 'iteration':       iter_num,
                                 'timesteps':       policy_step,
-                            }, step=policy_step)
+                            })
 
         else:
             _just_saved_ckpt = False
