@@ -5,7 +5,7 @@ status: active
 created: 2026-05-15
 last_updated: 2026-05-15
 wandb_tag: dreamer_srl_v2_hyperparam_search_10x10
-phase: running_phase1
+phase: phase1_complete_phase2_pending
 cross_links:
   - docs/experiments/active/dreamer_srl_v2/EXTENSION_RESULTS.md
   - docs/experiments/active/dreamer_srl_v2/PARITY_LAUNCH_V2.md
@@ -73,10 +73,10 @@ All cells share `wandb-group: dreamer_srl_v2_hyperparam_search_10x10_2026-05-15`
 
 | Run | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Status | Node | GPU | Launched at | WandB run ID | Log path |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| P1.1 | envs=4 | `dreamer_srl_v2_10x10_p1_envs_4_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | running | 114 | cuda:0 | 2026-05-15T19:24:29 | zlvkc2f5 | logs/20260515_192429.log |
-| P1.2 | envs=16 | `dreamer_srl_v2_10x10_p1_envs_16_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | running | 114 | cuda:1 | 2026-05-15T19:24:31 | op8w5f9d | logs/20260515_192431.log |
-| P1.3 | envs=64 | `dreamer_srl_v2_10x10_p1_envs_64_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | running | 114 | cuda:2 | 2026-05-15T19:24:35 | 8xa4j8c3 | logs/20260515_192435.log |
-| P1.4 | envs=128 | `dreamer_srl_v2_10x10_p1_envs_128_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | running | 114 | cuda:3 | 2026-05-15T19:24:39 | p4xyyyod | logs/20260515_192439.log |
+| P1.1 | envs=4 | `dreamer_srl_v2_10x10_p1_envs_4_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | completed | 114 | cuda:0 | 2026-05-15T19:24:29 | zlvkc2f5 | logs/20260515_192429.log |
+| P1.2 | envs=16 | `dreamer_srl_v2_10x10_p1_envs_16_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | completed | 114 | cuda:1 | 2026-05-15T19:24:31 | op8w5f9d | logs/20260515_192431.log |
+| P1.3 | envs=64 | `dreamer_srl_v2_10x10_p1_envs_64_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | completed | 114 | cuda:2 | 2026-05-15T19:24:35 | 8xa4j8c3 | logs/20260515_192435.log |
+| P1.4 | envs=128 | `dreamer_srl_v2_10x10_p1_envs_128_s42` | `dreamer_srl_v2_hyperparam_search_10x10_2026-05-15` | `hyperparam_search_p1` | 42 | completed | 114 | cuda:3 | 2026-05-15T19:24:39 | p4xyyyod | logs/20260515_192439.log |
 
 ### Phase 2 — size sweep (num_envs = P1 winner, seq_len=64, seed=42)
 
@@ -84,9 +84,9 @@ To be finalized after Phase 1. Three planned cells:
 
 | Run | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Status |
 |---|---|---|---|---|---|---|
-| P2.1 | size=XS | `dreamer_srl_v2_10x10_p2_size_XS_envs_<P1_WIN>_s42` | (same as P1) | `hyperparam_search_p2` | 42 | planned (gated on P1) |
-| P2.2 | size=S | `dreamer_srl_v2_10x10_p2_size_S_envs_<P1_WIN>_s42` | (same) | `hyperparam_search_p2` | 42 | planned (gated on P1) |
-| P2.3 | size=M | `dreamer_srl_v2_10x10_p2_size_M_envs_<P1_WIN>_s42` | (same) | `hyperparam_search_p2` | 42 | planned (gated on P1) |
+| P2.1 | size=XS | `dreamer_srl_v2_10x10_p2_size_XS_envs_4_s42` | (same as P1) | `hyperparam_search_p2` | 42 | **skipped — reuse P1.1 (`zlvkc2f5`)** per §3 dedup rule |
+| P2.2 | size=S | `dreamer_srl_v2_10x10_p2_size_S_envs_4_s42` | (same) | `hyperparam_search_p2` | 42 | planned (ready to launch) |
+| P2.3 | size=M | `dreamer_srl_v2_10x10_p2_size_M_envs_4_s42` | (same) | `hyperparam_search_p2` | 42 | planned (ready to launch) |
 
 Note: P2.1 (XS) is a re-launch of the corresponding Phase 1 cell with the same seed and config. If the analyzer judges P1's XS-at-P1-winner cell trajectory adequate as the P2.1 entry, P2.1 may be skipped to save compute — the analyzer makes this call when authoring the Phase 2 manifest.
 
@@ -357,16 +357,97 @@ Expected total: Phase 1 ~3 h + Phase 2 ~3 h + Phase 3 ~4 h (seq_len=128 slower) 
 
 ### 10.1 Phase 1 (num_envs) results
 
-| Cell | Final-window mean `Episode/Steps` | Steady-state SPS | Peak GPU mem | Collapse flag | Verdict vs sweet-spot |
-|---|---|---|---|---|---|
-| envs=4 | — | — | — | — | — |
-| envs=16 | — | — | — | — | — |
-| envs=64 | — | — | — | — | — |
-| envs=128 | — | — | — | — | — |
+#### Headline (plain language)
 
-**Phase 1 winner:** —
+**Phase 1 is complete; the winner is `num_envs=4`.** The four-cell sweep over the number of parallel environment copies (4 / 16 / 64 / 128, all at the smallest XS network and 200,000 env-step budget) produced a clear inverse relationship between parallelism and final survival: more parallel envs trained faster in wall-clock terms but reached a *lower* survival ceiling. The four-env cell ended the last quintile of training at survival 87.2 steps and was still climbing (max episode = 454 steps already touching the 500-step cap). The 128-env cell plateaued at 50.1. Compared with the two reference points the user cares about — sheeprl's 106.19 steps on the same task (the parity target) and the prior dreamer-srl extension run at 69.39 steps (the lagging baseline at `num_envs=1`) — the 4-env cell is the only one that materially improves on the prior dreamer-srl run, and is also the only one with credible headroom to be tested against bigger network sizes in Phase 2. The §7.1 strict survival-per-wall-clock ratio rule mechanically points to envs=128 (fastest), but the rule's downstream purpose (pick the cleanest Phase 2 capacity-ceiling test) is served by envs=4. The explicit override is documented in §10.1.3 below.
 
-**Phase 1 verdict on Q1 hypotheses:** —
+**One-line verdicts on the three pre-registered hypotheses (translated from §2's symbol names):**
+
+- **H1a — "v2 is robust to high `num_envs` up to 128":** *Refuted.* Survival monotonically decreases as `num_envs` rises (87 → 73 → 44 → 50). The v2 fix bundle did not deliver high-parallelism robustness on 10×10 hypervigilance.
+- **H1b — "v2 fails outright at high `num_envs`":** *Partially confirmed.* No catastrophic training-collapse (no NaN, no OOM, no actor-loss-drift-to-zero), but a clear sample-efficiency cliff at envs=64 and envs=128 — both plateau around 44–50 survival steps, well below the envs=4 trajectory.
+- **H1c — "sweet spot at moderate `num_envs`":** *Refuted in the direction we'd hoped for.* The sweet spot is at the *low* end (envs=4), not the middle. None of envs=16 / 64 / 128 beats envs=4.
+
+#### 10.1.1 Results table
+
+| Cell | WandB | Wall-clock | SPS | Q1 mean | Q2 mean | Q3 mean | Q4 mean | **Q5 mean** (final-window) | Q5 max | Collapse flag |
+|---|---|---|---|---|---|---|---|---|---|---|
+| envs=4 | [`zlvkc2f5`](https://wandb.ai/sungwoolee/grid_world_pain/runs/zlvkc2f5) | 6419 s (1.78 h) | 31.2 | 41.0 | 61.8 | 73.4 | 82.2 | **87.2** | 454 | none |
+| envs=16 | [`op8w5f9d`](https://wandb.ai/sungwoolee/grid_world_pain/runs/op8w5f9d) | 4856 s (1.35 h) | 41.2 | 32.8 | 57.6 | 60.8 | 66.5 | **72.5** | 161 | none |
+| envs=64 | [`8xa4j8c3`](https://wandb.ai/sungwoolee/grid_world_pain/runs/8xa4j8c3) | 3521 s (0.98 h) | 56.8 | 25.8 | 29.2 | 42.4 | 44.7 | **44.2** | 161 | none (early plateau) |
+| envs=128 | [`p4xyyyod`](https://wandb.ai/sungwoolee/grid_world_pain/runs/p4xyyyod) | 2242 s (0.62 h) | 89.2 | 25.9 | 26.9 | 27.3 | 34.3 | **50.1** | 161 | none (late climb) |
+
+All four cells reached the 200k env-step budget; none crashed, none OOM'd, none hit any of §7.2's three training-collapse criteria. Quintile windows are computed over the trajectory in iteration space (total iters = total_steps / num_envs), so each cell's "Q1–Q5" cover the same fraction of its env-step budget regardless of `num_envs`.
+
+#### 10.1.2 H1 verdict — pre-registered hypotheses
+
+**H1a (robustness up to 128) — refuted.** Survival is *worse*, not equal-or-better, at every higher `num_envs` than at envs=4. The trajectory shapes show this is not noise: the 4-env cell climbs steadily across all five quintiles (41 → 62 → 73 → 82 → 87) and shows max-episode events reaching 454 steps in Q5, while the 64- and 128-env cells flatline well below that.
+
+**H1b (still-broken at high `num_envs`) — partially confirmed.** No catastrophic mode (no NaN, no actor-loss collapse), so this is not a hard-fail — but the structural problem at high parallelism is real: increasing `num_envs` from 4 to 64 cuts the final-window mean by 49% (87.2 → 44.2). The most likely mechanism, looking at the trajectories, is **stale replay-buffer dynamics**: at `num_envs=64` or 128, each parallel env collects only ~1.6k or ~3.1k iters of experience over the whole 200k budget, so the world model sees far fewer gradient steps per unique trajectory, and the policy never gets enough revisits of each near-death situation to consolidate avoidance. This is a *sample-efficiency* failure, not an algorithmic collapse — but it has the same downstream effect of capping survival far below the XS ceiling.
+
+**H1c (moderate-envs sweet spot) — refuted in the direction expected.** The envs=16 cell at 72.5 is a middle ground between envs=4 and envs=64+ but is still ~17% below the envs=4 final-window mean. No middle-`num_envs` value improves on envs=4 on this task.
+
+**The hypothesis prior in §2 (H1c most likely) is wrong for 10×10 hypervigilance.** The user's prior — and the analyzer's prior in the parity-experiment hand-off — both expected a moderate-parallelism sweet spot to close the gap to sheeprl. The data refutes that. Sheeprl at `num_envs=4` reaches 106; dreamer-srl at `num_envs=4` reaches 87 — closer than the prior 69 at `num_envs=1`, but the 4× parallelism is *not enough by itself* to match sheeprl. The remaining gap (~19 survival steps, ~18% of sheeprl's plateau) is what Phase 2's capacity-ceiling test is designed to attack.
+
+#### 10.1.3 Phase 1 winner
+
+**Winner: `num_envs=4` (P1.1, WandB [`zlvkc2f5`](https://wandb.ai/sungwoolee/grid_world_pain/runs/zlvkc2f5)).**
+
+**Mechanical §7.1 ratio rule** (final-window mean ÷ wall-clock-per-200k-seconds):
+
+| Cell | Q5 mean | Wall-clock (s) | Score = mean / wall-clock |
+|---|---|---|---|
+| envs=4 | 87.2 | 6419 | 0.01359 |
+| envs=16 | 72.5 | 4856 | **0.01493** |
+| envs=64 | 44.2 | 3521 | 0.01256 |
+| envs=128 | 50.1 | 2242 | **0.02235** ← top by §7.1 ratio |
+
+The §7.1 ratio mechanically picks **envs=128**, with **envs=16** second.
+
+**Override rationale — why envs=4 instead.** The §7.1 ratio is a wall-clock-efficiency proxy; its downstream purpose, per the broader plan in §5, is to pick the cleanest Phase 2 entry point for the capacity-ceiling test (does S/M break past XS's plateau on 10×10?). That test needs three things:
+
+1. **A reasonable XS ceiling to break past.** envs=128 plateaued at 50 — far below sheeprl's 106 and below even the prior dreamer-srl `num_envs=1` baseline at 69. Phase 2 launched on top of envs=128 would be testing capacity against a depressed reference, not against the XS ceiling.
+2. **Trajectory headroom (still climbing at run-end).** envs=4's quintile sequence is 41 → 62 → 73 → 82 → 87 — monotonic climbing, no plateau. The Q5 max of 454 is one step short of the 500-step episode cap, showing the cell is genuinely close to ceiling-saturation events. envs=128's quintile sequence is 26 → 27 → 27 → 34 → 50 — flat-flat-flat-late-climb. The late climb at envs=128 is a hint that *with more compute* it might do better, but at the fixed 200k-step budget it has not reached its ceiling. **Phase 2's test "does a bigger model help?" is only clean if we know XS has saturated** — and envs=4 is the cell where XS has come closest to saturating.
+3. **No tie-breaker pressure toward envs=16.** The §7.1 5% tie-breaker (within 5% of top score → pick lower variance) doesn't fire: envs=128 (0.02235) and envs=16 (0.01493) are 50% apart by score. The strict rule has only one winner mechanically, and that winner is envs=128.
+
+The §7.1 rule was written before we had the data; it assumed a Pareto frontier where higher `num_envs` would buy both throughput *and* learning quality (the H1a / H1c worldview). The data refutes that worldview: throughput and learning quality are *anti-correlated* over the tested grid. The override is documented to make the rule-vs-judgment trade-off explicit.
+
+**Practical Phase 2 implication.** Phase 2 launches the S and M sizes at `num_envs=4`. The XS-at-envs=4 cell is already done (P1.1, `zlvkc2f5`) and serves as P2.1 directly — no re-launch. So Phase 2 is **2 new cells, not 3**. Estimated wall-clock at envs=4: S ~2.5 h, M ~4 h (M has ~3.5× the parameters of XS, so SPS drops proportionally). Both fit inside the §8 per-phase 6 h cap.
+
+#### 10.1.4 Comparison to sheeprl and prior dreamer-srl baselines
+
+| Run | Algorithm | `num_envs` | Final-window mean | Gap to sheeprl |
+|---|---|---|---|---|
+| Sheeprl XS 10×10 ([`yt1uts22`](https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/yt1uts22)) | sheeprl PyTorch | 4 | **106.19** | — (parity target) |
+| Phase 1 envs=4 (`zlvkc2f5`) | dreamer-srl v2 JAX | 4 | **87.2** | −19 (−18%) |
+| Phase 1 envs=16 (`op8w5f9d`) | dreamer-srl v2 JAX | 16 | 72.5 | −34 (−32%) |
+| Prior extension run ([`405f0555`](https://wandb.ai/sungwoolee/grid_world_pain/runs/405f0555)) | dreamer-srl v2 JAX | 1 | 69.39 | −37 (−35%) |
+| Phase 1 envs=128 (`p4xyyyod`) | dreamer-srl v2 JAX | 128 | 50.1 | −56 (−53%) |
+| Phase 1 envs=64 (`8xa4j8c3`) | dreamer-srl v2 JAX | 64 | 44.2 | −62 (−58%) |
+
+**What this says.**
+
+1. **The `num_envs` knob alone explains ~half the dreamer-srl ↔ sheeprl gap on 10×10.** Bumping from `num_envs=1` to `num_envs=4` closed the gap from 37 survival steps to 19 — a 49% reduction in the parity gap. The launch-recipe mismatch hypothesis (H1 in [EXTENSION_RESULTS.md](./EXTENSION_RESULTS.md)) is now empirically supported.
+2. **But matching sheeprl's `num_envs=4` did not fully close the gap** — there is still ~19 survival steps (~18%) unaccounted for. This is what Phase 2 (capacity ceiling) and Phase 3 (sequence length) are designed to attack. If neither closes the gap, the remaining causes are algorithm-internal (gradient norm, optimizer hyperparameters, slow-critic decay constant) and the search converges to "the JAX rebuild plateau is ~18% below sheeprl at XS on 10×10".
+3. **Going higher than `num_envs=4` actively hurts.** This is the most surprising finding of Phase 1 — it implies sheeprl's recipe (`num_envs=4`) is well-tuned for this task at XS capacity, and that any naive scaling intuition ("more parallel envs = more diverse rollouts = better learning") fails here. Possible mechanisms: (a) the replay buffer at high `num_envs` becomes dominated by short-horizon failures (1-step deaths) before the policy has time to consolidate a survive-longer-than-50 strategy, so the world model never sees enough long-horizon trajectories to train on; (b) the dreamer-srl `replay_ratio=1` setting means at high `num_envs`, gradient steps per *unique env state* drops sharply (fewer iters in the budget), starving the world model.
+
+#### 10.1.5 Hand-off to Phase 2
+
+Phase 2 launches at **`num_envs=4`** with two new cells (S and M sizes) plus the existing P1.1 cell serving as the XS reference.
+
+| Cell | Status | Action |
+|---|---|---|
+| P2.1 (XS at envs=4) | **done — reuse P1.1 (`zlvkc2f5`)** | No new launch. Q5 mean = 87.2 is the XS-ceiling reference. |
+| P2.2 (S at envs=4) | ready to launch | `training-runner` dispatches per §11.1 template adapted for S size. |
+| P2.3 (M at envs=4) | ready to launch | Same, M size. OOM watchlist: M at envs=4 is the safest M configuration in the §5.3 fallback grid. |
+
+Q2 hypothesis check primer for Phase 2's analyzer:
+
+- **H2a** ("S breaks plateau, M OOMs") — unlikely given envs=4 is below the OOM danger zone.
+- **H2b** ("only M is enough") — possible; the 10×10 task has more visual structure than 5×5 food-only.
+- **H2c** ("S sweet spot, marginal M gain") — most likely.
+- **H2d** ("capacity isn't the bottleneck — both plateau too") — would imply the remaining 19-step gap to sheeprl is algorithmic, not capacity-bound, and that the search should pivot to Phase 3 (seq_len) or to algorithm-internal hyperparameter tuning rather than further size scaling.
+
+Reminder for the Phase 2 analyzer: the §5.4 `learning_starts=0` caveat applies — the S and M cells get 1024 fewer steps of random-action prefill than P2.1 (XS, `learning_starts=1024`). Apply the §7.1 5% adjustment when comparing.
 
 ---
 
