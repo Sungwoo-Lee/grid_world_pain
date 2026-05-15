@@ -438,7 +438,7 @@ The SyncVectorEnv baseline IDs (`6p386gwm`, `no66f0j4`, `2kkrsh1k`, `xggwhch8`, 
 
 #### G4 — GO/NO-GO gate (verbatim)
 
-**At `num_envs=4`, JAX-vmap SPS ≥ 1.5× SyncVectorEnv 4-env baseline.** Numerically: if today's `2kkrsh1k` (num_envs=4 SyncVectorEnv) reports e.g. 640 SPS, the JAX-vmap `num_envs=4` run must report ≥ 960 SPS. If yes → GO for v2 (accumulator preservation, production configs, GPU-placement question). If no → STOP, write a "JAX-vmap no-speedup" memory insight under `.claude-memory/dreamer_diagnosis/`, mark this plan and the parent benchmark doc as superseded, hand back to senior-developer.
+**At `num_envs=4`, JAX-vmap SPS ≥ 1.5× SyncVectorEnv 4-env baseline.** Numerically: if today's `2kkrsh1k` (num_envs=4 SyncVectorEnv) reports e.g. 640 SPS, the JAX-vmap `num_envs=4` run must report ≥ 960 SPS. If yes → GO for v2 (accumulator preservation, production configs, GPU-placement question). If no → STOP, write a "JAX-vmap no-speedup" memory insight under `docs/memory/dreamer_diagnosis/`, mark this plan and the parent benchmark doc as superseded, hand back to senior-developer.
 
 ## Checkpoints
 

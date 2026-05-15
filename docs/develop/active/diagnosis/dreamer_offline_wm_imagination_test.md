@@ -18,8 +18,8 @@ verified_on: 2026-05-09
 > - **Parent probe plan (existing imagination instrumentation)** — [`docs/develop/active/diagnosis/dreamer_imagined_rollout_termination_probe.md`](dreamer_imagined_rollout_termination_probe.md). Adds `agent.imagined_rollout_probe` flag + 7 imagined-termination metrics during training. The new offline diagnostic is **separate** (read-only, post-hoc) and reuses the same `wm.rssm.imagine_step` API the probe relies on.
 > - **Failure-mode diagnosis** — [`docs/develop/active/diagnosis/dreamer_hypervigilance_learning_failure.md`](dreamer_hypervigilance_learning_failure.md).
 > - **Memory insights**:
->   - [`.claude-memory/memories/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md`](../../../../.claude-memory/memories/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md) — refutes "WM cannot imagine death"; new working hypothesis is "imagined deaths are miscalibrated in time and per-action".
->   - [`.claude-memory/memories/dreamer_diagnosis/20260508_1431_diagnostic_battery_refutes_four_fixes.md`](../../../../.claude-memory/memories/dreamer_diagnosis/20260508_1431_diagnostic_battery_refutes_four_fixes.md) — four ranked fixes refuted.
+>   - [`docs/memory/memories/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md`](../../../../docs/memory/memories/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md) — refutes "WM cannot imagine death"; new working hypothesis is "imagined deaths are miscalibrated in time and per-action".
+>   - [`docs/memory/memories/dreamer_diagnosis/20260508_1431_diagnostic_battery_refutes_four_fixes.md`](../../../../docs/memory/memories/dreamer_diagnosis/20260508_1431_diagnostic_battery_refutes_four_fixes.md) — four ranked fixes refuted.
 > - **Target checkpoint** — `results/JAX_DreamerV3/20260509-050606_dreamer_conv_NoPred_rr06_s0_n113/models/700009/` (final, 700k env-steps).
 
 ---

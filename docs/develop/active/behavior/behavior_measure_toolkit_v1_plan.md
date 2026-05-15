@@ -16,7 +16,7 @@ verification_status: pass
 > - Design doc (the source of truth for *what* is being built): [`docs/experiments/active/behavior_measures/behavior_measure_toolkit_v1_design.md`](../../../experiments/active/behavior_measures/behavior_measure_toolkit_v1_design.md).
 > - Idea memo (background, biological grounding): [`docs/project/ideas/20260510_behavior_measure_toolkit.md`](../../../project/ideas/20260510_behavior_measure_toolkit.md).
 > - Architectural precedent — per-tag distance metric (the 5-site `train.py` pattern this plan extends): [`per_quadrant_and_per_rabbit_logging.md`](../hypervigilance/per_quadrant_and_per_rabbit_logging.md).
-> - Synthetic-test-trap lesson (load-bearing for verification): [`.claude-memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md`](../../../../.claude-memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md).
+> - Synthetic-test-trap lesson (load-bearing for verification): [`docs/memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md`](../../../../docs/memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md).
 > - Frontmatter / topic contract: [`FRONTMATTER_CONTRACT.md`](../meta/FRONTMATTER_CONTRACT.md). (`topic` is restricted to the existing enum; this plan uses `topic: behavior`. The user's verbal request placed the doc under `docs/develop/active/behavior_measures/`; this plan files it under `behavior/` instead — see "Open questions" item 1.)
 
 ---
@@ -765,7 +765,7 @@ The senior-developer runs this after the developer reports `done`. Six checks; a
 
 ### V2 — T8 smoke training run on **actual** `train.py` output, NOT a synthetic script
 
-This is the explicit avoidance lesson from [`20260509_1534_synthetic_smoke_masks_dict_assembly_bugs`](../../../../.claude-memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md). The senior-developer:
+This is the explicit avoidance lesson from [`20260509_1534_synthetic_smoke_masks_dict_assembly_bugs`](../../../../docs/memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md). The senior-developer:
 
 1. Reads the developer's Implementation Report and locates the literal `train.py` command they ran.
 2. Independently re-runs the same command (or a near-equivalent with different `--num-envs`).
@@ -851,7 +851,7 @@ If two predators share a tag (e.g., `count: 2, tag: "TL"`), the per-tag M1/M2/M5
 - **Design doc** (`docs/experiments/active/behavior_measures/behavior_measure_toolkit_v1_design.md`) — §6 schema, §7 implementation surface, §1.1 formal predicates, §2 WandB key lists, §3 eval-rollout protocol.
 - **Idea memo** (`docs/project/ideas/20260510_behavior_measure_toolkit.md`) — measure definitions and biological grounding for M1, M2, M5, M7.
 - **Per-tag metric plan + verification** (`docs/develop/active/hypervigilance/per_quadrant_and_per_rabbit_logging.md`) — architectural precedent (the 5-site `train.py` accumulator pattern, the stage-transition wipe pattern, the WandB fan-out helper).
-- **Synthetic-test-trap insight** (`.claude-memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md`) — the load-bearing verification protocol rule that requires real-`train.py` smoke output, not a standalone script.
+- **Synthetic-test-trap insight** (`docs/memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md`) — the load-bearing verification protocol rule that requires real-`train.py` smoke output, not a standalone script.
 - **Frontmatter contract** (`docs/develop/active/meta/FRONTMATTER_CONTRACT.md`) — `topic` enum restriction; this plan files under `behavior/` (not `behavior_measures/`) for that reason. Flagged in Open Question 6.6 below.
 
 ### 6.6 Topic / folder placement

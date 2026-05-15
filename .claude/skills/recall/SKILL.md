@@ -1,13 +1,13 @@
 ---
 name: recall
-description: "Surface insights from this project's in-repo session-memory layer at .claude-memory/. Use whenever the user asks 'what did we decide', 'what did we work on', 'remind me about', 'last week', 'yesterday', 'memory of', 'show me my memories', '/recall', or any question about prior decisions, debugging conclusions, or design rationale that might live in the memory layer. Two modes: natural-language recall (default — plain English, folder definitions hidden as definitions, time-aware) and technical query (raw indexes, folder names, counts) when the user says 'show ROOT_INDEX', 'list folders', 'audit', 'tag dictionary', 'fragmentation', 'L1/L2/L3'. Default behavior with no arguments: list the 10 most recent insights, reverse-chronological, then offer drill-down. Accepts optional range hints in the user phrasing ('today', 'yesterday', 'this week', 'earlier', 'all') for time-grouped output. Do NOT use this skill for capture — that's /memorize. Do NOT load raw archives (L4) without explicit user confirmation."
+description: "Surface insights from this project's in-repo session-memory layer at docs/memory/. Use whenever the user asks 'what did we decide', 'what did we work on', 'remind me about', 'last week', 'yesterday', 'memory of', 'show me my memories', '/recall', or any question about prior decisions, debugging conclusions, or design rationale that might live in the memory layer. Two modes: natural-language recall (default — plain English, folder definitions hidden as definitions, time-aware) and technical query (raw indexes, folder names, counts) when the user says 'show ROOT_INDEX', 'list folders', 'audit', 'tag dictionary', 'fragmentation', 'L1/L2/L3'. Default behavior with no arguments: list the 10 most recent insights, reverse-chronological, then offer drill-down. Accepts optional range hints in the user phrasing ('today', 'yesterday', 'this week', 'earlier', 'all') for time-grouped output. Do NOT use this skill for capture — that's /memorize. Do NOT load raw archives (L4) without explicit user confirmation."
 ---
 
-# Recall — surface insights from `.claude-memory/`
+# Recall — surface insights from `docs/memory/`
 
-This skill reads the in-repo memory layer at `.claude-memory/` and produces a human-friendly listing of stored insights, with optional drill-down to a specific insight's body. It is the read counterpart to `/memorize`.
+This skill reads the in-repo memory layer at `docs/memory/` and produces a human-friendly listing of stored insights, with optional drill-down to a specific insight's body. It is the read counterpart to `/memorize`.
 
-**Authoritative contract**: `.claude-memory/CLAUDE.md` §8 (natural-language recall) and §9 (lazy-load levels). Treat it as ground truth.
+**Authoritative contract**: `docs/memory/CLAUDE.md` §8 (natural-language recall) and §9 (lazy-load levels). Treat it as ground truth.
 
 ## When to use
 
@@ -39,12 +39,12 @@ Natural-language mode hides: raw folder names, lazy-load codes, frontmatter fiel
 
 ### Step 1 — Read context
 
-1. Read `.claude-memory/ROOT_INDEX.md` — gives the list of topic folders + their 1-line definitions + counts.
-2. For each active topic folder listed, read `.claude-memory/memories/<topic>/_topic_index.md` — gives all insights in that topic with date, time, id, summary.
+1. Read `docs/memory/ROOT_INDEX.md` — gives the list of topic folders + their 1-line definitions + counts.
+2. For each active topic folder listed, read `docs/memory/memories/<topic>/_topic_index.md` — gives all insights in that topic with date, time, id, summary.
 
-If `.claude-memory/` is missing or `ROOT_INDEX.md` shows 0 active folders, halt with:
+If `docs/memory/` is missing or `ROOT_INDEX.md` shows 0 active folders, halt with:
 
-> No memories yet. Use `/memorize` to capture this conversation, or seed the `.claude-memory/` layer first.
+> No memories yet. Use `/memorize` to capture this conversation, or seed the `docs/memory/` layer first.
 
 ### Step 2 — Determine range
 
@@ -114,7 +114,7 @@ Rules per operating manual §8:
 Show the raw indexes:
 
 ```
-ROOT_INDEX.md (.claude-memory/ROOT_INDEX.md)
+ROOT_INDEX.md (docs/memory/ROOT_INDEX.md)
 
 Active folders: N
 Total insights: M
@@ -171,16 +171,16 @@ If the match is ambiguous (multiple insights match the user's reply), list the c
 
 ## Hard rules
 
-- **Repo-relative paths only.** Read only inside `.claude-memory/`. Never read `~/.claude/projects/.../memory/MEMORY.md` from this skill (different layer; recall there is the harness's job).
+- **Repo-relative paths only.** Read only inside `docs/memory/`. Never read `~/.claude/projects/.../memory/MEMORY.md` from this skill (different layer; recall there is the harness's job).
 - **Lazy-load discipline**: read `ROOT_INDEX.md` + topic indexes for the listing. Read individual insight files only on drill-down. Read raw archives never, unless the user explicitly asks AND confirms after the size-warning prompt.
 - **Natural-language mode hides**: raw folder names, L0/L1/L2/L3/L4, frontmatter field names, raw tag strings, token costs, "audit" / "fragmentation" jargon. Operating manual §8 forbids exposing them in this mode.
 - All output in English; no emojis unless the user explicitly asks.
 - **Do not capture** anything from this skill. If the listing reveals something the user wants to save, route them to `/memorize`.
-- If `.claude-memory/CLAUDE.md` and this SKILL.md disagree, the operating manual wins — flag and ask.
+- If `docs/memory/CLAUDE.md` and this SKILL.md disagree, the operating manual wins — flag and ask.
 
 ## References
 
-- `.claude-memory/CLAUDE.md` §8 (natural-language recall format), §9 (lazy-load levels), §10 (large-file warning protocol).
-- `.claude-memory/ROOT_INDEX.md` — topic registry + folder definitions.
-- `.claude-memory/memories/<folder>/_topic_index.md` — per-topic insight rows.
+- `docs/memory/CLAUDE.md` §8 (natural-language recall format), §9 (lazy-load levels), §10 (large-file warning protocol).
+- `docs/memory/ROOT_INDEX.md` — topic registry + folder definitions.
+- `docs/memory/memories/<folder>/_topic_index.md` — per-topic insight rows.
 - Companion skill: `.claude/skills/memorize/SKILL.md` (capture; this skill is recall).

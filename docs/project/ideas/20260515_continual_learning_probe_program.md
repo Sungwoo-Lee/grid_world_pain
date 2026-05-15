@@ -101,7 +101,7 @@ Each row is an event that moves the program forward. Newest at top. Edit in plac
 | 2026-05-14 | PI prioritisation in progress | Three candidate paths surfaced (Path A: Probe 2+4 batched; Path B: Probe 4 alone; Path C: Probe 3 alone). User decision pending. PI call to be logged under `docs/pi/calls/`. |
 | 2026-05-14 | User constraints locked | 10-GPU slice on n106–n110 cuda:0+1; single seed; no grid search; paper-shape first; verification deferred. |
 | 2026-05-13 | Idea memo + 2 professor reviews + postdoc synthesis | [Idea memo](20260513_continual_learning_probe_followups.md). NE/LC framing adopted; "regime switch" not "task switch"; Probe 2 redesigned to peri-boundary parameter-freeze 2×2; Probe 3 redesigned to gated + CBN baselines; Probe 4 (long dormancy) added. |
-| 2026-05-13 | Anchor finding memorised | [Memory insight](../../../.claude-memory/memories/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md). |
+| 2026-05-13 | Anchor finding memorised | [Memory insight](../../../docs/memory/memories/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md). |
 | 2026-05-12 | R2 continual sister pair finishes | First clearly-positive FiLM finding: +107 / +132 steps on the two return-to-active stages (~25× seed-noise floor). [Design doc §5.5](../../experiments/active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md). |
 
 ---
@@ -133,5 +133,5 @@ The PI agent recommended a path-B-first, path-A-next sequencing under the origin
 - **Idea memo** (the full reasoning): [`20260513_continual_learning_probe_followups.md`](20260513_continual_learning_probe_followups.md).
 - **Anchor finding** (the R2 win this program follows up on): [`NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md`](../../experiments/active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md).
 - **Re-summary of the study** (reader-facing): [`20260513_0321_nmn_comparison_study.md`](../../experiments/summaries/20260513_0321_nmn_comparison_study.md).
-- **Headline memory insight**: [`20260513_0014`](../../../.claude-memory/memories/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md).
-- **Logging-gap blocker insight**: [`20260513_0017`](../../../.claude-memory/memories/nmn_diagnosis/20260513_0017_mod_h_logging_gap_blocks_cka_precheck.md).
+- **Headline memory insight**: [`20260513_0014`](../../../docs/memory/memories/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md).
+- **Logging-gap blocker insight**: [`20260513_0017`](../../../docs/memory/memories/nmn_diagnosis/20260513_0017_mod_h_logging_gap_blocks_cka_precheck.md).

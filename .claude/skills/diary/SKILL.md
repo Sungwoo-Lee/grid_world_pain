@@ -75,7 +75,7 @@ Edits the matching open `Sessions` row in place: sets `Ended = HH:MM`, appends c
 
 .../python scripts/diary_append.py insight \
   --subject "<one-line, copy from the insight's summary frontmatter>" \
-  --link   "<.claude-memory/memories/<topic>/<id>.md>"
+  --link   "<docs/memory/memories/<topic>/<id>.md>"
 ```
 
 Inserts a row at the top of `## Events (chronological, newest first)`.
@@ -151,7 +151,7 @@ EOF
 EOF
 )" \
   --sources "$(cat <<'EOF'
-- Insight: [`20260512_1428_sameprop_class_discriminating_defence_event_level`](../../.claude-memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md)
+- Insight: [`20260512_1428_sameprop_class_discriminating_defence_event_level`](../../docs/memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md)
 - Design: [`sameprop_round26_design`](../experiments/active/hypervigilance/sameprop_round26_design.md)
 - Commits: `c110a2c`, `ed5cff3`, `dbd0e64`
 EOF

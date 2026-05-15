@@ -77,12 +77,12 @@ The environment has three classes of moving entities the agent encounters: a **p
 
 ### Memory insights
 
-- [`.claude-memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md`](../../../.claude-memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md) — **the verdict insight** for this re-summary. Round 2.5's two-cell decomposition; provisional pending Round 2.6 seed 44.
-- [`.claude-memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md`](../../../.claude-memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md) — Round 2 partial verdict (the truncated run that pointed at this verdict at ~5% of the budget).
-- [`.claude-memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md`](../../../.claude-memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md) — the design rationale for the per-tag metric that Round 2.5 empirically validated.
-- [`.claude-memory/memories/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md`](../../../.claude-memory/memories/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md) — Round 1 verdict + confound flag.
-- [`.claude-memory/memories/hypervigilance/20260508_1445_sameprop_discriminating_channels.md`](../../../.claude-memory/memories/hypervigilance/20260508_1445_sameprop_discriminating_channels.md) — channels memo (movement signature dominant, visual ch.5/ch.7 at contact, extero-noc contact-only) and the structural-disable trick used in Cell A1.
-- [`.claude-memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md`](../../../.claude-memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md) — the wiring-bug + verification-practice lesson encountered during the per-tag implementation.
+- [`docs/memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md`](../../../docs/memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md) — **the verdict insight** for this re-summary. Round 2.5's two-cell decomposition; provisional pending Round 2.6 seed 44.
+- [`docs/memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md`](../../../docs/memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md) — Round 2 partial verdict (the truncated run that pointed at this verdict at ~5% of the budget).
+- [`docs/memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md`](../../../docs/memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md) — the design rationale for the per-tag metric that Round 2.5 empirically validated.
+- [`docs/memory/memories/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md`](../../../docs/memory/memories/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md) — Round 1 verdict + confound flag.
+- [`docs/memory/memories/hypervigilance/20260508_1445_sameprop_discriminating_channels.md`](../../../docs/memory/memories/hypervigilance/20260508_1445_sameprop_discriminating_channels.md) — channels memo (movement signature dominant, visual ch.5/ch.7 at contact, extero-noc contact-only) and the structural-disable trick used in Cell A1.
+- [`docs/memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md`](../../../docs/memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md) — the wiring-bug + verification-practice lesson encountered during the per-tag implementation.
 
 ### Working files
 
@@ -122,10 +122,10 @@ The environment has three classes of moving entities the agent encounters: a **p
 
 1. **This summary** — start here (5 minutes).
 2. **§§9–11 of [`sameprop_round25_design.md`](../active/hypervigilance/sameprop_round25_design.md)** — the actual numbers per cell, the temporal-evolution table, the cross-round contrast against Round 1, the §5 failure-mode catalog mapping, and the Round-2.6 escalation policy (3 minutes).
-3. **The Round 2.5 verdict insight, [`20260510_2237_sameprop_round25_no_class_avoidance.md`](../../../.claude-memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md)** — the same verdict in 5-section form with rationale, the two-confound decomposition argument, and the methodology takeaway about pre-registered failure-mode catalogs (2 minutes).
+3. **The Round 2.5 verdict insight, [`20260510_2237_sameprop_round25_no_class_avoidance.md`](../../../docs/memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md)** — the same verdict in 5-section form with rationale, the two-confound decomposition argument, and the methodology takeaway about pre-registered failure-mode catalogs (2 minutes).
 
 If you have 30 minutes, also read:
 
-4. **The per-tag metric design rationale, [`20260509_1533_tag_based_distance_supersedes_quadrant.md`](../../../.claude-memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md)** — why the metric was the right disambiguator and what it cost. Useful context for understanding why Round 2.5's Cell A1 is interpretable when Round 2's Cell A1 was not.
+4. **The per-tag metric design rationale, [`20260509_1533_tag_based_distance_supersedes_quadrant.md`](../../../docs/memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md)** — why the metric was the right disambiguator and what it cost. Useful context for understanding why Round 2.5's Cell A1 is interpretable when Round 2's Cell A1 was not.
 5. **[`round1_relog_baseline_analysis.md`](../active/hypervigilance/round1_relog_baseline_analysis.md)** — the full Round 1 numbers + per-seed agreement check + the food/quadrant confound the analyzer flagged at the survey stage, which Round 2 + 2.5 then attacked directly.
 6. **The prior summary, [`20260509_1552_sameprop_rabbit_avoidance_study.md`](20260509_1552_sameprop_rabbit_avoidance_study.md)** — the snapshot before Round 2.5 finished. Useful for seeing how the predicted outcomes (designer's pre-registered priors) compared to what actually landed.

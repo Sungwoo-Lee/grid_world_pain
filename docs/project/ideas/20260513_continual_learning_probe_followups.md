@@ -122,9 +122,9 @@ If four: add **Probe 4** last. It is the cheapest dormancy-vs-storage disambigua
 
 - Anchor finding (the win): [`NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md`](../../experiments/active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md) §5.5–§6
 - Re-summary across the study window: [`20260513_0321_nmn_comparison_study.md`](../../experiments/summaries/20260513_0321_nmn_comparison_study.md)
-- Headline memory insight: [`20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md`](../../../.claude-memory/memories/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md)
-- Predicate-malformation lesson (shapes criterion-writing): [`20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric.md`](../../../.claude-memory/memories/nmn_diagnosis/20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric.md)
-- Logging-gap blocker (prerequisite for all four probes): [`20260513_0017_mod_h_logging_gap_blocks_cka_precheck.md`](../../../.claude-memory/memories/nmn_diagnosis/20260513_0017_mod_h_logging_gap_blocks_cka_precheck.md)
+- Headline memory insight: [`20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md`](../../../docs/memory/memories/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md)
+- Predicate-malformation lesson (shapes criterion-writing): [`20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric.md`](../../../docs/memory/memories/nmn_diagnosis/20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric.md)
+- Logging-gap blocker (prerequisite for all four probes): [`20260513_0017_mod_h_logging_gap_blocks_cka_precheck.md`](../../../docs/memory/memories/nmn_diagnosis/20260513_0017_mod_h_logging_gap_blocks_cka_precheck.md)
 - Prior synthesis that motivated the continual probe: [`nmn_meta_continual_synthesis_v2.md`](nmn_meta_continual_synthesis_v2.md)
 
 ---

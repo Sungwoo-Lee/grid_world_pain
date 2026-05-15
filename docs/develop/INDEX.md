@@ -73,7 +73,7 @@
 
 ### meta
 
-- [In-repo Session Memory System (.claude-memory/)](active/meta/claude_memory_system_design.md) — updated 2026-05-08
+- [In-repo Session Memory System (docs/memory/)](active/meta/claude_memory_system_design.md) — updated 2026-05-08
 - [Develop Docs Reorganization Plan](active/meta/DEVELOP_DOCS_REORGANIZATION_PLAN.md) — updated 2026-05-06
 - [Develop Docs Frontmatter Contract](active/meta/FRONTMATTER_CONTRACT.md) — updated 2026-05-06
 - [Important Issues & Lessons Learned](active/meta/IMPORTANT_ISSUES.md) — updated 2026-04-12

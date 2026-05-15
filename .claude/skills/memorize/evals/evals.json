@@ -5,7 +5,7 @@
       "id": 1,
       "name": "single-decision-explicit-trigger",
       "prompt": "Earlier today I decided we should run the FiLM heterogeneity sweep at gain=1.0 only, dropping the gain=0.5 and gain=2.0 arms. Reasoning: the unmodulated baseline (recurrent_ppo_nmn_het_unmod.yaml) already covers the gain=0 case, and gain=2.0 over-saturated activations in the pilot run on node 103. The decision affects the configs under configs/experiment/nmn_noise_heterogeneity/ — only the g1 config will be launched. /memorize this. Run non-interactively: no follow-up questions, default to saving all candidates with reasonable defaults, and report what you did at the end.",
-      "expected_output": "ONE OR TWO insight files written under .claude-memory/memories/<topic>/ — splitting the scope-decision from the supporting pilot finding is acceptable. Each file has full 14-field frontmatter and 5 named sections. ROOT_INDEX.md and topic _topic_index.md updated. Raw archive skipped (no explicit ask).",
+      "expected_output": "ONE OR TWO insight files written under docs/memory/memories/<topic>/ — splitting the scope-decision from the supporting pilot finding is acceptable. Each file has full 14-field frontmatter and 5 named sections. ROOT_INDEX.md and topic _topic_index.md updated. Raw archive skipped (no explicit ask).",
       "files": []
     },
     {
@@ -18,8 +18,8 @@
     {
       "id": 3,
       "name": "explicit-raw-archive-request",
-      "prompt": "Today's session covered the design of a new in-repo session-memory system at .claude-memory/. Key decisions:\n- Coexists with built-in MEMORY.md (split by insight density)\n- English-only content; no Korean (despite the reference being Korean)\n- Raw archives gitignored (local-only)\n- Genesis insight written as smoke test\n\nSave this to memory and include the FULL raw transcript from this session — I want it auditable later. Run non-interactively: default Y on candidates; for the raw-archive question, the answer is 'full' because I just told you so.",
-      "expected_output": "One insight file (or split if multiple distinct decisions are detected). raw_source pointing at .claude-memory/_archive/raw_conversations/<id>.md; raw_completeness=full; the archive itself written via scripts/claude_jsonl_to_md.py against the most-recent JSONL under ~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/. Insight's References section notes that raw_source is local-only.",
+      "prompt": "Today's session covered the design of a new in-repo session-memory system at docs/memory/. Key decisions:\n- Coexists with built-in MEMORY.md (split by insight density)\n- English-only content; no Korean (despite the reference being Korean)\n- Raw archives gitignored (local-only)\n- Genesis insight written as smoke test\n\nSave this to memory and include the FULL raw transcript from this session — I want it auditable later. Run non-interactively: default Y on candidates; for the raw-archive question, the answer is 'full' because I just told you so.",
+      "expected_output": "One insight file (or split if multiple distinct decisions are detected). raw_source pointing at docs/memory/_archive/raw_conversations/<id>.md; raw_completeness=full; the archive itself written via scripts/claude_jsonl_to_md.py against the most-recent JSONL under ~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/. Insight's References section notes that raw_source is local-only.",
       "files": []
     }
   ]

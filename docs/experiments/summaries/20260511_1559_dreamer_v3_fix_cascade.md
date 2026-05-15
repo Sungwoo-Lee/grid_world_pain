@@ -113,18 +113,18 @@ The cascade is iterating through a fixed set of paper-canonical deviations betwe
 
 NEW this window:
 
-- [20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt](../../../.claude-memory/memories/dreamer_diagnosis/20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt.md) — Experiment 3 verdict + the long-horizon-compounding residual that names candidate #1 as next.
-- [20260511_1535_encode_decode_flag_mismatch_silent_class_bug](../../../.claude-memory/memories/cluster_ops/20260511_1535_encode_decode_flag_mismatch_silent_class_bug.md) — the second instance of the auxiliary-tooling-falls-out-of-sync bug class + the cross-check anti-silent-failure-mode trip-wire.
+- [20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt](../../../docs/memory/memories/dreamer_diagnosis/20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt.md) — Experiment 3 verdict + the long-horizon-compounding residual that names candidate #1 as next.
+- [20260511_1535_encode_decode_flag_mismatch_silent_class_bug](../../../docs/memory/memories/cluster_ops/20260511_1535_encode_decode_flag_mismatch_silent_class_bug.md) — the second instance of the auxiliary-tooling-falls-out-of-sync bug class + the cross-check anti-silent-failure-mode trip-wire.
 
 From prior window (the immediate predecessor):
 
-- [20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry](../../../.claude-memory/memories/dreamer_diagnosis/20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry.md) — Experiment 2 verdict + the pos/neg asymmetry that picked Experiment 3.
-- [20260510_2240_reference_impl_compare_only_act_intersections](../../../.claude-memory/memories/subagent_engineering/20260510_2240_reference_impl_compare_only_act_intersections.md) — the rule for handling reference-impl comparisons.
-- [20260510_2241_residual_error_pattern_directs_next_fix](../../../.claude-memory/memories/subagent_engineering/20260510_2241_residual_error_pattern_directs_next_fix.md) — the methodology rule applied twice so far in the cascade.
+- [20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry](../../../docs/memory/memories/dreamer_diagnosis/20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry.md) — Experiment 2 verdict + the pos/neg asymmetry that picked Experiment 3.
+- [20260510_2240_reference_impl_compare_only_act_intersections](../../../docs/memory/memories/subagent_engineering/20260510_2240_reference_impl_compare_only_act_intersections.md) — the rule for handling reference-impl comparisons.
+- [20260510_2241_residual_error_pattern_directs_next_fix](../../../docs/memory/memories/subagent_engineering/20260510_2241_residual_error_pattern_directs_next_fix.md) — the methodology rule applied twice so far in the cascade.
 
 Older anchors:
 
-- [20260509_1534_wm_reward_head_localized_failure_a1](../../../.claude-memory/memories/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md), [20260509_1535_conventional_fixes_battery_verdict_predator_refute](../../../.claude-memory/memories/dreamer_diagnosis/20260509_1535_conventional_fixes_battery_verdict_predator_refute.md), [20260509_1536_train_py_checkpoint_restore_nnx_skew](../../../.claude-memory/memories/cluster_ops/20260509_1536_train_py_checkpoint_restore_nnx_skew.md) — the first instance of the silent class-bug pattern that returned this window.
+- [20260509_1534_wm_reward_head_localized_failure_a1](../../../docs/memory/memories/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md), [20260509_1535_conventional_fixes_battery_verdict_predator_refute](../../../docs/memory/memories/dreamer_diagnosis/20260509_1535_conventional_fixes_battery_verdict_predator_refute.md), [20260509_1536_train_py_checkpoint_restore_nnx_skew](../../../docs/memory/memories/cluster_ops/20260509_1536_train_py_checkpoint_restore_nnx_skew.md) — the first instance of the silent class-bug pattern that returned this window.
 
 ### Working files (raw analyzer extractions; gitignored)
 
@@ -154,11 +154,11 @@ Older anchors:
 ## 6. Reading order if you have 10 minutes
 
 1. **This document** (5 min) — the cumulative state at the close of Z2, with the next candidate selected and rationale.
-2. Memory insight [20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt](../../../.claude-memory/memories/dreamer_diagnosis/20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt.md) — Z2 verdict with the load-bearing residual-pattern reasoning that named candidate #1 (3 min).
+2. Memory insight [20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt](../../../docs/memory/memories/dreamer_diagnosis/20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt.md) — Z2 verdict with the load-bearing residual-pattern reasoning that named candidate #1 (3 min).
 3. The §Verification Report section of [dreamer_twohot_bin_range_fix](../../develop/active/diagnosis/dreamer_twohot_bin_range_fix.md) — concrete A1 vs Z1 vs Z2 metric tables (2 min).
 
 If you have 30 minutes, also read:
 
 - The §6 deviation list and the §9 sheeprl-comparison section in [dreamer_v3_implementation](../../project/concepts/dreamer_v3_implementation.md) — items 2, 27, 28 are the active candidates; items 29 and 30 are the deferred siblings; the rest is context.
-- Memory insight [20260511_1535_encode_decode_flag_mismatch_silent_class_bug](../../../.claude-memory/memories/cluster_ops/20260511_1535_encode_decode_flag_mismatch_silent_class_bug.md) — the defensive practice this window codified (cross-check diagnostic against training-time logger).
+- Memory insight [20260511_1535_encode_decode_flag_mismatch_silent_class_bug](../../../docs/memory/memories/cluster_ops/20260511_1535_encode_decode_flag_mismatch_silent_class_bug.md) — the defensive practice this window codified (cross-check diagnostic against training-time logger).
 - The two prior summaries in this study lineage: [20260509_1555_dreamer_v3_diagnosis](20260509_1555_dreamer_v3_diagnosis.md) and [20260510_2255_dreamer_v3_fix_cascade](20260510_2255_dreamer_v3_fix_cascade.md) — full backstory of how we got here.

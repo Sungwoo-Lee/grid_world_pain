@@ -19,7 +19,7 @@ supersedes: []
 > - Predecessor (single-seed result for both cells, with §12 toolkit appendix): [`sameprop_round25_design.md`](sameprop_round25_design.md).
 > - Behavior-toolkit design doc (operational definitions of M1, M2, M5, M7): [`behavior_measure_toolkit_v1_design.md`](../behavior_measures/behavior_measure_toolkit_v1_design.md).
 > - Toolkit implementation plan (`verification_status: pass`): [`behavior_measure_toolkit_v1_plan.md`](../../../develop/active/behavior/behavior_measure_toolkit_v1_plan.md).
-> - The class-discriminating-defence finding R2.6 is partly confirming: [`.claude-memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md`](../../../../.claude-memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md).
+> - The class-discriminating-defence finding R2.6 is partly confirming: [`docs/memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md`](../../../../docs/memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md).
 > - Round 1 baseline (for cross-round anchoring of the new primary criteria): [`round1_relog_baseline_analysis.md`](round1_relog_baseline_analysis.md).
 
 ---

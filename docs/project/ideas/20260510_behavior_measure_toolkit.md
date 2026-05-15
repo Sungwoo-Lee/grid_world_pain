@@ -216,7 +216,7 @@ The right time to invoke `professor-rl-bayesian-dl` is if M7 (motif clustering) 
 
 ## 9. References
 
-- Sameprop Round 2.5 verdict insight (motivation): [`.claude-memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md`](../../../.claude-memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md).
+- Sameprop Round 2.5 verdict insight (motivation): [`docs/memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md`](../../../docs/memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md).
 - Study re-summary: [`docs/experiments/summaries/20260510_2253_sameprop_rabbit_avoidance_study.md`](../../experiments/summaries/20260510_2253_sameprop_rabbit_avoidance_study.md).
 - Per-tag distance metric (the precedent the toolkit extends): [`docs/develop/active/hypervigilance/per_quadrant_and_per_rabbit_logging.md`](../../develop/active/hypervigilance/per_quadrant_and_per_rabbit_logging.md).
 - Discriminating-channels memo (what cues the agent could use): [`docs/develop/active/hypervigilance/sameprop_discriminating_channels.md`](../../develop/active/hypervigilance/sameprop_discriminating_channels.md).

@@ -33,7 +33,7 @@ Do **not** use for:
 |---|---|---|
 | Authoritative contract | `docs/experiments/summaries/README.md` | Folder purpose, filename rules, section structure. |
 | Output folder | `docs/experiments/summaries/` | Sibling to `active/` and `meta/` under `docs/experiments/`. |
-| Filename pattern | `YYYYMMDD_HHMM_<slug>.md` | `date +%Y%m%d_%H%M`; slug ≤ ~6 words English snake_case. Matches `.claude-memory/` insight convention. |
+| Filename pattern | `YYYYMMDD_HHMM_<slug>.md` | `date +%Y%m%d_%H%M`; slug ≤ ~6 words English snake_case. Matches `docs/memory/` insight convention. |
 | Frontmatter (5 fields) | `title`, `study`, `generated`, `window`, `status: snapshot` | `window` is the date range the summary covers, NOT the generation date. |
 | Body sections (6, in order) | §1 Study question / §2 Experiments / §3 Where this leaves us / §4 What's next / §5 Links / §6 Reading order | Section names verbatim — do not re-style. |
 | Diary row subcommand | `note` | Free-form; the structured subcommands (`session-start`, `implemented`, `insight`, etc.) don't fit "summary-doc-created". |
@@ -42,7 +42,7 @@ Do **not** use for:
 
 ## Why a separate folder + skill
 
-The project already has three documentation layers — design docs in `docs/experiments/active/<topic>/` (full pre-registered design + results per experiment), memory insights in `.claude-memory/memories/<topic>/` (per-finding 5-section files with rationale), and the daily diary in `docs/diary/` (one-line event rows). What's missing is a **study-level reader-facing layer** that names a coherent multi-experiment thread, explains it in plain language, and points at everything else. That's what `summaries/` provides; that's what this skill writes.
+The project already has three documentation layers — design docs in `docs/experiments/active/<topic>/` (full pre-registered design + results per experiment), memory insights in `docs/memory/memories/<topic>/` (per-finding 5-section files with rationale), and the daily diary in `docs/diary/` (one-line event rows). What's missing is a **study-level reader-facing layer** that names a coherent multi-experiment thread, explains it in plain language, and points at everything else. That's what `summaries/` provides; that's what this skill writes.
 
 The reader-facing constraint is the load-bearing one: a teammate (or future-you) opening a summary should be able to understand the study without first reading the design docs. So predicate names like H₀ / H₁a get translated on first mention; bare WandB IDs and config-file paths stay out of the prose; the prose framings are "did the modulator beat the baseline?" not "did the H₁a confirmation criterion fire?". Symbolic notation may appear in §5 Links or inside the linked memory insights themselves — but not in the summary's prose.
 
@@ -63,7 +63,7 @@ The user invokes the skill in one of four ways:
 
 | Input shape | What you do |
 |---|---|
-| Study label / topic name (e.g., "NMN comparison study") | Auto-discover from `docs/experiments/active/<topic>/` + `.claude-memory/memories/<topic>/`. |
+| Study label / topic name (e.g., "NMN comparison study") | Auto-discover from `docs/experiments/active/<topic>/` + `docs/memory/memories/<topic>/`. |
 | Topic folder under `docs/experiments/active/<topic>/` | Auto-discover from that folder + the matching memory subfolder. |
 | Date window (e.g., "2026-05-07 to 2026-05-09") | Scan all topic folders for design docs whose latest analysis row falls in the window. |
 | Explicit list of experiment doc paths | Use those exactly; no auto-discovery. |
@@ -159,7 +159,7 @@ Repo-relative paths only. Five subsections (write `(none for this study)` rather
 
 - **Design docs** — every in-scope `docs/experiments/active/<topic>/<doc>.md`.
 - **Anchor diagnosis** — the prior diagnosis the study extends (e.g., `docs/develop/active/diagnosis/<...>_v8.md`).
-- **Memory insights** — every in-scope `.claude-memory/memories/<topic>/<id>.md`, with a one-line gloss explaining what each carries (verdict, mechanism, design-rationale, etc.).
+- **Memory insights** — every in-scope `docs/memory/memories/<topic>/<id>.md`, with a one-line gloss explaining what each carries (verdict, mechanism, design-rationale, etc.).
 - **Working files** — every relevant `tmp/<file>.md` or `tmp/<file>.json` from the analyzer chain.
 - **Diary days** — every `docs/diary/YYYY-MM-DD.md` covering the window, with a one-line gloss of what happened that day.
 - **Implementation commits** — relevant commit hashes (the design-doc commit, the analyzer-fill commit, the memory-capture commit) — these let a reader run `git show <hash>` to see the actual diff.

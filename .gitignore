@@ -38,8 +38,8 @@ skills/notebooklm/.venv/
 !skills/
 
 # Claude session-memory soft-delete bin (track placeholder, ignore the rest)
-.claude-memory/.trash/*
-!.claude-memory/.trash/.gitkeep
+docs/memory/.trash/*
+!docs/memory/.trash/.gitkeep
 
 # (deprecated) Claude session-memory raw archives — superseded by claude_data/
 # (raw conversations are now read directly from the synced JSONL under

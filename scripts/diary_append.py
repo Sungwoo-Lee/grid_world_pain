@@ -151,8 +151,8 @@ def format_link(s: str) -> str:
     - Path-shaped (contains slash, or ends in a known extension) → `[<stem>](<path>)`,
       where <path> is rewritten to be relative TO THE DIARY FILE's directory
       (`docs/diary/`) so the link resolves correctly when clicked in any markdown
-      viewer. Repo-relative input (e.g. `.claude-memory/foo.md`) becomes
-      `../../.claude-memory/foo.md`; `docs/develop/x.md` becomes `../develop/x.md`.
+      viewer. Repo-relative input (e.g. `docs/memory/foo.md`) becomes
+      `../../docs/memory/foo.md`; `docs/develop/x.md` becomes `../develop/x.md`.
     - Anything else (e.g. '(pending)', '(none)', URL) → leave as-is.
     """
     if not s:
@@ -168,7 +168,7 @@ def format_link(s: str) -> str:
         from os.path import basename, splitext, relpath
         stem = splitext(basename(s))[0]
         # Rewrite the path to be relative to docs/diary/ (where the diary file lives).
-        # Input is expected to be repo-relative (e.g. ".claude-memory/foo.md"); we
+        # Input is expected to be repo-relative (e.g. "docs/memory/foo.md"); we
         # resolve it against REPO_ROOT, then make it relative to DIARY_DIR.
         try:
             target_abs = (REPO_ROOT / s).resolve()
