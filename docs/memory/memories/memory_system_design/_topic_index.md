@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `memory_system_design` topic.
 
 **Folder definition**: Claude memory system's own design decisions
-**Insights**: 7
-**Last updated**: 2026-05-13
+**Insights**: 9
+**Last updated**: 2026-05-16
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-16 | 14:32 | `20260516_1432_karpathy_graphify_adaptation_rationale` | Memory v2 adopted four Karpathy LLM Wiki primitives (wikilinks + backlinks + lint + contradiction-flag) and four Graphify primitives conceptually (god-nodes + surprising-connections + GRAPH_REPORT format + edge confidence), then extended with bitemporal `valid_until` + `confidence` fields and a first-class conversation-records-as-graph-nodes layer. Deliberately did NOT merge the live code-graph into the memory layer (kept as gitignored sibling). The adaptation rationale is what makes v2 distinct and what future v3 needs to retrace. |
+| 2026-05-16 | 14:31 | `20260516_1431_v2_three_role_architecture` | Memory v2 separates code/memory knowledge into three surfaces with distinct lifetimes: curated session insights (docs/memory/memories/), live regenerable code-graph (src/graphify-out/, gitignored), and dated immutable code-snapshots (docs/memory/code_snapshots/). Bridged by /memorize's opt-in snapshot prompt at Step 2 and /recall's god-node cross-reference hint. Different epistemic kinds get different homes; agents route to the right surface for the question type. |
 | 2026-05-13 | 23:10 | `20260513_2310_orphan_memory_branch_rewrite` | When a worktree branch carrying a single .claude-memory insight commit falls behind its base by N commits and another session edits the same docs/memory/ index files in the meantime, the merge produces synthetic index-only conflicts — the insight body itself is unique. Cleaner pattern: rewrite the insight body fresh on the current base via `git show <orphan-branch>:<path>`, regenerate indexes from CURRENT counts, drop the orphan branch. ~5 min; linear history; orphan commit survives 30 days in reflog as safety net. |
 | 2026-05-09 | 16:20 | `20260509_1620_documentation_framing_policy` | Established a project-wide Documentation framing policy in CLAUDE.md: every plan/design/analysis/summary/review/direction doc must lead with a plain-language entry-point section a reader without prior context can follow. 16 files updated in commit 62f96b9 (CLAUDE.md + 2 templates + 13 doc-producing agent profiles); first retro-application to v2 synthesis (commit 5c5adf3) added a 350-word TL;DR. The /summarize-study skill is the worked example. |
 | 2026-05-09 | 16:19 | `20260509_1619_summarize_study_skill_design_and_ship` | Added a third documentation layer: docs/experiments/summaries/ for study-level reader-facing summaries. First executed manually (commit d075fdc, NMN comparison study summary), then promoted to a /summarize-study skill (commit 2b52c08) that automates the flow on demand. Same append-only versioning + timestamped-filename + auto-commit pattern as /memorize. |
@@ -25,6 +27,7 @@
 
 ## Change history
 
+- 2026-05-16: Added 2 insights from the memory v2 build + graphify integration session: `20260516_1431_v2_three_role_architecture` (the 3-role architecture + memory/code-graph bridge as the load-bearing design decision of v2) and `20260516_1432_karpathy_graphify_adaptation_rationale` (what was borrowed from Karpathy LLM Wiki + Graphify, what was extended, what was skipped — the meta-insight a future v3 needs to consult). No new tags (all reused: memory, design, decision, meta).
 - 2026-05-13: Added 1 insight from the dreamer-srl v3 CP1 closure session: `20260513_2310_orphan_memory_branch_rewrite` (when a memory-layer worktree branch falls behind its base and the only conflict surface is synthetic index counts, rewriting the insight on the current base + regenerating indexes is cleaner than merge-with-conflict-resolution). No new tags (all reused: memory, design, learned_lesson, decision, meta).
 - 2026-05-09: Added insights `20260509_1619_summarize_study_skill_design_and_ship` (third documentation layer at `docs/experiments/summaries/` + the `/summarize-study` skill that automates it) and `20260509_1620_documentation_framing_policy` (project-wide plain-language entry-point rule promoted from one skill to all doc-producing surfaces).
 - 2026-05-09: Added insight `20260509_0311_diary_auto_session_backfill` (`scripts/diary_append.py` self-heals the Sessions table for sessions that miss `session-start`).

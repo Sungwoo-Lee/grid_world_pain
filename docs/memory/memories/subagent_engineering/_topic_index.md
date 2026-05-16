@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `subagent_engineering` topic.
 
 **Folder definition**: Subagent + worktree usage gotchas
-**Insights**: 6
-**Last updated**: 2026-05-10
+**Insights**: 8
+**Last updated**: 2026-05-16
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-16 | 14:35 | `20260516_1435_worktree_baseref_and_propagation` | Two related git-worktree gotchas: (1) EnterWorktree defaults to `origin/<default-branch>` (governed by `worktree.baseRef: fresh`), which on this repo is 467 commits behind `v1.4` — reset the new worktree to the user's branch tip via `git reset --hard <branch>` (untracked files survive). (2) Push refuses on a checked-out branch; `receive.denyCurrentBranch=updateInstead` requires a clean working tree (usually too restrictive). Cleanest propagation pattern: from the user's main checkout, `git -C <user_checkout> merge <worktree-branch> --ff-only`. Worked ~6 times across the v2 build even with the user's branch moving forward concurrently. |
+| 2026-05-16 | 14:34 | `20260516_1434_cross_phase_generator_backlinks_strip` | Any script that scans insight bodies for author-intent markers (e.g. `[[id]]` wikilinks for `related:` mirror) MUST strip auto-generated injection regions (e.g. `<!-- BACKLINKS ... -->` blocks) before scanning, or it will mirror auto-content as author intent and create self-amplifying cycles. Phase B's regen_memory_graph.py injected BACKLINKS into all 56 insights; Phase A's regen_memory_links.py then leaked them into `related:` on 16 files. Caught at Phase C's verification gate; fixed by mirroring Phase B's BACKLINKS_BLOCK_RE strip into Phase A (hotfix 33f98b6). Adopted as invariant for all future body-scanning regenerators. |
 | 2026-05-10 | 22:41 | `20260510_2241_residual_error_pattern_directs_next_fix` | Methodology pattern: when a partial fix lands (H2-band outcome), the residual-error pattern in the diagnostic output identifies the next-best candidate, NOT the original list-order or the plan's prescribed-next-step. Concretely: Z1's residual error was disproportionate on negative rewards → bin-range deviation (§6 item 2, mechanistic match) was selected over the plan §4 H2 prescription (candidate #1, GRU reset gate). |
 | 2026-05-10 | 22:40 | `20260510_2240_reference_impl_compare_only_act_intersections` | User-stated rule for using a third-party reference implementation (sheeprl) as a comparator: default action is to document differences in the concept doc; act on a difference (i.e., plan code changes to match) only when it intersects the live failure investigation. External reference impls always surface N differences, most of which are deliberate or framework-only divergences; reflexively matching them is a category error. |
 | 2026-05-09 | 16:21 | `20260509_1621_multi_agent_research_chain_v2_pattern` | Multi-agent research chains (postdoc triage → professor directions → postdoc synthesis) handle mid-chain user expansion via append-only sibling versioning, NOT in-place revision. Worked example: NMN meta/continual pivot — professor was re-spawned with a v2 task and wrote `nmn_meta_context_conditioning_v2.md` alongside the v1; postdoc then wrote `nmn_meta_continual_synthesis_v2.md` alongside the v1. v1 memos preserved as historical snapshots. |
@@ -24,6 +26,7 @@
 
 ## Change history
 
+- 2026-05-16: Added 2 insights from the memory v2 build + graphify integration session: `20260516_1434_cross_phase_generator_backlinks_strip` (cross-phase generator coordination — any body-scanning script must strip auto-generated injection regions like BACKLINKS blocks; caught by Phase C verification; hotfix 33f98b6) and `20260516_1435_worktree_baseref_and_propagation` (EnterWorktree base-ref defaults to origin/<default-branch> hundreds of commits behind user branch; propagation via `git -C <user> merge <worktree> --ff-only` works around denyCurrentBranch). No new tags (all reused: memory, worktree, learned_lesson, design, decision, meta).
 - 2026-05-10: Added 2 insights from the dreamer sheeprl-comparison + zero-init session: `20260510_2240_reference_impl_compare_only_act_intersections` (rule for handling third-party reference impl comparisons — document by default, act only on intersections with live failure) and `20260510_2241_residual_error_pattern_directs_next_fix` (residual-error pattern dictates next-fix selection in iterative cascades, not list order). No new tags (all reused: subagent, learned_lesson, decision, meta).
 - 2026-05-09: Added insight `20260509_1621_multi_agent_research_chain_v2_pattern` from the NMN meta/continual pivot session — append-only sibling versioning when the user expands the brief mid-chain in a multi-agent research chain. No new tags (all reused: subagent, design, decision, learned_lesson).
 - 2026-05-09: Added insight `20260509_1537_professor_analysis_resets_exotic_investigation` from the dreamer conventional-fixes session — routing pattern: professor-rl analysis BEFORE platform-development plans when investigation has gone exotic. No new tags (all reused: subagent, learned_lesson, meta, decision).
