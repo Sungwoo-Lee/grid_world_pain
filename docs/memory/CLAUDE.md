@@ -3,7 +3,7 @@
 > Authoritative single source for this memory layer's policies, workflows, and templates.
 > The project root `CLAUDE.md` routes future-Claude here. Do not duplicate this content elsewhere.
 
-**Last updated**: 2026-05-16  <!-- Phase E: schema extended to 16 fields -->
+**Last updated**: 2026-05-16  <!-- §14 code-graph snapshots added -->
 **Related**: [project CLAUDE.md](../CLAUDE.md), [ROOT_INDEX.md](ROOT_INDEX.md), [design plan](../docs/develop/active/meta/claude_memory_system_design.md)
 
 ---
@@ -325,3 +325,17 @@ When `/memorize` writes a new insight, it MUST first check for likely contradict
 ### Why no separate script
 
 The contradiction check is reasoning-shaped, not algorithm-shaped. A Python script would have to embed an LLM call to do the comparison, which the `/memorize` flow already has access to natively. Keeping the check inside the skill flow avoids an extra round-trip and keeps the contract auditable in one place.
+
+---
+
+## 14. Code-graph snapshots
+
+`docs/memory/code_snapshots/` holds point-in-time records of `src/`'s structural state — derived from graphifyy's tree-sitter pass, captured at architecturally significant moments. Distinct from the *live* code graph at `src/graphify-out/` (gitignored, regenerable on demand).
+
+**Capture**: `python scripts/snapshot_code_graph.py <label>` — see `docs/memory/code_snapshots/README.md`.
+
+**When to snapshot**: major refactors, ship milestones, deprecation events, "this is what we threw away when we pivoted." Not every commit. The `/memorize` skill optionally surfaces a snapshot candidate when the session involves ≥ 5 changed files in `src/`.
+
+**Lifetime**: immutable. Snapshots are dated records, not living documents. They never get edited, only superseded by newer snapshots.
+
+**Recall**: `/recall` surfaces snapshots when the user asks about past code state ("how did the model look at v1.4 ship"). Otherwise the live graph in `src/graphify-out/GRAPH_REPORT.md` is the right surface for "what does the code look like now."
