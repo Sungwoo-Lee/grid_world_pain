@@ -5,7 +5,7 @@ status: active
 created: 2026-05-15
 last_updated: 2026-05-16
 wandb_tag: dreamer_srl_v2_hyperparam_search_10x10
-phase: phase3_complete_longbudget_interim_envs16_still_running
+phase: extended_sweep_launched_8cells_n106-109
 cross_links:
   - docs/experiments/active/dreamer_srl_v2/EXTENSION_RESULTS.md
   - docs/experiments/active/dreamer_srl_v2/PARITY_LAUNCH_V2.md
@@ -791,7 +791,43 @@ Note: `dreamer_srl_main.py` does not support `--wandb-group` / `--wandb-job-type
 
 ---
 
-## 12. Cross-references
+## 12. Extended sweep (2026-05-16, 8 cells across n106–n109)
+
+### 12.1 Why launched
+
+The long-budget validation cells (§11) showed XS/envs=16 and XS/envs=64 at 2M steps achieving ~146 and ~136 survival-steps respectively, decisively beating the Phase 2 short-budget winner (S/envs=4 at 200k → 97 steps). Two questions remained unanswered:
+
+1. **Does the XS performance plateau by 2M or continue rising at 4M?** The in-flight LB cells (n113, ETAs 05:00–15:50 UTC) can only answer this for XS/envs=16+64. This sweep tests XS/envs=128 at 4M and repeats the XS/envs=16+64 cells at 4M to confirm.
+2. **Was the Phase 2 S/M underperformance (S: 97, M: 87) purely a function of low num_envs?** Phase 2 only ran S/M at envs=4. This sweep tests S at envs=16/64/128 and M at envs=64/128 — both at 2M steps — to check if size becomes relevant once throughput is unlocked.
+
+User directive after §11 interim results confirmed the LB advantage. Launched 2026-05-16 at ~12:42 UTC.
+
+### 12.2 8-cell manifest
+
+WandB group: `dreamer_srl_v2_extended_sweep_2026-05-16` (set via `WANDB_RUN_GROUP` env var — `dreamer_srl_main.py` does not support `--wandb-group` flag).
+
+| Cell | Size | num_envs | total_steps | Node | GPU | PID | WandB run ID | Log | ETA (~UTC) |
+|---|---|---|---|---|---|---|---|---|---|
+| E1 | XS | 16 | 4M | n106 | cuda:0 | 3629398 | [yxij4lrc](https://wandb.ai/sungwoolee/grid_world_pain/runs/yxij4lrc) | logs/20260516_124201.log | ~15:40 (+27h) |
+| E2 | XS | 64 | 4M | n106 | cuda:1 | 3629566 | [02n94uzu](https://wandb.ai/sungwoolee/grid_world_pain/runs/02n94uzu) | logs/20260516_124202.log | ~08:40 (+20h) |
+| E3 | XS | 128 | 4M | n107 | cuda:0 | 970879 | [ybsma2zd](https://wandb.ai/sungwoolee/grid_world_pain/runs/ybsma2zd) | logs/20260516_124203.log | ~01:10 (+12.5h) |
+| E4 | S | 16 | 2M | n107 | cuda:1 | 970919 | [z8w3bfte](https://wandb.ai/sungwoolee/grid_world_pain/runs/z8w3bfte) | logs/20260516_124204.log | ~10:40 (+22h) |
+| E5 | S | 64 | 2M | n108 | cuda:0 | 491086 | [20o5ujno](https://wandb.ai/sungwoolee/grid_world_pain/runs/20o5ujno) | logs/20260516_124204.log | ~02:40 (+14h) |
+| E6 | S | 128 | 2M | n108 | cuda:1 | 491254 | [qtvxauwd](https://wandb.ai/sungwoolee/grid_world_pain/runs/qtvxauwd) | logs/20260516_124205.log | ~20:40 (+8h) |
+| E7 | M | 64 | 2M | n109 | cuda:0 | 6059 | [c5pt9t4v](https://wandb.ai/sungwoolee/grid_world_pain/runs/c5pt9t4v) | logs/20260516_124206.log | ~08:40 (+20h) |
+| E8 | M | 128 | 2M | n109 | cuda:1 | 6099 | [d9emwzdp](https://wandb.ai/sungwoolee/grid_world_pain/runs/d9emwzdp) | logs/20260516_124207.log | ~00:40 (+12h) |
+
+Peak GPU memory at launch: XS/128 (E3) = 406 MiB; S/64 (E5) = 542 MiB; S/128 (E6) = 410 MiB; M/64 (E7) = 586 MiB; M/128 (E8) = 507 MiB. All well under 24 GB — no OOM risk.
+
+### 12.3 Decision rule for analysis
+
+At completion, `experiment-analyzer` builds a 3-axis table: **size × num_envs × budget** (short-budget 200k from Phase 2, long-budget 2M from §11 + this sweep, and 4M from E1/E2/E3). The primary question is whether higher budget or larger model size closes the gap with XS at high num_envs. Final synthesis is written to §10.4.
+
+First cell to finish: E6 (S/128/2M, ~20:40 UTC). Suggested next-check waypoint: ~01:00 UTC 2026-05-17 (when E3/E8 finish, ~12–12.5h ETA).
+
+---
+
+## 13. Cross-references
 
 - **EXTENSION_RESULTS** (the parity comparison that motivated this search): [EXTENSION_RESULTS.md](./EXTENSION_RESULTS.md)
 - **SPS × num_envs sweep** (the throughput data that informs §4.5 projections): [SPS_NUM_ENVS_SWEEP_V2.md](./SPS_NUM_ENVS_SWEEP_V2.md)
