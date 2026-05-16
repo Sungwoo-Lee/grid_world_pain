@@ -29,12 +29,44 @@ import fcntl
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+
+def _find_repo_root() -> Path:
+    """Return the root of the current git checkout (worktree-aware).
+
+    Uses ``git rev-parse --show-toplevel`` so that invocations from inside a
+    git worktree return the worktree's path (not the main checkout's path).
+    Falls back to walking up from the script's location, accepting ``.git``
+    as either a directory (main checkout) or a file (worktree marker), only
+    if ``git`` is unavailable or not in a git tree at all.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, check=True,
+        )
+        return Path(result.stdout.strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Fallback: walk up from this file, accepting .git as file OR dir.
+        candidate = Path(__file__).resolve().parent
+        while True:
+            git = candidate / ".git"
+            if git.exists():  # file (worktree) or dir (main checkout)
+                return candidate
+            parent = candidate.parent
+            if parent == candidate:
+                break  # filesystem root — give up
+            candidate = parent
+        # Last resort: assume script is scripts/diary_append.py → repo root is ../
+        return Path(__file__).resolve().parent.parent
+
+
+REPO_ROOT = _find_repo_root()
 DIARY_DIR = REPO_ROOT / "docs" / "diary"
 TEMPLATE = DIARY_DIR / "TEMPLATE.md"
 
