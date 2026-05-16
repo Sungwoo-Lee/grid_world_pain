@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-05-16
 **Active folders**: 6
-**Total insights**: 61
+**Total insights**: 70
 **Last audit**: (none)
 
 ---
@@ -16,8 +16,8 @@
 | Folder | Definition (1 line) | Insights | Last update | Top tags |
 |---|---|---|---|---|
 | `memory_system_design` | Claude memory system's own design decisions | 9 | 2026-05-16 | [memory, design, decision, skill, meta, learned_lesson] |
-| `subagent_engineering` | Subagent + worktree usage gotchas | 8 | 2026-05-16 | [meta, learned_lesson, worktree, subagent, decision] |
-| `nmn_diagnosis` | NMN performance diagnosis findings | 9 | 2026-05-13 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation] |
+| `subagent_engineering` | Subagent + worktree usage gotchas | 11 | 2026-05-16 | [meta, learned_lesson, worktree, subagent, decision, design] |
+| `nmn_diagnosis` | NMN performance diagnosis findings | 15 | 2026-05-16 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 9 | 2026-05-13 | [dreamer, decision, learned_lesson, refutation, meta, design] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 19 | 2026-05-16 | [meta, training_runner, learned_lesson, decision, design] |
 | `hypervigilance` | Hypervigilance experiments | 7 | 2026-05-13 | [hypervigilance, design, learned_lesson, decision, refutation, meta] |
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-16: Captured 9 insights from the multi-round planning session (v3 → v4 → concept memo + math audit → lineage investigation → 4-professor symposium → v5): 6 into existing `nmn_diagnosis` (`20260516_1504_symposium_substrate_right_rhetoric_wrong` — four-way professor convergence on "substrate right, rhetoric wrong"; `20260516_1505_target_one_acknowledge_many_defer_full_coverage` — user's refined scoping rule; `20260516_1506_film_hypernet_bhn_bnn_2x2_lineage` — formal 2×2 + 5 rigorous claims; `20260516_1507_gamma_bellman_not_forward_pass_filmable` — γ_Bellman out-of-substrate; `20260516_1508_v5_last_rhetorical_round_before_experiments` — PI pace flag stop rule; `20260516_1509_na_lc_natural_target_for_r2_anchor` — NA/LC natural target given R2 anchor), 3 into existing `subagent_engineering` (`20260516_1510_worktree_misses_post_branch_main_assets` — pre-spawn sync gap; `20260516_1511_math_reviewer_catches_silent_direction_errors` — math-reviewer audit value; `20260516_1512_multi_agent_symposium_pattern` — symposium-scale evolution of the v2 research chain). All tags reused (nmn, film, design, decision, learned_lesson, meta, refutation, worktree, subagent). No new tags promoted.
 - 2026-05-16: Captured 5 insights from the memory v2 build + graphify integration + bridge session: 2 into existing `memory_system_design` (`20260516_1431_v2_three_role_architecture` — the 3-role design (curated insights / live code-graph / dated snapshots) + memory↔code-graph bridge; `20260516_1432_karpathy_graphify_adaptation_rationale` — what was borrowed from Karpathy LLM Wiki + Graphify, what was extended (bitemporal + conversation-as-node), what was deliberately skipped (full code-graph merge into memory)), 1 into existing `cluster_ops` (`20260516_1433_graphifyy_integration_cheatsheet` — package name `graphifyy`, `graphify update <path>` CLI, per-scope output directory, PATH-fallback pattern), 2 into existing `subagent_engineering` (`20260516_1434_cross_phase_generator_backlinks_strip` — body-scanning scripts must strip auto-generated injection regions; hotfix 33f98b6; `20260516_1435_worktree_baseref_and_propagation` — EnterWorktree base-ref + `git -C <user> merge <worktree> --ff-only` propagation pattern). No new tags promoted (all reused: memory, design, decision, meta, worktree, learned_lesson).
 - 2026-05-13: Captured 3 insights from the dreamer-srl v3 CP1 closure session: 1 into existing `dreamer_diagnosis` (`20260513_2308_strong_strategy_validates_on_cp1` — Strong A+B+C+D deviation-prevention strategy paid off on CP1; caught a pre-CP0 gitignore blocker, surfaced a latent wrong-reference bug in the D-002 distribution test via threshold tighten, PI clean batch-approval of all 3 deviations), 1 into existing `cluster_ops` (`20260513_2309_merge_path_manifest_tripwire` — path-manifest tripwire instead of full cp -a backup for the 165GB of gitignored data on this repo; validated 0-delta on v1.3→develop→v1.4 fast-forward merge), 1 into existing `memory_system_design` (`20260513_2310_orphan_memory_branch_rewrite` — rewrite-on-base pattern for synthetic `docs/memory/` index conflicts when a worktree branch falls behind its base). No new tags promoted (all reused: dreamer, learned_lesson, decision, meta, design, memory).
 - 2026-05-13: Captured 1 insight into existing `dreamer_diagnosis` from the JAXVectorEnv v1+v2 spike closure session: `20260513_1417_jax_vmap_no_speedup_tiny_env` — JAX-vmap parallel env over 5x5 NoPred gridworld delivers no speedup vs SyncVectorEnv (v1 CPU: 1.01x at N=4; v2 GPU: 0.47x at N=4); Python-JAX boundary dominates microsecond env-step compute; only DLPack zero-copy bridge could plausibly win (separate fresh plan). Env-install chain side-effects captured (cudnn 9.10.2.21, nvcc 12.9.86, jax downgrade to 0.9.0.1, torch 2.5 to 2.8 upgrade). No new tags promoted (all reused: dreamer, learned_lesson, refutation, decision, meta).

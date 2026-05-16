@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 
 ## Change history
 
+- 2026-05-16: 9 insights from the multi-round planning session (v3 → v4 → concept memo + math audit → lineage investigation → 4-professor symposium → v5) reused existing tags `nmn`, `film`, `design`, `decision`, `learned_lesson`, `meta`, `refutation`, `worktree`, `subagent` — no new tags promoted. 6 into `nmn_diagnosis`, 3 into `subagent_engineering`.
 - 2026-05-16: 5 insights from the memory v2 build + graphify integration + bridge session (`20260516_1431_v2_three_role_architecture`, `20260516_1432_karpathy_graphify_adaptation_rationale`, `20260516_1433_graphifyy_integration_cheatsheet`, `20260516_1434_cross_phase_generator_backlinks_strip`, `20260516_1435_worktree_baseref_and_propagation`) reused existing tags `memory`, `design`, `decision`, `meta`, `worktree`, `learned_lesson` — no new tags promoted.
 - 2026-05-13: 3 insights from the dreamer-srl v3 CP1 closure session (`20260513_2308_strong_strategy_validates_on_cp1`, `20260513_2309_merge_path_manifest_tripwire`, `20260513_2310_orphan_memory_branch_rewrite`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `meta`, `design`, `memory` — no new tags promoted.
 - 2026-05-13: 1 insight from the JAXVectorEnv v1+v2 spike closure session (`20260513_1417_jax_vmap_no_speedup_tiny_env`) reused existing tags `dreamer`, `learned_lesson`, `refutation`, `decision`, `meta` — no new tags promoted.

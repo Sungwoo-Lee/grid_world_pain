@@ -62,4 +62,6 @@ The five-stage continual probe (`active → passive → active → passive → a
 - [[20260513_0015_active_swapped_geq_matched_reframes_meta]] (hypervigilance, 2026-05-13) — Specialist ceiling table from the 6-world unmodulated probe (single-seed, 10M ep
 - [[20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric]] (nmn_diagnosis, 2026-05-13) — The R2 continual probe's H₁a 'half-the-dip stability gap' predicate is schedule-
 - [[20260513_0017_mod_h_logging_gap_blocks_cka_precheck]] (nmn_diagnosis, 2026-05-13) — The R2 continual probe's modulator-engagement Mahalanobis check is unevaluable b
+- [[20260516_1504_symposium_substrate_right_rhetoric_wrong]] (nmn_diagnosis, 2026-05-16) — Four professors (neuromod / rl-bayesian-dl / bayesian-brain / pain-modeling) ind
+- [[20260516_1509_na_lc_natural_target_for_r2_anchor]] (nmn_diagnosis, 2026-05-16) — Given the refined target-one constraint, NA/LC (noradrenergic / locus coeruleus)
 <!-- END BACKLINKS -->
