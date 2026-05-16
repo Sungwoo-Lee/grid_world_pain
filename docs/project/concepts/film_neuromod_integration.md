@@ -557,4 +557,159 @@ This memo is not a complete review of either literature (the curator synthesis a
 
 ## §10 — Math-reviewer audit
 
+### Plain-English entry point
+
+I checked every equation in §3 (the FiLM-variant taxonomy), §5 (the eighteen-row integration mapping), and §6 (the per-behaviour mathematical sketches) against the cited paper reviews, with special attention to the four flags the postdoc surfaced. **Headline verdict: the math is solid on three of the four flags and on the §3 taxonomy itself, but two issues are load-bearing enough to require a v2 revision before downstream agents consume the memo.** Flag (a) — the Abdollahzadeh reinterpretation lemma establishing the Tsuda ⊂ FiLM ⊂ KML nesting — holds with a small clarification about operand type (conv kernel vs RNN recurrent matrix). Flag (b) — the FiLM-Ensemble + heteroscedastic-precision compound formula in Row EE-6 — has correct sign convention but two unspecified design choices (variance-space ambiguity and an unspecified $f$ in $\gamma_C = f(U, \sigma^{-2})$) that the postdoc must close before the formula carries the "novel substrate-level contribution" claim. Flag (c) — the Hessian-eigenvalue probe in §6.3 signature 2 — has the **direction of the effect reversed**: under Rodriguez-Garcia 2026 the raw-weight Hessian is *amplified* by $g^2$, not flattened; the flattening lives in the effective-parameter-space Hessian. This must be fixed before the probe is logged. Flag (d) — the Bellman γ vs FiLM γ disambiguation — recognises the collision but conflates GRU-update-gate-induced state retention with Bellman value-function discount; the dimensional content does not survive close reading. Beyond the four flags, two minor §5 / §6 issues. Overall verdict: **math is solid with two revisions required** before the memo can carry the unification claim. The integration claim itself (12-of-18 rows mapped, 3 honestly no-mapped) survives.
+
+### Audit of flag (a) — Abdollahzadeh reinterpretation lemma
+
+**Verdict: holds, with a one-clarification widening.**
+
+The memo's §3.11 derivation is faithful to Abdollahzadeh 2021's Eq. (5), reproduced in the per-paper review at `docs/project/references/FiLM/reviews/abdollahzadeh_2021_multimodal_meta.md` lines 128-142:
+
+$$
+\hat Y_i = \eta_i(W_i * X + b_i) + \gamma_i = (\eta_i W_i) * X + (\eta_i b_i + \gamma_i),
+$$
+
+so vanilla FiLM on per-output-channel $\eta_i$ is equivalent to convolving with the kernel $\hat W_i = \eta_i W_i$ where *every* spatial position and every input-channel slice of $W_i$ is rescaled by the same scalar $\eta_i$. This is one degree of freedom per output channel. Per-weight modulation (KML) lifts this to one degree of freedom per weight. So vanilla FiLM is the per-output-channel-uniform restriction of KML — **the derivation is correct**.
+
+The memo then extends the nesting to Tsuda 2021: $W \to f_{nm} \cdot W$ is the further-degenerate case where every entry of $W$ is rescaled by the *same* scalar $f_{nm}$. The memo writes this as $\hat W = W \odot (J + (f_{nm} - 1)J) = f_{nm} W$, which algebraically holds: $J + (f_{nm} - 1) J = f_{nm} J$, and $W \odot (f_{nm} J) = f_{nm} \cdot W$.
+
+**Clarification the memo should add (minor, not a blocker).** Abdollahzadeh's reinterpretation lemma is stated for vanilla FiLM applied to a **convolutional layer** — the "channel" indexing is over conv output channels. Tsuda 2021 applies $f_{nm}$ to an **RNN recurrent weight matrix** $W \in \mathbb{R}^{N \times N}$, which does not have a "conv channel" structure. The nesting Tsuda ⊂ vanilla FiLM ⊂ KML is rigorous if we abstract "channel" as "output index of the weight matrix" (i.e., row index of $W$): vanilla FiLM allows one scalar per row, Tsuda forces all row scalars equal, KML allows one scalar per (row, column) entry. The chain holds; the memo should add one sentence noting the operand is a generic weight matrix, not specifically a conv kernel, when Tsuda is included.
+
+**What this means for the memo's claim.** The headline that "vanilla FiLM on conv activations IS a degenerate (per-channel-uniform) kernel modulation; Tsuda 2021 is the further-degenerate scalar instance; KML is the most expressive instance" is **mathematically defensible**. The Tsuda ⊂ FiLM ⊂ KML nesting is the load-bearing math contribution of §3.11 and it holds. The v3 / predictions-synthesis Tsuda framing can be sharpened on this basis.
+
+### Audit of flag (b) — FiLM-Ensemble + heteroscedastic-precision compound formula
+
+**Verdict: holds on sign convention, but two design ambiguities must be closed before the formula carries the "project's unique novel-architecture result" claim.**
+
+**Sub-check 1: Kendall-Gal sign convention.** The memo's Row EE-6 writes the loss as
+$$
+\mathcal{L} = \tfrac{1}{2} e^{-s} \|y - \hat y\|^2 + \tfrac{1}{2} s.
+$$
+This matches Kendall & Gal 2017 Eq. 6 (boxed in the per-paper review at `docs/project/references/FiLM/reviews/kendall_gal_2017_uncertainties.md` line 109) **exactly** — $s = \log \sigma^2$, the $\exp(-s)$ factor downweights noisy data, the $\tfrac{1}{2} s$ regulariser prevents the network predicting infinite noise everywhere. Both terms have the right sign, no double-counting. **Verified.**
+
+**Sub-check 2: variance estimator space.** The memo defines
+$$
+U^{\text{epist}}_C(s) = \text{Var}_m[\pi^m(\cdot \mid s)],
+$$
+where $\pi^m$ is the $m$-th member's policy distribution. The postdoc flagged this needs to be in **post-softmax (probability simplex) space**, not logit space — otherwise epistemic uncertainty is unbounded and not interpretable as variance over predictions. The memo's notation $\pi^m(\cdot \mid s)$ reads as a probability distribution (softmax output), so this is *implicitly* correct, but **the memo never states it explicitly**. **Required revision:** explicitly state that $U^{\text{epist}}$ is computed on the post-softmax outputs $\pi^m \in \Delta^{|A|-1}$, not on pre-softmax logits $\ell^m \in \mathbb{R}^{|A|}$. Without this, an implementer could read the formula either way and get a different quantity. The post-softmax variance is bounded $[0, 0.25]$ per component (since each $\pi^m_i \in [0,1]$), making it interpretable; the logit-space variance is unbounded and would not function as a precision proxy.
+
+**Sub-check 3: FiLM-Ensemble's gain-init $\rho$.** Turkoglu 2022's Eq. (5) (reproduced in `docs/project/references/FiLM/reviews/turkoglu_2022_film_ensemble.md` line 130) initialises $\gamma^m, \beta^m \sim \mathcal{U}(-\sqrt{3/D_n}\rho, +\sqrt{3/D_n}\rho)$. The paper's default is $\rho = 2$. The memo's flagged concern — that $\rho \to 0$ collapses the ensemble — is correct per Turkoglu §2.1 and the review at lines 33-36. **The memo should state $\rho = 2$ as the recommended starting value** (Turkoglu's empirical default) and flag that the compound EE-6 formula presumes non-degenerate $\rho$ at training start. Without this, the heteroscedastic head sees zero epistemic signal and the compound collapses to a single-network heteroscedastic-regression baseline. Worth noting: Turkoglu initialises $\gamma^m$ centred at zero (not at one, which is BatchNorm's usual init), so the $\rho \to 0$ limit is *not* "all-ones $\gamma$" but rather "all-zeros $\gamma$ everywhere", which would collapse all features. This subtlety affects how $\rho$ trades accuracy for diversity and is worth flagging in EE-6.
+
+**Sub-check 4: coherent gradient flow.** The memo's claim is that the gradient signal to the FiLM-Ensemble members and the heteroscedastic $\sigma^{-2}$ "flow through both coherently". Concretely: if the heteroscedastic loss applies the $\tfrac{1}{2} e^{-s} \|y - \hat y\|^2$ residual term, the gradient wrt $\hat y$ scales as $e^{-s} (y - \hat y)$ — meaning *high predicted noise downweights the gradient to $\hat y$*. Through the FiLM-Ensemble chain, $\hat y$ depends on $(\gamma^m, \beta^m)$. So the per-member $(\gamma^m, \beta^m)$ gradients are also downweighted in high-$\sigma^2$ regions — this is consistent. The gradient wrt $s$ is $-\tfrac{1}{2} e^{-s} \|y - \hat y\|^2 + \tfrac{1}{2}$, which finds the optimum at $s^* = \log\|y - \hat y\|^2$ — the standard heteroscedastic fixed point. Gradients do not "fight each other" in the bad sense; they share a coherent block structure where $\sigma^2$ acts as a learning-rate gate on $(\gamma^m, \beta^m, \theta_{\text{backbone}})$. **No structural issue.** Worth noting in the memo: gradient block-diagonality is *not* exact (because both $\sigma^2$ and the ensemble share the backbone $\theta$), but the cross-coupling is benign (the high-$\sigma^2$ region is precisely where we want both heads' gradients downweighted). This is *not* a load-bearing concern.
+
+**Headline for flag (b).** The compound formula is mathematically well-formed; the project can claim it as a unique combination. The two required revisions: (1) explicit statement that $U^{\text{epist}}$ is post-softmax, (2) explicit $\rho = 2$ starting value with note that the formula presumes non-degenerate ensemble spread at training start. The functional form $f$ in $\gamma_C(s) = f(U^{\text{epist}}, \sigma^{-2})$ is currently unspecified — the memo should at minimum state whether $f$ is learned (a small MLP) or hand-coded (e.g., $\gamma_C = a \cdot \sigma^{-2} + b \cdot U^{\text{epist}}$). Without this, the formula is closer to a *family* than a specific architecture.
+
+### Audit of flag (c) — Hessian-eigenvalue probe
+
+**Verdict: derivation of $\lambda \to \lambda/g^2$ is correct, but the discriminator stated in §6.3 signature 2 reverses the direction of the effect at the raw-weight Hessian.**
+
+**The Rodriguez-Garcia derivation, verified.** Following the per-paper review at `docs/project/references/neuromodulatory_algorithms/reviews/rodriguezgarcia_2026_ne_stability_gap.md` lines 117-133:
+
+Define $\tilde{\mathcal L}(W) = \mathcal L(\Phi(W))$ with $\Phi(W) = G W$, $G = g I_n$. Lemma 1 (gradient): $\nabla_W \tilde{\mathcal L} = G^\top \nabla_{W_{\text{eff}}} \mathcal L = g \nabla_{W_{\text{eff}}} \mathcal L$. Lemma 2 (Hessian congruence):
+$$
+\nabla^2_W \tilde{\mathcal L}(W) = G^\top \nabla^2_{W_{\text{eff}}} \mathcal L(\Phi(W)) G = g^2 H_{W_{\text{eff}}}(W_{\text{eff}}).
+$$
+Both chain-rule applications check out. The corollary:
+$$
+H_W = g^2 H_{W_{\text{eff}}} \quad \Longleftrightarrow \quad H_{W_{\text{eff}}} = H_W / g^2.
+$$
+So $\lambda_i^{\text{eff}} = \lambda_i^{W} / g^2$ — eigenvalues of the **effective-parameter-space** Hessian $H_{W_{\text{eff}}}$ are $1/g^2$ times the eigenvalues of the **raw-weight** Hessian $H_W$. **The derivation is correct.**
+
+**Where the memo §6.3 signature 2 goes wrong.** The memo writes: "Under Rodriguez-Garcia 2026, the effective curvature flattens: $\lambda_i \to \lambda_i / g^2$. Under forward-pass FiLM, the *forward-pass conditioning* changes but the loss curvature at the raw weight should not flatten through the same gradient-level mechanism. **Discriminating reading**: curvature flattening at the raw-weight Hessian → gradient-level mechanism dominant; curvature unchanged at raw-weight but conditioning of effective forward pass changes → FiLM-level mechanism."
+
+This is **reversed**. Under Rodriguez-Garcia, the raw-weight Hessian $H_W$ is **amplified** by $g^2$ relative to baseline (since $H_W = g^2 H_{W_{\text{eff}}}$, with $H_{W_{\text{eff}}}$ being the curvature on the actual function the network computes). When $g > 1$ (NA-burst regime), $H_W$ grows. The "flattening" only appears in $H_{W_{\text{eff}}}$ — the effective-parameter-space Hessian — which is *not directly accessible* unless the optimiser explicitly logs the composite parameter $W_{\text{eff}} = gW$.
+
+**What the memo should say (and what the project should log).** Three distinct Hessians are at issue:
+1. $H_W$ — Hessian wrt raw weight $W$. Under Rodriguez-Garcia with $g > 1$, this is **amplified by $g^2$**. Under FiLM, $W$ is unchanged by modulation, so $H_W$ is **unchanged** (FiLM acts on activations, not weights).
+2. $H_{W_{\text{eff}}}$ — Hessian wrt the effective composite weight $W_{\text{eff}} = gW$. Under Rodriguez-Garcia, this is the "flattened" quantity ($1/g^2$ relative to $H_W$). Under FiLM, there is no equivalent composite weight, so this quantity is undefined.
+3. $H_{\theta_{\text{mod}}}$ — Hessian wrt the FiLM modulator parameters that produce $(\gamma, \beta)$. Under FiLM, this is the natural curvature probe; under Rodriguez-Garcia, $g$ is not parameterised by a side network so this is irrelevant.
+
+The memo's discriminator collapses these three. The corrected discriminator should be: **(a) measure $H_W$ on the raw weights pre-injection and post-injection of either mechanism; (b) Rodriguez-Garcia 2026 should produce $H_W$ amplification at $g > 1$ (not flattening), accompanied by gradient-step amplification; (c) FiLM should produce $H_W$ approximately unchanged and instead show modulator-parameter-Hessian $H_{\theta_{\text{mod}}}$ shifts**. The two are dissociable on the *direction* of the $H_W$ shift, not on its flattening.
+
+**Severity.** This is a load-bearing error for the §7.4 claim that the Hessian-eigenvalue probe is the discriminating measurement between forward-pass FiLM and gradient-level NGM-SGD. If the project logs $H_W$ expecting flattening under Rodriguez-Garcia, it will measure amplification and incorrectly read the result. **Required revision** before downstream agents consume the memo.
+
+### Audit of flag (d) — γ notational collision
+
+**Verdict: the disambiguation $\tilde\gamma_{\text{Bellman}}$ is consistent in §5.3 and §6.3, but the underlying conceptual claim that "additive β at the GRU update-gate ⇔ effective Bellman γ change" is dimensionally incoherent.**
+
+**The notational sweep.** I read §5.3 and §6.3 line-by-line for instances of bare γ that might be ambiguous between FiLM and Bellman. The memo uses $\gamma_C$ (FiLM at policy site C), $\gamma_A$ (FiLM at encoder site A), $\gamma^{(B)}$/$\beta^{(B)}$ (FiLM at GRU update-gate B), and $\tilde\gamma_{\text{Bellman}}$ where it means the Bellman value-function discount. **The notation is consistent**: every γ in §5.3 / §6.3 either has a site subscript (FiLM) or carries the $\tilde\cdot_{\text{Bellman}}$ marker (RL discount). No silent collisions found.
+
+**The dimensional incoherence.** The memo writes (§5.3, mathematical sketch box):
+$$
+z_t = \sigma(W_z [h_{t-1}, x_t] + b_z + \beta^{(B)}(\text{mod\_h}_t^T)),
+$$
+"where $\beta^{(B)}$ shifts the 'stay vs update' decision boundary additively" and "the state-dependent effective discount over past memory is $\tilde\gamma_{\text{Bellman}}(\beta^{(B)})$".
+
+This is dimensionally incoherent. The GRU update gate $z_t \in (0,1)^H$ is a **per-hidden-unit** retention scalar that produces the recurrent update $h_t = (1-z_t) \odot h_{t-1} + z_t \odot \tilde h_t$. The "discount" induced by $z_t$ is the *hidden-state decay factor*, a per-unit quantity bounded by $(0,1)$, with units of "retention probability per timestep of the inner recurrent loop". The Bellman value-function discount $\gamma_{\text{Bellman}}$ is a **global scalar** (typically ~0.99) that governs the value-function horizon: $V^\pi(s) = \mathbb{E}[\sum_{t=0}^\infty \gamma_{\text{Bellman}}^t r_t]$. The two operate at different layers of the algorithm:
+- GRU retention: at the policy network's recurrent loop, per-unit, per inner-network-timestep.
+- Bellman γ: at the value-target computation, global, per environment-timestep.
+
+A perturbation of the GRU's $z_t$ via additive $\beta^{(B)}$ changes how fast the hidden state decays. This affects *what the policy can remember*, not *how far into the future the value function looks*. The two effects can correlate empirically (longer hidden-state memory → effective longer-horizon credit assignment), but they are not the same quantity and one does not equal the other.
+
+**Severity.** This is the same conflation `professor-rl-bayesian-dl` warned against in v1 §8 Q3 (per the user's brief). The memo's recognition that "the math-reviewer should flag a notational collision" is a half-recognition — the notation is fine; the *concept* is the issue. **Required revision**: rewrite the §5.3 sketch-box to drop the $\tilde\gamma_{\text{Bellman}}(\beta^{(B)})$ formulation entirely and instead describe the effect as "additive β at the GRU update gate shifts the per-unit hidden-state retention, which can be measured as the autocorrelation time constant $\tau$ of the recurrent state". The Bellman discount lives in the value-target computation and is *not* what β at the update gate modulates. The §6.3 signature 3 ("R2 readout") survives because it does not depend on the Bellman-γ framing.
+
+### Sweep findings (other rows in §3, §5, §6)
+
+**§3.2 CIN equation.** Correct — matches Dumoulin 2017 Eq. (1). No issue.
+
+**§3.5 HyperNetwork equation.** The memo writes $K^j = g(z^j) = \langle W_{\text{out}}, W_i z^j + B_i \rangle + B_{\text{out}}$ with the angle-bracket notation. The Galanti-Wolf modularity-bound claim ($N_g = O(\epsilon^{-m_1/r})$ vs $N_q = \Omega(\epsilon^{-(m_1 + m_2)/r})$) is correctly attributed but the asymptotic-rate comparison should specify that this is for a target function family of complexity class $W^{r,m}$ and that $m_1, m_2$ are the conditioning and target dimensions respectively. Minor — not a blocker.
+
+**§3.7 FiLM-Ensemble equation.** Matches Turkoglu Eq. (2). Verified.
+
+**§3.9 Sparse MoE equation.** Matches Shazeer 2017 §3. Verified.
+
+**§5.1 Row CS-1 Vecoven bridge.** The memo writes:
+$$
+\sigma_{\text{NMN}}(x, z) = \sigma(z^\top (x w_s + w_b)) = \sigma((z^\top w_s) \odot x + (z^\top w_b)) = \sigma(\gamma(z) \odot x + \beta(z)).
+$$
+The middle equality uses $\odot$ where the actual operation is scalar multiplication (since $x \in \mathbb{R}$ is per-neuron scalar). This is a notation-tightening matter; the substantive algebra is correct. Verified that the bridge holds.
+
+**§5.1 Row CS-5 Costacurta bridge.** The memo writes $W_x(z) = \sum_{k=1}^K s_k(z) \ell_k r_k^\top$ with $s_k(z) = \sigma(A_z z + b_z)_k$. This matches the per-paper review's Section 3 equations precisely. The LSTM-equivalence (Prop. 1) holds. Verified.
+
+**§5.4 Row EE-1 Doya bridge.** The memo writes $\ell'_a = \gamma_C(\text{mod\_h}) \cdot \ell_a + \beta_C(\text{mod\_h})$ and compares to temperature-scaled softmax $\pi(a) \propto \exp(\ell_a / T)$, identifying $\gamma_C = 1/T$. This is correct **provided $\beta_C = 0$**. When $\beta_C \ne 0$, the result is *not* a pure temperature rescaling — it is a temperature rescaling plus a logit shift (which biases the policy toward / away from specific actions independent of value). The memo should note that the Doya-NA-β-inverse-temperature mapping holds only on the multiplicative arm $\gamma_C$; the additive arm $\beta_C$ has a separate behavioural interpretation (action-prior shift, *not* inverse temperature). This is a minor revision.
+
+**§5.4 Row EE-2 Lee 2024 bridge.** The hand-coded formula $\alpha = E/(E+A), \beta^{-1} = 1/\langle E\rangle$ matches Lee 2024 Eq. 4. The analogy to AdaIN's closed-form generator is structurally apt — both produce $(\gamma, \beta)$ from input statistics without learning. Verified.
+
+**§5.4 Row EE-7 Osman no-map.** The memo notes Osman's $W_{\text{rec}} \to g \cdot W_{\text{rec}}$ has "the same mathematical form as Tsuda 2021". This is correct, and the memo correctly flags that the *operand* (recurrent attractor network, not feedforward / GRU policy) is what differentiates Osman from FiLM. The no-map verdict holds.
+
+**§6.1 Effective-rank formula.** The formula
+$$
+\text{erank}(\gamma_C) := \exp\left(-\sum_i \frac{\sigma_i^2}{\sum_j \sigma_j^2} \log \frac{\sigma_i^2}{\sum_j \sigma_j^2}\right)
+$$
+is the **exponential of the Shannon entropy of the normalised squared singular values** — a standard effective-rank definition (Roy & Vetterli 2007). Correct.
+
+**§5.5 NO-MAP boundary verification.** Wainstein 2025's $g$ is described as "an experimental dial on a *post-hoc* trained-RNN analysis, not as a side-signal-conditioned forward-pass operator". This matches the per-paper review's description (the RNN was trained without pupil input). The pupil-diameter "side signal" correlates with $g$ but does not generate it. The no-map verdict holds.
+
+### Overall verdict
+
+**The memo's headline integration claim is mathematically defensible — 12-of-18 rows mapped, 3 honestly no-mapped, with the Abdollahzadeh nesting result as the load-bearing math contribution — but the memo needs two required revisions and three minor revisions before downstream agents consume it.**
+
+**Required revisions (must be fixed before `experiment-designer` or `senior-developer` use the memo):**
+
+1. **§6.3 signature 2 Hessian-eigenvalue probe** — reverse the discriminator direction. Under Rodriguez-Garcia 2026, the raw-weight Hessian $H_W$ is **amplified** by $g^2$ (not flattened); the flattening lives in the effective-parameter-space Hessian $H_{W_{\text{eff}}} = H_W / g^2$. The corrected discriminator measures $H_W$ shift direction (amplification under Rodriguez-Garcia, no change under FiLM), not flattening at $H_W$. This is the §7.4 claim's foundation, so it must be right.
+
+2. **§5.3 sketch-box Bellman-γ conflation** — drop the $\tilde\gamma_{\text{Bellman}}(\beta^{(B)})$ formulation. The GRU update gate $z_t$ produces per-unit hidden-state retention, which is dimensionally distinct from the global Bellman value-function discount. Rewrite as "additive β at the GRU update gate shifts the per-unit hidden-state retention $\tau_h$, measurable as recurrent-state autocorrelation".
+
+**Minor revisions (not blockers, but should be tightened):**
+
+3. **§5.4 Row EE-6 compound formula** — explicitly state (a) $U^{\text{epist}}$ is computed on post-softmax outputs $\pi^m \in \Delta^{|A|-1}$ (not pre-softmax logits); (b) the gain-initialisation $\rho = 2$ as starting value per Turkoglu 2022 §2.1; (c) the functional form of $f$ in $\gamma_C(s) = f(U^{\text{epist}}, \sigma^{-2})$ — learned (small MLP) or hand-coded.
+
+4. **§3.11 nesting clarification** — add one sentence noting the Abdollahzadeh lemma originally targets conv kernels; the Tsuda 2021 extension generalises "channel" to "row index of a generic weight matrix", which is what makes the nesting Tsuda ⊂ FiLM ⊂ KML work for RNN recurrent matrices.
+
+5. **§5.4 Row EE-1 Doya bridge** — note that $\gamma_C \equiv 1/T$ holds for the multiplicative arm only; the additive arm $\beta_C$ has a separate behavioural interpretation as an action-prior shift, not as part of the inverse-temperature mapping.
+
+### Recommendations
+
+The memo's central contribution — that the FiLM/hypernet family forms a mathematically articulated taxonomy that integrates roughly twelve of eighteen load-bearing neuromodulation-inspired algorithms — survives the audit. The Abdollahzadeh reinterpretation lemma is correctly derived. The compound EE-6 formula has correct sign conventions but unspecified design choices. The two required revisions (flag c and flag d) are both about *interpretation* rather than fundamental algebra — they reverse a direction and dismantle a conceptual conflation respectively. Neither requires re-derivation from scratch.
+
+**Recommended next step:** the postdoc revises §5.3, §5.4, §6.3, and §3.11 with the five items above. A v2 of the memo can then carry the unification claim defensibly. **The postdoc does NOT need to be re-spawned**; the required revisions are surgical and targeted at four sub-sections.
+
+The memo does *not* contain a math error so badly wrong that it invalidates the integration claim. The two required revisions are about Hessian-direction and Bellman-γ conflation respectively, neither of which undermines §3 (the taxonomy), §5 rows 1, 3, 4, 5, 6 (the cleanly-mapped neuromod algorithms), §5.5 (the no-map boundary), or §6.1 / §6.2 / §6.4 (the per-behaviour signatures other than §6.3 signature 2). Approximately 90% of the memo's mathematical content is unaffected.
+
+### Sign-off
+
+*--- Audit by `math-reviewer`, 2026-05-16.*
+
 *[Reserved for math-reviewer feedback. Math-reviewer should attend particularly to: the Abdollahzadeh 2021 reinterpretation lemma derivation (§3.11) establishing the FiLM/Tsuda nesting; the FiLM-Ensemble + heteroscedastic-precision compound formula (Row EE-6 in §5.4); the Hessian-eigenvalue probe formula (§6.3 signature 2); the notational collision flagged in §5.3 mathematical sketch between FiLM's $\gamma$ and the Bellman-discount $\gamma$.]*
