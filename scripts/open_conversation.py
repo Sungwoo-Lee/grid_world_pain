@@ -100,13 +100,13 @@ def _handle_insight(insight_path: Path, insight_id: str, all_paths: list[Path]) 
     # Detect pre-sync / archive source
     if not raw_source or raw_source == "none":
         print("This insight has no synced raw source (pre-sync genesis insight).")
-        return 2
+        sys.exit(2)
 
     uuid_m = UUID_ANYWHERE_RE.search(raw_source)
     if not uuid_m:
         # _archive/... path — not a UUID-based JSONL
         print("This insight has no synced raw source (pre-sync genesis insight).")
-        return 2
+        sys.exit(2)
 
     uuid = uuid_m.group(1).lower()
     return _handle_uuid(uuid, highlight_id=insight_id, all_paths=all_paths)
