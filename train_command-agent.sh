@@ -78,99 +78,20 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# dreamer_srl extended sweep — 10×10 hyperparam search §12 (8 cells)
-# Launched: 2026-05-16. Purpose: confirm long-budget XS dominance (146/136 at 2M), test S/M at high num_envs.
-# Nodes: 106 (E1,E2), 107 (E3,E4), 108 (E5,E6), 109 (E7,E8). All seed 42.
-# WandB group: dreamer_srl_v2_extended_sweep_2026-05-16, job-type: extended_sweep
-# Env config: configs/experiment/hypervigilance/01-interoNocicept.yaml
-# Agent configs: 01_food_only.yaml (XS), 01_food_only_S.yaml (S), 01_food_only_M.yaml (M)
-# Launch path: CIFS bypass via /tmp on each node.
-#
-# E1: XS/envs=16/4M  n106:GPU0
-WANDB_RUN_GROUP=dreamer_srl_v2_extended_sweep_2026-05-16 \
-WANDB_JOB_TYPE=extended_sweep \
-XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=0 \
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
-  src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only.yaml \
-  --total-steps 4000000 --num-envs 16 --seed 42 \
-  --wandb-project grid_world_pain \
-  --wandb-name dreamer_srl_v2_10x10_ext_XS_envs_16_4M_s42
-# E2: XS/envs=64/4M  n106:GPU1
-WANDB_RUN_GROUP=dreamer_srl_v2_extended_sweep_2026-05-16 \
-WANDB_JOB_TYPE=extended_sweep \
-XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=1 \
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
-  src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only.yaml \
-  --total-steps 4000000 --num-envs 64 --seed 42 \
-  --wandb-project grid_world_pain \
-  --wandb-name dreamer_srl_v2_10x10_ext_XS_envs_64_4M_s42
-# E3: XS/envs=128/4M  n107:GPU0
-WANDB_RUN_GROUP=dreamer_srl_v2_extended_sweep_2026-05-16 \
-WANDB_JOB_TYPE=extended_sweep \
-XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=0 \
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
-  src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only.yaml \
-  --total-steps 4000000 --num-envs 128 --seed 42 \
-  --wandb-project grid_world_pain \
-  --wandb-name dreamer_srl_v2_10x10_ext_XS_envs_128_4M_s42
-# E4: S/envs=16/2M  n107:GPU1
-WANDB_RUN_GROUP=dreamer_srl_v2_extended_sweep_2026-05-16 \
-WANDB_JOB_TYPE=extended_sweep \
-XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=1 \
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
-  src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only_S.yaml \
-  --total-steps 2000000 --num-envs 16 --seed 42 \
-  --wandb-project grid_world_pain \
-  --wandb-name dreamer_srl_v2_10x10_ext_S_envs_16_2M_s42
-# E5: S/envs=64/2M  n108:GPU0
-WANDB_RUN_GROUP=dreamer_srl_v2_extended_sweep_2026-05-16 \
-WANDB_JOB_TYPE=extended_sweep \
-XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=0 \
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
-  src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only_S.yaml \
-  --total-steps 2000000 --num-envs 64 --seed 42 \
-  --wandb-project grid_world_pain \
-  --wandb-name dreamer_srl_v2_10x10_ext_S_envs_64_2M_s42
-# E6: S/envs=128/2M  n108:GPU1
-WANDB_RUN_GROUP=dreamer_srl_v2_extended_sweep_2026-05-16 \
-WANDB_JOB_TYPE=extended_sweep \
-XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=1 \
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
-  src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only_S.yaml \
-  --total-steps 2000000 --num-envs 128 --seed 42 \
-  --wandb-project grid_world_pain \
-  --wandb-name dreamer_srl_v2_10x10_ext_S_envs_128_2M_s42
-# E7: M/envs=64/2M  n109:GPU0
-WANDB_RUN_GROUP=dreamer_srl_v2_extended_sweep_2026-05-16 \
-WANDB_JOB_TYPE=extended_sweep \
-XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=0 \
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
-  src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only_M.yaml \
-  --total-steps 2000000 --num-envs 64 --seed 42 \
-  --wandb-project grid_world_pain \
-  --wandb-name dreamer_srl_v2_10x10_ext_M_envs_64_2M_s42
-# E8: M/envs=128/2M  n109:GPU1
-WANDB_RUN_GROUP=dreamer_srl_v2_extended_sweep_2026-05-16 \
-WANDB_JOB_TYPE=extended_sweep \
-XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=1 \
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
-  src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only_M.yaml \
-  --total-steps 2000000 --num-envs 128 --seed 42 \
-  --wandb-project grid_world_pain \
-  --wandb-name dreamer_srl_v2_10x10_ext_M_envs_128_2M_s42
+# SameProp Round 2.6 — Cell A1 re-launch (passivePredator, seed 45)
+# Original run on n106 cuda:1 crashed at ~6.6h (state=failed, node-level event on 2026-05-12).
+# Re-launching on n102 cuda:0. Sibling Cell C re-launch on n101 cuda:0 (parallel runner).
+# Tag suffix _relaunch avoids WandB collision with prior failed run hypervigilance-round26-A1-seed45_n106_gpu1.
+# Design doc: docs/experiments/active/hypervigilance/sameprop_round26_design.md §3
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml \
+  --agent_config configs/models/recurrent_ppo.yaml \
+  --episodes 10000000 \
+  --num-envs 128 \
+  --seed 45 \
+  --device cuda:0 \
+  --log-interval 50 \
+  --wandb-group hypervigilance \
+  --wandb-job-type prod \
+  --wandb-name "hypervigilance-round26-A1-seed45_n102_gpu0_relaunch" \
+  --tag "hypervigilance-round26-A1-seed45_n102_gpu0_relaunch"
