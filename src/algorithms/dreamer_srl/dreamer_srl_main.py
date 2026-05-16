@@ -374,6 +374,10 @@ def main() -> None:
                 "env": env_config_dict,
                 "agent": agent_config_dict,
             }
+            # Defense-in-depth: force agent.algorithm even if a variant YAML omits the field
+            # Ported from train.py:L600 + 189f0df defense
+            wandb_config.setdefault("agent", {})["algorithm"] = "DreamerV3"
+
             run = wandb.init(
                 project=args.wandb_project,
                 entity="sungwoolee",   # Mirrors configs/logger/wandb.yaml:L4
