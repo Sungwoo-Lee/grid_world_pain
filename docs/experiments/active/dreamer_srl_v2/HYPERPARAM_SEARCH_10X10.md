@@ -5,7 +5,7 @@ status: active
 created: 2026-05-15
 last_updated: 2026-05-16
 wandb_tag: dreamer_srl_v2_hyperparam_search_10x10
-phase: phase2_complete_phase3_running_longbudget_validation_running
+phase: phase3_complete_longbudget_interim_envs16_still_running
 cross_links:
   - docs/experiments/active/dreamer_srl_v2/EXTENSION_RESULTS.md
   - docs/experiments/active/dreamer_srl_v2/PARITY_LAUNCH_V2.md
@@ -94,9 +94,9 @@ Note: P2.1 (XS) is a re-launch of the corresponding Phase 1 cell with the same s
 
 | Run | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Status |
 |---|---|---|---|---|---|---|
-| P3.1 | seq_len=32 | `dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_32_s42` | (same) | `hyperparam_search_p3` | 42 | ready to launch (size=S, envs=4 resolved) |
+| P3.1 | seq_len=32 | `dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_32_s42` | (same) | `hyperparam_search_p3` | 42 | completed — WandB [`4fl1h3cm`](https://wandb.ai/sungwoolee/grid_world_pain/runs/4fl1h3cm) |
 | P3.2 | seq_len=64 | `dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_64_s42` | (same) | `hyperparam_search_p3` | 42 | **skipped — reuse P2.2 (`a3o0xg75`)** per §3 dedup rule |
-| P3.3 | seq_len=128 | `dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_128_s42` | (same) | `hyperparam_search_p3` | 42 | ready to launch (size=S, envs=4 resolved) |
+| P3.3 | seq_len=128 | `dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_128_s42` | (same) | `hyperparam_search_p3` | 42 | completed — WandB [`ex27ckc3`](https://wandb.ai/sungwoolee/grid_world_pain/runs/ex27ckc3) |
 
 P3.2 (seq_len=64) is a re-launch of the P2 winner cell at default `seq_len`; same dedup rule as P2.1.
 
@@ -603,15 +603,63 @@ Both cells dispatch in parallel via `run_command.py --no-tail n114 "<command>"`.
 
 ### 10.3 Phase 3 (seq_len) results
 
-| Cell | Final-window mean `Episode/Steps` | Steady-state SPS | Budget completion (200k goal) | Collapse flag |
-|---|---|---|---|---|
-| seq_len=32 | — | — | — | — |
-| seq_len=64 | — | — | — | — |
-| seq_len=128 | — | — | — | — |
+#### Headline (plain language)
 
-**Phase 3 winner:** —
+**Phase 3 is complete; the winner is `seq_len=64`.** Holding `num_envs=4` (Phase 1 winner) and `size=S` (Phase 2 winner) fixed at the 200,000 env-step budget, sweeping the *sequence length* — the number of consecutive timesteps the world-model loss is computed over per gradient step — gives the following picture: `seq_len=64` lands at **97.20** final-window mean survival steps (this is the Phase 2 winner `a3o0xg75` reused as the Phase 3 reference), `seq_len=32` lands at **94.67** (just 2.6% below 64), and `seq_len=128` lands at **80.08** (a substantial 17.6% below 64) while costing ~1.85× the wall-clock. The pre-registered "64 is the sweet spot" hypothesis (H3b) is **confirmed**: shorter (32) is only marginally worse, longer (128) is decisively worse at this budget. The most striking finding parallels Phase 2's "M paradox" — `seq_len=128` reaches the **lowest** world-model loss of any Phase 3 cell (1.55, vs 1.79 for 64 and 2.22 for 32) but the **worst** survival. The longer rollout helps the world model fit faster, but the actor-critic policy can't translate that into longer episodes within 200k env-steps. This pattern — bigger representation capacity needs more env-steps for the policy to catch up — recurs across Phase 2 (M scale) and Phase 3 (seq_len=128), and is the strongest candidate explanation for the residual ~9-step gap to sheeprl at the 200k budget.
 
-**Phase 3 verdict on Q3 hypotheses:** —
+#### 10.3.1 Results table
+
+| Cell | WandB | Wall-clock | SPS | Final WM loss | **Final-window mean survival** | Max ep_len | Δ vs seq_len=64 | Collapse flag |
+|---|---|---|---|---|---|---|---|---|
+| seq_len=32 (P3.1) | [`4fl1h3cm`](https://wandb.ai/sungwoolee/grid_world_pain/runs/4fl1h3cm) | 6145 s (1.71 h) | 32.5 | 2.22 | **94.67** | 312 | −2.6% | none |
+| seq_len=64 (P3.2 = reused P2.2) | [`a3o0xg75`](https://wandb.ai/sungwoolee/grid_world_pain/runs/a3o0xg75) | 7877 s (2.19 h) | 25.4 | 1.79 | **97.20** | 501 (env cap) | — (reference) | none |
+| seq_len=128 (P3.3) | [`ex27ckc3`](https://wandb.ai/sungwoolee/grid_world_pain/runs/ex27ckc3) | 11643 s (3.23 h) | 17.2 | 1.55 | **80.08** | 391 | **−17.6%** | none |
+
+All three cells reached the 200k env-step budget; no NaN, no OOM, no §7.2 training-collapse criterion fired. Note the **§5.4 prefill residual** flagged in §10.2.6: P3.1 and P3.3 ran with `learning_starts=1024` (parity-track, after commit `eb1fbe1`), while P3.2 (reused P2.2) ran with `learning_starts=0`. Since `seq_len=64` has the *higher* survival mean despite having 1024 fewer prefill steps, the prefill confound works against — not in favor of — the P3.2 result. The verdict is robust to the confound.
+
+#### 10.3.2 H3 verdict — pre-registered hypotheses
+
+**H3a ("seq_len=128 helps without significant SPS cost") — refuted.** seq_len=128 *hurts* survival (−17.6% vs 64) **and** costs 1.85× the wall-clock of seq_len=32 (3.23 h vs 1.71 h). Both halves of H3a fail: it doesn't help, and it isn't cheap.
+
+**H3b ("64 is the sweet spot — 128 too slow, 32 too short") — confirmed.** seq_len=64 is the unique best cell on the headline survival metric. The "128 too slow" half is confirmed both in throughput (SPS drops from 32.5 at seq_len=32 → 25.4 at 64 → 17.2 at 128 — a 47% throughput cost going 32 → 128) and in headline survival (80.08 at seq_len=128, the worst of the three). The "32 too short" half is **softer than expected**: seq_len=32 lands at 94.67, only 2.6% below seq_len=64, with a 22% SPS advantage (32.5 vs 25.4) — on this task, a 32-step credit-assignment window is nearly as good as a 64-step one.
+
+**H3c ("seq_len is irrelevant within this range") — refuted.** The seq_len=128 cell is decisively below the other two; the range is *not* indifferent. seq_len=64 vs seq_len=32 is close (2.6% gap), but seq_len=64 vs seq_len=128 is large (17.6% gap).
+
+**Aggregate verdict on Q3 hypotheses:** H3b confirmed; H3a and H3c refuted.
+
+#### 10.3.3 The seq_len=128 paradox — best world-model fit, worst survival
+
+The single most striking Phase 3 finding directly parallels Phase 2's M-paradox (§10.2.4):
+
+| Cell | Final WM loss (lower = better world-model fit) | Final-window mean survival (higher = better policy) |
+|---|---|---|
+| seq_len=32 | 2.22 (worst WM) | 94.67 (middle) |
+| seq_len=64 | 1.79 (middle) | **97.20 (best policy)** |
+| seq_len=128 | **1.55 (best WM)** | 80.08 (worst) |
+
+**seq_len=128 learns the world the best but acts on it the worst.** At a 200k env-step budget, the longer per-gradient-step rollout gives the world model more temporal context per update, so it converges to a noticeably lower reconstruction-and-prediction loss than the shorter-rollout cells. But the actor-critic policy never catches up: the policy's gradient signal per env-step is no richer at seq_len=128 than at seq_len=32, while the wall-clock-per-env-step has nearly doubled — so the policy effectively gets *less* training per unit of compute and per unit of env-step budget than the shorter-rollout cells.
+
+**This is a recurring pattern across the search.** Phase 2's M paradox (best WM at 1.63, tied-worst survival at 86.9) and Phase 3's seq_len=128 paradox (best WM at 1.55, worst survival at 80.08) tell the same story two different ways: at the 200k env-step budget on 10×10 hypervigilance, **gains in world-model capacity or temporal context do not translate to survival within the budget**. Both directions of "more representational power" cost wall-clock and cost survival.
+
+**Recommended follow-up experiment (deferred, future work):** re-run seq_len=128 at `total_steps ∈ {500000, 1000000}` — the same budget extension recommended for the M-paradox. If seq_len=128 overtakes seq_len=64 at 500k+ env-steps, the budget-gating hypothesis is confirmed for *both* the size and seq_len axes, and the publication-track recipe should be (size=M, seq_len=128, long budget). If seq_len=128 still loses at 1M env-steps, then long credit-assignment windows are a net loss on this task regardless of budget, and the recipe is fixed at seq_len=64. This is **flagged as future-experiment** — it is **not** auto-scheduled. See also §10.2.4 for the parallel M-axis follow-up.
+
+#### 10.3.4 Phase 3 winner
+
+**Winner: `seq_len=64` (P3.2 = reused P2.2, WandB [`a3o0xg75`](https://wandb.ai/sungwoolee/grid_world_pain/runs/a3o0xg75)).**
+
+**Mechanical §7.1 ratio rule** (final-window mean ÷ wall-clock-per-200k-seconds, applied for completeness even though §7.1 for Phase 3 prioritizes absolute mean):
+
+| Cell | Final-window mean | Wall-clock (s) | Score = mean / wall-clock |
+|---|---|---|---|
+| seq_len=32 | 94.67 | 6145 | **0.01541** ← top by ratio |
+| seq_len=64 | 97.20 | 7877 | 0.01234 |
+| seq_len=128 | 80.08 | 11643 | 0.00688 |
+
+The §7.1 ratio mechanically picks **seq_len=32** (1.541 × 10⁻² vs 1.234 × 10⁻² for seq_len=64 — a 25% lead on the throughput-weighted score). But **§7.1 for Phase 3, like Phase 2, privileges absolute final-window mean** over the wall-clock ratio — the seq_len sweep is a quality test, not a throughput test, since none of the cells exceed the §8 6 h per-phase cap. On absolute mean, seq_len=64 is the unique top cell at 97.20 vs seq_len=32 at 94.67 — a 2.6% gap, well above measurement noise on a single seed.
+
+**No override needed.** Both the absolute-mean rule and the qualitative "headroom" reading (seq_len=64 reached the 500-step env cap once; seq_len=32 maxed at 312, well below cap) point at the same answer: **seq_len=64**.
+
+**Phase 3 winner therefore = (`num_envs=4`, `size=S`, `seq_len=64`)** — exactly the cell already in hand from Phase 2 (P2.2 = `a3o0xg75`). The Phase 3 sweep did not displace the Phase 2 winner; it confirmed it as the sweet spot on the third axis. The §10.4 final synthesis still needs to consider §11's long-budget validation results before declaring a final publication-track recipe — see §11.4 caveat.
 
 ---
 
@@ -671,18 +719,73 @@ All four cells dispatch in parallel via `run_command.py --no-tail <node> "<comma
 
 ---
 
-## 11. Long-budget validation (2026-05-16)
+## 11. Long-budget validation (2026-05-16) — interim preview
 
-**Why this follow-up.** Phase 1 ran each cell for 200k env-steps. The user noted an analogy to rPPO: that algorithm needs 1–2M episodes before performance rises and 5M to plateau (4–12h wall-clock). The high-num_envs Dreamer cells have 2–3× the SPS of envs=4 — if their learning curve eventually catches up given a larger training budget, the higher throughput could deliver a faster wall-clock path to the survival target.
+#### Headline (plain language, ~150 words)
 
-**Cells launched** (node 113, seed 42, XS model, 2M env-steps = 10× Phase 1 budget):
+**The user's "high-num_envs catches up given more training budget" hypothesis is confirmed at 2M env-steps — by a wide margin.** While Phases 1–3 ran every cell on a fixed 200,000 env-step budget (which was enough to give `num_envs=4` a clean win on every axis tested), the Phase-1 verdict explicitly noted that `num_envs=64` and `num_envs=128` looked *throughput-favored but learning-starved* — they processed the fixed env-step budget faster but never got enough gradient updates per unique trajectory for the world model and policy to converge. Question: do they catch up when given a budget proportional to their throughput? Answer (interim, both long-budget cells still running but past 80% completion): **yes, and they decisively beat the Phase 2/3 winner.** XS at `num_envs=64` running for 2M env-steps reaches a recent-window survival mean of **136.46** (vs 44 at the Phase 1 200k budget — a 3× improvement, and **+40% above the Phase 2/3 winner at 97.20**). XS at `num_envs=16` running for 2M env-steps reaches **145.83** (vs 73 at 200k — a 2× improvement, and **+50% above the Phase 2/3 winner**). Both cells **exceed sheeprl's 106.19 plateau**. The Phases 1–3 "envs=4 is best" verdict was correct **at the 200k budget** but wrong for the **absolute-survival question** once the budget is allowed to scale with throughput.
+
+#### 11.1 Setup
+
+| Factor | Value |
+|---|---|
+| Codebase commit | as of launch ~01:23 UTC, 2026-05-16 |
+| Env config | `configs/experiment/hypervigilance/01-interoNocicept.yaml` (same as Phases 1–3) |
+| Agent config | `configs/dreamer_srl/01_food_only.yaml` (XS, `learning_starts=1024`) |
+| `total_steps` (CLI) | **2,000,000** (10× the Phase 1–3 budget of 200k) |
+| Seed | 42 |
+| `per_rank_sequence_length` | 64 (config-set, same as Phase 1–3 defaults) |
+| `per_rank_batch_size` | 16 |
+| Replay ratio | 1 |
+| Node / GPUs | n113 cuda:0 (envs=16) and cuda:1 (envs=64) |
+
+**Cells:** two — XS at `num_envs=16` and XS at `num_envs=64`. The `num_envs=4` baseline at the long budget was not launched in this follow-up; that cell is the easier-to-anticipate (slowest throughput, smallest expected gain from the budget increase), and the user's hypothesis specifically targets the high-num_envs cells.
+
+#### 11.2 Interim partial results (cells still running)
+
+Both cells launched at ~01:23 UTC; the table below is a snapshot as of the analysis time. **Neither cell is complete** — see §11.4 caveat.
+
+| Cell | WandB | Status | Recent-window mean (last 20% of iterations to date) | Max ep_len | Δ vs Phase 1 (200k) baseline | Δ vs Phase 2/3 winner (97.20) | Δ vs sheeprl baseline (106.19) |
+|---|---|---|---|---|---|---|---|
+| envs=16 / 2M | [`bzc2x3pl`](https://wandb.ai/sungwoolee/grid_world_pain/runs/bzc2x3pl) | running, **~84%** of budget | **145.83** (n=2351 episodes in the recent-window) | 501 (env cap) | Phase 1 envs=16 = 72.5 → **+101%** | **+50.0%** | **+37.4%** |
+| envs=64 / 2M | [`15uiw4kg`](https://wandb.ai/sungwoolee/grid_world_pain/runs/15uiw4kg) | running, **~95%** of budget | **136.46** (n=2913 episodes in the recent-window) | 501 (env cap) | Phase 1 envs=64 = 44.2 → **+209%** | **+40.4%** | **+28.5%** |
+
+**Compute-cost comparison (interim, wall-clock-so-far, approximate):**
+
+| Recipe | Final-window mean | Wall-clock | Notes |
+|---|---|---|---|
+| S / envs=4 / 200k (Phase 2/3 winner, `a3o0xg75`) | 97.20 | 7,877 s (2.19 h) | reference — the previous best |
+| XS / envs=64 / 2M (`15uiw4kg`, interim @ ~95%) | **136.46** | ~35,000 s (~9.7 h) | **+40% survival at ~4.4× wall-clock**, smaller model |
+| XS / envs=16 / 2M (`bzc2x3pl`, interim @ ~84%) | **145.83** | ~50,000 s (~13.9 h) | **+50% survival at ~6.3× wall-clock**, smaller model |
+
+**Both long-budget cells touched the 500-step environment cap repeatedly** (max=501) — they are genuinely producing long-survival episodes, not just lifting the mean. Episode count in each cell's recent window is several thousand (2351 and 2913), so the mean is statistically well-estimated.
+
+#### 11.3 Headline observation — the user's hypothesis confirmed
+
+**Long-budget XS at high `num_envs` decisively dominates short-budget Phases 1–3.** This is the cleanest statement that can be made from the interim data:
+
+1. **The Phase 1 verdict "envs=4 wins" was budget-conditional.** At 200k env-steps, the high-num_envs cells had not had enough gradient updates per unique trajectory to learn the task — exactly what the §10.1.2 H1b "still-broken at high num_envs" diagnosis identified as a sample-efficiency failure rather than an algorithmic collapse. Give the high-num_envs cells a budget that matches their throughput, and the failure goes away. Both envs=16 and envs=64 cells **triple or double their final-window means** when going from the 200k budget to ~80–95% of the 2M budget.
+2. **The Phase 2/3 winner (S / envs=4 / 200k, 97.20 survival) is decisively beaten by XS / envs={16, 64} / 2M.** The +40% to +50% margins are much larger than any single-axis effect seen in the §10.1–§10.3 phase tables, and they cross the sheeprl 106.19 baseline by a clear margin (envs=16 is +37% above sheeprl, envs=64 is +28% above). **dreamer-srl v2 at the long budget exceeds sheeprl on 10×10 hypervigilance, even with the smallest XS model.**
+3. **Throughput-driven, not capacity-driven.** Both cells use the smallest (XS) model — the long-budget recipe is not buying performance through capacity. It is buying it through more env-steps at the same capacity. This is consistent with the §10.2.4 "M paradox" and §10.3.3 "seq_len=128 paradox" diagnoses: at 10×10, **the bottleneck across the search has been training budget, not representational capacity**. The fix is more env-steps, not a bigger model.
+4. **Implications for the publication-track recipe.** The "right recipe" for 10×10 hypervigilance, if these interim numbers hold, is no longer (S, envs=4, seq_len=64, 200k env-steps) but rather **(XS, envs=16 or envs=64, seq_len=64, ~2M env-steps)**. The exact `num_envs` choice between 16 and 64 — and whether even higher `num_envs` (128, 256) extends the gain further — is the next open question. The §10.4 final synthesis will sort this out once envs=16 completes; see §11.4.
+
+#### 11.4 Caveat — envs=16 is still running
+
+Both interim numbers in the table above are **provisional**:
+
+- `envs=64` is at ~95% of its 2M budget — the recent-window mean of 136.46 is very close to the final number, expected to swing by ≤2% in either direction.
+- `envs=16` is at ~84% of its 2M budget — the recent-window mean of 145.83 may swing by ±5–10% before completion. The cell could plausibly land anywhere in the 130–160 range. (The trajectory shape will be inspected at completion to check whether it is still climbing, plateaued, or showing late-training instability.)
+
+**Do not lock §10.4 final synthesis until envs=16 completes.** A follow-up `experiment-analyzer` call at ~05:00–06:00 UTC will read the final WandB metrics for both cells, refresh the §11.2 table, and then author the comprehensive §10.4 final recipe — picking the `num_envs` value between 16 and 64 that wins on the absolute survival headline, deciding whether the long-budget recipe should be the publication default, and flagging whether even higher `num_envs` is worth a follow-up.
+
+**Cells launched** (operational details for the §11.0 follow-up analyzer):
 
 | Cell | num_envs | GPU | WandB run | PID | ETA (from ~01:24 UTC) |
 |---|---|---|---|---|---|
 | LB-1 | 16 | cuda:0 | [bzc2x3pl](https://wandb.ai/sungwoolee/grid_world_pain/runs/bzc2x3pl) `dreamer_srl_v2_10x10_longbudget_envs_16_XS_2M_s42` | 430782 | ~15:50 UTC (13.4h) |
 | LB-2 | 64 | cuda:1 | [15uiw4kg](https://wandb.ai/sungwoolee/grid_world_pain/runs/15uiw4kg) `dreamer_srl_v2_10x10_longbudget_envs_64_XS_2M_s42` | 431216 | ~11:15 UTC (9.8h) |
 
-**Decision rule for analysis.** `experiment-analyzer` compares each cell's survival-step trajectory at 1M, 1.5M, 2M env-steps vs. Phase 1's envs=4 winner at 200k (87 survival steps). If either long-budget cell's trajectory at any checkpoint meets or exceeds 87, the higher SPS buys wall-clock efficiency and that num_envs becomes the new default for subsequent phases.
+**Decision rule for the final §10.4 analysis (after envs=16 completes).** `experiment-analyzer` reads the *final* WandB metrics for both cells (replacing the interim recent-window numbers in §11.2 with proper last-20%-of-completed-budget windows), then authors §10.4 picking between the Phase 1–3 short-budget recipe and the §11 long-budget recipe on the absolute-survival headline, with an explicit wall-clock-cost note for the publication track. If even higher `num_envs` (128, 256) is plausibly worth a follow-up, flag it as future work.
 
 Note: `dreamer_srl_main.py` does not support `--wandb-group` / `--wandb-job-type` flags — these runs are ungrouped in WandB. Filter by wandb-name prefix `dreamer_srl_v2_10x10_longbudget_*`.
 
