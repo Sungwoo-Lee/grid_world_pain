@@ -151,7 +151,7 @@ The raw conversation is the JSONL Claude Code writes per session — there is no
 
 - **Where it lives**: `claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/<UUID>.jsonl` (synced from each node's `~/.claude/.../<UUID>.jsonl`). Repo-relative; `claude_data/` is `.gitignore`'d so the JSONL travels via the sync script, not git.
 - **Insight pointer**: `/memorize` Step 7 sets every insight's `raw_source` to the JSONL path computed from `$CLAUDE_CODE_SESSION_ID`, with `raw_completeness: full`. No prompt — the link is set automatically.
-- **Sync responsibility**: `/memorize` does not auto-push. It surfaces a one-line reminder at the end of capture: "If you have not pushed recently, run `./sync-agent-data.sh claude push`." The user runs the sync.
+- **Sync responsibility**: `/memorize` Step 7.5 (mandatory, automatic) runs `./sync-agent-data.sh claude push` after writing the insights and before the diary log + commit, so the JSONL is mirrored to NAS by the time the new insight's `raw_source` link goes live. Non-gating — if the push errors (NAS unreachable, rsync failure), the capture still completes and a one-line warning is surfaced at Step 10. The user no longer needs to remember to push manually.
 - **Reading the raw conversation** (L4 — only on explicit user confirmation):
   - Best: `claude --resume <UUID>` re-enters the session in Claude Code (full UI, navigation, search).
   - Ad-hoc: `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` produces a one-shot markdown view. Apply the section 10 large-file warning protocol before reading the resulting file in context.

@@ -146,11 +146,24 @@ In each insight's `## References` section, add one line:
 
 > Raw conversation: synced via `./sync-agent-data.sh claude push`. To read on another node: `./sync-agent-data.sh claude pull`, then either `claude --resume <UUID>` (re-enter the session) or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot markdown view).
 
-After all insights are written, surface a single one-line reminder to the user:
+### Step 7.5 — Sync `claude_data/` to NAS (automatic, mandatory)
 
-> Raw-conversation links point at `claude_data/.../<UUID>.jsonl`. If you have not pushed recently, run `./sync-agent-data.sh claude push` so the link resolves on other nodes.
+Run `./sync-agent-data.sh claude push` BEFORE Step 8 (diary) so the local JSONL written by this session is mirrored to the NAS-shared `claude_data/` path that the just-written `raw_source` field points at. Without this push, the link resolves only on the originating node — defeating the cross-node restoration design.
 
-(No prompt asking the user to choose — the link is set automatically. The user's existing sync habit handles the rest.)
+```bash
+./sync-agent-data.sh claude push
+```
+
+Hard rules for this step:
+
+- **Always run** — do not ask the user, do not skip. The user's standing authorization for the diary + auto-commit covers this too. Sync is the third leg of the same atomic "capture + log + push" stool.
+- **Do not gate on it** — if the sync errors (NAS unreachable, rsync failure, permission denied), surface the error to the user but proceed to Step 8 + Step 9 anyway. The insights and diary rows are the durable artefacts; the sync can be re-run later (`./sync-agent-data.sh claude push` from any node). Do NOT abort the capture.
+- **No `--dry-run`** — this is the real push.
+- **Run from repo root** — `sync-agent-data.sh` lives at the project root and computes paths relative to `$NAS_PROJECT`. Do not `cd` elsewhere first.
+
+If the sync succeeds, no need to mention it in the user-facing Step 10 report (it's expected). If it errored, surface a one-line warning at Step 10: "⚠️ `sync-agent-data.sh claude push` failed: <reason>. Re-run manually when network/NAS is reachable; the `raw_source` link will resolve once the JSONL is mirrored."
+
+(The legacy "surface a one-line reminder asking the user to push" pattern that previously lived here is replaced by this automatic push. The user no longer needs to remember.)
 
 ### Step 8 — Log each insight to the diary (mandatory)
 
