@@ -35,6 +35,25 @@ Pick one mode for the whole response:
 
 Natural-language mode hides: raw folder names, lazy-load codes, frontmatter field names, raw tag strings, token costs, fragmentation jargon. Technical mode shows them verbatim.
 
+### Snapshot recall
+
+If the user asks "what did the code look like in \<past period\>", "show me code snapshots", "snapshot of \<topic\>", or similar:
+
+1. List matching snapshot files from `docs/memory/code_snapshots/` by reading `docs/memory/code_snapshots/README.md`.
+2. Show them in reverse-chronological order with date, label, source commit, and stats.
+3. On drill-down (user picks one), read that snapshot file and render the frontmatter fields and the first ~30 lines of the graph content.
+
+### Code-symbol cross-reference hint (natural-language mode only)
+
+When rendering a recalled insight in drill-down (Step 4), if the insight's `## Key conclusion` or `## Decisions and actions` body mentions a symbol that appears in the live `src/graphify-out/GRAPH_REPORT.md`'s God-nodes section (top-10 list):
+
+- If `src/graphify-out/GRAPH_REPORT.md` exists: append one line after the insight body:
+  > → To see the current structure: `graphify explain <symbol>` or open `src/graphify-out/graph.html`.
+- If `src/graphify-out/` is missing: append one line:
+  > → Code graph not generated locally. Run `python scripts/regen_code_graph.py` to enable live structural lookup.
+
+Apply this hint only when a God-nodes top-10 symbol actually appears in the insight's body. Do not add it for every insight — only when there is a genuine code-symbol match. Check `src/graphify-out/GRAPH_REPORT.md` lazily (read it only when you have a candidate insight to cross-reference, never preemptively).
+
 ## Step-by-step flow
 
 ### Step 1 — Read context

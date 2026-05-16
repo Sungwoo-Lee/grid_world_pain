@@ -31,6 +31,7 @@ Do **not** use for:
 | Topic registry | `docs/memory/ROOT_INDEX.md` | Read before classifying (safeguard layer 1). |
 | Tag dictionary | `docs/memory/memories/_global_tags.md` | Reuse existing tags. |
 | Insight template | `docs/memory/TEMPLATES/insight.md` | Copy as starting point. |
+| Code-graph snapshots | `docs/memory/code_snapshots/` | `python scripts/snapshot_code_graph.py <label>` |
 | Insight path | `docs/memory/memories/<topic>/<id>.md` | `<topic>` is English snake_case ≤ ~3 words. |
 | Insight filename | `YYYYMMDD_HHMM_<slug>.md` | `date +%Y%m%d_%H%M`; slug ≤ ~6 words English snake_case. |
 | Frontmatter | 16 fields | id, date, time, folder, tags, summary, related, session_origin, session_label, importance, status, valid_until, confidence, supersedes, raw_source, raw_completeness. |
@@ -70,6 +71,14 @@ Show the candidate list and ask:
 > 2. ...
 >
 > Save which? (Y = all / N = none / numbers like "1,3" / edit to revise)
+
+**Code-graph snapshot opportunity**: if the conversation made structural changes to `src/` (rough heuristic: `git diff --name-only HEAD~5 HEAD -- src/ | wc -l` returns ≥ 5 OR the user explicitly mentions a refactor / ship / pivot), add a one-line option to the candidate list:
+
+> N+1. Code-graph snapshot of `src/` — captures the structural state at HEAD for future comparison
+
+If the user picks it (Y or includes its number), invoke `python scripts/snapshot_code_graph.py <auto-label>` AFTER the insights have been written and committed (so the snapshot commit is separate from the insight commits — different epistemic kind). The auto-label should be derived from the session theme (the same one that goes into the diary's progress-report), mapped to `[a-z0-9_]+` (replace hyphens and spaces with underscores, lowercase).
+
+This is opt-in per-capture, NOT mandatory. Do not surface the option if the heuristic returns < 5 files and there is no architectural framing (refactor / ship / pivot language) in the session.
 
 If non-interactive (subagent eval, batch run), default to Y on all candidates.
 
