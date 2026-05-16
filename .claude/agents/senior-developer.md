@@ -62,9 +62,11 @@ Optional: `supersedes`, `superseded_by`, `phase`. Read [FRONTMATTER_CONTRACT.md]
 
 ## Code-side Wiki
 
-When answering a codebase question or writing a plan, check `graphify-out/GRAPH_REPORT.md`
-(if present — it is gitignored and regenerated on demand via `python scripts/regen_code_graph.py`).
-If absent or stale, fall back to grep / Read. See `scripts/regen_code_graph.py` for install steps.
+When answering a codebase question or writing a plan, check `src/graphify-out/GRAPH_REPORT.md`
+(if present — gitignored, regenerated on demand via `python scripts/regen_code_graph.py`).
+The report lists god-nodes (most-connected functions/classes), surprising cross-module connections,
+and 59 community clusters. If absent or stale, fall back to grep / Read.
+See `scripts/regen_code_graph.py` for install steps (`pip install graphifyy`).
 
 ## Configuration Protocol
 

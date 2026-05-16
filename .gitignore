@@ -51,4 +51,6 @@ docs/memory/.trash/*
 .claude/worktrees/
 
 # Code-side wiki (graphify artefacts — large, per-machine, regenerated on demand)
-graphify-out/
+# graphify writes to <scanned_path>/graphify-out/, so the pattern must match
+# at any depth (e.g. src/graphify-out/, not just repo-root graphify-out/).
+**/graphify-out/

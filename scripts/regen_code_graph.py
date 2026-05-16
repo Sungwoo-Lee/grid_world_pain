@@ -1,57 +1,66 @@
 #!/usr/bin/env python3
-"""Wrapper around `graphify` to produce graphify-out/GRAPH_REPORT.md.
+"""Wrapper around `graphify` to produce <scope>/graphify-out/GRAPH_REPORT.md.
 
 Run:
     python scripts/regen_code_graph.py [--scope src|all]
 
 What it does:
-    - If `graphify` is on PATH (installed in the active conda env), runs a
-      graphify scan over the target scope and writes the output artefacts to
-      graphify-out/ at the repo root.  The key file that code-review agents
-      read is graphify-out/GRAPH_REPORT.md.
+    - If `graphify` (the binary installed by graphifyy) is on PATH, runs
+      `graphify update <scope>` to extract a code knowledge graph via tree-sitter
+      (no LLM, no API key needed). Writes graph.json + graph.html +
+      GRAPH_REPORT.md inside <scope>/graphify-out/.
     - If `graphify` is NOT on PATH, prints install instructions and exits 0
       (treat as a no-op so this script can be wired into hooks or pre-commit
       without breaking CI).
 
-Prerequisites (when you want the real output):
-    pip install graphify        # see https://github.com/safishamsi/graphify
-    python scripts/regen_code_graph.py
+Install (when you want the real output):
+    /home/vncuser/miniconda3/envs/grid_world_pain/bin/pip install graphifyy
+    # OR (if available): uv tool install graphifyy / pipx install graphifyy
 
-The output directory graphify-out/ is gitignored (large, per-machine
-artefacts).  Only GRAPH_REPORT.md is the "contract" file that agents read;
-the rest of graphify-out/ (call graphs, symbol tables, etc.) is supplementary.
+The PyPI package is `graphifyy` (double-y); the installed binary is `graphify`
+(single y). Other `graphify*` packages on PyPI are unaffiliated. See
+https://github.com/safishamsi/graphify for the upstream README.
 
-Graphify CLI surface (from https://github.com/safishamsi/graphify README):
-    graphify [--output-dir DIR] [--language LANG] [PATH]
-    Default invocation: graphify . (scans current directory)
-    Output: writes to ./graphify-out/ by default.
+Output location:
+    graphify writes to <scanned_path>/graphify-out/, NOT the cwd. With the
+    default --scope src this means the output lives at src/graphify-out/.
+    The wrapper does not move it; instead .gitignore matches **/graphify-out/
+    so any scan target's output is ignored.
+
+Output files (per graphify upstream):
+    graph.json        - queryable knowledge graph
+    graph.html        - interactive HTML visualisation
+    GRAPH_REPORT.md   - reader-facing summary (god-nodes, surprising connections,
+                        community hubs); the file code-review agents read
 
 Usage:
     python scripts/regen_code_graph.py              # scan src/ (default)
     python scripts/regen_code_graph.py --scope all  # scan entire repo
 
 Code-side graph is optional — agents fall back to grep / Read when
-graphify-out/ is absent.
-
-TODO (to enable):
-    pip install graphify
-    python scripts/regen_code_graph.py
+<scope>/graphify-out/ is absent.
 """
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 
+CONDA_PIP = "/home/vncuser/miniconda3/envs/grid_world_pain/bin/pip"
+
+
 def _stub_exit() -> None:
     """Print install instructions and exit 0 (no-op stub)."""
     print("graphify not installed. To enable the code-side wiki:")
     print()
-    print("    # Install graphify into the project conda env:")
-    print("    /home/vncuser/miniconda3/envs/grid_world_pain/bin/pip install graphify")
+    print("    # Install graphifyy (double-y) into the project conda env:")
+    print(f"    {CONDA_PIP} install graphifyy")
+    print()
+    print("    # Or, if uv / pipx are available:")
+    print("    #   uv tool install graphifyy")
+    print("    #   pipx install graphifyy")
     print()
     print("    # Then regenerate the code graph:")
     print("    python scripts/regen_code_graph.py")
@@ -59,13 +68,13 @@ def _stub_exit() -> None:
     print("graphify reference: https://github.com/safishamsi/graphify")
     print()
     print("Code-side graph is optional — agents fall back to grep / Read when")
-    print("graphify-out/ is absent or stale.")
+    print("<scope>/graphify-out/ is absent or stale.")
     sys.exit(0)
 
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Regenerate graphify-out/GRAPH_REPORT.md from src/ (or full repo).",
+        description="Regenerate <scope>/graphify-out/GRAPH_REPORT.md from src/ (or full repo).",
     )
     p.add_argument(
         "--scope",
@@ -80,13 +89,17 @@ def _parse_args() -> argparse.Namespace:
 def main() -> None:
     args = _parse_args()
 
-    # --- Gate: check if graphify is installed ----------------------------------
+    # graphify might live in the same env as this Python interpreter even
+    # when that env's bin/ is not on the shell PATH (e.g. conda env not activated).
     graphify_bin = shutil.which("graphify")
+    if graphify_bin is None:
+        sibling = Path(sys.executable).parent / "graphify"
+        if sibling.is_file():
+            graphify_bin = str(sibling)
     if graphify_bin is None:
         _stub_exit()
         return  # unreachable; _stub_exit() calls sys.exit(0)
 
-    # --- Determine scan target -------------------------------------------------
     repo_root = Path(__file__).resolve().parent.parent  # scripts/ -> repo root
     if args.scope == "src":
         scan_target = repo_root / "src"
@@ -96,37 +109,26 @@ def main() -> None:
     else:
         scan_target = repo_root
 
-    output_dir = repo_root / "graphify-out"
-    output_dir.mkdir(exist_ok=True)
+    expected_out = scan_target / "graphify-out"
+    print(f"Running `graphify update {scan_target}` → {expected_out}/")
 
-    print(f"Running graphify over {scan_target} → {output_dir}/")
-
-    # --- Invoke graphify -------------------------------------------------------
-    # CLI surface per https://github.com/safishamsi/graphify README:
-    #   graphify [PATH]
-    # Output directory is graphify-out/ by default (created in cwd).
-    # We run from repo root so the default output path matches our gitignore.
-    cmd = [graphify_bin, str(scan_target)]
+    cmd = [graphify_bin, "update", str(scan_target)]
     result = subprocess.run(cmd, cwd=str(repo_root))
 
     if result.returncode != 0:
         print(f"graphify exited with code {result.returncode}", file=sys.stderr)
         sys.exit(result.returncode)
 
-    # Confirm the key output file exists.
-    report = output_dir / "GRAPH_REPORT.md"
+    report = expected_out / "GRAPH_REPORT.md"
     if report.exists():
-        print(f"OK — graphify-out/GRAPH_REPORT.md written ({report.stat().st_size} bytes).")
+        size_kb = report.stat().st_size // 1024
+        print(f"OK — {report.relative_to(repo_root)} written ({size_kb} KB).")
     else:
         print(
-            "WARNING: graphify ran successfully but graphify-out/GRAPH_REPORT.md was not found.",
+            f"WARNING: graphify exited 0 but {report} not found. "
+            "Check graphify's installed version vs its README.",
             file=sys.stderr,
         )
-        print(
-            "Check graphify's output directory flag (--output-dir?) against its installed version.",
-            file=sys.stderr,
-        )
-        # Exit 0: graphify itself succeeded; the report location may differ by version.
 
     sys.exit(0)
 
