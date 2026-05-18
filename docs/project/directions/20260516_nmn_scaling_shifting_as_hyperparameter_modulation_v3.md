@@ -27,10 +27,10 @@ This memo redirects the project's neuromodulator-network work away from "the **N
 
 ## 2. The two lineages
 
-| Lineage | Mechanism | Anchors |
-|---|---|---|
-| **Doya — RL hyperparameters** | One scalar per system retunes a knob. DA ↔ learning rate / TD error; **ACh ↔ learning rate $\alpha$** (Doya 2002 §3.4 — chosen over the out-of-corpus Yu & Dayan precision branch); NA ↔ inverse temperature; 5-HT ↔ discount. | Doya 2002; Lee 2024; Ben-Iwhiwhu 2022; Wang 2024. |
-| **Neural gain — scale and shift** | Multiplicative arm scales weights or slope. Additive arm shifts the operating point (rheobase — the current at which a neuron starts firing). | Multiplicative: Tsuda 2021 (weight scaling; hypertube is a *consequence*), Costacurta 2024, Rodriguez-Garcia 2026. Additive: Ferguson & Cardin 2020 Box 1c. Also Vecoven 2020. |
+| Lineage                           | Mechanism                                                                                                                                                                                                                      | Anchors                                                                                                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Doya — RL hyperparameters**     | One scalar per system retunes a knob. DA ↔ learning rate / TD error; **ACh ↔ learning rate $\alpha$** (Doya 2002 §3.4 — chosen over the out-of-corpus Yu & Dayan precision branch); NA ↔ inverse temperature; 5-HT ↔ discount. | Doya 2002; Lee 2024; Ben-Iwhiwhu 2022; Wang 2024.                                                                                                                              |
+| **Neural gain — scale and shift** | Multiplicative arm scales weights or slope. Additive arm shifts the operating point (rheobase — the current at which a neuron starts firing).                                                                                  | Multiplicative: Tsuda 2021 (weight scaling; hypertube is a *consequence*), Costacurta 2024, Rodriguez-Garcia 2026. Additive: Ferguson & Cardin 2020 Box 1c. Also Vecoven 2020. |
 
 v1 mis-cited Tsuda 2021 as additive; it is multiplicative-on-weights. Ferguson & Cardin Box 1c is the additive anchor.
 
