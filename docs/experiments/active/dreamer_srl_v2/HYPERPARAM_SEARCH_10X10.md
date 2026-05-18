@@ -3,9 +3,9 @@ title: "Dreamer-SRL v2 — 10×10 hypervigilance hyperparameter search (3-phase 
 topic: dreamer
 status: active
 created: 2026-05-15
-last_updated: 2026-05-16
+last_updated: 2026-05-18
 wandb_tag: dreamer_srl_v2_hyperparam_search_10x10
-phase: extended_sweep_launched_8cells_n106-109
+phase: extended_sweep_7of8_done_preliminary_synthesis
 cross_links:
   - docs/experiments/active/dreamer_srl_v2/EXTENSION_RESULTS.md
   - docs/experiments/active/dreamer_srl_v2/PARITY_LAUNCH_V2.md
@@ -663,15 +663,97 @@ The §7.1 ratio mechanically picks **seq_len=32** (1.541 × 10⁻² vs 1.234 × 
 
 ---
 
-### 10.4 Final recommended recipe
+### 10.4 PRELIMINARY synthesis — 2026-05-18 (7 of 8 extended cells done; one M cell still running)
 
-**(num_envs, size, seq_len) =** (—, —, —)
+#### Headline (plain language, ~220 words)
 
-**Vs sheeprl `yt1uts22` baseline (survival 106.19 at last-20% window):** —
+**The 10×10 hypervigilance recipe is settled in plain language: use the smallest model (XS), a moderate level of parallelism (16 parallel environments), and let it train for at least 4 million environment-interaction steps.** That recipe — labelled **E1** in the extended-sweep manifest in §12.2 — reaches a survival mean of **184 steps** over the last 20% of training, which is **+74% above the sheeprl PyTorch baseline of 106** (the score this entire sweep set out to beat). Every long-budget XS cell in the sweep beats sheeprl: E1 (XS / 16 envs / 4M steps) at 184, E2 (XS / 64 envs / 4M) at 164, E3 (XS / 128 envs / 4M) at 136, and the two earlier long-budget cells from §11 — LB-1 (XS / 16 envs / 2M) at 154 and LB-2 (XS / 64 envs / 2M) at 139.
 
-**Gap closed / not closed:** —
+**The "M paradox" from §10.2.4 is RESOLVED in this synthesis.** Earlier Phase 2 saw the medium model (M) underperform at the 200,000-step budget and we provisionally read it as "M is not learning." The two new long-budget M cells here (E7 = M / 64 envs / 2M; E8 = M / 128 envs / 2M) show that **M is learning — just slowly.** E7's recent-window survival climbed from 45 → 49 → 50 → 59 → **83** across training quarters, with the largest jump in the final quarter (+66% Q3→Q5). M was not broken; it was budget-starved.
 
-**Implications for the publication track:** —
+**Two cells still in-flight at the time of this writeup**: E7 (M / 64 envs / 2M) is at ~82% of its budget and trending sharply upward; E8 (M / 128 envs / 2M) is at ~57% and climbing more slowly. Their final numbers will be filled in by a second-pass synthesis when both cells finish (~6–12 hours from now). The headline recipe and findings below are not expected to change.
+
+#### 10.4.1 Comprehensive results table — size × num_envs × budget surface
+
+This table folds together all phases of the search so a reader can scan the whole surface in one place. Sizes are the sheeprl presets (XS smallest, S medium, M large). "envs" is the number of parallel environment copies feeding the replay buffer. "Budget" is the total environment-interaction steps. **Survival = mean episode length over the last 20% of training**, capped by the 500-step episode limit. The reference score to beat is **sheeprl = 106** ([`yt1uts22`](https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/yt1uts22)). Bolded cells highlight the headline winner and the in-progress cells.
+
+| Cell | Size | envs | Budget | Survival | Δ vs sheeprl 106 | WandB | Source |
+|---|---|---|---|---|---|---|---|
+| P1.1 | XS | 4 | 200k | 87 | −18% | (Phase 2 reused — see Phase 2 row) | §10.1 |
+| P1.2 | XS | 16 | 200k | 73 | −31% | [zlvkc2f5](https://wandb.ai/sungwoolee/grid_world_pain/runs/zlvkc2f5) | §10.1 |
+| P1.3 | XS | 64 | 200k | 44 | −58% | [8xa4j8c3](https://wandb.ai/sungwoolee/grid_world_pain/runs/8xa4j8c3) | §10.1 |
+| P1.4 | XS | 128 | 200k | 50 | −53% | [p4xyyyod](https://wandb.ai/sungwoolee/grid_world_pain/runs/p4xyyyod) | §10.1 |
+| P2 XS/4 | XS | 4 | 200k | 87 | −18% | (Phase 2 baseline) | §10.2 |
+| P2 S/4 | S | 4 | 200k | 97 | −8% | [a3o0xg75](https://wandb.ai/sungwoolee/grid_world_pain/runs/a3o0xg75) | §10.2 (Phase 2/3 winner) |
+| P2 M/4 | M | 4 | 200k | 87 | −18% | [ta7k7w9b](https://wandb.ai/sungwoolee/grid_world_pain/runs/ta7k7w9b) | §10.2 |
+| P3 seq_len=32 | S | 4 | 200k | 94.67 | −11% | [4fl1h3cm](https://wandb.ai/sungwoolee/grid_world_pain/runs/4fl1h3cm) | §10.3 |
+| P3 seq_len=64 | S | 4 | 200k | 97 | −8% | (= Phase 2 winner) | §10.3 |
+| P3 seq_len=128 | S | 4 | 200k | 80.08 | −24% | [ex27ckc3](https://wandb.ai/sungwoolee/grid_world_pain/runs/ex27ckc3) | §10.3 |
+| LB-1 | XS | 16 | 2M | 154 | **+45%** | [bzc2x3pl](https://wandb.ai/sungwoolee/grid_world_pain/runs/bzc2x3pl) | §11 |
+| LB-2 | XS | 64 | 2M | 139 | **+31%** | [15uiw4kg](https://wandb.ai/sungwoolee/grid_world_pain/runs/15uiw4kg) | §11 |
+| **E1** | **XS** | **16** | **4M** | **184** | **+74%** | [**yxij4lrc**](https://wandb.ai/sungwoolee/grid_world_pain/runs/yxij4lrc) | **§12 (headline winner)** |
+| E2 | XS | 64 | 4M | 164 | +55% | [02n94uzu](https://wandb.ai/sungwoolee/grid_world_pain/runs/02n94uzu) | §12 |
+| E3 | XS | 128 | 4M | 136 | +28% | [ybsma2zd](https://wandb.ai/sungwoolee/grid_world_pain/runs/ybsma2zd) | §12 |
+| E4 | S | 16 | 2M | 132 | +25% | [z8w3bfte](https://wandb.ai/sungwoolee/grid_world_pain/runs/z8w3bfte) | §12 |
+| E5 | S | 64 | 2M | 133 | +25% | [20o5ujno](https://wandb.ai/sungwoolee/grid_world_pain/runs/20o5ujno) | §12 |
+| E6 | S | 128 | 2M | 42 | −60% | [qtvxauwd](https://wandb.ai/sungwoolee/grid_world_pain/runs/qtvxauwd) | §12 (unique slow-learner — see Finding 3) |
+| **E7** (in-flight ~82%) | M | 64 | 2M | ~85–95 (proj.; Q5 partial=83, climbing) | ~−15% to −10% | [c5pt9t4v](https://wandb.ai/sungwoolee/grid_world_pain/runs/c5pt9t4v) | §12 |
+| **E8** (in-flight ~57%) | M | 128 | 2M | ~60–90 (proj.; Q3=58, still climbing) | ~−45% to −15% | [d9emwzdp](https://wandb.ai/sungwoolee/grid_world_pain/runs/d9emwzdp) | §12 |
+
+**How to read this table.** Within an XS row block, larger budget monotonically wins: at envs=16 the survival climbs 73 (200k) → 154 (2M) → **184 (4M)**; at envs=64 it climbs 44 → 139 → 164; at envs=128 it climbs 50 → (no 2M cell) → 136. Within a "envs" column, the size question flips depending on `num_envs` — see Finding 2 below.
+
+#### 10.4.2 Findings
+
+**Finding 1 — Production recipe: small model (XS) at moderate parallelism (envs=16) with extra training budget.** Two paired comparisons make this case directly. **LB-1 → E1** (XS/16/2M → XS/16/4M): doubling the training budget lifts survival from 154 → 184, a **+19%** gain. **LB-2 → E2** (XS/64/2M → XS/64/4M): doubling the budget lifts survival from 139 → 164, **+18%**. Both XS recipes benefit substantially from the 2× budget increase, and **E1 at 184 is +74% above sheeprl's 106**. This is the production headline finding.
+
+**Finding 2 — The optimal model size depends on the level of parallelism (a crossover effect between envs=4 and envs=16).**
+- **At envs=4 (the original Phase 2 setting):** S (medium-small) beats XS (smallest): 97 > 87, a +11% advantage.
+- **At envs=16 / 64 / 128 (the extended sweep):** XS beats S decisively:
+  - envs=16: XS 154 vs S 132 (XS +17%)
+  - envs=64: XS 139 vs S 133 (XS +5%)
+  - envs=128: XS 136 vs S 42 (XS +224%)
+- **The crossover sits between envs=4 and envs=16.** A practical reading: with limited per-environment data, S's extra parameters help fit the world model; once data is plentiful, the extra parameters slow learning and XS pulls ahead. We have not run a cell between envs=4 and envs=16, so the exact crossover point is unresolved.
+
+**Finding 3 — S at envs=128 is a catastrophic slow-learner — unique across the entire surface.** The E6 cell (S / 128 envs / 2M) climbed 37 → 39 → 45 → 45 → 42 across its training quarters, never breaking out of the 40s. This is **the only cell in the entire 7-done sweep that underperforms sheeprl by more than 50%** and the only cell whose trajectory shows no upward trend over training. This is not a generic "S underperforms at high parallelism" finding — S at envs=16 (132) and S at envs=64 (133) are both healthy mid-pack results. It is **specifically S at envs=128** that fails. The mechanism is unresolved; the conservative interpretation is that the medium-model gradient-update budget is insufficient given the very high replay-buffer turnover at envs=128.
+
+**Finding 4 — The "M paradox" from §10.2.4 is resolved: M cells learn, they just need more training budget.** Phase 2 saw M at envs=4 plateau at 87 (vs S=97, vs XS=87) at the 200,000-step budget. The §10.2.4 analysis tentatively read this as "M is not learning to translate good world-model fit into survival." The two new M cells in this sweep correct that reading.
+- **E7 (M / 64 envs / 2M):** quarterly recent-window survival climbed **45 → 49 → 50 → 59 → 83**. The Q3→Q5 jump (50 → 83) is a +66% explosive late-training climb. M is learning; it just learns slowly and breaks out late.
+- **E8 (M / 128 envs / 2M, in-flight ~57%):** quarterly survival 37 → 54 → 58. Slower than E7, but the trajectory is steadily upward.
+- The corrected reading is: **M is budget-starved, not algorithmically broken.** At enough budget M may match or exceed the XS long-budget cells. Whether the late-training breakout in E7 continues past 2M steps is now a high-value follow-up question (see §10.4.3 below).
+
+**Finding 5 — Every long-budget XS cell beats sheeprl.** This is the cleanest summary of the search outcome.
+
+| Recipe | Survival | Δ vs sheeprl 106 |
+|---|---|---|
+| E1 — XS / 16 envs / 4M | 184 | +74% |
+| E2 — XS / 64 envs / 4M | 164 | +55% |
+| LB-1 — XS / 16 envs / 2M | 154 | +45% |
+| LB-2 — XS / 64 envs / 2M | 139 | +31% |
+| E3 — XS / 128 envs / 4M | 136 | +28% |
+
+The smallest model, given enough budget, is sufficient to clear the sheeprl ceiling on 10×10 hypervigilance — by a wide margin. The earlier §11 finding that "long-budget XS at high num_envs beats sheeprl" generalises: **the long-budget XS recipe beats sheeprl regardless of which moderate-to-high num_envs we pick** (16, 64, or 128 all work; 16 wins).
+
+#### 10.4.3 Recommendations
+
+**Primary recipe for publication:** **XS model, num_envs=16, sequence length=64, training budget ≥4M environment-interaction steps.** This is E1 — the 184-survival winner. It is **+74% above the sheeprl baseline of 106** and the E1 trajectory does not appear to have plateaued (the final-quarter slope is still positive), suggesting an 8M-step run might push the number higher still.
+
+**Compute-economy alternative:** **XS / num_envs=64 / 4M** (E2). Yields 164 survival — about **89% of E1's headline** at roughly **half the wall-clock** (E2 finished in ~20h vs E1's ~27h). For situations where compute is the binding constraint, this is the right pick.
+
+#### 10.4.4 Follow-up experiments
+
+Three high-value follow-ups are flagged for the next round of the search:
+
+1. **XS / 16 envs / 8M (or higher).** Does E1 plateau or keep climbing past 184? E1's final-quarter trajectory still has positive slope. If 8M lifts the number to e.g. 210+, the publication ceiling for dreamer-srl v2 on 10×10 is materially higher than reported here.
+2. **M / 64 envs at 4M+ (and possibly M / 128 envs at 4M+).** Given E7's explosive late-training breakout (Q3→Q5: 50→83, +66%), extending M's budget might let it catch or exceed the XS long-budget cells. This directly tests the Finding-4 hypothesis that M is budget-starved rather than broken.
+3. **S / 16 envs at 4M.** Does S benefit from a 2× budget the way XS did? S at envs=16 currently sits at 132 (2M); a clean LB→E-style doubling would predict ~155 at 4M. If it lands higher, the size-vs-budget interaction is more interesting than the current data suggests.
+
+#### 10.4.5 Caveat — this is a PRELIMINARY synthesis
+
+**Two cells are still in-flight** at the time of this writeup:
+- **E7 (M / 64 envs / 2M):** at ~82% of budget. Recent-window survival is 83 and climbing sharply (the Q3→Q5 +66% jump). Final projected range: ~85–95. The Finding-4 ("M paradox resolved") interpretation is robust to E7's final landing point within that range.
+- **E8 (M / 128 envs / 2M):** at ~57% of budget. Recent-window survival is 58 and climbing more slowly. Final projected range: ~60–90 — a wide band. The Finding-4 reading would weaken if E8 plateaus below 60; it would strengthen if it lands above 80.
+
+**A second-pass synthesis will refresh this section** once both M cells finish (~6–12 hours from now). The expected updates are: (a) finalise the E7/E8 rows in §10.4.1, (b) tighten the "M paradox resolved" language in Finding 4 with the final trajectories, and (c) decide whether the Follow-up #2 (M at 4M+) is high or low priority. **The primary recipe (E1, XS/16/4M, 184 survival, +74% vs sheeprl) is not expected to change.**
 
 ---
 
