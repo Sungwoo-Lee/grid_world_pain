@@ -1,0 +1,52 @@
+---
+id: 20260518_1516_wandb_log_dict_timesteps_key
+date: 2026-05-18
+time: "15:16"
+folder: cluster_ops
+tags: [meta, learned_lesson, decision]
+summary: "WandB define_metric(step_metric=X) requires X to be a key INSIDE the log_dict on every wandb.log call — passing it via step= kwarg does not work, and metrics render as single bars instead of per-step traces. Fix: include 'timesteps': policy_step inside the log_dict; use uppercase pattern in define_metric (Episode/* not episode/*)."
+related: ["20260518_1513_production_recipe_xs_16_4m_hypervigilance"]
+session_origin: claude_code
+session_label: "dreamer-srl v2 parity + 10x10 hyperparameter search"
+importance: medium
+status: settled
+valid_until: null
+confidence: high
+supersedes: []
+raw_source: claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/7962c4de-7ac9-4c9a-9958-c22a36fd45c7.jsonl
+raw_completeness: full
+---
+
+# WandB step_metric must live inside the log_dict, not in the step= kwarg
+
+## Key conclusion
+For `wandb.define_metric("Episode/*", step_metric="timesteps")` to actually plot Episode/* metrics against the timestep x-axis, every `wandb.log(log_dict, step=...)` call must include `"timesteps": <value>` **as a key inside `log_dict`** — passing only the `step=` kwarg is NOT sufficient. The symptom of getting this wrong is that all Episode/* (and any other step-metric-bound family) metrics render as single bars in the WandB UI instead of per-iteration line traces. Second gotcha: `define_metric` patterns are case-sensitive — `define_metric("episode/*", step_metric="timesteps")` will silently not match keys logged as `"Episode/foo"`. The fix that worked at commit `2da1a33`: (a) add `"timesteps": policy_step` and `"iteration": iter_num` inside every log_dict, (b) align all `define_metric` patterns to the uppercase convention. Applies to both rPPO and dreamer-srl drivers; the dreamer-srl driver inherited the bug when it adopted the rPPO logging schema during the metric-unification work.
+
+## Evidence, measurements, facts
+- Affected drivers: `train.py` (original JAX Dreamer + rPPO) and `src/algorithms/dreamer_srl/dreamer_srl_main.py`.
+- Symptom: WandB UI showed Episode/* metrics as single horizontal bars (one data point) instead of per-iteration traces.
+- Diagnosis: `define_metric(step_metric="timesteps")` looks for the key `"timesteps"` inside the dict argument to `wandb.log`, not the `step=` kwarg. The kwarg is global ordering; the step_metric is per-metric x-axis.
+- Fix commit: `2da1a33` — added `"timesteps": policy_step` + `"iteration": iter_num` to log_dict, plus aligned all patterns to uppercase.
+- Related: the unified `grid_world_pain` WandB project has 49 unified metric keys (Episode/* + WorldModel/* + Behavior/* + Time/* + Params/* + Diagnostic/*) — see commits `e917187` … `f90a183`.
+- Time/sps_env was added to rPPO during the unification — see `train.py:L1481` (rPPO) and `train.py:L1786` (Dreamer).
+- Eval/* metrics had a separate but related "past-step warning" caused by the render subprocess (~13s) advancing WandB step; fixed at `0df32c9` by removing the explicit `step=` kwarg from the eval-time log call.
+
+## Decisions and actions
+- **Convention locked**: any new metric family added to either driver must (a) include the bound step_metric key inside the log_dict on every call, (b) use the uppercase convention `Family/metric` (not `family/metric`), (c) call `define_metric("Family/*", step_metric="timesteps")` at WandB init.
+- Generalisable rule for future-Claude on this project: **"If a WandB metric is showing as a single bar instead of a trace, the first thing to check is whether the step_metric key (`timesteps` here) is inside the dict you're passing to wandb.log."** Looking at `step=` kwargs alone will not surface the bug.
+- The fix pattern is project-wide: same code path serves rPPO + Dreamer + dreamer-srl now.
+
+## Open questions and follow-ups
+- None on the WandB side. The metric-unification migration is closed.
+
+## References
+- [[20260518_1513_production_recipe_xs_16_4m_hypervigilance]] — the hyperparameter sweep that consumed the unified WandB schema.
+- `train.py:L1481` (rPPO) and `train.py:L1786` (Dreamer) — `Time/sps_env` line, marker for the unification.
+- Commits: `2da1a33` (log_dict timesteps key + uppercase patterns), `0df32c9` (Eval/* past-step fix), `e917187` … `f90a183` (full metric-unification migration), `f90a183` (project rename to `grid_world_pain`).
+- WandB doc reference: `define_metric` step_metric semantics — `step_metric` is a key lookup on the dict passed to `wandb.log`, not a magic alias for the `step=` kwarg.
+- Raw conversation: synced via `./sync-agent-data.sh claude push`. To read on another node: `./sync-agent-data.sh claude pull`, then either `claude --resume 7962c4de-7ac9-4c9a-9958-c22a36fd45c7` or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/20260518_1516_wandb_log_dict_timesteps_key.md`.
+
+<!-- BACKLINKS — auto-generated by scripts/regen_memory_graph.py; do not edit -->
+## Backlinks
+- [[20260518_1737_wandb_post_crash_frozen_state_misread]] (cluster_ops, 2026-05-18) — When a WandB run crashes, its `run.summary` keys stay frozen at the last logged 
+<!-- END BACKLINKS -->

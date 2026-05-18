@@ -21,6 +21,11 @@
 #   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_L.yaml:L13 → transition_model.hidden_size: 768
 #   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_L.yaml:L15 → representation_model.hidden_size: 768
 
+# Agent identity — mirrors configs/models/dreamer_v3_rr06.yaml:L40-L41
+# Required for WandB filter: agent.algorithm = DreamerV3
+agent:
+  algorithm: "DreamerV3"   # Match XS parent (configs/dreamer_srl/01_food_only.yaml) for WandB filter
+
 # Cadence (sweep budget; learning_starts=0 per smoke deviation)
 algo:
   learning_starts: 0           # sweep-only deviation (skip §S3 prefill)

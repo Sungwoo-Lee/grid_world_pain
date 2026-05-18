@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `dreamer_diagnosis` topic.
 
 **Folder definition**: DreamerV3 failure investigation
-**Insights**: 9
-**Last updated**: 2026-05-13
+**Insights**: 12
+**Last updated**: 2026-05-18
 
 ---
 
@@ -13,6 +13,9 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-18 | 15:15 | `20260518_1515_m_paradox_resolution_slow_learner` | Mid-sweep observation: M-size cells (640/1024/mlp_layers=3) had the lowest WM loss but appeared stuck at low ep_len (~50) — apparent paradox where the WM is more accurate but the policy is worse. Resolution by late-iteration observation: M cells DO learn, just later than XS or S. E7 (M / 64 / 2M) went Q3=50 → Q4=59 → Q5=83 (rapid late climb at 82% of budget). Capacity is not the bottleneck; warm-up time is. Refutes "M over-parameterised" and "M stuck in bad optimum" alternatives. |
+| 2026-05-18 | 15:12 | `20260518_1512_reinforce_resampling_bug_imag_action_threading` | v1 H1 root cause was a one-line bug in the actor objective: calling `actor_module(sg_latents[h], actor_keys[h])` at loss-time drew a FRESH Gumbel sample, so `log_prob(action_NEW)` was paired with `advantage(action_OLD)` — the policy gradient was essentially noise. Fix: thread `imag_outputs["imagined_actions"]` through and use `log_prob_h = sum(sg(imagined_actions[h]) * log_softmax(logits_h))`. Generalisable rule: when a loss computes a log-prob, the action whose log-prob is being computed must be the same identity as the action that produced the paired advantage. |
+| 2026-05-18 | 15:11 | `20260518_1511_dreamer_srl_v2_parity_pass_outperform` | dreamer-srl v2 reached parity with sheeprl on food-only (ep_len_avg 501 vs ~500) after v1 had failed at 103.8 (random floor). The 5 P-blockers the v2 audit chain caught (missing reset_data write, terminated/truncated conflation, D-014 burst, REINFORCE action threading, target_critic→live critic) were the actual v1 root causes; the v1 plan-only review had passed them through. v2 added bit-identity grad parity tests as the canonical CI guard. v2 audit-chain template is now the default for any JAX rebuild of a PyTorch reference. |
 | 2026-05-13 | 23:08 | `20260513_2308_strong_strategy_validates_on_cp1` | The Strong (A+B+C+D) deviation-prevention strategy paid off on the first checkpoint (CP1, utils.py port) of the dreamer-srl v3 rebuild — caught a pre-CP0 gitignore blocker that would have broken Lever D + Lever A on a fresh clone, surfaced a latent wrong-reference bug in the D-002 distribution test when we tightened its threshold, and let the PI cleanly batch-approve all 3 deviations (D-001/D-002/D-003). ~50% overhead vs naive port; the previous plan-only review process let the twohot encoding bug through — the strategy closes that loop. |
 | 2026-05-13 | 14:17 | `20260513_1417_jax_vmap_no_speedup_tiny_env` | JAX-vmap parallel env over our 5x5 NoPred gridworld delivered no speedup vs sheeprl's SyncVectorEnv, on CPU (v1: 1.01x at N=4) or GPU (v2: 0.47x at N=4). Root cause is the Python↔JAX boundary cost dominating microsecond-cheap env-step compute — naive `np.array()` round-trip plus `jax.tree.map` auto-reset blend. Closes the spike; only DLPack zero-copy bridge could plausibly win, and that is a separate fresh plan. |
 | 2026-05-12 | 17:54 | `20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned` | After 3-reviewer ✅ PASS on a 1033-line JAX re-implementation plan, user pivoted via PI call to sheeprl PyTorch direct; static review of plan-against-paper does not predict integration-layer execution success. |
@@ -27,6 +30,7 @@
 
 ## Change history
 
+- 2026-05-18: Added 3 insights from the dreamer-srl v2 parity + 10×10 hyperparameter search session: `20260518_1511_dreamer_srl_v2_parity_pass_outperform` (v2 parity success + 5-P-blocker retrospective; audit-chain template promoted), `20260518_1512_reinforce_resampling_bug_imag_action_threading` (mechanistic root cause of v1 H1; sample-vs-recompute identity rule), `20260518_1515_m_paradox_resolution_slow_learner` (M-size cells learn slowly but DO learn; "flat early + climbing late = slow learner not stuck" rule). No new tags (all reused: dreamer, decision, learned_lesson, meta, refutation, design).
 - 2026-05-13: Added 1 insight from the dreamer-srl v3 CP1 closure: `20260513_2308_strong_strategy_validates_on_cp1` (Strong A+B+C+D deviation-prevention strategy fired its catches at three concrete moments on CP1 — pre-CP0 gitignore blocker, F2 latent wrong-reference bug in D-002 distribution test surfaced via threshold tighten, PI clean batch-approval of 3 deviations under "nothing has to be changed in the meaning of functions" criterion). No new tags (all reused: dreamer, learned_lesson, decision, meta, design).
 - 2026-05-13: Added 1 insight from the JAXVectorEnv v1+v2 spike closure: `20260513_1417_jax_vmap_no_speedup_tiny_env` (vmap on tiny envs with naive numpy boundary doesn't deliver speedup, CPU or GPU; only DLPack zero-copy bridge could plausibly win; spike closed; generalizable heuristic: measure per-step compute time before betting on vmap). No new tags (all reused: dreamer, learned_lesson, refutation, decision, meta).
 - 2026-05-11: Added 1 insight from the Z2 verdict session: `20260511_1534_z2_paper_bins_h2_partial_cascade_closure_attempt` (paper-canonical bins H2 partial fix; cumulative cascade −54%; mae_neg 45% drop validates mechanism; new long-horizon-compounding residual selects GRU reset gate as next candidate). No new tags.
