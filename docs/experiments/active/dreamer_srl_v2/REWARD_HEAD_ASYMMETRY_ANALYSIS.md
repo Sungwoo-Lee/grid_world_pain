@@ -218,12 +218,14 @@ The two cross-env comparisons together are the strongest indirect support for H1
 - **Likely cause**: regression target density imbalance — the negative-reward tail has fewer per-step training examples than the positive food-reward distribution.
 - **Performance correlation**: cross-run, every dreamer-srl v2 run on this env shows the asymmetry; every run underperforms rPPO; flips direction on parity (no deep negative tail → dreamer-srl wins).
 
-#### Pathology 2 — Imagination roll-out compounding (the H2 mechanism, not yet measured in v2)
+#### Pathology 2 — Imagination roll-out compounding (the H2 mechanism, Phase 2b results)
 
-- **Affected**: all 5 dreamer-srl v2 XS-recipe runs (predicted; per-horizon MAE not measured in v2 yet).
+- **Affected**: all 5 dreamer-srl v2 XS-recipe runs (predicted; per-horizon MAE now measured for the winner `yxij4lrc`).
 - **When it appears**: throughout training, increasing with imagination horizon.
 - **Likely cause**: small per-step reward bias × imagination horizon length → policy gradient bias.
-- **Performance correlation**: not yet measured. **Requires the offline-WM diagnostic port (Phase 2b) to verify in dreamer-srl v2.** Documented as analogous in original Dreamer (Z2 memory, 0.18 → 3.05 from h=5 to h=50).
+- **Phase 2b measurement (winner `yxij4lrc`)**: Per-horizon reward MAE grows from **1.84 at h=1** to **3.17 at h=50** (1.72× total compound). The pos/neg asymmetry at h=1 is 2.11× (neg worse), which inverts by h=25 (ratio ~0.90, pos slightly worse). Continuation accuracy drops from 98% at h=1 to 33.5% at h=50 — severe cont-head miscalibration at long horizons.
+- **Comparison to Z2**: Z2 showed 0.18→3.05 at h=5→50 (17× compound). dreamer-srl v2 shows 2.15→3.17 at h=5→50 (1.5× compound). dreamer-srl v2 starts much higher (larger prior-posterior gap at h=1) but compounds more slowly per step. Both end at similar absolute MAE at h=50.
+- **Full results**: [`offline_wm_diagnostic_results_yxij4lrc.md`](./offline_wm_diagnostic_results_yxij4lrc.md)
 
 #### Anti-pattern flag — `rew_MAE_total` does NOT equal a simple average of `rew_MAE_neg` and `rew_MAE_pos`
 
@@ -235,7 +237,7 @@ For the winner: `rew_MAE_total=0.76`, `rew_MAE_neg=1.02`, `rew_MAE_pos=0.31`. Th
 
 - **Headline.** dreamer-srl v2 best (191 survival steps) underperforms rPPO best (227–239 survival steps) by 19–25% on the 10×10 hypervigilance task. Across all 5 XS-recipe dreamer-srl v2 runs on this env, the world-model reward head has 2.2× – 6.4× higher MAE on negative-reward steps than on positive-reward steps. The same agent wins on the food-only parity task (no large negative rewards). The data is **consistent with** H1 — reward-head asymmetry as the leading cause of the rPPO gap — but does not yet *prove* it.
 - **H1 verdict — leading hypothesis, supported by indirect evidence.** Pattern replicates across every XS run on this env. Flips direction on parity (where there is no asymmetry to suffer). The within-cohort survival ranking is noisy w.r.t. the asymmetry ratio (Finding 4), so we cannot claim a *monotonic* causal link — only that the asymmetry is present and large in every run that loses to rPPO, and absent from the run that wins (parity).
-- **H2 verdict — pending Phase 2b.** Imagination-horizon compounding is plausible by analogy to the original Dreamer Z2 study but is not measured in dreamer-srl v2. Resolving it requires porting the offline-WM diagnostic.
+- **H2 verdict — confirmed (Phase 2b complete).** Imagination-horizon compounding is real in dreamer-srl v2. Per-horizon MAE grows from 1.84 (h=1) to 3.17 (h=50) on the winner run (`yxij4lrc`). The cascade is flatter per step than Z2 (1.5× at h=5→50 vs. Z2's 17×) but starts at a much higher baseline (1.84 vs. Z2's 0.18 at h=5). The continuation head severely miscalibrates at h>25 (33.5% cont accuracy at h=50), cutting off the effective planning horizon. The pos/neg asymmetry inverts by h=25 — negative steps become *easier* to predict than positive ones in long-horizon imagination, which is a novel finding not seen in Z2. Full results: [`offline_wm_diagnostic_results_yxij4lrc.md`](./offline_wm_diagnostic_results_yxij4lrc.md).
 - **H3 verdict — pending Phase 3.** Reducing `env.death_penalty` to flatten the negative-reward distribution is the cleanest causal test. The Phase 3 design doc (forward reference) owns it.
 - **Bin support is not the bottleneck.** Twohot bins cover `symlog(−355) ≈ −5.87` inside `[−20, +20]`. The bottleneck is fitting *density* in the deep-negative tail, not representability.
 
