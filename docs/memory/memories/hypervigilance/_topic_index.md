@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `hypervigilance` topic.
 
 **Folder definition**: Hypervigilance experiments
-**Insights**: 7
-**Last updated**: 2026-05-13
+**Insights**: 9
+**Last updated**: 2026-05-18
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-18 | 15:14 | `20260518_1514_num_envs_vs_budget_interaction` | Size-vs-num_envs optimum is regime-dependent on training budget — short-budget (200k) sweeps had envs=4 + size=S as the winner, but long-budget (2M-4M) sweeps catch up dramatically (XS/16: +110% from 200k→2M; XS/64: +216%) and flip to envs=16-64 + size=XS. Mechanism: high-parallelism configs amortise more WM warm-up. Operational lesson: short-budget hyperparameter sweeps systematically under-rank high-parallelism cells; do not pick a production recipe from a short-budget winner without re-running at deployment budget. |
+| 2026-05-18 | 15:13 | `20260518_1513_production_recipe_xs_16_4m_hypervigilance` | Production recipe for 10×10 hypervigilance with dreamer-srl v2: XS preset / num_envs=16 / 4M total env steps → ep_len_avg ≈ 184, +74% over sheeprl baseline (106). Winner of an 8-cell extended sweep (E1-E8) across {XS, S, M} × {16, 64, 128} × {2M, 4M} on nodes 106-110, 112, 114. Sheeprl PyTorch DreamerV3 no longer the recommended stack for this task — dreamer-srl v2 outperforms by +74% and is JAX-native. |
 | 2026-05-13 | 00:15 | `20260513_0015_active_swapped_geq_matched_reframes_meta` | Specialist ceiling table from the 6-world unmodulated probe (single-seed, 10M ep each) shows active_swapped (402 steps) > active_matched (338 steps). Swap is NOT harder than matched in isolation, which refutes the original 'swap is load-bearing' framing for the upcoming meta head-to-head and reframes it as a CKA-factorisation test instead. |
 | 2026-05-12 | 14:28 | `20260512_1428_sameprop_class_discriminating_defence_event_level` | Round 2.5 toolkit-v1 appendix refines the verdict — under sameProp matched smells, the agent IS class-discriminating, but at the EVENT level (bush-dive rate +37 pp predator vs rabbit; eat-under-threat 0.75× near predator vs 1.19× near rabbit), not the spatial-trajectory level (mean distance). Per-tag fan-out across rabbit_TL / rabbit_BR within noise — rules out single-instance artifacts. Complements `20260510_2237_sameprop_round25_no_class_avoidance`, does not supersede. |
 | 2026-05-10 | 22:37 | `20260510_2237_sameprop_round25_no_class_avoidance` | Round 2.5 (10M ep, n=1 each cell) refutes both pre-registered hypotheses: per-tag Δ_TL = +0.004 cells in Cell A1 (75× inside the H₀ band) confirms location-conditional corner-camping, not class recognition; Cell C aggregated Δ = −0.53 cells (sign-flipped vs R1's +0.63) with bilateral rabbit avoidance lands in §4.3 Inverted. The original sameProp survey effect (+0.6 cells) decomposes into two confounds (food/quadrant overlap + spatial-avoidance camouflage) — no genuine class-conditional avoidance under matched olfactory smells. Provisional pending Round 2.6 seed 44 for Cell C. |
@@ -25,6 +27,7 @@
 
 ## Change history
 
+- 2026-05-18: Added 2 insights from the dreamer-srl v2 parity + 10×10 hyperparameter search session: `20260518_1513_production_recipe_xs_16_4m_hypervigilance` (production recipe XS/16/4M=184, +74% over sheeprl baseline 106; 8-cell extended sweep winner), `20260518_1514_num_envs_vs_budget_interaction` (size-vs-num_envs winner regime-depends on budget; +110%/+216% short-to-long gap; short-budget sweeps mis-rank). No new tags (all reused: hypervigilance, dreamer, decision, learned_lesson, design).
 - 2026-05-13: Added insight `20260513_0015_active_swapped_geq_matched_reframes_meta` from the NMN R2 continual + 6-specialist analyzer verdict session — specialist ceiling table inverts design-time intuition (active_swapped > active_matched by +64 steps), refutes 'swap is load-bearing' framing for the upcoming meta head-to-head and reframes it as a CKA-factorisation test. No new tags promoted (all reused: hypervigilance, learned_lesson, refutation, design).
 - 2026-05-12: Added insight `20260512_1428_sameprop_class_discriminating_defence_event_level` from the behavior-measure toolkit v1 application to the R2.5 checkpoints — refines (not supersedes) the prior `_no_class_avoidance` verdict. Under sameProp the agent IS class-discriminating at the event level (bush-dive rate, eat-suppression) even though it is class-blind in mean distances. No new tags promoted (all reused: hypervigilance, learned_lesson, decision).
 - 2026-05-10: Added insight `20260510_2237_sameprop_round25_no_class_avoidance` from the Round 2.5 launch + analysis session — both pre-registered hypotheses refuted; sameProp survey effect decomposed into two confounds, no genuine class-conditional avoidance. Provisional pending Round 2.6 seed 44 (Cell C only). No new tags promoted (all reused: hypervigilance, refutation, learned_lesson, decision).
