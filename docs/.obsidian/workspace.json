@@ -8,17 +8,31 @@
         "type": "tabs",
         "children": [
           {
+            "id": "f9609a64d0b28919",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "project/directions/20260516_nmn_scaling_shifting_as_hyperparameter_modulation_v3.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "20260516_nmn_scaling_shifting_as_hyperparameter_modulation_v3"
+            }
+          },
+          {
             "id": "e9d149e844c42938",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "experiments/summaries/20260513_0321_nmn_comparison_study.md",
-                "mode": "preview",
+                "file": "memory/GRAPH_REPORT.md",
+                "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "20260513_0321_nmn_comparison_study"
+              "title": "GRAPH_REPORT"
             }
           }
         ]
@@ -78,7 +92,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 310.5086555480957
+    "width": 528.5
   },
   "right": {
     "id": "22360a12a84136a4",
@@ -183,8 +197,10 @@
       "bases:Create new base": false
     }
   },
-  "active": "e9d149e844c42938",
+  "active": "f9609a64d0b28919",
   "lastOpenFiles": [
+    "project/directions/20260516_nmn_scaling_shifting_as_hyperparameter_modulation_v4.md",
+    "memory/GRAPH_REPORT.md",
     "experiments/summaries/20260513_0321_nmn_comparison_study.md"
   ]
 }
