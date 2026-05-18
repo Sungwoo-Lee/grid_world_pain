@@ -2,14 +2,20 @@
 title: "Doya's four neuromodulator-hyperparameter assignments — concrete implementation routes under the two-headed FiLM + hypernet architecture"
 status: draft
 author: professor-dl-theory
-polished_by: "research-postdoc (2026-05-18)"
+polished_by:
+  - "research-postdoc (2026-05-18)"
+  - "research-postdoc (2026-05-18) — Section 5 polish"
 audience: user + pi + research-postdoc
 date: 2026-05-18
 last_updated: 2026-05-18
 companion_to:
   - "docs/project/critiques/20260518_film_as_hyperparameter_modulator_theoretical_audit.md"
   - "docs/project/critiques/20260518_film_as_hyperparameter_modulator_audit_story.md"
-one_line_summary: "Idea-level sketch of what each of Doya's four neuromodulator-hyperparameter assignments looks like in code under the audit's converged two-headed architecture — Head 1 emits FiLM scales/shifts to the agent's activations, Head 2 emits scalar coefficients to the loss / return estimator. Per knob: the one-line equation, where it lands, what claim is forfeited, what test confirms it."
+one_line_summary: "Idea-level sketch of what each of Doya's four neuromodulator-hyperparameter assignments looks like in code under the audit's converged two-headed architecture — Head 1 emits FiLM scales/shifts to the agent's activations, Head 2 emits scalar coefficients to the loss / return estimator. Per knob: the one-line equation, where it lands, what claim is forfeited, what test confirms it. Section 5 extends the 5-HT route with per-paper integrations of γ-Nets (Sherstan 2020), UVFA (Schaul 2015), and hyperbolic discounting (Fedus 2019)."
+references_integrated:
+  - "docs/project/references/unclassified/Schaul et al. 2015 - Universal Value Function Approximators.pdf"
+  - "docs/project/references/unclassified/Sherstan et al. 2020 - Gamma-nets - Generalizing value estimation over timescale.pdf"
+  - "docs/project/references/unclassified/Fedus et al. 2019 - Hyperbolic discounting and learning over multiple horizons.pdf"
 ---
 
 ## 1. Plain-language entry point
@@ -87,10 +93,48 @@ $$\mathcal{L}(\phi; c) \;=\; \mathbb{E}\!\left[\big(V_\phi(s; c) - r - \gamma_B(
 
 **Not entitled to claim:** (a) that Head 2 alone separates DA-gain from ACh-learning-rate — the positive-scalar gauge means on-policy training curves cannot distinguish them without an explicit gauge-breaker (Adam preconditioning, Fisher / natural-gradient curvature, or a reward-magnitude baseline that pins the scale); (b) that ACh-via-Head-1 is pure learning-rate modulation — forward-feature-gating and backward-gradient-gating are two views of one operator, so any ACh claim is necessarily coupled with feature-conditioning; (c) that 5-HT is implemented by FiLM — the discount lives in the return estimator (Head 2); without $\gamma_B(c)$ implemented in the bootstrap target *separately from FiLM*, FiLM alone never "is" the discount.
 
-## 5. Pointers
+## 5. Reference integration for 5-HT — γ-Nets, UVFA, and Fedus
+
+The 5-HT route (Section 3) is the most complex: Head 1 conditions the critic, Head 2 emits $\gamma_B(c)$, the critic learns a γ-conditional family. Three papers in the reference set feed it — one per architectural piece.
+
+### 6.1 γ-Nets (Sherstan et al. 2020) — critic conditioning, loss scaling, sampling
+
+**Lights up:** Head 1 (FiLM conditioning at the critic) + the multi-γ training loop.
+
+**What the paper does.** $\Gamma$-nets is a value network taking $\gamma$ as input, trained simultaneously on multiple $\gamma_k \in \Gamma_t$, learning $V^\pi_\gamma(s)$ for arbitrary fixed $\gamma$.
+
+**What it provides.** The operational blueprint for our γ-conditional critic. Sherstan compared four injection schemes — concatenation, a 16-dim linear embedding (`l_embed`), an element-wise multiply with a learned vector (`h_l_embed`), and a matrix-multiply — all perform similarly, `l_embed` slightly best on variance. The `h_l_embed` variant *is structurally FiLM-γ at the critic's penultimate layer* — our identification, not Sherstan's recommendation (he prefers concatenation for simplicity) — putting Head 1's placement on direct empirical footing. Two recommendations transfer: feed **both** $\gamma$ and $\tau = 1/(1-\gamma)$ into the modulator context, and use the loss scaling
+$$\delta_{t;\gamma_k} \;=\; (1-\gamma_k)\big[C_{t+1} + \gamma_k V(s_{t+1}, \gamma_k) - V(s_t, \gamma_k)\big]$$
+to keep TD-error magnitudes comparable across the $\gamma$ family.
+
+**What gap remains.** Sherstan restricts to fixed $\gamma$ per trajectory; he names *transition-dependent* $\gamma_{t+1} \equiv \gamma(s_t, a_t, s_{t+1})$ (White 2017) as the open extension. Our Head-2-emits-$\gamma_B(c)$ *is* that extension when $c$ varies within a trajectory; the calibrated-horizon test (Section 3) is the signature.
+
+### 6.2 UVFA (Schaul et al. 2015) — two-stream architecture and two-stage warm-start
+
+**Lights up:** Two-stream architectural pattern + matrix-factorisation warm-start before Head 2 attaches.
+
+**What the paper does.** $V(s, g; \theta)$ that generalises across states and goals via $V(s, g) = h(\varphi(s), \psi(g))$ with state embedding $\varphi$, goal embedding $\psi$, combiner $h$.
+
+**What it provides.** Substituting $\gamma$ for $g$ maps UVFA onto our γ-conditional critic: $\varphi(s)$ is the critic trunk, $\psi(\gamma_B(c))$ is Head 1's modulation. The **two-stage warm-start** matters more: stage 1 matrix-factorises a sparse $(s, \gamma)$ value table into target embeddings $\hat\varphi_s, \hat\psi_\gamma$; stage 2 regresses the networks onto those targets. Schaul reports *order-of-magnitude* speed-up over end-to-end — a concrete pre-training route before Head 2 is attached. The held-out-rooms extrapolation (~24% policy quality, Fig. 8) is the empirical basis for the "one critic stores a family of value functions" claim the 5-HT route depends on.
+
+**What gap remains.** UVFA's $g$ is sampled exogenously; our $\gamma_B(c)$ is *emitted by Head 2*. The closed-loop case introduces an identifiability hazard UVFA does not address — the local gauge between $\gamma_B(c)$ and a critic-output rescale flagged in Section 3.
+
+### 6.3 Fedus et al. 2019 — hazard prior, integral identity, multi-horizon auxiliary task
+
+**Lights up:** Sozou hazard-rate framing for Head 2 + multi-horizon auxiliary task + inference-time hyperbolic aggregation.
+
+**What the paper does.** Building on Sozou (1998) — *uncertainty over the hazard rate* implies non-exponential discounting; exponential prior on $\lambda$ gives $\Gamma_k(t) = 1/(1+kt)$ — Fedus shows non-exponential Q-values assemble from a basis of exponential ones via
+$$\int_0^1 \gamma^{kt}\,d\gamma \;=\; \frac{1}{1+kt} \;=\; \Gamma_k(t)\qquad \text{(Eq. 13).}$$
+
+**What it provides.** Three pieces. First, a **theoretical anchor for the hypervigilance framing**: Sozou makes $\gamma_B(c)$ interpretable as the agent's *posterior over the hazard rate* — sharper posteriors give exponential discounting, broader posteriors give hyperbolic. The clinical reading (hypervigilance ↔ posterior over hazard ↔ Head 2) lands as equivalence, not metaphor. Second, **Lemma 5.1** — if $d(t) = \int_0^1 w(\gamma) \gamma^t\,d\gamma$ then $Q^{H,d}_\pi = \int_0^1 w(\gamma) Q^{H,\gamma}_\pi\,d\gamma$ — lets us assemble non-exponential discounts at inference from a basis of exponential critics. Third, the **multi-horizon auxiliary task**: Multi-Rainbow (acts at one $\gamma$, learns over many) recovers most of Hyper-Rainbow's gain on 19 ALE games — the cheapest version of the 5-HT route.
+
+**What gap remains.** Fedus's $w(\gamma)$ is a fixed prior; our $\gamma_B(c)$ is a learned context-conditioned point estimate — the bridge to a posterior moment is `professor-bayesian-nn`'s. **Empirical signature**: three-way ablation — (a) fixed-$\gamma$, (b) multi-horizon auxiliary with fixed acting-$\gamma$, (c) full Head-2-emits-$\gamma_B(c)$. If (b) ≈ (c), the win is the auxiliary task; if (c) > (b) only on contexts with shifted effective hazard, the Sozou interpretation is load-bearing.
+
+## 6. Pointers
 
 - Technical audit with full equations and identifiability conditions: [`docs/project/critiques/20260518_film_as_hyperparameter_modulator_theoretical_audit.md`](../critiques/20260518_film_as_hyperparameter_modulator_theoretical_audit.md).
 - Plain-English story of the audit and the two pushbacks: [`docs/project/critiques/20260518_film_as_hyperparameter_modulator_audit_story.md`](../critiques/20260518_film_as_hyperparameter_modulator_audit_story.md).
 - Direction memo this is feeding back into: [`docs/project/directions/20260516_nmn_scaling_shifting_as_hyperparameter_modulation_v3.md`](../directions/20260516_nmn_scaling_shifting_as_hyperparameter_modulation_v3.md) and successors.
+- 5-HT route references integrated in Section 5: Schaul et al. 2015 (UVFA, ICML), Sherstan et al. 2020 (γ-Nets, AAAI 2020, 34(04), 5717–5725, arXiv:1911.07794), Fedus et al. 2019 (Hyperbolic discounting, arXiv:1902.06865) — all PDFs under [`docs/project/references/unclassified/`](../references/unclassified/).
 
-**Next steps by agent.** `senior-developer`: scope a minimal two-headed modulator class with explicit Head 1 / Head 2 separation and a per-knob ablation flag. `experiment-designer`: design the three identifiability tests (broadcast-vs-unconstrained for NA; stratified gradient-direction for ACh; gauge sweep for DA; calibrated-horizon for 5-HT). `professor-rl`: weigh in on the DA-vs-ACh gauge breakers compatible with the project's optimiser (Adam preconditioning gives a partial break; explicit Fisher/KFAC would give a clean one).
+**Next steps by agent.** `senior-developer`: scope a minimal two-headed modulator class with explicit Head 1 / Head 2 separation and a per-knob ablation flag; additionally, scope the γ-Nets-style auxiliary head (multi-$\gamma$ critic training with loss scaling) as a first-stage milestone toward the full 5-HT route. `experiment-designer`: design the three identifiability tests (broadcast-vs-unconstrained for NA; stratified gradient-direction for ACh; gauge sweep for DA; calibrated-horizon for 5-HT) **plus** the three-way ablation from Section 5.3 (fixed-$\gamma$ vs. multi-horizon-auxiliary vs. full Head-2-emits-$\gamma_B(c)$). `professor-rl`: weigh in on the DA-vs-ACh gauge breakers compatible with the project's optimiser (Adam preconditioning gives a partial break; explicit Fisher/KFAC would give a clean one). `professor-bayesian-nn`: bridge Fedus's hazard-prior interpretation to Head 2's output — does it correspond to a posterior mean, MAP, or full variational moment over $\lambda$?
