@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 20
+**Insights**: 21
 **Last updated**: 2026-05-18
 
 ---
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-18 | 17:37 | `20260518_1737_wandb_post_crash_frozen_state_misread` | When a WandB run crashes, `run.summary` keys stay frozen at the last logged values and `_runtime` stops incrementing — neither signal leaks the run's liveness state. The 2026-05-13 14:20 re-summary read R2.6's frozen post-crash summary keys (the runs had died 14.5h earlier) and described them as "in-flight progress at 29% elapsed", a misframing caught only when the user pointed out "There is no running training" on 2026-05-14. Fix: always check `run.state` (running / finished / failed / crashed) before quoting summary keys as live progress. |
 | 2026-05-18 | 15:16 | `20260518_1516_wandb_log_dict_timesteps_key` | WandB `define_metric("Episode/*", step_metric="timesteps")` requires `"timesteps"` to be a key INSIDE the log_dict on every `wandb.log` call — passing it only via `step=` kwarg silently breaks the x-axis binding and metrics render as single bars instead of per-step traces. Second gotcha: patterns are case-sensitive (`episode/*` won't match keys logged as `Episode/foo`). Fix at commit `2da1a33`: include `"timesteps": policy_step` + `"iteration": iter_num` inside each log_dict; align all `define_metric` patterns to uppercase. Project-wide rule across rPPO + Dreamer + dreamer-srl. |
 | 2026-05-16 | 14:33 | `20260516_1433_graphifyy_integration_cheatsheet` | Four non-obvious gotchas integrating Graphify into a project conda env: (1) install `graphifyy` (double-y; single-y on PyPI is squatted), (2) invoke `graphify update <path>` (NOT bare positional which prints help), (3) output lands at `<scanned_path>/graphify-out/` (NOT cwd), (4) wrapper scripts need `Path(sys.executable).parent / 'graphify'` PATH fallback when the conda env's bin isn't on shell PATH. `.gitignore` must use `**/graphify-out/` (recursive). Tree-sitter pass is sufficient for code structure (735 nodes / 1009 edges on src/, zero LLM tokens). |
 | 2026-05-13 | 23:09 | `20260513_2309_merge_path_manifest_tripwire` | When a project carries 165GB of gitignored training data and CLAUDE.md mandates "snapshot critical data before any merge", full cp -a is infeasible. Instead, save a path manifest (find -printf '%p %s\n', ~16MB, 128k lines) as tripwire, verify the op is structurally non-destructive (fast-forward only, no clean -x, no force-checkout), and post-op diff the manifest against current find count. Validated on v1.3 → develop → v1.4: delta=0. |

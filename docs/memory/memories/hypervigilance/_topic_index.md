@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `hypervigilance` topic.
 
 **Folder definition**: Hypervigilance experiments
-**Insights**: 9
+**Insights**: 11
 **Last updated**: 2026-05-18
 
 ---
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-18 | 17:36 | `20260518_1736_sameprop_c_seed44_directional_replication` | R2.6 Cell C seed 44 at 62.5% of 10M-ep budget on n101 (still running) reproduces the R2.5 event-level class discrimination directionally: training-time M2 gap +29 pp (R2.5 eval-time was +37 pp), M5_predator 0.95 (R2.5 eval was 0.75), per-tag rabbit_TL vs rabbit_BR identical to within 0.06 pp. Threshold misses are consistent with online-vs-eval bias — final verdict requires the offline eval-rollout that produced R2.5's §12 numbers. Status: active, valid_until 2026-05-21. |
+| 2026-05-18 | 17:35 | `20260518_1735_sameprop_a1_seed45_corner_camping_refuted` | R2.6 Cell A1 seed 45 finished 10M ep on n102 with Episode/Steps=98/500 — H₁(A1-stable, corner-camping is a generic basin) clearly refuted. Agent learned to avoid the TL corner (where both predator and TL-rabbit live) but then starved (Term_Starvation=0.84, FoodEaten=1.77/ep). Third A1 policy regime, distinct from seed 43's corner-camping (486/500) and the seed-45 partial mid-training "stay-and-eat" reading on n106. Spatial-level class-blindness survives (per-tag Δ_TL=+0.04 cells); the specific high-survival policy is seed-specific. |
 | 2026-05-18 | 15:14 | `20260518_1514_num_envs_vs_budget_interaction` | Size-vs-num_envs optimum is regime-dependent on training budget — short-budget (200k) sweeps had envs=4 + size=S as the winner, but long-budget (2M-4M) sweeps catch up dramatically (XS/16: +110% from 200k→2M; XS/64: +216%) and flip to envs=16-64 + size=XS. Mechanism: high-parallelism configs amortise more WM warm-up. Operational lesson: short-budget hyperparameter sweeps systematically under-rank high-parallelism cells; do not pick a production recipe from a short-budget winner without re-running at deployment budget. |
 | 2026-05-18 | 15:13 | `20260518_1513_production_recipe_xs_16_4m_hypervigilance` | Production recipe for 10×10 hypervigilance with dreamer-srl v2: XS preset / num_envs=16 / 4M total env steps → ep_len_avg ≈ 184, +74% over sheeprl baseline (106). Winner of an 8-cell extended sweep (E1-E8) across {XS, S, M} × {16, 64, 128} × {2M, 4M} on nodes 106-110, 112, 114. Sheeprl PyTorch DreamerV3 no longer the recommended stack for this task — dreamer-srl v2 outperforms by +74% and is JAX-native. |
 | 2026-05-13 | 00:15 | `20260513_0015_active_swapped_geq_matched_reframes_meta` | Specialist ceiling table from the 6-world unmodulated probe (single-seed, 10M ep each) shows active_swapped (402 steps) > active_matched (338 steps). Swap is NOT harder than matched in isolation, which refutes the original 'swap is load-bearing' framing for the upcoming meta head-to-head and reframes it as a CKA-factorisation test instead. |
