@@ -5,7 +5,7 @@ author: professor-dl-theory
 audience: user + pi + research-postdoc
 date: 2026-05-18
 scope: "Independent theoretical audit (no project docs read). First-principles assessment of whether a FiLM-like operator $h \\mapsto \\gamma(c)\\odot h + \\beta(c)$, or a more general hypernetwork $\\theta = g_\\phi(c)$, can play the role of a learned modulator for the four RL hyperparameters that Doya (2002) mapped to ascending neuromodulators (NA→inverse-temperature, ACh→learning-rate, DA→TD-error gain, 5-HT→discount)."
-one_line_summary: "Verdict — partial-with-a-category-warning: NA-temperature and DA-gain are clean forward-pass FiLM targets; ACh-learning-rate and 5-HT-discount live outside the forward pass and are reachable only via meta-gradient or unrolled-Bellman hypernetwork extensions, not by ordinary FiLM."
+one_line_summary: "Verdict — partial-with-a-category-warning: NA-temperature and DA-gain are clean forward-pass FiLM targets; ACh-learning-rate is reachable by ordinary FiLM via the chain-rule gradient-gating channel as a per-pathway generalisation of Doya's scalar α — coupled with feature gating and acting only upstream of the FiLM cut (softened 2026-05-18 addendum); 5-HT-discount lives in the Bellman fixed-point operator and remains unreachable by forward-pass FiLM."
 ---
 
 ## Headline
@@ -57,6 +57,36 @@ This is identifiable up to a *positive scalar gauge*: $(\kappa, \text{lr}) \maps
 **Form and identifiability.** Even with the cleanest route (1), $\alpha(c)$ is *not* identifiable from on-policy returns alone in finite training time — it is confounded with $\kappa$ (DA-gain), with the Fisher metric scale, and with the trust-region radius. Identifiability requires a controlled experiment that *holds the loss-gradient direction fixed and varies only the step size* — typically an offline replay sweep.
 
 **Empirical signature.** A *FiLM-only* implementation claiming ACh-role should fail a *gradient-direction-preserving* perturbation test: take a trained agent, evaluate it at two contexts $c_1, c_2$ on *the same batch*, and check whether the *direction* of $\nabla_\theta\mathcal{L}$ differs (FiLM-as-ACh prediction: directions identical, only magnitude differs) or differs in direction (FiLM-as-feature-conditioning: directions differ; ACh metaphor is decorative).
+
+#### Addendum (2026-05-18, follow-up): the chain-rule gradient-gating channel
+
+The audit above named the Adam-normalisation route as the only quantitatively defensible FiLM-to-ACh channel and called it a *side channel*. A follow-up challenge correctly identifies a more fundamental, optimiser-independent channel — the **chain-rule channel** — which I had folded into "feature gating" and treated as separate from learning-rate modulation. It is not separate. Reproducing the gradient factorisation: for a feedforward network $h_0 \to \cdots \to h_L$ with a FiLM operator inserted between layers $k-1$ and $k$, so that $h_k^{\text{post}} = \gamma(c)\odot h_k^{\text{pre}} + \beta(c)$, the Hadamard scale is a diagonal Jacobian $J_{\text{FiLM}} = \mathrm{diag}(\gamma(c))$ in the backward pass.
+
+**Q1 (forward and back).** Three cases for a parameter $W$:
+
+*(a) $W$ in the layer immediately upstream of FiLM* (i.e., $h_k^{\text{pre}} = f(W, h_{k-1})$). By the chain rule,
+$$\frac{\partial \mathcal{L}}{\partial W} \;=\; \left[\,\mathrm{diag}(\gamma(c))\,\frac{\partial \mathcal{L}}{\partial h_k^{\text{post}}}\,\right]^{\!\top}\!\frac{\partial h_k^{\text{pre}}}{\partial W}.$$
+The multiplier $\gamma(c)$ enters as a **per-channel diagonal matrix** on the upstream gradient signal — vector-valued, rank equal to the FiLM channel count, applied element-wise on the FiLM axis.
+
+*(b) $W$ two or more layers upstream of FiLM*. Same factorisation, with the FiLM Jacobian still appearing exactly once in the chain:
+$$\frac{\partial \mathcal{L}}{\partial W} \;=\; \left(\prod_{j<k}\frac{\partial h_j^{\text{pre}}}{\partial h_{j-1}}\right)^{\!\top}\!\mathrm{diag}(\gamma(c))\,\frac{\partial \mathcal{L}}{\partial h_k^{\text{post}}}\,\cdots$$
+$\gamma(c)$ remains a *single* diagonal-matrix factor at the FiLM layer, but its effect on $W$ is *no longer per-channel* — it is mixed through the upstream Jacobians. The effective per-parameter gain depends on which FiLM channels $W$ feeds into, weighted by the upstream chain.
+
+*(c) $W$ downstream of FiLM.* Here $\gamma(c)$ does **not** appear as a multiplicative factor in $\partial\mathcal{L}/\partial W$. It enters only indirectly, through the value of the input activation $h_k^{\text{post}} = \gamma \odot h_k^{\text{pre}} + \beta$ that feeds into $W$'s layer in the forward pass. The gradient gain channel is therefore **strictly upstream-acting**.
+
+The challenge is correct: $\gamma(c)$ multiplies upstream gradients directly, no optimiser preconditioner required.
+
+**Q2 (Doya's $\alpha$ vs. chain-rule gating).** Doya's $\alpha(c)$ is a uniform scalar on every parameter. The chain-rule channel is a **per-channel diagonal at the FiLM cut**, propagated upstream by the network Jacobian — it is anisotropic in parameter space, structured by the architecture. The clean formal name: **per-channel context-conditioned gradient gating at a layer cut**, equivalently a **context-conditioned diagonal Jacobian re-weighting** of the loss in the directions of the FiLM-channel basis. This is structurally identical to the gradient-side action of a *gating mechanism* (Hochreiter–Schmidhuber LSTM gates, gated linear units / Dauphin et al. 2017, Highway networks / Srivastava et al. 2015) and to a single-expert limit of *mixture-of-experts soft routing* (Shazeer et al. 2017) where the gate is context-conditioned rather than input-conditioned. It is a **generalisation** of Doya's $\alpha$: in the special limit $\gamma(c) = \alpha(c)\,\mathbf{1}$ (uniform broadcast over channels) *and* FiLM placed at the network's *output* (so every parameter is upstream), the chain-rule gain reduces to a global scalar multiplying every parameter's gradient — exactly Doya's $\alpha$, modulo the implicit-step-size gauge already noted (DA/$\alpha$ gauge in Q1's DA-gain block).
+
+**Q3 (identifiability).** The user's observation is sharp: $\gamma(c) = 0$ zeros both the forward activation *and* the upstream gradient simultaneously. Forward feature-gating and backward gradient-gating are **two views of the same operator**, not two operators. They are not separable by any single forward+backward pass. This does not collapse the ACh interpretation — it *fuses* it with feature gating. The honest reading is a **coupled feature-and-gradient gate**: ACh-via-FiLM is necessarily also feature-conditioning-via-FiLM, and any claim that "FiLM implements ACh" must be read as "FiLM implements a coupled gate whose backward action *includes* a per-channel learning-rate modulation as one of its effects". The two views can be partially disentangled only by an intervention that breaks the coupling — e.g., a stop-gradient on the FiLM forward path while leaving the backward $\gamma$ in place, which yields a synthetic ablation that the unmodified architecture cannot achieve.
+
+**Q4 (side vs. principal channel).** Reclassified. The chain-rule channel is the **principal** FiLM-to-effective-learning-rate channel; the Adam-denominator route is a secondary, optimiser-dependent modulation on top. The original audit was wrong to call ACh-via-FiLM "not FiLM-reachable" without qualification. The softened verdict: **ACh-style per-pathway learning-rate modulation *is* reachable by ordinary forward-pass FiLM via the chain-rule gradient-gating channel, as a strict generalisation of Doya's scalar $\alpha$, but only in coupled form with feature gating and only upstream of the FiLM cut — it does not act on parameters downstream of FiLM, and it is not separately identifiable from feature gating.** Doya's scalar $\alpha$ is the rank-1, output-placed, uniform-broadcast limit.
+
+**Empirical signature (revised).** The original gradient-direction-preserving test was *partially* right and needs refinement. Under chain-rule gating between contexts $c_1, c_2$ on the same batch:
+- For a parameter $W$ that feeds **a single FiLM channel** $i$, the gradient at $c_1$ vs. $c_2$ is scaled by $\gamma_i(c_1)/\gamma_i(c_2)$ — **same direction, magnitude only**.
+- For a parameter $W$ that feeds **multiple FiLM channels** with non-proportional $\gamma_i$'s, the *relative* channel contributions change, so the gradient **direction in parameter space rotates**.
+
+The revised test: stratify upstream parameters by *which FiLM channel they predominantly feed* (e.g., by the row-norms of the weight matrix into the FiLM layer) and check direction preservation **within strata** while expecting rotation **across strata**. Pure scalar-$\alpha$ (Doya) predicts global direction preservation across *all* parameters; pure feature-conditioning predicts no structured stratification; the chain-rule reading predicts *exactly* the stratified pattern.
 
 ### 5-HT → discount $\gamma_{\text{Bellman}}$
 
