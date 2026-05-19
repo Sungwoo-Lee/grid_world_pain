@@ -56,4 +56,5 @@ The dreamer-srl v2 rebuild reached parity with sheeprl on the food-only task (ep
 - [[20260518_1513_production_recipe_xs_16_4m_hypervigilance]] (hypervigilance, 2026-05-18) — Production recipe for 10×10 hypervigilance with dreamer-srl v2: XS size preset /
 - [[20260518_1514_num_envs_vs_budget_interaction]] (hypervigilance, 2026-05-18) — Size-vs-num_envs optimum is regime-dependent on training budget — at short budge
 - [[20260518_1515_m_paradox_resolution_slow_learner]] (dreamer_diagnosis, 2026-05-18) — M (640/1024/mlp_layers=3) size cells appeared stuck at low ep_len despite the lo
+- [[20260519_1507_dreamer_srl_v2_cpu_buffer_regression]] (dreamer_diagnosis, 2026-05-19) — dreamer-srl v2's replay buffer is 100% numpy/CPU (faithful to sheeprl's PyTorch 
 <!-- END BACKLINKS -->
