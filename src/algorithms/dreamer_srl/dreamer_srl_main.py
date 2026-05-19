@@ -32,11 +32,8 @@ import numpy as np
 import optax
 from flax import nnx
 
-# Project imports — use script-relative path so this works in worktrees too.
-# File is at src/algorithms/dreamer_srl/dreamer_srl_main.py → 4 dirname() to repo root.
-import os as _os
-_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))))
-sys.path.insert(0, _REPO_ROOT)
+# Project imports
+sys.path.insert(0, '/media/nas01/projects/Interoceptive-AI/grid_world_pain')
 from src.utils.config import Config
 from src.environment.config_loader import load_env_params
 from src.environment.wrapper import ParallelEnv
@@ -188,6 +185,10 @@ def main() -> None:
                         help="Override results directory (default: results/JAX_DreamerSRL/<run-name>/)")
     parser.add_argument("--debug", action="store_true",
                         help="Print debug info at startup")
+    parser.add_argument("--buffer-device", type=str, default="cpu", choices=["cpu", "gpu"],
+                        help="Buffer storage device: 'cpu' (default, preserves all tests) or "
+                             "'gpu' (Step 2 opt-in, stores replay buffer as jnp.ndarray). "
+                             "See docs/develop/active/dreamer_srl_v2/buffer_perf_fix_plan_option_L.md §Step 2")
     args = parser.parse_args()
 
     # -----------------------------------------------------------------------
@@ -321,6 +322,7 @@ def main() -> None:
         buffer_size=buffer_size,
         n_envs=num_envs,
         obs_keys=("obs",),
+        device=args.buffer_device,  # Step 2: "cpu" (default) or "gpu" (opt-in via --buffer-device)
     )
     player = Player(world_model, actor, num_envs)
 
@@ -859,12 +861,43 @@ def main() -> None:
                 t_train_start = time.time()
 
                 # Sample once for all gradient steps (sheeprl L664-L671)
-                local_data = buffer.sample(
-                    batch_size=batch_size,
-                    sequence_length=seq_len,
-                    n_samples=n_grad_steps,
-                )
+                # Step 2 — GPU-buffer opt-in: when buffer.device=="gpu", pass a JAX PRNG key
+                # and skip the subsequent H2D transfer (data is already on device).
+                # When buffer.device=="cpu" (default), key=None keeps existing behaviour.
+                if buffer._on_gpu:
+                    key, sample_key = jax.random.split(key)
+                    local_data = buffer.sample(
+                        batch_size=batch_size,
+                        sequence_length=seq_len,
+                        n_samples=n_grad_steps,
+                        key=sample_key,
+                    )
+                else:
+                    local_data = buffer.sample(
+                        batch_size=batch_size,
+                        sequence_length=seq_len,
+                        n_samples=n_grad_steps,
+                    )
                 # local_data shape: [n_grad_steps, seq_len, batch_size, ...]
+
+                # Step 1 — Option S: single H2D for the whole iteration.
+                # BEFORE: jnp.asarray(v[i], dtype=jnp.float32) was called once
+                # per gradient step (line 885 in pre-Step-1 code), launching one
+                # host→device transfer per grad step (tens per training iteration).
+                # AFTER: one jax.tree.map does the full [n_grad_steps, ...] array
+                # in a single transfer; v[i] inside the loop is a zero-copy JAX
+                # slice (dispatches to lax.dynamic_index_in_dim).
+                # Bit-identity is preserved: same numbers, same dtype (float32),
+                # just fewer CUDA launches.
+                # Step 2: when buffer._on_gpu, data is already jnp.ndarray — the
+                # jax.tree.map still ensures float32 dtype consistency but avoids
+                # any H2D transfer (no-op for GPU arrays already on device).
+                # Reference: docs/develop/active/dreamer_srl_v2/buffer_perf_fix_plan_option_L.md §Step 1 §Step 2
+                local_data_gpu = jax.tree.map(
+                    lambda x: jnp.asarray(x, dtype=jnp.float32),
+                    local_data,
+                )
+                # local_data_gpu[k] shape: [n_grad_steps, seq_len, batch_size, ...] on device
 
                 for i in range(n_grad_steps):
                     # Polyak update BEFORE train step (sheeprl L675-L680)
@@ -881,13 +914,9 @@ def main() -> None:
                         nnx.update(target_critic, new_target_params)
 
                     # Extract batch for this gradient step (sheeprl L681)
-                    # local_data[key] shape: [n_grad_steps, seq_len, batch_size, ...]
-                    # Slice i to get [seq_len, batch_size, ...]
-                    batch = {}
-                    for k, v in local_data.items():
-                        arr = jnp.asarray(v[i], dtype=jnp.float32)
-                        # v[i] shape: [seq_len, batch_size, ...] → matches [T, B, ...]
-                        batch[k] = arr
+                    # local_data_gpu[key] shape: [n_grad_steps, seq_len, batch_size, ...]
+                    # Slice i to get [seq_len, batch_size, ...] — zero-copy JAX slice.
+                    batch = {k: v[i] for k, v in local_data_gpu.items()}
 
                     # one_train_step (sheeprl L682-L698 train(...) call)
                     key, k_train = jax.random.split(key)

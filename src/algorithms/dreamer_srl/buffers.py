@@ -17,11 +17,18 @@ is never passed through JAX JIT. The add() and sample() methods mutate
 self._buf, self._pos, self._full in-place — matching sheeprl's OOP pattern
 exactly. The _sample_at_indices() method is added (not in sheeprl) to expose
 explicit-index sampling, bypassing the PRNG, for CP3b's bit-identity tests.
+
+Step 2 (Option M slice — GPU-mode buffer flag):
+  device="cpu" (default) preserves all existing numpy behaviour exactly;
+  device="gpu" stores arrays as jnp.ndarray and uses JAX ops for add/sample.
+  See docs/develop/active/dreamer_srl_v2/buffer_perf_fix_plan_option_L.md §Step 2.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Union
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 
@@ -51,19 +58,26 @@ class SequentialReplayBuffer:
         buffer_size: int,
         n_envs: int = 1,
         obs_keys: Sequence[str] = ("observations",),
+        device: str = "cpu",
     ) -> None:
         # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L50-L79 (ReplayBuffer.__init__)
         if buffer_size <= 0:
             raise ValueError(f"The buffer size must be greater than zero, got: {buffer_size}")
         if n_envs <= 0:
             raise ValueError(f"The number of environments must be greater than zero, got: {n_envs}")
+        if device not in ("cpu", "gpu"):
+            raise ValueError(f"device must be 'cpu' or 'gpu', got {device!r}")
         self._buffer_size: int = buffer_size
         self._n_envs: int = n_envs
         self._obs_keys: Sequence[str] = obs_keys
-        self._buf: Dict[str, np.ndarray] = {}
+        self._buf: Dict[str, Union[np.ndarray, jax.Array]] = {}
         self._pos: int = 0
         self._full: bool = False
         self._rng: np.random.Generator = np.random.default_rng()
+        # Step 2: device flag — "cpu" preserves all existing numpy behaviour;
+        # "gpu" uses jnp arrays and JAX-native add/sample ops.
+        self._device: str = device
+        self._on_gpu: bool = (device == "gpu")
 
     # ------------------------------------------------------------------
     # Properties (mirrors ReplayBuffer API used by the training loop)
@@ -141,11 +155,19 @@ class SequentialReplayBuffer:
                     f"but 'data' is of type '{type(data)}'"
                 )
             for k, v in data.items():
-                if not isinstance(v, np.ndarray):
-                    raise ValueError(
-                        f"'data' must be a dictionary containing Numpy arrays. "
-                        f"Found key '{k}' containing a value of type '{type(v)}'"
-                    )
+                if self._on_gpu:
+                    # GPU mode accepts jax.Array or np.ndarray (will be stored as jnp)
+                    if not isinstance(v, (np.ndarray, jax.Array)):
+                        raise ValueError(
+                            f"'data' must be a dictionary containing Numpy or JAX arrays. "
+                            f"Found key '{k}' containing a value of type '{type(v)}'"
+                        )
+                else:
+                    if not isinstance(v, np.ndarray):
+                        raise ValueError(
+                            f"'data' must be a dictionary containing Numpy arrays. "
+                            f"Found key '{k}' containing a value of type '{type(v)}'"
+                        )
             last_key = next(iter(data.keys()))
             last_batch_shape = next(iter(data.values())).shape[:2]
             for i, (k, v) in enumerate(data.items()):
@@ -178,33 +200,71 @@ class SequentialReplayBuffer:
         else:
             data_to_store = data
 
-        if env_idxes is not None:
-            # CP7-P1: per-env-subset write for reset_data at done boundaries.
-            # data shape: [seq_len, len(env_idxes), ...]; write only into env columns env_idxes.
-            # Non-selected env columns at this time slot are left as stale ring-buffer data
-            # (acceptable — sequences are sampled per-env and non-done envs are not done here).
-            # Ported from sheeprl@33b6366:dreamer_v3.py:L650
-            #             sheeprl@33b6366:sheeprl/data/buffers.py:L193-L221 (add with env_idxes)
-            if self.empty:
-                # Initialize buffer with zeros for all envs before writing subset.
-                # Use first key to determine trailing shape, then init full buffer.
+        if self._on_gpu:
+            # GPU path: jnp arrays, functional .at[].set() updates.
+            # Step 2 (Option M) — mirrors dreamer_v3_trainer.py:946-977.
+            jax_idxes = jnp.array(idxes)
+            if env_idxes is not None:
+                # CP7-P1 subset write: broadcast idxes[:, None] x env_idxes[None, :]
+                # to replace np.ix_(idxes, env_idxes).
+                jax_env_idxes = jnp.array(env_idxes)
+                if self.empty:
+                    for k, v in data_to_store.items():
+                        jv = jnp.asarray(v)
+                        self._buf[k] = jnp.zeros(
+                            shape=(self._buffer_size, self._n_envs, *jv.shape[2:]),
+                            dtype=jv.dtype,
+                        )
+                        self._buf[k] = self._buf[k].at[
+                            jax_idxes[:, None], jax_env_idxes[None, :]
+                        ].set(jv)
+                else:
+                    for k, v in data_to_store.items():
+                        jv = jnp.asarray(v)
+                        self._buf[k] = self._buf[k].at[
+                            jax_idxes[:, None], jax_env_idxes[None, :]
+                        ].set(jv)
+            elif self.empty:
                 for k, v in data_to_store.items():
-                    self._buf[k] = np.zeros(
-                        shape=(self._buffer_size, self._n_envs, *v.shape[2:]), dtype=v.dtype
+                    jv = jnp.asarray(v)
+                    self._buf[k] = jnp.zeros(
+                        shape=(self._buffer_size, self._n_envs, *jv.shape[2:]),
+                        dtype=jv.dtype,
                     )
-                    self._buf[k][np.ix_(idxes, env_idxes)] = data_to_store[k]
+                    self._buf[k] = self._buf[k].at[jax_idxes].set(jv)
             else:
                 for k, v in data_to_store.items():
-                    self._buf[k][np.ix_(idxes, env_idxes)] = data_to_store[k]
-        elif self.empty:
-            for k, v in data_to_store.items():
-                self._buf[k] = np.empty(
-                    shape=(self._buffer_size, self._n_envs, *v.shape[2:]), dtype=v.dtype
-                )
-                self._buf[k][idxes] = data_to_store[k]
+                    jv = jnp.asarray(v)
+                    self._buf[k] = self._buf[k].at[jax_idxes].set(jv)
         else:
-            for k, v in data_to_store.items():
-                self._buf[k][idxes] = data_to_store[k]
+            # CPU path: original numpy in-place writes, unchanged.
+            if env_idxes is not None:
+                # CP7-P1: per-env-subset write for reset_data at done boundaries.
+                # data shape: [seq_len, len(env_idxes), ...]; write only into env columns env_idxes.
+                # Non-selected env columns at this time slot are left as stale ring-buffer data
+                # (acceptable — sequences are sampled per-env and non-done envs are not done here).
+                # Ported from sheeprl@33b6366:dreamer_v3.py:L650
+                #             sheeprl@33b6366:sheeprl/data/buffers.py:L193-L221 (add with env_idxes)
+                if self.empty:
+                    # Initialize buffer with zeros for all envs before writing subset.
+                    # Use first key to determine trailing shape, then init full buffer.
+                    for k, v in data_to_store.items():
+                        self._buf[k] = np.zeros(
+                            shape=(self._buffer_size, self._n_envs, *v.shape[2:]), dtype=v.dtype
+                        )
+                        self._buf[k][np.ix_(idxes, env_idxes)] = data_to_store[k]
+                else:
+                    for k, v in data_to_store.items():
+                        self._buf[k][np.ix_(idxes, env_idxes)] = data_to_store[k]
+            elif self.empty:
+                for k, v in data_to_store.items():
+                    self._buf[k] = np.empty(
+                        shape=(self._buffer_size, self._n_envs, *v.shape[2:]), dtype=v.dtype
+                    )
+                    self._buf[k][idxes] = data_to_store[k]
+            else:
+                for k, v in data_to_store.items():
+                    self._buf[k][idxes] = data_to_store[k]
         if self._pos + data_len >= self._buffer_size:
             self._full = True
         self._pos = next_pos
@@ -220,7 +280,8 @@ class SequentialReplayBuffer:
         clone: bool = False,
         n_samples: int = 1,
         sequence_length: int = 1,
-    ) -> Dict[str, np.ndarray]:
+        key: Optional[jax.Array] = None,
+    ) -> Dict[str, Union[np.ndarray, jax.Array]]:
         """Sample elements from the replay buffer in a sequential manner.
 
         Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L395-L465
@@ -239,9 +300,11 @@ class SequentialReplayBuffer:
             n_samples (int): the number of samples to perform. Defaults to 1.
             sequence_length (int): the length of each sampled sequence.
                 Defaults to 1.
+            key (Optional[jax.Array]): JAX PRNG key. Required when device="gpu";
+                ignored (may be None) when device="cpu". Step 2 addition.
 
         Returns:
-            Dict[str, np.ndarray]: shape [n_samples, sequence_length, batch_size, ...]
+            Dict[str, np.ndarray | jax.Array]: shape [n_samples, sequence_length, batch_size, ...]
         """
         # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L419-L465
         batch_dim = batch_size * n_samples
@@ -267,35 +330,76 @@ class SequentialReplayBuffer:
                 f"The sequence length ({sequence_length}) is greater than "
                 f"the buffer size ({self._buffer_size})"
             )
+        if self._on_gpu and key is None:
+            raise ValueError(
+                "A JAX PRNG key must be provided when device='gpu'. "
+                "Pass key=jax.random.PRNGKey(...) to sample()."
+            )
 
         # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L438-L456
-        if self._full:
-            # Exclude the chunk (self._pos - sequence_length, self._pos) — invalid
-            first_range_end = self._pos - sequence_length + 1
-            second_range_end = (
-                self._buffer_size if first_range_end >= 0
-                else self._buffer_size + first_range_end
+        if self._on_gpu:
+            # GPU path: use jax.random.randint for index sampling.
+            # Step 2 (Option M) — mirrors dreamer_v3_trainer.py:997-1011.
+            assert key is not None  # guaranteed by check above
+            if self._full:
+                first_range_end = self._pos - sequence_length + 1
+                second_range_end = (
+                    self._buffer_size if first_range_end >= 0
+                    else self._buffer_size + first_range_end
+                )
+                valid_idxes = jnp.array(
+                    list(range(0, first_range_end)) + list(range(self._pos, second_range_end)),
+                    dtype=jnp.int32,
+                )
+                key, sample_key, env_key = jax.random.split(key, 3)
+                rand_pos = jax.random.randint(
+                    sample_key, shape=(batch_dim,), minval=0, maxval=len(valid_idxes),
+                    dtype=jnp.int32,
+                )
+                start_idxes = valid_idxes[rand_pos]
+            else:
+                key, sample_key, env_key = jax.random.split(key, 3)
+                start_idxes = jax.random.randint(
+                    sample_key, shape=(batch_dim,),
+                    minval=0, maxval=self._pos - sequence_length + 1,
+                    dtype=jnp.int32,
+                )
+                # env_key already set by split above
+            chunk_length = jnp.arange(sequence_length, dtype=jnp.int32).reshape(1, -1)
+            idxes = (start_idxes.reshape(-1, 1) + chunk_length) % self._buffer_size
+            return self._get_samples(
+                idxes, batch_size, n_samples, sequence_length,
+                sample_next_obs=sample_next_obs, clone=clone, gpu_env_key=env_key,
             )
-            valid_idxes = np.array(
-                list(range(0, first_range_end)) + list(range(self._pos, second_range_end)),
-                dtype=np.intp,
-            )
-            start_idxes = valid_idxes[
-                self._rng.integers(0, len(valid_idxes), size=(batch_dim,), dtype=np.intp)
-            ]
         else:
-            start_idxes = self._rng.integers(
-                0, self._pos - sequence_length + 1, size=(batch_dim,), dtype=np.intp
+            # CPU path: original numpy RNG — unchanged.
+            if self._full:
+                # Exclude the chunk (self._pos - sequence_length, self._pos) — invalid
+                first_range_end = self._pos - sequence_length + 1
+                second_range_end = (
+                    self._buffer_size if first_range_end >= 0
+                    else self._buffer_size + first_range_end
+                )
+                valid_idxes = np.array(
+                    list(range(0, first_range_end)) + list(range(self._pos, second_range_end)),
+                    dtype=np.intp,
+                )
+                start_idxes = valid_idxes[
+                    self._rng.integers(0, len(valid_idxes), size=(batch_dim,), dtype=np.intp)
+                ]
+            else:
+                start_idxes = self._rng.integers(
+                    0, self._pos - sequence_length + 1, size=(batch_dim,), dtype=np.intp
+                )
+
+            # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L458-L465
+            chunk_length = np.arange(sequence_length, dtype=np.intp).reshape(1, -1)
+            idxes = (start_idxes.reshape(-1, 1) + chunk_length) % self._buffer_size
+
+            return self._get_samples(
+                idxes, batch_size, n_samples, sequence_length,
+                sample_next_obs=sample_next_obs, clone=clone,
             )
-
-        # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L458-L465
-        chunk_length = np.arange(sequence_length, dtype=np.intp).reshape(1, -1)
-        idxes = (start_idxes.reshape(-1, 1) + chunk_length) % self._buffer_size
-
-        return self._get_samples(
-            idxes, batch_size, n_samples, sequence_length,
-            sample_next_obs=sample_next_obs, clone=clone,
-        )
 
     # ------------------------------------------------------------------
     # _get_samples()
@@ -303,13 +407,14 @@ class SequentialReplayBuffer:
 
     def _get_samples(
         self,
-        batch_idxes: np.ndarray,
+        batch_idxes: Union[np.ndarray, jax.Array],
         batch_size: int,
         n_samples: int,
         sequence_length: int,
         sample_next_obs: bool = False,
         clone: bool = False,
-    ) -> Dict[str, np.ndarray]:
+        gpu_env_key: Optional[jax.Array] = None,
+    ) -> Dict[str, Union[np.ndarray, jax.Array]]:
         """Internal: retrieve samples given batch_idxes of shape [B*N, seq_len].
 
         Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L467-L526
@@ -328,52 +433,100 @@ class SequentialReplayBuffer:
             sequence_length: length of each sequence.
             sample_next_obs: whether to include next-obs. Defaults to False.
             clone: whether to clone output arrays. Defaults to False.
+            gpu_env_key: JAX PRNG key for env-index sampling in GPU mode.
+                None for CPU mode (uses self._rng). Step 2 addition.
 
         Returns:
-            Dict[str, np.ndarray]: shape [n_samples, sequence_length, batch_size, ...]
+            Dict[str, np.ndarray | jax.Array]: shape [n_samples, sequence_length, batch_size, ...]
         """
         # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L476-L526
         batch_shape = (batch_size * n_samples, sequence_length)
-        flattened_batch_idxes = np.ravel(batch_idxes)
 
-        # Each sequence must come from the same environment (item #1)
-        # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L480-L486
-        if self._n_envs == 1:
-            env_idxes = np.zeros((np.prod(batch_shape),), dtype=np.intp)
-        else:
-            env_idxes = self._rng.integers(0, self._n_envs, size=(batch_shape[0],), dtype=np.intp)
-            env_idxes = np.reshape(env_idxes, (-1, 1))
-            env_idxes = np.tile(env_idxes, (1, sequence_length))
-            env_idxes = np.ravel(env_idxes)
+        if self._on_gpu:
+            # GPU path: jnp operations; batch_idxes is already a jax.Array.
+            # Step 2 (Option M).
+            assert gpu_env_key is not None, "gpu_env_key required in GPU mode"
+            flattened_batch_idxes = jnp.ravel(batch_idxes)
 
-        # Flatten indexes: flat_idx = time_idx * n_envs + env_idx
-        # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L489
-        flattened_idxes = (flattened_batch_idxes * self._n_envs + env_idxes).flat
-
-        # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L492-L526
-        samples: Dict[str, np.ndarray] = {}
-        for k, v in self._buf.items():
-            flattened_v = np.take(np.reshape(v, (-1, *v.shape[2:])), flattened_idxes, axis=0)
-            batched_v = np.reshape(
-                flattened_v,
-                (n_samples, batch_size, sequence_length) + flattened_v.shape[1:],
-            )
-            # [n_samples, batch_size, seq_len, ...] → [n_samples, seq_len, batch_size, ...]
-            samples[k] = np.swapaxes(batched_v, axis1=1, axis2=2)
-            if clone:
-                samples[k] = samples[k].copy()
-            if sample_next_obs and k in self._obs_keys:
-                flattened_next_v = v[
-                    (flattened_batch_idxes + 1) % self._buffer_size, env_idxes
-                ]
-                batched_next_v = np.reshape(
-                    flattened_next_v,
-                    (n_samples, batch_size, sequence_length) + flattened_next_v.shape[1:],
+            if self._n_envs == 1:
+                env_idxes = jnp.zeros((batch_shape[0] * sequence_length,), dtype=jnp.int32)
+            else:
+                env_idxes_per_seq = jax.random.randint(
+                    gpu_env_key, shape=(batch_shape[0],), minval=0, maxval=self._n_envs,
+                    dtype=jnp.int32,
                 )
-                samples[f"next_{k}"] = np.swapaxes(batched_next_v, axis1=1, axis2=2)
+                env_idxes = jnp.reshape(env_idxes_per_seq, (-1, 1))
+                env_idxes = jnp.tile(env_idxes, (1, sequence_length))
+                env_idxes = jnp.ravel(env_idxes)
+
+            flattened_idxes = flattened_batch_idxes * self._n_envs + env_idxes
+
+            samples: Dict[str, Union[np.ndarray, jax.Array]] = {}
+            for k, v in self._buf.items():
+                flat_v = jnp.reshape(v, (-1, *v.shape[2:]))
+                flattened_v = jnp.take(flat_v, flattened_idxes, axis=0)
+                batched_v = jnp.reshape(
+                    flattened_v,
+                    (n_samples, batch_size, sequence_length) + flattened_v.shape[1:],
+                )
+                # [n_samples, batch_size, seq_len, ...] → [n_samples, seq_len, batch_size, ...]
+                samples[k] = jnp.swapaxes(batched_v, axis1=1, axis2=2)
+                if sample_next_obs and k in self._obs_keys:
+                    next_idxes = (flattened_batch_idxes + 1) % self._buffer_size
+                    flat_next_v = jnp.take(
+                        flat_v,
+                        next_idxes * self._n_envs + env_idxes,
+                        axis=0,
+                    )
+                    batched_next_v = jnp.reshape(
+                        flat_next_v,
+                        (n_samples, batch_size, sequence_length) + flat_next_v.shape[1:],
+                    )
+                    samples[f"next_{k}"] = jnp.swapaxes(batched_next_v, axis1=1, axis2=2)
+            return samples
+        else:
+            # CPU path: original numpy code — unchanged.
+            # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L476-L526
+            flattened_batch_idxes = np.ravel(batch_idxes)
+
+            # Each sequence must come from the same environment (item #1)
+            # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L480-L486
+            if self._n_envs == 1:
+                env_idxes = np.zeros((np.prod(batch_shape),), dtype=np.intp)
+            else:
+                env_idxes = self._rng.integers(0, self._n_envs, size=(batch_shape[0],), dtype=np.intp)
+                env_idxes = np.reshape(env_idxes, (-1, 1))
+                env_idxes = np.tile(env_idxes, (1, sequence_length))
+                env_idxes = np.ravel(env_idxes)
+
+            # Flatten indexes: flat_idx = time_idx * n_envs + env_idx
+            # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L489
+            flattened_idxes = (flattened_batch_idxes * self._n_envs + env_idxes).flat
+
+            # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L492-L526
+            cpu_samples: Dict[str, np.ndarray] = {}
+            for k, v in self._buf.items():
+                flattened_v = np.take(np.reshape(v, (-1, *v.shape[2:])), flattened_idxes, axis=0)
+                batched_v = np.reshape(
+                    flattened_v,
+                    (n_samples, batch_size, sequence_length) + flattened_v.shape[1:],
+                )
+                # [n_samples, batch_size, seq_len, ...] → [n_samples, seq_len, batch_size, ...]
+                cpu_samples[k] = np.swapaxes(batched_v, axis1=1, axis2=2)
                 if clone:
-                    samples[f"next_{k}"] = samples[f"next_{k}"].copy()
-        return samples
+                    cpu_samples[k] = cpu_samples[k].copy()
+                if sample_next_obs and k in self._obs_keys:
+                    flattened_next_v = v[
+                        (flattened_batch_idxes + 1) % self._buffer_size, env_idxes
+                    ]
+                    batched_next_v = np.reshape(
+                        flattened_next_v,
+                        (n_samples, batch_size, sequence_length) + flattened_next_v.shape[1:],
+                    )
+                    cpu_samples[f"next_{k}"] = np.swapaxes(batched_next_v, axis1=1, axis2=2)
+                    if clone:
+                        cpu_samples[f"next_{k}"] = cpu_samples[f"next_{k}"].copy()
+            return cpu_samples
 
     # ------------------------------------------------------------------
     # _sample_at_indices() — CP3b addition (not in sheeprl)
@@ -397,6 +550,11 @@ class SequentialReplayBuffer:
         here, making the sampled arrays directly comparable to sheeprl's
         _get_samples output without having to match cross-PRNG streams.
 
+        **CPU-only**: raises NotImplementedError when device="gpu" (Step 2 design
+        decision (a) — GPU mode buffers are not tested for bit-identity, which
+        is a CPU-only concern; GPU-mode unit tests in test_gpu_buffer.py use
+        sample() with a fixed JAX PRNG key instead).
+
         Args:
             precomputed_start_idxes: shape [batch_size * n_samples]
                 — start time indices for each sequence.
@@ -411,6 +569,11 @@ class SequentialReplayBuffer:
         Returns:
             Dict[str, np.ndarray]: shape [n_samples, sequence_length, batch_size, ...]
         """
+        if self._on_gpu:
+            raise NotImplementedError(
+                "_sample_at_indices() is CPU-only (device='cpu'). "
+                "For GPU mode, use sample(key=...) with a fixed JAX PRNG key."
+            )
         chunk_length = np.arange(sequence_length, dtype=np.intp).reshape(1, -1)
         idxes = (precomputed_start_idxes.reshape(-1, 1) + chunk_length) % self._buffer_size
 
