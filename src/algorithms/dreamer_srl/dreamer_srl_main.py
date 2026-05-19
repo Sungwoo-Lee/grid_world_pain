@@ -32,8 +32,11 @@ import numpy as np
 import optax
 from flax import nnx
 
-# Project imports
-sys.path.insert(0, '/media/nas01/projects/Interoceptive-AI/grid_world_pain')
+# Project imports — use script-relative path so this works in worktrees too.
+# File is at src/algorithms/dreamer_srl/dreamer_srl_main.py → 4 dirname() to repo root.
+import os as _os
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))))
+sys.path.insert(0, _REPO_ROOT)
 from src.utils.config import Config
 from src.environment.config_loader import load_env_params
 from src.environment.wrapper import ParallelEnv
