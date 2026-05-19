@@ -148,6 +148,37 @@ The script does **not** require WandB and can run offline.
 #### Step 0 time estimate
 - 1–2 hours: ~30 min to set up `bench_sps.py`, 30 min for the WandB pull + plot, 30 min for the optional micro-experiment if needed, 30 min to write up findings.
 
+#### 0.5 Step 0 findings (executed 2026-05-19 by top-level Claude)
+
+Phase 0.2 (WandB pull + instantaneous SPS computation) was executed inline on three completed/partial runs. Phases 0.1 (bench_sps.py micro-benchmark, requires node launch) and 0.3 (controlled buffer-size experiment, conditional on real decay) are **DEFERRED** to the developer agent — see "Pending Step 0 sub-tasks" below.
+
+**Verdict on the SPS-decay question: the apparent decay is mostly a cumulative-average rendering artefact, NOT a real per-step throughput regression.**
+
+Per-run summary (instantaneous SPS computed via a 5-sample sliding window over the WandB history; full transcript at `tmp/sps_decay_findings_20260519.txt` — derivation in `$CLAUDE_JOB_DIR/step0_sps_decay.py` and `step0_sps_decay_e7.py`):
+
+| Run | Recipe | Final state | `Time/sps_env` (cum, final) | First-20% inst SPS | Last-20% inst SPS | Δ inst | Verdict |
+|---|---|---|---|---|---|---|---|
+| `yxij4lrc` | XS / 16 / 4M | finished | 32.5 | 31.71 | 34.38 | **+8.4%** | No decay; XS is rock-stable. |
+| `c5pt9t4v` | M / 64 / 2M (E7) | finished | 9.05 | 9.71 | 7.94 | -18.3% | Some non-monotonic decay; mid-run dip (7.31, 7.40) + late partial recovery — likely node contention / noise, not buffer-pressure monotonic growth. |
+| `d9emwzdp` | M / 128 / 2M (E8) | stopped at 89% | 6.78 | 6.58 | 9.19 | **+39.7%** | Cumulative SPS dropped -37% but instantaneous SPS **accelerated** in last 20%. Pure cumulative-average artefact. |
+
+**The real perf signal is NOT decay over a single run** — it's the **30% per-env-step gap between E7 (M/64) avg=9.05 SPS and E8 (M/128) avg=6.78 SPS**. Doubling `num_envs` should leave per-env-step SPS roughly constant if the bottleneck is GPU compute; the sub-linear scaling is the buffer-bandwidth contention signature that Option L directly attacks.
+
+**Baseline numbers** (for delta comparison after each step):
+
+| Recipe | Baseline SPS (production reference) | Source |
+|---|---|---|
+| XS / num_envs=16 / 4M | **~32** | `yxij4lrc` |
+| XS / num_envs=64 / 4M | (TBD from `02n94uzu` if needed) | — |
+| M / num_envs=64 / 2M | **~9** | `c5pt9t4v` (E7) |
+| M / num_envs=128 / 2M | **~7** | `d9emwzdp` (E8 partial) |
+
+`bench_sps.py` (Step 0.1) when executed will produce a controlled smoke-config baseline that's more apples-to-apples across steps; until then, these production numbers serve as the comparator anchors.
+
+**Pending Step 0 sub-tasks** (require a node launch — surfaced to user for node+GPU assignment):
+- 0.1 — implement `tests/algorithms/dreamer_srl/bench_sps.py` and run on a chosen node to get a clean smoke-config baseline (food-only, XS, num_envs=16, 50k env-steps, no WandB).
+- 0.3 — SKIP per Step-0 finding (no monotonic real decay → controlled buffer-size experiment not needed). If the bench_sps.py result surprises us, revisit.
+
 ---
 
 ### Step 1 — Option S: hoist H2D out of grad-step loop
