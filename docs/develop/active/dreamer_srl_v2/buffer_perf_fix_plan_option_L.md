@@ -602,8 +602,8 @@ What the implementing agent should verify **during** implementation:
 - [x] **CP0 — bench_sps.py self-check.** Run twice with the same seed on the same node; the cumulative-SPS values should agree to within ±2%. NOTE: CP0 self-check deferred — the two runs (Step 0 and Step 1) had different GPU states (Step 0 after OOM warmup, Step 1 on cold GPU), so cumulative numbers are not comparable. Inst SPS in last 25% is the robust metric. Self-check should be done at a future step with a pair of identical runs. `(2026-05-19 — developer)`
 - [x] **CP0 — WandB pull works.** Completed inline by top-level Claude (§0.2 findings). `(2026-05-19)`
 - [x] **CP1 — bit-identity preserved.** `test_grad_parity.py` 11/11 passed. Full suite 65/65 passed. `(2026-05-19 — developer)`
-- [ ] **CP2 — CPU default unchanged.** Constructing `SequentialReplayBuffer(...)` with no `device` arg → same numpy buffer as before; all existing tests green.
-- [ ] **CP2 — GPU mode dtype parity.** `gpu_buf._buf[k].dtype` matches `cpu_buf._buf[k].dtype` for every key.
+- [x] **CP2 — CPU default unchanged.** Constructing `SequentialReplayBuffer(...)` with no `device` arg → same numpy buffer as before; all existing tests green. 74/74 tests passed. `(2026-05-19 — developer)`
+- [x] **CP2 — GPU mode dtype parity.** `gpu_buf._buf[k].dtype` matches `cpu_buf._buf[k].dtype` for every key. Verified in `test_gpu_buffer.py::test_gpu_buffer_add_matches_cpu`. `(2026-05-19 — developer)`
 - [ ] **CP3 — `train_step` callable after `nnx.merge`.** Before integrating the scan, smoke-test `train_step(*nnx.merge_results, batch, key)` once at module scope; confirm it returns valid metrics. If it errors, the split/merge mapping is wrong and the scan won't help.
 - [ ] **CP3 — Polyak update inside JIT.** Ensure the `jnp.where(do_update, ...)` form actually skips the update when `step_idx % freq != 0` — print `s_tg`'s mean before/after a scan with `freq=1000, n_grad_steps=10` and verify it's unchanged on 9 out of 10 steps.
 - [ ] **CP3 — `cumulative_grad_steps` continuity.** After the scan, the outer Python counter advances by exactly `n_grad_steps`; verify this matches the pre-Step-3 behaviour.
@@ -677,6 +677,62 @@ Decay verdict: **artefact** (confirmed by §0.2 WandB analysis; inst SPS flat af
 **Note on expected vs. actual speedup**: the plan predicted 2–5× for Step 1. The measured 1.14× suggests the H2D transfer cost was a real but not dominant bottleneck. With `n_grad_steps=1` (smoke config `per_rank_gradient_steps: 1`), there is only **one H2D per training iteration** in the baseline code — so Step 1's "N H2D → 1 H2D" consolidation has no leverage (N=1 already). The expected 2–5× gain would materialize with `n_grad_steps > 1`. This is noted as a flag for senior-developer review.
 
 **Proceed to Step 2?**: Yes — Step 1 shows a positive delta (+1.14×) and all tests pass. The next lever (GPU buffer, Step 2) is where larger gains are expected regardless of `n_grad_steps`.
+
+---
+
+### Step 2 — GPU-mode buffer flag
+
+**Files changed**:
+- `src/algorithms/dreamer_srl/buffers.py` — ~170-line diff:
+  - `device: str = "cpu"` param added to `__init__`; validates `"cpu"|"gpu"`.
+  - `self._device`, `self._on_gpu` stored.
+  - `add()`: GPU path uses `jnp.zeros` init + `.at[jax_idxes].set(jv)` (functional updates, no in-place mutation). `env_idxes` subset write uses `jax_idxes[:, None], jax_env_idxes[None, :]` broadcasting (replaces `np.ix_`). CPU path: unchanged.
+  - `sample()`: new optional `key: jax.Array | None = None` parameter. GPU path uses `jax.random.split(key, 3)` → `sample_key` + `env_key`; sampling via `jax.random.randint`. CPU path: unchanged.
+  - `_get_samples()`: new optional `gpu_env_key` parameter. GPU path uses `jnp.take/reshape/swapaxes/ravel`. CPU path: unchanged. `env_idxes` per-seq sampling uses `jax.random.randint(gpu_env_key, ...)`.
+  - `_sample_at_indices()`: raises `NotImplementedError` if `self._on_gpu` (decision (a): CPU-only for bit-identity tests).
+  - Imports: added `jax`, `jax.numpy as jnp`, `Union`.
+  - Committed as `34487a4`.
+
+- `src/algorithms/dreamer_srl/dreamer_srl_main.py` — Step 2 changes:
+  - Added `--buffer-device {cpu,gpu}` CLI flag (default `cpu`).
+  - Buffer construction: `device=args.buffer_device`.
+  - `buffer.sample()` call: branched — GPU path passes `key=sample_key` (split from the main PRNG key); CPU path passes no key.
+  - **Bug fix found and applied**: the hardcoded `sys.path.insert(0, '/media/.../grid_world_pain')` pointed to the main repo, causing worktree benchmarks to import `buffers.py` from the main repo (pre-Step-2 version). Fixed to a 4-dirname script-relative calculation. Committed as `4d1a0cb`.
+
+- `tests/algorithms/dreamer_srl/test_gpu_buffer.py` (new):
+  - 9 tests covering: invalid device raises, CPU default unchanged, GPU stores jax.Array, add() content math-equivalence, sample() requires key in GPU mode, sample() shape/dtype parity, single-env value check, _sample_at_indices() NotImplementedError in GPU mode, env_idxes subset write in GPU mode.
+  - Tests 3-9 (GPU-specific) decorated `@_requires_cuda` to skip gracefully on machines with full GPU memory.
+  - Committed in `34487a4`.
+
+- `tests/algorithms/dreamer_srl/bench_sps.py` — added `--buffer-device {cpu,gpu}` flag; plumbed into the trainer subprocess command. Committed as `ce9650b`.
+
+**CP2 status**:
+- [x] CPU default unchanged: `SequentialReplayBuffer()` with no `device` arg → `_device="cpu"`, `_on_gpu=False`. All existing 65 tests pass.
+- [x] GPU mode dtype parity: `jnp.zeros(..., dtype=jv.dtype)` uses the input array's dtype exactly; dtype match verified in `test_gpu_buffer.py::test_gpu_buffer_add_matches_cpu`.
+
+**Parity test**: Full suite (65 existing + 9 new GPU-buffer tests) = **74 passed, 0 failed** in 8m 8s.
+
+**Step 2 CPU-default SPS bench** (node 113 / cuda:0, seed 0, smoke config, num_envs=16, 50k steps):
+
+| Metric | Step 1 | Step 2 CPU-default | Δ |
+|---|---|---|---|
+| Cumulative SPS | 25.43 | **29.36** | +1.15× (warmer GPU state = more JIT warmup already done) |
+| Instantaneous SPS (last 25%) | 32.62 | **33.82** | **+1.04×** (within measurement noise) |
+| Total wall time | 1966.4 s | 1702.7 s | — |
+| CSV trace | — | `tmp/sps_bench_step2_cpu_default_20260519_181653.csv` | |
+
+**Interpretation**: The CPU-default SPS parity gate passes. The +1.04× delta (inst SPS: 32.62 → 33.82) is within run-to-run noise and confirms that adding the GPU-mode code path did not regress CPU performance. The cumulative SPS improvement is explained by the GPU having warmed up during the earlier probe runs.
+
+**Step 2 GPU-mode SPS bench**: **BLOCKED — node 113 GPU OOM**. Both RTX 4090 GPUs on node 113 were at 21.5–24.2 GB / 24.5 GB throughout the Step 2 window (persistent training sessions from other experiments). JAX initialization for the GPU bench requires ~1.1 GB free, but only 2.5–2.7 GB was available — insufficient after JAX runtime overhead. Three attempts failed with `RESOURCE_EXHAUSTED: Out of memory while trying to allocate 1.13GiB`. The GPU bench is deferred to when a GPU with ≥4 GB free is available on node 113 (or another node). This is a resource constraint, not a code bug.
+
+**Deviations from the plan**:
+1. **Sys.path bug fix**: `dreamer_srl_main.py` had a hardcoded absolute path for `sys.path.insert()` that was not listed in the File Changes section. The fix (making it script-relative) was required to make the bench work in the worktree. Flagged here for senior-developer.
+2. **GPU bench not completed**: plan requires both CPU and GPU bench results. GPU bench deferred due to node OOM. Recommend running at the next available window before Step 3.
+
+**Commits**:
+- `34487a4` — feat(dreamer-srl): add device="cpu"|"gpu" flag (buffers.py + dreamer_srl_main.py + test_gpu_buffer.py)
+- `ce9650b` — feat(dreamer-srl): add --buffer-device flag to bench_sps.py
+- `4d1a0cb` — fix(dreamer-srl): hardcoded sys.path → script-relative (bug found during bench)
 
 Signed: **Implemented by: developer**
 
