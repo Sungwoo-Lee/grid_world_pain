@@ -189,6 +189,12 @@ def main() -> None:
                         help="Buffer storage device: 'cpu' (default, preserves all tests) or "
                              "'gpu' (Step 2 opt-in, stores replay buffer as jnp.ndarray). "
                              "See docs/develop/active/dreamer_srl_v2/buffer_perf_fix_plan_option_L.md §Step 2")
+    parser.add_argument("--legacy-grad-loop", action="store_true", default=False,
+                        help="Step 3 opt-in: use the pre-Step-3 Python for-loop over gradient "
+                             "steps instead of the default jax.lax.scan path. "
+                             "Preserves bit-identity for grad-parity tests (test_grad_parity.py). "
+                             "Default: False (scan path). "
+                             "See docs/develop/active/dreamer_srl_v2/buffer_perf_fix_plan_option_L.md §Step 3")
     args = parser.parse_args()
 
     # -----------------------------------------------------------------------
@@ -899,34 +905,181 @@ def main() -> None:
                 )
                 # local_data_gpu[k] shape: [n_grad_steps, seq_len, batch_size, ...] on device
 
-                for i in range(n_grad_steps):
-                    # Polyak update BEFORE train step (sheeprl L675-L680)
-                    # Use jax.tree.map directly on NNX State pytrees (polyak_update
-                    # expects a plain dict, so we use tree.map inline here).
-                    if cumulative_grad_steps % target_update_freq == 0:
-                        tau = 1.0 if cumulative_grad_steps == 0 else critic_tau
-                        online_params = nnx.state(critic, nnx.Param)
-                        target_params = nnx.state(target_critic, nnx.Param)
+                if args.legacy_grad_loop:
+                    # -------------------------------------------------------
+                    # LEGACY PATH (pre-Step-3 Python for-loop).
+                    # Activated via --legacy-grad-loop flag.
+                    # Preserves bit-identity for test_grad_parity.py.
+                    # Step 3 plan: docs/develop/active/dreamer_srl_v2/
+                    #              buffer_perf_fix_plan_option_L.md §Step 3
+                    # -------------------------------------------------------
+                    for i in range(n_grad_steps):
+                        # Polyak update BEFORE train step (sheeprl L675-L680)
+                        if cumulative_grad_steps % target_update_freq == 0:
+                            tau = 1.0 if cumulative_grad_steps == 0 else critic_tau
+                            online_params = nnx.state(critic, nnx.Param)
+                            target_params = nnx.state(target_critic, nnx.Param)
+                            new_target_params = jax.tree.map(
+                                lambda c, t: (1.0 - tau) * t + tau * c,
+                                online_params, target_params,
+                            )
+                            nnx.update(target_critic, new_target_params)
+
+                        # Extract batch for this gradient step (sheeprl L681)
+                        batch = {k: v[i] for k, v in local_data_gpu.items()}
+
+                        # one_train_step (sheeprl L682-L698 train(...) call)
+                        key, k_train = jax.random.split(key)
+                        moments, losses = train_step(
+                            world_model, actor, critic, target_critic,
+                            wm_opt, actor_opt, critic_opt,
+                            moments, batch, k_train,
+                        )
+                        last_losses = losses
+                        cumulative_grad_steps += 1
+                else:
+                    # -------------------------------------------------------
+                    # SCAN PATH (Step 3 default) — jax.lax.scan over grad steps.
+                    # Replaces the Python for-loop with a single fused XLA op.
+                    # Uses nnx.split / nnx.merge pattern from insight:
+                    #   docs/memory/memories/dreamer_diagnosis/
+                    #   20260519_1509_nnx_lax_scan_split_merge_pattern.md
+                    # Anti-pattern avoided: graphdef captured in closure (hashable
+                    # static); state pytree in carry (pure JAX array tree).
+                    # Reference: src/models/dreamer_v3_trainer.py:685-833 (_scan_train_gpu)
+                    # -------------------------------------------------------
+
+                    # Split all modules + optimizers into (graphdef, state) pairs.
+                    # graphdef is static metadata (hashable, captured in closure).
+                    # state is a pure pytree of arrays (goes in the scan carry).
+                    graphdef_wm,      state_wm      = nnx.split(world_model)
+                    graphdef_ac,      state_ac      = nnx.split(actor)
+                    graphdef_cr,      state_cr      = nnx.split(critic)
+                    graphdef_tg,      state_tg      = nnx.split(target_critic)
+                    graphdef_wm_opt,  state_wm_opt  = nnx.split(wm_opt)
+                    graphdef_ac_opt,  state_ac_opt  = nnx.split(actor_opt)
+                    graphdef_cr_opt,  state_cr_opt  = nnx.split(critic_opt)
+
+                    # Carry: all mutable state as pure pytrees.
+                    # step_idx tracks the cumulative grad step count for Polyak
+                    # scheduling; it's a JAX int so jnp.where can act on it traced.
+                    init_carry = (
+                        state_wm, state_ac, state_cr, state_tg,
+                        state_wm_opt, state_ac_opt, state_cr_opt,
+                        moments, key,
+                        jnp.array(cumulative_grad_steps, dtype=jnp.int32),
+                    )
+
+                    # Scan inputs: the pre-stacked local_data_gpu dict, already
+                    # on device. lax.scan slices axis 0 → each body call receives
+                    # {k: v[i]} automatically.
+                    scan_xs = local_data_gpu  # dict[str, [n_grad_steps, ...]]
+
+                    def _scan_body(carry, batch_i):
+                        """One gradient step inside jax.lax.scan.
+
+                        carry = (s_wm, s_ac, s_cr, s_tg,
+                                 s_wm_opt, s_ac_opt, s_cr_opt,
+                                 moments, key, step_idx)
+                        batch_i = {k: v[i, ...]} — one slice of local_data_gpu.
+
+                        graphdef_* are captured via Python closure (hashable static
+                        metadata) — they never enter the carry, which prevents
+                        JIT retracing. This is rule 1+3 from the nnx.split/merge
+                        insight: docs/memory/memories/dreamer_diagnosis/
+                        20260519_1509_nnx_lax_scan_split_merge_pattern.md
+                        target_update_freq, critic_tau captured as Python ints/floats.
+                        """
+                        (s_wm, s_ac, s_cr, s_tg,
+                         s_wm_opt, s_ac_opt, s_cr_opt,
+                         carry_moments, carry_key, step_idx) = carry
+
+                        # --- Polyak update on target_critic (scan-safe form) ---
+                        # Replaces the Python if-conditional (lines 921-929 legacy path).
+                        # jnp.where is elementwise: both branches always evaluated
+                        # (XLA requirement), but only one is selected. This is safe
+                        # because both branches are pure arithmetic on JAX arrays.
+                        do_update = (step_idx % target_update_freq) == 0
+                        tau_val = jnp.where(step_idx == 0,
+                                            jnp.float32(1.0),
+                                            jnp.float32(critic_tau))
+
+                        # Reconstruct critic + target_critic to extract Param substate.
+                        # Mirrors CPU path: nnx.state(critic, nnx.Param).
+                        # Note: _cr_for_polyak and _tg_for_polyak are temporary;
+                        # _cr reconstructed again below for train_step (same graphdef).
+                        _cr_for_polyak = nnx.merge(graphdef_cr, s_cr)
+                        _tg_for_polyak = nnx.merge(graphdef_tg, s_tg)
+                        online_params = nnx.state(_cr_for_polyak, nnx.Param)
+                        target_params = nnx.state(_tg_for_polyak, nnx.Param)
+
                         new_target_params = jax.tree.map(
-                            lambda c, t: (1.0 - tau) * t + tau * c,
+                            lambda c, t: jnp.where(
+                                do_update,
+                                (1.0 - tau_val) * t + tau_val * c,
+                                t,
+                            ),
                             online_params, target_params,
                         )
-                        nnx.update(target_critic, new_target_params)
+                        # Write updated Param substate back; extract full state
+                        nnx.update(_tg_for_polyak, new_target_params)
+                        s_tg_new = nnx.state(_tg_for_polyak)
 
-                    # Extract batch for this gradient step (sheeprl L681)
-                    # local_data_gpu[key] shape: [n_grad_steps, seq_len, batch_size, ...]
-                    # Slice i to get [seq_len, batch_size, ...] — zero-copy JAX slice.
-                    batch = {k: v[i] for k, v in local_data_gpu.items()}
+                        # --- Reconstruct all modules for train_step ---
+                        _wm   = nnx.merge(graphdef_wm,     s_wm)
+                        _ac   = nnx.merge(graphdef_ac,     s_ac)
+                        _cr   = nnx.merge(graphdef_cr,     s_cr)
+                        _tg   = nnx.merge(graphdef_tg,     s_tg_new)
+                        _wm_o = nnx.merge(graphdef_wm_opt, s_wm_opt)
+                        _ac_o = nnx.merge(graphdef_ac_opt, s_ac_opt)
+                        _cr_o = nnx.merge(graphdef_cr_opt, s_cr_opt)
 
-                    # one_train_step (sheeprl L682-L698 train(...) call)
-                    key, k_train = jax.random.split(key)
-                    moments, losses = train_step(
-                        world_model, actor, critic, target_critic,
-                        wm_opt, actor_opt, critic_opt,
-                        moments, batch, k_train,
+                        # --- Train step ---
+                        carry_key, k_train = jax.random.split(carry_key)
+                        new_moments, losses = train_step(
+                            _wm, _ac, _cr, _tg,
+                            _wm_o, _ac_o, _cr_o,
+                            carry_moments, batch_i, k_train,
+                        )
+
+                        # --- Extract updated state pytrees for next iteration ---
+                        new_carry = (
+                            nnx.state(_wm),
+                            nnx.state(_ac),
+                            nnx.state(_cr),
+                            s_tg_new,       # target_critic: Polyak-updated above
+                            nnx.state(_wm_o),
+                            nnx.state(_ac_o),
+                            nnx.state(_cr_o),
+                            new_moments,
+                            carry_key,
+                            step_idx + 1,
+                        )
+                        return new_carry, losses
+
+                    # Run the scan over all n_grad_steps
+                    final_carry, losses_stack = jax.lax.scan(
+                        _scan_body, init_carry, scan_xs,
                     )
-                    last_losses = losses
-                    cumulative_grad_steps += 1
+
+                    # Unpack final carry and write state back to live modules
+                    (s_wm_f, s_ac_f, s_cr_f, s_tg_f,
+                     s_wm_opt_f, s_ac_opt_f, s_cr_opt_f,
+                     moments, key, _step_idx_f) = final_carry
+
+                    nnx.update(world_model,   s_wm_f)
+                    nnx.update(actor,         s_ac_f)
+                    nnx.update(critic,        s_cr_f)
+                    nnx.update(target_critic, s_tg_f)
+                    nnx.update(wm_opt,        s_wm_opt_f)
+                    nnx.update(actor_opt,     s_ac_opt_f)
+                    nnx.update(critic_opt,    s_cr_opt_f)
+
+                    # Recover last-step losses from the stacked output
+                    last_losses = jax.tree.map(lambda x: x[-1], losses_stack)
+
+                    # Advance the Python counter by n_grad_steps (CP3 continuity)
+                    cumulative_grad_steps += n_grad_steps
 
                 t_train_total += time.time() - t_train_start
 

@@ -83,6 +83,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--buffer-device", type=str, default="cpu", choices=["cpu", "gpu"],
                    help="Buffer storage device: 'cpu' (default) or 'gpu' (Step 2). "
                         "Passed to SequentialReplayBuffer via --buffer-device CLI flag.")
+    p.add_argument("--legacy-grad-loop", type=str, default="false",
+                   choices=["true", "false"],
+                   help="Step 3 grad-loop path: 'false' (default) = jax.lax.scan path, "
+                        "'true' = legacy Python for-loop (--legacy-grad-loop flag in trainer).")
     return p.parse_args()
 
 # ---------------------------------------------------------------------------
@@ -199,6 +203,7 @@ def main() -> None:
     agent_cfg = _pick_agent_cfg()
     csv_out = _csv_path(args.label)
 
+    use_legacy_loop = args.legacy_grad_loop.lower() == "true"
     cmd = [
         PYTHON,
         TRAINER_SCRIPT,
@@ -210,15 +215,18 @@ def main() -> None:
         "--no-wandb",
         "--buffer-device", args.buffer_device,  # Step 2: "cpu" (default) or "gpu"
     ]
+    if use_legacy_loop:
+        cmd.append("--legacy-grad-loop")       # Step 3: opt-in Python for-loop
 
-    print(f"[bench_sps] Label:         {args.label}")
-    print(f"[bench_sps] Agent cfg:     {agent_cfg}")
-    print(f"[bench_sps] Env cfg:       {ENV_CFG}")
-    print(f"[bench_sps] num_envs:      {args.num_envs}")
-    print(f"[bench_sps] total_steps:   {args.total_steps}")
-    print(f"[bench_sps] seed:          {args.seed}")
-    print(f"[bench_sps] buffer_device: {args.buffer_device}")
-    print(f"[bench_sps] CSV out:       {csv_out}")
+    print(f"[bench_sps] Label:           {args.label}")
+    print(f"[bench_sps] Agent cfg:       {agent_cfg}")
+    print(f"[bench_sps] Env cfg:         {ENV_CFG}")
+    print(f"[bench_sps] num_envs:        {args.num_envs}")
+    print(f"[bench_sps] total_steps:     {args.total_steps}")
+    print(f"[bench_sps] seed:            {args.seed}")
+    print(f"[bench_sps] buffer_device:   {args.buffer_device}")
+    print(f"[bench_sps] legacy_grad_loop:{args.legacy_grad_loop}")
+    print(f"[bench_sps] CSV out:         {csv_out}")
     print(f"[bench_sps] Command:       {' '.join(cmd)}")
     print()
 
