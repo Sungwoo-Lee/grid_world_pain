@@ -38,10 +38,10 @@ The literature-reviewer's Phase 1 (foundational, undergrad-level) section alread
 
 Before starting, identify the input source and use the matching skill:
 
-| Input Specified | Skill to Use | How |
+| Input Specified | Tool to Use | How |
 |---|---|---|
 | A **directory path** (e.g., `docs/project/references/uncertainty/`, `docs/project/references/FiLM/`, `docs/project/references/perceptual_decision_making/`) | `pdf` skill | Glob for `*.pdf` files in the directory's `sources/` subfolder (e.g., `docs/project/references/<topic>/sources/*.pdf`); read and extract each PDF one-by-one. The `<topic>` for the output master review file is the topic-folder name (the parent of `sources/`), and the review is written to the topic root, not into `sources/`. |
-| A **NotebookLM link** (e.g., `https://notebooklm.google.com/notebook/...`) | `notebooklm` skill | Query the notebook; retrieve source-grounded answers with citations for each paper. |
+| A **NotebookLM link** (e.g., `https://notebooklm.google.com/notebook/...`) | `notebooklm` skill (official, from the `notebooklm-py` PyPI package; wraps the `notebooklm` CLI) | Query the notebook; retrieve source-grounded answers with citations for each paper. The CLI is also callable directly at `~/.local/notebooklm-py/bin/notebooklm` — useful commands: `notebooklm login` (one-time Google auth), `notebooklm list` (notebooks), `notebooklm use <id-prefix>` (set active notebook), `notebooklm ask "<question>"` (query active notebook), `notebooklm summary` (AI insights). Use the skill in preference; drop to the raw CLI only when the skill abstraction is in the way. |
 
 - If neither is specified, **ask the user** which source type they mean before proceeding.
 - If both are provided, process the directory PDFs first, then cross-reference with the NotebookLM notebook.
