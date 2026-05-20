@@ -564,9 +564,53 @@ What the implementing developer should verify during implementation:
 
 ---
 
+### Implementation Findings (2026-05-20)
+
+**Status: C1-C5 landed cleanly; C4 and C6 perf-gate measurements DEFERRED due to an XLA-compile-pathology blocker.**
+
+| Commit | Status | Gate |
+|---|---|---|
+| C1 `3e1ec2d` JointTrainer skeleton | ✅ | full pytest stays green |
+| C2 `f109b4a` for-loop rewire to `joint.*` | ✅ | L1 bit-identity 11/11 |
+| C3 `2e8a433` scan: 7→1 split/merge/update | ✅ | L2 math-equiv 5/5 + L1 regression |
+| C4 legacy bench (Node 114 / cuda:1) | ✅ | 41.14 inst SPS — matches Option-M reference 42.23 within noise |
+| C5 `c204b77` help-text + Step-3 mark-done | ✅ | L1 + L2 still green |
+| C4 scan bench (Node 114 / cuda:1) | ⏸ **DEFERRED** | XLA-compile pathology — see below |
+| C6 food-only smoke (Node 114 / cuda:2) | ⏸ **DEFERRED** | same pathology |
+
+**XLA-compile pathology (the genuine blocker)**:
+- C4 scan bench (PID 206890) ran **6h 31min wall time with zero iteration progress**. Process was healthy throughout (239-260% CPU, GPU memory allocated, no OOM signal) but XLA-GPU compilation never converged. Host RSS grew unboundedly: 44 GB → 62.5 GB → 74 GB → 85 GB across the run.
+- C6 food-only smoke (PID 238242) ran **3h 28min** with the same symptom (compile-only, no iter progress, RSS growing).
+- Both killed at 23:00 KST. n114 GPUs released cleanly.
+
+**What the JointTrainer refactor DID achieve (structural correctness)**:
+- Single `nnx.split` outside the scan, single `nnx.merge` inside — confirmed by C3.a five-constraint grep checklist.
+- 5/5 math-equivalence tests pass at atol=1e-5 on CPU in 4 minutes (proves composition correctness without paying the GPU-compile cost).
+- All 11 bit-identity grad-parity tests pass on the legacy for-loop path (proves no math drift from the rewire).
+- The structural refactor matches the original Dreamer's `train_multiple_gpu` template at `src/models/dreamer_v3_trainer.py:685-833`.
+
+**What the refactor did NOT achieve (revised causal model)**:
+- My earlier causal claim — that the 7-module decomposition was THE cause of the 70× scan slowdown — was at best a partial story. The module-count cost (`nnx.split/merge × 7 per iter`) was real but is NOT dominant. The dominant cost is XLA-GPU compiling the full Dreamer training step inside `lax.scan` — and that cost is determined by **the train_step body size and pytree shape**, not the module count. JointTrainer cleaned up the pytree shape (the 5 math-equiv tests prove it) but did not bring the XLA-GPU compile time down to a tractable bound.
+- This means the scan-path SPS payoff cannot be measured on the current bench config without either: (a) a much smaller train_step body, (b) a different XLA compile strategy (e.g., `jax.disable_jit()` for diagnostics, `XLA_FLAGS='--xla_dump_hlo_as_text='` to inspect the IR, partial JIT), or (c) much longer compile budgets that may simply not exist.
+
+**What ships from this session (the structural win)**:
+- Composite JointTrainer matching original Dreamer's pattern.
+- Legacy for-loop path bit-identical to pre-refactor.
+- Scan path mathematically correct (atol=1e-5).
+- Code is reviewer-approved (code-reviewer accept-with-3-revisions applied; math-reviewer construction-preserves-equivalence).
+- `--legacy-grad-loop` flag preserved as default rollback.
+
+**What is deferred to a follow-up investigation**:
+- The XLA-GPU compile-time pathology on the full Dreamer-V3 train-step body inside `lax.scan`. This is the real bottleneck behind the original Step 3 "70× regression + OOM" observation. Possible diagnostic angles:
+  1. `JAX_LOG_COMPILES=1` to see which subprogram blows up the IR.
+  2. Try `--total-steps=5000` to see whether compile time scales with `n_grad_steps` or is fixed-per-shape.
+  3. Compare with original Dreamer's `train_multiple_gpu` directly via `train.py` — does it have the same long compile? If not, what's structurally different about its train_step body?
+  4. Try `jax.disable_jit()` on the scan body for a correctness-only run; isolate whether the issue is the compile itself or some recursive trace.
+
 ### Revision history
 
 - 2026-05-20: applied 3 revisions from code-reviewer (R2 pseudocode, L2 coverage callout, C3.a grep checklist). Math-reviewer accepted unchanged.
+- 2026-05-20 (late): C1-C5 implementation landed; C4 and C6 deferred per XLA-compile-pathology blocker. Plan status flipped from PLANNED → IMPLEMENTED-STRUCTURAL-WINS-ONLY.
 
 ---
 
