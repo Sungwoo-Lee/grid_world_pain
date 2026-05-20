@@ -457,6 +457,34 @@ This step **may break bit-identity** on the existing `test_grad_parity.py` — `
 #### Step 3 time estimate
 - 8–12 hours: 4 hr scaffold of split/merge over all three modules + optimizers, 2 hr Polyak-update-in-JIT, 2 hr new parity test, 1 hr SPS bench, 2 hr write-up + checkpoint discussion with user re: bit-identity loss.
 
+#### Step 3 Bench Findings (executed 2026-05-19/20, node 105 — node 113 was contested)
+
+**Math correctness**: ✅ verified — 5 math-equivalence tests in `tests/algorithms/dreamer_srl/test_lax_scan_train.py` pass (atol=1e-4 on WM params, actor params, critic params, target Polyak, step-0 hard-copy). The scan body computes the same parameters the Python for-loop would.
+
+**Perf**: 🔴 **PROBLEM — scan path is 70× SLOWER than the legacy Python for-loop, not faster, plus has a CUDA-graph memory leak**.
+
+| Path | Bench config | Inst SPS (last 25%) | Notes |
+|---|---|---|---|
+| Step 3 legacy (`--legacy-grad-loop true`) | n105, smoke, 50k steps | **28.33** | Completed in 1899s; matches Step 2 within noise (the legacy path is unchanged code, so this is the parity check). |
+| Step 3 scan (`--legacy-grad-loop false`, default) | n105, smoke, 50k steps | **0.4** | Ran 5h 13min, made it to iter 1202/3125 (~38%), then **OOM'd**: `RESOURCE_EXHAUSTED: Underlying backend ran out of memory trying to instantiate command buffer with 35 (total of 2 alive graphs in the process). Failed to instantiate CUDA graph: CUDA_ERROR_OUT_OF_MEMORY`. |
+
+**Diagnosis**:
+1. The 70× slowdown is the runtime behaviour of the scan body itself — not compilation. Per-iteration cost is dominated by something we don't yet understand. Candidates: (a) per-iteration retracing because of how the carry pytree is shaped, (b) `nnx.merge` + `nnx.state` overhead × 7 modules × 3125 iterations adding up, (c) CUDA-graph capture being triggered every step instead of cached.
+2. The "35 alive command buffers" OOM is XLA's CUDA-graph caching mechanism accumulating buffers without recycling — separate issue from (1), but probably related root cause (something about the scan body is forcing fresh compilation/graph capture per iteration).
+
+**Conclusion**: Step 3's scan implementation as written is functionally correct but performance-broken. It cannot be the production path in its current form. Step 4 (combine GPU buffer + scan) would inherit and amplify these problems — the GPU buffer can't help if every scan iteration is 70× slower than it should be.
+
+**Recommended pivot** (requires user decision — see plan §"Critical Decision Point — Step 3 Findings"):
+- (A) **Debug the scan-body perf bug** — diagnose retracing / nnx.merge overhead / CUDA graph accumulation. Could take 4-8 hours of investigation, uncertain payoff.
+- (B) **Abandon the scan approach, ship Option M only**: enable `device="gpu"` default on the GPU buffer (Step 2 already implemented it), skip scan. Get measurable GPU-buffer speedup without the scan perf cost. This is the original "Option M" from the diagnosis insight.
+- (C) **Keep `lax.scan` infrastructure as opt-in** (default `--legacy-grad-loop true` flipped) so the code is preserved for future debugging, ship Option M as default, document the scan perf regression in a memory insight for future-Claude.
+
+---
+
+## Critical Decision Point — Step 3 Findings
+
+Plan Step 4 onward was built on the assumption that scan + GPU buffer compound favourably. **Step 3 bench proves that assumption wrong: scan alone is 70× slower than for-loop.** Three paths forward, listed above (A/B/C). Awaiting user direction. Steps 4-6 below remain the *original* plan if the user picks (A) or modifies the approach; if user picks (B) or (C), Step 4 changes to "enable `device='gpu'` default" only, and Steps 5+6 collapse to a single closeout.
+
 ---
 
 ### Step 4 — Combine 2+3: default `device="gpu"`, sample inside the scan
