@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `subagent_engineering` topic.
 
 **Folder definition**: Subagent + worktree usage gotchas
-**Insights**: 13
-**Last updated**: 2026-05-19
+**Insights**: 12
+**Last updated**: 2026-05-21
 
 ---
 
@@ -13,8 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
-| 2026-05-19 | 18:10 | `20260519_1810_bg_isolation_blocks_edit_not_bash` | Background-session worktree-isolation guard is enforced on Edit/Write tools but NOT on Bash. Mixed-mode work (Bash side-effects first, Edit later) leaves changes in the shared checkout that a post-hoc worktree would not see. Workaround when Bash work has already landed: route the remaining file edit through a Bash python heredoc that does the in-place edit (preserves single-match safety via count==1 assert). Disabling the guard via project-tracked `.claude/settings.json` is a repo-wide safety-posture change, not a per-session fix. |
-| 2026-05-19 | 18:09 | `20260519_1809_notebooklm_py_official_skill_install` | When a community-authored Claude Code skill exists in `.claude/skills/<tool>/`, check the upstream package for a bundled self-installing skill before keeping the community one. `notebooklm-py` ships `notebooklm skill install --scope project --target claude` which drops a version-stamped maintained `SKILL.md` (thin CLI wrapper, auto-updates with `pip install -U`). Pattern likely generalises to other CLIs that expose a `<tool> skill install` / `<tool> agent show` entry point. |
+| 2026-05-21 | 01:52 | `20260521_0152_parity_tested_refactor_verification_chain` | A 4-agent verification chain (senior-developer plan → code-reviewer + math-reviewer in parallel pre-impl audit → developer commit-by-commit with parity gates → senior-developer Verification Protocol) successfully shipped a high-stakes architectural refactor on a parity-tested codebase. The pre-implementation reviewer round caught 3 plan-doc bugs that would have produced silent failures during implementation (non-runnable diagnostic pseudocode using wrong NNX-state key syntax, missing L2-coverage-gap callout, incomplete C3.a 5-constraint grep checklist). Reusable template for any future refactor of bit-identity-tested code; the pre-impl reviewer round is the load-bearing piece. |
 | 2026-05-16 | 15:12 | `20260516_1512_multi_agent_symposium_pattern` | Multi-agent symposium pattern (4 profs in parallel → postdoc synthesis → PI portfolio call → top-level AskUserQuestion). Three non-obvious mechanics: sidecar-per-prof avoids parallel-write race; postdoc applies mid-round user-refined constraints; PI cannot directly call AskUserQuestion in subagent mode (top-level surfaces). Evolution of the v2 research chain at symposium scale. |
 | 2026-05-16 | 15:11 | `20260516_1511_math_reviewer_catches_silent_direction_errors` | Math-reviewer audit caught two load-bearing dimensional errors (Hessian-direction reversal; Bellman-γ vs FiLM-γ incoherence at GRU update-gate) AND validated the project's novel-architecture claim (FiLM-Ensemble + heteroscedastic-precision compound). Two independent reviews (rl-bayesian-dl v1 §8 + math-reviewer audit) caught flag d — strong-signal pattern. Workflow lesson: math-heavy direction memos benefit from math-reviewer audit before reaching experiment-designer. |
 | 2026-05-16 | 15:10 | `20260516_1510_worktree_misses_post_branch_main_assets` | Worktrees branched from origin/main miss lit-review assets that landed on v1.4 AFTER the worktree was created. Sub-agents in the worktree are blind to those assets. Recovery: `cp -r` from main into worktree pre-spawn. Hit twice this session (neuromod corpus + FiLM corpus). Distinct from `_orphan_memory_branch_rewrite` and `_worktree_baseref_and_propagation` mechanisms. |

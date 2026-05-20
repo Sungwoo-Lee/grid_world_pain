@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `dreamer_diagnosis` topic.
 
 **Folder definition**: DreamerV3 failure investigation
-**Insights**: 15
-**Last updated**: 2026-05-19
+**Insights**: 16
+**Last updated**: 2026-05-21
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-21 | 01:51 | `20260521_0151_xla_scan_body_compile_dominates_module_count` | Earlier claim — that dreamer-srl's 7-module decomposition CAUSED the 70× lax.scan regression — was a partial story. The JointTrainer refactor (composite of 7→1) landed cleanly with full math-equivalence preserved (5/5 atol=1e-5) but the XLA-GPU scan-body compile-time was still pathologically unbounded (6h31m / 85 GB RSS, no iter progress). Refines [[20260519_1507_dreamer_srl_v2_cpu_buffer_regression]]'s causal claim. The real dominant cost is XLA-GPU compiling the full Dreamer train_step body inside lax.scan; module-count cost is real but secondary. Three follow-up diagnostic angles documented (JAX_LOG_COMPILES, total_steps scaling, original-Dreamer compile profile comparison). |
 | 2026-05-19 | 15:09 | `20260519_1509_nnx_lax_scan_split_merge_pattern` | To run a flax NNX Module inside jax.lax.scan without re-tracing on every call, split the module via nnx.split (graphdef in closure, state in carry), reconstruct via nnx.merge inside the body, and pass mutable storage (buffers etc.) as explicit JAX-array arguments rather than via the object. Working reference at src/models/dreamer_v3_trainer.py:791-833 (commits 0dec9e0 + 6705735). Generalisable beyond Dreamer to any NNX + lax loop construct. |
 | 2026-05-19 | 15:08 | `20260519_1508_dreamer_jax_perf_retrofit_4_phases` | On 2026-02-21 (commit 0dec9e0), the original JAX Dreamer trainer was retrofitted in 4 measured phases that took DreamerV3 from impractical to production-ready: Phase 1 = encoder outside scan; Phase 2 = JIT-compile train_step (130×); Phase 3 = JIT collection loop via lax.scan (596×); Phase 4 = vectorize replay sampling (4.8×). Captured now because the original implementation predated the project's memory + diary systems — engineering template for future JAX/NNX training-loop perf work. |
 | 2026-05-19 | 15:07 | `20260519_1507_dreamer_srl_v2_cpu_buffer_regression` | dreamer-srl v2's replay buffer is 100% numpy/CPU (faithful to sheeprl PyTorch design), but this is a perf regression vs the original JAX Dreamer trainer which had a GPU/JAX buffer mode (device="gpu" default). The hottest line is dreamer_srl_main.py:885 — jnp.asarray() inside the gradient-step loop triggers a host→device transfer per gradient step (~tens per training iteration). E8 num_envs=128 ran ~30% slower per env-step than E7 num_envs=64 — buffer-bandwidth signature. Fix ladder: option S (hoist H2D out of loop, ~5-10 lines, 2-5× speedup) / option M (GPU buffer port, ~100 lines, 3-10×) / option L (full lax.scan, ~200 lines, original Dreamer measured 596× on its collection loop). |

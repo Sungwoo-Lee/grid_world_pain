@@ -60,4 +60,5 @@ The four-lever Strong strategy the user chose for the dreamer-srl v3 rebuild —
 ## Backlinks
 - [[20260518_1511_dreamer_srl_v2_parity_pass_outperform]] (dreamer_diagnosis, 2026-05-18) — dreamer-srl v2 PASS-OUTPERFORMs sheeprl on food-only parity (501 vs ~500) after 
 - [[20260518_1512_reinforce_resampling_bug_imag_action_threading]] (dreamer_diagnosis, 2026-05-18) — v1 H1 root cause was REINFORCE re-sampling at loss-time — re-calling the actor o
+- [[20260521_0152_parity_tested_refactor_verification_chain]] (subagent_engineering, 2026-05-21) — A 4-agent verification chain (senior-developer plan → code-reviewer + math-revie
 <!-- END BACKLINKS -->
