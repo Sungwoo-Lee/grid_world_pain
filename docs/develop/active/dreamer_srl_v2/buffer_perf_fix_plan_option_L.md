@@ -485,6 +485,35 @@ This step **may break bit-identity** on the existing `test_grad_parity.py` — `
 
 Plan Step 4 onward was built on the assumption that scan + GPU buffer compound favourably. **Step 3 bench proves that assumption wrong: scan alone is 70× slower than for-loop.** Three paths forward, listed above (A/B/C). Awaiting user direction. Steps 4-6 below remain the *original* plan if the user picks (A) or modifies the approach; if user picks (B) or (C), Step 4 changes to "enable `device='gpu'` default" only, and Steps 5+6 collapse to a single closeout.
 
+## User Decision (2026-05-20): Pivot to JointTrainer refactor
+
+User picked the deeper fix: the 70× regression is caused by dreamer-srl's 7-module decomposition (inherited from sheeprl). The original JAX Dreamer composite-trainer pattern (`src/models/dreamer_v3_trainer.py:923-1024`) does NOT have this cost because it uses 1 composite module. The fix is a structural refactor wrapping `world_model`, `actor`, `critic`, `target_critic`, and all 3 optimizer states into one `JointTrainer(nnx.Module)`, then doing 1 split/merge per scan iteration instead of 7. The full plan is at [`joint_trainer_refactor_plan.md`](joint_trainer_refactor_plan.md). The user explicitly requested the multi-agent flow with pre-implementation review to avoid integration mismatch — that flow is in motion.
+
+**Option-M reference number (recorded for the C4 win-condition gate)**: while the senior-developer was drafting the JointTrainer plan, the in-flight GPU-buffer bench on Node 114 / cuda:0 completed:
+
+- `step2_gpu_n114` (GPU buffer + Python for-loop, smoke config, 50k steps, num_envs=16, seed 0)
+- **Cumulative SPS**: 38.33 env-steps/s
+- **Instantaneous SPS (last 25%)**: **42.23** env-steps/s
+- Total wall time: 1304s
+- CSV: `tmp/sps_bench_step2_gpu_n114_20260520_142149.csv`
+
+This is **the bar the JointTrainer scan path must beat at C4**. Per-step progression:
+
+| Step | Node | Inst SPS | Path |
+|---|---|---|---|
+| 0 baseline | n113 | 28.58 | sheeprl-port for-loop, CPU buffer |
+| 1 H2D hoist | n113 | 32.62 | + bulk H2D conversion |
+| 2 CPU mode (default) | n113 | 33.82 | + device flag (CPU branch, no change) |
+| 2 GPU mode | **n114 cuda:0** | **42.23** | + buffer on GPU (Option M target) |
+| 3 scan (broken) | n105 | 0.4 | scan + 7 split/merge (regression) |
+| **C4 JointTrainer scan** | **n114 cuda:1** | **target ≥ 42.23** | scan + 1 split/merge (the refactor's payoff) |
+
+Cross-node note: n114 has 48 GB GPUs vs n113's 24 GB; n114's 42.23 SPS includes both the hardware uplift and the GPU-buffer effect. The C4 bench will use n114 cuda:1, same hardware class, so the JointTrainer vs Option-M comparison there will be node-controlled.
+
+---
+
+### Step 4 — Combine 2+3: default `device="gpu"`, sample inside the scan
+
 ---
 
 ### Step 4 — Combine 2+3: default `device="gpu"`, sample inside the scan
