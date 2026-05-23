@@ -167,8 +167,17 @@ def main() -> None:
                         help="Path to env YAML config")
     parser.add_argument("--agent-config", type=str, required=True,
                         help="Path to dreamer-srl agent YAML config")
-    parser.add_argument("--total-steps", type=int, default=5000,
-                        help="Total environment steps to run")
+    parser.add_argument("--episodes", type=int, default=None,
+                        help="Primary stop condition: total episodes to complete. "
+                             "Mirrors train.py rPPO + JAX Dreamer-V3 dual-mode "
+                             "pattern (train.py:1169). When set, --total-steps / "
+                             "--total-timesteps are ignored unless --episodes=0.")
+    parser.add_argument("--total-steps", type=int, default=None,
+                        help="Env-step fallback budget. Used only when --episodes "
+                             "is not passed AND training.episodes is not in the env "
+                             "config. Default: None (no env-step override).")
+    parser.add_argument("--total-timesteps", type=int, default=None,
+                        help="Alias for --total-steps for rPPO CLI compat (train.py:235).")
     parser.add_argument("--num-envs", type=int, default=1,
                         help="Number of parallel environments")
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
@@ -226,7 +235,22 @@ def main() -> None:
     replay_ratio = agent_cfg.get_mandatory("algo.replay_ratio", float)
     seq_len = agent_cfg.get_mandatory("algo.per_rank_sequence_length", int)
     batch_size = agent_cfg.get_mandatory("algo.per_rank_batch_size", int)
-    total_steps = args.total_steps  # CLI overrides config
+    num_envs = args.num_envs  # CLI sets this; needed for total_timesteps calculation below
+
+    # Episode-budget resolution — mirrors train.py:439-451 dual-mode pattern.
+    # Priority: --episodes > --total-(time)steps > training.episodes (mandatory).
+    # If --total-(time)steps is set, force episodes=0 to drop into env-step branch.
+    env_max_steps = env_cfg.get_mandatory('environment.max_steps', int)
+    env_step_override = args.total_timesteps or args.total_steps  # either CLI alias
+    if args.episodes is not None:
+        episodes = args.episodes
+    elif env_step_override is not None:
+        episodes = 0                       # env-step mode
+    else:
+        episodes = env_cfg.get_mandatory('training.episodes', int)
+    total_timesteps = env_step_override or (episodes * env_max_steps * num_envs)
+    # Legacy variable kept for the final-log print; equals the budgeted env-step cap.
+    total_steps = total_timesteps
     buffer_size = agent_cfg.get_mandatory("buffer.size", int)
 
     gamma = agent_cfg.get_mandatory("algo.gamma", float)
@@ -253,8 +277,6 @@ def main() -> None:
     actor_eps = agent_cfg.get_mandatory("algo.actor.optimizer.eps", float)
     critic_lr = agent_cfg.get_mandatory("algo.critic.optimizer.lr", float)
     critic_eps = agent_cfg.get_mandatory("algo.critic.optimizer.eps", float)
-
-    num_envs = args.num_envs  # CLI sets this; config is just documentation
 
     # -----------------------------------------------------------------------
     # 2b. Eval-video config — read from env_cfg (which now holds training.*,
@@ -297,7 +319,8 @@ def main() -> None:
     action_dim = 4 + int(env_params.rest_action_enabled) + int(env_params.eat_action_enabled)
 
     print(f"[dreamer-srl] obs_dim={obs_dim}, action_dim={action_dim}, num_envs={num_envs}")
-    print(f"[dreamer-srl] total_steps={total_steps}, learning_starts={learning_starts}")
+    print(f"[dreamer-srl] episodes={episodes} (0=env-step mode), "
+          f"total_timesteps={total_timesteps}, learning_starts={learning_starts}")
     print(f"[dreamer-srl] seq_len={seq_len}, batch_size={batch_size}, horizon={horizon}")
 
     # -----------------------------------------------------------------------
@@ -370,7 +393,9 @@ def main() -> None:
                 # Backward-compat scalars (previously hand-picked subset)
                 "env_config": args.env_config,
                 "agent_config": args.agent_config,
-                "total_steps": total_steps,
+                "total_steps":      total_timesteps,     # env-step cap (legacy key)
+                "total_timesteps":  total_timesteps,     # rPPO-style alias
+                "episodes":         episodes,            # primary budget
                 "num_envs": num_envs,
                 "seed": args.seed,
                 "obs_dim": obs_dim,
@@ -524,19 +549,32 @@ def main() -> None:
     # -----------------------------------------------------------------------
     cumulative_grad_steps = 0
     policy_step = 0
+    iter_num = 0
     last_losses: Dict = {}
-    total_iters = total_steps // num_envs  # one iter = num_envs env steps
 
+    # log_every: iterations between WandB metric logs.
+    # Mirrors rPPO's training.log_interval (train.py:447). Default 50 matches
+    # production rPPO invocations (e.g. SameProp Round 2.6 used --log-interval 50).
+    log_every = env_cfg.get('training.log_interval', 50)
     last_log_step = 0
-    log_every = max(1, total_iters // 100)  # log ~100 times over the run
 
     t_start = time.time()
     t_env_total = 0.0
     t_train_total = 0.0
 
-    print(f"[dreamer-srl] Starting training loop: {total_iters} iterations × {num_envs} envs")
+    if episodes > 0:
+        print(f"[dreamer-srl] Starting training loop: until {episodes} episodes "
+              f"completed × {num_envs} envs (env-step cap: {total_timesteps})")
+    else:
+        total_iters_estimate = total_timesteps // num_envs
+        print(f"[dreamer-srl] Starting training loop: {total_iters_estimate} "
+              f"iterations × {num_envs} envs (env-step mode)")
 
-    for iter_num in range(1, total_iters + 1):
+    # Dual-mode while-loop — mirrors train.py:1169.
+    # episodes > 0  → episode-driven (rPPO + JAX Dreamer-V3 default).
+    # episodes == 0 → env-step fallback (preserves --total-steps backward compat).
+    while (total_episodes_completed < episodes) if episodes > 0 else (policy_step < total_timesteps):
+        iter_num += 1
         policy_step += num_envs
 
         # -------------------------------------------------------------------
@@ -1093,7 +1131,15 @@ def main() -> None:
         # -------------------------------------------------------------------
         # LOG metrics (sheeprl L702-L730)
         # -------------------------------------------------------------------
-        if last_losses and (iter_num - last_log_step >= log_every or iter_num == total_iters):
+        # Log either every log_every iters, OR on the final iteration (whichever
+        # comes first). "Final iter" is detected by checking whether the loop
+        # condition will fail on the NEXT iter — done implicitly by logging
+        # whenever the budget is about to be exhausted.
+        will_be_last = (
+            (total_episodes_completed >= episodes) if episodes > 0
+            else (policy_step >= total_timesteps)
+        )
+        if last_losses and (iter_num - last_log_step >= log_every or will_be_last):
             last_log_step = iter_num
             sps_env = policy_step / max(time.time() - t_start, 1e-9)
 
@@ -1200,8 +1246,13 @@ def main() -> None:
             if not args.quiet:
                 wm_loss = log_dict.get("WorldModel/loss_model", float("nan"))
                 inv_s = log_dict["Diagnostic/moments_invscale"]
+                # In episode-mode, show ep-progress; in env-step-mode, show iter-progress.
+                if episodes > 0:
+                    progress = f"ep {total_episodes_completed}/{episodes}"
+                else:
+                    progress = f"iter {iter_num}"
                 print(
-                    f"[iter {iter_num}/{total_iters}] "
+                    f"[{progress}] "
                     f"policy_step={policy_step} "
                     f"world_model_loss={wm_loss:.4f} "
                     f"moments_invscale={inv_s:.4f} "
@@ -1213,7 +1264,8 @@ def main() -> None:
     # -----------------------------------------------------------------------
     elapsed = time.time() - t_start
     print(f"\n[dreamer-srl] Done. Total time: {elapsed:.1f}s "
-          f"({total_steps/elapsed:.1f} env-steps/s)")
+          f"({policy_step/elapsed:.1f} env-steps/s, "
+          f"{total_episodes_completed} episodes completed)")
     print(f"[dreamer-srl] grad_steps={cumulative_grad_steps}")
     if last_losses:
         print(f"[dreamer-srl] Final losses:")
