@@ -35,7 +35,7 @@ algo:
   per_rank_sequence_length: 64
   per_rank_batch_size: 16
   per_rank_pretrain_steps: 0
-  total_steps: 5000            # smoke budget (XS default is 5000000)
+  total_steps: 5000            # smoke budget — kept for backward-compat; ignored when training.episodes is set
 
   # Core dreamer algorithm
   gamma: 0.996840347           # sheeprl dreamer_v3.yaml:L22
@@ -118,6 +118,15 @@ buffer:
   size: 256000
   validate_args: false
   from_numpy: false
+
+# Episode-based budget cap — mirrors rPPO production (10M episodes).
+# This is a CAP, not a target — actual runs may be Ctrl-C'd much earlier.
+# Reference: train_command-agent.sh:86-97 (rPPO Round 2.6 launch uses 10M).
+# R2 mitigation: checkpoint_frequency raised from 10k → 200k so eval fires
+# ~50 times over a 10M-episode run (vs. 1000 fires at 10k = ~7h overhead).
+training:
+  episodes: 10000000
+  checkpoint_frequency: 200000
 
 # Env
 env:
