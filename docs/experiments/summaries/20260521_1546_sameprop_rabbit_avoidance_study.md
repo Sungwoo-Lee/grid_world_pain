@@ -8,88 +8,184 @@ status: snapshot
 
 # SameProp Rabbit-Avoidance Study — Closing re-summary as of 2026-05-21 15:46 KST
 
-> **This is the closing re-summary for the study.** The 2026-05-14 23:32 snapshot ([`20260514_2332_sameprop_rabbit_avoidance_study.md`](20260514_2332_sameprop_rabbit_avoidance_study.md)) carried the two-level verdict (spatial: class-blind; event: +37 pp bush-dive gap) but left **Round 2.6 (the seed-lock attempt) crashed and not yet replicated**. This version updates the headline: **Round 2.6 was successfully re-launched, completed cleanly, and replicated the event-level finding at a second seed.** The class-conditional active defence under matched smells is now seed-stable across two independent seeds. The corner-camping policy in the sister cell is NOT — it failed to replicate, so corner-camping is one basin out of at least two. Prior summaries remain as historical snapshots.
+> **The headline in one paragraph.** A reinforcement-learning agent lives on a small grid with a dangerous patrolling predator and two harmless rabbits. Normally the agent can tell them apart by smell. This study forced the predator and the rabbits to carry the *same* smell — making them sensorily indistinguishable from far away — and asked whether the agent still treats them differently. The answer turned out to depend on *what kind of "differently"* we measure. **Where the agent walks on average** is class-blind under matched smells (it doesn't keep predators farther away than rabbits). **What the agent does in the seconds around a creature entering its danger range** is strongly class-discriminating: it dives into cover roughly 88% of the time for a predator versus 51% for a rabbit, and it stops eating when a predator is near while eating normally when a rabbit is near. This two-layer finding was originally observed at one random seed (Round 2.5, late April); the seed-stability check (Round 2.6, this round) has now reproduced it at a second independent seed, with the numbers agreeing to within rounding error. The result is now treatable as paper-grade. The companion experiment that turned the predator into a harmless camp-target did *not* replicate its first-seed policy, so the "agent corner-camps" finding is one solution out of at least two — that is the only correction this re-summary makes to the prior story.
+
+> **This document is the closing re-summary for the study.** Prior dated summaries — the most recent at [`20260514_2332_sameprop_rabbit_avoidance_study.md`](20260514_2332_sameprop_rabbit_avoidance_study.md) — remain as historical snapshots; nothing is edited in place. The 2026-05-14 version carried the same two-layer finding but flagged the second-seed test as "crashed, not yet replicated"; this version updates that status to "successfully re-launched and finished".
 
 ---
 
 ## Take-home messages — the whole study in 6 bullets
 
-1. **The setup.** Normally the agent tells a dangerous patrolling predator from a harmless rabbit by **smell**. This study deliberately gives them the **same smell** ("sameProp") and asks: does the agent still behave differently around them, and how?
+1. **The setup.** A reinforcement-learning agent normally tells a dangerous patrolling predator from a harmless rabbit by **smell**. This study deliberately gives them the **same smell** and asks: does the agent still behave differently around them, and *how*?
 
-2. **Two answers, two layers — both still hold.** Where the agent *walks* on average is class-blind under matched smells (it doesn't keep predators farther away than rabbits). What the agent *does in the moments a creature enters its danger radius* is strongly class-discriminating: it dives into a bush **+37 percentage points more often** for a predator than a rabbit, and **stops eating** near a predator while eating normally near a rabbit. Same agent, opposite verdict — different layer of measurement.
+2. **Two answers, two layers — both still hold.** Where the agent *walks on average* is class-blind under matched smells (it doesn't keep predators farther away than rabbits). What the agent *does in the seconds a creature enters its danger range* is strongly class-discriminating: it gets into cover **about 37 percentage points more often** for a predator than for a rabbit, and **stops eating** near a predator while eating normally near a rabbit. Same agent, opposite verdict — different layer of measurement.
 
-3. **Now seed-locked.** The event-level finding (+37 pp bush-dive gap, opposite-direction eat suppression) has now been replicated at a second seed. Cross-seed agreement is exact-to-noise: 88.8% vs 87.6% bush-dive rate, +37.3 pp vs +36.8 pp class gap, 0.769 vs 0.748 eat-suppression. **Two independent seeds, same numbers.** This was Round 2.6's job and it succeeded.
+3. **Now seed-locked.** The first-layer (event-level) finding has now been reproduced at a second random seed. Cross-seed agreement is essentially exact: 88.8% vs 87.6% in-cover rate near predator, 37.3 vs 36.8 percentage-point class gap, 0.769 vs 0.748 eat-suppression ratio. **Two independent seeds, same numbers.**
 
-4. **The sister-cell story is more nuanced.** The companion experiment that turned the predator into a harmless camp-target (Cell A1) **did not replicate its first-seed finding**. The first seed (Round 2.5, seed 43) learned to camp in a safe corner and live to the timer; the second seed (Round 2.6, seed 45) learned a different "avoid the dangerous corner but starve" policy. **Corner-camping is one solution out of at least two**, not a generic basin. The class-blindness conclusion still holds — both seeds are class-blind — but the headline "agent corner-camps" needs more seeds to characterise the policy distribution.
+4. **The sister experiment's story is more nuanced.** The companion experiment that made the predator harmless and confined it to one corner of the grid did *not* replicate its first-seed policy. The first seed (43) learned to live in the safe corner and survive to the timer; the second seed (45) learned a *different* policy — avoid the dangerous corner but starve to death anyway, surviving only 98 of 500 steps. **The "corner-camping" finding is one solution out of at least two**, not a generic basin. The simpler class-blindness conclusion still holds — both seeds are class-blind at the event level — but the headline "agent corner-camps under this setup" needs more seeds to characterise.
 
-5. **The methodological lesson is now project canon.** Averages dissolve event-level signal. Whenever a study concludes "the agent doesn't discriminate," cross-check it with the behavior-measure toolkit (bush-dive rate, eat-under-threat ratio, defensive-motif clustering) before trusting the verdict. Round 2.5's spatial-only "no class discrimination" verdict was right as a spatial statement and wrong as a behavioural one — the toolkit recovered the signal mean-distance metrics had dissolved.
+5. **The methodological lesson is now project canon.** Average-distance metrics dissolve event-level signal. Whenever a study concludes "the agent doesn't discriminate", cross-check with event-level measures (in-cover rate, eat-suppression near threat, behavioural-motif clustering) before trusting the verdict. The original "no class discrimination under matched smells" verdict was right as an *average-distance* statement and wrong as a *behavioural* statement.
 
-6. **Where the work goes next.** The study has produced a paper-grade two-seed result on the event-level class-conditional defence. Open decisions: (a) does the corner-camping basin distribution merit a 4-seed Round 2.7 follow-up?, (b) does **Round 3** (food in all four quadrants — closing the spatial-camping loophole) launch next with the behavior toolkit pre-registered as the primary verdict?, (c) does the project pivot from this thread to the modulated-agent comparison (NMN / FiLM sequel on Cell C) or to a different research line entirely? The PI-level call has not yet been made.
+6. **Where the work goes next.** The study has produced a paper-grade two-seed event-level finding. Three candidate next moves (no decision yet): (a) characterise the sister experiment's basin distribution with 4 more seeds; (b) launch the next planned round — food in all four corners, closing the spatial-camping loophole — with the event-level measures pre-registered as primary; (c) move on to the modulated-agent thread (does a pain-driven modulator widen the event-level gap further?).
+
+---
+
+## 0. Vocabulary — terms used in this document
+
+A few terms recur often enough that they are worth defining once. Behaviour-metric details (the formulas + code) live in [**Appendix A**](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7); this section is the lightweight cheat-sheet.
+
+### 0.1 The world the agent lives in
+
+| Term | Meaning |
+|---|---|
+| **Grid world** | A small 2D grid (a few cells across) the agent inhabits. The agent moves one cell per step in one of five actions (up, down, left, right, stay). It survives by eating food and avoiding threats. |
+| **Episode** | One life of the agent, from spawn to death-or-timer. Capped at **500 steps** per episode in this study. Agents can die from injury, starvation, or simply run out the timer. |
+| **Survival steps** | How many steps the agent survived in an episode. The project's de-facto performance number — *not* cumulative reward. 500/500 = the agent lived to the timer; 98/500 = it died young. |
+| **Patrolling predator** | One creature that walks around the grid and damages the agent on contact. The dangerous entity in the world. Has a state machine that can switch to "HUNT" mode and chase the agent. |
+| **Hiding predators** | Four stationary creatures perched on rocks that damage the agent at a distance. Not the focus of this study but always present in the world. |
+| **Rabbits** | Two harmless creatures that wander around. Visually + olfactorily similar to predators in this study — but inflict no damage. |
+| **Bushes** | Obstacles that *hide* the agent: while the agent is on a bush cell, predators cannot see it. The agent uses this as cover. |
+| **Quadrants — TL / TR / BL / BR** | Top-left / top-right / bottom-left / bottom-right of the grid. Entities are configured to spawn in specific quadrants. |
+| **Smell / olfactory signature** | Each creature carries a 5-element "property vector". The agent has a short-range smell sensor that reports those vectors. Normally each class has a distinct vector. **This study forces them identical**, removing the smell cue. |
+
+### 0.2 What this study manipulated
+
+| Term | Meaning |
+|---|---|
+| **Matched smells** *("sameProp")* | The patrolling predator and the rabbits are given the same olfactory property vector `[0, 1, 0, 0, 0]`. The agent's smell sensor cannot tell them apart. **All experiments in this study run under this condition.** |
+| **Food-decoupling experiment** *("Cell C", "decoupleFood")* | Food no longer spawns in rabbit quadrants. Removes the "agent camps near rabbits because that's where food is" confound. |
+| **Passive-predator experiment** *("Cell A1", "passivePredator")* | The patrolling predator's HUNT mode is made unreachable, and the predator is confined to one quadrant (top-left). The dangerous threat becomes a static corner hazard. |
+| **Round 1** | The first clean re-run (April), two seeds, no quadrant manipulation — confirmed the agent keeps predators ~0.6 cells farther than rabbits on average. |
+| **Round 2 / 2.5** | Cell C + Cell A1 launched at full budget (10 million episodes), one random seed per cell (42 / 43). Round 2.5 produced the original two-layer verdict. |
+| **Round 2.6** | The seed-stability check: same two cells, second seeds (44 / 45). First launch crashed; re-launched on healthy nodes and finished cleanly. **The closing analysis of this round is what this document re-summarises.** |
+| **Seed** | The integer that initialises the agent's random weights + training stochasticity. Different seeds = different random initialisations = potentially different policies. "Two-seed-locked" = the same finding reproduces at two independent seeds. |
+
+### 0.3 What the agent is
+
+| Term | Meaning |
+|---|---|
+| **Plain RPPO** | The baseline policy used throughout this study: a small recurrent neural network (~128 hidden units) trained with the Proximal Policy Optimisation algorithm. No "modulator" or special architecture — just the off-the-shelf RL agent. Future studies will compare this baseline against modulated variants. |
+| **Checkpoint** | The frozen network weights at a specific training step. Saved every ~10,000 episodes; the *final* checkpoint at 10M episodes is the one analysed here. |
+| **Policy** | The function mapping the agent's observation to its action probabilities. At training time it is stochastic (samples actions); for analysis we run it in **deterministic mode** (argmax — take the most-likely action). |
+
+### 0.4 How we measured the agent
+
+| Term | Meaning |
+|---|---|
+| **Eval-rollout** | Frozen-checkpoint analysis. Take the final weights, run the policy in deterministic mode for **200 episodes** with a held-out set of environment seeds (1000–1199, disjoint from training seeds 0–999), dump every step to disk. These 200 episodes are what the behaviour metrics read. |
+| **Danger range / radius R** | A class-`c` entity is "in danger range" at step `t` if the closest such entity is within **R = 3 cells** of the agent. The threshold that defines what "near" means for the metrics below. |
+| **Threat onset** | The step at which an entity *just crossed* into danger range, having been outside it the step before. The "creature just got close" event. |
+| **Lookahead K = 5 steps** | For the in-cover and stop-eating metrics, how far we look forward from a candidate event to count the agent's response. |
+| **Spatial layer (average-distance)** | The original family of metrics: average distance the agent maintains to each entity over the whole episode. Numerically dominated by the long stretches of calm play. **Class-blind under matched smells** is its verdict on this study. |
+| **Event layer (around threat onsets)** | The behaviour-toolkit family: what the agent does in the few steps *around* a threat onset. Numerically dominated by the rare moments that actually matter. **Class-discriminating in Cell C** is its verdict on this study. |
+| **Class-conditional / class-blind** | "Class-conditional" = the agent responds differently to predator vs rabbit. "Class-blind" = same response. This is the study's central question. |
+| **Pre-registered confirmation criteria** | Numeric thresholds that the study wrote down *before* the closing analysis ran, defining what counts as confirmation, refutation, or borderline. The Round 2.6 verdict is just: did the closing-analysis numbers cross those thresholds? |
+
+### 0.5 The behaviour metrics (short form — full details in [Appendix A](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7))
+
+| Short name | Plain-English question |
+|---|---|
+| **In-cover rate (M2)** | When a creature enters the agent's danger range, how often does the agent get into a bush within the next 5 steps? *(The study's headline metric.)* |
+| **Eat-suppression ratio (M5)** | Does the agent's per-step probability of eating drop when a creature is nearby, compared to when it isn't? A value below 1.0 = the agent suppresses eating under threat. |
+| **Interrupted-feeding rate (M1)** | When the agent is currently eating and a creature is in range, how often does it stop eating in the next 5 steps? |
+| **Defensive-motif distribution (M7)** | A k-means clustering of behavioural windows around threat onsets, producing a 6-bin histogram of "kinds of response" per class. The qualitative complement to the three scalar metrics. |
 
 ---
 
 ## 1. Study question
 
-The grid world has three kinds of moving creatures:
+**The world.** A reinforcement-learning agent lives on a small 2D grid (a few cells across). At each step it picks one of five actions (up / down / left / right / stay). Around it move three kinds of creature:
 
-- a **patrolling predator** (deals damage if it touches the agent),
-- **four hiding-predators perched on rocks** (deal damage at a distance), and
-- **harmless rabbits** (do nothing).
+- a **patrolling predator** (one) — damages the agent on contact,
+- **four hiding-predators** perched on rocks — damage the agent at a distance,
+- **two rabbits** — harmless wanderers.
 
-Normally each class carries its own **smell signature**, so the agent can tell them apart from far away by using its smell sensor. This study removes that cue: the **patrolling predator** and the **rabbits** are given the **same smell signature** ("sameProp"). The smell sensor can no longer separate them.
+The agent has a short-range smell sensor: anything within its olfactory radius reports a 5-element "property vector" identifying its class. Normally each class carries its own property vector — so the agent can tell predators from rabbits from far away by smell. This study deliberately removes that cue: under "matched smells" the patrolling predator and the rabbits carry the *same* property vector, and the smell sensor can no longer separate them.
 
-**The puzzle.** Does the agent still behave differently around the dangerous one? If yes, *how* — by sight at close range, by post-contact pain memory, by movement pattern, by something else? And — the question that emerged halfway through — does the answer depend on **what kind of "differently" you measure**?
+**The puzzle.** Does the agent still behave differently around the dangerous one? If yes, *how* — by sight at close range, by post-contact pain memory, by movement pattern, by something else? And — the question that emerged halfway through this study — does the answer depend on **what kind of "differently"** we measure (where the agent walks, or what it does in specific moments)?
 
-**Why it matters for the broader project.** The wider research goal is to model **hypervigilance** — over-cautious avoidance of safe things, driven by pain or fear. To make that claim cleanly we needed to know what *baseline* discrimination looks like under matched smells. This study mapped that baseline and, in doing so, surfaced a methodological lesson that affects every future "the agent doesn't discriminate" verdict in this project.
+**Why it matters for the broader project.** The wider research goal is to model **hypervigilance** — over-cautious avoidance of safe things, driven by pain or fear. To make that claim cleanly, we needed to know what *baseline* discrimination looks like under matched smells. This study mapped that baseline and surfaced a methodological lesson that affects every future "the agent doesn't discriminate" verdict in this project.
 
 ---
 
 ## 2. Experiments completed this study
 
+> **Reading the experiment table.** Rows 3b and 6 quote per-class numbers for four behaviour metrics — **in-cover rate**, **eat-suppression ratio**, **interrupted-feeding rate**, **defensive-motif distribution** (technical names: M2, M5, M1, M7). If any term is unfamiliar, [§0 Vocabulary](#0-vocabulary--terms-used-in-this-document) has the short form and [Appendix A](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7) has the full definitions, formulas, and code.
+
 > **Reading the experiment table.** Rows 3b and 6 quote per-class numbers for four behaviour metrics — **M1** (interrupted-feeding rate), **M2** (bush-dive rate), **M5** (eat-under-threat ratio), **M7** (defensive-motif repertoire). None of these are standard RL metrics; they were built for this study. If the names are unfamiliar, jump to [**Appendix A — Behaviour-metric glossary**](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7) first for plain-English definitions, formulas, and the actual code that computes each one, then come back here.
 
-| # | Experiment | Plain-English question | What was changed | High-level finding (plain English) |
+| # | Experiment | Plain-English question | What was changed | High-level finding |
 |---|---|---|---|---|
-| **0** | **Existing-run survey** *(2026-05-07)* | Look at an already-running matched-smell training — does anything in the logs distinguish predator from rabbit? | Nothing changed; re-read existing logs. | The agent kept the predator about **half a cell farther** than rabbits on average. Suggestive but one seed; food and rabbits share quadrants — could be food-seeking, not class avoidance. |
-| **1** | **Round 1 — clean re-run** *(2026-05-07 → 2026-05-08)* | Re-run cleanly with two seeds and per-creature logging. Does the half-cell gap survive? | Per-creature distance logging implemented; two seeds (42, 43). | **Pattern replicates at both seeds** (gap ≈ +0.63 cells). Upgraded the survey from "anecdote" to "real signal." Food/rabbit-share-quadrants confound now needs a controlled test. |
-| **2** | **Round 2 — kill the confounds** *(2026-05-08, stopped early)* | Cell C: move food *away* from rabbit quadrants. Cell A1: turn off the predator's hunt-mode so only post-contact teaching can drive avoidance. | Cell C: food spawn-zones moved (decoupleFood). Cell A1: predator restricted to one quadrant and made passive (passivePredator). | Both runs SIGINT'd at ~4–5% of budget. Cell C's gap flipped sign (rabbits farther than predator). Cell A1's gap exploded — but the agent never visited the predator's quadrant. We were measuring **corner-camping**, not class avoidance. Need a sharper metric. |
-| **3** | **Round 2.5 — full budget + per-tag distances** *(2026-05-09 → 2026-05-10)* | Same two cells, but now measure distance to the *specific* same-corner predator vs the *specific* same-corner rabbit, so corner-camping doesn't fake a result. | No experimental knob change. Full 10M-episode budget; one seed per cell (42 / 43). | **Spatial verdict: NO class discrimination.** Cell A1 corner-camps (per-tag gap essentially zero, 0.004 cells, agent survives to the timer). Cell C's gap inverts (rabbits farther than predator). The "agent treats predators specially in space" claim does not survive matched smells. |
-| **3b** | **Round 2.5 appendix — new "what does it do" measures** *(2026-05-11)* | Read the *same* converged agents through a new toolkit: bush-dive rate, eating-while-threatened ratio, behavioural-motif clustering. Does the agent's defensive *behaviour* discriminate even though its *route* doesn't? | No new training — re-evaluated the Round 2.5 checkpoints with new metrics. 200 deterministic episodes per cell. | **Event-level verdict: YES, strongly, for Cell C.** Bush-dive rate when threat enters R=3 cells: predator **88%** vs rabbit **51%** → **+37 pp** gap. Eat-under-threat ratio: predator **0.75×** (eating suppressed) vs rabbit **1.19×** (eating elevated). Per-tag fan-out across the two rabbits is within noise → not a single-rabbit artifact. Cell A1 stays class-blind at every layer. |
-| **4** | **Round 2.6 — seed-lock attempt (first try)** *(2026-05-12 17:01 launch, crashed 23:38)* | Repeat Cell C (new seed 44) and Cell A1 (new seed 45) with event-level toolkit logging live. | Seed 44 (Cell C) and seed 45 (Cell A1) on the same node (n106). Behavior-measure logging backfilled into the configs. | **Both runs CRASHED at ~6.6 h on n106**, reaching 1.18 M / 0.87 M episodes out of 10 M. Crashed within 3 minutes of each other → node-level event, not a training bug. Partial data was tracking the +37 pp gap (+28.5 pp and rising at 1.18 M ep). Seed-lock not yet earned. |
-| **5** | **Round 2.6 — seed-lock re-launch** *(2026-05-16 → 2026-05-19, finished cleanly)* | Re-launch the two crashed runs on healthy nodes. Same configs, same seeds. | Cell C seed 44 on n101 cuda:0 (81.8 h to complete on the slower 2080 Ti); Cell A1 seed 45 on n102. | **Both runs finished cleanly to 10 M episodes.** Final eval-rollout numbers below. |
-| **6** | **Round 2.6 closing analysis — primary verdict** *(2026-05-21)* | Apply the pre-registered confirmation criteria (bush-dive rate ≥ 80% near predator, gap ≥ +30 pp, eat-suppression < 0.80 near predator) to the 10 M checkpoint of the Cell C re-launch. | No new training — same offline eval-rollout pipeline (200 deterministic episodes, fresh seeds 1000–1199) used on the Round 2.5 §12 appendix. | **Cell C: confirmation criteria met by a wide margin.** Bush-dive rate near predator **0.888** (threshold ≥ 0.80, +11% over), class gap **+0.373** (threshold ≥ +0.30, +24% over), eat-suppression near predator **0.769** (threshold < 0.80). Seed-paired vs Round 2.5: all numbers agree to within within-seed noise (cross-seed M2 1.2 pp, Δ_M2 0.5 pp, M5 0.02). **Two-seed replication achieved.** Cell A1: corner-camping basin **refuted** — seed 45 survived only 98/500 steps (threshold ≥ 470), learning a starve-while-avoiding-the-dangerous-corner policy instead. The class-blindness conclusion holds; the corner-camping policy itself is one basin of at least two. |
+| **0** | **Existing-run survey** *(2026-05-07)* | Look at an already-running matched-smells training — does anything in the logs distinguish predator from rabbit? | Nothing changed; re-read existing logs. | The agent kept the predator about **half a cell farther** than rabbits on average. Suggestive but only one random seed; food and rabbits also shared quadrants, so the gap could be food-seeking rather than class avoidance. |
+| **1** | **Round 1 — clean re-run** *(2026-05-07 → 2026-05-08)* | Re-run cleanly with two seeds and per-creature distance logging. Does the half-cell gap survive? | Per-creature distance logging implemented; two seeds (42, 43). | **Pattern replicates at both seeds** (gap ≈ +0.63 cells). Upgraded the survey from "anecdote" to "real signal." The food / rabbit shared-quadrant confound now needs a controlled test. |
+| **2** | **Round 2 — kill the confounds** *(2026-05-08, stopped early)* | (a) Move food *away* from rabbit quadrants (food-decoupling experiment). (b) Turn off the predator's hunt-mode so only post-contact damage can teach avoidance (passive-predator experiment). | Food-decoupling: food spawn-zones moved off rabbits. Passive-predator: predator confined to one corner and made passive. | Both runs were interrupted at ~4–5% of budget. In the food-decoupling experiment the gap **flipped sign** (rabbits farther than predator). In the passive-predator experiment the gap exploded — but the agent never even visited the predator's corner. We were measuring **corner-camping**, not class avoidance. Need a sharper metric. |
+| **3** | **Round 2.5 — full budget + per-corner distances** *(2026-05-09 → 2026-05-10)* | Same two experiments, but measure distance to the *specific* same-corner predator vs the *specific* same-corner rabbit, so corner-camping can't fake a result. | No experimental knob change. Full 10-million-episode budget; one seed per experiment (42 in food-decoupling; 43 in passive-predator). | **Average-distance verdict: NO class discrimination.** The passive-predator agent corner-camps (per-corner gap essentially zero, 0.004 cells; agent survives to the timer). The food-decoupling agent's gap inverts (rabbits farther than predator). The "agent treats predators specially in space" claim does not survive matched smells. |
+| **3b** | **Round 2.5 appendix — new "what does the agent *do*" measures** *(2026-05-11)* | Read the *same* converged agents through a new behaviour-toolkit: in-cover rate around threat onsets, eat-suppression ratio under threat, behavioural-motif clustering. Does the agent's defensive *behaviour* discriminate even though its *average route* doesn't? | No new training — re-evaluated the Round 2.5 final checkpoints with the new metrics. 200 deterministic-policy episodes per agent. | **Event-level verdict: YES, strongly, for the food-decoupling agent.** When a threat enters its danger range (3 cells): in-cover rate near predator **88%** vs near rabbit **51%** → **+37 percentage-point** class gap. Eat-suppression ratio: **0.75** near predator (eating cut to 75% of safe baseline) vs **1.19** near rabbit (eating slightly elevated). The two rabbits behave essentially identically as targets — so the gap isn't a single-rabbit artifact. The passive-predator agent stays class-blind at every layer. |
+| **4** | **Round 2.6 — seed-stability check, first try** *(2026-05-12 17:01 launch, crashed 23:38)* | Repeat both experiments at a new seed each (44 for food-decoupling, 45 for passive-predator) with event-level logging now built into training. | Seeds 44 + 45 on the same lab node, both behaviour-toolkit measures backfilled into the training configs. | **Both runs CRASHED at ~6.6 hours**, reaching 12% / 9% of the 10-million-episode budget. Crashed within 3 minutes of each other → likely a node-level event, not a training bug. The food-decoupling run's class gap was tracking at +29 percentage points and still climbing when it died. Seed-lock not yet earned. |
+| **5** | **Round 2.6 — seed-stability re-launch** *(2026-05-16 → 2026-05-19)* | Re-launch the two crashed runs on healthy lab nodes. Same configs, same seeds. | Food-decoupling agent (seed 44) on a slower GPU (~82 hours wall-clock); passive-predator agent (seed 45) on a faster GPU (~48 hours). | **Both runs finished cleanly to 10 million episodes.** Closing-analysis numbers below. |
+| **6** | **Round 2.6 closing analysis — primary verdict** *(2026-05-21)* | Apply the **pre-registered confirmation criteria** (set in writing before the run finished — see the threshold table below) to the final checkpoint of the food-decoupling re-launch. | No new training — re-ran the same 200-episode eval-rollout protocol that produced the Round 2.5 event-level numbers, this time on the Round 2.6 final checkpoint. | **Food-decoupling experiment: all three confirmation criteria met by a wide margin** (see the verdict table in §3). Cross-seed agreement to within rounding error (1.2 percentage points on in-cover rate; 0.5 percentage points on the class gap; 0.02 on eat-suppression ratio). **Two-seed replication achieved.** Passive-predator experiment: the corner-camping policy did **not** replicate at seed 45 — the agent survived only 98 of 500 steps (criterion was ≥ 470), learning a different starve-while-avoiding-the-dangerous-corner policy. The class-blindness conclusion holds; the corner-camping *policy* is one basin of at least two. |
+
+**The pre-registered confirmation criteria for the food-decoupling experiment** (frozen before the Round 2.6 closing analysis ran):
+
+| Number | What it asks | Threshold for confirmation | Threshold for refutation |
+|---|---|---|---|
+| **In-cover rate near predator** | When the predator just got close, what fraction of those events end with the agent in a bush within 5 steps? | ≥ 0.80 | < 0.50 |
+| **Class gap on in-cover rate** | In-cover rate near predator minus in-cover rate near rabbit. | ≥ +0.30 (+30 percentage points) | < +0.10 |
+| **Eat-suppression near predator** | Eat-rate when predator is in range, divided by eat-rate when the predator is not. | < 0.80 | ≥ 1.00 |
+| **Secondary check — rabbits behave alike** | The two rabbits' numbers should agree (within ±5 pp on in-cover rate, ±0.10 on eat-suppression). Rules out single-rabbit artifacts. | (sanity check) | (sanity check) |
 
 ---
 
 ## 3. Where this leaves the study
 
-- **The headline is now seed-locked.** The event-level class-conditional active defence (+37 pp bush-dive gap, +0.44 eat-suppression delta) replicates at a second independent seed under the same matched-smells configuration. This is the paper-grade result of the study.
+### 3.1 The closing-analysis verdict in one table
 
-- **The two-level reading is unchanged.** Under matched smells the agent is **class-blind in where it walks** and **class-discriminating in how it defends itself**. Both statements are simultaneously true; the spatial and event-level metrics are talking about different things, and the spatial-only verdict missed the signal.
+The Round 2.6 food-decoupling experiment, final checkpoint, 200-episode eval-rollout:
 
-- **Corner-camping is not the only basin.** The companion experiment (Cell A1, predator made passive) had two seeds picked two different policies: seed 43 corner-camped at 486/500 survival, seed 45 starved at 98/500 survival while still avoiding the dangerous corner. **Both are class-blind at the event level** — neither distinguishes predator from rabbit when forced to engage them — so the *class-blindness* conclusion is robust. But the *specific policy* underneath it is seed-sensitive: there are at least two basins. Characterising the basin distribution would need 4+ more seeds (a hypothetical Round 2.7).
+| Number | Threshold for confirmation | Observed at seed 44 (this round) | Observed at seed 42 (previous round) | Cross-seed delta |
+|---|---|---:|---:|---:|
+| In-cover rate near predator | ≥ 0.80 | **0.888** ✓ (+11% over) | 0.876 | +1.2 percentage points |
+| Class gap on in-cover rate | ≥ +0.30 | **+0.373** ✓ (+24% over) | +0.368 | +0.5 percentage points |
+| Eat-suppression near predator | < 0.80 | **0.769** ✓ | 0.748 | +0.021 |
+| (Eat-suppression near rabbit) | (no threshold; reported) | 1.202 | 1.186 | +0.016 |
+| (In-cover rate near rabbit) | (no threshold; reported) | 0.515 | 0.508 | +0.7 percentage points |
+| Sanity — rabbit pair agree on in-cover (±5 pp) | (sanity) | Δ = 3.7 pp ✓ | within noise | — |
+| Sanity — rabbit pair agree on eat-suppression (±0.10) | (sanity) | Δ = 0.139 ⚠ (soft miss) | within noise | — |
 
-- **The methodological win is now load-bearing for the rest of the project.** Mean-distance metrics are insensitive to event-level discrimination whenever the spatial layout is geometrically constrained. Any future "no class discrimination" verdict gets cross-checked with the behavior-measure toolkit before being trusted. Round 2.5 is the worked example of why; Round 2.6 is the seed-stability proof that the toolkit's signal is real, not a Round 2.5 artifact.
+**Verdict: all three primary criteria met; the seed-stability check is passed.** The two-seed cross-round agreement is within rounding error on every primary number — closer than the typical within-seed run-to-run noise on these measures.
 
-- **One soft caveat to log.** The per-tag rabbit fan-out check on the eat-suppression measure (0.139) marginally exceeded the ±0.10 secondary-check band at seed 44. The primary verdict (eat-suppression near predator < 0.80) was not affected. This is consistent with the food-density asymmetry across quadrants and is flagged as a toolkit-v2 candidate (either widen the band to ±0.15 or split the measure by quadrant). It does not change the verdict.
+### 3.2 What that means for the study
 
-- **Wider arc.** Hypervigilance work should anchor on the **event-level baseline** (+37 pp bush-dive gap, eat-suppression near predator), not the spatial baseline (no gap under matched smells). The latter has no signal to amplify; the former does. The natural next pain-modulation experiments are: does a pain-driven modulator widen the gap further (over-amplified defence) or narrow it (suppressed)? — and on Round 3, where the spatial-camping loophole is closed, does the gap survive?
+- **The headline is now seed-locked.** The event-level finding — agent dives into cover much more often for a predator, suppresses eating near a predator, eats normally near a rabbit — reproduces at a second independent random seed under the same matched-smells configuration. This is the paper-grade result.
+
+- **The two-layer reading is unchanged.** Under matched smells the agent is **class-blind in where it walks** and **class-discriminating in how it defends itself**. Both statements are simultaneously true; they describe different things. Average-distance metrics miss the second one.
+
+- **The corner-camping policy is one solution out of at least two.** The passive-predator experiment's two seeds chose qualitatively different policies: seed 43 lived in the safe corner and survived to the timer (486 of 500 steps); seed 45 avoided the dangerous corner but starved to death (98 of 500 steps). **Both are class-blind at the event level** — neither distinguishes predator from rabbit when forced to engage them — so the *class-blindness* conclusion is robust. But the *specific policy* underneath it is seed-sensitive: there are at least two basins. Characterising the basin distribution properly would need 4+ more seeds — a hypothetical follow-up round.
+
+- **The methodological win is now load-bearing for the rest of the project.** Average-distance metrics are insensitive to event-level discrimination whenever the spatial layout is geometrically constrained (food in some corners, threats in others). Any future "no class discrimination" verdict gets cross-checked with the event-level toolkit (in-cover rate, eat-suppression, motif clustering) before being trusted. Round 2.5 is the worked example of why; Round 2.6 is the seed-stability proof that the event-level signal is real, not a Round 2.5 artifact.
+
+- **One soft caveat.** The "the two rabbits should behave alike on eat-suppression" sanity check came in at 0.139 difference between the two rabbits — versus the ±0.10 band the toolkit pre-registered. **The primary verdict is not affected** (the primary criterion is the predator-side number, which passes), and the same direction was visible in the Round 2.5 numbers at a smaller magnitude. The pattern is consistent with food density differing between rabbit corners; the fix is either widening the sanity band to ±0.15 or computing eat-suppression per-corner against a corner-matched safe baseline. Flagged as a candidate change for behaviour-toolkit version 2.
+
+- **The wider arc.** Hypervigilance work in this project should anchor on the **event-level baseline** (37-percentage-point in-cover-rate gap, eat-suppression near predator), not on the spatial baseline (no gap under matched smells). The latter has no signal for pain-modulation to amplify; the former does. The natural next pain-modulation experiments are: does a pain-driven modulator widen the gap further (over-amplified defence) or narrow it (suppressed)? — and in a next planned round (food in all four corners, closing the spatial-camping loophole), does the gap survive?
 
 ---
 
 ## 4. What's next (still pending decision)
 
-1. **PI-level call on the next research thread.** The study has produced a publishable two-seed event-level finding. The three candidate next moves are not mutually exclusive but compete for compute: (a) characterise the corner-camping basin distribution with a 4-seed Round 2.7 on Cell A1; (b) launch Round 3 (food in all four quadrants, behavior toolkit pre-registered as primary) to close the spatial-camping loophole and test whether the +37 pp gap survives; (c) pivot to the modulated-agent (NMN / FiLM) sequel on Cell C — does the modulated agent show a *larger* event-level class discrimination than plain RPPO? *(`pi` to surface; user decides.)*
+1. **The portfolio-level call on the next research thread.** The study has produced a publishable two-seed event-level finding. Three candidate next moves are not mutually exclusive but compete for compute:
+   - **(a)** Characterise the passive-predator-experiment basin distribution with 4 more seeds.
+   - **(b)** Launch the next planned round — food in all four corners, closing the spatial-camping loophole — with the event-level toolkit pre-registered as the primary verdict.
+   - **(c)** Pivot to the modulated-agent thread: does a pain-modulated variant of the baseline agent show a *larger* event-level class gap than the baseline does?
 
-2. **Round 3 — close the spatial-camping loophole.** Spawn food in all four quadrants so no corner is uniformly safe. Pre-register the event-level toolkit (M2 bush-dive rate / M5 eat-under-threat / M7 defensive-motif clustering) as the *primary* verdict, not a secondary check. Designer's prior: if the agent's class discrimination is genuine, the bush-dive gap widens further (88% → ~95%) and eat-suppression deepens (0.75 → ~0.55); if the gap was spatially mediated, it collapses. *(`experiment-designer` to author, blocked on item 1.)*
+2. **Food-in-all-four-corners round — close the spatial-camping loophole.** Spawn food in every corner so no corner is uniformly safe (the agent can't trivially camp). Pre-register the event-level toolkit (in-cover rate, eat-suppression ratio, motif clustering) as the *primary* verdict, not a secondary check. Designer's prior: if the agent's class discrimination is genuine, the in-cover-rate gap widens further (88% → ~95%) and eat-suppression deepens (0.75 → ~0.55); if the gap was spatially mediated, it collapses.
 
-3. **(Optional) Round 2.7 — characterise the A1 basin distribution.** 4 seeds on Cell A1 (46, 47, 48, 49) to map how the agent's policy distribution splits across the corner-camping basin vs the starve-while-avoiding basin vs anything else that emerges. *(`experiment-designer`, optional; only launch if the basin distribution is research-relevant downstream.)*
+3. **(Optional) Passive-predator basin-mapping round.** 4 seeds (46, 47, 48, 49) on the passive-predator experiment to map how the agent's policy distribution splits across the corner-camping basin vs the starve-while-avoiding basin vs anything else that emerges. Worth running only if the basin distribution is research-relevant downstream.
 
-4. **(Optional) NMN / FiLM agent sequel on Cell C.** Does the modulated agent show a larger event-level class discrimination than plain RPPO under the same matched-smells configuration? This is the natural bridge back to the NMN comparison thread. *(`experiment-designer` to flag in the next round design.)*
+4. **(Optional) Pain-modulated-agent sequel.** Does a pain-driven modulator (a small extra network that scales the policy by an interoceptive injury signal) show a *larger* event-level class discrimination than the baseline agent? Natural bridge back to the project's modulator-comparison thread.
 
-5. **Toolkit-v2 candidate — refine the M5 per-tag band.** The 0.139 marginal miss on the rabbit-tag fan-out check is a soft toolkit-design issue, not a verdict issue. Options: widen the band to ±0.15, or compute M5 per-quadrant against a quadrant-matched safe baseline. Not blocking. *(`experiment-designer` or whoever owns toolkit v2.)*
+5. **Behaviour-toolkit version 2 — refine the eat-suppression per-rabbit sanity check.** The 0.139 marginal miss on the rabbit-pair agreement is a toolkit-design issue, not a verdict issue. Options: widen the band to ±0.15, or compute eat-suppression per-corner against a corner-matched safe baseline. Not blocking.
 
-6. **Diary backfill — small.** The 2026-05-16 Round 2.6 re-launch never wrote a `training-start` row to the diary (the original n106 launch on 2026-05-12 used a different tag, and the relaunch tag was not separately registered), so the closing analysis couldn't update a row in place. The closing analysis was posted as a `note` instead. Not actionable for the study; flagged here for future re-launch hygiene. *(diary skill or top-level Claude on the next R2.6-like re-launch.)*
+6. **Diary hygiene — small.** The Round 2.6 re-launch never wrote a `training-start` row to the daily event log (the original launch used a different run tag, and the re-launch tag wasn't separately registered). Flagged for the next re-launch-after-crash scenario.
 
 ---
 
@@ -175,17 +271,20 @@ Normally each class carries its own **smell signature**, so the agent can tell t
 
 ## 6. Reading order if you have 10 minutes
 
-1. **This summary, sections 1–4** (5 min) — the take-home messages, the experiment table including the closing Round 2.6 row, the two-level verdict, and the open decision points.
-2. **§§9–12 of [`sameprop_round26_design.md`](../active/hypervigilance/sameprop_round26_design.md)** (4 min) — the closing-analysis fill-in: the four key numbers vs their thresholds, the seed-paired cross-round agreement table, the toolkit appendix in the Round 2.5 §12 format.
-3. **The Cell C closing insight, [`20260518_1736_sameprop_c_seed44_directional_replication.md`](../../memory/memories/hypervigilance/20260518_1736_sameprop_c_seed44_directional_replication.md)** (1 min) — the verdict in 5-section memory form with the original directional-replication record and the 2026-05-21 closing update.
+This document is intended to stand alone — you should not *need* to open any of the links to understand the verdict, the methods, or the implications. The reading order below points at the next-most-useful layer of detail for readers who do want to go deeper.
 
-If you have 30 minutes, also read:
+1. **This summary, top to §4** (~6 min) — the headline paragraph, the take-home bullets, the vocabulary, the experiment table, the verdict table, and the open decision points.
+2. **[Appendix A](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7)** (~4 min) — the four behaviour metrics in plain English, with formulas, simplified Python code, and worked examples on this study's numbers.
+3. **The food-decoupling closing-analysis memory insight, [`20260518_1736_sameprop_c_seed44_directional_replication.md`](../../memory/memories/hypervigilance/20260518_1736_sameprop_c_seed44_directional_replication.md)** (~1 min) — the verdict in 5-section memory form with the original directional-replication record and the 2026-05-21 closing update.
 
-4. **§12 of [`sameprop_round25_design.md`](../active/hypervigilance/sameprop_round25_design.md)** — the original event-level appendix that the Round 2.6 work replicated.
-5. **The Round 2.5 event-level verdict insight, [`20260512_1428_sameprop_class_discriminating_defence_event_level.md`](../../memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md)** — the seed-42 paper-grade memory form.
-6. **The Cell A1 refutation insight, [`20260518_1735_sameprop_a1_seed45_corner_camping_refuted.md`](../../memory/memories/hypervigilance/20260518_1735_sameprop_a1_seed45_corner_camping_refuted.md)** — the corner-camping-is-not-generic finding.
-7. **The methodological lesson, [`20260518_1737_wandb_post_crash_frozen_state_misread.md`](../../memory/memories/cluster_ops/20260518_1737_wandb_post_crash_frozen_state_misread.md)** — why post-crash WandB summary reads are dangerous, and the corrected check pattern.
-8. **The prior re-summary at [`20260514_2332_sameprop_rabbit_avoidance_study.md`](20260514_2332_sameprop_rabbit_avoidance_study.md)** — useful for seeing the two-level verdict before the seed-lock landed.
+If you have 30 minutes, also read (in this order):
+
+4. **§§9–12 of [`sameprop_round26_design.md`](../active/hypervigilance/sameprop_round26_design.md)** — the design-doc version of the closing analysis, with the full per-tag tables, the motif distribution, and the cross-round seed-paired comparison.
+5. **§12 of [`sameprop_round25_design.md`](../active/hypervigilance/sameprop_round25_design.md)** — the original event-level appendix that the Round 2.6 work replicated.
+6. **The Round 2.5 event-level verdict insight, [`20260512_1428_sameprop_class_discriminating_defence_event_level.md`](../../memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md)** — the seed-42 paper-grade finding in memory form.
+7. **The passive-predator refutation insight, [`20260518_1735_sameprop_a1_seed45_corner_camping_refuted.md`](../../memory/memories/hypervigilance/20260518_1735_sameprop_a1_seed45_corner_camping_refuted.md)** — the corner-camping-is-not-generic finding.
+8. **The methodological-lesson insight, [`20260518_1737_wandb_post_crash_frozen_state_misread.md`](../../memory/memories/cluster_ops/20260518_1737_wandb_post_crash_frozen_state_misread.md)** — why post-crash logging-service reads are dangerous, and the corrected check pattern.
+9. **The prior re-summary at [`20260514_2332_sameprop_rabbit_avoidance_study.md`](20260514_2332_sameprop_rabbit_avoidance_study.md)** — useful for seeing how the two-layer verdict was framed before the second-seed test landed.
 
 ---
 
