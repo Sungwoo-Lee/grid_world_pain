@@ -25,15 +25,22 @@ The timestamp anchors the summary to a specific moment in the project's history.
 
 ## What goes inside each summary
 
-Recommended sections (mirrored across summaries for scanability):
+The document is structured in layers from coldest-read (the reader has never seen the project) to warmest (technical detail for readers going deeper). **Stand-alone principle**: a reader who never opens any of the links should still understand the verdict, the methods, and the implications — so the summary inlines pre-registered thresholds, verdict numbers, and (when the study uses non-standard metrics) a behaviour-metric glossary appendix.
 
-1. **Study question** — one paragraph, plain English, what the study is trying to answer.
-2. **Experiments completed** — a table with one row per experiment: name + question + manipulation + finding + what it changed. High-level interpretation, not numbers-heavy.
-3. **Where this leaves us** — bullets summarising the cumulative state of understanding.
-4. **What's next** — open follow-ups + their owner agent (e.g. `experiment-designer`, `senior-developer`).
-5. **Links** — every authoritative document the summary points at: design docs in `../active/<topic>/`, analyses, memory insights in `../../../docs/memory/memories/<topic>/`, working files in `../../../tmp/`, diary days in `../../diary/`. **Repo-relative paths** so links stay valid on any clone.
+Section order (names verbatim — future tooling may key on them):
 
-A summary that is missing the Links section is broken — the whole point is to be a reader-facing entry point that fans out to the full record.
+1. **Headline-paragraph blockquote** — a single self-contained paragraph at the very top of the document, ~150–300 words, telling a cold reader what the study asked, what it found, and what the verdict is. No symbolic notation.
+2. **Take-home messages — the whole study in 6 bullets** — skim layer. Each bullet ≤ ~3 sentences, plain English. Cover setup / headline / replication status / caveats / methodological lesson / what's next.
+3. **§0 Vocabulary — terms used in this document** — required whenever the body uses any project-specific shorthand. Five sub-tables (use whichever subset is non-empty): *0.1 the world the agent lives in / 0.2 what this study manipulated / 0.3 what the agent is / 0.4 how we measured the agent / 0.5 behaviour metrics (short form)*.
+4. **§1 Study question** — environment description + manipulation + puzzle + why-it-matters. One paragraph each.
+5. **§2 Experiments completed this study** — row-per-experiment table (`#`, name, plain-English question, what was changed, high-level finding). When the study had pre-registered numeric thresholds, **inline a pre-registered confirmation criteria table directly below the experiment table** so the verdict in §3 can be read without opening the design doc.
+6. **§3 Where this leaves the study** — `§3.1 The closing-analysis verdict in one table` (required when there is a closing analysis with cross-something agreement — inline observed numbers vs thresholds vs prior round) + `§3.2 What that means for the study` (narrative bullets — headline, caveats, methodological lesson, wider arc).
+7. **§4 What's next (still pending decision)** — numbered list of candidate next moves. First item usually a portfolio-level decision call with (a)/(b)/(c) sub-bullets.
+8. **§5 Links** — repo-relative paths only. Subsections: design docs / supporting plans / memory insights / working files / eval-rollout outputs / diary days / prior summaries (when re-summarising) / implementation commits.
+9. **§6 Reading order if you have 10 minutes** — opens with the stand-alone-principle reminder; ranks the next-most-useful layer of detail for readers going deeper.
+10. **Appendix A — `<metric-family>` glossary** *(required when the study uses non-standard metrics)* — per-metric: plain-English question + walk-through + formula + edge-case rule + simplified Python code extract + worked-example numbers. Open with `A.0 Shared setup` (protocol parameters table); close with sanity-criteria gates.
+
+A summary that is missing the Links section is broken — the whole point is also to be a reader-facing entry point that fans out to the full record for readers who *do* want to go deeper.
 
 ## What's NOT here
 

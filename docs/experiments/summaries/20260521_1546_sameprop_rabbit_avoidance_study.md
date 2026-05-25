@@ -112,8 +112,6 @@ The agent has a short-range smell sensor: anything within its olfactory radius r
 
 > **Reading the experiment table.** Rows 3b and 6 quote per-class numbers for four behaviour metrics — **in-cover rate**, **eat-suppression ratio**, **interrupted-feeding rate**, **defensive-motif distribution** (technical names: M2, M5, M1, M7). If any term is unfamiliar, [§0 Vocabulary](#0-vocabulary--terms-used-in-this-document) has the short form and [Appendix A](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7) has the full definitions, formulas, and code.
 
-> **Reading the experiment table.** Rows 3b and 6 quote per-class numbers for four behaviour metrics — **M1** (interrupted-feeding rate), **M2** (bush-dive rate), **M5** (eat-under-threat ratio), **M7** (defensive-motif repertoire). None of these are standard RL metrics; they were built for this study. If the names are unfamiliar, jump to [**Appendix A — Behaviour-metric glossary**](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7) first for plain-English definitions, formulas, and the actual code that computes each one, then come back here.
-
 | # | Experiment | Plain-English question | What was changed | High-level finding |
 |---|---|---|---|---|
 | **0** | **Existing-run survey** *(2026-05-07)* | Look at an already-running matched-smells training — does anything in the logs distinguish predator from rabbit? | Nothing changed; re-read existing logs. | The agent kept the predator about **half a cell farther** than rabbits on average. Suggestive but only one random seed; food and rabbits also shared quadrants, so the gap could be food-seeking rather than class avoidance. |
