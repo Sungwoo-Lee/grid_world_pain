@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 21
-**Last updated**: 2026-05-18
+**Insights**: 22
+**Last updated**: 2026-05-25
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-25 | 22:58 | `20260525_2258_claude_code_statusline_rate_limits_official` | Claude Code now pipes `rate_limits.five_hour.used_percentage`, `.resets_at`, and matching `seven_day` fields directly into the statusline stdin JSON — same numbers as `claude.ai/settings/usage`, no auth or scraping. Obsoletes ccusage / accessToken-polling / local-transcript aggregation for the usage-display use case. Percentages refresh once per API turn (data comes from last API response); pair with `refreshInterval: 30` in settings.json so the reset-countdown text ticks live during idle. Implemented as two-line statusline at `~/.claude/statusline-command.sh` + `~/.claude/statusline_render.py`. Extends [[20260508_1826_statusline_jq_ifs_pct]] (same pattern: prefer pre-calculated JSON fields). |
 | 2026-05-18 | 17:37 | `20260518_1737_wandb_post_crash_frozen_state_misread` | When a WandB run crashes, `run.summary` keys stay frozen at the last logged values and `_runtime` stops incrementing — neither signal leaks the run's liveness state. The 2026-05-13 14:20 re-summary read R2.6's frozen post-crash summary keys (the runs had died 14.5h earlier) and described them as "in-flight progress at 29% elapsed", a misframing caught only when the user pointed out "There is no running training" on 2026-05-14. Fix: always check `run.state` (running / finished / failed / crashed) before quoting summary keys as live progress. |
 | 2026-05-18 | 15:16 | `20260518_1516_wandb_log_dict_timesteps_key` | WandB `define_metric("Episode/*", step_metric="timesteps")` requires `"timesteps"` to be a key INSIDE the log_dict on every `wandb.log` call — passing it only via `step=` kwarg silently breaks the x-axis binding and metrics render as single bars instead of per-step traces. Second gotcha: patterns are case-sensitive (`episode/*` won't match keys logged as `Episode/foo`). Fix at commit `2da1a33`: include `"timesteps": policy_step` + `"iteration": iter_num` inside each log_dict; align all `define_metric` patterns to uppercase. Project-wide rule across rPPO + Dreamer + dreamer-srl. |
 | 2026-05-16 | 14:33 | `20260516_1433_graphifyy_integration_cheatsheet` | Four non-obvious gotchas integrating Graphify into a project conda env: (1) install `graphifyy` (double-y; single-y on PyPI is squatted), (2) invoke `graphify update <path>` (NOT bare positional which prints help), (3) output lands at `<scanned_path>/graphify-out/` (NOT cwd), (4) wrapper scripts need `Path(sys.executable).parent / 'graphify'` PATH fallback when the conda env's bin isn't on shell PATH. `.gitignore` must use `**/graphify-out/` (recursive). Tree-sitter pass is sufficient for code structure (735 nodes / 1009 edges on src/, zero LLM tokens). |

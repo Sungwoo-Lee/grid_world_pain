@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-05-19
+**Last updated**: 2026-05-25
 
 ---
 
@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 
 ## Change history
 
+- 2026-05-25: 1 insight from the Claude Code statusline / `rate_limits.*` session (`20260525_2258_claude_code_statusline_rate_limits_official`) reused existing tags `meta`, `learned_lesson`, `decision` — no new tags promoted.
 - 2026-05-19: 2 insights from the notebooklm community-skill → official `notebooklm-py` package swap session (`20260519_1809_notebooklm_py_official_skill_install`, `20260519_1810_bg_isolation_blocks_edit_not_bash`) reused existing tags `skill`, `learned_lesson`, `decision`, `meta`, `worktree`, `subagent` — no new tags promoted.
 - 2026-05-19: 3 insights from the dreamer-srl v2 perf-diagnosis + JAX-Dreamer perf-retrofit history session (`20260519_1507_dreamer_srl_v2_cpu_buffer_regression`, `20260519_1508_dreamer_jax_perf_retrofit_4_phases`, `20260519_1509_nnx_lax_scan_split_merge_pattern`) reused existing tags `dreamer`, `learned_lesson`, `design`, `decision`, `meta` — no new tags promoted.
 - 2026-05-18: 6 insights from the dreamer-srl v2 parity + 10×10 hyperparameter search session (`20260518_1511_dreamer_srl_v2_parity_pass_outperform`, `20260518_1512_reinforce_resampling_bug_imag_action_threading`, `20260518_1513_production_recipe_xs_16_4m_hypervigilance`, `20260518_1514_num_envs_vs_budget_interaction`, `20260518_1515_m_paradox_resolution_slow_learner`, `20260518_1516_wandb_log_dict_timesteps_key`) reused existing tags `dreamer`, `hypervigilance`, `decision`, `learned_lesson`, `refutation`, `meta`, `design` — no new tags promoted.
