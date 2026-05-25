@@ -448,18 +448,18 @@ def main() -> None:
         print("[dreamer-srl] WandB disabled (--no-wandb)")
 
     # -----------------------------------------------------------------------
-    # 9b. Results directory — mirrors train.py:L540-L547 JAX_DreamerV3 convention.
-    # Convention: results/JAX_DreamerSRL/<wandb-run-name>/ (parallel to DreamerV3).
+    # 9b. Results directory — mirrors train.py:L538-L545 JAX_DreamerV3 convention.
+    # Convention: results/JAX_DreamerSRL/<YYYYMMDD-HHMMSS>_<wandb-run-name>/.
     # Falls back to tmp/JAX_DreamerSRL_<timestamp>/ when --no-wandb.
     # -----------------------------------------------------------------------
-    import time as _time_mod
+    from datetime import datetime as _dt
+    _timestamp = _dt.now().strftime("%Y%m%d-%H%M%S")
     if args.results_dir:
         results_dir = args.results_dir
     elif use_wandb and wandb.run is not None:
-        results_dir = _os.path.join(_project_root, 'results', 'JAX_DreamerSRL', wandb.run.name)
+        results_dir = _os.path.join(_project_root, 'results', 'JAX_DreamerSRL', f"{_timestamp}_{wandb.run.name}")
     else:
-        _ts = int(_time_mod.time())
-        results_dir = _os.path.join(_project_root, 'tmp', f'JAX_DreamerSRL_{_ts}')
+        results_dir = _os.path.join(_project_root, 'tmp', f'JAX_DreamerSRL_{_timestamp}')
     _os.makedirs(results_dir, exist_ok=True)
     print(f"[dreamer-srl] results_dir={results_dir}")
 
