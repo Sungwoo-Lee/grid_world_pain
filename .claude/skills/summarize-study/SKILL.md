@@ -149,17 +149,17 @@ Bullets are reader-facing — use descriptive labels for experiments (*"the food
 
 #### §0 Vocabulary — terms used in this document
 
-**Required whenever the study uses any project-specific shorthand** (cell names, config slugs, round numbers, run IDs, custom metric short-forms, environment-specific jargon). Skip *only* if the entire body of the summary uses no jargon — rare.
+**Required whenever the study uses any project-specific shorthand** (cell names, config slugs, round numbers, run IDs, custom metric short-forms). Skip *only* if the entire body of the summary uses no project-specific jargon — rare.
 
-Structure as 5 sub-tables (use whichever subset is non-empty for the study):
+**Scope of §0**: project-specific shorthand the body uses repeatedly. **NOT** here: standard RL terms (episode, policy, checkpoint, seed, gradient) or environment basics (the grid, the entities, the agent's actions, the sensors). Standard RL is assumed knowledge for the project's readers; environment basics belong in §1 Study question's setup paragraph, where they're described in context.
 
-- **0.1 The world the agent lives in** — environment-level setup terms (grid world, episode, survival metric, the entities in the world, any environment features like bushes / quadrants / sensors).
-- **0.2 What this study manipulated** — every experimental knob with both its plain-English label and its project shorthand (e.g., *"Matched smells ('sameProp') — the predator and rabbits carry the same olfactory property vector."*). Each round / cell / config variant gets one row.
-- **0.3 What the agent is** — the policy / architecture / training-algorithm in one line each. *"Plain RPPO — a small recurrent neural network (~128 hidden units) trained with PPO. The baseline."*
-- **0.4 How we measured the agent** — analysis-protocol terms: eval-rollout, deterministic-policy, danger radius, lookahead window, threat-onset event, pre-registered confirmation criteria, etc.
-- **0.5 The behaviour metrics (short form)** — one row per non-standard metric, with "plain-English question" as the meaning column. Points readers to Appendix A for the full definitions. Required when Appendix A is present.
+Structure as 3 sub-tables (use whichever subset is non-empty for the study):
 
-Tables, not bullet lists — readers scan tables faster. Each cell is one or two sentences.
+- **0.1 What this study manipulated** — every experimental knob with both its plain-English label and its project shorthand (e.g., *"Matched smells ('sameProp') — the predator and rabbits carry the same olfactory property vector."*). Each round / cell / config variant gets one row. Round numbers and seed numbers also live here.
+- **0.2 How we measured the agent** — analysis-protocol terms the body refers to repeatedly: eval-rollout, deterministic-policy mode, danger radius, lookahead window, threat-onset event, pre-registered confirmation criteria, layer-of-measurement distinctions, etc. Define each one once and reuse the plain-English label thereafter.
+- **0.3 The behaviour metrics (short form)** — one row per non-standard metric, with "plain-English question" as the meaning column. Points readers to Appendix A for the full definitions. Required when Appendix A is present.
+
+Tables, not bullet lists — readers scan tables faster. Each cell is one or two sentences. If a term you're tempted to add is "what is an episode / a policy / a checkpoint", drop it (assumed knowledge). If it's "what is the grid / who is the predator / what does the smell sensor do", move it to §1 (described once in setup context). §0 stays compact — it's a cheat-sheet, not a textbook.
 
 #### §1 Study question
 

@@ -32,23 +32,9 @@ status: snapshot
 
 ## 0. Vocabulary — terms used in this document
 
-A few terms recur often enough that they are worth defining once. Behaviour-metric details (the formulas + code) live in [**Appendix A**](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7); this section is the lightweight cheat-sheet.
+This section defines the project-specific shorthand the body of the document uses repeatedly. Standard RL terms (episode, policy, checkpoint) and the environment basics (the grid, the entities, the agent's sensors) are not redefined here — they're described in [§1 Study question](#1-study-question). Behaviour-metric details (the formulas + code) live in [**Appendix A**](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7).
 
-### 0.1 The world the agent lives in
-
-| Term | Meaning |
-|---|---|
-| **Grid world** | A small 2D grid (a few cells across) the agent inhabits. The agent moves one cell per step in one of five actions (up, down, left, right, stay). It survives by eating food and avoiding threats. |
-| **Episode** | One life of the agent, from spawn to death-or-timer. Capped at **500 steps** per episode in this study. Agents can die from injury, starvation, or simply run out the timer. |
-| **Survival steps** | How many steps the agent survived in an episode. The project's de-facto performance number — *not* cumulative reward. 500/500 = the agent lived to the timer; 98/500 = it died young. |
-| **Patrolling predator** | One creature that walks around the grid and damages the agent on contact. The dangerous entity in the world. Has a state machine that can switch to "HUNT" mode and chase the agent. |
-| **Hiding predators** | Four stationary creatures perched on rocks that damage the agent at a distance. Not the focus of this study but always present in the world. |
-| **Rabbits** | Two harmless creatures that wander around. Visually + olfactorily similar to predators in this study — but inflict no damage. |
-| **Bushes** | Obstacles that *hide* the agent: while the agent is on a bush cell, predators cannot see it. The agent uses this as cover. |
-| **Quadrants — TL / TR / BL / BR** | Top-left / top-right / bottom-left / bottom-right of the grid. Entities are configured to spawn in specific quadrants. |
-| **Smell / olfactory signature** | Each creature carries a 5-element "property vector". The agent has a short-range smell sensor that reports those vectors. Normally each class has a distinct vector. **This study forces them identical**, removing the smell cue. |
-
-### 0.2 What this study manipulated
+### 0.1 What this study manipulated
 
 | Term | Meaning |
 |---|---|
@@ -60,15 +46,7 @@ A few terms recur often enough that they are worth defining once. Behaviour-metr
 | **Round 2.6** | The seed-stability check: same two cells, second seeds (44 / 45). First launch crashed; re-launched on healthy nodes and finished cleanly. **The closing analysis of this round is what this document re-summarises.** |
 | **Seed** | The integer that initialises the agent's random weights + training stochasticity. Different seeds = different random initialisations = potentially different policies. "Two-seed-locked" = the same finding reproduces at two independent seeds. |
 
-### 0.3 What the agent is
-
-| Term | Meaning |
-|---|---|
-| **Plain RPPO** | The baseline policy used throughout this study: a small recurrent neural network (~128 hidden units) trained with the Proximal Policy Optimisation algorithm. No "modulator" or special architecture — just the off-the-shelf RL agent. Future studies will compare this baseline against modulated variants. |
-| **Checkpoint** | The frozen network weights at a specific training step. Saved every ~10,000 episodes; the *final* checkpoint at 10M episodes is the one analysed here. |
-| **Policy** | The function mapping the agent's observation to its action probabilities. At training time it is stochastic (samples actions); for analysis we run it in **deterministic mode** (argmax — take the most-likely action). |
-
-### 0.4 How we measured the agent
+### 0.2 How we measured the agent
 
 | Term | Meaning |
 |---|---|
@@ -81,7 +59,7 @@ A few terms recur often enough that they are worth defining once. Behaviour-metr
 | **Class-conditional / class-blind** | "Class-conditional" = the agent responds differently to predator vs rabbit. "Class-blind" = same response. This is the study's central question. |
 | **Pre-registered confirmation criteria** | Numeric thresholds that the study wrote down *before* the closing analysis ran, defining what counts as confirmation, refutation, or borderline. The Round 2.6 verdict is just: did the closing-analysis numbers cross those thresholds? |
 
-### 0.5 The behaviour metrics (short form — full details in [Appendix A](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7))
+### 0.3 The behaviour metrics (short form — full details in [Appendix A](#appendix-a--behaviour-metric-glossary-m1-m2-m5-m7))
 
 | Short name | Plain-English question |
 |---|---|
@@ -99,6 +77,8 @@ A few terms recur often enough that they are worth defining once. Behaviour-metr
 - a **patrolling predator** (one) — damages the agent on contact,
 - **four hiding-predators** perched on rocks — damage the agent at a distance,
 - **two rabbits** — harmless wanderers.
+
+The grid also has a small number of **bushes** — cells the agent can step onto to hide from predators — and food the agent must keep eating to avoid starving. Each episode is capped at 500 steps; the agent can die from injury or starvation, or simply run out the timer. Performance throughout this study is reported in **survival steps** (how many of the 500-step cap the agent lived), not cumulative reward.
 
 The agent has a short-range smell sensor: anything within its olfactory radius reports a 5-element "property vector" identifying its class. Normally each class carries its own property vector — so the agent can tell predators from rabbits from far away by smell. This study deliberately removes that cue: under "matched smells" the patrolling predator and the rabbits carry the *same* property vector, and the smell sensor can no longer separate them.
 
