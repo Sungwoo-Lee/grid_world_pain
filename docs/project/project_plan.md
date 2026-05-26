@@ -1,9 +1,11 @@
 ---
-title: GridWorld Pain — Project Direction
+title: "EPISODE — Project Direction"
 last_updated: 2026-05-26
 ---
 
-# GridWorld Pain — Project Direction
+# EPISODE — Project Direction
+
+**EPISODE** — **E**mergence of **P**ain **I**n **S**imulated **O**rganismic & **D**ynamic **E**nvironments.
 
 > **What this document is.** Direction context for the project. It states the conceptual framing, the audiences, the framework, and the two papers the project produces. It is **not** a stage plan, a list of pre-registered hypotheses, a record of current state, or a record of past work. It is a stable reference. Subtasks operate inside this frame; this frame does not change as subtasks land.
 
