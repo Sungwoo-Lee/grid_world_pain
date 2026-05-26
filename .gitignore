@@ -54,3 +54,5 @@ docs/memory/.trash/*
 # graphify writes to <scanned_path>/graphify-out/, so the pattern must match
 # at any depth (e.g. src/graphify-out/, not just repo-root graphify-out/).
 **/graphify-out/
+
+docs/.obsidian/
