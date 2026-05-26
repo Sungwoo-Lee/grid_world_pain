@@ -1,1 +1,25 @@
-{}
+{
+  "files.watcherExclude": {
+    "**/.claude/worktrees/**": true,
+    "**/wandb/**": true,
+    "**/results/**": true,
+    "**/claude_data/**": true,
+    "**/graphify-out/**": true,
+    "**/legacy/**": true,
+    "**/antigravity_data/**": true,
+    "**/logs/**": true,
+    "**/tmp/**": true,
+    "**/.git/**": true
+  },
+  "search.exclude": {
+    "**/.claude/worktrees/**": true,
+    "**/wandb/**": true,
+    "**/results/**": true,
+    "**/claude_data/**": true,
+    "**/graphify-out/**": true,
+    "**/legacy/**": true,
+    "**/antigravity_data/**": true,
+    "**/logs/**": true,
+    "**/tmp/**": true
+  }
+}
