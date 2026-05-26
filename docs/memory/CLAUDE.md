@@ -1,3 +1,7 @@
+---
+aliases: [memory_operating_manual]
+---
+
 # CLAUDE.md — `docs/memory/` Operating Manual
 
 > Authoritative single source for this memory layer's policies, workflows, and templates.

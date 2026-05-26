@@ -1,3 +1,7 @@
+---
+aliases: [environment_summary]
+---
+
 # GridWorld Pain — Environment Reference
 
 > **Status**: Complete | **Primary source**: `src/environment/` | **Last updated**: 2026-04-20

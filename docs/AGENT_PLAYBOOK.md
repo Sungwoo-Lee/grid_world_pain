@@ -1,3 +1,7 @@
+---
+aliases: [agent_playbook]
+---
+
 # Agent Playbook
 
 The orchestration layer for the project's agent team. Read by `agent-manager` whenever it is producing a routing plan; readable by other agents (and the user) for reference. Each agent profile in `.claude/agents/` says *what that agent does*; this doc says *who comes after whom and when*. The `agent-manager` translates a request into a routing plan using this doc; the **parent (top-level Claude) executes the plan** by spawning the named sub-agents.

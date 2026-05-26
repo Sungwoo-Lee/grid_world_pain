@@ -4,6 +4,7 @@ topic: neuromodulation
 status: active
 created: 2026-02-11
 last_updated: 2026-04-12
+aliases: [neuromodulation_algorithm]
 ---
 
 # Unified Interoceptive Neuromodulation for Grid-World Pain

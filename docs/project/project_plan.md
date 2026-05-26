@@ -1,6 +1,7 @@
 ---
 title: "EPISODE — Project Direction"
 last_updated: 2026-05-26
+aliases: [project_direction]
 ---
 
 # EPISODE — Project Direction

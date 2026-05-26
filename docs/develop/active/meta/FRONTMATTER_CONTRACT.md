@@ -5,6 +5,7 @@ status: active
 created: 2026-05-06
 last_updated: 2026-05-06
 phase: null
+aliases: [frontmatter_contract]
 ---
 
 # Develop Docs Frontmatter Contract
