@@ -181,6 +181,10 @@ def main() -> None:
     parser.add_argument("--num-envs", type=int, default=1,
                         help="Number of parallel environments")
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
+    parser.add_argument("--log-interval", type=int, default=None,
+                        help="WandB logging interval in iterations (overrides config). "
+                             "Mirrors train.py:242 rPPO CLI. Priority: CLI > "
+                             "agent_cfg.training.log_interval > env_cfg.training.log_interval > default(50).")
     parser.add_argument("--wandb-project", type=str,
                         default="grid_world_pain",
                         help="WandB project name")
@@ -553,9 +557,20 @@ def main() -> None:
     last_losses: Dict = {}
 
     # log_every: iterations between WandB metric logs.
-    # Mirrors rPPO's training.log_interval (train.py:447). Default 50 matches
-    # production rPPO invocations (e.g. SameProp Round 2.6 used --log-interval 50).
-    log_every = env_cfg.get('training.log_interval', 50)
+    # Resolution order mirrors rPPO's CLI > config pattern (train.py:447):
+    #   --log-interval (CLI)
+    #   > agent_cfg.training.log_interval (per-config; e.g. buf256k.yaml)
+    #   > env_cfg.training.log_interval   (env / global default at configs/train/default.yaml:15)
+    #   > 50 (built-in fallback)
+    # CAUTION: dreamer-srl "iteration" = one env-step batch (num_envs env-steps),
+    # whereas rPPO "iteration" = one rollout (num_steps * num_envs env-steps). To get
+    # rPPO-equivalent env-step cadence at num_envs=16, use log_interval ≈ 50000
+    # (≈ 800k env-steps/log, matching rPPO @ log_interval=50, num_steps=128, num_envs=128).
+    log_every = (
+        args.log_interval
+        or agent_cfg.get('training.log_interval')
+        or env_cfg.get('training.log_interval', 50)
+    )
     last_log_step = 0
 
     t_start = time.time()

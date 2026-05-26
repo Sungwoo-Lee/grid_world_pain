@@ -127,6 +127,11 @@ buffer:
 training:
   episodes: 10000000
   checkpoint_frequency: 200000
+  # rPPO-parity log cadence. At num_envs=16: 50000 iters × 16 env-steps/iter
+  # ≈ 800k env-steps/log ≈ ~4000 episodes/row (matches rPPO production at
+  # --log-interval=50, num_steps=128, num_envs=128 = ~820k env-steps/log).
+  # Read priority: --log-interval CLI > this key > env_cfg default (10).
+  log_interval: 50000
 
 # Env
 env:
