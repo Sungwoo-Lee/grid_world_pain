@@ -1,6 +1,31 @@
 import jax.numpy as jnp
 import jax
+import numpy as np
 from flax import struct
+
+
+def select_by_class(params, class_name: str) -> np.ndarray:
+    """Return a boolean NumPy mask of length N selecting animals of the given class.
+
+    Args:
+        params: EnvParams — holds `animal_classes` tuple (pytree_node=False, len N).
+        class_name: one of 'predator', 'neutral', or any future class string.
+
+    Returns:
+        np.ndarray[bool, shape (N,)] — True at index i iff animal_classes[i] == class_name.
+
+    Usage:
+        pred_mask = select_by_class(params, 'predator')
+        pred_pos = np.array(state.animal_pos)[pred_mask]   # shape [N_pred, 2]
+
+    Notes:
+        - This is a host-side (NumPy) helper — not a JAX traced function. Call it
+          from analysis scripts, renderers, and eval code, not inside jit'd kernels.
+        - The mask is derived from `params.animal_classes`, a static
+          `pytree_node=False` tuple, so it is config-constant and allocation-free
+          when called repeatedly with the same params.
+    """
+    return np.array([c == class_name for c in params.animal_classes], dtype=bool)
 
 @struct.dataclass
 class EnvState:

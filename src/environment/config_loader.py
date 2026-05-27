@@ -11,6 +11,7 @@ v2.0 changes (CP1 — unified animal entity):
     they are derived via @property accessors on EnvParams (B3 / M1 fix in state.py).
 """
 import re as _re
+import logging
 import yaml
 import numpy as np
 import jax.numpy as jnp
@@ -20,6 +21,8 @@ from src.environment.state import EnvParams
 
 from src.utils.config import Config
 import warnings
+
+_log = logging.getLogger(__name__)
 
 # Allowed characters in entity tags (used in WandB key 'Episode/MeanDist*_<tag>').
 # Slashes / spaces / dots break the WandB namespace or log key.
@@ -232,9 +235,6 @@ def _load_animals(config: Config):
     `behaviour: hunt`. All 86 pre-v2.0 predator entries carry an explicit value,
     so no existing config breaks; this change is flagged for reference.
     """
-    import logging
-    _log = logging.getLogger(__name__)
-
     h = config.get_mandatory('environment.height')
     w = config.get_mandatory('environment.width')
 
@@ -771,28 +771,26 @@ def load_env_params(config: Config) -> EnvParams:
     placement_mode = config.get('environment.placement.mode', 'per_entity')
     assert placement_mode in ('per_entity', 'per_type'), f"Unknown placement mode: {placement_mode}"
 
-    import logging as _logging_local
-    _loader_log = _logging_local.getLogger(__name__)
-    _loader_log.debug("=" * 60)
-    _loader_log.debug("ENTITY PLACEMENT STRATEGY: %s", placement_mode)
-    _loader_log.debug("=" * 60)
-    _loader_log.debug("Grid: %d×%d (%d cells)", height, width, height * width)
-    _loader_log.debug("Total entities: %d", num_total_entities)
+    _log.debug("=" * 60)
+    _log.debug("ENTITY PLACEMENT STRATEGY: %s", placement_mode)
+    _log.debug("=" * 60)
+    _log.debug("Grid: %d×%d (%d cells)", height, width, height * width)
+    _log.debug("Total entities: %d", num_total_entities)
     if placement_mode == 'per_type':
-        _loader_log.debug("Type groups: %d (one lax.scan step each)", num_types)
+        _log.debug("Type groups: %d (one lax.scan step each)", num_types)
         for tidx, k in enumerate(area_keys_list):
             area = list(k)
             cnt = type_counts_list[tidx]
             area_cells = (area[2] - area[0]) * (area[3] - area[1])
-            _loader_log.debug(
+            _log.debug(
                 "  Group %d: area %s → %d entities / %d cells (%.0f%%)",
                 tidx, area, cnt, area_cells, 100 * cnt / area_cells if area_cells else 0
             )
-        _loader_log.debug("Max entities per group: %d", max_per_type)
-        _loader_log.debug("Sequential steps: %d", num_types)
+        _log.debug("Max entities per group: %d", max_per_type)
+        _log.debug("Sequential steps: %d", num_types)
     else:
-        _loader_log.debug("Sequential steps: %d (one per entity)", num_total_entities)
-    _loader_log.debug("=" * 60)
+        _log.debug("Sequential steps: %d (one per entity)", num_total_entities)
+    _log.debug("=" * 60)
     
     # Hidden-state observability flags
     injury_observable = bool(config.get_mandatory('sensory.injury_observable'))

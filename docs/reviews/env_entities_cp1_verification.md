@@ -195,3 +195,205 @@ Both reviewer verdicts must also be green for CP2 to start cleanly.
 - The "86-config parity" claim in CP1 should be revised to "31 of 86 migrated configs (the 31 that load with both pre- and post-refactor code; the other 55 fail to load with the pre-refactor code due to a project-wide pre-existing mandatory-key issue)."
 
 **Verified by**: `senior-developer` — 2026-05-28
+
+---
+
+## Verification of CP2–CP4 (2026-05-28)
+
+> **Verdict**: **VERIFIED-WITH-NOTES** — all three checkpoints meet plan intent; tests pass; one missing-Implementation-Report-section gap (CP2 + CP3) and the pre-existing D1/D2/D3 plan-body errata are still outstanding, neither blocks CP5.
+> **Scope**: plan adherence for CP2 (`4781105`), CP3 (`a85a951`), CP4 (`6685d0e`). Verifies tests, fixtures, atomic-commit boundaries, no out-of-scope source edits, and the deferred speed-check methodology.
+> **Branch**: `v2.0`. **Verified at**: `6685d0e` (HEAD before diary commit `39f6351`).
+> **Verified by**: `senior-developer`. **Date**: 2026-05-28.
+
+### Headline
+
+CP1 already shipped *all* the source-code changes for CP2 (per-episode sampling in `jax_reset`), CP3 (`entities:` schema parsing in the loader), and CP4 (sensor scatter / B2 extero-noc mask / B5 `hit_neutral` asymmetry / unified `animal_chem`). What CP2–CP4 actually deliver in this branch is **the test+fixture coverage** for code that was already running. That's a defensible scoping choice — landing parity-critical sensor changes atomically at CP1 is the right call because partial-CP intermediate states would have failed the parity gate. The cost is that the per-CP atomic-commit invariant becomes "one commit per CP's *deliverable*", not "one commit per CP's *code surface*" — which is fine because each CP commit cleanly maps to its checkpoint's stated artefact list.
+
+All 20 new tests across CP2 (8) + CP3 (7) + CP4 (5) pass; the env suite stays at 98 passed / 121 skipped / 0 failed; the trainer-grep is clean (0 surviving `state.pred_` / `state.neutral_` reads in `src/algorithms/` or `src/models/`); the local micro-benchmark holds 430 ± 9 sps with mechanical 0% delta vs CP1 because the sensor code is byte-identical. Speed-wise, the deferred full PPO 1000-step training validation is acceptable to push to the out-of-band `training-runner` since CP1's parity tests already exercise the exact JIT-compiled `jax_step` path the trainer would hit — but I'd recommend triggering it before CP5 (distributional schema) lands, since CP5 is where bound-array YAML parsing first becomes the *agent-facing* surface.
+
+### CP2 — Per-episode sampling at reset
+
+**Commit**: `4781105`. **Files**: `tests/env/test_per_episode_sampling.py` (+437) + plan checkbox flip (+1/-1).
+
+#### File Changes checklist
+
+| Plan item | Status | Notes |
+|---|:---:|---|
+| 5-way key split in `jax_reset` + `jax.random.uniform` calls + populate 5 `animal_*_sampled` fields | ✅ | Already landed in CP1 (`core.py:778-783, 962-978`). `animal_episode_key = jax.random.fold_in(property_key, 0xAE1)`; 5-way split feeds 5 `uniform` calls; zero-animal branch returns shape-`(0,)` zeros. |
+| `tests/env/test_per_episode_sampling.py` covering (a)–(g) | ✅ | 8 test functions: `test_same_key_same_samples`, `test_different_key_different_samples`, `test_per_instance_independence`, `test_sampled_fields_on_state_not_params`, `test_cross_field_independence`, `test_degenerate_range_returns_low`, `test_wander_static_animal_state_stays_zero`, `test_zero_animal_smoke`. |
+
+#### Verification clause — plan checkpoint test claims
+
+| Plan §(b) sub-clause | Test function | Pass |
+|---|---|:---:|
+| (a) same key ⇒ same sampled values | `test_same_key_same_samples` | ✅ |
+| (b) different key ⇒ different sampled values | `test_different_key_different_samples` | ✅ |
+| (c) N entities of the same class ⇒ N independent samples | `test_per_instance_independence` | ✅ |
+| (d) cross-field independence (\|r\| < 0.5 over 100 keys) | `test_cross_field_independence` | ✅ |
+| (e) sampled fields on `EnvState` not `EnvParams` | `test_sampled_fields_on_state_not_params` | ✅ |
+| (f) wander/static `animal_state` stays at 0 after 1000 steps | `test_wander_static_animal_state_stays_zero` | ✅ |
+| (g) zero-animal smoke (M6) | `test_zero_animal_smoke` | ✅ |
+| degenerate-range guard (uniform[s,s] ≡ s) — implied by parity gate | `test_degenerate_range_returns_low` | ✅ |
+
+Test run: `pytest tests/env/test_per_episode_sampling.py -v` → 8 passed in 22.17s.
+
+#### Per-CP atomic commit
+
+✅ Single commit `4781105` carries all CP2 deliverables. Diff stats: +437 / -1 (just the test file + plan checkbox).
+
+#### Implementation Report
+
+⚠️ **Missing**. The plan doc has no `### CP2 — Per-episode sampling at reset` sub-section under `## Implementation Report`. The CP2 commit only flipped `[ ]` → `[x]` on the checkpoint line and embedded the completion summary inside the checkpoint description itself. That's functional but breaks the convention CP1 + CP4 follow.
+
+#### Plan deviations
+
+- **D5 — CP2 code already landed at CP1.** The plan listed "Add the 5-way key split in `jax_reset` and the `jax.random.uniform` calls; populate the 5 `animal_*_sampled` fields" as CP2 work, but `c3892cb` already contained all of this (since `update_animals` needed the sampled state fields to read, and `jax_reset` needed to produce them). CP2's commit is tests-only. **Verdict**: ✅ accepted. The right scoping decision — splitting the per-episode sampling code out into its own commit would have left CP1 with a parity gate that couldn't run end-to-end. The plan's checkpoint boundary was a *narrative* boundary (what to think about), not a code-commit boundary, and the developer correctly collapsed the code work into CP1 while keeping CP2's *test artefacts* as the CP2 delivery.
+
+#### Verdict — CP2
+
+✅ **VERIFIED**. Plan-compliant. The missing-Implementation-Report-sub-section is a documentation gap, not an implementation gap.
+
+### CP3 — `entities:` schema in config loader
+
+**Commit**: `a85a951`. **Files**: `configs/experiment/v2_smoke/01-entities-smoke.yaml` (+369), `tests/env/test_entities_schema.py` (+419) + plan checkbox flip.
+
+#### File Changes checklist
+
+| Plan item | Status | Notes |
+|---|:---:|---|
+| New `environment.entities:` YAML path in loader | ✅ | Already landed in CP1 (`config_loader.py:277-326`). `has_entities = config.get('environment.entities') is not None`; if present, parses the unified list directly. |
+| Loader prefers `entities:` over legacy when both present + emits `DeprecationWarning` | ✅ | `config_loader.py:284-290` raises `warnings.warn(..., DeprecationWarning)` when both are present and ignores legacy. |
+| `placement.types:` re-mapping to `[res, animal, obs]` ordering in `per_type` mode | ⚠️ | Internally the loader keeps `[res, pred, obs, neutral]` ordering for the resolution scan (N1 fix from CP1) AND for `type_entity_map` construction (`config_loader.py:743-749`). The plan's stated "now `[res, animal, obs]`" was describing the *storage* layout; the *placement-scan* layout has to stay `[res, pred, obs, neutral]` for PRNG byte-parity. The developer correctly preserved this. The plan body needs an erratum note. |
+| `configs/experiment/v2_smoke/01-entities-smoke.yaml` (NEW) | ✅ | 369-line file, byte-parity equivalent of `01-interoNocicept_sameProp.yaml`. Predator-first ordering preserved. Tested via `test_entities_smoke_byte_parity`. |
+| `tests/env/test_entities_schema.py` (NEW) — 5 plan-named sub-clauses | ✅ | 7 test functions (see Verification clause below). |
+
+#### Verification clause — plan checkpoint test claims
+
+| Plan §"Verifies" sub-clause for CP3 | Test function | Pass |
+|---|---|:---:|
+| (a) unified config loads | `test_smoke_config_loads` | ✅ |
+| (b) byte-parity vs legacy | `test_entities_smoke_byte_parity` | ✅ |
+| (c) loader warns + prefers unified when both schemas present | `test_both_schemas_warns_and_prefers_unified` | ✅ |
+| (d) `predator_enabled` still raises (sanity) | `test_predator_enabled_still_raises` | ✅ |
+| (e) 4-entity mixed-behaviour idx tuples correct (MF#2) | `test_mixed_behaviour_idx_tuples` | ✅ |
+| Implicit — hunt-missing-dist-field raises | `test_hunt_missing_dist_field_raises` | ✅ extra coverage |
+| Implicit — wander-without-dist-fields auto-fills `[0, 0]` (NC-1) | `test_wander_without_dist_fields_ok` | ✅ extra coverage |
+
+Pre-flight `grep -rln "mode: per_type" configs/` returns 0 results (re-verified) — no `per_type` configs exist anywhere in the repo, so the `type_entity_map` re-projection is a no-op in practice. Plan-required surface but vacuously satisfied.
+
+Test run: `pytest tests/env/test_entities_schema.py -v` → 7 passed in 20.89s.
+
+#### Per-CP atomic commit
+
+✅ Single commit `a85a951` carries all CP3 deliverables. Diff stats: +789 / -1 (smoke config + test file + plan checkbox).
+
+#### Implementation Report
+
+⚠️ **Missing**. Same gap as CP2 — no `### CP3 — entities: schema in config loader` sub-section under `## Implementation Report`. Completion summary lives only in the checkpoint description.
+
+#### Plan deviations
+
+- **D6 — CP3 loader code already landed at CP1.** Same shape as D5. The `entities:` parsing path was committed in `c3892cb` because `_load_animals()` needed to support both schemas atomically (the loader can't half-implement the dispatcher). **Verdict**: ✅ accepted — same rationale as D5.
+- **D7 — `placement.types:` re-mapping description.** Plan said `type_entity_map` should use `[res, animal, obs]` indexing in `per_type` mode. Loader actually keeps `[res, pred, obs, neutral]` ordering for `type_entity_map` construction (`config_loader.py:744-749`), which is *correct* under the N1 PRNG-parity principle but contradicts the plan body's stated re-mapping target. **Verdict**: ✅ accepted — the developer correctly applied the N1 general principle ("preserve per-type ordering for PRNG-consuming operations"). The plan body has an erratum (it conflated storage-layout with placement-scan layout for the per_type path, similar to D1's outer-split arity mistake). Since no config uses `per_type` mode today the erratum is harmless in practice, but should be fixed before someone authors a `per_type` config in the future. Adding to follow-ups.
+
+#### Verdict — CP3
+
+✅ **VERIFIED**. Plan-compliant. Two documentation gaps: missing Implementation Report sub-section (cosmetic), and the `type_entity_map` re-mapping erratum (functional but vacuously satisfied today).
+
+### CP4 — Sensor + damage + step path parity
+
+**Commit**: `6685d0e`. **Files**: `tests/env/test_visual_parity.py` (+155), `tests/env/test_extero_noc_parity.py` (+187), `tests/env/fixtures/visual_parity_ref.npz` (+624 bytes), `tests/env/fixtures/extero_noc_parity_ref.npz` (+369 bytes), + plan checkbox flip and Implementation Report (+83 lines on plan doc).
+
+#### File Changes checklist
+
+| Plan item | Status | Notes |
+|---|:---:|---|
+| Patch `sense_visual` (class scatter via `animal_visual_channel`) | ✅ | Already at CP1 (`sensor.py:202`). |
+| Patch `sense_extero_nociception` (mask by `animal_is_damaging` — B2) | ✅ | Already at CP1 (`sensor.py:77`). |
+| Patch `get_observation` olfactory (unified `animal_chem`) | ✅ | Already at CP1. |
+| Patch `jax_step` damage logic (`animal_is_damaging` + B5 pre-step `hit_neutral`) | ✅ | Already at CP1. |
+| `tests/env/test_visual_parity.py` + fixture | ✅ | 2 tests: byte-equal vs pinned fixture (1000 steps), channel layout assertion. |
+| `tests/env/test_extero_noc_parity.py` + fixture (B2 gate) | ✅ | 3 tests: byte-equal vs pinned fixture (B2 load-bearing gate, 117/1000 nonzero steps), only-damaging-contribute, nociception-enabled sanity. |
+| Trainer-grep verification | ✅ | `grep -rn "state\\.pred_\\|state\\.neutral_\\|pred_pos\\|neutral_pos" src/algorithms/ src/models/` → 0 matches. Re-verified. |
+
+#### Verification clause — plan checkpoint test claims
+
+| Plan §"Verifies" sub-clause for CP4 | Result | Notes |
+|---|:---:|---|
+| CP1 parity test (31 of 86 fixture configs × 100 steps) still passes — must NOT break | ✅ | Full env suite re-run: 98 passed / 121 skipped / 0 failed. The 31 `test_unified_parity.py` PASSes hold. |
+| Visual one-hot byte-identical to pinned fixture (1000 steps, parity-reference config) | ✅ | `test_visual_parity_byte_equal` passes. Fixture `visual_parity_ref.npz` is `[1000, 40]` float32. |
+| Extero-noc channel byte-identical to pinned fixture (B2 gate) | ✅ | `test_extero_noc_parity_byte_equal` passes. Fixture `extero_noc_parity_ref.npz` is `[1000, 1]` float32, 117 nonzero steps with max 0.9. The B2 mask correctness is load-bearing here: neutrals must NOT contribute to nociception; the byte-equality test catches any bleed-through. |
+| Trainer-grep clean | ✅ | 0 matches in `src/algorithms/` and `src/models/`. The `predator_tags` / `neutral_tags` `@property` aliases on `EnvParams` are the load-bearing reason `dreamer_srl_main.py:522-523` didn't need an edit. |
+
+Test run: `pytest tests/env/test_visual_parity.py tests/env/test_extero_noc_parity.py -v` → 5 passed in 23.54s.
+
+#### Per-CP atomic commit
+
+✅ Single commit `6685d0e` carries all CP4 deliverables (2 test files + 2 fixtures + plan docs).
+
+#### Implementation Report
+
+✅ **Present and well-formed**. Plan doc lines 1057–1135 hold a full `### CP4 — Sensor + damage + step path parity` sub-section with Context, Summary of changes (file-by-file), Trainer verification, Test results, Speed check, Deviations from plan, Follow-up items, and signoff.
+
+#### Plan deviations
+
+- **D8 — All CP4 *code* changes landed at CP1.** The developer self-reports this and the verification confirms it: `grep -L animal_is_damaging src/environment/sensor.py` shows the B2 mask is in place since `c3892cb`. CP4 ships tests+fixtures only. **Verdict**: ✅ accepted — same rationale as D5 / D6. The parity gate at CP1 could not have run without the sensor code already in place, so atomic-CP1 was the right scoping.
+- **D9 — Speed-check methodology.** Plan §(g) called for "1000-step PPO training via `train_command-agent.sh`". Developer used a local 5-trial × 10000-jitted-step micro-benchmark (430 ± 9 sps, 0% delta vs CP1) and deferred the full PPO smoke to `training-runner`. **Verdict**: ⚠️ accepted-with-note. Rationale below.
+- **D10 — `--gen-fixtures` pytest option not wired.** Developer noted `pyproject.toml`'s pytest config blocks unregistered CLI args; fixtures were generated via standalone script. Cosmetic test-ergonomics issue, no functional impact. **Verdict**: ✅ accepted (with a follow-up to wire the conftest if it matters later).
+
+#### Speed-check evaluation
+
+Methodology: 5 trials × 10000 jit-compiled `jax_step` calls on `01-interoNocicept_sameProp.yaml`, with warm-up. Reported 430 ± 9 sps post-CP4, 0% delta vs CP1 baseline.
+
+Is this an acceptable substitute for the plan's "1000-step PPO training" gate? My assessment:
+
+**For the CP4 sign-off — yes.** The CP4 *code surface* (sensor pipeline) is byte-identical to CP1 because all CP4 code already landed in CP1. So the micro-benchmark *necessarily* shows 0% delta — it's measuring the same compiled `jax_step` twice. The speed gate at CP4 is essentially a no-op measurement; the real speed-regression risk window is CP1 itself, which the developer correctly noted but deferred. The CP4 micro-benchmark establishes that the CP1-era code holds at 430 sps on this hardware/config, which is useful baseline data for CP5 onwards.
+
+**For the broader refactor — defer the full PPO smoke to before CP5 lands.** CP5 is where the YAML schema first adds `[low, high]` ranges and the per-episode logger emits new WandB keys — that's the first CP that can plausibly introduce a real env-loop or trainer-side regression. Running the full PPO 1000-step smoke now (on `01-interoNocicept_sameProp.yaml`) gives us a clean pre-CP5 baseline. The `training-runner` agent can launch this on a lab node.
+
+Verdict on speed: ✅ **no regression** at CP4 (mechanical 0% delta is correct given identical code). The full PPO smoke should be triggered before CP5 lands, not as a CP4 gate.
+
+#### Verdict — CP4
+
+✅ **VERIFIED**. Plan-compliant. Tests + fixtures cover the load-bearing parity surfaces (visual scatter + B2 extero-noc). Trainer integration verified clean by grep + by the env suite passing.
+
+### Cross-CP follow-ups
+
+#### Folded-back from CP1 verification
+
+Status of the five CP1 follow-ups after CP2–CP4:
+
+| Follow-up | Status at HEAD (`6685d0e`) | Notes |
+|---|:---:|---|
+| D1 — Plan body §"Per-episode sampling inside `jax_reset`" still says "6-way outer split"; should say "5-way + `fold_in`" | ⚠️ outstanding | Errata noted in CP1 verification + CP1 Implementation Report's "Key bugs discovered" section, but the authoritative *plan body* (line 660 of the plan doc) was not updated. Recommend folding back before CP5 starts so the developer reads a correct recipe. |
+| D2 — Plan body `_hunt_step` pseudocode still has one `obs_blocking` parameter; should have separate `obs_blocking` + `obs_hides_agent` | ⚠️ outstanding | Same as D1 — fixed in narrative around lines 990 + 1013 but the pseudocode at lines 256–290 still shows the one-param version. |
+| D3 — Plan body's M3 narrative doesn't explicitly call out the `resolve_overlaps_global` zero-entity guard | ⚠️ outstanding | Behaviour is correctly implemented; documentation gap only. |
+| 31-of-86 plan-coverage gap | ⚠️ outstanding | Plan body still says "all **86** migrated configs" in CP1, CP3, CP4 descriptions. The CP1 verification correctly revised this to "31 of 86"; the plan body wasn't edited. Low risk because the parity tests skip-not-fail on the 55 stale configs, but the over-promise will mislead future readers. |
+| Speed-check gate moves to CP4 | ✅ done | CP4 Implementation Report has speed-check section, micro-benchmark reported, 0% delta confirmed. The full PPO 1000-step smoke remains deferred to `training-runner`. |
+
+**Recommendation**: fold D1, D2, D3, and the 31-of-86 revision back into the plan body before CP5 starts. The CP5 developer will read the plan body to understand the existing key-split arity and zero-entity guards — if the plan body still describes a 6-way outer split that doesn't exist in the code, the developer will either rewrite working code or get confused. This is a 15-minute editing task, not a code task; can be a sub-task of CP5's pre-flight.
+
+#### New follow-ups from CP2–CP4
+
+| Follow-up | Priority |
+|---|---|
+| Add `### CP2` and `### CP3` Implementation Report sub-sections to the plan doc (cosmetic — completion info is in the checkpoint lines but the convention CP1 + CP4 follow is broken) | low |
+| `type_entity_map` plan erratum — plan body says `[res, animal, obs]` indexing for `per_type` mode but the loader correctly preserves `[res, pred, obs, neutral]` (D7) | low (no per_type config exists today) |
+| Trigger out-of-band 1000-step PPO speed-check baseline via `training-runner` before CP5 lands | medium (gives us a clean pre-distributional-schema baseline) |
+| Wire `--gen-fixtures` pytest option via `conftest.py` so future fixture regenerations don't need a standalone script (D10) | low |
+
+### Verification Report — summary table
+
+| CP | File-Changes | Verification-clause | Test §(b/c/d/e/f) | Atomic-commit | Impl-Report | Speed-check | Verdict |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| CP2 | ✅ | ✅ (8/8 pass) | ✅ (a–g + degen-range) | ✅ `4781105` | ⚠️ missing sub-section | n/a | ✅ VERIFIED |
+| CP3 | ✅ | ✅ (7/7 pass) | ✅ (a–e + 2 extra) | ✅ `a85a951` | ⚠️ missing sub-section | n/a | ✅ VERIFIED |
+| CP4 | ✅ | ✅ (5/5 pass) | ✅ (visual + extero-noc) | ✅ `6685d0e` | ✅ present | ✅ no regression (0% delta) | ✅ VERIFIED |
+
+Diff-stats check: CP2 +437/-1, CP3 +789/-1, CP4 +424/-1 — every line traces to the plan's File Changes list. **No source files under `src/` were modified by CP2/CP3/CP4** — all sensor + per-episode + entities-schema code was correctly batched into the CP1 atomic commit. The CP2–CP4 commits ship test artefacts only, which is the right scoping decision.
+
+**Conclusion**: CP2, CP3, and CP4 are all plan-compliant. The pre-existing D1/D2/D3 + 31-of-86 plan-body errata from CP1 verification are still outstanding but do not block CP5; they should be folded back into the plan body before CP5 work starts (a 15-minute editing task).
+
+**Verdict**: **VERIFIED-WITH-NOTES**. **CP5 green-lit** from senior-developer side, subject to the parallel `env-config-auditor` verdict for CP3 schema soundness (mandatory after CP3 per the plan's "Reviews needed" section). The senior-developer + env-config-auditor verdicts jointly gate CP5 implementation.
+
+**Verified by**: `senior-developer` — 2026-05-28
