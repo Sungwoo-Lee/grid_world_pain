@@ -65,7 +65,6 @@ environment:
       spawn_area: [[6, 6], [10, 10]]
       patrol_area: [[6, 6], [10, 10]]
       tag: "BR"
-  predator_enabled: false
   predators: []
   obstacles:
     - name: "rock"
@@ -806,7 +805,7 @@ def test_t8_real_train_py_smoke():
     """
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     smoke_config = os.path.join(project_root, "configs", "experiment", "behavior_measures", "smoke_test.yaml")
-    agent_config = os.path.join(project_root, "configs", "models", "recurrent_ppo.yaml")
+    agent_config = os.path.join(project_root, "configs", "models", "recurrent_ppo", "recurrent_ppo.yaml")
 
     assert os.path.exists(smoke_config), f"Smoke config not found: {smoke_config}"
     assert os.path.exists(agent_config), f"Agent config not found: {agent_config}"

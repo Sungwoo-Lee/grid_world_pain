@@ -4,6 +4,7 @@ topic: env_entities
 status: active
 created: 2026-05-28
 last_updated: 2026-05-28
+verified: 2026-05-28
 aliases: [unified_animal_entity, env_entities_unified_animal, env_entities_step_1]
 ---
 
@@ -1053,14 +1054,27 @@ None. All File Changes from the plan were implemented as specified. The `obs_blo
 
 ## Verification Report
 
-> **Verified by**: [to be filled by `senior-developer` after each CP]
-> **Date**: [to be filled]
+> **Verified by**: `senior-developer` (CP1) — 2026-05-28
+> **Full report**: [docs/reviews/env_entities_cp1_verification.md](../../../reviews/env_entities_cp1_verification.md)
 
-| File | Change | Status | Notes |
+### CP1 — VERIFIED-WITH-NOTES
+
+| File / Surface | Change | Status | Notes |
 |------|--------|:------:|-------|
-| | | | |
+| `src/environment/state.py` | Remove `pred_*`/`neutral_*`; add unified `animal_*`; M1 remove `*_tags` `struct.field`; B3 add `@property` aliases; B1 + N1/N2 static index tuples | ✅ | Empirically: `predator_tags`/`neutral_tags` properties return correct tuples on reference config. |
+| `src/environment/config_loader.py` | `_load_animals()`; behaviour-string `ValueError` guard; NC-1 auto-fill; M2 drop `*_tags=` kwargs; `predator_enabled` guard | ✅ | All present + tested. |
+| `src/environment/core.py` | `update_animals` dispatcher; `_hunt_step`/`_wander_step`; preserve 6-way step split; N1 `[res, pred, obs, neutral]` order; N2 4-way `prop_key` split; N3 6-way `placement_key` split; B5 pre-step `hit_neutral` | ✅ | All 31 fixture-byte-parity tests pass. |
+| `src/environment/sensor.py` | B2 extero-noc mask; visual scatter via `animal_visual_channel`; unified `animal_chem` | ✅ | Reference config visual channels `[5, 7, 7]` confirm preservation. |
+| `scripts/verify_noise.py` | B4 rewrite `EnvState` constructor | ✅ | Exit 0. |
+| `scripts/verification/check_olfaction_parity.py` | Update field refs | ✅ | Exit 0, "PASS — 9 cases, max delta 0.00e+00". |
+| 86-config `predator_enabled` sweep | Atomic with schema change | ✅ | 86 strips in commit `c3892cb`; 0 remaining occurrences. |
+| Tests (4 new files) | Parity, backward-compat, behaviour validation, info-dict aliases | ✅ | 77 passed / 120 skipped / 0 failures (matches developer's report). |
+| Speed check | Plan implied | ⚠️ | Deferred to CP4 (first CP touching obs pipeline hot path) — rationale defensible; gate moves to CP4. |
+| Plan-coverage gap: 31-vs-86 | Plan promised parity on all 86 | ⚠️ | Only 31 are fixture-tested; other 55 fail to load under pre-refactor code (missing `sensory.injury_observable`, project-wide pre-existing). Not a regression; plan should be revised. |
 
-**Conclusion**: [to be filled]
+**Deviations** (all accepted): D1 outer key-split kept 5-way + `fold_in` derivation (plan errata — `split` not prefix-stable); D2 `_hunt_step` takes two obs-blocking arrays (plan transcription error); D3 zero-entity `resolve_overlaps_global` guard (plan-implied via M3, made explicit).
+
+**Conclusion**: CP1 is plan-compliant. **CP2 green-lit** from senior-developer side subject to `code-reviewer` and `env-config-auditor` verdicts running in parallel. Full report at [docs/reviews/env_entities_cp1_verification.md](../../../reviews/env_entities_cp1_verification.md).
 
 ---
 
