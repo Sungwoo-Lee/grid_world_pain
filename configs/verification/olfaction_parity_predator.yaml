@@ -7,7 +7,6 @@ environment:
   rest_action_enabled: true
   eat_action_enabled: false
   resources: []           # no food
-  predator_enabled: true
   predators:
     - name: "test_predator"
       count: 1

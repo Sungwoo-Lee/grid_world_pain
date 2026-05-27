@@ -152,7 +152,6 @@ environment:
       patrol_area: [[6, 6], [10, 10]]
       tag: "BR"
 
-  predator_enabled: true
   predators:
     # PASSIVE: HUNT mode unreachable. Quadrant-locked TL — same as
     # 02-sameProp_R2_passivePredator.yaml.

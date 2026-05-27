@@ -7,31 +7,32 @@ class EnvState:
     # Agent
     agent_pos: jnp.ndarray      # [2] (row, col)
     current_step: jnp.ndarray   # []
-    
+
     # Resources
     res_pos: jnp.ndarray        # [num_res, 2]
     res_active: jnp.ndarray     # [num_res] bool
     res_cons_count: jnp.ndarray # [num_res] int
     res_reg_timer: jnp.ndarray  # [num_res] int
     res_property_sampled: jnp.ndarray # [num_res, vector_size]
-    
-    # Predators
-    pred_pos: jnp.ndarray       # [num_pred, 2]
-    pred_state: jnp.ndarray      # [num_pred] int
-    pred_stamina: jnp.ndarray    # [num_pred] float
-    pred_move_timer: jnp.ndarray # [num_pred] int
-    pred_attack_timer: jnp.ndarray # [num_pred] int
-    pred_property_sampled: jnp.ndarray # [num_pred, vector_size]
-    
-    # Neutral Animals (Olfactory Decoys)
-    neutral_pos: jnp.ndarray     # [num_neutral, 2]
-    neutral_move_timer: jnp.ndarray # [num_neutral] int
-    neutral_property_sampled: jnp.ndarray # [num_neutral, vector_size]
+
+    # Animals (unified — predators + neutrals, predators-first ordering)
+    animal_pos: jnp.ndarray              # [N, 2]
+    animal_state: jnp.ndarray            # [N] int (PATROL=0, HUNT=1, RETURN=2; 0 for wander/static)
+    animal_stamina: jnp.ndarray          # [N] float (unused for wander/static, kept for shape stability)
+    animal_move_timer: jnp.ndarray       # [N] int
+    animal_attack_timer: jnp.ndarray     # [N] int (zero for non-hunt entities)
+    animal_property_sampled: jnp.ndarray # [N, vector_size]
+    # Per-episode-sampled behavioural params (NEW — all five fields, degenerate [s,s] for legacy configs)
+    animal_detect_sampled: jnp.ndarray         # [N] float
+    animal_max_stamina_sampled: jnp.ndarray    # [N] float
+    animal_recovery_sampled: jnp.ndarray       # [N] float
+    animal_hunt_thresh_sampled: jnp.ndarray    # [N] float
+    animal_lose_interest_sampled: jnp.ndarray  # [N] float
 
     # Obstacles
     obs_pos: jnp.ndarray        # [num_obs, 2]
     obs_property_sampled: jnp.ndarray # [num_obs, vector_size]
-    
+
     # Body
     satiation: jnp.ndarray       # [] float
     nutrition: jnp.ndarray       # [] float
@@ -40,10 +41,10 @@ class EnvState:
     nociception_history_buffer: jnp.ndarray  # [interoceptive_kernel_length] float (past injury_level values, idx 0 = most recent)
     last_collision_noc: jnp.ndarray # float (intensity of last collision)
     rest_streak: jnp.ndarray     # [] int
-    
+
     # Environment status
     terminated: jnp.ndarray      # bool
-    
+
     # Random State
     key: jax.random.PRNGKey      # PRNGKey
 
@@ -60,7 +61,7 @@ class EnvParams:
     width: int = struct.field(pytree_node=False)
     max_steps: int = struct.field(pytree_node=False)
     grid_location_type: jnp.ndarray # [height, width] (0:plain, 1:grass, 2:sand)
-    
+
     # Resources (Constant attributes)
     res_type: jnp.ndarray       # [num_res] int (0:food, 1:hiding_predator)
     res_property: jnp.ndarray   # [num_res, vector_size]
@@ -70,24 +71,46 @@ class EnvParams:
     res_max_cons: jnp.ndarray   # [num_res]
     res_reg_delay: jnp.ndarray  # [num_res]
     res_damage: jnp.ndarray     # [num_res, 2] [min, max]
-    
-    # Predators (Constant attributes)
-    pred_property: jnp.ndarray  # [num_pred, vector_size]
-    pred_property_std: jnp.ndarray # [num_pred, vector_size]
-    pred_nociception: jnp.ndarray # [num_pred]
-    pred_move_int: jnp.ndarray  # [num_pred]
-    pred_damage: jnp.ndarray    # [num_pred, 2] [min, max]
-    pred_patrol: jnp.ndarray    # [num_pred, 4] (min_r, min_c, max_r, max_c)
-    pred_detect: jnp.ndarray    # [num_pred]
-    pred_max_stamina: jnp.ndarray
-    pred_recovery: jnp.ndarray
-    pred_hunt_thresh: jnp.ndarray
-    pred_attack_delay: jnp.ndarray
-    pred_lose_interest_mult: jnp.ndarray # [num_pred]
-    predator_enabled: bool = struct.field(pytree_node=False)
-    pred_spawn_area: jnp.ndarray # [num_pred, 4]
-    predator_tags: tuple = struct.field(pytree_node=False)  # static metric-label tags, len = num_pred
 
+    # Animals (unified — predators-first ordering)
+    animal_property: jnp.ndarray       # [N, V]
+    animal_property_std: jnp.ndarray   # [N, V]
+    animal_nociception: jnp.ndarray    # [N]
+    animal_move_int: jnp.ndarray       # [N] int
+    animal_damage: jnp.ndarray         # [N, 2]
+    animal_attack_delay: jnp.ndarray   # [N] int
+    animal_spawn_area: jnp.ndarray     # [N, 4] int
+    animal_patrol: jnp.ndarray         # [N, 4] int
+    # Per-episode uniform bounds (low == high for legacy scalar configs)
+    animal_detect_low: jnp.ndarray         # [N]
+    animal_detect_high: jnp.ndarray        # [N]
+    animal_max_stamina_low: jnp.ndarray    # [N]
+    animal_max_stamina_high: jnp.ndarray   # [N]
+    animal_recovery_low: jnp.ndarray       # [N]
+    animal_recovery_high: jnp.ndarray      # [N]
+    animal_hunt_thresh_low: jnp.ndarray    # [N]
+    animal_hunt_thresh_high: jnp.ndarray   # [N]
+    animal_lose_interest_low: jnp.ndarray  # [N]
+    animal_lose_interest_high: jnp.ndarray # [N]
+    # Per-entity int-coded class/behaviour (for damage masking and visual channel)
+    animal_classes_int: jnp.ndarray        # [N] int (0=predator, 1=neutral, ...)
+    animal_behaviours_int: jnp.ndarray     # [N] int (0=wander, 1=hunt, 2=static)
+    animal_is_damaging: jnp.ndarray        # [N] bool (precomputed from class)
+    animal_visual_channel: jnp.ndarray     # [N] int (5=predator, 7=neutral, ...)
+    # Static tags / labels (pytree_node=False — not JAX arrays)
+    animal_classes: tuple = struct.field(pytree_node=False)    # len N strings
+    animal_behaviours: tuple = struct.field(pytree_node=False) # len N strings
+    animal_tags: tuple = struct.field(pytree_node=False)       # len N strings
+    # Static per-subset index tuples (B1 fix — used by update_animals to slice
+    # hunt / wander / static subsets while preserving today's PRNG draw shapes).
+    hunt_idx: tuple = struct.field(pytree_node=False)   # tuple[int, ...], len N_pred
+    wander_idx: tuple = struct.field(pytree_node=False) # tuple[int, ...], len N_neutral
+    static_idx: tuple = struct.field(pytree_node=False) # tuple[int, ...], len N_static
+    # Static per-class index tuples (N1/N2 fix — used by jax_reset to slice
+    # predator / neutral subsets during placement + property sampling, preserving
+    # today's per-type PRNG draw shapes).
+    predator_indices: tuple = struct.field(pytree_node=False)  # tuple[int, ...], len N_pred_class
+    neutral_indices: tuple = struct.field(pytree_node=False)   # tuple[int, ...], len N_neutral_class
 
     # Obstacles
     obs_blocking: jnp.ndarray   # [num_obs] bool
@@ -99,15 +122,6 @@ class EnvParams:
     obs_nociception: jnp.ndarray # [num_obs]
     obs_type: jnp.ndarray       # [num_obs] int32 index for names
     obstacle_names: tuple[str, ...] = struct.field(pytree_node=False)
-    
-    # Neutral Animals
-    neutral_property: jnp.ndarray   # [num_neutral, vector_size]
-    neutral_property_std: jnp.ndarray # [num_neutral, vector_size]
-    neutral_nociception: jnp.ndarray # [num_neutral]
-    neutral_move_int: jnp.ndarray    # [num_neutral]
-    neutral_patrol: jnp.ndarray      # [num_neutral, 4]
-    neutral_spawn_area: jnp.ndarray  # [num_neutral, 4]
-    neutral_tags: tuple = struct.field(pytree_node=False)  # static metric-label tags, len = num_neutral
 
     # Placement (Type-Level overlap resolution)
     type_areas: jnp.ndarray        # [T, 4] spawn area per type group
@@ -117,7 +131,7 @@ class EnvParams:
     num_types: int = struct.field(pytree_node=False)       # number of type groups
     num_entities: int = struct.field(pytree_node=False)    # total entities
     placement_mode: str = struct.field(pytree_node=False)  # "per_entity" or "per_type"
-    
+
     # Body
     max_satiation: float
     max_nutrition: float
@@ -147,7 +161,7 @@ class EnvParams:
     eating_nutrition_cost: float
     eating_reward_penalty: float
 
-    
+
     # Sensory
     sensor_radius: float
     sensor_decay: float
@@ -185,6 +199,27 @@ class EnvParams:
     noise_injury_scales: jnp.ndarray  # [13] float32 (Injury Noise Scale)
     noise_clip_min: jnp.ndarray       # [13] float32 (Per-modality observation lower bound)
     noise_clip_max: jnp.ndarray       # [13] float32 (Per-modality observation upper bound)
+
+    # ── Legacy @property aliases (B3 fix — kept for one release cycle) ────────
+    # These accessors allow code that reads `params.predator_tags` / `params.neutral_tags`
+    # (e.g., dreamer_srl_main.py:522-523, accumulators.py) to work without edits.
+    # The corresponding struct.field declarations have been REMOVED (M1 fix) so these
+    # properties are not shadowed by a static field.
+
+    @property
+    def predator_tags(self) -> tuple:
+        """Legacy alias — derived from animal_tags filtered by class == 'predator'.
+
+        Read by src/algorithms/dreamer_srl/dreamer_srl_main.py:522-523 and
+        accumulators.py setup. Will be removed once all consumers migrate to
+        consume animal_tags + class_indices() directly (post-CP6 + one release).
+        """
+        return tuple(t for t, c in zip(self.animal_tags, self.animal_classes) if c == 'predator')
+
+    @property
+    def neutral_tags(self) -> tuple:
+        """Legacy alias — derived from animal_tags filtered by class == 'neutral'."""
+        return tuple(t for t, c in zip(self.animal_tags, self.animal_classes) if c == 'neutral')
 
     def _replace(self, **kwargs):
         return self.replace(**kwargs)

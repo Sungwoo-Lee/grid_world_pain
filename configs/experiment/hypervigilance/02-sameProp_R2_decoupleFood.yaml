@@ -136,7 +136,6 @@ environment:
       patrol_area: [[6, 6], [10, 10]]
       tag: "BR"
 
-  predator_enabled: true
   predators:
     - name: "predator" # full-grid patrol
       count: 1

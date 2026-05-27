@@ -156,7 +156,6 @@ environment:
       patrol_area: [[6, 6], [10, 10]]
       tag: "BR"
 
-  predator_enabled: true
   predators:
     # ACTIVE: full hunt mode (matches 01-interoNocicept_sameProp.yaml).
     # OLFACTORY: predator on e3 (the slot rabbit occupies in distinct).

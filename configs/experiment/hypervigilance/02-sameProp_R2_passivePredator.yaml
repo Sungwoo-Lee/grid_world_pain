@@ -156,7 +156,6 @@ environment:
       patrol_area: [[6, 6], [10, 10]]
       tag: "BR"
 
-  predator_enabled: true
   predators:
     # PASSIVATED: same olfactory + damage as Round-1 predator, but HUNT mode
     # is structurally unreachable. Patrol area shrunk to TL [[1,1],[5,5]] so

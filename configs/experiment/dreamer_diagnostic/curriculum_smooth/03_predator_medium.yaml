@@ -83,7 +83,6 @@ environment:
       spawn_area: [[1, 1], [10, 10]]
       patrol_area: [[1, 1], [10, 10]]
 
-  predator_enabled: true
   predators:
     - name: "predator" #
       count: 1

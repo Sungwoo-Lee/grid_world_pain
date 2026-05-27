@@ -129,204 +129,279 @@ def update_resources(res_active, res_reg_timer, res_cons_count, params):
     
     return new_active, new_reg_timer, new_cons_count, respawn_mask
 
-def update_predators(pred_pos, pred_state, pred_stamina, pred_move_timer, pred_attack_timer, agent_pos, obs_pos, obs_blocking, params, key):
-    """Updates predator states and positions, considering obstacles."""
+def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
+               hunt_detect, hunt_max_stamina, hunt_recovery, hunt_thresh,
+               hunt_lose_interest, hunt_patrol, hunt_move_int,
+               agent_pos, obs_pos, obs_blocking_for_collision, obs_hides_agent, key,
+               grid_height: int = 10, grid_width: int = 10):
+    """Hunt behaviour update (verbatim body of the old update_predators).
+
+    Receives sliced arrays of shape (N_pred, ...) so PRNG draw shapes are
+    byte-identical to the pre-refactor update_predators call. (B1 fix)
+
+    B2 parity fix: the old update_predators used two different arrays:
+      - obs_blocking (params.obs_blocking) for check_collision inside the function
+      - params.obs_hides_agent for the agent_hidden computation inside the function
+    Both must be passed separately to preserve byte-parity.
+    """
     # 1. Timers
-    new_move_timer = pred_move_timer - 1
-    new_attack_timer = jnp.maximum(pred_attack_timer - 1, 0)
-    
+    new_move_timer = hunt_mt - 1
+    new_attack_timer = jnp.maximum(hunt_at - 1, 0)
+
     # Manhattan distance
-    dist = jnp.sum(jnp.abs(pred_pos - agent_pos), axis=-1)
-    
+    dist = jnp.sum(jnp.abs(hunt_pos - agent_pos), axis=-1)
+
     # Check if back in patrol area
-    # params.pred_patrol is [num_pred, 4] -> [min_r, min_c, max_r, max_c]
     in_zone = jnp.logical_and(
-        jnp.logical_and(pred_pos[:, 0] >= params.pred_patrol[:, 0], pred_pos[:, 0] <= params.pred_patrol[:, 2]),
-        jnp.logical_and(pred_pos[:, 1] >= params.pred_patrol[:, 1], pred_pos[:, 1] <= params.pred_patrol[:, 3])
+        jnp.logical_and(hunt_pos[:, 0] >= hunt_patrol[:, 0], hunt_pos[:, 0] <= hunt_patrol[:, 2]),
+        jnp.logical_and(hunt_pos[:, 1] >= hunt_patrol[:, 1], hunt_pos[:, 1] <= hunt_patrol[:, 3])
     )
-    
-    # 2. State Transitions (Only when move_timer <= 0)
-    # Bush concealment: agent is hidden if standing on an obstacle with hides_agent=True
+
+    # 2. State Transitions
+    # agent_hidden: uses obs_hides_agent (bush concealment) — same as old update_predators internal logic
     agent_hidden = jnp.any(jnp.logical_and(
         jnp.all(obs_pos == agent_pos, axis=-1),
-        params.obs_hides_agent
+        obs_hides_agent
     ))
-    
-    # HUNT transitions (suppressed when agent is hidden)
-    rested_enough = pred_stamina >= (params.pred_max_stamina * params.pred_hunt_thresh)
+
+    rested_enough = hunt_stamina >= (hunt_max_stamina * hunt_thresh)
     become_hunt = jnp.logical_and(
-        jnp.logical_and(dist <= params.pred_detect, rested_enough),
+        jnp.logical_and(dist <= hunt_detect, rested_enough),
         jnp.logical_not(agent_hidden)
     )
-    
-    # Lose interest (also triggered when agent hides)
+
     lose_interest = jnp.logical_or(
-        jnp.logical_or(dist > params.pred_detect * params.pred_lose_interest_mult, pred_stamina <= 0),
+        jnp.logical_or(dist > hunt_detect * hunt_lose_interest, hunt_stamina <= 0),
         agent_hidden
     )
-    
-    # New State logic
-    next_state = pred_state
-    # Transition to HUNT (1)
-    next_state = jnp.where(jnp.logical_and(pred_state != 1, become_hunt), 1, next_state)
-    # Transition to RETURN (2) (if patrol area exists) or PATROL (0)
-    next_state = jnp.where(jnp.logical_and(pred_state == 1, lose_interest), 2, next_state)
-    
-    # Target center for RETURN state logic
-    tr_return = (params.pred_patrol[:, 0] + params.pred_patrol[:, 2]) // 2
-    tc_return = (params.pred_patrol[:, 1] + params.pred_patrol[:, 3]) // 2
-    
-    # Transition to PATROL (0) when close to center and in RETURN state
-    dist_to_center = jnp.sum(jnp.abs(pred_pos - jnp.stack([tr_return, tc_return], axis=-1)), axis=-1)
+
+    next_state = hunt_state
+    next_state = jnp.where(jnp.logical_and(hunt_state != 1, become_hunt), 1, next_state)
+    next_state = jnp.where(jnp.logical_and(hunt_state == 1, lose_interest), 2, next_state)
+
+    tr_return = (hunt_patrol[:, 0] + hunt_patrol[:, 2]) // 2
+    tc_return = (hunt_patrol[:, 1] + hunt_patrol[:, 3]) // 2
+
+    dist_to_center = jnp.sum(jnp.abs(hunt_pos - jnp.stack([tr_return, tc_return], axis=-1)), axis=-1)
     reentered_home = jnp.logical_and(next_state == 2, dist_to_center <= 2)
     next_state = jnp.where(reentered_home, 0, next_state)
-    
-    # 3. Movement (Only when move_timer <= 0 and not attacking/delayed)
+
+    # 3. Movement
     should_move = jnp.logical_and(new_move_timer <= 0, new_attack_timer <= 0)
-    
-    # Target calculations for different states
-    # tr_return and tc_return moved up
-    
-    # PATROL: Random jitter (-1, 0, 1)
+
     key, subkey1, subkey2 = jax.random.split(key, 3)
-    jitter_r = jax.random.randint(subkey1, (pred_pos.shape[0],), -1, 2)
-    jitter_c = jax.random.randint(subkey2, (pred_pos.shape[0],), -1, 2)
-    
-    # Determine directional diff based on state
-    # dr, dc = goal - current
-    dr = jnp.zeros_like(pred_pos[:, 0])
-    dc = jnp.zeros_like(pred_pos[:, 1])
-    
-    # HUNT (1) vectors
-    dr = jnp.where(next_state == 1, agent_pos[0] - pred_pos[:, 0], dr)
-    dc = jnp.where(next_state == 1, agent_pos[1] - pred_pos[:, 1], dc)
-    
-    # RETURN (2) vectors
-    dr = jnp.where(next_state == 2, tr_return - pred_pos[:, 0], dr)
-    dc = jnp.where(next_state == 2, tc_return - pred_pos[:, 1], dc)
-    
-    # PATROL (0) vectors (jitter)
+    jitter_r = jax.random.randint(subkey1, (hunt_pos.shape[0],), -1, 2)
+    jitter_c = jax.random.randint(subkey2, (hunt_pos.shape[0],), -1, 2)
+
+    dr = jnp.zeros_like(hunt_pos[:, 0])
+    dc = jnp.zeros_like(hunt_pos[:, 1])
+    dr = jnp.where(next_state == 1, agent_pos[0] - hunt_pos[:, 0], dr)
+    dc = jnp.where(next_state == 1, agent_pos[1] - hunt_pos[:, 1], dc)
+    dr = jnp.where(next_state == 2, tr_return - hunt_pos[:, 0], dr)
+    dc = jnp.where(next_state == 2, tc_return - hunt_pos[:, 1], dc)
     dr = jnp.where(next_state == 0, jitter_r, dr)
     dc = jnp.where(next_state == 0, jitter_c, dc)
-    
-    # Resolve step
+
     step_r = jnp.sign(dr)
     step_c = jnp.sign(dc)
-    
-    # JAX stochasticity for diagonal moves
+
     key, subkey3 = jax.random.split(key)
-    rand_choice = jax.random.uniform(subkey3, (pred_pos.shape[0],)) < 0.5
-    
-    # Resolve diagonal (pick one axis to move along)
+    rand_choice = jax.random.uniform(subkey3, (hunt_pos.shape[0],)) < 0.5
+
     final_move_r = jnp.where(jnp.logical_and(dr != 0, dc != 0), jnp.where(rand_choice, step_r, 0), step_r)
     final_move_c = jnp.where(jnp.logical_and(dr != 0, dc != 0), jnp.where(jnp.logical_not(rand_choice), step_c, 0), step_c)
-    
+
     move_vec = jnp.stack([final_move_r, final_move_c], axis=-1)
-    new_pos = jnp.where(should_move[:, None], pred_pos + move_vec, pred_pos)
-    
+    new_pos = jnp.where(should_move[:, None], hunt_pos + move_vec, hunt_pos)
+
     # 4. Spatial Bounds Clipping (Strict enforcement for all states)
     new_pos = jnp.stack([
-        jnp.clip(new_pos[:, 0], params.pred_patrol[:, 0], params.pred_patrol[:, 2]),
-        jnp.clip(new_pos[:, 1], params.pred_patrol[:, 1], params.pred_patrol[:, 3])
+        jnp.clip(new_pos[:, 0], hunt_patrol[:, 0], hunt_patrol[:, 2]),
+        jnp.clip(new_pos[:, 1], hunt_patrol[:, 1], hunt_patrol[:, 3])
     ], axis=-1)
-    
-    # Hard Grid Boundaries (Always enforced)
-    new_pos = jnp.clip(new_pos, 0, jnp.stack([params.height - 1, params.width - 1]))
-    
-    # 4.5 Obstacle Collision for Predators
-    def check_collision(p_pos, old_p_pos):
-        # p_pos: [2], old_p_pos: [2]
-        is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), obs_blocking))
-        return jnp.where(is_coll, old_p_pos, p_pos)
-    
-    # Check collision for each predator
-    new_pos = jax.vmap(check_collision)(new_pos, pred_pos)
-    
-    # Reset timer
-    new_move_timer = jnp.where(should_move, params.pred_move_int, new_move_timer)
-    
-    new_stamina = jnp.where(next_state == 1, pred_stamina - 1.0, pred_stamina + params.pred_recovery)
-    new_stamina = jnp.clip(new_stamina, 0.0, params.pred_max_stamina)
-    
-    return new_pos, next_state, new_stamina, new_move_timer, new_attack_timer, key
 
-def update_neutral_animals(neutral_pos, neutral_move_timer, obs_pos, obs_blocking, params, key):
-    """Updates neutral animal positions (random patrol)."""
+    # Hard Grid Boundaries (Always enforced)
+    new_pos = jnp.clip(new_pos, 0, jnp.stack([grid_height - 1, grid_width - 1]))
+
+    # Obstacle Collision — uses obs_blocking_for_collision (params.obs_blocking), same as old code
+    def check_collision(p_pos, old_p_pos):
+        is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), obs_blocking_for_collision))
+        return jnp.where(is_coll, old_p_pos, p_pos)
+
+    new_pos = jax.vmap(check_collision)(new_pos, hunt_pos)
+
+    # Reset timer
+    new_move_timer = jnp.where(should_move, hunt_move_int, new_move_timer)
+
+    new_stamina = jnp.where(next_state == 1, hunt_stamina - 1.0, hunt_stamina + hunt_recovery)
+    new_stamina = jnp.clip(new_stamina, 0.0, hunt_max_stamina)
+
+    return new_pos, next_state, new_stamina, new_move_timer, new_attack_timer
+
+
+def _wander_step(wand_pos, wand_mt, wand_patrol, wand_move_int, obs_pos, obs_blocking, key,
+                 grid_height: int = 10, grid_width: int = 10):
+    """Wander behaviour update (verbatim body of the old update_neutral_animals).
+
+    Receives sliced arrays of shape (N_neutral, ...) so PRNG draw shapes are
+    byte-identical to the pre-refactor update_neutral_animals call. (B1 fix)
+    """
     # 1. Timers
-    new_move_timer = neutral_move_timer - 1
+    new_move_timer = wand_mt - 1
     should_move = new_move_timer <= 0
-    
+
     # 2. Random Movement (Jitter)
     key, subkey1, subkey2 = jax.random.split(key, 3)
-    jitter_r = jax.random.randint(subkey1, (neutral_pos.shape[0],), -1, 2)
-    jitter_c = jax.random.randint(subkey2, (neutral_pos.shape[0],), -1, 2)
-    
+    jitter_r = jax.random.randint(subkey1, (wand_pos.shape[0],), -1, 2)
+    jitter_c = jax.random.randint(subkey2, (wand_pos.shape[0],), -1, 2)
+
     move_vec = jnp.stack([jitter_r, jitter_c], axis=-1)
-    new_pos = jnp.where(should_move[:, None], neutral_pos + move_vec, neutral_pos)
-    
+    new_pos = jnp.where(should_move[:, None], wand_pos + move_vec, wand_pos)
+
     # 3. Spatial Bounds Clipping (Patrol Area)
     new_pos = jnp.stack([
-        jnp.clip(new_pos[:, 0], params.neutral_patrol[:, 0], params.neutral_patrol[:, 2]),
-        jnp.clip(new_pos[:, 1], params.neutral_patrol[:, 1], params.neutral_patrol[:, 3])
+        jnp.clip(new_pos[:, 0], wand_patrol[:, 0], wand_patrol[:, 2]),
+        jnp.clip(new_pos[:, 1], wand_patrol[:, 1], wand_patrol[:, 3])
     ], axis=-1)
-    
+
     # Hard Grid Boundaries
-    new_pos = jnp.clip(new_pos, 0, jnp.stack([params.height - 1, params.width - 1]))
-    
+    new_pos = jnp.clip(new_pos, 0, jnp.stack([grid_height - 1, grid_width - 1]))
+
     # Obstacle Collision
     def check_collision(p_pos, old_p_pos):
         is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), obs_blocking))
         return jnp.where(is_coll, old_p_pos, p_pos)
-    
-    new_pos = jax.vmap(check_collision)(new_pos, neutral_pos)
-    
+
+    new_pos = jax.vmap(check_collision)(new_pos, wand_pos)
+
     # Reset timer
-    new_move_timer = jnp.where(should_move, params.neutral_move_int, new_move_timer)
-    
-    return new_pos, new_move_timer, key
+    new_move_timer = jnp.where(should_move, wand_move_int, new_move_timer)
+
+    return new_pos, new_move_timer
+
+
+def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, wander_key):
+    """Unified animal update with per-subset call pattern (B1 fix).
+
+    Slices hunt and wander subsets statically from the unified animal arrays,
+    calls _hunt_step / _wander_step with their original draw shapes
+    (N_pred,) / (N_neutral,), and scatters results back. PRNG bytes are
+    byte-identical to the old update_predators / update_neutral_animals calls.
+
+    `hunt_key` feeds _hunt_step (was `predator_key`).
+    `wander_key` feeds _wander_step (was `neutral_key`).
+    """
+    animal_pos         = state.animal_pos
+    animal_state       = state.animal_state
+    animal_stamina     = state.animal_stamina
+    animal_mt          = state.animal_move_timer
+    animal_at          = state.animal_attack_timer
+    detect_s           = state.animal_detect_sampled
+    max_stam_s         = state.animal_max_stamina_sampled
+    recovery_s         = state.animal_recovery_sampled
+    hunt_thresh_s      = state.animal_hunt_thresh_sampled
+    lose_int_s         = state.animal_lose_interest_sampled
+
+    new_pos     = animal_pos
+    new_state   = animal_state
+    new_stamina = animal_stamina
+    new_mt      = animal_mt
+    new_at      = animal_at
+
+    # ── Branch A: HUNT subset ────────────────────────────────────────────────
+    if len(params.hunt_idx) > 0:
+        h_idx = jnp.array(params.hunt_idx, dtype=jnp.int32)
+
+        new_hunt_pos, new_hunt_state, new_hunt_stamina, new_hunt_mt, new_hunt_at = _hunt_step(
+            animal_pos[h_idx],
+            animal_state[h_idx],
+            animal_stamina[h_idx],
+            animal_mt[h_idx],
+            animal_at[h_idx],
+            detect_s[h_idx],
+            max_stam_s[h_idx],
+            recovery_s[h_idx],
+            hunt_thresh_s[h_idx],
+            lose_int_s[h_idx],
+            params.animal_patrol[h_idx],
+            params.animal_move_int[h_idx],
+            agent_pos,
+            state.obs_pos,
+            params.obs_blocking,      # for check_collision (byte-parity with old obs_blocking arg)
+            params.obs_hides_agent,   # for agent_hidden (byte-parity with old internal params.obs_hides_agent)
+            hunt_key,
+            grid_height=params.height,
+            grid_width=params.width,
+        )
+        # Scatter back
+        new_pos     = new_pos.at[h_idx].set(new_hunt_pos)
+        new_state   = new_state.at[h_idx].set(new_hunt_state)
+        new_stamina = new_stamina.at[h_idx].set(new_hunt_stamina)
+        new_mt      = new_mt.at[h_idx].set(new_hunt_mt)
+        new_at      = new_at.at[h_idx].set(new_hunt_at)
+
+    # ── Branch B: WANDER subset ──────────────────────────────────────────────
+    if len(params.wander_idx) > 0:
+        w_idx = jnp.array(params.wander_idx, dtype=jnp.int32)
+
+        new_wand_pos, new_wand_mt = _wander_step(
+            animal_pos[w_idx],
+            animal_mt[w_idx],
+            params.animal_patrol[w_idx],
+            params.animal_move_int[w_idx],
+            state.obs_pos,
+            params.obs_blocking,
+            wander_key,
+            grid_height=params.height,
+            grid_width=params.width,
+        )
+        new_pos = new_pos.at[w_idx].set(new_wand_pos)
+        new_mt  = new_mt.at[w_idx].set(new_wand_mt)
+
+    # ── Branch C: STATIC — pass-through, no PRNG draws ──────────────────────
+    # (No scatter needed; positions stay as-is.)
+
+    return new_pos, new_state, new_stamina, new_mt, new_at
 
 @jax.jit
 def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState, jnp.ndarray, jnp.ndarray, dict]:
     """Orchestrates a full environment step in JAX."""
     
     # 0. Split key for random events
-    key, respawn_key, predator_key, neutral_key, damage_key, property_key = jax.random.split(state.key, 6)
+    # Preserve today's 6-way split byte-for-byte (rename predator_key→hunt_key, neutral_key→wander_key).
+    key, respawn_key, hunt_key, wander_key, damage_key, property_key = jax.random.split(state.key, 6)
 
     # 1. Resource Regeneration (before agent moves)
     new_active, new_reg_timer, new_cons_count, respawn_mask = update_resources(
         state.res_active, state.res_reg_timer, state.res_cons_count, params
     )
-    
+
     # Displace resources that just respawned
     num_res = params.res_type.shape[0]
     res_keys = jax.random.split(respawn_key, num_res)
-    
+
     def sample_res_pos(rk, area):
         return jax.random.randint(rk, (2,), area[:2], area[2:])
-        
+
     new_potential_pos = jax.vmap(sample_res_pos)(res_keys, params.res_spawn_area)
     # Only update position IF respawn_mask is true for that resource
     res_pos_after_reg = jnp.where(respawn_mask[:, None], new_potential_pos, state.res_pos)
-    
+
     # Re-sample chemical property for respawned resources
     noise = jax.random.normal(property_key, shape=params.res_property.shape)
     new_sampled_prop = jnp.clip(params.res_property + params.res_property_std * noise, 0.0, 1.0)
     res_property_sampled_after_reg = jnp.where(
         respawn_mask[:, None], new_sampled_prop, state.res_property_sampled
     )
-    
+
     # 2. Agent Movement
     new_agent_pos, just_collided = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)
 
-    # 3. Predator Update (Using the NEW agent position)
-    new_pred_pos, new_pred_state, new_pred_stamina, new_pred_move_timer, new_pred_attack_timer, _ = update_predators(
-        state.pred_pos, state.pred_state, state.pred_stamina, state.pred_move_timer, state.pred_attack_timer,
-        new_agent_pos, state.obs_pos, params.obs_blocking, params, predator_key
-    )
-    
-    # 3.5 Neutral Animal Update
-    new_neutral_pos, new_neutral_move_timer, _ = update_neutral_animals(
-        state.neutral_pos, state.neutral_move_timer, state.obs_pos, params.obs_blocking, params, neutral_key
+    # 3. Unified Animal Update (per-subset call pattern — B1 fix)
+    # hunt_key feeds hunt subset (N_pred draw shapes, byte-identical to old predator_key).
+    # wander_key feeds wander subset (N_neutral draw shapes, byte-identical to old neutral_key).
+    new_animal_pos, new_animal_state, new_animal_stamina, new_animal_mt, new_animal_at = update_animals(
+        state, new_agent_pos, params, hunt_key, wander_key
     )
     
     # 4. Interaction Logic
@@ -392,16 +467,17 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     
     # ate_food is already calculated above
     
-    # Predator Damage
-    at_predator = jnp.all(new_pred_pos == new_agent_pos, axis=-1)
-    # Sample predator damage
-    sampled_pred_damage = jax.random.uniform(damage_key, (params.pred_damage.shape[0],),
-                                            minval=params.pred_damage[:, 0],
-                                            maxval=params.pred_damage[:, 1])
-    damage_pred = jnp.sum(jnp.where(at_predator, sampled_pred_damage, 0.0))
-    
-    # Trigger Attack Delay for predators that hit the agent
-    new_pred_attack_timer = jnp.where(at_predator, params.pred_attack_delay, new_pred_attack_timer)
+    # Predator Damage (unified — B5 fix: use at_damaging for damage + hit_predator)
+    at_animal = jnp.all(new_animal_pos == new_agent_pos, axis=-1)         # POST-step positions
+    at_damaging = jnp.logical_and(at_animal, params.animal_is_damaging)
+    # Sample animal damage (preserving today's draw shape = all N animals, using damage_key)
+    sampled_pred_damage = jax.random.uniform(damage_key, (params.animal_damage.shape[0],),
+                                             minval=params.animal_damage[:, 0],
+                                             maxval=params.animal_damage[:, 1])
+    damage_pred = jnp.sum(jnp.where(at_damaging, sampled_pred_damage, 0.0))
+
+    # Trigger Attack Delay for damaging animals that hit the agent
+    new_animal_at = jnp.where(at_damaging, params.animal_attack_delay, new_animal_at)
     
     # Rock/Obstacle Damage
     # 1. Overlap damage (non-blocking rocks at current pos)
@@ -428,6 +504,19 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     
     damage_hiding_predator = damage_res
     
+    # hit_neutral uses PRE-step animal positions (B5 fix: preserves today's pre/post asymmetry).
+    # Today's code: hit_predator uses new_pred_pos (post-move); hit_neutral uses state.neutral_pos (pre-move).
+    # We reproduce this exactly:
+    #   at_damaging (above) → POST-step → hit_predator
+    #   at_neutral_pre → PRE-step state.animal_pos masked by ~animal_is_damaging → hit_neutral
+    at_neutral_pre = (
+        jnp.logical_and(
+            jnp.all(state.animal_pos == new_agent_pos, axis=-1),
+            ~params.animal_is_damaging
+        )
+        if state.animal_pos.shape[0] > 0 else jnp.zeros(0, dtype=jnp.bool_)
+    )
+
     info = {
         'ate_food': ate_food,
         'damage': total_damage,
@@ -436,11 +525,8 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         'damage_obstacle': damage_obs_overlap + damage_obs_collision,
         'rested': rested,
         'hit_hiding_predator': jnp.any(jnp.logical_and(interact_resource, is_hiding_predator)),
-        'hit_predator': jnp.any(at_predator),
-        'hit_neutral': (
-            jnp.any(jnp.all(state.neutral_pos == new_agent_pos, axis=-1))
-            if state.neutral_pos.shape[0] > 0 else jnp.array(False)
-        ),
+        'hit_predator': jnp.any(at_damaging),
+        'hit_neutral': jnp.any(at_neutral_pre) if state.animal_pos.shape[0] > 0 else jnp.array(False),
     }
     
     new_satiation, new_nutrition, new_injury, next_injury_buffer, next_nociception_history, new_rest_streak, done = update_body(state, info, params)
@@ -492,27 +578,40 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     info['event_collided'] = just_collided
     
     # GPU-side distance calculations for stats
+    # M3 zero-N fallback: preserve today's `if state.pred_pos.shape[0] > 0 else 99.0` pattern.
     dist_to_food = jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 0), jnp.linalg.norm(state.res_pos - new_agent_pos, axis=-1), 99.0)) if state.res_pos.shape[0] > 0 else 99.0
-    dist_to_pred = jnp.min(jnp.linalg.norm(state.pred_pos - new_agent_pos, axis=-1)) if state.pred_pos.shape[0] > 0 else 99.0
-    dist_to_neutral = jnp.min(jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)) if state.neutral_pos.shape[0] > 0 else 99.0
     dist_to_hiding_predator = jnp.min(jnp.where(jnp.logical_and(state.res_active, params.res_type == 1), jnp.linalg.norm(state.res_pos - new_agent_pos, axis=-1), 99.0)) if state.res_pos.shape[0] > 0 else 99.0
-    # Per-instance unreduced distance vectors for tag-based logging.
-    dist_per_neutral = (
-        jnp.linalg.norm(state.neutral_pos - new_agent_pos, axis=-1)
-        if state.neutral_pos.shape[0] > 0
+
+    # Unified animal distances
+    dist_per_animal = (
+        jnp.linalg.norm(state.animal_pos - new_agent_pos, axis=-1)
+        if state.animal_pos.shape[0] > 0
         else jnp.zeros((0,), dtype=jnp.float32)
     )
-    dist_per_predator = (
-        jnp.linalg.norm(state.pred_pos - new_agent_pos, axis=-1)
-        if state.pred_pos.shape[0] > 0
-        else jnp.zeros((0,), dtype=jnp.float32)
-    )
+    # Legacy aliases — kept for one release cycle (C5); computed from per-class masks.
+    if len(params.predator_indices) > 0:
+        pred_mask = params.animal_is_damaging  # predator_class ≡ damaging in current schema
+        dist_to_pred = jnp.min(jnp.where(pred_mask, dist_per_animal, 99.0))
+        dist_per_predator = dist_per_animal[jnp.array(params.predator_indices, dtype=jnp.int32)]
+    else:
+        dist_to_pred = 99.0
+        dist_per_predator = jnp.zeros((0,), dtype=jnp.float32)
+
+    if len(params.neutral_indices) > 0:
+        neutral_mask = ~params.animal_is_damaging
+        dist_to_neutral = jnp.min(jnp.where(neutral_mask, dist_per_animal, 99.0))
+        dist_per_neutral = dist_per_animal[jnp.array(params.neutral_indices, dtype=jnp.int32)]
+    else:
+        dist_to_neutral = 99.0
+        dist_per_neutral = jnp.zeros((0,), dtype=jnp.float32)
+
     info['dist_to_food'] = dist_to_food
     info['dist_to_pred'] = dist_to_pred
     info['dist_to_neutral'] = dist_to_neutral
     info['dist_to_hiding_predator'] = dist_to_hiding_predator
     info['dist_per_neutral'] = dist_per_neutral
     info['dist_per_predator'] = dist_per_predator
+    info['dist_per_animal'] = dist_per_animal
 
     # Bush occupancy: True iff agent is standing on an obstacle marked hides_agent.
     # Mirrors the agent_hidden computation inside update_predators (line ~150);
@@ -533,11 +632,18 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         res_reg_timer=next_reg_timer,
         res_cons_count=next_cons_count,
         res_property_sampled=res_property_sampled_after_reg,
-        pred_pos=new_pred_pos,
-        pred_state=new_pred_state,
-        pred_stamina=new_pred_stamina,
-        pred_move_timer=new_pred_move_timer,
-        pred_attack_timer=new_pred_attack_timer,
+        # Unified animal fields (positions + state mutate; sampled distributional fields unchanged in step)
+        animal_pos=new_animal_pos,
+        animal_state=new_animal_state,
+        animal_stamina=new_animal_stamina,
+        animal_move_timer=new_animal_mt,
+        animal_attack_timer=new_animal_at,
+        animal_property_sampled=state.animal_property_sampled,
+        animal_detect_sampled=state.animal_detect_sampled,
+        animal_max_stamina_sampled=state.animal_max_stamina_sampled,
+        animal_recovery_sampled=state.animal_recovery_sampled,
+        animal_hunt_thresh_sampled=state.animal_hunt_thresh_sampled,
+        animal_lose_interest_sampled=state.animal_lose_interest_sampled,
         satiation=new_satiation,
         nutrition=new_nutrition,
         injury_level=new_injury,
@@ -548,8 +654,6 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         terminated=done,
         key=key,
         last_action=jnp.array(action, dtype=jnp.int32),
-        neutral_pos=new_neutral_pos,
-        neutral_move_timer=new_neutral_move_timer
     )
     
     return new_state, reward, done, info
@@ -656,63 +760,99 @@ def place_in_area(
 
 @jax.jit
 def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
-    """Functional reset for the JAX environment.
-    
-    Uses 4-phase overlap-free entity placement:
-    Supports two placement modes (selected via config):
-      per_entity: vmap sampling + sequential overlap scan (fast on small grids)
-      per_type:   lax.scan over type groups (better for large grids)
+    """Functional reset for the JAX environment (v2.0 — unified animal entity).
+
+    Placement: vmap sampling + resolve_overlaps_global (per_entity mode) or
+    lax.scan over type groups (per_type mode).
+
+    N1 fix: entity concatenation order for the overlap-resolve scan is preserved
+      as [res, pred, obs, neutral] (pred = predator-class animals; neutral =
+      neutral-class animals). Positions are sliced back in the same order.
+    N2 fix: property-key split is 4-way (prop_key_res / prop_key_pred /
+      prop_key_obs / prop_key_neutral). The predator-class / neutral-class subsets
+      of animal_property are sampled with prop_key_pred / prop_key_neutral
+      respectively, then concatenated in predator-first order.
+    N3 fix: placement_key split remains 6-way (res, pred, obs, neutral, resolve).
     """
+    # Keep the original 5-way outer split byte-for-byte (N3 fix).
+    # animal_episode_key is derived from property_key via fold_in so the
+    # existing agent_key / placement_key / body_key / property_key streams
+    # remain byte-identical to the pre-refactor code.
     key, agent_key, placement_key, body_key, property_key = jax.random.split(key, 5)
-    
+    # Derive per-episode animal sampling key without disturbing existing streams.
+    animal_episode_key = jax.random.fold_in(property_key, 0xAE1)
+
     # 1. Agent Position
     random_pos = jax.random.randint(agent_key, (2,), 0, jnp.array([params.height, params.width]))
     agent_pos = jnp.where(params.random_start_pos, random_pos, params.start_pos)
-    
+
     # 2. Entity Placement
     num_res = params.res_type.shape[0]
-    num_pred = params.pred_damage.shape[0]
+    # N1 fix: pred = animals with predator class; neutral = animals with neutral class.
+    # Use static index tuples (pytree_node=False) to slice spawn areas per class.
+    num_pred_class   = len(params.predator_indices)
+    num_neutral_class = len(params.neutral_indices)
     num_obs = params.obs_blocking.shape[0]
-    num_neutral = params.neutral_property.shape[0]
-    
+
     if params.placement_mode == 'per_entity':
         # ── Per-Entity Scan: vmap sample + resolve_overlaps_global ──
+        # N3 fix: 6-way split (unchanged from pre-refactor split shape).
         placement_key, res_key, pred_key, obs_key, neutral_key, resolve_key = \
             jax.random.split(placement_key, 6)
-        
+
         # Sample initial positions (may have overlaps)
-        res_keys = jax.random.split(res_key, num_res)
+        res_keys = jax.random.split(res_key, num_res) if num_res > 0 else jax.random.split(res_key, 1)[:0]
         res_pos = jax.vmap(lambda k, a: jax.random.randint(k, (2,), a[:2], a[2:]))(
-            res_keys, params.res_spawn_area)
-        
-        pred_keys = jax.random.split(pred_key, num_pred)
-        pred_pos = jax.vmap(lambda k, a: jax.random.randint(k, (2,), a[:2], a[2:]))(
-            pred_keys, params.pred_spawn_area)
-        
-        obs_keys = jax.random.split(obs_key, num_obs)
+            res_keys, params.res_spawn_area) if num_res > 0 else jnp.zeros((0, 2), dtype=jnp.int32)
+
+        # N1 fix: per-class spawn areas from config_loader (pred_spawn_area_for_placement
+        # is not stored on params; use params.animal_spawn_area + predator_indices).
+        if num_pred_class > 0:
+            pred_sa = params.animal_spawn_area[jnp.array(list(params.predator_indices), dtype=jnp.int32)]
+            pred_keys = jax.random.split(pred_key, num_pred_class)
+            pred_pos = jax.vmap(lambda k, a: jax.random.randint(k, (2,), a[:2], a[2:]))(
+                pred_keys, pred_sa)
+        else:
+            pred_pos = jnp.zeros((0, 2), dtype=jnp.int32)
+
+        obs_keys = jax.random.split(obs_key, num_obs) if num_obs > 0 else jax.random.split(obs_key, 1)[:0]
         obs_pos = jax.vmap(lambda k, a: jax.random.randint(k, (2,), a[:2], a[2:]))(
-            obs_keys, params.obs_spawn_area)
-        
-        neutral_keys = jax.random.split(neutral_key, num_neutral)
-        neutral_pos = jax.vmap(lambda k, a: jax.random.randint(k, (2,), a[:2], a[2:]))(
-            neutral_keys, params.neutral_spawn_area)
-        
-        # Resolve all overlaps in one sequential scan
+            obs_keys, params.obs_spawn_area) if num_obs > 0 else jnp.zeros((0, 2), dtype=jnp.int32)
+
+        if num_neutral_class > 0:
+            neutral_sa = params.animal_spawn_area[jnp.array(list(params.neutral_indices), dtype=jnp.int32)]
+            neutral_keys = jax.random.split(neutral_key, num_neutral_class)
+            neutral_pos = jax.vmap(lambda k, a: jax.random.randint(k, (2,), a[:2], a[2:]))(
+                neutral_keys, neutral_sa)
+        else:
+            neutral_pos = jnp.zeros((0, 2), dtype=jnp.int32)
+
+        # N1 fix: concat order [res, pred, obs, neutral] for resolve scan.
         all_positions = jnp.concatenate([res_pos, pred_pos, obs_pos, neutral_pos], axis=0)
+        # Build matching spawn-area array (N1 fix: same ordering).
+        if num_pred_class > 0:
+            pred_sa_all = params.animal_spawn_area[jnp.array(list(params.predator_indices), dtype=jnp.int32)]
+        else:
+            pred_sa_all = jnp.zeros((0, 4), dtype=jnp.int32)
+        if num_neutral_class > 0:
+            neutral_sa_all = params.animal_spawn_area[jnp.array(list(params.neutral_indices), dtype=jnp.int32)]
+        else:
+            neutral_sa_all = jnp.zeros((0, 4), dtype=jnp.int32)
         all_spawn_areas = jnp.concatenate([
-            params.res_spawn_area, params.pred_spawn_area,
-            params.obs_spawn_area, params.neutral_spawn_area
+            params.res_spawn_area, pred_sa_all,
+            params.obs_spawn_area, neutral_sa_all,
         ], axis=0)
-        all_positions = resolve_overlaps_global(
-            all_positions, all_spawn_areas, params.height, params.width, resolve_key
-        )
-        
+        if all_positions.shape[0] > 0:
+            all_positions = resolve_overlaps_global(
+                all_positions, all_spawn_areas, params.height, params.width, resolve_key
+            )
+
     else:  # per_type
         # ── Type-Level: lax.scan over spawn-area groups ──
         all_positions = jnp.zeros((params.num_entities, 2), dtype=jnp.int32)
         total_cells = params.height * params.width
         occupancy = jnp.zeros(total_cells, dtype=jnp.bool_)
-        
+
         def place_type_group(carry, type_idx):
             occ, positions, rng = carry
             rng, subkey = jax.random.split(rng)
@@ -722,11 +862,9 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
                 subkey, area, occ, count, params.max_per_type,
                 params.height, params.width
             )
-            # Per-cell occupancy update (safe, avoids batched .at padding bug)
             valid = jnp.arange(params.max_per_type) < count
             for j in range(params.max_per_type):
                 occ = jnp.where(valid[j], occ.at[type_flat[j]].set(True), occ)
-            # Per-entity position scatter
             entity_indices = params.type_entity_map[type_idx]
             for j in range(params.max_per_type):
                 eidx = entity_indices[j]
@@ -736,30 +874,44 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
                     positions
                 )
             return (occ, positions, rng), None
-        
+
         placement_key, scan_key = jax.random.split(placement_key)
         (_, all_positions, _), _ = jax.lax.scan(
             place_type_group,
             (occupancy, all_positions, scan_key),
             jnp.arange(params.num_types)
         )
-    
-    # 3. Split positions back into per-type arrays
-    res_pos = all_positions[:num_res]
-    pred_pos = all_positions[num_res:num_res + num_pred]
-    obs_pos = all_positions[num_res + num_pred:num_res + num_pred + num_obs]
-    neutral_pos = all_positions[num_res + num_pred + num_obs:]
-    
-    # 6. Body (Random start support)
+
+    # 3. Split positions back (N1 fix: same [res, pred, obs, neutral] order).
+    res_pos   = all_positions[:num_res]
+    pred_pos  = all_positions[num_res:num_res + num_pred_class]
+    obs_pos   = all_positions[num_res + num_pred_class:num_res + num_pred_class + num_obs]
+    neutral_pos = all_positions[num_res + num_pred_class + num_obs:]
+
+    # 4. Assemble unified animal_pos [N, 2] in predator-first order (N1 fix).
+    N = params.animal_property.shape[0]
+    if N > 0:
+        # Scatter pred/neutral positions back into the unified [N, 2] array
+        # using the static index tuples.
+        animal_pos_init = jnp.zeros((N, 2), dtype=jnp.int32)
+        if num_pred_class > 0:
+            p_idx = jnp.array(list(params.predator_indices), dtype=jnp.int32)
+            animal_pos_init = animal_pos_init.at[p_idx].set(pred_pos)
+        if num_neutral_class > 0:
+            n_idx = jnp.array(list(params.neutral_indices), dtype=jnp.int32)
+            animal_pos_init = animal_pos_init.at[n_idx].set(neutral_pos)
+    else:
+        animal_pos_init = jnp.zeros((0, 2), dtype=jnp.int32)
+
+    # 5. Body (Random start support)
     body_key1, body_key2, body_key3 = jax.random.split(body_key, 3)
-    
+
     if params.random_start_nutrition:
         min_start_nutr = params.max_nutrition / 2.0
         nutrition = jax.random.uniform(body_key2, (), minval=min_start_nutr, maxval=params.max_nutrition)
     else:
         nutrition = params.start_nutrition
 
-    # Satiation is derived from nutrition
     fullness_ratio = jnp.clip(nutrition / params.max_nutrition, 0.0, 1.0)
     satiation = params.max_satiation * jnp.power(fullness_ratio, params.nutrition_to_satiation_scaling_factor)
 
@@ -768,21 +920,63 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         injury = jax.random.uniform(body_key3, (), minval=0.0, maxval=max_start_injury)
     else:
         injury = 0.0
-        
+
     injury_buffer = jnp.zeros(params.smoothing_duration)
     nociception_history_buffer = jnp.zeros(params.interoceptive_kernel_length)
-    
+
+    # 6. Property sampling (N2 fix: 4-way split, pred/neutral sampled separately).
     prop_key_res, prop_key_pred, prop_key_obs, prop_key_neutral = jax.random.split(property_key, 4)
-    
+
     def _sample_property(sub_key, mean, std):
         noise = jax.random.normal(sub_key, shape=mean.shape)
         return jnp.clip(mean + std * noise, 0.0, 1.0)
-        
-    res_property_sampled     = _sample_property(prop_key_res,     params.res_property,     params.res_property_std)
-    pred_property_sampled    = _sample_property(prop_key_pred,    params.pred_property,    params.pred_property_std)
-    obs_property_sampled     = _sample_property(prop_key_obs,     params.obs_property,     params.obs_property_std)
-    neutral_property_sampled = _sample_property(prop_key_neutral, params.neutral_property, params.neutral_property_std)
-    
+
+    res_property_sampled = _sample_property(prop_key_res, params.res_property, params.res_property_std)
+    obs_property_sampled = _sample_property(prop_key_obs, params.obs_property, params.obs_property_std)
+
+    # N2 fix: sample pred-class and neutral-class properties separately then
+    # scatter back into the unified [N, vector_size] array (preserving byte-parity
+    # with the pre-refactor prop_key_pred / prop_key_neutral draws).
+    if N > 0:
+        animal_property_sampled = jnp.zeros_like(params.animal_property)
+        if num_pred_class > 0:
+            p_idx = jnp.array(list(params.predator_indices), dtype=jnp.int32)
+            pred_prop_mean = params.animal_property[p_idx]
+            pred_prop_std  = params.animal_property_std[p_idx]
+            pred_prop_sampled = _sample_property(prop_key_pred, pred_prop_mean, pred_prop_std)
+            animal_property_sampled = animal_property_sampled.at[p_idx].set(pred_prop_sampled)
+        if num_neutral_class > 0:
+            n_idx = jnp.array(list(params.neutral_indices), dtype=jnp.int32)
+            neutral_prop_mean = params.animal_property[n_idx]
+            neutral_prop_std  = params.animal_property_std[n_idx]
+            neutral_prop_sampled = _sample_property(prop_key_neutral, neutral_prop_mean, neutral_prop_std)
+            animal_property_sampled = animal_property_sampled.at[n_idx].set(neutral_prop_sampled)
+    else:
+        animal_property_sampled = jnp.zeros((0, params.animal_property.shape[-1] if params.animal_property.shape[0] == 0 else params.animal_property.shape[-1]), dtype=jnp.float32)
+
+    # 7. Per-episode distributional sampling for the 5 behavioural fields.
+    #    5 independent uniform draws per field — shape (N,) each.
+    #    For wander/static entries the ranges are [0, 0] (from _load_animals);
+    #    jax.random.uniform([0,0]) = 0.0 exactly, so these are harmless.
+    if N > 0:
+        ep_keys = jax.random.split(animal_episode_key, 5)
+        animal_detect_sampled = jax.random.uniform(
+            ep_keys[0], (N,), minval=params.animal_detect_low, maxval=jnp.maximum(params.animal_detect_high, params.animal_detect_low))
+        animal_max_stamina_sampled = jax.random.uniform(
+            ep_keys[1], (N,), minval=params.animal_max_stamina_low, maxval=jnp.maximum(params.animal_max_stamina_high, params.animal_max_stamina_low))
+        animal_recovery_sampled = jax.random.uniform(
+            ep_keys[2], (N,), minval=params.animal_recovery_low, maxval=jnp.maximum(params.animal_recovery_high, params.animal_recovery_low))
+        animal_hunt_thresh_sampled = jax.random.uniform(
+            ep_keys[3], (N,), minval=params.animal_hunt_thresh_low, maxval=jnp.maximum(params.animal_hunt_thresh_high, params.animal_hunt_thresh_low))
+        animal_lose_interest_sampled = jax.random.uniform(
+            ep_keys[4], (N,), minval=params.animal_lose_interest_low, maxval=jnp.maximum(params.animal_lose_interest_high, params.animal_lose_interest_low))
+    else:
+        animal_detect_sampled        = jnp.zeros(0, dtype=jnp.float32)
+        animal_max_stamina_sampled   = jnp.zeros(0, dtype=jnp.float32)
+        animal_recovery_sampled      = jnp.zeros(0, dtype=jnp.float32)
+        animal_hunt_thresh_sampled   = jnp.zeros(0, dtype=jnp.float32)
+        animal_lose_interest_sampled = jnp.zeros(0, dtype=jnp.float32)
+
     state = EnvState(
         agent_pos=agent_pos,
         current_step=jnp.array(0, dtype=jnp.int32),
@@ -791,12 +985,18 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         res_cons_count=jnp.zeros(num_res, dtype=jnp.int32),
         res_reg_timer=jnp.zeros(num_res, dtype=jnp.int32),
         res_property_sampled=res_property_sampled,
-        pred_pos=pred_pos,
-        pred_state=jnp.zeros(num_pred, dtype=jnp.int32), # PATROL
-        pred_stamina=jnp.full(num_pred, params.pred_max_stamina, dtype=jnp.float32),
-        pred_move_timer=jnp.zeros(num_pred, dtype=jnp.int32),
-        pred_attack_timer=jnp.zeros(num_pred, dtype=jnp.int32),
-        pred_property_sampled=pred_property_sampled,
+        # Unified animal fields
+        animal_pos=animal_pos_init,
+        animal_state=jnp.zeros(N, dtype=jnp.int32),           # PATROL=0
+        animal_stamina=animal_max_stamina_sampled.copy() if N > 0 else jnp.zeros(0, dtype=jnp.float32),
+        animal_move_timer=jnp.zeros(N, dtype=jnp.int32),
+        animal_attack_timer=jnp.zeros(N, dtype=jnp.int32),
+        animal_property_sampled=animal_property_sampled,
+        animal_detect_sampled=animal_detect_sampled,
+        animal_max_stamina_sampled=animal_max_stamina_sampled,
+        animal_recovery_sampled=animal_recovery_sampled,
+        animal_hunt_thresh_sampled=animal_hunt_thresh_sampled,
+        animal_lose_interest_sampled=animal_lose_interest_sampled,
         obs_pos=obs_pos,
         obs_property_sampled=obs_property_sampled,
         satiation=jnp.array(satiation, dtype=jnp.float32),
@@ -808,12 +1008,9 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         rest_streak=jnp.array(0, dtype=jnp.int32),
         terminated=jnp.array(False, dtype=jnp.bool_),
         key=key,
-        last_action=jnp.array(4 if params.rest_action_enabled else 5, dtype=jnp.int32), # Default to Rest/Stay
-        neutral_pos=neutral_pos,
-        neutral_move_timer=jnp.zeros(num_neutral, dtype=jnp.int32),
-        neutral_property_sampled=neutral_property_sampled
+        last_action=jnp.array(4 if params.rest_action_enabled else 5, dtype=jnp.int32),
     )
-    
+
     return state
 
 

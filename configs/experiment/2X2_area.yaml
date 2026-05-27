@@ -88,7 +88,6 @@ environment:
       spawn_area: [[1, 1], [20, 20]]
       patrol_area: [[1, 1], [20, 20]]
 
-  predator_enabled: true
   predators:
     # Grass Predators (Active and Territorial)
     - name: "Forest Predator TL"

@@ -78,13 +78,13 @@ def main():
             # Run predator
             params_b, state_b, obs_b, bk_b = run_one(predator_cfg, seed, agent_pos, prop, is_predator=True)
             
-            # Sanity checks
-            if not (state_a.neutral_pos[0] == state_b.pred_pos[0]).all():
-                print(f"Position mismatch: neutral={state_a.neutral_pos[0]} pred={state_b.pred_pos[0]}")
-            if not (state_a.neutral_pos[0] == jnp.array([0, 0])).all():
-                print(f"Entity not at [0,0]: {state_a.neutral_pos[0]}")
-                print(f"Neutral spawn area: {params_a.neutral_spawn_area}")
-                assert False, f"Entity not at [0,0]: {state_a.neutral_pos[0]}"
+            # Sanity checks (v2.0: use unified animal_pos — each config has exactly 1 animal)
+            if not (state_a.animal_pos[0] == state_b.animal_pos[0]).all():
+                print(f"Position mismatch: neutral={state_a.animal_pos[0]} pred={state_b.animal_pos[0]}")
+            if not (state_a.animal_pos[0] == jnp.array([0, 0])).all():
+                print(f"Entity not at [0,0]: {state_a.animal_pos[0]}")
+                print(f"Animal spawn area: {params_a.animal_spawn_area}")
+                assert False, f"Entity not at [0,0]: {state_a.animal_pos[0]}"
             
             s_a = olf_slice(bk_a)
             s_b = olf_slice(bk_b)

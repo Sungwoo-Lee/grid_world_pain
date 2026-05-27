@@ -58,32 +58,40 @@ def sense_location(agent_pos, height, width):
 
 def sense_extero_nociception(agent_pos, state: EnvState, params: EnvParams):
     """
-    Continuous Phasic Nociceptor: Detects contact with hiding predators, predators, and rocks.
+    Continuous Phasic Nociceptor: Detects contact with hiding predators, animals, and rocks.
     Returns the maximum intensity among all current painful contacts.
+
+    B2 fix: predator contact now uses unified state.animal_pos / params.animal_nociception
+    masked by params.animal_is_damaging (replaces old state.pred_pos / params.pred_nociception).
     """
-    # 1. Hiding Predator Contact
+    # 1. Hiding Predator Contact (resources with type==1)
     dist_res = jnp.linalg.norm(state.res_pos - agent_pos, axis=-1)
     # Intensity = intensity from params if at position and active
     res_intensities = jnp.where(jnp.logical_and(state.res_active, dist_res < 0.1), params.res_nociception, 0.0)
     max_res = jnp.max(res_intensities, initial=0.0)
 
-    # 2. Predator Contact
-    dist_pred = jnp.linalg.norm(state.pred_pos - agent_pos, axis=-1)
-    # All predators are active
-    pred_intensities = jnp.where(dist_pred < 0.1, params.pred_nociception, 0.0)
-    max_pred = jnp.max(pred_intensities, initial=0.0)
+    # 2. Animal Contact (B2 fix — unified; only damaging animals emit nociception)
+    if state.animal_pos.shape[0] > 0:
+        dist_animal = jnp.linalg.norm(state.animal_pos - agent_pos, axis=-1)
+        animal_intensities = jnp.where(
+            jnp.logical_and(dist_animal < 0.1, params.animal_is_damaging),
+            params.animal_nociception, 0.0
+        )
+        max_animal = jnp.max(animal_intensities, initial=0.0)
+    else:
+        max_animal = 0.0
 
     # 3. Rock Overlap Contact (Non-blocking)
     dist_obs = jnp.linalg.norm(state.obs_pos - agent_pos, axis=-1)
     obs_intensities = jnp.where(dist_obs < 0.1, params.obs_nociception, 0.0)
     max_obs_overlap = jnp.max(obs_intensities, initial=0.0)
-    
+
     # 4. Rock Collision Contact (Bumping)
     # Stored in state from jax_step
     max_collision = state.last_collision_noc
 
     # Result is the maximum intensity
-    final_noc = jnp.max(jnp.array([max_res, max_pred, max_obs_overlap, max_collision]), initial=0.0)
+    final_noc = jnp.max(jnp.array([max_res, max_animal, max_obs_overlap, max_collision]), initial=0.0)
     return jnp.array([final_noc])
 
 def sense_interoceptive_nociception(state: EnvState, params: EnvParams):
@@ -135,80 +143,80 @@ def get_visual_offsets(sensor_range):
     return offsets_arr
 
 def sense_visual(agent_pos, state: EnvState, params: EnvParams):
-    """Matmul-optimized Visual Sensor (simplified object recognition)."""
-    # Channel mapping:
-    # 0: Grass (loc 1), 1: Sand (loc 2), 2: Plain (loc 0)
-    # 3: Food (res_type 0), 4: Hiding Predator (res_type 1)
-    # 5: Predator, 6: Rock, 7: Neutral Animal
-    
+    """Matmul-optimized Visual Sensor (simplified object recognition).
+
+    Channel mapping:
+      0: Grass (loc 1), 1: Sand (loc 2), 2: Plain (loc 0)
+      3: Food (res_type 0), 4: Hiding Predator (res_type 1)
+      5: Predator (animal_visual_channel=5), 6: Rock (obstacle), 7: Neutral Animal (channel=7)
+
+    B2 fix: dynamic entities are now [res, animal, obs] — unified animals replace the
+    old separate pred/neutral lists. Each animal uses params.animal_visual_channel for
+    its per-entity visual channel index (predator=5, neutral=7).
+    """
     vis_range = params.visual_sensor_range
-    offsets = get_visual_offsets(vis_range) # [num_cells, 2]
+    offsets = get_visual_offsets(vis_range)  # [num_cells, 2]
     num_cells = offsets.shape[0]
-    cell_coords = agent_pos + offsets # [num_cells, 2]
-    
+    cell_coords = agent_pos + offsets  # [num_cells, 2]
+
     # 1. Bounds check
     is_in_bounds = jnp.all(jnp.logical_and(
         cell_coords >= 0,
         cell_coords < jnp.array([params.height, params.width])
     ), axis=-1)
-    
+
     # Safe coordinates for indexing background
     safe_coords = jnp.where(is_in_bounds[:, None], cell_coords, 0)
-    
+
     # 2. Background (Grid Properties) - Vectorized Indexing
     loc_types = params.grid_location_type[safe_coords[:, 0], safe_coords[:, 1]]
     # Mapping: loc 1 -> channel 0, loc 2 -> channel 1, loc 0 -> channel 2
     vis_background = jax.nn.one_hot(jnp.where(loc_types == 1, 0, jnp.where(loc_types == 2, 1, 2)), 8)
-    # Mask OOB background
     vis_background = vis_background * is_in_bounds[:, None]
-    
-    # 3. Dynamic Entities (Resources, Predators, Rocks, Neutrals) - Matmul Optimized
-    
-    # Combine all dynamic entity positions
-    all_pos = jnp.concatenate([
-        state.res_pos,
-        state.pred_pos,
-        state.obs_pos,
-        state.neutral_pos
-    ], axis=0) # [Total_E, 2]
-    
-    # Combine activity status (Predators/Rocks/Neutrals always active)
-    all_active = jnp.concatenate([
-        state.res_active,
-        jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_),
-        jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_),
-        jnp.ones(state.neutral_pos.shape[0], dtype=jnp.bool_)
-    ], axis=0) # [Total_E]
-    
-    # Create Visual Property Matrix [Total_E, 8]
-    # Channels 3: Food, 4: Hiding Predator, 5: Predator, 6: Rock, 7: Neutral
-    num_res = state.res_pos.shape[0]
-    num_pred = state.pred_pos.shape[0]
-    num_obs = state.obs_pos.shape[0]
-    num_neutral = state.neutral_pos.shape[0]
-    
-    res_props = jax.nn.one_hot(jnp.where(params.res_type == 0, 3, 4), 8)
-    pred_props = jax.nn.one_hot(jnp.full((num_pred,), 5), 8)
-    obs_props = jax.nn.one_hot(jnp.full((num_obs,), 6), 8)
-    neutral_props = jax.nn.one_hot(jnp.full((num_neutral,), 7), 8)
-    
-    all_props = jnp.concatenate([res_props, pred_props, obs_props, neutral_props], axis=0)
-    
+
+    # 3. Dynamic Entities (Resources, Animals, Obstacles) — B2 fix: unified animal list
+    num_res    = state.res_pos.shape[0]
+    num_animal = state.animal_pos.shape[0]
+    num_obs    = state.obs_pos.shape[0]
+
+    # Combine all dynamic entity positions — 3-way concat
+    parts_pos = [state.res_pos]
+    if num_animal > 0:
+        parts_pos.append(state.animal_pos)
+    parts_pos.append(state.obs_pos)
+    all_pos = jnp.concatenate(parts_pos, axis=0)  # [Total_E, 2]
+
+    # Combine activity status (animals/obstacles always active)
+    parts_active = [state.res_active]
+    if num_animal > 0:
+        parts_active.append(jnp.ones(num_animal, dtype=jnp.bool_))
+    parts_active.append(jnp.ones(num_obs, dtype=jnp.bool_))
+    all_active = jnp.concatenate(parts_active, axis=0)  # [Total_E]
+
+    # Visual Property Matrix [Total_E, 8]
+    res_props = jax.nn.one_hot(jnp.where(params.res_type == 0, 3, 4), 8)  # [num_res, 8]
+    obs_props = jax.nn.one_hot(jnp.full((num_obs,), 6), 8)                 # [num_obs, 8]
+    parts_props = [res_props]
+    if num_animal > 0:
+        # Each animal uses its per-entity visual channel (predator=5, neutral=7)
+        animal_props = jax.nn.one_hot(params.animal_visual_channel, 8)     # [N, 8]
+        parts_props.append(animal_props)
+    parts_props.append(obs_props)
+    all_props = jnp.concatenate(parts_props, axis=0)  # [Total_E, 8]
+
     # Apply activity mask
     all_props = all_props * all_active[:, None]
-    
+
     # Compute Matches [num_cells, Total_E]
-    # (num_cells, 1, 2) == (1, Total_E, 2)
     matches = jnp.all(cell_coords[:, None, :] == all_pos[None, :, :], axis=-1)
-    
-    # Sum properties using Matmul: [num_cells, Total_E] @ [Total_E, 8] -> [num_cells, 8]
+
+    # Sum properties: [num_cells, Total_E] @ [Total_E, 8] -> [num_cells, 8]
     vis_entities = jnp.matmul(matches.astype(jnp.float32), all_props)
-    
+
     # Final assembly
     total_vis = vis_background + vis_entities
-    # Mask out-of-bounds cells (entities at [0,0] might match safe_coords if OOB)
     total_vis = total_vis * is_in_bounds[:, None]
-    
+
     return total_vis.flatten()
 
 @jax.jit
@@ -286,13 +294,13 @@ def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
     if params.nociception_enabled:
         obs_parts.append(sense_extero_nociception(state.agent_pos, state, params))
 
-    # 5. Olfaction Sensor (Resources + Predators + Obstacles + Neutral)
+    # 5. Olfaction Sensor (Resources + Animals + Obstacles)
+    # B2 fix: unified animal_chem replaces separate pred_chem + neutral_chem calls.
     if params.olfactory_enabled:
         res_chem = sense_resource(state.agent_pos, state.res_pos, state.res_active, state.res_property_sampled, params.sensor_radius, params.sensor_decay)
-        pred_chem = sense_resource(state.agent_pos, state.pred_pos, jnp.ones(state.pred_pos.shape[0], dtype=jnp.bool_), state.pred_property_sampled, params.sensor_radius, params.sensor_decay)
+        animal_chem = sense_resource(state.agent_pos, state.animal_pos, jnp.ones(state.animal_pos.shape[0], dtype=jnp.bool_), state.animal_property_sampled, params.sensor_radius, params.sensor_decay)
         obs_chem = sense_resource(state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), state.obs_property_sampled, params.sensor_radius, params.sensor_decay)
-        neutral_chem = sense_resource(state.agent_pos, state.neutral_pos, jnp.ones(state.neutral_pos.shape[0], dtype=jnp.bool_), state.neutral_property_sampled, params.sensor_radius, params.sensor_decay)
-        obs_parts.append(res_chem + pred_chem + obs_chem + neutral_chem)
+        obs_parts.append(res_chem + animal_chem + obs_chem)
     
     # 6. Collision
     obs_parts.append(sense_collision(state.agent_pos, state, params))

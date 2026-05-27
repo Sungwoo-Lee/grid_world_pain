@@ -2,6 +2,13 @@
 Configuration loader for JAX Environment.
 
 Translates YAML config files into JAX-compatible EnvParams.
+
+v2.0 changes (CP1 — unified animal entity):
+  - `_load_animals()` replaces the two legacy `predators:` / `neutral_animals:` paths.
+  - The `predator_enabled` YAML key is fully removed; configs carrying it after the
+    migration sweep raise ValueError with a clear "removed in v2.0" message.
+  - `predator_tags` / `neutral_tags` no longer passed to EnvParams constructor (M2 fix);
+    they are derived via @property accessors on EnvParams (B3 / M1 fix in state.py).
 """
 import re as _re
 import yaml
@@ -17,6 +24,19 @@ import warnings
 # Allowed characters in entity tags (used in WandB key 'Episode/MeanDist*_<tag>').
 # Slashes / spaces / dots break the WandB namespace or log key.
 _TAG_RE = _re.compile(r'^[A-Za-z0-9_-]+$')
+
+# ── Animal entity constants (v2.0) ────────────────────────────────────────────
+ANIMAL_CLASS_TO_INT = {"predator": 0, "neutral": 1}
+ANIMAL_CLASS_TO_VIS_CHANNEL = {"predator": 5, "neutral": 7}
+ANIMAL_DAMAGING_CLASSES = {"predator"}
+ANIMAL_BEHAVIOUR_TO_INT = {"wander": 0, "hunt": 1, "static": 2}
+DISTRIBUTIONAL_FIELDS = (
+    "detection_range",
+    "max_stamina",
+    "stamina_recovery_rate",
+    "hunt_stamina_threshold",
+    "lose_interest_multiplier",
+)
 
 # ---------------------------------------------------------------------------
 # Behavior-measure toolkit v1 schema loader
@@ -176,6 +196,413 @@ def _read_properties_std(entry, entity_label):
         return entry['property_std']
     raise ValueError(f"{entity_label}: missing required key 'properties_std'.")
 
+def _load_animals(config: Config):
+    """Build unified animal arrays from the YAML config (v2.0).
+
+    Supports two YAML paths, detected automatically:
+      1. `environment.predators:` + `environment.neutral_animals:` (legacy) — all 86
+         pre-v2.0 configs. Predators are re-projected with class='predator',
+         behaviour='hunt'; neutrals with class='neutral', behaviour='wander'.
+         The five distributional fields are read as scalars from the legacy YAML
+         and stored as degenerate ranges [s, s]. `attack_delay` and `damage` for
+         neutrals are internally auto-filled to 0 and [0.0, 0.0] (NC-1 fix —
+         the legacy schema never carried them on neutral entries).
+      2. `environment.entities:` (new schema) — not used by any config yet; CP3
+         activates this path fully. If detected, a deprecation warning is emitted
+         when the legacy sections are also present.
+
+    Returns a flat tuple of all unified `animal_*` arrays and dispatch tuples,
+    ordered as expected by the `load_env_params` caller.
+
+    YAML cadence notes:
+      - `damage: [lo, hi]` is per-event (re-sampled on every collision).
+      - `detection_range: [lo, hi]` (and four siblings in DISTRIBUTIONAL_FIELDS)
+        are per-episode (re-sampled at reset). Cadence is determined by field name.
+
+    Mandatory-key rule by behaviour:
+      - `behaviour: hunt` — all five distributional fields are MANDATORY.
+        Missing → ValueError (no fallback default, per project rule).
+      - `behaviour: wander` / `static` — distributional fields are OPTIONAL.
+        If missing, loader auto-fills [0, 0] (internal projection detail;
+        the wander/static code path never reads these arrays at runtime).
+      - Legacy `neutral_animals:` re-projection always behaves as wander/optional.
+
+    v1.x → v2.0 semantic change note: `lose_interest_multiplier` was previously
+    optional in the predator loader (soft default 2.0). It is now MANDATORY for
+    `behaviour: hunt`. All 86 pre-v2.0 predator entries carry an explicit value,
+    so no existing config breaks; this change is flagged for reference.
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+
+    h = config.get_mandatory('environment.height')
+    w = config.get_mandatory('environment.width')
+
+    def _parse_area(area, default_h=h, default_w=w):
+        a = area if area is not None else [[1, 1], [default_h, default_w]]
+        return [a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]]
+
+    def _parse_distributional(entry, field, mandatory, entity_label, idx):
+        """Read a scalar or [lo, hi] distributional field.
+        Returns (low, high) as floats.
+        """
+        val = entry.get(field)
+        if val is None:
+            if mandatory:
+                raise ValueError(
+                    f"Animal entity {entity_label!r} (index {idx}) is missing mandatory "
+                    f"distributional field '{field}' (required for behaviour='hunt'). "
+                    f"No fallback default exists."
+                )
+            else:
+                _log.debug(
+                    "Animal entity %r (index %d): '%s' not specified; auto-filling [0, 0] "
+                    "(wander/static — field is unused at runtime).", entity_label, idx, field
+                )
+                return 0.0, 0.0
+        if isinstance(val, list):
+            if len(val) != 2:
+                raise ValueError(
+                    f"Animal entity {entity_label!r} (index {idx}): '{field}' must be a scalar "
+                    f"or a 2-element list [low, high]; got {val!r}."
+                )
+            lo, hi = float(val[0]), float(val[1])
+        else:
+            lo = hi = float(val)
+        return lo, hi
+
+    # ── Build the expanded entry list ──────────────────────────────────────────
+    entries = []  # list of dicts with unified fields
+
+    # Check for new entities: schema (CP3 will add full support)
+    has_entities = config.get('environment.entities') is not None
+    has_legacy_predators = config.get('environment.predators') is not None
+    has_legacy_neutrals = config.get('environment.neutral_animals') is not None
+
+    if has_entities:
+        # CP3 path — parse unified entities: list directly
+        if has_legacy_predators or has_legacy_neutrals:
+            warnings.warn(
+                "Config has both 'environment.entities:' and legacy "
+                "'environment.predators:'/'environment.neutral_animals:'. "
+                "The unified 'entities:' schema takes precedence; legacy sections are ignored.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+        raw_entities = config.get('environment.entities') or []
+        for i_raw, ent in enumerate(raw_entities):
+            count = ent.get('count', 1)
+            for _ in range(count):
+                cls = ent.get('class')
+                if cls is None:
+                    raise ValueError(f"entities[{i_raw}]: missing required field 'class'.")
+                beh = ent.get('behaviour')
+                if beh is None:
+                    raise ValueError(f"entities[{i_raw}]: missing required field 'behaviour'.")
+                # Validate behaviour string FIRST (before building index tuples)
+                if beh not in ANIMAL_BEHAVIOUR_TO_INT:
+                    raise ValueError(
+                        f"Unknown behaviour {beh!r} for entity tag={ent.get('tag', '?')}. "
+                        f"Must be one of {list(ANIMAL_BEHAVIOUR_TO_INT)}."
+                    )
+                mandatory_dist = (beh == 'hunt')
+                tag_raw = ent.get('tag')
+                tag_label = str(tag_raw) if tag_raw else f'entity{len(entries)}'
+                entries.append({
+                    'class': cls,
+                    'behaviour': beh,
+                    'tag_raw': tag_raw,
+                    'tag_label': tag_label,
+                    'property': _read_properties(ent, f'Entity[{i_raw}]'),
+                    'property_std': _read_properties_std(ent, f'Entity[{i_raw}]'),
+                    'nociception': ent.get('nociception_intensity', 0.0),
+                    'move_interval': ent.get('move_interval'),
+                    'damage': ent.get('damage'),
+                    'attack_delay': ent.get('attack_delay'),
+                    'spawn_area': ent.get('spawn_area'),
+                    'patrol_area': ent.get('patrol_area'),
+                    'mandatory_dist': mandatory_dist,
+                    'dist_source': ent,
+                })
+    else:
+        # Legacy path: re-project predators (hunt) + neutrals (wander)
+        raw_predators = config.get('environment.predators') or []
+        for i_raw, p in enumerate(raw_predators):
+            count = p.get('count', 1)
+            for _ in range(count):
+                tag_raw = p.get('tag')
+                tag_label = str(tag_raw) if tag_raw else f'pred{len(entries)}'
+                def _p_get(key, _p=p, _label=tag_label):
+                    val = _p.get(key)
+                    if val is None:
+                        raise ValueError(
+                            f"Strict Config: Predator (tag={_label!r}) field '{key}' is required."
+                        )
+                    return val
+                entries.append({
+                    'class': 'predator',
+                    'behaviour': 'hunt',
+                    'tag_raw': tag_raw,
+                    'tag_label': tag_label,
+                    'property': _read_properties(p, 'Predator'),
+                    'property_std': _read_properties_std(p, 'Predator'),
+                    'nociception': p.get('nociception_intensity', 0.9),
+                    'move_interval': _p_get('move_interval'),
+                    'damage': _p_get('damage'),
+                    'attack_delay': _p_get('attack_delay'),
+                    'spawn_area': p.get('spawn_area'),
+                    'patrol_area': p.get('patrol_area'),
+                    'mandatory_dist': True,  # hunt — all dist fields mandatory
+                    'dist_source': p,
+                })
+
+        raw_neutrals = config.get('environment.neutral_animals') or []
+        for i_raw, n in enumerate(raw_neutrals):
+            count = n.get('count', 1)
+            for _ in range(count):
+                tag_raw = n.get('tag')
+                tag_label = str(tag_raw) if tag_raw else f'rabbit{len(entries)}'
+                def _n_get(key, _n=n, _label=tag_label):
+                    val = _n.get(key)
+                    if val is None:
+                        raise ValueError(
+                            f"Strict Config: Neutral Animal (tag={_label!r}) field '{key}' is required."
+                        )
+                    return val
+                entries.append({
+                    'class': 'neutral',
+                    'behaviour': 'wander',
+                    'tag_raw': tag_raw,
+                    'tag_label': tag_label,
+                    'property': _read_properties(n, 'Neutral Animal'),
+                    'property_std': _read_properties_std(n, 'Neutral Animal'),
+                    'nociception': n.get('nociception_intensity', 0.0),
+                    'move_interval': _n_get('move_interval'),
+                    # NC-1 fix: legacy neutrals never had damage/attack_delay;
+                    # auto-fill internally (not user-facing fallback defaults).
+                    'damage': [0.0, 0.0],
+                    'attack_delay': 0,
+                    'spawn_area': n.get('spawn_area'),
+                    'patrol_area': n.get('patrol_area'),
+                    'mandatory_dist': False,  # wander — dist fields optional
+                    'dist_source': n,
+                })
+
+    N = len(entries)
+    chem_dim = 5  # default; updated below if entries exist
+
+    if N == 0:
+        # Zero-animal case (M6 smoke) — return empty arrays
+        animal_property = jnp.zeros((0, chem_dim))
+        animal_property_std = jnp.zeros((0, chem_dim))
+        animal_nociception = jnp.zeros(0)
+        animal_move_int = jnp.zeros(0, dtype=jnp.int32)
+        animal_damage = jnp.zeros((0, 2))
+        animal_attack_delay = jnp.zeros(0, dtype=jnp.int32)
+        animal_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
+        animal_patrol = jnp.zeros((0, 4), dtype=jnp.int32)
+        animal_detect_low = jnp.zeros(0)
+        animal_detect_high = jnp.zeros(0)
+        animal_max_stamina_low = jnp.zeros(0)
+        animal_max_stamina_high = jnp.zeros(0)
+        animal_recovery_low = jnp.zeros(0)
+        animal_recovery_high = jnp.zeros(0)
+        animal_hunt_thresh_low = jnp.zeros(0)
+        animal_hunt_thresh_high = jnp.zeros(0)
+        animal_lose_interest_low = jnp.zeros(0)
+        animal_lose_interest_high = jnp.zeros(0)
+        animal_classes_int = jnp.zeros(0, dtype=jnp.int32)
+        animal_behaviours_int = jnp.zeros(0, dtype=jnp.int32)
+        animal_is_damaging = jnp.zeros(0, dtype=jnp.bool_)
+        animal_visual_channel = jnp.zeros(0, dtype=jnp.int32)
+        animal_classes = ()
+        animal_behaviours = ()
+        animal_tags = ()
+        hunt_idx = ()
+        wander_idx = ()
+        static_idx = ()
+        predator_indices = ()
+        neutral_indices = ()
+        pred_spawn_area_for_placement = jnp.zeros((0, 4), dtype=jnp.int32)
+        neutral_spawn_area_for_placement = jnp.zeros((0, 4), dtype=jnp.int32)
+        return (
+            animal_property, animal_property_std, animal_nociception,
+            animal_move_int, animal_damage, animal_attack_delay,
+            animal_spawn_area, animal_patrol,
+            animal_detect_low, animal_detect_high,
+            animal_max_stamina_low, animal_max_stamina_high,
+            animal_recovery_low, animal_recovery_high,
+            animal_hunt_thresh_low, animal_hunt_thresh_high,
+            animal_lose_interest_low, animal_lose_interest_high,
+            animal_classes_int, animal_behaviours_int,
+            animal_is_damaging, animal_visual_channel,
+            animal_classes, animal_behaviours, animal_tags,
+            hunt_idx, wander_idx, static_idx,
+            predator_indices, neutral_indices,
+            pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
+        )
+
+    # ── Build per-field arrays ─────────────────────────────────────────────────
+    props_list = [_read_properties(e, e['tag_label']) if 'property' in e and not isinstance(e.get('property'), list) else e['property'] for e in entries]
+    stds_list = [e['property_std'] for e in entries]
+    chem_dim = len(props_list[0])
+
+    noc_list = [float(e['nociception']) for e in entries]
+    move_int_list = [int(e['move_interval']) for e in entries]
+
+    damage_list = []
+    for i, e in enumerate(entries):
+        d = e['damage']
+        if d is None:
+            raise ValueError(
+                f"Animal entity {e['tag_label']!r} (index {i}) is missing mandatory field 'damage'."
+            )
+        damage_list.append(d if isinstance(d, list) else [float(d), float(d)])
+
+    attack_delay_list = []
+    for i, e in enumerate(entries):
+        a = e['attack_delay']
+        if a is None:
+            raise ValueError(
+                f"Animal entity {e['tag_label']!r} (index {i}) is missing mandatory field 'attack_delay'."
+            )
+        attack_delay_list.append(int(a))
+
+    spawn_list = [_parse_area(e['spawn_area'], h, w) for e in entries]
+    patrol_list = [_parse_area(e['patrol_area'], h, w) for e in entries]
+
+    # Distributional fields (per entry)
+    dist_field_names = (
+        ("detection_range", "animal_detect"),
+        ("max_stamina", "animal_max_stamina"),
+        ("stamina_recovery_rate", "animal_recovery"),
+        ("hunt_stamina_threshold", "animal_hunt_thresh"),
+        ("lose_interest_multiplier", "animal_lose_interest"),
+    )
+    dist_lows = {k: [] for _, k in dist_field_names}
+    dist_highs = {k: [] for _, k in dist_field_names}
+    for i, e in enumerate(entries):
+        for yaml_key, arr_key in dist_field_names:
+            lo, hi = _parse_distributional(
+                e['dist_source'], yaml_key,
+                mandatory=e['mandatory_dist'],
+                entity_label=e['tag_label'], idx=i
+            )
+            dist_lows[arr_key].append(lo)
+            dist_highs[arr_key].append(hi)
+
+    # Class / behaviour codes
+    classes_int_list = []
+    behaviours_int_list = []
+    is_damaging_list = []
+    visual_channel_list = []
+    classes_tuple = []
+    behaviours_tuple = []
+    tags_tuple = []
+    hunt_idx_list = []
+    wander_idx_list = []
+    static_idx_list = []
+    predator_idx_list = []
+    neutral_idx_list = []
+
+    for i, e in enumerate(entries):
+        cls = e['class']
+        beh = e['behaviour']
+        # Validate behaviour string (for entities: path; legacy path is already validated)
+        if beh not in ANIMAL_BEHAVIOUR_TO_INT:
+            raise ValueError(
+                f"Unknown behaviour {beh!r} for entity tag={e['tag_label']!r}. "
+                f"Must be one of {list(ANIMAL_BEHAVIOUR_TO_INT)}."
+            )
+        if cls not in ANIMAL_CLASS_TO_INT:
+            raise ValueError(
+                f"Unknown class {cls!r} for entity tag={e['tag_label']!r}. "
+                f"Must be one of {list(ANIMAL_CLASS_TO_INT)}."
+            )
+        classes_int_list.append(ANIMAL_CLASS_TO_INT[cls])
+        behaviours_int_list.append(ANIMAL_BEHAVIOUR_TO_INT[beh])
+        is_damaging_list.append(cls in ANIMAL_DAMAGING_CLASSES)
+        visual_channel_list.append(ANIMAL_CLASS_TO_VIS_CHANNEL[cls])
+        classes_tuple.append(cls)
+        behaviours_tuple.append(beh)
+        tags_tuple.append(_normalise_tag(e['tag_raw'], i, e['tag_label']))
+
+        if beh == 'hunt':
+            hunt_idx_list.append(i)
+        elif beh == 'wander':
+            wander_idx_list.append(i)
+        else:
+            static_idx_list.append(i)
+
+        if cls == 'predator':
+            predator_idx_list.append(i)
+        elif cls == 'neutral':
+            neutral_idx_list.append(i)
+
+    # Build JAX arrays
+    animal_property = jnp.array(props_list, dtype=jnp.float32)
+    animal_property_std = jnp.array(stds_list, dtype=jnp.float32)
+    animal_nociception = jnp.array(noc_list, dtype=jnp.float32)
+    animal_move_int = jnp.array(move_int_list, dtype=jnp.int32)
+    animal_damage = jnp.array(damage_list, dtype=jnp.float32)
+    animal_attack_delay = jnp.array(attack_delay_list, dtype=jnp.int32)
+    animal_spawn_area = jnp.array(spawn_list, dtype=jnp.int32)
+    animal_patrol = jnp.array(patrol_list, dtype=jnp.int32)
+
+    animal_detect_low = jnp.array(dist_lows['animal_detect'], dtype=jnp.float32)
+    animal_detect_high = jnp.array(dist_highs['animal_detect'], dtype=jnp.float32)
+    animal_max_stamina_low = jnp.array(dist_lows['animal_max_stamina'], dtype=jnp.float32)
+    animal_max_stamina_high = jnp.array(dist_highs['animal_max_stamina'], dtype=jnp.float32)
+    animal_recovery_low = jnp.array(dist_lows['animal_recovery'], dtype=jnp.float32)
+    animal_recovery_high = jnp.array(dist_highs['animal_recovery'], dtype=jnp.float32)
+    animal_hunt_thresh_low = jnp.array(dist_lows['animal_hunt_thresh'], dtype=jnp.float32)
+    animal_hunt_thresh_high = jnp.array(dist_highs['animal_hunt_thresh'], dtype=jnp.float32)
+    animal_lose_interest_low = jnp.array(dist_lows['animal_lose_interest'], dtype=jnp.float32)
+    animal_lose_interest_high = jnp.array(dist_highs['animal_lose_interest'], dtype=jnp.float32)
+
+    animal_classes_int = jnp.array(classes_int_list, dtype=jnp.int32)
+    animal_behaviours_int = jnp.array(behaviours_int_list, dtype=jnp.int32)
+    animal_is_damaging = jnp.array(is_damaging_list, dtype=jnp.bool_)
+    animal_visual_channel = jnp.array(visual_channel_list, dtype=jnp.int32)
+
+    animal_classes = tuple(classes_tuple)
+    animal_behaviours = tuple(behaviours_tuple)
+    animal_tags = tuple(tags_tuple)
+
+    hunt_idx = tuple(hunt_idx_list)
+    wander_idx = tuple(wander_idx_list)
+    static_idx = tuple(static_idx_list)
+    predator_indices = tuple(predator_idx_list)
+    neutral_indices = tuple(neutral_idx_list)
+
+    # Per-class spawn areas for placement (N1 fix: jax_reset uses [res, pred, obs, neutral] order)
+    pred_spawn_area_for_placement = (
+        animal_spawn_area[jnp.array(list(predator_indices), dtype=jnp.int32)]
+        if predator_indices else jnp.zeros((0, 4), dtype=jnp.int32)
+    )
+    neutral_spawn_area_for_placement = (
+        animal_spawn_area[jnp.array(list(neutral_indices), dtype=jnp.int32)]
+        if neutral_indices else jnp.zeros((0, 4), dtype=jnp.int32)
+    )
+
+    return (
+        animal_property, animal_property_std, animal_nociception,
+        animal_move_int, animal_damage, animal_attack_delay,
+        animal_spawn_area, animal_patrol,
+        animal_detect_low, animal_detect_high,
+        animal_max_stamina_low, animal_max_stamina_high,
+        animal_recovery_low, animal_recovery_high,
+        animal_hunt_thresh_low, animal_hunt_thresh_high,
+        animal_lose_interest_low, animal_lose_interest_high,
+        animal_classes_int, animal_behaviours_int,
+        animal_is_damaging, animal_visual_channel,
+        animal_classes, animal_behaviours, animal_tags,
+        hunt_idx, wander_idx, static_idx,
+        predator_indices, neutral_indices,
+        pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
+    )
+
+
 def load_env_params(config: Config) -> EnvParams:
     """Loads environment parameters from a Config object with strict retrieval."""
     
@@ -225,63 +652,33 @@ def load_env_params(config: Config) -> EnvParams:
         res_reg_delay = jnp.zeros(0, dtype=jnp.int32)
         res_damage = jnp.zeros((0, 2))
 
-    # Build predator arrays
-    raw_predators = config.get_mandatory('environment.predators')
-    expanded_predators = []
-    if raw_predators:
-        for p in raw_predators:
-            count = p.get('count', 1)
-            for _ in range(count):
-                expanded_predators.append(p)
-                
-    if expanded_predators:
-        def p_get(p, key):
-            val = p.get(key)
-            if val is None: raise ValueError(f"Strict Config: Predator field '{key}' is required.")
-            return val
-
-        pred_property = jnp.array([_read_properties(p, 'Predator') for p in expanded_predators])
-        chem_dim = pred_property.shape[-1]
-        pred_property_std = jnp.array([_read_properties_std(p, 'Predator') for p in expanded_predators])
-        pred_nociception = jnp.array([p.get('nociception_intensity', 0.9) for p in expanded_predators])
-        pred_move_int = jnp.array([p_get(p, 'move_interval') for p in expanded_predators], dtype=jnp.int32)
-        
-        # Predator damage ranges
-        raw_p_damage = [p_get(p, 'damage') for p in expanded_predators]
-        pred_damage = jnp.array([d if isinstance(d, list) else [d, d] for d in raw_p_damage])
-        
-        h = config.get_mandatory('environment.height')
-        w = config.get_mandatory('environment.width')
-        # Adjust for 0-based min and exclusive max
-        pred_patrol = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [p.get('patrol_area', [[1,1],[h,w]]) for p in expanded_predators]])
-        pred_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [p.get('spawn_area', [[1,1],[h,w]]) for p in expanded_predators]])
-        pred_detect = jnp.array([p_get(p, 'detection_range') for p in expanded_predators])
-        pred_max_stamina = jnp.array([p_get(p, 'max_stamina') for p in expanded_predators])
-        pred_recovery = jnp.array([p_get(p, 'stamina_recovery_rate') for p in expanded_predators])
-        pred_hunt_thresh = jnp.array([p_get(p, 'hunt_stamina_threshold') for p in expanded_predators])
-        pred_attack_delay = jnp.array([p_get(p, 'attack_delay') for p in expanded_predators], dtype=jnp.int32)
-        pred_lose_interest_mult = jnp.array([p.get('lose_interest_multiplier', 2.0) for p in expanded_predators], dtype=jnp.float32)
-        predator_enabled = config.get_mandatory('environment.predator_enabled')
-        predator_tags = tuple(
-            _normalise_tag(p.get('tag'), i, 'Predator')
-            for i, p in enumerate(expanded_predators)
+    # ── Guard against stale `predator_enabled` key (removed in v2.0) ──────────
+    # The 86 migrated configs have this key stripped by the CP1 migration sweep.
+    # Any config that still carries it after migration raises a clear error.
+    if config.get('environment.predator_enabled') is not None:
+        raise ValueError(
+            "Config key 'environment.predator_enabled' was removed in v2.0. "
+            "Strip this line from your YAML (it was always True for 85 of 86 configs; "
+            "for the neutral-only case, use 'predators: []' which is already present)."
         )
-    else:
-        pred_property = jnp.zeros((0, 5))
-        pred_property_std = jnp.zeros((0, 5))
-        pred_nociception = jnp.zeros(0)
-        pred_move_int = jnp.zeros(0, dtype=jnp.int32)
-        pred_damage = jnp.zeros((0, 2))
-        pred_patrol = jnp.zeros((0, 4), dtype=jnp.int32)
-        pred_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
-        pred_detect = jnp.zeros(0)
-        pred_max_stamina = jnp.zeros(0)
-        pred_recovery = jnp.zeros(0)
-        pred_hunt_thresh = jnp.zeros(0)
-        pred_attack_delay = jnp.zeros(0, dtype=jnp.int32)
-        pred_lose_interest_mult = jnp.zeros(0, dtype=jnp.float32)
-        predator_enabled = config.get_mandatory('environment.predator_enabled')
-        predator_tags = tuple()
+
+    # ── Build unified animal arrays via _load_animals() ──────────────────────
+    (
+        animal_property, animal_property_std, animal_nociception,
+        animal_move_int, animal_damage, animal_attack_delay,
+        animal_spawn_area, animal_patrol,
+        animal_detect_low, animal_detect_high,
+        animal_max_stamina_low, animal_max_stamina_high,
+        animal_recovery_low, animal_recovery_high,
+        animal_hunt_thresh_low, animal_hunt_thresh_high,
+        animal_lose_interest_low, animal_lose_interest_high,
+        animal_classes_int, animal_behaviours_int,
+        animal_is_damaging, animal_visual_channel,
+        animal_classes, animal_behaviours, animal_tags,
+        hunt_idx, wander_idx, static_idx,
+        predator_indices, neutral_indices,
+        pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
+    ) = _load_animals(config)
 
     # Build Obstacle arrays
     raw_obstacles = config.get_mandatory('environment.obstacles')
@@ -327,44 +724,6 @@ def load_env_params(config: Config) -> EnvParams:
         obs_type = jnp.zeros(0, dtype=jnp.int32)
         obstacle_names = ("rock",)
     
-    # Build Neutral Animal arrays (Decoys)
-    raw_neutral = config.get_mandatory('environment.neutral_animals')
-    expanded_neutral = []
-    if raw_neutral:
-        for n in raw_neutral:
-            count = n.get('count', 1)
-            for _ in range(count):
-                expanded_neutral.append(n)
-                
-    if expanded_neutral:
-        def n_get(n, key):
-            val = n.get(key)
-            if val is None: raise ValueError(f"Strict Config: Neutral Animal field '{key}' is required.")
-            return val
-        
-        neutral_property = jnp.array([_read_properties(n, 'Neutral Animal') for n in expanded_neutral])
-        chem_dim = neutral_property.shape[-1]
-        neutral_property_std = jnp.array([_read_properties_std(n, 'Neutral Animal') for n in expanded_neutral])
-        neutral_nociception = jnp.array([n.get('nociception_intensity', 0.0) for n in expanded_neutral])
-        neutral_move_int = jnp.array([n_get(n, 'move_interval') for n in expanded_neutral], dtype=jnp.int32)
-        h = config.get_mandatory('environment.height')
-        w = config.get_mandatory('environment.width')
-        # Adjust for 0-based min and exclusive max
-        neutral_patrol = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('patrol_area', [[1,1],[h,w]]) for n in expanded_neutral]])
-        neutral_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [n.get('spawn_area', [[1,1],[h,w]]) for n in expanded_neutral]])
-        neutral_tags = tuple(
-            _normalise_tag(n.get('tag'), i, 'Rabbit')
-            for i, n in enumerate(expanded_neutral)
-        )
-    else:
-        neutral_property = jnp.zeros((0, 5))
-        neutral_property_std = jnp.zeros((0, 5))
-        neutral_nociception = jnp.zeros(0)
-        neutral_move_int = jnp.zeros(0, dtype=jnp.int32)
-        neutral_patrol = jnp.zeros((0, 4), dtype=jnp.int32)
-        neutral_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
-        neutral_tags = tuple()
-
     # Build Grid Location Types
     import numpy as np
     height = config.get_mandatory('environment.height')
@@ -382,9 +741,11 @@ def load_env_params(config: Config) -> EnvParams:
     grid_location_type = jnp.array(grid_np)
     
     # ── Type-Level Placement: Group entities by spawn area ──
+    # Preserve today's [res, pred, obs, neutral] index order for type_entity_map
+    # (N1 fix: jax_reset placement uses this ordering for the resolve-scan).
     all_spawn_areas_np = np.concatenate([
-        np.array(res_spawn_area), np.array(pred_spawn_area),
-        np.array(obs_spawn_area), np.array(neutral_spawn_area)
+        np.array(res_spawn_area), np.array(pred_spawn_area_for_placement),
+        np.array(obs_spawn_area), np.array(neutral_spawn_area_for_placement)
     ], axis=0)  # [N, 4]
     num_total_entities = all_spawn_areas_np.shape[0]
     
@@ -467,21 +828,37 @@ def load_env_params(config: Config) -> EnvParams:
         res_max_cons=res_max_cons,
         res_reg_delay=res_reg_delay,
         res_damage=res_damage,
-        pred_property=pred_property,
-        pred_property_std=pred_property_std,
-        pred_nociception=pred_nociception,
-        pred_move_int=pred_move_int,
-        pred_damage=pred_damage,
-        pred_patrol=pred_patrol,
-        pred_detect=pred_detect,
-        pred_max_stamina=pred_max_stamina,
-        pred_recovery=pred_recovery,
-        pred_hunt_thresh=pred_hunt_thresh,
-        pred_attack_delay=pred_attack_delay,
-        pred_lose_interest_mult=pred_lose_interest_mult,
-        predator_enabled=predator_enabled,
-        pred_spawn_area=pred_spawn_area,
-        predator_tags=predator_tags,
+        # Unified animal arrays (M2 fix: no predator_tags= / neutral_tags= kwargs)
+        animal_property=animal_property,
+        animal_property_std=animal_property_std,
+        animal_nociception=animal_nociception,
+        animal_move_int=animal_move_int,
+        animal_damage=animal_damage,
+        animal_attack_delay=animal_attack_delay,
+        animal_spawn_area=animal_spawn_area,
+        animal_patrol=animal_patrol,
+        animal_detect_low=animal_detect_low,
+        animal_detect_high=animal_detect_high,
+        animal_max_stamina_low=animal_max_stamina_low,
+        animal_max_stamina_high=animal_max_stamina_high,
+        animal_recovery_low=animal_recovery_low,
+        animal_recovery_high=animal_recovery_high,
+        animal_hunt_thresh_low=animal_hunt_thresh_low,
+        animal_hunt_thresh_high=animal_hunt_thresh_high,
+        animal_lose_interest_low=animal_lose_interest_low,
+        animal_lose_interest_high=animal_lose_interest_high,
+        animal_classes_int=animal_classes_int,
+        animal_behaviours_int=animal_behaviours_int,
+        animal_is_damaging=animal_is_damaging,
+        animal_visual_channel=animal_visual_channel,
+        animal_classes=animal_classes,
+        animal_behaviours=animal_behaviours,
+        animal_tags=animal_tags,
+        hunt_idx=hunt_idx,
+        wander_idx=wander_idx,
+        static_idx=static_idx,
+        predator_indices=predator_indices,
+        neutral_indices=neutral_indices,
         obs_blocking=obs_blocking,
         obs_hides_agent=obs_hides_agent,
         obs_damage=obs_damage,
@@ -491,13 +868,6 @@ def load_env_params(config: Config) -> EnvParams:
         obs_spawn_area=obs_spawn_area,
         obs_type=obs_type,
         obstacle_names=obstacle_names,
-        neutral_property=neutral_property,
-        neutral_property_std=neutral_property_std,
-        neutral_nociception=neutral_nociception,
-        neutral_move_int=neutral_move_int,
-        neutral_patrol=neutral_patrol,
-        neutral_spawn_area=neutral_spawn_area,
-        neutral_tags=neutral_tags,
         type_areas=jnp.array(type_areas_np, dtype=jnp.int32),
         type_counts=jnp.array(type_counts_list, dtype=jnp.int32),
         type_entity_map=jnp.array(type_entity_map_np, dtype=jnp.int32),
