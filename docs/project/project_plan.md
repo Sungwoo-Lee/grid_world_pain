@@ -1,6 +1,6 @@
 ---
 title: "EPISODE — Project Direction"
-last_updated: 2026-05-26
+last_updated: 2026-05-27
 aliases: [project_direction]
 ---
 
@@ -74,10 +74,10 @@ Each category is studied at three levels. The same agent, the same training run,
 | Level | What you measure | What it answers |
 |---|---|---|
 | **Behavioral** | Action distributions, survival, time-to-recover, foraging-vs-avoidance switching, threat-channel-selective response, trajectory shape around damage events. | *Does the agent act pain-like by behavioral criteria?* |
-| **Perceptual** | Internal representation changes — channel-selective gain, gate activity, attention to threat features, modulator state trajectories, latent representations of damage history. | *Does the agent's network process perceptual information differently after damage, in the way pain theory predicts?* |
+| **Representational** | Internal representation changes throughout the network — encoder gain on perceptual features, memory-gate activity, value and policy representations, modulator-state trajectories, latent representations of damage history. | *Does the agent's network process and represent information differently after damage, in the way pain theory predicts?* |
 | **Algorithmic** | What class of algorithm the modulator implements — its place in the FiLM / hypernetwork family, its connection to Doya-style hyperparameter modulation, its connection to continual-learning modulator gating. | *What is the modulator, computationally, and what other problems does this class of algorithm address?* |
 
-The behavioral level is what a non-mechanistic reviewer cares about. The perceptual level is the mechanism. The algorithmic level is what generalises out of this project to the rest of machine learning.
+The behavioral level is what a non-mechanistic reviewer cares about. The representational level is the mechanism. The algorithmic level is what generalises out of this project to the rest of machine learning.
 
 ## 4. Paper 1 — Nature Machine Intelligence
 
@@ -85,7 +85,7 @@ The behavioral level is what a non-mechanistic reviewer cares about. The percept
 
 **Audiences.** Computational neuroscience (pain theorists, predictive-coding researchers, interoceptive-inference researchers) and embodied / cognitive robotics (researchers building protective behavior for physical systems).
 
-**Calibration — perspective-plus-pilot.** Paper 1 does not claim to have exhaustively solved any of the four categories. It demonstrates the framework: each category receives a clean behavioral-level demonstration; at least one or two carry clean perceptual-level mechanism. The contribution is to make the framework concrete, runnable, and credible enough that the field is moved to pursue it further — not to deliver saturation-level treatment of any single category.
+**Calibration — perspective-plus-pilot.** Paper 1 does not claim to have exhaustively solved any of the four categories. It demonstrates the framework: each category receives a clean behavioral-level demonstration; at least one or two carry clean representational-level mechanism. The contribution is to make the framework concrete, runnable, and credible enough that the field is moved to pursue it further — not to deliver saturation-level treatment of any single category.
 
 **Algorithmic commitment — minimal and shared.** Paper 1 uses one shared neuromodulation-inspired modulator architecture, focused on the *perceptual modulation* injection site (the FiLM-variant family), applied uniformly across all four categories. Hyperparameter modulation and continual-learning modulator gating are deliberately not used in Paper 1; those belong to Paper 2.
 
