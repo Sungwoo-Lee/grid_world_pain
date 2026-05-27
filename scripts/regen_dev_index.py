@@ -38,6 +38,7 @@ VALID_TOPICS = {
     "refactors",
     "issues",
     "meta",
+    "env_entities",
 }
 
 
