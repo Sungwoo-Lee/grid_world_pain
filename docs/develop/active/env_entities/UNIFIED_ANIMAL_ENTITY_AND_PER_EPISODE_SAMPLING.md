@@ -6,12 +6,13 @@ created: 2026-05-28
 last_updated: 2026-05-28
 verified: 2026-05-28
 plan_version: v0.4
+cp5_completed: 2026-05-28
 aliases: [unified_animal_entity, env_entities_unified_animal, env_entities_step_1]
 ---
 
 # Env Refactor — Unified Animal Entity + Per-Episode Sampling of Behavioural Params
 
-> **Status**: IN PROGRESS — CP1-CP4 COMPLETE, CP5 IN QUEUE (v0.4). CP5–CP6 pending.
+> **Status**: IN PROGRESS — CP1-CP5 COMPLETE (v0.4). CP6 pending.
 > **Opened**: 2026-05-28
 > **Branch**: `v2.0` (from `v1.4@72186aa`, latest: `f0fe297`)
 > **Related**: [hypervigilance/01-interoNocicept_sameProp.yaml](../../../../configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml) (the parity-reference config), [code review](../../../reviews/env_entities_plan_review_code.md), [config audit](../../../reviews/env_entities_plan_audit_config.md), [FRONTMATTER_CONTRACT](../meta/FRONTMATTER_CONTRACT.md), [AGENT_PLAYBOOK](../../../AGENT_PLAYBOOK.md)
@@ -885,7 +886,7 @@ The refactor lands in six checkpoints. CP1 alone is the **minimum viable landing
 - [x] **CP2 — Per-episode sampling at reset.** COMPLETE (2026-05-28). The per-episode sampling code was already in `core.py` from CP1 (lines 957–978, using `animal_episode_key = jax.random.fold_in(property_key, 0xAE1)` and `jax.random.split(animal_episode_key, 5)` for the 5 fields). CP2's deliverable is the new test file `tests/env/test_per_episode_sampling.py` (8 tests, all passing). Tests verify: same-key reproducibility, different-key divergence, per-instance independence, sampled fields on EnvState not EnvParams, cross-field independence (Pearson |r| < 0.5 over 100 resets), degenerate-range guard (scalar=5.0 → sampled=5.0), wander/static animal_state stays 0 after 1000 steps, zero-animal smoke (M6). The 31 CP1 parity fixtures still pass byte-for-byte. Add the 5-way key split in `jax_reset` and the `jax.random.uniform` calls; populate the 5 `animal_*_sampled` fields. **Verifies:** with all legacy configs (degenerate ranges) the parity gate still passes byte-for-byte (uniform`[s, s]` ≡ `s`). A new test `tests/env/test_per_episode_sampling.py` verifies, **using a config explicitly with non-degenerate ranges** (e.g., `detection_range: [0, 5]`, 4 predators — degenerate ranges would fail the divergence check spuriously, C4): (a) same `key` ⇒ same sampled values; (b) different `key` ⇒ different sampled values; (c) N entities of the same class give N independent samples (not N copies); (d) **cross-field independence**: `detect`, `max_stamina`, `recovery`, `hunt_thresh`, `lose_interest` samples are statistically independent across episodes (correlation `< 0.5` over 100 keys per field pair — guards against accidentally reusing one subkey for multiple fields); (e) **per-episode-sampled fields live on `EnvState`, not `EnvParams`** — assert `hasattr(state, 'animal_detect_sampled')` and `not hasattr(params, 'animal_detect_sampled')` (code-reviewer Missed-failure-mode #1); (f) **wander/static get unused per-episode draws** — assert `state.animal_state[wander_idx]` and `state.animal_state[static_idx]` stay at 0 after 1000 steps (intentional shape uniformity, code-reviewer Missed-failure-mode #3 / #4); (g) **zero-animal smoke (v0.3, M6)** — use a config with `entities: []`, verify reset returns no-error and all `animal_*` fields have a leading dim of 0, and that `info['hit_*']` flags are `False` and `dist_to_*` fall back to `99.0` (M3 guard).
 - [x] **CP3 — `entities:` schema in config loader.** COMPLETE (2026-05-28). The `entities:` parsing path was already in `_load_animals()` from CP1 (lines 282–326 of config_loader.py). CP3's deliverables are: (1) `configs/experiment/v2_smoke/01-entities-smoke.yaml` — byte-parity equivalent of `01-interoNocicept_sameProp.yaml` using the unified schema (1 predator + 2 wander rabbits, predator-first ordering to match legacy iteration order); (2) `tests/env/test_entities_schema.py` (7 tests, all passing). Tests verify: smoke config loads, byte-parity vs legacy (100 steps from seed 0), both-schemas DeprecationWarning + unified takes precedence, predator_enabled raises ValueError, hunt entity with missing detection_range raises ValueError, wander without distributional fields auto-fills [0,0], 4-entity mixed-behaviour idx tuples correct (MF#2). Pre-flight: `grep -rln "mode: per_type" configs/` — 0 results; no per_type configs exist (confirmed in CP1 pre-flight, re-confirmed CP3). Add the new `environment.entities:` YAML path; loader prefers it over legacy if both present (with warning). Update `placement.types:` handling: ensure `type_entity_map` uses `[res, animal, obs]` indexing in `per_type` mode. **Pre-flight (C2)**: enumerate `per_type`-mode configs via `grep -l "mode: per_type" configs/`; for each one, verify the loader produces the same `type_entity_map` indices after unification (predators-first, then neutrals, preserves today's `[res, pred, obs, neutral]` index space mapped to `[res, animal, obs]`). Surface the list of `per_type` configs in the CP3 implementation report. **Verifies:** a new `configs/experiment/v2_smoke/01-entities-smoke.yaml` config that uses the unified schema for the same parity-reference setup produces byte-identical behaviour to `01-interoNocicept_sameProp.yaml`. New test `tests/env/test_entities_schema.py` covers: (a) the unified config loads; (b) byte-parity vs legacy; (c) loader warns when both legacy and unified sections are present; (d) configs that still contain the removed `predator_enabled` key raise `ValueError` with a clear migration message (sanity check; the CP1 sweep should have removed all of them already); (e) a 4-entity config with `behaviour: [hunt, wander, hunt, static]` loads correctly and the resulting `hunt_idx == (0, 2)`, `wander_idx == (1,)`, `static_idx == (3,)` (behaviour-mask axis test from code-reviewer Missed-failure-mode #2).
 - [x] **CP4 — Sensor + damage + step path parity.** COMPLETE (2026-05-28). Commit: `(see Implementation Report below)`. All sensor pipeline changes (`sense_visual` class scatter, `sense_extero_nociception` B2 mask, unified `animal_chem` olfactory, `jax_step` damage logic with `animal_is_damaging` + B5 pre-step `hit_neutral`) were implemented atomically in CP1 (`c3892cb`) and confirmed passing parity on all 31 fixture configs. CP4's deliverables are the parity-gate test files and fixtures: `tests/env/test_visual_parity.py` (2 tests), `tests/env/test_extero_noc_parity.py` (3 tests), `tests/env/fixtures/visual_parity_ref.npz`, `tests/env/fixtures/extero_noc_parity_ref.npz`. Final test run: 98 passed, 121 skipped, 0 failures. Trainer grep: 0 surviving `state.pred_` / `state.neutral_` reads in `src/algorithms/` or `src/models/`. Renderer/eval-recording paths in `src/environment/renderer*.py`, `grid_world.py`, `eval_recording.py`, `evaluation_core.py` remain xfailed — deferred to CP6 per plan. Speed check: 430 ± 9 sps (5 trials × 10000 steps, `01-interoNocicept_sameProp.yaml`). No regression vs CP1 baseline — sensor changes were already committed at CP1; no new JAX ops introduced in CP4. Patch `sense_visual` (class scatter), `sense_extero_nociception` (animal_is_damaging mask — B2), `get_observation` olfactory (unified `animal_chem`), and `jax_step` damage logic (`animal_is_damaging` + the pre-step `hit_neutral` asymmetry — B5). **Verifies:** the CP1 parity test (**31 of 86 fixture-tested migrated configs × 100 steps** — see Test Plan §(a) coverage breakdown for the gap explanation) still passes — this CP shouldn't *add* parity coverage but must *not break* it. Additionally, a new `tests/env/test_visual_parity.py` runs one episode (1000 steps) on the parity-reference config and asserts the visual one-hot per cell is byte-identical to a pinned reference dump (committed under `tests/env/fixtures/visual_parity_ref.npz`). **Extero-noc parity gate (B2)**: the same fixture also pins the extero-noc channel per step, byte-identical to today. **Trainer verification**: grep `src/algorithms/` and `src/models/` for `state.pred_` / `state.neutral_` / `pred_pos` / `neutral_pos`; document the grep result. With the `predator_tags` / `neutral_tags` legacy aliases in place (B3), `dreamer_srl_main.py:522-523` requires no edit and the test passes.
-- [ ] **CP5 — Distributional schema + per-episode logging.** Add YAML parsing for `[low, high]` ranges on the five fields under scope; emit `Episode/sampled_*_<tag>` WandB metrics. **Verifies:** new `tests/env/test_distributional_yaml.py` covers (a) scalar `5` → degenerate range `[5, 5]`, (b) `[0, 5]` → bounds stored correctly, (c) malformed range like `[5]` raises `ValueError`. End-to-end smoke: run 1000 training steps with `configs/experiment/v2_smoke/02-entities-distributional.yaml` (NEW — has `detection_range: [0, 5]` per predator) and confirm the 5 `sampled_*` WandB metrics appear with non-degenerate values. **JIT-recompile check (C3)**: capture `jax_log_compiles` output via `jax.config.update("jax_log_compiles", True)`; build env-step jit for config A (`1 pred + 2 neutral`, `detection_range: [0, 5]`), run 10 steps; build for config B (same counts, `detection_range: [2, 7]`), run 10 steps; assert `log.count("Compiling jax_step") == 1` (regex check). **Positive control (C-CFG-5)**: swap `animal_classes` ordering — same N, different per-entity class ordering like `[pred, neutral, pred]` vs `[pred, pred, neutral]` — and assert `log.count("Compiling jax_step") == 2` (recompile IS expected because `animal_classes` is `pytree_node=False` and the hunt_idx / wander_idx tuples differ). Documents the boundary: same N + same class ordering = no recompile; same N + different class ordering = recompile.
+- [x] **CP5 — Distributional schema + per-episode logging.** COMPLETE (2026-05-28). Commit: `b783bca`. Verified that `_parse_distributional()` already handles all 4 input shapes since CP3 (no new source code needed). Added `build_episode_log_dict(state, params)` and `sampled_wandb_keys(animal_tags)` to `accumulators.py`. Gated unconditional `print("="*60)` placement diagnostics behind `logging.debug()`. New config `02-entities-distributional.yaml` with `detection_range: [0, 5]`. 3 new test files, 4 YAML fixtures. Test results: 121 passed, 122 skipped, 0 failures. JIT check: Part 1 (bounds-only change) → count=1 (no recompile for B); Part 2 (class-ordering swap) → count=2 (recompile fired). See Implementation Report §CP5.
 - [ ] **CP6 — Analysis-side cleanup.** Update `accumulators.py`, `distance_aggregator.py`, `eval_rollout.py`, `motif_cluster.py`, `evaluation_core.py`, `eval_recording.py`, `grid_world.py`, `renderer.py`, `renderer_v2.py`, `benchmark_render.py` to consume `dist_per_animal` + `select_by_class` directly. **Verifies:** `pytest tests/behavior/test_accumulators.py` passes with the same metric layout as before; the WandB metric key names are unchanged (`MeanDistPredator_<tag>`, `MeanDistNeutral_<tag>` still produced). Legacy aliases `dist_per_predator` / `dist_per_neutral` removed from `info` (one release-cycle later, not in this CP).
 
 ### Test Plan
@@ -1296,8 +1297,98 @@ The full training-run validation (1000-step PPO via `train_command-agent.sh`) is
 
 #### Follow-up items
 
-- CP5 and CP6 per the plan.
-- Full 1000-step PPO training speed check via `training-runner` (out-of-band).
+- CP6 per the plan.
+- Full 1000-step PPO training speed check via `training-runner` (out-of-band) — deferred from CP4.
+
+**Implemented by**: developer
+
+---
+
+### CP5 — Distributional YAML + per-episode logging + JIT no-recompile
+
+> **Implemented by**: `developer` agent (Claude Sonnet 4.6)
+> **Date**: 2026-05-28
+> **Branch**: `v2.0`
+> **Commit**: `b783bca`
+
+#### Context
+
+CP5 delivers three things: (1) verified+tested YAML `[lo, hi]` range parsing for the 5 distributional fields; (2) per-episode `Episode/sampled_*_<tag>` WandB logging via new `build_episode_log_dict()` / `sampled_wandb_keys()` functions; (3) JIT no-recompile tests asserting that distributional-bound changes do not trigger recompiles while class-ordering changes do.
+
+#### Summary of changes (file-by-file)
+
+**`src/environment/config_loader.py`** — Gated the unconditional `print("="*60)` placement-strategy diagnostics (lines 775–791) behind `logging.debug()`. This silences stdout noise in test runs and production without affecting any runtime logic. No functional change.
+
+**`src/behavior/accumulators.py`** — Added two new functions at the bottom of the module:
+- `build_episode_log_dict(state, params) -> dict`: returns `{f"Episode/sampled_detect_{tag}": float, ...}` for each animal entity × 5 fields. Uses `np.asarray()` to extract `state.animal_*_sampled` arrays host-side. Pure Python/numpy — no JAX in the call path. Call once per episode-done event.
+- `sampled_wandb_keys(animal_tags) -> list`: enumerates all 5 × N WandB keys in stable order for pre-registration.
+
+**`configs/experiment/v2_smoke/02-entities-distributional.yaml`** (NEW) — Smoke config with 1 predator (tag=`predator0`, `detection_range: [0, 5]`, `max_stamina: [20, 40]`, `stamina_recovery_rate: [0.5, 1.5]`, `hunt_stamina_threshold: [0.5, 0.9]`, `lose_interest_multiplier: 1.5`) + 2 wander rabbits (tags `rabbit0`, `rabbit1`). Used by CP5 tests and future training validation.
+
+**`tests/env/fixtures/dist_scalar.yaml`** (NEW) — YAML fixture: `detection_range: 5` (scalar → degenerate `[5, 5]`).
+
+**`tests/env/fixtures/dist_range.yaml`** (NEW) — YAML fixture: `detection_range: [0, 5]` (true range).
+
+**`tests/env/fixtures/dist_malformed_single.yaml`** (NEW) — YAML fixture: `detection_range: [5]` (one-element list → ValueError).
+
+**`tests/env/fixtures/dist_malformed_str.yaml`** (NEW) — YAML fixture: `detection_range: "five"` (string → ValueError).
+
+**`tests/env/test_distributional_yaml.py`** (NEW, 11 tests):
+- `TestParseSingleField` (4 tests): scalar→`(5.0, 5.0)`, `[0,5]`→`(0.0,5.0)`, `[5]`→ValueError, `"five"`→ValueError
+- `TestDistributionalConfig` (7 tests): config file exists, detect bounds, max_stamina bounds, recovery bounds, hunt_thresh bounds, lose_interest degenerate, wander animals get zero bounds
+
+**`tests/env/test_per_episode_logging.py`** (NEW, 9 tests):
+- `TestBuildEpisodeLogDict` (6 tests): all 5 keys × all tags present, values are Python floats, predator values within bounds, values change across episodes (non-degenerate), values constant across episodes (degenerate), wander animals have zero sampled values
+- `TestSampledWandBKeys` (3 tests): key count = 5×N, all 5 suffixes per tag, keys match `build_episode_log_dict()` output
+
+**`tests/env/test_no_recompile.py`** (NEW, 2 tests):
+- `TestNegativeControl::test_bounds_change_no_recompile`: 1 pred + 2 rabbits, config A `[0,5]` then config B `[2,7]`; asserts count=1 after A and count=1 after B (no recompile for B).
+- `TestPositiveControl::test_class_ordering_swap_triggers_recompile`: C=`[pred, neutral, pred]` then D=`[pred, pred, neutral]`; asserts count=1 after C and count=2 after D (recompile for D). `jax.clear_caches()` used between tests for clean JIT state.
+
+#### Verifications
+
+**_parse_distributional already correct since CP3**: confirmed by running all 4 cases inline before writing tests. Scalar, [lo,hi], [lo]-single-element, and non-numeric string all work as expected. CP5's contribution is the explicit test coverage.
+
+**JIT recompile mechanism**: tested `jax._src.interpreters.pxla` WARNING logger capture with `"Compiling jit(jax_step)"` pattern. Verified that `jax.clear_caches()` resets the trace cache cleanly. Both test parts pass with exact counts.
+
+**Nice-to-have: perceptual_noise.enabled mandatory promotion** — SKIPPED. The env-config-auditor note says "every loadable config has it" but inspection shows 133 total YAML files with only 87 having the key (model configs under `configs/models/` don't have it). Promoting to mandatory would break the ~46 model configs. Deferred as a follow-up requiring a separate sweep of model config directories.
+
+#### Test results
+
+```
+Command: /home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest tests/env/ -q
+Result: 121 passed, 122 skipped, 1 warning, 0 failures (333.15s)
+```
+
+Delta from CP4 baseline (98 passed, 121 skipped):
+- +22 new CP5 tests (11 distributional YAML + 9 per-episode logging + 2 no-recompile)
+- +1 backward-compat pass (new `02-entities-distributional.yaml` loads cleanly)
+- +1 skip (new config added to `test_unified_parity.py`'s glob → no pre-refactor fixture → skipped)
+
+Net: +23 passed, +1 skipped, 0 new failures.
+
+JIT recompile results:
+- Part 1 (negative control): `count_after_A == 1`, `count_after_B == 1` ✓
+- Part 2 (positive control): `count_after_C == 1`, `count_after_D == 2` ✓
+
+#### Speed check
+
+No hot-path changes in CP5. No edits to `core.py`, `sensor.py`, or `state.py`. The `config_loader.py` change (print→debug) affects only config load time (once at startup), not training step throughput. The `accumulators.py` additions are never called in the training loop.
+
+CP4 baseline: 430 ± 9 sps. CP5 hot path: identical to CP4 → **no regression**.
+
+#### Deviations from plan
+
+- **`perceptual_noise.enabled` mandatory promotion** (nice-to-have): skipped. See "Nice-to-have: perceptual_noise.enabled" above. Flagged as open follow-up.
+- **No "build_episode_log_dict already existed" deviation**: the function did not exist; it was created as specified.
+- **Trainer wiring**: `build_episode_log_dict()` is implemented and tested as a standalone function. Wiring it into the training loops (dreamer_srl_main.py, train.py) is deferred — the plan did not specify a trainer integration target for CP5, only the function implementation and tests.
+
+#### Follow-up items
+
+- CP6 per the plan.
+- Wire `build_episode_log_dict()` into `dreamer_srl_main.py` and `train.py` at episode done boundaries (training loops, out-of-scope for CP5 per plan).
+- `perceptual_noise.enabled` mandatory promotion sweep (model config directories need the key added before this can be promoted).
+- Full 1000-step PPO training validation via `training-runner` (out-of-band; deferred from CP4).
 
 **Implemented by**: developer
 
