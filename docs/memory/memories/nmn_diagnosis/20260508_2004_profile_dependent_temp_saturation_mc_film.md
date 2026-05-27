@@ -31,7 +31,7 @@ The "MC temp head saturates at 3.0 ceiling" failure mode flagged in v8 §4.3.3 i
   | P5f | 18.00 | 3.00 | Yes (at ceiling) |
 - v8 §4.3.3 already flagged this as a structural concern and recommended raising the ceiling. This sweep confirms the recommendation has empirical traction at R ≥ 5; v8's data point was at R ≈ 2 (P1-equivalent) where saturation is NOT present, which is presumably why the v8 recommendation lacked direct in-doc evidence.
 - Saturation is a soft-cap effect, not a numerical-stability issue: no NaN, no gradient explosion, no Term_Starvation > 90 % anywhere in the FiLM cells.
-- Bound location: `configs/models/recurrent_ppo_nmn_het_film_g1.yaml` has `temp_clip: [0.5, 3.0]`; the agent code reads it as a hard sigmoid clip on the temperature head's output.
+- Bound location: `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` has `temp_clip: [0.5, 3.0]`; the agent code reads it as a hard sigmoid clip on the temperature head's output.
 - The saturation correlates with the gap-narrowing pattern in the sister insight: as R rises, FiLM temp saturates AND the FiLM-vs-Unmod gap narrows from −12.41 to −4.71. Plausible reading: heterogeneity is giving the temperature head signal, the head wants to push temperature higher, but the ceiling pins it — leaving residual gating capability on the table.
 
 ## Decisions and actions
@@ -52,7 +52,7 @@ The "MC temp head saturates at 3.0 ceiling" failure mode flagged in v8 §4.3.3 i
 - Sister insight (sweep verdict): `20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse`.
 - Design doc §6 ("MC temp saturates at 3.0 ceiling on every FiLM cell" — partial trigger): `docs/experiments/active/hypervigilance/NMN_NOISE_HETEROGENEITY_SWEEP.md`.
 - v8 anchor (originally flagged this failure mode): `docs/develop/active/diagnosis/NMN_PERFORMANCE_DIAGNOSIS_v8.md` §4.3.3, §6.3.
-- Config to edit for the test: `configs/models/recurrent_ppo_nmn_het_film_g1.yaml` (`temp_clip` field).
+- Config to edit for the test: `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` (`temp_clip` field).
 - Analyzer working files: `tmp/20260508_nmn_het_extraction.json`, `tmp/20260508_nmn_het_synthesis.md`.
 - Raw conversation: synced via `./sync-agent-data.sh claude push`. To read on another node: `./sync-agent-data.sh claude pull`, then either `claude --resume 6bbe7739-79ae-4486-b230-d8b7b8263893` (re-enter the session) or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot markdown view). Analysis-side continuation of launch session `c7ee226b-2162-4e7a-95e9-257a5b19d713`.
 

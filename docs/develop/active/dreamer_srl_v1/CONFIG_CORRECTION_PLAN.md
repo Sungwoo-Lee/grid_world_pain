@@ -27,7 +27,7 @@ The project is rebuilding a published RL agent called **DreamerV3** — a world-
 
 Sheeprl ships five named **size presets** — XS / S / M / L / XL — that scale the model's hidden width, recurrent-state width, MLP depth, and CNN channel multiplier. **XS** is the smallest preset (a 256-wide network with a single hidden layer per MLP miniblock) and is what the sheeprl baseline ran. **XL** is the largest (a 1024-wide network with five hidden layers and a 4096-wide recurrent state) and is roughly **16× larger on the dominant recurrent-state axis** than XS.
 
-When the dreamer-srl team ported sheeprl's config into our JAX YAML at `configs/dreamer_srl/01_food_only.yaml`, they copied from sheeprl's **base** config (which carries XL-equivalent numbers) **without applying** the small XS-override file that brings those numbers down. Every dreamer-srl plan since then has called that YAML "the XS default", but it is actually carrying XL-equivalent values — so the 14.4 GB out-of-memory error we saw last week on a single 24 GB GPU was a 16× over-sized XL model being asked to fit an XS budget. The fix is a YAML edit, not an engineering change. After the fix, the model fits trivially on a single GPU, the like-for-like parity claim is preserved (we run what sheeprl runs), and the wall-clock budget drops by roughly an order of magnitude. This plan specifies the edit, the documentation correction-note sweep across the v3 plan docs that mis-named the file as "XS-default", and the updated scope of the wall-clock-measurement checkpoint (CP10b) that follows the fix.
+When the dreamer-srl team ported sheeprl's config into our JAX YAML at `configs/models/dreamer_srl/01_food_only.yaml`, they copied from sheeprl's **base** config (which carries XL-equivalent numbers) **without applying** the small XS-override file that brings those numbers down. Every dreamer-srl plan since then has called that YAML "the XS default", but it is actually carrying XL-equivalent values — so the 14.4 GB out-of-memory error we saw last week on a single 24 GB GPU was a 16× over-sized XL model being asked to fit an XS budget. The fix is a YAML edit, not an engineering change. After the fix, the model fits trivially on a single GPU, the like-for-like parity claim is preserved (we run what sheeprl runs), and the wall-clock budget drops by roughly an order of magnitude. This plan specifies the edit, the documentation correction-note sweep across the v3 plan docs that mis-named the file as "XS-default", and the updated scope of the wall-clock-measurement checkpoint (CP10b) that follows the fix.
 
 The terms used in the manifest below — `dense_units` (the hidden width of each fully-connected MLP layer), `mlp_layers` (how many of those layers are stacked per miniblock), `recurrent_state_size` (the width of the RNN's hidden vector that carries the agent's running memory of an episode), `cnn_channels_multiplier` (the per-block channel scaling for the convolutional encoder; unused in our pure-MLP grid-world setup but still a sheeprl XS-overlay knob), "**parity target**" (the configuration the parity-launch sweep will actually run at), and "**the 12.5 h baseline**" (the sheeprl reference run at WandB `i4ulpn95`, ep_len_avg ≈ 399.4 steps on this same food-only NoPred env) — are all introduced here so the manifest below can cite them by short name.
 
@@ -37,7 +37,7 @@ The terms used in the manifest below — `dense_units` (the hidden width of each
 
 ### Root cause
 
-The dreamer-srl developers ported `configs/dreamer_srl/01_food_only.yaml` from `vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml`. That sheeprl file is the **base config** in a Hydra-style override tree — it carries XL-equivalent values, and the smaller sizes are applied as **overrides** on top of it (e.g. `dreamer_v3_XS.yaml` inherits from the base and then overwrites only the dimensions that shrink). The dreamer-srl port did not apply any overlay; it inlined the base values into a single flat YAML file and labeled the result "XS default".
+The dreamer-srl developers ported `configs/models/dreamer_srl/01_food_only.yaml` from `vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml`. That sheeprl file is the **base config** in a Hydra-style override tree — it carries XL-equivalent values, and the smaller sizes are applied as **overrides** on top of it (e.g. `dreamer_v3_XS.yaml` inherits from the base and then overwrites only the dimensions that shrink). The dreamer-srl port did not apply any overlay; it inlined the base values into a single flat YAML file and labeled the result "XS default".
 
 Empirical evidence the mis-port happened (cross-checked against `vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml` and `dreamer_v3_XS.yaml`):
 
@@ -66,9 +66,9 @@ The PI consultation surfaced four options that all assumed the OOM was real on a
 
 Checked alongside `01_food_only.yaml`:
 
-- **`configs/dreamer_srl/01_food_only_smoke.yaml`** — already at reduced-dim values (`dense_units=256`, `recurrent_state_size=512`, `mlp_layers=3`, `stochastic_size=8`, `discrete_size=8`, `horizon=7`, `per_rank_batch_size=4`, `per_rank_sequence_length=16`). The header comment block on lines 1–24 calls itself a "REDUCED size for OOM-safe dry-run" and describes its values as smoke-only reductions **from `01_food_only.yaml` (XS sizes)** — i.e. it inherits the same "XS default" mis-name framing. The runtime values are NOT claimed to be sheeprl XS (they are explicitly smaller than what the file calls "XS"), so the file does not need numeric changes; it does need the header comment to be corrected so the framing is no longer "XL-mis-called-XS minus a bit" but "sheeprl-XS minus a bit, for OOM-safe integration smoke". A specific correction-note pattern is in the File Changes section below.
+- **`configs/models/dreamer_srl/01_food_only_smoke.yaml`** — already at reduced-dim values (`dense_units=256`, `recurrent_state_size=512`, `mlp_layers=3`, `stochastic_size=8`, `discrete_size=8`, `horizon=7`, `per_rank_batch_size=4`, `per_rank_sequence_length=16`). The header comment block on lines 1–24 calls itself a "REDUCED size for OOM-safe dry-run" and describes its values as smoke-only reductions **from `01_food_only.yaml` (XS sizes)** — i.e. it inherits the same "XS default" mis-name framing. The runtime values are NOT claimed to be sheeprl XS (they are explicitly smaller than what the file calls "XS"), so the file does not need numeric changes; it does need the header comment to be corrected so the framing is no longer "XL-mis-called-XS minus a bit" but "sheeprl-XS minus a bit, for OOM-safe integration smoke". A specific correction-note pattern is in the File Changes section below.
 
-- **`configs/dreamer_srl/agent_xs.yaml`** — cadence-only file (no dimension knobs; only `learning_starts`, `replay_ratio`, `per_rank_*`, `total_steps`, `env.num_envs`, `buffer.size`). Already correct against sheeprl XS; no leakage. **No changes needed.**
+- **`configs/models/dreamer_srl/agent_xs.yaml`** — cadence-only file (no dimension knobs; only `learning_starts`, `replay_ratio`, `per_rank_*`, `total_steps`, `env.num_envs`, `buffer.size`). Already correct against sheeprl XS; no leakage. **No changes needed.**
 
 **Conclusion of adjacent-config audit:** XL-equivalent leakage is confined to `01_food_only.yaml` (and the mis-name framing in `01_food_only_smoke.yaml`'s header). No other dreamer-srl config carries XL-equivalent values.
 
@@ -80,7 +80,7 @@ Checked alongside `01_food_only.yaml`:
 
 Two surfaces of change:
 
-1. **Code-side (one YAML)**: edit `configs/dreamer_srl/01_food_only.yaml` to apply the sheeprl XS overlay to every site that currently carries XL-equivalent values. The full override-set from `vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml` is:
+1. **Code-side (one YAML)**: edit `configs/models/dreamer_srl/01_food_only.yaml` to apply the sheeprl XS overlay to every site that currently carries XL-equivalent values. The full override-set from `vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml` is:
 
    ```yaml
    dense_units: 256                       # was 1024
@@ -110,7 +110,7 @@ Two surfaces of change:
 
 ### File Changes
 
-#### `configs/dreamer_srl/01_food_only.yaml`
+#### `configs/models/dreamer_srl/01_food_only.yaml`
 
 **Header comment block (lines 1–11)** — update the "Full XS hyperparameter set" claim so it reflects the corrected values, and add a correction-note paragraph pointing at this plan.
 
@@ -287,7 +287,7 @@ Two surfaces of change:
 | `critic.tau`, `critic.per_rank_target_network_update_freq`, `critic.optimizer.*` | unchanged | sheeprl base — NOT in the XS overlay. |
 | `buffer.*`, `env.num_envs` | unchanged | already XS-correct (verified against `agent_xs.yaml` cadence base). |
 
-#### `configs/dreamer_srl/01_food_only_smoke.yaml`
+#### `configs/models/dreamer_srl/01_food_only_smoke.yaml`
 
 **Header comment block (lines 1–24)** — correct the framing so the smoke is no longer described as a reduction "from XS sizes" (which were actually XL); after the parent config is corrected to real XS, the reductions in the smoke are now reductions **from real XS, for OOM-safe integration testing**. Numeric values stay; this is documentation only.
 
@@ -372,7 +372,7 @@ Each of the five docs gets a fenced block inserted **immediately after the front
 > **CORRECTION NOTE (2026-05-14, PI call [`3c8b9f8`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md))**
 >
 > References below to "XS-default" / "XS default" / "the full XS configuration" / "the XS config"
-> as the content of `configs/dreamer_srl/01_food_only.yaml` **pre-date the discovery** that this
+> as the content of `configs/models/dreamer_srl/01_food_only.yaml` **pre-date the discovery** that this
 > file was mis-ported from the sheeprl base config (`vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml`)
 > rather than the sheeprl XS overlay (`vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml`).
 > The base config carries **sheeprl-XL-equivalent** values (`dense_units=1024`, `mlp_layers=5`,
@@ -432,7 +432,7 @@ CP10b is the structured spec for **converting the CP10 proxy projection into a r
 # AFTER (lines 12–16, post-D-013 disposition):
 ## Purpose
 
-CP10 closed at the **reduced-dim wall-clock baseline** (9.50 SPS steady-state on a single RTX 4090 at 256 dense units / 8×8 stochastic state / horizon=7). The 14.38 GB JIT-compile OOM that motivated the reduced-dim measurement was originally framed as "the full XS configuration cannot fit on a single 24 GB GPU"; the **2026-05-14 PI consultation** ([`2026-05-14_d013_parity_launch_disposition.md`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md)) disposed D-013 as a **config-correction** rather than a substrate change — the file mis-named "the full XS configuration" was actually carrying sheeprl-XL-equivalent values (`dense_units=1024`, `mlp_layers=5`, `recurrent_state_size=4096`). After [`CONFIG_CORRECTION_PLAN.md`](CONFIG_CORRECTION_PLAN.md) corrects `configs/dreamer_srl/01_food_only.yaml` to mirror real sheeprl XS (256/1/256/256), the OOM disappears and single-GPU is the natural substrate.
+CP10 closed at the **reduced-dim wall-clock baseline** (9.50 SPS steady-state on a single RTX 4090 at 256 dense units / 8×8 stochastic state / horizon=7). The 14.38 GB JIT-compile OOM that motivated the reduced-dim measurement was originally framed as "the full XS configuration cannot fit on a single 24 GB GPU"; the **2026-05-14 PI consultation** ([`2026-05-14_d013_parity_launch_disposition.md`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md)) disposed D-013 as a **config-correction** rather than a substrate change — the file mis-named "the full XS configuration" was actually carrying sheeprl-XL-equivalent values (`dense_units=1024`, `mlp_layers=5`, `recurrent_state_size=4096`). After [`CONFIG_CORRECTION_PLAN.md`](CONFIG_CORRECTION_PLAN.md) corrects `configs/models/dreamer_srl/01_food_only.yaml` to mirror real sheeprl XS (256/1/256/256), the OOM disappears and single-GPU is the natural substrate.
 
 CP10b is now scoped as **the like-for-like wall-clock measurement at the corrected XS config on a single GPU** — confirming both (a) that the corrected config compiles without OOM (the headline empirical closure for D-013) and (b) that the projected per-seed wall-clock lands well inside the ≤ 25 h budget gate (the 41–58 h single-GPU XL projection that CP10's reduced-dim proxy produced is obsolete; real XS projects roughly an order of magnitude faster). If CP10b instead shows the corrected XS config STILL OOMs, escalate back to PI per the disposition's stop rule.
 ```
@@ -470,7 +470,7 @@ CP10b does NOT block the parity launch. The parity launch can run alongside CP10
 A 20,000-step (or, by user election, 200,000-step at-target) dreamer-srl smoke on the **disposed configuration**, on the same hardware substrate the parity launch will use, with the same `learning_starts: 1024` setting that the parity-track config carries. The protocol is identical to CP10's:
 
 # AFTER (first paragraph):
-A 20,000-step dreamer-srl smoke on the **corrected `configs/dreamer_srl/01_food_only.yaml`** (real sheeprl XS: `dense_units=256`, `mlp_layers=1`, `recurrent_state_size=256`, `transition/representation hidden_size=256`, `cnn_channels_multiplier=24`), on a single GPU (likely a free RTX 6000 Ada on node 114, but any single-GPU node will work since the corrected XS fits comfortably in 24 GB), with the same `learning_starts: 1024` setting that the parity-track config carries. The protocol is identical to CP10's:
+A 20,000-step dreamer-srl smoke on the **corrected `configs/models/dreamer_srl/01_food_only.yaml`** (real sheeprl XS: `dense_units=256`, `mlp_layers=1`, `recurrent_state_size=256`, `transition/representation hidden_size=256`, `cnn_channels_multiplier=24`), on a single GPU (likely a free RTX 6000 Ada on node 114, but any single-GPU node will work since the corrected XS fits comfortably in 24 GB), with the same `learning_starts: 1024` setting that the parity-track config carries. The protocol is identical to CP10's:
 ```
 
 **Edit 4 — Acceptance criteria (lines 58–65)**: tighten the pass conditions to match the corrected-config scope.
@@ -489,7 +489,7 @@ Criteria 2–6 remain unchanged. The "speed verdict" thresholds (≤ 25 h ✅ / 
 
 The `developer` agent should verify, during implementation:
 
-- [ ] **CP-A — corrected YAML loads without ConfigError.** Run `from omegaconf import OmegaConf; OmegaConf.load('configs/dreamer_srl/01_food_only.yaml')` and confirm no parse error.
+- [ ] **CP-A — corrected YAML loads without ConfigError.** Run `from omegaconf import OmegaConf; OmegaConf.load('configs/models/dreamer_srl/01_food_only.yaml')` and confirm no parse error.
 - [ ] **CP-B — all dimensions are at the corrected XS values.** Programmatically verify every site listed in the File Changes table now holds `256` (for `dense_units`, `hidden_size`, `recurrent_state_size`) or `1` (for `mlp_layers`), and `cnn_channels_multiplier: 24` was added under `world_model.encoder`. No site still holds `1024` or `4096` or `5` (mlp_layers).
 - [ ] **CP-C — preserved keys are still at their pre-edit values.** Confirm `algo.learning_starts == 1024`, `algo.replay_ratio == 1`, `algo.per_rank_sequence_length == 64`, `algo.per_rank_batch_size == 16`, `algo.horizon == 15`, `world_model.stochastic_size == 32`, `world_model.discrete_size == 32`, `world_model.reward_model.bins == 255`, `algo.critic.bins == 255` — unchanged by this plan.
 - [ ] **CP-D — pytest suite is green.** Run the dreamer-srl Lever-A bit-identity suite + offline-check fixture suite:
@@ -510,7 +510,7 @@ The `developer` agent should verify, during implementation:
 After this plan lands and `developer` commits the edit, CP10b runs with the following concrete scope (operationalising the CP10B_SPEC.md scope-update edits above):
 
 - **Hardware**: single GPU on a free lab node. Node 114's 4× RTX 6000 Ada (49 GB each) are confirmed idle; any single-GPU node (101–114) works since 24 GB is now ample headroom for true XS. Pick at training-runner launch time per the `training-runner` agent's input contract (user confirms node + GPU upfront).
-- **Config**: `configs/dreamer_srl/01_food_only.yaml` (corrected; this plan's File Changes section).
+- **Config**: `configs/models/dreamer_srl/01_food_only.yaml` (corrected; this plan's File Changes section).
 - **Step budget**: 20,000 steps (same as CP10) so the wall-clock measurement is directly comparable to CP10's reduced-dim 2347.2 s.
 - **Same protocol as CP10**: WandB logging on, name = `dreamer_srl_cp10b_corrected_xs_20k_s<seed>`, capture aggregate + steady-state env-SPS, peak VRAM, NaN count across the 7 Loss/* keys, WM-loss drop step-200 → final, `Diagnostic/moments_invscale` min/max/final, `Params/replay_ratio` convergence to sheeprl-spec, and the iter-1024 debt-repayment burst (per CP9b D-014 F3).
 - **New pass condition (vs. CP10)**: JIT compile succeeds without OOM — the headline empirical observation that closes D-013.
@@ -541,7 +541,7 @@ Each hand-off step gates on the previous; CP10b and the parity-launch sweep run 
 - **Risk 2 — the corrected XS config trains too slowly to hit the survival-step target.** This is a **different concern from D-013** — a learning-dynamics question that surfaces at the parity-analysis stage (step #7 of the execution chain), not at the wall-clock-budget stage. The corrected XS values exactly mirror what sheeprl ran at the 12.5 h baseline (ep_len_avg ≈ 399.4 steps on this same env), so a learning-dynamics failure here would be a JAX-port-faithfulness failure, not a config-size failure. Out of scope for this plan; covered by the parity-gate analysis downstream.
 - **Risk 3 — adjacent dreamer-srl configs carry XL-equivalent leakage too.** *Probability:* low, addressed by the adjacent-config audit in the Analysis section above (verified `agent_xs.yaml` cadence-only and clean; `01_food_only_smoke.yaml` already at reduced dims with no parity claim). *Mitigation:* if the post-correction CP10b run still shows unexpectedly high memory or wall-clock, file a follow-up correction PR and surface to PI before launching the parity sweep.
 - **Risk 4 — the docs-side correction-note sweep silently rewrites historical content.** *Probability:* low if the `developer` agent follows the canonical pattern in the File Changes section. *Mitigation:* CP-E + CP-F checkpoint greps confirm the additive note landed AND the original body text is unchanged (verifiable by `git diff` line-count: the correction note adds ~25 lines per doc; no lines below the note should change).
-- **Rollback procedure** if the corrected XS config has any unforeseen failure mode: revert `configs/dreamer_srl/01_food_only.yaml` to the pre-correction commit via `git revert <commit_hash>`; the correction-note blocks in the v3 plan docs can stay (they remain accurate as a historical record); CP10b's spec edits can stay or revert depending on the failure mode. File a new PI call to dispose D-013 from option A / B / C / D.
+- **Rollback procedure** if the corrected XS config has any unforeseen failure mode: revert `configs/models/dreamer_srl/01_food_only.yaml` to the pre-correction commit via `git revert <commit_hash>`; the correction-note blocks in the v3 plan docs can stay (they remain accurate as a historical record); CP10b's spec edits can stay or revert depending on the failure mode. File a new PI call to dispose D-013 from option A / B / C / D.
 
 ---
 
@@ -564,7 +564,7 @@ Implemented config-only correction per the File Changes manifest in three commit
 
 **Commit 1 — `4fe3d8b` — YAML config edits**
 
-- `configs/dreamer_srl/01_food_only.yaml`: applied all sheeprl XS overlay values at every site:
+- `configs/models/dreamer_srl/01_food_only.yaml`: applied all sheeprl XS overlay values at every site:
   - Header comment updated ("Full XS" → "Full sheeprl-XS" + CORRECTION paragraph)
   - `world_model.encoder`: `dense_units 1024→256`, `mlp_layers 5→1`, `cnn_channels_multiplier: 24` added
   - `world_model.decoder`: `dense_units 1024→256`, `mlp_layers 5→1`
@@ -576,7 +576,7 @@ Implemented config-only correction per the File Changes manifest in three commit
   - `actor`: `dense_units 1024→256`, `mlp_layers 5→1`
   - `critic`: `dense_units 1024→256`, `mlp_layers 5→1`
   - All preserved keys verified unchanged: `learning_starts=1024`, `replay_ratio=1`, `per_rank_sequence_length=64`, `per_rank_batch_size=16`, `horizon=15`, `stochastic_size=32`, `discrete_size=32`, `reward_model.bins=255`, `critic.bins=255`
-- `configs/dreamer_srl/01_food_only_smoke.yaml`: header comment block rewritten (lines 1–24 → 1–42); body YAML unchanged. Reductions now framed as "smaller than real XS" rather than "smaller than XL-mis-named-XS".
+- `configs/models/dreamer_srl/01_food_only_smoke.yaml`: header comment block rewritten (lines 1–24 → 1–42); body YAML unchanged. Reductions now framed as "smaller than real XS" rather than "smaller than XL-mis-named-XS".
 
 **Commit 2 — `4460883` — Correction notes: 4 plan docs**
 
@@ -632,7 +632,7 @@ Confirmed — no training was launched. Config-only change.
 
 ### No other XL-equivalent values lurk
 
-`grep -n "1024\|4096\|mlp_layers.*5" configs/dreamer_srl/01_food_only.yaml` confirms: remaining `1024` hits are comments only (correction note + `learning_starts=1024` cadence key). No `4096` or `mlp_layers.*5` in data section.
+`grep -n "1024\|4096\|mlp_layers.*5" configs/models/dreamer_srl/01_food_only.yaml` confirms: remaining `1024` hits are comments only (correction note + `learning_starts=1024` cadence key). No `4096` or `mlp_layers.*5` in data section.
 
 **Implemented by**: developer
 
@@ -645,8 +645,8 @@ Confirmed — no training was launched. Config-only change.
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `configs/dreamer_srl/01_food_only.yaml` | XL-equivalent values → real sheeprl XS at every site listed in File Changes | | |
-| `configs/dreamer_srl/01_food_only_smoke.yaml` | Header comment block corrected; body unchanged | | |
+| `configs/models/dreamer_srl/01_food_only.yaml` | XL-equivalent values → real sheeprl XS at every site listed in File Changes | | |
+| `configs/models/dreamer_srl/01_food_only_smoke.yaml` | Header comment block corrected; body unchanged | | |
 | `docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` | Inline correction note added after frontmatter | | |
 | `docs/develop/active/dreamer_srl_v1/CP9_PLAN.md` | Inline correction note added after frontmatter | | |
 | `docs/develop/active/dreamer_srl_v1/CP9B_PLAN.md` | Inline correction note + CP9B-specific addendum added after frontmatter | | |

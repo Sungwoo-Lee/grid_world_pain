@@ -41,7 +41,7 @@ With `temp_clip` raised from `[0.5, 3.0]` → `[0.5, 10.0]`, the MC FiLM tempera
 
 ## Decisions and actions
 - For future NMN config design, `temp_clip` should be **`[0.5, 5.0]` minimum** to avoid binding on R ≥ 9 profiles. The parent sweep's `[0.5, 3.0]` is now known to be a misconfiguration that conflated FiLM's structural performance with a hyperparameter artefact at R ≥ 9.
-- The canonical FiLM agent config (`configs/models/recurrent_ppo_nmn_het_film_g1.yaml` and any v8-anchored derivative) should adopt `[0.5, 5.0]` as the new default — this is a `senior-developer` scope call (it changes a project default), not analyzer scope. Flag it in the senior-developer hand-off triggered by the sister insight.
+- The canonical FiLM agent config (`configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` and any v8-anchored derivative) should adopt `[0.5, 5.0]` as the new default — this is a `senior-developer` scope call (it changes a project default), not analyzer scope. Flag it in the senior-developer hand-off triggered by the sister insight.
 - Future R-sweeps that explore profiles with R > 18 should preview the head's expressed temp_max BEFORE locking the ceiling — the `[3.0, 5.0)` plateau may not extend; if R > 50 turns out to push the head past 5.0, the new default would re-bind.
 
 ## Open questions and follow-ups
@@ -54,7 +54,7 @@ With `temp_clip` raised from `[0.5, 3.0]` → `[0.5, 10.0]`, the MC FiLM tempera
 - Parent mechanism insight (this refines, does NOT supersede): `20260508_2004_profile_dependent_temp_saturation_mc_film`.
 - Design doc (this session): `docs/experiments/active/hypervigilance/NMN_TEMP_CLIP_CEILING_RERUN.md`.
 - Architecture default location: `src/models/neuromodulator.py:71` (`temp_clip: Tuple[float, float] = (0.1, 10.0)`).
-- Canonical FiLM config that should adopt the new default: `configs/models/recurrent_ppo_nmn_het_film_g1.yaml` (currently `[0.5, 3.0]`).
+- Canonical FiLM config that should adopt the new default: `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` (currently `[0.5, 3.0]`).
 - Analyzer working files: `tmp/20260509_nmn_tempceil10_extraction.json`, `tmp/20260509_124500_nmn_tempceil10_analysis.md`.
 - Raw conversation: synced via `./sync-agent-data.sh claude push`. To read on another node: `./sync-agent-data.sh claude pull`, then either `claude --resume 6bbe7739-79ae-4486-b230-d8b7b8263893` (re-enter the session) or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot markdown view).
 

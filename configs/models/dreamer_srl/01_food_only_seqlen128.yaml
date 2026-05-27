@@ -1,3 +1,16 @@
+# dreamer-srl HYPERPARAM-SEARCH config — sheeprl XS preset, seq_len=128
+#
+# **Phase-3 variant of the 10×10 hyperparameter search**
+# (see docs/experiments/active/dreamer_srl_v2/HYPERPARAM_SEARCH_10X10.md).
+#
+# Authored 2026-05-15 by experiment-designer. This file is a verbatim
+# copy of configs/models/dreamer_srl/01_food_only.yaml with the single key
+# `algo.per_rank_sequence_length` overridden to 128 (parent default: 64).
+# All other algorithm / optimizer / KL / cadence / model-architecture values
+# are unchanged from the parent.
+#
+# Provenance: 01_food_only.yaml → 01_food_only_seqlen128.yaml
+
 # dreamer-srl parity-track config — food-only NoPred 5x5
 #
 # Full sheeprl-XS hyperparameter set for parity-launch training runs.
@@ -22,7 +35,7 @@
 #   - XS overlay (the values applied here): vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml
 #   - Experiment defaults: vendor/sheeprl/sheeprl/configs/exp/dreamer_v3.yaml
 
-# Agent identity — mirrors configs/models/dreamer_v3_rr06.yaml:L40-L41
+# Agent identity — mirrors configs/models/dreamer_v3/dreamer_v3_rr06.yaml:L40-L41
 # Required for WandB filter: agent.algorithm = DreamerV3
 agent:
   algorithm: "DreamerV3"
@@ -32,10 +45,10 @@ algo:
   learning_starts: 1024        # XS default — §S3 prefill (CP9b restores from D-012)
   replay_ratio: 1
   per_rank_gradient_steps: 1
-  per_rank_sequence_length: 64
+  per_rank_sequence_length: 128
   per_rank_batch_size: 16
   per_rank_pretrain_steps: 0
-  total_steps: 5000            # smoke budget — kept for backward-compat; ignored when training.episodes is set
+  total_steps: 5000            # smoke budget (XS default is 5000000)
 
   # Core dreamer algorithm
   gamma: 0.996840347           # sheeprl dreamer_v3.yaml:L22
@@ -115,23 +128,9 @@ algo:
 
 # Buffer
 buffer:
-  size: 256000
+  size: 1000000
   validate_args: false
   from_numpy: false
-
-# Episode-based budget cap — mirrors rPPO production (10M episodes).
-# This is a CAP, not a target — actual runs may be Ctrl-C'd much earlier.
-# Reference: train_command-agent.sh:86-97 (rPPO Round 2.6 launch uses 10M).
-# R2 mitigation: checkpoint_frequency raised from 10k → 200k so eval fires
-# ~50 times over a 10M-episode run (vs. 1000 fires at 10k = ~7h overhead).
-training:
-  episodes: 10000000
-  checkpoint_frequency: 200000
-  # rPPO-parity log cadence. At num_envs=16: 50000 iters × 16 env-steps/iter
-  # ≈ 800k env-steps/log ≈ ~4000 episodes/row (matches rPPO production at
-  # --log-interval=50, num_steps=128, num_envs=128 = ~820k env-steps/log).
-  # Read priority: --log-interval CLI > this key > env_cfg default (10).
-  log_interval: 50000
 
 # Env
 env:

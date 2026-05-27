@@ -214,7 +214,7 @@ WANDB_RUN_GROUP=dreamer_srl_v2_extension_2026-05-15 WANDB_JOB_TYPE=5x5_pred \
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
   src/algorithms/dreamer_srl/dreamer_srl_main.py \
   --env-config configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml \
-  --agent-config configs/dreamer_srl/01_food_only.yaml \
+  --agent-config configs/models/dreamer_srl/01_food_only.yaml \
   --total-steps 200000 --num-envs 1 --seed 42 \
   --wandb-project grid_world_pain \
   --wandb-name dreamer_srl_v2_5x5_pred_XS_s42
@@ -228,7 +228,7 @@ WANDB_RUN_GROUP=dreamer_srl_v2_extension_2026-05-15 WANDB_JOB_TYPE=10x10_intero 
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
   src/algorithms/dreamer_srl/dreamer_srl_main.py \
   --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only.yaml \
+  --agent-config configs/models/dreamer_srl/01_food_only.yaml \
   --total-steps 200000 --num-envs 1 --seed 42 \
   --wandb-project grid_world_pain \
   --wandb-name dreamer_srl_v2_10x10_intero_XS_s42

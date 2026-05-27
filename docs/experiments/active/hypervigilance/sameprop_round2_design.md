@@ -82,7 +82,7 @@ All other fields fixed at Round-1 baseline (`01-interoNocicept_sameProp.yaml`). 
 - Rocks: 3 in each of 4 quadrants, damage [1,5].
 - Sensors: olfaction radius 20, decay 2.0, vector_size 5; visual range 0; nociception enabled; intero-noc enabled (tau 3.0, kernel 12); proprioception on; injury_observable false; nutrition_observable false.
 - Body: full Round-1 homeostatic reward, max_steps 500, metabolic_cost 1.0.
-- Agent: `configs/models/recurrent_ppo.yaml` (RPPO, identical to Round 1).
+- Agent: `configs/models/recurrent_ppo/recurrent_ppo.yaml` (RPPO, identical to Round 1).
 - Step budget: 10,000,000 episodes (full Round-1 budget; Round 1's 6.7M was an early checkpoint, not a hard ceiling).
 - Parallel envs: 128 (Round-1 default).
 - Per-entity metrics (`Episode/MeanDistRabbit`, `Episode/RabbitHits`, etc.) logged via the recently-merged `per_entity_avoidance_logging` (commit `4b55fc6`, branch `v1.3`).
@@ -112,8 +112,8 @@ All other fields fixed at Round-1 baseline (`01-interoNocicept_sameProp.yaml`). 
 
 | Run | Config (env) | Config (agent) |
 |-----|--------------|----------------|
-| 1 | `configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 2 | `configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 1 | `configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml` | `configs/models/recurrent_ppo/recurrent_ppo.yaml` |
+| 2 | `configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml` | `configs/models/recurrent_ppo/recurrent_ppo.yaml` |
 
 ### 3.2 Launch Commands (for `training-runner` reference)
 
@@ -123,7 +123,7 @@ Both invoked via `run_command.py` with the standard project Python interpreter `
 # Run 1 — Cell C — node 112 cuda:0 — seed 42
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --episodes 10000000 \
   --num-envs 128 \
   --seed 42 \
@@ -137,7 +137,7 @@ Both invoked via `run_command.py` with the standard project Python interpreter `
 # Run 2 — Cell A1 — node 112 cuda:1 — seed 43
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --episodes 10000000 \
   --num-envs 128 \
   --seed 43 \

@@ -175,7 +175,7 @@ Replace with:
 | `src/utils/evaluation_core.py` | Apply `true_obs` init fix (Step A) | ✅ | Line 341: `true_obs = get_observation(...)` correctly placed **before** `if record_stats:` at line 343. Duplicate removed from inside the block (line 362 now just `ep_true_obs.append(true_obs)`). |
 | `src/utils/evaluation_core.py` | Step loop `true_obs` | ✅ | Line 467: `true_obs` computed before both `render_video` (line 469) and `record_stats` (line 481) blocks. Shared correctly. |
 | `configs/environment/default.yaml` | Predator count 4→3, bush counts 2→1 | ⚠️ | **Not in plan.** Environment balance changes — likely user's own edits or from another task. |
-| `configs/models/neuromodulated_ppo.yaml` | Modulation type `Multiplicative`→`PreActivation` | ⚠️ | **Not in plan.** Model config change — likely user's own edits. |
+| `configs/models/ppo/neuromodulated_ppo.yaml` | Modulation type `Multiplicative`→`PreActivation` | ⚠️ | **Not in plan.** Model config change — likely user's own edits. |
 | `train_command.sh` | Modified | ⚠️ | **Not in plan.** Training command changes — likely user's own edits. |
 
 **Conclusion**: ✅ Core implementation correct — `evaluation_core.py` fully restored with the `true_obs` fix applied. Three out-of-scope config/script changes flagged (likely pre-existing user edits, not from Gemini).

@@ -9,7 +9,7 @@
 # Design doc:
 #   docs/experiments/active/sheeprl_bridge/JAX_SHEEPRL_MATCHED_SPS_DESIGN.md
 #
-# Provenance: byte-identical copy of configs/models/dreamer_v3.yaml with the
+# Provenance: byte-identical copy of configs/models/dreamer_v3/dreamer_v3.yaml with the
 # following deltas (each mirrors the sheeprl XS recipe at the corresponding
 # row of §2 of the SPS-comparison memo):
 #
@@ -20,7 +20,7 @@
 #   encoding_mode: hierarchical -> flat    (sheeprl uses a flat MLP encoder)
 #
 # Plus one delta against the cascade-side Hafner-Atari replay_ratio baseline
-# (configs/models/dreamer_v3_rr06.yaml, NOT dreamer_v3.yaml which sits at 0.5):
+# (configs/models/dreamer_v3/dreamer_v3_rr06.yaml, NOT dreamer_v3.yaml which sits at 0.5):
 #
 #   replay_ratio:         0.0625 -> 1.0    (16x more grad updates per env step)
 #

@@ -10,7 +10,7 @@ last_updated: 2026-04-12
 
 > **Reviewer**: Claude | **Date**: 2026-03-06 (updated 2026-03-17)
 > **Scope**: Structural review of the neuromodulatory network as implemented in RecurrentPPO.
-> **Key files**: `src/models/neuromodulator.py`, `src/models/recurrent_ppo_network.py`, `src/models/modulated_gru_cell.py`, `configs/models/neuromodulated_ppo.yaml`
+> **Key files**: `src/models/neuromodulator.py`, `src/models/recurrent_ppo_network.py`, `src/models/modulated_gru_cell.py`, `configs/models/ppo/neuromodulated_ppo.yaml`
 
 ---
 

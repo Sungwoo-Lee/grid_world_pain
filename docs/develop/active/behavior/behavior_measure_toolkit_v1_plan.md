@@ -732,7 +732,7 @@ def test_t8_real_train_py_smoke(tmp_path):
         "/home/vncuser/miniconda3/envs/grid_world_pain/bin/python",
         "train.py",
         "--env-config", "configs/experiment/behavior_measures/smoke_test.yaml",
-        "--agent-config", "configs/models/recurrent_ppo.yaml",
+        "--agent-config", "configs/models/recurrent_ppo/recurrent_ppo.yaml",
         "--num-envs", "4",
         "--max-iterations", "3",
         "--no-wandb",
@@ -941,7 +941,7 @@ T8 (real train.py subprocess):
 ```
 Command: /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/behavior_measures/smoke_test.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --num-envs 4 --episodes 3 --no-wandb --device cpu --quiet
 returncode: 0 (22.8s)
 stderr: no KeyError, no AttributeError
@@ -1010,7 +1010,7 @@ Implemented by: developer
 | **V4 — backwards compatibility** | ✅ PASS | (a) Loaded `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` (no BM block); `cfg.get('behavior_measures')` returns `None`; `load_behavior_measure_cfg(cfg)` returns `None`; env params build unchanged. (b) Existing aggregated keys (`Episode/MeanDistPredator`, `Episode/MeanDistRabbit`, `Episode/MeanDistHidingPredator`, `Episode/RabbitHits`, `Episode/HidingPredatorHits`, per-tag `Episode/MeanDistPredator_TL`, `Episode/MeanDistRabbit_TL`, `Episode/MeanDistRabbit_BR`, plus `Episode/Term_*` distribution keys, `Episode/Damage*`, etc.) all emit with finite values alongside the new BM keys in the V2 wandb dump — no regression. (c) `behavior_measures:` block is opt-in: absence ⇒ `bm_enabled = False` ⇒ zero overhead path. |
 | **V5 — real-`train.py` smoke** | ✅ PASS | See V2 evidence (V5 in the spec is the same check as V2 in this protocol — V2 in the §5 of the doc maps to V5 in the user's task prompt). Confirmed all expected keys emit with finite-and-bounded values. |
 | **V6 — overhead on canonical `01-interoNocicept_sameProp.yaml`** | ✅ PASS | 3 trials, 16 envs × 30 episodes on CPU. Baseline (no BM block): 20.0/21.0/21.0 s; BM enabled (block appended): 20.6/21.0/21.2 s. **Overhead: 0–3%, average ≈ 1%.** Well within the ≤ 2% expected guideline. The developer's reported +5.3% came from the smaller smoke-test config (10×10, num_envs not specified) where the Python K-buffer loop is a larger fraction of total wallclock. On the canonical 16-env config the overhead is essentially noise. **Verdict: ✅ no regression.** |
-| **C7 — `eval_rollout.py` checkpoint smoke (Cell A1)** | ❌ FAIL | `python scripts/eval_rollout.py --config <Cell-A1>/models/config.yaml --agent_config configs/models/recurrent_ppo.yaml --checkpoint <Cell-A1>/models/10000003 --eval-n-episodes 5 --eval-seeds 1000 1001 1002 1003 1004 --device cpu` crashes at `from src.models.recurrent_ppo_trainer import RecurrentPPOTrainer` (line 417): **`ImportError: cannot import name 'RecurrentPPOTrainer'`**. The codebase exposes only a functional API (`collect_trajectories`, `train_iteration`, `update_step`) — there is no `RecurrentPPOTrainer` class. The plan §2.7 referenced this class ("For RPPO, that is `RecurrentPPOTrainer.load_checkpoint(path)`"), which was an incorrect senior-developer direction; the developer accepted it instead of escalating. The script's stub also references `trainer.agent`, `trainer.agent.initialize_hidden`, `trainer.agent.get_action` — none of which exist. **Blocker for the v1 demonstration.** |
+| **C7 — `eval_rollout.py` checkpoint smoke (Cell A1)** | ❌ FAIL | `python scripts/eval_rollout.py --config <Cell-A1>/models/config.yaml --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml --checkpoint <Cell-A1>/models/10000003 --eval-n-episodes 5 --eval-seeds 1000 1001 1002 1003 1004 --device cpu` crashes at `from src.models.recurrent_ppo_trainer import RecurrentPPOTrainer` (line 417): **`ImportError: cannot import name 'RecurrentPPOTrainer'`**. The codebase exposes only a functional API (`collect_trajectories`, `train_iteration`, `update_step`) — there is no `RecurrentPPOTrainer` class. The plan §2.7 referenced this class ("For RPPO, that is `RecurrentPPOTrainer.load_checkpoint(path)`"), which was an incorrect senior-developer direction; the developer accepted it instead of escalating. The script's stub also references `trainer.agent`, `trainer.agent.initialize_hidden`, `trainer.agent.get_action` — none of which exist. **Blocker for the v1 demonstration.** |
 | **C8 — `motif_cluster.py` smoke** | ⚠️ PARTIAL | CLI loads cleanly; T6 (synthetic-input unit test) passes with `silhouette_mean > 0.20` and 6 non-degenerate clusters. End-to-end pipeline (C7 dump → C8 cluster) cannot be exercised until C7 is fixed. |
 
 ### M1 age-ordering bug re-read (per developer's `bf4f446` fix)
@@ -1250,7 +1250,7 @@ Ran an offline-wandb smoke of the running pipeline (3 logged iterations × 4 env
 ```
 $ WANDB_MODE=offline WANDB_DIR=/tmp/reverify_smoke2 \
   python train.py --config configs/experiment/behavior_measures/smoke_test.yaml \
-                  --agent_config configs/models/recurrent_ppo.yaml \
+                  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
                   --num-envs 4 --episodes 60 --log-interval 1 --device cpu --quiet --tag reverify-smoke2
 ```
 

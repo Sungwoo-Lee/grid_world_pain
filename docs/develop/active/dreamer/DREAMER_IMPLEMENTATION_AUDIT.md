@@ -53,7 +53,7 @@ The `collect_sequence` implementation using `jax.lax.scan` and `jax.vmap` is a s
 *   **Structurally Independent Sampling**: The codebase correctly generates 2D PRNG key grids ($T \times B$) and uses `jax.vmap` mapped across `OneHotDist.sample`. This ensures that even environments sharing identical sequence lengths and logits experience mathematically independent stochastic transitions.
 
 ### 3.3 Configuration Protocol Parity
-Following strict structural alignment, the `configs/models/dreamer_v3.yaml` logic strictly mirrors the paper defaults through `get_mandatory`:
+Following strict structural alignment, the `configs/models/dreamer_v3/dreamer_v3.yaml` logic strictly mirrors the paper defaults through `get_mandatory`:
 *   **Learning Rates**: World Model ($1 \times 10^{-4}$), Actor/Critic ($3 \times 10^{-5}$).
 *   **Adam Epsilon**: Asymmetric bounds ($10^{-8}$ for WM, $10^{-5}$ for policy stability).
 *   **Entropy & Unimix**: Anchored at $3 \times 10^{-4}$ and $1\%$ respectively.
@@ -336,7 +336,7 @@ The 2026-02-22 audit predates several substantial additions. They are summarized
 
 [dreamer_v3_nnx.py:197-422](../../src/models/dreamer_v3_nnx.py#L197-L422)
 
-- `DreamerObservationEncoder` and `DreamerObservationDecoder` both expose two modes via `agent.encoding_mode`: `flat` (canonical) and `hierarchical` (default in [configs/models/dreamer_v3.yaml:44](../../configs/models/dreamer_v3.yaml#L44)).
+- `DreamerObservationEncoder` and `DreamerObservationDecoder` both expose two modes via `agent.encoding_mode`: `flat` (canonical) and `hierarchical` (default in [configs/models/dreamer_v3/dreamer_v3.yaml:44](../../configs/models/dreamer_v3/dreamer_v3.yaml#L44)).
 - **Phase 1 (unimodal)**: `DreamerGroupedMLP` runs one independent MLP per sensor in parallel via a single `einsum('...gi,gio->...go')`, padding all sensor inputs to a common `max_in` width. Each per-group Linear initialises with the correct `fan_in = in_features` (not the group dimension), avoiding a subtle `hafner_init` mis-scaling that would otherwise occur for a `[G, I, O]` weight tensor.
 - **Phase 2 (multimodal hub)**: a standard `MLP` over the concatenated unimodal features.
 - **Symmetry**: the decoder mirrors this layout — `multimodal_decoder` expands `feat → len(sensors) * hidden`, then `unimodal_grouped_decoder` reconstructs each sensor with its native dimension.
@@ -358,7 +358,7 @@ This is a closer match to the canonical V3 RSSM than a naive GRU, and explains w
 
 #### 7.2.3 Neuromodulation Pathway (Optional, Config-Gated)
 
-[dreamer_v3_nnx.py:42-140](../../src/models/dreamer_v3_nnx.py#L42-L140), [modulated_layer_norm_gru_cell.py](../../src/models/modulated_layer_norm_gru_cell.py), [neuromodulator.py](../../src/models/neuromodulator.py), [configs/models/neuromodulated_dreamer_v3.yaml](../../configs/models/neuromodulated_dreamer_v3.yaml)
+[dreamer_v3_nnx.py:42-140](../../src/models/dreamer_v3_nnx.py#L42-L140), [modulated_layer_norm_gru_cell.py](../../src/models/modulated_layer_norm_gru_cell.py), [neuromodulator.py](../../src/models/neuromodulator.py), [configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml](../../configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml)
 
 When `agent.modulation.type` is non-null, a `DreamerNeuromodulatorRNN` runs in parallel with the world model and emits a `ModulatorOutput` namedtuple with five tap signals plus a temperature scalar. Three injection points:
 
@@ -370,7 +370,7 @@ All injection points are no-ops when `modulation_enabled = False`, so this is fu
 
 #### 7.2.4 DreamerV4-Inspired Mixture Sampling
 
-[dreamer_v3_trainer.py:624-772](../../src/models/dreamer_v3_trainer.py#L624-L772), [configs/models/dreamer_v3.yaml:18-22](../../configs/models/dreamer_v3.yaml#L18-L22)
+[dreamer_v3_trainer.py:624-772](../../src/models/dreamer_v3_trainer.py#L624-L772), [configs/models/dreamer_v3/dreamer_v3.yaml:18-22](../../configs/models/dreamer_v3/dreamer_v3.yaml#L18-L22)
 
 The replay-buffer story has materially shifted toward DreamerV4's data-pipeline philosophy, while remaining online:
 
@@ -463,7 +463,7 @@ These are not regressions — they are forward-looking items surfaced by this re
 
 1. **Document the `agent.modulation.*` keys** in a config schema doc analogous to `docs/environment/02_config_schema.md`. The neuromodulation pathway is now a first-class feature but its YAML surface is only described in `NEUROMODULATION_ALGORITHM.md` (referenced indirectly from comments).
 2. **Audit `Ratio`** for live use — if unused, delete; if used on the CPU path, document.
-3. **Add a "mode = uniform" CI run** to ensure the canonical V3 path remains green as the mixture sampler evolves. Right now `sampling_mode: "mixture"` is the default in [configs/models/dreamer_v3.yaml:18](../../configs/models/dreamer_v3.yaml#L18); a regression in mixture indexing would silently degrade canonical comparisons.
+3. **Add a "mode = uniform" CI run** to ensure the canonical V3 path remains green as the mixture sampler evolves. Right now `sampling_mode: "mixture"` is the default in [configs/models/dreamer_v3/dreamer_v3.yaml:18](../../configs/models/dreamer_v3/dreamer_v3.yaml#L18); a regression in mixture indexing would silently degrade canonical comparisons.
 4. **Numeric guard on `compute_lambda_values`**: the function uses `LAMBDA=0.95` from the local default arg, while the module-level `LAMBDA = 0.95` is also defined. They agree, but if someone changes the module constant they will not see it propagate. Consider passing `LAMBDA` explicitly from the call site.
 
 **Reviewer**: Claude

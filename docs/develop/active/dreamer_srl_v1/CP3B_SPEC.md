@@ -100,7 +100,7 @@ achievable state-evolution variant. Same `1e-6` threshold, same fixed seed
 ## Cadence sub-gate (separate Lever-A tests, same CP-id)
 
 5. **`test_cadence_yaml_key_parity_with_sheeprl_xs`** — mandatory-key audit on
-   `configs/dreamer_srl/agent_xs.yaml`. Assert exact-match against sheeprl XS
+   `configs/models/dreamer_srl/agent_xs.yaml`. Assert exact-match against sheeprl XS
    defaults for the following keys: `learning_starts`, `replay_ratio`,
    `per_rank_gradient_steps`, `per_rank_sequence_length`, `per_rank_batch_size`,
    `per_rank_pretrain_steps`, `per_rank_target_network_update_freq`,
@@ -190,7 +190,7 @@ achievable state-evolution variant. Same `1e-6` threshold, same fixed seed
 5. **`tests/fixtures/dreamer_srl/`** — create six `.npz` fixture files and a
    `scripts/fixtures/gen_cp3b_fixtures.py` generator script. Seed `0xD3EAF`,
    conventions per `tests/fixtures/dreamer_srl/README.md`.
-6. **`configs/dreamer_srl/agent_xs.yaml`** — add a top-of-file canonical-key
+6. **`configs/models/dreamer_srl/agent_xs.yaml`** — add a top-of-file canonical-key
    block comment listing the cadence-parity contract enforced by
    `test_cadence_yaml_key_parity_with_sheeprl_xs`:
    ```yaml
@@ -240,7 +240,7 @@ achievable state-evolution variant. Same `1e-6` threshold, same fixed seed
 | File | Status | Notes |
 |---|---|---|
 | `src/algorithms/dreamer_srl/buffers.py` | New | `SequentialReplayBuffer` ported from sheeprl@33b6366:sheeprl/data/buffers.py:L363-L526. In-memory only (D-004). Added `_sample_at_indices()` for CP3b explicit-index test path (not in sheeprl). All methods carry Lever-B citation headers. |
-| `configs/dreamer_srl/agent_xs.yaml` | New | 9 cadence keys matching sheeprl XS defaults at commit 33b6366. Top-of-file CP3b canonical-key-list block comment. |
+| `configs/models/dreamer_srl/agent_xs.yaml` | New | 9 cadence keys matching sheeprl XS defaults at commit 33b6366. Top-of-file CP3b canonical-key-list block comment. |
 | `scripts/fixtures/gen_cp3b_fixtures.py` | New | Generates 6 `.npz` fixture files using sheeprl's Ratio + SRB. Seed 0xD3EAF. Run in `sheeprl_bridge` env. |
 | `tests/algorithms/dreamer_srl/test_buffers.py` | New | 6 Lever-A tests (state-evolution bit-identity). All fixtures loaded from pre-computed `.npz` — no PyTorch needed at test time. |
 | `tests/fixtures/dreamer_srl/*.npz` (6 files) | New | Pre-computed reference fixtures for CP3b. |
@@ -278,7 +278,7 @@ Skipped — CP3b adds no hot-path code (buffer is CPU NumPy; the JAX training ho
 
 ### YAML cadence keys confirmed
 
-All 9 keys in `configs/dreamer_srl/agent_xs.yaml` match sheeprl XS defaults at commit 33b6366:
+All 9 keys in `configs/models/dreamer_srl/agent_xs.yaml` match sheeprl XS defaults at commit 33b6366:
 `learning_starts=1024`, `replay_ratio=1`, `per_rank_gradient_steps=1`, `per_rank_sequence_length=64`,
 `per_rank_batch_size=16`, `per_rank_pretrain_steps=0`, `per_rank_target_network_update_freq=1`,
 `total_steps=5000000`, `num_envs=1`.

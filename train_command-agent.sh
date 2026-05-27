@@ -15,7 +15,7 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # train.py CLI arguments (full list — agent fills the relevant ones below)
 # ---------------------------------------------------------------------------
 # Required:
-#   --agent_config <path>     Path to agent/model config YAML (e.g., configs/models/dreamer_v3.yaml)
+#   --agent_config <path>     Path to agent/model config YAML (e.g., configs/models/dreamer_v3/dreamer_v3.yaml)
 #
 # Common (env / training):
 #   --config <path>           Base env config YAML (single-stage)
@@ -83,7 +83,7 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 CUDA_VISIBLE_DEVICES=0 \
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python src/algorithms/dreamer_srl/dreamer_srl_main.py \
   --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only_buf256k_log50k.yaml \
+  --agent-config configs/models/dreamer_srl/01_food_only_buf256k_log50k.yaml \
   --episodes 10000000 \
   --num-envs 16 \
   --seed 42 \

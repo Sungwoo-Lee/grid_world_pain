@@ -24,7 +24,7 @@ When the user terminated the `passive_matched` specialist (PID 11855 on n104) vi
 ## Evidence, measurements, facts
 
 - **Concrete instance**: 2026-05-12 23:25 KST, n104 cuda:1.
-  - Main process: PID 11855 = `python train.py --config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml --agent_config configs/models/recurrent_ppo_nmn_het_unmod.yaml --num-envs 128 --episodes 10000000 --seed 0 --device cuda:1 --tag rppo_nmn_meta_spec_passive_matched_s0`.
+  - Main process: PID 11855 = `python train.py --config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml --num-envs 128 --episodes 10000000 --seed 0 --device cuda:1 --tag rppo_nmn_meta_spec_passive_matched_s0`.
   - After SIGINT: main process exited, WandB summary captured at 9,670,022 episodes (96.7% of 10M target).
   - Then `pgrep -af 'rppo_nmn_meta_spec_passive_matched'` returned 19 entries — all identical:
     `python /media/.../scripts/render_recordings.py results/JAX_RecurrentPPO/20260509-184214_.../recordings/9720013 --concat --skip-existing --cleanup-per-episode --fps 5`

@@ -33,9 +33,9 @@ cross_links:
 
 | Run label | Algorithm | WandB ID | WandB URL | num_envs | Env config | Agent config | Seed | Wall-clock |
 |---|---|---|---|---|---|---|---|---|
-| **5×5+pred, dreamer-srl** | dreamer-srl v2 (JAX) | [`xvrtjlat`](https://wandb.ai/sungwoolee/grid_world_pain/runs/xvrtjlat) | [link](https://wandb.ai/sungwoolee/grid_world_pain/runs/xvrtjlat) | 1 | `configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml` | `configs/dreamer_srl/01_food_only.yaml` (XS, `learning_starts=1024`) | 42 | 12249 s (3.40 h) |
+| **5×5+pred, dreamer-srl** | dreamer-srl v2 (JAX) | [`xvrtjlat`](https://wandb.ai/sungwoolee/grid_world_pain/runs/xvrtjlat) | [link](https://wandb.ai/sungwoolee/grid_world_pain/runs/xvrtjlat) | 1 | `configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` (XS, `learning_starts=1024`) | 42 | 12249 s (3.40 h) |
 | **5×5+pred, sheeprl** | sheeprl dreamer_v3 XS (PyTorch) | [`dbh64fcy`](https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/dbh64fcy) | [link](https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/dbh64fcy) | 4 | (same task) | sheeprl `algo=dreamer_v3_XS`, `algo.learning_starts=1024` | 42 | 46676 s (12.97 h) |
-| **10×10 intero, dreamer-srl** | dreamer-srl v2 (JAX) | [`405f0555`](https://wandb.ai/sungwoolee/grid_world_pain/runs/405f0555) | [link](https://wandb.ai/sungwoolee/grid_world_pain/runs/405f0555) | 1 | `configs/experiment/hypervigilance/01-interoNocicept.yaml` | `configs/dreamer_srl/01_food_only.yaml` (XS, `learning_starts=1024`) | 42 | 12235 s (3.40 h) |
+| **10×10 intero, dreamer-srl** | dreamer-srl v2 (JAX) | [`405f0555`](https://wandb.ai/sungwoolee/grid_world_pain/runs/405f0555) | [link](https://wandb.ai/sungwoolee/grid_world_pain/runs/405f0555) | 1 | `configs/experiment/hypervigilance/01-interoNocicept.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` (XS, `learning_starts=1024`) | 42 | 12235 s (3.40 h) |
 | **10×10 intero, sheeprl** | sheeprl dreamer_v3 XS (PyTorch) | [`yt1uts22`](https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/yt1uts22) | [link](https://wandb.ai/sungwoolee/grid_world_pain_sheeprl_test/runs/yt1uts22) | 4 | (same task) | sheeprl `algo=dreamer_v3_XS`, `algo.learning_starts=1024` | 42 | 46253 s (12.85 h) |
 
 **Local log paths** (the authoritative source for this analysis):

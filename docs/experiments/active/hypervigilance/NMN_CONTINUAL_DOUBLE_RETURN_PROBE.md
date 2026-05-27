@@ -187,8 +187,8 @@ The `wandb-group` is unchanged (`nmn_continual_double_return`) — Round 1 and R
 
 | Run | Config (env / schedule) | Config (agent) |
 |-----|--------------------------|----------------|
-| R2.1 | `--configs-dir configs/continual/nmn_double_return_stages/` `--continual-schedule configs/continual/nmn_double_return.yaml` (rewritten 2026-05-11) | `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` |
-| R2.2 | (same) | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` |
+| R2.1 | `--configs-dir configs/continual/nmn_double_return_stages/` `--continual-schedule configs/continual/nmn_double_return.yaml` (rewritten 2026-05-11) | `configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml` |
+| R2.2 | (same) | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` |
 
 ### 3.3 Analyzer guidance — Round 1 vs. Round 2 data
 
@@ -202,8 +202,8 @@ When the `experiment-analyzer` opens this experiment, it must apply the followin
 
 | Run | Config (env / schedule) | Config (agent) |
 |-----|--------------------------|----------------|
-| 1 | `--configs-dir configs/continual/nmn_double_return_stages/` `--continual-schedule configs/continual/nmn_double_return.yaml` (Round 1 version, 5100-ep budget — see git history of the schedule file for the pre-2026-05-11 form) | `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` |
-| 2 | (same) | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` |
+| 1 | `--configs-dir configs/continual/nmn_double_return_stages/` `--continual-schedule configs/continual/nmn_double_return.yaml` (Round 1 version, 5100-ep budget — see git history of the schedule file for the pre-2026-05-11 form) | `configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml` |
+| 2 | (same) | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` |
 
 ### 3.5 File inventory (this experiment's writes — Round 1 + Round 2)
 
@@ -213,7 +213,7 @@ When the `experiment-analyzer` opens this experiment, it must apply the followin
 - `configs/continual/nmn_double_return_stages/03_active_predator.yaml` (= `01_active_predator.yaml` body, header notes stage 3).
 - `configs/continual/nmn_double_return_stages/04_passive_predator.yaml` (= `02_passive_predator.yaml` body, header notes stage 4).
 - `configs/continual/nmn_double_return_stages/05_active_predator.yaml` (= `01_active_predator.yaml` body, header notes stage 5).
-- `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` — new canonical FiLM g1 modulated agent config with `temp_clip: [0.5, 5.0]`.
+- `configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml` — new canonical FiLM g1 modulated agent config with `temp_clip: [0.5, 5.0]`.
 
 Per CLAUDE.md "Git Safety": NAS does not support symlinks, so the 5 stage YAMLs are literal copies. If the canonical active/passive baselines change, env-config-auditor must update the stage YAMLs in lock-step.
 
@@ -276,8 +276,8 @@ Plot survival vs. episode for both cells across all 5 stages, with stage boundar
 
 ### 5.5.1 Run identity confirmation
 
-- **R2.1 modulated** (WandB run [`8eorbxhq`](https://wandb.ai/sungwoolee/grid_world_pain/runs/8eorbxhq), display name `rppo_nmn_cont_dr_mod_s0_r2`): agent config `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` (FiLM modulator, `temp_clip=[0.5, 5.0]`). Confirmed from the local wandb config; the user-supplied launch-table line that paired this run with `het_unmod.yaml` was a documentation typo — the actual run uses the modulated config. 5,097,472 episodes; 13.3 h wallclock; `Episode/Steps` final-iter = 246.0.
-- **R2.2 unmodulated** (WandB run [`lrzvg8k6`](https://wandb.ai/sungwoolee/grid_world_pain/runs/lrzvg8k6), display name `rppo_nmn_cont_dr_unmod_s0_r2`): agent config `configs/models/recurrent_ppo_nmn_het_unmod.yaml` (no modulation). 5,093,982 episodes; 9.5 h wallclock; `Episode/Steps` final-iter = 87.9.
+- **R2.1 modulated** (WandB run [`8eorbxhq`](https://wandb.ai/sungwoolee/grid_world_pain/runs/8eorbxhq), display name `rppo_nmn_cont_dr_mod_s0_r2`): agent config `configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml` (FiLM modulator, `temp_clip=[0.5, 5.0]`). Confirmed from the local wandb config; the user-supplied launch-table line that paired this run with `het_unmod.yaml` was a documentation typo — the actual run uses the modulated config. 5,097,472 episodes; 13.3 h wallclock; `Episode/Steps` final-iter = 246.0.
+- **R2.2 unmodulated** (WandB run [`lrzvg8k6`](https://wandb.ai/sungwoolee/grid_world_pain/runs/lrzvg8k6), display name `rppo_nmn_cont_dr_unmod_s0_r2`): agent config `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` (no modulation). 5,093,982 episodes; 9.5 h wallclock; `Episode/Steps` final-iter = 87.9.
 - Both: seed 0, n106, schedule `configs/continual/nmn_double_return.yaml` boundaries `[1.5M, 3.0M, 3.7M, 4.4M, 5.1M]`.
 
 ### 5.5.2 Per-stage survival statistics
@@ -400,12 +400,12 @@ In priority order:
 1. **`env-config-auditor`** (BEFORE launch). Audit:
    - the new schedule YAML (`configs/continual/nmn_double_return.yaml`) for schema correctness (`continual.episode_boundaries` strictly increasing, `checkpoint_frequencies` parallel and > 0).
    - all 5 stage YAMLs in `configs/continual/nmn_double_return_stages/` — confirm `01/03/05` body byte-matches `01-interoNocicept_sameProp.yaml`, `02/04` body byte-matches `02-sameProp_R2_passivePredator.yaml`, except for the prepended header comments.
-   - the new agent config `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` for parity with `recurrent_ppo_nmn_het_film_g1.yaml` modulo the `temp_clip` change.
+   - the new agent config `configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml` for parity with `recurrent_ppo_nmn_het_film_g1.yaml` modulo the `temp_clip` change.
    - obs↔noise invariants (no env-spec changes that would shift modality dimensions).
 2. **User authorisation** — review the auditor pass + this design doc; greenlight the launch.
 3. **`training-runner`** (after authorisation). Launch the two **Round 2** cells per §3.2:
-   - Run R2.1 (modulated) on **node 101 GPU 0** with `--tag rppo_nmn_cont_dr_mod_s0_r2 --wandb-name rppo_nmn_cont_dr_mod_s0_r2 --wandb-group nmn_continual_double_return --wandb-job-type prod --seed 0 --configs-dir configs/continual/nmn_double_return_stages/ --continual-schedule configs/continual/nmn_double_return.yaml --agent_config configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml`.
-   - Run R2.2 (unmodulated) on **node 101 GPU 1** with `--tag rppo_nmn_cont_dr_unmod_s0_r2 --wandb-name rppo_nmn_cont_dr_unmod_s0_r2 --wandb-group nmn_continual_double_return --wandb-job-type prod --seed 0 --configs-dir configs/continual/nmn_double_return_stages/ --continual-schedule configs/continual/nmn_double_return.yaml --agent_config configs/models/recurrent_ppo_nmn_het_unmod.yaml`.
+   - Run R2.1 (modulated) on **node 101 GPU 0** with `--tag rppo_nmn_cont_dr_mod_s0_r2 --wandb-name rppo_nmn_cont_dr_mod_s0_r2 --wandb-group nmn_continual_double_return --wandb-job-type prod --seed 0 --configs-dir configs/continual/nmn_double_return_stages/ --continual-schedule configs/continual/nmn_double_return.yaml --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml`.
+   - Run R2.2 (unmodulated) on **node 101 GPU 1** with `--tag rppo_nmn_cont_dr_unmod_s0_r2 --wandb-name rppo_nmn_cont_dr_unmod_s0_r2 --wandb-group nmn_continual_double_return --wandb-job-type prod --seed 0 --configs-dir configs/continual/nmn_double_return_stages/ --continual-schedule configs/continual/nmn_double_return.yaml --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml`.
    - Per project memory rule `feedback_runner_post_launch_pgrep`: verify exactly one PID per tag after launch.
    - Round 1 launch commands (using the un-suffixed `*_s0` tags) are obsolete — do NOT re-issue them; the Round 1 data is discarded.
 4. **`experiment-analyzer`** (after training completes). Fill §4 / §5 / §6 of this doc per the analysis plan above. Cross-reference with the sister meta-probe doc (NMN_META_2x3_MIXTURE_PROBE) for the joint architecture-vitality verdict. **[DONE — 2026-05-13]**

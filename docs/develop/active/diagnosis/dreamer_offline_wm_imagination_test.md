@@ -66,7 +66,7 @@ results/JAX_DreamerV3/20260509-050606_dreamer_conv_NoPred_rr06_s0_n113/
 **Crucial constraint**: the run did NOT save its merged config to disk. `train.py` writes a results dir but no top-level `config.yaml`. The script must therefore re-merge the same configs the run used:
 
 - `--config configs/experiment/basic/00-5X5_NoPred.yaml`
-- `--agent_config configs/models/dreamer_v3_rr06.yaml`
+- `--agent_config configs/models/dreamer_v3/dreamer_v3_rr06.yaml`
 
 Both files exist and are unchanged (verified — `dreamer_v3_rr06.yaml` was the file the battery designer added; `00-5X5_NoPred.yaml` is the long-standing NoPred env config). The script takes both YAML paths as CLI arguments to keep config provenance explicit.
 
@@ -187,7 +187,7 @@ Usage:
   python scripts/dreamer_offline_wm_test.py \
     --checkpoint-dir results/JAX_DreamerV3/20260509-050606_dreamer_conv_NoPred_rr06_s0_n113/models \
     --env-config configs/experiment/basic/00-5X5_NoPred.yaml \
-    --agent-config configs/models/dreamer_v3_rr06.yaml \
+    --agent-config configs/models/dreamer_v3/dreamer_v3_rr06.yaml \
     --env-seed 42 \
     --num-real-steps 2000 \
     --num-starts 200 \
@@ -309,7 +309,7 @@ The checkpoint dir contains seven step-folders (100011, 200000, 300022, 400015, 
 
 What `developer` should verify **during** implementation:
 
-- [x] **Checkpoint 1 — config + env + checkpoint loads cleanly.** `python scripts/dreamer_offline_wm_test.py --checkpoint results/JAX_DreamerV3/20260509-050606_dreamer_conv_NoPred_rr06_s0_n113 --env-config configs/experiment/basic/00-5X5_NoPred.yaml --agent-config configs/models/dreamer_v3_rr06.yaml --num-real-steps 50 --num-starts 5 --horizon-max 5` completes without raising. Confirmed: obs_dim=19, breakdown={'Satiation':1,'IntNoc':1,'ExteroNoc':1,'Olfaction':5,'Collision':5,'Proprioception':6}, step=700009, modulation_enabled=False.
+- [x] **Checkpoint 1 — config + env + checkpoint loads cleanly.** `python scripts/dreamer_offline_wm_test.py --checkpoint results/JAX_DreamerV3/20260509-050606_dreamer_conv_NoPred_rr06_s0_n113 --env-config configs/experiment/basic/00-5X5_NoPred.yaml --agent-config configs/models/dreamer_v3/dreamer_v3_rr06.yaml --num-real-steps 50 --num-starts 5 --horizon-max 5` completes without raising. Confirmed: obs_dim=19, breakdown={'Satiation':1,'IntNoc':1,'ExteroNoc':1,'Olfaction':5,'Collision':5,'Proprioception':6}, step=700009, modulation_enabled=False.
 - [x] **Checkpoint 2 — eval rollout produces non-degenerate trace.** With `--num-real-steps 300`: 1 episode completed (terminal=True observed), 289 valid starting states found. Satiation varies across trace (verified from rollout logs). Dreamer state stored correctly without batch dim (shape `(512,)` for deter).
 - [x] **Checkpoint 3 — single imagined rollout sanity.** With 5 imagination rollouts at H=5: cont_pred near 1.0 (100% at h=1, stays high), Satiation MSE=0.0074 at h=5 (very small — homeostatic decay near-deterministic as expected). PASS.
 - [x] **Checkpoint 4 — per-channel slicing is correct.** Verified from JSON output: channel dims are {'Satiation':1,'IntNoc':1,'ExteroNoc':1,'Olfaction':5,'Collision':5,'Proprioception':6}, sum=19=obs_dim. Slicing confirmed correct by consistent per-channel MSE values.
@@ -319,7 +319,7 @@ What `developer` should verify **during** implementation:
 ## Tests / smoke runs
 
 1. **End-to-end on the target checkpoint** — the production invocation in the script's docstring. Runs in < 1 min on a single GPU. Confirms the diagnostic produces a JSON+Markdown verdict.
-2. **Negative — wrong agent config**: pass `configs/models/dreamer_v3.yaml` (rr=0.5) instead of `dreamer_v3_rr06.yaml`. The orbax restore should still succeed (the two configs differ only in `replay_ratio`, which doesn't change layer shapes), but the result is logged with the wrong config provenance. Document in the JSON header which YAMLs were passed; user-eyeballable.
+2. **Negative — wrong agent config**: pass `configs/models/dreamer_v3/dreamer_v3.yaml` (rr=0.5) instead of `dreamer_v3_rr06.yaml`. The orbax restore should still succeed (the two configs differ only in `replay_ratio`, which doesn't change layer shapes), but the result is logged with the wrong config provenance. Document in the JSON header which YAMLs were passed; user-eyeballable.
 3. **Negative — wrong env config**: pass the predator env config. The env should construct successfully, but the encoder will see a different obs distribution than the WM was trained on. Output is meaningless but the script must not crash. (Real defense: the JSON header records the env config path; user is responsible for matching.)
 
 ## Out of scope
@@ -359,7 +359,7 @@ Command used:
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/dreamer_offline_wm_test.py \
   --checkpoint results/JAX_DreamerV3/20260509-050606_dreamer_conv_NoPred_rr06_s0_n113/ \
   --env-config configs/experiment/basic/00-5X5_NoPred.yaml \
-  --agent-config configs/models/dreamer_v3_rr06.yaml \
+  --agent-config configs/models/dreamer_v3/dreamer_v3_rr06.yaml \
   --num-starts 200 \
   --output tmp/20260509_wm_imagination_test_A1.json
 ```

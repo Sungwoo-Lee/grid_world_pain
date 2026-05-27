@@ -26,7 +26,7 @@ The active command in `train_command-new.sh`:
 ```
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml \
-  --agent_config configs/models/dreamer_v3.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
   --num-envs 16 \
   --episodes 10000000 \
   --checkpoint-frequency 100000 \
@@ -69,31 +69,31 @@ This is the actionable bug.
 
 ### Root cause (one-liner)
 
-`configs/models/dreamer_v3.yaml` is missing the `agent.use_layer_norm` key, which became mandatory in commit `f1db0f0` but was only added to the *PPO* configs (`recurrent_ppo.yaml:20`, `neuromodulated_ppo.yaml:20`) — the two DreamerV3 configs were left out of that commit.
+`configs/models/dreamer_v3/dreamer_v3.yaml` is missing the `agent.use_layer_norm` key, which became mandatory in commit `f1db0f0` but was only added to the *PPO* configs (`recurrent_ppo.yaml:20`, `neuromodulated_ppo.yaml:20`) — the two DreamerV3 configs were left out of that commit.
 
 ### Evidence
 
 `git show --stat f1db0f0`:
 
 ```
-configs/models/neuromodulated_ppo.yaml     |  3 +-
-configs/models/recurrent_ppo.yaml          |  1 +
+configs/models/ppo/neuromodulated_ppo.yaml     |  3 +-
+configs/models/recurrent_ppo/recurrent_ppo.yaml          |  1 +
 src/models/dreamer_v3_nnx.py               | 86 +++++++++++++++++-------------
 src/models/dreamer_v3_trainer.py           | 32 +++++++----
 src/models/recurrent_ppo_network.py        | 77 ++++++++++++++------------
 …
 ```
 
-The commit added `use_layer_norm: true` to the PPO YAMLs and added `config.get_mandatory('agent.use_layer_norm', bool)` to **both** PPO and DreamerV3 trainers — but did not touch `configs/models/dreamer_v3.yaml` or `configs/models/neuromodulated_dreamer_v3.yaml`.
+The commit added `use_layer_norm: true` to the PPO YAMLs and added `config.get_mandatory('agent.use_layer_norm', bool)` to **both** PPO and DreamerV3 trainers — but did not touch `configs/models/dreamer_v3/dreamer_v3.yaml` or `configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml`.
 
 Verification:
 
 ```
-$ grep -n "use_layer_norm" configs/models/recurrent_ppo.yaml configs/models/neuromodulated_ppo.yaml
-configs/models/recurrent_ppo.yaml:20:  use_layer_norm: true
-configs/models/neuromodulated_ppo.yaml:20:  use_layer_norm: true
+$ grep -n "use_layer_norm" configs/models/recurrent_ppo/recurrent_ppo.yaml configs/models/ppo/neuromodulated_ppo.yaml
+configs/models/recurrent_ppo/recurrent_ppo.yaml:20:  use_layer_norm: true
+configs/models/ppo/neuromodulated_ppo.yaml:20:  use_layer_norm: true
 
-$ grep -n "use_layer_norm" configs/models/dreamer_v3.yaml configs/models/neuromodulated_dreamer_v3.yaml
+$ grep -n "use_layer_norm" configs/models/dreamer_v3/dreamer_v3.yaml configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml
 (no matches)
 ```
 
@@ -121,7 +121,7 @@ if self.use_layer_norm:
 Following the senior-developer's hypothesis list:
 
 - **Hierarchical encoder/decoder mismatch** — Not the cause. The error fires at trainer construction (`get_mandatory` for `use_layer_norm`), strictly *before* any encoder build. The CONFIGURATION banner in the cuda:0 reproducer log shows `Observation Dim: 19 (Satiation=1, Interoceptive Nociception=1, Extero Nociception=1, Olfaction=5, Collision=5, Proprioception=6)`, i.e. obs breakdown is fine.
-- **Three-pool mixture sampler keys missing** — All five keys (`sampling_mode`, `mixture_positive_slots`, `mixture_recent_slots`, `mixture_recent_window`, `positive_buffer_capacity`) are present in `configs/models/dreamer_v3.yaml:18–22`. Not the cause for this run. **Note**: the *neuromodulated_dreamer_v3.yaml* file is missing all five — see "Adjacent issue" below.
+- **Three-pool mixture sampler keys missing** — All five keys (`sampling_mode`, `mixture_positive_slots`, `mixture_recent_slots`, `mixture_recent_window`, `positive_buffer_capacity`) are present in `configs/models/dreamer_v3/dreamer_v3.yaml:18–22`. Not the cause for this run. **Note**: the *neuromodulated_dreamer_v3.yaml* file is missing all five — see "Adjacent issue" below.
 - **Neuromodulation tap points** — Confirmed not the cause; `dreamer_v3.yaml:74–75` has `modulation.type: null`, and `dreamer_v3_nnx.py:491–493` correctly treats null as disabled.
 - **Pre-computed encoder embeddings shape mismatch** — Not the cause; never reached.
 - **Experiment YAML existence** — `configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml` exists and loads fine.
@@ -132,11 +132,11 @@ Both PPO YAMLs set `use_layer_norm: true`. The originating commit message says "
 
 ### Adjacent issue (flagged but **not fixed** by this plan)
 
-`configs/models/neuromodulated_dreamer_v3.yaml` has the same problem **plus** is missing the entire mixture-sampling block:
+`configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml` has the same problem **plus** is missing the entire mixture-sampling block:
 
 ```
 $ grep -nE "sampling_mode|mixture_positive_slots|mixture_recent_slots|mixture_recent_window|positive_buffer_capacity|use_layer_norm" \
-    configs/models/neuromodulated_dreamer_v3.yaml
+    configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml
 (no matches)
 ```
 
@@ -152,7 +152,7 @@ No code changes. No Python changes. The `config.get_mandatory` call at `dreamer_
 
 ### File Changes
 
-#### `configs/models/dreamer_v3.yaml` (insert one line at line 42)
+#### `configs/models/dreamer_v3/dreamer_v3.yaml` (insert one line at line 42)
 
 Add the single key `use_layer_norm: true` between `unimix` (line 41) and the "Encoding Configuration" comment (line 43).
 
@@ -180,7 +180,7 @@ That is the **only** code/config change required to make the user's command run.
 
 #### `scratch/test_dreamer_v3_config_smoke.py` (new file)
 
-A minimal, fast (no GPU, no env, no model-build) smoke test that asserts every mandatory `agent.*` key referenced in `dreamer_v3_trainer.py` is declared in `configs/models/dreamer_v3.yaml`. Catches future "added a `get_mandatory` call but forgot to update the YAML" regressions for this exact config.
+A minimal, fast (no GPU, no env, no model-build) smoke test that asserts every mandatory `agent.*` key referenced in `dreamer_v3_trainer.py` is declared in `configs/models/dreamer_v3/dreamer_v3.yaml`. Catches future "added a `get_mandatory` call but forgot to update the YAML" regressions for this exact config.
 
 Place under `scratch/` (matches existing project convention — see `scratch/test_fallback.py`). Runnable with the project python:
 
@@ -192,7 +192,7 @@ Test body (developer agent to implement — sketch):
 
 ```python
 """Smoke test: every mandatory agent.* key consumed by DreamerTrainer.__init__
-is present in configs/models/dreamer_v3.yaml. No GPU, no env, no model build.
+is present in configs/models/dreamer_v3/dreamer_v3.yaml. No GPU, no env, no model build.
 
 Run:
     /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scratch/test_dreamer_v3_config_smoke.py
@@ -224,7 +224,7 @@ MANDATORY_KEYS = [
     'agent.sampling_mode',
 ]
 
-cfg = Config.load_yaml('configs/models/dreamer_v3.yaml')
+cfg = Config.load_yaml('configs/models/dreamer_v3/dreamer_v3.yaml')
 missing = []
 for key in MANDATORY_KEYS:
     try:
@@ -258,7 +258,7 @@ After the YAML edit:
    ```bash
    timeout 90 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
      --config configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml \
-     --agent_config configs/models/dreamer_v3.yaml \
+     --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
      --num-envs 16 --episodes 10000 --checkpoint-frequency 100000 \
      --device cuda:0 --log-interval 10 --no-wandb \
      --tag "smoke_dreamer_v3_post_fix" 2>&1 | tail -40
@@ -270,7 +270,7 @@ After the YAML edit:
 
 ### Checkpoints
 
-- [x] **Checkpoint 1** — After the YAML edit, `grep -n "use_layer_norm" configs/models/dreamer_v3.yaml` returns exactly one match at line 42, value `true`. `neuromodulated_dreamer_v3.yaml` confirmed untouched.
+- [x] **Checkpoint 1** — After the YAML edit, `grep -n "use_layer_norm" configs/models/dreamer_v3/dreamer_v3.yaml` returns exactly one match at line 42, value `true`. `neuromodulated_dreamer_v3.yaml` confirmed untouched.
 - [x] **Checkpoint 2** — Smoke test (`scratch/test_dreamer_v3_config_smoke.py`) prints `OK: all 16 mandatory keys present in dreamer_v3.yaml` and exits 0.
 - [x] **Checkpoint 3** — `timeout 90 … --device cuda:0 …` produces tqdm iteration bar at 2.64it/s, iteration 1 logs Loss/Rew/R_MAE/Ent, no `ValueError`. Process killed by signal 15 (timeout), exit code 0.
 
@@ -283,11 +283,11 @@ After the YAML edit:
 
 Two files changed:
 
-1. **`scratch/test_dreamer_v3_config_smoke.py`** (new file) — Minimal smoke test asserting all 16 mandatory `agent.*` keys from `DreamerTrainer.__init__` are present in `configs/models/dreamer_v3.yaml`. Uses absolute path derivation (`PROJECT_ROOT = dirname(dirname(abspath(__file__)))`) to resolve the config file correctly regardless of cwd. Created before the YAML fix per plan instructions.
+1. **`scratch/test_dreamer_v3_config_smoke.py`** (new file) — Minimal smoke test asserting all 16 mandatory `agent.*` keys from `DreamerTrainer.__init__` are present in `configs/models/dreamer_v3/dreamer_v3.yaml`. Uses absolute path derivation (`PROJECT_ROOT = dirname(dirname(abspath(__file__)))`) to resolve the config file correctly regardless of cwd. Created before the YAML fix per plan instructions.
 
-2. **`configs/models/dreamer_v3.yaml`** (+2 lines at line 42) — Inserted `use_layer_norm: true` with its explanatory comment between `unimix: 0.01` (line 41) and the `# Encoding Configuration` comment (line 43), exactly as specified in the plan's File Changes section.
+2. **`configs/models/dreamer_v3/dreamer_v3.yaml`** (+2 lines at line 42) — Inserted `use_layer_norm: true` with its explanatory comment between `unimix: 0.01` (line 41) and the `# Encoding Configuration` comment (line 43), exactly as specified in the plan's File Changes section.
 
-No other files were modified. `configs/models/neuromodulated_dreamer_v3.yaml` was intentionally left untouched (out of scope per plan).
+No other files were modified. `configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml` was intentionally left untouched (out of scope per plan).
 
 ### Pre-fix Regression Test Output (FAIL — expected)
 
@@ -344,7 +344,7 @@ The training loop reached `dreamer_v3_trainer.py:75` and beyond — iteration 1 
 ### `git diff --stat HEAD` (changed files)
 
 ```
-configs/models/dreamer_v3.yaml           |  2 ++
+configs/models/dreamer_v3/dreamer_v3.yaml           |  2 ++
 scratch/test_dreamer_v3_config_smoke.py  |  (untracked, ?? in git status)
 ```
 All other modified files in the diff stat are pre-existing uncommitted changes unrelated to this plan.
@@ -355,7 +355,7 @@ None. Implemented exactly as specified.
 
 ### Blockers / Follow-up Items
 
-- `configs/models/neuromodulated_dreamer_v3.yaml` is missing both `use_layer_norm` and the full mixture-sampler block. A separate plan should be opened when neuromodulated runs are needed (as flagged in the plan's "Adjacent issue" section).
+- `configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml` is missing both `use_layer_norm` and the full mixture-sampler block. A separate plan should be opened when neuromodulated runs are needed (as flagged in the plan's "Adjacent issue" section).
 - The user should update `--device cuda:3` to `cuda:0` or `cuda:1` in `train_command-new.sh` (no such GPU on this box).
 
 ## Verification Report
@@ -365,10 +365,10 @@ None. Implemented exactly as specified.
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `configs/models/dreamer_v3.yaml` | +2 lines (`use_layer_norm: true` + continuation comment) inserted at line 42, between `unimix: 0.01` (L41) and `# Encoding Configuration` (L45) | ✅ | Value `true` matches PPO YAMLs (`recurrent_ppo.yaml:20`, `neuromodulated_ppo.yaml:20`). Placement matches plan exactly. Diff is `+2/-0`. |
+| `configs/models/dreamer_v3/dreamer_v3.yaml` | +2 lines (`use_layer_norm: true` + continuation comment) inserted at line 42, between `unimix: 0.01` (L41) and `# Encoding Configuration` (L45) | ✅ | Value `true` matches PPO YAMLs (`recurrent_ppo.yaml:20`, `neuromodulated_ppo.yaml:20`). Placement matches plan exactly. Diff is `+2/-0`. |
 | `scratch/test_dreamer_v3_config_smoke.py` | new file — smoke test enumerating all 16 mandatory `agent.*` keys consumed by `DreamerTrainer.__init__` (10 architecture keys at L65–78, 3 LR keys at L96/104/112, plus `use_layer_norm`, `encoding_mode`, `sampling_mode`) | ✅ | Re-confirmed pre-fix behavior via `git stash`: test correctly FAILs with exit 1 reporting `agent.use_layer_norm` missing. Post-fix: exit 0, "OK: all 16 mandatory keys present". Test self-documents the bug it guards against (clear docstring + explicit key list). Does not swallow exceptions. |
 
-**Out-of-scope guardrails (all clean)**: `configs/models/neuromodulated_dreamer_v3.yaml`, `train_command-new.sh`, `train.py`, and all of `src/` show `0` lines of diff vs HEAD — no scope creep.
+**Out-of-scope guardrails (all clean)**: `configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml`, `train_command-new.sh`, `train.py`, and all of `src/` show `0` lines of diff vs HEAD — no scope creep.
 
 **Root-cause vs symptom check**: Fix adds the missing YAML key (root-cause) rather than relaxing `get_mandatory` at `dreamer_v3_trainer.py:75` (symptom). Confirmed: no `src/` files modified; the strict-config call site is preserved. ✅
 
@@ -381,7 +381,7 @@ None. Implemented exactly as specified.
 
 <!--
 Adjacent issue (NOT fixed by this plan, see Analysis):
-  configs/models/neuromodulated_dreamer_v3.yaml is missing both
+  configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml is missing both
   `use_layer_norm` and the entire mixture-sampler block
   (sampling_mode, mixture_positive_slots, mixture_recent_slots,
    mixture_recent_window, positive_buffer_capacity).

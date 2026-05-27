@@ -198,14 +198,14 @@ System-of-record. `experiment-designer` filled the planned columns; `training-ru
 
 | Run | Config (env / mixture) | Config (agent) |
 |-----|-------------------------|----------------|
-| 1 | `--mixture-mode configs/experiment/nmn_meta_2x3_mixture/` (after dev-touch lands; see §2.4) | `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` |
-| 2 | (same) | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
-| 3 | `--config configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` (existing) | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
-| 4 | `--config configs/experiment/nmn_meta_2x3_mixture/active_distinct.yaml` | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
-| 5 | `--config configs/experiment/nmn_meta_2x3_mixture/active_swapped.yaml` | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
-| 6 | `--config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml` (existing) | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
-| 7 | `--config configs/experiment/nmn_meta_2x3_mixture/passive_distinct.yaml` | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
-| 8 | `--config configs/experiment/nmn_meta_2x3_mixture/passive_swapped.yaml` | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
+| 1 | `--mixture-mode configs/experiment/nmn_meta_2x3_mixture/` (after dev-touch lands; see §2.4) | `configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml` |
+| 2 | (same) | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
+| 3 | `--config configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` (existing) | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
+| 4 | `--config configs/experiment/nmn_meta_2x3_mixture/active_distinct.yaml` | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
+| 5 | `--config configs/experiment/nmn_meta_2x3_mixture/active_swapped.yaml` | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
+| 6 | `--config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml` (existing) | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
+| 7 | `--config configs/experiment/nmn_meta_2x3_mixture/passive_distinct.yaml` | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
+| 8 | `--config configs/experiment/nmn_meta_2x3_mixture/passive_swapped.yaml` | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` (existing) |
 
 **Specialist arm-choice note.** The 6 specialists use the **unmodulated** baseline architecture, not the modulated one. Specialists are *ceiling references* — they show "what's achievable on this env structure if you just train one agent per context cleanly". Whether the modulated agent could match a per-context-trained modulated specialist is a question the head-to-head cells answer (the modulated mixture-trained agent's per-context survival should be comparable to a modulated specialist's; that is what context-conditioning *means*). Adding per-context modulated specialists would double the cell count without changing the headline read-out.
 
@@ -215,7 +215,7 @@ System-of-record. `experiment-designer` filled the planned columns; `training-ru
 - `configs/experiment/nmn_meta_2x3_mixture/active_swapped.yaml` — (active, swapped olfactory). LOAD-BEARING.
 - `configs/experiment/nmn_meta_2x3_mixture/passive_distinct.yaml` — (passive, distinct).
 - `configs/experiment/nmn_meta_2x3_mixture/passive_swapped.yaml` — (passive, swapped). LOAD-BEARING.
-- `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` — new canonical FiLM g1 modulated agent config with `temp_clip: [0.5, 5.0]` (also used by the continual sister experiment).
+- `configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml` — new canonical FiLM g1 modulated agent config with `temp_clip: [0.5, 5.0]` (also used by the continual sister experiment).
 
 The matched cells (`01-interoNocicept_sameProp.yaml`, `02-sameProp_R2_passivePredator.yaml`) are **REUSED** unchanged from the project's existing hypervigilance config family. The unmodulated agent config is REUSED unchanged.
 
@@ -391,7 +391,7 @@ In priority order:
 2. **`env-config-auditor`** (BEFORE launch, parallel with #1). Audit:
    - the 4 new env configs in `configs/experiment/nmn_meta_2x3_mixture/` for parity (body / sensors / noise byte-identical across all 6 contexts; differ ONLY in olfactory `properties` and predator behaviour fields).
    - obs↔noise invariants (no env-spec changes shifting modality dimensions across the 6 contexts; if any shift, the mixture sampler at episode reset breaks).
-   - the new agent config `configs/models/recurrent_ppo_nmn_film_g1_tempceil5.yaml` for parity with `recurrent_ppo_nmn_het_film_g1.yaml` modulo the `temp_clip` change.
+   - the new agent config `configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml` for parity with `recurrent_ppo_nmn_het_film_g1.yaml` modulo the `temp_clip` change.
 3. **`experiment-analyzer` (pre-launch, parallel)**. Run the 6×6 ΔCKA pre-check on existing v8 trajectories per the v2 direction memo §4.1 — the cheap measurement-only probe that runs without GPU spend. The result is informational (the lock-menu Option C launches anyway), but a v8-positive ΔCKA strengthens the prior on H₁a/H₁b and a v8-negative caveats the launch.
 4. **User authorisation** — review #1 (mixture-mode lands), #2 (auditor pass), and this design doc; greenlight launch.
 5. **`training-runner`** (after authorisation). Launch all 8 cells per the manifest. Pre-flight: confirm node 102/103/104/105 conda envs (per memory rule `feedback_runner_node_env_preflight`); verify exactly one PID per tag post-launch (per `feedback_runner_post_launch_pgrep`).

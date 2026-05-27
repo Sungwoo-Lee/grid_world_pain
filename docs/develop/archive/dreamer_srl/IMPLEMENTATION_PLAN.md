@@ -195,7 +195,7 @@ Sheeprl's `loss.py` docstring says `(1 - dones) * γ` but the actual call site u
 
 ### Design
 
-Five new Python modules under `src/algorithms/dreamer_srl/`, plus a config family under `configs/dreamer_srl/`. The training entry (`train.py`) gets one new branch in the algorithm dispatch (≈30 lines added; nothing removed). No existing file under `src/models/`, `src/environment/`, `src/utils/`, or `configs/models/` is modified.
+Five new Python modules under `src/algorithms/dreamer_srl/`, plus a config family under `configs/models/dreamer_srl/`. The training entry (`train.py`) gets one new branch in the algorithm dispatch (≈30 lines added; nothing removed). No existing file under `src/models/`, `src/environment/`, `src/utils/`, or `configs/models/` is modified.
 
 **The five new modules:**
 
@@ -382,11 +382,11 @@ The biggest file. Translate sheeprl's `agent.py` (1236 lines) and the `LayerNorm
 - **NNX**, matching the existing JAX Dreamer scaffolding (`src/models/dreamer_v3_nnx.py`). Keep `dreamer-srl` `flax.nnx` + `optax` + `jax`. Rationale: side-by-side diff against the current Dreamer reads as a true sheeprl-vs-ours diff, not a Flax-dialect diff. Decision locked 2026-05-12 (was Risks §1; now RESOLVED).
 - **`Ratio` stays Python-side** (uncompiled). The top-level `train.py` calls `ratio(env_step) -> num_grad_steps`, then runs `one_train_step` in a Python loop that count of times.
 
-#### CREATE `configs/dreamer_srl/` family (new directory, three files)
+#### CREATE `configs/models/dreamer_srl/` family (new directory, three files)
 
-Two-tier config: one model file holding the network sizes / training hyperparameters (the dreamer-srl analog of `configs/models/dreamer_v3.yaml`), one experiment file pointing at the food-only task. We DO NOT create per-stage curriculum configs in this plan — parity gate is food-only only.
+Two-tier config: one model file holding the network sizes / training hyperparameters (the dreamer-srl analog of `configs/models/dreamer_v3/dreamer_v3.yaml`), one experiment file pointing at the food-only task. We DO NOT create per-stage curriculum configs in this plan — parity gate is food-only only.
 
-##### CREATE `configs/dreamer_srl/agent_xs.yaml` (new, ~70 lines)
+##### CREATE `configs/models/dreamer_srl/agent_xs.yaml` (new, ~70 lines)
 
 Direct YAML transcription of `tmp/sheeprl/sheeprl/configs/algo/dreamer_v3_XL.yaml` + `dreamer_v3_XS.yaml` overrides. Flattened to single-document YAML (no Hydra). Every key gets fetched via `Config.get_mandatory` in the trainer — no fallbacks.
 
@@ -537,7 +537,7 @@ agent:
 | Continue head | `world_model.discount_model.mlp_layers` (1) | `world_model.discount_model.dense_units` (256) | uniform_init_weights(1.0) | |
 | Actor trunk | top-level (1) | top-level (256) | uniform_init_weights(1.0) | Heads get `uniform_init_weights(1.0)` (sheeprl `build_agent:1171`) |
 
-##### CREATE `configs/dreamer_srl/01_food_only.yaml` (new, ~30 lines — points at the existing env config + agent config)
+##### CREATE `configs/models/dreamer_srl/01_food_only.yaml` (new, ~30 lines — points at the existing env config + agent config)
 
 ```yaml
 # dreamer-srl parity-gate experiment config.
@@ -550,7 +550,7 @@ defaults_from: configs/experiment/dreamer_curriculum/01_food_only.yaml
 #  documented in docs/develop/active/diagnosis/sheeprl_drop_in_test.md
 #  Implementation Report §1 — same merge dance the sheeprl bridge uses.)
 
-agent_config: configs/dreamer_srl/agent_xs.yaml
+agent_config: configs/models/dreamer_srl/agent_xs.yaml
 
 training:
   num_envs: 4                     # match the sheeprl jzgkcep4 run for parity
@@ -573,9 +573,9 @@ total_steps: 200_000
 agent_cfg = Config.load_yaml(config.get_mandatory('agent_config'))
 config.merge(agent_cfg)
 ```
-No new YAML-level mechanism; no change to `src/utils/config.py`. The `01_food_only.yaml` shown above keeps `agent_config: configs/dreamer_srl/agent_xs.yaml` as the wiring; the `defaults_from:` line above is **dropped** (left in the example for context but DO NOT implement it — strike it from the implementation YAML).
+No new YAML-level mechanism; no change to `src/utils/config.py`. The `01_food_only.yaml` shown above keeps `agent_config: configs/models/dreamer_srl/agent_xs.yaml` as the wiring; the `defaults_from:` line above is **dropped** (left in the example for context but DO NOT implement it — strike it from the implementation YAML).
 
-##### CREATE `configs/dreamer_srl/__init__.py` — not needed; `configs/` is YAML-only.
+##### CREATE `configs/models/dreamer_srl/__init__.py` — not needed; `configs/` is YAML-only.
 
 #### EDIT `train.py` (lines around 430-460 and 770-820 — ADD a `dreamer-srl` branch; do NOT modify the existing `DreamerV3` branch)
 
@@ -662,8 +662,8 @@ Used in Step 11 of the verification protocol below. Threshold for "bit-identical
 | `src/algorithms/dreamer_srl/agent.py` | NEW | ~700 | `LayerNormGRUCell` (fix #28), `MLP`, encoder/decoder, `RSSM` (fix #30), `Actor`, `Critic`, `Player`, `build_agent` (fix #27) |
 | `src/algorithms/dreamer_srl/loss.py` | NEW | ~250 | Distributions + `reconstruction_loss` |
 | `src/algorithms/dreamer_srl/train.py` | NEW | ~500 | `build_state`, `one_train_step`, `collect_step`, target-critic Polyak update, critic loss (fix #29) |
-| `configs/dreamer_srl/agent_xs.yaml` | NEW | ~70 | Sheeprl XS hyperparameter mapping |
-| `configs/dreamer_srl/01_food_only.yaml` | NEW | ~30 | Food-only env + agent config |
+| `configs/models/dreamer_srl/agent_xs.yaml` | NEW | ~70 | Sheeprl XS hyperparameter mapping |
+| `configs/models/dreamer_srl/01_food_only.yaml` | NEW | ~30 | Food-only env + agent config |
 | `train.py` | EDIT | +80–120, −0 | New `dreamer-srl` algorithm branch (lines ~430, ~456, ~773, ~1319, ~1461, ~1736, ~2000, ~2635 — additive) |
 | `scripts/dreamer_srl_offline_check.py` | NEW (optional) | ~150 | Cross-framework forward-pass parity check |
 | **Total** | | **~2240 new + ~100 edits in `train.py`** | |
@@ -707,7 +707,7 @@ This is the **gate** for "dreamer-srl is done". It is not a hyperparameter sweep
 
 ### The gate
 
-> Three seeds of dreamer-srl, running `configs/dreamer_srl/01_food_only.yaml`, mean survival ≥ ~500 over the last 50,000 policy steps (40k–200k window, by analogy with `jzgkcep4`'s saturation window) and wall-clock ≤ 25 hours per seed on the same node sheeprl's `jzgkcep4` ran on (node 114, RTX 6000 Ada).
+> Three seeds of dreamer-srl, running `configs/models/dreamer_srl/01_food_only.yaml`, mean survival ≥ ~500 over the last 50,000 policy steps (40k–200k window, by analogy with `jzgkcep4`'s saturation window) and wall-clock ≤ 25 hours per seed on the same node sheeprl's `jzgkcep4` ran on (node 114, RTX 6000 Ada).
 
 ### Launch commands
 
@@ -718,7 +718,7 @@ Launched via the `training-runner` agent. Three runs in parallel (one per seed),
 XLA_PYTHON_CLIENT_PREALLOCATE=false CUDA_VISIBLE_DEVICES=0 \
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --algorithm dreamer-srl \
-  --config configs/dreamer_srl/01_food_only.yaml \
+  --config configs/models/dreamer_srl/01_food_only.yaml \
   --total-timesteps 200000 \
   --num-envs 4 \
   --seed 0 \
@@ -801,7 +801,7 @@ WandB project: `grid_world_pain_dreamer_srl_parity` (NEW project — keeps these
 
 9. **WandB metric-name collision with the existing Dreamer (resolved-in-plan)**. The existing JAX Dreamer logs metrics under names like `dreamer_v3/world_model_loss` (or whatever pattern `train.py` uses for it). Sheeprl's `AGGREGATOR_KEYS` (`Loss/world_model_loss`, `Game/ep_len_avg`, …) is what we want for dreamer-srl, so the analyzer can reuse the `jzgkcep4` extraction code. **The new WandB project name (`grid_world_pain_dreamer_srl_parity`) keeps the runs apart;** no collision.
 
-10. **No-fallback-defaults audit (resolved-in-plan, flagging)**. Every new key in `configs/dreamer_srl/agent_xs.yaml` must be read via `Config.get_mandatory` in the trainer. Specifically: `agent.gamma`, `agent.lmbda`, `agent.horizon`, `agent.replay_ratio`, `agent.learning_starts`, `agent.per_rank_pretrain_steps`, `agent.per_rank_sequence_length`, `agent.per_rank_batch_size`, `agent.unimix`, `agent.hafner_initialization`, `agent.dense_units`, `agent.mlp_layers`, `agent.layer_norm_eps`, `agent.world_model.*` (every leaf), `agent.actor.*` (every leaf), `agent.critic.*` (every leaf), `agent.mlp_keys.*`, `agent.cnn_keys.*`, `agent.buffer_size`, `agent.buffer_device`, `agent.player.discrete_size`, `distribution.type`, `distribution.validate_args`. **No `config.get('key', default)`** in dreamer-srl code. This is the project-wide rule (`CLAUDE.md` "No fallback defaults").
+10. **No-fallback-defaults audit (resolved-in-plan, flagging)**. Every new key in `configs/models/dreamer_srl/agent_xs.yaml` must be read via `Config.get_mandatory` in the trainer. Specifically: `agent.gamma`, `agent.lmbda`, `agent.horizon`, `agent.replay_ratio`, `agent.learning_starts`, `agent.per_rank_pretrain_steps`, `agent.per_rank_sequence_length`, `agent.per_rank_batch_size`, `agent.unimix`, `agent.hafner_initialization`, `agent.dense_units`, `agent.mlp_layers`, `agent.layer_norm_eps`, `agent.world_model.*` (every leaf), `agent.actor.*` (every leaf), `agent.critic.*` (every leaf), `agent.mlp_keys.*`, `agent.cnn_keys.*`, `agent.buffer_size`, `agent.buffer_device`, `agent.player.discrete_size`, `distribution.type`, `distribution.validate_args`. **No `config.get('key', default)`** in dreamer-srl code. This is the project-wide rule (`CLAUDE.md` "No fallback defaults").
 
 11. **`Moments` `max_=1.0` semantic effect (flagging — professor-rl-bayesian-dl #11)**. Sheeprl `dreamer_v3.yaml:134` sets `max: 1.0`, overriding the class default `1e8`. The semantic is: `invscale = max(1/max_, high - low)`, so with `max_=1.0` the **invscale floor is `1.0`**, meaning when the lambda-value spread is tiny the advantage is NOT re-scaled larger than the spread itself. The walkthrough calls this a "ceiling" but it's actually a floor on the invscale (= a ceiling on the scale-down factor). Document precisely in the YAML so the developer does not silently set it back to `1e8`.
 
@@ -844,8 +844,8 @@ WandB project: `grid_world_pain_dreamer_srl_parity` (NEW project — keeps these
 | `src/algorithms/dreamer_srl/agent.py` | NEW | | |
 | `src/algorithms/dreamer_srl/loss.py` | NEW | | |
 | `src/algorithms/dreamer_srl/train.py` | NEW | | |
-| `configs/dreamer_srl/agent_xs.yaml` | NEW | | |
-| `configs/dreamer_srl/01_food_only.yaml` | NEW | | |
+| `configs/models/dreamer_srl/agent_xs.yaml` | NEW | | |
+| `configs/models/dreamer_srl/01_food_only.yaml` | NEW | | |
 | `train.py` | EDIT (additive) | | |
 | `scripts/dreamer_srl_offline_check.py` | NEW (optional) | | |
 
@@ -984,7 +984,7 @@ All 29 deviations flagged by the three reviewers have been folded into the body 
 2. **Item 2 — Prepend-zero-action shift** — applied at: Training-loop semantics §S2, cited in `train.py` `one_train_step` row + new Checkpoint 2b.
 3. **Item 3 — `learning_starts` random-action prefill** — applied at: Training-loop semantics §S3, `collect_step` row, Implementation order Step 9, YAML comment block on `learning_starts`, new Checkpoint 9b.
 4. **Item 4 — `prepare_obs` tightening** — applied at: `utils.py` `prepare_obs` row (replaced "no image rescale" with explicit `[T=1, B, F]` contract note).
-5. **Item 5 — Distribution config (`type`, `validate_args`)** — applied at: `configs/dreamer_srl/agent_xs.yaml` (new top-level `distribution:` block).
+5. **Item 5 — Distribution config (`type`, `validate_args`)** — applied at: `configs/models/dreamer_srl/agent_xs.yaml` (new top-level `distribution:` block).
 6. **Item 6 — Actor std hyperparameters (`init_std`, `min_std`, `max_std`)** — applied at: `agent_xs.yaml` actor block (kept for signature parity with comment noting "unused on discrete path").
 7. **Item 7 — `discount_model.learnable` + reward/continue head MLP sizing** — applied at: `agent_xs.yaml` (new `reward_model:` and `discount_model:` sub-blocks under `world_model`).
 8. **Item 8 — Encoder/decoder/recurrent network sizing keys** — applied at: new "MLP sizing table" section after the YAML block, naming which network reads which `mlp_layers`/`dense_units` for each of 9 networks.

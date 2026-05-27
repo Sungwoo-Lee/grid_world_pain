@@ -21,7 +21,7 @@ wandb_tag: "dreamer_curriculum_food_then_predator_s0"
 > - Stage 2 config: [`configs/experiment/dreamer_curriculum/02_predator_slow.yaml`](../../../../configs/experiment/dreamer_curriculum/02_predator_slow.yaml)
 > - Stage 3 config: [`configs/experiment/dreamer_curriculum/03_predator_full.yaml`](../../../../configs/experiment/dreamer_curriculum/03_predator_full.yaml)
 > - Schedule: [`configs/continual/dreamer_curriculum_food_then_predator.yaml`](../../../../configs/continual/dreamer_curriculum_food_then_predator.yaml)
-> - Agent config: [`configs/models/dreamer_v3_curriculum.yaml`](../../../../configs/models/dreamer_v3_curriculum.yaml)
+> - Agent config: [`configs/models/dreamer_v3/dreamer_v3_curriculum.yaml`](../../../../configs/models/dreamer_v3/dreamer_v3_curriculum.yaml)
 
 > **Note**: Single-seed pilot. The result is observational (not statistical). The
 > deliverable is a single WandB run whose Stage 3 segment shows survival
@@ -130,7 +130,7 @@ This is by design (matches the basic configs the curriculum stages were
 copied from). The cross-stage live-load probe (§4) confirms they end up
 identical across all three stages after the default merge.
 
-Agent-side (controlled by `configs/models/dreamer_v3_curriculum.yaml` applied
+Agent-side (controlled by `configs/models/dreamer_v3/dreamer_v3_curriculum.yaml` applied
 to all three stages):
 
 ```text
@@ -199,9 +199,9 @@ System-of-record for every training run in this experiment.
 
 | Run | Schedule | Configs-dir | Agent config |
 |-----|----------|-------------|--------------|
-| 1 | `configs/continual/dreamer_curriculum_food_then_predator.yaml` | `configs/experiment/dreamer_curriculum/` | `configs/models/dreamer_v3_curriculum.yaml` |
+| 1 | `configs/continual/dreamer_curriculum_food_then_predator.yaml` | `configs/experiment/dreamer_curriculum/` | `configs/models/dreamer_v3/dreamer_v3_curriculum.yaml` |
 
-All five files are produced fresh in this experiment (no edits to pre-existing `configs/experiment/basic/` or `configs/models/dreamer_v3.yaml`).
+All five files are produced fresh in this experiment (no edits to pre-existing `configs/experiment/basic/` or `configs/models/dreamer_v3/dreamer_v3.yaml`).
 
 ### 3.2 Exact launch command
 
@@ -209,7 +209,7 @@ All five files are produced fresh in this experiment (no edits to pre-existing `
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --configs-dir configs/experiment/dreamer_curriculum/ \
   --continual-schedule configs/continual/dreamer_curriculum_food_then_predator.yaml \
-  --agent_config configs/models/dreamer_v3_curriculum.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_curriculum.yaml \
   --num-envs 16 \
   --seed 0 \
   --device cuda:3 \

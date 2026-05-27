@@ -615,7 +615,7 @@ def _run_buffer_parallel_env_lane_non_interference(fixture) -> tuple:
 def _run_cadence_yaml_key_parity_with_sheeprl_xs(fixture) -> tuple:
     """Cadence test: agent_xs.yaml keys match sheeprl XS defaults.
 
-    Loads configs/dreamer_srl/agent_xs.yaml and checks 9 cadence keys.
+    Loads configs/models/dreamer_srl/agent_xs.yaml and checks 9 cadence keys.
     Returns 0.0 diff if all keys match, else fails with mismatch values.
 
     Sheeprl source: vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml,
@@ -667,7 +667,7 @@ def _run_cadence_yaml_key_parity_with_sheeprl_xs(fixture) -> tuple:
         diff = float(len(mismatches))
         metadata = (
             f"sheeprl: vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml\n"
-            f"  jax:     configs/dreamer_srl/agent_xs.yaml\n"
+            f"  jax:     configs/models/dreamer_srl/agent_xs.yaml\n"
             f"  fixture: expected cadence keys from sheeprl XS at 33b6366\n"
             f"  MISMATCH: {mismatches}"
         )
@@ -675,7 +675,7 @@ def _run_cadence_yaml_key_parity_with_sheeprl_xs(fixture) -> tuple:
 
     metadata = (
         f"sheeprl: vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml\n"
-        f"  jax:     configs/dreamer_srl/agent_xs.yaml\n"
+        f"  jax:     configs/models/dreamer_srl/agent_xs.yaml\n"
         f"  fixture: expected cadence keys from sheeprl XS at 33b6366\n"
         f"  All 9 cadence keys match: {list(expected.keys())}"
     )

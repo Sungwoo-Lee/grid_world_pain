@@ -12,8 +12,8 @@ Writes a CSV trace to tmp/sps_bench_<label>_<YYYYMMDD_HHMMSS>.csv with columns:
   policy_step, wall_time, instantaneous_sps
 
 Config used:
-  Agent config: configs/dreamer_srl/01_food_only_smoke.yaml  (if present; else
-                configs/dreamer_srl/01_food_only.yaml — see NOTE below)
+  Agent config: configs/models/dreamer_srl/01_food_only_smoke.yaml  (if present; else
+                configs/models/dreamer_srl/01_food_only.yaml — see NOTE below)
   Env config:   configs/experiment/dreamer_curriculum/01_food_only.yaml
 
 CLI overrides applied:

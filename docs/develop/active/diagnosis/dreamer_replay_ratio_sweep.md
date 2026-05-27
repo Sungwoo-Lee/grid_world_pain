@@ -51,14 +51,14 @@ The ±15% tolerance is chosen because: (a) the 30-iter window in the parent doc 
 
 | Variable | Values | Rationale |
 |---|---|---|
-| `agent.replay_ratio` (in `configs/models/dreamer_v3.yaml`, line 5) | `{0.125, 0.25, 0.5, 1.0}` | Spans 8× range. R=1 is the parent baseline (anchor). R=0.5 is the parent's headline recommendation. R=0.25 / 0.125 extend the curve toward the "all-collect, no-train" limit where SPS should saturate at `1 / a ≈ 3.6 iter/s` (× 2048 = 7314 SPS in the limit; we won't hit this with R=0.125 but the trajectory should bend toward it). |
+| `agent.replay_ratio` (in `configs/models/dreamer_v3/dreamer_v3.yaml`, line 5) | `{0.125, 0.25, 0.5, 1.0}` | Spans 8× range. R=1 is the parent baseline (anchor). R=0.5 is the parent's headline recommendation. R=0.25 / 0.125 extend the curve toward the "all-collect, no-train" limit where SPS should saturate at `1 / a ≈ 3.6 iter/s` (× 2048 = 7314 SPS in the limit; we won't hit this with R=0.125 but the trajectory should bend toward it). |
 
 ### 2.2 Controlled Variables
 
 ```yaml
 # Environment
 config: configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml
-agent_config: configs/models/dreamer_v3.yaml   # only line 5 (replay_ratio) varies
+agent_config: configs/models/dreamer_v3/dreamer_v3.yaml   # only line 5 (replay_ratio) varies
 
 # CLI
 --num-envs 16
@@ -102,10 +102,10 @@ Run R values in **decreasing** order: `1.0 → 0.5 → 0.25 → 0.125`. Rational
 
 ### 3.2 Per-run procedure
 
-The developer should edit `configs/models/dreamer_v3.yaml:5` in place, run, then restore at the end. Pseudo-script:
+The developer should edit `configs/models/dreamer_v3/dreamer_v3.yaml:5` in place, run, then restore at the end. Pseudo-script:
 
 ```bash
-DREAMER_YAML=/media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/models/dreamer_v3.yaml
+DREAMER_YAML=/media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/models/dreamer_v3/dreamer_v3.yaml
 
 # Sanity check that the canonical line still matches before editing
 grep -n "^  replay_ratio:" "$DREAMER_YAML"
@@ -122,7 +122,7 @@ for R in 1.0 0.5 0.25 0.125; do
     PROFILE_BASELINE_ITERS=30 \
     /home/vncuser/miniconda3/envs/grid_world_pain/bin/python /media/nas01/projects/Interoceptive-AI/grid_world_pain/train.py \
         --config configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml \
-        --agent_config configs/models/dreamer_v3.yaml \
+        --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
         --num-envs 16 \
         --episodes 100000000 \
         --device cuda:0 \
@@ -224,7 +224,7 @@ These are appended to §4 (Results) of this doc.
 
 ### 3.5 No new YAML keys
 
-Per CLAUDE.md "No fallback defaults" rule: this sweep adds **zero new YAML keys**. `replay_ratio` exists at `configs/models/dreamer_v3.yaml:5` and is read via `config.get_mandatory('agent.replay_ratio')` at `train.py:588`. The `PROFILE_BASELINE_ITERS` value is an env var (not a config key) because the scaffolding is temporary and never enters production training semantics — same justification the parent doc used for `--profile` (parent §3.4).
+Per CLAUDE.md "No fallback defaults" rule: this sweep adds **zero new YAML keys**. `replay_ratio` exists at `configs/models/dreamer_v3/dreamer_v3.yaml:5` and is read via `config.get_mandatory('agent.replay_ratio')` at `train.py:588`. The `PROFILE_BASELINE_ITERS` value is an env var (not a config key) because the scaffolding is temporary and never enters production training semantics — same justification the parent doc used for `--profile` (parent §3.4).
 
 ## 4. Predicted Outcomes (pre-registered)
 
@@ -409,7 +409,7 @@ Plot (measured points, parent-plan prediction, fit line, rPPO baseline reference
 ### B. Config Diffs
 
 ```yaml
-# configs/models/dreamer_v3.yaml — line 5 only differs across runs:
+# configs/models/dreamer_v3/dreamer_v3.yaml — line 5 only differs across runs:
 agent:
   replay_ratio: 0.125  | 0.25  | 0.5  | 1.0
 # All other lines (batch_size, sequence_length, collect_interval, network sizes, mixture sampling, etc.) are identical to the parent profile baseline.
@@ -457,7 +457,7 @@ Fit: `iter_time(R) = 0.2433 + 0.6964 · R`, R² = 0.99972.
 | File | Status |
 |---|---|
 | `train.py` (post-sweep state) | ✅ scaffolding fully removed (verified by `grep -nE "BASELINE_SPS\|_baseline_iter\|_iter_t0\|PROFILE_BASELINE" train.py` returning no matches) |
-| `configs/models/dreamer_v3.yaml:5` | ✅ restored to `replay_ratio: 1` |
+| `configs/models/dreamer_v3/dreamer_v3.yaml:5` | ✅ restored to `replay_ratio: 1` |
 | `tmp/20260507_011300_dreamer_replay_ratio_sweep/raw_lines.txt` | ✅ four canonical `[BASELINE]` lines preserved verbatim |
 | `tmp/20260507_011300_dreamer_replay_ratio_sweep/run_R0.25.log` | ⚠️ discarded (config-path typo); `run_R0.25_v2.log` is canonical |
 | `tmp/20260507_011300_dreamer_replay_ratio_sweep/sweep_results.csv` | ✅ kept as-is (developer's original output) |
@@ -504,9 +504,9 @@ grep -nE "BASELINE_SPS_ITERS|_baseline_iter_times|_iter_t0|PROFILE_BASELINE" tra
 
 #### Step 2 — YAML key
 
-`configs/models/dreamer_v3.yaml` line 5: `  replay_ratio: 1`. Restored to original value `1` after all runs. Final verification:
+`configs/models/dreamer_v3/dreamer_v3.yaml` line 5: `  replay_ratio: 1`. Restored to original value `1` after all runs. Final verification:
 ```
-grep replay_ratio configs/models/dreamer_v3.yaml
+grep replay_ratio configs/models/dreamer_v3/dreamer_v3.yaml
 →  5:  replay_ratio: 1
 ```
 
@@ -519,7 +519,7 @@ All runs: `PROFILE_BASELINE_ITERS=30`, `--num-envs 16`, `--device cuda:0`, `--no
 #### Step 4 — YAML restored
 
 ```
-grep -n "^  replay_ratio:" configs/models/dreamer_v3.yaml
+grep -n "^  replay_ratio:" configs/models/dreamer_v3/dreamer_v3.yaml
 →  5:  replay_ratio: 1
 ```
 

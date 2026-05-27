@@ -47,8 +47,8 @@ All other configuration is held identical (see §2.2).
 # Environment (shared)
 config: configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml
 # Agent configs (chosen at CLI):
-#   configs/models/dreamer_v3.yaml
-#   configs/models/recurrent_ppo.yaml
+#   configs/models/dreamer_v3/dreamer_v3.yaml
+#   configs/models/recurrent_ppo/recurrent_ppo.yaml
 
 # CLI flags (matched)
 --num-envs 16
@@ -464,7 +464,7 @@ Episode budget is set so the loop survives 220 iterations even in the unlikely w
 ```
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --num-envs 16 \
   --episodes 100000000 \
   --device cuda:0 \
@@ -479,7 +479,7 @@ The `--profile` flag forces the loop to exit after 110 iterations regardless of 
 ```
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml \
-  --agent_config configs/models/dreamer_v3.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
   --num-envs 16 \
   --episodes 100000000 \
   --device cuda:0 \
@@ -928,14 +928,14 @@ Both algorithms ran a 3-episode CPU smoke test before the profile runs to confir
 # rPPO smoke test
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --num-envs 4 --episodes 3 --device cpu --no-wandb --quiet
 # Result: Training complete. Results saved to results/JAX_RecurrentPPO/...
 
 # DreamerV3 smoke test
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml \
-  --agent_config configs/models/dreamer_v3.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
   --num-envs 4 --episodes 3 --device cpu --no-wandb --quiet
 # Result: Training complete. Results saved to results/JAX_DreamerV3/...
 ```
@@ -986,7 +986,7 @@ Smoke test (1-iter CPU, DreamerV3, after the scope fix):
 ```
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/labmeeting/basic-01-PredInterval3_NutGain18.yaml \
-  --agent_config configs/models/dreamer_v3.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
   --num-envs 4 --episodes 3 --device cpu --no-wandb --quiet
 # Result: Training complete. Results saved to results/JAX_DreamerV3/20260506-185304_default
 ```

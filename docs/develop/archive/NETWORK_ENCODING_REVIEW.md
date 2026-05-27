@@ -815,9 +815,9 @@ The simplified architecture requires updating the neuromodulatory network:
 - Remove `mod_z_bodystate_mean/std` and `mod_beta_bodystate_mean` metric logging
 
 #### 5. Config files
-- `configs/models/recurrent_ppo.yaml`
-- `configs/models/neuromodulated_ppo.yaml`
-- `configs/models/neuromodulated_dreamer_v3.yaml`
+- `configs/models/recurrent_ppo/recurrent_ppo.yaml`
+- `configs/models/ppo/neuromodulated_ppo.yaml`
+- `configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml`
 
 Changes:
 ```yaml

@@ -857,7 +857,7 @@ When `modulation.type` is set to `None` in config:
 -   Implemented `NeuromodulatorRNN`, `ModulatedGRUCell`, and the modulated `ActorCriticRNN` variant.
 -   Integrated into `train.py` with full config/ablation support.
 -   Validated: (a) `modulation.type = None` reproduces baseline performance exactly, (b) modulated agent trains stably, (c) gate activations are interpretable via WandB logging.
--   Config: `configs/models/neuromodulated_ppo.yaml`.
+-   Config: `configs/models/ppo/neuromodulated_ppo.yaml`.
 
 **Phase 2: DreamerV3 — ✅ Implemented.**
 -   Implemented `DreamerNeuromodulatorRNN` with dual input projections (`proj_obs` for observation mode, `proj_imagine` for imagination mode) feeding a shared GRU core.
@@ -869,7 +869,7 @@ When `modulation.type` is set to `None` in config:
 -   Modified `DreamerTrainer.get_action` to run the modulator in observation mode alongside the RSSM step and carry `mod_h` in the state dict.
 -   Integrated into `train.py` DreamerV3 block with WandB logging for modulator metrics (gamma, beta, memory, z_reward).
 -   Validated: (a) `modulation.type = None` reproduces baseline (unmodulated `LayerNormGRUCell`, identical code paths), (b) `Multiplicative` mode: `mod_gamma_mean ≈ 0.88` at init, (c) `PreActivation` mode: beta metrics included, (d) `train_step` and `get_action` produce correct shapes and metrics.
--   Config: `configs/models/neuromodulated_dreamer_v3.yaml`.
+-   Config: `configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml`.
 
 **Rationale for phasing**: PPO's architecture is compact (single `ActorCriticRNN`) and its training loop is much simpler than DreamerV3's world-model + actor-critic pipeline. Debugging modulator interactions was easier in the PPO setting before adapting to DreamerV3's dual-scan architecture.
 

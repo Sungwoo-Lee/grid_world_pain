@@ -32,7 +32,7 @@ I read the plan, the nine-file sheeprl walkthrough at `docs/project/references/s
 | PRNG threading | 🟡 | Plan correctly says "every sampling site takes explicit `key`; never grab from `nnx.Rngs` at forward time." But does not name the sub-key split count per `one_train_step` invocation (see Deviation 5). |
 | Target-critic aliasing | ✅ | Plan §agent.py discipline says target critic is a *second* `Critic` instance; explicitly warns "do NOT alias parameters across the two instances." |
 | Sensor / observation breakdown sync | N/A | Plan is a fresh algorithm with `obs_keys=["state"]` only — no new sensor introduced. Verified the existing food-only env config wiring is not touched. |
-| Configuration Protocol (no-fallback-defaults) | 🟡 | Plan §Risks #10 names every key as mandatory, BUT `defaults_from:` in `configs/dreamer_srl/01_food_only.yaml` is not a real `Config` mechanism (see Deviation 11). |
+| Configuration Protocol (no-fallback-defaults) | 🟡 | Plan §Risks #10 names every key as mandatory, BUT `defaults_from:` in `configs/models/dreamer_srl/01_food_only.yaml` is not a real `Config` mechanism (see Deviation 11). |
 | `is_first` reset broadcast pattern | 🔴 | Plan says `jnp.where(is_first[..., None], learnable_init_state, current_state)`. Sheeprl actually uses `(1 - is_first) * current + is_first * initial` with `is_first` already shaped `[1, B, 1]` (see Deviation 3). |
 | `lax.scan` over time axis | 🔴 | Plan does not specify the scan carry signature or how `is_first` enters the scan body (see Deviation 1). |
 | Replay sequence semantics (straddle episode boundaries) | ✅ | Plan §buffers.py explicitly preserves "windows that DO NOT respect episode boundaries; trainer relies on stored `is_first` flag." |
@@ -304,7 +304,7 @@ def moments_update(state: MomentsState, x: jnp.ndarray, decay=0.99, p_low=0.05, 
 
 ### 9. 🟡 Configuration Protocol Violation — `defaults_from:` in `01_food_only.yaml` is not a real Config mechanism
 
-**Plan location**: §`configs/dreamer_srl/01_food_only.yaml` (line ~344): "`defaults_from: configs/experiment/dreamer_curriculum/01_food_only.yaml`". Plan flag at line 367 admits "the project does not have a `defaults_from`-style merge mechanism in `src/utils/config.py` (only `Config.merge(other)`)."
+**Plan location**: §`configs/models/dreamer_srl/01_food_only.yaml` (line ~344): "`defaults_from: configs/experiment/dreamer_curriculum/01_food_only.yaml`". Plan flag at line 367 admits "the project does not have a `defaults_from`-style merge mechanism in `src/utils/config.py` (only `Config.merge(other)`)."
 
 **Walkthrough location**: N/A (this is project-side).
 
@@ -314,7 +314,7 @@ def moments_update(state: MomentsState, x: jnp.ndarray, decay=0.99, p_low=0.05, 
 
 ### 10. 🟡 Configuration Protocol Concern — `target_update_freq` config key naming
 
-**Plan location**: `configs/dreamer_srl/agent_xs.yaml` (line ~318): `per_rank_target_network_update_freq: 1`. Plan §Risks §10: "every new key in `configs/dreamer_srl/agent_xs.yaml` must be read via `Config.get_mandatory`."
+**Plan location**: `configs/models/dreamer_srl/agent_xs.yaml` (line ~318): `per_rank_target_network_update_freq: 1`. Plan §Risks §10: "every new key in `configs/models/dreamer_srl/agent_xs.yaml` must be read via `Config.get_mandatory`."
 
 **Walkthrough location**: sheeprl `dreamer_v3.yaml:151`.
 

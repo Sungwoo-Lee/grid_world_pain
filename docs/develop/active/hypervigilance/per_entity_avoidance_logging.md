@@ -483,7 +483,7 @@ afterward, not a blocker.
 ```
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
     --config configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml \
-    --model configs/models/recurrent_ppo.yaml \
+    --model configs/models/recurrent_ppo/recurrent_ppo.yaml \
     --episodes 0 --total-timesteps 2000 --quiet
 ```
 

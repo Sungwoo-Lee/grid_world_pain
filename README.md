@@ -103,7 +103,7 @@ Train high-performance JAX agents with massive parallelization.
 **Example: Train RecurrentPPO with 128 parallel environments:**
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-    --agent_config configs/models/recurrent_ppo.yaml \
+    --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
     --config configs/experiment/ablation/homeostatic/08_location.yaml \
     --num-envs 128
 ```

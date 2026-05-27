@@ -97,7 +97,7 @@ predator[0].spawn_area:         [[1,1],[10,10]] # FULL grid
 predator[0].patrol_area:        [[1,1],[10,10]] # FULL grid
 hiding_predator[0..3]:          one per quadrant (TL, TR, BR, BL)
 
-# Agent: configs/models/recurrent_ppo.yaml (unchanged from prior single-seed run)
+# Agent: configs/models/recurrent_ppo/recurrent_ppo.yaml (unchanged from prior single-seed run)
 # Budget: --episodes 10000000 (only ~7.2M reached before user-stop)
 # Envs: 128 parallel
 ```
@@ -140,7 +140,7 @@ two rows are reproduced here:
 
 | Run | Config (env) | Config (agent) |
 |-----|--------------|----------------|
-| 1, 2 | `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 1, 2 | `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` | `configs/models/recurrent_ppo/recurrent_ppo.yaml` |
 
 ---
 
@@ -507,7 +507,7 @@ Steady-state and trajectory-shape claims verify.
 
 None — both Round 1 runs use the unchanged
 `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` and
-`configs/models/recurrent_ppo.yaml`. Only `--seed` differs (42 vs 43).
+`configs/models/recurrent_ppo/recurrent_ppo.yaml`. Only `--seed` differs (42 vs 43).
 
 ### D. Changelog
 

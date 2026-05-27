@@ -164,10 +164,10 @@ System-of-record for every training run in this experiment. **Owned jointly:**
 
 | Run | Stages / Configs-dir | Schedule | Env config | Agent config | Pre-existing inputs | NEW files written by this experiment |
 |-----|---|---|---|---|---|---|
-| A | n/a (single-stage) | n/a | `configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml` (existing) | `configs/models/dreamer_v3_curriculum.yaml` (existing) | env + agent | none |
-| B | `configs/experiment/dreamer_curriculum/` (existing dir) | `configs/continual/dreamer_curriculum_food_then_predator.yaml` (existing) | (per-stage; from configs-dir) | `configs/models/dreamer_v3.yaml` (existing) | env stages + schedule + agent | none |
-| C | n/a (single-stage) | n/a | `configs/experiment/dreamer_diagnostic/03_predator_full_no_homeostatic.yaml` (**NEW**) | `configs/models/dreamer_v3.yaml` (existing) | agent | env config |
-| D | `configs/experiment/dreamer_diagnostic/curriculum_smooth/` (**NEW dir, 4 NEW files**) | `configs/continual/dreamer_curriculum_smooth_4stage.yaml` (**NEW**) | (per-stage; from configs-dir) | `configs/models/dreamer_v3_curriculum.yaml` (existing) | agent | 4 env stages + schedule |
+| A | n/a (single-stage) | n/a | `configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml` (existing) | `configs/models/dreamer_v3/dreamer_v3_curriculum.yaml` (existing) | env + agent | none |
+| B | `configs/experiment/dreamer_curriculum/` (existing dir) | `configs/continual/dreamer_curriculum_food_then_predator.yaml` (existing) | (per-stage; from configs-dir) | `configs/models/dreamer_v3/dreamer_v3.yaml` (existing) | env stages + schedule + agent | none |
+| C | n/a (single-stage) | n/a | `configs/experiment/dreamer_diagnostic/03_predator_full_no_homeostatic.yaml` (**NEW**) | `configs/models/dreamer_v3/dreamer_v3.yaml` (existing) | agent | env config |
+| D | `configs/experiment/dreamer_diagnostic/curriculum_smooth/` (**NEW dir, 4 NEW files**) | `configs/continual/dreamer_curriculum_smooth_4stage.yaml` (**NEW**) | (per-stage; from configs-dir) | `configs/models/dreamer_v3/dreamer_v3_curriculum.yaml` (existing) | agent | 4 env stages + schedule |
 
 **6 NEW files** written by this experiment (paths are absolute):
 
@@ -188,7 +188,7 @@ System-of-record for every training run in this experiment. **Owned jointly:**
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml \
-  --agent_config configs/models/dreamer_v3_curriculum.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_curriculum.yaml \
   --num-envs 16 \
   --seed 0 \
   --episodes 700000 \
@@ -207,7 +207,7 @@ System-of-record for every training run in this experiment. **Owned jointly:**
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --configs-dir configs/experiment/dreamer_curriculum/ \
   --continual-schedule configs/continual/dreamer_curriculum_food_then_predator.yaml \
-  --agent_config configs/models/dreamer_v3.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
   --num-envs 16 \
   --seed 0 \
   --device cuda:1 \
@@ -223,7 +223,7 @@ System-of-record for every training run in this experiment. **Owned jointly:**
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/dreamer_diagnostic/03_predator_full_no_homeostatic.yaml \
-  --agent_config configs/models/dreamer_v3.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
   --num-envs 16 \
   --seed 0 \
   --episodes 700000 \
@@ -242,7 +242,7 @@ System-of-record for every training run in this experiment. **Owned jointly:**
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --configs-dir configs/experiment/dreamer_diagnostic/curriculum_smooth/ \
   --continual-schedule configs/continual/dreamer_curriculum_smooth_4stage.yaml \
-  --agent_config configs/models/dreamer_v3_curriculum.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_curriculum.yaml \
   --num-envs 16 \
   --seed 0 \
   --device cuda:3 \

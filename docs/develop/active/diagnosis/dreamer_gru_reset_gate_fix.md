@@ -344,7 +344,7 @@ No further plumbing in `trainer.py` needed — the flag is consumed inside `Worl
 
 ### §2.3 Config wiring
 
-#### §2.3.1 `configs/models/dreamer_v3.yaml` — add the knob (canonical, full comment)
+#### §2.3.1 `configs/models/dreamer_v3/dreamer_v3.yaml` — add the knob (canonical, full comment)
 
 After the existing `paper_canonical_twohot_bins: true` block at line 48 (and its multi-line comment), add:
 
@@ -358,12 +358,12 @@ After the existing `paper_canonical_twohot_bins: true` block at line 48 (and its
                                 # and §6 item 28 of dreamer_v3_implementation.md.
 ```
 
-#### §2.3.2 `configs/models/dreamer_v3_rr06.yaml` — add the knob (mirror, brief)
+#### §2.3.2 `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` — add the knob (mirror, brief)
 
 After the existing `paper_canonical_twohot_bins: true` at line 86, add:
 
 ```yaml
-  apply_gru_reset_gate: true   # See configs/models/dreamer_v3.yaml for full comment.
+  apply_gru_reset_gate: true   # See configs/models/dreamer_v3/dreamer_v3.yaml for full comment.
 ```
 
 #### §2.3.3 Pre-existing config files (per Z2's Deviation 3 / Implementation Report)
@@ -477,7 +477,7 @@ Confirm both YAML files expose the new mandatory key and a missing key raises:
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python -c "
 from src.utils.strict_config import StrictConfig   # adapt to actual API
-for path in ['configs/models/dreamer_v3.yaml', 'configs/models/dreamer_v3_rr06.yaml']:
+for path in ['configs/models/dreamer_v3/dreamer_v3.yaml', 'configs/models/dreamer_v3/dreamer_v3_rr06.yaml']:
     cfg = StrictConfig.load(path)
     val = cfg.get_mandatory('agent.apply_gru_reset_gate', bool)
     print(f'{path} -> agent.apply_gru_reset_gate = {val}  (type: {type(val).__name__})')
@@ -507,7 +507,7 @@ After the developer reports implementation complete, `training-runner` launches 
 
 | Cell | Node:GPU | Task | Tag | WandB run name | WandB group | Seed | Env steps | Experiment config | Agent config |
 |---|---|---|---|---|---|---|---|---|---|
-| Z3 | n113:0 | NoPred (5×5) | `dreamer_gru_NoPred_rr06_s0_n113` | `dreamer_gru_NoPred_rr06_s0_n113` | `dreamer_gru_reset_gate` | 0 | 700,000 | `configs/experiment/basic/00-5X5_NoPred.yaml` | `configs/models/dreamer_v3_rr06.yaml` (now with `apply_gru_reset_gate: true`, `paper_canonical_twohot_bins: true`, `zero_init_reward_critic: true`) |
+| Z3 | n113:0 | NoPred (5×5) | `dreamer_gru_NoPred_rr06_s0_n113` | `dreamer_gru_NoPred_rr06_s0_n113` | `dreamer_gru_reset_gate` | 0 | 700,000 | `configs/experiment/basic/00-5X5_NoPred.yaml` | `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` (now with `apply_gru_reset_gate: true`, `paper_canonical_twohot_bins: true`, `zero_init_reward_critic: true`) |
 
 - **WandB group**: `dreamer_gru_reset_gate` — isolated from `dreamer_paper_canonical_bins` (Z2), `dreamer_zero_init` (Z1), and `dreamer_conventional_fixes` (A-cells) so the cumulative-fix framing is clean.
 - **Tag == WandB run name** (per the standing Launch Manifest rule; `feedback_launch_manifest.md`).
@@ -589,8 +589,8 @@ After this plan lands and is committed:
    - `src/models/dreamer_v3_nnx.py` (LayerNormGRUCell class — new `apply_reset_gate` kwarg + gated branch; RSSM constructor — new `apply_gru_reset_gate` kwarg + pass-through to cell; WorldModel constructor — read `agent_config['apply_gru_reset_gate']` and forward to RSSM)
    - `src/models/modulated_layer_norm_gru_cell.py` (ModulatedLayerNormGRUCell — new `apply_reset_gate` kwarg + gated branch, mirrors the LN variant)
    - `src/models/dreamer_v3_trainer.py` (new entry in `agent_config` dict reading `config.get_mandatory('agent.apply_gru_reset_gate', bool)`)
-   - `configs/models/dreamer_v3.yaml` (new key with full doc-link comment)
-   - `configs/models/dreamer_v3_rr06.yaml` (new key with brief comment)
+   - `configs/models/dreamer_v3/dreamer_v3.yaml` (new key with full doc-link comment)
+   - `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` (new key with brief comment)
 
    Run the §2.5 smoke test (cell divergence + hand-computed reference match) and the §2.6 config end-to-end check. Fill out the Implementation Report below. Report back.
 
@@ -617,7 +617,7 @@ After this plan lands and is committed:
 - [x] `RSSM.__init__` accepts `apply_gru_reset_gate: bool = False` and passes it to both cell constructors (modulated and non-modulated branches both updated).
 - [x] `WorldModel.__init__` reads `config.get('apply_gru_reset_gate', False)` from `agent_config` and forwards it to `RSSM(...)`.
 - [x] `DreamerV3Trainer.__init__` adds `'apply_gru_reset_gate': config.get_mandatory('agent.apply_gru_reset_gate', bool)` to the `agent_config` dict alongside the existing `paper_canonical_twohot_bins` entry; missing YAML key raises `ValueError` at trainer construction.
-- [x] `configs/models/dreamer_v3.yaml` and `configs/models/dreamer_v3_rr06.yaml` both contain `apply_gru_reset_gate: true`.
+- [x] `configs/models/dreamer_v3/dreamer_v3.yaml` and `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` both contain `apply_gru_reset_gate: true`.
 - [x] §2.5 smoke test passes: (a) paper-flag and legacy-flag cell outputs diverge by max |Δ| > 1e-3 on the same input/state/weights (observed: 0.641342); (b) legacy-flag output matches hand-computed legacy reference within 1e-6; (c) paper-flag output matches hand-computed paper reference within 1e-6; (d) both assertions hold for `ModulatedLayerNormGRUCell` (with `gate_bias=None`).
 - [x] §2.6 config end-to-end check passes (both YAML files expose the key; missing key raises `ValueError`).
 - [x] When `apply_gru_reset_gate: false` is set, training output is bit-identical to pre-fix behaviour (verified by §2.4 reasoning — the `else` branch is verbatim previous code; PRNG consumption unchanged; op count identical except for one extra `jnp.multiply` only under `True`).
@@ -640,8 +640,8 @@ After this plan lands and is committed:
 | `src/models/dreamer_v3_nnx.py` (`WorldModel`) | Added `apply_gru_reset_gate = config.get('apply_gru_reset_gate', False)` read from agent_config before `self.rssm = RSSM(...)`, forwarded as `apply_gru_reset_gate=apply_gru_reset_gate`. |
 | `src/models/modulated_layer_norm_gru_cell.py` | Added `apply_reset_gate: bool = False` kwarg to `__init__`; stored as `self.apply_reset_gate`; updated class docstring. In `__call__`, added `if self.apply_reset_gate: cand = jnp.tanh(reset * cand)` branch; `else: cand = jnp.tanh(cand)` (verbatim previous code). Gate_bias modulation branch on update gate is untouched. |
 | `src/models/dreamer_v3_trainer.py` | Added `'apply_gru_reset_gate': config.get_mandatory('agent.apply_gru_reset_gate', bool)` to `agent_config` dict, right after the `paper_canonical_twohot_bins` entry. |
-| `configs/models/dreamer_v3.yaml` | Added `apply_gru_reset_gate: true` with full 7-line doc-link comment, inserted after the `paper_canonical_twohot_bins` block and before `use_layer_norm`. |
-| `configs/models/dreamer_v3_rr06.yaml` | Added `apply_gru_reset_gate: true` with brief back-reference comment, inserted after `paper_canonical_twohot_bins` and before `use_layer_norm`. |
+| `configs/models/dreamer_v3/dreamer_v3.yaml` | Added `apply_gru_reset_gate: true` with full 7-line doc-link comment, inserted after the `paper_canonical_twohot_bins` block and before `use_layer_norm`. |
+| `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` | Added `apply_gru_reset_gate: true` with brief back-reference comment, inserted after `paper_canonical_twohot_bins` and before `use_layer_norm`. |
 
 ### Deviations from §2
 
@@ -669,8 +669,8 @@ All four assertions passed:
 ### Config end-to-end check (§2.6)
 
 ```
-configs/models/dreamer_v3.yaml -> agent.apply_gru_reset_gate = True  (type: bool)
-configs/models/dreamer_v3_rr06.yaml -> agent.apply_gru_reset_gate = True  (type: bool)
+configs/models/dreamer_v3/dreamer_v3.yaml -> agent.apply_gru_reset_gate = True  (type: bool)
+configs/models/dreamer_v3/dreamer_v3_rr06.yaml -> agent.apply_gru_reset_gate = True  (type: bool)
 OK: both YAML files expose the mandatory key correctly.
 OK: missing key raises ValueError: Strict Config: Configuration key 'agent.apply_gru_reset_gate' is required but missing.
 ```

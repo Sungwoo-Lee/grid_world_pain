@@ -40,6 +40,6 @@ agent:
     multimodal_hub: [128,128]
 
   # Neuromodulation: DISABLED (true baseline, §5.2)
-  # For neuromodulated variant, use: configs/models/neuromodulated_ppo.yaml
+  # For neuromodulated variant, use: configs/models/ppo/neuromodulated_ppo.yaml
   modulation:
     type: null

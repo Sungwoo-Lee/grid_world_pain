@@ -312,7 +312,7 @@ The implementation provides flexible logging control across all core algorithms,
 | [train.py](../train.py) | DQN: Gated logging | ✅ | Line 1330. |
 | [train.py](../train.py) | DRQN: Gated logging | ✅ | Line 1493. |
 | [train.py](../train.py) | PPO: Gated logging | ✅ | Line 1598. |
-| configs/models/neuromodulated_ppo.yaml | Changed `multimodal_hub` and `grouping_size` | ⚠️ | **Out of scope.** Not part of this plan. Likely user's own experiment tuning. |
+| configs/models/ppo/neuromodulated_ppo.yaml | Changed `multimodal_hub` and `grouping_size` | ⚠️ | **Out of scope.** Not part of this plan. Likely user's own experiment tuning. |
 | train_command.sh | Changed device and tag | ⚠️ | **Out of scope.** User's own experiment config. |
 | docs/BEHAVIOR_ANALYSIS.pdf | Deleted | ⚠️ | **Out of scope.** Binary file removed. |
 

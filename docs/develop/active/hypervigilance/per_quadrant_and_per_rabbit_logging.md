@@ -974,7 +974,7 @@ All values in (0, 14.5) as expected. Aggregated `MeanDistRabbit` falls between T
 Dreamer batch path (Site 2, `train.py:1465-1604`) emits non-zero per-tag
 distance values end-to-end.
 
-**Config**: `02-sameProp_R2_passivePredator.yaml` + `configs/models/dreamer_v3.yaml`.
+**Config**: `02-sameProp_R2_passivePredator.yaml` + `configs/models/dreamer_v3/dreamer_v3.yaml`.
 **Tags confirmed**: `neutral_tags=('TL','BR')`, `predator_tags=('TL',)`.
 **Method**: direct Python smoke — 3 iterations × 128 collect steps × 8 envs
 (3 072 env-steps total) via `DreamerTrainer.collect_sequence`, then simulating

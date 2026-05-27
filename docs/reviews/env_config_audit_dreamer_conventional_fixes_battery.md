@@ -2,7 +2,7 @@
 
 > Pre-flight audit by `env-config-auditor` for the 2-cell DreamerV3 conventional-fixes mini-battery (Cell A1 NoPred + rr=0.0625, Cell A2 Predator + rr=0.0625 + death_penalty=1) on node 113.
 >
-> Audited: 2026-05-09. Configs: `configs/models/dreamer_v3_rr06.yaml`, `configs/experiment/dreamer_diagnostic/01-PredInterval3_NutGain18_DeathPenalty1.yaml`. Design doc: `docs/experiments/active/dreamer_diagnosis/DREAMER_CONVENTIONAL_FIXES_BATTERY.md`.
+> Audited: 2026-05-09. Configs: `configs/models/dreamer_v3/dreamer_v3_rr06.yaml`, `configs/experiment/dreamer_diagnostic/01-PredInterval3_NutGain18_DeathPenalty1.yaml`. Design doc: `docs/experiments/active/dreamer_diagnosis/DREAMER_CONVENTIONAL_FIXES_BATTERY.md`.
 
 ## Items
 

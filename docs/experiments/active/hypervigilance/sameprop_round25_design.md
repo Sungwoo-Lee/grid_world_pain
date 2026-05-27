@@ -73,7 +73,7 @@ All other fields fixed at Round-1 baseline (`01-interoNocicept_sameProp.yaml`). 
 - Rocks: 3 in each of 4 quadrants, damage `[1, 5]`.
 - Sensors: olfaction radius 20, decay 2.0, vector_size 5; visual range 0; nociception enabled; intero-noc enabled (tau 3.0, kernel 12); proprioception on; injury_observable false; nutrition_observable false.
 - Body: full Round-1 homeostatic reward, max_steps 500, metabolic_cost 1.0.
-- Agent: `configs/models/recurrent_ppo.yaml` (RPPO, identical to Round 1 + Round 2).
+- Agent: `configs/models/recurrent_ppo/recurrent_ppo.yaml` (RPPO, identical to Round 1 + Round 2).
 - Step budget: **10,000,000 episodes** (full Round-1 plan).
 - Parallel envs: 128.
 - Per-tag distance metrics live (`Episode/MeanDistRabbit_<tag>`, `Episode/MeanDistPredator_<tag>`) at all 5 WandB sites — verified at commit `6d3d382`.
@@ -104,8 +104,8 @@ All other fields fixed at Round-1 baseline (`01-interoNocicept_sameProp.yaml`). 
 
 | Run | Config (env) | Config (agent) |
 |-----|--------------|----------------|
-| 1 | `configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 2 | `configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 1 | `configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml` | `configs/models/recurrent_ppo/recurrent_ppo.yaml` |
+| 2 | `configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml` | `configs/models/recurrent_ppo/recurrent_ppo.yaml` |
 
 **Configs are reused unchanged from the truncated Round 2.** Both already carry the `tag:` fields per the per-tag metrics implementation (commit `0a73613`). Tag↔spawn_area correctness was verified by the senior-developer in the per-tag plan's verification report and re-checked against the live YAML for this design (Cell A1: rabbits TL+BR, predator TL co-located with TL rabbit ✓; Cell C: rabbits TL+BR, predator full ✓).
 
@@ -117,7 +117,7 @@ Both invoked via `run_command.py` with the standard project Python interpreter. 
 # Run 1 — Cell C — node 106 cuda:0 — seed 42
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --episodes 10000000 \
   --num-envs 128 \
   --seed 42 \
@@ -131,7 +131,7 @@ Both invoked via `run_command.py` with the standard project Python interpreter. 
 # Run 2 — Cell A1 — node 106 cuda:1 — seed 43
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --episodes 10000000 \
   --num-envs 128 \
   --seed 43 \

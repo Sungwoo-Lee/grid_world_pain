@@ -253,7 +253,7 @@ The `attempted_pos` calculation for collision damage targeting is the same logic
 
 ---
 
-### 12. Neuromodulated PPO Config (`configs/models/neuromodulated_ppo.yaml`)
+### 12. Neuromodulated PPO Config (`configs/models/ppo/neuromodulated_ppo.yaml`)
 
 **Status**: ⚠️ Simplified in tuningEnv
 
@@ -281,7 +281,7 @@ The `attempted_pos` calculation for collision damage targeting is the same logic
 |------|---------|
 | `src/environment/grid_world.py` | Duplicate renderer (725 lines) |
 | `src/models/modulated_layer_norm_gru_cell.py` | LayerNorm GRU cell for modulation (84 lines) |
-| `configs/models/neuromodulated_dreamer_v3.yaml` | DreamerV3 neuro-modulated config (49 lines) |
+| `configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml` | DreamerV3 neuro-modulated config (49 lines) |
 | `command.sh` | Shell utility script (12 lines) |
 | `assets/agent_food.jpg` | Composite icon |
 | `assets/assets.pptx` | Asset source file |
@@ -622,7 +622,7 @@ Full DreamerV3 config with modulation block:
 | 🔴 High | Port `ModulatedLayerNormGRUCell` | New file: `src/models/modulated_layer_norm_gru_cell.py` | Easy (84 lines) |
 | 🔴 High | Port DreamerV3 modulation integration | `dreamer_v3_nnx.py` (RSSM, Encoder, WorldModel) | Large |
 | 🔴 High | Port DreamerV3 trainer modulation | `dreamer_v3_trainer.py` (WM scan, imagination scan, get_action) | Large |
-| 🟡 Medium | Port DreamerV3 neuromod config | New file: `configs/models/neuromodulated_dreamer_v3.yaml` | Easy |
+| 🟡 Medium | Port DreamerV3 neuromod config | New file: `configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml` | Easy |
 | 🟢 Low | Align terminology ("gate" → "gain/gamma") | `neuromodulator.py` docstrings | Trivial |
 
 > [!NOTE]

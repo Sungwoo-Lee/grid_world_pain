@@ -71,7 +71,7 @@ both `numpy.random.seed()` and `jax.random.PRNGKey()` from this single CLI argum
 | Variable | Value | Source |
 |---|---|---|
 | Codebase commit at launch | [`1ac9952`](https://github.com/anthropics/grid_world_pain/commit/1ac9952) (v2-CP10 → CP-PASS authorization; includes the 5 P-blocker fixes from v2-CP9 `b813d48`) | git |
-| Agent config | [`configs/dreamer_srl/01_food_only.yaml`](../../../../configs/dreamer_srl/01_food_only.yaml) — the corrected XS preset (`dense_units=256`, `mlp_layers=1`, `recurrent_state_size=256`, `transition/representation hidden_size=256`, `cnn_channels_multiplier=24`, `learning_starts=0`) | YAML, unchanged from v1 |
+| Agent config | [`configs/models/dreamer_srl/01_food_only.yaml`](../../../../configs/models/dreamer_srl/01_food_only.yaml) — the corrected XS preset (`dense_units=256`, `mlp_layers=1`, `recurrent_state_size=256`, `transition/representation hidden_size=256`, `cnn_channels_multiplier=24`, `learning_starts=0`) | YAML, unchanged from v1 |
 | Env config | [`configs/experiment/dreamer_curriculum/01_food_only.yaml`](../../../../configs/experiment/dreamer_curriculum/01_food_only.yaml) — 5×5 food-only NoPred grid; `max_steps=500`; `perceptual_noise.enabled=false`; `food.count=1`, `bush.count=3`, no predators / rabbits | YAML, unchanged from v1 |
 | `total_steps` | 200,000 | CLI `--total-steps 200000` |
 | `num_envs` | 1 | CLI `--num-envs 1` |
@@ -93,7 +93,7 @@ WANDB_RUN_GROUP=dreamer_srl_v2_parity_2026-05-15 WANDB_JOB_TYPE=parity \
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
   src/algorithms/dreamer_srl/dreamer_srl_main.py \
   --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \
-  --agent-config configs/dreamer_srl/01_food_only.yaml \
+  --agent-config configs/models/dreamer_srl/01_food_only.yaml \
   --total-steps 200000 --num-envs 1 --seed <SEED> \
   --wandb-project grid_world_pain_dreamer_srl_v2 \
   --wandb-name dreamer_srl_v2_parity_s<SEED>

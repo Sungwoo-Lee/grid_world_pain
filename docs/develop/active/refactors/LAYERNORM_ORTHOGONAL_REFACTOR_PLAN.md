@@ -55,7 +55,7 @@ FiLM/FiLMNoNorm is referenced in **8 source files** across 3 categories:
 - `src/models/dreamer_v3_trainer.py` (lines 278, 295)
 
 **Category 5 — Config**:
-- `configs/models/neuromodulated_ppo.yaml` (line 54)
+- `configs/models/ppo/neuromodulated_ppo.yaml` (line 54)
 
 ### What Changes Per Category
 
@@ -102,7 +102,7 @@ For **Multiplicative**, LayerNorm is applied before the activation, which then g
 
 ### File Changes
 
-#### `configs/models/neuromodulated_ppo.yaml` (lines 24–54)
+#### `configs/models/ppo/neuromodulated_ppo.yaml` (lines 24–54)
 
 ```yaml
 # BEFORE:
@@ -565,7 +565,7 @@ if self.modulation_type == "FiLMNoNorm":
 
 | File | Lines Changed | Nature |
 |------|--------------|--------|
-| `configs/models/neuromodulated_ppo.yaml` | 2 | Add `agent.use_layer_norm` key, update modulation type comment |
+| `configs/models/ppo/neuromodulated_ppo.yaml` | 2 | Add `agent.use_layer_norm` key, update modulation type comment |
 | `src/models/neuromodulator.py` | ~12 | Remove `"FiLMNoNorm"` from all conditionals (both RPO and Dreamer modulators) |
 | `src/models/recurrent_ppo_network.py` | ~55 | Remove FiLMNoNorm branches, add LN to `__call__()` (unmodulated path), move LN before dispatch in `forward_with_modulation()`, rename `film_*_ln` → `mod_*_ln`, add migration guard |
 | `src/models/dreamer_v3_nnx.py` | ~55 | Same pattern for DreamerObservationEncoder, Encoder, WorldModel + unmodulated `__call__()` paths |
@@ -590,7 +590,7 @@ if self.modulation_type == "FiLMNoNorm":
 > **Implemented by**: Gemini
 > **Date**: 2026-03-18 16:28:08
 
-1. **`configs/models/neuromodulated_ppo.yaml`**: Added `agent.use_layer_norm` and updated `modulation.type` comment to remove `FiLMNoNorm`.
+1. **`configs/models/ppo/neuromodulated_ppo.yaml`**: Added `agent.use_layer_norm` and updated `modulation.type` comment to remove `FiLMNoNorm`.
 2. **`src/models/neuromodulator.py`**: Removed all `FiLMNoNorm` checks from conditionals for baseline initialization and module creation.
 3. **`src/models/recurrent_ppo_network.py`**: Updated `ActorCriticRNN` and `ObservationEncoder` to apply LN layers (`mod_*_ln`) based on `use_layer_norm`. Applied LN before modulation logic. Removed `FiLMNoNorm` branches. Added migration logic.
 4. **`src/models/dreamer_v3_nnx.py`**: Mirrored changes to apply LN before modulation for `Encoder` and `DreamerObservationEncoder`. Updated `WorldModel` to generate LN conditionally and added migration guard.
@@ -613,8 +613,8 @@ Found 2 blocking issues:
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `configs/models/neuromodulated_ppo.yaml` | Add `use_layer_norm`, update type comment | ✅ | Correctly reverted to original formatting. Only 3 lines changed: added `use_layer_norm: false`, removed `FiLMNoNorm` from type comment. All comments preserved. |
-| `configs/models/recurrent_ppo.yaml` | Add `use_layer_norm` | ✅ | Out-of-plan but correct — the non-modulated config also needs the mandatory key. Added `use_layer_norm: false`. |
+| `configs/models/ppo/neuromodulated_ppo.yaml` | Add `use_layer_norm`, update type comment | ✅ | Correctly reverted to original formatting. Only 3 lines changed: added `use_layer_norm: false`, removed `FiLMNoNorm` from type comment. All comments preserved. |
+| `configs/models/recurrent_ppo/recurrent_ppo.yaml` | Add `use_layer_norm` | ✅ | Out-of-plan but correct — the non-modulated config also needs the mandatory key. Added `use_layer_norm: false`. |
 | `src/models/neuromodulator.py` | Remove `FiLMNoNorm` from conditionals | ✅ | All 8 occurrences correctly replaced across both `NeuromodulatorRNN` and `DreamerNeuromodulatorRNN`. |
 | `src/models/recurrent_ppo_network.py` | Remove FiLMNoNorm branches, LN refactor, migration guard | ✅ | `__call__()` accepts LN kwargs, `forward_with_modulation()` applies LN before dispatch, `film_*_ln` → `mod_*_ln`, migration guard added. |
 | `src/models/dreamer_v3_nnx.py` | Same pattern for Dreamer encoders + WorldModel | ✅ | All encoder paths updated. Migration guard added. |

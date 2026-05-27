@@ -332,7 +332,7 @@ Same — add two `elif` branches for the flat encoder fallback.
 
 Attach `film_unimodal_ln` and `film_multimodal_ln` when `self.modulation_type == "FiLM"`, same as `ActorCriticRNN`.
 
-#### 4. `configs/models/neuromodulated_ppo.yaml`
+#### 4. `configs/models/ppo/neuromodulated_ppo.yaml`
 
 Update comment only:
 
@@ -577,7 +577,7 @@ The fame of LayerNorm isn't about preserving all activations — it's about **st
 | `src/models/recurrent_ppo_network.py`    | Two new `elif` branches per phase + LayerNorm construction + updated call site | ~30                |
 | `src/models/dreamer_v3_nnx.py`           | Two new `elif` branches per phase + LayerNorm construction                     | ~30                |
 | `src/models/dreamer_v3_trainer.py`       | `if/else` for effective γ logging                                              | ~6                 |
-| `configs/models/neuromodulated_ppo.yaml` | Comment update (doc only)                                                      | ~1                 |
+| `configs/models/ppo/neuromodulated_ppo.yaml` | Comment update (doc only)                                                      | ~1                 |
 
 
 ---
@@ -618,7 +618,7 @@ The fame of LayerNorm isn't about preserving all activations — it's about **st
 | `src/models/dreamer_v3_nnx.py`           | FiLM/FiLMNoNorm branches in both encoders + WorldModel LayerNorm + agent call site | ✅      | Uses `jax.nn.silu` directly instead of `SiLU()` wrapper — functionally identical. Flat encoder passes `film_flat_ln` correctly.                                          |
 | `src/models/dreamer_v3_trainer.py`       | Effective γ logging + beta logging condition extended                              | ✅      | Training loop call site (L148) correctly updated. Beta logging condition correctly extended.                                                                             |
 | `src/models/dreamer_v3_trainer.py`       | `get_action` call site (L495)                                                      | ❌      | **Missing `film_*_ln` args** — calls `forward_with_modulation` without passing LayerNorm layers. FiLM mode will silently skip normalization during inference/evaluation. |
-| `configs/models/neuromodulated_ppo.yaml` | Comment update                                                                     | ✅      | Correct.                                                                                                                                                                 |
+| `configs/models/ppo/neuromodulated_ppo.yaml` | Comment update                                                                     | ✅      | Correct.                                                                                                                                                                 |
 
 
 ### ❌ Detail: `dreamer_v3_trainer.py:495` — Missing FiLM LayerNorm in `get_action`
@@ -667,7 +667,7 @@ Re-verified after Gemini's fix for the `get_action` call site.
 | `src/models/dreamer_v3_nnx.py`           | FiLM/FiLMNoNorm branches in both encoders + WorldModel LayerNorm + agent call site | ✅      | No change since last verification.                                                                                                     |
 | `src/models/dreamer_v3_trainer.py`       | Effective γ logging + training call site (L148)                                    | ✅      | No change since last verification.                                                                                                     |
 | `src/models/dreamer_v3_trainer.py`       | `get_action` call site (L495)                                                      | ✅      | **Fixed.** Now passes `film_unimodal_ln`, `film_multimodal_ln`, `film_flat_ln` via `getattr`, matching the training call site pattern. |
-| `configs/models/neuromodulated_ppo.yaml` | Comment update                                                                     | ✅      | No change since last verification.                                                                                                     |
+| `configs/models/ppo/neuromodulated_ppo.yaml` | Comment update                                                                     | ✅      | No change since last verification.                                                                                                     |
 
 
 **Diff stats**: 5 files changed, +180 / −55. Proportionate to plan scope (5 files, ~77 new lines planned; extra lines from `elif` branch duplication and signature changes are expected).

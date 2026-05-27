@@ -97,12 +97,12 @@ The **SPS micro-benchmark fixture** is defined once in Step 0 and re-used identi
 
 #### 0.1 SPS micro-benchmark fixture (define once, re-use at every step)
 
-- **Config**: `configs/dreamer_srl/01_food_only_smoke.yaml` (already exists; small XS recipe, food-only env).
+- **Config**: `configs/models/dreamer_srl/01_food_only_smoke.yaml` (already exists; small XS recipe, food-only env).
 - **Override at the CLI** (do **not** edit the config — keep it stable across steps): `num_envs=16`, total `policy_steps=50000`, `seed=0`, `wandb.enabled=false` (we want a clean SPS, not WandB I/O overhead in the measurement), `learning_starts` set to a small value (e.g., `1000 / num_envs = ~63`) so the gradient-step loop actually runs.
 - **Hardware**: launch via `run_command.py` on whichever node is free, **must be the same node for every step** (`node101` recommended — the regular dreamer training box). Record the node ID in every measurement.
 - **Wall-time budget**: ≤ 5 minutes per run. 50k env-steps × ~50 SPS ≈ ~16 min if perf is bad; if a run is too slow to finish in 5 min, fall back to 25k steps and note the change in the table.
 - **Helper script** (the developer to create): `tests/algorithms/dreamer_srl/bench_sps.py`. It runs the trainer end-to-end with the overrides above and prints two numbers — **instantaneous SPS** averaged over the last 25% of training, and **cumulative SPS** over the full run — plus a CSV trace of `(policy_step, wall_time, instantaneous_sps)` rows to `tmp/sps_bench_<step>_<timestamp>.csv` for plotting.
-- **Invocation**: `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python tests/algorithms/dreamer_srl/bench_sps.py --config configs/dreamer_srl/01_food_only_smoke.yaml --num-envs 16 --total-steps 50000 --seed 0 --label step0_baseline`.
+- **Invocation**: `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python tests/algorithms/dreamer_srl/bench_sps.py --config configs/models/dreamer_srl/01_food_only_smoke.yaml --num-envs 16 --total-steps 50000 --seed 0 --label step0_baseline`.
 
 The script does **not** require WandB and can run offline.
 
@@ -182,7 +182,7 @@ Per-run summary (instantaneous SPS computed via a 5-sample sliding window over t
 #### 0.1 Baseline result (Step 0 bench — executed 2026-05-19 by developer agent)
 
 **Node**: 113 / cuda:0 (RTX 4090, ~21.5 GB in use from prior sessions — OOM on first attempt with XLA command buffers; resolved by `XLA_FLAGS='--xla_gpu_enable_command_buffer='`).
-**Config**: `configs/dreamer_srl/01_food_only_smoke.yaml` + `configs/experiment/dreamer_curriculum/01_food_only.yaml`, `num_envs=16`, `total_steps=50000`, `seed=0`, `--no-wandb`.
+**Config**: `configs/models/dreamer_srl/01_food_only_smoke.yaml` + `configs/experiment/dreamer_curriculum/01_food_only.yaml`, `num_envs=16`, `total_steps=50000`, `seed=0`, `--no-wandb`.
 **CSV trace**: `tmp/sps_bench_step0_baseline_20260519_161102.csv`
 **Total wall time**: 1675.0 s
 
@@ -543,7 +543,7 @@ def scan_body(carry, _):
 
 **`buf_pos` and `buf_full`** — keep them as Python ints outside the JIT; pass as `jnp.array(...)` for the call. If they change between calls (they do — `_pos` grows monotonically), the JIT will retrace on each call until the buffer is full. Once full, `_pos` stabilises (still rotates but always equals `buffer_size - 1` value-wise — wait, no, it rotates). The original Dreamer's `idx` is in the same position; it accepts retracing while the buffer fills, then stabilises after fill. Document this in the change.
 
-**Add `device: gpu` to the dreamer-srl YAML schema.** If a config key like `agent.buffer_device` doesn't exist, add it via `config.get_mandatory(...)` (no fallback default). Search the existing dreamer_srl configs (`configs/dreamer_srl/01_food_only*.yaml`) and add the key to each, defaulting to `"gpu"`. The `device="cpu"` legacy path stays in the codebase but is no longer the default.
+**Add `device: gpu` to the dreamer-srl YAML schema.** If a config key like `agent.buffer_device` doesn't exist, add it via `config.get_mandatory(...)` (no fallback default). Search the existing dreamer_srl configs (`configs/models/dreamer_srl/01_food_only*.yaml`) and add the key to each, defaulting to `"gpu"`. The `device="cpu"` legacy path stays in the codebase but is no longer the default.
 
 #### Step 4 parity test
 
@@ -640,7 +640,7 @@ Grouped by step. Files marked `(new)` don't yet exist; files marked `(edit)` are
 ### Step 4
 - `src/algorithms/dreamer_srl/dreamer_srl_main.py` **(edit)** — buffer-construction site: pass `device=config.get_mandatory('agent.buffer_device', str)`; rewire the training block to sample inside the scan body via a pure JAX `sample_one_batch_from_gpu_buffer` helper; ~30-line diff.
 - `src/algorithms/dreamer_srl/buffers.py` **(edit)** — expose a free-function form of `sample` (or a `@staticmethod` that takes buffer arrays + pos/full ints + key as explicit inputs), suitable for closure-capture inside `lax.scan`. ~30 lines.
-- `configs/dreamer_srl/01_food_only*.yaml` **(edit, all variants)** — add `agent.buffer_device: gpu`. No fallback default per project rule; the driver uses `config.get_mandatory(...)`.
+- `configs/models/dreamer_srl/01_food_only*.yaml` **(edit, all variants)** — add `agent.buffer_device: gpu`. No fallback default per project rule; the driver uses `config.get_mandatory(...)`.
 - `tests/algorithms/dreamer_srl/test_gpu_mode_end_to_end.py` **(new)** — 1-iteration end-to-end smoke test with `device="gpu"`; assert metrics dict has expected keys + shapes.
 
 ### Step 5 (optional, deferred)

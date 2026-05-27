@@ -22,7 +22,7 @@
 #   - XS overlay (the values applied here): vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml
 #   - Experiment defaults: vendor/sheeprl/sheeprl/configs/exp/dreamer_v3.yaml
 
-# Agent identity — mirrors configs/models/dreamer_v3_rr06.yaml:L40-L41
+# Agent identity — mirrors configs/models/dreamer_v3/dreamer_v3_rr06.yaml:L40-L41
 # Required for WandB filter: agent.algorithm = DreamerV3
 agent:
   algorithm: "DreamerV3"
@@ -115,7 +115,7 @@ algo:
 
 # Buffer
 buffer:
-  size: 100000
+  size: 500000
   validate_args: false
   from_numpy: false
 

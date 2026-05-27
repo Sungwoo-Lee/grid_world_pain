@@ -104,13 +104,13 @@ P3.2 (seq_len=64) is a re-launch of the P2 winner cell at default `seq_len`; sam
 
 | Phase | Run | Env config | Agent config | New file? |
 |---|---|---|---|---|
-| P1.1–P1.4 | all | `configs/experiment/hypervigilance/01-interoNocicept.yaml` | `configs/dreamer_srl/01_food_only.yaml` (XS, existing) | no |
-| P2.1 | XS | (same env) | `configs/dreamer_srl/01_food_only.yaml` (existing) | no |
-| P2.2 | S | (same env) | `configs/dreamer_srl/01_food_only_S.yaml` (existing — sweep variant, see §4.1 caveat) | no |
-| P2.3 | M | (same env) | `configs/dreamer_srl/01_food_only_M.yaml` (existing — sweep variant, see §4.1 caveat) | no |
-| P3.1 | seq=32 | (same env) | `configs/dreamer_srl/01_food_only_<P2_WIN>_seqlen32.yaml` | **yes — authored by this plan** |
-| P3.2 | seq=64 | (same env) | `configs/dreamer_srl/01_food_only_<P2_WIN>.yaml` (existing) | no |
-| P3.3 | seq=128 | (same env) | `configs/dreamer_srl/01_food_only_<P2_WIN>_seqlen128.yaml` | **yes — authored by this plan** |
+| P1.1–P1.4 | all | `configs/experiment/hypervigilance/01-interoNocicept.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` (XS, existing) | no |
+| P2.1 | XS | (same env) | `configs/models/dreamer_srl/01_food_only.yaml` (existing) | no |
+| P2.2 | S | (same env) | `configs/models/dreamer_srl/01_food_only_S.yaml` (existing — sweep variant, see §4.1 caveat) | no |
+| P2.3 | M | (same env) | `configs/models/dreamer_srl/01_food_only_M.yaml` (existing — sweep variant, see §4.1 caveat) | no |
+| P3.1 | seq=32 | (same env) | `configs/models/dreamer_srl/01_food_only_<P2_WIN>_seqlen32.yaml` | **yes — authored by this plan** |
+| P3.2 | seq=64 | (same env) | `configs/models/dreamer_srl/01_food_only_<P2_WIN>.yaml` (existing) | no |
+| P3.3 | seq=128 | (same env) | `configs/models/dreamer_srl/01_food_only_<P2_WIN>_seqlen128.yaml` | **yes — authored by this plan** |
 
 This plan ships seq_len-32 and seq_len-128 variants for **all three sizes (XS, S, M)** up front so that whichever size wins Phase 2 has its Phase 3 variants ready without a second config-authoring round. That's six files total (XS/S/M × {seqlen32, seqlen128}).
 
@@ -130,7 +130,7 @@ This plan ships seq_len-32 and seq_len-128 variants for **all three sizes (XS, S
 |---|---|
 | Codebase commit | head at launch time (training-runner records) |
 | Env config | `configs/experiment/hypervigilance/01-interoNocicept.yaml` |
-| Agent config | `configs/dreamer_srl/01_food_only.yaml` (XS, corrected, `learning_starts=1024`) |
+| Agent config | `configs/models/dreamer_srl/01_food_only.yaml` (XS, corrected, `learning_starts=1024`) |
 | `total_steps` (CLI) | 200,000 |
 | Seed | 42 |
 | Replay ratio | 1 (config-set) |
@@ -204,9 +204,9 @@ These are projections; the actual numbers will land in §10.1. The 10×10 env ha
 
 **Independent variable:** model size ∈ {XS, S, M} via agent-config swap. The three configs are:
 
-- XS: `configs/dreamer_srl/01_food_only.yaml` — 256 dense / 256 recurrent / 1 MLP layer; `learning_starts=1024`, `total_steps=5000` (CLI override to 200000).
-- S: `configs/dreamer_srl/01_food_only_S.yaml` — 512 / 512 / 2 MLP layers; `learning_starts=0`, `total_steps=1000` (CLI override to 200000). **See §5.4 caveat on `learning_starts=0`.**
-- M: `configs/dreamer_srl/01_food_only_M.yaml` — 640 / 1024 / 3 MLP layers; `learning_starts=0`, `total_steps=1000` (CLI override to 200000). **See §5.4 caveat.**
+- XS: `configs/models/dreamer_srl/01_food_only.yaml` — 256 dense / 256 recurrent / 1 MLP layer; `learning_starts=1024`, `total_steps=5000` (CLI override to 200000).
+- S: `configs/models/dreamer_srl/01_food_only_S.yaml` — 512 / 512 / 2 MLP layers; `learning_starts=0`, `total_steps=1000` (CLI override to 200000). **See §5.4 caveat on `learning_starts=0`.**
+- M: `configs/models/dreamer_srl/01_food_only_M.yaml` — 640 / 1024 / 3 MLP layers; `learning_starts=0`, `total_steps=1000` (CLI override to 200000). **See §5.4 caveat.**
 
 **Fixed factors:**
 
@@ -264,7 +264,7 @@ Authoring proper parity-grade `_S` / `_M` configs (with `learning_starts=1024`) 
 
 ### 6.2 Configs authored by this plan (for Phase 3)
 
-To avoid a second config-authoring round, this plan ships seq_len variants for **all three sizes** so whichever wins Phase 2 has Phase 3 ready. Six files total under `configs/dreamer_srl/`:
+To avoid a second config-authoring round, this plan ships seq_len variants for **all three sizes** so whichever wins Phase 2 has Phase 3 ready. Six files total under `configs/models/dreamer_srl/`:
 
 | File | Size | seq_len | Derived from |
 |---|---|---|---|
@@ -511,7 +511,7 @@ Notable trajectory features:
 
 **Override note — for completeness.** The user's brief raised a "strict ratio picks XS, override toward absolute mean" concern, mirroring the §10.1.3 Phase 1 override pattern. For Phase 2 the override is **not actually needed**: §7.1 for Phase 2 already privileges absolute mean over wall-clock ratio. The §10.1.3 override pattern was a Phase 1 special case where the §7.1 rule (which *did* include wall-clock for Phase 1) had to be set aside in favor of trajectory-headroom judgment. For Phase 2, the rule and the absolute-mean reading point at the same answer: **S.**
 
-**Practical Phase 3 implication.** Phase 3 launches the seq_len sweep on top of (size=S, num_envs=4). The seq_len=64 cell at this base is already done (P2.2, `a3o0xg75`, Q5 mean = 97.2) and serves as P3.2 directly — no re-launch needed. Phase 3 is therefore **2 new cells (seq_len=32 and seq_len=128), not 3**. The pre-authored configs `configs/dreamer_srl/01_food_only_S_seqlen32.yaml` and `01_food_only_S_seqlen128.yaml` were fixed at commit `eb1fbe1` to carry `learning_starts=1024` (parity-track default), so the §5.4 prefill-difference caveat **does not apply to Phase 3** — the Phase 3 cells are all on parity-track `learning_starts`, which is a strict methodological tightening relative to Phase 2.
+**Practical Phase 3 implication.** Phase 3 launches the seq_len sweep on top of (size=S, num_envs=4). The seq_len=64 cell at this base is already done (P2.2, `a3o0xg75`, Q5 mean = 97.2) and serves as P3.2 directly — no re-launch needed. Phase 3 is therefore **2 new cells (seq_len=32 and seq_len=128), not 3**. The pre-authored configs `configs/models/dreamer_srl/01_food_only_S_seqlen32.yaml` and `01_food_only_S_seqlen128.yaml` were fixed at commit `eb1fbe1` to carry `learning_starts=1024` (parity-track default), so the §5.4 prefill-difference caveat **does not apply to Phase 3** — the Phase 3 cells are all on parity-track `learning_starts`, which is a strict methodological tightening relative to Phase 2.
 
 #### 10.2.4 The M paradox — best world-model fit, worst-tier survival
 
@@ -577,7 +577,7 @@ WANDB_JOB_TYPE=hyperparam_search_p3 \
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
   src/algorithms/dreamer_srl/dreamer_srl_main.py \
   --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only_S_seqlen32.yaml \
+  --agent-config configs/models/dreamer_srl/01_food_only_S_seqlen32.yaml \
   --total-steps 200000 --num-envs 4 --seed 42 \
   --wandb-project grid_world_pain \
   --wandb-name dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_32_s42
@@ -589,7 +589,7 @@ WANDB_JOB_TYPE=hyperparam_search_p3 \
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
   src/algorithms/dreamer_srl/dreamer_srl_main.py \
   --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only_S_seqlen128.yaml \
+  --agent-config configs/models/dreamer_srl/01_food_only_S_seqlen128.yaml \
   --total-steps 200000 --num-envs 4 --seed 42 \
   --wandb-project grid_world_pain \
   --wandb-name dreamer_srl_v2_10x10_p3_S_envs_4_seqlen_128_s42
@@ -785,7 +785,7 @@ WANDB_JOB_TYPE=hyperparam_search_p1 \
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
   src/algorithms/dreamer_srl/dreamer_srl_main.py \
   --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/dreamer_srl/01_food_only.yaml \
+  --agent-config configs/models/dreamer_srl/01_food_only.yaml \
   --total-steps 200000 --num-envs 4 --seed 42 \
   --wandb-project grid_world_pain \
   --wandb-name dreamer_srl_v2_10x10_p1_envs_4_s42
@@ -813,7 +813,7 @@ All four cells dispatch in parallel via `run_command.py --no-tail <node> "<comma
 |---|---|
 | Codebase commit | as of launch ~01:23 UTC, 2026-05-16 |
 | Env config | `configs/experiment/hypervigilance/01-interoNocicept.yaml` (same as Phases 1–3) |
-| Agent config | `configs/dreamer_srl/01_food_only.yaml` (XS, `learning_starts=1024`) |
+| Agent config | `configs/models/dreamer_srl/01_food_only.yaml` (XS, `learning_starts=1024`) |
 | `total_steps` (CLI) | **2,000,000** (10× the Phase 1–3 budget of 200k) |
 | Seed | 42 |
 | `per_rank_sequence_length` | 64 (config-set, same as Phase 1–3 defaults) |

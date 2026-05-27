@@ -19,7 +19,7 @@ The goal: identify the best num_envs setting for production parity-track runs in
 ## §2 Setup
 
 - **Implementation**: dreamer-srl v2 (`src/algorithms/dreamer_srl/dreamer_srl_main.py`)
-- **Agent config**: `configs/dreamer_srl/01_food_only.yaml` — XS preset (256 dense / 256 recurrent / mlp_layers=1), corrected 2026-05-14
+- **Agent config**: `configs/models/dreamer_srl/01_food_only.yaml` — XS preset (256 dense / 256 recurrent / mlp_layers=1), corrected 2026-05-14
 - **Env config**: `configs/experiment/dreamer_curriculum/01_food_only.yaml` — food-only NoPred 5×5 (parity-validated env)
 - **Budget**: `--total-steps 5000`, `--seed 0` (all cells)
 - **Hardware**: node 114, GPUs 2+3 (GPUs 0+1 held for running extension trainings)

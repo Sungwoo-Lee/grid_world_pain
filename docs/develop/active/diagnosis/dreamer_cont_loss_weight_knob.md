@@ -31,12 +31,12 @@ Tiny schema add. The continuation-head loss currently has an implicit weight of 
      ```
    - **Do not** add a module-level `CONT_SCALE` constant. We are intentionally not generalizing the other loss weights (`DYN_SCALE`, `REP_SCALE`, `KL_SCALE`, `FREE_NATS`) in this plan — they stay hardcoded.
 
-2. **`configs/models/dreamer_v3.yaml`** — add key under `agent:`. Place it on a new line right after `entropy_scale: 3e-4` (line 40):
+2. **`configs/models/dreamer_v3/dreamer_v3.yaml`** — add key under `agent:`. Place it on a new line right after `entropy_scale: 3e-4` (line 40):
    ```yaml
    cont_loss_weight: 1.0  # Continuation-head loss multiplier. 1.0 = pre-knob behavior.
    ```
 
-3. **`configs/models/neuromodulated_dreamer_v3.yaml`** — same key under `agent:`, after `entropy_scale: 3e-4` (line 39):
+3. **`configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml`** — same key under `agent:`, after `entropy_scale: 3e-4` (line 39):
    ```yaml
    cont_loss_weight: 1.0
    ```
@@ -56,12 +56,12 @@ Default value `1.0` makes existing runs bit-identical: `1.0 * loss_cont == loss_
 1. **Smoke test** — runs cleanly, no behavioral change:
    ```bash
    /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-     --agent_config configs/models/dreamer_v3.yaml \
+     --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
      --episodes 5 --num-envs 2 --no-wandb --quiet
    ```
    Expect: completes 5 episodes without exception.
 
-2. **Negative test (mandatory-key)** — temporarily comment out `cont_loss_weight:` in `configs/models/dreamer_v3.yaml`, rerun the smoke command. Expect: `ValueError` at trainer construction. Restore the key after.
+2. **Negative test (mandatory-key)** — temporarily comment out `cont_loss_weight:` in `configs/models/dreamer_v3/dreamer_v3.yaml`, rerun the smoke command. Expect: `ValueError` at trainer construction. Restore the key after.
 
 3. **Numerical-equivalence check** — with `cont_loss_weight: 1.0`, total_loss for a fixed seed and batch must equal the pre-change value to within float tolerance. Cheapest path: capture `total_loss` from one training step on the smoke command at HEAD~1 (pre-change) and HEAD (post-change) using the same `--seed`; diff should be 0 (or `<1e-6` if any reordering of additions matters numerically). Same goes for `neuromodulated_dreamer_v3.yaml` — repeat the smoke + numerical check.
 
@@ -84,9 +84,9 @@ Default value `1.0` makes existing runs bit-identical: `1.0 * loss_cont == loss_
    - The `loss_cont` log entry at line 274 (raw, unweighted) was left untouched as required.
    - Placement mirrors the `ENTROPY_SCALE` pattern exactly: local constant read inside the JIT-traced closure from `self.config`, so no JIT recompile trigger.
 
-2. **`configs/models/dreamer_v3.yaml`** — Added `cont_loss_weight: 1.0` on a new line immediately after `entropy_scale: 3e-4` (line 40 → now line 41).
+2. **`configs/models/dreamer_v3/dreamer_v3.yaml`** — Added `cont_loss_weight: 1.0` on a new line immediately after `entropy_scale: 3e-4` (line 40 → now line 41).
 
-3. **`configs/models/neuromodulated_dreamer_v3.yaml`** — Added `cont_loss_weight: 1.0` on a new line immediately after `entropy_scale: 3e-4` (line 39 → now line 40).
+3. **`configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml`** — Added `cont_loss_weight: 1.0` on a new line immediately after `entropy_scale: 3e-4` (line 39 → now line 40).
 
 ### Actual line numbers (vs plan estimates)
 
@@ -100,9 +100,9 @@ Default value `1.0` makes existing runs bit-identical: `1.0 * loss_cont == loss_
 
 | Test | Command | Result | Key output |
 |---|---|---|---|
-| Smoke — dreamer_v3.yaml | `train.py --agent_config configs/models/dreamer_v3.yaml --episodes 5 --num-envs 2 --no-wandb --quiet` | **PASS** | `Training complete. Results saved to results/JAX_DreamerV3/20260507-172859_default` |
+| Smoke — dreamer_v3.yaml | `train.py --agent_config configs/models/dreamer_v3/dreamer_v3.yaml --episodes 5 --num-envs 2 --no-wandb --quiet` | **PASS** | `Training complete. Results saved to results/JAX_DreamerV3/20260507-172859_default` |
 | Negative (key missing) | Same command with `cont_loss_weight` commented out | **PASS** | `ValueError: Strict Config: Configuration key 'agent.cont_loss_weight' is required but missing.` |
-| Smoke — neuromodulated_dreamer_v3.yaml | `train.py --agent_config configs/models/neuromodulated_dreamer_v3.yaml --episodes 5 --num-envs 2 --no-wandb --quiet` | **PASS** | `Training complete. Results saved to results/JAX_DreamerV3/20260507-173250_default` |
+| Smoke — neuromodulated_dreamer_v3.yaml | `train.py --agent_config configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml --episodes 5 --num-envs 2 --no-wandb --quiet` | **PASS** | `Training complete. Results saved to results/JAX_DreamerV3/20260507-173250_default` |
 
 Numerical-equivalence check: skipped (1.0 × x = x is algebraically exact; smoke runs to completion with no loss anomalies; full numerical diff would require identical hardware timing which is not available for a pre-change baseline here).
 

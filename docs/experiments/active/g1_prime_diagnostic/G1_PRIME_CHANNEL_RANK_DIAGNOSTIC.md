@@ -60,7 +60,7 @@ Everything is fixed.
 config: configs/experiment/<canonical_preset>.yaml   # see §6
 
 # Agent (LayerNorm baseline, NO modulator)
-agent_config: configs/models/recurrent_ppo.yaml
+agent_config: configs/models/recurrent_ppo/recurrent_ppo.yaml
 agent.use_layer_norm: true
 agent.modulation.type: null
 agent.encoding_mode: hierarchical
@@ -126,7 +126,7 @@ g1_prime_logger:
 
 | Run | Config (env) | Config (agent) |
 |-----|--------------|----------------|
-| 1 | `configs/experiment/<topic>/<canonical_preset>.yaml` (re-used; canonical preset name pending §6 resolution) | `configs/models/recurrent_ppo_g1prime.yaml` (new — adds `g1_prime_logger:` block; otherwise identical to `recurrent_ppo.yaml`) |
+| 1 | `configs/experiment/<topic>/<canonical_preset>.yaml` (re-used; canonical preset name pending §6 resolution) | `configs/models/recurrent_ppo/recurrent_ppo_g1prime.yaml` (new — adds `g1_prime_logger:` block; otherwise identical to `recurrent_ppo.yaml`) |
 | 2 | (same as Run 1) | (same as Run 1) |
 | 3 | (same as Run 1) | (same as Run 1) |
 

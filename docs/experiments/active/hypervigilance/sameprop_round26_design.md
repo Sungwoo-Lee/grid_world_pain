@@ -48,7 +48,7 @@ Verdicts on the two cells are independent — a clean refutation of one does not
 
 ### 2.1 What is identical to Round 2.5
 
-This section is short by design. Round 2.6 inherits the configs, the noise preset, the env definition, the agent architecture, the step budget, and the cross-round comparability rules from Round 2.5. **See [`sameprop_round25_design.md`](sameprop_round25_design.md) §2 for the full pinned-factors table** (4 hiding_predators, 2 tagged rabbits, olfactory `properties [0,1,0,0,0]` matched on rabbit + active predator, `perceptual_noise.enabled: false`, `random_start_pos: true`, sensors, body, 128 parallel envs, max_steps 500, RPPO via `configs/models/recurrent_ppo.yaml`).
+This section is short by design. Round 2.6 inherits the configs, the noise preset, the env definition, the agent architecture, the step budget, and the cross-round comparability rules from Round 2.5. **See [`sameprop_round25_design.md`](sameprop_round25_design.md) §2 for the full pinned-factors table** (4 hiding_predators, 2 tagged rabbits, olfactory `properties [0,1,0,0,0]` matched on rabbit + active predator, `perceptual_noise.enabled: false`, `random_start_pos: true`, sensors, body, 128 parallel envs, max_steps 500, RPPO via `configs/models/recurrent_ppo/recurrent_ppo.yaml`).
 
 The independent variables (Cell C ablates food-quadrant coupling; Cell A1 ablates predator HUNT + restricts patrol area) are identical to Round 2.5; the configs `02-sameProp_R2_decoupleFood.yaml` and `02-sameProp_R2_passivePredator.yaml` are reused unchanged at the environment-level. Step budget is **10,000,000 episodes** per run.
 
@@ -87,8 +87,8 @@ Tag uniqueness verified against R2.5 (`hypervigilance-round25-*`) — `round26` 
 
 | Run | Config (env) | Config (agent) |
 |-----|--------------|----------------|
-| 1 | `configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml` (reused unchanged) | `configs/models/recurrent_ppo.yaml` |
-| 2 | `configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml` (reused unchanged) | `configs/models/recurrent_ppo.yaml` |
+| 1 | `configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml` (reused unchanged) | `configs/models/recurrent_ppo/recurrent_ppo.yaml` |
+| 2 | `configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml` (reused unchanged) | `configs/models/recurrent_ppo/recurrent_ppo.yaml` |
 
 **No new configs to produce.** Both env configs are inherited from Round 2.5 with no edits. See §2.3 for the optional `behavior_measures:` block backfill if online M1/M2/M5 keys are wanted during training; this is **not produced by this designer** — it routes through developer follow-up if authorised.
 
@@ -98,7 +98,7 @@ Tag uniqueness verified against R2.5 (`hypervigilance-round25-*`) — `round26` 
 # Run 1 — Cell C — node 106 cuda:0 — seed 44
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/hypervigilance/02-sameProp_R2_decoupleFood.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --episodes 10000000 \
   --num-envs 128 \
   --seed 44 \
@@ -112,7 +112,7 @@ Tag uniqueness verified against R2.5 (`hypervigilance-round25-*`) — `round26` 
 # Run 2 — Cell A1 — node 106 cuda:1 — seed 45
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --episodes 10000000 \
   --num-envs 128 \
   --seed 45 \

@@ -286,7 +286,7 @@ different `collect_interval`, does the JAX cadence formula still produce
 sheeprl-faithful behavior?
 
 **Audit.** I grep'd both `vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml`
-and `configs/dreamer_srl/agent_xs.yaml`: **neither has a `collect_interval`
+and `configs/models/dreamer_srl/agent_xs.yaml`: **neither has a `collect_interval`
 key**. Sheeprl's outer-loop iteration directly maps to env-step
 collection — `policy_step += policy_steps_per_iter` per iter
 (`dreamer_v3.py:551`), with `policy_steps_per_iter = num_envs * world_size`.

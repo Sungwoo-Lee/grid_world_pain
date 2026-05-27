@@ -32,8 +32,8 @@ TRAIN_SCRIPT = "train.py"
 # Algorithms to run in parallel per level
 # Format: (Algorithm Name, Config Path)
 ALGORITHMS = [
-    ("RecurrentPPO", "configs/models/recurrent_ppo.yaml"),
-    # ("DreamerV3", "configs/models/dreamer_v3.yaml"),
+    ("RecurrentPPO", "configs/models/recurrent_ppo/recurrent_ppo.yaml"),
+    # ("DreamerV3", "configs/models/dreamer_v3/dreamer_v3.yaml"),
 ]
 
 def main():

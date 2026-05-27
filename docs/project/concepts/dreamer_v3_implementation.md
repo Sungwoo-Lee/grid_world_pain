@@ -110,7 +110,7 @@ These defaults are the bar against which §3 and §5 judge "matches paper / devi
 
 ## §3 Implementation map
 
-This section walks every architectural and algorithmic component of our active codebase. **Active modules** (the ones the trainer actually imports): `src/models/dreamer_v3_nnx.py` (Flax NNX model definitions), `src/models/dreamer_v3_trainer.py` (training loop + losses + imagination + buffers + JIT scan), `src/models/dreamer_v3_util.py` (`symlog`/`symexp`/`to_twohot`/`from_twohot`/`OneHotDist`/`Moments`/`Ratio`/`hafner_init`), `configs/models/dreamer_v3.yaml` (canonical config), and the DreamerV3 branch of `train.py` from L773. The legacy file `src/models/dreamer_v3_network.py` is **NOT imported** anywhere — it is an 80-LOC scratch file confirmed orphaned by `grep -rln "dreamer_v3_network"`. It is flagged in §6 but otherwise ignored here.
+This section walks every architectural and algorithmic component of our active codebase. **Active modules** (the ones the trainer actually imports): `src/models/dreamer_v3_nnx.py` (Flax NNX model definitions), `src/models/dreamer_v3_trainer.py` (training loop + losses + imagination + buffers + JIT scan), `src/models/dreamer_v3_util.py` (`symlog`/`symexp`/`to_twohot`/`from_twohot`/`OneHotDist`/`Moments`/`Ratio`/`hafner_init`), `configs/models/dreamer_v3/dreamer_v3.yaml` (canonical config), and the DreamerV3 branch of `train.py` from L773. The legacy file `src/models/dreamer_v3_network.py` is **NOT imported** anywhere — it is an 80-LOC scratch file confirmed orphaned by `grep -rln "dreamer_v3_network"`. It is flagged in §6 but otherwise ignored here.
 
 ### §3.1 World model — RSSM
 
@@ -531,7 +531,7 @@ This is **not just a numerical-stability trick**: percentile return scaling is t
   train_steps = ratio_scaled_updates(global_step // num_steps)
   ```
   The argument is `global_step // num_steps` where `num_steps = collect_interval = 128`, so `Ratio` is fed *iteration count*, not raw env-step count — the effective rate is `replay_ratio` gradient steps per **iteration**, not per env step. Cold-start gate (`train.py:1615`): training is blocked until the buffer holds at least `max(batch_size * 2, sequence_length) = max(32, 128) = 128` transitions. Effective replay ratio metric logged to WandB (`train.py:1640`): `Params/effective_replay_ratio = cumulative_gradient_steps / max(1, global_step)`.
-- **Deviation flag — `replay_ratio = 0.5`.** `MAJOR DEVIATION (deliberate)`. 8× the paper-canonical Atari/DMC default of 0.0625. Top-3 candidate failure mode in the related critique ([§2.2](../critiques/dreamer_conventional_failure_modes_for_our_setup.md)). The variant `configs/models/dreamer_v3_rr06.yaml` differs by exactly this knob (set to 0.0625). Single biggest gradient-flow knob in the codebase.
+- **Deviation flag — `replay_ratio = 0.5`.** `MAJOR DEVIATION (deliberate)`. 8× the paper-canonical Atari/DMC default of 0.0625. Top-3 candidate failure mode in the related critique ([§2.2](../critiques/dreamer_conventional_failure_modes_for_our_setup.md)). The variant `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` differs by exactly this knob (set to 0.0625). Single biggest gradient-flow knob in the codebase.
 - **Deviation flag — `agent.train_steps: 64` YAML key never read.** `MINOR DEVIATION (suspected unjustified)`. Gating is purely via `Ratio(replay_ratio)`; the `train_steps` key is dead. (Inventory red-flag #10.)
 
 #### §3.8.3 `train_multiple_gpu` JIT path
@@ -649,7 +649,7 @@ When modulation is enabled (canonical config has `modulation.type: null`, so by 
 
 ## §5 Configs + canonical defaults
 
-### §5.1 `configs/models/dreamer_v3.yaml` — full key-value table
+### §5.1 `configs/models/dreamer_v3/dreamer_v3.yaml` — full key-value table
 
 | YAML key | Paper default (Hafner 2023 / 2025) | Current value | Deviation flag |
 |---|---|---|---|
@@ -720,7 +720,7 @@ When modulation is enabled (canonical config has `modulation.type: null`, so by 
 | `hafner_init` scale | 0.8796 | `util.py:195` | 0.8796 ("secret sauce" of original implementation) | matches paper |
 | Positive-buffer reward threshold | `> 0.0` | `train.py:1411, 1454` | n/a | **EXTENSION (not in paper)** |
 
-### §5.3 `configs/models/dreamer_v3_rr06.yaml` — single delta from canonical
+### §5.3 `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` — single delta from canonical
 
 | Key | Canonical | rr06 value |
 |---|---|---|
@@ -824,8 +824,8 @@ A reader placing DreamerV3 in the broader model-based-RL landscape may also want
 - `src/models/dreamer_v3_nnx.py` — Flax NNX model definitions (RSSM, encoder, decoder, heads, actor-critic, modulation).
 - `src/models/dreamer_v3_trainer.py` — training loop, losses, imagination, replay buffer, JIT scan path.
 - `src/models/dreamer_v3_util.py` — `symlog`, `symexp`, `to_twohot`, `from_twohot`, `OneHotDist`, `Moments`, `Ratio`, `hafner_init`.
-- `configs/models/dreamer_v3.yaml` — canonical config.
-- `configs/models/dreamer_v3_rr06.yaml` — single-knob variant restoring `replay_ratio = 0.0625`.
+- `configs/models/dreamer_v3/dreamer_v3.yaml` — canonical config.
+- `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` — single-knob variant restoring `replay_ratio = 0.0625`.
 - `train.py` — entrypoint; DreamerV3 branch starts at L773.
 - `scripts/dreamer_offline_wm_test.py` — diagnostic script using `trainer.agent.wm.{rssm.imagine_step, decoder, reward_head, continue_head}` as public API.
 - **Orphan**: `src/models/dreamer_v3_network.py` — legacy scratch file, not imported (see §6 item 14).

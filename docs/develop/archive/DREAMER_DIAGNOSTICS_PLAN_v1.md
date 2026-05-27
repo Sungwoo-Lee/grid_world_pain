@@ -684,7 +684,7 @@ The `replay_ratio` dynamic scaling was implemented to replace the fixed `train_s
 
 **Files Changed:**
 - `src/models/dreamer_v3_util.py` — Added `Ratio` class (from Hafner's original DreamerV3)
-- `configs/models/dreamer_v3.yaml` — Added `replay_ratio: 1.0`
+- `configs/models/dreamer_v3/dreamer_v3.yaml` — Added `replay_ratio: 1.0`
 - `train.py` — Uses `Ratio(replay_ratio)` to compute gradient steps dynamically
 
 **How it works in `train.py`:**
@@ -817,7 +817,7 @@ The corrected version gives:
 
 Rather than leaving 1-step collection as future work, we added a `collect_interval` config parameter that controls collection granularity:
 
-**`configs/models/dreamer_v3.yaml`:**
+**`configs/models/dreamer_v3/dreamer_v3.yaml`:**
 ```yaml
 replay_ratio: 1.0
 collect_interval: 1     # 1 = sheeprl-style (canonical), 128 = JAX-optimized
@@ -1178,7 +1178,7 @@ If the gradient starvation is fixed by setting `train_steps = 8192`, the Python 
 
 ### 16.4 Recommended Fixes
 
-1.  **Reduce Batch Footprint**: Update `configs/models/dreamer_v3.yaml` to `batch_size: 16` and `sequence_length: 64`.
+1.  **Reduce Batch Footprint**: Update `configs/models/dreamer_v3/dreamer_v3.yaml` to `batch_size: 16` and `sequence_length: 64`.
 2.  **Correct Ratio Formulation**: Remove the `// num_steps` floor division in `train.py`. Give the `Ratio` tracker the true `global_steps` increment so it matches canonical update frequency (`1.0` grad steps per env step).
 3.  **JIT the Training Loop**: Refactor the innermost `train_steps` application in `dreamer_v3_trainer.py` to accept a pre-sampled array of batches (`train_steps, batch_size, seq_len, dim`) and execute the gradient loop entirely on the GPU via `jax.lax.scan`.
 
@@ -1189,7 +1189,7 @@ If the gradient starvation is fixed by setting `train_steps = 8192`, the Python 
 Based on the bottlenecks identified in Section 16, and targeting the performance baseline set by the `RecurrentPPO` implementation, the following roadmap is proposed:
 
 ### Step 1: Correct Configuration Memory Bounds
-*   **Action**: Modify `configs/models/dreamer_v3.yaml` back to canonical parameters.
+*   **Action**: Modify `configs/models/dreamer_v3/dreamer_v3.yaml` back to canonical parameters.
 *   **Details**: Set `batch_size: 16` and `sequence_length: 64` (down from 64/128). This prevents the world model and critic from executing 8x more FLOPs than necessary per update loop, speeding up individual GPU kernels.
 
 ### Step 2: Fix Gradient Starvation in `train.py`
@@ -1578,7 +1578,7 @@ class GPUReplayBuffer:
 
 Rather than two separate phases, we implement a **single unified buffer** that supports both GPU and CPU backends via a config option, combined with a `lax.scan` training loop.
 
-#### Config Addition (`configs/models/dreamer_v3.yaml`)
+#### Config Addition (`configs/models/dreamer_v3/dreamer_v3.yaml`)
 
 ```yaml
 agent:

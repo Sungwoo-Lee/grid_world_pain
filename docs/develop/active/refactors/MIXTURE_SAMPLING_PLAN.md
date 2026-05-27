@@ -160,7 +160,7 @@ _scan_train_gpu(...)   ← called for training
 
 ### File Changes
 
-#### `configs/models/dreamer_v3.yaml`
+#### `configs/models/dreamer_v3/dreamer_v3.yaml`
 
 ```yaml
 # BEFORE (line ~10):
@@ -566,7 +566,7 @@ The implementing agent should verify **during** implementation:
 - `train.py`: updated to initialize `positive_buffer` and detect positive reward blocks during insertion.
 - **Strict Config Protocol**: Removed all fallback defaults for sampling parameters in `train.py` and `dreamer_v3_trainer.py` using `config.get_mandatory`. Verified that missing keys raise `ValueError`.
 - All changes verified on GPU.
-- Updated `configs/models/dreamer_v3.yaml` with mixture sampling parameters.
+- Updated `configs/models/dreamer_v3/dreamer_v3.yaml` with mixture sampling parameters.
 - Updated `src/models/dreamer_v3_trainer.py`:
     - `_scan_train_gpu`: Implemented three-pool mixture logic (positive, recent, uniform).
     - `train_multiple_gpu`: Added `positive_buffer` support.
@@ -584,7 +584,7 @@ The implementing agent should verify **during** implementation:
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `configs/models/dreamer_v3.yaml` | Add mixture sampling + positive buffer config | ✅ | All 5 keys added correctly: `sampling_mode`, `mixture_positive_slots`, `mixture_recent_slots`, `mixture_recent_window`, `positive_buffer_capacity` |
+| `configs/models/dreamer_v3/dreamer_v3.yaml` | Add mixture sampling + positive buffer config | ✅ | All 5 keys added correctly: `sampling_mode`, `mixture_positive_slots`, `mixture_recent_slots`, `mixture_recent_window`, `positive_buffer_capacity` |
 | `train.py` | Create `positive_buffer` alongside main buffer | ✅ | Uses `get_mandatory`, rounds capacity to `seq_len` multiple, correct params |
 | `train.py` | Detect positive blocks and copy to positive buffer after `add_batch` | ✅ | Implemented in both GPU and CPU transition branches. Uses `jnp.any`/`np.any` correctly |
 | `train.py` | Pass `positive_buffer` to `train_multiple_gpu` | ✅ | Keyword arg `positive_buffer=positive_buffer` |

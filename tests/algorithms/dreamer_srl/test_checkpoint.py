@@ -37,7 +37,7 @@ def tiny_agent():
     _project_root = '/media/nas01/projects/Interoceptive-AI/grid_world_pain'
     env_cfg = get_default_config()
     env_cfg.merge(Config.load_yaml(f'{_project_root}/configs/experiment/dreamer_curriculum/01_food_only.yaml'))
-    agent_cfg = Config.load_yaml(f'{_project_root}/configs/dreamer_srl/01_food_only.yaml')
+    agent_cfg = Config.load_yaml(f'{_project_root}/configs/models/dreamer_srl/01_food_only.yaml')
 
     from src.environment.config_loader import load_env_params
     env_params = load_env_params(env_cfg)

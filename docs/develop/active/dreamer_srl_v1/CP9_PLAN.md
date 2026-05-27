@@ -10,7 +10,7 @@ phase: 2
 > **CORRECTION NOTE (2026-05-14, PI call [`3c8b9f8`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md))**
 >
 > References below to "XS-default" / "XS default" / "the full XS configuration" / "the XS config"
-> as the content of `configs/dreamer_srl/01_food_only.yaml` **pre-date the discovery** that this
+> as the content of `configs/models/dreamer_srl/01_food_only.yaml` **pre-date the discovery** that this
 > file was mis-ported from the sheeprl base config (`vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml`)
 > rather than the sheeprl XS overlay (`vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml`).
 > The base config carries **sheeprl-XL-equivalent** values (`dense_units=1024`, `mlp_layers=5`,
@@ -97,7 +97,7 @@ the chain CP9 → CP9b → CP10 → PI consultation → multi-seed parity launch
 integration test that composes CP1–CP7's deterministic math correctly. **It does
 NOT exercise the env loop.**
 
-`configs/dreamer_srl/agent_xs.yaml` — the XS hyperparameters (cadence keys only:
+`configs/models/dreamer_srl/agent_xs.yaml` — the XS hyperparameters (cadence keys only:
 `learning_starts: 1024`, `replay_ratio: 1`, `per_rank_sequence_length: 64`,
 `per_rank_batch_size: 16`, etc.). The full hyperparameter set
 (`world_model.*`, `actor.*`, `critic.*` etc.) is **missing** and must be added —
@@ -119,7 +119,7 @@ against `vendor/sheeprl/sheeprl/algos/dreamer_v3/dreamer_v3.py:main()` and
 | `build_agent()` factory | **MISSING** in `agent.py` | `vendor/.../dreamer_v3/agent.py:L935-L1180` |
 | `one_train_step` (per-iteration: WM forward, imagined-trajectory rollout, critic loss, actor loss, all three optimizers step) | **MISSING** in `train.py` | `vendor/.../dreamer_v3/dreamer_v3.py:L48-L358` `train()` |
 | **Env-loop driver script** — calls envs.step, fills buffer, gates training on `iter_num >= learning_starts`, fires `polyak_update` before `one_train_step`, logs WandB | **MISSING** as a new artifact | `vendor/.../dreamer_v3/dreamer_v3.py:L361-L765` `main()` |
-| `configs/dreamer_srl/01_food_only.yaml` — env-side + dreamer-srl full hyperparameter set | **MISSING** (only `agent_xs.yaml` exists) | sheeprl `algo/dreamer_v3.yaml` + `algo/dreamer_v3_XS.yaml` + `env/default.yaml` |
+| `configs/models/dreamer_srl/01_food_only.yaml` — env-side + dreamer-srl full hyperparameter set | **MISSING** (only `agent_xs.yaml` exists) | sheeprl `algo/dreamer_v3.yaml` + `algo/dreamer_v3_XS.yaml` + `env/default.yaml` |
 | WandB hookup (run init, logging cadence, `AGGREGATOR_KEYS` schema parity) | **MISSING** | sheeprl `dreamer_v3.py:L702-L735` |
 
 CP9's job is to **add all of the above** in a way that exposes integration bugs
@@ -291,7 +291,7 @@ directly:
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
     src/algorithms/dreamer_srl/dreamer_srl_main.py \
     --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \
-    --agent-config configs/dreamer_srl/01_food_only.yaml \
+    --agent-config configs/models/dreamer_srl/01_food_only.yaml \
     --total-steps 5000 \
     --num-envs 1 \
     --seed 0 \
@@ -435,8 +435,8 @@ Built by merging:
 - Env-side: `configs/experiment/dreamer_curriculum/01_food_only.yaml` —
   reuse as-is via the `--env-config` CLI flag. **No modification.** This file
   is the existing food-only NoPred 5x5 environment.
-- Agent-side: a new file `configs/dreamer_srl/01_food_only.yaml` that extends
-  `configs/dreamer_srl/agent_xs.yaml`. The XS file has only cadence keys; the
+- Agent-side: a new file `configs/models/dreamer_srl/01_food_only.yaml` that extends
+  `configs/models/dreamer_srl/agent_xs.yaml`. The XS file has only cadence keys; the
   new file adds:
   - `algo.gamma: 0.996840347`
   - `algo.lmbda: 0.95`
@@ -655,13 +655,13 @@ with the deletions listed in §B. Single file, ~400 lines, including the
 argparse CLI, config loading, WandB hookup, env loop, polyak-before-train
 firing, and per-iteration logging.
 
-#### `configs/dreamer_srl/01_food_only.yaml` — NEW full hyperparameter config
+#### `configs/models/dreamer_srl/01_food_only.yaml` — NEW full hyperparameter config
 
 The dreamer-srl-side hyperparameter file. Extends `agent_xs.yaml`; merges into
 the env-side `configs/experiment/dreamer_curriculum/01_food_only.yaml` at
 driver startup. Full key list per §F above.
 
-#### `configs/dreamer_srl/agent_xs.yaml` — NO CHANGES
+#### `configs/models/dreamer_srl/agent_xs.yaml` — NO CHANGES
 
 The XS cadence file stays as-is. The CP9 config inherits from it and adds the
 algorithm + model + optimizer keys.
@@ -693,7 +693,7 @@ Add entry:
 deferred to CP9b. Setting `learning_starts: 0` removes the prefill from CP9's
 surface area so an integration failure is unambiguous. The XS config in
 `agent_xs.yaml` retains `learning_starts: 1024` for the parity gate.
-**Scope**: only the file `configs/dreamer_srl/01_food_only.yaml`.
+**Scope**: only the file `configs/models/dreamer_srl/01_food_only.yaml`.
 **PI gate**: NOT triggered (CP9 reviewer chain is optional; deviations are
 batched at the parity-launch gate).
 **Status**: ☐ pending → flipped to ✅ APPROVED by senior-developer at CP9
@@ -707,8 +707,8 @@ verification.
 | `src/algorithms/dreamer_srl/agent.py` | EXTEND — add `MLPEncoder`, `MLPDecoder`, `ContinueHead`, `Actor`, `WorldModel`, `build_agent` | ~600 | developer |
 | `src/algorithms/dreamer_srl/train.py` | EXTEND — add `one_train_step` | ~250 | developer |
 | `src/algorithms/dreamer_srl/dreamer_srl_main.py` | NEW — driver script | ~400 | developer |
-| `configs/dreamer_srl/01_food_only.yaml` | NEW — full hyperparameter config | ~80 | developer |
-| `configs/dreamer_srl/agent_xs.yaml` | NO CHANGE | 0 | — |
+| `configs/models/dreamer_srl/01_food_only.yaml` | NEW — full hyperparameter config | ~80 | developer |
+| `configs/models/dreamer_srl/agent_xs.yaml` | NO CHANGE | 0 | — |
 | `tests/algorithms/dreamer_srl/test_build_agent.py` | NEW (optional) | ~50 | developer |
 | `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | EDIT — add D-012 entry | ~15 | developer |
 | `docs/develop/active/dreamer_srl_v1/IMPLEMENTATION_PLAN.md` | EDIT — CP9 row Status `NOT STARTED` → `IN PROGRESS` (developer), then → `CP-PASS` (senior-developer only) | 1 row | both |
@@ -756,7 +756,7 @@ senior-developer's gate.
    Run Checkpoint A.
 5. **Implement `train.py:one_train_step`** with the same citation discipline.
    Run Checkpoint B.
-6. **Implement `configs/dreamer_srl/01_food_only.yaml`** with every key listed
+6. **Implement `configs/models/dreamer_srl/01_food_only.yaml`** with every key listed
    in §F. Verify it loads via `Config.load_yaml + config.get_mandatory(...)` for
    each key.
 7. **Pre-declare D-012 in `DEVIATION_LOG.md`.**
@@ -777,7 +777,7 @@ senior-developer's gate.
 - 4 h — `agent.py` extensions (Encoder + Decoder + ContinueHead + Actor + WorldModel + build_agent). The hard pieces are checkpointed; the additions are MLPs + a thin orchestrator class. Lever-B citations + zero-init assertions add some overhead but the algorithm is uncontroversial.
 - 2 h — `one_train_step` orchestration in `train.py`. The sub-functions all exist; the work is plumbing the inputs/outputs and JIT-ing the boundary.
 - 1 h — `dreamer_srl_main.py` driver script. Line-for-line port of a 400-line sheeprl function with documented deletions.
-- 1 h — `configs/dreamer_srl/01_food_only.yaml` + WandB hookup + pre-flight + Checkpoints A/B/C/D/E/F/G.
+- 1 h — `configs/models/dreamer_srl/01_food_only.yaml` + WandB hookup + pre-flight + Checkpoints A/B/C/D/E/F/G.
 
 Plus a buffer for first-integration-bug fixes — most likely an obs-shape
 mismatch between `ParallelEnv` and the encoder, or a buffer-shape mismatch
@@ -890,8 +890,8 @@ across CP1–CP8), THEN PI consultation IS triggered — promote the issue from
 |---|---|---|
 | `src/algorithms/dreamer_srl/train.py` | EXTEND — `make_train_step` / `one_train_step` factory (CP9 Checkpoint B) | +313 |
 | `src/algorithms/dreamer_srl/dreamer_srl_main.py` | NEW — env-loop driver script (port of sheeprl main()) | +589 |
-| `configs/dreamer_srl/01_food_only.yaml` | NEW — full XS hyperparameter set (parity target) | +106 |
-| `configs/dreamer_srl/01_food_only_smoke.yaml` | NEW — reduced-size smoke config (OOM workaround — see deviations) | +106 |
+| `configs/models/dreamer_srl/01_food_only.yaml` | NEW — full XS hyperparameter set (parity target) | +106 |
+| `configs/models/dreamer_srl/01_food_only_smoke.yaml` | NEW — reduced-size smoke config (OOM workaround — see deviations) | +106 |
 
 **Note**: `agent.py` was completed in a prior session (pre-CP9 start). The plan's `agent.py` File Changes section lists ~600 lines; those were already present at the start of this session (all `MLPEncoder`, `MLPDecoder`, `ContinueHead`, `Actor`, `WorldModel`, `FullMLPHead`, `build_agent` classes committed at commit `b7ea9bb`).
 
@@ -944,7 +944,7 @@ Run name: `dreamer_srl_cp9_dryrun_s0`
 
 **What happened**: The plan's §F specifies full XS dimensions (dense_units=1024, 5 layers, recurrent_state_size=4096, stochastic_size=32, discrete_size=32). Running `make_train_step` (JIT'd) with these dimensions on a single RTX 4090 (24GB) causes OOM at training time: `RESOURCE_EXHAUSTED: Out of memory while trying to allocate 14.38GiB`.
 
-**Workaround**: Created `configs/dreamer_srl/01_food_only_smoke.yaml` with reduced dimensions (dense_units=256, 3 layers, recurrent=512, stoch=8×8, horizon=7, batch=4, seq=16). This is structurally identical to the XS config — same architecture, same loss functions, same §S-rule call sites — just smaller.
+**Workaround**: Created `configs/models/dreamer_srl/01_food_only_smoke.yaml` with reduced dimensions (dense_units=256, 3 layers, recurrent=512, stoch=8×8, horizon=7, batch=4, seq=16). This is structurally identical to the XS config — same architecture, same loss functions, same §S-rule call sites — just smaller.
 
 **Status**: This is a new deviation not in DEVIATION_LOG. Logging as D-E1 (CP9-integration-only class; does not affect parity gate, which requires GPU memory optimization or multi-GPU setup). **Senior-developer needs to decide whether to classify this as a new DEVIATION_LOG entry or treat it as a platform constraint (like D-004).**
 

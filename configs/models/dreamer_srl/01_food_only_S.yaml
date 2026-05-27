@@ -1,23 +1,10 @@
-# dreamer-srl HYPERPARAM-SEARCH config — sheeprl S preset, seq_len=128
-#
-# **Phase-3 variant of the 10×10 hyperparameter search**
-# (see docs/experiments/active/dreamer_srl_v2/HYPERPARAM_SEARCH_10X10.md).
-#
-# Authored 2026-05-15 by experiment-designer. This file is a verbatim
-# copy of configs/dreamer_srl/01_food_only_S.yaml with the single key
-# `algo.per_rank_sequence_length` overridden to 128 (parent default: 64).
-# All other algorithm / optimizer / KL / cadence / model-architecture values
-# are unchanged from the parent.
-#
-# Provenance: 01_food_only_S.yaml → 01_food_only_S_seqlen128.yaml
-
 # dreamer-srl PROFILING-SWEEP config — sheeprl S preset
 #
 # **Profiling-sweep config (NOT a parity-track config).** Authored 2026-05-14
 # for the SPS × num_envs × network-size feasibility sweep documented at
 # docs/experiments/active/dreamer_srl_v3/SPS_SIZE_NUM_ENVS_SWEEP.md.
 #
-# Derived from configs/dreamer_srl/01_food_only.yaml (corrected real-XS) by
+# Derived from configs/models/dreamer_srl/01_food_only.yaml (corrected real-XS) by
 # overriding ONLY the six size-bearing keys per the sheeprl S overlay at
 # vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_S.yaml. All algorithm /
 # optimizer / KL / cadence values are unchanged from the corrected XS file.
@@ -34,20 +21,20 @@
 #   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_S.yaml:L13 → transition_model.hidden_size: 512
 #   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_S.yaml:L15 → representation_model.hidden_size: 512
 
-# Agent identity — mirrors configs/models/dreamer_v3_rr06.yaml:L40-L41
+# Agent identity — mirrors configs/models/dreamer_v3/dreamer_v3_rr06.yaml:L40-L41
 # Required for WandB filter: agent.algorithm = DreamerV3
 agent:
-  algorithm: "DreamerV3"   # Match XS parent (configs/dreamer_srl/01_food_only.yaml) for WandB filter
+  algorithm: "DreamerV3"   # Match XS parent (configs/models/dreamer_srl/01_food_only.yaml) for WandB filter
 
 # Cadence (sweep budget; learning_starts=0 per smoke deviation)
 algo:
-  learning_starts: 1024           # parity-track default (was 0 for SPS sweep)
+  learning_starts: 1024        # parity-track default (XS uses 1024) — was 0 for SPS sweep, restored for production
   replay_ratio: 1
   per_rank_gradient_steps: 1
-  per_rank_sequence_length: 128
+  per_rank_sequence_length: 64
   per_rank_batch_size: 16
   per_rank_pretrain_steps: 0
-  total_steps: 1000            # sweep step budget
+  total_steps: 5000000         # parity-track default (XS default is 5000000); CLI overrides
 
   # Core dreamer algorithm (unchanged from XS parity)
   gamma: 0.996840347           # sheeprl dreamer_v3.yaml:L22

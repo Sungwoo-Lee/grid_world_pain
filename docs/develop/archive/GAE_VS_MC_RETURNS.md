@@ -365,7 +365,7 @@ The previous implementation of the `gae_scan` function was incorrectly tracking 
 ### Code Verification Checklist
 
 **Date**: 2026-03-03
-**Verified against**: `src/models/recurrent_ppo_trainer.py` (post-fix) and `configs/models/recurrent_ppo.yaml`
+**Verified against**: `src/models/recurrent_ppo_trainer.py` (post-fix) and `configs/models/recurrent_ppo/recurrent_ppo.yaml`
 
 | # | Check | Expected | Actual (line) | Status |
 |---|-------|----------|---------------|--------|
@@ -541,7 +541,7 @@ This section provides the full specification for implementing gradient clipping.
 
 ### What to Change
 
-#### 1. Add `max_grad_norm` to config (`configs/models/recurrent_ppo.yaml`)
+#### 1. Add `max_grad_norm` to config (`configs/models/recurrent_ppo/recurrent_ppo.yaml`)
 
 Add the parameter under the `agent:` block, near the existing optimizer-related parameters:
 ```yaml
@@ -643,7 +643,7 @@ GAE value targets are raw discounted returns, which can reach magnitudes in the 
 
 **The Fix**:
 1.  **Enforced Protocol**: Enforced `config.get_mandatory` for all critical agent parameters in `train.py`, including `max_grad_norm`, to eliminate "safe default" fallbacks per project rules.
-2.  **Added Configuration**: Added `max_grad_norm: 0.5` to `configs/models/recurrent_ppo.yaml`.
+2.  **Added Configuration**: Added `max_grad_norm: 0.5` to `configs/models/recurrent_ppo/recurrent_ppo.yaml`.
 3.  **Optimizer Chain**: Updated the `RecurrentPPO` optimizer creation to use `optax.chain`:
     ```python
     optimizer = nnx.Optimizer(

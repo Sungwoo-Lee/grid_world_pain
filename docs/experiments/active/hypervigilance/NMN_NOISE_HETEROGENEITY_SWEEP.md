@@ -198,16 +198,16 @@ All Tags are unique within the manifest. Tag = wandb-name per project memory; ru
 
 | Run | Cell | Config (env) | Config (agent) |
 |---|---|---|---|
-| 1 | p1_unmod   | `configs/experiment/nmn_noise_heterogeneity/p1_flat.yaml`     | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` |
-| 2 | p1_film_g1 | `configs/experiment/nmn_noise_heterogeneity/p1_flat.yaml`     | `configs/models/recurrent_ppo_nmn_het_film_g1.yaml` |
-| 3 | p2_unmod   | `configs/experiment/nmn_noise_heterogeneity/p2_mild.yaml`     | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` |
-| 4 | p2_film_g1 | `configs/experiment/nmn_noise_heterogeneity/p2_mild.yaml`     | `configs/models/recurrent_ppo_nmn_het_film_g1.yaml` |
-| 5 | p3_unmod   | `configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml` | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` |
-| 6 | p3_film_g1 | `configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml` | `configs/models/recurrent_ppo_nmn_het_film_g1.yaml` |
-| 7 | p4_unmod   | `configs/experiment/nmn_noise_heterogeneity/p4_high.yaml`     | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` |
-| 8 | p4_film_g1 | `configs/experiment/nmn_noise_heterogeneity/p4_high.yaml`     | `configs/models/recurrent_ppo_nmn_het_film_g1.yaml` |
-| 9 | p5_unmod   | `configs/experiment/nmn_noise_heterogeneity/p5_extreme.yaml`  | `configs/models/recurrent_ppo_nmn_het_unmod.yaml` |
-| 10 | p5_film_g1 | `configs/experiment/nmn_noise_heterogeneity/p5_extreme.yaml`  | `configs/models/recurrent_ppo_nmn_het_film_g1.yaml` |
+| 1 | p1_unmod   | `configs/experiment/nmn_noise_heterogeneity/p1_flat.yaml`     | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` |
+| 2 | p1_film_g1 | `configs/experiment/nmn_noise_heterogeneity/p1_flat.yaml`     | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` |
+| 3 | p2_unmod   | `configs/experiment/nmn_noise_heterogeneity/p2_mild.yaml`     | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` |
+| 4 | p2_film_g1 | `configs/experiment/nmn_noise_heterogeneity/p2_mild.yaml`     | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` |
+| 5 | p3_unmod   | `configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml` | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` |
+| 6 | p3_film_g1 | `configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml` | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` |
+| 7 | p4_unmod   | `configs/experiment/nmn_noise_heterogeneity/p4_high.yaml`     | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` |
+| 8 | p4_film_g1 | `configs/experiment/nmn_noise_heterogeneity/p4_high.yaml`     | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` |
+| 9 | p5_unmod   | `configs/experiment/nmn_noise_heterogeneity/p5_extreme.yaml`  | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml` |
+| 10 | p5_film_g1 | `configs/experiment/nmn_noise_heterogeneity/p5_extreme.yaml`  | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` |
 
 All 7 configs (5 env + 2 agent) are NEW. No schema additions; all keys read by existing `config_loader.py` + `train.py:204-280` paths.
 
@@ -217,7 +217,7 @@ For Run 1 (p1_unmod, node 101, cuda:0):
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/nmn_noise_heterogeneity/p1_flat.yaml \
-  --agent_config configs/models/recurrent_ppo_nmn_het_unmod.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml \
   --num-envs 128 \
   --episodes 10000000 \
   --checkpoint-frequency 100000 \

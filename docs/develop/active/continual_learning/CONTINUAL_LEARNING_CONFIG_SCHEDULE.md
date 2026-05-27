@@ -492,7 +492,7 @@ continual:
 python train.py \
     --configs-dir configs/experiment/curriculum_basic/ \
     --continual-schedule configs/continual/example_schedule.yaml \
-    --agent_config configs/models/dreamerv3.yaml \
+    --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
     --tag curriculum_basic_run01
 ```
 
@@ -506,7 +506,7 @@ Where `configs/experiment/curriculum_basic/` contains e.g.:
 
 ## Checkpoints
 
-- [x] **Ckpt 1** — Single-config mode still works: smoke run `train.py --agent_config configs/models/recurrent_ppo.yaml --no-wandb --quiet --episodes 20 --num-envs 2` completed successfully. New code is all behind `if schedule is not None:` guards; single-config path is unchanged.
+- [x] **Ckpt 1** — Single-config mode still works: smoke run `train.py --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml --no-wandb --quiet --episodes 20 --num-envs 2` completed successfully. New code is all behind `if schedule is not None:` guards; single-config path is unchanged.
 - [x] **Ckpt 2** — Schedule validation fails loudly: 6 error cases verified in `tmp/20260506_000000_ckpt2_3_validation.py` — mismatched boundaries length, non-increasing boundaries, duplicate boundaries, zero checkpoint frequency, missing key, mismatched checkpoint_frequencies length. All raised clear `ValueError` before training. Sensor-toggling detection (obs_dim change) is wired in the startup probe loop; not triggered because test stages share the default config.
 - [x] **Ckpt 3** — Alphabetic ordering test: `glob.glob + sorted` on `[03_c.yaml, 01_a.yaml, 02_b.yaml]` → `stage_names = ['01_a', '02_b', '03_c']`. Verified in `tmp/20260506_000000_ckpt2_3_validation.py`. PASS.
 - [x] **Ckpt 4** — Stage transition fires: `boundaries=[6, 12]` with `num_envs=1` — `[STAGE] 0:01_stage_a -> 1:02_stage_b at ep=10 (boundary was 6)` logged. ep=10 is boundary=6 + drift≤4 (acceptable). The `stage_for_episode` boundary logic also verified in unit test script.

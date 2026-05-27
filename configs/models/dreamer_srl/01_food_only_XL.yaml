@@ -1,50 +1,45 @@
-# dreamer-srl HYPERPARAM-SEARCH config — sheeprl M preset, seq_len=128
-#
-# **Phase-3 variant of the 10×10 hyperparameter search**
-# (see docs/experiments/active/dreamer_srl_v2/HYPERPARAM_SEARCH_10X10.md).
-#
-# Authored 2026-05-15 by experiment-designer. This file is a verbatim
-# copy of configs/dreamer_srl/01_food_only_M.yaml with the single key
-# `algo.per_rank_sequence_length` overridden to 128 (parent default: 64).
-# All other algorithm / optimizer / KL / cadence / model-architecture values
-# are unchanged from the parent.
-#
-# Provenance: 01_food_only_M.yaml → 01_food_only_M_seqlen128.yaml
-
-# dreamer-srl PROFILING-SWEEP config — sheeprl M preset
+# dreamer-srl PROFILING-SWEEP config — sheeprl XL preset
 #
 # **Profiling-sweep config (NOT a parity-track config).** Authored 2026-05-14
 # for the SPS × num_envs × network-size feasibility sweep documented at
 # docs/experiments/active/dreamer_srl_v3/SPS_SIZE_NUM_ENVS_SWEEP.md.
 #
-# Derived from configs/dreamer_srl/01_food_only.yaml (corrected real-XS) by
-# overriding ONLY the six size-bearing keys per the sheeprl M overlay at
-# vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_M.yaml. All algorithm /
+# Derived from configs/models/dreamer_srl/01_food_only.yaml (corrected real-XS) by
+# overriding ONLY the six size-bearing keys per the sheeprl XL overlay at
+# vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XL.yaml. All algorithm /
 # optimizer / KL / cadence values are unchanged from the corrected XS file.
+#
+# Historical note: the XL values below are identical to what
+# configs/models/dreamer_srl/01_food_only.yaml CARRIED PRE-CORRECTION on 2026-05-14
+# (when it was mis-named "XS" in the v3 plan but actually held the XL
+# preset's numbers). At single env, that XL config produced a ~14.38 GB
+# JIT-compile footprint (D-013). On node 114's RTX 6000 Ada (49 GB), it
+# should now fit comfortably at num_envs=1 — the sweep tests where the
+# (size=XL, num_envs) boundary lands on the bigger GPU.
 #
 # Sweep-only deviations from parity-track 01_food_only.yaml:
 #   - learning_starts: 0       (skip §S3 prefill — pure profiling, no training)
 #   - total_steps:     1000    (sweep step budget; CLI also passes --total-steps 1000)
 #
 # Sheeprl references for the six size-bearing overrides:
-#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_M.yaml:L5  → dense_units: 640
-#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_M.yaml:L6  → mlp_layers: 3
-#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_M.yaml:L9  → cnn_channels_multiplier: 48
-#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_M.yaml:L11 → recurrent_state_size: 1024
-#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_M.yaml:L13 → transition_model.hidden_size: 640
-#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_M.yaml:L15 → representation_model.hidden_size: 640
+#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XL.yaml:L5  → dense_units: 1024
+#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XL.yaml:L6  → mlp_layers: 5
+#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XL.yaml:L9  → cnn_channels_multiplier: 96
+#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XL.yaml:L11 → recurrent_state_size: 4096
+#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XL.yaml:L13 → transition_model.hidden_size: 1024
+#   vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XL.yaml:L15 → representation_model.hidden_size: 1024
 
-# Agent identity — mirrors configs/models/dreamer_v3_rr06.yaml:L40-L41
+# Agent identity — mirrors configs/models/dreamer_v3/dreamer_v3_rr06.yaml:L40-L41
 # Required for WandB filter: agent.algorithm = DreamerV3
 agent:
-  algorithm: "DreamerV3"   # Match XS parent (configs/dreamer_srl/01_food_only.yaml) for WandB filter
+  algorithm: "DreamerV3"   # Match XS parent (configs/models/dreamer_srl/01_food_only.yaml) for WandB filter
 
 # Cadence (sweep budget; learning_starts=0 per smoke deviation)
 algo:
   learning_starts: 0           # sweep-only deviation (skip §S3 prefill)
   replay_ratio: 1
   per_rank_gradient_steps: 1
-  per_rank_sequence_length: 128
+  per_rank_sequence_length: 64
   per_rank_batch_size: 16
   per_rank_pretrain_steps: 0
   total_steps: 1000            # sweep step budget
@@ -70,39 +65,39 @@ algo:
     encoder: ["obs"]
     decoder: ["obs"]
 
-  # World model architecture (M preset)
+  # World model architecture (XL preset)
   world_model:
     encoder:
-      dense_units: 640                 # sheeprl algo/dreamer_v3_M.yaml:L5
-      mlp_layers: 3                    # sheeprl algo/dreamer_v3_M.yaml:L6
-      cnn_channels_multiplier: 48      # sheeprl algo/dreamer_v3_M.yaml:L9 (no runtime effect — cnn_keys empty)
+      dense_units: 1024                # sheeprl algo/dreamer_v3_XL.yaml:L5
+      mlp_layers: 5                    # sheeprl algo/dreamer_v3_XL.yaml:L6
+      cnn_channels_multiplier: 96      # sheeprl algo/dreamer_v3_XL.yaml:L9 (no runtime effect — cnn_keys empty)
     decoder:
-      dense_units: 640                 # sheeprl algo/dreamer_v3_M.yaml:L5 (symmetric with encoder)
-      mlp_layers: 3                    # sheeprl algo/dreamer_v3_M.yaml:L6
+      dense_units: 1024                # sheeprl algo/dreamer_v3_XL.yaml:L5 (symmetric with encoder)
+      mlp_layers: 5                    # sheeprl algo/dreamer_v3_XL.yaml:L6
     recurrent_model:
-      recurrent_state_size: 1024       # sheeprl algo/dreamer_v3_M.yaml:L11
-      dense_units: 640                 # sheeprl algo/dreamer_v3_M.yaml:L5
+      recurrent_state_size: 4096       # sheeprl algo/dreamer_v3_XL.yaml:L11
+      dense_units: 1024                # sheeprl algo/dreamer_v3_XL.yaml:L5
     transition_model:
-      hidden_size: 640                 # sheeprl algo/dreamer_v3_M.yaml:L13
+      hidden_size: 1024                # sheeprl algo/dreamer_v3_XL.yaml:L13
     representation_model:
-      hidden_size: 640                 # sheeprl algo/dreamer_v3_M.yaml:L15
+      hidden_size: 1024                # sheeprl algo/dreamer_v3_XL.yaml:L15
     reward_model:
-      dense_units: 640                 # sheeprl algo/dreamer_v3_M.yaml:L5 (inherits algo.dense_units)
-      mlp_layers: 3                    # sheeprl algo/dreamer_v3_M.yaml:L6
-      bins: 255                        # sheeprl dreamer_v3.yaml:L36 (NOT overridden by M)
+      dense_units: 1024                # sheeprl algo/dreamer_v3_XL.yaml:L5 (inherits algo.dense_units)
+      mlp_layers: 5                    # sheeprl algo/dreamer_v3_XL.yaml:L6
+      bins: 255                        # sheeprl dreamer_v3.yaml:L36 (NOT overridden by XL)
     continue_model:
-      dense_units: 640                 # sheeprl algo/dreamer_v3_M.yaml:L5
-      mlp_layers: 3                    # sheeprl algo/dreamer_v3_M.yaml:L6
+      dense_units: 1024                # sheeprl algo/dreamer_v3_XL.yaml:L5
+      mlp_layers: 5                    # sheeprl algo/dreamer_v3_XL.yaml:L6
     stochastic_size: 32        # sheeprl exp/dreamer_v3.yaml:L23 (unchanged from XS)
     discrete_size: 32          # sheeprl exp/dreamer_v3.yaml:L24 (unchanged from XS)
     optimizer:
       lr: 1.0e-4               # sheeprl dreamer_v3.yaml:L14
       eps: 1.0e-8              # sheeprl dreamer_v3.yaml:L15
 
-  # Actor architecture + optimizer (M preset)
+  # Actor architecture + optimizer (XL preset)
   actor:
-    dense_units: 640                   # sheeprl algo/dreamer_v3_M.yaml:L5
-    mlp_layers: 3                      # sheeprl algo/dreamer_v3_M.yaml:L6
+    dense_units: 1024                  # sheeprl algo/dreamer_v3_XL.yaml:L5
+    mlp_layers: 5                      # sheeprl algo/dreamer_v3_XL.yaml:L6
     ent_coef: 3.0e-4           # sheeprl dreamer_v3.yaml:L63
     moments:
       decay: 0.99              # sheeprl dreamer_v3.yaml:L68
@@ -114,10 +109,10 @@ algo:
       lr: 8.0e-5               # sheeprl dreamer_v3.yaml:L57
       eps: 1.0e-5              # sheeprl dreamer_v3.yaml:L58
 
-  # Critic architecture + optimizer (M preset)
+  # Critic architecture + optimizer (XL preset)
   critic:
-    dense_units: 640                   # sheeprl algo/dreamer_v3_M.yaml:L5
-    mlp_layers: 3                      # sheeprl algo/dreamer_v3_M.yaml:L6
+    dense_units: 1024                  # sheeprl algo/dreamer_v3_XL.yaml:L5
+    mlp_layers: 5                      # sheeprl algo/dreamer_v3_XL.yaml:L6
     bins: 255                  # sheeprl dreamer_v3.yaml:L82
     tau: 0.02                  # sheeprl dreamer_v3.yaml:L77
     per_rank_target_network_update_freq: 1  # sheeprl dreamer_v3.yaml:L151

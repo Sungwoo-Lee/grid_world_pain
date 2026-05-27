@@ -31,7 +31,7 @@ def eval_agent_and_params():
                 'configs/visualization/default.yaml']:
         env_cfg.merge(Config.load_yaml(os.path.join(_root, rel)))
 
-    agent_cfg = Config.load_yaml(f'{_root}/configs/dreamer_srl/01_food_only.yaml')
+    agent_cfg = Config.load_yaml(f'{_root}/configs/models/dreamer_srl/01_food_only.yaml')
 
     env_params = load_env_params(env_cfg)
     action_dim = 4 + int(env_params.rest_action_enabled) + int(env_params.eat_action_enabled)

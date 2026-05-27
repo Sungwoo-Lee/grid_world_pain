@@ -60,7 +60,7 @@ Any individual seed with `M_seed < 110` is flagged as a per-seed failure. The ra
 
 | Variable | Value | Source |
 |---|---|---|
-| Agent config (network sizes, optimizer, KL balance, RSSM dims) | `configs/dreamer_srl/01_food_only.yaml` (the corrected real-XS, commit `4fe3d8b`) | sheeprl XS preset — 256/1/256/256/24 — verified at CP10b |
+| Agent config (network sizes, optimizer, KL balance, RSSM dims) | `configs/models/dreamer_srl/01_food_only.yaml` (the corrected real-XS, commit `4fe3d8b`) | sheeprl XS preset — 256/1/256/256/24 — verified at CP10b |
 | Env config | `configs/experiment/dreamer_curriculum/01_food_only.yaml` | food-only NoPred 5×5 grid, no predator, no rabbit; `max_steps: 500`, `bush.count: 3`; same env CP9, CP10b, and the SPS sweep used |
 | `total_steps` | 200,000 | sheeprl baseline step budget (matched to `kfsvh1qk`, `jzgkcep4`) — passed via CLI `--total-steps 200000` to override the agent YAML's `total_steps: 5000` smoke default |
 | `num_envs` | 1 | XS / num_envs=1 verdict from [SPS sweep §6.4](SPS_SIZE_NUM_ENVS_SWEEP.md#64-verdict-for-the-parity-launch). Multi-env gave only +13% throughput; the parity claim is strongest 1:1 with sheeprl's XS recipe |
@@ -112,7 +112,7 @@ All 3 runs share:
 - **wandb-job-type**: `parity` — injected via `WANDB_JOB_TYPE` env var (same reason)
 - **Node**: 114
 - **Env config**: `configs/experiment/dreamer_curriculum/01_food_only.yaml`
-- **Agent config**: `configs/dreamer_srl/01_food_only.yaml`
+- **Agent config**: `configs/models/dreamer_srl/01_food_only.yaml`
 - **`total_steps`**: 200,000 (CLI `--total-steps 200000`)
 - **`num_envs`**: 1
 - **Step budget per seed**: 200,000 env steps; projected 3.47 h/seed wall-clock
@@ -127,11 +127,11 @@ All 3 runs share:
 
 ### 4.1 Configs to produce
 
-**Approach chosen — single config + CLI `--seed` override (NOT three-seed-variant configs).** The driver at `src/algorithms/dreamer_srl/dreamer_srl_main.py:174` accepts `--seed` as a first-class CLI argument that seeds both numpy (`np.random.seed`) and JAX (`jax.random.PRNGKey`) globally. Producing 3 seed-variant YAML files that differ in only one integer would duplicate the corrected-XS contents 3 times and make any future XS hyperparameter change require 3 edits. The CLI-arg approach is simpler, more maintainable, and matches the existing pattern used by both the sweep doc (`configs/dreamer_srl/01_food_only.yaml` + `--seed 0`) and the matched-config SPS measurement (`configs/models/dreamer_v3_sheeprl_matched.yaml` + `--seed 0`).
+**Approach chosen — single config + CLI `--seed` override (NOT three-seed-variant configs).** The driver at `src/algorithms/dreamer_srl/dreamer_srl_main.py:174` accepts `--seed` as a first-class CLI argument that seeds both numpy (`np.random.seed`) and JAX (`jax.random.PRNGKey`) globally. Producing 3 seed-variant YAML files that differ in only one integer would duplicate the corrected-XS contents 3 times and make any future XS hyperparameter change require 3 edits. The CLI-arg approach is simpler, more maintainable, and matches the existing pattern used by both the sweep doc (`configs/models/dreamer_srl/01_food_only.yaml` + `--seed 0`) and the matched-config SPS measurement (`configs/models/dreamer_v3/dreamer_v3_sheeprl_matched.yaml` + `--seed 0`).
 
 | Run | Env config | Agent config | Seed (CLI override) | Status |
 |---|---|---|---|---|
-| 1, 2, 3 (all) | `configs/experiment/dreamer_curriculum/01_food_only.yaml` (existing, read-only) | `configs/dreamer_srl/01_food_only.yaml` (existing, corrected to real-XS at commit `4fe3d8b`) | `--seed 0` / `1` / `2` | both files exist; no new configs needed |
+| 1, 2, 3 (all) | `configs/experiment/dreamer_curriculum/01_food_only.yaml` (existing, read-only) | `configs/models/dreamer_srl/01_food_only.yaml` (existing, corrected to real-XS at commit `4fe3d8b`) | `--seed 0` / `1` / `2` | both files exist; no new configs needed |
 
 **No new YAMLs are produced** by this design. The only new artifact is this design doc.
 
@@ -147,7 +147,7 @@ WANDB_JOB_TYPE=parity \
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
     src/algorithms/dreamer_srl/dreamer_srl_main.py \
     --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \
-    --agent-config configs/dreamer_srl/01_food_only.yaml \
+    --agent-config configs/models/dreamer_srl/01_food_only.yaml \
     --total-steps 200000 \
     --num-envs 1 \
     --seed <SEED> \
@@ -282,7 +282,7 @@ The parity target is **the 200k-step, noise-off, food-only sheeprl behavior — 
 ## 8. Pre-flight
 
 This launch reuses two configs both already pre-flighted:
-- **`configs/dreamer_srl/01_food_only.yaml`** — corrected XS at commit `4fe3d8b`, verified at CP10b (WandB `s31wc1a1`) where it ran cleanly for 20,000 steps without OOM, NaN, or stability issue.
+- **`configs/models/dreamer_srl/01_food_only.yaml`** — corrected XS at commit `4fe3d8b`, verified at CP10b (WandB `s31wc1a1`) where it ran cleanly for 20,000 steps without OOM, NaN, or stability issue.
 - **`configs/experiment/dreamer_curriculum/01_food_only.yaml`** — env config unchanged since CP9, CP10b, and the SPS sweep used it. `env-config-auditor` has previously cleared it.
 
 **No new YAML schema, no new keys, no new code paths.** Only the CLI invocation differs from CP10b (200,000 steps vs 20,000; `--seed 0/1/2` vs `--seed 0` only).

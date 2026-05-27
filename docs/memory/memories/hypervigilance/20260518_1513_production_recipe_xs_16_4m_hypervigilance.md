@@ -56,7 +56,7 @@ On the 10×10 hypervigilance environment, the dreamer-srl v2 production recipe i
 - [[20260518_1514_num_envs_vs_budget_interaction]] — why the size winner depends on the num_envs regime.
 - [[20260518_1515_m_paradox_resolution_slow_learner]] — why M cells appeared not to learn but actually do (slowly).
 - `docs/experiments/active/dreamer_srl_v2/HYPERPARAM_SEARCH_10X10.md`
-- `configs/dreamer_srl/01_food_only.yaml` (XS template) and family `_S.yaml` / `_M.yaml` / `_L.yaml` / `_XL.yaml`.
+- `configs/models/dreamer_srl/01_food_only.yaml` (XS template) and family `_S.yaml` / `_M.yaml` / `_L.yaml` / `_XL.yaml`.
 - WandB project: `grid_world_pain` (unified with original Dreamer + rPPO since commit `f90a183`).
 - Raw conversation: synced via `./sync-agent-data.sh claude push`. To read on another node: `./sync-agent-data.sh claude pull`, then either `claude --resume 7962c4de-7ac9-4c9a-9958-c22a36fd45c7` or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/20260518_1513_production_recipe_xs_16_4m_hypervigilance.md`.
 

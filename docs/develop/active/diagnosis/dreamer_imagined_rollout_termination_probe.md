@@ -79,17 +79,17 @@ Tiny instrumentation feature. Direct test of the surviving structural hypothesis
    ```
    Without this edit the keys land at the root namespace via the final `else` branch — functional but messy. One-line change, line 1575.
 
-3. **`configs/models/dreamer_v3.yaml`** — add key under `agent:`. Place on a new line right after `cont_loss_weight: 1.0` (line 41):
+3. **`configs/models/dreamer_v3/dreamer_v3.yaml`** — add key under `agent:`. Place on a new line right after `cont_loss_weight: 1.0` (line 41):
    ```yaml
    imagined_rollout_probe: false  # Diagnostic: log imagined-trajectory termination stats. False = bit-identical to pre-probe runs.
    ```
 
-4. **`configs/models/neuromodulated_dreamer_v3.yaml`** — same key under `agent:`, after `cont_loss_weight: 1.0` (line 40):
+4. **`configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml`** — same key under `agent:`, after `cont_loss_weight: 1.0` (line 40):
    ```yaml
    imagined_rollout_probe: false
    ```
 
-5. **`configs/models/dreamer_v3_curriculum.yaml`** — same key. The curriculum config is the one we'll most likely flip to `true` for the qont5dac-style follow-up. Insert after `cont_loss_weight: 5.0` (line 71):
+5. **`configs/models/dreamer_v3/dreamer_v3_curriculum.yaml`** — same key. The curriculum config is the one we'll most likely flip to `true` for the qont5dac-style follow-up. Insert after `cont_loss_weight: 5.0` (line 71):
    ```yaml
    imagined_rollout_probe: false  # Flip to true to enable diagnostic probe.
    ```
@@ -111,7 +111,7 @@ No other agent configs (`recurrent_ppo.yaml`, `neuromodulated_ppo.yaml`, `ppo.ya
 1. **Smoke (probe disabled, default):** runs cleanly, no behavioral change.
    ```bash
    /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-     --agent_config configs/models/dreamer_v3.yaml \
+     --agent_config configs/models/dreamer_v3/dreamer_v3.yaml \
      --episodes 5 --num-envs 2 --no-wandb --quiet
    ```
    Expect: completes 5 episodes, no `imagined_*` keys in metrics dict.
@@ -139,9 +139,9 @@ No other agent configs (`recurrent_ppo.yaml`, `neuromodulated_ppo.yaml`, `ppo.ya
 |------|--------|-----------|
 | `src/models/dreamer_v3_trainer.py` | Edit A: `IMG_PROBE` read after `modulation_enabled`; Edit B: imagined termination stats + `if IMG_PROBE: metrics.update(...)` in `behavior_loss_fn`; Edit C: real-term baseline + `if IMG_PROBE: metrics.update(...)` in `model_loss_fn` | +30 |
 | `train.py` | Edit 2: added `mk.startswith('imagined_')` branch to WandB routing so probe keys land under `WorldModel/` | +1 |
-| `configs/models/dreamer_v3.yaml` | Added `imagined_rollout_probe: false` after `cont_loss_weight: 1.0` | +1 |
-| `configs/models/neuromodulated_dreamer_v3.yaml` | Same key, same placement | +1 |
-| `configs/models/dreamer_v3_curriculum.yaml` | Same key after `cont_loss_weight: 5.0`, with flip-to-true comment | +1 |
+| `configs/models/dreamer_v3/dreamer_v3.yaml` | Added `imagined_rollout_probe: false` after `cont_loss_weight: 1.0` | +1 |
+| `configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml` | Same key, same placement | +1 |
+| `configs/models/dreamer_v3/dreamer_v3_curriculum.yaml` | Same key after `cont_loss_weight: 5.0`, with flip-to-true comment | +1 |
 
 Total net additions: ~34 lines.
 

@@ -255,7 +255,7 @@ Before saving, do a self-review pass over the headline blockquote + take-home bu
 | `H₀`, `H₁a`, `H₁b`, `Δ_X` (or any locked predicate name / symbolic delta) | The plain-English equivalent: "the agent did discriminate" / "the corner-camping policy did not replicate" / "the cross-class gap on bush-dive rate". Symbol may appear once in parens after a definition in §0 Vocabulary; should not appear in §§1–4 body prose. |
 | A project shorthand like `Cell C` / `decoupleFood` / `sameProp` | Either a descriptive label ("the food-decoupling experiment", "matched smells") or the shorthand-with-translation on first mention; define once in §0.2 and use the descriptive label thereafter. |
 | A bare WandB run ID like `f96lhxpe` | A link to the memory insight or design doc that cites it. Run IDs are allowed in §5 Links and inside Appendix A worked-example numerics. |
-| A bare config path like `configs/models/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` | A description of what the config changed ("raised the temperature ceiling from 3.0 to 10.0") + a §5 link to the design doc that pins the path. |
+| A bare config path like `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` | A description of what the config changed ("raised the temperature ceiling from 3.0 to 10.0") + a §5 link to the design doc that pins the path. |
 | Bare metric short-names (`M2`, `M5`, `Δ_M2`) without a plain-English label nearby | Either the plain-English label (`in-cover rate`, `eat-suppression ratio`) or the short name paired with the label on first use (`in-cover rate (M2)`). |
 | Project-internal jargon without a one-clause translation OR a §0 Vocabulary entry | Add the translation inline, or add a §0 row and reference it. |
 

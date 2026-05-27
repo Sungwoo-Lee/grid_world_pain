@@ -85,7 +85,7 @@ In that entry-point section:
 
 - **Translate every cited result on first mention.** "The modulator did not beat the baseline (H₁a refuted)", not just "H₁a refuted". The English first; the symbol after, in parens.
 - **No bare WandB run IDs** like `f96lhxpe` — link through the design doc or memory insight that names them.
-- **No bare config paths** like `configs/models/recurrent_ppo_nmn_het_film_g1.yaml` — describe what the config does ("the FiLM agent config with the modulator's temperature ceiling raised from 3.0 to 10.0") and link the path elsewhere.
+- **No bare config paths** like `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` — describe what the config does ("the FiLM agent config with the modulator's temperature ceiling raised from 3.0 to 10.0") and link the path elsewhere.
 - **No bare predicate / shorthand names** (`H₁a`, `H₀`, `Δ_SS`, `Cand. A1`, `Phase 0`, `T/P split`, etc.) without a one-clause translation.
 - **Concrete examples beat abstract claims.** If the doc proposes "a 2-context mixture", show what the two contexts ARE — not just "context A vs. context B".
 

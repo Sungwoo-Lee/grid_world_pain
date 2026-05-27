@@ -102,13 +102,13 @@ The deferred cell (predator + rr=0.0625 only) primarily isolates which of the tw
 
 | Run | Config (env)                                                                          | Config (agent)                                  | Notes                                                                |
 |-----|---------------------------------------------------------------------------------------|-------------------------------------------------|----------------------------------------------------------------------|
-| 1   | `configs/experiment/basic/00-5X5_NoPred.yaml` (existing, unchanged)                   | `configs/models/dreamer_v3_rr06.yaml` (NEW)     | Tests `replay_ratio: 0.0625` against `3zjhap9w` collapse template.   |
-| 2   | `configs/experiment/dreamer_diagnostic/01-PredInterval3_NutGain18_DeathPenalty1.yaml` (NEW) | `configs/models/dreamer_v3_rr06.yaml` (NEW; same as A1) | Tests joint `replay_ratio: 0.0625` + `death_penalty: 1` on predator. |
+| 1   | `configs/experiment/basic/00-5X5_NoPred.yaml` (existing, unchanged)                   | `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` (NEW)     | Tests `replay_ratio: 0.0625` against `3zjhap9w` collapse template.   |
+| 2   | `configs/experiment/dreamer_diagnostic/01-PredInterval3_NutGain18_DeathPenalty1.yaml` (NEW) | `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` (NEW; same as A1) | Tests joint `replay_ratio: 0.0625` + `death_penalty: 1` on predator. |
 
 **Two new files total. Zero schema changes. Cells share the same agent config.**
 
 Config provenance — both new files are byte-equal to their parents except for the single advertised knob:
-- `configs/models/dreamer_v3_rr06.yaml` ← `configs/models/dreamer_v3.yaml` with `agent.replay_ratio: 0.5 → 0.0625`. Verified by programmatic key-set diff: zero added or removed keys; one value diff.
+- `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` ← `configs/models/dreamer_v3/dreamer_v3.yaml` with `agent.replay_ratio: 0.5 → 0.0625`. Verified by programmatic key-set diff: zero added or removed keys; one value diff.
 - `configs/experiment/dreamer_diagnostic/01-PredInterval3_NutGain18_DeathPenalty1.yaml` ← `configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml` with `body.death_penalty: 100 → 1`. Verified by programmatic deep-diff: one value diff, no other changes.
 
 ### 3.2 Launch commands (verbatim, ready for `training-runner`)
@@ -118,7 +118,7 @@ Config provenance — both new files are byte-equal to their parents except for 
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/basic/00-5X5_NoPred.yaml \
-  --agent_config configs/models/dreamer_v3_rr06.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_rr06.yaml \
   --num-envs 16 \
   --seed 0 \
   --episodes 700000 \
@@ -136,7 +136,7 @@ Config provenance — both new files are byte-equal to their parents except for 
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/dreamer_diagnostic/01-PredInterval3_NutGain18_DeathPenalty1.yaml \
-  --agent_config configs/models/dreamer_v3_rr06.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_rr06.yaml \
   --num-envs 16 \
   --seed 0 \
   --episodes 700000 \
@@ -222,10 +222,10 @@ The IV under primary test for each cell:
 Live-load probe ran with project conda env on this commit
 (`/home/vncuser/miniconda3/envs/grid_world_pain/bin/python`).
 
-**Agent-config probe** — for `configs/models/dreamer_v3_rr06.yaml`, all mandatory keys parse correctly via `Config.load_yaml(...).get_mandatory(...)`:
+**Agent-config probe** — for `configs/models/dreamer_v3/dreamer_v3_rr06.yaml`, all mandatory keys parse correctly via `Config.load_yaml(...).get_mandatory(...)`:
 
 ```text
-configs/models/dreamer_v3_rr06.yaml
+configs/models/dreamer_v3/dreamer_v3_rr06.yaml
   algorithm              = 'DreamerV3'
   replay_ratio           = 0.0625      ← FIX-DELTA (was 0.5)
   cont_loss_weight       = 1.0

@@ -22,7 +22,7 @@
 #   - XS overlay (the values applied here): vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml
 #   - Experiment defaults: vendor/sheeprl/sheeprl/configs/exp/dreamer_v3.yaml
 
-# Agent identity — mirrors configs/models/dreamer_v3_rr06.yaml:L40-L41
+# Agent identity — mirrors configs/models/dreamer_v3/dreamer_v3_rr06.yaml:L40-L41
 # Required for WandB filter: agent.algorithm = DreamerV3
 agent:
   algorithm: "DreamerV3"
@@ -35,7 +35,7 @@ algo:
   per_rank_sequence_length: 64
   per_rank_batch_size: 16
   per_rank_pretrain_steps: 0
-  total_steps: 5000            # smoke budget — kept for backward-compat; ignored when training.episodes is set
+  total_steps: 5000            # smoke budget (XS default is 5000000)
 
   # Core dreamer algorithm
   gamma: 0.996840347           # sheeprl dreamer_v3.yaml:L22
@@ -115,23 +115,9 @@ algo:
 
 # Buffer
 buffer:
-  size: 256000
+  size: 100000
   validate_args: false
   from_numpy: false
-
-# Episode-based budget cap — mirrors rPPO production (10M episodes).
-# This is a CAP, not a target — actual runs may be Ctrl-C'd much earlier.
-# Reference: train_command-agent.sh:86-97 (rPPO Round 2.6 launch uses 10M).
-# R2 mitigation: checkpoint_frequency raised from 10k → 200k so eval fires
-# ~50 times over a 10M-episode run (vs. 1000 fires at 10k = ~7h overhead).
-training:
-  episodes: 10000000
-  checkpoint_frequency: 200000
-  # Log-interval comparison cell (B) — medium cadence.
-  # 5000 iters × num_envs=16 ≈ 80k env-steps/log ≈ ~400 episodes/row.
-  # Counterparts: jkmto06f (cell A, log_interval=10 default, ~0.8 ep/row);
-  #               buf256k_log50k (cell C, log_interval=50000, ~4k ep/row).
-  log_interval: 5000
 
 # Env
 env:

@@ -111,7 +111,7 @@ This list is the **modality-fingerprint surface** the train.py probe checks
 (`_modality_fingerprint(p)` at train.py validation block — see Fix 3 in
 the feature spec). All values are byte-identical between the two stage YAMLs.
 
-Agent / algorithm side, controlled by `configs/models/recurrent_ppo.yaml`
+Agent / algorithm side, controlled by `configs/models/recurrent_ppo/recurrent_ppo.yaml`
 applied to both stages:
 
 ```text
@@ -158,7 +158,7 @@ System-of-record for every training run in this experiment. **Owned jointly:**
 
 | Run | Schedule | Configs-dir | Agent config |
 |-----|----------|-------------|--------------|
-| 1 | `configs/continual/basic_5x5_NoPred_to_PredInt3.yaml` | `configs/experiment/basic/` | `configs/models/recurrent_ppo.yaml` |
+| 1 | `configs/continual/basic_5x5_NoPred_to_PredInt3.yaml` | `configs/experiment/basic/` | `configs/models/recurrent_ppo/recurrent_ppo.yaml` |
 
 Schedule and basic configs already exist on disk; this experiment authors only the schedule YAML (the basic stage YAMLs are pre-existing inputs and **must not be edited**).
 
@@ -168,7 +168,7 @@ Schedule and basic configs already exist on disk; this experiment authors only t
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --configs-dir configs/experiment/basic/ \
   --continual-schedule configs/continual/basic_5x5_NoPred_to_PredInt3.yaml \
-  --agent_config configs/models/recurrent_ppo.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --num-envs 16 \
   --seed 0 \
   --device cuda:1 \

@@ -106,7 +106,7 @@ PPO's `K_epochs` plays a **similar role** to DreamerV3's `replay_ratio` — both
 
 ## 3. Configuration Reference
 
-### 3.1 Current Config (`configs/models/recurrent_ppo.yaml`)
+### 3.1 Current Config (`configs/models/recurrent_ppo/recurrent_ppo.yaml`)
 
 ```yaml
 agent:

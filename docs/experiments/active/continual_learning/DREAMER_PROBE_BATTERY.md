@@ -112,10 +112,10 @@ Significance: H₁ provides per-stage temporal localization of the failure. The 
 
 | Run | Config (env)                                                                      | Config (agent)                                                                     |
 |-----|-----------------------------------------------------------------------------------|------------------------------------------------------------------------------------|
-| 1   | `configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml`                    | `configs/models/dreamer_v3_probe.yaml` (NEW)                                       |
-| 2   | `configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml`                    | `configs/models/dreamer_v3_probe_cont10.yaml` (NEW)                                |
-| 3   | `configs/experiment/basic/00-5X5_NoPred.yaml`                                     | `configs/models/dreamer_v3_probe.yaml` (NEW; same as E1)                           |
-| 4   | `configs/experiment/dreamer_curriculum/{01_food_only,02_predator_slow,03_predator_full}.yaml` (via `--configs-dir`) + `configs/continual/dreamer_curriculum_food_then_predator.yaml` (existing schedule, unchanged) | `configs/models/dreamer_v3_curriculum_probe.yaml` (NEW) |
+| 1   | `configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml`                    | `configs/models/dreamer_v3/dreamer_v3_probe.yaml` (NEW)                                       |
+| 2   | `configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml`                    | `configs/models/dreamer_v3/dreamer_v3_probe_cont10.yaml` (NEW)                                |
+| 3   | `configs/experiment/basic/00-5X5_NoPred.yaml`                                     | `configs/models/dreamer_v3/dreamer_v3_probe.yaml` (NEW; same as E1)                           |
+| 4   | `configs/experiment/dreamer_curriculum/{01_food_only,02_predator_slow,03_predator_full}.yaml` (via `--configs-dir`) + `configs/continual/dreamer_curriculum_food_then_predator.yaml` (existing schedule, unchanged) | `configs/models/dreamer_v3/dreamer_v3_curriculum_probe.yaml` (NEW) |
 
 **Three new agent configs total. Zero env / schedule changes.**
 
@@ -126,7 +126,7 @@ Significance: H₁ provides per-stage temporal localization of the failure. The 
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml \
-  --agent_config configs/models/dreamer_v3_probe.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_probe.yaml \
   --num-envs 16 \
   --seed 0 \
   --episodes 700000 \
@@ -144,7 +144,7 @@ Significance: H₁ provides per-stage temporal localization of the failure. The 
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml \
-  --agent_config configs/models/dreamer_v3_probe_cont10.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_probe_cont10.yaml \
   --num-envs 16 \
   --seed 0 \
   --episodes 700000 \
@@ -162,7 +162,7 @@ Significance: H₁ provides per-stage temporal localization of the failure. The 
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/basic/00-5X5_NoPred.yaml \
-  --agent_config configs/models/dreamer_v3_probe.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_probe.yaml \
   --num-envs 16 \
   --seed 0 \
   --episodes 700000 \
@@ -181,7 +181,7 @@ Significance: H₁ provides per-stage temporal localization of the failure. The 
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --configs-dir configs/experiment/dreamer_curriculum/ \
   --continual-schedule configs/continual/dreamer_curriculum_food_then_predator.yaml \
-  --agent_config configs/models/dreamer_v3_curriculum_probe.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_curriculum_probe.yaml \
   --num-envs 16 \
   --seed 0 \
   --device cuda:3 \
@@ -264,17 +264,17 @@ Live-load probe ran with project conda env on this commit
 **Agent-config probe** — for all 3 new agent configs, `Config.load_yaml(...).get_mandatory('agent.imagined_rollout_probe', bool)` returns `True`; mandatory-key discipline holds; `agent.algorithm == 'DreamerV3'`; `entropy_scale` and `cont_loss_weight` cast cleanly to float at the planned values:
 
 ```text
-configs/models/dreamer_v3_probe.yaml
+configs/models/dreamer_v3/dreamer_v3_probe.yaml
   algorithm              = 'DreamerV3'
   imagined_rollout_probe = True (type bool)
   entropy_scale          = 0.0003
   cont_loss_weight       = 1.0
-configs/models/dreamer_v3_probe_cont10.yaml
+configs/models/dreamer_v3/dreamer_v3_probe_cont10.yaml
   algorithm              = 'DreamerV3'
   imagined_rollout_probe = True (type bool)
   entropy_scale          = 0.0003
   cont_loss_weight       = 10.0
-configs/models/dreamer_v3_curriculum_probe.yaml
+configs/models/dreamer_v3/dreamer_v3_curriculum_probe.yaml
   algorithm              = 'DreamerV3'
   imagined_rollout_probe = True (type bool)
   entropy_scale          = 0.001

@@ -25,7 +25,7 @@
 # homeostatic reward the final-step would have produced (typically near zero
 # at the death state). This is approximately the Crafter recipe.
 #
-# Used in conjunction with configs/models/dreamer_v3_rr06.yaml (replay_ratio
+# Used in conjunction with configs/models/dreamer_v3/dreamer_v3_rr06.yaml (replay_ratio
 # 0.0625) for Cell A2 of the battery — the joint conventional-fixes test.
 #
 # Pre-registered prediction (battery doc §2):

@@ -168,16 +168,16 @@ All Tags are unique within the manifest AND unique versus the parent sweep's tag
 
 | Run | Cell | Config (env — REUSED from parent sweep) | Config (agent — NEW) |
 |---|---|---|---|
-| 1 | p3_film_g1_tempceil10_s0 | `configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml` | `configs/models/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` |
-| 2 | p3_film_g1_tempceil10_s1 | `configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml` | `configs/models/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` |
-| 3 | p3_film_g1_tempceil10_s2 | `configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml` | `configs/models/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` |
-| 4 | p4_film_g1_tempceil10_s0 | `configs/experiment/nmn_noise_heterogeneity/p4_high.yaml`     | `configs/models/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` |
-| 5 | p5_film_g1_tempceil10_s0 | `configs/experiment/nmn_noise_heterogeneity/p5_extreme.yaml`  | `configs/models/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` |
+| 1 | p3_film_g1_tempceil10_s0 | `configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml` | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` |
+| 2 | p3_film_g1_tempceil10_s1 | `configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml` | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` |
+| 3 | p3_film_g1_tempceil10_s2 | `configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml` | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` |
+| 4 | p4_film_g1_tempceil10_s0 | `configs/experiment/nmn_noise_heterogeneity/p4_high.yaml`     | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` |
+| 5 | p5_film_g1_tempceil10_s0 | `configs/experiment/nmn_noise_heterogeneity/p5_extreme.yaml`  | `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml` |
 
 **File changes (total):**
 - **0** changes to `src/`, `scripts/`, or `train_command*.sh`.
 - **0** new env configs (P3/P4/P5 env configs reused verbatim from the parent sweep).
-- **1** new agent config: `configs/models/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml`.
+- **1** new agent config: `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml`.
 
 **Diff vs `recurrent_ppo_nmn_het_film_g1.yaml`** (the parent sweep's FiLM agent config) — lines that change:
 ```yaml
@@ -197,7 +197,7 @@ For Run 1 (p3_film_g1_tempceil10_s0):
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/nmn_noise_heterogeneity/p3_moderate.yaml \
-  --agent_config configs/models/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml \
   --num-envs 128 \
   --episodes 10000000 \
   --checkpoint-frequency 100000 \
@@ -310,7 +310,7 @@ None for this experiment. All §4.5 metrics are logged by the existing pipeline.
 ### 7.1 env-config-auditor (next agent)
 
 Audit the §3.1 configs:
-- 1 NEW agent config: `configs/models/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml`. Verify it is byte-identical to `recurrent_ppo_nmn_het_film_g1.yaml` EXCEPT `temp_clip: [0.5, 10.0]` (and the comment header). Use `diff` directly.
+- 1 NEW agent config: `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1_tempceil10.yaml`. Verify it is byte-identical to `recurrent_ppo_nmn_het_film_g1.yaml` EXCEPT `temp_clip: [0.5, 10.0]` (and the comment header). Use `diff` directly.
 - 0 NEW env configs (re-use of `p3_moderate.yaml` / `p4_high.yaml` / `p5_extreme.yaml` from parent sweep). No need to re-audit these — they passed audit for the parent sweep on 2026-05-07 and have not changed.
 - 5 manifest tags are unique strings AND do not collide with any parent sweep tag (`rppo_nmn_het_*`).
 - `agent.modulation.type: "FiLM"`, `grouping_size: 1`, `mod_hidden_size: 16`, `percept_bias_init: 3.0`, `temp_clip: [0.5, 10.0]`, `memory_clip: [-2.0, 2.0]` in the new agent config.

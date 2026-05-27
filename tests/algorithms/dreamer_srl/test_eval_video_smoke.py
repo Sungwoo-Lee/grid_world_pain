@@ -76,7 +76,7 @@ def test_e2e_smoke_checkpoints_and_recordings():
         cmd = [
             _PYTHON, _DRIVER,
             '--env-config', cfg_path,
-            '--agent-config', os.path.join(_ROOT, 'configs/dreamer_srl/01_food_only.yaml'),
+            '--agent-config', os.path.join(_ROOT, 'configs/models/dreamer_srl/01_food_only.yaml'),
             '--total-steps', '300',
             '--num-envs', '1',
             '--seed', '42',
@@ -163,7 +163,7 @@ def test_e2e_smoke_no_video_only_stats():
         cmd = [
             _PYTHON, _DRIVER,
             '--env-config', cfg_path,
-            '--agent-config', os.path.join(_ROOT, 'configs/dreamer_srl/01_food_only.yaml'),
+            '--agent-config', os.path.join(_ROOT, 'configs/models/dreamer_srl/01_food_only.yaml'),
             '--total-steps', '150',
             '--num-envs', '1',
             '--seed', '0',

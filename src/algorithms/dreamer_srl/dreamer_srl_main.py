@@ -12,7 +12,7 @@ Usage::
     /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \\
         src/algorithms/dreamer_srl/dreamer_srl_main.py \\
         --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \\
-        --agent-config configs/dreamer_srl/01_food_only.yaml \\
+        --agent-config configs/models/dreamer_srl/01_food_only.yaml \\
         --total-steps 5000 --num-envs 1 --seed 0 \\
         --wandb-project grid_world_pain \\
         --wandb-name dreamer_srl_v3_schema_migration_smoke_s0

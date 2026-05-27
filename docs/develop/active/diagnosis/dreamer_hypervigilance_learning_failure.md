@@ -37,7 +37,7 @@ This is a **post-hoc comparison of two pre-existing runs** that the user trained
 
 | Variable | rPPO run | DreamerV3 run |
 |---|---|---|
-| `--agent_config` | `configs/models/recurrent_ppo.yaml` | `configs/models/dreamer_v3.yaml` |
+| `--agent_config` | `configs/models/recurrent_ppo/recurrent_ppo.yaml` | `configs/models/dreamer_v3/dreamer_v3.yaml` |
 | `--num-envs` | 128 | 16 |
 | `--device` | `cuda:1` | `cuda:3` |
 

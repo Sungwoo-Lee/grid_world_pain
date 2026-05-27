@@ -41,7 +41,7 @@ def recorded_episode(tmp_path_factory):
                 'configs/visualization/default.yaml']:
         env_cfg.merge(Config.load_yaml(os.path.join(_ROOT, rel)))
 
-    agent_cfg = Config.load_yaml(f'{_ROOT}/configs/dreamer_srl/01_food_only.yaml')
+    agent_cfg = Config.load_yaml(f'{_ROOT}/configs/models/dreamer_srl/01_food_only.yaml')
     env_params = load_env_params(env_cfg)
     obs_dim = 19
     action_dim = 4 + int(env_params.rest_action_enabled) + int(env_params.eat_action_enabled)

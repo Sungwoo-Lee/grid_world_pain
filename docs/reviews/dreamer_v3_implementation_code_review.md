@@ -158,9 +158,9 @@ Forward-pass and reverse-pass walked the following files at HEAD (`v1.3` branch,
 - `/media/nas01/projects/Interoceptive-AI/grid_world_pain/src/models/dreamer_v3_trainer.py` (1017 lines)
 - `/media/nas01/projects/Interoceptive-AI/grid_world_pain/src/models/dreamer_v3_util.py` (205 lines)
 - `/media/nas01/projects/Interoceptive-AI/grid_world_pain/src/models/dreamer_v3_network.py` (80 lines, confirmed orphan)
-- `/media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/models/dreamer_v3.yaml` (78 lines)
-- `/media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/models/dreamer_v3_rr06.yaml` (referenced)
-- `/media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/models/dreamer_v3_curriculum.yaml`, `dreamer_v3_curriculum_probe.yaml`, `dreamer_v3_probe.yaml`, `dreamer_v3_probe_cont10.yaml`, `neuromodulated_dreamer_v3.yaml` (existence confirmed; not deeply audited)
+- `/media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/models/dreamer_v3/dreamer_v3.yaml` (78 lines)
+- `/media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/models/dreamer_v3/dreamer_v3_rr06.yaml` (referenced)
+- `/media/nas01/projects/Interoceptive-AI/grid_world_pain/configs/models/dreamer_v3/dreamer_v3_curriculum.yaml`, `dreamer_v3_curriculum_probe.yaml`, `dreamer_v3_probe.yaml`, `dreamer_v3_probe_cont10.yaml`, `neuromodulated_dreamer_v3.yaml` (existence confirmed; not deeply audited)
 - `/media/nas01/projects/Interoceptive-AI/grid_world_pain/train.py` — DreamerV3 branch (L440-505 dispatch, L773-832 setup, L1100-1160 stage transition, L1380-1465 buffer write + positive-buffer copy, L1605-1665 train + WandB log)
 - `/media/nas01/projects/Interoceptive-AI/grid_world_pain/scripts/dreamer_offline_wm_test.py` (only L250-279 spot-checked for the doc's two cited line refs)
 

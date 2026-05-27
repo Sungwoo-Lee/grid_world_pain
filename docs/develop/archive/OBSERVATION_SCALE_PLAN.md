@@ -163,7 +163,7 @@ What the implementing agent should verify **during** implementation:
 ### Changes
 - **src/models/recurrent_ppo_network.py**: Applied `symlog` normalization at the start of `ActorCriticRNN.__call__`.
 - **train.py**: Fixed `ModulatorOutput` logging fields (`z_bodystate` -> `z_unimodal`, `z_association` -> `z_multimodal`).
-- **configs/models/neuromodulated_ppo.yaml**: Added missing `max_grad_norm: 0.5`.
+- **configs/models/ppo/neuromodulated_ppo.yaml**: Added missing `max_grad_norm: 0.5`.
 
 ### Verification Results
 - Baseline PPO: 100 steps successful (no NaNs).
@@ -179,7 +179,7 @@ What the implementing agent should verify **during** implementation:
 |------|--------|:------:|-------|
 | `src/models/recurrent_ppo_network.py` | Add symlog as first op in `ActorCriticRNN.__call__()` | ✅ | Lines 249–252; correct formula; before `modulation_enabled` branch at line 254 |
 | `src/environment/sensor.py` | No change — environment stays raw | ✅ | No symlog present; raw [0,~40]/[0,~13] values preserved |
-| `configs/models/neuromodulated_ppo.yaml` | `max_grad_norm: 0.5` added | ✅ | Present at line 19 — **out-of-scope extra by Gemini** |
+| `configs/models/ppo/neuromodulated_ppo.yaml` | `max_grad_norm: 0.5` added | ✅ | Present at line 19 — **out-of-scope extra by Gemini** |
 | `train.py` | Logging fields `z_bodystate`→`z_unimodal`, `z_association`→`z_multimodal` | ✅ | Correct names at lines 766, 837–851; old names absent from entire codebase — **out-of-scope extra by Gemini** |
 
 **Conclusion**: Core plan change verified correct. Two additional out-of-scope fixes were applied by Gemini (`neuromodulated_ppo.yaml`, `train.py` logging fields) — both appear correct and beneficial, but were not part of this plan's scope.

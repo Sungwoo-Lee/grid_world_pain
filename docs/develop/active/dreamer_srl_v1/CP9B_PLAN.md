@@ -10,7 +10,7 @@ phase: 2
 > **CORRECTION NOTE (2026-05-14, PI call [`3c8b9f8`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md))**
 >
 > References below to "XS-default" / "XS default" / "the full XS configuration" / "the XS config"
-> as the content of `configs/dreamer_srl/01_food_only.yaml` **pre-date the discovery** that this
+> as the content of `configs/models/dreamer_srl/01_food_only.yaml` **pre-date the discovery** that this
 > file was mis-ported from the sheeprl base config (`vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml`)
 > rather than the sheeprl XS overlay (`vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml`).
 > The base config carries **sheeprl-XL-equivalent** values (`dense_units=1024`, `mlp_layers=5`,
@@ -298,7 +298,7 @@ Two specific properties the implementer should preserve:
   NumPy array. The `np.asarray(jax.nn.one_hot(..., dtype=jnp.float32))` form
   preserves both.
 
-#### `configs/dreamer_srl/01_food_only.yaml` (lines 14–15)
+#### `configs/models/dreamer_srl/01_food_only.yaml` (lines 14–15)
 
 ```yaml
 # BEFORE:
@@ -314,7 +314,7 @@ Also update the header comment block (lines 1–11) to remove the D-012 mention
 and replace with a CP9b note explaining that this config is now the
 parity-track config.
 
-#### `configs/dreamer_srl/01_food_only_smoke.yaml` (line 22)
+#### `configs/models/dreamer_srl/01_food_only_smoke.yaml` (line 22)
 
 The smoke config stays at `learning_starts: 0`. The reason: the smoke is for
 fast iteration on integration bugs, not parity. With the smoke budget at 5,000
@@ -648,11 +648,11 @@ Two property tests:
 
 Commit: `ab2b678`.
 
-**`configs/dreamer_srl/01_food_only.yaml` (lines 1–15)**
+**`configs/models/dreamer_srl/01_food_only.yaml` (lines 1–15)**
 
 `learning_starts: 0` (D-012 deviation) reverted to `learning_starts: 1024` (sheeprl XS default). Header comment updated from CP9-smoke framing to parity-track framing. Commit: `e4a94d6`.
 
-**`configs/dreamer_srl/01_food_only_smoke.yaml` (lines 19–24)**
+**`configs/models/dreamer_srl/01_food_only_smoke.yaml` (lines 19–24)**
 
 D-012 comment replaced with explicit smoke-only deviation rationale explaining why `learning_starts: 0` is intentional for the fast-iteration smoke. Body unchanged. Commit: `e4a94d6`.
 
@@ -723,8 +723,8 @@ Signed: `Implemented by: developer`
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
 | `src/algorithms/dreamer_srl/dreamer_srl_main.py` (L387-L411) | §S3 JAX-RNG prefill branch replaces NumPy-loop stub; production comment fixed at L391-L399 to remove the false `ratio(0) == 0` claim and document the D-014 debt-repayment burst | ✅ | Citation block points to `sheeprl@33b6366:dreamer_v3.py:L558-L571` (verified against vendored source — the cited range exactly brackets the `iter_num <= learning_starts` action gate + one-hot encoding clause). PRNG threading clean — `k_player` consumed exactly once in either branch; `jax.random.randint + jax.nn.one_hot` matches sheeprl's `gym.spaces.Discrete.sample() + F.one_hot` in distribution. Comment fix landed in this verification commit (the L391-L393 block was carrying the inaccurate `ratio(0) == 0` claim from the original CP9b plan text; the developer correctly caught the inaccuracy when writing Test 2 but did not propagate the fix to the production-code comment — caught by the code-reviewer's F1). |
-| `configs/dreamer_srl/01_food_only.yaml` (L14-L15) | `learning_starts: 0 → 1024` (parity-track) | ✅ | D-012 closes cleanly on the parity-track config — `learning_starts: 1024` restored to the sheeprl XS default. Header comment block updated to CP9b parity-track framing. |
-| `configs/dreamer_srl/01_food_only_smoke.yaml` (L19-L22) | comment updated; body keeps `learning_starts: 0` | ✅ | Smoke retains `learning_starts: 0` with an explicit "smoke-only deviation" rationale tied to (a) the 5,000-step smoke budget being too small to absorb a 1024-step prefill (20% of budget burnt on prefill if `learning_starts=1024`), and (b) the zero-init actor (cascade fix #27) producing approximately-uniform actions for the first ~100 steps. The smoke's purpose is fast iteration on integration bugs, not parity. |
+| `configs/models/dreamer_srl/01_food_only.yaml` (L14-L15) | `learning_starts: 0 → 1024` (parity-track) | ✅ | D-012 closes cleanly on the parity-track config — `learning_starts: 1024` restored to the sheeprl XS default. Header comment block updated to CP9b parity-track framing. |
+| `configs/models/dreamer_srl/01_food_only_smoke.yaml` (L19-L22) | comment updated; body keeps `learning_starts: 0` | ✅ | Smoke retains `learning_starts: 0` with an explicit "smoke-only deviation" rationale tied to (a) the 5,000-step smoke budget being too small to absorb a 1024-step prefill (20% of budget burnt on prefill if `learning_starts=1024`), and (b) the zero-init actor (cascade fix #27) producing approximately-uniform actions for the first ~100 steps. The smoke's purpose is fast iteration on integration bugs, not parity. |
 | `tests/algorithms/dreamer_srl/test_prefill.py` | NEW — two Lever-A tests | ✅ | Both tests PASS (`test_prefill_uniform_entropy_below_learning_starts` 13.21 s, `test_no_gradient_step_before_learning_starts`). Test 2's adjusted assertion correctly preserves the §S3 hard invariant (zero grad steps for iters 1..learning_starts-1) without making the incorrect plan-time `ratio(0) == 0` boundary claim. The developer's flagged plan-reality discrepancy is genuine and correctly handled in the test; the plan text was amended (this verification commit) to match the code rather than the other way around. F1-F4 from the code-reviewer are nits (scope-vs-helper, slow Python loop, tolerance arithmetic) — all defer to a follow-up commit per the code-reviewer's recommendation. |
 | `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` | NEW — D-014 entry (substrate-class) | ✅ | D-014 logged as substrate-class match with D-001 (`moments_update` functional return) and D-011 (`polyak_update` functional return). JAX driver omits sheeprl's `ratio_steps = policy_step - prefill_steps * policy_steps_per_iter` subtraction; both paths preserve the §S3 hard invariant and the long-run replay ratio, only the boundary debt distribution differs (sheeprl smears the debt across `learning_starts` iters at 1 grad step per iter; JAX driver pays the full debt at iter `learning_starts` in a one-shot burst). ✅ APPROVED by senior-developer at this verification per CP9b reviewer-optional/no-PI scope (v3 plan line 527) and the substrate-class precedent. Verdict: log-but-approve, code unchanged, comment fixed. |
 | `docs/develop/active/dreamer_srl_v1/CP9B_PLAN.md` (§Analysis + §Test 2) | amended at verification | ✅ | §Analysis "no gradient step before learning_starts" subsection rewritten to correctly document both sheeprl's `prefill_steps`-subtraction path and the JAX driver's no-subtraction path; both reach the same long-run replay ratio, only the boundary debt distribution differs. §Test 2 spec docstring amended to remove the incorrect `ratio(policy_step) at the boundary returns 0` claim and replace with the correct debt-repayment-burst rationale + D-014 cross-reference. Plan now matches the implementation. |

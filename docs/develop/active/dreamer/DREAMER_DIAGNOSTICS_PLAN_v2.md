@@ -177,7 +177,7 @@ Research findings on DreamerV3 replay strategies:
 ## 3. Current DreamerV3 Configuration
 
 ```yaml
-# configs/models/dreamer_v3.yaml (as of Mar 2, 2026)
+# configs/models/dreamer_v3/dreamer_v3.yaml (as of Mar 2, 2026)
 agent:
   algorithm: "DreamerV3"
   batch_size: 64
@@ -228,7 +228,7 @@ The GPU buffer + batched JIT optimization (Section 2.3) has been implemented but
 
 **Run Configuration**:
 ```
-Config:     configs/environment/default.yaml + configs/models/dreamer_v3.yaml
+Config:     configs/environment/default.yaml + configs/models/dreamer_v3/dreamer_v3.yaml
 num_envs:   64
 CI:         128
 RR:         1.0
@@ -297,7 +297,7 @@ The single most impactful speed improvement is reducing the per-gradient-step wo
 
 #### Step 1: Reduce Batch Size
 
-- [x] **4.7.1** Change `configs/models/dreamer_v3.yaml`:
+- [x] **4.7.1** Change `configs/models/dreamer_v3/dreamer_v3.yaml`:
   ```yaml
   batch_size: 16          # was 64 (sequence_length stays at 128)
   ```

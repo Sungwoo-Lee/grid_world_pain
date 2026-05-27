@@ -381,7 +381,7 @@ Each commit names exactly one gating test. Do not advance until the gate is gree
 - Bench both paths back-to-back, same node + GPU + config + seed, for a fair head-to-head:
   1. `--legacy-grad-loop` (Python for-loop path, post-refactor) — record SPS_legacy.
   2. Default (scan path under `JointTrainer`) — record SPS_scan.
-- Use `configs/dreamer_srl/01_food_only_smoke.yaml` + `configs/experiment/dreamer_curriculum/01_food_only.yaml`, `--num-envs 16`, `--total-steps 50000`, `--seed 0`, `--no-wandb`.
+- Use `configs/models/dreamer_srl/01_food_only_smoke.yaml` + `configs/experiment/dreamer_curriculum/01_food_only.yaml`, `--num-envs 16`, `--total-steps 50000`, `--seed 0`, `--no-wandb`.
 - **Gate**: SPS_scan ≥ SPS_legacy on the same hardware/config/seed/budget. Record both numbers + the ratio in the Implementation Report.
 - **Soft success bar**: SPS_scan ≥ 32 (the original Dreamer's `yxij4lrc` reference). Hard success bar (this gate): SPS_scan ≥ SPS_legacy. If SPS_scan < SPS_legacy, stop and triage — the structural collapse failed to deliver the expected XLA fusion, and we need a code-reviewer audit before continuing.
 - **Memory check**: `nvidia-smi --query-gpu=memory.used --format=csv,noheader -l 5` for the duration of the scan-path bench. Memory must be stable (no monotonic growth between iterations). The pre-refactor scan path leaked; the post-refactor scan path must not.
@@ -399,7 +399,7 @@ If the developer determines C5 is purely documentation/comment cleanup with no b
 #### **C6 — Food-only parity launch (L3 end-to-end smoke)**
 
 - Launch the 50k-env-step food-only smoke via `run_command.py` on **Node 114 cuda:2** (`cuda:1` is busy with the C4 bench from the same session; cuda:0 is the Option-M bench).
-- Configs: `configs/dreamer_srl/01_food_only_smoke.yaml` + `configs/experiment/dreamer_curriculum/01_food_only.yaml`.
+- Configs: `configs/models/dreamer_srl/01_food_only_smoke.yaml` + `configs/experiment/dreamer_curriculum/01_food_only.yaml`.
 - WandB logging ON (this is the end-to-end smoke; we want the full metric trace). Record the run ID in the Implementation Report.
 - **Gate**: `ep_len_avg ≥ 100` at the end of the 50k-step run.
 - Expected wall time: ~30 min on a free node.

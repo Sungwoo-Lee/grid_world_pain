@@ -176,7 +176,7 @@ def from_twohot(logits, min_v=-20.0, max_v=20.0, num_buckets=255, paper_canonica
 
 Add a single agent-level config key `agent.paper_canonical_twohot_bins: true` and propagate it to every `to_twohot` / `from_twohot` call site so paired calls always use matching bin layouts.
 
-#### §2.3.1 `configs/models/dreamer_v3.yaml` — add the knob
+#### §2.3.1 `configs/models/dreamer_v3/dreamer_v3.yaml` — add the knob
 
 After line 43 (the existing `unimix: 0.01`) and the existing `zero_init_reward_critic: true` block, add:
 
@@ -189,7 +189,7 @@ After line 43 (the existing `unimix: 0.01`) and the existing `zero_init_reward_c
                                        # and §6 item 2 of dreamer_v3_implementation.md.
 ```
 
-#### §2.3.2 `configs/models/dreamer_v3_rr06.yaml` — add the knob (mirror)
+#### §2.3.2 `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` — add the knob (mirror)
 
 After the matching `unimix: 0.01` / `zero_init_reward_critic: true` block (currently around L82–L85), add the same line with brief comment:
 
@@ -319,7 +319,7 @@ Confirm both YAML files expose the new mandatory key without crashing:
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python -c "
 from src.utils.strict_config import StrictConfig
-for path in ['configs/models/dreamer_v3.yaml', 'configs/models/dreamer_v3_rr06.yaml']:
+for path in ['configs/models/dreamer_v3/dreamer_v3.yaml', 'configs/models/dreamer_v3/dreamer_v3_rr06.yaml']:
     cfg = StrictConfig.load(path)   # adapt to actual API
     val = cfg.get_mandatory('agent.paper_canonical_twohot_bins', bool)
     print(f'{path} -> agent.paper_canonical_twohot_bins = {val}  (type: {type(val).__name__})')
@@ -354,7 +354,7 @@ After the developer reports implementation complete, `training-runner` launches 
 
 | Cell | Node:GPU | Task | Tag | WandB run | Seed | Env steps | Experiment config | Agent config |
 |---|---|---|---|---|---|---|---|---|
-| Z2 | n113:0 | NoPred (5×5) | `dreamer_twohotrng_NoPred_rr06_s0_n113` | `dreamer_twohotrng_NoPred_rr06_s0_n113` | 0 | 700,000 | `configs/experiment/basic/00-5X5_NoPred.yaml` | `configs/models/dreamer_v3_rr06.yaml` (now with `paper_canonical_twohot_bins: true` and the existing `zero_init_reward_critic: true` from Z1) |
+| Z2 | n113:0 | NoPred (5×5) | `dreamer_twohotrng_NoPred_rr06_s0_n113` | `dreamer_twohotrng_NoPred_rr06_s0_n113` | 0 | 700,000 | `configs/experiment/basic/00-5X5_NoPred.yaml` | `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` (now with `paper_canonical_twohot_bins: true` and the existing `zero_init_reward_critic: true` from Z1) |
 
 - **WandB group**: `dreamer_paper_canonical_bins`. Isolated from the existing `dreamer_zero_init` and `dreamer_conventional_fixes` groups so the cumulative-fix framing is clean.
 - **Direct comparison anchors**:
@@ -416,8 +416,8 @@ After this plan lands and is committed:
    - `src/models/dreamer_v3_util.py` (the two function bodies, plus docstrings; new optional kwarg `paper_canonical_bins: bool = True` on both)
    - `src/models/dreamer_v3_trainer.py` (mandatory read in `agent_config` dict; flag plumbed to all 9 call sites in this file via the cleanest pattern — §2.3.3 (A) preferred)
    - `src/models/dreamer_v3_nnx.py` (the one `from_twohot` call site at L681; route the flag through `agent_config` or refactor to the trainer)
-   - `configs/models/dreamer_v3.yaml` (the new key with full doc-link comment)
-   - `configs/models/dreamer_v3_rr06.yaml` (the new key with brief comment)
+   - `configs/models/dreamer_v3/dreamer_v3.yaml` (the new key with full doc-link comment)
+   - `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` (the new key with brief comment)
 
    Run the §2.5 smoke test (round-trip) and the §2.6 config end-to-end check. Fill out the Implementation Report below. Report back.
 
@@ -440,7 +440,7 @@ After this plan lands and is committed:
 - [x] `from_twohot` mirrors the same flag with the same semantics; bin layout matches `to_twohot` for any given flag value.
 - [x] `DreamerV3Trainer.__init__` reads `agent.paper_canonical_twohot_bins` via `config.get_mandatory(...)`; missing YAML key raises `ValueError` at trainer construction.
 - [x] Every `to_twohot` / `from_twohot` call site listed in §2.3.4 (10 in total) uses the same flag value sourced from `agent.paper_canonical_twohot_bins`. None left at default. (9 in trainer.py via `self._paper_canonical_twohot_bins`; 1 in nnx.py via `self.paper_canonical_twohot_bins` stashed from `agent_config`.)
-- [x] `configs/models/dreamer_v3.yaml` and `configs/models/dreamer_v3_rr06.yaml` both contain `paper_canonical_twohot_bins: true`.
+- [x] `configs/models/dreamer_v3/dreamer_v3.yaml` and `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` both contain `paper_canonical_twohot_bins: true`.
 - [x] §2.5 round-trip smoke test passes (assertions hold; values inside ±20 round-trip cleanly under both flags; values at ±100 saturate at ±20 under `False` and round-trip under `True`; values at ±10000 saturate hard under `False` and round-trip under `True`).
 - [x] §2.6 config end-to-end check passes (both YAML files expose the key; missing key raises `ValueError`).
 - [x] When `paper_canonical_twohot_bins: false` is set, training output is bit-identical to pre-fix behaviour (verified by §2.4 reasoning — the `else` branch is verbatim previous code; PRNG consumption unchanged).
@@ -460,8 +460,8 @@ After this plan lands and is committed:
 | `src/models/dreamer_v3_util.py` | Added `paper_canonical_bins: bool = False` kwarg to both `to_twohot` and `from_twohot`. Under `True`: `bottom = jnp.array(min_v, dtype=...)`, `top = jnp.array(max_v, dtype=...)` — no `symlog` applied to range constants. Under `False` (legacy default): verbatim original code path (`bottom = symlog(jnp.array(min_v, ...))`, `top = symlog(jnp.array(max_v, ...))`). Updated docstrings. |
 | `src/models/dreamer_v3_trainer.py` | (1) Added `'paper_canonical_twohot_bins': config.get_mandatory('agent.paper_canonical_twohot_bins', bool)` to `agent_config` dict. (2) Added `self._paper_canonical_twohot_bins = config.get_mandatory('agent.paper_canonical_twohot_bins', bool)` after `self.agent` construction. (3) Updated all 9 call sites in `train_step` and `behavior_loss_fn` to pass `paper_canonical_bins=self._paper_canonical_twohot_bins`. |
 | `src/models/dreamer_v3_nnx.py` | Added `self.paper_canonical_twohot_bins = config.get('paper_canonical_twohot_bins', False)` in `DreamerV3Agent.__init__`. Updated the one call site at line 682: `from_twohot(value_logits, num_buckets=value_logits.shape[-1], paper_canonical_bins=self.paper_canonical_twohot_bins)`. |
-| `configs/models/dreamer_v3.yaml` | Added `paper_canonical_twohot_bins: true` with full doc-link comment after `zero_init_reward_critic`. |
-| `configs/models/dreamer_v3_rr06.yaml` | Added `paper_canonical_twohot_bins: true` with brief comment referencing dreamer_v3.yaml. |
+| `configs/models/dreamer_v3/dreamer_v3.yaml` | Added `paper_canonical_twohot_bins: true` with full doc-link comment after `zero_init_reward_critic`. |
+| `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` | Added `paper_canonical_twohot_bins: true` with brief comment referencing dreamer_v3.yaml. |
 
 ### Deviations from §2
 
@@ -497,8 +497,8 @@ All assertions passed:
 ### Config end-to-end check (§2.6)
 
 ```
-configs/models/dreamer_v3.yaml -> agent.paper_canonical_twohot_bins = True  (type: bool)
-configs/models/dreamer_v3_rr06.yaml -> agent.paper_canonical_twohot_bins = True  (type: bool)
+configs/models/dreamer_v3/dreamer_v3.yaml -> agent.paper_canonical_twohot_bins = True  (type: bool)
+configs/models/dreamer_v3/dreamer_v3_rr06.yaml -> agent.paper_canonical_twohot_bins = True  (type: bool)
 OK: both YAML files expose the mandatory key correctly.
 OK: missing key raises ValueError: Strict Config: Configuration key 'agent.paper_canonical_twohot_bins' is required but missing.
 ```
@@ -598,8 +598,8 @@ The remaining 0.18 reward-MAE floor and the new `mae_pos` regression suggest a d
 | `src/models/dreamer_v3_util.py` | `paper_canonical_bins=False` kwarg added to `to_twohot` and `from_twohot`; under `True` skips `symlog` on range constants | OK | Function-level default is `False` (Implementation Report Deviation 1) — *correct choice* for direct-import test stability, but discovery during this verification (§V.0) shows the diagnostic script depends on this default and was not updated. Filed as a downstream issue. |
 | `src/models/dreamer_v3_trainer.py` | All 9 production call sites pass `paper_canonical_bins=self._paper_canonical_twohot_bins` from `config.get_mandatory(...)` | OK | Verified via training-time `model_reward_mae` showing −42% improvement vs Z1 — only possible if encode/decode flag is matched at training time. |
 | `src/models/dreamer_v3_nnx.py` | Single call site at L682 uses `paper_canonical_bins=self.paper_canonical_twohot_bins` from `agent_config` | OK | Same evidence chain as trainer. |
-| `configs/models/dreamer_v3.yaml` | `paper_canonical_twohot_bins: true` added with full doc-link comment | OK | Pre-flight verified at launch. |
-| `configs/models/dreamer_v3_rr06.yaml` | `paper_canonical_twohot_bins: true` added (the config Z2 actually used) | OK | Confirmed live via `results/JAX_DreamerV3/20260510-221153_dreamer_twohotrng_NoPred_rr06_s0_n113/models/config.yaml`. |
+| `configs/models/dreamer_v3/dreamer_v3.yaml` | `paper_canonical_twohot_bins: true` added with full doc-link comment | OK | Pre-flight verified at launch. |
+| `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` | `paper_canonical_twohot_bins: true` added (the config Z2 actually used) | OK | Confirmed live via `results/JAX_DreamerV3/20260510-221153_dreamer_twohotrng_NoPred_rr06_s0_n113/models/config.yaml`. |
 | **`scripts/dreamer_offline_wm_test.py`** (out-of-scope for the plan) | Calls `from_twohot` at L254 without `paper_canonical_bins` argument | **NOT UPDATED** | Pre-existing call site; the plan's File Changes did not include the diagnostic script. Symptom: §V.0 above. **Filed as Metrics Requested below — not patched here per the analyzer's read-only scope.** |
 
 ### V.6 Metrics Requested

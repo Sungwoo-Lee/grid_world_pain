@@ -101,7 +101,7 @@ Walltime 54,255 s ≈ 15.1 h; iteration 188,040; 3.08e9 timesteps;
 
 | Run | Config (env) | Config (agent) |
 |-----|--------------|----------------|
-| 1 | `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 1 | `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` | `configs/models/recurrent_ppo/recurrent_ppo.yaml` |
 
 ### 3.2 Sibling RPPO runs (NOT sameProp, reference only)
 
@@ -355,7 +355,7 @@ and `01-interoNocicept_noise.yaml` (sibling RPPO runs):
 
 **Config**: `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` (identical to original; not edited).
 
-**Agent config**: `configs/models/recurrent_ppo.yaml`.
+**Agent config**: `configs/models/recurrent_ppo/recurrent_ppo.yaml`.
 
 **Budget**: 10,000,000 episodes, 128 parallel envs, matching original run.
 

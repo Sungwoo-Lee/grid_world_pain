@@ -145,7 +145,7 @@ into the plan before any code is written.
 ### Item 5 — Missing: actor distribution-type config (`distribution.type` and validate_args)
 
 - **Deviation type**: Missing
-- **Plan location**: `IMPLEMENTATION_PLAN.md` §"CREATE `configs/dreamer_srl/agent_xs.yaml`" (line ~253). The actor block has `ent_coef`, `action_clip`, `clip_gradients`, etc., but no `distribution.type` and no `distribution.validate_args` keys.
+- **Plan location**: `IMPLEMENTATION_PLAN.md` §"CREATE `configs/models/dreamer_srl/agent_xs.yaml`" (line ~253). The actor block has `ent_coef`, `action_clip`, `clip_gradients`, etc., but no `distribution.type` and no `distribution.validate_args` keys.
 - **Walkthrough location**: [`agent.md` line 1066](../../../project/references/sheeprl_dreamer_v3/agent.md):
   ```python
   self.distribution = distribution_cfg.get("type", "auto").lower()
@@ -165,7 +165,7 @@ into the plan before any code is written.
   For a single-`Discrete` env this is a no-op — the actor always uses `OneHotCategoricalStraightThrough`
   for discrete actions — but the plan should still name the key for transparency and so the
   no-fallback-defaults rule (CLAUDE.md) is satisfied.
-- **Proposed correction**: Add to `configs/dreamer_srl/agent_xs.yaml`:
+- **Proposed correction**: Add to `configs/models/dreamer_srl/agent_xs.yaml`:
   ```yaml
   # === Distribution config (matches sheeprl distribution/default.yaml) ===
   distribution:
@@ -178,7 +178,7 @@ into the plan before any code is written.
 ### Item 6 — Missing: actor std hyperparameters (`init_std`, `min_std`, `max_std`)
 
 - **Deviation type**: Missing
-- **Plan location**: `IMPLEMENTATION_PLAN.md` §"CREATE `configs/dreamer_srl/agent_xs.yaml`" actor block (lines 302–311). Has `ent_coef`, `action_clip`, `clip_gradients`, `lr`, `eps`, `moments_*`. Missing `init_std`, `min_std`, `max_std`.
+- **Plan location**: `IMPLEMENTATION_PLAN.md` §"CREATE `configs/models/dreamer_srl/agent_xs.yaml`" actor block (lines 302–311). Has `ent_coef`, `action_clip`, `clip_gradients`, `lr`, `eps`, `moments_*`. Missing `init_std`, `min_std`, `max_std`.
 - **Walkthrough location**: [sheeprl `dreamer_v3.yaml` lines 120–122](../../../../tmp/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml) — the YAML carries `min_std: 0.1`, `max_std: 1.0`, `init_std: 2.0`. [`agent.md` lines 1053–1098](../../../project/references/sheeprl_dreamer_v3/agent.md) — `Actor.__init__` stores all three and uses them inside `Actor.forward` for the continuous branch.
 - **What's wrong**: Strictly speaking, these three keys are only consumed in the continuous
   branch (`scaled_normal` / `normal` / `tanh_normal`), and dreamer-srl is discrete-only per
@@ -189,7 +189,7 @@ into the plan before any code is written.
   in YAML for symmetry with sheeprl, or (b) prune them from the translated `Actor.__init__`
   signature with an explicit comment ("discrete-only — these args dropped from sheeprl
   signature"). Pick one and name it.
-- **Proposed correction**: Add to `configs/dreamer_srl/agent_xs.yaml` actor block (preferred —
+- **Proposed correction**: Add to `configs/models/dreamer_srl/agent_xs.yaml` actor block (preferred —
   preserves bit-identity with the sheeprl signature):
   ```yaml
     init_std: 2.0                 # sheeprl dreamer_v3.yaml:122 (unused on discrete path; kept for signature parity)
@@ -200,7 +200,7 @@ into the plan before any code is written.
 ### Item 7 — Missing: `discount_model.learnable` flag
 
 - **Deviation type**: Missing
-- **Plan location**: `IMPLEMENTATION_PLAN.md` §"CREATE `configs/dreamer_srl/agent_xs.yaml`" world_model block (lines 281–299). Missing.
+- **Plan location**: `IMPLEMENTATION_PLAN.md` §"CREATE `configs/models/dreamer_srl/agent_xs.yaml`" world_model block (lines 281–299). Missing.
 - **Walkthrough location**: [sheeprl `dreamer_v3.yaml` lines 103–108](../../../../tmp/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml):
   ```yaml
     discount_model:
@@ -216,7 +216,7 @@ into the plan before any code is written.
   the walkthrough, the continue head is an `MLP(latent_state_size → 1, hidden_sizes=[dense_units]*mlp_layers)`
   with the same dense_units as the rest of the world model. Without these YAML keys the
   developer would invent sizings.
-- **Proposed correction**: Add to `configs/dreamer_srl/agent_xs.yaml` world_model block:
+- **Proposed correction**: Add to `configs/models/dreamer_srl/agent_xs.yaml` world_model block:
   ```yaml
     discount_model:
       learnable: true               # sheeprl dreamer_v3.yaml:104
@@ -233,7 +233,7 @@ into the plan before any code is written.
 ### Item 8 — Missing: encoder/decoder/recurrent network sizing keys
 
 - **Deviation type**: Missing
-- **Plan location**: `IMPLEMENTATION_PLAN.md` §"CREATE `configs/dreamer_srl/agent_xs.yaml`" (lines 274–294). The plan has top-level `dense_units: 256`, `mlp_layers: 1`, `dense_act: "silu"`, `layer_norm_eps: 1.0e-3`, and `world_model.recurrent_state_size: 256`, `world_model.transition_hidden_size: 256`, `world_model.representation_hidden_size: 256`. Missing the per-component sub-trees that sheeprl uses.
+- **Plan location**: `IMPLEMENTATION_PLAN.md` §"CREATE `configs/models/dreamer_srl/agent_xs.yaml`" (lines 274–294). The plan has top-level `dense_units: 256`, `mlp_layers: 1`, `dense_act: "silu"`, `layer_norm_eps: 1.0e-3`, and `world_model.recurrent_state_size: 256`, `world_model.transition_hidden_size: 256`, `world_model.representation_hidden_size: 256`. Missing the per-component sub-trees that sheeprl uses.
 - **Walkthrough location**: [sheeprl `dreamer_v3.yaml` lines 56–108](../../../../tmp/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml):
   ```yaml
   world_model:
@@ -451,7 +451,7 @@ into the plan before any code is written.
 ## §3. Hyperparameter coverage table
 
 Walking every key in `tmp/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml` (XL defaults)
-and `dreamer_v3_XS.yaml` (XS overrides) against `configs/dreamer_srl/agent_xs.yaml` in
+and `dreamer_v3_XS.yaml` (XS overrides) against `configs/models/dreamer_srl/agent_xs.yaml` in
 the plan. ✓ = present in plan, ✗ = missing, ≈ = present under a different name.
 
 | sheeprl YAML key | plan YAML key | status | notes |
@@ -571,7 +571,7 @@ Walking the plan looking for items that the walkthrough does **not** name.
 | `apply_gru_reset_gate` debug flag in Checkpoint 2 | No (sheeprl has no such flag) | Acceptable as a temporary checkpoint debug flag *if removed before commit* — plan line 476 says "After the check, delete the debug flag." |
 | Second-term-off debug flag for critic self-EMA in Checkpoint 6 | No | Same as above — acceptable if removed (plan line 480 says so). |
 | `agent.algorithm: "dreamer-srl"` YAML field | No — sheeprl uses Hydra `name: dreamer_v3` | Allow — needed for our `train.py` dispatch. Not algorithm-shaping. |
-| `defaults_from:` YAML merge key | No (Hydra-specific) | Plan §"CREATE `configs/dreamer_srl/01_food_only.yaml`" line 367 already flags this as a "developer confirms by reading get_default_config()". Mark as **resolve before implementation**, not arbitrary. |
+| `defaults_from:` YAML merge key | No (Hydra-specific) | Plan §"CREATE `configs/models/dreamer_srl/01_food_only.yaml`" line 367 already flags this as a "developer confirms by reading get_default_config()". Mark as **resolve before implementation**, not arbitrary. |
 
 **No arbitrary algorithmic additions found.** Every algorithm-shaping line traces back to a
 sheeprl source line. The plan is disciplined on this dimension.

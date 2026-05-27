@@ -1,32 +1,32 @@
-# DreamerV3 — curriculum variant for the food→predator hypervigilance recovery
+# DreamerV3 — curriculum-with-levers + probe (E4 cell)
 # ----------------------------------------------------------------------------
-# Provenance: copied from configs/models/dreamer_v3.yaml. The ONLY deltas vs
-# that base are entropy_scale and cont_loss_weight, both motivated by the
-# diagnosis below.
+# Provenance: byte-identical copy of configs/models/dreamer_v3/dreamer_v3_curriculum.yaml
+# with exactly ONE delta:
 #
-# Lever 1 — entropy_scale: 3e-4 -> 1e-3 (~3.3x boost; lower edge of range).
-#   Rationale (diagnosis §4.3.4 / §7.3 priority 5): rPPO's effective entropy
-#   bonus is ~30x stronger than DreamerV3's at the Hafner-2023 default 3e-4.
-#   When the policy gradient is anaemic (constant advantage of -0.19), a
-#   too-weak entropy regularizer cannot keep exploration alive. We pick
-#   1e-3 (still well below rPPO's effective 1.7e-2) as the conservative end
-#   of the user's range so the actor maintains exploration without becoming
-#   uniform-noise.
+#     imagined_rollout_probe: false -> true
 #
-# Lever 2 — cont_loss_weight: 1.0 -> 5.0 (5x boost).
-#   Rationale (diagnosis §4.3.3 / §7.3 priority 2): the continuation head
-#   exploits class imbalance and scores ~98% accuracy by predicting "alive",
-#   so imagined rollouts almost never terminate and the actor never sees the
-#   death-penalty gradient. Boosting cont_loss_weight makes the WM pay a
-#   larger price for missing terminations. 5x is the conservative end of the
-#   diagnosis's "10x" recommendation; we pair it with the curriculum (Stage 2
-#   delivers a much higher death-event density per step than Stage 3 anchor)
-#   so the head sees enough positive class samples to actually learn.
+# All curriculum levers preserved verbatim from the parent config:
+#   - entropy_scale: 1e-3       (parent's CURRICULUM-DELTA from 3e-4)
+#   - cont_loss_weight: 5.0     (parent's CURRICULUM-DELTA from 1.0)
+#
+# Reproduces the just-finished `95mpudwp` run (3-stage curriculum + levers)
+# bit-for-bit on the agent side, with the probe added so we can directly
+# observe per-stage `imagined_termination_fraction`. The expectation is
+# Stage 0/1 should show non-zero termination fraction (the curriculum's easy
+# tasks have a tractable termination distribution; the diagnostic battery
+# Cell B and the 95mpudwp Stage 0/1 unfreeze suggest learning is occurring),
+# and Stage 2 (predator_full) regresses to ~0 within ~3,200 episodes of the
+# stage transition — directly visualising the moment WM imagination loses
+# death events. This is the structural mechanism inferred (but not directly
+# observed) by the diagnostic battery's §11.4 cross-cell synthesis.
 #
 # References:
-#   - Diagnosis: docs/develop/active/diagnosis/dreamer_hypervigilance_learning_failure.md
-#   - Schema-add plan: docs/develop/active/diagnosis/dreamer_cont_loss_weight_knob.md
-#   - Design doc: docs/experiments/active/continual_learning/DREAMER_CURRICULUM_FOOD_THEN_PREDATOR.md
+#   - Probe plan: docs/develop/active/diagnosis/dreamer_imagined_rollout_termination_probe.md
+#   - Battery design doc: docs/experiments/active/continual_learning/DREAMER_PROBE_BATTERY.md
+#   - Parent config (curriculum + levers): configs/models/dreamer_v3/dreamer_v3_curriculum.yaml
+#   - Parent design doc: docs/experiments/active/continual_learning/DREAMER_CURRICULUM_FOOD_THEN_PREDATOR.md
+#   - Diagnostic battery (where mechanism inference came from):
+#     docs/experiments/active/continual_learning/DREAMER_DIAGNOSTIC_BATTERY.md (§11.4, §12.2)
 
 agent:
   algorithm: "DreamerV3"
@@ -69,7 +69,7 @@ agent:
 
   entropy_scale: 1e-3      # CURRICULUM-DELTA vs dreamer_v3.yaml (3e-4 -> 1e-3, ~3.3x boost)
   cont_loss_weight: 5.0    # CURRICULUM-DELTA vs dreamer_v3.yaml (1.0 -> 5.0, 5x boost)
-  imagined_rollout_probe: false  # Flip to true to enable diagnostic probe.
+  imagined_rollout_probe: true  # PROBE-DELTA vs dreamer_v3_curriculum.yaml (false -> true).
   unimix: 0.01
   zero_init_reward_critic: true   # See dreamer_v3.yaml for full comment + doc links.
   paper_canonical_twohot_bins: true   # See dreamer_v3.yaml for full comment + doc links.
@@ -91,6 +91,6 @@ agent:
     multimodal_hub: [128,128]
 
   # Neuromodulation: DISABLED
-  # For neuromodulated variant, use: configs/models/neuromodulated_dreamer_v3.yaml
+  # For neuromodulated variant, use: configs/models/dreamer_v3/neuromodulated_dreamer_v3.yaml
   modulation:
     type: null

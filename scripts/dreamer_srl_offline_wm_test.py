@@ -16,7 +16,7 @@ Usage:
     scripts/dreamer_srl_offline_wm_test.py \\
     --checkpoint results/JAX_DreamerSRL/dreamer_srl_v2_10x10_ext_XS_envs_16_4M_s42 \\
     --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \\
-    --agent-config configs/dreamer_srl/agent_xs.yaml \\
+    --agent-config configs/models/dreamer_srl/agent_xs.yaml \\
     --num-starts 200 \\
     --output tmp/20260518_dreamer_srl_wm_diag_yxij4lrc.json
 
@@ -91,13 +91,13 @@ Examples:
   python scripts/dreamer_srl_offline_wm_test.py \\
     --checkpoint results/JAX_DreamerSRL/dreamer_srl_v2_10x10_ext_XS_envs_16_4M_s42 \\
     --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \\
-    --agent-config configs/dreamer_srl/agent_xs.yaml
+    --agent-config configs/models/dreamer_srl/agent_xs.yaml
 
   # Quick CPU smoke run (used by the pytest smoke test):
   python scripts/dreamer_srl_offline_wm_test.py \\
     --checkpoint /tmp/ckpt_dir \\
     --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \\
-    --agent-config configs/dreamer_srl/01_food_only.yaml \\
+    --agent-config configs/models/dreamer_srl/01_food_only.yaml \\
     --num-real-steps 100 --num-starts 5 --horizon-max 5 --horizons 1,5 \\
     --source real_env --device cpu
 """,

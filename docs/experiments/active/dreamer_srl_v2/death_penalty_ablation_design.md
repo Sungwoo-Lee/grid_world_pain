@@ -106,7 +106,7 @@ with a margin of ≥ 1 seed-std between adjacent cells.
 - Size preset: **XS** (256-wide dense, 256-wide recurrent, mlp_layers=1).
 - `num_envs`: **16**.
 - Total env steps: **4,000,000**.
-- Agent config: `configs/dreamer_srl/01_food_only.yaml` (XS template).
+- Agent config: `configs/models/dreamer_srl/01_food_only.yaml` (XS template).
 - `learning_starts`: as defined in the agent config (1024 prefill — verify at launch).
 - All other dreamer-srl hyperparameters (horizon, gamma, kl-regularizer, replay-ratio, twohot bin grid, etc.) inherited verbatim from the agent config.
 
@@ -190,18 +190,18 @@ All 12 runs share the same agent config; they vary only by env config and seed.
 
 | Run | Config (env) | Config (agent) |
 |-----|--------------|----------------|
-| 1 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp100.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 2 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp100.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 3 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp100.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 4 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp50.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 5 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp50.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 6 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp50.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 7 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp10.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 8 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp10.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 9 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp10.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 10 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp0.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 11 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp0.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
-| 12 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp0.yaml` | `configs/dreamer_srl/01_food_only.yaml` |
+| 1 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp100.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 2 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp100.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 3 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp100.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 4 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp50.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 5 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp50.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 6 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp50.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 7 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp10.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 8 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp10.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 9 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp10.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 10 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp0.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 11 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp0.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
+| 12 | `configs/experiment/hypervigilance/death_penalty_ablation/01-interoNocicept_dp0.yaml` | `configs/models/dreamer_srl/01_food_only.yaml` |
 
 ### 6.2 Tag-collision check
 
@@ -316,7 +316,7 @@ The Phase 2a audit Q5 flagged that `model_reward_mae_total` is dominated by the 
 - [[20260509_1534_wm_reward_head_localized_failure_a1]] — offline-WM diagnostic localizing the failure to the reward head; original Dreamer codebase precedent for the per-horizon analysis.
 
 **Base env config**: [`configs/experiment/hypervigilance/01-interoNocicept.yaml`](../../../../configs/experiment/hypervigilance/01-interoNocicept.yaml).
-**Base agent config**: [`configs/dreamer_srl/01_food_only.yaml`](../../../../configs/dreamer_srl/01_food_only.yaml) (XS template).
+**Base agent config**: [`configs/models/dreamer_srl/01_food_only.yaml`](../../../../configs/models/dreamer_srl/01_food_only.yaml) (XS template).
 **New env configs**: under [`configs/experiment/hypervigilance/death_penalty_ablation/`](../../../../configs/experiment/hypervigilance/death_penalty_ablation/).
 
 ---

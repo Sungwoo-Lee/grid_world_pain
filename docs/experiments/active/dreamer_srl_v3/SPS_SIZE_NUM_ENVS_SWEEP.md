@@ -56,7 +56,7 @@ None of the above are pass/fail criteria. The sweep collects facts; the parity-l
 
 | Variable | Values | Rationale |
 |---|---|---|
-| `size` | {XS, S, M, L, XL} | The five sheeprl named presets. Each corresponds to one agent-config YAML in `configs/dreamer_srl/01_food_only_<size>.yaml` (XS uses the unsuffixed `01_food_only.yaml`). Size-bearing keys taken byte-identically from `vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_<size>.yaml`. |
+| `size` | {XS, S, M, L, XL} | The five sheeprl named presets. Each corresponds to one agent-config YAML in `configs/models/dreamer_srl/01_food_only_<size>.yaml` (XS uses the unsuffixed `01_food_only.yaml`). Size-bearing keys taken byte-identically from `vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_<size>.yaml`. |
 | `num_envs` | {1, 2, 4, 8, 16} | Powers of 2 spanning the realistic range for a single-process `SyncVectorEnv`-style wrapper. `num_envs=1` is the parity-launch default; `num_envs=16` is the largest practical for a single-process step loop. Skipping {3, 5, 6, …} is intentional — the OOM frontier is monotone in `num_envs`, so a power-of-2 grid suffices to locate it. |
 
 ### 3.2 Fixed (controlled) variables — held constant across all 25 cells
@@ -142,11 +142,11 @@ All 25 runs use the same env config; the agent config picks the size preset. `nu
 
 | Size | Agent config (relative to repo root) | Env config | Status |
 |---|---|---|---|
-| XS | `configs/dreamer_srl/01_food_only.yaml` | `configs/experiment/dreamer_curriculum/01_food_only.yaml` | **exists** (corrected 2026-05-14, commit `4fe3d8b`) |
-| S  | `configs/dreamer_srl/01_food_only_S.yaml`  | same | **created this design** |
-| M  | `configs/dreamer_srl/01_food_only_M.yaml`  | same | **created this design** |
-| L  | `configs/dreamer_srl/01_food_only_L.yaml`  | same | **created this design** |
-| XL | `configs/dreamer_srl/01_food_only_XL.yaml` | same | **created this design** |
+| XS | `configs/models/dreamer_srl/01_food_only.yaml` | `configs/experiment/dreamer_curriculum/01_food_only.yaml` | **exists** (corrected 2026-05-14, commit `4fe3d8b`) |
+| S  | `configs/models/dreamer_srl/01_food_only_S.yaml`  | same | **created this design** |
+| M  | `configs/models/dreamer_srl/01_food_only_M.yaml`  | same | **created this design** |
+| L  | `configs/models/dreamer_srl/01_food_only_L.yaml`  | same | **created this design** |
+| XL | `configs/models/dreamer_srl/01_food_only_XL.yaml` | same | **created this design** |
 
 **Note on the XS agent config in the sweep.** The parity-track XS config sets `learning_starts: 1024` and `total_steps: 5000`. For the sweep, the runner overrides these via CLI (`--total-steps 1000`) but the YAML's `learning_starts: 1024` is NOT CLI-overridable. The 5 sweep cells with XS will therefore burn ~1024 of their 1000 steps on random-action prefill, which is fine for SPS measurement (prefill exercises the env step but skips the train step — slightly inflates `Time/sps_env`). **Alternative if the analyzer wants strict apples-to-apples with the bigger sizes** (which all have `learning_starts: 0`): the runner can pass `--total-steps 2048` for the XS cells (1024 prefill + ~1024 train) so the steady-state window covers genuine train-step throughput. Recommendation: **use 2048 for the 5 XS cells, 1000 for the other 20 cells**, and let the analyzer note the difference in the results table.
 
@@ -161,7 +161,7 @@ CUDA_VISIBLE_DEVICES=<GPU> \
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
     src/algorithms/dreamer_srl/dreamer_srl_main.py \
     --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \
-    --agent-config configs/dreamer_srl/01_food_only<SIZE_SUFFIX>.yaml \
+    --agent-config configs/models/dreamer_srl/01_food_only<SIZE_SUFFIX>.yaml \
     --total-steps <1000_or_2048> --num-envs <N> --seed 0 \
     --wandb-project grid_world_pain_dreamer_srl_sweep \
     --wandb-name dreamer_srl_sweep_<size>_envs<N>
@@ -278,7 +278,7 @@ Each cell shows **steady-state SPS** (`Time/sps_env`, env-steps per wall-clock-s
 2. Upsizing to S/M/L/XL is technically feasible (no OOM) but cuts throughput 2–4x and changes the parity target from XS to a larger size, weakening the 1:1 sheeprl comparison. The PI call (D-013) decided "Go with XS"; the sweep does not provide a reason to override that decision.
 3. XS / num_envs=1 at ~7.8 SPS means a 25-hour parity run processes ~702,000 env-steps, comfortably above the 500K target in the parity gate spec.
 
-**Recommended parity-launch config:** XS size (`configs/dreamer_srl/01_food_only.yaml`), `num_envs=1`, 3 seeds, ~25 hours each on node 114 GPUs 1/2/3.
+**Recommended parity-launch config:** XS size (`configs/models/dreamer_srl/01_food_only.yaml`), `num_envs=1`, 3 seeds, ~25 hours each on node 114 GPUs 1/2/3.
 
 ---
 

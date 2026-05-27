@@ -176,7 +176,7 @@ _ = config.get_mandatory('zero_init_reward_critic')
 
 Purpose: the `config.get(..., False)` in `nnx.py` provides the value; this line ensures a missing YAML key raises `ValueError` at trainer construction time (training entry path). Effectively, `nnx.py` reads the value (using `.get` to stay constructable from tests), but the trainer enforces presence. The developer should pick the exact insertion line based on the existing `get_mandatory` block.
 
-#### `configs/models/dreamer_v3.yaml` — add the knob
+#### `configs/models/dreamer_v3/dreamer_v3.yaml` — add the knob
 
 After line 43 (the existing `unimix: 0.01` line), add:
 
@@ -187,7 +187,7 @@ After line 43 (the existing `unimix: 0.01` line), add:
                                    # When false, reward/critic output Linear uses hafner_init (pre-knob behaviour, bit-identical).
 ```
 
-#### `configs/models/dreamer_v3_rr06.yaml` — add the knob (mirror)
+#### `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` — add the knob (mirror)
 
 After the matching `unimix: 0.01` line (currently L82), add the same block:
 
@@ -251,7 +251,7 @@ After the developer reports implementation complete, `training-runner` launches 
 
 | Cell | Node:GPU | Task | Tag | WandB run | Seed | Env steps | Experiment config | Agent config |
 |---|---|---|---|---|---|---|---|---|
-| Z1 | n113:0 | NoPred (5×5) | `dreamer_zinit_NoPred_rr06_s0_n113` | `dreamer_zinit_NoPred_rr06_s0_n113` | 0 | 700,000 | `configs/experiment/basic/00-5X5_NoPred.yaml` | `configs/models/dreamer_v3_rr06.yaml` (now with `zero_init_reward_critic: true`) |
+| Z1 | n113:0 | NoPred (5×5) | `dreamer_zinit_NoPred_rr06_s0_n113` | `dreamer_zinit_NoPred_rr06_s0_n113` | 0 | 700,000 | `configs/experiment/basic/00-5X5_NoPred.yaml` | `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` (now with `zero_init_reward_critic: true`) |
 
 - **WandB group**: `dreamer_zero_init` (isolated from the existing `dreamer_conventional_fixes` group so the comparison-against-Cell-A1 framing is clean and the run does not accidentally average into that group's curves).
 - **Direct comparison**: against Cell A1 baseline `czfnljf0` (NoPred + `replay_ratio: 0.0625` at survival 106; reward MAE 0.39 in offline diagnostic). Same task, same seed, same agent config except for the zero-init knob.
@@ -304,7 +304,7 @@ After this plan lands and is committed:
 - [x] `WorldModel.__init__` reads `agent.zero_init_reward_critic` (via `config.get(...)` in NNX file; the mandatory enforcement is added separately) and passes through to the reward head only. (nnx.py lines 546–552)
 - [x] `ActorCritic.__init__` does the same for the critic head only (NOT the actor). (nnx.py lines 595–601)
 - [x] `DreamerV3Trainer.__init__` calls `config.get_mandatory('agent.zero_init_reward_critic', bool)` and inserts the value into `agent_config` dict so it flows to constructors; missing YAML key raises `ValueError`. (trainer.py line 76)
-- [x] `configs/models/dreamer_v3.yaml` and `configs/models/dreamer_v3_rr06.yaml` both contain `zero_init_reward_critic: true`.
+- [x] `configs/models/dreamer_v3/dreamer_v3.yaml` and `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` both contain `zero_init_reward_critic: true`.
 - [x] §2.4 smoke test passes (assertions all hold; output of `MLP(... zero_init_output=True)(x)` at init is exactly zero).
 - [x] When `zero_init_reward_critic: false`, the model construction takes the original code path verbatim (no PRNG-consumption divergence; bit-identical to pre-knob behaviour).
 - [x] No edits made to the GRU cell (`LayerNormGRUCell`, `nnx.py:18–39`), the prior/posterior head construction (`nnx.py:51, 58–59`), or the critic loss (`trainer.py:421–430`) — those are the other three §9.11 candidates and are explicitly out of scope.
@@ -322,8 +322,8 @@ After this plan lands and is committed:
 |---|---|
 | `src/models/dreamer_v3_nnx.py` | `MLP.__init__` gains `zero_init_output: bool = False`; `WorldModel.__init__` reads `config.get('zero_init_reward_critic', False)` and passes to reward head (not continue head); `ActorCritic.__init__` reads same key and passes to critic head (not actor head) |
 | `src/models/dreamer_v3_trainer.py` | Added `'zero_init_reward_critic': config.get_mandatory('agent.zero_init_reward_critic', bool)` to `agent_config` dict at line 76; mandatory read enforces YAML key presence; value flows to `DreamerV3Agent` and `target_critic` constructors via the same dict |
-| `configs/models/dreamer_v3.yaml` | Added `zero_init_reward_critic: true` (with full doc-link comment) after `unimix: 0.01` |
-| `configs/models/dreamer_v3_rr06.yaml` | Added `zero_init_reward_critic: true` (brief comment, canonical link in dreamer_v3.yaml) after `unimix: 0.01` |
+| `configs/models/dreamer_v3/dreamer_v3.yaml` | Added `zero_init_reward_critic: true` (with full doc-link comment) after `unimix: 0.01` |
+| `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` | Added `zero_init_reward_critic: true` (brief comment, canonical link in dreamer_v3.yaml) after `unimix: 0.01` |
 
 ### Deviations from §2
 
@@ -458,8 +458,8 @@ Survival rose ~9 steps (single seed, no replicates — soft signal). The standou
 |------|--------|:------:|-------|
 | `src/models/dreamer_v3_nnx.py` | `MLP.__init__` gains `zero_init_output: bool = False`; reward head + critic head pass `zero_init_output=zero_init_rc` | OK | §2.4 smoke test passed (developer report, lines 332–362). Zero-init produces exact-zero kernel + bias on the final Linear; default branch unchanged. |
 | `src/models/dreamer_v3_trainer.py` | `config.get_mandatory('zero_init_reward_critic')` added at trainer construction | OK | Done as a single-statement `agent_config['zero_init_reward_critic'] = config.get_mandatory(...)` rather than the plan's split-read sentinel — the developer's deviation note (line 330) explains why this is strictly superior; verified by missing-key test raising `ValueError` (line 376). |
-| `configs/models/dreamer_v3.yaml` | `zero_init_reward_critic: true` added | OK | Verified by config end-to-end check (line 369–372). |
-| `configs/models/dreamer_v3_rr06.yaml` | `zero_init_reward_critic: true` added | OK | As above. |
+| `configs/models/dreamer_v3/dreamer_v3.yaml` | `zero_init_reward_critic: true` added | OK | Verified by config end-to-end check (line 369–372). |
+| `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` | `zero_init_reward_critic: true` added | OK | As above. |
 
 ### Interpretation
 

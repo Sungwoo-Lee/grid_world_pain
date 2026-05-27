@@ -3,7 +3,7 @@ set -e
 
 # Configuration
 ENV_NAME="grid_world_pain"
-CONFIG_PATH="configs/models/drqn.yaml"
+CONFIG_PATH="configs/models/drqn/drqn.yaml"
 EPISODES=1000
 DEVICE="cuda"
 RESULTS_BASE_DIR="results"

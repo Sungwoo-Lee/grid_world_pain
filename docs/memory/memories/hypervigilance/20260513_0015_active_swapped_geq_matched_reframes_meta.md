@@ -31,7 +31,7 @@ The six unmodulated specialist runs (10M episodes each, one specialist per `{act
   - `active_distinct` 382
   - `active_matched` **338**
 - **The flip**: active_swapped (402) > active_matched (338) by **+64 steps**.
-- All 6 specialists ran with `configs/models/recurrent_ppo_nmn_het_unmod.yaml`; world configs in `configs/experiment/nmn_meta_2x3_mixture/` and `configs/experiment/hypervigilance/{01-interoNocicept_sameProp,02-sameProp_R2_passivePredator}.yaml`.
+- All 6 specialists ran with `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_unmod.yaml`; world configs in `configs/experiment/nmn_meta_2x3_mixture/` and `configs/experiment/hypervigilance/{01-interoNocicept_sameProp,02-sameProp_R2_passivePredator}.yaml`.
 - WandB IDs: `p9g5kjx3` (active_matched, crashed at 99.7%), `iktjhpmm` (active_distinct), `2p5zgdk4` (active_swapped), `958mba24` (passive_matched, user-terminated at 96.7%), `z5dfkzw5` (passive_distinct), `44rumz7m` (passive_swapped).
 - **Caveat — single-seed**: the 64-step gap is single-seed; replicate at 3 seeds before treating as load-bearing for the meta design.
 - **Caveat — partial runs**: `active_matched` (p9g5kjx3) crashed at 99.7% with a Python `onerror(os.rmdir,…)` exception. `passive_matched` (958mba24) was terminated by user SIGINT at 96.7% (clean WandB flush captured). Both terminal ceilings are likely representative but verify per-stage averages aren't transient.

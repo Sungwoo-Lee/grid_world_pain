@@ -38,7 +38,7 @@ While GAE runs happen to keep z_memory within bounds due to different optimizati
 
 ### Config is defined but never read
 
-- **`configs/models/neuromodulated_ppo.yaml:60`**: `memory_clip: [-2.0, 2.0]  # ... requires code support`
+- **`configs/models/ppo/neuromodulated_ppo.yaml:60`**: `memory_clip: [-2.0, 2.0]  # ... requires code support`
 - **`src/models/recurrent_ppo_network.py:204-224`**: The network constructor reads `mod_hidden_size`, `type`, `grouping_size`, `percept_bias_init`, `memory_bias_init`, `temp_clip` — but **never reads `memory_clip`**.
 - **`src/models/neuromodulator.py:59-73`**: `NeuromodulatorRNN.__init__` accepts `temp_clip` but has no `memory_clip` parameter.
 
@@ -118,14 +118,14 @@ Read `memory_clip` from config and pass it to the modulator constructor:
 ```
 
 #### No changes needed to:
-- `configs/models/neuromodulated_ppo.yaml` — `memory_clip: [-2.0, 2.0]` already defined at line 60
+- `configs/models/ppo/neuromodulated_ppo.yaml` — `memory_clip: [-2.0, 2.0]` already defined at line 60
 - `src/models/modulated_gru_cell.py` — receives already-clamped gate_bias
 - `train.py` — logs `mod_info.z_memory` which will now be the clamped value
 - `src/models/dreamer_v3_nnx.py` — DreamerV3's `DreamerNeuromodulatorRNN` does not use `memory_clip` (separate architecture); if needed, that's a separate issue
 
 ## Checkpoints
 
-- [x] **CP1**: After adding `memory_clip` param, verify `NeuromodulatorRNN` instantiates without error by running a single training iteration: `python train.py --config configs/models/neuromodulated_ppo.yaml --max_iterations 1` [17:05:00]
+- [x] **CP1**: After adding `memory_clip` param, verify `NeuromodulatorRNN` instantiates without error by running a single training iteration: `python train.py --config configs/models/ppo/neuromodulated_ppo.yaml --max_iterations 1` [17:05:00]
 - [x] **CP2**: Add a temporary debug print in `NeuromodulatorRNN.__call__` to confirm `z_mem` values are within [-2.0, 2.0] after clipping: `print(f"z_mem range: [{float(jnp.min(z_mem)):.3f}, {float(jnp.max(z_mem)):.3f}]")` [17:08:00]
 - [x] **CP3**: Verify the `memory_clip` key is read from config without error (no KeyError). If the key is missing from a config file, the default `(-2.0, 2.0)` in the `__init__` signature will be used. [17:05:00]
 

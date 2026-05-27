@@ -18,7 +18,7 @@ cross_links:
 ## 0. Change log
 
 - **2026-05-13** — §4.2 and §4.3 launch commands amended to add `--episodes 0`. The env YAML `configs/experiment/dreamer_curriculum/01_food_only.yaml` pins `episodes: 100`, and `train.py:1165` makes the episode-based loop the controlling stop condition whenever `episodes > 0`, silently ignoring `--total-timesteps`. Without the CLI override, Run A stopped after 100 episodes / ~110 s on WandB `pz66mhu0`, far below the §6.1 acceptance floor (`_runtime ≥ 600 s`). `--episodes 0` flips the loop to the `else` branch at line 1165 so `--total-timesteps` controls. Re-launch Run A and launch Run B with the amended commands.
-- **2026-05-13** — §2 `replay_ratio` row re-pointed. The `0.0625` baseline lives in `configs/models/dreamer_v3_rr06.yaml` (the Hafner-2023 Atari/DMC default the cascade-side runs use), not in `configs/models/dreamer_v3.yaml` (which sits at `replay_ratio: 0.5`). The numerical 16× factor — 0.0625 → 1.0 — is the cascade-relevant one and stands. The structural-delta rows (rssm dim, MLP layers/widths, sequence_length, encoding_mode) are correctly baselined against `dreamer_v3.yaml` (both files share that arch).
+- **2026-05-13** — §2 `replay_ratio` row re-pointed. The `0.0625` baseline lives in `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` (the Hafner-2023 Atari/DMC default the cascade-side runs use), not in `configs/models/dreamer_v3/dreamer_v3.yaml` (which sits at `replay_ratio: 0.5`). The numerical 16× factor — 0.0625 → 1.0 — is the cascade-relevant one and stands. The structural-delta rows (rssm dim, MLP layers/widths, sequence_length, encoding_mode) are correctly baselined against `dreamer_v3.yaml` (both files share that arch).
 
 ## 1. Context (plain English)
 
@@ -26,13 +26,13 @@ A previous analysis showed our in-house JAX DreamerV3 trains around 2,600 times 
 
 This design specifies the short measurement run that answers that question. We create one (or two) JAX runs with every hyperparameter pinned to sheeprl's "XS" recipe, on the same food-only no-predator survival task that sheeprl was run on. The run is short on purpose — long enough to amortize JAX-IT compilation and reach steady throughput, not long enough to train a useful policy. The single number that comes out — matched-config environment-steps-per-second on JAX — decides whether a full JAX rebuild is worth funding (greenlight at 5x advantage or more), worth a focused user conversation (1.5-5x), or definitively closed (below 1.5x).
 
-The new model config is at `configs/models/dreamer_v3_sheeprl_matched.yaml`. The environment is the existing `configs/experiment/dreamer_curriculum/01_food_only.yaml`. The standard JAX `train.py` entrypoint is used. Nothing in `src/` is touched.
+The new model config is at `configs/models/dreamer_v3/dreamer_v3_sheeprl_matched.yaml`. The environment is the existing `configs/experiment/dreamer_curriculum/01_food_only.yaml`. The standard JAX `train.py` entrypoint is used. Nothing in `src/` is touched.
 
 ---
 
 ## 2. The matched-config recipe
 
-Every knob audited in §2 of the SPS-comparison memo, with the override decision. "Override" means the new YAML differs from `configs/models/dreamer_v3.yaml`; "matched" means the JAX value already matches sheeprl. **One exception:** the `replay_ratio` row is baselined against `configs/models/dreamer_v3_rr06.yaml` (the Hafner-2023 Atari/DMC default the cascade-side runs use, sitting at `0.0625`), NOT against `dreamer_v3.yaml` itself (which sits at `replay_ratio: 0.5`). The numerical 16× factor — 0.0625 → 1.0 — is the cascade-relevant one and stands.
+Every knob audited in §2 of the SPS-comparison memo, with the override decision. "Override" means the new YAML differs from `configs/models/dreamer_v3/dreamer_v3.yaml`; "matched" means the JAX value already matches sheeprl. **One exception:** the `replay_ratio` row is baselined against `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` (the Hafner-2023 Atari/DMC default the cascade-side runs use, sitting at `0.0625`), NOT against `dreamer_v3.yaml` itself (which sits at `replay_ratio: 0.5`). The numerical 16× factor — 0.0625 → 1.0 — is the cascade-relevant one and stands.
 
 | Knob | Current JAX (`dreamer_v3.yaml`) | sheeprl XS | New value in `dreamer_v3_sheeprl_matched.yaml` | Action | Rationale |
 |---|---|---|---|---|---|
@@ -97,7 +97,7 @@ The user can downgrade to A or B at launch time if compute is tighter than expec
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/dreamer_curriculum/01_food_only.yaml \
-  --agent_config configs/models/dreamer_v3_sheeprl_matched.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_sheeprl_matched.yaml \
   --num-envs 4 \
   --episodes 0 \
   --total-timesteps 1500000 \
@@ -119,7 +119,7 @@ The user can downgrade to A or B at launch time if compute is tighter than expec
 ```bash
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/experiment/dreamer_curriculum/01_food_only.yaml \
-  --agent_config configs/models/dreamer_v3_sheeprl_matched.yaml \
+  --agent_config configs/models/dreamer_v3/dreamer_v3_sheeprl_matched.yaml \
   --num-envs 16 \
   --episodes 0 \
   --total-timesteps 3000000 \
@@ -156,7 +156,7 @@ The `training-runner` fills Node / GPU / Launched-at / WandB-run-ID / Log-path a
 
 | Run | Env config | Agent config |
 |---|---|---|
-| A, B (both) | `configs/experiment/dreamer_curriculum/01_food_only.yaml` (existing, read-only) | `configs/models/dreamer_v3_sheeprl_matched.yaml` (**new**) |
+| A, B (both) | `configs/experiment/dreamer_curriculum/01_food_only.yaml` (existing, read-only) | `configs/models/dreamer_v3/dreamer_v3_sheeprl_matched.yaml` (**new**) |
 
 Only one new file — the model YAML. The env YAML is reused unchanged.
 
@@ -252,7 +252,7 @@ These do NOT block the launch — they are flagged for the `experiment-analyzer`
 
 Before `training-runner` is invoked:
 
-1. `env-config-auditor` reviews `configs/models/dreamer_v3_sheeprl_matched.yaml` against `configs/experiment/dreamer_curriculum/01_food_only.yaml`. Standard schema + obs/noise consistency check. The new agent config does not introduce new YAML keys, so this should pass cleanly.
+1. `env-config-auditor` reviews `configs/models/dreamer_v3/dreamer_v3_sheeprl_matched.yaml` against `configs/experiment/dreamer_curriculum/01_food_only.yaml`. Standard schema + obs/noise consistency check. The new agent config does not introduce new YAML keys, so this should pass cleanly.
 2. User authorization to launch.
 3. `training-runner` invoked with: node + GPU per run, env config, agent config, the exact launch commands above.
 

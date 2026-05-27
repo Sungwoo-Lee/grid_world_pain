@@ -5,7 +5,7 @@ status: active
 reviewer: professor-rl-bayesian-dl
 created: 2026-05-14
 last_updated: 2026-05-14
-audited_doc: src/algorithms/dreamer_srl/dreamer_srl_main.py, tests/algorithms/dreamer_srl/test_prefill.py, configs/dreamer_srl/01_food_only.yaml, configs/dreamer_srl/01_food_only_smoke.yaml
+audited_doc: src/algorithms/dreamer_srl/dreamer_srl_main.py, tests/algorithms/dreamer_srl/test_prefill.py, configs/models/dreamer_srl/01_food_only.yaml, configs/models/dreamer_srl/01_food_only_smoke.yaml
 ---
 
 # dreamer-srl v3 CP9b — professor-rl-bayesian-dl audit
@@ -216,11 +216,11 @@ On the first call (`_prev is None`) the return is `int(step * self._ratio)`. The
 
 ## D-012 → D-012-closed transition (verify-checklist item 3)
 
-**The parity-track config (`configs/dreamer_srl/01_food_only.yaml`).**
+**The parity-track config (`configs/models/dreamer_srl/01_food_only.yaml`).**
 
 Line 15 now reads `learning_starts: 1024`. Header comment block (L1-L11) correctly frames the config as "parity-track" with a CP9b citation. No remaining hardcoded `learning_starts=0` anywhere in production code (verified by reading L387-L404 of `dreamer_srl_main.py`: the gate is `iter_num <= learning_starts` with `learning_starts` loaded via `agent_cfg.get_mandatory("algo.learning_starts", int)` at L197 — no fallback default, per CLAUDE.md project rules).
 
-**The smoke config (`configs/dreamer_srl/01_food_only_smoke.yaml`).**
+**The smoke config (`configs/models/dreamer_srl/01_food_only_smoke.yaml`).**
 
 Line 27 reads `learning_starts: 0`. The header comment at L19-L24 explicitly frames this as "smoke-only deviation" with rationale tied to (a) the 5,000-step smoke budget being too small to absorb a 1024-step prefill (20% of budget burnt on prefill if `learning_starts=1024`), and (b) the zero-init actor (cascade fix #27) producing approximately-uniform actions for the first ~100 steps, so the smoke's integration-surface coverage is unchanged by the local deviation.
 

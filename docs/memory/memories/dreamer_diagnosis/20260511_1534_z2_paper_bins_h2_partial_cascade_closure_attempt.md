@@ -37,7 +37,7 @@ The second targeted code-side fix to the localized DreamerV3 reward-head failure
 - **Anchor comparisons**: A1 baseline (`czfnljf0`, `dreamer_conv_NoPred_rr06_s0_n113`); Z1 zero-init (`axndoqsz`, `dreamer_zinit_NoPred_rr06_s0_n113`). Offline-diagnostic outputs: A1 at `tmp/20260509_wm_imagination_test_A1.{json,md}`, Z1 at `tmp/20260510_211404_wm_imagination_test_Z1.{json,md}`, Z2 (authoritative) at `tmp/20260511_044500_wm_imagination_test_Z2_papercanonical.{json,md}`.
 
 ## Decisions and actions
-- **Promote `paper_canonical_twohot_bins: true` to default**. Both `configs/models/dreamer_v3.yaml` and `configs/models/dreamer_v3_rr06.yaml` ship with the key set to `true`. Legacy `false` path is preserved for bit-identical legacy reproduction.
+- **Promote `paper_canonical_twohot_bins: true` to default**. Both `configs/models/dreamer_v3/dreamer_v3.yaml` and `configs/models/dreamer_v3/dreamer_v3_rr06.yaml` ship with the key set to `true`. Legacy `false` path is preserved for bit-identical legacy reproduction.
 - **Update concept doc §6** (commit `2ed7199`):
   - Item 2 (twohot bin range): `MAJOR DEVIATION (suspected unjustified)` → `RESOLVED-PARTIAL`. The deviation is no longer suspected unjustified — paper-canonical recipe verified to repair what its mechanism predicted.
   - Item 27 (zero-init): same flag transition.

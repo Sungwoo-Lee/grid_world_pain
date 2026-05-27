@@ -5,7 +5,7 @@ status: active
 reviewer: code-reviewer
 created: 2026-05-14
 last_updated: 2026-05-14
-audited_doc: src/algorithms/dreamer_srl/dreamer_srl_main.py (L387-L404, L490-L493), tests/algorithms/dreamer_srl/test_prefill.py, configs/dreamer_srl/01_food_only.yaml, configs/dreamer_srl/01_food_only_smoke.yaml
+audited_doc: src/algorithms/dreamer_srl/dreamer_srl_main.py (L387-L404, L490-L493), tests/algorithms/dreamer_srl/test_prefill.py, configs/models/dreamer_srl/01_food_only.yaml, configs/models/dreamer_srl/01_food_only_smoke.yaml
 ---
 
 # CP9b Code Review — ⚠ PASS WITH NOTES

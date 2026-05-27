@@ -10,7 +10,7 @@ phase: 2
 > **CORRECTION NOTE (2026-05-14, PI call [`3c8b9f8`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md))**
 >
 > References below to "XS-default" / "XS default" / "the full XS configuration" / "the XS config"
-> as the content of `configs/dreamer_srl/01_food_only.yaml` **pre-date the discovery** that this
+> as the content of `configs/models/dreamer_srl/01_food_only.yaml` **pre-date the discovery** that this
 > file was mis-ported from the sheeprl base config (`vendor/sheeprl/sheeprl/configs/algo/dreamer_v3.yaml`)
 > rather than the sheeprl XS overlay (`vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml`).
 > The base config carries **sheeprl-XL-equivalent** values (`dense_units=1024`, `mlp_layers=5`,
@@ -34,7 +34,7 @@ phase: 2
 
 ## Purpose
 
-CP10 closed at the **reduced-dim wall-clock baseline** (9.50 SPS steady-state on a single RTX 4090 at 256 dense units / 8×8 stochastic state / horizon=7). The 14.38 GB JIT-compile OOM that motivated the reduced-dim measurement was originally framed as "the full XS configuration cannot fit on a single 24 GB GPU"; the **2026-05-14 PI consultation** ([`2026-05-14_d013_parity_launch_disposition.md`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md)) disposed D-013 as a **config-correction** rather than a substrate change — the file mis-named "the full XS configuration" was actually carrying sheeprl-XL-equivalent values (`dense_units=1024`, `mlp_layers=5`, `recurrent_state_size=4096`). After [`CONFIG_CORRECTION_PLAN.md`](CONFIG_CORRECTION_PLAN.md) corrects `configs/dreamer_srl/01_food_only.yaml` to mirror real sheeprl XS (256/1/256/256), the OOM disappears and single-GPU is the natural substrate.
+CP10 closed at the **reduced-dim wall-clock baseline** (9.50 SPS steady-state on a single RTX 4090 at 256 dense units / 8×8 stochastic state / horizon=7). The 14.38 GB JIT-compile OOM that motivated the reduced-dim measurement was originally framed as "the full XS configuration cannot fit on a single 24 GB GPU"; the **2026-05-14 PI consultation** ([`2026-05-14_d013_parity_launch_disposition.md`](../../../pi/calls/2026-05-14_d013_parity_launch_disposition.md)) disposed D-013 as a **config-correction** rather than a substrate change — the file mis-named "the full XS configuration" was actually carrying sheeprl-XL-equivalent values (`dense_units=1024`, `mlp_layers=5`, `recurrent_state_size=4096`). After [`CONFIG_CORRECTION_PLAN.md`](CONFIG_CORRECTION_PLAN.md) corrects `configs/models/dreamer_srl/01_food_only.yaml` to mirror real sheeprl XS (256/1/256/256), the OOM disappears and single-GPU is the natural substrate.
 
 CP10b is now scoped as **the like-for-like wall-clock measurement at the corrected XS config on a single GPU** — confirming both (a) that the corrected config compiles without OOM (the headline empirical closure for D-013) and (b) that the projected per-seed wall-clock lands well inside the ≤ 25 h budget gate (the 41–58 h single-GPU XL projection that CP10's reduced-dim proxy produced is obsolete; real XS projects roughly an order of magnitude faster). If CP10b instead shows the corrected XS config STILL OOMs, escalate back to PI per the disposition's stop rule.
 
@@ -56,7 +56,7 @@ CP10b does NOT block the parity launch. The parity launch can run alongside CP10
 
 ## What CP10b measures
 
-A 20,000-step dreamer-srl smoke on the **corrected `configs/dreamer_srl/01_food_only.yaml`** (real sheeprl XS: `dense_units=256`, `mlp_layers=1`, `recurrent_state_size=256`, `transition/representation hidden_size=256`, `cnn_channels_multiplier=24`), on a single GPU (likely a free RTX 6000 Ada on node 114, but any single-GPU node will work since the corrected XS fits comfortably in 24 GB), with the same `learning_starts: 1024` setting that the parity-track config carries. The protocol is identical to CP10's:
+A 20,000-step dreamer-srl smoke on the **corrected `configs/models/dreamer_srl/01_food_only.yaml`** (real sheeprl XS: `dense_units=256`, `mlp_layers=1`, `recurrent_state_size=256`, `transition/representation hidden_size=256`, `cnn_channels_multiplier=24`), on a single GPU (likely a free RTX 6000 Ada on node 114, but any single-GPU node will work since the corrected XS fits comfortably in 24 GB), with the same `learning_starts: 1024` setting that the parity-track config carries. The protocol is identical to CP10's:
 
 1. Launch the run with WandB logging enabled, name = `dreamer_srl_cp10b_<disposition>_<step_budget>_s<seed>`.
 2. Capture: aggregate env-SPS (`Time/sps_env` summary), steady-state env-SPS (mean of inter-log Δstep/Δruntime across post-JIT windows), peak VRAM, NaN count across the 7 Loss/* keys, WM-loss drop step-200 → final, `Diagnostic/moments_invscale` min/max/final, `Params/replay_ratio` convergence to sheeprl-spec, and **the iter-1024 debt-repayment burst** (per CP9b D-014 + professor's F3 forward-looking note: SPS trace at iters `[1, 1024, 1025, 1026, 2048]` to confirm the debt is paid in one burst and steady-state SPS resumes at iter 1025+).

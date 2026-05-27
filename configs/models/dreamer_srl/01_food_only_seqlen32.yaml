@@ -4,7 +4,7 @@
 # (see docs/experiments/active/dreamer_srl_v2/HYPERPARAM_SEARCH_10X10.md).
 #
 # Authored 2026-05-15 by experiment-designer. This file is a verbatim
-# copy of configs/dreamer_srl/01_food_only.yaml with the single key
+# copy of configs/models/dreamer_srl/01_food_only.yaml with the single key
 # `algo.per_rank_sequence_length` overridden to 32 (parent default: 64).
 # All other algorithm / optimizer / KL / cadence / model-architecture values
 # are unchanged from the parent.
@@ -35,7 +35,7 @@
 #   - XS overlay (the values applied here): vendor/sheeprl/sheeprl/configs/algo/dreamer_v3_XS.yaml
 #   - Experiment defaults: vendor/sheeprl/sheeprl/configs/exp/dreamer_v3.yaml
 
-# Agent identity — mirrors configs/models/dreamer_v3_rr06.yaml:L40-L41
+# Agent identity — mirrors configs/models/dreamer_v3/dreamer_v3_rr06.yaml:L40-L41
 # Required for WandB filter: agent.algorithm = DreamerV3
 agent:
   algorithm: "DreamerV3"

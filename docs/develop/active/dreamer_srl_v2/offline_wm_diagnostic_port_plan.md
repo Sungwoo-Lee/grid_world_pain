@@ -163,7 +163,7 @@ CLI surface (mirrors the reference script with dreamer-srl adjustments):
     --checkpoint results/JAX_DreamerSRL/dreamer_srl_v2_10x10_ext_XS_envs_16_4M_s42 \
     [--checkpoint-step 20000]              # default: latest
     [--env-config configs/experiment/hypervigilance/01-interoNocicept.yaml]
-    [--agent-config configs/dreamer_srl/...]
+    [--agent-config configs/models/dreamer_srl/...]
     [--source real_env|recordings]         # default: real_env
     [--num-real-steps 2000]
     [--num-starts 200]
@@ -378,7 +378,7 @@ Not applicable (this is a diagnostic script, not a training loop change).
 
 ### Deviations from plan
 
-1. **`--agent-config` for integration run**: Plan's CLI example showed `configs/dreamer_srl/...` without specifying which file. Actual run requires `01_food_only.yaml` (not `agent_xs.yaml`) because `agent_xs.yaml` lacks `algo.world_model` architecture keys. The script itself is correct — it accepts any agent config; the deviation is only in the integration run command.
+1. **`--agent-config` for integration run**: Plan's CLI example showed `configs/models/dreamer_srl/...` without specifying which file. Actual run requires `01_food_only.yaml` (not `agent_xs.yaml`) because `agent_xs.yaml` lacks `algo.world_model` architecture keys. The script itself is correct — it accepts any agent config; the deviation is only in the integration run command.
 
 2. **h=1 MAE 2.4× vs WandB (2× gate)**: As explained above, the discrepancy is principled (prior vs. posterior latents, different reward distribution in eval). The decode is verified correct by monotone behavior and finite outputs.
 
