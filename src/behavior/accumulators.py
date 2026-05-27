@@ -485,3 +485,77 @@ def bm_wandb_keys(
         keys.append(f"Episode/EatUnderThreatRatio_rabbit_{tag}")
         keys.append(f"Episode/EatUnderThreatRate_rabbit_{tag}")
     return keys
+
+
+# ── CP5: per-episode sampled-behavioural-parameter logging ────────────────
+
+def build_episode_log_dict(state, params) -> dict:
+    """Build per-episode WandB log dict for the 5 sampled behavioural fields.
+
+    Called once per episode-done event, after ``jax_reset``, using the STATE
+    that was active DURING the just-completed episode (the sampled values are
+    constant within an episode — they change only at the next reset).
+
+    Returns a dict with one key per animal entity per field:
+      ``Episode/sampled_detect_<tag>``
+      ``Episode/sampled_max_stamina_<tag>``
+      ``Episode/sampled_recovery_<tag>``
+      ``Episode/sampled_hunt_thresh_<tag>``
+      ``Episode/sampled_lose_interest_<tag>``
+
+    Values are Python floats (host-side); the caller averages them across
+    episodes within an iteration window before passing to ``wandb.log``.
+
+    CP5 deliverable — plan §"Logging":
+      "For each animal entity with a static tag, log five WandB metrics per
+       episode (after each reset): Episode/sampled_detect_<tag>, etc."
+
+    Args:
+        state: EnvState — the state at the START of the episode (after reset)
+               or equivalently any step within it (sampled values are constant).
+        params: EnvParams — holds animal_tags (static tuple, pytree_node=False).
+
+    Returns:
+        dict[str, float]: one key per (entity, field) combination.
+    """
+    import numpy as _np
+
+    out: dict = {}
+    detect_arr = _np.asarray(state.animal_detect_sampled)
+    max_stam_arr = _np.asarray(state.animal_max_stamina_sampled)
+    recovery_arr = _np.asarray(state.animal_recovery_sampled)
+    hunt_thresh_arr = _np.asarray(state.animal_hunt_thresh_sampled)
+    lose_int_arr = _np.asarray(state.animal_lose_interest_sampled)
+
+    for i, tag in enumerate(params.animal_tags):
+        out[f"Episode/sampled_detect_{tag}"] = float(detect_arr[i])
+        out[f"Episode/sampled_max_stamina_{tag}"] = float(max_stam_arr[i])
+        out[f"Episode/sampled_recovery_{tag}"] = float(recovery_arr[i])
+        out[f"Episode/sampled_hunt_thresh_{tag}"] = float(hunt_thresh_arr[i])
+        out[f"Episode/sampled_lose_interest_{tag}"] = float(lose_int_arr[i])
+
+    return out
+
+
+def sampled_wandb_keys(animal_tags: Tuple[str, ...]) -> list:
+    """Return the full list of ``Episode/sampled_*_<tag>`` WandB keys in stable order.
+
+    Companion to ``build_episode_log_dict`` — used by consumers that need to
+    pre-register the key names (e.g. sheeprl MeanMetrics at startup).
+
+    CP5 deliverable — plan §"Logging".
+
+    Args:
+        animal_tags: ``params.animal_tags`` (one entry per animal entity).
+
+    Returns:
+        list[str]: keys for all 5 fields × all N animal entities.
+    """
+    keys = []
+    for tag in animal_tags:
+        keys.append(f"Episode/sampled_detect_{tag}")
+        keys.append(f"Episode/sampled_max_stamina_{tag}")
+        keys.append(f"Episode/sampled_recovery_{tag}")
+        keys.append(f"Episode/sampled_hunt_thresh_{tag}")
+        keys.append(f"Episode/sampled_lose_interest_{tag}")
+    return keys

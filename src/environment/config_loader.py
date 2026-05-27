@@ -770,25 +770,29 @@ def load_env_params(config: Config) -> EnvParams:
     # Parse placement mode
     placement_mode = config.get('environment.placement.mode', 'per_entity')
     assert placement_mode in ('per_entity', 'per_type'), f"Unknown placement mode: {placement_mode}"
-    
-    # Log placement strategy
-    print("="*60)
-    print(f"ENTITY PLACEMENT STRATEGY: {placement_mode}")
-    print("="*60)
-    print(f"Grid: {height}×{width} ({height*width} cells)")
-    print(f"Total entities: {num_total_entities}")
+
+    import logging as _logging_local
+    _loader_log = _logging_local.getLogger(__name__)
+    _loader_log.debug("=" * 60)
+    _loader_log.debug("ENTITY PLACEMENT STRATEGY: %s", placement_mode)
+    _loader_log.debug("=" * 60)
+    _loader_log.debug("Grid: %d×%d (%d cells)", height, width, height * width)
+    _loader_log.debug("Total entities: %d", num_total_entities)
     if placement_mode == 'per_type':
-        print(f"Type groups: {num_types} (one lax.scan step each)")
+        _loader_log.debug("Type groups: %d (one lax.scan step each)", num_types)
         for tidx, k in enumerate(area_keys_list):
             area = list(k)
             cnt = type_counts_list[tidx]
-            area_cells = (area[2]-area[0]) * (area[3]-area[1])
-            print(f"  Group {tidx}: area {area} → {cnt} entities / {area_cells} cells ({100*cnt/area_cells:.0f}%)")
-        print(f"Max entities per group: {max_per_type}")
-        print(f"Sequential steps: {num_types}")
+            area_cells = (area[2] - area[0]) * (area[3] - area[1])
+            _loader_log.debug(
+                "  Group %d: area %s → %d entities / %d cells (%.0f%%)",
+                tidx, area, cnt, area_cells, 100 * cnt / area_cells if area_cells else 0
+            )
+        _loader_log.debug("Max entities per group: %d", max_per_type)
+        _loader_log.debug("Sequential steps: %d", num_types)
     else:
-        print(f"Sequential steps: {num_total_entities} (one per entity)")
-    print("="*60)
+        _loader_log.debug("Sequential steps: %d (one per entity)", num_total_entities)
+    _loader_log.debug("=" * 60)
     
     # Hidden-state observability flags
     injury_observable = bool(config.get_mandatory('sensory.injury_observable'))

@@ -1,0 +1,22 @@
+# dist_scalar.yaml — distributional field as scalar (degenerate range).
+# Expected: detection_range scalar 5 → bounds (5.0, 5.0)
+# Used by: tests/env/test_distributional_yaml.py
+environment:
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "p"
+      count: 1
+      properties: [0.0, 1.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      move_interval: 1
+      nociception_intensity: 0.9
+      damage: [10.0, 20.0]
+      spawn_area: [[1, 1], [9, 9]]
+      patrol_area: [[1, 1], [9, 9]]
+      attack_delay: 2
+      detection_range: 5
+      max_stamina: 30
+      stamina_recovery_rate: 1.0
+      hunt_stamina_threshold: 0.7
+      lose_interest_multiplier: 1.5
