@@ -5,12 +5,13 @@ status: active
 created: 2026-05-28
 last_updated: 2026-05-28
 verified: 2026-05-28
+plan_version: v0.4
 aliases: [unified_animal_entity, env_entities_unified_animal, env_entities_step_1]
 ---
 
 # Env Refactor — Unified Animal Entity + Per-Episode Sampling of Behavioural Params
 
-> **Status**: IN PROGRESS — CP1 COMPLETE (v0.3). CP2–CP6 pending.
+> **Status**: IN PROGRESS — CP1-CP4 COMPLETE, CP5 IN QUEUE (v0.4). CP5–CP6 pending.
 > **Opened**: 2026-05-28
 > **Branch**: `v2.0` (from `v1.4@72186aa`, latest: `f0fe297`)
 > **Related**: [hypervigilance/01-interoNocicept_sameProp.yaml](../../../../configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml) (the parity-reference config), [code review](../../../reviews/env_entities_plan_review_code.md), [config audit](../../../reviews/env_entities_plan_audit_config.md), [FRONTMATTER_CONTRACT](../meta/FRONTMATTER_CONTRACT.md), [AGENT_PLAYBOOK](../../../AGENT_PLAYBOOK.md)
@@ -88,6 +89,10 @@ The user locked these in the design discussion. Briefly:
    - **N3 — `placement_key` 6-way split** (`core.py:680-681`): today splits `placement_key` 6-ways as `(placement_key, res_key, pred_key, obs_key, neutral_key, resolve_key)`. The same split-arity issue as N2 applies: `jax.random.split(key, 5)` ≠ first 5 of `jax.random.split(key, 6)` because they are independent split arities, not prefix-related. If the developer naively reduces this to a 5-way split when collapsing pred + neutral into animal, `res_key`, `obs_key`, and `resolve_key` all change — and every legacy config's initial positions shift. **Fix**: keep the 6-way split exactly. Sample predator and neutral positions independently with `pred_key` and `neutral_key` at shapes `(N_pred, 2)` and `(N_neutral, 2)`, then assemble into the `[res, pred, obs, neutral]` resolution scan as in N1.
 
    **General principle** (covers N1, N2, N3 and any future similar surface): for every PRNG-consuming step inside `jax_reset`, preserve today's per-type split-arity and per-type draw shapes internally. The unification is a **storage-layout** change, not a **random-stream-layout** change. The host-side `predator_indices = class_indices(params, 'predator')` and `neutral_indices = class_indices(params, 'neutral')` tuples (already on `EnvParams` via the v0.2 plan's `class_indices` helper) make the slice-back-and-concat step a one-liner. The developer applies this principle uniformly across N1/N2/N3 (and any reset-side PRNG draw the developer encounters that mixes predator and neutral state in today's code).
+
+   **Sub-case N0 — outer 5-way key split (D1 errata, v0.4)**: the same arity-stability principle applies to the outer-most key split at the top of `jax_reset` (`key, agent_key, placement_key, body_key, property_key`). **DO NOT** extend it to 6-way to add `animal_episode_key`. `jax.random.split` is not prefix-stable across arities — `jax.random.split(k, 5)[i] ≠ jax.random.split(k, 6)[i]` for any `i`. Instead, derive `animal_episode_key = jax.random.fold_in(property_key, 0xAE1)`. `fold_in` produces a deterministic sub-key from `property_key` without disturbing `property_key` itself, so the downstream N2 4-way `prop_key` split is unchanged byte-for-byte. This was caught at CP1 implementation when the naive 5→6 extension broke all 31 fixture-byte-parity tests.
+
+8. **`lax.scan` over zero-length arrays crashes (D3 errata, v0.4 — zero-entity guard).** JAX traces the `lax.scan` body even at `length=0`, so calling `resolve_overlaps_global(positions, spawn_areas, key)` on a shape-`(0, 2)` `positions` array raises `IndexError` during trace (the scan body indexes `positions[i, 0]`). For configs with zero animals + zero resources + zero obstacles, the concatenated `all_positions` is shape `(0, 2)` and the scan crashes. **Fix**: wrap the `resolve_overlaps_global` call in a host-side Python guard `if all_positions.shape[0] > 0:`. The guard is JIT-static (`shape[0]` is a Python int known at trace time, because `num_animals` / `num_res` / `num_obs` are all config-time constants known at param-load), so this is a Python-level branch — no runtime `lax.cond` needed. The non-empty path is byte-identical to today (the guard short-circuits only when `all_positions` is empty, which is a previously-unreachable code path because today's `update_predators` / `update_neutral_animals` were never called on a config with zero of every entity class). Documented under File Changes → `jax_reset` and tested via the CP2 zero-animal smoke (test §(b) step 8).
 
 ## Implementation Plan
 
@@ -258,7 +263,7 @@ def update_animals(animal_pos, animal_state, animal_stamina,
                    animal_detect_sampled, animal_max_stamina_sampled,
                    animal_recovery_sampled, animal_hunt_thresh_sampled,
                    animal_lose_interest_sampled,
-                   agent_pos, obs_pos, obs_blocking, params,
+                   agent_pos, obs_pos, obs_blocking, obs_hides_agent, params,
                    hunt_key, wander_key):
 
     hunt_idx_arr   = jnp.asarray(params.hunt_idx,   dtype=jnp.int32)   # static; len N_pred
@@ -281,13 +286,21 @@ def update_animals(animal_pos, animal_state, animal_stamina,
         hunt_move_int     = params.animal_move_int[hunt_idx_arr]
         # _hunt_step is the verbatim body of update_predators, lifted to take
         # the sliced arrays. Its internal jax.random.{uniform,randint} calls
-        # use shape (N_pred,) — byte-identical to today.
+        # use shape (N_pred,) — byte-identical to today. Note TWO obstacle-
+        # array parameters: `obs_blocking` (the agent collides with this
+        # obstacle) and `obs_hides_agent` (the agent gains stealth when
+        # standing on this obstacle — bush concealment). These are two distinct
+        # arrays on `params` (`params.obs_blocking` vs `params.obs_hides_agent`)
+        # and today's `update_predators` reads them independently; collapsing
+        # them into a single parameter breaks byte-parity (D2 errata, v0.4 —
+        # caught at CP1 implementation as a predator-position divergence at
+        # step 3).
         (new_hunt_pos, new_hunt_state, new_hunt_stam,
          new_hunt_mt, new_hunt_at) = _hunt_step(
             hunt_pos_in, hunt_state_in, hunt_stam_in, hunt_mt_in, hunt_at_in,
             hunt_detect, hunt_max_stam, hunt_recovery, hunt_thresh, hunt_lose_int,
             hunt_patrol, hunt_move_int,
-            agent_pos, obs_pos, obs_blocking, hunt_key)
+            agent_pos, obs_pos, obs_blocking, obs_hides_agent, hunt_key)
     else:
         new_hunt_pos = new_hunt_state = new_hunt_stam = new_hunt_mt = new_hunt_at = None
 
@@ -339,9 +352,14 @@ def update_animals(animal_pos, animal_state, animal_stamina,
 #### Per-episode sampling inside `jax_reset`
 
 ```
-# inside jax_reset, after the existing key splits:
+# inside jax_reset, after the existing key splits. NOTE: we DERIVE
+# animal_episode_key from property_key via jax.random.fold_in rather than
+# extending the outer 5-way split to 6-way — see "File Changes → jax_reset"
+# for the rationale (D1 errata, v0.4: jax.random.split is not prefix-stable
+# across arities, so a 5→6 extension would shift the four pre-existing sub-keys
+# and break byte-parity for every legacy config).
 
-key, animal_episode_key = jax.random.split(key)
+animal_episode_key = jax.random.fold_in(property_key, 0xAE1)
 ek1, ek2, ek3, ek4, ek5 = jax.random.split(animal_episode_key, 5)
 
 animal_detect_sampled  = jax.random.uniform(ek1, (N,),
@@ -657,7 +675,14 @@ The cadence is determined by field name (membership in `DISTRIBUTIONAL_FIELDS`),
 
 **Patch** `jax_reset` (lines 657–817). **PRNG byte-parity principle — v0.3 (N1/N2/N3 fix from code-reviewer re-review):** the unification of `pred_*` + `neutral_*` into a single `animal_*` storage layout MUST NOT propagate into the per-type key splits or per-type draw shapes used during reset. See Risks item 7 for the principle. The recipe below preserves the exact split-arity, draw-shape, and resolution-order today's `jax_reset` uses, then slices into per-type buffers and re-concatenates into unified arrays only at the end:
 
-- Lines 666: extend the **outer** 5-way key split to 6-way (`key, agent_key, placement_key, body_key, property_key, animal_episode_key`). Prefix-stable: the first 5 sub-keys byte-match today.
+- Lines 666: **keep today's 5-way outer key split exactly** (`key, agent_key, placement_key, body_key, property_key`) and derive `animal_episode_key` from `property_key` via `jax.random.fold_in`:
+   ```python
+   # Preserve today's 5-way outer split byte-for-byte; derive animal_episode_key
+   # without disturbing the existing four sub-keys.
+   key, agent_key, placement_key, body_key, property_key = jax.random.split(key, 5)
+   animal_episode_key = jax.random.fold_in(property_key, 0xAE1)
+   ```
+   **DO NOT** extend this to a 6-way split. `jax.random.split` is NOT prefix-stable across arities: `jax.random.split(key, 5)[i] ≠ jax.random.split(key, 6)[i]` for any `i`. Extending to 6-way would shift `agent_key`, `placement_key`, `body_key`, and `property_key` — and every legacy config's initial agent position, entity placement, body state, and property samples would change. This is the same conceptual principle as N2 (4-way `prop_key` split) and N3 (6-way `placement_key` split) above, applied to the outer-most split. The `fold_in` deviation is what makes byte-parity possible across the per-episode sampling addition. (D1 errata, v0.4 — caught at CP1 implementation when the naive 5→6 extension broke all fixture parity.)
 - Lines 673–676: replace the `num_pred`, `num_neutral` derivation with `num_animals = params.animal_property.shape[0]`. Keep the per-class counts available as host-side constants computed from the static index tuples: `N_pred = len(params.predator_indices)`, `N_neutral = len(params.neutral_indices)`.
 - **Lines 680–681 — `placement_key` 6-way split (N3 fix, v0.3):** keep today's 6-way split exactly. The fact that the stored array is unified does NOT change the key-split arity. Concretely:
    ```python
@@ -676,7 +701,15 @@ The cadence is determined by field name (membership in `DISTRIBUTIONAL_FIELDS`),
      all_positions   = jnp.concatenate([res_pos, pred_pos_init, obs_pos, neutral_pos_init], axis=0)
      all_spawn_areas = jnp.concatenate([res, params.animal_spawn_area[jnp.asarray(params.predator_indices)],
                                         obs, params.animal_spawn_area[jnp.asarray(params.neutral_indices)]], axis=0)
-     all_positions   = resolve_overlaps_global(all_positions, all_spawn_areas, resolve_key)
+     # D3 (v0.4): host-side Python guard for the zero-entity edge case.
+     # JAX traces lax.scan body even at length=0, so calling
+     # resolve_overlaps_global on a shape-(0, 2) array raises IndexError
+     # at trace time. The guard is JIT-static — all_positions.shape[0] is
+     # a Python int known at trace time (sum of config-time-constant
+     # num_res / num_animals / num_obs counts), so this is a Python-level
+     # branch with no runtime cond. See Risks item 8.
+     if all_positions.shape[0] > 0:
+         all_positions = resolve_overlaps_global(all_positions, all_spawn_areas, resolve_key)
      ```
      After resolution, **slice back to per-type buffers**:
      ```python
@@ -691,7 +724,7 @@ The cadence is determined by field name (membership in `DISTRIBUTIONAL_FIELDS`),
      animal_pos = jnp.concatenate([pred_pos_resolved, neutral_pos_resolved], axis=0)
      ```
      This is the same per-subset principle as B1's `update_animals` fix — preserve per-type call shapes for the PRNG-consuming step, unify only at the storage step.
-  - **`per_type` mode**: the YAML's `placement.types:` definition is loaded by the existing per-type logic — verify the config-loader produces the right `type_entity_map` indices when animals are unified. **Detailed check needed in CP3**: per-type placement reads `type_entity_map` indices, which today partition the flat `[res, pred, obs, neutral]` index space; the loader's `type_entity_map` builder needs updating to use `[res, animal, obs]` ordering. The reference config uses `per_entity` mode, so the per-type path is exercised only by configs that opt into it — list them in CP3 and verify all 86 parity tests. The same per-subset-key principle applies if any random draws are made inside `per_type` placement — preserve today's per-type draw shapes (consult the existing code before changing the key-split arity).
+  - **`per_type` mode (D7 errata, v0.4)**: the YAML's `placement.types:` definition is loaded by the existing per-type logic — verify the config-loader produces the right `type_entity_map` indices when animals are unified. **The loader's `type_entity_map` builder MUST preserve today's `[res, pred, obs, neutral]` index ordering, NOT collapse to `[res, animal, obs]`.** This is the same N1 PRNG-parity principle as the resolution scan: the `type_entity_map` indexes into the same `all_positions` array that gets fed to `resolve_overlaps_global`, and that scan's per-cell tie-breaking order depends on the array's ordering. Collapsing to `[res, animal, obs]` would put obstacles after neutrals (today they come between predators and neutrals) and break byte-parity for any config where a `per_type` placement could collide with an obstacle. The reference config uses `per_entity` mode and **no config in the repo currently uses `per_type` mode** (pre-flight `grep -rln "mode: per_type" configs/` returns zero results, re-verified at CP1 and CP3), so this point is vacuously satisfied today — but the recipe must stay correct for future `per_type` authors. The same per-subset-key principle applies if any random draws are made inside `per_type` placement — preserve today's per-type draw shapes (consult the existing code before changing the key-split arity). **An earlier v0.3 draft of this bullet said "needs updating to use `[res, animal, obs]` ordering" — that was wrong; the correct recipe preserves the legacy `[res, pred, obs, neutral]` ordering, mapped to the unified storage layout only at the slice-back step. The CP3 implementation correctly applied the N1 principle here despite the misleading v0.3 plan text; v0.4 fixes the plan text.**
    - **Loader-side helper for index tuples** (M1+M2 follow-on): the loader exposes `predator_indices = class_indices(params, 'predator')` and `neutral_indices = class_indices(params, 'neutral')` as `pytree_node=False` Python int tuples on `EnvParams` (next to `hunt_idx` / `wander_idx` / `static_idx`). The `jax_reset` slice-back step reads these — they are JIT-static constants under the trace.
 - After placement, add the per-episode uniform sampling block (§"Per-episode sampling inside `jax_reset`" above). Note: for zero-animal configs the calls become `uniform(ek1, (0,), low=..., high=...)` and produce `(0,)` arrays — threefry handles zero-shape draws cleanly. The CP2 test includes a zero-animal smoke (M6).
 - **Lines 776–784 — property sampling (N2 fix, v0.3): preserve today's 4-way `prop_key` split exactly.** The unification of `pred_property_sampled` + `neutral_property_sampled` into one `animal_property_sampled` is a STORAGE-layout change, not a PRNG-stream-layout change. Concretely:
@@ -848,10 +881,10 @@ Same as the renderers — replace `state.pred_pos` / `state.neutral_pos` reads w
 
 The refactor lands in six checkpoints. CP1 alone is the **minimum viable landing** (schema + loader + backward-compat shim + parity tests). CP2–CP5 add the per-episode sampling layer. CP6 is the analysis-side cleanup; until CP6, the legacy `dist_per_predator` / `dist_per_neutral` / `pred_*` arrays survive as compatibility aliases.
 
-- [x] **CP1 — Unified state + loader + backward-compat parity + `predator_enabled` migration sweep.** COMPLETE (2026-05-28). Commits: `c3892cb` (code + 86-config sweep, 92 files), `78faf37` (4 new test files). Final test run: 77 passed, 120 skipped, 0 failures. See Implementation Report. Implement `EnvState` / `EnvParams` field changes (including full removal of `predator_enabled`, the per-subset hunt_idx / wander_idx / static_idx static tuples, AND the new `predator_indices` / `neutral_indices` static tuples for `jax_reset`'s per-class PRNG parity — v0.3 N1/N2 fix), `update_animals` (per-subset call pattern — see §"`update_animals()` dispatch" — with all distributional sampling no-ops: bounds set to `[scalar, scalar]` from legacy YAML), `config_loader._load_animals` (including the v0.3 behaviour-string `ValueError` guard and the NC-1 auto-fill of `attack_delay=0` + `damage=[0.0, 0.0]` for legacy `neutral_animals:` re-projection), the legacy `@property predator_tags` / `neutral_tags` on `EnvParams` (AND the explicit removal of today's `predator_tags` / `neutral_tags` `struct.field` declarations on `state.py:89, 110` and the constructor kwargs on `config_loader.py:484, 500` — M1+M2 v0.3 fix), the `sense_extero_nociception` refactor (B2), the `scripts/verify_noise.py` `EnvState` constructor rewrite (B4), and the **v0.3 `jax_reset` PRNG-parity preservation work (N1/N2/N3)**: keep the 6-way `placement_key` split (N3), keep the 4-way `prop_key` split (N2), keep the `[res, pred, obs, neutral]` resolution scan order in `per_entity` placement (N1), and slice back to per-type buffers before re-concatenating into `animal_pos` / `animal_property_sampled` for storage. Pre-step `hit_neutral` asymmetry preserved (B5). The M3 zero-N fallback for `dist_to_pred` / `dist_to_neutral` is preserved. **Atomic commit boundary (B-CFG-config-auditor C-CFG-4)**: the loader change, the `verify_noise.py` rewrite, and the 86-config migration sweep all land in a single atomic commit so no intermediate state has 86 configs failing to load. **Atomically migrate all 86 configs that reference `predator_enabled`**: (a) sed-strip the 85 `predator_enabled: true` lines (no behavioural change); (b) hand-migrate `configs/verification/olfaction_parity_neutral.yaml` — strip the single line `predator_enabled: false` (L10); `predators: []` is already present on L11. **Pre-flight (C2)**: run `grep -rln "mode: per_type" configs/` to enumerate per-type-placement configs before touching loader code — surface them in the implementation report so the developer can verify the `type_entity_map` re-projection on each one. **Verifies:** `pytest tests/env/test_unified_parity.py` (new) passes — for each of all **86** migrated configs (see Test Plan §(a) for the full glob), running 100 steps from seed 0 produces byte-identical `obs` vectors before and after the refactor, AND the parity assertion includes `state.animal_pos[wander_idx]` (catches B1 regressions), `state.animal_pos[predator_indices]` and `state.animal_pos[neutral_indices]` (catches N1 placement-order regressions), `state.animal_property_sampled[predator_indices]` and `state.animal_property_sampled[neutral_indices]` (catches N2 property-sampling regressions), `info['hit_neutral']` / `info['hit_predator']` (catches B5 regressions), and the M4-tightened info-dict sweep keys. The existing parity scripts `scripts/verification/check_olfaction_parity.py` and `scripts/verify_noise.py` (post-rewrite) also exit 0. **No new YAML fields are read in this CP** — the per-episode bounds come from re-projecting the legacy scalar to `[scalar, scalar]`.
+- [x] **CP1 — Unified state + loader + backward-compat parity + `predator_enabled` migration sweep.** COMPLETE (2026-05-28). Commits: `c3892cb` (code + 86-config sweep, 92 files), `78faf37` (4 new test files). Final test run: 77 passed, 120 skipped, 0 failures. See Implementation Report. Implement `EnvState` / `EnvParams` field changes (including full removal of `predator_enabled`, the per-subset hunt_idx / wander_idx / static_idx static tuples, AND the new `predator_indices` / `neutral_indices` static tuples for `jax_reset`'s per-class PRNG parity — v0.3 N1/N2 fix), `update_animals` (per-subset call pattern — see §"`update_animals()` dispatch" — with all distributional sampling no-ops: bounds set to `[scalar, scalar]` from legacy YAML), `config_loader._load_animals` (including the v0.3 behaviour-string `ValueError` guard and the NC-1 auto-fill of `attack_delay=0` + `damage=[0.0, 0.0]` for legacy `neutral_animals:` re-projection), the legacy `@property predator_tags` / `neutral_tags` on `EnvParams` (AND the explicit removal of today's `predator_tags` / `neutral_tags` `struct.field` declarations on `state.py:89, 110` and the constructor kwargs on `config_loader.py:484, 500` — M1+M2 v0.3 fix), the `sense_extero_nociception` refactor (B2), the `scripts/verify_noise.py` `EnvState` constructor rewrite (B4), and the **v0.3 `jax_reset` PRNG-parity preservation work (N1/N2/N3)**: keep the 6-way `placement_key` split (N3), keep the 4-way `prop_key` split (N2), keep the `[res, pred, obs, neutral]` resolution scan order in `per_entity` placement (N1), and slice back to per-type buffers before re-concatenating into `animal_pos` / `animal_property_sampled` for storage. Pre-step `hit_neutral` asymmetry preserved (B5). The M3 zero-N fallback for `dist_to_pred` / `dist_to_neutral` is preserved. **Atomic commit boundary (B-CFG-config-auditor C-CFG-4)**: the loader change, the `verify_noise.py` rewrite, and the 86-config migration sweep all land in a single atomic commit so no intermediate state has 86 configs failing to load. **Atomically migrate all 86 configs that reference `predator_enabled`**: (a) sed-strip the 85 `predator_enabled: true` lines (no behavioural change); (b) hand-migrate `configs/verification/olfaction_parity_neutral.yaml` — strip the single line `predator_enabled: false` (L10); `predators: []` is already present on L11. **Pre-flight (C2)**: run `grep -rln "mode: per_type" configs/` to enumerate per-type-placement configs before touching loader code — surface them in the implementation report so the developer can verify the `type_entity_map` re-projection on each one. **Verifies:** `pytest tests/env/test_unified_parity.py` (new) passes — for each of the **31 of 86 migrated configs that load under both pre- and post-refactor code** (see Test Plan §(a) for the full glob and the coverage-gap explanation; the other 55 configs fail to load under the pre-refactor code due to an unrelated project-wide pre-existing mandatory-key issue — missing `sensory.injury_observable` — so there is no pre-refactor reference to compare against, and the gap is structurally impossible to close in CP1 without first migrating those 55 configs in a separate PR; not a CP1 regression — rationale documented in fixture-generator commit `3d20aab` and CP1 verification doc), running 100 steps from seed 0 produces byte-identical `obs` vectors before and after the refactor, AND the parity assertion includes `state.animal_pos[wander_idx]` (catches B1 regressions), `state.animal_pos[predator_indices]` and `state.animal_pos[neutral_indices]` (catches N1 placement-order regressions), `state.animal_property_sampled[predator_indices]` and `state.animal_property_sampled[neutral_indices]` (catches N2 property-sampling regressions), `info['hit_neutral']` / `info['hit_predator']` (catches B5 regressions), and the M4-tightened info-dict sweep keys. The existing parity scripts `scripts/verification/check_olfaction_parity.py` and `scripts/verify_noise.py` (post-rewrite) also exit 0. **No new YAML fields are read in this CP** — the per-episode bounds come from re-projecting the legacy scalar to `[scalar, scalar]`.
 - [x] **CP2 — Per-episode sampling at reset.** COMPLETE (2026-05-28). The per-episode sampling code was already in `core.py` from CP1 (lines 957–978, using `animal_episode_key = jax.random.fold_in(property_key, 0xAE1)` and `jax.random.split(animal_episode_key, 5)` for the 5 fields). CP2's deliverable is the new test file `tests/env/test_per_episode_sampling.py` (8 tests, all passing). Tests verify: same-key reproducibility, different-key divergence, per-instance independence, sampled fields on EnvState not EnvParams, cross-field independence (Pearson |r| < 0.5 over 100 resets), degenerate-range guard (scalar=5.0 → sampled=5.0), wander/static animal_state stays 0 after 1000 steps, zero-animal smoke (M6). The 31 CP1 parity fixtures still pass byte-for-byte. Add the 5-way key split in `jax_reset` and the `jax.random.uniform` calls; populate the 5 `animal_*_sampled` fields. **Verifies:** with all legacy configs (degenerate ranges) the parity gate still passes byte-for-byte (uniform`[s, s]` ≡ `s`). A new test `tests/env/test_per_episode_sampling.py` verifies, **using a config explicitly with non-degenerate ranges** (e.g., `detection_range: [0, 5]`, 4 predators — degenerate ranges would fail the divergence check spuriously, C4): (a) same `key` ⇒ same sampled values; (b) different `key` ⇒ different sampled values; (c) N entities of the same class give N independent samples (not N copies); (d) **cross-field independence**: `detect`, `max_stamina`, `recovery`, `hunt_thresh`, `lose_interest` samples are statistically independent across episodes (correlation `< 0.5` over 100 keys per field pair — guards against accidentally reusing one subkey for multiple fields); (e) **per-episode-sampled fields live on `EnvState`, not `EnvParams`** — assert `hasattr(state, 'animal_detect_sampled')` and `not hasattr(params, 'animal_detect_sampled')` (code-reviewer Missed-failure-mode #1); (f) **wander/static get unused per-episode draws** — assert `state.animal_state[wander_idx]` and `state.animal_state[static_idx]` stay at 0 after 1000 steps (intentional shape uniformity, code-reviewer Missed-failure-mode #3 / #4); (g) **zero-animal smoke (v0.3, M6)** — use a config with `entities: []`, verify reset returns no-error and all `animal_*` fields have a leading dim of 0, and that `info['hit_*']` flags are `False` and `dist_to_*` fall back to `99.0` (M3 guard).
 - [x] **CP3 — `entities:` schema in config loader.** COMPLETE (2026-05-28). The `entities:` parsing path was already in `_load_animals()` from CP1 (lines 282–326 of config_loader.py). CP3's deliverables are: (1) `configs/experiment/v2_smoke/01-entities-smoke.yaml` — byte-parity equivalent of `01-interoNocicept_sameProp.yaml` using the unified schema (1 predator + 2 wander rabbits, predator-first ordering to match legacy iteration order); (2) `tests/env/test_entities_schema.py` (7 tests, all passing). Tests verify: smoke config loads, byte-parity vs legacy (100 steps from seed 0), both-schemas DeprecationWarning + unified takes precedence, predator_enabled raises ValueError, hunt entity with missing detection_range raises ValueError, wander without distributional fields auto-fills [0,0], 4-entity mixed-behaviour idx tuples correct (MF#2). Pre-flight: `grep -rln "mode: per_type" configs/` — 0 results; no per_type configs exist (confirmed in CP1 pre-flight, re-confirmed CP3). Add the new `environment.entities:` YAML path; loader prefers it over legacy if both present (with warning). Update `placement.types:` handling: ensure `type_entity_map` uses `[res, animal, obs]` indexing in `per_type` mode. **Pre-flight (C2)**: enumerate `per_type`-mode configs via `grep -l "mode: per_type" configs/`; for each one, verify the loader produces the same `type_entity_map` indices after unification (predators-first, then neutrals, preserves today's `[res, pred, obs, neutral]` index space mapped to `[res, animal, obs]`). Surface the list of `per_type` configs in the CP3 implementation report. **Verifies:** a new `configs/experiment/v2_smoke/01-entities-smoke.yaml` config that uses the unified schema for the same parity-reference setup produces byte-identical behaviour to `01-interoNocicept_sameProp.yaml`. New test `tests/env/test_entities_schema.py` covers: (a) the unified config loads; (b) byte-parity vs legacy; (c) loader warns when both legacy and unified sections are present; (d) configs that still contain the removed `predator_enabled` key raise `ValueError` with a clear migration message (sanity check; the CP1 sweep should have removed all of them already); (e) a 4-entity config with `behaviour: [hunt, wander, hunt, static]` loads correctly and the resulting `hunt_idx == (0, 2)`, `wander_idx == (1,)`, `static_idx == (3,)` (behaviour-mask axis test from code-reviewer Missed-failure-mode #2).
-- [x] **CP4 — Sensor + damage + step path parity.** COMPLETE (2026-05-28). Commit: `(see Implementation Report below)`. All sensor pipeline changes (`sense_visual` class scatter, `sense_extero_nociception` B2 mask, unified `animal_chem` olfactory, `jax_step` damage logic with `animal_is_damaging` + B5 pre-step `hit_neutral`) were implemented atomically in CP1 (`c3892cb`) and confirmed passing parity on all 31 fixture configs. CP4's deliverables are the parity-gate test files and fixtures: `tests/env/test_visual_parity.py` (2 tests), `tests/env/test_extero_noc_parity.py` (3 tests), `tests/env/fixtures/visual_parity_ref.npz`, `tests/env/fixtures/extero_noc_parity_ref.npz`. Final test run: 98 passed, 121 skipped, 0 failures. Trainer grep: 0 surviving `state.pred_` / `state.neutral_` reads in `src/algorithms/` or `src/models/`. Renderer/eval-recording paths in `src/environment/renderer*.py`, `grid_world.py`, `eval_recording.py`, `evaluation_core.py` remain xfailed — deferred to CP6 per plan. Speed check: 430 ± 9 sps (5 trials × 10000 steps, `01-interoNocicept_sameProp.yaml`). No regression vs CP1 baseline — sensor changes were already committed at CP1; no new JAX ops introduced in CP4. Patch `sense_visual` (class scatter), `sense_extero_nociception` (animal_is_damaging mask — B2), `get_observation` olfactory (unified `animal_chem`), and `jax_step` damage logic (`animal_is_damaging` + the pre-step `hit_neutral` asymmetry — B5). **Verifies:** the CP1 parity test (all **86** migrated configs × 100 steps) still passes — this CP shouldn't *add* parity coverage but must *not break* it. Additionally, a new `tests/env/test_visual_parity.py` runs one episode (1000 steps) on the parity-reference config and asserts the visual one-hot per cell is byte-identical to a pinned reference dump (committed under `tests/env/fixtures/visual_parity_ref.npz`). **Extero-noc parity gate (B2)**: the same fixture also pins the extero-noc channel per step, byte-identical to today. **Trainer verification**: grep `src/algorithms/` and `src/models/` for `state.pred_` / `state.neutral_` / `pred_pos` / `neutral_pos`; document the grep result. With the `predator_tags` / `neutral_tags` legacy aliases in place (B3), `dreamer_srl_main.py:522-523` requires no edit and the test passes.
+- [x] **CP4 — Sensor + damage + step path parity.** COMPLETE (2026-05-28). Commit: `(see Implementation Report below)`. All sensor pipeline changes (`sense_visual` class scatter, `sense_extero_nociception` B2 mask, unified `animal_chem` olfactory, `jax_step` damage logic with `animal_is_damaging` + B5 pre-step `hit_neutral`) were implemented atomically in CP1 (`c3892cb`) and confirmed passing parity on all 31 fixture configs. CP4's deliverables are the parity-gate test files and fixtures: `tests/env/test_visual_parity.py` (2 tests), `tests/env/test_extero_noc_parity.py` (3 tests), `tests/env/fixtures/visual_parity_ref.npz`, `tests/env/fixtures/extero_noc_parity_ref.npz`. Final test run: 98 passed, 121 skipped, 0 failures. Trainer grep: 0 surviving `state.pred_` / `state.neutral_` reads in `src/algorithms/` or `src/models/`. Renderer/eval-recording paths in `src/environment/renderer*.py`, `grid_world.py`, `eval_recording.py`, `evaluation_core.py` remain xfailed — deferred to CP6 per plan. Speed check: 430 ± 9 sps (5 trials × 10000 steps, `01-interoNocicept_sameProp.yaml`). No regression vs CP1 baseline — sensor changes were already committed at CP1; no new JAX ops introduced in CP4. Patch `sense_visual` (class scatter), `sense_extero_nociception` (animal_is_damaging mask — B2), `get_observation` olfactory (unified `animal_chem`), and `jax_step` damage logic (`animal_is_damaging` + the pre-step `hit_neutral` asymmetry — B5). **Verifies:** the CP1 parity test (**31 of 86 fixture-tested migrated configs × 100 steps** — see Test Plan §(a) coverage breakdown for the gap explanation) still passes — this CP shouldn't *add* parity coverage but must *not break* it. Additionally, a new `tests/env/test_visual_parity.py` runs one episode (1000 steps) on the parity-reference config and asserts the visual one-hot per cell is byte-identical to a pinned reference dump (committed under `tests/env/fixtures/visual_parity_ref.npz`). **Extero-noc parity gate (B2)**: the same fixture also pins the extero-noc channel per step, byte-identical to today. **Trainer verification**: grep `src/algorithms/` and `src/models/` for `state.pred_` / `state.neutral_` / `pred_pos` / `neutral_pos`; document the grep result. With the `predator_tags` / `neutral_tags` legacy aliases in place (B3), `dreamer_srl_main.py:522-523` requires no edit and the test passes.
 - [ ] **CP5 — Distributional schema + per-episode logging.** Add YAML parsing for `[low, high]` ranges on the five fields under scope; emit `Episode/sampled_*_<tag>` WandB metrics. **Verifies:** new `tests/env/test_distributional_yaml.py` covers (a) scalar `5` → degenerate range `[5, 5]`, (b) `[0, 5]` → bounds stored correctly, (c) malformed range like `[5]` raises `ValueError`. End-to-end smoke: run 1000 training steps with `configs/experiment/v2_smoke/02-entities-distributional.yaml` (NEW — has `detection_range: [0, 5]` per predator) and confirm the 5 `sampled_*` WandB metrics appear with non-degenerate values. **JIT-recompile check (C3)**: capture `jax_log_compiles` output via `jax.config.update("jax_log_compiles", True)`; build env-step jit for config A (`1 pred + 2 neutral`, `detection_range: [0, 5]`), run 10 steps; build for config B (same counts, `detection_range: [2, 7]`), run 10 steps; assert `log.count("Compiling jax_step") == 1` (regex check). **Positive control (C-CFG-5)**: swap `animal_classes` ordering — same N, different per-entity class ordering like `[pred, neutral, pred]` vs `[pred, pred, neutral]` — and assert `log.count("Compiling jax_step") == 2` (recompile IS expected because `animal_classes` is `pytree_node=False` and the hunt_idx / wander_idx tuples differ). Documents the boundary: same N + same class ordering = no recompile; same N + different class ordering = recompile.
 - [ ] **CP6 — Analysis-side cleanup.** Update `accumulators.py`, `distance_aggregator.py`, `eval_rollout.py`, `motif_cluster.py`, `evaluation_core.py`, `eval_recording.py`, `grid_world.py`, `renderer.py`, `renderer_v2.py`, `benchmark_render.py` to consume `dist_per_animal` + `select_by_class` directly. **Verifies:** `pytest tests/behavior/test_accumulators.py` passes with the same metric layout as before; the WandB metric key names are unchanged (`MeanDistPredator_<tag>`, `MeanDistNeutral_<tag>` still produced). Legacy aliases `dist_per_predator` / `dist_per_neutral` removed from `info` (one release-cycle later, not in this CP).
 
@@ -860,6 +893,15 @@ The refactor lands in six checkpoints. CP1 alone is the **minimum viable landing
 The test plan operationalises the locked parity gate. The full test surface:
 
 #### (a) Per-step parity test — `tests/env/test_unified_parity.py` (NEW, CP1)
+
+**Coverage clarification (v0.4 errata, 31-of-86):** the **glob enumerates all 86 migrated configs**, but the **byte-parity gate actually exercises 31 of them**. The other 55 fail to load under the **pre-refactor** code (they are missing the project-wide mandatory key `sensory.injury_observable`, added in an earlier unrelated PR), so there is no pre-refactor reference fixture to compare against — the parity test `pytest.skip()`s them with a clear "no pre-refactor fixture exists; the config could not load under the pre-refactor code either" message. **This is not a CP1 regression**: the refactor does not affect those configs' loadability either way; the gap is structurally impossible to close in CP1 without first migrating the 55 affected configs to add `sensory.injury_observable` (a separate, unrelated PR). The fixture-generator commit `3d20aab` documents the 55 skipped configs and the rationale. The 31 fixture-tested configs cover all the structurally important per-class entity layouts the codebase actively trains on:
+
+- All 4 observability-gates configs (`S1`–`S4`)
+- Both olfaction-parity configs (`olfaction_parity_predator/neutral`)
+- All 5 active/passive predator continual stages
+- All 5 nmn_noise_heterogeneity configs
+- All 4 nmn_meta_2x3_mixture configs
+- The parity-reference config `01-interoNocicept_sameProp.yaml` and 7 sibling hypervigilance configs
 
 **Glob covers all 86 migrated configs**, not just the 74 under `configs/experiment/`. This was HC-1 raised by both reviewers (also C1 in the code review and "HARD CONCERN" in the config audit). The original glob `glob('configs/experiment/**/*.yaml')` without `recursive=True` would miss both:
 
@@ -894,15 +936,17 @@ For each `config_path in configs`:
 
 **Failure mode:** any single step diff blocks CP1.
 
-**Coverage breakdown** (86 = 74 experiment + 5 continual + 6 verification + 1 environment/default):
+**Coverage breakdown** (86 enumerated by glob; 31 actually parity-tested — see v0.4 errata above for the gap explanation):
 
-| Directory | Count | Included via |
-|---|---:|---|
-| `configs/experiment/**/*.yaml` | 74 | `experiment/**/*.yaml` glob (recursive=True catches `2X2_area.yaml` at depth 0) |
-| `configs/continual/nmn_double_return_stages/*.yaml` | 5 | `continual/**/*.yaml` glob |
-| `configs/verification/*.yaml` | 6 | `verification/**/*.yaml` glob (includes 4 observability gates + 2 olfaction parity) |
-| `configs/environment/default.yaml` | 1 | explicit |
-| **Total** | **86** | |
+| Directory | Glob count | Parity-tested | Skipped (pre-refactor load failure) |
+|---|---:|---:|---:|
+| `configs/experiment/**/*.yaml` | 74 | ~22 | ~52 |
+| `configs/continual/nmn_double_return_stages/*.yaml` | 5 | 5 | 0 |
+| `configs/verification/*.yaml` | 6 | 4 | 2 |
+| `configs/environment/default.yaml` | 1 | 0 | 1 |
+| **Total** | **86** | **31** | **55** |
+
+The 55 skipped configs `pytest.skip()` with a clear message — they did not load under the pre-refactor code either (missing `sensory.injury_observable`), so there is no pre-refactor reference fixture. Not a CP1 regression. See fixture-generator commit `3d20aab` for details.
 
 #### (b) Per-episode sampling test — `tests/env/test_per_episode_sampling.py` (NEW, CP2)
 
@@ -1054,6 +1098,130 @@ None. All File Changes from the plan were implemented as specified. The `obs_blo
 
 ---
 
+### CP2 — Per-episode sampling at reset
+
+> **Implemented by**: `developer` agent (Claude Sonnet 4.6)
+> **Date**: 2026-05-28
+> **Branch**: `v2.0`
+> **Commit**: `4781105`
+
+#### Context
+
+The per-episode sampling **code** was already in `core.py` from CP1 (the `update_animals` dispatcher reads `state.animal_*_sampled` arrays, so `jax_reset` had to produce them atomically at CP1; splitting the code work would have left CP1's parity gate unable to run end-to-end). CP2's deliverable is therefore the test+fixture coverage for that already-running code — a defensible scoping decision that the senior-developer verification (post-CP2-CP4) accepted under deviation D5.
+
+#### Summary of changes (file-by-file)
+
+**`tests/env/test_per_episode_sampling.py`** (NEW): 8 test functions covering the plan's §(b) clauses (a)–(g) plus the degenerate-range guard. Tests verified end-to-end against `01-interoNocicept_sameProp.yaml` and a synthetic non-degenerate-range config with `detection_range: [0, 5]` on 4 predators.
+
+Test-by-test mapping to plan §(b):
+
+| Plan §(b) clause | Test function | Purpose |
+|---|---|---|
+| (a) same key ⇒ same sampled values | `test_same_key_same_samples` | reproducibility |
+| (b) different key ⇒ different sampled values | `test_different_key_different_samples` | divergence (N=4 predators makes false-positive ≪ 1e-6) |
+| (c) N entities of the same class ⇒ N independent samples | `test_per_instance_independence` | per-instance independence |
+| (d) cross-field independence (\|r\| < 0.5 over 100 keys) | `test_cross_field_independence` | guards against accidental subkey reuse |
+| (e) sampled fields on `EnvState` not `EnvParams` | `test_sampled_fields_on_state_not_params` | code-reviewer MF#1 |
+| (f) wander/static `animal_state` stays at 0 after 1000 steps | `test_wander_static_animal_state_stays_zero` | code-reviewer MF#3/4 |
+| (g) zero-animal smoke (M6) | `test_zero_animal_smoke` | empty-array threefry edge cases |
+| degenerate-range guard (implied by parity gate) | `test_degenerate_range_returns_low` | scalar=5.0 → sampled=5.0 |
+
+**No source code changes** — `core.py:957-978` (the 5-way `animal_episode_key` split + 5 `jax.random.uniform` calls + populate the 5 `animal_*_sampled` fields) already landed at CP1.
+
+**Plan doc** — flipped `[ ]` → `[x]` on the CP2 checkpoint line, embedded the completion summary inline.
+
+#### Test results
+
+```
+Command: /home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest \
+  tests/env/test_per_episode_sampling.py -v 2>&1 | tail -20
+
+Result: 8 passed in 22.17s
+```
+
+The 31 CP1 parity fixtures still pass byte-for-byte — re-verified via the full env suite (`pytest tests/env/ -v` → 85 passed / 121 skipped / 0 failures at CP2 HEAD).
+
+#### Speed check
+
+n/a — CP2 ships test artefacts only; no source code changes. The CP1 hot path is byte-identical to itself.
+
+#### Deviations from plan
+
+- **D5 — CP2 source code already landed at CP1.** The plan listed "Add the 5-way key split in `jax_reset` and the `jax.random.uniform` calls; populate the 5 `animal_*_sampled` fields" as CP2 work, but commit `c3892cb` (CP1) already contained all of this. The CP2 commit is tests-only. **Senior-developer verdict**: accepted — splitting the per-episode sampling code out into its own commit would have left CP1's parity gate unable to run end-to-end. The plan's checkpoint boundary was a *narrative* boundary (what to think about at each checkpoint), not a code-commit boundary, and the developer correctly collapsed the code work into CP1 while keeping CP2's *test artefacts* as the CP2 delivery. Documented in post-CP2-CP4 verification report at `docs/reviews/env_entities_cp1_verification.md` §"Verification of CP2-CP4 → CP2 → Plan deviations".
+
+#### Follow-up items
+
+- CP3-CP6 per the plan.
+
+**Implemented by**: developer
+
+---
+
+### CP3 — `entities:` schema in config loader
+
+> **Implemented by**: `developer` agent (Claude Sonnet 4.6)
+> **Date**: 2026-05-28
+> **Branch**: `v2.0`
+> **Commit**: `a85a951`
+
+#### Context
+
+The `entities:` parsing path was already in `_load_animals()` from CP1 (`config_loader.py:282-326`). CP3's deliverables are the unified-schema smoke config + the test+fixture coverage. Same scoping pattern as CP2 (D6 below).
+
+#### Summary of changes (file-by-file)
+
+**`configs/experiment/v2_smoke/01-entities-smoke.yaml`** (NEW, 369 lines): byte-parity equivalent of `01-interoNocicept_sameProp.yaml` using the unified `entities:` schema (1 predator + 2 wander rabbits, predator-first ordering to match legacy iteration order). Drives `test_entities_smoke_byte_parity`.
+
+**`tests/env/test_entities_schema.py`** (NEW, 419 lines): 7 test functions covering plan §"Verifies" sub-clauses (a)–(e) for CP3 plus two extra coverage tests:
+
+| Plan §"Verifies" sub-clause | Test function | Purpose |
+|---|---|---|
+| (a) unified config loads | `test_smoke_config_loads` | sanity: loader doesn't crash |
+| (b) byte-parity vs legacy (100 steps from seed 0) | `test_entities_smoke_byte_parity` | the load-bearing CP3 gate |
+| (c) both schemas → `DeprecationWarning` + unified takes precedence | `test_both_schemas_warns_and_prefers_unified` | dispatcher correctness |
+| (d) `predator_enabled` still raises (sanity) | `test_predator_enabled_still_raises` | CP1 sweep verification |
+| (e) 4-entity mixed-behaviour idx tuples correct (MF#2) | `test_mixed_behaviour_idx_tuples` | behaviour-mask axis test |
+| Implicit — hunt-missing-dist-field raises | `test_hunt_missing_dist_field_raises` | extra coverage of B-CFG-1 |
+| Implicit — wander-without-dist-fields auto-fills `[0, 0]` (NC-1) | `test_wander_without_dist_fields_ok` | extra coverage of NC-1 |
+
+**No source code changes** — the `_load_animals()` two-path dispatcher (legacy `predators:`/`neutral_animals:` vs unified `entities:`) already landed at CP1.
+
+**Plan doc** — flipped `[ ]` → `[x]` on the CP3 checkpoint line, embedded the completion summary inline.
+
+#### Pre-flight: `per_type` configs re-enumerated (C2)
+
+```
+grep -rln "mode: per_type" configs/
+```
+Result: 0 matches. Re-verified at CP3 (same as CP1 pre-flight). No config in the repo uses `mode: per_type`; the `type_entity_map` re-projection is a vacuously-satisfied surface today.
+
+#### Test results
+
+```
+Command: /home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest \
+  tests/env/test_entities_schema.py -v 2>&1 | tail -20
+
+Result: 7 passed in 20.89s
+```
+
+#### Speed check
+
+n/a — CP3 ships test artefacts + one smoke config. No source code changes.
+
+#### Deviations from plan
+
+- **D6 — CP3 loader code already landed at CP1.** Same shape as D5. The `entities:` parsing path was committed in `c3892cb` because `_load_animals()` needed to support both schemas atomically (the loader can't half-implement the dispatcher). **Senior-developer verdict**: accepted — same rationale as D5. Documented in post-CP2-CP4 verification report.
+- **D7 — `placement.types:` re-mapping plan-body wording.** The v0.3 plan body said `type_entity_map` should use `[res, animal, obs]` indexing in `per_type` mode. The loader actually keeps `[res, pred, obs, neutral]` ordering (`config_loader.py:743-749`), which is the *correct* application of the N1 PRNG-parity principle for the `per_type` path — but contradicted the plan body. **Senior-developer verdict**: accepted — the developer correctly applied the N1 general principle. Vacuously safe today (zero configs use `per_type` mode), but the plan body would have misled a future `per_type` author. **Plan body fixed in v0.4** under §"File Changes → `jax_reset` → per_type mode bullet". Documented in post-CP2-CP4 verification report.
+
+#### Follow-up items
+
+- CP4-CP6 per the plan.
+- Plan-body v0.4 errata fold-back (D1 + D2 + D3 + D7 + 31-of-86) — completed in v0.4.
+
+**Implemented by**: developer
+
+---
+
 ### CP4 — Sensor + damage + step path parity
 
 > **Implemented by**: `developer` agent (Claude Sonnet 4.6)
@@ -1177,6 +1345,40 @@ The full training-run validation (1000-step PPO via `train_command-agent.sh`) is
 ---
 
 ## Revision log
+
+### v0.4 — 2026-05-28 (post-CP1-CP4 errata fold-back, no further review cycle)
+
+Plan body synced with the actual CP1–CP4 implementation. Six errata applied — each one was identified by the senior-developer's post-CP1 and post-CP2–CP4 verification reports (commits `c3892cb`, `78faf37`, `b854eb9`, `4781105`, `a85a951`, `6685d0e`). The CP1-CP4 implementations were already correct; what was stale was the plan body's *recipe*, which the CP5 developer would read as authoritative. Without this fold-back, CP5 might have "fixed" code that was already correct.
+
+**Source verification reports:**
+
+- [docs/reviews/env_entities_cp1_verification.md](../../../reviews/env_entities_cp1_verification.md) §"Deviations from plan" (D1, D2, D3, D4) + §"Conclusion → Follow-ups" (D1, D2, D3, 31-of-86 coverage gap).
+- [docs/reviews/env_entities_cp1_verification.md](../../../reviews/env_entities_cp1_verification.md) §"Verification of CP2-CP4" → §"CP3 → Plan deviations" (D7) + §"Cross-CP follow-ups → Folded-back from CP1 verification" (D1, D2, D3, 31-of-86) + §"New follow-ups from CP2-CP4" (CP2 + CP3 missing Implementation Report sub-sections).
+
+**Errata applied**
+
+| Erratum | Source | What changed | Where |
+|---|---|---|---|
+| D1 — outer `jax_reset` key split kept 5-way + `fold_in` (NOT 5→6) | post-CP1 verification §"D1" | Plan body's `jax_reset` recipe at the "extend the outer 5-way key split to 6-way" bullet rewritten to "keep today's 5-way outer key split exactly" + derive `animal_episode_key = jax.random.fold_in(property_key, 0xAE1)`. Pseudocode in §"Per-episode sampling inside `jax_reset`" updated to match. Risks section gains item 7 sub-case N0 explaining the JAX `split` arity-instability principle as it applies to the outer split. | §"File Changes → `jax_reset`" outer-split bullet; §"Per-episode sampling inside `jax_reset`" pseudocode; §"Analysis → Risks" item 7 (new sub-case N0) |
+| D2 — `_hunt_step` takes TWO obstacle-array parameters (`obs_blocking` + `obs_hides_agent`) | post-CP1 verification §"D2" | Plan pseudocode for `update_animals` signature updated to accept both `obs_blocking` AND `obs_hides_agent` as separate parameters. `_hunt_step` call site updated. Comment added explaining the two arrays describe distinct semantic surfaces (collision vs stealth-bush) that today's `update_predators` reads as `params.obs_blocking` and `params.obs_hides_agent` respectively. | §"`update_animals()` dispatch" pseudocode (signature + call site) |
+| D3 — zero-entity Python-level guard before `resolve_overlaps_global` | post-CP1 verification §"D3" | Plan pseudocode for the `per_entity` placement block in `jax_reset` gains an explicit `if all_positions.shape[0] > 0:` host-side guard. Risks section gains item 8 explaining JAX's `lax.scan` zero-length trace-time crash and why the guard is JIT-static (Python-level branch on config-time-constant shapes). | §"File Changes → `jax_reset`" → per_entity placement bullet; §"Analysis → Risks" item 8 |
+| D7 — `placement.types:` re-mapping recipe: preserve `[res, pred, obs, neutral]`, NOT `[res, animal, obs]` | post-CP2-CP4 verification §"CP3 → Plan deviations" | Plan body's `per_type` mode bullet rewritten to "MUST preserve today's `[res, pred, obs, neutral]` index ordering, NOT collapse to `[res, animal, obs]`" with the N1 PRNG-parity-principle explanation. Vacuously safe today (zero configs use `per_type` mode), but the recipe must stay correct for future `per_type` authors. | §"File Changes → `jax_reset`" → `per_type` mode bullet |
+| 31-of-86 parity coverage gap | post-CP1 verification §"The 31-vs-86 discrepancy" | CP1 verification clause and Test Plan §(a) updated from "all 86 migrated configs" to "31 of 86 (the 31 that load under both pre- and post-refactor code; the other 55 fail to load pre-refactor due to a project-wide pre-existing mandatory-key issue — missing `sensory.injury_observable`)". CP4 verification clause similarly updated. Coverage breakdown table now shows glob count (86), parity-tested count (31), and skipped count (55) explicitly. Pointer to fixture-generator commit `3d20aab` for full rationale. Not a CP1 regression — the gap is structurally impossible to close in CP1 without first migrating those 55 configs to add `sensory.injury_observable` (a separate, unrelated PR). | CP1 + CP4 description blocks; Test Plan §(a) header + coverage-breakdown table |
+| CP2 + CP3 Implementation Report sub-sections | post-CP2-CP4 verification §"Notable issues 1" | Added full `### CP2 — Per-episode sampling at reset` and `### CP3 — entities: schema in config loader` sub-sections under `## Implementation Report` matching the CP1 / CP4 convention. Each sub-section carries: Context, Summary of changes (file-by-file with test-mapping tables), Pre-flight result, Test results, Speed check, Deviations from plan (D5, D6, D7), Follow-up items. References to source commits: `4781105` (CP2), `a85a951` (CP3). | `## Implementation Report` (new CP2 + CP3 sub-sections inserted between CP1 and CP4) |
+
+**Non-changes (intentionally NOT touched)**
+
+- CP1, CP4 Implementation Report sub-sections — already present and well-formed; no edits.
+- All blocker / Risks IDs (N1, N2, N3, B1–B5, M1–M6, NC-1) — unchanged. The errata adjust *recipe text*, not the identified risks.
+- All file-by-file source-code change descriptions outside the four errata above — unchanged.
+- All test-plan §(b)–§(h) content — unchanged.
+- CP5 + CP6 descriptions — unchanged (next-in-queue and after-next checkpoints).
+
+**No new design decisions.** The fold-back is purely a sync of plan body to actual-CP1-CP4 behaviour. Senior-developer + code-reviewer + env-config-auditor verdicts on CP1-CP4 stand; v0.4 makes the plan body usable by the CP5 developer.
+
+**Status line bumped**: "IN PROGRESS — CP1 COMPLETE (v0.3). CP2–CP6 pending." → "IN PROGRESS — CP1-CP4 COMPLETE, CP5 IN QUEUE (v0.4). CP5–CP6 pending."
+
+**`last_updated` bumped to `2026-05-28`**, `plan_version: v0.4` added to frontmatter.
 
 ### v0.3 — 2026-05-28 (sign-off revision, no further review cycle)
 
