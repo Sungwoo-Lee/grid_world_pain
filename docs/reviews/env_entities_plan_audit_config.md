@@ -92,3 +92,170 @@ All 86 configs carrying `predator_enabled` also carry both `predators:` and `neu
 Fix the two blockers (DISTRIBUTIONAL_FIELDS contradiction + `attack_delay` missing from schema description) and one hard concern (parity test scope) before the developer begins CP1. The migration sweep count is verified correct. Obs/noise channel invariant is correctly preserved. Three concerns need documentation fixes before CP3/CP5: parity test scope expansion to all 86 configs, JIT recompile documentation for same-count different-class-assignment, and `[lo, hi]` per-event vs per-episode cadence annotation in YAML comments and loader docstring.
 
 Audited by: env-config-auditor
+
+---
+
+## Re-audit of v0.2 (2026-05-28, focused on blocker resolution)
+
+**Plan version**: v0.2 (commit `6e5e03c`, branch `v2.0`)
+**Scope**: Focused re-audit — verifying resolution of B-CFG-1, B-CFG-2, HC-1 from prior verdict; checking incorporated non-blocking suggestions; new surface check on `hunt_idx` / `wander_idx` / `static_idx` construction.
+**Auditor**: env-config-auditor
+**Date**: 2026-05-28
+
+### Purpose
+
+This re-audit gates CP1. The prior verdict (ACCEPT-WITH-REVISIONS, same date) identified two blockers and one hard concern. The `senior-developer` revised the plan to v0.2 and documented the fixes in the plan's Revision Log. This section verifies each fix held, checks incorporated suggestions, and surfaces one new concern introduced by the v0.2 revision itself.
+
+### Per-finding verification table
+
+| Finding | Status | Evidence | Notes |
+|---|---|---|---|
+| **B-CFG-1** — DISTRIBUTIONAL_FIELDS contradiction | PASS | Plan L93-101, L574-577 | Reconciliation is consistent — see detailed analysis below. |
+| **B-CFG-2** — `attack_delay` missing from schema description | PARTIAL-PASS | Plan L91, L98, L126, L178 | Added to schema description text (L91) and Mandatory-key table (L98); present in example YAML (L126) and EnvParams table (L178). One gap: loader numbered-steps (L574-578) describe only DISTRIBUTIONAL_FIELDS handling; `attack_delay` is not named in the step-by-step recipe. Not a blocker — it delegates to existing `p_get` at `config_loader.py:262` — but the plan's Mandatory-key table at L98 contains an error in the legacy-column for wander entries that is a new concern (see NC-1 below). |
+| **HC-1** — parity test scope covers only 74 of 86 configs | PASS | Plan L762-798, Test Plan §(a) | Glob widened to four-glob pattern with `recursive=True`; coverage breakdown table added. Machine-verified: the four-glob pattern captures all 86 `predator_enabled`-carrying configs (74 experiment + 5 continual-stages + 6 verification + 1 environment/default). `2X2_area.yaml` confirmed present in `experiment/**/*.yaml` with `recursive=True`. See §"HC-1 glob verification" below. |
+| **C-CFG-3** — olfaction_parity_neutral wording | PASS | Plan L750 (CP1 desc), Revision Log L927 | Correctly reworded: "strip the single line `predator_enabled: false` (L10); `predators: []` is already present on L11." Confirmed against actual file: `predator_enabled: false` is on L10, `predators: []` on L11. |
+| **C-CFG-4** — atomic-commit note for CP1 | PASS | Plan L750 | Explicit atomic-commit boundary stated: "loader change, the `verify_noise.py` rewrite, and the 86-config migration sweep all land in a single atomic commit." |
+| **C-CFG-5** — positive control for JIT recompile test | PASS | Plan L754, Test Plan §(e) Part 2 | Positive control added: same-N different-class-ordering asserts `log.count("Compiling jax_step") == 2`. |
+| **C-CFG-6** — YAML comment convention for per-event vs per-episode | PASS | Plan L586-596 | YAML cadence-distinction convention section added. `damage: [lo, hi]` documented as per-event; distributional fields documented as per-episode. Canonical example with inline comments provided. |
+| `lose_interest_multiplier` mandatory-promotion semantic-change note | PASS | Plan L582 | Inline note added to loader section referencing the soft-default-to-mandatory semantic change; directs developer to add a v1.x → v2.0 note in the loader docstring. |
+
+### B-CFG-1 detailed analysis
+
+The reconciliation at plan L93-101 and L574-577 is internally consistent. The behaviour-conditional rule correctly resolves the original contradiction:
+
+- `behaviour: hunt` entries: DISTRIBUTIONAL_FIELDS are **mandatory** (`ValueError` on missing).
+- `behaviour: wander` / `static` entries: DISTRIBUTIONAL_FIELDS are **optional**; loader auto-fills `[0, 0]` and debug-logs. Correctly classified as an internal projection detail, not a user-facing fallback default. The wander/static code paths (`_wander_step`, `_hunt_step[wander_idx]` is never called) do not read these arrays.
+- Legacy `neutral_animals:` re-projection: treated as wander-equivalent; auto-fill `[0, 0]` is purely internal.
+
+The worked-example YAML comment (plan L140-143) and the loader numbered-steps (plan L574-577) are consistent with the table.
+
+**Edge case: `behaviour: hunt` entity with `properties_std: 0` (a scalar, not a list).** The plan (L91, schema description) says `properties_std` is mandatory. A scalar `0` would be read as a zero-vector `[0, 0, 0, 0, 0]` (the `_read_properties_std` helper handles this). This is not ambiguous; `properties_std` is not a DISTRIBUTIONAL_FIELD and has no `[low, high]` interpretation.
+
+**Edge case: `behaviour: hunt` entity where all five DISTRIBUTIONAL_FIELDS are present but one has value `0`.** The plan correctly handles this: `detection_range: 0` → degenerate range `[0, 0]` → sampled value `0.0` every episode (plan L349). No ambiguity.
+
+The B-CFG-1 reconciliation PASSES.
+
+### B-CFG-2 detailed analysis
+
+`attack_delay` now appears in four locations:
+
+1. **Schema description text** (plan L91): listed among the entity fields. PRESENT.
+2. **Mandatory-key table** (plan L98): explicitly stated as mandatory for all behaviour modes. PRESENT.
+3. **Example YAML** (plan L126): `attack_delay: 3` in the predator entry. PRESENT. (Not present in the wander entry, which is correct per the plan's choice to omit it from the example.)
+4. **EnvParams table** (plan L178): `animal_attack_delay | [N] int32 | — | post-attack cooldown`. PRESENT.
+
+The loader numbered-steps (plan L574-578) do not enumerate `attack_delay` explicitly but defer to the existing `p_get` at `config_loader.py:262`. This is acceptable as a documentation choice since `attack_delay` is not a DISTRIBUTIONAL_FIELD — the loader recipe's numbered-steps specifically describe how DISTRIBUTIONAL_FIELDS are processed.
+
+However, a new concern (NC-1) arises from row L98 of the Mandatory-key table, which is addressed below.
+
+B-CFG-2 is PARTIAL-PASS: the field is present in all four locations, but row L98 carries a factual error about the legacy column that creates a developer trap.
+
+### HC-1 glob verification
+
+Live verification with the project's Python environment:
+
+```
+glob('configs/experiment/**/*.yaml', recursive=True)  +
+glob('configs/continual/**/*.yaml', recursive=True)   +
+glob('configs/verification/**/*.yaml', recursive=True) +
+['configs/environment/default.yaml']
+= 91 total files, of which 86 carry `predator_enabled`
+```
+
+The 5 extra files (top-level `configs/continual/*.yaml` without `predator_enabled`) are correctly included in the glob but have no `predator_enabled` key, so the parity test's `predator_enabled`-migration assertion will simply find nothing to strip — no harm.
+
+Spot-check results:
+
+| Check | Result |
+|---|---|
+| `configs/environment/default.yaml` in glob | PASS — added as explicit entry |
+| `configs/experiment/2X2_area.yaml` in glob | PASS — `recursive=True` captures depth-0 files |
+| All 6 `configs/verification/*.yaml` in glob | PASS — confirmed by `find` |
+| All 5 `configs/continual/nmn_double_return_stages/*.yaml` in glob | PASS — confirmed by `find` + `grep` |
+
+HC-1 PASSES.
+
+### Incorporated suggestions verification
+
+| ID | Verification |
+|---|---|
+| C-CFG-3 | PASS — wording is accurate to the actual file on disk (L10/L11 confirmed). |
+| C-CFG-4 | PASS — atomic-commit note present in CP1 description. |
+| C-CFG-5 | PASS — positive control in Test Plan §(e) Part 2. |
+| C-CFG-6 | PASS — YAML cadence-distinction section at plan L586-596 with canonical comment examples. |
+
+### New surface check: `hunt_idx` / `wander_idx` / `static_idx` construction
+
+The plan specifies (plan L234, L544-547) that `hunt_idx`, `wander_idx`, `static_idx` are `pytree_node=False` Python int tuples on `EnvParams`, built at param-load time as:
+
+```python
+hunt_idx   = tuple(i for i, b in enumerate(params.animal_behaviours) if b == 'hunt')
+wander_idx = tuple(i for i, b in enumerate(params.animal_behaviours) if b == 'wander')
+static_idx = tuple(i for i, b in enumerate(params.animal_behaviours) if b == 'static')
+```
+
+**Are these computed deterministically from `animal_behaviours` at param-build time?** Yes. `animal_behaviours` is itself `pytree_node=False` (plan L164, L541), so it is fixed at load time. The index tuples cannot drift. The plan's revision note at L944 confirms this: "the constructor is a one-liner. No new design decision required."
+
+**Failure mode for a bad behaviour value (e.g., `behaviour: chase`).** The plan does not explicitly specify `ValueError` for an unrecognized behaviour string. The `ANIMAL_BEHAVIOUR_TO_INT` dict at plan L560 maps only `{"wander": 0, "hunt": 1, "static": 2}`. If a config author writes `behaviour: chase`, the integer-coding step (`ANIMAL_BEHAVIOUR_TO_INT["chase"]`) will raise a `KeyError` at load time — this is acceptable early-fail behaviour, though it is not explicitly documented as a `ValueError` with a clear message in the plan. The index-tuple construction would silently produce an empty tuple for all three behaviour categories (`hunt_idx = ()`, `wander_idx = ()`, `static_idx = ()`), which means the entity would be treated as `static` (no update, no draws) with no error. This is a silent misclassification risk if the integer-coding step is not reached before the tuple construction.
+
+**Assessment:** CONCERN-LEVEL (not a blocker). The risk is that a future config author who introduces a typo (`behaviour: "Hunt"` vs `behaviour: "hunt"`) would see the entity silently treated as static. The fix is simple: add an explicit validation step in `_load_animals()` that raises `ValueError(f"Unknown behaviour: {b!r}. Must be one of {list(ANIMAL_BEHAVIOUR_TO_INT)}")` before building the index tuples. This is a documentation and implementation note for the developer, not a plan-level blocker.
+
+### New concern surfaced by v0.2: NC-1 — Mandatory-key table L98 incorrectly states `attack_delay` is mandatory in the legacy `neutral_animals:` re-projection path
+
+**Finding:** Plan L98, Mandatory-key table, legacy column for `attack_delay` states: "mandatory (`p_get`)". This is incorrect. The current `neutral_animals:` loader path at `config_loader.py:330-366` does NOT read `attack_delay` from neutral entries. The actual legacy neutral loader reads only: `properties`, `properties_std`, `nociception_intensity` (soft-defaulted), `move_interval`, `patrol_area` (soft-defaulted), `spawn_area` (soft-defaulted), and `tag` (soft-defaulted). There is no `n_get(n, 'attack_delay')` call.
+
+**Consequence:** If a developer reads the plan's Mandatory-key table at L98 and implements `attack_delay` as mandatory during legacy re-projection for `neutral_animals:` entries, the following configs will fail to load (they have `neutral_animals:` entries without `attack_delay`):
+- `configs/verification/olfaction_parity_neutral.yaml` (the `neutral_animals:` entry at L12-20 has no `attack_delay`)
+- `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml` (parity-reference config — its two `neutral_animals:` entries at L108-126 have no `attack_delay`)
+- Every other config whose `neutral_animals:` entries lack `attack_delay` (confirmed: `olfaction_parity_neutral.yaml` has no `attack_delay` in its neutral section)
+
+This would cause CP1's parity test to fail at load time for these configs, not at the step-comparison level.
+
+**Correct behaviour for the legacy re-projection:** during `neutral_animals:` → `behaviour='wander'` re-projection, `animal_attack_delay` for those entries should be auto-filled to `0` (zero-int), not read via mandatory `p_get`. Wander entities never reach the attack-timer update path, so `0` is semantically correct and does not require a user-facing key.
+
+**Severity:** CONCERN (not a blocker, because the CP1 parity test itself will catch this if the developer implements it incorrectly — the test would fail at load time and the error message from `p_get` would point directly to the missing key). However, the Mandatory-key table as written will mislead the developer. The table's L98 legacy column should be corrected from "mandatory (`p_get`)" to "auto-fill `0` (wander entities never attack; no user-facing key required)".
+
+**Note:** Similarly, the Mandatory-key table L97 claims `damage` is mandatory for the legacy `neutral_animals:` re-projection path. The actual legacy neutral loader does not read `damage` at all (confirmed by reading `config_loader.py:330-366`). The `damage` field was not in scope as a blocker in the prior audit because the legacy neutrals simply have no `pred_damage`-equivalent in `EnvParams` today. Under the unified schema, wander entities will have `animal_damage` — the plan should specify that the legacy re-projection auto-fills `[0.0, 0.0]` for this field too, consistent with the DISTRIBUTIONAL_FIELDS auto-fill pattern. This is the same class of error as NC-1 for `attack_delay`.
+
+### Findings table
+
+| Severity | Location | Issue | Suggested fix |
+|---|---|---|---|
+| CONCERN | Plan L98 (Mandatory-key table, legacy column) | `attack_delay` stated as "mandatory (`p_get`)" for legacy `neutral_animals:` re-projection. Actual current loader does not read `attack_delay` from neutrals. Will cause CP1 parity test to fail at load time for configs like `olfaction_parity_neutral.yaml` and the parity-reference config if developer implements as written. | Correct the legacy column for `attack_delay` to: "auto-fill `0` (wander entities never attack; no user-facing key)". Same correction needed for `damage` in the legacy neutral column of L97. |
+| CONCERN | Plan L560, loader step 3 | No explicit validation of the `behaviour` string value against `ANIMAL_BEHAVIOUR_TO_INT`. A typo (`behaviour: "Hunt"`) silently produces empty index tuples and treats the entity as static. | Add explicit `ValueError` with message "Unknown behaviour: {b!r}. Must be one of {list(ANIMAL_BEHAVIOUR_TO_INT)}" in `_load_animals()` before building index tuples. Document this in the loader spec. |
+| NIT | Plan L574-578 (loader numbered-steps) | `attack_delay` not mentioned in the step-by-step loader recipe; only DISTRIBUTIONAL_FIELDS handling is described. A developer reading only step 3 will not know that `attack_delay` must also be read. | Add a step 3a or note in the loader recipe: "All non-distributional mandatory fields (`attack_delay`, `move_interval`, `damage`, etc.) are read via `p_get` for all behaviour modes (hunt and wander/static). For wander/static in the legacy path, `attack_delay` is auto-filled to `0` since the legacy schema never carried it." |
+
+### Checklist (re-audit scope)
+
+- [x] (1) Observation / Noise Modality Consistency — N/A (no change in v0.2, prior PASS stands)
+- [x] (2) Mandatory-Key Discipline — PARTIAL-PASS. B-CFG-1 fully resolved. B-CFG-2 present in all four required locations. New concern NC-1: Mandatory-key table L98 misstates the legacy neutral re-projection rule for `attack_delay` (and `damage`). Not a plan-level blocker but requires correction before CP1 to avoid developer error.
+- [x] (3) Static-Field / JIT Recompile Risk — PASS. `hunt_idx` / `wander_idx` / `static_idx` are `pytree_node=False`, computed from `animal_behaviours` (also static). C-CFG-5 positive control now in Test Plan §(e).
+- [x] (4) Known Latent-Bug Recurrences — N/A (no change in scope)
+- [x] (5) Schema Padding / Modality-Count — N/A (no change)
+- [x] (6) Cross-Config Coherence — PASS. HC-1 glob machine-verified; all 86 configs confirmed captured.
+
+### HC-1 Coverage Breakdown (verified)
+
+| Directory | Count in glob | `predator_enabled` count |
+|---|---:|---:|
+| `configs/experiment/**/*.yaml` (recursive) | 74 | 74 |
+| `configs/continual/**/*.yaml` (recursive) | 10 | 5 |
+| `configs/verification/**/*.yaml` (recursive) | 6 | 6 |
+| `configs/environment/default.yaml` (explicit) | 1 | 1 |
+| **Total** | **91** | **86** |
+
+The 5 continual configs without `predator_enabled` (top-level `configs/continual/*.yaml`) are harmlessly included — the migration sweep will simply find nothing to strip in those files.
+
+### Final verdict
+
+**ACCEPT-WITH-MINOR-REVISIONS.**
+
+All three blockers (B-CFG-1, B-CFG-2, HC-1) are resolved. The plan is ready for CP1 implementation with two non-blocking corrections that should be made to the Mandatory-key table before the developer reads it:
+
+1. **NC-1 (Concern):** Correct the Mandatory-key table at plan L97-98 to specify that `attack_delay` and `damage` for the legacy `neutral_animals:` re-projection path are **auto-filled** (to `0` and `[0.0, 0.0]` respectively), not read via mandatory `p_get`. This prevents a developer misreading the table from breaking CP1's parity test for configs like `olfaction_parity_neutral.yaml` and the parity-reference config (`01-interoNocicept_sameProp.yaml`).
+
+2. **Behaviour-string validation (Concern):** Add explicit `ValueError` for unrecognized `behaviour:` values in `_load_animals()`. Document in the loader spec.
+
+Neither concern requires a re-audit. The developer can apply these corrections inline as part of CP1 implementation and note them in the implementation report. If the CP1 parity test passes for all 86 configs, NC-1 was handled correctly.
+
+Audited by: env-config-auditor

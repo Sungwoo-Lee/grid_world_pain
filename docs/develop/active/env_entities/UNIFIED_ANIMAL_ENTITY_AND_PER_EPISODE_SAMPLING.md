@@ -9,7 +9,7 @@ aliases: [unified_animal_entity, env_entities_unified_animal, env_entities_step_
 
 # Env Refactor — Unified Animal Entity + Per-Episode Sampling of Behavioural Params
 
-> **Status**: PLANNED (v0.2 — post-review revision)
+> **Status**: PLANNED (v0.3 — sign-off revision, no further review cycle)
 > **Opened**: 2026-05-28
 > **Branch**: `v2.0` (from `v1.4@72186aa`, latest: `f0fe297`)
 > **Related**: [hypervigilance/01-interoNocicept_sameProp.yaml](../../../../configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml) (the parity-reference config), [code review](../../../reviews/env_entities_plan_review_code.md), [config audit](../../../reviews/env_entities_plan_audit_config.md), [FRONTMATTER_CONTRACT](../meta/FRONTMATTER_CONTRACT.md), [AGENT_PLAYBOOK](../../../AGENT_PLAYBOOK.md)
@@ -81,6 +81,12 @@ The user locked these in the design discussion. Briefly:
 4. **`damage_key` is reused 3× today** (`core.py:351, 398, 410`) — same key used for resource damage, predator damage, obstacle damage. That is a pre-existing PRNG bug (not technically a bug since `jax.random.uniform` with different shapes yields different streams, but it is suspicious). **Do not fix it in this refactor** — flag it as a separate issue if confirmed. Refactor must preserve this exact behaviour.
 5. **`predator_enabled: bool` flag** (`state.py:87`) currently disables the *predator path*. **Fully removed in CP1.** The 86 existing configs that reference this flag are migrated atomically in CP1: 85 of them set `predator_enabled: true` (the default — sed-stripped, no semantic change); 1 of them (`configs/verification/olfaction_parity_neutral.yaml`) sets `predator_enabled: false` and `predators: []` already on L11 — the migration is a one-line strip of `predator_enabled: false`, not a restructuring. After CP1 lands, the loader does not read the flag; configs that still carry the key raise `ValueError` (caught by the CP1 migration sweep itself).
 6. **`grid_world.py` + `renderer.py` + `renderer_v2.py`** all index `state.pred_pos` / `state.neutral_pos` for rendering. They need to switch to slicing `state.animal_pos` by class (using `select_by_class`). The visual output must remain byte-identical for the parity-reference config.
+7. **PRNG byte-parity in `jax_reset` requires per-type key splits to be preserved internally even when the stored arrays are unified.** This is the same conceptual principle as Risks item 1 (`update_animals` per-subset call pattern), but applied to `jax_reset`'s placement + property-sampling sections instead of `jax_step`'s animal updates. The unification of `pred_*` + `neutral_*` into a single `animal_*` storage layout MUST NOT propagate into the per-type key splits and per-type draw shapes used during reset. Three concrete sub-cases (all surfaced by `code-reviewer` in the v0.2 re-review as new blockers N1/N2/N3):
+   - **N1 — `per_entity` placement concat order** (`core.py:701-708`): today's concat is `[res, pred, obs, neutral]` and `resolve_overlaps_global` processes them sequentially via `lax.scan`, so the order determines tie-breaking when two entities collide in the same cell. The naive refactor to `[res, animal, obs]` puts obstacles after neutrals (today they come between predators and neutrals). For any of the 86 configs where an obstacle and a neutral could collide in spawn, byte-parity fails. **Fix**: keep the concat order `[res, pred, obs, neutral]` for the resolution scan even though the final stored array is `[res, animal=pred+neutral, obs]`. After resolution, slice back into per-type buffers and re-concatenate `animal_pos = jnp.concatenate([pred_pos_resolved, neutral_pos_resolved])` for storage. See File Changes → `jax_reset` for the exact recipe.
+   - **N2 — property-sampling 4-way `prop_key` split** (`core.py:775`): today splits `prop_key` 4-ways as `(prop_key_res, prop_key_pred, prop_key_obs, prop_key_neutral)` and calls `normal(prop_key_pred, (N_pred, V))` + `normal(prop_key_neutral, (N_neutral, V))` independently. Naively collapsing to a 3-way split or to a single `(N_animals, V)` draw breaks threefry parity in two ways: (a) `jax.random.split(key, 3)[1] ≠ jax.random.split(key, 4)[1]` — the keys themselves differ, so even the predator slice cannot byte-match; (b) `normal(prop_key_animal, (N_animals, V))[N_pred:]` does not byte-match `normal(prop_key_neutral, (N_neutral, V))` because they consume different keys. **Fix**: keep the 4-way split exactly. Sample `pred_property_sampled` with `prop_key_pred` at shape `(N_pred, V)`, sample `neutral_property_sampled` with `prop_key_neutral` at shape `(N_neutral, V)`, then concatenate (predators-first ordering) into `animal_property_sampled` for storage.
+   - **N3 — `placement_key` 6-way split** (`core.py:680-681`): today splits `placement_key` 6-ways as `(placement_key, res_key, pred_key, obs_key, neutral_key, resolve_key)`. The same split-arity issue as N2 applies: `jax.random.split(key, 5)` ≠ first 5 of `jax.random.split(key, 6)` because they are independent split arities, not prefix-related. If the developer naively reduces this to a 5-way split when collapsing pred + neutral into animal, `res_key`, `obs_key`, and `resolve_key` all change — and every legacy config's initial positions shift. **Fix**: keep the 6-way split exactly. Sample predator and neutral positions independently with `pred_key` and `neutral_key` at shapes `(N_pred, 2)` and `(N_neutral, 2)`, then assemble into the `[res, pred, obs, neutral]` resolution scan as in N1.
+
+   **General principle** (covers N1, N2, N3 and any future similar surface): for every PRNG-consuming step inside `jax_reset`, preserve today's per-type split-arity and per-type draw shapes internally. The unification is a **storage-layout** change, not a **random-stream-layout** change. The host-side `predator_indices = class_indices(params, 'predator')` and `neutral_indices = class_indices(params, 'neutral')` tuples (already on `EnvParams` via the v0.2 plan's `class_indices` helper) make the slice-back-and-concat step a one-liner. The developer applies this principle uniformly across N1/N2/N3 (and any reset-side PRNG draw the developer encounters that mixes predator and neutral state in today's code).
 
 ## Implementation Plan
 
@@ -92,11 +98,12 @@ A new top-level `environment.entities:` list. Each entry has fields: `class` (`p
 
 **Mandatory-key rule by behaviour (B-CFG-1 resolution).** The five distributional behavioural fields drive the predator state machine; for non-hunting entities they are unused. The rule is:
 
-| Field group | `behaviour: hunt` entry | `behaviour: wander` / `static` entry (unified `entities:` schema) | Legacy `predators:` / `neutral_animals:` re-projection |
-|---|---|---|---|
-| `class`, `behaviour`, `tag`, `count`, `properties`, `properties_std`, `nociception_intensity`, `move_interval`, `damage`, `spawn_area`, `patrol_area` | **mandatory** — missing → `ValueError` | **mandatory** | already mandatory today |
-| `attack_delay` | **mandatory** | **mandatory** (matches today's behaviour: `p_get('attack_delay')` at `config_loader.py:262` is unconditional) | mandatory (`p_get`) |
-| 5 distributional fields (`detection_range`, `max_stamina`, `stamina_recovery_rate`, `hunt_stamina_threshold`, `lose_interest_multiplier`) | **mandatory** — missing → `ValueError` (no fallback default, per project rule) | **optional** — if missing, loader auto-fills `[0, 0]` and records a debug-log entry. The wander / static branch never reads these fields, so the auto-fill is an internal projection detail, not a user-facing fallback default. | **internal auto-fill** — legacy neutrals don't carry these fields at all; the loader auto-fills `[0, 0]` during re-projection. This is an internal projection detail (not a fallback default on a user-facing key), so it does not violate the "no fallback defaults" rule. |
+| Field group | `behaviour: hunt` entry | `behaviour: wander` / `static` entry (unified `entities:` schema) | Legacy `predators:` re-projection | Legacy `neutral_animals:` re-projection |
+|---|---|---|---|---|
+| `class`, `behaviour`, `tag`, `count`, `properties`, `properties_std`, `nociception_intensity`, `move_interval`, `spawn_area`, `patrol_area` | **mandatory** — missing → `ValueError` | **mandatory** | already mandatory today (`p_get`) | already mandatory today (`p_get` in current loader at `config_loader.py:330-366`) |
+| `damage` | **mandatory** | **mandatory** | mandatory (`p_get`) | **internal auto-fill `[0.0, 0.0]`** — current loader at `config_loader.py:330-366` does NOT read `damage` from neutral entries at all (legacy schema never carried it). The unified schema introduces `animal_damage`, but for wander entities the damage code path is masked off by `animal_is_damaging`, so the auto-fill is an internal projection detail, not a user-facing fallback default. **(NC-1 fix — v0.3.)** |
+| `attack_delay` | **mandatory** | **mandatory** (matches today's behaviour: `p_get('attack_delay')` at `config_loader.py:262` is unconditional) | mandatory (`p_get`) | **internal auto-fill `0`** — current loader at `config_loader.py:330-366` does NOT read `attack_delay` from neutral entries at all (legacy schema never carried it). Wander entities never reach the attack-timer update path, so `0` is semantically correct. Auto-fill is an internal projection detail, not a user-facing fallback default. **(NC-1 fix — v0.3.)** |
+| 5 distributional fields (`detection_range`, `max_stamina`, `stamina_recovery_rate`, `hunt_stamina_threshold`, `lose_interest_multiplier`) | **mandatory** — missing → `ValueError` (no fallback default, per project rule) | **optional** — if missing, loader auto-fills `[0, 0]` and records a debug-log entry. The wander / static branch never reads these fields, so the auto-fill is an internal projection detail, not a user-facing fallback default. | mandatory (read as scalar from legacy YAML, stored as degenerate range `[s, s]`) | **internal auto-fill `[0, 0]`** — legacy neutrals don't carry these fields at all; the loader auto-fills during re-projection. This is an internal projection detail (not a fallback default on a user-facing key), so it does not violate the "no fallback defaults" rule. |
 
 This resolves the apparent contradiction the config auditor flagged between "Missing → raise `ValueError`" (loader code) and "loader fills these with zeros; the wander branch ignores them" (worked example): the `ValueError` applies only to `behaviour: hunt`; the zero-fill applies to `behaviour: wander` / `static` entries and to the legacy `neutral_animals:` re-projection path. The loader docstring documents this explicitly.
 
@@ -168,6 +175,8 @@ All `[num_animals, ...]` arrays in the table below are pytree-node JAX arrays. `
 | `hunt_idx` | `tuple[int, ...]`, len `N_pred` | ✓ | host-side index tuple for animals with `behaviour == 'hunt'`; used by `update_animals` to slice the hunt subset (preserves PRNG draw shape `(N_pred,)`) |
 | `wander_idx` | `tuple[int, ...]`, len `N_neutral` | ✓ | host-side index tuple for animals with `behaviour == 'wander'`; preserves PRNG draw shape `(N_neutral,)` |
 | `static_idx` | `tuple[int, ...]`, len `N_static` | ✓ | host-side index tuple for animals with `behaviour == 'static'`; no PRNG draws |
+| `predator_indices` | `tuple[int, ...]`, len `N_pred_class` | ✓ | host-side index tuple for animals with `class == 'predator'`; used by `jax_reset` to slice the predator subset during placement (N1 fix) and property sampling (N2 fix), preserving per-type draw shapes `(N_pred, 2)` and `(N_pred, V)` byte-identical to today. v0.3. |
+| `neutral_indices` | `tuple[int, ...]`, len `N_neutral_class` | ✓ | host-side index tuple for animals with `class == 'neutral'`; symmetric to `predator_indices`. v0.3. |
 | `predator_tags` (legacy alias, @property) | derived | — | returns `tuple(animal_tags[i] for i in class_indices('predator'))`. Read by `dreamer_srl_main.py:522-523`. See "Legacy aliases" below. |
 | `neutral_tags` (legacy alias, @property) | derived | — | returns `tuple(animal_tags[i] for i in class_indices('neutral'))`. Read by `dreamer_srl_main.py:522-523`. See "Legacy aliases" below. |
 | `animal_property` | `[N, V]` float | — | olfactory signature mean |
@@ -490,6 +499,13 @@ Plumbed through `src/behavior/accumulators.py` (`build_episode_log_dict`) — sa
 
 **Remove** (lines 19–24, 27–29, 74–89, 104–110): all `pred_*` and `neutral_*` fields on both `EnvState` and `EnvParams`. **Also remove `predator_enabled: bool`** (the 86 configs that reference it are migrated in CP1's sweep — see CP1 spec).
 
+**Explicitly remove the existing `predator_tags` and `neutral_tags` `struct.field` declarations** (M1 fix — v0.3, code-reviewer follow-up):
+
+- `src/environment/state.py:89` — the declaration `predator_tags: tuple = struct.field(pytree_node=False, default=())` (or equivalent) MUST be removed from the `EnvParams` class body.
+- `src/environment/state.py:110` — the declaration `neutral_tags: tuple = struct.field(pytree_node=False, default=())` MUST be removed from the `EnvParams` class body.
+
+Both are required for the B3 `@property predator_tags` / `@property neutral_tags` accessors to take effect — if the static `struct.field` declarations stay, the dataclass field shadows the property and the legacy alias never fires (consumers like `dreamer_srl_main.py:522-523` would read an empty tuple).
+
 **Add** to `EnvState`:
 
 ```python
@@ -545,6 +561,11 @@ animal_tags: tuple = struct.field(pytree_node=False)         # len N strings
 hunt_idx: tuple = struct.field(pytree_node=False)            # tuple[int, ...], len N_pred
 wander_idx: tuple = struct.field(pytree_node=False)          # tuple[int, ...], len N_neutral
 static_idx: tuple = struct.field(pytree_node=False)          # tuple[int, ...], len N_static
+# Static per-class index tuples (N1/N2 fix, v0.3 — used by jax_reset to slice
+# predator / neutral subsets during placement + property sampling, preserving
+# today's per-type PRNG draw shapes (N_pred, ...) / (N_neutral, ...)).
+predator_indices: tuple = struct.field(pytree_node=False)    # tuple[int, ...], len N_pred_class
+neutral_indices: tuple = struct.field(pytree_node=False)     # tuple[int, ...], len N_neutral_class
 ```
 
 Plus the `@property` legacy accessors `predator_tags` / `neutral_tags` defined on the `EnvParams` class body (see "Legacy aliases" earlier in this section, B3 fix).
@@ -571,15 +592,35 @@ DISTRIBUTIONAL_FIELDS = (
 
 1. If `environment.entities` is present → parse the unified list directly.
 2. Else, build the unified list by re-projecting `environment.predators` (each entry gets `class='predator'`, `behaviour='hunt'`) and `environment.neutral_animals` (each entry gets `class='neutral'`, `behaviour='wander'`). Concatenate in that order so per-class metric slicing yields the same layout as today.
-3. For each entry, for each field in `DISTRIBUTIONAL_FIELDS`:
+3. **Validate the behaviour string** for every entry **before** building integer codes or the `hunt_idx` / `wander_idx` / `static_idx` tuples (v0.3 — env-config-auditor follow-up). If `entry['behaviour']` is not in `ANIMAL_BEHAVIOUR_TO_INT` (i.e., not one of `{'wander', 'hunt', 'static'}`), raise:
+   ```python
+   raise ValueError(
+       f"Unknown behaviour {entry['behaviour']!r} for entity tag={entry.get('tag', '?')}. "
+       f"Must be one of {list(ANIMAL_BEHAVIOUR_TO_INT)}."
+   )
+   ```
+   Without this guard, a typo such as `behaviour: "Hunt"` (capital H) silently produces empty `hunt_idx`, `wander_idx`, and `static_idx` tuples and the entity is treated as static (no update, no draws) — a silent misclassification.
+4. For each entry, for each field in `DISTRIBUTIONAL_FIELDS`:
    - **If `behaviour == 'hunt'`**: field is **mandatory**. Read scalar or `[low, high]`; if scalar `s`, treat as `[s, s]`. Missing → raise `ValueError` (no fallback default, per project rule).
    - **If `behaviour ∈ {'wander', 'static'}`**: field is **optional**. Read scalar or `[low, high]` if present; if scalar `s`, treat as `[s, s]`. If missing, auto-fill `[0, 0]` and log at debug level. This is an internal projection detail (the wander / static code path never reads these arrays), not a fallback default on a user-facing key — see "Mandatory-key rule by behaviour" above (B-CFG-1).
    - **Legacy `predators:` entries** behave as `behaviour='hunt'` (mandatory rule). **Legacy `neutral_animals:` entries** behave as `behaviour='wander'` (optional / auto-fill `[0, 0]`). This preserves today's behaviour: legacy neutrals don't carry these fields and the auto-fill is purely an internal re-projection.
-4. Build all `animal_*` jnp arrays at the bottom of the function and return them.
+5. **Non-distributional mandatory fields** (`move_interval`, `nociception_intensity`, `properties`, `properties_std`, `spawn_area`, `patrol_area`, `tag`) are read via `p_get` for **all behaviour modes** (hunt and wander/static). For the unified `entities:` schema, missing → `ValueError`. For legacy `predators:` / `neutral_animals:` paths, behaviour is exactly as today's loader.
+6. **Legacy `neutral_animals:` re-projection — auto-fill for fields the legacy schema never carried** (v0.3, NC-1 fix from env-config-auditor):
+   - `animal_attack_delay` for each re-projected neutral entry is auto-filled to `0` (zero-int). The current legacy loader at `config_loader.py:330-366` does NOT call `n_get(n, 'attack_delay')`, and wander entities never reach the attack-timer update path. Reading `attack_delay` as mandatory during re-projection would break load for `configs/verification/olfaction_parity_neutral.yaml` and the parity-reference config `01-interoNocicept_sameProp.yaml` (their `neutral_animals:` entries have no `attack_delay`).
+   - `animal_damage` for each re-projected neutral entry is auto-filled to `[0.0, 0.0]`. The current legacy loader does NOT read `damage` from neutral entries either; the unified schema introduces `animal_damage` as a shared `[N, 2]` array, and for wander entities the damage code path is masked off by `animal_is_damaging`. The auto-fill is an internal projection detail; the user-facing legacy YAML does not require `damage` on a `neutral_animals:` entry.
+   - These two auto-fills are the same class of "internal projection detail" as the DISTRIBUTIONAL_FIELDS auto-fill — not a user-facing fallback default.
+7. Build all `animal_*` jnp arrays at the bottom of the function and return them.
 
 (The loader no longer reads `predator_enabled` — that flag is fully removed in this CP; the 86 affected configs are migrated atomically with the schema change.)
 
 **Note on `lose_interest_multiplier` mandatory promotion** (C-CFG-config auditor concern). The current loader at `config_loader.py:263` uses `p.get('lose_interest_multiplier', 2.0)` — a soft default of `2.0`. The refactor promotes the field to mandatory for `behaviour: hunt`. All 86 existing predator entries carry an explicit value, so no real-world config breaks; flag the change in the loader docstring as a v1.x → v2.0 semantic-change note.
+
+**Explicitly drop the `predator_tags=` / `neutral_tags=` kwargs from the `EnvParams(...)` constructor call** (M2 fix — v0.3, code-reviewer follow-up):
+
+- `src/environment/config_loader.py:484` — the line `predator_tags=predator_tags,` (or equivalent kwarg) inside the `EnvParams(...)` constructor MUST be removed. The `predator_tags` field no longer exists on `EnvParams` (the `@property` accessor replaces it — see B3 + M1).
+- `src/environment/config_loader.py:500` — the line `neutral_tags=neutral_tags,` MUST be removed for the same reason.
+
+Implicit in "replace lines 228–366 with `_load_animals()`", but flagged here so the developer cannot miss it. After the M1+M2 changes land, the `EnvParams(...)` constructor call inside `config_loader.py` should pass only the new unified `animal_*` arrays + tags (`animal_tags=animal_tags`) — not the per-class tag tuples.
 
 `get_mandatory` semantics: `environment.predators` and `environment.neutral_animals` are kept as `get_mandatory` reads (legacy invariant — every existing config has them, even if empty list). When `entities:` is present, both legacy keys become optional and the loader allows them to be missing or `None`. Document this in the loader docstring.
 
@@ -610,16 +651,75 @@ The cadence is determined by field name (membership in `DISTRIBUTIONAL_FIELDS`),
 - Lines 321–330: replace the two separate update calls with one `update_animals` call (the per-subset slicing + scatter happens inside).
 - Lines 395–404: change damage logic per §"Damage logic" above (use `at_damaging` for damage + `hit_predator`).
 - Lines 440–443: `info['hit_neutral']` uses **pre-step** `state.animal_pos` masked by `~animal_is_damaging` (B5 fix), not post-step `new_animal_pos`. See §"Damage logic" for the exact diff.
-- Lines 495–515: `dist_to_pred` and `dist_to_neutral` derived from `state.animal_pos` masked by `params.animal_is_damaging` (predator distances) and `~animal_is_damaging` (neutral distances). `dist_per_predator` and `dist_per_neutral` similarly — kept as legacy info-dict aliases (C5). `dist_per_animal` is the unmasked vector.
+- Lines 495–515: `dist_to_pred` and `dist_to_neutral` derived from `state.animal_pos` masked by `params.animal_is_damaging` (predator distances) and `~animal_is_damaging` (neutral distances). `dist_per_predator` and `dist_per_neutral` similarly — kept as legacy info-dict aliases (C5). `dist_per_animal` is the unmasked vector. **Zero-animal Python-level fallback (M3 — v0.3 code-reviewer follow-up):** today's code uses an `if state.pred_pos.shape[0] > 0 else 99.0` host-side guard against empty arrays. Preserve this exactly: in the new code, use `if state.animal_pos.shape[0] > 0 else 99.0` for the unified case, AND apply the per-class mask via `jnp.where(animal_is_damaging, dist_per_animal, 99.0).min()` — over an all-`99.0` array this still returns `99.0`, byte-parity holds. The empty-N fallback must be kept for the rare zero-animal configs (none in the 86 today, but the field exists).
 - Lines 528–553: update `state._replace(...)` to use the new `animal_*` field names.
 
-**Patch** `jax_reset` (lines 657–817):
+**Patch** `jax_reset` (lines 657–817). **PRNG byte-parity principle — v0.3 (N1/N2/N3 fix from code-reviewer re-review):** the unification of `pred_*` + `neutral_*` into a single `animal_*` storage layout MUST NOT propagate into the per-type key splits or per-type draw shapes used during reset. See Risks item 7 for the principle. The recipe below preserves the exact split-arity, draw-shape, and resolution-order today's `jax_reset` uses, then slices into per-type buffers and re-concatenates into unified arrays only at the end:
 
-- Lines 666: extend the 5-way key split to 6-way (`key, agent_key, placement_key, body_key, property_key, animal_episode_key`).
-- Lines 673–676: replace the `num_pred`, `num_neutral` derivation with `num_animals = params.animal_property.shape[0]`.
-- Lines 678–751 (placement modes): the per-entity and per-type placement scans currently treat predator and neutral as separate spawn-area groups. Re-project: in `per_entity` mode, concatenate `res / animal / obs` spawn areas (was `res / pred / obs / neutral`). In `per_type` mode, the YAML's `placement.types:` definition is loaded by the existing per-type logic — verify the config-loader produces the right `type_entity_map` indices when animals are unified. **Detailed check needed in CP3**: per-type placement reads `type_entity_map` indices, which today partition the flat `[res, pred, obs, neutral]` index space; the loader's `type_entity_map` builder needs updating to use `[res, animal, obs]` ordering. The reference config uses `per_entity` mode, so the per-type path is exercised only by configs that opt into it — list them in CP3 and verify all 74 parity tests.
-- After placement, add the per-episode uniform sampling block (§"Per-episode sampling inside `jax_reset`" above).
-- Lines 776–784 (property sampling): collapse `pred_property_sampled` + `neutral_property_sampled` into one `animal_property_sampled`. Use a single `prop_key_animal`.
+- Lines 666: extend the **outer** 5-way key split to 6-way (`key, agent_key, placement_key, body_key, property_key, animal_episode_key`). Prefix-stable: the first 5 sub-keys byte-match today.
+- Lines 673–676: replace the `num_pred`, `num_neutral` derivation with `num_animals = params.animal_property.shape[0]`. Keep the per-class counts available as host-side constants computed from the static index tuples: `N_pred = len(params.predator_indices)`, `N_neutral = len(params.neutral_indices)`.
+- **Lines 680–681 — `placement_key` 6-way split (N3 fix, v0.3):** keep today's 6-way split exactly. The fact that the stored array is unified does NOT change the key-split arity. Concretely:
+   ```python
+   # Preserve today's 6-way split byte-for-byte.
+   placement_key, res_key, pred_key, obs_key, neutral_key, resolve_key = (
+       jax.random.split(placement_key, 6)
+   )
+   ```
+   Each sub-key feeds the same per-type position sample today's code uses. Reducing this to a 5-way split (e.g., `[placement_key, res_key, animal_key, obs_key, resolve_key]`) would re-derive `res_key`, `obs_key`, and `resolve_key` from a different split arity, shifting every legacy config's initial resource positions, obstacle positions, and final resolved positions. **DO NOT** collapse this split.
+- Lines 678–751 (placement modes): the per-entity and per-type placement scans currently treat predator and neutral as separate spawn-area groups.
+  - **`per_entity` mode (N1 fix, v0.3):** Sample per-type positions independently with their respective sub-keys at today's draw shapes — `pred_pos_init` at `(N_pred, 2)` with `pred_key`, `neutral_pos_init` at `(N_neutral, 2)` with `neutral_key`. Then **keep today's `[res, pred, obs, neutral]` concat order for the resolution scan**:
+     ```python
+     # N1: preserve today's resolve-scan order [res, pred, obs, neutral]
+     # so resolve_overlaps_global processes obstacles AFTER predators but
+     # BEFORE neutrals, matching today byte-for-byte.
+     all_positions   = jnp.concatenate([res_pos, pred_pos_init, obs_pos, neutral_pos_init], axis=0)
+     all_spawn_areas = jnp.concatenate([res, params.animal_spawn_area[jnp.asarray(params.predator_indices)],
+                                        obs, params.animal_spawn_area[jnp.asarray(params.neutral_indices)]], axis=0)
+     all_positions   = resolve_overlaps_global(all_positions, all_spawn_areas, resolve_key)
+     ```
+     After resolution, **slice back to per-type buffers**:
+     ```python
+     res_pos_resolved     = all_positions[:N_res]
+     pred_pos_resolved    = all_positions[N_res : N_res + N_pred]
+     obs_pos_resolved     = all_positions[N_res + N_pred : N_res + N_pred + N_obs]
+     neutral_pos_resolved = all_positions[N_res + N_pred + N_obs : N_res + N_pred + N_obs + N_neutral]
+     ```
+     **Re-concatenate into the unified `animal_pos`** for storage, predators-first ordering (matches the loader's class ordering):
+     ```python
+     # Storage-layout reconcat: predators-first ordering matches class_indices.
+     animal_pos = jnp.concatenate([pred_pos_resolved, neutral_pos_resolved], axis=0)
+     ```
+     This is the same per-subset principle as B1's `update_animals` fix — preserve per-type call shapes for the PRNG-consuming step, unify only at the storage step.
+  - **`per_type` mode**: the YAML's `placement.types:` definition is loaded by the existing per-type logic — verify the config-loader produces the right `type_entity_map` indices when animals are unified. **Detailed check needed in CP3**: per-type placement reads `type_entity_map` indices, which today partition the flat `[res, pred, obs, neutral]` index space; the loader's `type_entity_map` builder needs updating to use `[res, animal, obs]` ordering. The reference config uses `per_entity` mode, so the per-type path is exercised only by configs that opt into it — list them in CP3 and verify all 86 parity tests. The same per-subset-key principle applies if any random draws are made inside `per_type` placement — preserve today's per-type draw shapes (consult the existing code before changing the key-split arity).
+   - **Loader-side helper for index tuples** (M1+M2 follow-on): the loader exposes `predator_indices = class_indices(params, 'predator')` and `neutral_indices = class_indices(params, 'neutral')` as `pytree_node=False` Python int tuples on `EnvParams` (next to `hunt_idx` / `wander_idx` / `static_idx`). The `jax_reset` slice-back step reads these — they are JIT-static constants under the trace.
+- After placement, add the per-episode uniform sampling block (§"Per-episode sampling inside `jax_reset`" above). Note: for zero-animal configs the calls become `uniform(ek1, (0,), low=..., high=...)` and produce `(0,)` arrays — threefry handles zero-shape draws cleanly. The CP2 test includes a zero-animal smoke (M6).
+- **Lines 776–784 — property sampling (N2 fix, v0.3): preserve today's 4-way `prop_key` split exactly.** The unification of `pred_property_sampled` + `neutral_property_sampled` into one `animal_property_sampled` is a STORAGE-layout change, not a PRNG-stream-layout change. Concretely:
+   ```python
+   # N2: preserve today's 4-way split byte-for-byte. DO NOT collapse to a 3-way split.
+   prop_key_res, prop_key_pred, prop_key_obs, prop_key_neutral = (
+       jax.random.split(property_key, 4)
+   )
+   # Sample predator and neutral property arrays at today's per-type shapes.
+   # The N=0 case for either class is handled cleanly by jax.random.normal at shape (0, V).
+   pred_property_sampled    = _sample_property(
+       prop_key_pred,
+       params.animal_property[jnp.asarray(params.predator_indices)],
+       params.animal_property_std[jnp.asarray(params.predator_indices)],
+   )
+   neutral_property_sampled = _sample_property(
+       prop_key_neutral,
+       params.animal_property[jnp.asarray(params.neutral_indices)],
+       params.animal_property_std[jnp.asarray(params.neutral_indices)],
+   )
+   # Storage-layout reconcat: predators-first ordering (matches class_indices).
+   # Because predators occupy indices 0..N_pred-1 and neutrals occupy
+   # N_pred..N_animals-1 in the unified layout (the loader builds it this way),
+   # plain concat is sufficient — no scatter required.
+   animal_property_sampled = jnp.concatenate(
+       [pred_property_sampled, neutral_property_sampled], axis=0
+   )
+   ```
+   Reducing the 4-way split to 3-way (or to a single `(N_animals, V)` `normal` call) would break threefry parity in two compounding ways: (a) `jax.random.split(key, 3)[1] ≠ jax.random.split(key, 4)[1]` — the sub-keys themselves differ; (b) `normal(prop_key_animal, (N_animals, V))[N_pred:]` would not byte-match `normal(prop_key_neutral, (N_neutral, V))` even with the right sub-key, because they consume different keys. Keep the 4-way split. The `_sample_property` helper, if it does not exist today, is a one-liner wrapping `params.animal_property[indices] + std * jax.random.normal(...)` that mirrors today's per-type code.
 - Lines 786–815 (state assembly): replace `pred_*` and `neutral_*` initialisers with `animal_*` initialisers (per the `EnvState` schema above). `animal_state = jnp.zeros(N, dtype=jnp.int32)` (PATROL=0; semantically inert for wander/static).
 
 #### `src/environment/sensor.py`
@@ -747,8 +847,8 @@ Same as the renderers — replace `state.pred_pos` / `state.neutral_pos` reads w
 
 The refactor lands in six checkpoints. CP1 alone is the **minimum viable landing** (schema + loader + backward-compat shim + parity tests). CP2–CP5 add the per-episode sampling layer. CP6 is the analysis-side cleanup; until CP6, the legacy `dist_per_predator` / `dist_per_neutral` / `pred_*` arrays survive as compatibility aliases.
 
-- [ ] **CP1 — Unified state + loader + backward-compat parity + `predator_enabled` migration sweep.** Implement `EnvState` / `EnvParams` field changes (including full removal of `predator_enabled` and the per-subset hunt_idx / wander_idx / static_idx static tuples), `update_animals` (per-subset call pattern — see §"`update_animals()` dispatch" — with all distributional sampling no-ops: bounds set to `[scalar, scalar]` from legacy YAML), `config_loader._load_animals`, the legacy `@property predator_tags` / `neutral_tags` on `EnvParams`, the `sense_extero_nociception` refactor (B2), and the `scripts/verify_noise.py` `EnvState` constructor rewrite (B4). Pre-step `hit_neutral` asymmetry preserved (B5). **Atomic commit boundary (B-CFG-config-auditor C-CFG-4)**: the loader change, the `verify_noise.py` rewrite, and the 86-config migration sweep all land in a single atomic commit so no intermediate state has 86 configs failing to load. **Atomically migrate all 86 configs that reference `predator_enabled`**: (a) sed-strip the 85 `predator_enabled: true` lines (no behavioural change); (b) hand-migrate `configs/verification/olfaction_parity_neutral.yaml` — strip the single line `predator_enabled: false` (L10); `predators: []` is already present on L11. **Pre-flight (C2)**: run `grep -rln "mode: per_type" configs/` to enumerate per-type-placement configs before touching loader code — surface them in the implementation report so the developer can verify the `type_entity_map` re-projection on each one. **Verifies:** `pytest tests/env/test_unified_parity.py` (new) passes — for each of all **86** migrated configs (see Test Plan §(a) for the full glob), running 100 steps from seed 0 produces byte-identical `obs` vectors before and after the refactor, AND the parity assertion includes `state.animal_pos[wander_idx]` (catches B1 regressions) and `info['hit_neutral']` / `info['hit_predator']` (catches B5 regressions). The existing parity scripts `scripts/verification/check_olfaction_parity.py` and `scripts/verify_noise.py` (post-rewrite) also exit 0. **No new YAML fields are read in this CP** — the per-episode bounds come from re-projecting the legacy scalar to `[scalar, scalar]`.
-- [ ] **CP2 — Per-episode sampling at reset.** Add the 5-way key split in `jax_reset` and the `jax.random.uniform` calls; populate the 5 `animal_*_sampled` fields. **Verifies:** with all legacy configs (degenerate ranges) the parity gate still passes byte-for-byte (uniform`[s, s]` ≡ `s`). A new test `tests/env/test_per_episode_sampling.py` verifies, **using a config explicitly with non-degenerate ranges** (e.g., `detection_range: [0, 5]`, 4 predators — degenerate ranges would fail the divergence check spuriously, C4): (a) same `key` ⇒ same sampled values; (b) different `key` ⇒ different sampled values; (c) N entities of the same class give N independent samples (not N copies); (d) **cross-field independence**: `detect`, `max_stamina`, `recovery`, `hunt_thresh`, `lose_interest` samples are statistically independent across episodes (correlation `< 0.5` over 100 keys per field pair — guards against accidentally reusing one subkey for multiple fields); (e) **per-episode-sampled fields live on `EnvState`, not `EnvParams`** — assert `hasattr(state, 'animal_detect_sampled')` and `not hasattr(params, 'animal_detect_sampled')` (code-reviewer Missed-failure-mode #1); (f) **wander/static get unused per-episode draws** — assert `state.animal_state[wander_idx]` and `state.animal_state[static_idx]` stay at 0 after 1000 steps (intentional shape uniformity, code-reviewer Missed-failure-mode #3 / #4). 
+- [ ] **CP1 — Unified state + loader + backward-compat parity + `predator_enabled` migration sweep.** Implement `EnvState` / `EnvParams` field changes (including full removal of `predator_enabled`, the per-subset hunt_idx / wander_idx / static_idx static tuples, AND the new `predator_indices` / `neutral_indices` static tuples for `jax_reset`'s per-class PRNG parity — v0.3 N1/N2 fix), `update_animals` (per-subset call pattern — see §"`update_animals()` dispatch" — with all distributional sampling no-ops: bounds set to `[scalar, scalar]` from legacy YAML), `config_loader._load_animals` (including the v0.3 behaviour-string `ValueError` guard and the NC-1 auto-fill of `attack_delay=0` + `damage=[0.0, 0.0]` for legacy `neutral_animals:` re-projection), the legacy `@property predator_tags` / `neutral_tags` on `EnvParams` (AND the explicit removal of today's `predator_tags` / `neutral_tags` `struct.field` declarations on `state.py:89, 110` and the constructor kwargs on `config_loader.py:484, 500` — M1+M2 v0.3 fix), the `sense_extero_nociception` refactor (B2), the `scripts/verify_noise.py` `EnvState` constructor rewrite (B4), and the **v0.3 `jax_reset` PRNG-parity preservation work (N1/N2/N3)**: keep the 6-way `placement_key` split (N3), keep the 4-way `prop_key` split (N2), keep the `[res, pred, obs, neutral]` resolution scan order in `per_entity` placement (N1), and slice back to per-type buffers before re-concatenating into `animal_pos` / `animal_property_sampled` for storage. Pre-step `hit_neutral` asymmetry preserved (B5). The M3 zero-N fallback for `dist_to_pred` / `dist_to_neutral` is preserved. **Atomic commit boundary (B-CFG-config-auditor C-CFG-4)**: the loader change, the `verify_noise.py` rewrite, and the 86-config migration sweep all land in a single atomic commit so no intermediate state has 86 configs failing to load. **Atomically migrate all 86 configs that reference `predator_enabled`**: (a) sed-strip the 85 `predator_enabled: true` lines (no behavioural change); (b) hand-migrate `configs/verification/olfaction_parity_neutral.yaml` — strip the single line `predator_enabled: false` (L10); `predators: []` is already present on L11. **Pre-flight (C2)**: run `grep -rln "mode: per_type" configs/` to enumerate per-type-placement configs before touching loader code — surface them in the implementation report so the developer can verify the `type_entity_map` re-projection on each one. **Verifies:** `pytest tests/env/test_unified_parity.py` (new) passes — for each of all **86** migrated configs (see Test Plan §(a) for the full glob), running 100 steps from seed 0 produces byte-identical `obs` vectors before and after the refactor, AND the parity assertion includes `state.animal_pos[wander_idx]` (catches B1 regressions), `state.animal_pos[predator_indices]` and `state.animal_pos[neutral_indices]` (catches N1 placement-order regressions), `state.animal_property_sampled[predator_indices]` and `state.animal_property_sampled[neutral_indices]` (catches N2 property-sampling regressions), `info['hit_neutral']` / `info['hit_predator']` (catches B5 regressions), and the M4-tightened info-dict sweep keys. The existing parity scripts `scripts/verification/check_olfaction_parity.py` and `scripts/verify_noise.py` (post-rewrite) also exit 0. **No new YAML fields are read in this CP** — the per-episode bounds come from re-projecting the legacy scalar to `[scalar, scalar]`.
+- [ ] **CP2 — Per-episode sampling at reset.** Add the 5-way key split in `jax_reset` and the `jax.random.uniform` calls; populate the 5 `animal_*_sampled` fields. **Verifies:** with all legacy configs (degenerate ranges) the parity gate still passes byte-for-byte (uniform`[s, s]` ≡ `s`). A new test `tests/env/test_per_episode_sampling.py` verifies, **using a config explicitly with non-degenerate ranges** (e.g., `detection_range: [0, 5]`, 4 predators — degenerate ranges would fail the divergence check spuriously, C4): (a) same `key` ⇒ same sampled values; (b) different `key` ⇒ different sampled values; (c) N entities of the same class give N independent samples (not N copies); (d) **cross-field independence**: `detect`, `max_stamina`, `recovery`, `hunt_thresh`, `lose_interest` samples are statistically independent across episodes (correlation `< 0.5` over 100 keys per field pair — guards against accidentally reusing one subkey for multiple fields); (e) **per-episode-sampled fields live on `EnvState`, not `EnvParams`** — assert `hasattr(state, 'animal_detect_sampled')` and `not hasattr(params, 'animal_detect_sampled')` (code-reviewer Missed-failure-mode #1); (f) **wander/static get unused per-episode draws** — assert `state.animal_state[wander_idx]` and `state.animal_state[static_idx]` stay at 0 after 1000 steps (intentional shape uniformity, code-reviewer Missed-failure-mode #3 / #4); (g) **zero-animal smoke (v0.3, M6)** — use a config with `entities: []`, verify reset returns no-error and all `animal_*` fields have a leading dim of 0, and that `info['hit_*']` flags are `False` and `dist_to_*` fall back to `99.0` (M3 guard).
 - [ ] **CP3 — `entities:` schema in config loader.** Add the new `environment.entities:` YAML path; loader prefers it over legacy if both present (with warning). Update `placement.types:` handling: ensure `type_entity_map` uses `[res, animal, obs]` indexing in `per_type` mode. **Pre-flight (C2)**: enumerate `per_type`-mode configs via `grep -l "mode: per_type" configs/`; for each one, verify the loader produces the same `type_entity_map` indices after unification (predators-first, then neutrals, preserves today's `[res, pred, obs, neutral]` index space mapped to `[res, animal, obs]`). Surface the list of `per_type` configs in the CP3 implementation report. **Verifies:** a new `configs/experiment/v2_smoke/01-entities-smoke.yaml` config that uses the unified schema for the same parity-reference setup produces byte-identical behaviour to `01-interoNocicept_sameProp.yaml`. New test `tests/env/test_entities_schema.py` covers: (a) the unified config loads; (b) byte-parity vs legacy; (c) loader warns when both legacy and unified sections are present; (d) configs that still contain the removed `predator_enabled` key raise `ValueError` with a clear migration message (sanity check; the CP1 sweep should have removed all of them already); (e) a 4-entity config with `behaviour: [hunt, wander, hunt, static]` loads correctly and the resulting `hunt_idx == (0, 2)`, `wander_idx == (1,)`, `static_idx == (3,)` (behaviour-mask axis test from code-reviewer Missed-failure-mode #2).
 - [ ] **CP4 — Sensor + damage + step path parity.** Patch `sense_visual` (class scatter), `sense_extero_nociception` (animal_is_damaging mask — B2), `get_observation` olfactory (unified `animal_chem`), and `jax_step` damage logic (`animal_is_damaging` + the pre-step `hit_neutral` asymmetry — B5). **Verifies:** the CP1 parity test (all **86** migrated configs × 100 steps) still passes — this CP shouldn't *add* parity coverage but must *not break* it. Additionally, a new `tests/env/test_visual_parity.py` runs one episode (1000 steps) on the parity-reference config and asserts the visual one-hot per cell is byte-identical to a pinned reference dump (committed under `tests/env/fixtures/visual_parity_ref.npz`). **Extero-noc parity gate (B2)**: the same fixture also pins the extero-noc channel per step, byte-identical to today. **Trainer verification**: grep `src/algorithms/` and `src/models/` for `state.pred_` / `state.neutral_` / `pred_pos` / `neutral_pos`; document the grep result. With the `predator_tags` / `neutral_tags` legacy aliases in place (B3), `dreamer_srl_main.py:522-523` requires no edit and the test passes.
 - [ ] **CP5 — Distributional schema + per-episode logging.** Add YAML parsing for `[low, high]` ranges on the five fields under scope; emit `Episode/sampled_*_<tag>` WandB metrics. **Verifies:** new `tests/env/test_distributional_yaml.py` covers (a) scalar `5` → degenerate range `[5, 5]`, (b) `[0, 5]` → bounds stored correctly, (c) malformed range like `[5]` raises `ValueError`. End-to-end smoke: run 1000 training steps with `configs/experiment/v2_smoke/02-entities-distributional.yaml` (NEW — has `detection_range: [0, 5]` per predator) and confirm the 5 `sampled_*` WandB metrics appear with non-degenerate values. **JIT-recompile check (C3)**: capture `jax_log_compiles` output via `jax.config.update("jax_log_compiles", True)`; build env-step jit for config A (`1 pred + 2 neutral`, `detection_range: [0, 5]`), run 10 steps; build for config B (same counts, `detection_range: [2, 7]`), run 10 steps; assert `log.count("Compiling jax_step") == 1` (regex check). **Positive control (C-CFG-5)**: swap `animal_classes` ordering — same N, different per-entity class ordering like `[pred, neutral, pred]` vs `[pred, pred, neutral]` — and assert `log.count("Compiling jax_step") == 2` (recompile IS expected because `animal_classes` is `pytree_node=False` and the hunt_idx / wander_idx tuples differ). Documents the boundary: same N + same class ordering = no recompile; same N + different class ordering = recompile.
@@ -782,8 +882,14 @@ For each `config_path in configs`:
 2. Load with the **new** loader path.
 3. Run 100 steps from seed 0 (using `jax_reset(params, jax.random.PRNGKey(0))` then 100 `jax_step` calls with actions `[0, 1, 2, 3, 4] * 20`).
 4. Assert `jnp.array_equal(old_obs[t], new_obs[t])` for every step `t`.
-5. Assert `jnp.array_equal(old_state.<field>, new_state.<field>)` for every common field (post-renaming: predator/neutral fields → matching `animal_*` slices, including `state.animal_pos[wander_idx]` to catch B1 regressions).
-6. Assert `info['hit_neutral']` and `info['hit_predator']` byte-equal old (catches B5 regressions).
+5. Assert `jnp.array_equal(old_state.<field>, new_state.<field>)` for every common field (post-renaming: predator/neutral fields → matching `animal_*` slices). Explicit per-axis slices to assert (v0.3 — covers B1 + N1 + N2 regressions):
+   - `state.animal_pos[hunt_idx]` vs old `state.pred_pos` (B1 — per-subset PRNG in `update_animals`).
+   - `state.animal_pos[wander_idx]` vs old `state.neutral_pos` (B1).
+   - `state.animal_pos[predator_indices]` vs old `state.pred_pos` immediately after reset, before any step (N1 — `jax_reset` placement order).
+   - `state.animal_pos[neutral_indices]` vs old `state.neutral_pos` immediately after reset (N1).
+   - `state.animal_property_sampled[predator_indices]` vs old `state.pred_property_sampled` (N2 — `prop_key` 4-way split preservation).
+   - `state.animal_property_sampled[neutral_indices]` vs old `state.neutral_property_sampled` (N2).
+6. Assert `info['hit_neutral']` and `info['hit_predator']` byte-equal old (catches B5 regressions). Also assert the M4-tightened info-dict sweep set (see Test Plan §(h)) — every legacy info-dict key carries the same value as today's reference dump.
 
 **Failure mode:** any single step diff blocks CP1.
 
@@ -808,6 +914,7 @@ Use a config where `detection_range: [0, 5]`, `max_stamina: [20, 40]`, etc. with
 5. **Cross-field independence (C4)**: collect samples from 100 distinct keys for each of the 5 sampled fields (`detect`, `max_stamina`, `recovery`, `hunt_thresh`, `lose_interest`); assert pairwise Pearson correlation `|r| < 0.5` for every pair. Guards against accidentally reusing one subkey across fields.
 6. **State-vs-params placement (code-reviewer Missed-failure-mode #1)**: assert `hasattr(state, 'animal_detect_sampled')` AND `not hasattr(params, 'animal_detect_sampled')`. Per-episode samples live on `EnvState`, never on `EnvParams`.
 7. **Wander/static get unused draws (code-reviewer Missed-failure-mode #3, #4)**: use a 4-entity config with `behaviour: [hunt, wander, hunt, static]`; reset with key `K`, run 1000 `jax_step` calls; assert `state.animal_state[wander_idx]` and `state.animal_state[static_idx]` stay at 0 throughout. Intentional shape uniformity — wander/static entities carry the five `*_sampled` fields but the code paths never read them.
+8. **Zero-animal smoke (M6 — v0.3, code-reviewer follow-up)**: use a config with `entities: []` (or equivalently empty `predators: []` + `neutral_animals: []`). Reset with key `K`, run 100 `jax_step` calls. Assert: (a) no exception during reset (the `uniform(ek1, (0,), low=..., high=...)` calls return shape-`(0,)` arrays cleanly); (b) `state.animal_pos.shape == (0, 2)` and all five `state.animal_*_sampled` fields have shape `(0,)`; (c) `info['hit_predator'] == False`, `info['hit_neutral'] == False` across all 100 steps; (d) `dist_to_pred` and `dist_to_neutral` fall back to `99.0` (the M3 zero-N guard). Guards against threefry / `jnp.min` edge cases on empty arrays.
 
 #### (c) Backward-compat test — `tests/env/test_backward_compat_configs.py` (NEW, CP1)
 
@@ -840,7 +947,13 @@ YAML fixtures under `tests/env/fixtures/`:
 
 #### (h) Info-dict legacy-alias parity — `tests/env/test_info_dict_aliases.py` (NEW, CP1)
 
-C5 from code-reviewer: the original plan addressed `hit_neutral` (B5) but did not enumerate the full set of legacy info-dict keys. Sweep `grep -n "info\[" src/environment/core.py` and confirm every legacy info-dict key is preserved name-for-name on the new step output. Required key list (minimum — extend if grep finds more):
+C5 from code-reviewer: the original plan addressed `hit_neutral` (B5) but did not enumerate the full set of legacy info-dict keys. **Grep pattern (M4 — v0.3, code-reviewer follow-up):** use a two-pattern sweep that catches both subscripted assignments (`info['key'] = value`) and dict-literal initialisation (`info = {...}`). The single pattern `info\[` misses dict-literal keys; use:
+
+```bash
+grep -nE "(info\[|info\s*=\s*\{)" src/environment/core.py
+```
+
+Required key list (minimum — extend if the tightened grep finds more):
 
 - `info['hit_predator']` — from `at_damaging` (POST-step), unchanged semantics.
 - `info['hit_neutral']` — from `at_neutral_pre` (PRE-step, B5 fix), preserves today's asymmetry.
@@ -848,6 +961,7 @@ C5 from code-reviewer: the original plan addressed `hit_neutral` (B5) but did no
 - `info['damage_obstacle']` — unchanged (no animal-side change).
 - `info['damage_hiding_predator']` — preserved if today's code emits it; verify via grep.
 - `info['dist_per_predator']` / `info['dist_per_neutral']` — derived from `info['dist_per_animal']` masked by `animal_is_damaging` / `~animal_is_damaging`. Legacy aliases kept for one release cycle.
+- `info['agent_in_bush']` (M5 — v0.3, code-reviewer follow-up) — reads `state.obs_pos`, NOT animal positions, so no animal-refactor change is needed for this key. Included in the C5 sweep for completeness, so a regression that accidentally drops it from `info` would be caught.
 
 Test loads the parity-reference config, runs 100 steps from seed 0, and asserts each legacy key (a) is present in `info` and (b) has the same value as the pre-refactor reference dump. Failure of any key blocks CP1.
 
@@ -893,6 +1007,51 @@ Launch a 1000-step PPO training on `configs/experiment/v2_smoke/02-entities-dist
 ---
 
 ## Revision log
+
+### v0.3 — 2026-05-28 (sign-off revision, no further review cycle)
+
+Plan revised by `senior-developer` to address the three NEW blockers and six minor concerns the two reviewers surfaced when re-reviewing v0.2 (commit `6e5e03c`). Code-reviewer's verdict on v0.2 was REJECT-with-N1/N2/N3-blockers but explicitly authorised "Senior-developer can sign off directly" after v0.3 — no further review cycle is required because all three new blockers share a single mechanical fix-pattern (preserve per-type PRNG splits internally). Config-auditor's verdict on v0.2 was ACCEPT-WITH-MINOR-REVISIONS — the two CONCERN-level items are incorporated inline.
+
+**Reviewer reports addressed (v0.2 → v0.3):**
+
+- [code review — Re-review of v0.2](../../../reviews/env_entities_plan_review_code.md) — verdict **REJECT** (B1–B5 all PASS in v0.2; three NEW blockers N1/N2/N3 in `jax_reset` PRNG threading + six minor concerns M1–M6). Resolved in v0.3.
+- [config audit — Re-audit of v0.2](../../../reviews/env_entities_plan_audit_config.md) — verdict **ACCEPT-WITH-MINOR-REVISIONS** (one CONCERN-level Mandatory-key-table error NC-1 + one CONCERN-level behaviour-string validation gap). Resolved in v0.3.
+
+**Blockers addressed**
+
+| ID | Source | What changed | Where |
+|---|---|---|---|
+| N1 | code-reviewer | `jax_reset` per_entity placement: keep today's `[res, pred, obs, neutral]` resolution-scan order even though the stored array is `[res, animal=pred+neutral, obs]`. Sample per-type positions independently with their respective `pred_key` / `neutral_key` at today's draw shapes, run the resolution scan in the legacy order, then slice back to per-type buffers and re-concatenate `animal_pos = jnp.concatenate([pred_pos_resolved, neutral_pos_resolved])` for storage. Added new `predator_indices` / `neutral_indices` `pytree_node=False` index tuples to `EnvParams` for the slice-back step. | §"File Changes → `jax_reset`" → per_entity placement bullet; EnvParams field-layout table (new rows); state.py Add block (new field declarations); CP1 description; Test Plan §(a) step 5 explicit per-axis slices |
+| N2 | code-reviewer | `jax_reset` property sampling: keep today's 4-way `prop_key` split exactly. Sample `pred_property_sampled` with `prop_key_pred` at `(N_pred, V)`, sample `neutral_property_sampled` with `prop_key_neutral` at `(N_neutral, V)`, then concatenate (predators-first) into `animal_property_sampled`. Reducing to a 3-way or 1-way collapse would break threefry parity in two compounding ways (split-arity changes the sub-keys; slicing a single big draw would consume the wrong key). | §"File Changes → `jax_reset`" → property-sampling bullet; CP1 description; Test Plan §(a) step 5 explicit per-axis slices |
+| N3 | code-reviewer | `jax_reset` placement-key 6-way split: keep today's `(placement_key, res_key, pred_key, obs_key, neutral_key, resolve_key)` 6-way split exactly. Reducing to a 5-way split would shift `res_key`, `obs_key`, AND `resolve_key` because `jax.random.split(key, 5) ≠` first 5 of `jax.random.split(key, 6)` — these are independent split arities, not prefix-related. | §"File Changes → `jax_reset`" → `placement_key` bullet; CP1 description |
+| (general principle) | code-reviewer | New Risks item 7 — "PRNG byte-parity in `jax_reset` requires per-type key splits to be preserved internally even when the stored arrays are unified" — symmetric to Risks item 1 for `jax_step`. Documents the general principle covering N1/N2/N3 and any future similar surface (unification is a storage-layout change, NOT a random-stream-layout change). | §"Analysis → Risks" item 7 |
+
+**Minor concerns addressed (M1–M6, NC-1, behaviour-string validation)**
+
+| ID | Source | What changed | Where |
+|---|---|---|---|
+| M1 | code-reviewer | Explicit "Remove the existing `predator_tags: tuple = struct.field(pytree_node=False)` declaration at `src/environment/state.py:89` AND the `neutral_tags` declaration at `state.py:110`" added to the File Changes section. Required for the B3 `@property` strategy to take effect — if the static field declarations stay, they shadow the property and the legacy alias never fires. | File Changes → `src/environment/state.py` (new explicit removal bullet) |
+| M2 | code-reviewer | Explicit "Drop `predator_tags=`/`neutral_tags=` from the `EnvParams(...)` constructor call at `config_loader.py:484, 500`" added to the File Changes section. The fields no longer exist on `EnvParams`. | File Changes → `src/environment/config_loader.py` (new explicit drop bullet) |
+| M3 | code-reviewer | Explicit zero-N Python-level fallback (`if state.animal_pos.shape[0] > 0 else 99.0`) preserved for the `dist_to_pred` / `dist_to_neutral` block. Documented in File Changes → `jax_step` patch (line-495–515 bullet). | File Changes → `jax_step` patch (dist_to_* bullet) |
+| M4 | code-reviewer | Test §(h) grep pattern tightened from `info\[` to the two-pattern sweep `(info\[|info\s*=\s*\{)` to catch both subscripted assignments AND dict-literal initialisation in `core.py`. | Test Plan §(h) |
+| M5 | code-reviewer | `info['agent_in_bush']` added to the §(h) info-dict legacy-alias sweep set (reads `state.obs_pos`, NOT animal positions, so no animal-refactor change is needed — included for completeness against regression). | Test Plan §(h) |
+| M6 | code-reviewer | Zero-animal smoke added to the CP2 test: a config with `entities: []` is reset + 100 steps, asserting no exception, correct empty shapes, and the M3 99.0 fallback. CP2 checkpoint description updated. | Test Plan §(b) step 8; CP2 description (sub-item g) |
+| NC-1 | env-config-auditor | Mandatory-key table (plan §"Unified config schema") corrected: the legacy `neutral_animals:` re-projection column now correctly states `attack_delay` and `damage` are **auto-filled** (to `0` and `[0.0, 0.0]` respectively), NOT read via mandatory `p_get`. Today's `config_loader.py:330-366` does not call `n_get(n, 'attack_delay')` or `n_get(n, 'damage')` on neutrals; reading them as mandatory during re-projection would break load for `configs/verification/olfaction_parity_neutral.yaml` and the parity-reference config `01-interoNocicept_sameProp.yaml`. Loader numbered-steps section (`_load_animals()`) explicitly adds step 6 documenting this auto-fill. The legacy column of the table is now its own column (separate from `predators:` re-projection) to avoid ambiguity. | §"Unified config schema" Mandatory-key table (split into 5-column form); §"File Changes → `config_loader.py`" loader numbered-steps (new step 6) |
+| behaviour-string validation | env-config-auditor | Added explicit `ValueError(f"Unknown behaviour {entry['behaviour']!r} for entity tag={entry.get('tag', '?')}. Must be one of {list(ANIMAL_BEHAVIOUR_TO_INT)}.")` raised inside `_load_animals()` BEFORE building integer codes or `hunt_idx`/`wander_idx`/`static_idx` tuples. Prevents the silent-misclassification trap where a typo like `behaviour: "Hunt"` (capital H) produces empty index tuples and the entity is treated as static. | §"File Changes → `config_loader.py`" loader numbered-steps (new step 3) |
+
+**Non-blocking suggestions — incorporated inline (no additional v0.3 items)**
+
+All non-blocking suggestions from the v0.2 review cycle (C1–C5, C-CFG-3 through C-CFG-6, code-reviewer's Missed-failure-modes 1–5) were already incorporated in v0.2 and remain so in v0.3. The v0.3 micro-revision touches only the specific blockers and minor concerns listed above.
+
+**Non-blocking suggestions — deferred (unchanged from v0.2)**
+
+The four deferral items from v0.2 (`lose_interest_multiplier` mandatory-promotion note resolved inline; `placement.mode: per_entity` soft-default cleanup → separate plan; `name` vs `tag` field semantics → preserved as-is; `damage_key` reuse triage → separate plan) remain deferred. No new items added to this list in v0.3.
+
+**New open questions surfaced during this revision**
+
+- **None of consequence.** The N1/N2/N3 fix introduces `predator_indices` / `neutral_indices` as new `pytree_node=False` index tuples on `EnvParams`, constructed deterministically from `animal_classes` (also `pytree_node=False`) — same construction pattern as `hunt_idx` / `wander_idx` / `static_idx` from v0.2. The behaviour-string `ValueError` guard is purely additive (pre-existing typos already KeyError at the `ANIMAL_BEHAVIOUR_TO_INT["typo"]` step; the explicit `ValueError` just upgrades the error message and ensures it fires before the silent-misclassification path). The Mandatory-key table NC-1 correction is a documentation fix, not a design change. No design decision required.
+
+**Sign-off note.** Code-reviewer explicitly authorised "Senior-developer can sign off on v0.3 directly" in the v0.2 re-review (`docs/reviews/env_entities_plan_review_code.md` final verdict) because the three new blockers all share a single mechanical fix-pattern (preserve per-type PRNG splits internally). Once that principle is documented in the Risks section, the developer applies it uniformly. CP1 implementation starts after this commit lands; v0.3 is the authoritative plan for the `developer` agent.
 
 ### v0.2 — 2026-05-28 (post-review revision)
 
