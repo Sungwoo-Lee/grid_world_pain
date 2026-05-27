@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `nmn_diagnosis` topic.
 
 **Folder definition**: NMN performance diagnosis findings
-**Insights**: 15
-**Last updated**: 2026-05-16
+**Insights**: 16
+**Last updated**: 2026-05-28
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-28 | 02:17 | `20260528_0217_episode_direction_4x3_framework_two_papers` | `project_plan.md` rewritten from 760-line Nature MI staged plan (G1′/G2′ gates, T/P modulator split, ~138–168 run budget) to 138-line stable direction context. Project rebranded EPISODE (Emergence of Pain In Simulated Organismic & Dynamic Environments). 4 behavioral categories of pain-like behavior (avoidance / recovery / managing conflict needs / hypervigilance) × 3 levels of analysis (behavioral / representational / algorithmic). Two papers committed: Nature Machine Intelligence (neuro + robotics — "pain is more than nociception") + NeurIPS (ML — neuromodulation-inspired modulators unify perceptual + hyperparameter + continual-learning). Both at perspective-plus-pilot calibration — demonstrate framework plausibility, NOT exhaustively solve any category. v8 null becomes evidence FOR the framework rather than a failure. Extends [[20260516_1504_symposium_substrate_right_rhetoric_wrong]] + [[20260516_1505_target_one_acknowledge_many_defer_full_coverage]]. |
 | 2026-05-16 | 15:09 | `20260516_1509_na_lc_natural_target_for_r2_anchor` | NA/LC is the natural targeted system for the NMN paper because the R2 anchor's modulator phasic burst at regime change IS the canonical Aston-Jones & Cohen 2005 LC-NA signature. v5 names NA/LC explicitly in §1 + §3 + frontmatter. |
 | 2026-05-16 | 15:08 | `20260516_1508_v5_last_rhetorical_round_before_experiments` | PI pace flag: project cycled through 4 versions of direction memo + concept memo + lineage investigation + active-inference memo + 4-professor symposium in 4 days; marginal improvement shrinking; empirical floor unchanged since 2026-05-13. Stop rule: v5 is the LAST rhetorical round; next decision is whether to authorise experimental execution. |
 | 2026-05-16 | 15:07 | `20260516_1507_gamma_bellman_not_forward_pass_filmable` | γ_Bellman cannot be carried by forward-pass FiLM: GRU update-gate is per-unit recurrent-state retention, not value-function horizon. Clean γ_Bellman lives at the loss (TD-target γ(c)), not in the forward pass. v4/v5 follow Lee 2024 §6 and name γ_Bellman as out-of-substrate. Two independent reviews caught this (math-reviewer flag d + rl-bayesian-dl v1 §8 Q3). |

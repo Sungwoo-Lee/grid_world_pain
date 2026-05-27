@@ -59,4 +59,5 @@ The 2026-05-16 impactful-vs-reasonable symposium ran four professor agents (neur
 - [[20260516_1508_v5_last_rhetorical_round_before_experiments]] (nmn_diagnosis, 2026-05-16) — PI pace flag: project cycled through 4 versions of direction memo + concept memo
 - [[20260516_1509_na_lc_natural_target_for_r2_anchor]] (nmn_diagnosis, 2026-05-16) — Given the refined target-one constraint, NA/LC (noradrenergic / locus coeruleus)
 - [[20260516_1512_multi_agent_symposium_pattern]] (subagent_engineering, 2026-05-16) — Multi-agent symposium pattern (evolution of the v2 research chain): 4 professors
+- [[20260528_0217_episode_direction_4x3_framework_two_papers]] (nmn_diagnosis, 2026-05-28) — project_plan.md rewritten from 760-line Nature MI staged plan to 138-line stable
 <!-- END BACKLINKS -->

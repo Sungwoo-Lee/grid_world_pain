@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 22
-**Last updated**: 2026-05-25
+**Insights**: 24
+**Last updated**: 2026-05-28
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-28 | 02:18 | `20260528_0218_git_lock_parallel_session_contamination` | When `.git/index.lock` from a parallel Claude session clears and your `git add <file> && git commit` runs, the commit consumes EVERYTHING currently staged in the index — including files staged by the queued parallel session, despite staging by name only. Concrete contamination: a 1-file diary commit ended up with `.gitignore` + `train_command-agent.sh` from a parallel session. Recovery: `git diff --cached --stat` before commit; if a parallel commit lands on top of a contaminated one, use `git commit -C <hash>` to re-create it after the reset rather than blind `--soft HEAD~1`. Refines the project's "stage by name only" rule with the parallel-session caveat. |
+| 2026-05-28 | 02:15 | `20260528_0215_foam_excludes_required_not_search_exclude` | VSCode's `search.exclude` and `files.watcherExclude` do NOT cover the Foam wikilink indexer — Foam has its own `foam.files.ignore` setting. On this NAS-backed remote-SSH workspace with 300+ markdown files, omitting it made Foam's activation take 329,724 ms (5.5 min); adding it dropped to 3,729 ms (3.7 s — 88× speedup). Configure three exclude layers in `.vscode/settings.json`: `files.watcherExclude`, `search.exclude`, `foam.files.ignore`. Include `**/docs/project/references/**/sources/**` (PDFs) and `**/docs/diary/**` in the Foam-specific list. Confirmed via `Developer: Startup Performance` profiler. |
 | 2026-05-25 | 22:58 | `20260525_2258_claude_code_statusline_rate_limits_official` | Claude Code now pipes `rate_limits.five_hour.used_percentage`, `.resets_at`, and matching `seven_day` fields directly into the statusline stdin JSON — same numbers as `claude.ai/settings/usage`, no auth or scraping. Obsoletes ccusage / accessToken-polling / local-transcript aggregation for the usage-display use case. Percentages refresh once per API turn (data comes from last API response); pair with `refreshInterval: 30` in settings.json so the reset-countdown text ticks live during idle. Implemented as two-line statusline at `~/.claude/statusline-command.sh` + `~/.claude/statusline_render.py`. Extends [[20260508_1826_statusline_jq_ifs_pct]] (same pattern: prefer pre-calculated JSON fields). |
 | 2026-05-18 | 17:37 | `20260518_1737_wandb_post_crash_frozen_state_misread` | When a WandB run crashes, `run.summary` keys stay frozen at the last logged values and `_runtime` stops incrementing — neither signal leaks the run's liveness state. The 2026-05-13 14:20 re-summary read R2.6's frozen post-crash summary keys (the runs had died 14.5h earlier) and described them as "in-flight progress at 29% elapsed", a misframing caught only when the user pointed out "There is no running training" on 2026-05-14. Fix: always check `run.state` (running / finished / failed / crashed) before quoting summary keys as live progress. |
 | 2026-05-18 | 15:16 | `20260518_1516_wandb_log_dict_timesteps_key` | WandB `define_metric("Episode/*", step_metric="timesteps")` requires `"timesteps"` to be a key INSIDE the log_dict on every `wandb.log` call — passing it only via `step=` kwarg silently breaks the x-axis binding and metrics render as single bars instead of per-step traces. Second gotcha: patterns are case-sensitive (`episode/*` won't match keys logged as `Episode/foo`). Fix at commit `2da1a33`: include `"timesteps": policy_step` + `"iteration": iter_num` inside each log_dict; align all `define_metric` patterns to uppercase. Project-wide rule across rPPO + Dreamer + dreamer-srl. |

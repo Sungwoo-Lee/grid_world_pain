@@ -59,4 +59,5 @@ Two related git-worktree gotchas surfaced repeatedly during the v2 build. (1) Wh
 ## Backlinks
 - [[20260516_1510_worktree_misses_post_branch_main_assets]] (subagent_engineering, 2026-05-16) — Background-session worktrees branched from origin/main miss lit-review assets th
 - [[20260519_1810_bg_isolation_blocks_edit_not_bash]] (subagent_engineering, 2026-05-19) — In bg (background-job) sessions, the worktree-isolation guard blocks the Edit an
+- [[20260528_0218_git_lock_parallel_session_contamination]] (cluster_ops, 2026-05-28) — When .git/index.lock from a parallel Claude session clears and your `git add <fi
 <!-- END BACKLINKS -->

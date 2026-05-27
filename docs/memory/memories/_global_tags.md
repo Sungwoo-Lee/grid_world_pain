@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-05-25
+**Last updated**: 2026-05-28
 
 ---
 
@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 
 ## Change history
 
+- 2026-05-28: 4 insights from the EPISODE project_plan rewrite + Foam wikilink convention + VSCode startup fix session (`20260528_0215_foam_excludes_required_not_search_exclude`, `20260528_0216_foam_wikilinks_filename_as_id_sparse_aliases`, `20260528_0217_episode_direction_4x3_framework_two_papers`, `20260528_0218_git_lock_parallel_session_contamination`) reused existing tags `meta`, `learned_lesson`, `decision`, `memory`, `design`, `nmn` — no new tags promoted.
 - 2026-05-25: 1 insight from the Claude Code statusline / `rate_limits.*` session (`20260525_2258_claude_code_statusline_rate_limits_official`) reused existing tags `meta`, `learned_lesson`, `decision` — no new tags promoted.
 - 2026-05-19: 2 insights from the notebooklm community-skill → official `notebooklm-py` package swap session (`20260519_1809_notebooklm_py_official_skill_install`, `20260519_1810_bg_isolation_blocks_edit_not_bash`) reused existing tags `skill`, `learned_lesson`, `decision`, `meta`, `worktree`, `subagent` — no new tags promoted.
 - 2026-05-19: 3 insights from the dreamer-srl v2 perf-diagnosis + JAX-Dreamer perf-retrofit history session (`20260519_1507_dreamer_srl_v2_cpu_buffer_regression`, `20260519_1508_dreamer_jax_perf_retrofit_4_phases`, `20260519_1509_nnx_lax_scan_split_merge_pattern`) reused existing tags `dreamer`, `learned_lesson`, `design`, `decision`, `meta` — no new tags promoted.

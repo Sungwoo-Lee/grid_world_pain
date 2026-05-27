@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `memory_system_design` topic.
 
 **Folder definition**: Claude memory system's own design decisions
-**Insights**: 9
-**Last updated**: 2026-05-16
+**Insights**: 10
+**Last updated**: 2026-05-28
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-28 | 02:16 | `20260528_0216_foam_wikilinks_filename_as_id_sparse_aliases` | Project-wide doc-linking convention adopted: `[[filename]]` wikilinks default for new cross-doc references (resolved by Foam at runtime; survives file moves); `aliases: [<id>]` opt-in only for ~10–20 god-node docs (survives renames). Old `[text](path.md)` links kept; no bulk migration. Filename stem IS the id — no separate `id:` field. 6 load-bearing docs aliased (project_plan, NEUROMODULATION_ALGORITHM, ENVIRONMENT_SUMMARY, FRONTMATTER_CONTRACT, memory/CLAUDE.md, AGENT_PLAYBOOK). Convention doc at `docs/develop/active/meta/doc_linking_convention.md`; CLAUDE.md bullet under Project-Wide Rules. Same pattern shape as [[20260509_1620_documentation_framing_policy]]: policy promoted from one layer (memory tree) to all doc-producing surfaces. |
 | 2026-05-16 | 14:32 | `20260516_1432_karpathy_graphify_adaptation_rationale` | Memory v2 adopted four Karpathy LLM Wiki primitives (wikilinks + backlinks + lint + contradiction-flag) and four Graphify primitives conceptually (god-nodes + surprising-connections + GRAPH_REPORT format + edge confidence), then extended with bitemporal `valid_until` + `confidence` fields and a first-class conversation-records-as-graph-nodes layer. Deliberately did NOT merge the live code-graph into the memory layer (kept as gitignored sibling). The adaptation rationale is what makes v2 distinct and what future v3 needs to retrace. |
 | 2026-05-16 | 14:31 | `20260516_1431_v2_three_role_architecture` | Memory v2 separates code/memory knowledge into three surfaces with distinct lifetimes: curated session insights (docs/memory/memories/), live regenerable code-graph (src/graphify-out/, gitignored), and dated immutable code-snapshots (docs/memory/code_snapshots/). Bridged by /memorize's opt-in snapshot prompt at Step 2 and /recall's god-node cross-reference hint. Different epistemic kinds get different homes; agents route to the right surface for the question type. |
 | 2026-05-13 | 23:10 | `20260513_2310_orphan_memory_branch_rewrite` | When a worktree branch carrying a single .claude-memory insight commit falls behind its base by N commits and another session edits the same docs/memory/ index files in the meantime, the merge produces synthetic index-only conflicts — the insight body itself is unique. Cleaner pattern: rewrite the insight body fresh on the current base via `git show <orphan-branch>:<path>`, regenerate indexes from CURRENT counts, drop the orphan branch. ~5 min; linear history; orphan commit survives 30 days in reflog as safety net. |
