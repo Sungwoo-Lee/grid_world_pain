@@ -267,6 +267,11 @@ def _load_animals(config: Config):
                     f"or a 2-element list [low, high]; got {val!r}."
                 )
             lo, hi = float(val[0]), float(val[1])
+            if hi < lo:
+                raise ValueError(
+                    f"Animal entity {entity_label!r} (index {idx}): '{field}' range "
+                    f"must satisfy low <= high; got [{lo}, {hi}]."
+                )
         else:
             lo = hi = float(val)
         return lo, hi
@@ -313,6 +318,7 @@ def _load_animals(config: Config):
                     'behaviour': beh,
                     'tag_raw': tag_raw,
                     'tag_label': tag_label,
+                    'type_label': f'Entity[{i_raw}]',
                     'property': _read_properties(ent, f'Entity[{i_raw}]'),
                     'property_std': _read_properties_std(ent, f'Entity[{i_raw}]'),
                     'nociception': ent.get('nociception_intensity', 0.0),
@@ -344,6 +350,7 @@ def _load_animals(config: Config):
                     'behaviour': 'hunt',
                     'tag_raw': tag_raw,
                     'tag_label': tag_label,
+                    'type_label': 'Predator',
                     'property': _read_properties(p, 'Predator'),
                     'property_std': _read_properties_std(p, 'Predator'),
                     'nociception': p.get('nociception_intensity', 0.9),
@@ -374,6 +381,7 @@ def _load_animals(config: Config):
                     'behaviour': 'wander',
                     'tag_raw': tag_raw,
                     'tag_label': tag_label,
+                    'type_label': 'Rabbit',
                     'property': _read_properties(n, 'Neutral Animal'),
                     'property_std': _read_properties_std(n, 'Neutral Animal'),
                     'nociception': n.get('nociception_intensity', 0.0),
@@ -525,7 +533,7 @@ def _load_animals(config: Config):
         visual_channel_list.append(ANIMAL_CLASS_TO_VIS_CHANNEL[cls])
         classes_tuple.append(cls)
         behaviours_tuple.append(beh)
-        tags_tuple.append(_normalise_tag(e['tag_raw'], i, e['tag_label']))
+        tags_tuple.append(_normalise_tag(e['tag_raw'], i, e.get('type_label', e['tag_label'])))
 
         if beh == 'hunt':
             hunt_idx_list.append(i)

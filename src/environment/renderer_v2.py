@@ -28,6 +28,7 @@ from src.environment.renderer import (
     draw_categorical_visual, draw_boresight_diamond,
     save_jax_video,
 )
+from src.environment.state import select_by_class
 from src.environment.sensor import get_visual_offsets  # noqa: F401 (used by draw_boresight_diamond)
 
 # Additional tokens for v2 (extend the inherited palette)
@@ -371,13 +372,15 @@ def render_jax_state_v2(state, params,
     res_pos = np.array(state.res_pos)
     res_type = np.array(params.res_type)
     res_active = np.array(state.res_active)
-    p_pos = np.array(state.pred_pos)
+    _pred_mask = select_by_class(params, 'predator')
+    p_pos = np.array(state.animal_pos)[_pred_mask]
     o_pos = np.array(state.obs_pos)
     obs_types = np.array(params.obs_type)
     obs_hides = (np.array(params.obs_hides_agent)
                  if hasattr(params, 'obs_hides_agent')
                  else np.zeros(o_pos.shape[0], dtype=bool))
-    n_pos = np.array(state.neutral_pos)
+    _neut_mask = select_by_class(params, 'neutral')
+    n_pos = np.array(state.animal_pos)[_neut_mask]
 
     at_agent = []
 

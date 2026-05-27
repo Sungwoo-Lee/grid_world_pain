@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from src.environment.core import jax_step, jax_reset, calculate_drive
 from src.environment.sensor import get_observation, get_visual_offsets
+from src.environment.state import select_by_class
 from src.models.recurrent_ppo_network import get_action_and_value_nnx
 from src.utils.wandb_utils import upload_video
 
@@ -61,8 +62,7 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
         'rest_streak': jnp.stack([s['rest_streak'] for s in ep_jax_states]),
         'res_pos': jnp.stack([s['res_pos'] for s in ep_jax_states]),
         'res_active': jnp.stack([s['res_active'] for s in ep_jax_states]),
-        'pred_pos': jnp.stack([s['pred_pos'] for s in ep_jax_states]),
-        'neutral_pos': jnp.stack([s['neutral_pos'] for s in ep_jax_states]),
+        'animal_pos': jnp.stack([s['animal_pos'] for s in ep_jax_states]),
         'obs_pos': jnp.stack([s['obs_pos'] for s in ep_jax_states]),
     })
     batched_info = {}
@@ -78,6 +78,9 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
     true_obs_header_indices = [i for i, h in enumerate(stat_headers) if h.startswith("true_")]
     num_true_obs_headers = len(true_obs_header_indices)
     num_steps = len(ep_jax_states)
+    # Compute per-class masks once (params is config-constant).
+    _pred_mask = select_by_class(params, 'predator')
+    _neut_mask = select_by_class(params, 'neutral')
     stats_path = os.path.join(stats_dir, f"{episode_number:06d}ep_stats.csv")
     with open(stats_path, 'w', newline='') as f:
         writer = csv.writer(f)
@@ -118,11 +121,11 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
                 row.append(int(res_pos[i, 0]))
                 row.append(int(res_pos[i, 1]))
                 row.append(bool(res_active[i]))
-            pred_pos = batched_state['pred_pos'][t]
+            pred_pos = batched_state['animal_pos'][t][_pred_mask]
             for i in range(pred_pos.shape[0]):
                 row.append(int(pred_pos[i, 0]))
                 row.append(int(pred_pos[i, 1]))
-            neutral_pos = batched_state['neutral_pos'][t]
+            neutral_pos = batched_state['animal_pos'][t][_neut_mask]
             for i in range(neutral_pos.shape[0]):
                 row.append(int(neutral_pos[i, 0]))
                 row.append(int(neutral_pos[i, 1]))
@@ -241,12 +244,12 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
             stat_headers += [f"{res_name}_r", f"{res_name}_c", f"{res_name}_active"]
         
         # 2. Predators
-        for i in range(params.pred_damage.shape[0]):
+        for i in range(len(params.predator_indices)):
             pred_name = f"pred_{i}"
             stat_headers += [f"{pred_name}_r", f"{pred_name}_c"]
-        
+
         # 3. Neutrals
-        for i in range(params.neutral_property.shape[0]):
+        for i in range(len(params.neutral_indices)):
             neu_name = f"neutral_{i}"
             stat_headers += [f"{neu_name}_r", f"{neu_name}_c"]
         
@@ -384,8 +387,7 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
                 'rest_streak': state.rest_streak,
                 'res_pos': state.res_pos,
                 'res_active': state.res_active,
-                'pred_pos': state.pred_pos,
-                'neutral_pos': state.neutral_pos,
+                'animal_pos': state.animal_pos,
                 'obs_pos': state.obs_pos,
             })
             ep_jax_infos.append({})  # No info at step 0
@@ -462,8 +464,7 @@ def _run_single_env_eval(model, params, config, num_episodes, seed, results_dir,
                     'rest_streak': state.rest_streak,
                     'res_pos': state.res_pos,
                     'res_active': state.res_active,
-                    'pred_pos': state.pred_pos,
-                    'neutral_pos': state.neutral_pos,
+                    'animal_pos': state.animal_pos,
                     'obs_pos': state.obs_pos,
                 })
                 ep_jax_infos.append(info)
@@ -531,7 +532,7 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
                 'agent_pos': states.agent_pos[i], 'satiation': states.satiation[i], 'nutrition': states.nutrition[i],
                 'injury_level': states.injury_level[i], 'rest_streak': states.rest_streak[i],
                 'res_pos': states.res_pos[i], 'res_active': states.res_active[i],
-                'pred_pos': states.pred_pos[i], 'neutral_pos': states.neutral_pos[i], 'obs_pos': states.obs_pos[i],
+                'animal_pos': states.animal_pos[i], 'obs_pos': states.obs_pos[i],
             })
             slot_infos[i].append({})
             slot_actions[i].append(-1)
@@ -576,8 +577,8 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
                 'agent_pos': next_states.agent_pos[i], 'satiation': next_states.satiation[i],
                 'nutrition': next_states.nutrition[i], 'injury_level': next_states.injury_level[i],
                 'rest_streak': next_states.rest_streak[i], 'res_pos': next_states.res_pos[i],
-                'res_active': next_states.res_active[i], 'pred_pos': next_states.pred_pos[i],
-                'neutral_pos': next_states.neutral_pos[i], 'obs_pos': next_states.obs_pos[i],
+                'res_active': next_states.res_active[i], 'animal_pos': next_states.animal_pos[i],
+                'obs_pos': next_states.obs_pos[i],
             })
             slot_infos[i].append({k: (v[i] if (hasattr(v, 'ndim') and v.ndim > 0) else v) for k, v in infos.items()})
             slot_actions[i].append(int(actions[i]))
@@ -659,7 +660,7 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
                 slot_states[i] = [{'agent_pos': new_state.agent_pos, 'satiation': new_state.satiation, 'nutrition': new_state.nutrition,
                                    'injury_level': new_state.injury_level, 'rest_streak': new_state.rest_streak,
                                    'res_pos': new_state.res_pos, 'res_active': new_state.res_active,
-                                   'pred_pos': new_state.pred_pos, 'neutral_pos': new_state.neutral_pos, 'obs_pos': new_state.obs_pos}]
+                                   'animal_pos': new_state.animal_pos, 'obs_pos': new_state.obs_pos}]
                 slot_infos[i] = [{}]
                 slot_actions[i] = [-1]
                 slot_rewards[i] = [0.0]

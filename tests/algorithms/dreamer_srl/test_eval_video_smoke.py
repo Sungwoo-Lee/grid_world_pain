@@ -60,7 +60,6 @@ def _write_smoke_config(path: str, checkpoint_frequency: int = 3,
 
 
 @pytest.mark.slow
-@pytest.mark.xfail(reason="CP6 — renderer/eval-recording paths still read state.pred_pos; deferred to CP6", strict=False)
 def test_e2e_smoke_checkpoints_and_recordings():
     """End-to-end: run dreamer-srl, verify checkpoints + recordings + MP4."""
     with tempfile.TemporaryDirectory() as results_dir:

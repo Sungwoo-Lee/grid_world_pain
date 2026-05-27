@@ -154,6 +154,22 @@ def _wand_entry(tag: str) -> str:
       attack_delay: 0"""
 
 
+def _stat_entry(tag: str) -> str:
+    return f"""
+    - class: neutral
+      behaviour: static
+      tag: {tag}
+      count: 1
+      properties: [0.0, 1.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      move_interval: 1
+      nociception_intensity: 0.1
+      damage: [0.0, 0.0]
+      spawn_area: [[1, 1], [9, 9]]
+      patrol_area: [[1, 1], [9, 9]]
+      attack_delay: 0"""
+
+
 def _make_params(entity_yaml_body: str):
     """Combine base YAML with entity body and load EnvParams."""
     full_entities_yaml = "environment:\n  entities:" + entity_yaml_body
@@ -314,5 +330,67 @@ class TestPositiveControl:
             assert count_after_D == 2, (
                 f"Expected exactly 2 compiles after config D (recompile expected); "
                 f"got {count_after_D}.\n"
+                f"Log tail:\n{counter.log[-500:]}"
+            )
+
+
+# ── Part 3: same animal_classes but different animal_behaviours → recompile ───
+
+class TestBehaviourChangeTriggersRecompile:
+    """Same N + same class tuple but different behaviours → 2 compiles.
+
+    wander_idx / static_idx are pytree_node=False tuples.  Changing a neutral
+    entity from wander to static changes wander_idx=(0,) → wander_idx=() and
+    static_idx=() → static_idx=(0,), so JAX must re-trace.
+
+    N-CP5-3: reviewer-verified edge case; this test documents and guards it.
+    Plan ref: §"Test Plan §(e)" (CP5 / N-CP5-3).
+    """
+
+    def test_behaviour_change_triggers_recompile(self):
+        """Config E: 1 neutral (wander). Config F: 1 neutral (static).
+
+        Same animal_classes=('neutral',) but wander_idx vs static_idx differ.
+        Exactly 2 compiles expected.
+        """
+        jax.clear_caches()
+
+        params_E = _make_params(_wand_entry("r0"))   # wander_idx=(0,), static_idx=()
+        params_F = _make_params(_stat_entry("r0"))   # wander_idx=(),   static_idx=(0,)
+
+        # Sanity: same class tuple, different behaviour tuples.
+        assert params_E.animal_classes == params_F.animal_classes, (
+            "Test setup error: class tuples must be identical."
+        )
+        assert params_E.animal_behaviours != params_F.animal_behaviours, (
+            "Test setup error: behaviour tuples must differ (wander vs static)."
+        )
+        assert params_E.wander_idx != params_F.wander_idx, (
+            "Test setup error: wander_idx must differ."
+        )
+
+        key = jax.random.PRNGKey(0)
+
+        with _CompileCounter() as counter:
+            # Config E — wander neutral — should compile once.
+            state_E = jax_reset(params_E, key)
+            for _ in range(5):
+                state_E, _, _, _ = jax_step(state_E, 0, params_E)
+
+            count_after_E = counter.count
+            assert count_after_E == 1, (
+                f"Expected exactly 1 compile after config E; got {count_after_E}.\n"
+                f"Log tail:\n{counter.log[-500:]}"
+            )
+
+            # Config F — static neutral — MUST recompile (different wander_idx/static_idx).
+            state_F = jax_reset(params_F, key)
+            for _ in range(5):
+                state_F, _, _, _ = jax_step(state_F, 0, params_F)
+
+            count_after_F = counter.count
+            assert count_after_F == 2, (
+                f"Expected exactly 2 compiles after config F (recompile expected); "
+                f"got {count_after_F}.\n"
                 f"Log tail:\n{counter.log[-500:]}"
             )

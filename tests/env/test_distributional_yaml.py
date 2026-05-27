@@ -163,6 +163,16 @@ class TestParseSingleField:
         with pytest.raises(ValueError):
             _load_with_detect("five")
 
+    def test_inverted_range_raises_valueerror(self):
+        """[5, 3] → ValueError: low must be <= high (inverted range).
+
+        C-CP5-1 regression test. Without the lo <= hi guard, jax.random.uniform
+        with minval=5, maxval=3 silently returns 5.0 every episode (deterministic
+        and wrong). With the guard, a clear ValueError is raised at load time.
+        """
+        with pytest.raises(ValueError, match="low <= high"):
+            _load_with_detect("[5, 3]")
+
 
 # ── Tests: all 5 fields via non-degenerate config file ───────────────────
 

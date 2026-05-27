@@ -40,7 +40,10 @@ from src.environment.renderer import render_jax_state  # noqa: E402
 
 
 def _snapshot_state(state):
-    """Minimal per-step snapshot the renderer needs (same fields as stats recorder)."""
+    """Minimal per-step snapshot the renderer needs (same fields as stats recorder).
+
+    Uses unified animal_pos (CP6). Renderers slice by class via select_by_class.
+    """
     return {
         'agent_pos': np.asarray(state.agent_pos),
         'satiation': float(state.satiation),
@@ -49,8 +52,7 @@ def _snapshot_state(state):
         'rest_streak': int(state.rest_streak),
         'res_pos': np.asarray(state.res_pos),
         'res_active': np.asarray(state.res_active),
-        'pred_pos': np.asarray(state.pred_pos),
-        'neutral_pos': np.asarray(state.neutral_pos),
+        'animal_pos': np.asarray(state.animal_pos),
         'obs_pos': np.asarray(state.obs_pos),
     }
 

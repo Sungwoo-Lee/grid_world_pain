@@ -1,0 +1,16 @@
+# dist_malformed_inverted.yaml — inverted [hi, lo] range.
+# Expected: detection_range [5, 3] → raises ValueError (low must be <= high)
+# Used by: tests/env/test_distributional_yaml.py (test_inverted_range_raises_valueerror)
+#
+# Note: The test uses _load_with_detect("[5, 3]") (inline helper) rather than
+# loading this file directly, because the file needs the full base env YAML.
+# This file is kept as documentation of the malformed case.
+#
+# Snippet showing the offending entity entry:
+#
+# environment:
+#   entities:
+#     - class: "predator"
+#       behaviour: "hunt"
+#       tag: "p"
+#       detection_range: [5, 3]   # ← inverted: hi=5 > lo=3 → ValueError

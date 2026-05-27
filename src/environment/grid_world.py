@@ -23,6 +23,7 @@ except ImportError:
 
 # Imports for JAX EnvState
 import jax.numpy as jnp
+from src.environment.state import select_by_class
 
 # Global cache for icons to avoid reloading every frame
 _ICON_CACHE = None
@@ -442,14 +443,15 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
         elif r_start <= rr < r_end and c_start <= rc < c_end:
             draw_icon(ax_grid, rr, rc, 'food' if res_type[i] == 0 else 'hiding_predator', zoom=0.035, s_fac=scale_factor)
             
-    p_pos = np.array(state.pred_pos)
+    _pred_mask = select_by_class(params, 'predator')
+    p_pos = np.array(state.animal_pos)[_pred_mask]
     for i in range(p_pos.shape[0]):
         pr, pc = int(p_pos[i, 0]), int(p_pos[i, 1])
         if pr == ar and pc == ac:
             at_agent.append('predator')
         elif r_start <= pr < r_end and c_start <= pc < c_end:
             draw_icon(ax_grid, pr, pc, 'predator', zoom=0.045, s_fac=scale_factor)
-            
+
     o_pos = np.array(state.obs_pos)
     obs_types = np.array(params.obs_type)
     obs_hides = np.array(params.obs_hides_agent) if hasattr(params, 'obs_hides_agent') else np.zeros(o_pos.shape[0], dtype=bool)
@@ -462,8 +464,9 @@ def render_jax_state(state, params, episode=None, step=None, train_episode=None,
         elif r_start <= or_ < r_end and c_start <= oc < c_end:
             obs_icon = params.obstacle_names[obs_types[i]]
             draw_icon(ax_grid, or_, oc, obs_icon, zoom=0.035, s_fac=scale_factor)
-            
-    n_pos = np.array(state.neutral_pos)
+
+    _neut_mask = select_by_class(params, 'neutral')
+    n_pos = np.array(state.animal_pos)[_neut_mask]
     for i in range(n_pos.shape[0]):
         nr, nc = int(n_pos[i, 0]), int(n_pos[i, 1])
         if nr == ar and nc == ac:

@@ -76,17 +76,13 @@ def extract_state_fields(state) -> dict:
     # Resources
     fields["res_pos"] = np.array(state.res_pos)
     fields["res_active"] = np.array(state.res_active)
-    # Predators (legacy field names — captured for parity comparison)
-    fields["pred_pos"] = np.array(state.pred_pos)
-    fields["pred_state"] = np.array(state.pred_state)
-    fields["pred_stamina"] = np.array(state.pred_stamina)
-    fields["pred_move_timer"] = np.array(state.pred_move_timer)
-    fields["pred_attack_timer"] = np.array(state.pred_attack_timer)
-    fields["pred_property_sampled"] = np.array(state.pred_property_sampled)
-    # Neutral animals
-    fields["neutral_pos"] = np.array(state.neutral_pos)
-    fields["neutral_move_timer"] = np.array(state.neutral_move_timer)
-    fields["neutral_property_sampled"] = np.array(state.neutral_property_sampled)
+    # Animals (unified — CP6 updated from legacy pred_*/neutral_* fields)
+    fields["animal_pos"] = np.array(state.animal_pos)
+    fields["animal_state"] = np.array(state.animal_state)
+    fields["animal_stamina"] = np.array(state.animal_stamina)
+    fields["animal_move_timer"] = np.array(state.animal_move_timer)
+    fields["animal_attack_timer"] = np.array(state.animal_attack_timer)
+    fields["animal_property_sampled"] = np.array(state.animal_property_sampled)
     # Obstacles
     fields["obs_pos"] = np.array(state.obs_pos)
     fields["obs_property_sampled"] = np.array(state.obs_property_sampled)
@@ -145,8 +141,8 @@ def generate_fixture(config_path: str):
             npz_data[f"info{step_i:03d}_{fname}"] = farr
 
     # Also store the number of predators and neutrals for reconstruction
-    npz_data["num_pred"] = np.array(state_list[0].pred_pos.shape[0])
-    npz_data["num_neutral"] = np.array(state_list[0].neutral_pos.shape[0])
+    npz_data["num_pred"] = np.array(len(params.predator_indices))
+    npz_data["num_neutral"] = np.array(len(params.neutral_indices))
 
     np.savez_compressed(out_path, **npz_data)
     return True, "ok"

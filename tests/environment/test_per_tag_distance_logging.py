@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from src.utils.config import Config
 from src.environment.config_loader import load_env_params
 from src.environment.core import jax_reset, jax_step
+from src.environment.state import select_by_class
 
 # ---------------------------------------------------------------------------
 # Minimal full YAML used as a template for T1 and T4.
@@ -173,15 +174,19 @@ def test_default_tag_is_idx_positional(tmp_path):
 # ---------------------------------------------------------------------------
 # T3 — Per-instance distances match known geometry
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(reason="CP1 — test reads state.neutral_pos directly; test update deferred to CP6", strict=False)
 def test_dist_per_neutral_matches_l2(tmp_path):
-    """T3: dist_per_neutral shape and approximate values correct for known state."""
+    """T3: dist_per_neutral shape and approximate values correct for known state.
+
+    Uses select_by_class(params, 'neutral') to slice animal_pos for neutral
+    positions (replaces the old state.neutral_pos property removed in CP6).
+    """
     yaml_path = _write_yaml(tmp_path, _BASE_YAML)
     params = load_env_params(Config.load_yaml(yaml_path))
     key = jax.random.PRNGKey(0)
     state = jax_reset(params, key)
-    # Snapshot neutral positions before the step (they may move by ≤1 cell)
-    pre_neutral_pos = np.array(state.neutral_pos)
+    # Snapshot neutral positions before the step using the unified animal_pos array
+    neutral_mask = select_by_class(params, 'neutral')
+    pre_neutral_pos = np.array(state.animal_pos)[neutral_mask]
     # Take a step (action 0 = up / any valid action)
     _, _, _, info = jax_step(state, jnp.array(0, dtype=jnp.int32), params)
 
@@ -208,9 +213,13 @@ def test_dist_per_neutral_matches_l2(tmp_path):
 # ---------------------------------------------------------------------------
 # T4 — Invalid tag character raises ValueError
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(reason="CP1 — tag-character validation dropped in unified loader; restoration deferred", strict=False)
 def test_invalid_tag_char_raises(tmp_path):
-    """T4: Tag with '/' raises ValueError at config-load time."""
+    """T4: Tag with '/' raises ValueError at config-load time.
+
+    Tag-character validation is in _normalise_tag() (config_loader.py). The
+    Rabbit entity_type_label is set in the neutral_animals legacy path so the
+    error message contains 'Rabbit tag'.
+    """
     bad_yaml = _BASE_YAML.replace('tag: "TL"', 'tag: "TL/inner"', 1)
     yaml_path = _write_yaml(tmp_path, bad_yaml, filename="bad.yaml")
     with pytest.raises(ValueError, match="Rabbit tag"):

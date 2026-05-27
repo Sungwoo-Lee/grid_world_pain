@@ -72,7 +72,7 @@ def recorded_episode(tmp_path_factory):
     return ep, env_params
 
 
-pytestmark = pytest.mark.xfail(reason="CP6 — renderer/eval-recording paths still read state.pred_pos; deferred to CP6", strict=False)
+# CP6: xfail removed — renderer and eval-recording paths now use animal_pos + select_by_class.
 
 
 def test_recording_has_expected_keys(recorded_episode):

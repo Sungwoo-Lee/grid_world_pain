@@ -518,14 +518,12 @@ def build_episode_log_dict(state, params) -> dict:
     Returns:
         dict[str, float]: one key per (entity, field) combination.
     """
-    import numpy as _np
-
     out: dict = {}
-    detect_arr = _np.asarray(state.animal_detect_sampled)
-    max_stam_arr = _np.asarray(state.animal_max_stamina_sampled)
-    recovery_arr = _np.asarray(state.animal_recovery_sampled)
-    hunt_thresh_arr = _np.asarray(state.animal_hunt_thresh_sampled)
-    lose_int_arr = _np.asarray(state.animal_lose_interest_sampled)
+    detect_arr = np.asarray(state.animal_detect_sampled)
+    max_stam_arr = np.asarray(state.animal_max_stamina_sampled)
+    recovery_arr = np.asarray(state.animal_recovery_sampled)
+    hunt_thresh_arr = np.asarray(state.animal_hunt_thresh_sampled)
+    lose_int_arr = np.asarray(state.animal_lose_interest_sampled)
 
     for i, tag in enumerate(params.animal_tags):
         out[f"Episode/sampled_detect_{tag}"] = float(detect_arr[i])
