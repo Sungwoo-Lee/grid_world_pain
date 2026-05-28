@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-05-28
 **Active folders**: 6
-**Total insights**: 87
+**Total insights**: 88
 **Last audit**: (none)
 
 ---
@@ -16,7 +16,7 @@
 | Folder | Definition (1 line) | Insights | Last update | Top tags |
 |---|---|---|---|---|
 | `memory_system_design` | Claude memory system's own design decisions | 10 | 2026-05-28 | [memory, design, decision, skill, meta, learned_lesson] |
-| `subagent_engineering` | Subagent + worktree usage gotchas | 12 | 2026-05-21 | [meta, learned_lesson, worktree, subagent, decision, design] |
+| `subagent_engineering` | Subagent + worktree usage gotchas | 13 | 2026-05-28 | [meta, learned_lesson, worktree, subagent, decision, design] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 16 | 2026-05-28 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 16 | 2026-05-21 | [dreamer, decision, learned_lesson, refutation, meta, design] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 24 | 2026-05-28 | [meta, training_runner, learned_lesson, decision, design] |
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-28: Captured 1 insight into existing `subagent_engineering` from the v2.0 env_entities refactor session: `20260528_1647_bg_isolation_subagent_bypass` — sub-agents spawned via the `Agent` tool bypass the bg-session worktree-isolation guard that blocks top-level Edit/Write/NotebookEdit; 4-tier workaround hierarchy verified empirically across 100+ file edits during CP1-CP6. Extends `20260519_1810_bg_isolation_blocks_edit_not_bash` (closes its `NotebookEdit` open question and adds the sub-agent-bypass finding). All tags reused (worktree, subagent, learned_lesson, meta, decision). No new tags promoted.
 - 2026-05-28: Captured 4 insights from the EPISODE project_plan rewrite + Foam wikilink convention + VSCode startup fix session: 2 into existing `cluster_ops` (`20260528_0215_foam_excludes_required_not_search_exclude` — Foam doesn't honor `search.exclude`, needs its own `foam.files.ignore`; cold start 329,724 ms → 3,729 ms, 88× speedup; `20260528_0218_git_lock_parallel_session_contamination` — `git add <file> && git commit` consumes everything currently staged in the index when stale lock clears, including files staged by parallel sessions; recovery via `git commit -C <hash>`), 1 into existing `memory_system_design` (`20260528_0216_foam_wikilinks_filename_as_id_sparse_aliases` — project-wide doc-linking convention: `[[filename]]` default, sparse `aliases:` on ~10–20 god-nodes; same shape as documentation-framing policy promotion), 1 into existing `nmn_diagnosis` (`20260528_0217_episode_direction_4x3_framework_two_papers` — project_plan.md reframe as direction context, 4×3 matrix, two papers at perspective-plus-pilot). All tags reused (meta, learned_lesson, decision, memory, design, nmn). No new tags promoted.
 - 2026-05-25: Captured 1 insight into existing `cluster_ops` from the Claude Code statusline / `rate_limits.*` session: `20260525_2258_claude_code_statusline_rate_limits_official` — Claude Code's stdin JSON now exposes `rate_limits.{five_hour,seven_day}.{used_percentage,resets_at}` directly, replacing local-transcript aggregation / ccusage / accessToken-polling for the Pro/Max usage-display use case. Paired with `refreshInterval: 30` in settings.json so the reset-countdown text ticks live during idle. All tags reused (meta, learned_lesson, decision). No new tags promoted. Extends [[20260508_1826_statusline_jq_ifs_pct]].
 - 2026-05-19: Captured 3 insights into existing `dreamer_diagnosis` from the dreamer-srl v2 perf-diagnosis + JAX-Dreamer perf-retrofit history session: `20260519_1507_dreamer_srl_v2_cpu_buffer_regression` (the CPU/numpy buffer regression — current bottleneck), `20260519_1508_dreamer_jax_perf_retrofit_4_phases` (preserves 2026-02-21 retrofit history with measured speedups; captured because the original implementation predated this memory+diary system), `20260519_1509_nnx_lax_scan_split_merge_pattern` (generalisable NNX + lax.scan technique). All tags reused (dreamer, learned_lesson, design, decision, meta). No new tags. The 3 insights are tightly cross-linked: #1507 is the current regression, #1508 is the historical template, #1509 is the specific technique to implement the fix.

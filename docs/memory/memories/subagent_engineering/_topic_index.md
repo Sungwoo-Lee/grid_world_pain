@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `subagent_engineering` topic.
 
 **Folder definition**: Subagent + worktree usage gotchas
-**Insights**: 12
-**Last updated**: 2026-05-21
+**Insights**: 13
+**Last updated**: 2026-05-28
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-28 | 16:47 | [20260528_1647_bg_isolation_subagent_bypass](20260528_1647_bg_isolation_subagent_bypass.md) | Sub-agents spawned via Agent tool bypass the bg-session guard that blocks top-level Edit/Write/NotebookEdit. 4-tier hierarchy. Extends 20260519_1810. |
 | 2026-05-21 | 01:52 | `20260521_0152_parity_tested_refactor_verification_chain` | A 4-agent verification chain (senior-developer plan → code-reviewer + math-reviewer in parallel pre-impl audit → developer commit-by-commit with parity gates → senior-developer Verification Protocol) successfully shipped a high-stakes architectural refactor on a parity-tested codebase. The pre-implementation reviewer round caught 3 plan-doc bugs that would have produced silent failures during implementation (non-runnable diagnostic pseudocode using wrong NNX-state key syntax, missing L2-coverage-gap callout, incomplete C3.a 5-constraint grep checklist). Reusable template for any future refactor of bit-identity-tested code; the pre-impl reviewer round is the load-bearing piece. |
 | 2026-05-16 | 15:12 | `20260516_1512_multi_agent_symposium_pattern` | Multi-agent symposium pattern (4 profs in parallel → postdoc synthesis → PI portfolio call → top-level AskUserQuestion). Three non-obvious mechanics: sidecar-per-prof avoids parallel-write race; postdoc applies mid-round user-refined constraints; PI cannot directly call AskUserQuestion in subagent mode (top-level surfaces). Evolution of the v2 research chain at symposium scale. |
 | 2026-05-16 | 15:11 | `20260516_1511_math_reviewer_catches_silent_direction_errors` | Math-reviewer audit caught two load-bearing dimensional errors (Hessian-direction reversal; Bellman-γ vs FiLM-γ incoherence at GRU update-gate) AND validated the project's novel-architecture claim (FiLM-Ensemble + heteroscedastic-precision compound). Two independent reviews (rl-bayesian-dl v1 §8 + math-reviewer audit) caught flag d — strong-signal pattern. Workflow lesson: math-heavy direction memos benefit from math-reviewer audit before reaching experiment-designer. |
