@@ -5,11 +5,13 @@ status: active
 created: 2026-05-28
 last_updated: 2026-05-29
 phase: 2
+aliases:
+  - sameprop_predator_distributional
 wandb_tag: "hypervigilance-round3-distributional"
 supersedes: []
 ---
 
-> **Status banner — 2026-05-29 02:30 KST.** MID-TRAINING PREVIEW at iter 36,144 / ~64,000 expected (episode 1,810,043 / 10,000,000 — 18.1 % of budget). The training run is still active on n113:GPU0 (PID 655905, launched 2026-05-28 16:18 KST). §§9–11 below report a preliminary readout to give the operator an early signal; the closing analysis will use the post-training checkpoint and may move the numbers materially. **Do not treat this as the closing verdict.**
+> **Status banner — 2026-05-29 16:08 KST.** SECOND MID-TRAINING PREVIEW at episode 3,900,028 / 10,000,000 (39 % of budget); training continues on n113:GPU0 (PID 655905, launched 2026-05-28 16:18 KST). The first preview (§§9–11, 2026-05-29 02:30 KST, at 18 % of budget) remains as historical record; the second preview is appended as **§12** below. The closing analysis will use the post-training checkpoint and may move the numbers further. **Do not treat either preview as the closing verdict.**
 
 # SameProp Round 3 — predator behavioural randomisation: does avoidance generalise to neutrals when the predator's chase cue is unreliable?
 
@@ -577,3 +579,318 @@ Files produced by this preview (all gitignored except the design doc itself):
 - `tmp/20260529_r3_seed46_motif_by_tag.csv` — tag × cluster cross-tab (row-normalised).
 - `tmp/20260529_0212_r3_online_replay.json` — snapshot of online_replay for traceability.
 - `tmp/20260529_0212_r3_aggregates.json` — duplicate of the seed-46 aggregates JSON with the date-time prefix for the working-file convention.
+
+---
+
+## 12. Second mid-training preview — Cell C-dist seed 46 at ckpt 3,900,028 (39 % of budget, 2026-05-29 16:08 KST)
+
+### 12.0 What this section reports — plain-English entry point
+
+This is the **second mid-training preview** of the same run reported in §§9–11. It does NOT replace the first preview; both stay on the record so the trajectory between them is visible. The training run on n113:GPU0 has gone from 1.81 M episodes (first preview, 18.1 % of budget) to **3.90 M episodes (39 % of budget)** — an additional 2.09 M episodes of training, ~13 h 50 m of wall-clock at the run's current ~3.3 it/s pace. The same 200-episode deterministic eval-rollout protocol used for the first preview is re-applied to the latest fully-written checkpoint (episode 3,900,028, finalised 15:44 KST 2026-05-29; the very latest checkpoint at 3,910,013 was still being written by orbax at eval-launch time and was skipped per the conservative one-revision-back convention). Training is still active and was NOT interrupted; the eval harness loads the saved checkpoint offline.
+
+**Headline trajectory in plain English.** Between the two previews, **the gap on the in-cover-rate measure has narrowed by 3.5 percentage points** (Δ_M2_class moved from +35.1 pp at the first preview to **+31.6 pp** at the second). That's a small but real drift toward the borderline band — the gap is now only 1.6 pp above the +30 pp H₀ floor and is 11.6 pp above the +20 pp H₁ ceiling. **Rabbit-side in-cover rate IS catching up** (rose from 34.3 % to **39.5 %**, +5.2 pp), confirming the trajectory the operator flagged as the headline open question; predator-side also rose (69.3 % to **71.1 %**, +1.8 pp) but by less, which is what is shrinking the gap. The **M5 strategy-reshape pattern has NOT held** — the dramatic predator-side eat-suppression at the first preview (0.560, far below the baseline 0.769) has relaxed substantially toward the baseline (now **0.660**, only 0.11 below baseline vs 0.21 at the first preview). Survival has approached the baseline (411.9 ± 121.9 steps vs the R2.6 baseline's 414.7 ± 118.3 — within noise). On the §1 / §5.1 pre-registered criteria the data **still sits in the H₀ band but with thinner margin**; if the rabbit-side trajectory continues at its current per-2M-episode rate, the closing checkpoint at 10 M could land Δ_M2_class in the [+20, +30] **borderline band** and trigger the seed-47 escalation. Still mid-training; still a preview; not a closing verdict.
+
+### 12.1 Run actuals (second mid-training preview)
+
+| Cell | Tag | WandB | Seed | Episodes (logged) | Checkpoint analysed | Wall-clock at preview |
+|---|---|---|---:|---:|---|---:|
+| C-dist — predator behavioural randomisation | `hypervigilance-round3-distributional-seed46` | [`0ikqqpvc`](https://wandb.ai/sungwoolee/grid_world_pain/runs/0ikqqpvc) | 46 | 3,940,038 (training) | **episode 3,900,028** | ~23 h 50 m |
+
+The training process (PID 655905 on n113) remains active. Episode 3,900,028 corresponds to **39.0 %** of the planned 10 M-episode budget (vs the first preview's 18.1 %). The latest fully-orbax-written checkpoint at preview time is 3,910,013 (written 15:48 KST, 4 min before this eval launched); per the §9.1 conservative convention this preview used the one-revision-back 3,900,028 (written 15:44 KST). The run's pace has held: ~3.3 it/s, projected closing at ~2026-05-31.
+
+### 12.2 Training-time last-20 % window readout (episodes ≈ 3.16 M – 3.94 M, n = 369 records)
+
+Means ± std across the 369 last-20 %-window WandB log records (the script's actual `step_lo / step_hi` cuts at episode 3,160,032 → 3,940,038 — see [`tmp/20260529_1556_r3_second_preview_last20pct.csv`](../../../../tmp/20260529_1556_r3_second_preview_last20pct.csv) for the full table). The first-preview last-20 % comparator and the R2.6 baseline are inlined:
+
+| Metric | R3 seed 46 (1st preview, last-20 %, ep 1.45M – 1.82M) | R3 seed 46 (2nd preview, last-20 %, ep 3.16M – 3.94M) | R2.6 C seed 44 (last-10 %, fully trained) |
+|---|---:|---:|---:|
+| `Episode/Steps` (survival) | 371.7 ± 4.3 | **382.4 ± 4.3** | 396.0 ± 4.5 |
+| `Episode/Term_MaxSteps` | 0.485 ± 0.014 | **0.512 ± 0.014** | 0.487 ± 0.017 |
+| `Episode/Term_Injury` | 0.289 ± 0.032 | 0.273 ± 0.026 | 0.276 ± 0.024 |
+| `Episode/Term_Starvation` | 0.226 ± 0.030 | 0.215 ± 0.027 | 0.239 ± 0.028 |
+| `Episode/MeanDistRabbit` | 4.561 ± 0.024 | 4.547 ± 0.023 | 4.587 ± 0.024 |
+| `Episode/MeanDistPredator` | 4.210 ± 0.055 | 4.213 ± 0.041 | 4.068 ± 0.049 |
+| `Episode/RabbitHits` | 0.956 ± 0.081 | 1.011 ± 0.075 | 0.916 ± 0.070 |
+| `Episode/PredatorHits` | 2.915 ± 0.170 | 2.951 ± 0.160 | 3.315 ± 0.177 |
+| `Episode/HidingPredatorHits` | 2.636 ± 0.099 | 2.573 ± 0.079 | 2.527 ± 0.077 |
+| `Episode/FoodEaten` | 72.92 ± 1.87 | 73.75 ± 1.76 | 71.6 ± 1.4 |
+| `Episode/Reward` | −176.5 ± 1.6 | **−174.5 ± 1.6** | −184.9 ± 1.7 |
+| **`Episode/BushDiveRate_predator_full`** | **0.622 ± 0.008** | **0.636 ± 0.009** | **0.804 ± 0.007** |
+| **`Episode/BushDiveRate_rabbit`** | **0.350 ± 0.010** | **0.365 ± 0.010** | **0.454 ± 0.011** |
+| `Episode/BushDiveRate_rabbit_TL` | 0.432 ± 0.012 | 0.449 ± 0.013 | 0.548 ± 0.013 |
+| `Episode/BushDiveRate_rabbit_BR` | 0.409 ± 0.015 | 0.428 ± 0.014 | 0.530 ± 0.015 |
+| **`Episode/EatUnderThreatRatio_predator`** | **0.961 ± 0.041** | **0.984 ± 0.039** | **0.931 ± 0.030** |
+| **`Episode/EatUnderThreatRatio_rabbit`** | **1.274 ± 0.051** | **1.270 ± 0.044** | **1.386 ± 0.046** |
+| `Episode/EatUnderThreatRatio_rabbit_TL` | 1.242 ± 0.060 | 1.237 ± 0.052 | 1.353 ± 0.060 |
+| `Episode/EatUnderThreatRatio_rabbit_BR` | 1.237 ± 0.069 | 1.249 ± 0.061 | 1.454 ± 0.069 |
+
+**Reading the training-time movement between the two previews.** Survival is up 10.7 steps (371.7 → 382.4, ~3 % of remaining headroom to the R2.6 baseline 396.0). `BushDiveRate_predator_full` is up 0.014 (0.622 → 0.636, only ~8 % of remaining headroom to the baseline 0.804); `BushDiveRate_rabbit` is up 0.015 (0.350 → 0.365, ~15 % of remaining headroom to baseline 0.454). Both BushDive sides are moving in lockstep at the training-time level — the training-time gap between them has stayed essentially constant (+0.272 first preview → +0.271 second preview). This is the "both rise proportionally → H₀ verdict holds" trajectory, NOT the "rabbit catches up faster → borderline triggers" trajectory **at the training-time level**; but the eval-time numbers (§12.3) tell a slightly different story, and the eval-time numbers are the load-bearing comparator for §1 / §5.1.
+
+`EatUnderThreatRatio_predator` is still NOT yet at the R2.6 baseline (0.984 vs 0.931 last-10 % training-time — the M5_predator training-time number is **monotonically descending** from its first-preview level toward baseline, but slowly; see §12.4 window trajectory). `EatUnderThreatRatio_rabbit` is essentially flat between the two previews (1.274 → 1.270).
+
+### 12.3 Derived primary statistics (eval-time, deterministic policy, n = 200 episodes)
+
+Run via `scripts/eval_rollout.py` (200 deterministic episodes on the byte-identical R2.6 eval_seeds list, exploration off, host CPU, **284.0 s**) + `scripts/motif_cluster.py` (k = 6, seed = 42, 10 features, zscore_pooled). Eval root: [`results/eval/models/3900028/models/3900028/`](../../../../results/eval/models/3900028/models/3900028). Git commit at eval time: `d340793`. Per-class headline numbers (cross-tab from [`tmp/20260529_1556_r3_seed46_second_preview_analysis.py`](../../../../tmp/20260529_1556_r3_seed46_second_preview_analysis.py)):
+
+**The three-column headline trajectory table** — applying the comparison the operator's brief asked for:
+
+| Measure | R2.6 baseline (Cell C, seed 44, 10 M) | R3 1st preview (ckpt 1.81 M, 18 %) | R3 2nd preview (ckpt 3.90 M, 39 %) | Trajectory |
+|---|---:|---:|---:|---|
+| **M2** bush-dive rate, predator | 88.8 % | 69.3 % | **71.1 %** | climbing toward baseline (+1.8 pp) |
+| **M2** bush-dive rate, rabbit (aggregated) | 51.5 % | 34.3 % | **39.5 %** | **climbing FASTER toward baseline (+5.2 pp)** |
+| **Δ_M2_class ≡ M2_pred − M2_rab** | **+37.3 pp** | **+35.1 pp** | **+31.6 pp** | **gap narrowing toward H₀ floor (−3.5 pp)** |
+| **M5** eat-under-threat ratio, predator | 0.769 | 0.560 | **0.660** | **relaxing toward baseline (+0.10)** |
+| **M5** eat-under-threat ratio, rabbit | 1.202 | 1.124 | **1.198** | re-converged to baseline (+0.074) |
+| M1 interrupted-feeding rate, predator | 42.7 % | 37.9 % | 39.8 % | climbing toward baseline (+1.9 pp) |
+| M1 interrupted-feeding rate, rabbit | 23.8 % | 19.6 % | 21.2 % | climbing toward baseline (+1.6 pp) |
+| Δ_M1_class | +18.9 pp | +18.3 pp | +18.6 pp | stable, baseline-matched |
+| Mean survival (eval, n = 200) | 414.7 ± 118.3 | 380.5 ± 142.5 | **411.9 ± 121.9** | **converged to baseline (+31 steps)** |
+
+**Reading the eval-time movement between the two previews.** The eval-time picture moves more than the training-time picture suggested. M2_rabbit rose by 5.2 pp eval-time vs 1.5 pp training-time (the deterministic-policy eval picks up the agent's already-stronger rabbit-side defence more clearly than the on-policy training stream does; see §12.4 below for the temporal trajectory hint). M2_predator rose by 1.8 pp eval-time. The class gap on M2 dropped by 3.5 pp eval-time (35.1 → 31.6) — moving toward the +30 pp H₀ floor at a rate of roughly **1.7 pp per million episodes** of training. **At this rate, projecting the remaining 6.1 M training episodes would put the closing gap at ≈ +21 pp**, which is INSIDE the H₁(< +20 pp ceiling) confirmation band by 1 pp. *This linear extrapolation is not a forecast* — convergence rates typically slow as the policy plateaus — but it shows the trajectory is meaningful, not noise.
+
+Per-tag fan-out (the §5.2 secondary check):
+
+| Tag | M1 | M2 | M5 ratio | R3 1st preview (§9.3 reference) |
+|---|---:|---:|---:|---|
+| predator_full | 39.8 % (1464 / 3679) | **71.1 % (1873 / 2634)** | **0.660** | M1 37.9 %, M2 69.3 %, M5 0.560 |
+| rabbit_TL | 22.6 % (400 / 1771) | 38.1 % (572 / 1500) | 1.099 | M1 20.0 %, M2 33.6 %, M5 1.085 |
+| rabbit_BR | 19.1 % (200 / 1048) | 42.6 % (390 / 916) | 1.358 | M1 18.7 %, M2 35.6 %, M5 1.165 |
+
+| Metric | rabbit_TL | rabbit_BR | gap | §5.2 ± band | Status |
+|---|---:|---:|---:|---|---|
+| M2 bush-dive rate | 38.1 % | 42.6 % | **4.5 pp** | ±5 pp | ✓ within band |
+| M5 eat-under-threat ratio | 1.099 | 1.358 | **0.259** | ±0.10 | ✗ OVER band (was 0.080 at first preview) |
+
+Per-tag fan-out has DRIFTED on M5: the rabbit_BR M5 has risen from 1.165 at the first preview to 1.358 now (+0.193, the biggest single-tag move between previews), while rabbit_TL M5 only nudged from 1.085 to 1.099 (+0.014). The 0.259 gap exceeds the toolkit-v1 ±0.10 band. The R2.6 baseline §9.3 reference also had M5 rabbit_TL 1.255 / rabbit_BR 1.116 (gap 0.139, marginally over the 0.10 band as flagged at closing); the current 0.259 gap is roughly double that. The M2 per-tag fan-out remains within band (4.5 pp ≤ 5 pp), so the headline M2 verdict is not affected; the M5 per-tag drift is a flag for the closing analysis rather than a verdict-changer.
+
+### 12.4 Temporal evolution — 10 equal-episode windows across training-so-far
+
+Mandatory per project convention. Windowed means across episodes 10,170 → 3,940,038 (n = 171 records per window for windows 1–9; n = 174 for window 10). The R3 training-time numbers — the first preview's §9.4 windows are the FIRST FIVE windows of this table, the second preview adds five more:
+
+| Window | ep range (M) | n | `BushDiveRate_predator_full` | `BushDiveRate_rabbit` | `EatUnderThreatRatio_predator` | `Steps` | `Term_MaxSteps` | `MeanDistPredator` |
+|---:|:---|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.01 – 0.55 | 171 | 0.479 | 0.228 | 0.908 | 280.8 | 0.271 | 4.60 |
+| 2 | 0.55 – 0.96 | 171 | 0.577 | 0.306 | 0.967 | 345.6 | 0.423 | 4.28 |
+| 3 | 0.96 – 1.34 | 171 | 0.613 | 0.333 | 0.995 | 363.6 | 0.465 | 4.26 |
+| 4 | 1.34 – 1.72 | 171 | 0.624 | 0.350 | 0.973 | 369.9 | 0.481 | 4.22 |
+| 5 | 1.72 – 2.09 | 171 | 0.628 | 0.355 | 0.954 | 373.1 | 0.488 | 4.19 |
+| 6 | 2.10 – 2.47 | 171 | 0.632 | 0.361 | 0.958 | 376.8 | 0.497 | 4.20 |
+| 7 | 2.47 – 2.84 | 171 | 0.636 | 0.368 | 0.970 | 379.1 | 0.504 | 4.19 |
+| 8 | 2.84 – 3.21 | 171 | 0.633 | 0.364 | 0.953 | 378.3 | 0.500 | 4.19 |
+| 9 | 3.21 – 3.57 | 171 | 0.634 | 0.363 | 0.979 | 382.2 | 0.512 | 4.21 |
+| 10 | 3.57 – 3.94 | 174 | 0.637 | 0.366 | 0.988 | 382.8 | 0.512 | 4.22 |
+
+*(The first preview's §9.4 table used 10 windows over 1.85 M episodes; the table above re-windows over 3.94 M episodes. Window 1 here is consequently wider — 0.55 M — than first preview's window 1 — 0.30 M — and the inflection points fall at different window indices. The shape is the same; the resolution is different. See [`tmp/20260529_1556_r3_second_preview_windows.csv`](../../../../tmp/20260529_1556_r3_second_preview_windows.csv) for the underlying CSV.)*
+
+Three readings worth highlighting:
+
+1. **`BushDiveRate_predator_full` has plateaued at the training-time level.** Windows 7 / 8 / 9 / 10 = 0.636 / 0.633 / 0.634 / 0.637 — spread 0.004, well below within-window σ ≈ 0.009. The training-time predator-side defence has settled at 0.636 ± 0.009, which is 0.17 below the R2.6 baseline plateau of 0.804. This is NOT a transient mid-training number; it is the policy's current operating point.
+
+2. **`BushDiveRate_rabbit` has also plateaued at the training-time level.** Windows 7 / 8 / 9 / 10 = 0.368 / 0.364 / 0.363 / 0.366 — spread 0.005, ≈ within-window σ ≈ 0.010. The training-time rabbit-side defence has settled at 0.365 ± 0.010, which is 0.09 below the R2.6 baseline plateau of 0.454. The training-time gap (predator − rabbit) is locked at +0.272 across the entire last quartile of training-so-far — **identical to the first preview's plateau gap of +0.272**.
+
+3. **`EatUnderThreatRatio_predator` has stabilised at ~0.98 training-time** — windows 7 / 8 / 9 / 10 = 0.970 / 0.953 / 0.979 / 0.988 — but with downward-then-upward wobble (0.953 → 0.979 → 0.988) across the last three windows. This is the training-time number that doesn't match the eval-time number (eval-time M5_predator = 0.660 at the deterministic policy); R2.6 baseline had the same training-time-vs-eval-time gap (training-time 0.93, eval-time 0.769). The first preview's eval-time M5_predator at 0.560 was an outlier *low*; the second preview's 0.660 is between the first preview and the baseline, suggesting the agent's deterministic-policy eat-suppression is relaxing as training continues.
+
+**The training-time plateau on M2 is the most important finding from this preview.** The class gap on M2 at the training-time level is locked at +0.272 across both previews; only the eval-time numbers are still moving. The R2.6 baseline reached its training-time plateau early (by ~window 2 of 10) and stayed there for the remaining 8 windows. The R3 run appears to have entered the same regime — training-time numbers are stable, eval-time numbers are still slowly tracking.
+
+### 12.5 Diagnostic — per-episode predator threat-fraction proxy (re-check)
+
+The §9.5 behavioural-trace proxy is recomputed for the new checkpoint:
+
+| Run | n | mean | std | min | max | Range |
+|---|---:|---:|---:|---:|---:|---:|
+| R2.6 C seed 44 (static predator) | 200 | 0.415 | 0.148 | 0.066 | 0.869 | 0.803 |
+| R3 1st preview (ckpt 1.81 M) | 200 | 0.373 | 0.219 | 0.018 | 1.000 | 0.982 |
+| R3 2nd preview (ckpt 3.90 M) | 200 | **0.339** | **0.187** | **0.004** | **0.860** | **0.856** |
+
+The R3 second-preview spread (std 0.187) is narrower than the first preview's (std 0.219) but still **26 % wider** than the static-predator R2.6 reference (std 0.148). The min/max extremes have compressed slightly (the first preview's max=1.000 episode where the agent spent literally every step within R = 3.0 of the predator does not appear in the second preview's 200 episodes — the most aggressive episode now is 0.860; but a min of 0.004 is still cleaner than R2.6's 0.066). **The per-episode distributional sampling continues to fire as designed.** Mean threat-fraction has dropped from 0.373 → 0.339 → and the baseline's 0.415, which is consistent with the agent learning to spend more steps further from the predator as training continues (corroborated by the `MeanDistPredator` trajectory: window 1 = 4.60 → window 10 = 4.22; the R2.6 baseline was 4.07).
+
+### 12.6 Motif distribution (M7)
+
+200 episodes × ~3 threat-onsets per episode → **7,540 motif windows** (vs 6,950 at the first preview — the agent is generating more threat-onset events per episode, consistent with the higher survival). Silhouette mean = **0.190** (vs 0.180 first preview; modest improvement); the six k-means clusters partition predator vs rabbit windows as:
+
+| cluster | size | frac | net_disp | path_len | min_threat_dist | bush_occ | eat_per_win | predator-frac | rabbit-frac |
+|:---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 586 | 0.078 | 5.42 | 7.52 | 1.51 | 0.136 | 1.11 | 0.360 | 0.640 |
+| 1 | 1061 | 0.141 | 0.35 | 0.85 | 1.92 | 0.916 | 0.51 | 0.497 | 0.503 |
+| 2 | 1774 | 0.235 | 0.87 | 3.04 | 1.21 | 0.521 | 2.32 | **0.719** | 0.281 |
+| 3 | 1814 | 0.241 | 1.34 | 4.32 | 2.10 | 0.457 | 1.51 | 0.398 | **0.602** |
+| 4 | 1117 | 0.148 | 0.56 | 0.88 | 2.08 | 0.082 | **3.83** | 0.263 | **0.737** |
+| 5 | 1188 | 0.158 | 2.14 | 6.00 | 1.16 | 0.308 | 1.21 | **0.763** | 0.237 |
+
+The cluster assignments have re-shuffled relative to the first preview (k-means is run independently on each eval, and the relabelling of clusters is expected); the substantive question is the **shape** of the partition. The predator-skewed clusters at the second preview are **2 (71.9 % predator, "low motion, in-bush, high eating, close threat")** and **5 (76.3 % predator, "moderate motion, low bush, mid eating, close threat")** — together capturing **39 % of all windows** vs the first preview's predator-skewed clusters 0 + 2 capturing **43 %**. The rabbit-skewed clusters are **3 (60.2 % rabbit, "moderate motion, low bush, mid eating, mid threat distance")** and **4 (73.7 % rabbit, "low motion, very high eating, mid threat distance")** — together **39 %** of windows vs the first preview's 36 %. Cluster 1 (50/50 predator-rabbit split with very high bush_occ = 0.92, low eating, mid threat distance) is the new "in-bush, low-eat, mid-threat" cluster that didn't have a direct counterpart in the first preview's six clusters — it captures 14 % of windows and is essentially class-neutral.
+
+Per-class motif distribution (row-normalised):
+
+| triggering_class | cluster_0 | cluster_1 | cluster_2 | cluster_3 | cluster_4 | cluster_5 |
+|---|---:|---:|---:|---:|---:|---:|
+| predator | 0.054 | 0.134 | **0.324** | 0.183 | 0.075 | **0.230** |
+| rabbit | 0.104 | 0.148 | 0.138 | **0.303** | **0.228** | 0.078 |
+
+The two predator-skewed clusters (2, 5) together capture 55 % of predator threat-onset windows (vs 62 % in the first preview's clusters 0 + 2); the two rabbit-skewed clusters (3, 4) together capture 53 % of rabbit threat-onset windows (vs 51 % at the first preview). The qualitative agent-response separation by class is still intact — predator triggers concentrate in "close-threat" clusters, rabbit triggers in "mid-threat" clusters — but the separation has weakened slightly between the two previews (predator concentration dropped 7 pp; rabbit held steady). This is consistent with the eval-time M2 gap narrowing from +35.1 to +31.6 pp: the agent's class-conditional motif separation is loosening, just slowly.
+
+---
+
+## 13. Analysis — applying §1 / §5.1 thresholds to the second preview (mid-training)
+
+### 13.0 What this section does — plain-English entry point
+
+§12 reported the numbers; §13 applies the same pre-registered §5.1 verdict thresholds the first-preview §10 used — *with the explicit caveat that this is still a mid-training preview*, just at a later waypoint (39 % of budget vs the first preview's 18 %). The §5.1 confirmation criteria are unchanged from the design: H₁ confirmation (avoidance generalised) needs `Δ_M2_class < +20 pp` AND (`M2_neutral ≥ 0.65` OR `M5_neutral < 1.05`); H₀ confirmation (avoidance class-pinned) needs `Δ_M2_class ≥ +30 pp` AND `M2_neutral < 0.60`; borderline is `+20 pp ≤ Δ_M2_class < +30 pp`. Each row below holds an R3 second-preview eval-time number from §12.3 against its locked threshold.
+
+### 13.1 Pre-registered band classification at the second mid-training preview
+
+| §5.1 outcome | Primary thresholds | R3 eval-time observed (ckpt 3.90 M) | First preview observed (ckpt 1.81 M, §10.1) | Within band? |
+|---|---|---:|---:|---|
+| **H₁(generalised-avoidance) confirmed** | `Δ_M2_class < +20 pp` AND (`M2_neutral ≥ 0.65` OR `M5_neutral < 1.05`) | Δ_M2_class = **+31.6 pp**; M2_neutral = **0.395**; M5_neutral = **1.198** | (+35.1 pp; 0.343; 1.124) | ✗ — Δ_M2_class is 11.6 pp ABOVE the < +20 pp ceiling (was 15.1 pp above); M2_neutral 0.255 below ≥ 0.65 floor (was 0.31 below); M5_neutral 0.148 ABOVE < 1.05 ceiling (was 0.07 above — M5 secondary has WORSENED). |
+| **H₀(class-pinned-avoidance) confirmed** | `Δ_M2_class ≥ +30 pp` AND `M2_neutral < 0.60` | Δ_M2_class = **+31.6 pp** (≥ +30); M2_neutral = **0.395** (< 0.60) | (+35.1 pp; 0.343) | ✓ both predicates satisfied — but with only 1.6 pp margin above the +30 pp floor (vs 5.1 pp at first preview). |
+| **Borderline** | `+20 pp ≤ Δ_M2_class < +30 pp` | Δ_M2_class = +31.6 pp (1.6 pp above the borderline band's upper edge) | (+35.1 pp; 5.1 pp above) | ✗ at the second preview, but the trajectory is **moving toward this band** at ~1.7 pp per million episodes. |
+| **Inverted / null** | `Δ_M2_class ≤ 0` OR `M2_predator < 0.50` | Δ_M2_class = +0.316 (positive, not ≤ 0); M2_predator = 0.711 (≥ 0.50) | (+0.351; 0.693) | ✗ |
+
+**At the second mid-training waypoint the data still sits in the H₀(class-pinned-avoidance) band — but with thinner margin than the first preview.** Both H₀ predicates clear: Δ_M2_class +31.6 pp is 1.6 pp past the +30 pp floor (vs 5.1 pp at first preview — margin shrunk by 3.5 pp); M2_neutral 0.395 is 0.205 (51 % of the way to zero) under the 0.60 ceiling (vs 76 % at first preview — margin shrunk by 25 % of the headroom).
+
+**The trajectory is genuinely toward the borderline band.** A 3.5 pp drop in Δ_M2_class over 2.09 M episodes of additional training is faster than the first preview's "stable across windows 8–10" reading implied. If the same per-2M-episode drift continues for the remaining 6.1 M episodes, the closing Δ_M2_class projects to ≈ +21 pp — JUST INSIDE the H₁ confirmation band by 1 pp, or 1 pp inside the borderline band if convergence slows by a factor of ~1.5. **This is the operator's headline open question: will the closing checkpoint land in H₀, borderline, or H₁?** The second preview shifts the answer-probability mass from "H₀ confident" toward "borderline with H₁ tail" but does not commit.
+
+### 13.2 §5.3 temporal-stability check (windows 8, 9, 10)
+
+The §5.3 stability check asks whether the primary metric is stable across windows 8, 9, 10 — a precondition for the verdict to be taken seriously. At the second mid-training waypoint these three windows correspond to episodes 2.84 M → 3.94 M (the last 28 % of training-so-far).
+
+| Measure | Window 8 | Window 9 | Window 10 | Spread | Within-window σ | Stable? |
+|---|---:|---:|---:|---:|---:|---|
+| `BushDiveRate_predator_full` | 0.633 | 0.634 | 0.637 | 0.004 | 0.009 | ✓ |
+| `BushDiveRate_rabbit` | 0.364 | 0.363 | 0.366 | 0.003 | 0.010 | ✓ |
+| `EatUnderThreatRatio_predator` | 0.953 | 0.979 | 0.988 | 0.035 | 0.038 | ✓ but with upward trend |
+| `Steps` | 378.3 | 382.2 | 382.8 | 4.5 | 4.5 | ✓ |
+| `Term_MaxSteps` | 0.500 | 0.512 | 0.512 | 0.012 | 0.014 | ✓ |
+
+The mid-training plateau at the second preview is **more complete than at the first preview**: predator-side BushDive stable to ±0.004, rabbit-side BushDive stable to ±0.003 (cleaner than the first preview's borderline 0.013 spread on the rabbit side), survival stable to ±4.5, MaxSteps termination stable. `EatUnderThreatRatio_predator` is still not quite plateaued — windows 8/9/10 show an upward drift from 0.953 → 0.988 (the first preview had it DECREASING; the trajectory reversed, suggesting the M5_predator may be relaxing toward the baseline's training-time ~0.93 rather than continuing to drop). **The policy is more clearly plateaued than at the first preview**, especially on the training-time M2 numbers.
+
+### 13.3 §5.2 cross-cell + cross-round contrasts — what the second preview locks in
+
+| Quantity | R3 second preview (ckpt 3.90 M) | R3 first preview (ckpt 1.81 M) | R2.6 C seed 44 (10 M baseline) | Δ (2nd − baseline) | Δ (2nd − 1st) |
+|---|---:|---:|---:|---:|---:|
+| Eval-time M2 predator | 71.1 % | 69.3 % | 88.8 % | −17.7 pp | +1.8 pp |
+| Eval-time M2 rabbit | 39.5 % | 34.3 % | 51.5 % | −12.0 pp | **+5.2 pp** |
+| Eval-time Δ_M2_class | **+31.6 pp** | **+35.1 pp** | **+37.3 pp** | **−5.7 pp** | **−3.5 pp** |
+| Eval-time M5 predator | 0.660 | 0.560 | 0.769 | −0.109 | **+0.100** |
+| Eval-time M5 rabbit | 1.198 | 1.124 | 1.202 | −0.004 | +0.074 |
+| Mean survival (eval, n = 200) | 411.9 ± 121.9 | 380.5 ± 142.5 | 414.7 ± 118.3 | −2.8 steps | +31.4 steps |
+
+Three observations:
+
+- **The M2 trajectory is asymmetric between the two sides.** Predator-side M2 moved by +1.8 pp between the two previews; rabbit-side M2 moved by +5.2 pp — **the rabbit-side is climbing faster than the predator-side**, which is exactly the trajectory the operator's brief flagged as the headline open question. **Rabbit-side M2 has caught up substantially**; the gap is narrowing because the rabbit-side defence is closing the headroom-to-baseline faster than the predator-side is. *Answer to operator's sub-question 1: YES, rabbit-side M2 is catching up — the headroom-to-baseline is closing at ~5 pp per 2 M episodes on the rabbit side vs ~2 pp on the predator side.*
+
+- **The M5 strategy-reshape pattern has NOT held.** The first preview's surprise was M5_predator = 0.560 vs the baseline 0.769 — much more eat-suppression. The second preview shows M5_predator at 0.660, having relaxed by +0.10 toward the baseline. The "agent eats less near predator under randomisation" effect is still present but only at 50 % of the first-preview magnitude. *Answer to operator's sub-question 2: NO, the M5 strategy-reshape pattern has FADED. Predator-side eat-suppression has relaxed from 56 % of safe-baseline to 66 % of safe-baseline, halfway back to the R2.6 baseline's 77 %.* The likely interpretation: at the first preview the agent had a strong, brittle "stay-away-from-food-when-predator-near" sub-policy that was the dominant defence (because the bush-dive arm wasn't yet well-trained); as the bush-dive defence has matured between the previews, the agent has relaxed the eat-suppression arm.
+
+- **Survival has converged to the baseline.** 411.9 ± 121.9 vs the baseline's 414.7 ± 118.3 — within noise (~3 step difference, std ~120). The first preview's 34-step deficit has closed entirely. **Answer to operator's sub-question 3: YES, predator-side defence trajectory has climbed substantially toward the baseline** — by 1.8 pp on the bush-dive measure and by enough on the cross-section of defences (eat-suppression near predator, distance-keeping, in-bush time near predator) that survival now matches baseline.
+
+The mid-training reading is that **the predator-side defence is approaching baseline; the rabbit-side defence is climbing faster than predator-side; and the M5 over-suppression has relaxed**. The §0 plain-English question — "does the class gap collapse from +37 pp toward ≤ +20 pp?" — has its second-preview answer: "from +37 pp it dropped to +35 pp (first preview), then to +31.6 pp (second preview); the trajectory is real, the slope is modest but consistent, and a closing landing in the borderline band is now the modal projection."
+
+### 13.4 Did the random-predator-behaviour cue push the agent in a different direction since the first preview?
+
+The first preview's §10.4 summary was that the agent was MORE eat-suppressed near the predator (0.56 vs baseline 0.77) and LESS bush-diving on both classes (predator −19.5 pp, rabbit −17.2 pp). The second preview shows this profile has **shifted**:
+
+- **Predator-side M5 has half-relaxed toward baseline** (0.560 → 0.660 vs baseline 0.769 — at the second preview the gap to baseline is 0.109; at the first preview it was 0.209). The eat-suppression-as-primary-defence reading is weakening.
+- **Bush-dive defence on both classes has caught up but asymmetrically.** Predator-side gap to baseline: −19.5 pp at first preview → −17.7 pp at second preview (closed by 1.8 pp). Rabbit-side gap to baseline: −17.2 pp → −12.0 pp (closed by 5.2 pp). The rabbit-side has closed nearly three times as much as the predator-side.
+- **The M5 class gap has WIDENED** (Δ_M5 = +0.564 at first preview → +0.538 at second preview — actually slightly narrowed in absolute terms; but the *predator-side magnitude* of the M5 effect has weakened more than the rabbit-side magnitude has).
+
+The most useful summary of the second-preview shape: **the agent is on a path toward the R2.6 baseline policy from a "less-bush-diving + more-eat-suppression" mid-training detour; the rabbit-side is closing faster than the predator-side, which is what is narrowing the in-cover class gap.** The interpretation is that randomised predator behaviour did NOT push the agent into a permanently different defensive strategy — the policy is converging toward the same kind of class-conditional defence the R2.6 baseline has, just along a different trajectory and possibly with a slightly narrower closing class gap.
+
+### 13.5 §6 failure-mode catalog — which rows fired at the second preview?
+
+- **§6 "Survival collapses < 350 / 500"**: training-time `Episode/Steps` = 382.4, eval-time mean = 411.9 — both well ABOVE the 350 floor. The mid-training agent has NOT collapsed. **Did not fire.**
+- **§6 "Per-episode sampling did not fire"**: §12.5 behavioural-trace diagnostic (per-episode predator threat-fraction std 0.187, still 26 % wider than the static-predator R2.6 reference's 0.148; min 0.004 vs baseline 0.066) is still strong indirect evidence that the per-episode sampling IS firing. **Did not fire.**
+- **§6 "Δ_M2_class lands in the borderline band"**: Δ_M2_class = +31.6 pp, just above the [+20, +30] band. **Did not fire at the second preview**, but **the trajectory is moving toward firing this row at the closing analysis** if convergence does not slow further than its current slope. The seed-47 escalation rule is now a live possibility at the closing analysis.
+- **§6 "Visual one-hot dependence cannot be ruled out"**: H₁ has still not confirmed; the row's "successor question" is still latent. **Latent.**
+- **§6 "Agent saturates at M2_predator ≈ 1.0"**: M2_predator = 0.711, still far from 1.0. **Did not fire.**
+- **§6 "Per-episode sampling triggers JIT recompile"**: training continues at ~3.3 it/s, no recompile spikes visible. **Did not fire.**
+- **NEW concern flagged at this preview: M5 per-tag fan-out exceeds the ±0.10 band.** The rabbit_TL / rabbit_BR M5 gap is 0.259 (§12.3 fan-out table), exceeding the toolkit-v1 ±0.10 band. The baseline §9.3 reference had a 0.139 gap (also over band but marginal); the current 0.259 gap is roughly double. The M2 per-tag fan-out remains within band (4.5 pp ≤ 5 pp), so the headline verdict is not affected, but the M5 per-tag asymmetry is worth re-checking at the closing analysis.
+
+---
+
+## 14. Second-preview conclusions
+
+### 14.0 What this section says — plain-English entry point
+
+This section records the **second mid-training preview verdict for the R3 distributional-predator experiment at ~39 % of its 10-million-episode training budget**, NOT the closing verdict. The first preview (§§9–11) at 18 % of budget is unchanged on the record; this preview just adds a later waypoint and a trajectory reading. With those caveats stated up front:
+
+**Plain-English preview.** At 3.90 M episodes of training, the agent has narrowed the predator-vs-rabbit class gap on the in-cover-rate measure from +37 pp (R2.6 baseline) to +35.1 pp (first preview) to **+31.6 pp** (second preview) — a trajectory toward the +30 pp H₀ floor with roughly 1.7 pp of progress per million episodes. The rabbit-side defence IS catching up to the predator-side: rabbit-side M2 climbed +5.2 pp between previews while predator-side M2 climbed +1.8 pp. The first preview's surprise — dramatic predator-side eat-suppression (M5 = 0.560 vs baseline 0.769) — has half-relaxed (now M5 = 0.660). Survival has converged to the baseline (411.9 ± 121.9 vs baseline 414.7 ± 118.3, within noise). At the §5.1 pre-registered criteria the data still sits in the **H₀(class-pinned-avoidance) band**, but with thinner margin (Δ_M2_class is now only 1.6 pp above the H₀ floor vs 5.1 pp at the first preview). Linear extrapolation of the per-million-episode drift to the 10 M closing checkpoint projects Δ_M2_class ≈ +21 pp, which would put the closing verdict in either the borderline band (and trigger seed-47 escalation) or — if convergence is slightly faster than linear — in the H₁ confirmation band. **The "H₀ confirmed, gap is rock-stable" reading from the first preview no longer dominates the closing-projection space.**
+
+### 14.1 Per-cell preview verdict — Cell C-dist seed 46 at episode 3.90 M / 10 M
+
+**Plain English:** at the second mid-training waypoint the agent at seed 46 has trained a class-conditional defence that is now closer in *magnitude* to the R2.6 baseline (survival within noise; predator-side M2 climbing toward the baseline plateau; M5_predator relaxing back toward the baseline). The class gap on in-cover rate is +31.6 pp — narrowed by 5.7 pp from the seed-locked baseline +37.3 pp and 3.5 pp from the first preview's +35.1 pp. If this mid-training trajectory continues, the experiment's pre-registered verdict at closing is likely to be either **H₀(class-pinned-avoidance) confirmed with thin margin** (Δ in [+30, +33]) or **Borderline** (Δ in [+20, +30]) triggering seed-47 escalation, with a smaller probability mass on **H₁(generalised-avoidance) confirmed** (Δ < +20).
+
+**Formal preview predicate: H₀(class-pinned-avoidance) provisionally band-matched, with margin-shrinkage warning.** Δ_M2_class = +31.6 pp (≥ +30 pp); M2_neutral = 0.395 (< 0.60). Both H₀ predicates clear. Per-tag rabbit fan-out: M2 within band (4.5 pp ≤ 5 pp), M5 OVER band (0.259 > 0.10 — new at this preview; was 0.080 at the first preview). The H₀ verdict at the second preview is *consistent with* but **less confidently committed to** than at the first preview — the Δ_M2_class margin above the +30 pp H₀ floor has dropped from 5.1 pp to 1.6 pp over 2.09 M additional episodes.
+
+**Elevation:** none claimed. The §5.1 verdict thresholds are written for the closing-analysis checkpoint; a mid-training preview does not satisfy the elevation rule.
+
+### 14.2 What the closing analysis will check that this preview cannot
+
+The second mid-training preview still cannot decide three questions:
+
+1. **Does Δ_M2_class drift below +30 pp?** Currently +31.6 pp with a clear downward trajectory. Linear projection to 10 M lands near +21 pp (borderline / H₁ edge). Convergence-slowing past plateau could leave it at the +30 pp floor (H₀ thin) or just below (borderline triggering seed-47).
+2. **Does rabbit-side M2 stabilise or keep climbing?** Window-8/9/10 training-time numbers are tightly plateaued (0.364 / 0.363 / 0.366 — spread 0.003), but the eval-time numbers moved by +5.2 pp between the two previews despite training-time only moving +0.015. If the eval-time-vs-training-time gap is the load-bearing driver of the closing M2_rabbit, the closing eval could land notably above the current 0.395 — possibly into the [0.45, 0.55] range, which would matter for the H₁ M2_neutral ≥ 0.65 secondary.
+3. **Does M5_predator stabilise around 0.66 or relax further toward baseline's 0.77?** The first→second-preview drift was +0.10 in 2.09 M episodes; if the trajectory continues, the closing M5_predator could land near 0.76 — fully erasing the strategy-reshape pattern. If it stabilises, the +0.10 gap to baseline is itself a publishable finding.
+
+### 14.3 §2.2 designer's priors versus second-preview observed
+
+| §2.2 prior | Stated probability | Second-preview observation | Holding? |
+|---|---:|---|---|
+| Partial generalisation (H₁ confirmed via M2_neutral rising into 0.65–0.70) | 50 % | M2_neutral = 0.395 — rabbit defence rising (+5.2 pp from first preview), but still 0.255 below the 0.65 threshold | Not yet — but trajectory is in the predicted direction, and 6.1 M more episodes of training is substantial. **Probability-mass has increased.** |
+| No generalisation (visual one-hot wins, H₀ confirmed) | 35 % | Δ_M2_class = +31.6 pp; both H₀ predicates band-matched but with thinner margin | Still in band — but margin shrinkage warns this prior may not survive to closing. **Probability-mass has decreased.** |
+| Over-generalisation (M5_neutral drops below 1.0) | 10 % | M5_neutral = 1.198 — within 0.004 of R2.6 baseline (1.202); the first preview's 1.124 was apparently a transient | Refuted — M5_neutral has re-converged to baseline; agent is NOT over-suppressing eating near rabbits. |
+| Predator becomes degenerate / training instability | 5 % | Survival 382.4 / 411.9 (within R2.6 noise), no policy collapse, M2 stable in windows 8–10 | Refuted. |
+
+The H₀ prior (35 %) was the first preview's band-match; at the second preview the H₁-partial prior (50 %) has more empirical support than at the first preview because the rabbit-side M2 has demonstrably risen +5.2 pp in 2.09 M episodes. **The probability-mass has shifted from H₀-confident toward H₁-partial / borderline.** The closing-analysis verdict will pick between H₀ (thin), borderline (seed-47), and H₁-partial.
+
+### 14.4 What to do next — closing-analysis routing
+
+**Do not act on the second mid-training H₀ preview as a final answer.** The pre-registered §5.1 verdict thresholds are written for the closing checkpoint; this preview is logged so the operator has updated tracking and can plan downstream experiments, NOT to declare the verdict.
+
+The closing-analysis decision tree (re-stated from §11.4, with second-preview probability-mass commentary):
+
+- **If closing Δ_M2_class lands ≥ +30 pp with M2_neutral < 0.60** (still plausible per the second preview's plateau evidence): H₀ confirms thin; single seed is sufficient per §3.4. Route to the visual-channel-blind ablation (Round 4) as natural follow-up.
+- **If closing Δ_M2_class lands < +20 pp with M2_neutral ≥ 0.65 OR M5_neutral < 1.05**: H₁ confirms; launch seed 47 as the §3.4 seed-lock follow-up. Probability-mass on this outcome has **risen** between the two previews.
+- **If closing Δ_M2_class lands in [+20, +30] pp**: borderline; escalate to seed 47. Probability-mass on this outcome has **risen substantially** — it is now the modal projection if convergence holds at its current slope.
+- **If closing Δ_M2_class ≤ 0 OR M2_predator < 0.50**: anomalous; route to senior-developer / experiment-analyzer discussion.
+
+**Operator monitoring guidance for the remaining ~6 M episodes.** The most informative single metric for tracking trajectory between the second preview and the closing analysis is `Episode/BushDiveRate_rabbit` — its training-time plateau at 0.366 (window 10) is locked, but eval-time numbers are tracking a different curve. A third mid-training preview at ~70 % of budget (≈ 7 M episodes, projected for ~2026-05-30 evening) would resolve the most ambiguity; if compute is tight, going directly to the closing analysis is acceptable given the seed-47 escalation rule provides the second-seed safety net for the borderline case.
+
+### 14.5 Metrics requested
+
+Unchanged from §11.5 / §7. The `Episode/sampled_*_<tag>` keys remain unwired in `train.py`; the §12.5 per-episode threat-fraction proxy is sufficient for the preview sampling-firing diagnostic at both waypoints. No new metrics requested by this preview.
+
+### 14.6 Related issues
+
+- **No bugs surfaced** in the second mid-training preview. Training is healthy, eval-rollout ran cleanly (284.0 s for 200 episodes — within 7 % of the first preview's 265.2 s), motif clustering converged with silhouette 0.190.
+- **No `feature-workflow` plan** is needed for the preview verdict; `Episode/sampled_*_<tag>` wiring remains a soft request for the closing analysis but does not block.
+- **No `bug-fix-workflow` plan** is needed.
+- **NEW flag for closing analysis:** the M5 per-tag rabbit fan-out has drifted OVER the toolkit ±0.10 band (rabbit_TL = 1.099, rabbit_BR = 1.358; gap = 0.259). This was 0.080 at the first preview; the doubling between previews is worth a brief check at the closing analysis to confirm it is not a single-instance artifact. The M2 per-tag fan-out remains within band.
+- The training process (PID 655905 on n113) is **explicitly NOT to be interrupted** per the user's brief. This preview was produced offline against the saved checkpoint 3,900,028.
+
+### 14.7 Open question for the operator before the closing analysis
+
+The single most important open question from this second preview, **updated from §11.7**: **does the rabbit-side eval-time M2 catch up faster than the predator-side eval-time M2 over the remaining 6.1 M episodes, narrowing the class gap into the borderline band or below?** The second preview shows the trajectory is real: rabbit-side moved +5.2 pp vs predator-side +1.8 pp in 2.09 M episodes of additional training. If the trajectory continues, the closing checkpoint at 10 M projects Δ_M2_class near +21 pp (H₁ edge) or +25 pp (borderline interior); if it slows substantially, +28-30 pp (H₀ thin) is possible. The operator may want to monitor `Episode/BushDiveRate_rabbit` and `Episode/BushDiveRate_predator_full` per windowed read across the next few days; a divergence in their slopes is the signal that the gap is closing further.
+
+A second secondary question worth re-flagging: M5_predator at 0.660 has relaxed substantially from the first preview's 0.560 — half-way back to the R2.6 baseline's 0.769. If this trajectory continues, the M5 strategy-reshape pattern that the first preview flagged as "noteworthy" may have been a transient mid-training detour rather than a closing finding. Worth re-checking at closing.
+
+---
+
+## 15. Second-preview manifest
+
+Files produced by this preview (all gitignored except the design doc itself):
+
+- `results/eval/models/3900028/models/3900028/` — eval-rollout output (200 episodes, deterministic policy, 284.0 s wall-clock at git `d340793`).
+  - `metadata.json` — config snapshot.
+  - `episodes/*.npz` — 200 per-episode step arrays.
+  - `windows/threat_onsets.parquet` — threat-onset window index.
+  - `online_replay.json` — M1 / M2 / M5 online-replay sanity (M1 reads 0 due to the same online_replay quirk on the predator side; the cross-tab in `tmp/20260529_1556_r3_second_preview_aggregates.json` is the authoritative number).
+  - `motifs/feature_vectors.parquet` + `cluster_assignments.parquet` + `cluster_centroids.npy` + `silhouette.json` + `motif_distribution.json` + `exemplars.json` — M7 k-means k = 6 seed = 42.
+- `tmp/20260529_1556_r3_seed46_second_preview_analysis.py` — cross-tab analysis script (mirror of the first preview's `tmp/20260529_0212_r3_seed46_eval_analysis.py`).
+- `tmp/20260529_1556_r3_second_preview_aggregates.json` — per-class and per-tag M1 / M2 / M5 numerator/denominator/ratio.
+- `tmp/20260529_1556_r3_second_preview_motifs.csv` — per-cluster centroid feature means + class fractions.
+- `tmp/20260529_1556_r3_second_preview_motif_by_class.csv` — class × cluster cross-tab (row-normalised).
+- `tmp/20260529_1556_r3_second_preview_motif_by_tag.csv` — tag × cluster cross-tab (row-normalised).
+- `tmp/20260529_1556_r3_second_preview_last20pct.py` — last-20 %-window extractor script.
+- `tmp/20260529_1556_r3_second_preview_last20pct.csv` — last-20 %-window means + std (training-time, from WandB raw history).
+- `tmp/20260529_1556_r3_second_preview_full_run.csv` — full-run-so-far means + std (training-time, from WandB raw history).
+- `tmp/20260529_1556_r3_second_preview_windows.csv` — 10-window breakdown of headline training-time metrics.
+- `tmp/20260529_1556_r3_second_preview_analysis_output.txt` — captured stdout of the cross-tab analysis script.
