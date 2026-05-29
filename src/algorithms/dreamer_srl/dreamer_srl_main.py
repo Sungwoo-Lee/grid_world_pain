@@ -410,12 +410,20 @@ def main() -> None:
                 "learning_starts": learning_starts,
                 "seq_len": seq_len,
                 "batch_size": batch_size,
-                # Full config trees — agent.algorithm becomes filterable in WandB UI
-                "env": env_config_dict,
-                "agent": agent_config_dict,
+                # Spread env YAML first, then agent YAML — agent wins on collision.
+                # Mirrors train.py:L599-L617 spread pattern so the agent YAML's `agent:`
+                # block lands at wandb.config.agent (clean, single level) — makes
+                # `agent.algorithm = DreamerV3` filterable in the WandB UI.
+                # Merge rule: agent-config wins on key collision (algorithm-identity and
+                # training-cadence live there). Current canonical configs are disjoint at
+                # top level (env: environment/body/sensory/visualization/perceptual_noise/
+                # behavior_measures; agent: agent/algo/buffer/training/env), so no actual
+                # overrides today — the rule only matters for future configs.
+                **env_config_dict,
+                **agent_config_dict,
             }
-            # Defense-in-depth: force agent.algorithm even if a variant YAML omits the field
-            # Ported from train.py:L600 + 189f0df defense
+            # Defense-in-depth: if a variant YAML ever omits agent.algorithm,
+            # the WandB filter still works. (Cheap, idempotent.)
             wandb_config.setdefault("agent", {})["algorithm"] = "DreamerV3"
 
             run = wandb.init(
@@ -466,6 +474,21 @@ def main() -> None:
         results_dir = _os.path.join(_project_root, 'tmp', f'JAX_DreamerSRL_{_timestamp}')
     _os.makedirs(results_dir, exist_ok=True)
     print(f"[dreamer-srl] results_dir={results_dir}")
+
+    # Persist both source YAMLs next to checkpoints for reproducibility.
+    # Mirrors train.py:L561-L566 — but kept SEPARATE (env_config.yaml + agent_config.yaml)
+    # instead of merged, to preserve the --env-config / --agent-config CLI provenance.
+    import yaml as _yaml
+    _models_dir = _os.path.join(results_dir, 'models')
+    _os.makedirs(_models_dir, exist_ok=True)
+    _env_save = _os.path.join(_models_dir, 'env_config.yaml')
+    _agent_save = _os.path.join(_models_dir, 'agent_config.yaml')
+    with open(_env_save, 'w') as _f:
+        _yaml.dump(env_cfg.to_dict(), _f, default_flow_style=False, sort_keys=False)
+    with open(_agent_save, 'w') as _f:
+        _yaml.dump(agent_cfg.to_dict(), _f, default_flow_style=False, sort_keys=False)
+    print(f"[dreamer-srl] saved env_config → {_env_save}")
+    print(f"[dreamer-srl] saved agent_config → {_agent_save}")
 
     # Checkpoint state for Commit B
     last_ckpt_episode: int = 0   # tracks last episode count at which we saved
