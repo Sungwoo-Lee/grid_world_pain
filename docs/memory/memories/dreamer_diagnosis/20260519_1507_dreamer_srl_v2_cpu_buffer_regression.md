@@ -70,4 +70,5 @@ dreamer-srl v2 ports sheeprl's PyTorch replay buffer as pure numpy/CPU (`src/alg
 - [[20260519_1508_dreamer_jax_perf_retrofit_4_phases]] (dreamer_diagnosis, 2026-05-19) — On 2026-02-21, the original JAX Dreamer trainer was retrofitted in 4 measured ph
 - [[20260519_1509_nnx_lax_scan_split_merge_pattern]] (dreamer_diagnosis, 2026-05-19) — To run a flax NNX Module inside jax.lax.scan without re-tracing on every call, s
 - [[20260521_0151_xla_scan_body_compile_dominates_module_count]] (dreamer_diagnosis, 2026-05-21) — Earlier claim — that dreamer-srl's 7-module decomposition CAUSED the 70× lax.sca
+- [[20260529_1825_log_interval_anchored_rows_per_session]] (cluster_ops, 2026-05-29) — log_interval should be anchored to rows-per-session (target ~140 rows in a 24h r
 <!-- END BACKLINKS -->

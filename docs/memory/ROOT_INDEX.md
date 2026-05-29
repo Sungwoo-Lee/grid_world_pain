@@ -4,9 +4,9 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-05-28
-**Active folders**: 6
-**Total insights**: 88
+**Last updated**: 2026-05-29
+**Active folders**: 7
+**Total insights**: 92
 **Last audit**: (none)
 
 ---
@@ -18,9 +18,10 @@
 | `memory_system_design` | Claude memory system's own design decisions | 10 | 2026-05-28 | [memory, design, decision, skill, meta, learned_lesson] |
 | `subagent_engineering` | Subagent + worktree usage gotchas | 13 | 2026-05-28 | [meta, learned_lesson, worktree, subagent, decision, design] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 16 | 2026-05-28 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision] |
-| `dreamer_diagnosis` | DreamerV3 failure investigation | 16 | 2026-05-21 | [dreamer, decision, learned_lesson, refutation, meta, design] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 24 | 2026-05-28 | [meta, training_runner, learned_lesson, decision, design] |
+| `dreamer_diagnosis` | DreamerV3 failure investigation | 17 | 2026-05-29 | [dreamer, decision, learned_lesson, refutation, meta, design] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 26 | 2026-05-29 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
 | `hypervigilance` | Hypervigilance experiments | 9 | 2026-05-18 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta] |
+| `env_entities` | Env entity architecture decisions | 1 | 2026-05-29 | [design, decision, learned_lesson, meta] |
 
 ---
 
@@ -52,6 +53,8 @@ Surface a merge proposal to the user when:
 
 ## Change history
 
+- 2026-05-29: Captured 3 insights from the dreamer-srl v2 post-fix relaunch + WandB/config-save parity + log_interval-cadence session: 2 into existing `cluster_ops` (`20260529_1824_dreamer_srl_wandb_spread_and_config_save_parity` — lifted rPPO's `**config.to_dict()` spread pattern + dual env_config.yaml/agent_config.yaml save, smoke `mo1pkvm5` confirms `wandb.config["agent"] == {"algorithm": "DreamerV3"}`; `20260529_1825_log_interval_anchored_rows_per_session` — anchor log_interval to ~140 WandB rows / 24h, not env-steps-per-row; dreamer-srl @ XS/num_envs=16 → 50000 → 2000 to match rPPO scale), 1 into existing `dreamer_diagnosis` (`20260529_1826_lazy_import_schema_drift_first_call_crash` — 4 cells crashed at ep 10000 because eval_recording.py is lazy-imported AFTER a parallel session pulled the CP6 EnvState unification; schema mismatch surfaces only at first lazy-call site, ~7h into training). All tags reused (dreamer, meta, learned_lesson, decision, design, refutation, training_runner). No new tags promoted. Added `dreamer` to `cluster_ops` top-tags list to reflect cross-algorithm-infra use.
+- 2026-05-29: Captured 1 insight into the **new** `env_entities` folder from the v2.0 env_entities refactor + R3 predator-distributional design session: `20260529_1823_unified_animal_entity_v2_0_arch` — unified predator + neutral animals into one entity class with a static class tag (sensor channels + metric fan-out only), added per-episode uniform distributional sampling on 5 core behavioural fields, shipped via CP1-CP6 atomic refactor across 86 configs with byte-parity vs v1.4 preserved by a per-subset PRNG call pattern. **Why a new folder**: env-architecture is generic to all experiments and shouldn't be hidden inside `hypervigilance` (which drove R3) or `nmn_diagnosis` (model-architecture). Definition lock: `Env entity architecture decisions`. Folder size 1; eligible for merge proposal if it stays singleton at the next audit. All tags reused (design, decision, learned_lesson, meta). No new tags promoted.
 - 2026-05-28: Captured 1 insight into existing `subagent_engineering` from the v2.0 env_entities refactor session: `20260528_1647_bg_isolation_subagent_bypass` — sub-agents spawned via the `Agent` tool bypass the bg-session worktree-isolation guard that blocks top-level Edit/Write/NotebookEdit; 4-tier workaround hierarchy verified empirically across 100+ file edits during CP1-CP6. Extends `20260519_1810_bg_isolation_blocks_edit_not_bash` (closes its `NotebookEdit` open question and adds the sub-agent-bypass finding). All tags reused (worktree, subagent, learned_lesson, meta, decision). No new tags promoted.
 - 2026-05-28: Captured 4 insights from the EPISODE project_plan rewrite + Foam wikilink convention + VSCode startup fix session: 2 into existing `cluster_ops` (`20260528_0215_foam_excludes_required_not_search_exclude` — Foam doesn't honor `search.exclude`, needs its own `foam.files.ignore`; cold start 329,724 ms → 3,729 ms, 88× speedup; `20260528_0218_git_lock_parallel_session_contamination` — `git add <file> && git commit` consumes everything currently staged in the index when stale lock clears, including files staged by parallel sessions; recovery via `git commit -C <hash>`), 1 into existing `memory_system_design` (`20260528_0216_foam_wikilinks_filename_as_id_sparse_aliases` — project-wide doc-linking convention: `[[filename]]` default, sparse `aliases:` on ~10–20 god-nodes; same shape as documentation-framing policy promotion), 1 into existing `nmn_diagnosis` (`20260528_0217_episode_direction_4x3_framework_two_papers` — project_plan.md reframe as direction context, 4×3 matrix, two papers at perspective-plus-pilot). All tags reused (meta, learned_lesson, decision, memory, design, nmn). No new tags promoted.
 - 2026-05-25: Captured 1 insight into existing `cluster_ops` from the Claude Code statusline / `rate_limits.*` session: `20260525_2258_claude_code_statusline_rate_limits_official` — Claude Code's stdin JSON now exposes `rate_limits.{five_hour,seven_day}.{used_percentage,resets_at}` directly, replacing local-transcript aggregation / ccusage / accessToken-polling for the Pro/Max usage-display use case. Paired with `refreshInterval: 30` in settings.json so the reset-countdown text ticks live during idle. All tags reused (meta, learned_lesson, decision). No new tags promoted. Extends [[20260508_1826_statusline_jq_ifs_pct]].

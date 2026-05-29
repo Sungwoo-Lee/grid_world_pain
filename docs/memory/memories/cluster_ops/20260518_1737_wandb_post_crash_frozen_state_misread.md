@@ -64,4 +64,5 @@ The Python WandB API's `api.run(<id>).summary` dictionary holds the **last logge
 ## Backlinks
 - [[20260518_1735_sameprop_a1_seed45_corner_camping_refuted]] (hypervigilance, 2026-05-18) — R2.6 Cell A1 seed 45 finished 10M ep on n102 with Episode/Steps=98/500 — H₁(A1-s
 - [[20260518_1736_sameprop_c_seed44_directional_replication]] (hypervigilance, 2026-05-18) — R2.6 Cell C seed 44 at 62.5% of 10M-episode budget on n101 (still running) repro
+- [[20260529_1826_lazy_import_schema_drift_first_call_crash]] (dreamer_diagnosis, 2026-05-29) — 4 dreamer-srl cells crashed at episode 10000 (first checkpoint) with AttributeEr
 <!-- END BACKLINKS -->

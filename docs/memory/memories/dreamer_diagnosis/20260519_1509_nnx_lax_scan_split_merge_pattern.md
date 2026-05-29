@@ -108,4 +108,5 @@ def _scan_train_gpu(self, graphdef, num_steps, rng, main_arrays, ...):
 - [[20260519_1507_dreamer_srl_v2_cpu_buffer_regression]] (dreamer_diagnosis, 2026-05-19) — dreamer-srl v2's replay buffer is 100% numpy/CPU (faithful to sheeprl's PyTorch 
 - [[20260519_1508_dreamer_jax_perf_retrofit_4_phases]] (dreamer_diagnosis, 2026-05-19) — On 2026-02-21, the original JAX Dreamer trainer was retrofitted in 4 measured ph
 - [[20260521_0151_xla_scan_body_compile_dominates_module_count]] (dreamer_diagnosis, 2026-05-21) — Earlier claim — that dreamer-srl's 7-module decomposition CAUSED the 70× lax.sca
+- [[20260529_1823_unified_animal_entity_v2_0_arch]] (env_entities, 2026-05-29) — v2.0 env merges predator + neutral animals into one unified entity class with a 
 <!-- END BACKLINKS -->

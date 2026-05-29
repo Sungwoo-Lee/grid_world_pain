@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-05-28
+**Last updated**: 2026-05-29
 
 ---
 
@@ -55,6 +55,8 @@ These are not yet active — they become active when first used in an insight. R
 
 ## Change history
 
+- 2026-05-29: 3 insights from the dreamer-srl v2 post-fix relaunch + WandB/config-save parity + log_interval-cadence session (`20260529_1824_dreamer_srl_wandb_spread_and_config_save_parity`, `20260529_1825_log_interval_anchored_rows_per_session`, `20260529_1826_lazy_import_schema_drift_first_call_crash`) reused existing tags `dreamer`, `meta`, `learned_lesson`, `decision`, `design`, `refutation`, `training_runner` — no new tags promoted. 2 into `cluster_ops`, 1 into `dreamer_diagnosis`.
+- 2026-05-29: 1 insight from the v2.0 env_entities CP1-CP6 ship + R3 predator-distributional design session (`20260529_1823_unified_animal_entity_v2_0_arch`) reused existing tags `design`, `decision`, `learned_lesson`, `meta` — no new tags promoted. New folder `env_entities` opened (genesis insight).
 - 2026-05-28: 1 insight from the v2.0 env_entities refactor session (`20260528_1647_bg_isolation_subagent_bypass`) reused existing tags `worktree`, `subagent`, `learned_lesson`, `meta`, `decision` — no new tags promoted. Extends `20260519_1810_bg_isolation_blocks_edit_not_bash` with the sub-agent-bypass finding.
 - 2026-05-28: 4 insights from the EPISODE project_plan rewrite + Foam wikilink convention + VSCode startup fix session (`20260528_0215_foam_excludes_required_not_search_exclude`, `20260528_0216_foam_wikilinks_filename_as_id_sparse_aliases`, `20260528_0217_episode_direction_4x3_framework_two_papers`, `20260528_0218_git_lock_parallel_session_contamination`) reused existing tags `meta`, `learned_lesson`, `decision`, `memory`, `design`, `nmn` — no new tags promoted.
 - 2026-05-25: 1 insight from the Claude Code statusline / `rate_limits.*` session (`20260525_2258_claude_code_statusline_rate_limits_official`) reused existing tags `meta`, `learned_lesson`, `decision` — no new tags promoted.

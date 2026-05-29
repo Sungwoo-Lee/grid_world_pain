@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 24
-**Last updated**: 2026-05-28
+**Insights**: 26
+**Last updated**: 2026-05-29
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-05-29 | 18:25 | `20260529_1825_log_interval_anchored_rows_per_session` | log_interval should be anchored to ~140 WandB rows / 24h session, not env-steps-per-row. Dreamer-srl @ ~38 SPS / num_envs=16 reaches 250–500× fewer episodes than rPPO in the same wall-clock, so copying rPPO's env-step cadence (50000) gave 4–6 rows/session — empirically useless across 4 prior cells (oxm78on8/50cpronf/2r5hc0oz/hbqje3dt). Fix: `log_interval=2000` for dreamer-srl @ XS/num_envs=16 → ~140 rows in a 22k-episode session, same row-shape resolution rPPO has at production scale. New YAML carries the rationale + the 4 prior-crash run IDs as the evidence trail. |
+| 2026-05-29 | 18:24 | `20260529_1824_dreamer_srl_wandb_spread_and_config_save_parity` | Lifted rPPO's `**config.to_dict()` spread pattern into `dreamer_srl_main.py` so the UI filter `agent.algorithm = DreamerV3` works cleanly — pre-fix, the entire agent YAML was wrapped under `wandb_config["agent"]`, producing a doubly-nested `agent.agent.algorithm` that confused the filter. Post-fix smoke (`mo1pkvm5`): `wandb.config["agent"] == {"algorithm": "DreamerV3"}`. Trade-off: filter paths flatten — old saved views querying `agent.algo.gamma` / `env.environment.height` won't match post-fix runs; new paths are `algo.gamma` / `environment.height`. Also added `env_config.yaml` + `agent_config.yaml` save to `<results_dir>/models/` for reproducibility parity with rPPO. |
 | 2026-05-28 | 02:18 | `20260528_0218_git_lock_parallel_session_contamination` | When `.git/index.lock` from a parallel Claude session clears and your `git add <file> && git commit` runs, the commit consumes EVERYTHING currently staged in the index — including files staged by the queued parallel session, despite staging by name only. Concrete contamination: a 1-file diary commit ended up with `.gitignore` + `train_command-agent.sh` from a parallel session. Recovery: `git diff --cached --stat` before commit; if a parallel commit lands on top of a contaminated one, use `git commit -C <hash>` to re-create it after the reset rather than blind `--soft HEAD~1`. Refines the project's "stage by name only" rule with the parallel-session caveat. |
 | 2026-05-28 | 02:15 | `20260528_0215_foam_excludes_required_not_search_exclude` | VSCode's `search.exclude` and `files.watcherExclude` do NOT cover the Foam wikilink indexer — Foam has its own `foam.files.ignore` setting. On this NAS-backed remote-SSH workspace with 300+ markdown files, omitting it made Foam's activation take 329,724 ms (5.5 min); adding it dropped to 3,729 ms (3.7 s — 88× speedup). Configure three exclude layers in `.vscode/settings.json`: `files.watcherExclude`, `search.exclude`, `foam.files.ignore`. Include `**/docs/project/references/**/sources/**` (PDFs) and `**/docs/diary/**` in the Foam-specific list. Confirmed via `Developer: Startup Performance` profiler. |
 | 2026-05-25 | 22:58 | `20260525_2258_claude_code_statusline_rate_limits_official` | Claude Code now pipes `rate_limits.five_hour.used_percentage`, `.resets_at`, and matching `seven_day` fields directly into the statusline stdin JSON — same numbers as `claude.ai/settings/usage`, no auth or scraping. Obsoletes ccusage / accessToken-polling / local-transcript aggregation for the usage-display use case. Percentages refresh once per API turn (data comes from last API response); pair with `refreshInterval: 30` in settings.json so the reset-countdown text ticks live during idle. Implemented as two-line statusline at `~/.claude/statusline-command.sh` + `~/.claude/statusline_render.py`. Extends [[20260508_1826_statusline_jq_ifs_pct]] (same pattern: prefer pre-calculated JSON fields). |
