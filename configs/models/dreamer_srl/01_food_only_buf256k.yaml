@@ -127,11 +127,17 @@ buffer:
 training:
   episodes: 10000000
   checkpoint_frequency: 200000
-  # rPPO-parity log cadence. At num_envs=16: 50000 iters × 16 env-steps/iter
-  # ≈ 800k env-steps/log ≈ ~4000 episodes/row (matches rPPO production at
-  # --log-interval=50, num_steps=128, num_envs=128 = ~820k env-steps/log).
+  # Log cadence anchored to ROWS-PER-SESSION, not env-steps-per-row.
+  # rPPO production accumulates ~10M episodes in 24h → ~2500 WandB rows
+  # at log_interval=50. Dreamer-srl @ ~38 SPS / num_envs=16 only reaches
+  # ~20-40k episodes in 24h (250-500× less). Matching rPPO's env-step cadence
+  # (log_interval=50000 ≈ 800k env-steps/log) gave only ~4-6 rows per session
+  # — empirically useless (see 2026-05-28 oxm78on8 / 50cpronf / 2r5hc0oz / hbqje3dt).
+  # log_interval=2000 yields ~160 episodes/row (≈ 0.08 ep/iter × 2000 iters)
+  # and ~140 rows in a 22k-episode session — same trajectory-shape resolution
+  # rPPO has at production scale.
   # Read priority: --log-interval CLI > this key > env_cfg default (10).
-  log_interval: 50000
+  log_interval: 2000
 
 # Env
 env:
