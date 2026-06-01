@@ -149,6 +149,101 @@ def _pad_ragged(rows):
     return out
 
 
+def _run_episode_with_recording(
+    params,
+    policy_fn,
+    rng_key,
+    max_steps: int,
+    deterministic: bool = True,
+    episode_index: int = 0,
+    seed: int = 0,
+):
+    """Recorder-aware variant of _run_episode.
+
+    Returns (ep_data, EpisodeRecorder).  Mirrors the call pattern used by
+    evaluation_core.py (_run_single_env_eval) so recordings are compatible
+    with render_recordings.py.  Handles zero-predator configs (dist shape [T,0]).
+    """
+    from src.utils.eval_recording import EpisodeRecorder
+    from src.environment.sensor import get_observation as _get_obs
+
+    recorder = EpisodeRecorder(
+        episode_index=episode_index,
+        train_episode=episode_index,   # no training-episode concept here; reuse index
+        seed=seed,
+    )
+
+    state = jax_reset(params, rng_key)
+    carry = None
+
+    records = {
+        "agent_pos": [],
+        "action": [],
+        "ate_food": [],
+        "agent_in_bush": [],
+        "dist_per_predator": [],
+        "dist_per_neutral": [],
+        "hit_predator": [],
+        "hit_neutral": [],
+        "nociception": [],
+        "termination_reason": None,
+    }
+
+    # Record initial state (action=-1, reward=0.0 -- matches evaluation_core.py)
+    obs0 = _get_obs(state, params)
+    true_obs0 = _get_obs(state, params, apply_noise=False)
+    recorder.append(state, obs0, true_obs0, action_idx=-1, reward=0.0)
+
+    step = 0
+    done = False
+    info = {}
+    while step < max_steps and not done:
+        action, carry = policy_fn(state, carry, rng_key, deterministic=deterministic)
+        next_state, reward, done_flag, info = jax_step(state, action, params)
+
+        records["agent_pos"].append(np.array(state.agent_pos))
+        records["action"].append(int(action))
+        records["ate_food"].append(bool(np.array(info.get("ate_food", False))))
+        records["agent_in_bush"].append(bool(np.array(info.get("agent_in_bush", False))))
+
+        dp = info.get("dist_per_predator")
+        records["dist_per_predator"].append(np.array(dp) if dp is not None else np.array([]))
+        dn = info.get("dist_per_neutral")
+        records["dist_per_neutral"].append(np.array(dn) if dn is not None else np.array([]))
+
+        records["hit_predator"].append(bool(np.array(info.get("hit_predator", False))))
+        records["hit_neutral"].append(bool(np.array(info.get("hit_neutral", False))))
+        noci = info.get("nociception", info.get("exteroception_nociception", 0.0))
+        records["nociception"].append(float(np.array(noci)))
+
+        # Record post-step state
+        next_obs = _get_obs(next_state, params)
+        true_next_obs = _get_obs(next_state, params, apply_noise=False)
+        recorder.append(next_state, next_obs, true_next_obs,
+                        action_idx=int(action), reward=float(reward))
+
+        state = next_state
+        done = bool(done_flag)
+        step += 1
+
+    records["termination_reason"] = int(np.array(info.get("termination_reason", -1)))
+    T = step
+    ep_data = {
+        "agent_pos": np.array(records["agent_pos"], dtype=np.int32),
+        "action": np.array(records["action"], dtype=np.int32),
+        "ate_food": np.array(records["ate_food"], dtype=bool),
+        "agent_in_bush": np.array(records["agent_in_bush"], dtype=bool),
+        "dist_per_predator": _pad_ragged(records["dist_per_predator"]),
+        "dist_per_neutral": _pad_ragged(records["dist_per_neutral"]),
+        "hit_predator": np.array(records["hit_predator"], dtype=bool),
+        "hit_neutral": np.array(records["hit_neutral"], dtype=bool),
+        "nociception": np.array(records["nociception"], dtype=np.float32),
+        "termination_reason": np.int32(records["termination_reason"]),
+        "length": np.int32(T),
+    }
+    return ep_data, recorder
+
+
 def _detect_threat_onsets(episodes, bm_cfg):
     """Scan episodes for threat-onset events (rising edge of dist < R per class).
 
@@ -319,6 +414,10 @@ def main():
     parser.add_argument("--device", default="cpu", choices=["cpu", "gpu"],
                         help="JAX device.")
     parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--record", action="store_true", default=False,
+                        help="Emit .rec.gz recordings compatible with render_recordings.py.")
+    parser.add_argument("--record-n-episodes", type=int, default=10,
+                        help="Number of episodes to record (first N of --eval-n-episodes).")
     args = parser.parse_args()
 
     if args.device == "cpu":
@@ -364,6 +463,14 @@ def main():
     params = load_env_params(config)
     max_steps = int(config.get_mandatory("environment.max_steps"))
 
+    # --- Derive checkpoint_pct label (directory-name-safe) ---
+    # Use the step number from the checkpoint dir name if parseable, else "eval".
+    _ckpt_name_for_pct = Path(args.checkpoint).resolve().name
+    try:
+        _pct_label = str(int(_ckpt_name_for_pct))
+    except ValueError:
+        _pct_label = "eval"
+
     # --- Determine output dir ---
     ckpt_path = Path(args.checkpoint).resolve()
     run_tag = ckpt_path.parent.name if ckpt_path.parent.name != "checkpoints" else ckpt_path.parent.parent.name
@@ -372,6 +479,12 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "episodes").mkdir(exist_ok=True)
     (out_dir / "windows").mkdir(exist_ok=True)
+
+    # --- Recording setup (--record) ---
+    rec_n_eps = args.record_n_episodes if args.record else 0
+    rec_dir = out_dir / "recordings" / _pct_label
+    if args.record:
+        rec_dir.mkdir(parents=True, exist_ok=True)
 
     if not args.quiet:
         print(f"[eval_rollout] Config: {args.config}", flush=True)
@@ -538,6 +651,22 @@ def main():
         raise NotImplementedError(f"Agent type '{agent_type}' not yet supported by eval_rollout.py. "
                                   f"Implement DreamerV3 checkpoint loading and add here.")
 
+    # --- Recording metadata (written once before the loop) ---
+    if args.record:
+        from src.utils.eval_recording import write_run_meta
+        _action_map = ["Up", "Right", "Down", "Left"]
+        if params.rest_action_enabled:
+            _action_map.append("Rest")
+        if params.eat_action_enabled:
+            _action_map.append("Eat")
+        _icon_config = config.get("visualization.icons", None)
+        write_run_meta(
+            rec_dir, params, _icon_config, _action_map, args.config,
+            extras={"checkpoint_pct": _pct_label},
+        )
+        if not args.quiet:
+            print(f"[eval_rollout] Recording to: {rec_dir}", flush=True)
+
     # --- Run episodes ---
     t_start = time.time()
     episodes = []
@@ -545,18 +674,38 @@ def main():
         key = jax.random.PRNGKey(seeds[ep_idx])
         if not args.quiet:
             print(f"[eval_rollout] Episode {ep_idx + 1}/{n_eps} (seed={seeds[ep_idx]})...", end="\r", flush=True)
-        ep_data = _run_episode(
-            params, policy_fn, key, max_steps=max_steps,
-            deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
-        )
+
+        # When recording, use the recorder-aware variant; otherwise use the fast path.
+        should_record = args.record and ep_idx < rec_n_eps
+        if should_record:
+            ep_data, recorder = _run_episode_with_recording(
+                params, policy_fn, key, max_steps=max_steps,
+                deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
+                episode_index=ep_idx,
+                seed=seeds[ep_idx],
+            )
+        else:
+            ep_data = _run_episode(
+                params, policy_fn, key, max_steps=max_steps,
+                deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
+            )
+            recorder = None
+
         ep_data["seed"] = np.int32(seeds[ep_idx])
         episodes.append(ep_data)
 
-        # Save .npz
+        # Save .npz (unchanged schema)
         np.savez_compressed(
             out_dir / "episodes" / f"{ep_idx:04d}.npz",
             **ep_data,
         )
+
+        # Write recording file if applicable
+        if should_record and recorder is not None:
+            out_path = rec_dir / f"episode_{ep_idx:06d}.rec.gz"
+            recorder.write(out_path)
+            if not args.quiet:
+                print(f"[eval_rollout] Wrote recording: {out_path}", flush=True)
 
     if not args.quiet:
         print(f"\n[eval_rollout] {n_eps} episodes done in {time.time() - t_start:.1f}s", flush=True)
