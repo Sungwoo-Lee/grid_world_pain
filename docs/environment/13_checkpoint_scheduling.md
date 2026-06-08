@@ -265,6 +265,273 @@ For continual-learning runs via `train.py`, `checkpoint_frequency` is replaced b
 
 ---
 
+## Implementation Walkthrough — Full Verbatim Source
+
+This section embeds the complete source of every checkpoint function and the gate code in both training paths. Read this alongside the descriptions above; the descriptions explain *why*, this section shows *exactly what* runs.
+
+New to JAX or Orbax? Read the [primer: Orbax](00_jax_primer.md#orbax) section before continuing — it explains `CheckpointManager`, `StandardSave`, `nnx.state`, and why scalars must be wrapped as 0-d arrays. The [primer: pytrees](00_jax_primer.md#jax-pytrees) section explains why `nnx.state(module, nnx.Param)` returns a pytree that Orbax can serialize.
+
+---
+
+### `make_checkpoint_manager` — create the Orbax session handle
+
+Creates one `CheckpointManager` per training run and points it at a dedicated subdirectory. This is the only place in the codebase that constructs a manager for the dreamer-srl path.
+
+`Source: src/algorithms/dreamer_srl/checkpoint.py:29–41`
+
+```python
+def make_checkpoint_manager(results_dir: str, max_to_keep: int = 20) -> ocp.CheckpointManager:
+    """Create an Orbax CheckpointManager under <results_dir>/checkpoints/.
+
+    Ported from train.py:L555-L559 (ocp.CheckpointManager setup).
+    """
+    ckpt_dir = os.path.join(results_dir, 'checkpoints')
+    os.makedirs(ckpt_dir, exist_ok=True)
+    manager = ocp.CheckpointManager(
+        os.path.abspath(ckpt_dir),
+        checkpointers=ocp.StandardCheckpointer(),
+        options=ocp.CheckpointManagerOptions(max_to_keep=max_to_keep, create=True),
+    )
+    return manager
+```
+
+> **API notes**
+> - `ocp.CheckpointManager` is the Orbax session handle — it tracks which step numbers have been saved in `ckpt_dir` and enforces the `max_to_keep` rotation. [primer: Orbax](00_jax_primer.md#orbax)
+> - `ocp.StandardCheckpointer()` is the default serializer: it round-trips any JAX pytree (including nested dicts of `nnx.state` outputs) without manual schema definitions.
+> - `max_to_keep` is a plain Python int here. Orbax deletes the *oldest* step each time the count exceeds this limit — see the "Silent Rotation" regime in the TL;DR above.
+> - `os.path.abspath(ckpt_dir)` is required: Orbax uses the absolute path as the on-disk root. Relative paths cause subtle failures when the working directory changes.
+> - Note the directory convention: dreamer-srl writes to `<results_dir>/checkpoints/` while Path A (`train.py`) writes to `<results_dir>/models/`. This is a deliberate split — they are different algorithms with separate checkpoint histories.
+
+---
+
+### `save_checkpoint` — serialise all training state at a given episode
+
+Assembles every piece of live training state — model parameters, bookkeeping counters, the PRNG key, and the return-normalisation moments — into a single pytree dict, then hands it to Orbax.
+
+`Source: src/algorithms/dreamer_srl/checkpoint.py:44–102`
+
+```python
+def save_checkpoint(
+    manager: ocp.CheckpointManager,
+    episode: int,
+    world_model,
+    actor,
+    critic,
+    target_critic,
+    moments,
+    key: jax.Array,
+    iter_num: int,
+    policy_step: int,
+    total_episodes_completed: int,
+    cumulative_grad_steps: int,
+) -> None:
+    """Save dreamer-srl state to an Orbax checkpoint at the given episode count.
+
+    Dict structure mirrors train.py:L2411-L2421 (DreamerV3 ckpt_data).
+    Ported from train.py:L2423-L2426.
+
+    Args:
+        manager: CheckpointManager returned by make_checkpoint_manager().
+        episode: Step label for the checkpoint (= total_episodes_completed).
+        world_model: dreamer-srl WorldModel (nnx module).
+        actor: dreamer-srl Actor (nnx module).
+        critic: dreamer-srl Critic (nnx module).
+        target_critic: dreamer-srl target Critic (nnx module).
+        moments: moments dataclass (plain JAX arrays, already picklable).
+        key: current PRNG key.
+        iter_num: current iteration number.
+        policy_step: current policy_step counter.
+        total_episodes_completed: running episode count.
+        cumulative_grad_steps: total gradient steps taken.
+    """
+    ckpt_data = {
+        'world_model':              nnx.state(world_model, nnx.Param),
+        'actor':                    nnx.state(actor, nnx.Param),
+        'critic':                   nnx.state(critic, nnx.Param),
+        'target_critic':            nnx.state(target_critic, nnx.Param),
+        # Moments + bookkeeping scalars stored as 0-d arrays for Orbax compat
+        'key':                      key,
+        'iter_num':                 jnp.array(iter_num, dtype=jnp.int32),
+        'policy_step':              jnp.array(policy_step, dtype=jnp.int32),
+        'total_episodes_completed': jnp.array(total_episodes_completed, dtype=jnp.int32),
+        'cumulative_grad_steps':    jnp.array(cumulative_grad_steps, dtype=jnp.int32),
+    }
+    # Moments is a NamedTuple of JAX arrays — include field-by-field for Orbax
+    # (Orbax StandardSave handles plain JAX pytrees natively).
+    if hasattr(moments, '_asdict'):
+        ckpt_data['moments'] = dict(moments._asdict())
+    elif isinstance(moments, dict):
+        ckpt_data['moments'] = moments
+    else:
+        # Fallback: store the object fields as a dict
+        ckpt_data['moments'] = {k: v for k, v in moments.__dict__.items()
+                                 if isinstance(v, jax.Array)}
+
+    # Ported from train.py:L2425-L2426
+    manager.save(episode, args=ocp.args.StandardSave(ckpt_data))
+    manager.wait_until_finished()
+```
+
+> **API notes**
+> - `nnx.state(module, nnx.Param)` extracts only the trainable parameters from a Flax NNX module as a pytree. Non-parameter variables (e.g. batch-norm running stats) are excluded by the `nnx.Param` filter. [primer: pytrees](00_jax_primer.md#jax-pytrees) | [primer: Orbax](00_jax_primer.md#orbax)
+> - The four model entries (`world_model`, `actor`, `critic`, `target_critic`) are all pytrees of arrays — nested dicts of weight tensors. The entire `ckpt_data` dict is itself a pytree (a dict of pytrees), which Orbax walks recursively.
+> - `jnp.array(iter_num, dtype=jnp.int32)` wraps a plain Python int as a 0-d JAX array. Orbax's `StandardSave` only serialises JAX pytree leaves; plain Python ints are not pytree leaves and would be silently dropped or cause a type error. [primer: pytrees](00_jax_primer.md#jax-pytrees)
+> - The `moments` branching (`_asdict` / `isinstance(dict)` / `__dict__`) exists because the moments object can be a NamedTuple, a plain dict, or a dataclass depending on the model variant. All three paths produce a `dict[str, jax.Array]`, which Orbax handles natively.
+> - `manager.wait_until_finished()` is important: Orbax saves are asynchronous by default. Without this call, the training loop could proceed and modify live arrays while the background write is still in flight — resulting in a corrupt checkpoint. This is a subtle async hazard worth remembering.
+> - **Optimizer state is not saved.** `ckpt_data` does not include the Adam/optimizer state (`nnx.state(optimizer)`). On restart, the optimizer reinitialises from scratch. Contrast with the RecurrentPPO path in `train.py` which does save `nnx.state(optimizer)`. This is a known gap (see the Additional Concerns section).
+
+---
+
+### `load_checkpoint` — restore a saved pytree dict
+
+Returns the raw pytree dict stored at a given step. The caller is responsible for distributing the arrays back into live modules via `nnx.update`.
+
+`Source: src/algorithms/dreamer_srl/checkpoint.py:105–115`
+
+```python
+def load_checkpoint(manager: ocp.CheckpointManager, episode: int) -> dict:
+    """Load a dreamer-srl checkpoint saved at `episode`.
+
+    Returns the raw pytree dict as stored (call nnx.update(module, ckpt['actor'])
+    etc. to restore into live modules).
+
+    Ported from train.py:L1071-L1073 (ocp.CheckpointManager restore pattern).
+    """
+    # Orbax StandardCheckpointer restore needs an abstract_target that matches
+    # the saved structure.  Use restore() with None to get a raw dict back.
+    return manager.restore(episode)
+```
+
+> **API notes**
+> - `manager.restore(episode)` reads the checkpoint directory named `<episode>` and reconstructs the pytree. The `episode` argument must be an integer that matches an existing step key on disk; passing an unknown step raises an error. [primer: Orbax](00_jax_primer.md#orbax)
+> - The comment says `restore() with None to get a raw dict back` — this refers to the fact that `StandardCheckpointer.restore` can optionally take an `abstract_target` (a pytree of `jax.ShapeDtypeStruct` describing expected shapes) to validate the restore; passing `None` skips that validation and returns whatever is on disk. Useful for inspection; risky if the saved structure has drifted from what the code expects.
+> - After calling `load_checkpoint`, each module gets its params back via `nnx.update(module, ckpt_data['actor'])` — this is the inverse of `nnx.state(module, nnx.Param)`. [primer: pytrees](00_jax_primer.md#jax-pytrees)
+> - As noted in the Resume Semantics section, **dreamer-srl currently has no `--load-checkpoint` CLI flag and no in-driver resume path** — `load_checkpoint` exists in the helper module but is not wired into `dreamer_srl_main.py`.
+
+---
+
+### Gate code — `dreamer_srl_main.py` (Path B)
+
+The gate that decides *when* to call `save_checkpoint`. This is plain Python arithmetic — no JAX involved. The key insight is that it uses integer division (`//`) to detect when a new checkpoint-frequency multiple has been crossed.
+
+**Initialisation** (`dreamer_srl_main.py:493–500`):
+
+`Source: src/algorithms/dreamer_srl/dreamer_srl_main.py:493–500`
+
+```python
+    # Checkpoint state for Commit B
+    last_ckpt_episode: int = 0   # tracks last episode count at which we saved
+
+    # Initialize Orbax CheckpointManager — Commit B
+    # Ported from train.py:L555-L559
+    from src.algorithms.dreamer_srl.checkpoint import make_checkpoint_manager, save_checkpoint as _save_checkpoint
+    _ckpt_manager = make_checkpoint_manager(results_dir, max_to_keep=max_checkpoints_keep)
+    print(f"[dreamer-srl] Checkpoint manager ready at {results_dir}/checkpoints/")
+```
+
+**Gate + save block** (`dreamer_srl_main.py:816–843`):
+
+`Source: src/algorithms/dreamer_srl/dreamer_srl_main.py:816–843`
+
+```python
+            # -------------------------------------------------------------------
+            # Commit B — Orbax checkpoint trigger (episode-based).
+            # Ported from train.py:L2398-L2426 checkpoint-save block.
+            # Fires when total_episodes_completed crosses a new multiple of
+            # checkpoint_frequency (mirrors train.py:L2395 episode modulo gate).
+            # -------------------------------------------------------------------
+            _just_saved_ckpt = False
+            if (total_episodes_completed > 0 and
+                    total_episodes_completed // checkpoint_frequency >
+                    last_ckpt_episode // checkpoint_frequency):
+                print(f"[dreamer-srl] Saving checkpoint @ episode {total_episodes_completed}...")
+                _save_checkpoint(
+                    _ckpt_manager,
+                    episode=total_episodes_completed,
+                    world_model=world_model,
+                    actor=actor,
+                    critic=critic,
+                    target_critic=target_critic,
+                    moments=moments,
+                    key=key,
+                    iter_num=iter_num,
+                    policy_step=policy_step,
+                    total_episodes_completed=total_episodes_completed,
+                    cumulative_grad_steps=cumulative_grad_steps,
+                )
+                last_ckpt_episode = total_episodes_completed
+                _just_saved_ckpt = True
+                print(f"[dreamer-srl] Checkpoint saved.")
+```
+
+> **Why integer division is the right gate arithmetic:**
+> The condition `total // freq > last // freq` asks: "has `total` crossed into a new `freq`-sized bucket since the last save?" If `freq=100` and `last=73`, the gate fires the first time `total` reaches 100 (`100 // 100 = 1 > 73 // 100 = 0`). After saving, `last_ckpt_episode` is set to the *actual* episode count (e.g. 156 after drift), not the nominal milestone (100). The next gate fires when `total // 100 > 156 // 100 = 1`, i.e. when `total >= 200`. This is the plain-arithmetic explanation of why drift produces non-round step keys — the gate fires at the *first actual episode count* that crosses a nominal multiple, and then stores the actual count, not the nominal one.
+
+> **Contrast with Path A (`train.py:2387–2401`):**
+> Path A uses an additive gate: `total >= last + freq`, with cursor update `last = floor(total / freq) * freq`. This snaps the cursor to the nearest nominal multiple *below* the actual count. The two formulations are equivalent in Regime 1 (one multiple crossed per iteration), but Path A stores a floored cursor while Path B stores the actual count. Neither stores a clean milestone in the step key — that is always `total_episodes_completed` (the actual count). See the Gate section in Path A above for the verbatim `train.py` source.
+
+---
+
+### Gate code — `train.py` (Path A, for reference)
+
+The gate block that applies to both RecurrentPPO and DreamerV3 in `train.py`.
+
+`Source: train.py:2387–2430`
+
+```python
+                # Checkpoint Logic
+                if schedule is not None:
+                    checkpoint_freq = schedule.checkpoint_frequencies[current_stage]
+                else:
+                    checkpoint_freq = args.checkpoint_frequency or config.get_mandatory('training.checkpoint_frequency')
+
+                # Check if we've crossed an episode boundary for checkpointing
+                # We save if the current episode count has reached the next checkpoint milestone
+                if not hasattr(main, 'last_checkpoint_save'):
+                    main.last_checkpoint_save = 0
+
+                should_checkpoint = (total_episodes_completed >= main.last_checkpoint_save + checkpoint_freq)
+
+                if should_checkpoint:
+                    main.last_checkpoint_save = (total_episodes_completed // checkpoint_freq) * checkpoint_freq
+
+                    ckpt_data = {}
+                    if algorithm == "RecurrentPPO":
+                        ckpt_data = {
+                            'model': nnx.state(model, nnx.Param),
+                            'optimizer': nnx.state(optimizer),
+                            'h_state': h_state,
+                            'key': key,
+                            'iteration': iteration,
+                            'step': global_step,
+                            'episode': total_episodes_completed,
+                            'stage': current_stage,
+                        }
+                    elif algorithm == "DreamerV3":
+                        ckpt_data = {
+                            'wm': nnx.state(trainer.agent.wm, nnx.Param),
+                            'actor': nnx.state(trainer.agent.ac.actor, nnx.Param),
+                            'critic': nnx.state(trainer.agent.ac.critic, nnx.Param),
+                            'key': key,
+                            'iteration': iteration,
+                            'step': global_step,
+                            'episode': total_episodes_completed,
+                            'stage': current_stage,
+                        }
+
+                    if ckpt_data:
+                        pbar.write(f"[CHECKPOINT] Saving model at episode {total_episodes_completed} (Iteration {iteration})...")
+                        checkpointer.save(total_episodes_completed, args=ocp.args.StandardSave(ckpt_data))
+                        checkpointer.wait_until_finished()  # Ensure sync for stability
+```
+
+> **API notes**
+> - `nnx.state(model, nnx.Param)` — same as in `save_checkpoint`: extracts only trainable parameters as a pytree. [primer: pytrees](00_jax_primer.md#jax-pytrees)
+> - `nnx.state(optimizer)` — RecurrentPPO saves the *full* optimizer state (Adam moments, step counter), not just params. This is why RecurrentPPO resumes cleanly from any checkpoint while dreamer-srl would restart the optimizer from cold. [primer: Orbax](00_jax_primer.md#orbax)
+> - `if not hasattr(main, 'last_checkpoint_save')` — this is the function-attribute singleton pattern (Concern A). `main` is the function object; its attribute survives across calls within the same Python process. In tests or notebooks that call `main()` twice, the cursor from the first run leaks into the second, suppressing early checkpoints. The dreamer-srl path avoids this with a plain local variable (`last_ckpt_episode: int = 0`).
+> - `checkpointer.save(total_episodes_completed, args=ocp.args.StandardSave(ckpt_data))` — the Orbax step key is `total_episodes_completed`, the *actual* cumulative count. This is why checkpoint directories are named e.g. `156/` instead of `100/`. [primer: Orbax](00_jax_primer.md#orbax)
+> - `checkpointer.wait_until_finished()` — same async-completion guard as in `save_checkpoint`. Both paths include this call for stability.
+
 ## Drift Analysis
 
 Let `f = checkpoint_frequency`, `N = num_envs`, and let `Δₖ` be the number of episodes completed in iteration `k`.
