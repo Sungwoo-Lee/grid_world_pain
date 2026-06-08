@@ -114,7 +114,7 @@ These five module-level constants are the single source of truth for all integer
 `Source: src/environment/config_loader.py:31–42`
 
 ```python
-# ââ Animal entity constants (v2.0) ââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── Animal entity constants (v2.0) ────────────────────────────────────────────
 ANIMAL_CLASS_TO_INT = {"predator": 0, "neutral": 1}
 ANIMAL_CLASS_TO_VIS_CHANNEL = {"predator": 5, "neutral": 7}
 ANIMAL_DAMAGING_CLASSES = {"predator"}
@@ -302,13 +302,13 @@ def _load_animals(config: Config):
 
     Mandatory-key rule by behaviour:
       - `behaviour: hunt` — all five distributional fields are MANDATORY.
-        Missing — ValueError (no fallback default, per project rule).
+        Missing → ValueError (no fallback default, per project rule).
       - `behaviour: wander` / `static` — distributional fields are OPTIONAL.
         If missing, loader auto-fills [0, 0] (internal projection detail;
         the wander/static code path never reads these arrays at runtime).
       - Legacy `neutral_animals:` re-projection always behaves as wander/optional.
 
-    v1.x — v2.0 semantic change note: `lose_interest_multiplier` was previously
+    v1.x → v2.0 semantic change note: `lose_interest_multiplier` was previously
     optional in the predator loader (soft default 2.0). It is now MANDATORY for
     `behaviour: hunt`. All 86 pre-v2.0 predator entries carry an explicit value,
     so no existing config breaks; this change is flagged for reference.
@@ -353,12 +353,13 @@ def _load_animals(config: Config):
         else:
             lo = hi = float(val)
         return lo, hi
+
 ```
 
 `Source: src/environment/config_loader.py:279–397` (entry-list construction — entities: path and legacy path)
 
 ```python
-    # ââ Build the expanded entry list ââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Build the expanded entry list ──────────────────────────────────────────
     entries = []  # list of dicts with unified fields
 
     # Check for new entities: schema (CP3 will add full support)
@@ -540,7 +541,7 @@ def _load_animals(config: Config):
 `Source: src/environment/config_loader.py:453–611` (array construction and return)
 
 ```python
-    # ââ Build per-field arrays ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Build per-field arrays ─────────────────────────────────────────────────
     props_list = [_read_properties(e, e['tag_label']) if 'property' in e and not isinstance(e.get('property'), list) else e['property'] for e in entries]
     stds_list = [e['property_std'] for e in entries]
     chem_dim = len(props_list[0])
@@ -1527,7 +1528,6 @@ def load_env_params(config: Config) -> EnvParams:
         # Perceptual Noise Configuration
         perceptual_noise_enabled=config.get('perceptual_noise.enabled', False),
         **_parse_noise_config(config)
-    )
 ```
 
 > **API notes — the host–device boundary in full**
@@ -1539,7 +1539,7 @@ def load_env_params(config: Config) -> EnvParams:
 >
 > `action_dim` is computed from two bool flags and stored as a static int. Adding a new action requires bumping `action_dim` in the config and retracing all JIT-compiled functions. See [primer: static vs dynamic fields](00_jax_primer.md#static-dynamic).
 >
-> The interoceptive alpha kernel formula `k_raw[i] = (i/Ï) * exp(1 - i/Ï)` peaks at `i = Ï` and is normalized to sum to 1. The computation is done in NumPy before the `jnp.array(...)` call; the resulting fixed-shape kernel array is a dynamic leaf of `EnvParams` and can be updated between episodes without triggering recompilation (its shape is static, but its values are traced).
+> The interoceptive alpha kernel formula `k_raw[i] = (i/τ) * exp(1 - i/τ)` peaks at `i = τ` and is normalized to sum to 1. The computation is done in NumPy before the `jnp.array(...)` call; the resulting fixed-shape kernel array is a dynamic leaf of `EnvParams` and can be updated between episodes without triggering recompilation (its shape is static, but its values are traced).
 
 
 ---

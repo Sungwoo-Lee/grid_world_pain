@@ -320,8 +320,6 @@ Source: `src/environment/core.py:421–465`
 
 Source: `src/environment/core.py:470–530`
 ```python
-    # ate_food is already calculated above
-    
     # Predator Damage (unified — B5 fix: use at_damaging for damage + hit_predator)
     at_animal = jnp.all(new_animal_pos == new_agent_pos, axis=-1)         # POST-step positions
     at_damaging = jnp.logical_and(at_animal, params.animal_is_damaging)

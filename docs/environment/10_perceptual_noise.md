@@ -97,7 +97,7 @@ Doc 02 owns the full body of `_parse_noise_config`. The verbatim excerpt below c
 
 Source: `src/environment/config_loader.py:944–1002`
 ```python
-_YAML_KEY_TO_SENSOR_NAME = {          # config_loader.py:944–955
+_YAML_KEY_TO_SENSOR_NAME = {
     "injury":                    "Injury",
     "nutrition":                 "Nutrition",
     "satiation":                 "Satiation",

@@ -715,18 +715,18 @@ def select_by_class(params, class_name: str) -> np.ndarray:
     """Return a boolean NumPy mask of length N selecting animals of the given class.
 
     Args:
-        params: EnvParams holds `animal_classes` tuple (pytree_node=False, len N).
+        params: EnvParams — holds `animal_classes` tuple (pytree_node=False, len N).
         class_name: one of 'predator', 'neutral', or any future class string.
 
     Returns:
-        np.ndarray[bool, shape (N,)] -- True at index i iff animal_classes[i] == class_name.
+        np.ndarray[bool, shape (N,)] — True at index i iff animal_classes[i] == class_name.
 
     Usage:
         pred_mask = select_by_class(params, 'predator')
         pred_pos = np.array(state.animal_pos)[pred_mask]   # shape [N_pred, 2]
 
     Notes:
-        - This is a host-side (NumPy) helper, not a JAX traced function. Call it
+        - This is a host-side (NumPy) helper — not a JAX traced function. Call it
           from analysis scripts, renderers, and eval code, not inside jit'd kernels.
         - The mask is derived from `params.animal_classes`, a static
           `pytree_node=False` tuple, so it is config-constant and allocation-free
@@ -862,26 +862,26 @@ Short description: draws the rectangular border, accent top-line, and title text
 ```python
 def draw_pod_frame(ax, x, y, w, h, title, offline=False, obs_only=False, transform=None):
     """Draws a modular Telemetry Pod frame."""
-    rect = plt.Rectangle((x, y), w, h, facecolor=COLORS['bg'],
-                         edgecolor=COLORS['border'],
+    rect = plt.Rectangle((x, y), w, h, facecolor=COLORS['bg'], edgecolor=COLORS['border'], 
                          linewidth=0.5, transform=transform, zorder=0)
     ax.add_patch(rect)
-
+    
+    # Accent top border
     border_color = COLORS['border'] if not offline else COLORS['text_offline']
-    ax.plot([x, x + w], [y + h, y + h], color=border_color,
-            linewidth=1.5, transform=transform, zorder=1)
-
+    ax.plot([x, x + w], [y + h, y + h], color=border_color, linewidth=1.5, transform=transform, zorder=1)
+    
+    # Title
     t_color = COLORS['text_label'] if not offline else COLORS['text_offline']
     if obs_only:
         title = title + " (OBS ONLY)"
         t_color = COLORS['text_offline']
-
-    ax.text(x + 0.02, y + h + 0.015, title.upper(), color=t_color,
+        
+    ax.text(x + 0.02, y + h + 0.015, title.upper(), color=t_color, 
             fontsize=8, fontweight='bold', transform=transform)
-
+    
     if offline:
-        ax.text(x + w/2, y + h/2, "OFFLINE", color=COLORS['text_offline'],
-                ha='center', va='center', fontsize=9, fontweight='bold',
+        ax.text(x + w/2, y + h/2, "OFFLINE", color=COLORS['text_offline'], 
+                ha='center', va='center', fontsize=9, fontweight='bold', 
                 alpha=0.5, transform=transform)
 ```
 
@@ -1775,7 +1775,7 @@ def _hbar(ax, bar_left, bar_bottom, bar_width, bar_height,
         boxstyle='round,pad=0,rounding_size=0.02',
         facecolor=color, edgecolor='none', alpha=0.85,
         transform=ax.transAxes, zorder=2))
-    # REAL tick (vertical line at real_pct position)
+    # REAL tick
     if not obs_only:
         tick_x = bar_left + bar_width * min(1.0, real_pct)
         ax.plot([tick_x, tick_x],
@@ -1792,7 +1792,7 @@ def _hbar(ax, bar_left, bar_bottom, bar_width, bar_height,
 ```python
 def draw_vital_card(ax, label, real_pct, obs_pct,
                     real_val_str, obs_val_str, color):
-    """Interoception vital: label + big OBS value + bar + REAL tick + delta."""
+    """Interoception vital: label + big OBS value + bar + REAL tick + Δ."""
     _style_card(ax)
     ax.text(0.05, 0.93, label.upper(),
             transform=ax.transAxes, color=COLORS['text_label'],
@@ -1806,7 +1806,7 @@ def draw_vital_card(ax, label, real_pct, obs_pct,
     delta = obs_pct - real_pct
     sign = '+' if delta >= 0 else ''
     ax.text(0.05, 0.08,
-            f"real {real_val_str}  ·  delta {sign}{delta:.2f}",
+            f"real {real_val_str}  ·  Δ {sign}{delta:.2f}",
             transform=ax.transAxes,
             color=COLORS['text_label'], fontsize=6, va='bottom')
 ```
@@ -1829,14 +1829,14 @@ def draw_intensity_pod(ax, label, obs_pct, real_pct,
           COLORS['action'], obs_only=obs_only)
 
     if obs_only:
-        ax.text(0.05, 0.08, 'obs only -- no noise-free reference',
+        ax.text(0.05, 0.08, 'obs only — no noise-free reference',
                 transform=ax.transAxes,
                 color=COLORS['text_offline'], fontsize=5.5, va='bottom')
     else:
         delta = obs_pct - real_pct
         sign = '+' if delta >= 0 else ''
         ax.text(0.05, 0.08,
-                f"real {real_val_str}  ·  delta {sign}{delta:.2f}",
+                f"real {real_val_str}  ·  Δ {sign}{delta:.2f}",
                 transform=ax.transAxes,
                 color=COLORS['text_label'], fontsize=6, va='bottom')
 ```
@@ -1851,12 +1851,12 @@ def draw_spectrum_pod(ax, label, obs_vec, true_vec, obs_only=False):
     _style_card(ax)
     _card_title(ax, label, obs_only=obs_only)
 
-    obs_vec  = np.asarray(obs_vec,  dtype=float)
+    obs_vec = np.asarray(obs_vec, dtype=float)
     true_vec = np.asarray(true_vec, dtype=float)
     n = len(obs_vec)
     all_vals = np.concatenate([obs_vec, true_vec]) if not obs_only else obs_vec
-    max_val  = float(np.max(all_vals)) if np.max(all_vals) > 0.01 else 1.0
-    scale    = 1.0 / max_val
+    max_val = float(np.max(all_vals)) if np.max(all_vals) > 0.01 else 1.0
+    scale = 1.0 / max_val
 
     bar_x, bar_y = 0.06, 0.14
     bar_w, bar_h = 0.88, 0.65
@@ -1884,6 +1884,8 @@ def draw_categorical_pod(ax, label, obs_vec, true_vec,
     """Collision / Visual categorical grid, using draw_categorical_visual."""
     _style_card(ax)
     _card_title(ax, label, obs_only=obs_only)
+    # Leave top ~16% for title, bottom ~8% for feature labels.
+    # draw_categorical_visual handles its own internal margins.
     draw_categorical_visual(
         ax, 0.05, 0.08, 0.90, 0.78,
         obs_vec, r, num_features,
@@ -1911,11 +1913,11 @@ def draw_action_pod(ax, action):
 
     action_names = {0: 'UP', 1: 'RIGHT', 2: 'DOWN', 3: 'LEFT',
                     4: 'REST', 5: 'EAT'}
-    arrows        = {0: '↑', 1: '→', 2: '↓', 3: '←', 4: '⊝', 5: '✙'}
+    arrows = {0: '↑', 1: '→', 2: '↓', 3: '←', 4: '⊝', 5: '✙'}
 
     if action is not None:
         act_name = action_names.get(int(action), str(action))
-        arrow    = arrows.get(int(action), '•')
+        arrow = arrows.get(int(action), '•')
         ax.text(0.5, 0.66, act_name,
                 transform=ax.transAxes, color=COLORS['text_main'],
                 fontsize=11, fontweight='black', ha='center', va='center')
@@ -1923,7 +1925,7 @@ def draw_action_pod(ax, action):
                 transform=ax.transAxes, color=COLORS['action'],
                 fontsize=17, fontweight='black', ha='center', va='center')
     else:
-        ax.text(0.5, 0.48, '--',
+        ax.text(0.5, 0.48, '—',
                 transform=ax.transAxes, color=COLORS['text_offline'],
                 fontsize=12, ha='center', va='center')
 ```

@@ -267,7 +267,6 @@ The `done_from_body` value that feeds into the `logical_or` above is set inside 
         # Instant death logic for levels without health system
         done = jnp.where(damage > 0, True, done)
     
-    return new_satiation, new_nutrition, new_injury, new_buffer, new_nociception_history, new_rest_streak, done
 ```
 
 > **API notes**
