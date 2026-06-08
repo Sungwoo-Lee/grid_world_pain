@@ -25,28 +25,108 @@ Updates always produce a new object via `.replace(**kwargs)` (aliased as `._repl
 
 ## `select_by_class()` — Host-Side Class Filter
 
-Defined at `src/environment/state.py:7`.
+Takes `params` and a class name string, and returns a boolean NumPy mask of length N that is `True` at every index whose animal belongs to that class. Used outside JIT to extract predator or neutral subsets for analysis, rendering, and eval.
 
+`Source: src/environment/state.py:7–28`
 ```python
-def select_by_class(params, class_name: str) -> np.ndarray
+def select_by_class(params, class_name: str) -> np.ndarray:
+    """Return a boolean NumPy mask of length N selecting animals of the given class.
+
+    Args:
+        params: EnvParams — holds `animal_classes` tuple (pytree_node=False, len N).
+        class_name: one of 'predator', 'neutral', or any future class string.
+
+    Returns:
+        np.ndarray[bool, shape (N,)] — True at index i iff animal_classes[i] == class_name.
+
+    Usage:
+        pred_mask = select_by_class(params, 'predator')
+        pred_pos = np.array(state.animal_pos)[pred_mask]   # shape [N_pred, 2]
+
+    Notes:
+        - This is a host-side (NumPy) helper — not a JAX traced function. Call it
+          from analysis scripts, renderers, and eval code, not inside jit'd kernels.
+        - The mask is derived from `params.animal_classes`, a static
+          `pytree_node=False` tuple, so it is config-constant and allocation-free
+          when called repeatedly with the same params.
+    """
+    return np.array([c == class_name for c in params.animal_classes], dtype=bool)
 ```
 
-Returns a boolean NumPy mask of length N selecting all animals of the given class string (e.g. `'predator'`, `'neutral'`). Example use:
-
-```python
-pred_mask = select_by_class(params, 'predator')
-pred_pos = np.array(state.animal_pos)[pred_mask]   # shape [N_pred, 2]
-```
-
-**Key design points:**
-
-- This is a **host-side (NumPy) helper** — not a JAX-traced function. Use it in analysis scripts, renderers, and eval code; not inside JIT'd kernels.
-- It reads `params.animal_classes`, which is a `pytree_node=False` static tuple (config-constant). The mask is therefore **allocation-free when called repeatedly with the same params** — no heap allocation after the first call.
-- The function simply iterates: `np.array([c == class_name for c in params.animal_classes], dtype=bool)`.
+> **API notes**
+>
+> - `params.animal_classes` is a `struct.field(pytree_node=False)` tuple — a **static** field, not a JAX array. See [primer: static-dynamic](00_jax_primer.md#static-dynamic). Iterating it with a Python list comprehension is valid host-side code, not a traced operation.
+> - The return type is `np.ndarray` (plain NumPy), not `jnp.ndarray`. This is intentional: `select_by_class` is a host-only utility. Inside a JIT'd kernel, use the precomputed `params.predator_indices` / `params.neutral_indices` index tuples (also static) as slice indices — they avoid any dynamic-shape problem.
+> - `params` itself is registered as a [primer: pytrees](00_jax_primer.md#jax-pytrees) node, but `select_by_class` never touches any of its array fields — only the `pytree_node=False` tuple — so no JAX machinery is invoked at all.
 
 ---
 
 ## EnvState — Mutable Per-Step
+
+`EnvState` is a Flax `@struct.dataclass` whose fields are all JAX pytree leaves (no `pytree_node=False` here). Every call to `jax_step` returns a *new* `EnvState` via `.replace()`; no field is mutated in place.
+
+`Source: src/environment/state.py:30–81`
+```python
+@struct.dataclass
+class EnvState:
+    # Agent
+    agent_pos: jnp.ndarray      # [2] (row, col)
+    current_step: jnp.ndarray   # []
+
+    # Resources
+    res_pos: jnp.ndarray        # [num_res, 2]
+    res_active: jnp.ndarray     # [num_res] bool
+    res_cons_count: jnp.ndarray # [num_res] int
+    res_reg_timer: jnp.ndarray  # [num_res] int
+    res_property_sampled: jnp.ndarray # [num_res, vector_size]
+
+    # Animals (unified — predators + neutrals, predators-first ordering)
+    animal_pos: jnp.ndarray              # [N, 2]
+    animal_state: jnp.ndarray            # [N] int (PATROL=0, HUNT=1, RETURN=2; 0 for wander/static)
+    animal_stamina: jnp.ndarray          # [N] float (unused for wander/static, kept for shape stability)
+    animal_move_timer: jnp.ndarray       # [N] int
+    animal_attack_timer: jnp.ndarray     # [N] int (zero for non-hunt entities)
+    animal_property_sampled: jnp.ndarray # [N, vector_size]
+    # Per-episode-sampled behavioural params (NEW — all five fields, degenerate [s,s] for legacy configs)
+    animal_detect_sampled: jnp.ndarray         # [N] float
+    animal_max_stamina_sampled: jnp.ndarray    # [N] float
+    animal_recovery_sampled: jnp.ndarray       # [N] float
+    animal_hunt_thresh_sampled: jnp.ndarray    # [N] float
+    animal_lose_interest_sampled: jnp.ndarray  # [N] float
+
+    # Obstacles
+    obs_pos: jnp.ndarray        # [num_obs, 2]
+    obs_property_sampled: jnp.ndarray # [num_obs, vector_size]
+
+    # Body
+    satiation: jnp.ndarray       # [] float
+    nutrition: jnp.ndarray       # [] float
+    injury_level: jnp.ndarray    # [] float
+    injury_buffer: jnp.ndarray   # [smoothing_duration] float
+    nociception_history_buffer: jnp.ndarray  # [interoceptive_kernel_length] float (past injury_level values, idx 0 = most recent)
+    last_collision_noc: jnp.ndarray # float (intensity of last collision)
+    rest_streak: jnp.ndarray     # [] int
+
+    # Environment status
+    terminated: jnp.ndarray      # bool
+
+    # Random State
+    key: jax.random.PRNGKey      # PRNGKey
+
+    # Proprioception
+    last_action: jnp.ndarray      # [] (int32 action index)
+
+    def _replace(self, **kwargs):
+        return self.replace(**kwargs)
+```
+
+> **API notes**
+>
+> - `@struct.dataclass` registers `EnvState` as a JAX pytree node. Every `jnp.ndarray` field is a pytree leaf; `jax.jit`, `jax.vmap`, and `jax.lax.scan` can all accept and return it without manual flattening. See [primer: pytrees](00_jax_primer.md#jax-pytrees).
+> - **Immutability**: no field is ever mutated. Updates use `state.replace(field=new_val)` (or `state._replace(...)`) which returns a fresh struct. The step function builds the next `EnvState` in one large `.replace()` call. See [primer: immutability](00_jax_primer.md#immutability).
+> - **`key: jax.random.PRNGKey`** is itself a JAX array (shape `[2]` uint32) and therefore a pytree leaf. It is split at the top of each step to derive all random events for that step. See [primer: prng](00_jax_primer.md#prng).
+> - **`injury_buffer`** has shape `[smoothing_duration]`. The *length* of this buffer is a static field on `EnvParams` (`smoothing_duration: int = struct.field(pytree_node=False)`), which pins the shape at compile time and prevents recompilation as long as `smoothing_duration` is unchanged. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+> - **`vmap` batching**: `ParallelEnv` vmaps over the leading dimension of each array. Conceptually you have a batch of `EnvState` objects stacked along axis 0; the struct fields just grow a leading batch dimension. See [primer: vmap](00_jax_primer.md#vmap).
 
 Defined in `src/environment/state.py:30`. All fields are JAX pytree leaves (no `pytree_node=False` here).
 
@@ -112,13 +192,196 @@ The five `animal_*_sampled` fields are per-episode behavioural parameters drawn 
 ### Meta / RNG
 
 | Field | Shape | dtype | Description |
-|-------|-------|-------|-------------|
+|-------|-------|-------------|-------------|
 | `terminated` | `[]` | bool | Whether this episode has ended |
 | `key` | `PRNGKey` | uint32 | JAX PRNG key, split each step to produce all random events for that step |
 
 ---
 
 ## EnvParams — Immutable Per-Episode
+
+`EnvParams` is a Flax `@struct.dataclass` that holds every fixed rule and constant attribute for one episode. It is built once from the YAML config and never mutated during training; any update produces a new object via `.replace()`. Fields tagged `struct.field(pytree_node=False)` are **static** — they shape the compiled XLA graph and trigger recompilation if changed.
+
+`Source: src/environment/state.py:82–250`
+```python
+@struct.dataclass
+class EnvParams:
+    # Grid
+    height: int = struct.field(pytree_node=False)
+    width: int = struct.field(pytree_node=False)
+    max_steps: int = struct.field(pytree_node=False)
+    grid_location_type: jnp.ndarray # [height, width] (0:plain, 1:grass, 2:sand)
+
+    # Resources (Constant attributes)
+    res_type: jnp.ndarray       # [num_res] int (0:food, 1:hiding_predator)
+    res_property: jnp.ndarray   # [num_res, vector_size]
+    res_property_std: jnp.ndarray # [num_res, vector_size]
+    res_nociception: jnp.ndarray # [num_res]
+    res_spawn_area: jnp.ndarray # [num_res, 4] (min_r, min_c, max_r, max_c)
+    res_max_cons: jnp.ndarray   # [num_res]
+    res_reg_delay: jnp.ndarray  # [num_res]
+    res_damage: jnp.ndarray     # [num_res, 2] [min, max]
+
+    # Animals (unified — predators-first ordering)
+    animal_property: jnp.ndarray       # [N, V]
+    animal_property_std: jnp.ndarray   # [N, V]
+    animal_nociception: jnp.ndarray    # [N]
+    animal_move_int: jnp.ndarray       # [N] int
+    animal_damage: jnp.ndarray         # [N, 2]
+    animal_attack_delay: jnp.ndarray   # [N] int
+    animal_spawn_area: jnp.ndarray     # [N, 4] int
+    animal_patrol: jnp.ndarray         # [N, 4] int
+    # Per-episode uniform bounds (low == high for legacy scalar configs)
+    animal_detect_low: jnp.ndarray         # [N]
+    animal_detect_high: jnp.ndarray        # [N]
+    animal_max_stamina_low: jnp.ndarray    # [N]
+    animal_max_stamina_high: jnp.ndarray   # [N]
+    animal_recovery_low: jnp.ndarray       # [N]
+    animal_recovery_high: jnp.ndarray      # [N]
+    animal_hunt_thresh_low: jnp.ndarray    # [N]
+    animal_hunt_thresh_high: jnp.ndarray   # [N]
+    animal_lose_interest_low: jnp.ndarray  # [N]
+    animal_lose_interest_high: jnp.ndarray # [N]
+    # Per-entity int-coded class/behaviour (for damage masking and visual channel)
+    animal_classes_int: jnp.ndarray        # [N] int (0=predator, 1=neutral, ...)
+    animal_behaviours_int: jnp.ndarray     # [N] int (0=wander, 1=hunt, 2=static)
+    animal_is_damaging: jnp.ndarray        # [N] bool (precomputed from class)
+    animal_visual_channel: jnp.ndarray     # [N] int (5=predator, 7=neutral, ...)
+    # Static tags / labels (pytree_node=False — not JAX arrays)
+    animal_classes: tuple = struct.field(pytree_node=False)    # len N strings
+    animal_behaviours: tuple = struct.field(pytree_node=False) # len N strings
+    animal_tags: tuple = struct.field(pytree_node=False)       # len N strings
+    # Static per-subset index tuples (B1 fix — used by update_animals to slice
+    # hunt / wander / static subsets while preserving today's PRNG draw shapes).
+    hunt_idx: tuple = struct.field(pytree_node=False)   # tuple[int, ...], len N_pred
+    wander_idx: tuple = struct.field(pytree_node=False) # tuple[int, ...], len N_neutral
+    static_idx: tuple = struct.field(pytree_node=False) # tuple[int, ...], len N_static
+    # Static per-class index tuples (N1/N2 fix — used by jax_reset to slice
+    # predator / neutral subsets during placement + property sampling, preserving
+    # today's per-type PRNG draw shapes).
+    predator_indices: tuple = struct.field(pytree_node=False)  # tuple[int, ...], len N_pred_class
+    neutral_indices: tuple = struct.field(pytree_node=False)   # tuple[int, ...], len N_neutral_class
+
+    # Obstacles
+    obs_blocking: jnp.ndarray   # [num_obs] bool
+    obs_hides_agent: jnp.ndarray # [num_obs] bool (bush-type concealment)
+    obs_spawn_area: jnp.ndarray # [num_obs, 4] (min_r, min_c, max_r, max_c)
+    obs_damage: jnp.ndarray     # [num_obs, 2] [min, max]
+    obs_property: jnp.ndarray   # [num_obs, vector_size]
+    obs_property_std: jnp.ndarray # [num_obs, vector_size]
+    obs_nociception: jnp.ndarray # [num_obs]
+    obs_type: jnp.ndarray       # [num_obs] int32 index for names
+    obstacle_names: tuple[str, ...] = struct.field(pytree_node=False)
+
+    # Placement (Type-Level overlap resolution)
+    type_areas: jnp.ndarray        # [T, 4] spawn area per type group
+    type_counts: jnp.ndarray       # [T] entity count per type group
+    type_entity_map: jnp.ndarray   # [T, max_per_type] global entity indices
+    max_per_type: int = struct.field(pytree_node=False)   # max entities in any group
+    num_types: int = struct.field(pytree_node=False)       # number of type groups
+    num_entities: int = struct.field(pytree_node=False)    # total entities
+    placement_mode: str = struct.field(pytree_node=False)  # "per_entity" or "per_type"
+
+    # Body
+    max_satiation: float
+    max_nutrition: float
+    max_injury: float
+    food_nutrition_gain: float
+    setpoint: float
+    start_satiation: float              # For non-random start
+    start_nutrition: float
+    metabolic_cost: float
+    nutrition_to_satiation_scaling_factor: float
+    recovery_base_rate: float
+    recovery_accel_rate: float
+    smoothing_duration: int = struct.field(pytree_node=False)
+    death_penalty: float
+    overeating_death: bool = struct.field(pytree_node=False)
+    use_homeostatic_reward: bool = struct.field(pytree_node=False)
+    with_satiation: bool = struct.field(pytree_node=False)
+    with_nutrition: bool = struct.field(pytree_node=False)
+    with_injury: bool = struct.field(pytree_node=False)
+    random_start_satiation: bool = struct.field(pytree_node=False)
+    random_start_nutrition: bool = struct.field(pytree_node=False)
+    random_start_injury: bool = struct.field(pytree_node=False)
+    random_start_pos: bool = struct.field(pytree_node=False)
+    start_pos: jnp.ndarray  # [2]
+    rest_action_enabled: bool = struct.field(pytree_node=False)
+    eat_action_enabled: bool = struct.field(pytree_node=False)
+    eating_nutrition_cost: float
+    eating_reward_penalty: float
+
+
+    # Sensory
+    sensor_radius: float
+    sensor_decay: float
+    sensor_range: int = struct.field(pytree_node=False)
+    visual_sensor_enabled: bool = struct.field(pytree_node=False)
+    visual_sensor_range: int = struct.field(pytree_node=False)
+    local_view_size: int = struct.field(pytree_node=False)
+    olfactory_enabled: bool = struct.field(pytree_node=False)
+    nociception_enabled: bool = struct.field(pytree_node=False)
+    location_sensor_enabled: bool = struct.field(pytree_node=False)
+
+    # Hidden-state observability flags
+    injury_observable: bool = struct.field(pytree_node=False)
+    nutrition_observable: bool = struct.field(pytree_node=False)
+
+    # Interoceptive nociception (delayed-peak perception of hidden injury)
+    interoceptive_nociception_enabled: bool = struct.field(pytree_node=False)
+    interoceptive_convolution_enabled: bool = struct.field(pytree_node=False)
+    interoceptive_kernel_length: int = struct.field(pytree_node=False)
+    interoceptive_kernel: jnp.ndarray  # [interoceptive_kernel_length] float, normalized alpha kernel (zeros when convolution disabled)
+
+    # Proprioception
+    proprioception_enabled: bool = struct.field(pytree_node=False)
+    action_dim: int = struct.field(pytree_node=False)
+    olfactory_vector_size: int = struct.field(pytree_node=False)
+    nociception_size: int = struct.field(pytree_node=False)
+
+    # Perceptual Noise Parameters (Vectorized across modalities)
+    perceptual_noise_enabled: bool = struct.field(pytree_node=False)
+    # Order defined by YAML perceptual_noise.modalities key order (read via config_loader).
+    # sensor.py builds modality_map dynamically from this tuple — do not reorder independently.
+    noise_modality_order: tuple = struct.field(pytree_node=False)  # e.g. ("Injury","Nutrition",...)
+    noise_modes: jnp.ndarray          # [13] int32 (0: None, 1: Constant, 2: State-Dependent)
+    noise_sigmas: jnp.ndarray         # [13] float32 (Base Sigma)
+    noise_injury_scales: jnp.ndarray  # [13] float32 (Injury Noise Scale)
+    noise_clip_min: jnp.ndarray       # [13] float32 (Per-modality observation lower bound)
+    noise_clip_max: jnp.ndarray       # [13] float32 (Per-modality observation upper bound)
+
+    # ── Legacy @property aliases (B3 fix — kept for one release cycle) ────────
+    # These accessors allow code that reads `params.predator_tags` / `params.neutral_tags`
+    # (e.g., dreamer_srl_main.py:522-523, accumulators.py) to work without edits.
+    # The corresponding struct.field declarations have been REMOVED (M1 fix) so these
+    # properties are not shadowed by a static field.
+
+    @property
+    def predator_tags(self) -> tuple:
+        """Legacy alias — derived from animal_tags filtered by class == 'predator'.
+
+        Read by src/algorithms/dreamer_srl/dreamer_srl_main.py:522-523 and
+        accumulators.py setup. Will be removed once all consumers migrate to
+        consume animal_tags + class_indices() directly (post-CP6 + one release).
+        """
+        return tuple(t for t, c in zip(self.animal_tags, self.animal_classes) if c == 'predator')
+
+    @property
+    def neutral_tags(self) -> tuple:
+        """Legacy alias — derived from animal_tags filtered by class == 'neutral'."""
+        return tuple(t for t, c in zip(self.animal_tags, self.animal_classes) if c == 'neutral')
+
+    def _replace(self, **kwargs):
+        return self.replace(**kwargs)
+```
+
+> **API notes**
+>
+> - `@struct.dataclass` registers `EnvParams` as a JAX [primer: pytrees](00_jax_primer.md#jax-pytrees) node. Every `jnp.ndarray` field is a pytree leaf that JAX can substitute freely at runtime without recompilation.
+> - Fields declared with `= struct.field(pytree_node=False)` are **static**: JAX bakes their concrete Python value into the compiled XLA graph. Python-level `if` branches inside JIT'd functions may safely test these fields. Changing any static field (e.g. `height`, `smoothing_duration`, `hunt_idx`) triggers a full recompile. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+> - **The nine static tuple fields** (`animal_classes`, `animal_behaviours`, `animal_tags`, `hunt_idx`, `wander_idx`, `static_idx`, `predator_indices`, `neutral_indices`, `obstacle_names`) are plain Python tuples, not JAX arrays. They define N and per-index semantics. Because they are static, JIT'd code can use their elements as fixed slice indices — e.g. `animal_pos[hunt_idx, :]` — without triggering a dynamic-shape error.
+> - **`@property` aliases** (`predator_tags`, `neutral_tags`) are ordinary Python `@property` decorators on a Flax struct. Flax does not interfere with `@property` — they work exactly as in a regular Python class. They zip over the two static tuples `animal_tags` and `animal_classes`, which is pure Python computation, never traced by JAX.
+> - **`._replace(**kwargs)`** at line 249 delegates to `.replace(**kwargs)` — Flax's generated method that returns a new struct with the named fields swapped. This is the immutability pattern described in [primer: immutability](00_jax_primer.md#immutability). Having both `._replace` and `.replace` means legacy call sites (which used `namedtuple._replace` style) work unchanged.
 
 Defined in `src/environment/state.py:82`. Fields with `struct.field(pytree_node=False)` are **static** — they determine the compiled graph shape and trigger recompilation if changed. All other fields are JAX-array pytree leaves and can change between episodes without recompilation.
 
