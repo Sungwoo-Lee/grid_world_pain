@@ -10,11 +10,33 @@ GridWorld Pain is a JAX-based RL environment for **Interoceptive AI** research �
 
 ---
 
+## How to read these docs
+
+These documents double as a **tutorial track** for readers who are new to JAX, Flax, or Orbax.
+
+**Embedded implementation.** Each numbered doc shows the actual source functions verbatim, with captions that give the file and line number (e.g., `src/environment/core.py:372`). You are reading the real code, not a paraphrase of it.
+
+**API notes convention.** Whenever a code block uses an advanced JAX, Flax, or Orbax API — `jax.lax.scan`, `@struct.dataclass`, `orbax.checkpoint.CheckpointManager`, and so on — a blockquote immediately below the block explains it:
+
+> **API notes** — links each unfamiliar API back to the section in `00_jax_primer.md` that teaches it from scratch.
+
+**Recommended reading order.** If you are learning the codebase from scratch, follow this path:
+
+1. `00_jax_primer.md` — JAX, Flax, and Orbax foundations: pure functions, pytrees, JIT, vmap, PRNG, `@struct.dataclass`, Orbax checkpointing. Read this once; all other docs assume it.
+2. `01` (state/params pytrees) then `02` (config loading) then `03` (reset) then `04` (step loop) — these four form the spine of the environment.
+3. Subsystem docs: `05` (body/homeostasis), `06` (reward/termination), `07` (predator AI), `08` (resources and obstacles), `09` (sensors), `10` (perceptual noise).
+4. `11` (parallel wrapper and vmap batching), `12` (renderer), `13` (checkpoint scheduling).
+
+If you only need one subsystem, jump directly to its doc — each is self-contained — but skim `00` first so the API notes make sense.
+
+---
+
 ## Table of Contents
 
 | # | Document | Topic |
 |---|----------|-------|
 | — | **This file** | Hub: conventions, step-flow diagram, observation table, config summary |
+| 00 | [JAX & Advanced-API Primer](00_jax_primer.md) | Tutorial: every advanced JAX/Flax/Orbax API the env uses, taught once |
 | 01 | [State & Parameters](01_state_and_params.md) | `EnvState`, `EnvParams` pytree definitions |
 | 02 | [Config Schema](02_config_schema.md) | YAML → `EnvParams` loading, mandatory keys, expansion |
 | 03 | [Entity Placement](03_entity_placement.md) | `jax_reset`, `per_entity`/`per_type`, overlap resolution |
