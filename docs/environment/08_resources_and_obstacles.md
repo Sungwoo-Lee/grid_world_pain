@@ -95,17 +95,70 @@ Note: `interacted_this_step` governs the consumption counter and deactivation. T
 
 Handled in Stage 1 of `jax_step` (`core.py:374-395`, calling `update_resources` at `core.py:375`).
 
-`update_resources` (`core.py:119-130`):
-```
-# Decrement timer only while inactive and timer > 0
-needs_reg_update = (NOT active) AND (reg_timer > 0)
-new_reg_timer = reg_timer - 1  if needs_reg_update  else reg_timer
+`update_resources` is a pure function that advances the regen timer for every resource in parallel, using only [branchless masking](00_jax_primer.md#branchless-control-flow-jnpwhere-jaxlaxselect-jaxlaxcond) — no Python conditionals, no loop over resources.
 
-# Respawn when timer reaches 0
-respawn_mask = (NOT active) AND (new_reg_timer <= 0)
-new_active    = True  where respawn_mask
-new_cons_count = 0    where respawn_mask
+**What it does, in plain English:**
+1. Countdown: subtract 1 from the timer of every resource that is both inactive *and* has timer > 0.
+2. Respawn-ready: any resource that was inactive *and* whose new timer is ≤ 0 is flagged in `respawn_mask`.
+3. For flagged resources: flip `res_active` back to `True` and reset `res_cons_count` to 0.
+4. Return the updated arrays plus `respawn_mask` — the caller (`jax_step`) uses the mask to sample new positions and re-draw chemical properties only for those resources.
+
+No positions or chemical properties are touched inside `update_resources` itself.
+
+```python
+# Source: src/environment/core.py:119–130
+def update_resources(res_active, res_reg_timer, res_cons_count, params):
+    """Updates resource timers and regeneration."""
+    # Regeneration
+    needs_reg_update = jnp.logical_and(jnp.logical_not(res_active), res_reg_timer > 0)
+    new_reg_timer = jnp.where(needs_reg_update, res_reg_timer - 1, res_reg_timer)
+    
+    # Respawn where timer hits 0
+    respawn_mask = jnp.logical_and(jnp.logical_not(res_active), new_reg_timer <= 0)
+    new_active = jnp.where(respawn_mask, True, res_active)
+    new_cons_count = jnp.where(respawn_mask, 0, res_cons_count)
+    
+    return new_active, new_reg_timer, new_cons_count, respawn_mask
 ```
+
+> **API notes — `update_resources`**
+> - `jnp.logical_not` / `jnp.logical_and` — [primer: branchless](00_jax_primer.md#branchless-control-flow-jnpwhere-jaxlaxselect-jaxlaxcond). Elementwise boolean ops over `[num_res]` bool arrays; no Python `if`.
+> - `jnp.where(mask, true_val, false_val)` — [primer: branchless](00_jax_primer.md#branchless-control-flow-jnpwhere-jaxlaxselect-jaxlaxcond). Selects element-by-element; both branches are always evaluated but only selected values write through. "If inactive AND timer > 0, decrement" is expressed entirely this way — no `for` loop, no Python `if`.
+> - The intermediate `new_reg_timer` is computed first and then immediately consumed by `respawn_mask` — two sequential `jnp.where` calls in pure functional style; no array is mutated. See [primer: immutability](00_jax_primer.md#immutable-arrays-and-functional-updates-atidxset--add).
+> - Scalar `True` and `0` as `true_val` arguments to `jnp.where` are broadcast to match the `[num_res]` shape — standard JAX broadcasting.
+
+### Respawn position and property sampling (`jax_step` Stage 1 — cross-reference)
+
+`update_resources` returns `respawn_mask` but does not move resources or re-draw their chemical properties. Immediately after the call in `jax_step`, the caller does both:
+
+```python
+# Source: src/environment/core.py:379–395  (excerpt from jax_step, Stage 1)
+    # Displace resources that just respawned
+    num_res = params.res_type.shape[0]
+    res_keys = jax.random.split(respawn_key, num_res)
+
+    def sample_res_pos(rk, area):
+        return jax.random.randint(rk, (2,), area[:2], area[2:])
+
+    new_potential_pos = jax.vmap(sample_res_pos)(res_keys, params.res_spawn_area)
+    # Only update position IF respawn_mask is true for that resource
+    res_pos_after_reg = jnp.where(respawn_mask[:, None], new_potential_pos, state.res_pos)
+
+    # Re-sample chemical property for respawned resources
+    noise = jax.random.normal(property_key, shape=params.res_property.shape)
+    new_sampled_prop = jnp.clip(params.res_property + params.res_property_std * noise, 0.0, 1.0)
+    res_property_sampled_after_reg = jnp.where(
+        respawn_mask[:, None], new_sampled_prop, state.res_property_sampled
+    )
+```
+
+> **API notes — respawn position + property**
+> - `jax.random.split(respawn_key, num_res)` — [primer: prng](00_jax_primer.md#functional-prng-split-fold_in-key-threading). Produces `num_res` independent keys from one parent key so each resource gets an independent draw.
+> - `jax.vmap(sample_res_pos)(res_keys, params.res_spawn_area)` — [primer: vmap](00_jax_primer.md#jaxvmap-and-in_axes). `sample_res_pos` is written for a single resource (`rk` is one key, `area` is `[4]`). `vmap` lifts it to all `num_res` resources simultaneously — both arguments batched on axis 0. No Python `for` loop.
+> - `respawn_mask[:, None]` — inserts a trailing axis to broadcast `[num_res]` → `[num_res, 1]`, matching the `[num_res, 2]` position array in `jnp.where`. The shape is statically known so this is valid inside a traced/JIT context.
+> - `jnp.clip(..., 0.0, 1.0)` — [primer: masking](00_jax_primer.md#fixed-shape-masking-idioms). Branchless elementwise clamp; guards the Gaussian draw without a conditional.
+> - Consumption / deactivation logic that sets `res_active=False` and starts the timer lives in `jax_step` Stage 4 (`core.py:421–465`). Doc [04_jax_step](04_jax_step.md) owns that body.
+> - Reset-time property sampling (`jax_reset`, `core.py:934`) follows the same `clip(mean + std * N(0,1), 0, 1)` formula. Doc [03_jax_reset](03_jax_reset.md) owns that body.
 
 After `update_resources` returns, `jax_step` handles two additional respawn effects:
 
@@ -178,11 +231,51 @@ Obstacles are **static** — positions (`obs_pos` in `EnvState`) are fixed after
 
 ### Blocking behaviour
 
-Movement is resolved in `move_agent` (`core.py:5-36`). The blocking check (`core.py:29-32`):
+`move_agent` resolves all movement for the agent: it converts the action integer to a `(dr, dc)` delta, clamps the proposed position to grid boundaries, and then checks blocking obstacles — all branchlessly.
+
+```python
+# Source: src/environment/core.py:5–36
+def move_agent(pos: jnp.ndarray, action: int, obs_pos: jnp.ndarray, obs_blocking: jnp.ndarray, params: EnvParams) -> jnp.ndarray:
+    """Calculates New Agent position based on action, considering obstacles."""
+    # 0: Up, 1: Right, 2: Down, 3: Left, 4+: Stay
+    moves = jnp.array([
+        [-1, 0], # Up
+        [0, 1],  # Right
+        [1, 0],  # Down
+        [0, -1], # Left
+        [0, 0],  # Rest/Stay
+        [0, 0],  # Eat/Stay
+    ], dtype=jnp.int32)
+    
+    # Clip action to valid range [0, 5]
+    action = jnp.clip(action, 0, 5).astype(jnp.int32)
+    move = moves[action]
+    
+    new_pos = pos + move
+    # Clamp to grid boundaries
+    new_pos = jnp.array([
+        jnp.clip(new_pos[0], 0, params.height - 1),
+        jnp.clip(new_pos[1], 0, params.width - 1)
+    ])
+    
+    # Obstacle collision check
+    is_collision = jnp.any(jnp.logical_and(
+        jnp.all(obs_pos == new_pos, axis=-1),
+        obs_blocking
+    ))
+    
+    # If collision, stay at current position
+    final_pos = jnp.where(is_collision, pos, new_pos)
+    return final_pos, is_collision
 ```
-is_collision = any(obs_pos == new_pos  AND  obs_blocking)
-final_pos = pos  if is_collision  else  new_pos
-```
+
+> **API notes — `move_agent`**
+> - `moves[action]` — static-shape index into a `[6, 2]` constant array; `action` is a traced integer, but the array shape is fixed at compile time, so JAX can trace this as a gather. See [primer: static-dynamic](00_jax_primer.md#static-vs-dynamic-fields-and-jit-recompilation).
+> - `jnp.clip(action, 0, 5)` — [primer: masking](00_jax_primer.md#fixed-shape-masking-idioms). Branchless clamp so out-of-range actions fall back to the `[0,0]` stay move without a Python `if`.
+> - `jnp.all(..., axis=-1)` over `obs_pos == new_pos` — checks both row and column match simultaneously for each obstacle. Returns `[num_obs]` bool; combined with `obs_blocking` via `logical_and` then collapsed to a scalar with `jnp.any`. See [primer: masking](00_jax_primer.md#fixed-shape-masking-idioms).
+> - `jnp.where(is_collision, pos, new_pos)` — [primer: branchless](00_jax_primer.md#branchless-control-flow-jnpwhere-jaxlaxselect-jaxlaxcond). Both `pos` (stay) and `new_pos` (move) are computed; only the selected one is returned. This is the canonical JAX substitute for `if is_collision: return pos else: return new_pos`.
+> - Called from `jax_step` Stage 2 (`core.py:398`): `new_agent_pos, just_collided = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)`. `obs_pos` is read from **state** (current episode positions), while `obs_blocking` is a static parameter from `params`. Doc [04_jax_step](04_jax_step.md) owns the full stage-by-stage call sequence.
+
 If blocked, the agent stays at `pos`, `just_collided = True`, and `last_collision_noc` is written.
 
 | `obs_blocking` | `obs_hides_agent` | Effect |
