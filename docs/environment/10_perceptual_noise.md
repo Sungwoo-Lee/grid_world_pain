@@ -93,6 +93,77 @@ perceptual_noise:
 
 `_parse_noise_config(config) → dict` (`config_loader.py:957`)
 
+Doc 02 owns the full body of `_parse_noise_config`. The verbatim excerpt below covers the fields consumed directly by `apply_perceptual_noise`; see [02_config_loader.md](02_config_loader.md) for the complete implementation and surrounding context.
+
+Source: `src/environment/config_loader.py:944–1002`
+```python
+_YAML_KEY_TO_SENSOR_NAME = {          # config_loader.py:944–955
+    "injury":                    "Injury",
+    "nutrition":                 "Nutrition",
+    "satiation":                 "Satiation",
+    "extero_nociception":        "Extero Nociception",
+    "interoceptive_nociception": "Interoceptive Nociception",
+    "olfaction":                 "Olfaction",
+    "collision":                 "Collision",
+    "proprioception":            "Proprioception",
+    "visual":                    "Visual",
+    "location":                  "Location",
+}
+
+def _parse_noise_config(config: Config):
+    modalities_cfg = config.get('perceptual_noise.modalities') or {}
+
+    def _parse_mode(s):
+        return 2 if s == 'state_dependent' else 1 if s == 'constant' else 0
+
+    noise_modality_order = tuple(
+        _YAML_KEY_TO_SENSOR_NAME[k]
+        for k in modalities_cfg
+        if k in _YAML_KEY_TO_SENSOR_NAME
+    )
+    pad = max(0, 13 - len(noise_modality_order))
+
+    noise_modes = jnp.pad(jnp.array([
+        _parse_mode(modalities_cfg[k].get('mode', 'none'))
+        for k in modalities_cfg if k in _YAML_KEY_TO_SENSOR_NAME
+    ], dtype=jnp.int32), (0, pad))
+    
+    noise_sigmas = jnp.pad(jnp.array([
+        modalities_cfg[k].get('sigma', 0.0)
+        for k in modalities_cfg if k in _YAML_KEY_TO_SENSOR_NAME
+    ], dtype=jnp.float32), (0, pad))
+    
+    noise_injury_scales = jnp.pad(jnp.array([
+        modalities_cfg[k].get('injury_noise_scale', 0.0)
+        for k in modalities_cfg if k in _YAML_KEY_TO_SENSOR_NAME
+    ], dtype=jnp.float32), (0, pad))
+    
+    noise_clip_min = jnp.pad(jnp.array([
+        modalities_cfg[k].get('clip_min', -100.0)
+        for k in modalities_cfg if k in _YAML_KEY_TO_SENSOR_NAME
+    ], dtype=jnp.float32), (0, pad))
+    
+    noise_clip_max = jnp.pad(jnp.array([
+        modalities_cfg[k].get('clip_max', 100.0)
+        for k in modalities_cfg if k in _YAML_KEY_TO_SENSOR_NAME
+    ], dtype=jnp.float32), (0, pad))
+
+    return {
+        "noise_modality_order": noise_modality_order,
+        "noise_modes": noise_modes,
+        "noise_sigmas": noise_sigmas,
+        "noise_injury_scales": noise_injury_scales,
+        "noise_clip_min": noise_clip_min,
+        "noise_clip_max": noise_clip_max,
+    }
+```
+
+> **API notes — `_parse_noise_config`**
+> - `noise_modality_order` is a **Python tuple of strings** stored as a static field in `EnvParams`. Changing YAML key order rewrites this tuple and triggers a full JIT recompile. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+> - `jnp.pad(..., (0, pad))` right-pads each of the five arrays to a constant shape `[13]`. Array shapes are static under `@jax.jit`; the fixed size prevents recompilation when modality count varies within the 13-slot budget. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+> - The five arrays are **parallel**: slot `i` in `noise_modes`, `noise_sigmas`, `noise_injury_scales`, `noise_clip_min`, and `noise_clip_max` all describe the same modality — the entry at position `i` in `noise_modality_order`.
+> - `_parse_mode` encodes the three modes as integers via a branchless ternary chain. The integer is stored in a `jnp.int32` array; the JAX-side `jnp.where` in `apply_perceptual_noise` dispatches without Python branching at inference time. See [primer: branchless](00_jax_primer.md#branchless).
+
 **Step-by-step**:
 1. Read `perceptual_noise.modalities` dict (`config_loader.py:958`). Python ≥ 3.7 and PyYAML ≥ 5.1 both preserve insertion order, so YAML declaration order is maintained.
 2. Emit `noise_modality_order` tuple (`config_loader.py:963–967`) by iterating YAML keys in declaration order and mapping through `_YAML_KEY_TO_SENSOR_NAME` (`config_loader.py:944–955`). Only keys present in that mapping are included; unknown YAML keys are silently dropped.
@@ -153,6 +224,86 @@ Decorated with `@jax.jit` (bare, no `static_argnames`). `params.perceptual_noise
 obs_key = jax.random.fold_in(state.key, 999)
 ```
 `state.key` is refreshed every step via the split-and-store pattern in `core.py`. `fold_in(key, 999)` creates a deterministic, per-step noise key without consuming a split from the main key. The constant `999` is an arbitrary salt whose only role is to make the observation noise branch independent from other uses of `state.key` in the same step.
+
+### Full verbatim implementation
+
+`apply_perceptual_noise` is the core noise function. The full source is reproduced below so every line can be read alongside the API notes that follow.
+
+Source: `src/environment/sensor.py:222–267`
+```python
+@jax.jit
+def apply_perceptual_noise(obs: jnp.ndarray, state: EnvState, params: EnvParams, key: jax.random.PRNGKey):
+    """Applies vectorized, state-dependent Gaussian noise based on modality-specific modes."""
+    if not params.perceptual_noise_enabled:
+        return obs
+        
+    breakdown = get_observation_breakdown(params)
+    
+    # Mapping Sensor names to indices in params.noise_modes/sigmas/scales
+    # Derived from YAML order stored in params.
+    modality_map = {name: i for i, name in enumerate(params.noise_modality_order)}
+    
+    sigma_base_list = []
+    alpha_list = []
+    mode_list = []
+    
+    # Static iteration over breakdown (which depends on EnvParams/struct)
+    for sensor_name, dim in breakdown.items():
+        idx = modality_map[sensor_name]
+        sigma_base_list.append(jnp.full((dim,), params.noise_sigmas[idx]))
+        alpha_list.append(jnp.full((dim,), params.noise_injury_scales[idx]))
+        mode_list.append(jnp.full((dim,), params.noise_modes[idx]))
+        
+    sigma_base = jnp.concatenate(sigma_base_list)
+    alpha = jnp.concatenate(alpha_list)
+    mode = jnp.concatenate(mode_list)
+    
+    # Normalized injury (0.0 to 1.0)
+    norm_injury = state.injury_level / jnp.maximum(params.max_injury, 1e-6)
+    
+    # Effective Sigma calculation:
+    # Mode 0: None (0.0)
+    # Mode 1: Constant (sigma_base)
+    # Mode 2: State-Dependent (sigma_base * (1 + alpha * injury))
+    sigma_eff = jnp.where(
+        mode == 2,
+        sigma_base * (1.0 + alpha * norm_injury),
+        jnp.where(mode == 1, sigma_base, 0.0)
+    )
+    
+    # Clip ranges (Vectorized)
+    clip_min = jnp.concatenate([jnp.full((dim,), params.noise_clip_min[modality_map[name]]) for name, dim in breakdown.items() if name in modality_map])
+    clip_max = jnp.concatenate([jnp.full((dim,), params.noise_clip_max[modality_map[name]]) for name, dim in breakdown.items() if name in modality_map])
+    
+    noise = jax.random.normal(key, obs.shape) * sigma_eff
+    return jnp.clip(obs + noise, clip_min, clip_max)
+```
+
+> **API notes — `apply_perceptual_noise`**
+>
+> **`@jax.jit` and the static-bool guard (lines 222–226)**  
+> The bare `@jax.jit` decorator means JAX traces the function once per unique combination of argument *shapes and types*. `params.perceptual_noise_enabled` is a static Python `bool` field in the `EnvParams` struct (declared with `struct.field(pytree_node=False)`), so `if not params.perceptual_noise_enabled: return obs` is evaluated at *trace time*, not at runtime. When noise is disabled the compiled function is a literal pass-through. See [primer: static-dynamic](00_jax_primer.md#static-dynamic) and [primer: jit](00_jax_primer.md#jit).
+>
+> **Static iteration builds per-element sigma vector (lines 239–247)**  
+> The `for sensor_name, dim in breakdown.items()` loop runs entirely in Python during JIT tracing — it is fully unrolled and leaves no loop in the compiled XLA code. Each `jnp.full((dim,), scalar)` creates a constant JAX array for one modality segment; `jnp.concatenate` fuses them into full-obs-length arrays `sigma_base`, `alpha`, and `mode`. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+>
+> **Critical invariant — noise order must match breakdown (line 240)**  
+> `modality_map[sensor_name]` raises a `KeyError` at trace time if any sensor returned by `get_observation_breakdown` is absent from `params.noise_modality_order`. YAML declaration order determines `noise_modality_order`; `get_observation_breakdown` determines which sensors are active. These two sets must be kept in sync. This is a known desync hazard — see the Critical Invariant section below.
+>
+> **`jnp.where` for branchless mode dispatch (lines 256–260)**  
+> The nested `jnp.where` evaluates all three branches simultaneously and selects elementwise — no Python `if` at inference time. A Python `if mode == 2:` would be illegal here because `mode` is a JAX array, not a Python scalar. The `state_dependent` path is `sigma_base * (1.0 + alpha * norm_injury)`; the `constant` path is `sigma_base`; the `none` path is `0.0`. See [primer: branchless](00_jax_primer.md#branchless).
+>
+> **`jnp.maximum` for the injury denominator (line 250)**  
+> `state.injury_level / jnp.maximum(params.max_injury, 1e-6)` uses `jnp.maximum` (elementwise JAX op) instead of Python `max`. `params.max_injury` is a JAX scalar array of shape `[]`; Python `max` only works on Python numbers. The `1e-6` floor prevents division-by-zero if `max_injury` is ever set to 0.
+>
+> **Clip asymmetry — guard on `clip_min/clip_max` but not on `sigma_base` (lines 263–264)**  
+> The list comprehensions for `clip_min` and `clip_max` include `if name in modality_map`, while the `sigma_base_list` loop (lines 239–243) uses a bare `modality_map[sensor_name]`. Both iterate the same `breakdown` dict, so the guard is always `True` and lengths always match. The asymmetry is a latent hazard: a future refactor that changes the iteration set for one path but not the other could silently produce mismatched array lengths. See Desync 3 in the Critical Invariant section.
+>
+> **PRNG: one key, one draw, full-obs-length (lines 266–267)**  
+> `jax.random.normal(key, obs.shape)` draws independent N(0,1) samples for every element of the full observation vector. Independence across modalities comes from the statistical properties of the PRNG, not from separate per-modality key splits. Multiplying by `sigma_eff` scales each element independently to implement per-modality σ. See [primer: prng](00_jax_primer.md#prng).
+>
+> **`fold_in` vs `split` for the obs key (from `get_observation`, line 273)**  
+> `jax.random.fold_in(state.key, 999)` produces a new deterministic key without consuming a slot from the original key's sequence (unlike `jax.random.split`). The integer `999` namespaces this branch away from other uses of `state.key` in the same step. Because `state.key` is refreshed each step, the noise key changes every step — observations are not correlated across time. See [primer: prng](00_jax_primer.md#prng).
 
 ---
 
