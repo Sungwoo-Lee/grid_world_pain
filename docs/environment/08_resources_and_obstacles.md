@@ -1,38 +1,69 @@
 # 08 — Resources & Obstacles
 
-> **Source**: `src/environment/core.py` (`update_resources`, interaction section), `src/environment/config_loader.py` | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
+> **Source**: `src/environment/core.py` (`update_resources`, `jax_step`), `src/environment/state.py`, `src/environment/config_loader.py`, `src/environment/sensor.py` | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 
 ## Overview
 
-The environment contains four categories of interactable objects beyond the agent:
+This document covers three categories of non-agent interactable objects: **resources** (food and traps), **obstacles** (static terrain features), and **neutral animals** (mobile non-hostile creatures). A fourth topic, grid tile types (plain, grass, sand), is covered at the end.
 
-- **Resources** (food/hiding_predator): consumable entities with regeneration timers.
-- **Obstacles** (rocks, bushes, trees): static blocking or passthrough terrain features.
-- **Neutral animals**: mobile non-hostile entities that wander the grid.
-- **Grid location types**: tile-level terrain annotation (plain, grass, sand).
+**Plain-language summary of what these things do:**
 
-Resources and obstacles are placed at reset and interact with the agent in Stage 4 of `jax_step`. Neutral animals are mobile entities updated each step in Stage 3.5.
+- A **food resource** is a consumable item the agent can eat to restore nutrition. After being eaten a set number of times, it disappears and reappears elsewhere after a timer expires.
+- A **hiding-predator resource** is a trap: it looks like a resource but deals damage and triggers the pain sensor when stepped on. It never requires an action to activate — the agent just has to step on it.
+- An **obstacle** is a static object fixed at reset. A blocking obstacle (like a rock) physically stops the agent from entering its cell; a non-blocking obstacle (like a bush) the agent can walk onto, potentially taking damage each step. Blocking obstacles can also hide the agent from predators (`obs_hides_agent`).
+- A **neutral animal** is the `neutral`-class member of the unified animal entity system (introduced in the env-entities CP1 refactor). Neutrals wander or stand still, contribute chemical ("olfactory") smell signals, and can optionally emit a small nociceptive signal on contact — but they do not deal damage and do not cause predators to enter hunt mode. The old `neutral_*` and `pred_*` separate arrays no longer exist; everything lives in the `animal_*` arrays described in doc [07_predator_ai](07_predator_ai.md).
+
+Resources and obstacles are placed at `jax_reset` and interact with the agent in Stage 4 of `jax_step`. Animals (including neutrals) are updated in Stage 3 of `jax_step` via `update_animals`.
 
 ---
 
 ## Resource Types
 
-`res_type [N]` int32 — 0 = food, 1 = hiding_predator.
+`res_type [num_res]` int32 — two codes:
+
+| Code | Name | YAML `type:` string |
+|------|------|---------------------|
+| 0 | food | `"food"` |
+| 1 | hiding_predator | `"hiding_predator"` (formerly `"danger"` — deprecated, still accepted with a warning) |
 
 **Food** (type 0):
-- Contact provides a nutrition gain of `food_nutrition_gain - eating_nutrition_cost`.
-- Olfactory signature in `res_property`: typically `[1,0,0,0,0]` (hot in channel 0).
-- No damage; `res_nociception = 0.0`.
+- Contact provides a net nutrition gain of `food_nutrition_gain - eating_nutrition_cost`.
+- Olfactory signature via `res_property`; convention in shipped configs is `[1,0,0,0,0]` (hot in channel 0).
+- Default `res_nociception = 0.0` (no pain signal). Set nonzero to model aversive food.
+- Consumption can be action-gated (see Consumption Mechanics below).
 
 **Hiding Predator** (type 1):
 - Contact deals damage sampled from `Uniform(res_damage[n,0], res_damage[n,1])`.
-- `res_nociception` (default 0.9): the intensity forwarded to the nociception sensor on contact.
+- `res_nociception` (default 0.9): intensity forwarded to the exteroceptive nociception sensor on contact.
 - No nutrition effect.
-- Olfactory signature: typically `[0,0,0,0,0]` (no chemical signature) — agent must infer hiding predators from other signals.
+- Olfactory signature: typically `[0,0,0,0,0]` — no chemical signature, so the agent must infer the trap from other signals (nociception, visual).
+- Always triggers automatically regardless of `eat_action_enabled`.
 
-Both types use the same lifecycle (consumption counter, timer, activity flag). The type only determines the interaction outcome.
+Both types share the same lifecycle (consumption counter, regen timer, active flag). The type code only determines the interaction outcome.
+
+**Config loading** (`config_loader.py:638-652`): `res_nociception` defaults to 0.9 for hiding-predator resources and 0.0 for food if not explicitly set. The deprecated `"danger"` type string is remapped to 1 with a `DeprecationWarning`.
+
+---
+
+## Resource State and Parameter Fields
+
+| Field | Location | Shape | Description |
+|-------|----------|-------|-------------|
+| `res_pos` | `EnvState` | `[num_res, 2]` | Current position (row, col) |
+| `res_active` | `EnvState` | `[num_res]` bool | Whether this resource can be interacted with |
+| `res_cons_count` | `EnvState` | `[num_res]` int | Consumption count since last respawn |
+| `res_reg_timer` | `EnvState` | `[num_res]` int | Steps remaining before respawn (counts down) |
+| `res_property_sampled` | `EnvState` | `[num_res, V]` | Olfactory signature for this episode / since last respawn |
+| `res_type` | `EnvParams` | `[num_res]` int32 | 0=food, 1=hiding_predator |
+| `res_property` | `EnvParams` | `[num_res, V]` | Mean olfactory signature (config constant) |
+| `res_property_std` | `EnvParams` | `[num_res, V]` | Std for per-reset Gaussian sampling |
+| `res_nociception` | `EnvParams` | `[num_res]` | Nociceptive intensity on contact |
+| `res_spawn_area` | `EnvParams` | `[num_res, 4]` | `[min_r, min_c, max_r, max_c]` bounding box for placement/respawn |
+| `res_max_cons` | `EnvParams` | `[num_res]` int | Max consumptions before deactivation (<=0 = infinite) |
+| `res_reg_delay` | `EnvParams` | `[num_res]` int | Steps from deactivation to respawn |
+| `res_damage` | `EnvParams` | `[num_res, 2]` | `[min, max]` damage range per contact |
 
 ---
 
@@ -40,100 +71,246 @@ Both types use the same lifecycle (consumption counter, timer, activity flag). T
 
 **Auto-eat mode** (`eat_action_enabled=False`): any step where `agent_pos == res_pos[n] AND res_active[n]` triggers consumption. No explicit action needed.
 
-**Eat-action mode** (`eat_action_enabled=True`): food consumption only occurs if the agent is on a food resource AND selects the eat action (action 5 if rest is enabled, action 4 if rest is disabled). Hiding predators always trigger automatically regardless of this setting.
+**Eat-action mode** (`eat_action_enabled=True`): food consumption only occurs if the agent is on a food resource AND selects the eat action (action index 5 if `rest_action_enabled=True`, index 4 if `rest_action_enabled=False`). Hiding predators always trigger automatically regardless of this flag (`core.py:421-449`).
 
-**Lifecycle tracking** (`core.py:372`):
+**Lifecycle tracking** (`core.py:458-465`):
 ```
-next_cons_count = cons_count + 1  (if interacted)
-should_deactivate = res_active AND res_max_cons > 0 AND next_cons_count >= res_max_cons
-final_active = False if should_deactivate else res_active
-next_reg_timer = res_reg_delay if should_deactivate else reg_timer
+next_cons_count = new_cons_count + (1 if interacted_this_step else 0)
+should_deactivate = new_active AND (res_max_cons > 0) AND (next_cons_count >= res_max_cons)
+final_active = False if should_deactivate else new_active
+next_reg_timer = res_reg_delay if should_deactivate else new_reg_timer
 ```
 
-Setting `res_max_cons = -1` (or any value ≤ 0) makes the resource permanently available — it never deactivates. The default is `35` in `configs/environment/default.yaml`.
+Setting `res_max_cons <= 0` (e.g. `-1` or `0`) makes the resource permanently available — it never deactivates. The default in `configs/environment/default.yaml` is 35.
+
+**`interacted_this_step`** is the union of:
+1. Hiding-predator interaction: `interact_resource AND is_hiding_predator` (always auto).
+2. Food lifecycle trigger: `interact_resource AND is_food AND (auto-eat OR eat-action)`.
+
+Note: `interacted_this_step` governs the consumption counter and deactivation. The separate `ate_food` flag governs only the nutrition gain (`core.py:441-444`).
 
 ---
 
 ## Regeneration
 
-Handled in Stage 1 of `jax_step` (`core.py:117`, called at `core.py:291`):
+Handled in Stage 1 of `jax_step` (`core.py:374-395`, calling `update_resources` at `core.py:375`).
 
+`update_resources` (`core.py:119-130`):
 ```
-For each inactive resource:
-  new_reg_timer = reg_timer - 1
-  if new_reg_timer <= 0:
-    new_active = True
-    new_cons_count = 0
-    new_res_pos = randint(spawn_area)   # sample new position in spawn area
+# Decrement timer only while inactive and timer > 0
+needs_reg_update = (NOT active) AND (reg_timer > 0)
+new_reg_timer = reg_timer - 1  if needs_reg_update  else reg_timer
+
+# Respawn when timer reaches 0
+respawn_mask = (NOT active) AND (new_reg_timer <= 0)
+new_active    = True  where respawn_mask
+new_cons_count = 0    where respawn_mask
 ```
 
-Resources respawn within their `res_spawn_area` bounding box. The new position is random — it will not necessarily be the same as the original position. No overlap checking is done on respawn positions, so two resources could theoretically land on the same cell.
+After `update_resources` returns, `jax_step` handles two additional respawn effects:
+
+1. **New position** (`core.py:381-388`): for each respawning resource, a new `(row, col)` is sampled uniformly from its `res_spawn_area`. No occupancy check — two resources can land on the same cell.
+
+2. **Re-sampled chemical property** (`core.py:391-395`): `new_sampled = clip(res_property + res_property_std * N(0,1), 0, 1)`. The respawned resource looks chemically "fresh" with new noise if `res_property_std > 0`.
+
+**Timer behaviour in detail:**
+- At deactivation: `next_reg_timer = res_reg_delay` (set at `core.py:465`).
+- Each subsequent step: `new_reg_timer = reg_timer - 1` (decremented in `update_resources`).
+- Respawn fires the first step that `new_reg_timer <= 0`, i.e. exactly `res_reg_delay` steps after deactivation.
+- The timer is NOT decremented while the resource is active (`needs_reg_update` requires `NOT active`).
+- At reset: `res_reg_timer` is initialized to 0 and `res_active` to all-True, so all resources start available (`core.py:984-986`).
+
+---
+
+## Per-Resource Property Sampling
+
+`res_property` (`EnvParams`) is the configured mean — constant across all episodes. `res_property_sampled` (`EnvState`) is a noisy draw made at two points:
+
+1. **At reset** (`core.py:934`, `jax_reset`): `clip(res_property + res_property_std * N(0,1), 0, 1)`.
+2. **On respawn** (`core.py:391-395`): same formula, applied only to resources flagged by `respawn_mask`.
+
+Sensors read `res_property_sampled`. If `res_property_std = 0` for all channels, the sampled value equals the mean exactly and is constant.
 
 ---
 
 ## Damage & Nociception from Resources
 
-**Damage** (`core.py:338`): sampled independently per resource using the step's `damage_key`:
-```python
-sampled_res_damage = Uniform(res_damage[:, 0], res_damage[:, 1])
-damage_res = sum(sampled_res_damage where (interact AND is_danger))
+**Damage** (`core.py:424-427`): sampled independently per resource using `damage_key`:
 ```
+sampled_res_damage = Uniform(res_damage[:, 0], res_damage[:, 1])
+damage_res = sum(sampled_res_damage  where (interact_resource AND is_hiding_predator))
+```
+This is a single `jax.random.uniform` draw over all resources, so draw positions are stable. The result feeds `total_damage`.
 
-**Nociception** (`sensor.py:59`): the nociception sensor checks for active hiding predators at the agent's exact position (`dist < 0.1`), returning the maximum `res_nociception` intensity among all overlapping hiding predators. This is a separate signal from the damage value — damage feeds the body, nociception feeds the sensor.
+**Exteroceptive nociception** (`sensor.py:59-95`): `sense_extero_nociception` checks:
+1. Active resources at the agent's cell (`dist < 0.1`): max of `res_nociception` among overlapping resources.
+2. Damaging animals at the agent's cell: max of `animal_nociception` (only `animal_is_damaging` entries contribute, `sensor.py:74-80`).
+3. Non-blocking obstacles at the agent's cell: max of `obs_nociception`.
+4. Blocking obstacle collision: `state.last_collision_noc` (stored from the step).
+
+The final nociceptive signal is the maximum across all four sources — a single scalar.
 
 ---
 
 ## Obstacles
 
-Obstacles are **static** — their positions are fixed after `jax_reset` and never change during an episode.
+Obstacles are **static** — positions (`obs_pos` in `EnvState`) are fixed after `jax_reset` and never change during an episode.
 
-| Field | Effect |
-|-------|--------|
-| `obs_blocking=True` | Agent cannot enter this cell; bounces back; `just_collided=True`; collision damage applied |
-| `obs_blocking=False` | Agent can stand on the cell; overlap damage applied; nociception from overlap |
-| `obs_hides_agent=True` | Agent on this cell is hidden from predators |
-| `obs_hides_agent=False` | No concealment effect |
+| Field | Location | Shape | Description |
+|-------|----------|-------|-------------|
+| `obs_pos` | `EnvState` | `[num_obs, 2]` | Fixed position (row, col) |
+| `obs_property_sampled` | `EnvState` | `[num_obs, V]` | Olfactory signature (sampled at reset) |
+| `obs_blocking` | `EnvParams` | `[num_obs]` bool | True: agent cannot enter this cell |
+| `obs_hides_agent` | `EnvParams` | `[num_obs]` bool | True: agent on this cell is hidden from predators |
+| `obs_spawn_area` | `EnvParams` | `[num_obs, 4]` | Placement bounding box |
+| `obs_damage` | `EnvParams` | `[num_obs, 2]` | `[min, max]` damage range |
+| `obs_property` | `EnvParams` | `[num_obs, V]` | Mean olfactory signature |
+| `obs_property_std` | `EnvParams` | `[num_obs, V]` | Std for per-reset sampling |
+| `obs_nociception` | `EnvParams` | `[num_obs]` | Nociceptive intensity on overlap/collision (default 0.3) |
+| `obs_type` | `EnvParams` | `[num_obs]` int32 | Index into `obstacle_names` for renderer icon |
+| `obstacle_names` | `EnvParams` | `tuple[str]` | Sorted unique set of obstacle name strings |
 
-**Damage sources**:
-- **Collision** (blocking): `damage_obs_collision = max(obs_damage[n] where at attempted_pos AND obs_blocking[n])` — only the specific obstacle being bumped deals damage.
-- **Overlap** (non-blocking): `damage_obs_overlap = sum(obs_damage[n] where at agent_pos AND NOT obs_blocking[n])`.
+**Config defaults** (`config_loader.py:704-711`):
+- `blocking`: defaults to `True` if not specified.
+- `hides_agent`: defaults to `False` if not specified.
+- `damage`: defaults to `0.0` if not specified (converted to `[0.0, 0.0]`).
+- `nociception_intensity`: defaults to `0.3` if not specified.
 
-**Nociception storage**: `last_collision_noc` in `EnvState` stores the nociception intensity from the most recent blocking collision. This value is consumed by `sense_extero_nociception` in the next observation. It is reset to 0 when no collision occurs.
+### Blocking behaviour
 
-**Olfactory signature**: `obs_property [O, 5]` — obstacles can contribute to the olfactory signal. Bush obstacles in the default config use channel 3 (`[0,0,0,1,0]`).
+Movement is resolved in `move_agent` (`core.py:5-36`). The blocking check (`core.py:29-32`):
+```
+is_collision = any(obs_pos == new_pos  AND  obs_blocking)
+final_pos = pos  if is_collision  else  new_pos
+```
+If blocked, the agent stays at `pos`, `just_collided = True`, and `last_collision_noc` is written.
 
-**Visual encoding**: `obs_type [O]` indexes into `obstacle_names` (e.g. `("bush", "rock")`). The visual sensor maps type to channel 6 (rock) regardless of obstacle name — the `obs_type` field is used by the renderer for icon selection.
+| `obs_blocking` | `obs_hides_agent` | Effect |
+|----------------|-------------------|--------|
+| `True` | `False` | Agent bounces back; `just_collided=True`; collision damage applied |
+| `True` | `True` | Bounce-back AND agent hidden from predators while adjacent (same-cell check inside `_hunt_step`) |
+| `False` | `False` | Agent can stand on cell; overlap damage applied each step |
+| `False` | `True` | Agent can stand on cell (e.g. bush); agent hidden from predators while on this cell |
+
+### Damage sources
+
+**Collision damage** (blocking obstacles, `core.py:493-494`):
+```
+at_attempted_obs = (obs_pos == attempted_pos)
+damage_obs_collision = max(sampled_obs_damage  where at_attempted_obs)  if just_collided  else  0
+```
+Uses `jnp.max` — only the single hardest-hitting obstacle at the attempted cell counts.
+
+**Overlap damage** (non-blocking obstacles, `core.py:489`):
+```
+damage_obs_overlap = sum(sampled_obs_damage  where (at_obs AND NOT obs_blocking))
+```
+All non-blocking obstacles at the agent's current cell are summed. Standing on a damaging non-blocking tile bleeds the agent each step.
+
+Both damage types are added into `total_damage` (`core.py:499`).
+
+### Nociception
+
+`last_collision_noc` (`EnvState`, scalar float) stores the nociceptive intensity from the most recent blocking collision:
+```
+collision_noc = max(obs_nociception  where at_attempted_obs)  if just_collided  else  0
+```
+This value is consumed by `sense_extero_nociception` on the next observation call. It is written to state every step, so it resets to 0 if no collision occurred.
+
+### Olfactory signature
+
+`obs_property [num_obs, V]` — obstacles contribute to the olfactory signal. Sampled at reset via the same Gaussian formula as resources. Bush obstacles in the default config use channel 3 (`[0,0,0,1,0]`). In `sensor.py:302`, `obs_chem` is added alongside `res_chem` and `animal_chem`.
+
+### Visual encoding
+
+`obs_type [num_obs]` int32 is built in `config_loader.py:720-722` by sorting unique obstacle names alphabetically and mapping each name to its index. The renderer uses this index for icon selection. There is no fixed rock=0, bush=1 convention — the index depends on which names appear in the config.
 
 ---
 
 ## Neutral Animals
 
-Neutral animals wander randomly and do not attack. They serve as **olfactory decoys** — they contribute to the olfactory sensor signal via `neutral_property`, making the olfactory scene noisier and harder to decode.
+> **Key design change (env-entities CP1 refactor)**: Neutral animals are no longer tracked in separate `neutral_*` arrays. They are the `neutral` class of the **unified animal entity system** (`animal_*` arrays). The old `neutral_pos`, `neutral_property`, `neutral_nociception` etc. fields are gone from both `EnvState` and `EnvParams`. See [07_predator_ai](07_predator_ai.md) for the full unified animal architecture.
 
-**Update** (`core.py:249`):
-1. Decrement `neutral_move_timer`.
-2. When timer expires, move by random jitter `(dr, dc)` each in `{-1, 0, 1}`.
-3. Clamp to `neutral_patrol` bounding box.
-4. Obstacle collision check via `jax.vmap`.
-5. Reset timer to `neutral_move_int`.
+### What neutral animals are
 
-**Olfactory contribution** (`sensor.py:269`): included in the olfactory sensor:
+A neutral animal is any entry in the unified `animal_*` arrays where `animal_classes[i] == 'neutral'` (string tag, pytree-excluded) or equivalently `animal_classes_int[i] == 1` (JAX int array). The set of neutral indices is cached in `params.neutral_indices` (a static Python tuple, pytree-excluded) and used by:
+- `jax_reset` for placement (N1 fix in `core.py:822-828`).
+- `update_animals` (Branch B, `core.py:344-359`) to route them through `_wander_step`.
+
+Neutral animals defined via legacy `environment.neutral_animals:` YAML (pre-v2.0 configs) are automatically projected to `class='neutral'`, `behaviour='wander'` by `_load_animals` (`config_loader.py:366-397`).
+
+### Behaviour: wander vs. static
+
+`animal_behaviours[i]` (string) / `animal_behaviours_int[i]` (int) describes the movement policy:
+
+| Behaviour string | Int code | Movement |
+|-----------------|----------|----------|
+| `wander` | 0 | Random jitter `(-1, 0, 1)` per axis, clamped to `animal_patrol[i]` area |
+| `static` | 2 | Never moves; position frozen at reset value |
+
+The `hunt` behaviour (int 1) is exclusively used by `predator`-class animals and runs through `_hunt_step`.
+
+**`_wander_step` update** (`core.py:242-280`):
+1. Decrement `animal_move_timer`.
+2. When `move_timer <= 0`, sample random jitter `(dr, dc)` each in `{-1, 0, 1}` using two independent `jax.random.randint` draws.
+3. Apply move, then clamp to `animal_patrol[i]` bounding box.
+4. Hard-clamp to grid boundaries.
+5. Obstacle collision: if the proposed new position is on a blocking obstacle, revert to previous position.
+6. Reset timer to `animal_move_int[i]`.
+
+There is no inter-animal collision — neutrals (and predators) can stack on the same cell.
+
+### Olfactory contribution
+
+`sensor.py:298-303` (B2 fix): the olfactory sensor combines resources, all animals (predators and neutrals together), and obstacles into a single `animal_chem` term:
 ```python
-neutral_chem = sense_resource(agent_pos, neutral_pos, ones, neutral_property, radius, decay)
-obs_olfactory = res_chem + pred_chem + obs_chem + neutral_chem
+animal_chem = sense_resource(
+    agent_pos,
+    state.animal_pos,          # unified [N, 2] -- includes both predators and neutrals
+    jnp.ones(N, bool),         # always "active" (no per-animal active flag)
+    state.animal_property_sampled,
+    params.sensor_radius, params.sensor_decay
+)
+obs_olfactory = res_chem + animal_chem + obs_chem
 ```
 
-**Nociception**: `neutral_nociception [M]` — if a neutral animal is at the agent's position, its intensity contributes to the nociception sensor. Default is 0.1 in the default config.
+Before the CP1 refactor there were separate `pred_chem` and `neutral_chem` calls; these are now collapsed into a single `animal_chem` call over the unified array. There is no mechanism to selectively mask one class from olfaction at runtime — the split is done at analysis time via `params.predator_indices` / `params.neutral_indices`.
+
+### Nociception
+
+`params.animal_nociception [N]` — per-animal nociceptive intensity. For neutral animals this defaults to 0.0 in the `_load_animals` NC-1 fix (`config_loader.py:391`), but any positive value can be configured via `nociception_intensity:` in the YAML.
+
+Critically, `sense_extero_nociception` (`sensor.py:74-80`) **only** emits nociceptive signal from animals where `params.animal_is_damaging[i] == True`:
+```python
+animal_intensities = where(dist < 0.1 AND animal_is_damaging, animal_nociception, 0.0)
+```
+`animal_is_damaging` is False for all `neutral`-class animals (set in `config_loader.py:532-533`). So even if a neutral's `nociception_intensity` is nonzero, it will NOT appear in the nociception sensor.
+
+### Damage
+
+`params.animal_damage [N, 2]` for neutral animals is always `[0.0, 0.0]` (auto-filled by the NC-1 fix in `config_loader.py:391`). The damage accumulation at `core.py:472-477` uses `at_damaging = at_animal AND animal_is_damaging`, so neutral animals never contribute damage regardless of position.
+
+### Hit detection in `info` dict
+
+`info['hit_neutral']` (`core.py:529`) uses PRE-step `state.animal_pos` masked by `~animal_is_damaging`. This asymmetry with `hit_predator` (which uses POST-step positions) is intentional for byte-parity with the pre-refactor code.
+
+### Property sampling
+
+Neutral animals' `animal_property_sampled` is populated at reset using a separate `prop_key_neutral` from the 4-way PRNG split (N2 fix, `core.py:928-953`). The mean and std are `animal_property[neutral_indices]` and `animal_property_std[neutral_indices]`. During the episode, `animal_property_sampled` does not change (no per-step property re-sampling for animals, unlike resources). 
+
+### Placement
+
+At reset, neutral animals are placed using `neutral_sa` (their subset of `animal_spawn_area`) in the `per_entity` mode via `neutral_key` (N3 fix, `core.py:799-828`). In `per_type` mode, they participate in the type-grouped scan alongside resources, predators, and obstacles in the order `[res, pred, obs, neutral]` (N1 fix). Both modes call `resolve_overlaps_global` to prevent initial position overlaps.
 
 ---
 
 ## Grid Location Types
 
-`grid_location_type [H, W]` int32 — tiles are categorised at reset from `environment.location_areas` in the YAML.
+`grid_location_type [H, W]` int32 — tile annotations set at reset from `environment.location_areas` in YAML.
 
-| Value | Name | YAML type | Renderer color |
-|-------|------|-----------|----------------|
-| 0 | Plain | `"plain"` (default) | White `#FFFFFF` |
+| Value | Name | YAML `type:` | Renderer colour |
+|-------|------|-------------|-----------------|
+| 0 | Plain | `"plain"` (or omit) | White `#FFFFFF` |
 | 1 | Grass | `"grass"` | Light green `#ECFDF5` |
 | 2 | Sand | `"sand"` | Light amber `#FFFBEB` |
 
@@ -142,62 +319,62 @@ obs_olfactory = res_chem + pred_chem + obs_chem + neutral_chem
 - channel 1 = sand (loc 2)
 - channel 2 = plain (loc 0)
 
-**Predator concealment**: predators only check `obs_hides_agent` per-obstacle, not grid location type. Bush concealment is an obstacle property, not a tile property.
+**Predator concealment**: concealment is determined entirely by `obs_hides_agent` (a per-obstacle flag), not by `grid_location_type`. A bush tile that hides the agent is an obstacle with `hides_agent: true`, not a grass tile.
 
 ---
 
 ## Clarifications / FAQ
 
 **Q: Can two resources share the same cell?**
-A: At reset, no — `resolve_overlaps_global` prevents it. After respawn, **yes** — respawn position sampling (`core.py:300-305`) uses `res_spawn_area` with no occupancy check. Two food items can land on the same cell, and the agent standing there will interact with both.
+A: At reset, no — `resolve_overlaps_global` prevents it. After respawn, **yes** — respawn position sampling (`core.py:381-388`) uses `res_spawn_area` with no occupancy check. Two food items can land on the same cell, and the agent standing there interacts with both simultaneously.
 
 **Q: What if a resource respawns onto an obstacle cell?**
-A: It will. There's no overlap check against obstacles or predators either. The agent standing on that cell would receive food+obstacle effects simultaneously. For dense configs, use non-overlapping `res_spawn_area` and `obs_spawn_area` to avoid this.
+A: It will. There is no check against obstacle or animal positions on respawn. The agent on that cell receives both food and obstacle effects in the same step. For dense configs, use non-overlapping `res_spawn_area` and `obs_spawn_area` to avoid this.
 
 **Q: What's the difference between `res_max_cons = 0`, `-1`, and a positive value?**
 A: The deactivation check is `should_deactivate = active AND (res_max_cons > 0) AND (next_cons_count >= res_max_cons)`:
-- `res_max_cons = -1` (or any ≤ 0): the `> 0` guard fails, so the resource never deactivates — infinite consumption, no respawn needed.
+- `res_max_cons = -1` (or any <= 0): the `> 0` guard fails, so the resource never deactivates — infinite consumption, no respawn needed.
 - `res_max_cons = 0`: same as -1 (guard fails).
 - `res_max_cons = N > 0`: resource deactivates after N consumptions, respawns after `res_reg_delay` steps.
 
 **Q: Does `res_reg_delay` start counting from deactivation or from the initial step?**
-A: From deactivation. `res_reg_timer` is set to `res_reg_delay` at the moment `should_deactivate` fires (`core.py:386`). A just-deactivated resource will not respawn for exactly `res_reg_delay` steps.
+A: From deactivation. `res_reg_timer` is set to `res_reg_delay` at the moment `should_deactivate` fires (`core.py:465`). A just-deactivated resource will not respawn for exactly `res_reg_delay` more steps.
 
 **Q: When a resource respawns, does it get a new chemical property?**
-A: Yes. `core.py:307-312` re-samples the property on respawn: `new_sampled = clip(property + std * N(0, 1), 0, 1)`. This makes the respawn look "different" to the olfaction sensor if `property_std > 0`.
+A: Yes. `core.py:391-395` re-samples the property on respawn: `new_sampled = clip(res_property + res_property_std * N(0, 1), 0, 1)`. If `res_property_std > 0`, the respawned item looks chemically different to the olfaction sensor.
 
 **Q: Can a hiding predator be "eaten" with the eat action?**
-A: No — hiding predators always trigger automatically on overlap (`core.py:348`). The `eat_action_enabled` flag and the eat action only affect food resources (`core.py:351-365`). Hiding predators ignore the flag.
+A: No. Hiding predators always trigger automatically on overlap (`core.py:421-427`). The `eat_action_enabled` flag and eat action only gate food consumption (`core.py:432-449`). Hiding predators ignore the flag entirely.
 
 **Q: If I step onto a blocking obstacle, do I take damage once or continuously?**
-A: Once per collision step. Each time `just_collided=True`, the collision damage is sampled fresh. Standing against the same obstacle over multiple steps re-samples damage each step the agent tries to move into it. Rest action (staying put) is NOT a collision — the agent doesn't "re-bump" when resting.
+A: Once per collision attempt. Each step where `just_collided=True`, collision damage is freshly sampled. Resting in place (action 4) does not re-trigger the collision — the agent stays at its current position and never enters `move_agent` with a non-zero move. Moving repeatedly against the same wall re-samples damage each time.
 
 **Q: Does a non-blocking obstacle with `damage > 0` deal damage on every step the agent stays on it?**
-A: Yes. `damage_obs_overlap` is computed every step based on `agent_pos == obs_pos`. Standing on a non-blocking damaging tile (e.g. a brier patch) bleeds the agent each step.
+A: Yes. `damage_obs_overlap` is computed every step based on `agent_pos == obs_pos`. Standing on a non-blocking damaging cell bleeds the agent each step.
 
 **Q: What's the max number of obstacles the agent can collide with simultaneously?**
-A: For collision damage, only one — `damage_obs_collision` uses `jnp.max(...)` over obstacles at `attempted_pos` (`core.py:414`), so it's the single hardest-hitting obstacle at that cell. For overlap damage, all matching obstacles are summed.
+A: For collision damage, effectively one — `damage_obs_collision` uses `jnp.max(...)` over obstacles at the `attempted_pos` (`core.py:494`). For overlap damage, all matching obstacles at the agent's position are summed.
 
-**Q: Does the neutral animal's patrol area differ from its spawn area?**
-A: Yes — both are configured per-animal. `neutral_spawn_area` is used only at reset; `neutral_patrol` bounds movement every step (`core.py:265-266`). Same pattern as predators.
+**Q: Do neutral animals affect damage or the nociception sensor?**
+A: No to both. `animal_is_damaging` is False for all neutral-class animals. `sense_extero_nociception` only emits nociceptive signal from damaging animals (`sensor.py:77`). Neutrals exist solely to add olfactory ("chemical smell") clutter to the sensory scene.
 
-**Q: Can neutral animals walk through each other?**
-A: Yes. They have no inter-animal collision — only obstacle collision (`core.py:273-277`). Like predators, multiple neutrals can stack on the same cell.
+**Q: What's the difference between `res_property` and `res_property_sampled`?**
+A: `res_property` is the configured mean (constant across all episodes); `res_property_sampled` is the per-reset or per-respawn Gaussian draw (`mean + std x N(0,1)`, clipped to [0,1]). Sensors read `res_property_sampled`. See also doc `01_state_and_params.md`.
 
-**Q: Do neutral animals affect damage or nociception?**
-A: Neutrals contribute to **olfaction** (via `neutral_property`) and **nociception** (via `neutral_nociception`) only. They deal no damage, cause no termination, and do not trigger Hunt state in predators. They exist to add sensory clutter.
-
-**Q: What's the relationship between `res_property` and `res_property_sampled`?**
-A: `res_property` is the configured mean (constant per episode); `res_property_sampled` is the per-reset or per-respawn Gaussian sample (mean + std × N(0,1)). Sensors read `res_property_sampled`. See doc `01` FAQ.
+**Q: Do neutral animals still have their own separate PRNG stream?**
+A: Yes. `wander_key` in `jax_step` feeds `_wander_step` exclusively (`core.py:372, 404`), giving neutrals byte-identical draw shapes to the pre-refactor `neutral_key`. The key split is done at the top of `jax_step`: `key, respawn_key, hunt_key, wander_key, damage_key, property_key = jax.random.split(state.key, 6)`.
 
 **Q: What if `grid_location_type` is set for a cell that also has an obstacle?**
-A: Both coexist. The location sensor reads `grid_location_type` at the agent's cell; the visual sensor also reads obstacle type. A bush on grass reads as "grass tile with a bush on it" — two separate signals.
-
-**Q: Does the renderer show obstacle type or obstacle name?**
-A: Obstacle type (int) maps to a fixed icon set in the renderer. See doc `12_renderer.md` for the exact icon-per-type mapping. `obstacle_names` is used primarily for the config → index mapping in `obs_type`.
+A: Both coexist. The location sensor reads `grid_location_type` at the agent's cell; the visual sensor also reads obstacle type. A bush on grass tile reads as "grass tile with a bush on it" — two separate signals.
 
 **Q: Are food olfactory channels always channel 0?**
-A: By convention in the shipped configs, yes — `property: [1, 0, 0, 0, 0]` for food. But the convention is not enforced; you can remap channels freely. The agent learns the channel meaning from data.
+A: By convention in the shipped configs, yes — `property: [1, 0, 0, 0, 0]` for food. But the convention is not enforced in code; channel assignment is entirely user-defined.
 
-**Q: What value should I give `res_nociception` for food?**
-A: `0.0` (default when `type: "food"`, per `config_loader.py:44`). Food should not activate the nociception sensor. If you set it nonzero, the agent will get a "pain" signal on eating — useful for modelling aversive food tasks.
+**Q: Does the neutral animal's patrol area differ from its spawn area?**
+A: Yes — both are configured per-animal as separate YAML fields. `spawn_area` (stored as `animal_spawn_area[i]`) is used only at reset for initial placement. `patrol_area` (stored as `animal_patrol[i]`) bounds movement every step in `_wander_step` (`core.py:262-265`). Same pattern as predators.
+
+**Q: Can neutral animals walk through each other?**
+A: Yes. There is no inter-animal collision — only per-animal obstacle collision (via `jax.vmap(check_collision)` in `_wander_step`, `core.py:271-275`). Multiple animals (neutral or predator) can occupy the same cell simultaneously.
+
+**Q: What happened to the old `neutral_property`, `neutral_nociception`, `neutral_move_timer`, `neutral_patrol` fields?**
+A: They were removed in the CP1 refactor. All per-animal data is now in the unified `animal_*` arrays. `neutral_property` is now `animal_property_sampled[neutral_indices]`. `neutral_nociception` is now `animal_nociception[neutral_indices]` (though it no longer feeds the nociception sensor — see Nociception section above). `neutral_move_timer` is now `animal_move_timer[neutral_indices]`. `neutral_patrol` is now `animal_patrol[neutral_indices]`. The helper `select_by_class(params, 'neutral')` (`state.py:7-28`) returns a NumPy boolean mask for host-side slicing.
