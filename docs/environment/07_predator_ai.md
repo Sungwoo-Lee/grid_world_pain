@@ -484,3 +484,309 @@ A: No. Each animal is updated independently using `jnp.where` over the batch axi
 
 **Q: Does `predator_enabled: false` still work?**
 A: No. This key was removed in v2.0. To disable predators, use an empty `predators: []` list in the legacy schema, or simply omit the `entities:` section's predator entries. With N=0 hunt animals, `update_animals` Branch A is a no-op (the `if len(params.hunt_idx) > 0:` guard at `core.py:312` short-circuits).
+
+---
+
+## Implementation Reference
+
+The three sections below contain the **full verbatim source** for every function this document covers. Each section opens with a plain-English description, then the code exactly as it appears in `src/environment/core.py`, then an `> **API notes**` blockquote that links to the relevant primer section rather than re-teaching it here.
+
+The central JAX idiom in this file is the **scatter-index pattern**: a static Python tuple (`params.hunt_idx`, `params.wander_idx`) is converted to a JAX integer array with `jnp.array(params.hunt_idx)`, used to *gather* a subset of the unified `[N]` arrays, the subset is operated on, and results are *scattered* back with `.at[idx].set(...)`. See [primer: scatter-index](00_jax_primer.md#scatter-index) for the full explanation.
+
+---
+
+### `_hunt_step` — Hunt Behaviour (3-State FSM, Stamina, Pursuit Movement)
+
+`_hunt_step` runs one time-step of the hunt AI for a **subset** of animals — specifically the `N_hunt` animals whose indices are in `params.hunt_idx`. It does **not** see the full `[N]` unified array; it receives already-sliced `(N_hunt, ...)` arrays and returns updated `(N_hunt, ...)` arrays. `update_animals` is responsible for slicing and scattering.
+
+The function does five things in order:
+
+1. **Decrement timers** — `move_timer` counts down every step; `attack_timer` floor-clamps at 0.
+2. **Compute distances and bush concealment** — Manhattan distance to the agent; a single boolean `agent_hidden` built from obstacle positions.
+3. **Advance the FSM** — three `jnp.where` calls update `next_state` from Patrol→Hunt, Hunt→Return, Return→Patrol, all evaluated unconditionally every step regardless of whether the animal can move.
+4. **Compute movement** — direction depends on `next_state`; diagonal moves are broken 50/50 by a PRNG draw; the proposal is clipped to patrol box then grid bounds; a per-animal `jax.vmap(check_collision)` reverts any animal that would enter a blocking obstacle.
+5. **Update stamina** — drain by 1.0 in Hunt, recover by `hunt_recovery` otherwise; clamp to `[0, max_stamina]`.
+
+Source: `src/environment/core.py:132–239`
+
+```python
+def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
+               hunt_detect, hunt_max_stamina, hunt_recovery, hunt_thresh,
+               hunt_lose_interest, hunt_patrol, hunt_move_int,
+               agent_pos, obs_pos, obs_blocking_for_collision, obs_hides_agent, key,
+               grid_height: int = 10, grid_width: int = 10):
+    """Hunt behaviour update (verbatim body of the old update_predators).
+
+    Receives sliced arrays of shape (N_pred, ...) so PRNG draw shapes are
+    byte-identical to the pre-refactor update_predators call. (B1 fix)
+
+    B2 parity fix: the old update_predators used two different arrays:
+      - obs_blocking (params.obs_blocking) for check_collision inside the function
+      - params.obs_hides_agent for the agent_hidden computation inside the function
+    Both must be passed separately to preserve byte-parity.
+    """
+    # 1. Timers
+    new_move_timer = hunt_mt - 1
+    new_attack_timer = jnp.maximum(hunt_at - 1, 0)
+
+    # Manhattan distance
+    dist = jnp.sum(jnp.abs(hunt_pos - agent_pos), axis=-1)
+
+    # Check if back in patrol area
+    in_zone = jnp.logical_and(
+        jnp.logical_and(hunt_pos[:, 0] >= hunt_patrol[:, 0], hunt_pos[:, 0] <= hunt_patrol[:, 2]),
+        jnp.logical_and(hunt_pos[:, 1] >= hunt_patrol[:, 1], hunt_pos[:, 1] <= hunt_patrol[:, 3])
+    )
+
+    # 2. State Transitions
+    # agent_hidden: uses obs_hides_agent (bush concealment) — same as old update_predators internal logic
+    agent_hidden = jnp.any(jnp.logical_and(
+        jnp.all(obs_pos == agent_pos, axis=-1),
+        obs_hides_agent
+    ))
+
+    rested_enough = hunt_stamina >= (hunt_max_stamina * hunt_thresh)
+    become_hunt = jnp.logical_and(
+        jnp.logical_and(dist <= hunt_detect, rested_enough),
+        jnp.logical_not(agent_hidden)
+    )
+
+    lose_interest = jnp.logical_or(
+        jnp.logical_or(dist > hunt_detect * hunt_lose_interest, hunt_stamina <= 0),
+        agent_hidden
+    )
+
+    next_state = hunt_state
+    next_state = jnp.where(jnp.logical_and(hunt_state != 1, become_hunt), 1, next_state)
+    next_state = jnp.where(jnp.logical_and(hunt_state == 1, lose_interest), 2, next_state)
+
+    tr_return = (hunt_patrol[:, 0] + hunt_patrol[:, 2]) // 2
+    tc_return = (hunt_patrol[:, 1] + hunt_patrol[:, 3]) // 2
+
+    dist_to_center = jnp.sum(jnp.abs(hunt_pos - jnp.stack([tr_return, tc_return], axis=-1)), axis=-1)
+    reentered_home = jnp.logical_and(next_state == 2, dist_to_center <= 2)
+    next_state = jnp.where(reentered_home, 0, next_state)
+
+    # 3. Movement
+    should_move = jnp.logical_and(new_move_timer <= 0, new_attack_timer <= 0)
+
+    key, subkey1, subkey2 = jax.random.split(key, 3)
+    jitter_r = jax.random.randint(subkey1, (hunt_pos.shape[0],), -1, 2)
+    jitter_c = jax.random.randint(subkey2, (hunt_pos.shape[0],), -1, 2)
+
+    dr = jnp.zeros_like(hunt_pos[:, 0])
+    dc = jnp.zeros_like(hunt_pos[:, 1])
+    dr = jnp.where(next_state == 1, agent_pos[0] - hunt_pos[:, 0], dr)
+    dc = jnp.where(next_state == 1, agent_pos[1] - hunt_pos[:, 1], dc)
+    dr = jnp.where(next_state == 2, tr_return - hunt_pos[:, 0], dr)
+    dc = jnp.where(next_state == 2, tc_return - hunt_pos[:, 1], dc)
+    dr = jnp.where(next_state == 0, jitter_r, dr)
+    dc = jnp.where(next_state == 0, jitter_c, dc)
+
+    step_r = jnp.sign(dr)
+    step_c = jnp.sign(dc)
+
+    key, subkey3 = jax.random.split(key)
+    rand_choice = jax.random.uniform(subkey3, (hunt_pos.shape[0],)) < 0.5
+
+    final_move_r = jnp.where(jnp.logical_and(dr != 0, dc != 0), jnp.where(rand_choice, step_r, 0), step_r)
+    final_move_c = jnp.where(jnp.logical_and(dr != 0, dc != 0), jnp.where(jnp.logical_not(rand_choice), step_c, 0), step_c)
+
+    move_vec = jnp.stack([final_move_r, final_move_c], axis=-1)
+    new_pos = jnp.where(should_move[:, None], hunt_pos + move_vec, hunt_pos)
+
+    # 4. Spatial Bounds Clipping (Strict enforcement for all states)
+    new_pos = jnp.stack([
+        jnp.clip(new_pos[:, 0], hunt_patrol[:, 0], hunt_patrol[:, 2]),
+        jnp.clip(new_pos[:, 1], hunt_patrol[:, 1], hunt_patrol[:, 3])
+    ], axis=-1)
+
+    # Hard Grid Boundaries (Always enforced)
+    new_pos = jnp.clip(new_pos, 0, jnp.stack([grid_height - 1, grid_width - 1]))
+
+    # Obstacle Collision — uses obs_blocking_for_collision (params.obs_blocking), same as old code
+    def check_collision(p_pos, old_p_pos):
+        is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), obs_blocking_for_collision))
+        return jnp.where(is_coll, old_p_pos, p_pos)
+
+    new_pos = jax.vmap(check_collision)(new_pos, hunt_pos)
+
+    # Reset timer
+    new_move_timer = jnp.where(should_move, hunt_move_int, new_move_timer)
+
+    new_stamina = jnp.where(next_state == 1, hunt_stamina - 1.0, hunt_stamina + hunt_recovery)
+    new_stamina = jnp.clip(new_stamina, 0.0, hunt_max_stamina)
+
+    return new_pos, next_state, new_stamina, new_move_timer, new_attack_timer
+```
+
+> **API notes**
+>
+> - **`jnp.where` (branchless FSM)** — `next_state` is updated through three sequential `jnp.where` calls (lines 179, 180, 187), not Python `if`/`elif`. All branches are computed; `jnp.where` selects. See [primer: branchless](00_jax_primer.md#branchless).
+> - **`jnp.any` / `jnp.all` (masking)** — `agent_hidden` (line 162) and `check_collision` (line 228) both use `jnp.all(..., axis=-1)` to match a `[num_obs, 2]` position array against a single `[2]` position, then `jnp.any` to reduce to a scalar boolean. This is the fixed-shape masking idiom — no Python loops, no boolean indexing. See [primer: masking](00_jax_primer.md#masking).
+> - **`jax.vmap(check_collision)` (inner vmap)** — line 231 vmaps `check_collision` over the `(N_hunt,)` axis. `check_collision` operates on a single animal's proposed position and returns either the new or old position. Wrapping in `vmap` vectorises the collision check across all hunt animals simultaneously. The `obs_pos` and `obs_blocking_for_collision` arrays are *not* in `in_axes` (defaulting to `None`), so they are broadcast as constants to every mapped call. See [primer: vmap](00_jax_primer.md#vmap).
+> - **PRNG key threading** — the key is split twice: once at line 192 to get `subkey1`, `subkey2` for patrol jitter; once at line 208 to get `subkey3` for diagonal tie-breaking. The consumed `key` is returned from `jax.random.split` in position 0 each time. See [primer: prng](00_jax_primer.md#prng).
+> - **`jnp.clip` (spatial bounds)** — patrol-box clipping (lines 218–221) and grid-bounds clipping (line 224) are both `jnp.clip` over the `(N_hunt, 2)` position array. Clipping is branchless and safe to apply unconditionally every step even when `should_move` is False — the position was never changed if `should_move=False`, so the clip is a no-op. See [primer: masking](00_jax_primer.md#masking).
+> - **`in_zone` is computed but never used** — `in_zone` (lines 155–158) is computed every step but never referenced in the rest of `_hunt_step`. This is a latent/dead variable in the current implementation (see "Possible bug / surprise" in the report below).
+> - **Distance is Manhattan, not Euclidean** — `jnp.sum(jnp.abs(...), axis=-1)` at line 152. See [primer: linalg](00_jax_primer.md#linalg) for the Euclidean/L2 contrast used elsewhere in the codebase.
+
+---
+
+### `_wander_step` — Wander Behaviour (Random Walk, No FSM)
+
+`_wander_step` is the simpler of the two movement functions. It operates on the `N_wander` animals whose indices are in `params.wander_idx`. There is no state machine and no stamina — an animal picks a random jitter `{-1, 0, 1}` per axis every `move_interval` steps, clips to its patrol box and the grid, then reverts if the proposed cell is a blocking obstacle. The agent's position is never passed in: wander animals are completely blind to the agent.
+
+Source: `src/environment/core.py:242–280`
+
+```python
+def _wander_step(wand_pos, wand_mt, wand_patrol, wand_move_int, obs_pos, obs_blocking, key,
+                 grid_height: int = 10, grid_width: int = 10):
+    """Wander behaviour update (verbatim body of the old update_neutral_animals).
+
+    Receives sliced arrays of shape (N_neutral, ...) so PRNG draw shapes are
+    byte-identical to the pre-refactor update_neutral_animals call. (B1 fix)
+    """
+    # 1. Timers
+    new_move_timer = wand_mt - 1
+    should_move = new_move_timer <= 0
+
+    # 2. Random Movement (Jitter)
+    key, subkey1, subkey2 = jax.random.split(key, 3)
+    jitter_r = jax.random.randint(subkey1, (wand_pos.shape[0],), -1, 2)
+    jitter_c = jax.random.randint(subkey2, (wand_pos.shape[0],), -1, 2)
+
+    move_vec = jnp.stack([jitter_r, jitter_c], axis=-1)
+    new_pos = jnp.where(should_move[:, None], wand_pos + move_vec, wand_pos)
+
+    # 3. Spatial Bounds Clipping (Patrol Area)
+    new_pos = jnp.stack([
+        jnp.clip(new_pos[:, 0], wand_patrol[:, 0], wand_patrol[:, 2]),
+        jnp.clip(new_pos[:, 1], wand_patrol[:, 1], wand_patrol[:, 3])
+    ], axis=-1)
+
+    # Hard Grid Boundaries
+    new_pos = jnp.clip(new_pos, 0, jnp.stack([grid_height - 1, grid_width - 1]))
+
+    # Obstacle Collision
+    def check_collision(p_pos, old_p_pos):
+        is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), obs_blocking))
+        return jnp.where(is_coll, old_p_pos, p_pos)
+
+    new_pos = jax.vmap(check_collision)(new_pos, wand_pos)
+
+    # Reset timer
+    new_move_timer = jnp.where(should_move, wand_move_int, new_move_timer)
+
+    return new_pos, new_move_timer
+```
+
+> **API notes**
+>
+> - **`jnp.where` with `[:, None]` broadcast** — `should_move` has shape `(N_wander,)` (a boolean per animal). The position array has shape `(N_wander, 2)`. `should_move[:, None]` reshapes it to `(N_wander, 1)`, which broadcasts against the `(N_wander, 2)` move_vec. This is a standard JAX broadcast trick to gate a per-row decision on a 2-D array without a loop. See [primer: branchless](00_jax_primer.md#branchless).
+> - **PRNG: `split(key, 3)` vs two calls to `split`** — `jax.random.split(key, 3)` returns three independent keys in one call. `_hunt_step` uses two separate `split` calls; `_wander_step` folds both row and col jitter into a single 3-way split. Both are correct; the byte outputs differ. See [primer: prng](00_jax_primer.md#prng).
+> - **Inner `jax.vmap(check_collision)` (line 275)** — structurally identical to the one in `_hunt_step`. Each wander animal's proposed position is tested independently for obstacle collision, then reverted if blocked. See [primer: vmap](00_jax_primer.md#vmap).
+> - **`jnp.stack` vs `jnp.concatenate`** — `jnp.stack([jitter_r, jitter_c], axis=-1)` creates a new `(N_wander, 2)` array by stacking two `(N_wander,)` vectors along a new last axis. Compare `jnp.concatenate`, which would join along an *existing* axis. See [primer: masking](00_jax_primer.md#masking).
+> - **`obs_blocking` (not `obs_blocking_for_collision`)** — `_wander_step` takes a single `obs_blocking` argument. This is the same `params.obs_blocking` array, but passed under its natural name since wander has no byte-parity constraint from a prior implementation. The `_hunt_step` name `obs_blocking_for_collision` documents the B2 fix.
+
+---
+
+### `update_animals` — Scatter-Index Dispatch
+
+`update_animals` is the only animal function called from `jax_step`. It implements the project's signature **scatter-index pattern**: static Python tuples `params.hunt_idx` and `params.wander_idx` are converted to JAX integer arrays, used to *gather* the relevant rows from the unified `[N]` arrays, the per-behaviour step functions are called on those subsets, and the results are *scattered* back with `.at[idx].set(...)`. The static arrays pass through unchanged (Branch C).
+
+This design keeps `_hunt_step` and `_wander_step` shape-stable across different total animal counts `N` — each function always sees exactly `N_hunt` or `N_wander` rows. That shape stability is what preserves PRNG byte-parity with the pre-v2.0 per-class functions (the B1 fix documented in the docstring).
+
+Source: `src/environment/core.py:283–364`
+
+```python
+def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, wander_key):
+    """Unified animal update with per-subset call pattern (B1 fix).
+
+    Slices hunt and wander subsets statically from the unified animal arrays,
+    calls _hunt_step / _wander_step with their original draw shapes
+    (N_pred,) / (N_neutral,), and scatters results back. PRNG bytes are
+    byte-identical to the old update_predators / update_neutral_animals calls.
+
+    `hunt_key` feeds _hunt_step (was `predator_key`).
+    `wander_key` feeds _wander_step (was `neutral_key`).
+    """
+    animal_pos         = state.animal_pos
+    animal_state       = state.animal_state
+    animal_stamina     = state.animal_stamina
+    animal_mt          = state.animal_move_timer
+    animal_at          = state.animal_attack_timer
+    detect_s           = state.animal_detect_sampled
+    max_stam_s         = state.animal_max_stamina_sampled
+    recovery_s         = state.animal_recovery_sampled
+    hunt_thresh_s      = state.animal_hunt_thresh_sampled
+    lose_int_s         = state.animal_lose_interest_sampled
+
+    new_pos     = animal_pos
+    new_state   = animal_state
+    new_stamina = animal_stamina
+    new_mt      = animal_mt
+    new_at      = animal_at
+
+    # ── Branch A: HUNT subset ────────────────────────────────────────────────
+    if len(params.hunt_idx) > 0:
+        h_idx = jnp.array(params.hunt_idx, dtype=jnp.int32)
+
+        new_hunt_pos, new_hunt_state, new_hunt_stamina, new_hunt_mt, new_hunt_at = _hunt_step(
+            animal_pos[h_idx],
+            animal_state[h_idx],
+            animal_stamina[h_idx],
+            animal_mt[h_idx],
+            animal_at[h_idx],
+            detect_s[h_idx],
+            max_stam_s[h_idx],
+            recovery_s[h_idx],
+            hunt_thresh_s[h_idx],
+            lose_int_s[h_idx],
+            params.animal_patrol[h_idx],
+            params.animal_move_int[h_idx],
+            agent_pos,
+            state.obs_pos,
+            params.obs_blocking,      # for check_collision (byte-parity with old obs_blocking arg)
+            params.obs_hides_agent,   # for agent_hidden (byte-parity with old internal params.obs_hides_agent)
+            hunt_key,
+            grid_height=params.height,
+            grid_width=params.width,
+        )
+        # Scatter back
+        new_pos     = new_pos.at[h_idx].set(new_hunt_pos)
+        new_state   = new_state.at[h_idx].set(new_hunt_state)
+        new_stamina = new_stamina.at[h_idx].set(new_hunt_stamina)
+        new_mt      = new_mt.at[h_idx].set(new_hunt_mt)
+        new_at      = new_at.at[h_idx].set(new_hunt_at)
+
+    # ── Branch B: WANDER subset ──────────────────────────────────────────────
+    if len(params.wander_idx) > 0:
+        w_idx = jnp.array(params.wander_idx, dtype=jnp.int32)
+
+        new_wand_pos, new_wand_mt = _wander_step(
+            animal_pos[w_idx],
+            animal_mt[w_idx],
+            params.animal_patrol[w_idx],
+            params.animal_move_int[w_idx],
+            state.obs_pos,
+            params.obs_blocking,
+            wander_key,
+            grid_height=params.height,
+            grid_width=params.width,
+        )
+        new_pos = new_pos.at[w_idx].set(new_wand_pos)
+        new_mt  = new_mt.at[w_idx].set(new_wand_mt)
+
+    # ── Branch C: STATIC — pass-through, no PRNG draws ──────────────────────
+    # (No scatter needed; positions stay as-is.)
+
+    return new_pos, new_state, new_stamina, new_mt, new_at
+```
+
+> **API notes**
+>
+> - **Scatter-index pattern** — `h_idx = jnp.array(params.hunt_idx, dtype=jnp.int32)` converts the static Python tuple (which JAX does not trace) into a JAX integer index array. `animal_pos[h_idx]` gathers rows; `new_pos.at[h_idx].set(...)` scatters rows back. The `.at[...].set(...)` call returns a *new* array — the original `new_pos` is not mutated. See [primer: scatter-index](00_jax_primer.md#scatter-index) and [primer: immutability](00_jax_primer.md#immutability).
+> - **Static Python `if` guards** — `if len(params.hunt_idx) > 0:` (line 312) and `if len(params.wander_idx) > 0:` (line 344) are Python-level conditionals, not JAX conditionals. They execute at JIT *trace time*, not at runtime. Because `params.hunt_idx` is a `pytree_node=False` static field, its length is known at trace time and the branch simply disappears from the compiled XLA program if the subset is empty. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+> - **Functional state update pattern** — the five `new_*` variables are initialised as copies of the original arrays (lines 305–309), then selectively overwritten by `.at[idx].set(...)`. This functional-update style produces no in-place mutation and is the standard JAX pattern for partial array updates. See [primer: immutability](00_jax_primer.md#immutability).
+> - **`jnp.array(params.hunt_idx, dtype=jnp.int32)`** — the explicit `dtype=jnp.int32` matters on platforms where the default integer type is 64-bit. JAX's `x64` mode is not always enabled, but specifying the dtype makes the gather/scatter type-stable across platforms.
+> - **`state.obs_pos` vs `params.obs_blocking`** — obstacle *positions* live on `state` (shape `[num_obs, 2]`, passed as a dynamic value); obstacle *blocking flags* live on `params` (shape `[num_obs]`, static per episode). Both are needed for `check_collision`: positions to identify which cell the obstacle occupies, flags to decide whether it blocks movement. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
