@@ -37,7 +37,7 @@ Sensors appear in the vector in the exact order listed below. Sensors toggled of
 | 10 | Location | `location_sensor_enabled` | 2 | `[-1, 1]` | Normalised (row, col) |
 
 With `sensor_range=1`, the collision diamond has 5 cells: `{center, up, right, down, left}`.
-With `visual_sensor_range=0`, the visual diamond has 1 cell (agent's own cell): `1×8=8` dims.
+With `visual_sensor_range=0`, the visual diamond has 1 cell (agent\'s own cell): `1×8=8` dims.
 With `visual_sensor_range=1`, it has `5×8=40` dims.
 
 ---
@@ -62,7 +62,7 @@ Inlined in `get_observation` (`sensor.py:277–286`). Direct normalized reads of
 [state.satiation / params.max_satiation]       # always
 ```
 
-These three sensors are sometimes called the **interoceptive triad** — they measure the agent's internal physiological state. Injury and nutrition can be hidden (gated off) to require the agent to infer them from downstream signals.
+These three sensors are sometimes called the **interoceptive triad** — they measure the agent\'s internal physiological state. Injury and nutrition can be hidden (gated off) to require the agent to infer them from downstream signals.
 
 ---
 
@@ -72,9 +72,9 @@ These three sensors are sometimes called the **interoceptive triad** — they me
 
 Enabled by: `params.interoceptive_nociception_enabled`
 
-**What it models:** A delayed, smoothed perception of ongoing injury — analogous to the "slow burn" of tonic pain that persists after the acute contact has passed. The raw injury state is optionally hidden from the agent (sensor 1 gated off), so this signal becomes the agent's only window into body damage, but with a temporal lag built in.
+**What it models:** A delayed, smoothed perception of ongoing injury — analogous to the "slow burn" of tonic pain that persists after the acute contact has passed. The raw injury state is optionally hidden from the agent (sensor 1 gated off), so this signal becomes the agent\'s only window into body damage, but with a temporal lag built in.
 
-**Input:** `state.nociception_history_buffer` — a circular buffer of length `interoceptive_kernel_length` storing past `injury_level` values. Index 0 is the most recent entry; the current step's injury is pushed in *after* observation is assembled, so it does not appear instantaneously.
+**Input:** `state.nociception_history_buffer` — a circular buffer of length `interoceptive_kernel_length` storing past `injury_level` values. Index 0 is the most recent entry; the current step\'s injury is pushed in *after* observation is assembled, so it does not appear instantaneously.
 
 #### Convolution mode (`interoceptive_convolution_enabled=True`, default)
 
@@ -109,6 +109,36 @@ Skips the kernel entirely; emits `state.injury_level / max(params.max_injury, 1e
 Returns shape `[1]`.
 
 > **Companion figure**: `docs/environment/09_interoceptive_nociception_dynamics.png` (generator: `09_interoceptive_nociception_plot.py`) — shows kernel shape, temporal lag, and decay vs. τ.
+
+#### Full implementation
+
+Source: `src/environment/sensor.py:97–113`
+
+```python
+def sense_interoceptive_nociception(state: EnvState, params: EnvParams):
+    """
+    Tonic interoceptive pain. Two modes (selected statically at JIT time):
+
+    - Convolution mode (default): convolves recent injury history with a
+      normalized alpha kernel (peak at τ steps). Buffer slot 0 = most recent
+      injury; kernel[0]=0 so current-step injury does not leak instantaneously.
+    - Passthrough mode (`interoceptive_convolution_enabled=False`): bypasses
+      the kernel and returns the current normalized injury directly. Use this
+      for ablations where the agent should perceive injury without delay.
+
+    Returns scalar in [0, 1].
+    """
+    if params.interoceptive_convolution_enabled:
+        convolved = jnp.sum(state.nociception_history_buffer * params.interoceptive_kernel)
+        return jnp.array([convolved / jnp.maximum(params.max_injury, 1e-6)])
+    return jnp.array([state.injury_level / jnp.maximum(params.max_injury, 1e-6)])
+```
+
+> **API notes**
+>
+> - `params.interoceptive_convolution_enabled` is a static field (`struct.field(pytree_node=False)`), so the `if` branch is resolved at trace time — the compiler bakes in only one path and eliminates the other entirely. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+> - `jnp.sum(buffer * kernel)` is a standard dot-product with no explicit loop — JAX traces it as a single element-wise multiply followed by a reduction. See [primer: masking](00_jax_primer.md#masking) for the broader pattern of element-wise gating.
+> - `jnp.maximum(params.max_injury, 1e-6)` is the branchless safe-divide guard — avoids a Python `if max_injury == 0` inside JIT. See [primer: branchless](00_jax_primer.md#branchless).
 
 ---
 
@@ -145,6 +175,58 @@ Final output: `max(max_res, max_animal, max_obs_overlap, last_collision_noc)` �
 
 The collision bump nociception (`last_collision_noc`) is stored in `EnvState` during Stage 4 of `jax_step` and read here on the following step.
 
+#### Full implementation
+
+Source: `src/environment/sensor.py:59–95`
+
+```python
+def sense_extero_nociception(agent_pos, state: EnvState, params: EnvParams):
+    """
+    Continuous Phasic Nociceptor: Detects contact with hiding predators, animals, and rocks.
+    Returns the maximum intensity among all current painful contacts.
+
+    B2 fix: predator contact now uses unified state.animal_pos / params.animal_nociception
+    masked by params.animal_is_damaging (replaces old state.pred_pos / params.pred_nociception).
+    """
+    # 1. Hiding Predator Contact (resources with type==1)
+    dist_res = jnp.linalg.norm(state.res_pos - agent_pos, axis=-1)
+    # Intensity = intensity from params if at position and active
+    res_intensities = jnp.where(jnp.logical_and(state.res_active, dist_res < 0.1), params.res_nociception, 0.0)
+    max_res = jnp.max(res_intensities, initial=0.0)
+
+    # 2. Animal Contact (B2 fix — unified; only damaging animals emit nociception)
+    if state.animal_pos.shape[0] > 0:
+        dist_animal = jnp.linalg.norm(state.animal_pos - agent_pos, axis=-1)
+        animal_intensities = jnp.where(
+            jnp.logical_and(dist_animal < 0.1, params.animal_is_damaging),
+            params.animal_nociception, 0.0
+        )
+        max_animal = jnp.max(animal_intensities, initial=0.0)
+    else:
+        max_animal = 0.0
+
+    # 3. Rock Overlap Contact (Non-blocking)
+    dist_obs = jnp.linalg.norm(state.obs_pos - agent_pos, axis=-1)
+    obs_intensities = jnp.where(dist_obs < 0.1, params.obs_nociception, 0.0)
+    max_obs_overlap = jnp.max(obs_intensities, initial=0.0)
+
+    # 4. Rock Collision Contact (Bumping)
+    # Stored in state from jax_step
+    max_collision = state.last_collision_noc
+
+    # Result is the maximum intensity
+    final_noc = jnp.max(jnp.array([max_res, max_animal, max_obs_overlap, max_collision]), initial=0.0)
+    return jnp.array([final_noc])
+```
+
+> **API notes**
+>
+> - **`jnp.linalg.norm(..., axis=-1)`** computes L2 distance for every entity in one vectorized call — shape `[N]` out, no Python loop. See [primer: linalg](00_jax_primer.md#linalg).
+> - **`jnp.where(condition, true_val, false_val)`** is the branchless gate used twice: once for `res_active AND dist < 0.1`, once for `animal_is_damaging AND dist < 0.1`. Both evaluate both branches unconditionally; only the selected value is returned. See [primer: branchless](00_jax_primer.md#branchless) and [primer: masking](00_jax_primer.md#masking).
+> - **`params.animal_is_damaging`** is a boolean array (`[N_animal]`) precomputed at config load — it makes the nociception gate a pure data operation rather than a string comparison at step time.
+> - **`state.animal_pos.shape[0] > 0`** is a Python `if` on a static shape — shapes are known at trace time, so the compiler eliminates the dead branch. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+> - **`jnp.max(..., initial=0.0)`** is safe even on zero-length arrays (the `initial` keyword prevents the "empty sequence" error). This is the standard pattern here for optional entity lists.
+
 ---
 
 ### 6 · Olfaction / Chemical Gradient
@@ -162,7 +244,7 @@ All four keys are **mandatory** (missing → `ValueError`):
 | YAML key | `EnvParams` field | Type | Effect |
 |---|---|---|---|
 | `sensory.olfactory_enabled` | `olfactory_enabled` | bool (static) | Gates the sensor; if false, zero dims |
-| `sensory.vector_size` | `olfactory_vector_size` | int (static) | Length of each entity's chemical property vector (default 5) |
+| `sensory.vector_size` | `olfactory_vector_size` | int (static) | Length of each entity\'s chemical property vector (default 5) |
 | `sensory.sensor_radius` | `sensor_radius` | float | Distance cutoff; entities beyond this emit nothing (default 20, covers full 10×10 grid) |
 | `sensory.decay_power` | `sensor_decay` | float | Exponent in the distance-decay formula (default 2.0 = inverse-square) |
 
@@ -226,6 +308,38 @@ The `1e-10` in the denominator is a numerical safety guard; the `dist < 0.001` b
 
 The final `obs_olfactory` is a `[vector_size]` vector placed at observation positions `[5 : 5+vector_size]` (0-indexed, assuming Injury + Nutrition + Satiation + InteroNoc + ExteroNoc all enabled and occupying indices 0–4).
 
+#### Full implementation
+
+Source: `src/environment/sensor.py:5–22`
+
+```python
+def sense_resource(agent_pos, res_pos, res_active, res_property, radius, decay_power):
+    """Vectorized Resource Sensor (Chemical signature gradient)."""
+    # [num_res, 2]
+    diff = res_pos - agent_pos
+    dist = jnp.linalg.norm(diff, axis=-1)
+    
+    # Handle singularity (agent ON resource)
+    # Original: dist < 0.001 -> decay = 2.0
+    # Else: 1.0 / (dist ** decay_power)
+    decay = jnp.where(dist < 0.001, 2.0, 1.0 / (jnp.power(dist, decay_power) + 1e-10))
+    
+    # Mask by radius and activity
+    mask = jnp.logical_and(res_active, dist <= radius)
+    
+    # Apply mask and sum: [num_res, vector_size] -> [vector_size]
+    weighted_props = res_property * decay[:, None] * mask[:, None]
+    obs = jnp.sum(weighted_props, axis=0)
+    return obs
+```
+
+> **API notes**
+>
+> - **`jnp.linalg.norm(diff, axis=-1)`** computes the L2 distance from the agent to every entity in one vectorized call over the `[N, 2]` difference array — output shape `[N]`. See [primer: linalg](00_jax_primer.md#linalg).
+> - **`jnp.where(dist < 0.001, 2.0, ...)`** is the branchless singularity guard. The condition `dist < 0.001` evaluates to a boolean array `[N]`; `jnp.where` selects element-wise between the two branches with no Python conditional. See [primer: branchless](00_jax_primer.md#branchless).
+> - **`decay[:, None] * mask[:, None]`** — the `[:, None]` broadcasts a `[N]` vector to `[N, 1]` so it multiplies each row of the `[N, vector_size]` property matrix. This is the standard JAX broadcasting pattern for per-entity scaling. See [primer: masking](00_jax_primer.md#masking).
+> - **`jnp.sum(weighted_props, axis=0)`** reduces `[N, vector_size]` → `[vector_size]`, accumulating all entity contributions into one chemical vector.
+
 ---
 
 ### 7 · Collision Sensor
@@ -239,11 +353,102 @@ cell_coords = agent_pos + offsets   (offsets from get_visual_offsets(sensor_rang
 blocked = out_of_bounds(cell_coord) OR blocking_obstacle_at(cell_coord)
 ```
 
-Returns a flat binary vector of length `2*r²+2*r+1`. With `sensor_range=1` (default), this is 5 cells. The center cell (agent's own position) is always 0.
+Returns a flat binary vector of length `2*r²+2*r+1`. With `sensor_range=1` (default), this is 5 cells. The center cell (agent\'s own position) is always 0.
 
 Cell order is defined by `get_visual_offsets(r)` (`sensor.py:115`). For `r=1` hardcoded as `[[0,0], [-1,0], [0,1], [1,0], [0,-1]]` — center, up, right, down, left.
 
 Only **blocking** obstacles (rocks with `params.obs_blocking[o]=True`) trigger this sensor. Non-blocking obstacles (bushes, trees) do NOT appear here.
+
+#### Full implementation
+
+Source: `src/environment/sensor.py:24–50`
+
+```python
+def sense_collision(agent_pos, state: EnvState, params: EnvParams):
+    """Manhattan Collision Sensor (checks OOB and blocking obstacles)."""
+    sensor_range = params.sensor_range
+    offsets = get_visual_offsets(sensor_range) # [num_cells, 2]
+    num_cells = offsets.shape[0]
+    cell_coords = agent_pos + offsets # [num_cells, 2]
+    
+    # 1. Bounds check
+    is_out_of_bounds = jnp.any(jnp.logical_or(
+        cell_coords < 0,
+        cell_coords >= jnp.array([params.height, params.width])
+    ), axis=-1)
+    
+    # 2. Blocking Obstacles (Rocks)
+    def check_blocking_rock(coord):
+        # coord: [2]
+        is_here = jnp.all(state.obs_pos == coord, axis=-1)
+        # Check if any rock at this position is blocking
+        is_blocking = jnp.logical_and(is_here, params.obs_blocking)
+        return jnp.any(is_blocking)
+        
+    is_blocked_by_rock = jax.vmap(check_blocking_rock)(cell_coords)
+    
+    # Total collision: OOB or Blocking Rock
+    collision = jnp.logical_or(is_out_of_bounds, is_blocked_by_rock).astype(jnp.float32)
+    
+    return collision
+```
+
+> **API notes**
+>
+> - **`jax.vmap(check_blocking_rock)(cell_coords)`** maps a single-cell obstacle check over all `[num_cells, 2]` coordinates — one compiled kernel runs over the whole diamond in parallel. `check_blocking_rock` is written for one coordinate; `vmap` lifts it to the batch. See [primer: vmap](00_jax_primer.md#vmap).
+> - **`jnp.all(..., axis=-1)`** and **`jnp.any(..., axis=-1)`** are element-wise reductions used for coordinate matching (`[N_obs, 2]` → `[N_obs]`) and bounds checking (`[num_cells, 2]` → `[num_cells]`) — both branchless. See [primer: masking](00_jax_primer.md#masking).
+> - **`jnp.logical_and(is_here, params.obs_blocking)`** gates the obstacle match by the blocking flag — a boolean array operation, no Python loop over obstacles. See [primer: branchless](00_jax_primer.md#branchless).
+> - **`.astype(jnp.float32)`** converts the boolean result to float for concatenation into the observation vector — the observation vector is a uniform `float32` array throughout.
+
+---
+
+### `get_visual_offsets` — diamond cell ordering
+
+`get_visual_offsets(sensor_range)` (`sensor.py:115`)
+
+This helper generates the list of `(row, col)` offsets that define the Manhattan diamond used by both the collision and visual sensors. It is called at trace time (not JIT-compiled itself) to produce a small constant array of cell offsets.
+
+#### Full implementation
+
+Source: `src/environment/sensor.py:115–143`
+
+```python
+def get_visual_offsets(sensor_range):
+    """Generates Manhattan diamond offsets in a consistent order."""
+    offsets = []
+    # Ordering: Manhattan distance 0, then 1, then 2...
+    # Within each distance, we can use a fixed direction order (e.g. Up, Right, Down, Left)
+    for d in range(sensor_range + 1):
+        if d == 0:
+            offsets.append([0, 0])
+        else:
+            # Manhattan distance d: |dr| + |dc| = d
+            # We iterate to find all pairs
+            for dr in range(-d, d + 1):
+                dc_abs = d - abs(dr)
+                if dc_abs == 0:
+                    offsets.append([dr, 0])
+                else:
+                    # Both + and - for dc
+                    offsets.append([dr, dc_abs])
+                    offsets.append([dr, -dc_abs])
+    
+    # Sort for consistency: primary by distance, secondary by row, tertiary by col
+    offsets_arr = jnp.array(offsets)
+    dist = jnp.sum(jnp.abs(offsets_arr), axis=1)
+    # Use jnp.lexsort or similar if needed, but for small ranges a simple nested loop is fine
+    # Let\'s just use the manual order for range 0 and 1 as they are common
+    if sensor_range == 1:
+        return jnp.array([[0,0], [-1,0], [0,1], [1,0], [0,-1]])
+    
+    return offsets_arr
+```
+
+> **API notes**
+>
+> - This function runs in **Python** at trace time — the `for` loops and `if` branches are plain Python, not JAX. The result is a small constant `jnp.array` that the compiler treats as a compile-time constant. This is safe because `sensor_range` is a static field. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+> - For `sensor_range=1` the function returns a hardcoded `jnp.array` directly, bypassing the loop-and-sort logic — a minor shortcut that avoids the unsorted ordering the general loop produces for `d>1`.
+> - The `dist` variable computed mid-function (line 137) is **not used** for `sensor_range=1` (the hardcoded return fires first) — it is dead code for the common case.
 
 ---
 
@@ -260,6 +465,11 @@ Enabled by: `params.proprioception_enabled`
 One-hot encoding of `last_action` — the action taken on the immediately previous step. Dimension = `action_dim` (4, 5, or 6 depending on which optional actions are enabled).
 
 `state.last_action` is set at the end of `jax_step`. On step 0 (post-reset) it is a placeholder: Rest (`4`) if rest is enabled, else Eat (`5`) — see `core.py:773`.
+
+> **API notes**
+>
+> - **`jax.nn.one_hot(index, num_classes)`** returns a float32 vector of length `num_classes` with a `1.0` at position `index` and `0.0` elsewhere. It is fully differentiable and JIT-safe. See [primer: one-hot](00_jax_primer.md#one-hot).
+> - `params.action_dim` is a static field (it controls the vector length), so the compiler knows the output shape at trace time without needing the actual value of `state.last_action`.
 
 ---
 
@@ -303,6 +513,97 @@ With `visual_sensor_range=0` (default): 1 cell × 8 channels = **8 dims**. The a
 
 Channels 0–2 are terrain (one-hot, mutually exclusive). Channels 3–7 are entity presence and can overlap if multiple entities share a cell.
 
+#### Full implementation
+
+Source: `src/environment/sensor.py:145–220`
+
+```python
+def sense_visual(agent_pos, state: EnvState, params: EnvParams):
+    """Matmul-optimized Visual Sensor (simplified object recognition).
+
+    Channel mapping:
+      0: Grass (loc 1), 1: Sand (loc 2), 2: Plain (loc 0)
+      3: Food (res_type 0), 4: Hiding Predator (res_type 1)
+      5: Predator (animal_visual_channel=5), 6: Rock (obstacle), 7: Neutral Animal (channel=7)
+
+    B2 fix: dynamic entities are now [res, animal, obs] — unified animals replace the
+    old separate pred/neutral lists. Each animal uses params.animal_visual_channel for
+    its per-entity visual channel index (predator=5, neutral=7).
+    """
+    vis_range = params.visual_sensor_range
+    offsets = get_visual_offsets(vis_range)  # [num_cells, 2]
+    num_cells = offsets.shape[0]
+    cell_coords = agent_pos + offsets  # [num_cells, 2]
+
+    # 1. Bounds check
+    is_in_bounds = jnp.all(jnp.logical_and(
+        cell_coords >= 0,
+        cell_coords < jnp.array([params.height, params.width])
+    ), axis=-1)
+
+    # Safe coordinates for indexing background
+    safe_coords = jnp.where(is_in_bounds[:, None], cell_coords, 0)
+
+    # 2. Background (Grid Properties) - Vectorized Indexing
+    loc_types = params.grid_location_type[safe_coords[:, 0], safe_coords[:, 1]]
+    # Mapping: loc 1 -> channel 0, loc 2 -> channel 1, loc 0 -> channel 2
+    vis_background = jax.nn.one_hot(jnp.where(loc_types == 1, 0, jnp.where(loc_types == 2, 1, 2)), 8)
+    vis_background = vis_background * is_in_bounds[:, None]
+
+    # 3. Dynamic Entities (Resources, Animals, Obstacles) — B2 fix: unified animal list
+    num_res    = state.res_pos.shape[0]
+    num_animal = state.animal_pos.shape[0]
+    num_obs    = state.obs_pos.shape[0]
+
+    # Combine all dynamic entity positions — 3-way concat
+    parts_pos = [state.res_pos]
+    if num_animal > 0:
+        parts_pos.append(state.animal_pos)
+    parts_pos.append(state.obs_pos)
+    all_pos = jnp.concatenate(parts_pos, axis=0)  # [Total_E, 2]
+
+    # Combine activity status (animals/obstacles always active)
+    parts_active = [state.res_active]
+    if num_animal > 0:
+        parts_active.append(jnp.ones(num_animal, dtype=jnp.bool_))
+    parts_active.append(jnp.ones(num_obs, dtype=jnp.bool_))
+    all_active = jnp.concatenate(parts_active, axis=0)  # [Total_E]
+
+    # Visual Property Matrix [Total_E, 8]
+    res_props = jax.nn.one_hot(jnp.where(params.res_type == 0, 3, 4), 8)  # [num_res, 8]
+    obs_props = jax.nn.one_hot(jnp.full((num_obs,), 6), 8)                 # [num_obs, 8]
+    parts_props = [res_props]
+    if num_animal > 0:
+        # Each animal uses its per-entity visual channel (predator=5, neutral=7)
+        animal_props = jax.nn.one_hot(params.animal_visual_channel, 8)     # [N, 8]
+        parts_props.append(animal_props)
+    parts_props.append(obs_props)
+    all_props = jnp.concatenate(parts_props, axis=0)  # [Total_E, 8]
+
+    # Apply activity mask
+    all_props = all_props * all_active[:, None]
+
+    # Compute Matches [num_cells, Total_E]
+    matches = jnp.all(cell_coords[:, None, :] == all_pos[None, :, :], axis=-1)
+
+    # Sum properties: [num_cells, Total_E] @ [Total_E, 8] -> [num_cells, 8]
+    vis_entities = jnp.matmul(matches.astype(jnp.float32), all_props)
+
+    # Final assembly
+    total_vis = vis_background + vis_entities
+    total_vis = total_vis * is_in_bounds[:, None]
+
+    return total_vis.flatten()
+```
+
+> **API notes**
+>
+> - **`jax.nn.one_hot(index_array, num_classes=8)`** is called three times here — once per entity type — to build the per-entity visual property matrix. A batched array of integer channel indices in, a float32 `[N, 8]` matrix out. See [primer: one-hot](00_jax_primer.md#one-hot). The terrain case chains two `jnp.where` calls to remap `{0,1,2}` tile types to `{2,0,1}` channel indices before calling `one_hot`.
+> - **`safe_coords = jnp.where(is_in_bounds[:, None], cell_coords, 0)`** is the OOB guard for grid indexing: out-of-bounds cells are clamped to coordinate `[0,0]` so the array index never raises. The `is_in_bounds` mask zeros their contribution at the end — branchless safe indexing. See [primer: masking](00_jax_primer.md#masking).
+> - **`matches = jnp.all(cell_coords[:, None, :] == all_pos[None, :, :], axis=-1)`** uses broadcasting to compare every cell against every entity at once — shape `[num_cells, Total_E]`. No Python loop over entities or cells. See [primer: masking](00_jax_primer.md#masking).
+> - **`jnp.matmul(matches.astype(float32), all_props)`** — casting bool to float32 and using matmul is the key efficiency trick: "which entities are in this cell" × "what channel does each entity own" in one BLAS call, shape `[num_cells, 8]`. See [primer: linalg](00_jax_primer.md#linalg).
+> - **`if num_animal > 0:`** branches on a static shape, resolved at trace time — compiler eliminates the dead path for configs with no animals. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+
 ---
 
 ### 10 · Location Sensor
@@ -318,6 +619,24 @@ return jnp.array([norm_r, norm_c])
 Enabled by: `params.location_sensor_enabled`
 
 Maps grid position to `[-1, 1]`. Top-left corner = `(-1, -1)`, bottom-right = `(1, 1)`. Disabled by default in the standard config.
+
+#### Full implementation
+
+Source: `src/environment/sensor.py:52–57`
+
+```python
+def sense_location(agent_pos, height, width):
+    """Normalized Agent Location Sensor."""
+    # Center coordinates to [-1, 1]
+    norm_r = (agent_pos[0] / (height - 1)) * 2 - 1
+    norm_c = (agent_pos[1] / (width - 1)) * 2 - 1
+    return jnp.array([norm_r, norm_c])
+```
+
+> **API notes**
+>
+> - `height` and `width` are static fields passed as plain Python ints — arithmetic on them produces a Python scalar that scales the traced `agent_pos` element. No special JAX API needed; the division and linear rescaling are standard element-wise ops.
+> - **No guard for `height=1`** (would produce NaN). The convention is `H, W >= 2` — see FAQ below.
 
 ---
 
@@ -344,6 +663,60 @@ breakdown = {
 ```
 
 Note: olfaction dimension is read from `params.res_property.shape[-1]` directly, not `params.olfactory_vector_size`. Keep the two in sync to avoid downstream mismatches.
+
+#### Full implementation
+
+Source: `src/environment/sensor.py:328–368`
+
+```python
+def get_observation_breakdown(params: EnvParams):
+    """Returns a dict of {sensor_name: dimension} for observation components."""
+    breakdown = {}
+    
+    # 1. Injury (hidden when injury_observable=False) — interoceptive
+    if params.injury_observable:
+        breakdown["Injury"] = 1
+    # 2. Nutrition (hidden when nutrition_observable=False) — interoceptive
+    if params.nutrition_observable:
+        breakdown["Nutrition"] = 1
+    # 3. Satiation — interoceptive
+    breakdown["Satiation"] = 1
+    # 4. Interoceptive Nociception — interoceptive (delayed/passthrough injury)
+    if params.interoceptive_nociception_enabled:
+        breakdown["Interoceptive Nociception"] = 1
+    # 5. Extero Nociception — exteroceptive
+    if params.nociception_enabled:
+        breakdown["Extero Nociception"] = 1
+    
+    # 5. Olfaction
+    if params.olfactory_enabled:
+        breakdown["Olfaction"] = int(params.res_property.shape[-1])
+    
+    # 6. Collision
+    num_coll_cells = 2 * (params.sensor_range**2) + 2 * params.sensor_range + 1
+    breakdown["Collision"] = int(num_coll_cells)
+    
+    # 7. Proprioception
+    if params.proprioception_enabled:
+        breakdown["Proprioception"] = int(params.action_dim)
+        
+    # 8. Visual
+    if params.visual_sensor_enabled:
+        num_vis_cells = 2 * (params.visual_sensor_range**2) + 2 * params.visual_sensor_range + 1
+        breakdown["Visual"] = int(num_vis_cells * 8)
+    
+    # 9. Location
+    if params.location_sensor_enabled:
+        breakdown["Location"] = 2
+        
+    return breakdown
+```
+
+> **API notes**
+>
+> - This function is **not** JIT-compiled. It runs at Python level on `EnvParams` static fields. Every `if` here branches on a static field value — safe as plain Python.
+> - The `breakdown` dict insertion order is the **observation vector order**. Python 3.7+ dicts preserve insertion order, so iterating `breakdown.items()` is the same as iterating observation slots.
+> - `int(params.res_property.shape[-1])` materializes the JAX shape integer to a plain Python `int` — `breakdown` values are pure Python ints, not JAX scalars, which matters for downstream use as `range()` arguments and slice bounds.
 
 ---
 
@@ -395,6 +768,89 @@ The PRNG key for noise is derived by `jax.random.fold_in(state.key, 999)` (`sens
 
 Noise is handled by `apply_perceptual_noise` (doc 10) — sensor.py is only responsible for handing off the clean vector.
 
+#### Full implementation
+
+Source: `src/environment/sensor.py:269–326`
+
+```python
+@jax.jit(static_argnames=['apply_noise'])
+def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
+    """Assembles the full observation vector, including noise if enabled."""
+    # Salt the state key for observation noise
+    obs_key = jax.random.fold_in(state.key, 999)
+    
+    obs_parts = []
+    
+    # 1. Injury (hidden when injury_observable=False) — interoceptive
+    if params.injury_observable:
+        obs_parts.append(jnp.array([state.injury_level / params.max_injury]))
+
+    # 2. Nutrition (hidden when nutrition_observable=False) — interoceptive
+    if params.nutrition_observable:
+        obs_parts.append(jnp.array([state.nutrition / params.max_nutrition]))
+
+    # 3. Satiation — interoceptive
+    obs_parts.append(jnp.array([state.satiation / params.max_satiation]))
+
+    # 4. Interoceptive Nociception — interoceptive
+    #    (Tonic — delayed function of hidden injury, or passthrough if convolution disabled)
+    if params.interoceptive_nociception_enabled:
+        obs_parts.append(sense_interoceptive_nociception(state, params))
+
+    # 5. Extero Nociception — exteroceptive (phasic, multi-source contact)
+    if params.nociception_enabled:
+        obs_parts.append(sense_extero_nociception(state.agent_pos, state, params))
+
+    # 5. Olfaction Sensor (Resources + Animals + Obstacles)
+    # B2 fix: unified animal_chem replaces separate pred_chem + neutral_chem calls.
+    if params.olfactory_enabled:
+        res_chem = sense_resource(state.agent_pos, state.res_pos, state.res_active, state.res_property_sampled, params.sensor_radius, params.sensor_decay)
+        animal_chem = sense_resource(state.agent_pos, state.animal_pos, jnp.ones(state.animal_pos.shape[0], dtype=jnp.bool_), state.animal_property_sampled, params.sensor_radius, params.sensor_decay)
+        obs_chem = sense_resource(state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), state.obs_property_sampled, params.sensor_radius, params.sensor_decay)
+        obs_parts.append(res_chem + animal_chem + obs_chem)
+    
+    # 6. Collision
+    obs_parts.append(sense_collision(state.agent_pos, state, params))
+    
+    # 7. Proprioception (Previous Action)
+    if params.proprioception_enabled:
+        obs_parts.append(jax.nn.one_hot(state.last_action, params.action_dim))
+    
+    # 8. Visual Sensor
+    if params.visual_sensor_enabled:
+        obs_parts.append(sense_visual(state.agent_pos, state, params))
+    
+    # 9. Location
+    if params.location_sensor_enabled:
+        obs_parts.append(sense_location(state.agent_pos, params.height, params.width))
+    
+    # Assemble final vector
+    obs = jnp.concatenate(obs_parts)
+    
+    # Apply Perceptual Precision Modulation
+    if apply_noise:
+        return apply_perceptual_noise(obs, state, params, obs_key)
+    return obs
+```
+
+> **API notes**
+>
+> - **`@jax.jit(static_argnames=[\'apply_noise\'])`** — `apply_noise` is a plain Python `bool` argument (not a struct field), so it cannot be traced. Marking it static means the compiler resolves the `if apply_noise:` branch at trace time, producing two compiled variants: one with the noise call and one without. Calling `get_observation(..., apply_noise=False)` triggers a second compile on first use. See [primer: static-argnames](00_jax_primer.md#static-argnames).
+> - **`obs_key = jax.random.fold_in(state.key, 999)`** — `fold_in` creates an independent sub-key by hashing the base key with a constant integer (here `999`). It does not consume the key (unlike `split`), so `state.key` is unchanged. The constant `999` is a readable sentinel that distinguishes this RNG branch from all others in the step. See [primer: prng](00_jax_primer.md#prng).
+> - Every `if params.<flag>:` branch here is a Python conditional on a static field — resolved at trace time; disabled sensors are compiled away entirely. The observation vector shape is therefore fixed at compile time for a given `EnvParams`. See [primer: static-dynamic](00_jax_primer.md#static-dynamic).
+> - **`jnp.concatenate(obs_parts)`** assembles the final vector from the list of per-sensor arrays. Each element of `obs_parts` is a 1D array; the concatenation produces the flat observation vector of total length equal to the sum of all enabled sensor dimensions.
+> - `apply_perceptual_noise` (doc 10) is not reproduced here — this function hands off the clean vector and an independent noise key.
+
+---
+
+## `build_sensory_viz` — renderer hookup
+
+`build_sensory_viz(obs, state, params, true_obs=None)` (`sensor.py:370`)
+
+This function is **renderer-facing** — it parses the flat observation vector into the structured `sensory_data` list consumed by `renderer.render_jax_state`. It is not part of the training pipeline. Full coverage is in doc 12 (renderer); only the hookup is noted here.
+
+It iterates `get_observation_breakdown(params)` to find each sensor\'s slice in the flat vector, then packages each slice into a typed dict (`\'type\': \'intensity\'`, `\'type\': \'diamond\'`, `\'type\': \'visual_grid\'`, etc.) that the renderer knows how to draw. The optional `true_obs` argument enables side-by-side noisy vs. clean display.
+
 ---
 
 ## Clarifications / FAQ
@@ -402,19 +858,19 @@ Noise is handled by `apply_perceptual_noise` (doc 10) — sensor.py is only resp
 **Q: Are observations normalised or raw?**
 A: Mixed. Interoceptive scalars (sensors 1–4) are divided by max values → `[0, 1]`. Location is rescaled to `[-1, 1]`. Collision and Visual are binary `{0, 1}`. Proprioception is one-hot `{0, 1}`. **Olfaction is NOT bounded** — it is a sum of `property × decay × mask`, so values can exceed 1.0 (agent on top of an entity gives decay=2.0; multiple entities sum together).
 
-**Q: What's the observation order, end-to-end?**
+**Q: What\'s the observation order, end-to-end?**
 A: `[Injury(1?), Nutrition(1?), Satiation(1), InteroNoc(1?), ExteroNoc(1?), Olfaction(V?), Collision(C), Proprioception(A?), Visual(P?), Location(2?)]`. Sensors 1–2, 4–5, 8–10 are conditional on their enable flags; 3 and 7 are always present. To get the exact runtime mapping, call `get_observation_breakdown(params)`.
 
 **Q: Is `get_observation` called inside `jax_step`?**
 A: No. `jax_step` returns only the new state and scalars. The caller must explicitly call `get_observation(state, params)` to materialise the observation vector. `ParallelEnv` wraps this into a single step interface. See doc `11`.
 
 **Q: What happens when `apply_noise=False`?**
-A: The clean pre-noise vector is returned. Useful for evaluation and analysis. Note `apply_noise` is a static arg (`static_argnames=['apply_noise']`) — changing it triggers recompilation.
+A: The clean pre-noise vector is returned. Useful for evaluation and analysis. Note `apply_noise` is a static arg (`static_argnames=[\'apply_noise\']`) — changing it triggers recompilation.
 
 **Q: Is `last_action` from the step just completed or the one about to be taken?**
 A: Just completed. `state.last_action` is set at the end of `jax_step` to the action just executed (`core.py:514`). The very first observation (step 0, post-reset) uses a placeholder — Rest (`4`) if rest is enabled, else Eat (`5`) (`core.py:773`).
 
-**Q: The olfaction decay is `1/(d^p + 1e-10)` — what's the `1e-10` for?**
+**Q: The olfaction decay is `1/(d^p + 1e-10)` — what\'s the `1e-10` for?**
 A: Numerical safety for near-zero distances. The `dist < 0.001` branch catches true-zero-distance cases (returning 2.0); the `1e-10` prevents a numerical divide-by-zero for tiny-but-nonzero distances. Change `sensor.py:14` if you need a different saturation value.
 
 **Q: Why is agent-on-entity decay exactly 2.0?**
@@ -427,7 +883,7 @@ A: Yes. There is no line-of-sight check (`sensor.py:5–22`). A chemical source 
 A: No — `res_active` masks them out (`sensor.py:17`). Animals and obstacles are always included (their activity mask is `jnp.ones(..., bool)`).
 
 **Q: What does the collision sensor return for the center cell?**
-A: Always `0`. The center is the agent's own cell — it can't be out-of-bounds and the agent couldn't be there if it were blocked.
+A: Always `0`. The center is the agent\'s own cell — it can\'t be out-of-bounds and the agent couldn\'t be there if it were blocked.
 
 **Q: What ordering do the collision/visual diamond cells use?**
 A: Manhattan-distance shells (d=0, 1, 2, …), within each shell a fixed direction sweep. For `r=1`: `[center, (−1,0), (0,1), (1,0), (0,−1)]` — center, up, right, down, left. See `get_visual_offsets(r)` at `sensor.py:115`.
@@ -447,7 +903,7 @@ A: Summed into one (`sensor.py:303`: `res_chem + animal_chem + obs_chem`). **v2.
 **Q: Does the sensor system know about noise, or is noise applied after?**
 A: After. `get_observation` assembles the clean vector then optionally calls `apply_perceptual_noise` (`sensor.py:324–325`). The noise system reads `get_observation_breakdown` to find which slice belongs to which modality.
 
-**Q: What if `olfactory_vector_size` in YAML doesn't match the actual `property` vector length?**
+**Q: What if `olfactory_vector_size` in YAML doesn\'t match the actual `property` vector length?**
 A: `get_observation_breakdown` reads `params.res_property.shape[-1]` directly (`sensor.py:349`) — so the breakdown uses the actual vector length. `olfactory_vector_size` is a separate static param used elsewhere (e.g. encoder input shape). If the two diverge, downstream dimension mismatches follow. Keep them in sync.
 
 **Q: The location sensor is `[-1, 1]` but on a 1×1 grid would divide by zero. Is this guarded?**
