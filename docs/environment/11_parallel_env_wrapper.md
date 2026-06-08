@@ -21,12 +21,47 @@ Two tools are provided:
 
 ## `ParallelEnv`
 
+### Class overview
+
+`ParallelEnv` is the standard entry point for batched training. At construction time it pre-builds three vmapped callables from the three core single-env functions (`jax_reset`, `jax_step`, `get_observation`). These compiled variants are reused for every `reset` and `step` call — JAX traces and XLA-compiles them on first call, then caches the binary for subsequent calls with matching shapes.
+
+`Source: src/environment/wrapper.py:7–33`
 ```python
 class ParallelEnv:
-    def __init__(self, params: EnvParams)
-    def reset(self, key: PRNGKey, num_envs: int) → (EnvState, obs)
-    def step(self, states: EnvState, actions: jnp.ndarray) → (EnvState, obs, rewards, dones, infos)
+    """Vectorized Environment Wrapper for JAX."""
+    def __init__(self, params: EnvParams):
+        self.params = params
+        
+        # Vectorize reset and step
+        self._v_reset = jax.vmap(jax_reset, in_axes=(None, 0))
+        self._v_step = jax.vmap(jax_step, in_axes=(0, 0, None))
+        self._v_obs = jax.vmap(get_observation, in_axes=(0, None))
+
+    def reset(self, key: jax.random.PRNGKey, num_envs: int) -> tuple[EnvState, jnp.ndarray]:
+        keys = jax.random.split(key, num_envs)
+        states = self._v_reset(self.params, keys)
+        obs = self._v_obs(states, self.params)
+        return states, obs
+
+    def step(self, states: EnvState, actions: jnp.ndarray) -> tuple[EnvState, jnp.ndarray, jnp.ndarray, jnp.ndarray, dict]:
+        """Steps all environments in parallel."""
+        # Standard vmapped step
+        next_states, rewards, dones, infos = self._v_step(states, actions, self.params)
+        
+        # Note: Auto-reset is usually handled at the training loop level in JAX 
+        # (e.g. jax.lax.cond) to keep it pure. 
+        # But we can provide a helper here if needed.
+        obs = self._v_obs(next_states, self.params)
+        
+        return next_states, obs, rewards, dones, infos
 ```
+
+> **API notes**
+>
+> - `jax.vmap` — [primer: vmap](00_jax_primer.md#vmap). The key idea here: **three separate vmap calls** with **different `in_axes` patterns** are the entire parallelism story. There is no threading, no multiprocessing, no Python loop. XLA maps the compiled kernel across all N environments as a hardware-level parallel operation.
+> - `EnvParams` / `EnvState` as pytrees — [primer: jax-pytrees](00_jax_primer.md#jax-pytrees). `vmap` recurses into `EnvState` automatically: every array field gains a leading N-axis simultaneously, with zero manual shape management.
+> - `in_axes=None` for `params` — [primer: static-dynamic](00_jax_primer.md#static-dynamic). `EnvParams` is broadcast (one copy for all N envs), not sliced. This is safe because params is shared config, not per-env state.
+> - PRNG key splitting — [primer: prng](00_jax_primer.md#prng). `jax.random.split(key, num_envs)` produces N independent subkeys in one call. Each env starts with a distinct, non-overlapping random stream.
 
 ### `__init__` (`wrapper.py:9–15`)
 
@@ -47,6 +82,12 @@ self._v_obs   = jax.vmap(get_observation, in_axes=(0, None)) # state batched; pa
 | `get_observation(state, params)` | `0` (batched) | `None` (broadcast) | — | Each env has its own `EnvState`; `params` is shared |
 
 `EnvParams` is always `in_axes=None` — a single immutable copy is shared and broadcast to all N environments. This keeps memory usage proportional to `N × sizeof(EnvState)`, not `N × sizeof(EnvState) + N × sizeof(EnvParams)`.
+
+> **API notes**
+>
+> - `in_axes=(None, 0)` on `_v_reset`: the `None` on argument 1 tells vmap "do not slice this argument — every env sees the same value". The `0` on argument 2 tells vmap "slice this argument along axis 0 — env i gets `keys[i]`". See [primer: vmap](00_jax_primer.md#vmap) for the full `in_axes` contract.
+> - **Why pre-build in `__init__`**: `jax.vmap` itself is a Python-level transformation — it returns a new Python function, not a compiled one. Compilation happens on the first *call* (via the `@jax.jit` decorators inside `core.py` / `sensor.py`). Pre-building in `__init__` avoids re-applying the vmap transform on every `reset`/`step` call, but the real compilation is amortised across the first call to each vmapped fn.
+> - **Immutability**: `self.params` is stored once and never mutated. Changing `EnvParams` between calls would require a new `ParallelEnv` instance (and a new JIT compilation). See [primer: immutability](00_jax_primer.md#immutability).
 
 ### `reset(key, num_envs)` (`wrapper.py:17–21`)
 
@@ -69,13 +110,24 @@ The returned `states` is a batched `EnvState` pytree where every array field has
 
 `obs` is shape `[N, obs_dim]`.
 
+> **API notes**
+>
+> - `jax.random.split(key, N)` — [primer: prng](00_jax_primer.md#prng). Splitting is the only correct way to produce multiple independent keys. Do **not** manually offset keys (e.g. `key + i`) — that breaks the CSPRNG guarantees.
+> - **The batched `EnvState` pytree**: after `_v_reset`, every array leaf of `EnvState` has gained a leading N-axis. JAX does this automatically because `EnvState` is a registered pytree node (via `@struct.dataclass`). You never touch individual leaves — you hand the whole struct to `_v_step` and it recurses. See [primer: jax-pytrees](00_jax_primer.md#jax-pytrees).
+
 ### `step(states, actions)` (`wrapper.py:23–33`)
 
 ```python
 def step(self, states: EnvState, actions: jnp.ndarray) -> tuple[EnvState, jnp.ndarray, jnp.ndarray, jnp.ndarray, dict]:
     """Steps all environments in parallel."""
+    # Standard vmapped step
     next_states, rewards, dones, infos = self._v_step(states, actions, self.params)
+    
+    # Note: Auto-reset is usually handled at the training loop level in JAX 
+    # (e.g. jax.lax.cond) to keep it pure. 
+    # But we can provide a helper here if needed.
     obs = self._v_obs(next_states, self.params)
+    
     return next_states, obs, rewards, dones, infos
 ```
 
@@ -87,11 +139,59 @@ def step(self, states: EnvState, actions: jnp.ndarray) -> tuple[EnvState, jnp.nd
 
 **No auto-reset**: `ParallelEnv.step` returns terminal states as-is. Terminated environments continue to hold their terminal `EnvState` until the caller explicitly resets them. Use `auto_reset_step` if you need in-call reset, or handle episode boundaries in your training loop with `jax.lax.cond` / masking.
 
+> **API notes**
+>
+> - **Two vmapped calls per step**: `_v_step` and `_v_obs` are separate vmapped callables. `_v_step` advances all N states; `_v_obs` reads observations from those advanced states. They are separate because `get_observation` is also used standalone (e.g. for eval rollouts with `apply_noise=False`).
+> - **`infos` dict auto-batches**: `jax.vmap` maps over the return value of `jax_step` the same way it maps over inputs. If `jax_step` returns `{'termination_reason': scalar}`, then `_v_step` returns `{'termination_reason': [N]}`. The dict structure is preserved; only the leaf arrays gain a leading axis. This is the pytree walk on *outputs*, not just inputs.
+> - **JIT compatibility** — [primer: jit](00_jax_primer.md#jit). Both `_v_step` and `_v_obs` are pure JAX with no Python side effects. Wrapping `ParallelEnv.step` in `@jax.jit` (or calling it inside a larger jitted training step) is safe and recommended.
+
 ---
 
-## `auto_reset_step` (`wrapper.py:35–61`)
+## `auto_reset_step`
 
-A standalone function that steps all N environments and, for any that just terminated, immediately resets them so the next call to `auto_reset_step` continues from a fresh episode.
+### Function overview
+
+`auto_reset_step` is the "always-on" batched step: it steps all N environments and, for any environment where `done=True`, silently swaps the terminal state for a freshly-reset state before returning. The training loop receives continuous `(states, obs, rewards, dones, infos)` tuples without ever having to detect episode endings or manually call `reset`.
+
+The mechanism combines three JAX patterns in a tight inner function: **pytree-level conditional select** (`tree_map` + `lax.select`), **per-env PRNG derivation** (from `state.key`), and **inline vmap** (applied at call time, not pre-built).
+
+`Source: src/environment/wrapper.py:35–61`
+```python
+def auto_reset_step(states: EnvState, actions: jnp.ndarray, params: EnvParams, key: jax.random.PRNGKey):
+    """vmapped step with automatic reset for finished environments."""
+    
+    def step_fn(state, action):
+        next_state, reward, done, info = jax_step(state, action, params)
+        
+        # If done, reset immediately for the NEXT step's input
+        # Note: In most RL loops (CleanRL/Gymnax), the 'obs' returned is for the next state.
+        # If terminal, we often want the reset obs.
+        
+        reset_key, _ = jax.random.split(state.key)
+        reset_state = jax_reset(params, reset_key)
+        
+        # Replace state if done
+        # We use tree_utils to swap the entire Pytree
+        final_state = jax.tree_util.tree_map(
+            lambda x, y: jax.lax.select(done, x, y),
+            reset_state, next_state
+        )
+        
+        obs = get_observation(next_state, params) # Return terminal obs or masked?
+        # Usually, for 'done' transitions, we return the terminal obs, 
+        # but the state passed back should be reset.
+        
+        return final_state, obs, reward, done, info
+
+    return jax.vmap(step_fn, in_axes=(0, 0))(states, actions)
+```
+
+> **API notes**
+>
+> - `jax.tree_util.tree_map` — [primer: tree-map](00_jax_primer.md#tree-map). This is the **core auto-reset mechanism**: it walks every leaf array of `reset_state` and `next_state` in lockstep and applies `lax.select(done, x, y)` to each pair. The result is a new `EnvState` pytree whose every field is either from `reset_state` (if `done=True`) or from `next_state` (if `done=False`). One lambda, zero manual field enumeration.
+> - `jax.lax.select` — [primer: branchless](00_jax_primer.md#branchless). `lax.select(cond, x, y)` is a branchless conditional — both `x` and `y` are always computed; the result is a data-select, not a control-flow branch. This is mandatory for use inside `vmap` and `jit` where Python-level `if` on traced values is forbidden.
+> - `jax.random.split(state.key)` — [primer: prng](00_jax_primer.md#prng). The reset key is derived from the current env's own key, not the outer `key` argument (which is unused — see FAQ). This is a functional pattern: the env's key is the only source of randomness, so resets are deterministic given the terminal state.
+> - `jax.vmap(step_fn, in_axes=(0, 0))` — [primer: vmap](00_jax_primer.md#vmap). Unlike `ParallelEnv.__init__`, the vmap is constructed **inline at call time**. `params` is a Python closure — it is not passed as an argument, so it does not appear in `in_axes`. This is the idiomatic JAX pattern for "broadcast a constant into a vmapped function".
 
 ### Signature
 
@@ -137,6 +237,8 @@ return jax.vmap(step_fn, in_axes=(0, 0))(states, actions)
 
 This is functionally a conditional branch but is compiled as a masked select — no branching in the JAX/XLA graph, which is necessary for `vmap` and `jit` compatibility. The `done` scalar is broadcast across all leaf shapes during the select.
 
+> **Why `tree_map` here is the cleanest possible design**: the alternative would be manually listing every `EnvState` field and calling `lax.select` on each one. `EnvState` has ~30 fields (see Batched Shape Convention table below). `tree_map` handles all of them in one line, is robust to field additions, and carries no risk of accidentally omitting a field. This is the textbook use case for pytree-level operations — see [primer: tree-map](00_jax_primer.md#tree-map).
+
 **2. Terminal observation, not reset observation** (`wrapper.py:55`):
 
 ```python
@@ -162,6 +264,8 @@ The reset key is derived from the **current** environment's key (the key at the 
 - Reproducibility of the reset depends on the entire episode's key chain, not just a fresh seed. If you need deterministic episode-N resets from a known seed, you should track the reset key at launch rather than replaying through the full episode chain.
 - `reset_state` is always computed (no short-circuit in `jax.lax.select`) even on non-terminal transitions. The cost is one `jax_reset` call per env per step — paid even when `done=False`. For most training configurations this is negligible.
 
+> **Why this is correct even inside vmap**: `step_fn` operates on a **single** env (one `state`, one `action`). The `done` it sees is a scalar bool. The `jax.lax.select(done, x, y)` inside `tree_map` is a scalar select on each leaf. `jax.vmap` then lifts `step_fn` to operate on the N-env batch. From JAX's perspective, the select happens "before" the vmap expansion — the compiled kernel selects per-env, independently, exactly as intended. See [primer: vmap](00_jax_primer.md#vmap) and [primer: branchless](00_jax_primer.md#branchless).
+
 **4. `vmap` in `auto_reset_step`** (`wrapper.py:61`):
 
 ```python
@@ -169,6 +273,8 @@ return jax.vmap(step_fn, in_axes=(0, 0))(states, actions)
 ```
 
 The vmap is constructed inline at call time (not pre-compiled in `__init__`). Each invocation re-applies vmap over the `(state, action)` batch axes. `params` is closed over from the outer scope — it is not batched.
+
+> **Closure capture in vmapped functions**: when `step_fn` references `params` from the enclosing `auto_reset_step` scope, JAX treats `params` as a compile-time constant (it is a static pytree, not a traced argument). This is equivalent to `in_axes=None` for `params` in the explicit form — the same broadcast behaviour as in `_v_reset` and `_v_step` in `ParallelEnv`. The difference is style: `ParallelEnv` passes `params` explicitly; `auto_reset_step` captures it as a closure. Both produce identical compiled code.
 
 ---
 
@@ -214,6 +320,11 @@ states = self._v_reset(self.params, keys)
 ### Independent streams guarantee
 
 Two environments that start with different keys (produced by `split`) will always diverge in their random event sequences, because JAX's PRNG is a counter-mode CSPRNG. There is no global shared state — all randomness flows through the key field in `EnvState`.
+
+> **API notes**
+>
+> - Full PRNG mechanics — [primer: prng](00_jax_primer.md#prng). The key rule: **one key, one use**. Each split produces fresh keys; re-using a key gives the same numbers, not independent ones.
+> - **The key shape inside a batched state**: a JAX `PRNGKey` has shape `[2]`. After vmap over N envs, `states.key` has shape `[N, 2]`. This is just the normal batching behaviour — the key field is an array like any other, and vmap adds a leading axis. See Batched Shape Convention table below for the full list.
 
 ---
 
