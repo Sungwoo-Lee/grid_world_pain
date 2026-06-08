@@ -693,3 +693,1241 @@ A: Not directly supported by either renderer. You'd need to extract the arena dr
 
 **Q: How does the renderer handle entities with `count: 0`?**
 A: They aren't in the arrays (config_loader skips zero-count expansions). The renderer naturally omits them. No special case needed.
+
+---
+
+## Implementation deep-dive — host-side code, not JAX
+
+> **Key mindset shift.** Everything in this section runs eagerly on the CPU, never under `jax.jit` or `jax.vmap`. The renderer is Python + NumPy + Matplotlib. Its "advanced API" story is about the **host/device boundary** (pulling JAX arrays to CPU), **`select_by_class`** (recovering per-class animals from the unified array), and **Matplotlib/imageio idioms**. Primer anchors `jax-pytrees` and `scatter-index` are the only ones that genuinely apply.
+
+### Why this matters for a JAX learner
+
+In the rest of the codebase, `EnvState` lives on the GPU as a JAX pytree of `jnp.ndarray` values — see [jax-pytrees](00_jax_primer.md#jax-pytrees). The renderer cannot touch those arrays directly. The caller must convert the state to NumPy first (`jax.device_get(state)` or equivalently wrapping each field with `np.array(...)`). Once converted, every field is a plain NumPy array and normal Python/NumPy/Matplotlib code applies.
+
+`select_by_class` is the host-side mirror of the [scatter-index](00_jax_primer.md#scatter-index) pattern: instead of writing results back into a fixed-size array, it reads a per-class *boolean mask* out of the config tuple `params.animal_classes`. The result is a NumPy boolean array, not a JAX array — so you can use it for standard Python indexing (`array[mask]`), which would be illegal inside a JIT-traced kernel.
+
+---
+
+### `select_by_class` — per-class mask from the unified animal array
+
+```python
+def select_by_class(params, class_name: str) -> np.ndarray:
+    """Return a boolean NumPy mask of length N selecting animals of the given class.
+
+    Args:
+        params: EnvParams holds `animal_classes` tuple (pytree_node=False, len N).
+        class_name: one of 'predator', 'neutral', or any future class string.
+
+    Returns:
+        np.ndarray[bool, shape (N,)] -- True at index i iff animal_classes[i] == class_name.
+
+    Usage:
+        pred_mask = select_by_class(params, 'predator')
+        pred_pos = np.array(state.animal_pos)[pred_mask]   # shape [N_pred, 2]
+
+    Notes:
+        - This is a host-side (NumPy) helper, not a JAX traced function. Call it
+          from analysis scripts, renderers, and eval code, not inside jit'd kernels.
+        - The mask is derived from `params.animal_classes`, a static
+          `pytree_node=False` tuple, so it is config-constant and allocation-free
+          when called repeatedly with the same params.
+    """
+    return np.array([c == class_name for c in params.animal_classes], dtype=bool)
+```
+
+*Source: `src/environment/state.py:7–28`*
+
+> **API notes.** `params.animal_classes` is a `pytree_node=False` tuple — a [static field](00_jax_primer.md#static-dynamic) on `EnvParams`. That is why it is safe to iterate over in Python: it is never a traced value. The result is a plain NumPy bool array, usable for standard fancy-indexing (`state.animal_pos[mask]`) after the state has been pulled to host. Compare to the [scatter-index](00_jax_primer.md#scatter-index) pattern in the JAX kernel, which uses precomputed index tuples rather than boolean masks because JAX cannot trace dynamic shapes.
+
+---
+
+### `_load_icons` — icon cache
+
+Short description: loads PNG/JPG/SVG/WebP assets from the `assets/` directory the first time it is called; subsequent calls return the cached dict immediately. Missing files produce `None` entries; the arena draw function falls back to matplotlib scatter markers.
+
+```python
+def _load_icons(icon_config=None):
+    """Loads icons from assets directory based on config."""
+    global _ICON_CACHE
+    if _ICON_CACHE is not None:
+        return _ICON_CACHE
+
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    assets_path = os.path.join(base_dir, 'assets')
+
+    if icon_config is None:
+        icon_config = {
+            'agent': 'agent',
+            'food': 'food',
+            'hiding_predator': 'hiding_predator',
+            'predator': 'predator',
+            'agent_food': 'agent_food',
+            'agent_hiding_predator': 'agent_hiding_predator',
+            'agent_predator': 'agent_predator',
+            'rock': 'rock',
+            'bush': 'bush',
+            'agent_bush': 'bush_agent',
+            'neutral': 'neutral'
+        }
+
+    supported_extensions = ['.png', '.jpg', '.jpeg', '.svg', '.gif', '.webp']
+
+    icons = {}
+    for key, base_filename in icon_config.items():
+        found = False
+        for ext in supported_extensions:
+            filename = f"{base_filename}{ext}" if not base_filename.endswith(ext) else base_filename
+            path = os.path.join(assets_path, filename)
+            if os.path.exists(path):
+                try:
+                    if ext.lower() == '.svg':
+                        if CAIROSVG_AVAILABLE:
+                            png_data = cairosvg.svg2png(url=path)
+                            icons[key] = np.array(Image.open(BytesIO(png_data)))
+                            found = True
+                        # else: silently skipped -- no cairosvg
+                    else:
+                        img = Image.open(path)
+                        if img.mode != 'RGBA':
+                            img = img.convert('RGBA')
+                        icons[key] = np.array(img)
+                        found = True
+                    if found:
+                        break
+                except Exception:
+                    pass
+        if not found:
+            icons[key] = None   # draw_icon falls back to scatter marker
+
+    _ICON_CACHE = icons
+    return icons
+```
+
+*Source: `src/environment/renderer.py:31–96`*
+
+> **API notes.** This is pure host-side code — PIL/NumPy, no JAX. The cache is a module-level global; set `_ICON_CACHE = None` to force a reload when swapping asset files in-process. SVG support requires the optional `cairosvg` package; missing it silently skips SVGs (no warning printed by default). The `icon_config` kwarg lets you pass a custom `{key: filename}` mapping to `render_jax_state` / `render_jax_state_v2` without editing source.
+
+---
+
+### Draw helpers (V1 — shared with V2)
+
+#### `draw_dual_capsule_bar` — two-layer vitals bar
+
+Short description: draws a horizontal capsule progress bar on any axes using `transAxes` (0–1) coordinates. A wide translucent layer shows the ground-truth value; a narrower opaque layer shows the observed (possibly noisy) value. Used for every vital in V1's left panel.
+
+```python
+def draw_dual_capsule_bar(ax, x, y, w, h, state_pct, obs_pct, color,
+                          label=None, state_val=None, obs_val=None,
+                          transform=None):
+    """Draws a professional capsule-style progress bar showing reality vs perception."""
+    # Background (Trough)
+    bg_rect = matplotlib.patches.FancyBboxPatch(
+        (x, y), w, h, boxstyle=f"round,pad=0,rounding_size={h/2}",
+        facecolor='#F3F4F6', edgecolor='none', transform=transform, zorder=0
+    )
+    ax.add_patch(bg_rect)
+
+    # State (Reality) -- thicker, alpha 0.3
+    if state_pct > 0:
+        val_w = max(h, w * min(1.0, state_pct))
+        st_rect = matplotlib.patches.FancyBboxPatch(
+            (x, y), val_w, h, boxstyle=f"round,pad=0,rounding_size={h/2}",
+            facecolor=color, edgecolor='none', alpha=0.3, transform=transform, zorder=1
+        )
+        ax.add_patch(st_rect)
+
+    # Observation (Perception) -- thinner inner bar
+    if obs_pct > 0:
+        val_w = max(h*0.6, w * min(1.0, obs_pct))
+        obs_rect = matplotlib.patches.FancyBboxPatch(
+            (x, y + h*0.2), val_w, h*0.6,
+            boxstyle=f"round,pad=0,rounding_size={h*0.3}",
+            facecolor=color, edgecolor='none', transform=transform, zorder=2
+        )
+        ax.add_patch(obs_rect)
+
+    # ... (omitted: 10 lines of text label drawing -- label, REAL: value, OBS: value) ...
+```
+
+*Source: `src/environment/renderer.py:134–172`*
+
+> **API notes.** Runs entirely on host; all coordinates are `transAxes` fractions (0 = left/bottom, 1 = right/top of the axes). No JAX involved. The `transform=ax.transAxes` argument is passed through to every `add_patch` / `ax.text` call so the same function works on any axes object without knowing pixel dimensions.
+
+---
+
+#### `draw_pod_frame` — sensor pod border and title
+
+Short description: draws the rectangular border, accent top-line, and title text for a sensor pod. The `offline=True` flag greys everything out and adds an "OFFLINE" watermark; `obs_only=True` appends "(OBS ONLY)" to the title.
+
+```python
+def draw_pod_frame(ax, x, y, w, h, title, offline=False, obs_only=False, transform=None):
+    """Draws a modular Telemetry Pod frame."""
+    rect = plt.Rectangle((x, y), w, h, facecolor=COLORS['bg'],
+                         edgecolor=COLORS['border'],
+                         linewidth=0.5, transform=transform, zorder=0)
+    ax.add_patch(rect)
+
+    border_color = COLORS['border'] if not offline else COLORS['text_offline']
+    ax.plot([x, x + w], [y + h, y + h], color=border_color,
+            linewidth=1.5, transform=transform, zorder=1)
+
+    t_color = COLORS['text_label'] if not offline else COLORS['text_offline']
+    if obs_only:
+        title = title + " (OBS ONLY)"
+        t_color = COLORS['text_offline']
+
+    ax.text(x + 0.02, y + h + 0.015, title.upper(), color=t_color,
+            fontsize=8, fontweight='bold', transform=transform)
+
+    if offline:
+        ax.text(x + w/2, y + h/2, "OFFLINE", color=COLORS['text_offline'],
+                ha='center', va='center', fontsize=9, fontweight='bold',
+                alpha=0.5, transform=transform)
+```
+
+*Source: `src/environment/renderer.py:174–196`*
+
+> **API notes.** Host-side only. The title is drawn *above* the pod rectangle (at `y + h + 0.015`) — the pod frame is the content area; the title sits in the gap above it. This is why V1's y-cursor must account for title height when stacking pods.
+
+---
+
+#### `draw_boresight_diamond` — spatial sensor grid (range > 1)
+
+Short description: draws a Manhattan-diamond spatial grid for directional sensors when range > 1. Each grid cell is drawn at its correct relative position around the agent's centre. Ghost icons/patches (alpha 0.10–0.15) show the ground-truth feature; solid patches/icons show what the agent observed. Uses the same offset table as `sensor.py:get_visual_offsets` for spatial alignment.
+
+```python
+def draw_boresight_diamond(ax, x, y, size, vec, r, num_features,
+                           true_vec=None, icons=None, obs_only=False,
+                           transform=None):
+    """
+    Draws a schematic Manhattan diamond grid for directional sensors.
+    Uses the same offset logic as sensor.py for perfect spatial alignment.
+    """
+    offsets = np.array(get_visual_offsets(r))  # host-side: np.array(), not jnp
+
+    if len(vec) != len(offsets) * num_features:
+        return
+
+    obs_grid = np.array(vec).reshape(len(offsets), num_features)
+    true_grid = (np.array(true_vec).reshape(len(offsets), num_features)
+                 if true_vec is not None else None)
+
+    feature_keys = [
+        'grass', 'sand', 'plain', 'food',
+        'hiding_predator',   # slot 4 -- was 'danger' in legacy
+        'predator', 'rock', 'neutral',
+    ]
+    feature_colors = [
+        '#A1DFA1', '#F2D7D5', '#FFFFFF', COLORS['food'],
+        COLORS['hiding_predator'], COLORS['predator'],
+        COLORS['rock'], COLORS['neutral']
+    ]
+
+    for i, (dr, dc) in enumerate(offsets):
+        cell_x, cell_y = x + dc * size, y - dr * size
+
+        # Cell background border
+        # ... (omitted: 3 lines of plt.Rectangle grid cell border) ...
+
+        obs_vals = obs_grid[i]
+        true_vals = true_grid[i] if true_grid is not None else obs_vals
+
+        if num_features == 1:
+            # Collision: single-channel indicator
+            if not obs_only and true_vals[0] > 0.5:   # ghosted ground truth
+                ax.add_patch(plt.Rectangle(
+                    (cell_x - size*0.48, cell_y - size*0.48), size*0.96, size*0.96,
+                    facecolor=COLORS['hiding_predator'], alpha=0.15,
+                    transform=transform, zorder=2))
+            if obs_vals[0] > 0.5:                       # solid observed
+                ax.add_patch(plt.Rectangle(
+                    (cell_x - size*0.35, cell_y - size*0.35), size*0.7, size*0.7,
+                    facecolor=COLORS['hiding_predator'], alpha=0.8,
+                    transform=transform, zorder=3))
+        else:
+            # Visual (8-channel): ghosted reality, then solid observation
+            if not obs_only:
+                true_active = np.where(true_vals > 0.1)[0]
+                true_entities = [idx for idx in true_active if idx >= 3]
+                for feat_idx in true_active:
+                    icon_key = feature_keys[feat_idx % len(feature_keys)]
+                    icon_img = icons.get(icon_key) if icons else None
+                    if icon_img is not None and (feat_idx >= 3 or not true_entities):
+                        imagebox = OffsetImage(icon_img, zoom=size * 0.35)
+                        ab = AnnotationBbox(imagebox, (cell_x, cell_y),
+                                            frameon=False, pad=0,
+                                            xycoords=transform if transform else 'data')
+                        ab.set_alpha(0.15)
+                        ax.add_artist(ab)
+                    else:
+                        color = feature_colors[feat_idx % len(feature_colors)]
+                        ax.add_patch(plt.Rectangle(
+                            (cell_x - size*0.48, cell_y - size*0.48),
+                            size*0.96, size*0.96,
+                            facecolor=color, alpha=0.1,
+                            transform=transform, zorder=2))
+
+            obs_active = np.where(obs_vals > 0.1)[0]
+            obs_entities = [idx for idx in obs_active if idx >= 3]
+            for feat_idx in obs_active:
+                icon_key = feature_keys[feat_idx % len(feature_keys)]
+                icon_img = icons.get(icon_key) if icons else None
+                if icon_img is not None and (feat_idx >= 3 and len(obs_entities) == 1):
+                    imagebox = OffsetImage(icon_img, zoom=size * 0.35)
+                    ab = AnnotationBbox(imagebox, (cell_x, cell_y),
+                                        frameon=False, pad=0,
+                                        xycoords=transform if transform else 'data')
+                    ax.add_artist(ab)
+                elif feat_idx >= 3:
+                    color = feature_colors[feat_idx % len(feature_colors)]
+                    ax.add_patch(plt.Rectangle(
+                        (cell_x - size*0.35, cell_y - size*0.35),
+                        size*0.7, size*0.7,
+                        facecolor=color, alpha=0.9,
+                        transform=transform, zorder=4))
+```
+
+*Source: `src/environment/renderer.py:200–289`*
+
+> **API notes.** Host-side only; `np.array(get_visual_offsets(r))` converts the JAX-origin offset list to NumPy immediately so the rest of the loop is plain Python. The `xycoords=transform if transform else 'data'` idiom passes the axes transform through to `AnnotationBbox` so icons land correctly regardless of whether the caller is using `transAxes` or `transData` coordinates.
+
+---
+
+#### `draw_categorical_visual` — flat bar chart for sensors (range ≤ 1)
+
+Short description: for Collision and Visual sensors with range ≤ 1, draws a flat stacked bar chart — one group of bars per spatial cell (`C U R D L` layout for 5-cell), one bar per feature channel within each group. Ghost bars (alpha 0.15) behind solid bars (alpha 0.9) show truth vs. observed.
+
+```python
+def draw_categorical_visual(ax, x, y, w, h, obs_vec, r, num_features,
+                            true_vec=None, labels=None, obs_only=False,
+                            transform=None):
+    """Draws a categorical bar chart for visual observations (V7).
+    y: bottom of the pod frame
+    h: total height of the pod frame
+    """
+    obs_grid = np.array(obs_vec).reshape(-1, num_features)
+    true_grid = (np.array(true_vec).reshape(-1, num_features)
+                 if true_vec is not None else obs_grid)
+    num_cells = obs_grid.shape[0]
+
+    if labels is None:
+        feature_labels = ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'NEU', 'RCK']
+    else:
+        feature_labels = labels
+
+    # ... (omitted: 8 lines of feature_colors list + cell_labels setup) ...
+
+    # Internal margins (fraction of h)
+    margin_bottom = 0.04
+    margin_top    = 0.02
+    bar_y = y + margin_bottom
+    bar_h = h - (margin_bottom + margin_top)
+
+    cell_gap_ratio = 1.15
+    unit_w = w / (num_cells * num_features + max(num_cells - 1, 0) * cell_gap_ratio)
+
+    for c_idx in range(num_cells):
+        start_x = x + c_idx * (num_features + cell_gap_ratio) * unit_w
+
+        if num_cells > 1:
+            ax.text(start_x + (num_features * unit_w)/2, bar_y + bar_h + 0.002,
+                    cell_labels[c_idx],
+                    color=COLORS['text_label'], fontsize=5.5, fontweight='bold',
+                    ha='center', transform=transform)
+
+        for f_idx in range(num_features):
+            bx = start_x + f_idx * unit_w
+            bw = unit_w * 0.8
+            color = feature_colors[f_idx % len(feature_colors)]
+
+            # Ground truth (ghosted)
+            if not obs_only:
+                true_val = float(true_grid[c_idx, f_idx])
+                ax.add_patch(plt.Rectangle(
+                    (bx, bar_y), bw, bar_h * true_val,
+                    facecolor=color, alpha=0.15,
+                    transform=transform, zorder=1))
+
+            # Perception (solid)
+            obs_val = float(obs_grid[c_idx, f_idx])
+            ax.add_patch(plt.Rectangle(
+                (bx + bw*0.1, bar_y), bw*0.8, bar_h * obs_val,
+                facecolor=color, alpha=0.9,
+                transform=transform, zorder=2))
+
+            # Feature labels (rotated 90 deg, inside frame bottom)
+            if (num_cells == 1 or c_idx == 0) and f_idx < len(feature_labels):
+                ax.text(bx + bw*1.1/2, y + 0.002, feature_labels[f_idx],
+                        color=COLORS['text_label'],
+                        fontsize=4.0, ha='center', va='bottom',
+                        rotation=90, transform=transform)
+```
+
+*Source: `src/environment/renderer.py:291–353`*
+
+> **API notes.** Host-side only. The `feature_labels` fallback list uses `'DNG'` (not `'HPR'`) — the authoritative v2.0 label. The legacy copy in `grid_world.py` still uses `'HPR'`. Both are cosmetic labels only; they do not affect which feature channel maps to which entity class.
+
+---
+
+### `render_jax_state` — V1 entry point (full)
+
+Short description: the main V1 render function. Takes a single `EnvState` (already converted to host NumPy by the caller), creates a `14x10` figure, draws three panels (left: interoception vitals + minimap, centre: arena local view, right: exteroception sensor pods), and returns a `(H, W, 3)` uint8 NumPy array.
+
+```python
+def render_jax_state(state, params, episode=None, step=None, train_episode=None,
+                     dpi=100, icon_scale=1.0, action=None,
+                     sensory_data=None, info=None, icon_config=None):
+    """
+    Render a JAX EnvState to an RGB numpy array (Industrial White V2).
+    """
+    from src.environment.core import calculate_drive
+    start_time = time.time()
+    icons = _load_icons(icon_config)
+    global _FIG_CACHE
+
+    # Grid dimensions -- all .array() / int() calls pull JAX scalars to Python
+    height, width = int(params.height), int(params.width)
+    view_size = int(params.local_view_size)
+    agent_pos = np.array(state.agent_pos)   # host/device boundary: JAX -> NumPy
+    ar, ac = int(agent_pos[0]), int(agent_pos[1])
+
+    # Local view window bounds
+    half_view = view_size // 2
+    r_start = max(0, min(height - view_size, ar - half_view))
+    c_start = max(0, min(width  - view_size, ac - half_view))
+    r_start = max(0, r_start)
+    c_start = max(0, c_start)
+    r_end = min(height, r_start + view_size)
+    c_end = min(width,  c_start + view_size)
+
+    plt.close('all')
+
+    # Figure: flat GridSpec, 3 columns
+    fig = plt.figure(figsize=(14, 10), dpi=dpi)
+    fig.patch.set_facecolor(COLORS['bg'])
+    gs = fig.add_gridspec(1, 3, width_ratios=[0.8, 2.2, 0.8])
+    ax_left  = fig.add_subplot(gs[0, 0])   # INTEROCEPTION + Minimap
+    ax_grid  = fig.add_subplot(gs[0, 1])   # ARENA
+    ax_right = fig.add_subplot(gs[0, 2])   # EXTEROCEPTION + Action
+
+    for ax in [ax_left, ax_grid, ax_right]:
+        ax.set_facecolor(COLORS['bg'])
+        ax.axis('off')
+
+    canvas = FigureCanvas(fig)
+
+    # ---- Centre: arena local view -----------------------------------------------
+    ax_grid.set_xlim(c_start - 0.5, c_end - 0.5)
+    ax_grid.set_ylim(r_start - 0.5, r_end - 0.5)
+    ax_grid.invert_yaxis()
+    ax_grid.set_aspect('equal')
+    ax_grid.axis('off')
+
+    # Background grid lines
+    for x in range(c_start, c_end + 1):
+        ax_grid.vlines(x - 0.5, r_start - 0.5, r_end - 0.5,
+                       colors=COLORS['grid'], linewidth=0.5)
+    for y in range(r_start, r_end + 1):
+        ax_grid.hlines(y - 0.5, c_start - 0.5, c_end - 0.5,
+                       colors=COLORS['grid'], linewidth=0.5)
+
+    # Terrain tiles
+    location_colors = {0: COLORS['bg'], 1: '#ECFDF5', 2: '#FFFBEB'}
+    loc_grid = np.array(params.grid_location_type)  # host/device boundary
+    for r in range(r_start, r_end):
+        for c in range(c_start, c_end):
+            l_type = int(loc_grid[r, c])
+            if l_type != 0:
+                ax_grid.add_patch(plt.Rectangle(
+                    (c - 0.5, r - 0.5), 1, 1,
+                    color=location_colors.get(l_type, COLORS['bg']), zorder=0))
+
+    # Icon drawing helper (inner closure)
+    scale_factor = (4.0 / view_size) * icon_scale
+    def draw_icon(ax, r, c, icon_key, zoom=0.038, s_fac=1.0, is_axes_coords=False):
+        img = icons.get(icon_key)
+        if img is not None:
+            imagebox = OffsetImage(img, zoom=zoom * s_fac)
+            ab = AnnotationBbox(imagebox, (c, r), frameon=False, pad=0,
+                                xycoords='data' if not is_axes_coords else ax.transAxes)
+            ax.add_artist(ab)
+        else:
+            m_map = {'agent':('o',COLORS['action']), 'food':('D',COLORS['food']),
+                     'hiding_predator':('X',COLORS['hiding_predator']),
+                     'predator':('v',COLORS['predator']), 'rock':('s',COLORS['rock']),
+                     'neutral':('o',COLORS['neutral'])}
+            m, clr = m_map.get(icon_key, ('s', 'grey'))
+            ax.plot(c, r, marker=m, markersize=12*s_fac, color=clr,
+                    markeredgecolor='white', markeredgewidth=1,
+                    transform=ax.transData if not is_axes_coords else ax.transAxes)
+
+    # ---- Entity drawing -- host/device boundary at np.array() calls ----------
+    res_pos, res_type, res_active = (np.array(state.res_pos),   # JAX -> NumPy
+                                     np.array(params.res_type),
+                                     np.array(state.res_active))
+    at_agent = []
+
+    for i in range(len(res_active)):
+        if not res_active[i]: continue
+        rr, rc = int(res_pos[i, 0]), int(res_pos[i, 1])
+        if rr == ar and rc == ac:
+            at_agent.append('food' if res_type[i] == 0 else 'hiding_predator')
+        elif r_start <= rr < r_end and c_start <= rc < c_end:
+            draw_icon(ax_grid, rr, rc,
+                      'food' if res_type[i] == 0 else 'hiding_predator',
+                      zoom=0.035, s_fac=scale_factor)
+
+    # select_by_class: recover per-class slice from unified animal_pos array
+    _pred_mask = select_by_class(params, 'predator')    # NumPy bool mask
+    p_pos = np.array(state.animal_pos)[_pred_mask]      # host/device boundary
+    for i in range(p_pos.shape[0]):
+        pr, pc = int(p_pos[i, 0]), int(p_pos[i, 1])
+        if pr == ar and pc == ac:
+            at_agent.append('predator')
+        elif r_start <= pr < r_end and c_start <= pc < c_end:
+            draw_icon(ax_grid, pr, pc, 'predator', zoom=0.045, s_fac=scale_factor)
+
+    o_pos = np.array(state.obs_pos)     # host/device boundary
+    obs_types = np.array(params.obs_type)
+    obs_hides = (np.array(params.obs_hides_agent)
+                 if hasattr(params, 'obs_hides_agent')
+                 else np.zeros(o_pos.shape[0], dtype=bool))
+    for i in range(o_pos.shape[0]):
+        or_, oc = int(o_pos[i, 0]), int(o_pos[i, 1])
+        if or_ == ar and oc == ac:
+            if obs_hides[i]:
+                at_agent.append('bush')
+        elif r_start <= or_ < r_end and c_start <= oc < c_end:
+            draw_icon(ax_grid, or_, oc, params.obstacle_names[obs_types[i]],
+                      zoom=0.035, s_fac=scale_factor)
+
+    _neut_mask = select_by_class(params, 'neutral')     # NumPy bool mask
+    n_pos = np.array(state.animal_pos)[_neut_mask]      # host/device boundary
+    for i in range(n_pos.shape[0]):
+        nr, nc = int(n_pos[i, 0]), int(n_pos[i, 1])
+        if nr == ar and nc == ac:
+            at_agent.append('neutral')
+        elif r_start <= nr < r_end and c_start <= nc < c_end:
+            draw_icon(ax_grid, nr, nc, 'neutral', zoom=0.035, s_fac=scale_factor)
+
+    # Composite agent icon: priority order -- predator > hiding_predator > bush > food
+    agent_icon = 'agent'
+    if 'predator'          in at_agent: agent_icon = 'agent_predator'
+    elif 'hiding_predator' in at_agent: agent_icon = 'agent_hiding_predator'
+    elif 'bush'            in at_agent: agent_icon = 'agent_bush'
+    elif 'food'            in at_agent: agent_icon = 'agent_food'
+    draw_icon(ax_grid, ar, ac, agent_icon, zoom=0.035, s_fac=scale_factor)
+
+    # ---- Minimap (inset inside ax_left) -----------------------------------------
+    from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+    ax_minimap = inset_axes(ax_left, width="80%", height="25%",
+                            loc='lower center', borderpad=2.2)
+    ax_minimap.axis('off')
+    ax_minimap.set_aspect('equal')
+    ax_minimap.set_xlim(-0.5, width - 0.5)
+    ax_minimap.set_ylim(-0.5, height - 0.5)
+    ax_minimap.invert_yaxis()
+
+    minimap_img = np.ones((height, width, 3))
+    for l_id, color_hex in location_colors.items():
+        if l_id == 0: continue
+        from matplotlib.colors import to_rgb
+        minimap_img[loc_grid == l_id] = to_rgb(color_hex)
+    ax_minimap.imshow(minimap_img,
+                      extent=(-0.5, width-0.5, height-0.5, -0.5),
+                      zorder=0, alpha=0.5)
+
+    def plot_entity_dots(positions, active_mask, color):
+        valid = positions[active_mask]
+        if len(valid) > 0:
+            ax_minimap.scatter(valid[:, 1], valid[:, 0],
+                               s=2.5, color=color, edgecolors='none',
+                               alpha=0.8, zorder=2)
+
+    plot_entity_dots(res_pos, res_active & (res_type == 0), COLORS['food'])
+    plot_entity_dots(res_pos, res_active & (res_type == 1), COLORS['hiding_predator'])
+    plot_entity_dots(p_pos, np.ones(p_pos.shape[0], dtype=bool), COLORS['predator'])
+    plot_entity_dots(o_pos, np.ones(o_pos.shape[0], dtype=bool), COLORS['rock'])
+    plot_entity_dots(n_pos, np.ones(n_pos.shape[0], dtype=bool), COLORS['neutral'])
+
+    ax_minimap.add_patch(plt.Rectangle(
+        (c_start-0.5, r_start-0.5), view_size, view_size,
+        fill=False, edgecolor=COLORS['action'],
+        linewidth=0.8, alpha=0.6, zorder=3))
+    ax_minimap.plot(ac, ar, 'o', color=COLORS['action'],
+                    markersize=3, markeredgecolor='white',
+                    markeredgewidth=0.4, zorder=4)
+    ax_left.text(0.5, 0.32, "MINIMAP", color=COLORS['text_label'],
+                 fontsize=7, fontweight='bold', ha='center',
+                 transform=ax_left.transAxes)
+
+    # ---- Left panel: interoception vitals ---------------------------------------
+    y_ptr = 0.95
+    ax_left.text(0.05, y_ptr, "INTEROCEPTION", color=COLORS['text_main'],
+                 fontsize=10, fontweight='black', transform=ax_left.transAxes)
+    y_ptr -= 0.12
+
+    sensor_map = {s['name']: s for s in sensory_data} if sensory_data else {}
+
+    # 4 bars need tighter spacing than 3
+    intero_noc_enabled = bool(getattr(params, 'interoceptive_nociception_enabled', False))
+    bar_step = 0.10 if intero_noc_enabled else 0.15
+
+    # Satiation
+    sat_real, max_sat = float(state.satiation), float(params.max_satiation)
+    sat_obs_data = sensor_map.get('Satiation', {'intensity': sat_real/max_sat})
+    sat_obs = float(sat_obs_data.get('intensity', 0))
+    draw_dual_capsule_bar(ax_left, 0.05, y_ptr, 0.9, 0.04,
+                          sat_real/max_sat, sat_obs, COLORS['satiation'],
+                          "Satiation", f"{sat_real/max_sat:.2f}", f"{sat_obs:.2f}",
+                          transform=ax_left.transAxes)
+    y_ptr -= bar_step
+
+    # Nutrition
+    nut_real, max_nut = float(state.nutrition), float(params.max_nutrition)
+    nut_obs_data = sensor_map.get('Nutrition', {'intensity': nut_real/max_nut})
+    nut_obs = float(nut_obs_data.get('intensity', 0))
+    draw_dual_capsule_bar(ax_left, 0.05, y_ptr, 0.9, 0.04,
+                          nut_real/max_nut, nut_obs, COLORS['nutrition'],
+                          "Nutrition", f"{nut_real/max_nut:.2f}", f"{nut_obs:.2f}",
+                          transform=ax_left.transAxes)
+    y_ptr -= bar_step
+
+    # Injury
+    inj_real, max_inj = float(state.injury_level), float(params.max_injury)
+    inj_obs_data = sensor_map.get('Injury', {'intensity': inj_real/max_inj})
+    inj_obs = float(inj_obs_data.get('intensity', 0))
+    draw_dual_capsule_bar(ax_left, 0.05, y_ptr, 0.9, 0.04,
+                          inj_real/max_inj, inj_obs, COLORS['injury'],
+                          "Injury", f"{inj_real/max_inj:.2f}", f"{inj_obs:.2f}",
+                          transform=ax_left.transAxes)
+    y_ptr -= bar_step
+
+    # Interoceptive Nociception (only when enabled)
+    if intero_noc_enabled:
+        intero_obs_data = sensor_map.get('Intero Nociception')
+        if intero_obs_data is not None:
+            intero_real = float(intero_obs_data.get('true_intensity',
+                                                    intero_obs_data.get('intensity', 0.0)))
+            intero_obs  = float(intero_obs_data.get('intensity', intero_real))
+        else:
+            # Fallback: recompute the convolved signal host-side
+            import numpy as _np
+            if bool(getattr(params, 'interoceptive_convolution_enabled', False)):
+                buf = _np.asarray(state.nociception_history_buffer)  # host/device boundary
+                ker = _np.asarray(params.interoceptive_kernel)
+                intero_real = float(_np.sum(buf * ker) / max(float(params.max_injury), 1e-6))
+            else:
+                intero_real = float(state.injury_level) / max_inj
+            intero_obs = intero_real
+
+        draw_dual_capsule_bar(ax_left, 0.05, y_ptr, 0.9, 0.04,
+                              intero_real, intero_obs, COLORS['intero_noc'],
+                              "Intero Noc", f"{intero_real:.2f}", f"{intero_obs:.2f}",
+                              transform=ax_left.transAxes)
+        y_ptr -= bar_step
+
+    # ... (omitted: ~12 lines of Run Context pod -- episode, scale, step text labels) ...
+
+    # ---- Right panel: exteroception pods ----------------------------------------
+    y_cursor = 0.95
+    ax_right.text(0.05, y_cursor, "EXTEROCEPTION", color=COLORS['text_main'],
+                  fontsize=11, fontweight='black', transform=ax_right.transAxes)
+    y_cursor -= 0.05
+    pod_h_default = 0.11
+
+    known_sensors = ['Olfactory', 'Extero Nociception', 'Collision', 'Visual', 'LOC']
+
+    for s_name in known_sensors:
+        s_data = sensor_map.get(s_name)
+        offline = s_data is None
+
+        # obs_only detection -- NOTE: V1 uses exact equality (== / np.array_equal),
+        # which silently fails for sub-epsilon float noise. See Pitfall 4.
+        obs_only = False
+        if s_data is not None and s_data['type'] == 'intensity':
+            obs_only = ('true_intensity' not in s_data
+                        or s_data.get('true_intensity') == s_data.get('intensity'))
+        elif s_data is not None and s_data['type'] in ('spectrum', 'diamond', 'visual_grid'):
+            tv = s_data.get('true_vector')
+            obs_only = tv is None or np.array_equal(
+                np.asarray(tv), np.asarray(s_data['vector']))  # BUG: exact equality
+
+        pod_h = 0.20 if (not offline and s_data.get('type') in ('diamond', 'visual_grid')) \
+                else pod_h_default
+        y_frame_bottom = y_cursor - pod_h
+        draw_pod_frame(ax_right, 0.05, y_frame_bottom, 0.9, pod_h, s_name,
+                       offline=offline, obs_only=obs_only,
+                       transform=ax_right.transAxes)
+
+        if not offline:
+            if s_data['type'] == 'intensity':
+                true_v = float(s_data.get('true_intensity', s_data['intensity']))
+                obs_v  = float(s_data['intensity'])
+                if obs_only:
+                    draw_dual_capsule_bar(ax_right, 0.15, y_frame_bottom+0.02,
+                                          0.7, 0.07, 0, obs_v, COLORS['action'],
+                                          state_val="--", obs_val=f"{obs_v:.2f}",
+                                          transform=ax_right.transAxes)
+                else:
+                    draw_dual_capsule_bar(ax_right, 0.15, y_frame_bottom+0.02,
+                                          0.7, 0.07, true_v, obs_v, COLORS['action'],
+                                          state_val=f"{true_v:.2f}", obs_val=f"{obs_v:.2f}",
+                                          transform=ax_right.transAxes)
+            elif s_data['type'] == 'spectrum':
+                obs_vec = np.array(s_data['vector'])
+                true_vec = np.array(s_data.get('true_vector', obs_vec))
+                max_val = max(np.max(obs_vec), np.max(true_vec))
+                scale = 1.0 if max_val <= 1.0 else (1.0 / max_val)
+                n = len(obs_vec)
+                sw = 0.7 / n
+                for i in range(n):
+                    vx = 0.15 + i * sw
+                    if not obs_only:
+                        ax_right.add_patch(plt.Rectangle(
+                            (vx, y_frame_bottom+0.02), sw*0.8, 0.07*true_vec[i]*scale,
+                            color=COLORS['action'], alpha=0.2,
+                            transform=ax_right.transAxes))
+                    ax_right.add_patch(plt.Rectangle(
+                        (vx, y_frame_bottom+0.02), sw*0.8, 0.07*obs_vec[i]*scale,
+                        color=COLORS['action'], alpha=0.9,
+                        transform=ax_right.transAxes))
+            elif s_data['type'] in ('diamond', 'visual_grid'):
+                r = int(s_data.get('range', 1))
+                num_features = int(s_data.get('num_features', 1))
+                obs_v  = np.array(s_data['vector'])
+                true_v = np.array(s_data.get('true_vector', obs_v))
+                if r <= 1:
+                    draw_categorical_visual(ax_right, 0.08, y_frame_bottom, 0.84, pod_h,
+                                            obs_v, r, num_features, true_vec=true_v,
+                                            labels=s_data.get('labels'), obs_only=obs_only,
+                                            transform=ax_right.transAxes)
+                else:
+                    origin_x, origin_y = 0.5, y_cursor - pod_h/2
+                    cell_size = 0.12 / (2*r + 1)
+                    draw_boresight_diamond(ax_right, origin_x, origin_y, cell_size,
+                                           obs_v, r, num_features, true_vec=true_v,
+                                           icons=icons, obs_only=obs_only,
+                                           transform=ax_right.transAxes)
+                if not np.any(obs_v > 0.1) and not np.any(true_v > 0.1):
+                    ax_right.text(0.5, y_cursor - pod_h/2, "NO SIGNALS",
+                                  color=COLORS['text_offline'], fontsize=6,
+                                  ha='center', transform=ax_right.transAxes)
+            elif s_data['type'] == 'text':
+                ax_right.text(0.5, y_cursor - pod_h/2,
+                              s_data.get('value_text', '--'),
+                              color=COLORS['text_main'], fontsize=10,
+                              fontweight='bold', ha='center', va='center',
+                              transform=ax_right.transAxes, fontfamily='monospace')
+
+        y_cursor -= (pod_h + 0.03)
+        if y_cursor < 0.20: break   # save room for action pod
+
+    # ---- Action pod (fixed at bottom) -------------------------------------------
+    action_y = 0.03
+    if action is not None:
+        draw_pod_frame(ax_right, 0.05, action_y, 0.9, 0.13, "Current Action",
+                       transform=ax_right.transAxes)
+        action_names = {0:"UP", 1:"RIGHT", 2:"DOWN", 3:"LEFT", 4:"REST", 5:"EAT"}
+        arrows        = {0:"↑",  1:"→",    2:"↓",    3:"←",    4:"⊝",    5:"✙"}
+        act_name = action_names.get(int(action), f"{action}")
+        arrow    = arrows.get(int(action), "•")
+        ax_right.text(0.5, action_y+0.085, act_name, color=COLORS['text_main'],
+                      fontsize=10, fontweight='black', ha='center',
+                      transform=ax_right.transAxes)
+        ax_right.text(0.5, action_y+0.025, arrow, color=COLORS['action'],
+                      fontsize=18, fontweight='black', ha='center',
+                      transform=ax_right.transAxes)
+
+    # ---- Render to numpy array ---------------------------------------------------
+    canvas.draw()
+    s, (w, h) = canvas.print_to_buffer()
+    image = np.frombuffer(s, dtype='uint8').reshape((int(h), int(w), 4))
+    return image[:, :, :3]   # drop alpha channel
+```
+
+*Source: `src/environment/renderer.py:355–731`*
+
+> **API notes.** This function runs eagerly on host — never under `jax.jit` or `jax.vmap`. The host/device boundary crossings are every `np.array(state.<field>)` call: `state.agent_pos`, `state.res_pos`, `state.res_active`, `state.animal_pos`, `state.obs_pos`, `state.satiation`, `state.nutrition`, `state.injury_level`, `state.nociception_history_buffer`, `params.grid_location_type`. After those conversions, nothing JAX-specific is used; the rest is plain NumPy + Matplotlib. `select_by_class` — see [jax-pytrees](00_jax_primer.md#jax-pytrees) and [scatter-index](00_jax_primer.md#scatter-index) — is called twice (lines 462 and 484) to slice predator and neutral positions from the unified `animal_pos` array. The `plt.close('all')` at the top of the function prevents figure accumulation across frames.
+
+---
+
+### `render_jax_state_v2` — V2 entry point (full)
+
+Short description: the V2 render function. Drop-in replacement for `render_jax_state` with the same signature. Uses `subfigures` + `subplot_mosaic` to create a named-axes layout — panels cannot overlap because each has its own `Axes` object. Shorter figure (`14x8` vs `14x10`), slim header banner across the full width, constrained layout engine.
+
+```python
+def render_jax_state_v2(state, params,
+                        episode=None, step=None, train_episode=None,
+                        dpi=100, icon_scale=1.0, action=None,
+                        sensory_data=None, info=None, icon_config=None):
+    """
+    Render a JAX EnvState to an RGB numpy array -- Dashboard V2.
+
+    Drop-in replacement for render_jax_state(); identical signature.
+    """
+    icons = _load_icons(icon_config)
+
+    height, width = int(params.height), int(params.width)
+    view_size = int(params.local_view_size)
+    agent_pos = np.array(state.agent_pos)   # host/device boundary: JAX -> NumPy
+    ar, ac = int(agent_pos[0]), int(agent_pos[1])
+
+    half_view = view_size // 2
+    r_start = max(0, min(height - view_size, ar - half_view))
+    c_start = max(0, min(width  - view_size, ac - half_view))
+    r_start, c_start = max(0, r_start), max(0, c_start)
+    r_end = min(height, r_start + view_size)
+    c_end = min(width,  c_start + view_size)
+
+    plt.close('all')
+
+    # ---- Declarative figure layout (V2 key difference) ---------------------------
+    fig = plt.figure(figsize=(14, 8), dpi=dpi, layout='constrained')
+    fig.patch.set_facecolor(COLORS['bg'])
+
+    sf_header, sf_body = fig.subfigures(2, 1, height_ratios=[0.055, 0.945])
+    sf_header.patch.set_facecolor(COLORS['bg'])
+    sf_body.patch.set_facecolor(COLORS['bg'])
+
+    sf_left, sf_center, sf_right = sf_body.subfigures(
+        1, 3, width_ratios=[1.0, 2.4, 1.0], wspace=0.02)
+    for sf in (sf_left, sf_center, sf_right):
+        sf.patch.set_facecolor(COLORS['bg'])
+
+    # Header: single axes
+    ax_hdr = sf_header.subplots(1, 1)
+    ax_hdr.set_facecolor(COLORS['bg'])
+    ax_hdr.axis('off')
+
+    # Left column: 3 vital cards (named axes)
+    left_axes = sf_left.subplot_mosaic(
+        [['satiation'], ['nutrition'], ['injury']],
+        gridspec_kw={'hspace': 0.35})
+
+    # Centre column: large arena + compact minimap
+    center_axes = sf_center.subplot_mosaic(
+        [['arena'], ['arena'], ['arena'], ['minimap']],
+        gridspec_kw={'hspace': 0.06, 'height_ratios': [1, 1, 1, 0.65]})
+
+    # Right column: sensor pods + action badge
+    right_axes = sf_right.subplot_mosaic(
+        [['olfactory'],
+         ['nociception'],
+         ['collision'],
+         ['visual'],
+         ['action']],
+        gridspec_kw={'hspace': 0.4, 'height_ratios': [1, 1, 1.4, 1.4, 0.55]})
+
+    sensor_map = {s['name']: s for s in sensory_data} if sensory_data else {}
+
+    # ---- Header banner -----------------------------------------------------------
+    disp_ep = episode if episode is not None else (train_episode or '--')
+    ax_hdr.text(0.02, 0.5, 'GridWorld · Homeostasis Dashboard',
+                transform=ax_hdr.transAxes,
+                color=COLORS['text_main'], fontsize=11, fontweight='bold', va='center')
+    ax_hdr.text(0.98, 0.5,
+                f'Ep {disp_ep}  ·  {width}x{height}  ·  Step {step or "--"}',
+                transform=ax_hdr.transAxes,
+                color=COLORS['text_label'], fontsize=9,
+                ha='right', va='center', fontfamily='monospace')
+    ax_hdr.axhline(0.0, color=COLORS['border'], linewidth=1.0)
+
+    # ---- Left panel: vital cards -------------------------------------------------
+    # All state reads are plain float() -- scalar JAX arrays auto-convert via float()
+    sat_real = float(state.satiation) / float(params.max_satiation)
+    sat_data = sensor_map.get('Satiation', {})
+    sat_obs  = float(sat_data.get('intensity', sat_real))
+    draw_vital_card(left_axes['satiation'], 'Satiation',
+                    sat_real, sat_obs,
+                    f'{sat_real:.2f}', f'{sat_obs:.2f}', COLORS['satiation'])
+
+    nut_real = float(state.nutrition) / float(params.max_nutrition)
+    nut_data = sensor_map.get('Nutrition', {})
+    nut_obs  = float(nut_data.get('intensity', nut_real))
+    draw_vital_card(left_axes['nutrition'], 'Nutrition',
+                    nut_real, nut_obs,
+                    f'{nut_real:.2f}', f'{nut_obs:.2f}', COLORS['nutrition'])
+
+    inj_real = float(state.injury_level) / float(params.max_injury)
+    inj_data = sensor_map.get('Injury', {})
+    inj_obs  = float(inj_data.get('intensity', inj_real))
+    draw_vital_card(left_axes['injury'], 'Injury',
+                    inj_real, inj_obs,
+                    f'{inj_real:.2f}', f'{inj_obs:.2f}', COLORS['injury'])
+
+    # ---- Centre panel: arena -----------------------------------------------------
+    ax_arena = center_axes['arena']
+    ax_arena.set_facecolor('#ECFDF5')
+    for spine in ax_arena.spines.values():
+        spine.set_edgecolor(COLORS['arena_border'])
+        spine.set_linewidth(2.0)
+    ax_arena.set_xticks([])
+    ax_arena.set_yticks([])
+    ax_arena.set_xlim(c_start - 0.5, c_end - 0.5)
+    ax_arena.set_ylim(r_start - 0.5, r_end - 0.5)
+    ax_arena.invert_yaxis()
+    ax_arena.set_aspect('equal')
+    ax_arena.set_title('ARENA -- LOCAL VIEW',
+                        fontsize=7, color=COLORS['text_label'],
+                        fontweight='bold', pad=4)
+
+    # Grid lines + terrain tiles
+    # ... (omitted: ~15 lines of grid vlines/hlines + terrain patches -- identical logic to V1) ...
+
+    # Entity drawing -- host/device boundary at np.array() calls
+    scale_factor = (4.0 / view_size) * icon_scale
+
+    def draw_icon(r, c, icon_key, zoom=0.038, s_fac=1.0):
+        # ... (omitted: 12 lines -- identical fallback logic to V1, draws on ax_arena) ...
+        pass
+
+    res_pos    = np.array(state.res_pos)        # host/device boundary
+    res_type   = np.array(params.res_type)
+    res_active = np.array(state.res_active)     # host/device boundary
+    _pred_mask = select_by_class(params, 'predator')          # NumPy bool mask
+    p_pos      = np.array(state.animal_pos)[_pred_mask]       # host/device boundary
+    o_pos      = np.array(state.obs_pos)        # host/device boundary
+    obs_types  = np.array(params.obs_type)
+    obs_hides  = (np.array(params.obs_hides_agent)
+                  if hasattr(params, 'obs_hides_agent')
+                  else np.zeros(o_pos.shape[0], dtype=bool))
+    _neut_mask = select_by_class(params, 'neutral')           # NumPy bool mask
+    n_pos      = np.array(state.animal_pos)[_neut_mask]       # host/device boundary
+
+    at_agent = []
+    # ... (omitted: ~45 lines of entity iteration -- identical co-occupancy logic to V1) ...
+
+    agent_icon = 'agent'
+    if 'predator'          in at_agent: agent_icon = 'agent_predator'
+    elif 'hiding_predator' in at_agent: agent_icon = 'agent_hiding_predator'
+    elif 'bush'            in at_agent: agent_icon = 'agent_bush'
+    elif 'food'            in at_agent: agent_icon = 'agent_food'
+    draw_icon(ar, ac, agent_icon, zoom=0.035, s_fac=scale_factor)
+
+    # ---- Centre panel: minimap ---------------------------------------------------
+    ax_mini = center_axes['minimap']   # named axes -- no inset_axes needed
+    _style_card(ax_mini, facecolor='card_bg')
+    ax_mini.set_xlim(-0.5, width - 0.5)
+    ax_mini.set_ylim(-0.5, height - 0.5)
+    ax_mini.invert_yaxis()
+    ax_mini.set_aspect('equal')
+    ax_mini.set_title('MINIMAP', fontsize=6, color=COLORS['text_label'],
+                      fontweight='bold', pad=3)
+
+    minimap_img = np.ones((height, width, 3))
+    for l_id, color_hex in location_colors.items():
+        if l_id != 0:
+            minimap_img[loc_grid == l_id] = to_rgb(color_hex)
+    ax_mini.imshow(minimap_img,
+                   extent=(-0.5, width-0.5, height-0.5, -0.5),
+                   zorder=0, alpha=0.5)
+
+    # ... (omitted: ~15 lines of minimap scatter dots + viewport rectangle -- identical to V1) ...
+
+    # ---- Right panel: sensor pods (V2 uses named axes per pod) ------------------
+    pod_map = [
+        ('olfactory',   'Olfactory'),
+        ('nociception', 'Extero Nociception'),
+        ('collision',   'Collision'),
+        ('visual',      'Visual'),
+    ]
+
+    for ax_key, s_name in pod_map:
+        ax = right_axes[ax_key]
+        s_data = sensor_map.get(s_name)
+
+        if s_data is None:
+            draw_offline_card(ax, s_name)
+            continue
+
+        s_type = s_data.get('type', 'spectrum')
+
+        if s_type == 'intensity':
+            ti = s_data.get('true_intensity')
+            # V2 fix: use abs() < 1e-6 instead of exact == (fixes Pitfall 4)
+            obs_only = (ti is None
+                        or abs(float(ti) - float(s_data['intensity'])) < 1e-6)
+            obs_v  = float(s_data['intensity'])
+            true_v = float(s_data.get('true_intensity', obs_v))
+            draw_intensity_pod(ax, s_name,
+                               min(1.0, obs_v), min(1.0, true_v),
+                               f'{obs_v:.2f}', f'{true_v:.2f}',
+                               obs_only=obs_only)
+
+        elif s_type == 'spectrum':
+            obs_vec  = np.asarray(s_data['vector'])
+            tv       = s_data.get('true_vector')
+            true_vec = np.asarray(tv) if tv is not None else obs_vec
+            # V2 fix: np.allclose instead of np.array_equal (fixes Pitfall 4)
+            obs_only = tv is None or np.allclose(obs_vec, true_vec, atol=1e-6)
+            draw_spectrum_pod(ax, s_name, obs_vec, true_vec, obs_only=obs_only)
+
+        elif s_type in ('diamond', 'visual_grid'):
+            obs_vec      = np.asarray(s_data['vector'])
+            tv           = s_data.get('true_vector')
+            true_vec     = np.asarray(tv) if tv is not None else obs_vec
+            obs_only     = tv is None or np.allclose(obs_vec, true_vec, atol=1e-6)
+            r_range      = int(s_data.get('range', 1))
+            num_features = int(s_data.get('num_features', 1))
+            draw_categorical_pod(ax, s_name, obs_vec, true_vec,
+                                 r_range, num_features,
+                                 labels=s_data.get('labels'),
+                                 obs_only=obs_only)
+
+        elif s_type == 'text':
+            _style_card(ax)
+            _card_title(ax, s_name)
+            ax.text(0.5, 0.48, s_data.get('value_text', '--'),
+                    transform=ax.transAxes, color=COLORS['text_main'],
+                    fontsize=10, fontweight='bold',
+                    ha='center', va='center', fontfamily='monospace')
+        else:
+            draw_offline_card(ax, s_name)
+
+    draw_action_pod(right_axes['action'], action)
+
+    # ---- Render to numpy array ---------------------------------------------------
+    canvas = FigureCanvas(fig)
+    canvas.draw()
+    buf, (w, h) = canvas.print_to_buffer()
+    image = np.frombuffer(buf, dtype='uint8').reshape((int(h), int(w), 4))
+    plt.close(fig)
+    return image[:, :, :3]   # drop alpha channel
+```
+
+*Source: `src/environment/renderer_v2.py:216–540`*
+
+> **API notes.** Host-side only. `subfigures` + `subplot_mosaic` is a Matplotlib 3.4+ API that assigns each panel its own `Axes` object at creation time — no y-cursor arithmetic, no `inset_axes`, no overlap risk. The `layout='constrained'` flag (Matplotlib 3.5+) handles padding automatically; it can warn when axes are too small for their decorators (Pitfall 6). Unlike V1, V2 closes the figure (`plt.close(fig)`) at the end rather than relying on the global `plt.close('all')` at the start of the next call. The `obs_only` detection uses `abs() < 1e-6` (scalar) and `np.allclose(..., atol=1e-6)` (vector) — the fix for V1's exact-equality bug (Pitfall 4). No JAX is used after the `np.array(state.agent_pos)` boundary crossing at the top.
+
+---
+
+### `save_jax_video` — streaming video export
+
+Short description: writes a list of `(H, W, 3)` uint8 NumPy frames to an MP4 file using `imageio.get_writer` (frame-by-frame streaming). The `quiet=True` flag silences imageio's stdout/stderr by redirecting file descriptors to `/dev/null` at the OS level — not just Python-level redirection.
+
+```python
+def save_jax_video(frames, output_path, fps=5, quiet=False):
+    """
+    Save a list of RGB frames as an MP4 video.
+
+    Args:
+        frames: List of numpy arrays (H, W, 3)
+        output_path: Path to save the video
+        fps: Frames per second
+        quiet: Suppress output messages
+    """
+    import os
+    import imageio
+
+    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+
+    if quiet:
+        import sys
+        sys.stdout.flush()
+        sys.stderr.flush()
+        old_stdout_fd = os.dup(sys.stdout.fileno())
+        old_stderr_fd = os.dup(sys.stderr.fileno())
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+            os.dup2(devnull, sys.stderr.fileno())
+            os.close(devnull)
+            with imageio.get_writer(output_path, fps=fps) as writer:
+                for frame in frames:
+                    writer.append_data(frame)
+        finally:
+            os.dup2(old_stdout_fd, sys.stdout.fileno())
+            os.dup2(old_stderr_fd, sys.stderr.fileno())
+            os.close(old_stdout_fd)
+            os.close(old_stderr_fd)
+    else:
+        with imageio.get_writer(output_path, fps=fps) as writer:
+            for frame in frames:
+                writer.append_data(frame)
+        print(f"Saved video to {output_path}")
+```
+
+*Source: `src/environment/renderer.py:734–773`*
+
+> **API notes.** Host-side only — no JAX. The production implementation uses `imageio.get_writer` (streaming, one frame at a time, constant memory), unlike the legacy `grid_world.py` copy which uses `imageio.mimsave` (loads all frames into memory at once). `renderer_v2.py` re-exports `save_jax_video` directly from `renderer.py` (`renderer_v2.py:29`) — there is a single implementation. The fd-level redirect in `quiet` mode (`os.dup`/`os.dup2`) silences C-library output that Python-level `sys.stdout` capture cannot catch — relevant because imageio's ffmpeg subprocess writes directly to fd 1/2.
+
+---
+
+### V2 card/pod helpers (signatures + instructive core)
+
+#### `_hbar` — OBS fill bar + REAL tick
+
+```python
+def _hbar(ax, bar_left, bar_bottom, bar_width, bar_height,
+          obs_pct, real_pct, color, obs_only=False):
+    """Horizontal OBS bar + thin vertical REAL tick marker."""
+    # Trough
+    ax.add_patch(matplotlib.patches.FancyBboxPatch(
+        (bar_left, bar_bottom), bar_width, bar_height,
+        boxstyle='round,pad=0,rounding_size=0.02',
+        facecolor='#F3F4F6', edgecolor='none',
+        transform=ax.transAxes, zorder=0))
+    # OBS fill
+    obs_w = max(0.02, bar_width * min(1.0, obs_pct))
+    ax.add_patch(matplotlib.patches.FancyBboxPatch(
+        (bar_left, bar_bottom), obs_w, bar_height,
+        boxstyle='round,pad=0,rounding_size=0.02',
+        facecolor=color, edgecolor='none', alpha=0.85,
+        transform=ax.transAxes, zorder=2))
+    # REAL tick (vertical line at real_pct position)
+    if not obs_only:
+        tick_x = bar_left + bar_width * min(1.0, real_pct)
+        ax.plot([tick_x, tick_x],
+                [bar_bottom - 0.06, bar_bottom + bar_height + 0.06],
+                color=COLORS['text_main'], linewidth=1.8,
+                transform=ax.transAxes, zorder=3,
+                solid_capstyle='round')
+```
+
+*Source: `src/environment/renderer_v2.py:58–81`*
+
+#### `draw_vital_card` — interoception vital card
+
+```python
+def draw_vital_card(ax, label, real_pct, obs_pct,
+                    real_val_str, obs_val_str, color):
+    """Interoception vital: label + big OBS value + bar + REAL tick + delta."""
+    _style_card(ax)
+    ax.text(0.05, 0.93, label.upper(),
+            transform=ax.transAxes, color=COLORS['text_label'],
+            fontsize=7, fontweight='bold', va='top')
+    ax.text(0.95, 0.93, obs_val_str,
+            transform=ax.transAxes, color=color,
+            fontsize=14, fontweight='bold', ha='right', va='top')
+
+    _hbar(ax, 0.05, 0.40, 0.90, 0.26, obs_pct, real_pct, color, obs_only=False)
+
+    delta = obs_pct - real_pct
+    sign = '+' if delta >= 0 else ''
+    ax.text(0.05, 0.08,
+            f"real {real_val_str}  ·  delta {sign}{delta:.2f}",
+            transform=ax.transAxes,
+            color=COLORS['text_label'], fontsize=6, va='bottom')
+```
+
+*Source: `src/environment/renderer_v2.py:86–104`*
+
+#### `draw_intensity_pod` — extero nociception pod
+
+```python
+def draw_intensity_pod(ax, label, obs_pct, real_pct,
+                       obs_val_str, real_val_str, obs_only=False):
+    """Extero nociception: same layout as vital card but uses action color."""
+    _style_card(ax)
+    _card_title(ax, label, obs_only=obs_only)
+    ax.text(0.95, 0.93, obs_val_str,
+            transform=ax.transAxes, color=COLORS['action'],
+            fontsize=12, fontweight='bold', ha='right', va='top')
+
+    _hbar(ax, 0.05, 0.40, 0.90, 0.26, obs_pct, real_pct,
+          COLORS['action'], obs_only=obs_only)
+
+    if obs_only:
+        ax.text(0.05, 0.08, 'obs only -- no noise-free reference',
+                transform=ax.transAxes,
+                color=COLORS['text_offline'], fontsize=5.5, va='bottom')
+    else:
+        delta = obs_pct - real_pct
+        sign = '+' if delta >= 0 else ''
+        ax.text(0.05, 0.08,
+                f"real {real_val_str}  ·  delta {sign}{delta:.2f}",
+                transform=ax.transAxes,
+                color=COLORS['text_label'], fontsize=6, va='bottom')
+```
+
+*Source: `src/environment/renderer_v2.py:115–137`*
+
+#### `draw_spectrum_pod` — olfactory 5-channel bars
+
+```python
+def draw_spectrum_pod(ax, label, obs_vec, true_vec, obs_only=False):
+    """Olfactory 5-channel spectrum bars."""
+    _style_card(ax)
+    _card_title(ax, label, obs_only=obs_only)
+
+    obs_vec  = np.asarray(obs_vec,  dtype=float)
+    true_vec = np.asarray(true_vec, dtype=float)
+    n = len(obs_vec)
+    all_vals = np.concatenate([obs_vec, true_vec]) if not obs_only else obs_vec
+    max_val  = float(np.max(all_vals)) if np.max(all_vals) > 0.01 else 1.0
+    scale    = 1.0 / max_val
+
+    bar_x, bar_y = 0.06, 0.14
+    bar_w, bar_h = 0.88, 0.65
+    sw = bar_w / n
+    for i in range(n):
+        vx = bar_x + i * sw
+        if not obs_only:
+            ax.add_patch(plt.Rectangle(
+                (vx, bar_y), sw * 0.80, bar_h * float(true_vec[i]) * scale,
+                facecolor=COLORS['action'], alpha=0.15,
+                transform=ax.transAxes, zorder=1))
+        ax.add_patch(plt.Rectangle(
+            (vx, bar_y), sw * 0.80, bar_h * float(obs_vec[i]) * scale,
+            facecolor=COLORS['action'], alpha=0.9,
+            transform=ax.transAxes, zorder=2))
+```
+
+*Source: `src/environment/renderer_v2.py:140–165`*
+
+#### `draw_categorical_pod` — Collision/Visual wrapper
+
+```python
+def draw_categorical_pod(ax, label, obs_vec, true_vec,
+                          r, num_features, labels=None, obs_only=False):
+    """Collision / Visual categorical grid, using draw_categorical_visual."""
+    _style_card(ax)
+    _card_title(ax, label, obs_only=obs_only)
+    draw_categorical_visual(
+        ax, 0.05, 0.08, 0.90, 0.78,
+        obs_vec, r, num_features,
+        true_vec=true_vec, labels=labels,
+        obs_only=obs_only,
+        transform=ax.transAxes)
+
+    if not np.any(np.asarray(obs_vec) > 0.1):
+        ax.text(0.5, 0.50, 'NO SIGNALS',
+                transform=ax.transAxes, color=COLORS['text_offline'],
+                fontsize=6, ha='center', va='center')
+```
+
+*Source: `src/environment/renderer_v2.py:168–185`*
+
+#### `draw_action_pod` — action badge
+
+```python
+def draw_action_pod(ax, action):
+    """Small action badge at bottom of right column."""
+    _style_card(ax)
+    ax.text(0.05, 0.93, 'CURRENT ACTION',
+            transform=ax.transAxes, color=COLORS['text_label'],
+            fontsize=6.5, fontweight='bold', va='top')
+
+    action_names = {0: 'UP', 1: 'RIGHT', 2: 'DOWN', 3: 'LEFT',
+                    4: 'REST', 5: 'EAT'}
+    arrows        = {0: '↑', 1: '→', 2: '↓', 3: '←', 4: '⊝', 5: '✙'}
+
+    if action is not None:
+        act_name = action_names.get(int(action), str(action))
+        arrow    = arrows.get(int(action), '•')
+        ax.text(0.5, 0.66, act_name,
+                transform=ax.transAxes, color=COLORS['text_main'],
+                fontsize=11, fontweight='black', ha='center', va='center')
+        ax.text(0.5, 0.20, arrow,
+                transform=ax.transAxes, color=COLORS['action'],
+                fontsize=17, fontweight='black', ha='center', va='center')
+    else:
+        ax.text(0.5, 0.48, '--',
+                transform=ax.transAxes, color=COLORS['text_offline'],
+                fontsize=12, ha='center', va='center')
+```
+
+*Source: `src/environment/renderer_v2.py:188–211`*
+
+> **API notes (V2 card helpers).** All V2 card/pod functions take `ax` as their first argument and use `transform=ax.transAxes` internally — no coordinate arithmetic outside the function. `_style_card` sets background and spine style; `_card_title` writes the title with `(OBS ONLY)` or `OFFLINE` suffix. `draw_categorical_pod` is a thin wrapper that delegates to the shared `draw_categorical_visual` from `renderer.py`, passing fixed margins (`0.05, 0.08, 0.90, 0.78`) tuned for the V2 axes geometry.
