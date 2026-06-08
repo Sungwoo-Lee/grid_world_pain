@@ -4,7 +4,7 @@ aliases: [environment_summary]
 
 # GridWorld Pain — Environment Reference
 
-> **Status**: Complete | **Primary source**: `src/environment/` | **Last updated**: 2026-04-20
+> **Status**: Complete | **Primary source**: `src/environment/` | **Last updated**: 2026-06-08
 
 GridWorld Pain is a JAX-based RL environment for **Interoceptive AI** research — agents must balance external reward-seeking with internal homeostatic regulation (hunger/satiation, injury avoidance). All environment logic is pure-functional; all parallelism uses `jax.vmap`.
 
@@ -35,7 +35,7 @@ GridWorld Pain is a JAX-based RL environment for **Interoceptive AI** research �
 
 **`EnvState` vs `EnvParams`**: `EnvState` is mutable per-step data (positions, timers, body values); `EnvParams` is immutable per-episode configuration. Both are Flax `@struct.dataclass` pytrees.
 
-**Static fields** (`struct.field(pytree_node=False)`): integer/bool/string fields in `EnvParams` that determine array shapes and JIT trace structure. These are treated as compile-time constants — changing them forces XLA recompilation. Examples: `height`, `width`, `placement_mode`, `use_homeostatic_reward`, `predator_enabled`, `visual_sensor_enabled`.
+**Static fields** (`struct.field(pytree_node=False)`): integer/bool/string fields in `EnvParams` that determine array shapes and JIT trace structure. These are treated as compile-time constants — changing them forces XLA recompilation. Examples: `height`, `width`, `placement_mode`, `use_homeostatic_reward`, `animal_is_damaging`, `visual_sensor_enabled`.
 
 **Immutability**: never mutate state in-place. Always use `.replace(**kwargs)` (aliased as `._replace(...)`) to produce a new object. This is enforced by Flax's struct semantics.
 
@@ -43,7 +43,7 @@ GridWorld Pain is a JAX-based RL environment for **Interoceptive AI** research �
 
 **`vmap` axis conventions**: `ParallelEnv` vmaps over the leading axis (axis 0 = env index). `EnvState` batched over N envs has all arrays with a leading `[N, ...]` shape. `EnvParams` is broadcast (not batched) — single copy shared across all envs.
 
-**PRNG key threading**: each `EnvState.key` is an independent PRNG stream. `jax_step` splits it into 5 sub-keys per step and advances the main key forward. This ensures reproducibility: same initial key + same actions = same episode.
+**PRNG key threading**: each `EnvState.key` is an independent PRNG stream. `jax_step` splits it into 6 sub-keys per step (`key, respawn_key, hunt_key, wander_key, damage_key, property_key`) and advances the main key forward. `jax_reset` splits 5-way (`key, agent_key, placement_key, body_key, property_key`) and derives an additional `animal_episode_key` via `jax.random.fold_in(property_key, 0xAE1)`. This ensures reproducibility: same initial key + same actions = same episode. (`core.py:372`, `core.py:781–783`)
 
 ---
 
@@ -52,7 +52,7 @@ GridWorld Pain is a JAX-based RL environment for **Interoceptive AI** research �
 ```
 jax_step(state, action, params)
 │
-├── 0. Split PRNG key → respawn_key, predator_key, neutral_key, damage_key
+├── 0. Split PRNG key → key, respawn_key, hunt_key, wander_key, damage_key, property_key
 │
 ├── 1. RESOURCE REGEN  ──────────────────────────────────────────────────────
 │       update_resources(res_active, res_reg_timer, res_cons_count, params)
@@ -64,24 +64,20 @@ jax_step(state, action, params)
 │       READ:  agent_pos, action, obs_pos, obs_blocking
 │       WRITE: agent_pos, last_action; produces: just_collided
 │
-├── 3. PREDATOR UPDATE  ─────────────────────────────────────────────────────
-│       update_predators(..., new_agent_pos, ...)
-│       READ:  pred_pos, pred_state, pred_stamina, pred_move_timer,
-│              pred_attack_timer, new_agent_pos, obs_pos, obs_hides_agent
-│       WRITE: pred_pos, pred_state, pred_stamina, pred_move_timer,
-│              pred_attack_timer
-│
-├── 3.5 NEUTRAL ANIMAL UPDATE  ──────────────────────────────────────────────
-│       update_neutral_animals(neutral_pos, neutral_move_timer, ...)
-│       READ:  neutral_pos, neutral_move_timer
-│       WRITE: neutral_pos, neutral_move_timer
+├── 3. UNIFIED ANIMAL UPDATE  ───────────────────────────────────────────────
+│       update_animals(state, new_agent_pos, params, hunt_key, wander_key)
+│       READ:  animal_pos, animal_state, animal_stamina, animal_move_timer,
+│              animal_attack_timer, new_agent_pos, obs_pos, obs_hides_agent
+│       WRITE: animal_pos, animal_state, animal_stamina, animal_move_timer,
+│              animal_attack_timer
+│       (hunt subset uses hunt_key; wander subset uses wander_key)
 │
 ├── 4. INTERACTION  ──────────────────────────────────────────────────────────
-│       resource overlaps, predator overlaps, obstacle collision/overlap
-│       READ:  res_pos/active/type, pred_pos, obs_pos, obs_blocking,
+│       resource overlaps, animal overlaps, obstacle collision/overlap
+│       READ:  res_pos/active/type, animal_pos, obs_pos, obs_blocking,
 │              obs_nociception, new_agent_pos, just_collided
-│       COMPUTES: ate_food, total_damage (res+pred+obs), collision_noc
-│       WRITE: res_cons_count, res_active, res_reg_timer, pred_attack_timer
+│       COMPUTES: ate_food, total_damage (res+animal+obs), collision_noc
+│       WRITE: res_cons_count, res_active, res_reg_timer, animal_attack_timer
 │
 ├── 5. BODY UPDATE  ──────────────────────────────────────────────────────────
 │       update_body(state, info, params)
@@ -113,7 +109,7 @@ Authoritative sensor order (from `get_observation_breakdown()` in `sensor.py`).
 | `[0]` | Injury | `injury_observable` | 1 | `[0, 1]` |
 | `[1]` | Nutrition | `nutrition_observable` | 1 | `[0, 1]` |
 | `[2]` | Satiation | Always | 1 | `[0, 1]` |
-| `[3]` | Interoceptive Nociception | `intero_enabled` | 1 | `[0, 1]` |
+| `[3]` | Interoceptive Nociception | `interoceptive_nociception_enabled` | 1 | `[0, 1]` |
 | `[4]` | Extero Nociception | `nociception_enabled` | 1 | `[0, 1]` |
 | `[5:5+V]` | Olfaction | `olfactory_enabled` | V=`olfactory_vector_size` | `[0, ∞)` |
 | `[5+V:5+V+C]` | Collision | Always | C=`2r²+2r+1` | `{0, 1}` |
@@ -123,6 +119,8 @@ Authoritative sensor order (from `get_observation_breakdown()` in `sensor.py`).
 
 Default config observation dimension (all sensors enabled, `r=1`, `vis_r=0`, `action_dim=6`):
 - 1 + 1 + 1 + 1 + 5 + 5 + 6 + 8 + 0 = **28 dims** (location disabled by default)
+
+Olfaction pools 3 chemical signals: `res_chem + animal_chem + obs_chem` (resources, all animals unified, obstacles). The perceptual-noise system has 10 configured modalities; noise arrays are zero-padded to a fixed static shape of 13 for JIT stability (`state.py:222–226`). `interoceptive_nociception` sits at index 3 in the modality order. `injury` and `nutrition` noise are silenced by default (σ_base=0.0). See [10](10_perceptual_noise.md).
 
 ---
 
@@ -136,7 +134,6 @@ Quick-lookup for YAML path → `EnvParams` field:
 | `environment.width` | `width` | int (static) |
 | `environment.max_steps` | `max_steps` | int (static) |
 | `environment.placement.mode` | `placement_mode` | str (static) |
-| `environment.predator_enabled` | `predator_enabled` | bool (static) |
 | `environment.rest_action_enabled` | `rest_action_enabled` | bool (static) |
 | `environment.eat_action_enabled` | `eat_action_enabled` | bool (static) |
 | `environment.random_start_pos` | `random_start_pos` | bool (static) |
@@ -186,7 +183,7 @@ A: **No — latent bug.** The flag only sets `termination_reason=3` but does not
 A: Agent placement at reset does NOT participate in the entity occupancy mask. A `random_start_pos=True` agent can overlap any entity. Contact effects fire on step 0. See [03](03_entity_placement.md#clarifications--faq).
 
 **Q: Why can two entities of the same kind land on the same cell after step 0?**
-A: Resource respawn (`core.py:300-305`) doesn't check occupancy. Predators and neutrals also have no inter-entity collision. Placement uniqueness is only enforced at reset. See [03](03_entity_placement.md#clarifications--faq), [07](07_predator_ai.md#clarifications--faq), [08](08_resources_and_obstacles.md#clarifications--faq).
+A: Resource respawn (`core.py:300-305`) doesn't check occupancy. Animals also have no inter-entity collision. Placement uniqueness is only enforced at reset. See [03](03_entity_placement.md#clarifications--faq), [07](07_predator_ai.md#clarifications--faq), [08](08_resources_and_obstacles.md#clarifications--faq).
 
 **Q: Why does my YAML key `property` do nothing for a resource?**
 A: All entities now use `properties` (plural) as the canonical key. If you use the legacy `property` key, it still works but emits a `DeprecationWarning`. A missing key on any entity now hard-fails with a `ValueError`. See [02](02_config_schema.md#per-entity-olfactory-yaml-keys).
@@ -214,3 +211,15 @@ A: No. Index into the batch first (`jax.tree.map(lambda x: x[i], batched)`) then
 
 **Q: How do I confirm my observation layout matches what the noise system expects?**
 A: Call `get_observation_breakdown(params)` after loading config. This is the single source of truth for observation dim mapping, and it's what the noise system uses to build `modality_map`. See [09](09_sensors_and_observation.md#clarifications--faq).
+
+**Q: Which renderer file should I use?**
+A: `renderer.py` (V1) is the production default used by all eval and record scripts. `renderer_v2.py` (V2) is an experimental card/pod layout that re-exports `save_jax_video` from V1 unchanged. `grid_world.py` is a legacy renderer copy retained for reference — it does not contain step logic. See [12](12_renderer.md).
+
+**Q: What are the info dict keys returned by `jax_step`?**
+A: Core keys include: `ate_food`, `damage`, `damage_hiding_predator`, `damage_predator`, `damage_obstacle`, `rested`, `hit_hiding_predator`, `hit_predator`, `hit_neutral`, `agent_in_bush`, `termination_reason`, `reward_homeostatic`, `reward_extrinsic`, `drive_hunger`, `drive_injury`, `metabolic_drain`, `event_collided`, `dist_to_food`, `dist_to_pred`, `dist_to_neutral`, `dist_to_hiding_predator`, `dist_per_predator`, `dist_per_neutral`, `dist_per_animal`. Note: `interacted_this_step` is a local variable inside `jax_step`, NOT an info key. `info['termination_reason']` is unreliable when `with_nutrition`/`with_injury` are both disabled (codes 2 and 4 never fire). See [04](04_step_loop.md).
+
+**Q: What is the canonical entity concat order used for placement / position-splitting?**
+A: `[resources | predator-class animals | obstacles | neutral-class animals]` — verified at `core.py:831` and `core.py:886–889`. This order is preserved byte-for-byte across `jax_reset` and `update_animals`.
+
+**Q: How do I access positions of just predators or just neutrals?**
+A: Use the host-side helper `select_by_class(params, 'predator')` / `select_by_class(params, 'neutral')` (defined in `state.py:7–28`) to get a boolean NumPy mask, then index `state.animal_pos`. Inside JIT use `params.predator_indices` / `params.neutral_indices` (static index tuples).
