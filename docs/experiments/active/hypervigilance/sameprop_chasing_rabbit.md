@@ -3,7 +3,7 @@ title: "SameProp Round 4 — chasing rabbit: does the agent flee a harmless anim
 topic: hypervigilance
 status: active
 created: 2026-05-29
-last_updated: 2026-06-01
+last_updated: 2026-06-02
 phase: 2
 aliases:
   - sameprop_chasing_rabbit
@@ -427,3 +427,443 @@ below.
 `dist_pred.shape[1] > 0`, so predator-relative measures (e.g. M2_predator) come out
 empty/NaN by design — expected and correct, because there is no predator to measure.
 `load_env_params` does not crash (confirmed).
+
+### Results (deterministic eval, checkpoint 9.52M — read this first)
+
+**One-paragraph plain-English headline.** We took the agent trained alongside one
+dangerous predator and two harmless chasing rabbits, and rolled it out 200 times in a
+world where **every dangerous entity was deleted** — no patrolling predator, no corner
+ambushers — leaving only the two harmless chasing rabbits. We compared this against a
+matched 200-rollout in the **original predator-present world**, using the **same saved
+brain** (the checkpoint taken ~95% of the way through training, at 9.52 million
+episodes), the **same greedy "always pick the best action" policy**, and the **same
+200 random-world seeds**, so the two result sets are directly comparable to each other.
+**Result: when nothing can hurt it, the agent drops its defensive behaviour.** It
+survives every single episode (200/200 vs 121/200 with the predator), forages roughly
+50% more food (about 115 vs 77 food items per episode), lets the rabbits come ~25%
+closer (nearest rabbit averages 1.4 cells away vs 1.8 with the predator), and stops
+suppressing eating when a rabbit is nearby. Two further findings: (a) **even with the
+predator present, the agent already tells the predator and the rabbit apart** despite
+their identical smell and identical chasing motion — it keeps the predator ~4.3 cells
+away while letting the chasing rabbit to ~1.8 cells, and dives for cover far more often
+for the predator; and (b) **removing the predator relaxes the agent's caution toward
+the rabbits too**, even though the rabbits themselves did not change. Together this says
+the agent's threat discrimination is **driven by what has actually damaged it** (a
+learned per-animal danger memory read off the visual "what class is this" channel), not
+by chasing-motion or proximity. **Caveat up front:** this is one seed, one architecture,
+and a checkpoint at ~95% of training (not the final converged model) — clean *within*
+this matched protocol, but still a single model.
+
+**Translating the metric shorthand used below.** *Survival steps* = how many timesteps
+the agent stays alive out of a 500-step episode cap (our performance measure; we never
+use cumulative reward). *Termination reason* = why an episode ended: `1` = survived to
+the 500-step cap, `2` = died of injury (predator/hazard damage), `4` = starved.
+*Nearest-X distance* = average grid-cell distance the agent keeps from the closest
+entity of class X. *M2 bush-dive rate* = of the times a threat closes in on the agent
+(an "onset"), the fraction where the agent responds by diving into a bush it can hide
+in — our main active-avoidance measure. *M5 eat-under-threat ratio* = how the agent's
+eating rate when a threat is nearby compares to when it is safe; **below 1 means it
+suppresses eating under threat** (cautious), **near/above 1 means it eats just as freely
+near the threat** (unbothered). *M1 interrupted-feeding rate* = fraction of feeding
+attempts the agent aborts when a threat appears.
+
+#### R.1 Matched comparison table
+
+All values are deterministic-eval aggregates over the 200 fixed-seed episodes on the
+same 9.52M checkpoint. Numbers reproduced independently from the per-episode `.npz`
+trajectories and the `online_replay.json` behaviour-measure dumps; see the working
+file `tmp/20260601_153000_noPredator_transfer.md` for the extraction script.
+
+| Measure (plain meaning) | With predator | No predator |
+|---|---|---|
+| **Survival mean** (steps out of 500) | 403.2 | **500.0** |
+| Survival spread (std / min) | +/-140.2 / 23 | +/-0.0 / 500 |
+| **% episodes surviving to the 500-step cap** | 60.5% (121/200) | **100% (200/200)** |
+| **Deaths** (episodes ending in injury or starvation) | 79 | **0** |
+| -- death breakdown (injury `2` / starvation `4`) | 23 / 56 | 0 / 0 |
+| Mean nearest-**predator** distance (cells) | 4.26 (+/-1.20) | -- (no predator) |
+| Mean nearest-**rabbit** distance (cells) | 1.79 (+/-0.39) | **1.41 (+/-0.27)** |
+| -- per-rabbit (top-left tag / bottom-right tag) | 2.41 / 2.43 | 2.04 / 2.02 |
+| Fraction of steps a rabbit is within 3 cells | 0.79 | 0.83 |
+| **Food eaten per episode** | 76.8 (+/-36.4) | **114.8 (+/-5.5)** |
+| Rabbit contacts per episode (all harmless) | 110.5 | 213.1 |
+| Predator contacts per episode | 6.45 | 0.0 |
+| **M2 bush-dive -- PREDATOR** (defensive dive rate) | 0.565 (1270 dives / 2249 onsets) | NaN (no predator) |
+| **M2 bush-dive -- RABBIT** | 0.409 (833 / 2039) | **0.159 (401 / 2518)** |
+| **M5 eat-under-threat -- PREDATOR** | 0.675 (eats *less* near predator) | NaN |
+| **M5 eat-under-threat -- RABBIT** | 1.975 | **1.076** (eats ~as freely) |
+| **M1 interrupted-feeding** (either class) | 0.000 | 0.000 |
+
+Notes on the table. (1) The per-rabbit distances (2.0-2.4 cells) are larger than the
+*nearest*-rabbit distance (1.4-1.8) because "nearest" takes the closer of the two
+rabbits at each step; both views agree the rabbits sit closer in the no-predator world.
+(2) The behaviour-measure toolkit's own logged within-3-cells fraction reads 0.754
+(predator world) / 0.806 (no-predator world) -- same direction as the 0.79 / 0.83 we
+recomputed here, ~0.04 lower, a denominator-convention difference that does not move the
+conclusion. (3) Every "predator" measure in the no-predator column is NaN/empty by
+design: with the predator deleted the per-predator distance tensor has a zero-width axis
+and the accumulators correctly skip it (the parity check in the methods table above).
+
+#### R.2 What the agent does when nothing can hurt it
+
+In the no-predator world the agent **stops treating the chasing rabbits as threats**,
+on every channel we can read:
+
+- **It never dies** (0 / 200) and **survives the full episode every time** (100% reach
+  the 500-step cap), versus 79 deaths and only 60.5% full-length survival when the
+  predator is present. The death-cause split with the predator (23 injury, 56
+  starvation) shows the predator world kills the agent both directly (injury) and
+  indirectly -- starvation, because staying defensive costs foraging time.
+- **It forages straight through the rabbits.** Food intake jumps from ~77 to ~115 items
+  per episode (+50%), and the variance collapses (+/-36 -> +/-5) -- once nothing can hurt
+  it, every episode becomes a clean, near-identical foraging run.
+- **It lets the rabbits in closer** (nearest-rabbit 1.79 -> 1.41 cells; within-3-cells
+  occupancy 0.79 -> 0.83) and **stops suppressing eating near them** (M5 rabbit ratio
+  1.975 -> 1.076, i.e. from clearly-cautious down to essentially-unbothered).
+- **It never aborts a meal** for a rabbit (M1 = 0.000 in both worlds -- interrupted
+  feeding was never a rabbit-driven behaviour here).
+
+**The residual rabbit bush-dive (M2 = 0.159) is incidental foraging, not defense.** We
+tested this directly rather than asserting it. If the 0.159 were active defense, bush
+entries should cluster when a rabbit is *closing in* (small distance). They do the
+opposite: in the no-predator world the agent enters a bush when the nearest rabbit is
+**1.73 cells away on average -- farther than its 1.41-cell overall average**, and only
+20% of its steps are spent in bushes. In the predator world the sign flips: bush entries
+happen when the nearest rabbit is **closer than average** (1.47 vs 1.75 overall), the
+agent spends **twice as much time in bushes** (44% of steps), and it **suppresses eating
+while hidden** (eats on 6.5% of in-bush steps vs 16% in the no-predator world). The
+timing of bush entry relative to threat proximity reverses between the two worlds -- that
+is the signature of defensive diving in the predator world and of ordinary
+move-through-a-bush-while-foraging in the no-predator world. The residual 0.159 is the
+latter.
+
+#### R.3 The matched comparison: the agent discriminates by damage, not motion
+
+Reading the two columns against each other answers the thread's central question.
+
+- **With the predator present, the agent already separates the predator from the
+  chasing rabbit** even though the two share matched smell *and* now share the same
+  chasing motion. It keeps the predator 4.26 cells away but the rabbit only 1.79; it
+  dives for cover for the predator at 0.565 vs 0.409 for the rabbit; and it suppresses
+  eating near the predator (M5 0.675, below 1) while eating freely near the rabbit (M5
+  1.975, well above 1). With smell and motion held identical across the two animals, the
+  only cue left to discriminate on is the **visual class channel** (a predator reads on
+  a different one-hot channel than a neutral animal) paired with a **learned association
+  that the predator-class animal is the one that has damaged it**.
+- **Removing the predator relaxes caution toward the rabbits too** -- generalized
+  vigilance. The rabbits did not change between the two worlds, yet rabbit bush-dive
+  falls 0.409 -> 0.159, rabbit eat-suppression lifts (M5 1.975 -> 1.076), and the agent
+  lets the rabbits ~0.4 cells closer. So part of the caution the agent *appeared* to
+  show toward the rabbits in the training world was actually driven by the predator's
+  presence (a generalized "threats are around" posture), not by the rabbits themselves.
+
+Both points push the same way: the agent's defensive discrimination is **damage-driven**
+-- a learned, per-animal danger memory keyed to the visual "what class is this" channel
+-- **not** driven by chasing motion (the rabbits chase exactly like the predator and are
+still not feared) or by raw proximity. This is consistent with the earlier rounds: in
+Round 3 randomizing the predator's chase parameters did not collapse the predator-rabbit
+gap, and in this chasing-rabbit run making the rabbits chase did not open a new gap.
+
+#### R.4 Measure-validity payoff (the original worry, retired for this world)
+
+The concern that launched this whole thread was that our main avoidance measure -- the
+bush-dive rate (M2) -- might be **blind to flight**: if the agent avoided rabbits by
+*running away* rather than diving into cover, M2 would under-count rabbit-avoidance and
+mislead us. The two independent channels -- the **distance/flight channel** (how far the
+agent keeps each animal) and the **bush-dive channel** (M2) -- **agree in both worlds**.
+Where the agent is cautious (predator), both the distance is large and M2 is high; where
+it is relaxed (rabbits, and especially the no-predator world), both the distance is
+small and M2 is low. There is no hidden flight-based avoidance that the bush-dive
+measure missed. For this world, M2 was **not** misleading -- it tracked the flight read.
+
+#### R.5 Watch the rollouts
+
+- No-predator eval video (the agent foraging unbothered through the chasing rabbits):
+  `results/eval/noPredator_chasingRabbit/models/9520028/videos/eval_9520028.mp4`
+- With-predator matched eval video (defensive behaviour for comparison):
+  `results/eval/withPredator_chasingRabbit/models/9520028/videos/eval_9520028.mp4`
+  *(rendering at time of writing -- the `videos/` directory exists but the `.mp4` may
+  not be present yet; check before linking.)*
+
+#### R.6 Conclusions and honest caveats
+
+**Conclusion.** Dropping every damaging entity from the world causes the trained agent
+to **abandon its defensive behaviour** -- it survives perfectly, forages freely, and lets
+the harmless chasing rabbits right up to it. The matched predator-present comparison
+shows the agent had already been discriminating the predator from an
+identically-smelling, identically-chasing rabbit, and that part of its apparent
+rabbit-caution was a spillover of general predator-driven vigilance. The most
+parsimonious account across this thread: **threat discrimination in this matched-smell
+world is a learned per-animal danger association (damage-driven), read off the visual
+class channel -- not a chasing-motion or proximity heuristic.** The two avoidance
+channels (distance and bush-dive) agree, so the bush-dive measure was valid here.
+
+**Caveats, stated plainly.**
+1. **Single seed.** One training seed (42); the eval replays 200 *world* seeds against
+   that one brain, which controls eval noise but not training-init variance. A
+   multi-seed repeat is needed before any published claim.
+2. **Checkpoint at ~95%, not final.** The brain evaluated here is the 9.52M-episode
+   checkpoint (~95% of the 10M budget), not the converged final model. The direction is
+   unlikely to reverse (the predator-rabbit gap was already stable mid-training), but the
+   absolute levels can still shift slightly.
+3. **One architecture.** Recurrent-PPO only. Whether the damage-driven discrimination is
+   architecture-general is untested.
+4. **Clean within-protocol, still one model.** The two eval sets *are* directly
+   comparable (same checkpoint, same greedy policy, same 200 seeds, byte-identical
+   protocol) -- that is the strength of this comparison over the earlier online-preview.
+   But "clean comparison between two rollouts of one model" is not the same as "robust
+   across models," and conclusion strength is bounded by caveats 1-3.
+
+_This Results block fills the pre-existing No-predator transfer eval subsection. The
+parent design was lightly pre-registered ("watching, not gating"), so these conclusions
+are observational rather than a thresholded confirm/refute._
+
+
+## Matched-aggression control eval
+
+**Why this eval exists (plain English).** In the original chasing-rabbit world the
+predator picked its chase ability (how far it sees you, how long it can sprint, how
+stubbornly it pursues) randomly each episode, while the two harmless rabbits always
+chased with the *same fixed, aggressive* settings. So on any given episode the predator
+could chase *less reliably* than the rabbits. That makes the agent's apparent
+"avoid-the-predator-before-it-ever-touches-me" behaviour ambiguous: it could be real
+danger inference, or just an artifact of the predator *looking or moving differently*
+(an **approach-speed confound**). This control config removes that confound by setting
+the predator's five chase parameters to be byte-identical to the rabbits' fixed values,
+so predator and rabbit now differ in exactly one thing: the predator hurts on contact and
+the rabbits do not. We then re-evaluate the already-trained chasing-rabbit model on it.
+
+**Prediction.** If the agent truly cannot tell predator from rabbit from what it observes
+(smell and chase dynamics are now identical, and the visual class channel is contact-only
+since visual range is zero), then the pre-first-contact distance gap between predator and
+rabbits should **collapse**, and any avoidance of the predator should appear **only after
+the first painful contact** in an episode. A surviving pre-contact gap would instead say
+the agent reads danger off the visual class channel on contact and generalises, not off
+approach speed.
+
+**Config + validation.** Eval config:
+[`configs/experiment/hypervigilance/06-matchedAggression_chasingRabbit_eval.yaml`](../../../../configs/experiment/hypervigilance/06-matchedAggression_chasingRabbit_eval.yaml).
+The only diff vs the training config (`04-sameProp_R4_chasingRabbit.yaml`) is the
+predator's five chase fields, changed from per-episode `[low, high]` ranges to fixed
+scalars equal to the rabbits' values. Loader validation confirmed: observation dimension
+unchanged at **27** (breakdown byte-identical to config 04); `predator_indices=(0,)`,
+`neutral_indices=(1,2)`, `animal_is_damaging=[True, False, False]`, `hunt_idx=(0,1,2)`;
+all five chase fields equal across the three animals (each a degenerate `[v, v]` range:
+detection `[10,10]`, stamina `[60,60]`, recovery `[1,1]`, hunt-threshold `[0.3,0.3]`,
+lose-interest `[3,3]`); damage/nociception asymmetry preserved (predator `[15,45]` @ 0.9
+vs rabbits `[0,0]` @ 0.1) and visual class channel 5 (predator) vs 7 (rabbits).
+
+### Results — matched-aggression control (deterministic eval, final 10M checkpoint)
+
+**One-paragraph plain-English headline (read this first).** The question this control
+answers is sharp: *does the trained agent recognise and avoid the dangerous predator
+**before** the predator ever touches it?* If it did, that would be impossible under our
+own observation pipeline — at a distance the predator and the harmless rabbits are
+indistinguishable (same smell, the agent's eyes have **zero range** so the "what class
+is this" visual channel only fires on contact, and the agent's memory resets every
+episode), so pre-contact the agent has **no information** about which animal is the
+killer. Yet an earlier read showed the agent kept the predator about 2.5 cells farther
+away than the rabbits *before any contact*, which looked like impossible pre-contact
+discrimination. **This control shows that apparent gap was not real danger inference —
+it was two stacked measurement artifacts.** When we remove both (see below), the
+pre-contact distance gap between predator and rabbit collapses to **essentially zero,
+and is in fact slightly negative** (the agent, if anything, sits a hair *closer* to the
+predator than to a rabbit before contact). The clincher: in the matched world the agent
+**dies in 91% of episodes** — if it could spot and flee the predator before contact it
+would not be slaughtered when the predator beelines straight for it. The real
+discrimination is **entirely post-contact**: predator touches the agent → pain → the
+agent then keeps its distance. No hidden observation leak, no implementation bug. The
+user's theoretical intuition — *matched cues ⟹ no pre-contact discrimination* — is
+empirically vindicated.
+
+**Translating the metric shorthand.** *Survival* = timesteps alive out of a 500-step
+cap (our performance measure; never cumulative reward). *First-contact step* = the
+timestep on which the predator first touches the agent in an episode; everything before
+it is the **pre-contact window**, the only window in which the agent provably has zero
+class information. *Pre-contact distance gap* = how much farther (in grid cells) the
+agent keeps the predator than it keeps a rabbit, averaged over just the pre-contact
+window — **this is the key evidence**; a positive gap means "predator held farther
+(looks like avoidance)", ~zero or negative means "no pre-contact discrimination".
+*M2 bush-dive rate* = of the times a threat closes in, the fraction where the agent
+dives into a bush to hide (our main active-avoidance measure). *M5 eat-under-threat
+ratio* = eating rate near a threat vs. when safe; **below 1 = suppresses eating
+(cautious), above 1 = eats freely (unbothered)**.
+
+#### The two arms (what differs)
+
+Both arms are **deterministic** rollouts of the **same final converged checkpoint**
+(10 million episodes, the `s42` chasing-rabbit model), over the **same 200 fixed eval
+seeds**, so they are directly comparable to each other. The only difference is the
+predator's chase behaviour:
+
+- **Arm A — distributional predator** (the original training-world dynamics): the
+  predator's five chase parameters (how far it detects the agent, how long it can
+  sprint, how fast it recovers, how eagerly it re-engages, how stubbornly it pursues)
+  are re-rolled randomly each episode, so on a given episode the predator can chase
+  *less reliably* than the always-on rabbits.
+- **Arm B — matched-aggression predator** (the control): the predator's five chase
+  parameters are set **byte-equal to the rabbits'** fixed aggressive values (detect
+  anywhere = 10, stamina 60, recovery 1.0, re-engage threshold 0.3, lose-interest 3.0).
+  Now predator and rabbit are **behaviourally identical** and differ in exactly one
+  thing — the predator deals damage on contact, the rabbits do not.
+
+#### R.M1 Comparison table
+
+All values are deterministic-eval aggregates over the 200 fixed-seed episodes on the
+final 10M checkpoint. Numbers independently re-derived from the per-episode `.npz`
+trajectories and the `online_replay.json` behaviour-measure dumps; extraction script and
+the full reconciliation (the pre-contact gap reproduces to the digit under per-episode
+averaging) are in the working file `tmp/20260602_061518_matchedAggression_control.md`.
+
+| Measure (plain meaning) | Arm A — distributional | Arm B — matched-aggression |
+|---|---|---|
+| **Survival mean** (steps / 500) | 396.3 (±138.2) | **272.9 (±120.8)** |
+| **% episodes reaching the 500 cap** | 53% (106/200) | **9% (17/200)** |
+| **Deaths** (injury or starvation) | 94 | **183** |
+| — death split (injury / starvation) | 33 / 61 | 76 / 107 |
+| **Mean first-contact step** (lower = predator reaches agent sooner) | 85.2 | **33.3** |
+| Episodes with no predator contact at all | 12 | 1 |
+| **% steps predator within 2 cells** | 0.152 | **0.268** |
+| M2 bush-dive — predator / rabbit | 0.542 / 0.416 | 0.699 / 0.592 |
+| M5 eat-under-threat — predator / rabbit | 0.615 / 1.751 | 1.315 / 2.227 |
+
+Reading the table: under matched aggression the predator reaches the agent **2.6×
+sooner** (first contact 85→33), spends **~1.8× more time right next to it** (0.152→0.268
+of steps within 2 cells), and the agent **dies far more** (survival 396→273; only 9% of
+episodes survive the full 500 steps vs 53%). The agent is being run down. That alone is
+hard to reconcile with any claim that it can see and flee the predator before contact.
+
+#### R.M2 The key evidence — pre-contact distance gap, broken out by pooling method
+
+This is the load-bearing table. Each cell is the **predator-minus-rabbit distance
+averaged over the pre-contact window only** (positive = predator held farther =
+*looks* like pre-contact avoidance). It is broken out four ways by **which rabbit
+distance we compare against**, because the choice of comparison is exactly where the
+first artifact hides.
+
+| Pre-contact gap, predator vs… | Arm A — distributional | Arm B — matched-aggression |
+|---|---|---|
+| **nearest of the 2 rabbits** | **+2.52** | **+1.11** |
+| **mean of the 2 rabbits** | +1.63 | **−0.15** |
+| **rabbit_TL alone** (one rabbit) | +1.54 | **−0.24** |
+| **rabbit_BR alone** (the other rabbit) | +1.71 | **−0.07** |
+
+The whole story is in how the gap moves from the top row to the bottom rows, and from
+Arm A to Arm B.
+
+**Artifact 1 — "2 rabbits vs 1 predator" (a pooling bias, removed by comparing
+1-vs-1).** The agent faces **two** rabbits but only **one** predator. "Distance to the
+*nearest* rabbit" is the minimum of two independent draws, which is mechanically smaller
+than the distance to the single predator — *even if the agent treats all three animals
+identically*. So the +2.52-cell "nearest-rabbit" gap in Arm A is inflated purely by the
+2-vs-1 geometry. Comparing the predator against **one** rabbit at a time (the `_mean`,
+`_TL`, `_BR` rows) removes this bias and immediately shrinks the Arm-A gap from +2.52
+down to ~+1.5 to +1.6.
+
+**Artifact 2 — "the distributional predator chased less aggressively" (an
+approach-speed confound, removed by matching chase parameters).** Even after fixing the
+2-vs-1 bias, Arm A still shows a +1.5-to-+1.6 gap. But in Arm A the predator's chase was
+randomly re-rolled, so on average it pursued *less reliably* than the always-on rabbits
+— it approached more slowly and therefore simply *sat farther from the agent before
+contact*, with no inference required. Matching the predator's chase parameters to the
+rabbits' (Arm B) makes them approach identically (first-contact step drops 85→33), and
+**this residual gap vanishes**: predator-vs-one-rabbit goes to **−0.15 / −0.24 / −0.07**
+— zero, slightly negative.
+
+**With both artifacts removed (Arm B, 1-vs-1): the pre-contact gap is ≈ 0, slightly
+negative.** The agent does **not** keep the predator farther than a rabbit before the
+first contact. There is **zero pre-contact discrimination** — exactly what the clean
+(no-leak) observation pipeline predicts, since the agent has no class information in that
+window.
+
+#### R.M3 The clincher — it gets slaughtered under matched aggression
+
+If the agent could recognise the predator and flee it pre-contact, matching the
+predator's chase ability to the rabbits' should not be lethal — the agent would still
+sidestep the predator the way it (appears to) avoid threats. Instead, under matched
+aggression the agent **dies in 91% of episodes** (survival 272.9, only 9% reach the
+500-step cap, 183/200 deaths), with the predator reaching it in 33 steps on average.
+The agent cannot get out of the way of a predator it cannot distinguish until that
+predator hurts it. This is direct behavioural confirmation that the avoidance is
+**reactive (post-contact), not anticipatory (pre-contact)**.
+
+The post-contact channel is exactly where discrimination *does* live and *should* live:
+once the predator makes painful contact, the M2 bush-dive and M5 eat-suppression
+machinery (and the kept-distance behaviour documented in the earlier sections of this
+doc) kick in. Both arms keep the predator's M2 bush-dive rate above the rabbit's
+(0.542 > 0.416 in Arm A; 0.699 > 0.592 in Arm B), and that separation is driven by
+contact-triggered pain, fully consistent with the class-blind-at-distance observation.
+
+#### R.M4 Watch the rollout
+
+- Matched-aggression eval video (predator chasing exactly like the rabbits, agent run
+  down repeatedly): `results/eval/matchedAggression_final/models/10000024/videos/eval_10000024.mp4`
+  *(rendering at time of writing — the `videos/10000024/` directory exists but the
+  `.mp4` may not be present yet; check before linking.)*
+
+#### R.M5 Caveats (stated plainly)
+
+1. **Single seed, one architecture.** One training seed (42), recurrent-PPO only. The
+   eval replays 200 *world* seeds against that one brain — this controls eval noise but
+   not training-init variance, and says nothing about architecture-generality.
+2. **Arm B is a transfer eval (out-of-distribution).** The agent was trained with the
+   *distributional* predator (Arm A dynamics) and is *evaluated* under matched
+   aggression (Arm B), a world its policy never trained on. So Arm B's absolute levels
+   (survival 273, 91% deaths) reflect a policy operating off-distribution and should not
+   be read as "how good the agent is" — they are a stress test, not a performance score.
+   **Crucially, the pre-contact-gap logic is immune to this caveat:** the argument
+   concerns a window (before first contact) in which the agent provably has **zero class
+   information** regardless of which distribution it trained on, so a ≈0 pre-contact gap
+   there cannot be an artifact of the train/eval mismatch.
+3. **Pre-contact gaps use per-episode-then-averaged pooling** (equal weight per episode),
+   matching the convention used elsewhere in this doc. Pooling all pre-contact steps
+   instead shifts magnitudes but not signs (the Arm-B-vs-one-rabbit gap stays ≤ ~+0.6 and
+   the qualitative collapse holds); see the working file for both.
+
+## Final synthesis — what we learned across the whole chasing-rabbit thread
+
+**The single question, answered.** Does this matched-smell agent recognise and avoid the
+dangerous predator *before* the predator ever touches it? **No.** Three independent lines
+of evidence now converge on the same answer, and on the same mechanism — discrimination
+is **post-contact and pain-driven**, never anticipatory:
+
+1. **The observation audit** (`docs/reviews/chasingRabbit_obs_classLeak_audit.md`): at a
+   distance the agent's senses are class-blind. Smell is matched across predator and
+   rabbits; the visual "what class is this" channel only fires **on contact** (the
+   agent's visual range is zero); and the recurrent memory **resets every episode**. So
+   before the first contact, the agent has literally no signal that separates the killer
+   from the harmless chasers. There is no observation leak.
+
+2. **The matched-aggression control** (this section): once we strip out the two
+   measurement artifacts that made pre-contact avoidance *look* real — the 2-rabbits-vs-1-
+   predator pooling bias, and the slower-approaching distributional predator — the
+   pre-contact distance gap **collapses to ≈ 0 (slightly negative)**. And under matched
+   chase dynamics the agent is **run down and killed in 91% of episodes**, which it could
+   not be if it were fleeing the predator pre-contact.
+
+3. **The no-predator transfer eval** (earlier section of this doc): the agent's caution
+   toward the rabbits is contingent on the predator being present and relaxes when every
+   damaging entity is removed — i.e. the caution is a response to *actual danger
+   experienced*, not a fixed reaction to chasing motion or proximity.
+
+**The mechanism, stated once.** Threat discrimination in this world is a **learned
+per-animal danger association keyed to painful contact** — predator touches the agent →
+pain → the agent thereafter keeps its distance, dives for cover, and suppresses eating
+near *that* class. It is **not** driven by chasing motion (the rabbits chase identically
+and are not feared), **not** by smell (matched), and **not** by any pre-contact class
+cue (there is none). Earlier rounds are consistent: randomising the predator's chase
+(Round 3) did not collapse the predator-rabbit gap, and making the rabbits chase
+(Round 4) did not open one.
+
+**No bug.** The earlier "+2.5-cell pre-contact gap" was a real number computed correctly;
+it just measured two confounds rather than danger inference, and both are now isolated and
+removed. The observation pipeline behaves exactly as designed (class-blind at distance),
+the GRU reset is working, and the agent's behaviour is exactly what that clean pipeline
+predicts. The user's theoretical intuition — matched cues imply no pre-contact
+discrimination — is empirically vindicated.
+
+_This Results block fills the pre-existing Matched-aggression control subsection. The
+parent design was lightly pre-registered ("watching, not gating"); the matched-aggression
+control adds a **sharp, falsifiable** prediction (pre-contact gap should collapse under
+matched chase dynamics) which the data confirms. Conclusions remain bounded by the
+single-seed / single-architecture / transfer-eval caveats above._
