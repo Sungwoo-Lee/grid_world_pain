@@ -234,6 +234,22 @@ This value feeds the exteroceptive nociception sensor (doc 09, sensor #5) as one
 
 `calculate_drive(satiation, injury, params)` — `core.py:38–42`
 
+Computes the agent's instantaneous homeostatic *drive* — how far its current body state is from the ideal (fully satiated, zero injury). Drive is the Euclidean distance in a 2-D space whose axes are satiation and injury; the bigger the distance, the worse the agent feels. Reward is granted when this distance shrinks between consecutive steps.
+
+`Source: src/environment/core.py:38–42`
+```python
+def calculate_drive(satiation, injury, params):
+    """Calculates homeostatic drive (Euclidean distance to setpoint)."""
+    target = jnp.array([params.setpoint, 0.0])
+    current = jnp.stack([satiation, injury], axis=-1)
+    return jnp.linalg.norm(current - target, axis=-1)
+```
+
+> **API notes**
+> - `jnp.stack([satiation, injury], axis=-1)` builds a length-2 vector from two scalars; `axis=-1` appends a new trailing axis so the result has the shape needed by `linalg.norm`. Under `vmap` across environments, both inputs are already rank-1 (one scalar per env), so `axis=-1` produces a `[N_envs, 2]` matrix — `norm(axis=-1)` then reduces along the last axis and returns a per-env scalar. [primer: jnp.stack](00_jax_primer.md#masking)
+> - `jnp.linalg.norm(x, axis=-1)` is the L2 (Euclidean) norm — computes `sqrt(sum(x**2))` along the last axis. No `ord` argument needed; the default is the Frobenius/L2 norm. [primer: linalg](00_jax_primer.md#linalg)
+> - Both satiation and injury use their raw scales (0–100 by default). The two axes are *not* normalised before taking the norm, so injury and satiation contribute equally in absolute units. The maximum possible drive is `sqrt(100^2 + 100^2) ≈ 141.4`.
+
 ```
 target  = [params.setpoint, 0.0]          # ideal state: full satiation, zero injury
 current = [satiation, injury]
@@ -263,6 +279,145 @@ drive_injury = (new_injury / max_injury)^2
 These are for analysis logging **only** — they are not used in the reward formula. The actual reward uses the raw Euclidean drive via `calculate_drive`.
 
 **Drive is not normalised**: raw values (0–100) are used. Both `drive_hunger` and `drive_injury` are dimensionless `[0, 1]` by construction, but the reward-driving `drive` value is in the same units as the body state variables. Reconfiguring `max_satiation` or `max_injury` changes the drive scale.
+
+---
+
+## `update_body` — Full Implementation
+
+`update_body(state, info, params)` — `core.py:44–117`
+
+Runs once per environment step. Takes the previous `EnvState`, an `info` dict populated earlier in `jax_step` (with keys `ate_food`, `rested`, `damage`), and `EnvParams`. Returns seven values: `(new_satiation, new_nutrition, new_injury, new_buffer, new_nociception_history, new_rest_streak, done)`.
+
+The body below is presented as one block to show the full sequential logic: nutrition → satiation → injury + buffer → recovery → nociception history → termination.
+
+### Chunk 1: Nutrition and Satiation update (`core.py:44–66`)
+
+`Source: src/environment/core.py:44–66`
+```python
+def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, bool]:
+    """Updates satiation, nutrition, and injury levels with streak-based recovery."""
+    prev_nutrition = state.nutrition
+    prev_injury = state.injury_level
+    prev_rest_streak = state.rest_streak
+    # --- Nutrition Dynamics (Linear Decay) ---
+    if params.with_nutrition:
+        # Nutrition decays linearly
+        new_nutrition = prev_nutrition - params.metabolic_cost
+        # Refill from food (immediate) - with consumption cost
+        ate_food_gain = params.food_nutrition_gain - params.eating_nutrition_cost
+        new_nutrition = jnp.where(info['ate_food'], new_nutrition + ate_food_gain, new_nutrition)
+        new_nutrition = jnp.clip(new_nutrition, 0.0, params.max_nutrition)
+    else:
+        new_nutrition = prev_nutrition
+
+    # --- Satiation Dynamics (Derived Non-linearly from Nutrition) ---
+    if params.with_satiation:
+        # Subjective fullness S = Max * (N/MaxN)^k
+        fullness_ratio = jnp.clip(new_nutrition / params.max_nutrition, 0.0, 1.0)
+        new_satiation = params.max_satiation * jnp.power(fullness_ratio, params.nutrition_to_satiation_scaling_factor)
+    else:
+        new_satiation = state.satiation
+```
+
+> **API notes**
+> - The `if params.with_nutrition:` guard is a **Python-level static branch**, not a JAX traced branch — `params` is a `struct.dataclass` with `pytree_node=False` fields, so `with_nutrition` is a compile-time constant. Changing it requires recompilation. [primer: static-dynamic](00_jax_primer.md#static-dynamic)
+> - `jnp.where(info['ate_food'], new_nutrition + ate_food_gain, new_nutrition)` is a **branchless select**: both branches are fully evaluated; `where` picks between them elementwise. This is the correct JAX pattern because `info['ate_food']` is a traced boolean, not a Python bool. [primer: branchless](00_jax_primer.md#branchless)
+> - `jnp.clip(new_nutrition, 0.0, params.max_nutrition)` clamps the result to a fixed range without any conditional. [primer: masking / clip](00_jax_primer.md#masking)
+> - `jnp.power(fullness_ratio, params.nutrition_to_satiation_scaling_factor)` raises each element to the power `k`. Here both arguments are scalars (or traced scalars under `vmap`). `jnp.power` is element-wise and differentiable — safe inside JIT and `vmap`. The exponent `k` comes from `params`, which is a static pytree leaf, so its *value* is baked in at trace time (it is still a traced float, not a Python literal, but it travels through `params` which is part of the JIT input pytree). [primer: jax-pytrees](00_jax_primer.md#jax-pytrees)
+
+### Chunk 2: Injury accumulation + smoothing ring buffer (`core.py:68–80`)
+
+`Source: src/environment/core.py:68–80`
+```python
+    # --- Injury Dynamics (Instant-start smoothing) ---
+    damage = info['damage']
+    if params.with_injury:
+        # 1. Spread new damage across the buffer
+        inc = damage / params.smoothing_duration
+        temp_buffer = state.injury_buffer + inc
+        
+        # 2. Apply the first slice immediately
+        applied_inc = temp_buffer[0]
+        new_injury = prev_injury + applied_inc
+        
+        # 3. Shift the rest of the buffer for future steps
+        new_buffer = jnp.roll(temp_buffer, -1).at[-1].set(0.0)
+```
+
+> **API notes**
+> - `state.injury_buffer + inc` broadcasts the scalar `inc` across the entire ring-buffer array — every slot receives the same per-step dose. This is a pure functional operation; `state.injury_buffer` is never mutated. [primer: immutability](00_jax_primer.md#immutability)
+> - `jnp.roll(temp_buffer, -1)` shifts all elements one position to the left (towards index 0), with the element at index 0 wrapping to the last slot. The negative shift direction means the front of the queue is consumed each step. [primer: masking / jnp.roll](00_jax_primer.md#masking)
+> - `.at[-1].set(0.0)` writes a zero to the last (freshly vacated) slot using JAX's functional index-update syntax. This returns a **new** array — `temp_buffer` is unchanged. The combined expression `jnp.roll(...).at[-1].set(0.0)` is the canonical JAX idiom for a rotating ring buffer with a cleared tail. [primer: immutability / .at[].set()](00_jax_primer.md#immutability)
+
+### Chunk 3: Recovery gating and rest-streak update (`core.py:82–100`)
+
+`Source: src/environment/core.py:82–100`
+```python
+        # --- Recovery Dynamics (Exponential recovery based on rest streak) ---
+        # Update rest streak
+        new_rest_streak = jnp.where(info['rested'], prev_rest_streak + 1, 0)
+        
+        # Calculate exponential recovery: base * (1 + accel)^(streak-1)
+        # streak 1 -> mult 1.0 (base)
+        # streak 2 -> mult 1.5 (base * 1.5)
+        recovery_mult = jnp.power(1.0 + params.recovery_accel_rate, (jnp.maximum(new_rest_streak, 1) - 1).astype(jnp.float32))
+        recovery_amount = params.recovery_base_rate * recovery_mult
+        
+        # Recovery only applies if resting and not currently taking net damage
+        can_recover = jnp.logical_and(info['rested'], applied_inc <= 0)
+        new_injury = jnp.where(can_recover, new_injury - recovery_amount, new_injury)
+        
+        new_injury = jnp.clip(new_injury, 0.0, params.max_injury)
+    else:
+        new_injury = prev_injury
+        new_buffer = state.injury_buffer
+        new_rest_streak = prev_rest_streak
+```
+
+> **API notes**
+> - `jnp.where(info['rested'], prev_rest_streak + 1, 0)` is another branchless select — streak increment or reset, no Python `if`. [primer: branchless](00_jax_primer.md#branchless)
+> - `jnp.power(base, exponent)` computes `base ** exponent` element-wise. Here `base = 1.0 + params.recovery_accel_rate` (a scalar) and `exponent = max(streak, 1) - 1` (also a scalar, cast to float32 because integer exponents can cause type-promotion issues with some JAX backends). This is the compound rest-streak recovery formula: streak-1 is used as the exponent so that streak=1 → power=0 → multiplier=1.0 (base rate, no acceleration on the first rest step). Streak=2 → power=1 → multiplier=`1+accel`. Streak=3 → power=2 → multiplier=`(1+accel)^2`. The multiplier grows without a cap — recovery can eventually dominate max_injury in a single step; the `.clip(0, max_injury)` below prevents over-recovery. **`jnp.power` is not a primer section** — it is a standard element-wise power lifted from NumPy, safe in JIT and vmap.
+> - `jnp.maximum(new_rest_streak, 1)` ensures the exponent is never negative (streak=0 would give exponent=-1, an inverse). [primer: branchless / masking](00_jax_primer.md#branchless)
+> - `jnp.logical_and(info['rested'], applied_inc <= 0)` masks out recovery when buffered damage is still being absorbed — injury and recovery cannot cancel on the same step. [primer: masking](00_jax_primer.md#masking)
+> - `jnp.clip(new_injury, 0.0, params.max_injury)` prevents over-subtraction (injury can't go negative) and over-accumulation (injury can't exceed `max_injury`). [primer: masking / clip](00_jax_primer.md#masking)
+
+### Chunk 4: Nociception history buffer roll (`core.py:102–104`)
+
+`Source: src/environment/core.py:102–104`
+```python
+    # Roll the perceptual history buffer and write the new injury at slot 0.
+    # Buffer is non-conditional on `with_injury`: if injury never updates, slot 0 stays at prev_injury (0 from reset).
+    new_nociception_history = jnp.roll(state.nociception_history_buffer, 1).at[0].set(new_injury)
+```
+
+> **API notes**
+> - `jnp.roll(..., +1)` shifts **right** (toward higher indices), so the oldest entry falls off the end and slot 0 is freed for the new value. Compare with the injury buffer above which uses `roll(..., -1)` (left shift) — the two buffers use opposite shift directions because they have opposite slot-0 semantics (injury buffer: slot 0 = apply-now; nociception history: slot 0 = most-recent-write). [primer: immutability / .at[].set()](00_jax_primer.md#immutability)
+> - `.at[0].set(new_injury)` functionally writes to slot 0 of the shifted array, returning a new array. The original `state.nociception_history_buffer` is never mutated. [primer: immutability](00_jax_primer.md#immutability)
+> - This line runs **unconditionally** outside the `if params.with_injury` block — it is not a static branch. If `with_injury=False`, `new_injury` is just the frozen `prev_injury` (0.0 from reset), and the buffer fills with zeros, but the operation executes every step. [primer: static-dynamic](00_jax_primer.md#static-dynamic)
+
+### Chunk 5: Termination computation and return (`core.py:106–117`)
+
+`Source: src/environment/core.py:106–117`
+```python
+    # Termination check (Based on Nutrition and Injury)
+    done = False
+    if params.with_nutrition:
+        done = jnp.where(new_nutrition <= 0.0, True, done)
+        
+    if params.with_injury:
+        done = jnp.where(new_injury >= params.max_injury, True, done)
+    else:
+        # Instant death logic for levels without health system
+        done = jnp.where(damage > 0, True, done)
+    
+    return new_satiation, new_nutrition, new_injury, new_buffer, new_nociception_history, new_rest_streak, done
+```
+
+> **API notes**
+> - `done = False` initialises `done` as a Python bool. The subsequent `jnp.where(condition, True, done)` promotes it to a JAX scalar (`jnp.bool_`) on first use. Subsequent calls chain off that scalar — `jnp.where` always returns a JAX array. The final `done` returned is a 0-D `jnp.bool_` array. [primer: branchless](00_jax_primer.md#branchless)
+> - The two `if params.with_nutrition:` / `if params.with_injury:` guards are again **static Python branches** — determined at compile time. Only the active termination condition is traced into the XLA computation graph. [primer: static-dynamic](00_jax_primer.md#static-dynamic)
+> - `jnp.where(new_injury >= params.max_injury, True, done)` is the injury-death check — notice `>=` (inclusive). [primer: branchless](00_jax_primer.md#branchless)
+> - The `else: done = jnp.where(damage > 0, True, done)` branch handles `with_injury=False` — any nonzero damage is instantly fatal regardless of injury level (which is frozen at 0). This is a design choice: injury tracking is entirely optional; disabling it makes any damage lethal to model a "no health bar" scenario.
 
 ---
 
