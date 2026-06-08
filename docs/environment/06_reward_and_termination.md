@@ -1,6 +1,6 @@
 # 06 — Reward & Termination
 
-> **Source**: `src/environment/core.py` (reward: lines 550–571; termination codes: lines 538–548; termination from body: lines 106–116) | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
+> **Source**: `src/environment/core.py` (reward: lines 550–571; termination codes: lines 534–548; termination from body: lines 106–116) | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
 ---
 
@@ -50,6 +50,44 @@ Typical per-step values:
 - Alive, no food: `0.0`
 - Alive, ate food: `1.0 - eating_reward_penalty`
 - Terminal step (death or truncation): `-death_penalty` (eating penalty still applies if food was eaten on that step)
+
+### Full reward block — verbatim
+
+Both reward modes live in the same function and share the combined-reward tail; they are shown together so you can see the full static-flag tracing pattern in one read.
+
+`Source: src/environment/core.py:550–571`
+
+```python
+    # 6. Reward (Homeostatic driven by Satiation)
+    reward_homeostatic = 0.0
+    reward_extrinsic = 0.0
+    
+    # Calculate components for analysis
+    # drive = (1 - satiation/100)^2 + (injury/100)^2
+    drive_hunger = jnp.power(1.0 - (new_satiation / params.max_satiation), 2)
+    drive_injury = jnp.power(new_injury / params.max_injury, 2)
+    
+    if params.use_homeostatic_reward:
+        prev_drive = calculate_drive(state.satiation, state.injury_level, params)
+        curr_drive = calculate_drive(new_satiation, new_injury, params)
+        reward_homeostatic = prev_drive - curr_drive
+        # Death penalty based on Nutrition starvation
+        reward_homeostatic = jnp.where(done, reward_homeostatic - params.death_penalty, reward_homeostatic)
+    else:
+        reward_extrinsic = jnp.where(ate_food, 1.0, 0.0)
+        reward_extrinsic = jnp.where(done, -params.death_penalty, reward_extrinsic)
+    
+    reward = reward_homeostatic + reward_extrinsic
+    # Apply eating penalty if ate food
+    reward = jnp.where(ate_food, reward - params.eating_reward_penalty, reward)
+```
+
+> **API notes**
+>
+> - **Static flag / Python `if`**: `if params.use_homeostatic_reward:` is a compile-time branch, not a runtime conditional. `use_homeostatic_reward` is declared `struct.field(pytree_node=False)`, so JIT treats it as a Python constant and traces **only one branch**. Changing the flag forces a full recompile. The same applies to `with_nutrition`, `with_injury`, and `overeating_death` throughout this file. See [primer: static vs. dynamic](00_jax_primer.md#static-dynamic).
+> - **Branchless `jnp.where`**: every `reward = jnp.where(condition, x, y)` inside the traced path evaluates **both** `x` and `y` at every step; the condition selects the result without branching the execution graph. This is what makes the death penalty expressible as arithmetic rather than an `if done:` guard. See [primer: branchless](00_jax_primer.md#branchless).
+> - **`reward_homeostatic = 0.0` / `reward_extrinsic = 0.0`** initialised as Python scalars. The `jnp.where` on each branch returns a JAX scalar array. The final addition is safe because NumPy broadcasting promotes `0.0` — but the *inactive* variable is never a traced zero, so its shape/dtype is invisible to JAX’s checker until the `+`. In practice this is harmless for scalar reward.
+> - **`drive_hunger` / `drive_injury`** (lines 556–557): normalised squared components, logging only. They approximate the per-axis contribution to drive for analysis scripts but are **not** fed into `reward_homeostatic`. The actual reward uses the Euclidean norm in `calculate_drive`. See [Reward — Homeostatic Mode](#reward--homeostatic-mode) below.
 
 ---
 
@@ -105,6 +143,27 @@ drive_hunger = (1.0 - new_satiation / params.max_satiation) ** 2
 drive_injury = (new_injury / params.max_injury) ** 2
 ```
 
+### `calculate_drive` — verbatim
+
+`calculate_drive` is the single function that defines what “homeostasis” means numerically. It is called twice per step (before and after the body update); the difference is the reward signal.
+
+`Source: src/environment/core.py:38–42`
+
+```python
+def calculate_drive(satiation, injury, params):
+    """Calculates homeostatic drive (Euclidean distance to setpoint)."""
+    target = jnp.array([params.setpoint, 0.0])
+    current = jnp.stack([satiation, injury], axis=-1)
+    return jnp.linalg.norm(current - target, axis=-1)
+```
+
+> **API notes**
+>
+> - **`jnp.stack([satiation, injury], axis=-1)`**: stacks two scalars into a 1-D array `[satiation, injury]`. When called under `vmap` (parallel envs), both `satiation` and `injury` are shape-`[num_envs]` vectors; `stack(..., axis=-1)` then produces shape `[num_envs, 2]`. The norm along `axis=-1` is correct in both cases, so the function is naturally vmap-composable without modification. See [primer: vmap](00_jax_primer.md#vmap).
+> - **`jnp.linalg.norm(..., axis=-1)`**: Euclidean (L2) distance from the homeostatic setpoint `[params.setpoint, 0.0]`. Default `ord=2`. See [primer: linalg](00_jax_primer.md#linalg).
+> - **Why L2, not L1 or squared?** L2 penalises large simultaneous hunger+injury more than the sum of independent penalties would. It is differentiable everywhere except at the setpoint (drive = 0), which is rarely hit in practice.
+> - **`params.setpoint`** is a static field. Its value is baked into the compiled graph; changing it at runtime requires a recompile. See [primer: static vs. dynamic](00_jax_primer.md#static-dynamic).
+
 ---
 
 ## Combined Reward Formula (Both Modes)
@@ -125,7 +184,7 @@ The `info` dict always carries both `reward_homeostatic` and `reward_extrinsic`,
 
 `params.death_penalty` (default `100`) is applied on any terminal step (`done = True`), whether death is from starvation, injury, or `max_steps` truncation.
 
-- In **survival mode**: replaces `reward_extrinsic` with `-death_penalty` (the step's food-eat bonus is lost).
+- In **survival mode**: replaces `reward_extrinsic` with `-death_penalty` (the step’s food-eat bonus is lost).
 - In **homeostatic mode**: subtracted from the drive-change term (the drive change from the final body update is still included).
 
 FAQ: Is the death penalty also applied on truncation? **Yes.** `done = done_from_body OR truncated` (core.py:548), so any `done=True` triggers the penalty regardless of cause. If you want truncation to be reward-neutral, set `death_penalty=0`.
@@ -158,6 +217,65 @@ reason = jnp.where(new_injury >= params.max_injury,        4, reason)   # highes
 
 If starvation and truncation both fire in the same step, `reason=2` wins (starvation overwrites truncation). If injury and starvation both fire, `reason=4` wins.
 
+### Full termination block — verbatim
+
+The truncation check, priority-chain termination codes, `done` assembly, and where they appear in the step function, all in one place.
+
+`Source: src/environment/core.py:534–548`
+
+```python
+    # Max Steps Truncation
+    next_step = state.current_step + 1
+    truncated = next_step >= params.max_steps
+    
+    # Termination Reason (Integer codes for JIT compatibility)
+    # 0: active, 1: max_steps, 2: starvation, 3: overeating, 4: injury
+    reason = jnp.array(0, dtype=jnp.int32)
+    reason = jnp.where(truncated, 1, reason)
+    reason = jnp.where(new_nutrition <= 0.0, 2, reason)
+    if params.overeating_death:
+        reason = jnp.where(new_satiation >= params.max_satiation, 3, reason)
+    reason = jnp.where(new_injury >= params.max_injury, 4, reason)
+    
+    info['termination_reason'] = reason
+    done = jnp.logical_or(done, truncated)
+```
+
+> **API notes**
+>
+> - **Priority chain via sequential `jnp.where`**: each `reason = jnp.where(cond, new_code, reason)` overwrites `reason` when `cond` is true. Later calls have higher priority because they can overwrite earlier ones. Code 4 (injury) is last, so it wins any simultaneous multi-condition step. This is the standard JAX idiom for priority selection without branching. See [primer: branchless](00_jax_primer.md#branchless).
+> - **`if params.overeating_death:`** — Python-level static branch. When `overeating_death=False`, the JIT-compiled graph contains no `jnp.where` for code 3 at all; the check is compiled out entirely. See [primer: static vs. dynamic](00_jax_primer.md#static-dynamic).
+> - **`jnp.array(0, dtype=jnp.int32)`**: explicitly typed to `int32`. Without this, JAX defaults to `int32` on most platforms anyway, but the explicit dtype prevents a subtle shape-mismatch if `jnp.where` returns a different default integer type on a particular accelerator.
+> - **`done = jnp.logical_or(done, truncated)`**: `done` on the right-hand side is `done_from_body`, the boolean returned by `update_body`. `truncated` is a traced boolean from the step-count comparison. `logical_or` is branchless and vmap-safe. See [primer: masking](00_jax_primer.md#masking).
+> - **`params.max_steps`** is a static field. `truncated` is computed from `next_step >= params.max_steps`; the threshold is baked at compile time. See [primer: static vs. dynamic](00_jax_primer.md#static-dynamic).
+
+### Termination from `update_body` — linked
+
+The `done_from_body` value that feeds into the `logical_or` above is set inside `update_body` at `core.py:106–116`. Its full logic (nutrition death, injury threshold death, instant-damage death when `with_injury=False`) is owned by doc 05. The relevant excerpt:
+
+`Source: src/environment/core.py:106–116`
+
+```python
+    # Termination check (Based on Nutrition and Injury)
+    done = False
+    if params.with_nutrition:
+        done = jnp.where(new_nutrition <= 0.0, True, done)
+        
+    if params.with_injury:
+        done = jnp.where(new_injury >= params.max_injury, True, done)
+    else:
+        # Instant death logic for levels without health system
+        done = jnp.where(damage > 0, True, done)
+    
+    return new_satiation, new_nutrition, new_injury, new_buffer, new_nociception_history, new_rest_streak, done
+```
+
+> **API notes**
+>
+> - **Two static flags, up to four compiled variants**: `with_nutrition` and `with_injury` are both `struct.field(pytree_node=False)`. Each combination is a separate compiled specialisation of `update_body`. The `else` branch (`with_injury=False`, instant damage death) is compiled in only when `with_injury=False`. See [primer: static vs. dynamic](00_jax_primer.md#static-dynamic).
+> - **`done = False`** starts as a Python bool. The first `jnp.where` that fires promotes it to a JAX boolean scalar. The `logical_or` in `jax_step` (line 548) then combines it with `truncated`, another JAX boolean. This promotion chain is standard JAX and safe.
+> - **Structural redundancy**: `done_from_body` is set by nutrition/injury thresholds inside `update_body`, but `reason` codes 2 and 4 are set by independent `jnp.where` checks in `jax_step` against the same thresholds. They are logically redundant but structurally independent — a change to one does not automatically update the other. This is the source of the `with_nutrition` / `with_injury` mismatch bugs documented below.
+
 ### Code 3 / overeating: informational only
 
 `reason=3` is **never** the direct cause of episode termination. The `done` flag comes from `update_body` (nutrition and injury only) and `truncated` — overeating does not contribute. Code 3 appears in `info['termination_reason']` for the triggering step, but the episode continues.
@@ -168,7 +286,7 @@ The starvation check at `core.py:542` (`reason = jnp.where(new_nutrition <= 0.0,
 
 ### `with_injury=False` and the injury code
 
-Similarly, `core.py:545` has no `with_injury` guard. When `with_injury=False`, `new_injury` stays frozen at its reset value. If the reset value is `0.0` and `max_injury > 0`, the check never fires. However, damage *does* still terminate the episode via `update_body`'s instant-death branch (`done = jnp.where(damage > 0, True, done)` — core.py:115). In that case, `new_injury` never reaches `max_injury`, so `reason` will be `1` (truncation) or `0` — **not** `4`. The claim that code 4 fires for `with_injury=False` damage-deaths is incorrect.
+Similarly, `core.py:545` has no `with_injury` guard. When `with_injury=False`, `new_injury` stays frozen at its reset value. If the reset value is `0.0` and `max_injury > 0`, the check never fires. However, damage *does* still terminate the episode via `update_body`’s instant-death branch (`done = jnp.where(damage > 0, True, done)` — core.py:115). In that case, `new_injury` never reaches `max_injury`, so `reason` will be `1` (truncation) or `0` — **not** `4`. The claim that code 4 fires for `with_injury=False` damage-deaths is incorrect.
 
 ---
 
