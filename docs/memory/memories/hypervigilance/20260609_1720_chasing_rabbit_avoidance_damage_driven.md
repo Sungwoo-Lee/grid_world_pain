@@ -48,4 +48,5 @@ The R4 experiment made the two neutral rabbits actively HUNT the agent (`behavio
 - [[20260609_1719_predator_discrimination_visual_count_elimination]] (hypervigilance, 2026-06-09) — The chasing-rabbit rPPO agent can identify an approaching predator BEFORE contac
 - [[20260609_1721_aggregate_stats_hide_conditional_behavior]] (hypervigilance, 2026-06-09) — Methodology post-mortem: I reached a confidently-wrong 'the agent cannot discrim
 - [[20260609_1722_renderer_no_neutral_icon_and_attack_delay_ride]] (env_entities, 2026-06-09) — Two env/rendering findings from the chasing-rabbit work: (1) the renderer has no
+- [[20260609_1747_avoidance_is_post_contact_not_preemptive]] (hypervigilance, 2026-06-09) — Predator-only eval (same chasing-rabbit model, rabbits removed) shows the agent 
 <!-- END BACKLINKS -->

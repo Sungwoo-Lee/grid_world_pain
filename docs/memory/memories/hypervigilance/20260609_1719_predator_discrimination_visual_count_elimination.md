@@ -5,19 +5,22 @@ time: "17:19"
 folder: hypervigilance
 tags: [hypervigilance, learned_lesson, decision]
 summary: "The chasing-rabbit rPPO agent can identify an approaching predator BEFORE contact by counting the neutrals on its own cell (visual channel 7 = 2.0 = both rabbits accounted for) and inferring the unaccounted approaching smell must be the predator — discrimination by elimination, not by directly sensing the predator at a distance."
-related: ["20260508_1445_sameprop_discriminating_channels", "20260512_1428_sameprop_class_discriminating_defence_event_level", "20260609_1720_chasing_rabbit_avoidance_damage_driven", "20260609_1721_aggregate_stats_hide_conditional_behavior"]
+related: ["20260508_1445_sameprop_discriminating_channels", "20260512_1428_sameprop_class_discriminating_defence_event_level", "20260609_1720_chasing_rabbit_avoidance_damage_driven", "20260609_1721_aggregate_stats_hide_conditional_behavior", "20260609_1747_avoidance_is_post_contact_not_preemptive"]
 session_origin: claude_code
 session_label: "chasing-rabbit (R4) behaviour deep-dive + obs-leak audit + matched-aggression control"
 importance: high
-status: settled
+status: superseded
 valid_until: null
 confidence: high
 supersedes: []
+superseded_by: ["20260609_1747_avoidance_is_post_contact_not_preemptive"]
 raw_source: claude_data/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/144f126e-4b23-4e3f-bc6f-cc2491b3f2a4.jsonl
 raw_completeness: full
 ---
 
 # Agent discriminates an approaching predator by counting rabbits on its own cell (elimination)
+
+> **SUPERSEDED 2026-06-09** by [[20260609_1747_avoidance_is_post_contact_not_preemptive]]. The factual observation below (visual channel 7 counts the neutrals on the agent's own cell) is still correct, but the behavioural interpretation — that the agent uses it for genuine *pre-emptive* avoidance — did NOT survive the predator-only control test: with rabbits removed the agent does not pre-empt the lone predator, so its avoidance is post-contact / pain-reactive. Read the superseding insight for the corrected conclusion.
 
 ## Key conclusion
 In the matched-aggression chasing-rabbit world (predator and 2 rabbits share smell `[0,1,0,0,0]`, share `behaviour: hunt`, share all 5 chase params; differ only in damage), the agent reliably takes defensive action against the **approaching predator before the predator contacts it** — and it genuinely *can* do this. The mechanism is **discrimination by elimination via the visual sensor's count**: with `visual_sensor_range: 0` the visual channel only reports animals on the agent's OWN cell, but it reports them as a per-class **count** (sum of one-hots). The two rabbits ride the agent, so the agent literally observes `neutral channel (ch 7) = 2.0` = "both rabbits are on me". It knows there are only two rabbits, so any *third* animal it smells approaching must be the predator. It then stops eating and dives into cover. This is real, sensory-grounded, pre-(predator-)contact discrimination — it does NOT require sensing the predator's class directly at a distance.
@@ -46,4 +49,5 @@ In the matched-aggression chasing-rabbit world (predator and 2 rabbits share sme
 ## Backlinks
 - [[20260609_1720_chasing_rabbit_avoidance_damage_driven]] (hypervigilance, 2026-06-09) — Making the rabbits actively hunt the agent (harmless chasers, R4) did NOT create
 - [[20260609_1721_aggregate_stats_hide_conditional_behavior]] (hypervigilance, 2026-06-09) — Methodology post-mortem: I reached a confidently-wrong 'the agent cannot discrim
+- [[20260609_1747_avoidance_is_post_contact_not_preemptive]] (hypervigilance, 2026-06-09) — Predator-only eval (same chasing-rabbit model, rabbits removed) shows the agent 
 <!-- END BACKLINKS -->

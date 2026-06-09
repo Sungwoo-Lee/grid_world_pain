@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `hypervigilance` topic.
 
 **Folder definition**: Hypervigilance experiments
-**Insights**: 14
+**Insights**: 15
 **Last updated**: 2026-06-09
 
 ---
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-09 | 17:47 | `20260609_1747_avoidance_is_post_contact_not_preemptive` | Predator-only eval (same chasing-rabbit model, rabbits removed) shows the agent does NOT pre-empt the lone approaching predator — it forages/rests in place until contact (~step 11) and only hides reactively after a hit. Conclusion: predator avoidance is POST-CONTACT / pain-reactive, not anticipatory; the visual rabbit-count signal is real but doesn't drive reliable pre-emption. SUPERSEDES `20260609_1719`. Confidence medium (predator-only world is out-of-distribution, N=20). |
 | 2026-06-09 | 17:21 | `20260609_1721_aggregate_stats_hide_conditional_behavior` | Methodology post-mortem: a confidently-wrong 'agent cannot discriminate predator/rabbit' conclusion came from over-trusting an incomplete proof + defending it with confounds and AGGREGATE stats that averaged away a CONDITIONAL behaviour. Mechanism only surfaced by reading individual trajectories step-by-step and inspecting the raw 27-dim observation vector — which the user had urged for several turns. Rules: inspect agent inputs + single trajectories early; bin by conditioning state; a careful observer's repeated contradicting observation is evidence the model is wrong; check docs/memory first. |
 | 2026-06-09 | 17:20 | `20260609_1720_chasing_rabbit_avoidance_damage_driven` | Making rabbits actively hunt (harmless, R4) did NOT create predator-level avoidance — agent tolerates the harmless chaser (rides at dist 0), forages through it. No-predator transfer: ignores chasers (500/500 survival, M1=0). Matched-aggression control (predator≡rabbit chase params, only damage differs): dies 91%. 1-vs-1 matched pre-contact gap collapses to ~0. Avoidance is pain-consequence-driven, not motion-driven. Built eval_rollout --record tooling + configs 04/05/06. |
 | 2026-06-09 | 17:19 | `20260609_1719_predator_discrimination_visual_count_elimination` | The chasing-rabbit rPPO agent identifies an approaching predator BEFORE contact by COUNTING the neutrals on its own cell (visual ch7 = 2.0 = both rabbits accounted for) and inferring the unaccounted approaching smell is the predator — discrimination by ELIMINATION, not by sensing the predator's class at a distance (visual range 0). Conditional: only fires when rabbits are accounted-for; reverts to class-blind otherwise. Extends 'visual ch5/7 teaches at contact'. |
