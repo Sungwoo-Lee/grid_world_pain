@@ -478,7 +478,15 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
 
     # Trigger Attack Delay for damaging animals that hit the agent
     new_animal_at = jnp.where(at_damaging, params.animal_attack_delay, new_animal_at)
-    
+
+    # Strike-and-retreat: opt-in animals lose all stamina on contact, which makes
+    # the existing hunt cycle disengage (HUNT→RETURN), retreat to patrol centre,
+    # recover, and re-engage. No-op (where(False, ...)) for animals that did not
+    # opt in or did not contact this step; draws no PRNG → byte-parity preserved.
+    new_animal_stamina = jnp.where(
+        at_animal & params.animal_disengage_on_contact, 0.0, new_animal_stamina
+    )
+
     # Rock/Obstacle Damage
     # 1. Overlap damage (non-blocking rocks at current pos)
     at_obs = jnp.all(state.obs_pos == new_agent_pos, axis=-1)

@@ -121,6 +121,7 @@ class EnvParams:
     animal_classes_int: jnp.ndarray        # [N] int (0=predator, 1=neutral, ...)
     animal_behaviours_int: jnp.ndarray     # [N] int (0=wander, 1=hunt, 2=static)
     animal_is_damaging: jnp.ndarray        # [N] bool (precomputed from class)
+    animal_disengage_on_contact: jnp.ndarray  # [N] bool (opt-in: drain stamina→0 on agent contact)
     animal_visual_channel: jnp.ndarray     # [N] int (5=predator, 7=neutral, ...)
     # Static tags / labels (pytree_node=False — not JAX arrays)
     animal_classes: tuple = struct.field(pytree_node=False)    # len N strings

@@ -325,6 +325,7 @@ def _load_animals(config: Config):
                     'move_interval': ent.get('move_interval'),
                     'damage': ent.get('damage'),
                     'attack_delay': ent.get('attack_delay'),
+                    'disengage_on_contact': bool(ent.get('disengage_on_contact', False)),
                     'spawn_area': ent.get('spawn_area'),
                     'patrol_area': ent.get('patrol_area'),
                     'mandatory_dist': mandatory_dist,
@@ -357,6 +358,7 @@ def _load_animals(config: Config):
                     'move_interval': _p_get('move_interval'),
                     'damage': _p_get('damage'),
                     'attack_delay': _p_get('attack_delay'),
+                    'disengage_on_contact': bool(p.get('disengage_on_contact', False)),
                     'spawn_area': p.get('spawn_area'),
                     'patrol_area': p.get('patrol_area'),
                     'mandatory_dist': True,  # hunt — all dist fields mandatory
@@ -390,6 +392,7 @@ def _load_animals(config: Config):
                     # auto-fill internally (not user-facing fallback defaults).
                     'damage': [0.0, 0.0],
                     'attack_delay': 0,
+                    'disengage_on_contact': bool(n.get('disengage_on_contact', False)),
                     'spawn_area': n.get('spawn_area'),
                     'patrol_area': n.get('patrol_area'),
                     'mandatory_dist': False,  # wander — dist fields optional
@@ -422,6 +425,7 @@ def _load_animals(config: Config):
         animal_classes_int = jnp.zeros(0, dtype=jnp.int32)
         animal_behaviours_int = jnp.zeros(0, dtype=jnp.int32)
         animal_is_damaging = jnp.zeros(0, dtype=jnp.bool_)
+        animal_disengage_on_contact = jnp.zeros(0, dtype=jnp.bool_)
         animal_visual_channel = jnp.zeros(0, dtype=jnp.int32)
         animal_classes = ()
         animal_behaviours = ()
@@ -443,7 +447,7 @@ def _load_animals(config: Config):
             animal_hunt_thresh_low, animal_hunt_thresh_high,
             animal_lose_interest_low, animal_lose_interest_high,
             animal_classes_int, animal_behaviours_int,
-            animal_is_damaging, animal_visual_channel,
+            animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
             animal_classes, animal_behaviours, animal_tags,
             hunt_idx, wander_idx, static_idx,
             predator_indices, neutral_indices,
@@ -503,6 +507,7 @@ def _load_animals(config: Config):
     classes_int_list = []
     behaviours_int_list = []
     is_damaging_list = []
+    disengage_on_contact_list = []
     visual_channel_list = []
     classes_tuple = []
     behaviours_tuple = []
@@ -530,6 +535,7 @@ def _load_animals(config: Config):
         classes_int_list.append(ANIMAL_CLASS_TO_INT[cls])
         behaviours_int_list.append(ANIMAL_BEHAVIOUR_TO_INT[beh])
         is_damaging_list.append(cls in ANIMAL_DAMAGING_CLASSES)
+        disengage_on_contact_list.append(bool(e['disengage_on_contact']))
         visual_channel_list.append(ANIMAL_CLASS_TO_VIS_CHANNEL[cls])
         classes_tuple.append(cls)
         behaviours_tuple.append(beh)
@@ -571,6 +577,7 @@ def _load_animals(config: Config):
     animal_classes_int = jnp.array(classes_int_list, dtype=jnp.int32)
     animal_behaviours_int = jnp.array(behaviours_int_list, dtype=jnp.int32)
     animal_is_damaging = jnp.array(is_damaging_list, dtype=jnp.bool_)
+    animal_disengage_on_contact = jnp.array(disengage_on_contact_list, dtype=jnp.bool_)
     animal_visual_channel = jnp.array(visual_channel_list, dtype=jnp.int32)
 
     animal_classes = tuple(classes_tuple)
@@ -603,7 +610,7 @@ def _load_animals(config: Config):
         animal_hunt_thresh_low, animal_hunt_thresh_high,
         animal_lose_interest_low, animal_lose_interest_high,
         animal_classes_int, animal_behaviours_int,
-        animal_is_damaging, animal_visual_channel,
+        animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
         animal_classes, animal_behaviours, animal_tags,
         hunt_idx, wander_idx, static_idx,
         predator_indices, neutral_indices,
@@ -681,7 +688,7 @@ def load_env_params(config: Config) -> EnvParams:
         animal_hunt_thresh_low, animal_hunt_thresh_high,
         animal_lose_interest_low, animal_lose_interest_high,
         animal_classes_int, animal_behaviours_int,
-        animal_is_damaging, animal_visual_channel,
+        animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
         animal_classes, animal_behaviours, animal_tags,
         hunt_idx, wander_idx, static_idx,
         predator_indices, neutral_indices,
@@ -860,6 +867,7 @@ def load_env_params(config: Config) -> EnvParams:
         animal_classes_int=animal_classes_int,
         animal_behaviours_int=animal_behaviours_int,
         animal_is_damaging=animal_is_damaging,
+        animal_disengage_on_contact=animal_disengage_on_contact,
         animal_visual_channel=animal_visual_channel,
         animal_classes=animal_classes,
         animal_behaviours=animal_behaviours,
