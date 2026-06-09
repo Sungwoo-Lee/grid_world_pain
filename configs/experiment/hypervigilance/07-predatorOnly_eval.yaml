@@ -1,0 +1,829 @@
+# 07-predatorOnly_eval.yaml — eval-only: matched-aggression predator, NO rabbits.
+# Derived from 06-matchedAggression_chasingRabbit_eval.yaml by removing the 2 neutral (rabbit) entities.
+# Tests the elimination hypothesis: without rabbits to 'account for', does the agent still avoid the predator before contact?
+environment:
+  height: 10
+  width: 10
+  start_pos:
+  - 5
+  - 5
+  max_steps: 500
+  rest_action_enabled: true
+  eat_action_enabled: true
+  random_start_pos: true
+  placement:
+    mode: per_entity
+  resources:
+  - name: food
+    type: food
+    count: 0
+    spawn_area:
+    - - 1
+      - 1
+    - - 5
+      - 5
+    properties:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    max_consumption: 12
+    regeneration_delay: 0
+    damage:
+    - 0.0
+    - 0.0
+    nociception_intensity: 0.0
+  - name: food
+    type: food
+    count: 2
+    spawn_area:
+    - - 1
+      - 6
+    - - 5
+      - 10
+    properties:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    max_consumption: 12
+    regeneration_delay: 0
+    damage:
+    - 0.0
+    - 0.0
+    nociception_intensity: 0.0
+  - name: food
+    type: food
+    count: 0
+    spawn_area:
+    - - 6
+      - 6
+    - - 10
+      - 10
+    properties:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    max_consumption: 12
+    regeneration_delay: 0
+    damage:
+    - 0.0
+    - 0.0
+    nociception_intensity: 0.0
+  - name: food
+    type: food
+    count: 2
+    spawn_area:
+    - - 6
+      - 1
+    - - 10
+      - 5
+    properties:
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    max_consumption: 12
+    regeneration_delay: 0
+    damage:
+    - 0.0
+    - 0.0
+    nociception_intensity: 0.0
+  - name: hiding_predator
+    type: hiding_predator
+    count: 1
+    spawn_area:
+    - - 1
+      - 1
+    - - 5
+      - 5
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    max_consumption: -1
+    damage:
+    - 15.0
+    - 45.0
+    regeneration_delay: 20
+    nociception_intensity: 0.9
+  - name: hiding_predator
+    type: hiding_predator
+    count: 1
+    spawn_area:
+    - - 1
+      - 6
+    - - 5
+      - 10
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    max_consumption: -1
+    damage:
+    - 15.0
+    - 45.0
+    regeneration_delay: 20
+    nociception_intensity: 0.9
+  - name: hiding_predator
+    type: hiding_predator
+    count: 1
+    spawn_area:
+    - - 6
+      - 6
+    - - 10
+      - 10
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    max_consumption: -1
+    damage:
+    - 15.0
+    - 45.0
+    regeneration_delay: 20
+    nociception_intensity: 0.9
+  - name: hiding_predator
+    type: hiding_predator
+    count: 1
+    spawn_area:
+    - - 6
+      - 1
+    - - 10
+      - 5
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    max_consumption: -1
+    damage:
+    - 15.0
+    - 45.0
+    regeneration_delay: 20
+    nociception_intensity: 0.9
+  entities:
+  - class: predator
+    behaviour: hunt
+    tag: full
+    count: 1
+    properties:
+    - 0.0
+    - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    move_interval: 1
+    nociception_intensity: 0.9
+    damage:
+    - 15.0
+    - 45.0
+    spawn_area:
+    - - 1
+      - 1
+    - - 10
+      - 10
+    patrol_area:
+    - - 1
+      - 1
+    - - 10
+      - 10
+    attack_delay: 3
+    detection_range: 10
+    max_stamina: 60
+    stamina_recovery_rate: 1.0
+    hunt_stamina_threshold: 0.3
+    lose_interest_multiplier: 3.0
+  location_areas:
+  - type: grass
+    area:
+    - - 1
+      - 1
+    - - 10
+      - 10
+  - type: sand
+    area:
+    - - 0
+      - 0
+    - - 0
+      - 0
+  obstacles:
+  - name: rock
+    count: 3
+    area:
+    - - 1
+      - 1
+    - - 5
+      - 5
+    blocking: false
+    damage:
+    - 1
+    - 5
+    nociception_intensity: 0.9
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - name: rock
+    count: 3
+    area:
+    - - 1
+      - 6
+    - - 5
+      - 10
+    blocking: false
+    damage:
+    - 1
+    - 5
+    nociception_intensity: 0.9
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - name: rock
+    count: 3
+    area:
+    - - 6
+      - 1
+    - - 10
+      - 5
+    blocking: false
+    damage:
+    - 1
+    - 5
+    nociception_intensity: 0.9
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - name: rock
+    count: 3
+    area:
+    - - 6
+      - 6
+    - - 10
+      - 10
+    blocking: false
+    damage:
+    - 1
+    - 5
+    nociception_intensity: 0.9
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - name: tree
+    count: 0
+    area:
+    - - 5
+      - 15
+    - - 5
+      - 15
+    blocking: true
+    damage:
+    - 0.1
+    - 0.5
+    nociception_intensity: 0.1
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - name: bush
+    count: 0
+    area:
+    - - 1
+      - 1
+    - - 5
+      - 5
+    blocking: false
+    damage:
+    - 0.0
+    - 0.0
+    nociception_intensity: 0.0
+    hides_agent: true
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - name: bush
+    count: 5
+    area:
+    - - 1
+      - 6
+    - - 5
+      - 10
+    blocking: false
+    damage:
+    - 0.0
+    - 0.0
+    nociception_intensity: 0.0
+    hides_agent: true
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - name: bush
+    count: 5
+    area:
+    - - 6
+      - 1
+    - - 10
+      - 5
+    blocking: false
+    damage:
+    - 0.0
+    - 0.0
+    nociception_intensity: 0.0
+    hides_agent: true
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - name: bush
+    count: 0
+    area:
+    - - 6
+      - 6
+    - - 10
+      - 10
+    blocking: false
+    damage:
+    - 0.0
+    - 0.0
+    nociception_intensity: 0.0
+    hides_agent: true
+    properties:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 1.0
+    - 0.0
+    properties_std:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+body:
+  with_satiation: true
+  with_nutrition: true
+  with_injury: true
+  random_start_satiation: false
+  random_start_nutrition: false
+  random_start_injury: false
+  max_satiation: 100
+  max_nutrition: 100
+  max_injury: 100
+  metabolic_cost: 1.0
+  food_nutrition_gain: 6
+  eating_nutrition_cost: 1.0
+  eating_reward_penalty: 0.0
+  nutrition_to_satiation_scaling_factor: 1.0
+  satiation_setpoint: 100
+  start_satiation: 100
+  start_nutrition: 100
+  recovery_base_rate: 0.1
+  recovery_accel_rate: 0.5
+  injury_smoothing_duration: 3
+  use_homeostatic_reward: true
+  death_penalty: 100
+  overeating_death: false
+sensory:
+  using_sensory: true
+  olfactory_enabled: true
+  sensor_radius: 20
+  vector_size: 5
+  decay_power: 2.0
+  collision_sensor_range: 1
+  location_sensor: false
+  nociception_enabled: true
+  nociception_size: 1
+  visual_sensor_enabled: true
+  visual_sensor_range: 0
+  proprioception_enabled: true
+  injury_observable: false
+  nutrition_observable: false
+  interoceptive_nociception_enabled: true
+  interoceptive_convolution_enabled: true
+  interoceptive_kernel_tau: 3.0
+  interoceptive_kernel_length: 12
+visualization:
+  local_view_size: 5
+behavior_measures:
+  enabled: true
+  cue_radius: 3.0
+  obs_window: 5
+  eval_n_episodes: 200
+  eval_seeds:
+  - 15810353
+  - 48773805
+  - 66180795
+  - 74502574
+  - 80020205
+  - 94067870
+  - 125204184
+  - 137046513
+  - 145857092
+  - 163945743
+  - 170075129
+  - 184566854
+  - 188226768
+  - 191664964
+  - 193376308
+  - 194489917
+  - 197860369
+  - 202244314
+  - 208792607
+  - 227939461
+  - 245951460
+  - 253415745
+  - 271185814
+  - 275121931
+  - 279004308
+  - 300116173
+  - 300211767
+  - 327087749
+  - 331334161
+  - 345075200
+  - 346328508
+  - 354826746
+  - 356942049
+  - 358571615
+  - 392022359
+  - 406886645
+  - 417983442
+  - 429299595
+  - 432652533
+  - 460817075
+  - 487284116
+  - 487991439
+  - 502381220
+  - 512746651
+  - 514446424
+  - 527166791
+  - 593883019
+  - 594336918
+  - 595114158
+  - 604267306
+  - 619179888
+  - 630487793
+  - 647492281
+  - 652727865
+  - 670802254
+  - 689805533
+  - 699704628
+  - 709091226
+  - 717885406
+  - 727876280
+  - 735708086
+  - 746248854
+  - 761338719
+  - 776986664
+  - 781482251
+  - 787359109
+  - 795556160
+  - 796282693
+  - 818236852
+  - 832103482
+  - 864178267
+  - 872709139
+  - 877308582
+  - 878721193
+  - 882294417
+  - 897559571
+  - 929893138
+  - 932688238
+  - 934620677
+  - 937843452
+  - 938776597
+  - 942484272
+  - 944062963
+  - 952224741
+  - 957106590
+  - 958113306
+  - 967196436
+  - 967354525
+  - 985514123
+  - 991873799
+  - 994157307
+  - 1002275723
+  - 1008363426
+  - 1011671399
+  - 1012682731
+  - 1021568550
+  - 1064348453
+  - 1068008206
+  - 1068999196
+  - 1074497556
+  - 1075985461
+  - 1084512518
+  - 1085781156
+  - 1102145673
+  - 1130604998
+  - 1171300113
+  - 1173749072
+  - 1188802710
+  - 1190961761
+  - 1193242762
+  - 1196217438
+  - 1200888233
+  - 1212254291
+  - 1213835295
+  - 1214129971
+  - 1221362418
+  - 1233945443
+  - 1294585271
+  - 1303944408
+  - 1352408539
+  - 1353521562
+  - 1356488968
+  - 1363047213
+  - 1367435608
+  - 1382689816
+  - 1405375275
+  - 1405681632
+  - 1421454891
+  - 1426602464
+  - 1427756342
+  - 1435384430
+  - 1438414600
+  - 1455819992
+  - 1465647934
+  - 1466836457
+  - 1468235992
+  - 1474200732
+  - 1495336619
+  - 1496303882
+  - 1497586439
+  - 1503807855
+  - 1504361615
+  - 1514331119
+  - 1539871430
+  - 1540770720
+  - 1551254893
+  - 1580016184
+  - 1596387605
+  - 1599364551
+  - 1627981025
+  - 1631871624
+  - 1634535063
+  - 1642822537
+  - 1648932250
+  - 1656896192
+  - 1662057958
+  - 1671565831
+  - 1675819613
+  - 1676602827
+  - 1678403331
+  - 1683408585
+  - 1688060241
+  - 1689907232
+  - 1707061845
+  - 1708709736
+  - 1711206424
+  - 1728218298
+  - 1728507683
+  - 1748095465
+  - 1764532445
+  - 1766867110
+  - 1777324408
+  - 1787264314
+  - 1788162810
+  - 1788288546
+  - 1803345591
+  - 1807519525
+  - 1832669144
+  - 1836270334
+  - 1837539165
+  - 1843166519
+  - 1843824993
+  - 1906728919
+  - 1917963003
+  - 1928628491
+  - 1934070333
+  - 1944623249
+  - 1970642946
+  - 1981113450
+  - 1990212659
+  - 2014450024
+  - 2019291965
+  - 2060924130
+  - 2065659505
+  - 2077711329
+  - 2084558134
+  - 2095133046
+  - 2110414631
+  - 2131733184
+  - 2139123294
+  eval_policy_mode: deterministic
+  eval_max_steps: 500
+  eval_obs_noise: training
+  motif_window_K: 7
+  motif_features:
+  - net_displacement
+  - path_length
+  - threat_distance_change_rate
+  - min_threat_distance
+  - bush_occupancy_fraction
+  - eat_events_per_window
+  - action_entropy
+  - mode_action_fraction
+  - stay_in_place_fraction
+  - drive_injury_change
+  motif_kmeans_k: 6
+  motif_kmeans_seed: 42
+  motif_standardise: zscore_pooled
+  eval_output_root: results/eval
+perceptual_noise:
+  enabled: false
+  modalities:
+    injury:
+      mode: state_dependent
+      sigma: 0.0
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    nutrition:
+      mode: state_dependent
+      sigma: 0.0
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    satiation:
+      mode: state_dependent
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    interoceptive_nociception:
+      mode: state_dependent
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    extero_nociception:
+      mode: state_dependent
+      sigma: 0.1
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0
+    olfaction:
+      mode: state_dependent
+      sigma: 0.2
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0
+    collision:
+      mode: constant
+      sigma: 0.01
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    proprioception:
+      mode: constant
+      sigma: 0.05
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    visual:
+      mode: state_dependent
+      sigma: 0.2
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 100.0
+    location:
+      mode: constant
+      sigma: 0.01
+      injury_noise_scale: 0.0
+      clip_min: -1.0
+      clip_max: 1.0
