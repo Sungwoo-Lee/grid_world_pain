@@ -78,15 +78,18 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# log_interval comparison cell C — buf256k @ 10M episode cap, n113/gpu0, seed 42.
-# Sibling cells: jkmto06f (A, log_interval=10), n114/gpu1 (B, log_interval=5000).
-CUDA_VISIBLE_DEVICES=0 \
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \
-  --agent-config configs/models/dreamer_srl/01_food_only_buf256k_log50k.yaml \
+# recurrent_ppo hypervigilance pilot (2026-05-29).
+# Run: 04-sameProp_R4_chasingRabbit, seed 42, node 110, GPU 0.
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+  train.py \
+  --config configs/experiment/hypervigilance/04-sameProp_R4_chasingRabbit.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --episodes 10000000 \
-  --num-envs 16 \
+  --num-envs 128 \
   --seed 42 \
-  --wandb-project grid_world_pain \
-  --wandb-name "dreamer_srl_v2_postfix_XS_envs_16_ep10M_buf256k_s42_n113_gpu0_log50k" \
-  --legacy-grad-loop
+  --device cuda:0 \
+  --log-interval 50 \
+  --wandb-group hypervigilance \
+  --wandb-job-type pilot \
+  --wandb-name "recurrent_ppo_04-sameProp_R4_chasingRabbit_s42" \
+  --tag "recurrent_ppo_04-sameProp_R4_chasingRabbit_s42"
