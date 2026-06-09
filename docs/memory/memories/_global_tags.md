@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-05-29
+**Last updated**: 2026-06-09
 
 ---
 
@@ -54,6 +54,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-06-09: 4 insights from the chasing-rabbit (R4) behaviour deep-dive session (`20260609_1719_predator_discrimination_visual_count_elimination`, `20260609_1720_chasing_rabbit_avoidance_damage_driven`, `20260609_1721_aggregate_stats_hide_conditional_behavior`, `20260609_1722_renderer_no_neutral_icon_and_attack_delay_ride`) reused existing tags `hypervigilance`, `learned_lesson`, `decision`, `refutation`, `meta`, `design` — no new tags promoted. 3 into `hypervigilance`, 1 into `env_entities`.
 
 - 2026-05-29: 3 insights from the dreamer-srl v2 post-fix relaunch + WandB/config-save parity + log_interval-cadence session (`20260529_1824_dreamer_srl_wandb_spread_and_config_save_parity`, `20260529_1825_log_interval_anchored_rows_per_session`, `20260529_1826_lazy_import_schema_drift_first_call_crash`) reused existing tags `dreamer`, `meta`, `learned_lesson`, `decision`, `design`, `refutation`, `training_runner` — no new tags promoted. 2 into `cluster_ops`, 1 into `dreamer_diagnosis`.
 - 2026-05-29: 1 insight from the v2.0 env_entities CP1-CP6 ship + R3 predator-distributional design session (`20260529_1823_unified_animal_entity_v2_0_arch`) reused existing tags `design`, `decision`, `learned_lesson`, `meta` — no new tags promoted. New folder `env_entities` opened (genesis insight).

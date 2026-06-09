@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `hypervigilance` topic.
 
 **Folder definition**: Hypervigilance experiments
-**Insights**: 11
-**Last updated**: 2026-05-18
+**Insights**: 14
+**Last updated**: 2026-06-09
 
 ---
 
@@ -13,6 +13,9 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-09 | 17:21 | `20260609_1721_aggregate_stats_hide_conditional_behavior` | Methodology post-mortem: a confidently-wrong 'agent cannot discriminate predator/rabbit' conclusion came from over-trusting an incomplete proof + defending it with confounds and AGGREGATE stats that averaged away a CONDITIONAL behaviour. Mechanism only surfaced by reading individual trajectories step-by-step and inspecting the raw 27-dim observation vector — which the user had urged for several turns. Rules: inspect agent inputs + single trajectories early; bin by conditioning state; a careful observer's repeated contradicting observation is evidence the model is wrong; check docs/memory first. |
+| 2026-06-09 | 17:20 | `20260609_1720_chasing_rabbit_avoidance_damage_driven` | Making rabbits actively hunt (harmless, R4) did NOT create predator-level avoidance — agent tolerates the harmless chaser (rides at dist 0), forages through it. No-predator transfer: ignores chasers (500/500 survival, M1=0). Matched-aggression control (predator≡rabbit chase params, only damage differs): dies 91%. 1-vs-1 matched pre-contact gap collapses to ~0. Avoidance is pain-consequence-driven, not motion-driven. Built eval_rollout --record tooling + configs 04/05/06. |
+| 2026-06-09 | 17:19 | `20260609_1719_predator_discrimination_visual_count_elimination` | The chasing-rabbit rPPO agent identifies an approaching predator BEFORE contact by COUNTING the neutrals on its own cell (visual ch7 = 2.0 = both rabbits accounted for) and inferring the unaccounted approaching smell is the predator — discrimination by ELIMINATION, not by sensing the predator's class at a distance (visual range 0). Conditional: only fires when rabbits are accounted-for; reverts to class-blind otherwise. Extends 'visual ch5/7 teaches at contact'. |
 | 2026-05-18 | 17:36 | `20260518_1736_sameprop_c_seed44_directional_replication` | R2.6 Cell C seed 44 at 62.5% of 10M-ep budget on n101 (still running) reproduces the R2.5 event-level class discrimination directionally: training-time M2 gap +29 pp (R2.5 eval-time was +37 pp), M5_predator 0.95 (R2.5 eval was 0.75), per-tag rabbit_TL vs rabbit_BR identical to within 0.06 pp. Threshold misses are consistent with online-vs-eval bias — final verdict requires the offline eval-rollout that produced R2.5's §12 numbers. Status: active, valid_until 2026-05-21. |
 | 2026-05-18 | 17:35 | `20260518_1735_sameprop_a1_seed45_corner_camping_refuted` | R2.6 Cell A1 seed 45 finished 10M ep on n102 with Episode/Steps=98/500 — H₁(A1-stable, corner-camping is a generic basin) clearly refuted. Agent learned to avoid the TL corner (where both predator and TL-rabbit live) but then starved (Term_Starvation=0.84, FoodEaten=1.77/ep). Third A1 policy regime, distinct from seed 43's corner-camping (486/500) and the seed-45 partial mid-training "stay-and-eat" reading on n106. Spatial-level class-blindness survives (per-tag Δ_TL=+0.04 cells); the specific high-survival policy is seed-specific. |
 | 2026-05-18 | 15:14 | `20260518_1514_num_envs_vs_budget_interaction` | Size-vs-num_envs optimum is regime-dependent on training budget — short-budget (200k) sweeps had envs=4 + size=S as the winner, but long-budget (2M-4M) sweeps catch up dramatically (XS/16: +110% from 200k→2M; XS/64: +216%) and flip to envs=16-64 + size=XS. Mechanism: high-parallelism configs amortise more WM warm-up. Operational lesson: short-budget hyperparameter sweeps systematically under-rank high-parallelism cells; do not pick a production recipe from a short-budget winner without re-running at deployment budget. |

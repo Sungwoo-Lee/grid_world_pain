@@ -4,9 +4,9 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-05-29
+**Last updated**: 2026-06-09
 **Active folders**: 7
-**Total insights**: 92
+**Total insights**: 96
 **Last audit**: (none)
 
 ---
@@ -20,8 +20,8 @@
 | `nmn_diagnosis` | NMN performance diagnosis findings | 16 | 2026-05-28 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 17 | 2026-05-29 | [dreamer, decision, learned_lesson, refutation, meta, design] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 26 | 2026-05-29 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
-| `hypervigilance` | Hypervigilance experiments | 9 | 2026-05-18 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta] |
-| `env_entities` | Env entity architecture decisions | 1 | 2026-05-29 | [design, decision, learned_lesson, meta] |
+| `hypervigilance` | Hypervigilance experiments | 12 | 2026-06-09 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta] |
+| `env_entities` | Env entity architecture decisions | 2 | 2026-06-09 | [design, decision, learned_lesson, meta] |
 
 ---
 
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-06-09: Captured 4 insights from the chasing-rabbit (R4) behaviour deep-dive + obs-leak audit + matched-aggression control session: 3 into existing `hypervigilance` (`20260609_1719_predator_discrimination_visual_count_elimination` — agent identifies an approaching predator pre-contact by COUNTING rabbits on its own cell via visual ch7 and inferring the unaccounted approacher is the predator (elimination); `20260609_1720_chasing_rabbit_avoidance_damage_driven` — harmless hunting rabbits did NOT create predator-level avoidance; avoidance is damage/pain-driven, matched-aggression control kills 91%; `20260609_1721_aggregate_stats_hide_conditional_behavior` — methodology post-mortem on a wrong 'cannot discriminate' conclusion that aggregates hid and raw-obs/trajectory inspection corrected), 1 into existing `env_entities` (`20260609_1722_renderer_no_neutral_icon_and_attack_delay_ride` — renderer has no agent+neutral icon (cosmetic disappear) + attack-pause is damage-gated so the chasing rabbit rides). All tags reused (hypervigilance, learned_lesson, decision, refutation, meta, design). No new tags promoted.
 
 - 2026-05-29: Captured 3 insights from the dreamer-srl v2 post-fix relaunch + WandB/config-save parity + log_interval-cadence session: 2 into existing `cluster_ops` (`20260529_1824_dreamer_srl_wandb_spread_and_config_save_parity` — lifted rPPO's `**config.to_dict()` spread pattern + dual env_config.yaml/agent_config.yaml save, smoke `mo1pkvm5` confirms `wandb.config["agent"] == {"algorithm": "DreamerV3"}`; `20260529_1825_log_interval_anchored_rows_per_session` — anchor log_interval to ~140 WandB rows / 24h, not env-steps-per-row; dreamer-srl @ XS/num_envs=16 → 50000 → 2000 to match rPPO scale), 1 into existing `dreamer_diagnosis` (`20260529_1826_lazy_import_schema_drift_first_call_crash` — 4 cells crashed at ep 10000 because eval_recording.py is lazy-imported AFTER a parallel session pulled the CP6 EnvState unification; schema mismatch surfaces only at first lazy-call site, ~7h into training). All tags reused (dreamer, meta, learned_lesson, decision, design, refutation, training_runner). No new tags promoted. Added `dreamer` to `cluster_ops` top-tags list to reflect cross-algorithm-infra use.
 - 2026-05-29: Captured 1 insight into the **new** `env_entities` folder from the v2.0 env_entities refactor + R3 predator-distributional design session: `20260529_1823_unified_animal_entity_v2_0_arch` — unified predator + neutral animals into one entity class with a static class tag (sensor channels + metric fan-out only), added per-episode uniform distributional sampling on 5 core behavioural fields, shipped via CP1-CP6 atomic refactor across 86 configs with byte-parity vs v1.4 preserved by a per-subset PRNG call pattern. **Why a new folder**: env-architecture is generic to all experiments and shouldn't be hidden inside `hypervigilance` (which drove R3) or `nmn_diagnosis` (model-architecture). Definition lock: `Env entity architecture decisions`. Folder size 1; eligible for merge proposal if it stays singleton at the next audit. All tags reused (design, decision, learned_lesson, meta). No new tags promoted.

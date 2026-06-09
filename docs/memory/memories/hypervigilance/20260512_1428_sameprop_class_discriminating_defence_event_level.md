@@ -79,4 +79,7 @@ The Round 2.5 mean-distance verdict (`20260510_2237_sameprop_round25_no_class_av
 - [[20260513_0015_active_swapped_geq_matched_reframes_meta]] (hypervigilance, 2026-05-13) — Specialist ceiling table from the 6-world unmodulated probe (single-seed, 10M ep
 - [[20260518_1735_sameprop_a1_seed45_corner_camping_refuted]] (hypervigilance, 2026-05-18) — R2.6 Cell A1 seed 45 finished 10M ep on n102 with Episode/Steps=98/500 — H₁(A1-s
 - [[20260518_1736_sameprop_c_seed44_directional_replication]] (hypervigilance, 2026-05-18) — R2.6 Cell C seed 44 at 62.5% of 10M-episode budget on n101 (still running) repro
+- [[20260609_1719_predator_discrimination_visual_count_elimination]] (hypervigilance, 2026-06-09) — The chasing-rabbit rPPO agent can identify an approaching predator BEFORE contac
+- [[20260609_1720_chasing_rabbit_avoidance_damage_driven]] (hypervigilance, 2026-06-09) — Making the rabbits actively hunt the agent (harmless chasers, R4) did NOT create
+- [[20260609_1721_aggregate_stats_hide_conditional_behavior]] (hypervigilance, 2026-06-09) — Methodology post-mortem: I reached a confidently-wrong 'the agent cannot discrim
 <!-- END BACKLINKS -->
