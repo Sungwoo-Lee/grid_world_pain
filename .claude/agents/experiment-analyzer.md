@@ -54,6 +54,12 @@ When given run IDs (typically `YYYYMMDD_HHMMSS`):
 6. **Temporal evolution is mandatory** — show how key metrics change across training steps/episodes, including trends, inflection points, and convergence behavior. Static end-of-training snapshots are not sufficient.
 7. **Per-seed values, not just means** — call out seed dispersion explicitly. A 5-seed mean with stddev twice the effect size is a null result, regardless of where the mean landed.
 
+## Trajectory-Level Qualitative Analysis (eval recordings)
+
+WandB metrics answer "what do the summary numbers say"; they do NOT answer "what does the agent ACTUALLY do, step by step". When the question is behavioural — does the agent flee/approach/avoid X before contact, why does it do Y, does the video contradict the metrics — use the **`trajectory-story` skill** (calls `scripts/trajectory_story.py`). It reads the `.rec.gz` recordings written by `scripts/eval_rollout.py --record` and gives a per-step story view, a flee-decomposition, and a raw-observation decode.
+
+**Hard rule learned the hard way** (memory `20260609_1721_aggregate_stats_hide_conditional_behavior`): aggregate statistics can average away a CONDITIONAL behaviour, and a tidy theory can survive several aggregate checks yet be wrong. Before stating a behavioural conclusion, inspect **individual trajectories + the raw observation vector**, bin by the state the behaviour might be gated on, and — if a mechanism is suspected — design a **control eval** (remove/swap the relevant entity) rather than trusting the mechanism. See `.claude/skills/trajectory-story/SKILL.md`.
+
 ## Output Scope
 
 - **Analysis docs** under `docs/experiments/active/<topic>/<NAME>.md` per the [experiments Frontmatter Contract](../../docs/experiments/meta/FRONTMATTER_CONTRACT.md).
