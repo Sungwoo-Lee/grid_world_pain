@@ -22,9 +22,11 @@ CP9 note: learning_starts=0 (D-012 pre-declared in DEVIATION_LOG.md).
 from __future__ import annotations
 
 import argparse
+import glob
 import sys
 import time
-from typing import Dict, Optional
+from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 import jax
 import jax.numpy as jnp
@@ -42,6 +44,144 @@ from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
 from src.algorithms.dreamer_srl.loss import TwoHotEncoding
 from src.algorithms.dreamer_srl.train import make_train_step, polyak_update
 from src.algorithms.dreamer_srl.utils import Ratio, moments_init
+
+
+# ---------------------------------------------------------------------------
+# ContinualSchedule — curriculum engine (ported from train.py:134-201)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ContinualSchedule:
+    """Describes a multi-stage curriculum: one env config + schedule per stage.
+
+    Ported from train.py:L135-L153 with adaptation for dreamer-srl's split
+    env-config / agent-config style (stage configs are env configs only).
+
+    Attributes:
+        stage_config_paths: Absolute paths to stage env YAML files (alphabetic).
+        stage_names: Basename without extension (e.g. "01_5x5_food_hide_rock").
+        stage_configs: Fully-merged Config objects, one per stage.
+        episode_boundaries: Cumulative episode count ending each stage
+            (strictly increasing; last = total episodes).
+        checkpoint_frequencies: Checkpoint-save period (in episodes) per stage.
+    """
+    stage_config_paths: List[str]
+    stage_names: List[str]
+    stage_configs: List  # List[Config]
+    episode_boundaries: List[int]
+    checkpoint_frequencies: List[int]
+
+    @property
+    def num_stages(self) -> int:
+        return len(self.stage_config_paths)
+
+    def stage_for_episode(self, episode: int) -> int:
+        """Return the stage index that owns `episode` (0-based).
+
+        Mirrors train.py:L146-L153 stage_for_episode logic.
+        """
+        for i, b in enumerate(self.episode_boundaries):
+            if episode < b:
+                return i
+        return self.num_stages - 1
+
+
+def _load_stage_env_cfg(project_root: str, stage_yaml_path: str):
+    """Build a full env Config for one stage: defaults + stage YAML.
+
+    Mirrors dreamer_srl_main.py single-config merge (lines 221-234), applied
+    per stage. Returns a merged Config object ready for load_env_params().
+
+    Args:
+        project_root: Absolute path to the repo root.
+        stage_yaml_path: Absolute path to the stage env YAML.
+
+    Returns:
+        Config: Fully merged env config for this stage.
+    """
+    import os as _os
+    from src.utils.config import get_default_config, Config as _Config
+    cfg = get_default_config()  # loads configs/environment/default.yaml
+    for rel in [
+        'configs/train/default.yaml',
+        'configs/evaluation/default.yaml',
+        'configs/visualization/default.yaml',
+    ]:
+        p = _os.path.join(project_root, rel)
+        if _os.path.exists(p):
+            cfg.merge(_Config.load_yaml(p))
+    cfg.merge(_Config.load_yaml(stage_yaml_path))
+    return cfg
+
+
+def _build_continual_schedule(project_root: str, configs_dir: str,
+                               schedule_path: str) -> ContinualSchedule:
+    """Discover stage YAMLs + load + validate the schedule file.
+
+    Ported from train.py:L154-L201 _build_continual_schedule with adaptation:
+    stage Config is built by _load_stage_env_cfg (dreamer-srl merge style)
+    instead of train.py's single-config clone.
+
+    Args:
+        project_root: Absolute path to the repo root.
+        configs_dir: Directory containing stage env YAML files (loaded
+            alphabetically — prefix 01_, 02_, ...).
+        schedule_path: Path to schedule YAML with
+            continual.episode_boundaries and continual.checkpoint_frequencies.
+
+    Returns:
+        ContinualSchedule: Validated schedule ready for use.
+
+    Raises:
+        ValueError: If directory missing, no YAMLs found, schedule YAML
+            invalid, lengths mismatched, or boundaries non-monotonic.
+    """
+    import os as _os
+    from src.utils.config import Config as _Config
+
+    if not _os.path.isdir(configs_dir):
+        raise ValueError(f"--configs-dir '{configs_dir}' is not a directory.")
+    paths = sorted(glob.glob(_os.path.join(configs_dir, "*.yaml")))
+    if not paths:
+        raise ValueError(f"No *.yaml files found in {configs_dir}.")
+    names = [_os.path.splitext(_os.path.basename(p))[0] for p in paths]
+
+    # Load + validate schedule YAML — ported from train.py:L165-L186
+    sched_cfg = _Config.load_yaml(schedule_path)
+    boundaries = sched_cfg.get_mandatory("continual.episode_boundaries")
+    ckpt_freqs = sched_cfg.get_mandatory("continual.checkpoint_frequencies")
+
+    if len(boundaries) != len(paths):
+        raise ValueError(
+            f"episode_boundaries length ({len(boundaries)}) != "
+            f"number of stage configs ({len(paths)})."
+        )
+    if len(ckpt_freqs) != len(paths):
+        raise ValueError(
+            f"checkpoint_frequencies length ({len(ckpt_freqs)}) != "
+            f"number of stage configs ({len(paths)})."
+        )
+    if sorted(boundaries) != list(boundaries) or len(set(boundaries)) != len(boundaries):
+        raise ValueError(
+            f"episode_boundaries must be strictly increasing: {boundaries}"
+        )
+    if boundaries[0] <= 0:
+        raise ValueError(
+            f"episode_boundaries[0] must be > 0 (got {boundaries[0]})."
+        )
+    if any(f <= 0 for f in ckpt_freqs):
+        raise ValueError(
+            f"checkpoint_frequencies must all be > 0: {ckpt_freqs}"
+        )
+
+    stage_configs = [_load_stage_env_cfg(project_root, p) for p in paths]
+    return ContinualSchedule(
+        stage_config_paths=paths,
+        stage_names=names,
+        stage_configs=stage_configs,
+        episode_boundaries=list(boundaries),
+        checkpoint_frequencies=list(ckpt_freqs),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -163,10 +303,18 @@ def main() -> None:
     # 1. CLI args
     # -----------------------------------------------------------------------
     parser = argparse.ArgumentParser(description="dreamer-srl v3 training driver")
-    parser.add_argument("--env-config", type=str, required=True,
-                        help="Path to env YAML config")
+    parser.add_argument("--env-config", type=str, default=None,
+                        help="Path to env YAML config (single-config mode). "
+                             "Mutually exclusive with --configs-dir.")
     parser.add_argument("--agent-config", type=str, required=True,
                         help="Path to dreamer-srl agent YAML config")
+    parser.add_argument("--configs-dir", type=str, default=None,
+                        help="Directory of stage env-config YAMLs for curriculum learning. "
+                             "Loaded alphabetically (prefix 01_, 02_, ...). "
+                             "Mutually exclusive with --env-config / --episodes / --total-steps.")
+    parser.add_argument("--continual-schedule", type=str, default=None,
+                        help="Schedule YAML (continual.episode_boundaries, "
+                             "continual.checkpoint_frequencies). Required with --configs-dir.")
     parser.add_argument("--episodes", type=int, default=None,
                         help="Primary stop condition: total episodes to complete. "
                              "Mirrors train.py rPPO + JAX Dreamer-V3 dual-mode "
@@ -218,20 +366,52 @@ def main() -> None:
     import os as _os
     _project_root = '/media/nas01/projects/Interoceptive-AI/grid_world_pain'
     from src.utils.config import get_default_config
-    env_cfg = get_default_config()  # loads configs/environment/default.yaml
 
-    # Merge Training defaults (training.checkpoint_frequency etc.)
-    # Ported from train.py:L297-L327
-    for _cfg_rel in [
-        'configs/train/default.yaml',
-        'configs/evaluation/default.yaml',
-        'configs/visualization/default.yaml',
-    ]:
-        _cfg_path = _os.path.join(_project_root, _cfg_rel)
-        if _os.path.exists(_cfg_path):
-            env_cfg.merge(Config.load_yaml(_cfg_path))
+    # --- Mutual-exclusion guard + curriculum schedule build ---
+    # Exactly one of --env-config or --configs-dir is required.
+    # Mirrors train.py:329-336, 441-442.
+    schedule: Optional[ContinualSchedule] = None
+    if args.configs_dir is not None:
+        # Curriculum mode: --configs-dir replaces --env-config.
+        if args.env_config is not None:
+            raise ValueError(
+                "--configs-dir and --env-config are mutually exclusive. "
+                "Pass one or the other, not both."
+            )
+        if args.continual_schedule is None:
+            raise ValueError(
+                "--continual-schedule is required when --configs-dir is set."
+            )
+        if any(x is not None for x in (args.episodes, args.total_steps, args.total_timesteps)):
+            raise ValueError(
+                "--episodes / --total-steps / --total-timesteps are not allowed "
+                "with --configs-dir. The episode budget comes from "
+                "episode_boundaries[-1] in the schedule file."
+            )
+        schedule = _build_continual_schedule(
+            _project_root, args.configs_dir, args.continual_schedule
+        )
+        # Stage-0 config is the live env config at startup.
+        env_cfg = schedule.stage_configs[0]
+    else:
+        # Single-config mode: existing path unchanged.
+        if args.env_config is None:
+            raise ValueError(
+                "Exactly one of --env-config or --configs-dir is required."
+            )
+        env_cfg = get_default_config()  # loads configs/environment/default.yaml
+        # Merge Training defaults (training.checkpoint_frequency etc.)
+        # Ported from train.py:L297-L327
+        for _cfg_rel in [
+            'configs/train/default.yaml',
+            'configs/evaluation/default.yaml',
+            'configs/visualization/default.yaml',
+        ]:
+            _cfg_path = _os.path.join(_project_root, _cfg_rel)
+            if _os.path.exists(_cfg_path):
+                env_cfg.merge(Config.load_yaml(_cfg_path))
+        env_cfg.merge(Config.load_yaml(args.env_config))  # experiment-specific overrides
 
-    env_cfg.merge(Config.load_yaml(args.env_config))  # experiment-specific overrides
     agent_cfg = Config.load_yaml(args.agent_config)
 
     # Mandatory agent config reads (no fallback defaults per CLAUDE.md)
@@ -246,13 +426,20 @@ def main() -> None:
     # If --total-(time)steps is set, force episodes=0 to drop into env-step branch.
     env_max_steps = env_cfg.get_mandatory('environment.max_steps', int)
     env_step_override = args.total_timesteps or args.total_steps  # either CLI alias
-    if args.episodes is not None:
+    if schedule is not None:
+        # Curriculum mode: budget comes from the schedule (mutual-exclusion
+        # guard above ensures --episodes / --total-steps are not set).
+        episodes = schedule.episode_boundaries[-1]
+        total_timesteps = episodes * env_max_steps * num_envs
+    elif args.episodes is not None:
         episodes = args.episodes
+        total_timesteps = env_step_override or (episodes * env_max_steps * num_envs)
     elif env_step_override is not None:
         episodes = 0                       # env-step mode
+        total_timesteps = env_step_override
     else:
         episodes = env_cfg.get_mandatory('training.episodes', int)
-    total_timesteps = env_step_override or (episodes * env_max_steps * num_envs)
+        total_timesteps = episodes * env_max_steps * num_envs
     # Legacy variable kept for the final-log print; equals the budgeted env-step cap.
     total_steps = total_timesteps
     buffer_size = agent_cfg.get_mandatory("buffer.size", int)
@@ -328,6 +515,66 @@ def main() -> None:
     print(f"[dreamer-srl] seq_len={seq_len}, batch_size={batch_size}, horizon={horizon}")
 
     # -----------------------------------------------------------------------
+    # 4b. Pre-flight obs/action + modality-fingerprint check (curriculum only)
+    # Ported from train.py:483-534. Validates that all stage configs produce
+    # the same obs_dim, action_dim, and 13-field modality fingerprint so the
+    # retained weights fit every stage. Fails fast with a descriptive error.
+    # -----------------------------------------------------------------------
+    def _modality_fingerprint(p):
+        """13-field tuple of sensor enables + shape params affecting obs layout.
+
+        Ported verbatim from train.py:L485-L503.
+        If any two stages produce different fingerprints, obs semantics differ
+        even when obs_dim happens to be the same (same-dim modality swap).
+        """
+        return (
+            p.visual_sensor_enabled,
+            p.visual_sensor_range,
+            p.local_view_size,
+            p.olfactory_enabled,
+            p.olfactory_vector_size,
+            p.nociception_enabled,
+            p.nociception_size,
+            p.interoceptive_nociception_enabled,
+            p.location_sensor_enabled,
+            p.proprioception_enabled,
+            p.injury_observable,
+            p.nutrition_observable,
+            p.sensor_range,
+        )
+
+    if schedule is not None:
+        stage0_fingerprint = _modality_fingerprint(env_params)
+        probe_key = jax.random.PRNGKey(0)
+        for _i in range(1, schedule.num_stages):
+            _p_i = load_env_params(schedule.stage_configs[_i])
+            _env_i = ParallelEnv(_p_i)
+            _, _obs_i = _env_i.reset(probe_key, 1)
+            _a_i = 4 + int(_p_i.rest_action_enabled) + int(_p_i.eat_action_enabled)
+            if int(_obs_i.shape[-1]) != obs_dim or _a_i != action_dim:
+                raise ValueError(
+                    f"Stage {_i} ({schedule.stage_names[_i]}) changes "
+                    f"obs_dim ({obs_dim} -> {int(_obs_i.shape[-1])}) or "
+                    f"action_dim ({action_dim} -> {_a_i}). "
+                    "Continual learning forbids architecture-visible dimension changes."
+                )
+            _fp_i = _modality_fingerprint(_p_i)
+            if _fp_i != stage0_fingerprint:
+                raise ValueError(
+                    f"Stage {_i} ({schedule.stage_names[_i]}) has a different sensor "
+                    f"modality fingerprint than stage 0, which would scramble the "
+                    f"observation semantics even if obs_dim is unchanged.\n"
+                    f"  Stage 0 fingerprint: {stage0_fingerprint}\n"
+                    f"  Stage {_i} fingerprint: {_fp_i}"
+                )
+        if not args.quiet:
+            print(
+                f"[dreamer-srl] Continual mode: obs_dim={obs_dim}, "
+                f"action_dim={action_dim} validated consistent across "
+                f"{schedule.num_stages} stages."
+            )
+
+    # -----------------------------------------------------------------------
     # 5. Build agent
     # -----------------------------------------------------------------------
     rngs = nnx.Rngs(key)
@@ -397,6 +644,9 @@ def main() -> None:
                 # Backward-compat scalars (previously hand-picked subset)
                 "env_config": args.env_config,
                 "agent_config": args.agent_config,
+                "configs_dir": args.configs_dir,
+                "continual_schedule": args.continual_schedule,
+                "current_stage": 0,                      # curriculum: start stage
                 "total_steps":      total_timesteps,     # env-step cap (legacy key)
                 "total_timesteps":  total_timesteps,     # rPPO-style alias
                 "episodes":         episodes,            # primary budget
@@ -453,6 +703,9 @@ def main() -> None:
             # Mirrors train.py:L2466-L2467 Eval/* pattern
             wandb.define_metric("eval/checkpoint_episode")
             wandb.define_metric("Eval/*",       step_metric="timesteps")
+            # Curriculum: stage/* metrics indexed on Episode/Number.
+            # Mirrors plan §(h) — logged at each stage boundary.
+            wandb.define_metric("stage/*",      step_metric="Episode/Number")
         except ImportError:
             print("[dreamer-srl] WandB not installed — disabling WandB logging")
             use_wandb = False
@@ -489,6 +742,25 @@ def main() -> None:
         _yaml.dump(agent_cfg.to_dict(), _f, default_flow_style=False, sort_keys=False)
     print(f"[dreamer-srl] saved env_config → {_env_save}")
     print(f"[dreamer-srl] saved agent_config → {_agent_save}")
+
+    # In curriculum mode: dump each stage config + the schedule for auditability.
+    # Mirrors train.py:L568-L582.
+    if schedule is not None:
+        for _si, (_sname, _scfg) in enumerate(zip(schedule.stage_names, schedule.stage_configs)):
+            _stage_out = _os.path.join(_models_dir, f"stage_{_si:02d}_{_sname}.yaml")
+            with open(_stage_out, 'w') as _f:
+                _yaml.dump(_scfg.to_dict(), _f, default_flow_style=False, sort_keys=False)
+        _sched_dump = {
+            "continual": {
+                "episode_boundaries":     schedule.episode_boundaries,
+                "checkpoint_frequencies": schedule.checkpoint_frequencies,
+                "stage_names":            schedule.stage_names,
+            }
+        }
+        _sched_out = _os.path.join(_models_dir, "schedule.yaml")
+        with open(_sched_out, 'w') as _f:
+            _yaml.dump(_sched_dump, _f, default_flow_style=False, sort_keys=False)
+        print(f"[dreamer-srl] Saved {schedule.num_stages} stage configs + schedule.yaml → {_models_dir}/")
 
     # Checkpoint state for Commit B
     last_ckpt_episode: int = 0   # tracks last episode count at which we saved
@@ -570,6 +842,19 @@ def main() -> None:
         )
     else:
         _bm_state = None
+
+    # -----------------------------------------------------------------------
+    # 11b. Curriculum stage tracker + active checkpoint frequency.
+    # current_stage: 0-based index into schedule.stage_configs.
+    # checkpoint_frequency_active: per-stage checkpoint cadence (episodes).
+    #   In single-config mode mirrors the existing checkpoint_frequency.
+    # Mirrors plan §(i) and train.py:1093 (stage bookkeeping).
+    # -----------------------------------------------------------------------
+    current_stage: int = 0
+    checkpoint_frequency_active: int = (
+        schedule.checkpoint_frequencies[0] if schedule is not None
+        else checkpoint_frequency
+    )
 
     # -----------------------------------------------------------------------
     # 12. Training loop (sheeprl main() L550-L765)
@@ -814,15 +1099,105 @@ def main() -> None:
                 next_obs[env_idx] = np.asarray(new_obs_single)
 
             # -------------------------------------------------------------------
+            # Curriculum stage-transition block (gated on schedule is not None).
+            # Ported from train.py:1176-1270. MUST run AFTER per-env autoreset loop
+            # and BEFORE "obs = next_obs" (the fresh-stage full-env reset is
+            # authoritative; the per-env autoreset above would otherwise leave
+            # individual done-env obs drawn from the old env_params).
+            # -------------------------------------------------------------------
+            if schedule is not None:
+                _new_stage = schedule.stage_for_episode(total_episodes_completed)
+                if _new_stage != current_stage:
+                    if not args.quiet:
+                        print(
+                            f"[STAGE] {current_stage}:{schedule.stage_names[current_stage]}"
+                            f" -> {_new_stage}:{schedule.stage_names[_new_stage]}"
+                            f" at ep={total_episodes_completed}"
+                        )
+                    # 1. Rebuild env (env_params reassigned — autoreset path reads it).
+                    env_params = load_env_params(schedule.stage_configs[_new_stage])
+                    env = ParallelEnv(env_params)
+                    key, _k_stage_reset = jax.random.split(key)
+                    states, _next_obs_jax = env.reset(_k_stage_reset, num_envs)
+                    next_obs = np.array(_next_obs_jax)
+
+                    # Re-sync step_data staged row to the fresh stage.
+                    # step_data["obs"] was a NumPy view aliasing the *old* next_obs;
+                    # after rebinding next_obs above the view still points at the
+                    # pre-swap array.  buffer.add(step_data) runs at the TOP of the
+                    # next iteration (before line ~991 re-writes obs), so without this
+                    # re-sync the first row of the cleared buffer would pair the new
+                    # stage's is_first=1 anchor with the old stage's obs/reward/term.
+                    # Fix: mirror the startup init at lines ~783-789 exactly.
+                    step_data["obs"]        = next_obs[np.newaxis]                    # [1, B, obs_dim]
+                    step_data["rewards"]    = np.zeros((1, num_envs, 1), dtype=np.float32)
+                    step_data["terminated"] = np.zeros((1, num_envs, 1), dtype=np.float32)
+                    step_data["truncated"]  = np.zeros((1, num_envs, 1), dtype=np.float32)
+
+                    # 2. Reset player recurrent + posterior state (weights retained).
+                    player.init_states()
+                    is_first_next[:] = 1.0
+                    step_data["is_first"][:] = 1.0
+
+                    # 3. Clear replay buffer — prevents cross-stage dynamics
+                    #    contamination. Matches train.py:1224-1246. Cheap counter reset.
+                    _pre_size = buffer._pos if not buffer._full else buffer._buffer_size
+                    buffer.reset()
+
+                    # 4. Wipe in-flight episode accumulators (all envs — partial
+                    #    episodes dropped). Risk 3 mitigation: clear iteration_episodes
+                    #    so pre-swap per-tag keys don't reach WandB fan-out.
+                    episode_lengths[:] = 0
+                    episode_rewards[:] = 0.0
+                    for _k in BEHAVIOR_KEYS:
+                        episode_behavior[_k][:] = 0.0
+                    for _k in BEHAVIOR_DIST_KEYS:
+                        episode_dist_sums[_k][:] = 0.0
+                    iteration_episodes = []
+
+                    # 5. Rebuild per-tag accumulators + BM state for the new tag roster.
+                    neutral_tags  = tuple(env_params.neutral_tags)
+                    predator_tags = tuple(env_params.predator_tags)
+                    num_neutral_for_log  = len(neutral_tags)
+                    num_predator_for_log = len(predator_tags)
+                    episode_dist_per_neutral_sums  = np.zeros(
+                        (num_envs, num_neutral_for_log),  dtype=np.float32
+                    )
+                    episode_dist_per_predator_sums = np.zeros(
+                        (num_envs, num_predator_for_log), dtype=np.float32
+                    )
+                    if bm_enabled:
+                        _bm_state = make_bm_state(
+                            num_envs=num_envs,
+                            num_predator_tags=num_predator_for_log,
+                            num_neutral_tags=num_neutral_for_log,
+                            bm_R=bm_R,
+                            bm_K=bm_K,
+                        )
+
+                    # 6. Switch checkpoint frequency + log transition to WandB.
+                    current_stage = _new_stage
+                    checkpoint_frequency_active = schedule.checkpoint_frequencies[current_stage]
+                    if use_wandb:
+                        import wandb as _wandb_stage
+                        _wandb_stage.log({
+                            "stage/index":         current_stage,
+                            "stage/transition":    1,
+                            "stage/buffer_cleared": _pre_size,
+                            "Episode/Number":      total_episodes_completed,
+                        })
+
+            # -------------------------------------------------------------------
             # Commit B — Orbax checkpoint trigger (episode-based).
             # Ported from train.py:L2398-L2426 checkpoint-save block.
             # Fires when total_episodes_completed crosses a new multiple of
-            # checkpoint_frequency (mirrors train.py:L2395 episode modulo gate).
+            # checkpoint_frequency_active (per-stage cadence in curriculum mode,
+            # static checkpoint_frequency in single-config mode).
             # -------------------------------------------------------------------
             _just_saved_ckpt = False
             if (total_episodes_completed > 0 and
-                    total_episodes_completed // checkpoint_frequency >
-                    last_ckpt_episode // checkpoint_frequency):
+                    total_episodes_completed // checkpoint_frequency_active >
+                    last_ckpt_episode // checkpoint_frequency_active):
                 print(f"[dreamer-srl] Saving checkpoint @ episode {total_episodes_completed}...")
                 _save_checkpoint(
                     _ckpt_manager,
@@ -837,6 +1212,7 @@ def main() -> None:
                     policy_step=policy_step,
                     total_episodes_completed=total_episodes_completed,
                     cumulative_grad_steps=cumulative_grad_steps,
+                    stage=current_stage,
                 )
                 last_ckpt_episode = total_episodes_completed
                 _just_saved_ckpt = True

@@ -54,6 +54,7 @@ def save_checkpoint(
     policy_step: int,
     total_episodes_completed: int,
     cumulative_grad_steps: int,
+    stage: int = 0,
 ) -> None:
     """Save dreamer-srl state to an Orbax checkpoint at the given episode count.
 
@@ -73,6 +74,12 @@ def save_checkpoint(
         policy_step: current policy_step counter.
         total_episodes_completed: running episode count.
         cumulative_grad_steps: total gradient steps taken.
+        stage: current curriculum stage index (0-based). Written to the
+            checkpoint payload so a future resume plan can land in the right
+            stage. Defaults to 0 (single-config / non-curriculum runs).
+            NOTE: restore wiring is out of scope for this plan (no resume
+            path exists in the dreamer-srl driver today). This field is
+            write-only until a future plan adds restore.
     """
     ckpt_data = {
         'world_model':              nnx.state(world_model, nnx.Param),
@@ -85,6 +92,7 @@ def save_checkpoint(
         'policy_step':              jnp.array(policy_step, dtype=jnp.int32),
         'total_episodes_completed': jnp.array(total_episodes_completed, dtype=jnp.int32),
         'cumulative_grad_steps':    jnp.array(cumulative_grad_steps, dtype=jnp.int32),
+        'stage':                    jnp.array(stage, dtype=jnp.int32),
     }
     # Moments is a NamedTuple of JAX arrays — include field-by-field for Orbax
     # (Orbax StandardSave handles plain JAX pytrees natively).

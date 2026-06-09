@@ -529,6 +529,25 @@ class SequentialReplayBuffer:
             return cpu_samples
 
     # ------------------------------------------------------------------
+    # reset() — curriculum stage-boundary clear (not in sheeprl)
+    # ------------------------------------------------------------------
+
+    def reset(self) -> None:
+        """Mark the buffer empty without freeing the backing arrays.
+
+        Matches train.py:1230-1231 (idx=0; size=0) cheap-clear: sample()
+        gates on self._pos, so stale rows become unreachable. Used at
+        curriculum stage boundaries to prevent cross-stage dynamics
+        contamination of the world model.
+
+        Note: self._buf retains its allocated arrays; they will be
+        overwritten as new data is added. This avoids re-allocating large
+        arrays at each stage boundary.
+        """
+        self._pos = 0
+        self._full = False
+
+    # ------------------------------------------------------------------
     # _sample_at_indices() — CP3b addition (not in sheeprl)
     # ------------------------------------------------------------------
 
