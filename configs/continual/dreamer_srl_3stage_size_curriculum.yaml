@@ -1,0 +1,88 @@
+# Continual schedule: dreamer_srl_3stage_size_curriculum
+# ----------------------------------------------------------------------------
+# Plain-language purpose:
+#   Drives a 3-stage size+entity curriculum for the dreamer_srl agent. The
+#   engine reads this file together with a --configs-dir of stage env configs
+#   and, at each cumulative episode boundary below, swaps the live env config
+#   to the next stage (and writes a checkpoint at the per-stage cadence). The
+#   agent's weights carry across boundaries unchanged — only the environment
+#   the weights act in changes.
+#
+# Stage sources (alphabetical order in
+# configs/experiment/dreamer_srl_curriculum/ — the engine loads them sorted):
+#   01_5x5_food_hide_rock.yaml             -- 5x5: food + static hiding predator + rock
+#   02_5x5_food_hide_chase_rock_bush.yaml  -- 5x5: + moving chasing predator + bush
+#   03_10x10_full_task.yaml                -- 10x10: + rabbit (the full target task)
+#
+# Schedule contract (mirrors train.py ContinualSchedule):
+#   continual.episode_boundaries     : cumulative, strictly increasing, one per
+#                                      stage, last = total episodes.
+#   continual.checkpoint_frequencies : one int per stage, parallel to boundaries.
+#
+# Modality fingerprint: the obs vector is a fixed 27-dim with byte-identical
+#   per-modality breakdown across all three stages (verified by live-load probe:
+#   Satiation 1, Interoceptive-Nociception 1, Extero-Nociception 1, Olfaction 5,
+#   Collision 5, Proprioception 6, Visual 8). The encoder input dim is invariant
+#   to the 5x5 -> 10x10 grid change, so weight transfer is shape-safe.
+#   See design doc §"Modality fingerprint match".
+#
+# Throughput anchor (for the budget back-calculation)
+# ---------------------------------------------------
+#   dreamer_srl XS, num_envs=16: ~40 environment-steps/sec (the three running
+#   10M-episode parity cells logged 40.2 / 41.7 / 41.1 SPS — see
+#   docs/experiments/active/dreamer_srl_v2/ep10m_3cell_termination_analysis.md §7).
+#   Those cells reached ~47k episodes / ~7.4M env-steps in ~50h wall-clock on the
+#   10x10 full task — i.e. ~157 env-steps per episode averaged over the run.
+#   Budget below is intentionally sized so the whole curriculum lands in a
+#   comparable multi-day window to that from-scratch baseline run.
+#
+# Per-stage EPISODE budgets (the contract is on episodes, not env-steps)
+# ----------------------------------------------------------------------
+#   Stage 1 (food + static hazard, 5x5): delta 15,000 episodes.
+#     Once the agent learns to eat, episodes on this benign stage run long
+#     (toward max_steps=500 / starvation; few death events). Estimate ~150-250
+#     steps/ep => ~2.5-3.5M env-steps. Enough for the world-model reward head to
+#     repeatedly sample the small-positive eating tail and for the actor to
+#     leave the uniform regime before any moving threat appears. Anchored to the
+#     15-16k Stage-1 budget the prior dreamer curricula used.
+#
+#   Stage 2 (full threat suite, 5x5): delta 60,000 episodes (15k -> 75k).
+#     The bridge stage and the longest in EPISODE count by design. A moving
+#     chaser on a tiny 5x5 grid produces SHORT episodes early (~20-50 steps), so
+#     episode count must be high to expose the continuation/reward heads to
+#     enough death-terminal samples (the exact signal the diagnosis flags as
+#     under-sampled). ~60k eps x ~40-80 steps => ~2.5-5M env-steps. As bush-
+#     hiding is learned, episodes lengthen and the env-step yield rises.
+#
+#   Stage 3 (full target task, 10x10): delta 685,000 episodes (75k -> 760k).
+#     The bulk stage, sized so the cumulative total (760k episode CAP) exceeds
+#     what the from-scratch baseline consumed (~47k episodes in ~50h) by a wide
+#     margin — the CAP is deliberately loose; runs are Ctrl-C'd / evaluated long
+#     before it. On 10x10 the chaser-laden task yields ~60 steps/ep early rising
+#     to ~200 late; at ~40 SPS this stage dominates wall-clock. Success is
+#     measured here against the from-scratch baseline (see design doc §success).
+#
+#   Cumulative boundaries: [15000, 75000, 760000].
+#
+# Checkpoint frequencies: [7500, 30000, 100000]
+#   Stage 1: 7,500  -> 2 ckpts (mid + end-of-stage; capture the post-warm-up WM).
+#   Stage 2: 30,000 -> 2 ckpts (mid + end; capture the bridge-stage transfer point).
+#   Stage 3: 100,000 -> coarse; keeps disk manageable on the long final stage
+#                       while still resolving when 10x10 survival inflects.
+#
+# Launch (depends on the in-flight code port of the continual engine):
+#   --configs-dir configs/experiment/dreamer_srl_curriculum \
+#   --continual-schedule configs/continual/dreamer_srl_3stage_size_curriculum.yaml
+#
+# Design doc:
+#   docs/experiments/active/continual_learning/DREAMER_SRL_3STAGE_SIZE_CURRICULUM.md
+
+continual:
+  # Cumulative episode boundaries.
+  # Stage 1 (01_5x5_food_hide_rock)            runs while ep_count <  15000.
+  # Stage 2 (02_5x5_food_hide_chase_rock_bush) runs from ep 15000 until ep  75000.
+  # Stage 3 (03_10x10_full_task)               runs from ep 75000 until ep 760000 = total.
+  episode_boundaries: [15000, 75000, 760000]
+
+  # One int per stage. Parallel to episode_boundaries above.
+  checkpoint_frequencies: [7500, 30000, 100000]

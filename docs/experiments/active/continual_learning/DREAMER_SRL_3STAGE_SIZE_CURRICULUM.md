@@ -1,0 +1,194 @@
+---
+title: "dreamer_srl 3-stage size+entity curriculum vs from-scratch on the 10×10 full task"
+topic: continual_learning
+status: active
+created: 2026-06-09
+last_updated: 2026-06-09  # Stage-2 chaser slowed to a bridge form (full strength deferred to Stage 3)
+phase: 2
+wandb_tag: "dreamer_v3_dsrl_curric3_*"
+develop_link: docs/develop/active/diagnosis/dreamer_hypervigilance_learning_failure.md
+cross_links:
+  - docs/experiments/active/continual_learning/DREAMER_CURRICULUM_FOOD_THEN_PREDATOR.md
+  - docs/experiments/active/dreamer_srl_v2/ep10m_3cell_termination_analysis.md
+---
+
+# dreamer_srl 3-stage size+entity curriculum vs from-scratch on the 10×10 full task
+
+## 1. Purpose (plain-language entry point)
+
+We want to know whether **teaching the agent in three escalating steps** beats **throwing it straight at the hard task**.
+
+The agent is **dreamer_srl** — a from-scratch JAX re-implementation of DreamerV3, a model-based reinforcement learner that first learns a compact predictor of the world ("world model") and then trains its policy inside imagined roll-outs of that predictor. Performance is measured in **survival steps** (how many steps the agent stays alive out of a 500-step episode cap), never cumulative reward.
+
+The hard task is a **10×10 grid survival game**: find and eat food while avoiding a moving predator that hunts you, four static ambush hazards ("hiding predators") that kill on contact, and mild-damage rocks — with hiding bushes you can duck into to break the hunter's line of sight, and harmless rabbits wandering around as distractors. When dreamer_srl is trained on this task **from scratch**, three independent runs all climbed slowly to about **200 survival steps after roughly two days of wall-clock and ~47,000 episodes, and were still rising when stopped** (see the companion analysis of the three parity runs). A separate diagnosis showed that on the *small* 5×5 version of this task, an earlier DreamerV3 build got **stuck near 30 survival steps and never escaped** — its policy stayed essentially random because the death signal was too sparse for the world model's reward and "am-I-still-alive" heads to learn from.
+
+**The curriculum idea**: instead of starting on the full 10×10 task, start the same agent in a **small, simple 5×5 world** (food + one static ambush hazard + rocks), then add a **gentle, slowed-down moving hunter and hiding bushes** (still 5×5), then finally **scale up to the full 10×10 task with rabbits and the hunter restored to full strength**. The agent's neural-network weights carry across each transition unchanged — only the world it acts in changes. The single pre-registered question this experiment answers:
+
+The Stage-2 hunter is deliberately a **"bridge" chaser**: it moves slowly, does about a third of the damage, and has a tighter detection range, so the agent's first encounter with a moving predator is survivable rather than instantly lethal. Full predator strength is **deferred to Stage 3**. This makes the difficulty ramp smoother and — per the diagnosis of why the small-grid agent got stuck — gives the world model's "am-I-still-alive" head a chance to learn from occasional, recoverable death events before it faces the dense, fast lethality of the full task.
+
+> **Does a dreamer_srl agent that warms up through the 3-stage curriculum reach a higher final survival-step plateau on the 10×10 full task than a dreamer_srl agent trained on that task from scratch, and does it do so without losing seed-stability — measured across 5 seeds?**
+
+This doc owns the **config set and stage schedule**. The **continual-learning engine that reads them** is being ported in parallel by `senior-developer`; the launch command below depends on that port landing. This doc does **not** touch `src/`.
+
+## 2. Hypothesis & Predicted Outcomes
+
+**Hypothesis (H1).** Warming up on the small, simple stages lets the world model's reward head and continuation ("alive/dead") head accumulate clean eating-reward and death-terminal samples *before* the agent faces the full task, so the curriculum agent reaches a **higher and/or faster-converging** survival plateau on the 10×10 full task than the from-scratch baseline.
+
+**Confirmation (pre-registered).** The curriculum is judged to **help** if, on the Stage-3 full task, the curriculum arm's final survival (mean over the last 2,000 episodes, averaged across 5 seeds) exceeds the from-scratch baseline's final survival by **≥ 20 survival steps with non-overlapping 95% confidence intervals**, AND the curriculum arm's seed spread at that checkpoint is **≤ the baseline's** (no stability cost). "Final" is taken at matched cumulative **environment-step** budget on Stage 3, not matched episodes (episode counts differ because episode lengths differ between arms).
+
+**Refutation (pre-registered).** The curriculum is judged to **not help** (H1 refuted) if either: (a) the curriculum arm's Stage-3 final survival is **within ±20 steps** of the baseline (null — the warm-up bought nothing), or (b) the curriculum arm is **worse** than the baseline (negative transfer — the small-grid warm-up taught geometry-specific habits that hurt on 10×10). A **catastrophic-forgetting** signature — survival collapsing at the Stage-2→Stage-3 boundary and not recovering to baseline within the Stage-3 budget — also counts as refutation of H1 (and is logged as its own failure mode, §6).
+
+**Predicted shape of a positive result.** Survival rises on Stage 1, **drops at each stage boundary** (the task just got harder), then recovers; the Stage-3 recovery overshoots the from-scratch curve and plateaus higher. A flat Stage-1 trace near ~30 survival steps that never rises would instead reproduce the documented small-grid stuck-policy failure and predicts a null/negative final result.
+
+## 3. Launch Manifest (system-of-record)
+
+All rows share **wandb-group `dreamer_srl_curriculum`** and **wandb-job-type `prod`**. The curriculum arm is the new continual run; the baseline arm is the existing from-scratch 10×10 run pattern, re-run here at matched seeds for a clean paired comparison. Tag = wandb-name on every row. Actual columns (`Node`, `GPU`, `Launched at`, `WandB run ID`, `Log path`) are filled by `training-runner` at launch.
+
+| Run | Status | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Node | GPU | Launched at | WandB run ID | Log path |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Curric s42 | planned | C-42 | `dreamer_v3_dsrl_curric3_s42` | dreamer_srl_curriculum | prod | 42 | — | — | — | — | — |
+| Curric s43 | planned | C-43 | `dreamer_v3_dsrl_curric3_s43` | dreamer_srl_curriculum | prod | 43 | — | — | — | — | — |
+| Curric s44 | planned | C-44 | `dreamer_v3_dsrl_curric3_s44` | dreamer_srl_curriculum | prod | 44 | — | — | — | — | — |
+| Curric s45 | planned | C-45 | `dreamer_v3_dsrl_curric3_s45` | dreamer_srl_curriculum | prod | 45 | — | — | — | — | — |
+| Curric s46 | planned | C-46 | `dreamer_v3_dsrl_curric3_s46` | dreamer_srl_curriculum | prod | 46 | — | — | — | — | — |
+| Base s42 | planned | B-42 | `dreamer_v3_dsrl_fromscratch10x10_s42` | dreamer_srl_curriculum | prod | 42 | — | — | — | — | — |
+| Base s43 | planned | B-43 | `dreamer_v3_dsrl_fromscratch10x10_s43` | dreamer_srl_curriculum | prod | 43 | — | — | — | — | — |
+| Base s44 | planned | B-44 | `dreamer_v3_dsrl_fromscratch10x10_s44` | dreamer_srl_curriculum | prod | 44 | — | — | — | — | — |
+| Base s45 | planned | B-45 | `dreamer_v3_dsrl_fromscratch10x10_s45` | dreamer_srl_curriculum | prod | 45 | — | — | — | — | — |
+| Base s46 | planned | B-46 | `dreamer_v3_dsrl_fromscratch10x10_s46` | dreamer_srl_curriculum | prod | 46 | — | — | — | — | — |
+
+Tags are unique across the manifest. Seeds 42–46 are matched between the two arms for a paired comparison.
+
+> **Baseline-reuse note.** The three already-completed from-scratch parity cells (seed 42 only) are *not* used as the baseline here — they predate this design and used the single-seed `01-interoNocicept.yaml` env config without the curriculum's identical fingerprint guarantee at seeds 43–46. The `Base s4x` rows re-run the from-scratch arm at the same 5 seeds against the **same Stage-3 config** (`03_10x10_full_task.yaml`), so the comparison is config-identical end-task. If the user prefers to fold in the existing seed-42 cell as a 6th baseline point, that is a launch-time decision, not a design change.
+
+### 3.1 Configs to Produce (designer-only, pre-launch)
+
+| Run | Stage env configs (`--configs-dir`) | Schedule (`--continual-schedule`) | Agent config |
+|---|---|---|---|
+| Curric s42–s46 | `configs/experiment/dreamer_srl_curriculum/{01_5x5_food_hide_rock, 02_5x5_food_hide_chase_rock_bush, 03_10x10_full_task}.yaml` | `configs/continual/dreamer_srl_3stage_size_curriculum.yaml` | `configs/models/dreamer_srl/01_food_only_buf256k.yaml` |
+| Base s42–s46 | single-stage `--config configs/experiment/dreamer_srl_curriculum/03_10x10_full_task.yaml` (no `--configs-dir`) | n/a | `configs/models/dreamer_srl/01_food_only_buf256k.yaml` |
+
+All four config files above are authored by this doc and exist on disk. The agent config is the existing XS / 256k-replay preset that the running parity cells use — **unchanged**, so the two arms differ only in env exposure, not in agent hyperparameters.
+
+## 4. Experimental Design
+
+- **Independent variable**: training-exposure schedule — `{curriculum (3-stage), from-scratch (Stage-3 only)}`.
+- **Dependent variable (primary)**: survival steps on the 10×10 full task (`03_10x10_full_task.yaml`), mean over the last 2,000 episodes per seed, averaged across seeds, with 95% CI.
+- **Dependent variables (secondary, diagnostic only)**: per-stage survival trajectory; world-model reward-head MAE on positive vs. negative reward samples; continuation-head accuracy; actor entropy (the diagnosis metrics that flagged the stuck-policy failure). Cumulative reward is **not** a headline metric.
+- **Controls / fixed factors (pinned and named)**:
+  - Agent config: `configs/models/dreamer_srl/01_food_only_buf256k.yaml` (XS preset, 256k replay) — identical for both arms.
+  - `--num-envs 16`, the same parallelism the parity cells used.
+  - **Modality fingerprint identical across all three stages AND both arms** — see §"Modality fingerprint match" below.
+  - Noise **off** (`perceptual_noise.enabled: false`) in every stage — this experiment is about exposure schedule, not noise robustness.
+  - Stage-3 task is **byte-value-identical** to the from-scratch baseline task, so the two arms are evaluated on exactly the same environment.
+- **Seeds**: 5 per arm (42–46). The expected effect (curriculum transfer) is plausibly **marginal** — the from-scratch baseline already learns, just slowly — so 5 seeds (not 3) are used to resolve a ~20-step difference against the ~140-step single-episode noise band documented for these runs.
+- **Sample size / compute estimate**: at ~40 env-steps/sec (num_envs=16), the curriculum's three stages total roughly 2.5–3.5M (Stage 1) + 2.5–5M (Stage 2) + the Stage-3 bulk env-steps; the from-scratch baseline reached ~7.4M env-steps in ~50h. Budget per run is a comparable multi-day window; 10 runs total. Exact wall-clock depends on how fast survival (and thus episode length) rises — longer episodes mean fewer episodes per env-step.
+
+## 5. Analysis Plan (pre-specified)
+
+- **Primary statistic**: mean survival steps over the last 2,000 episodes per seed → mean ± 95% CI across the 5 seeds, per arm, at matched Stage-3 cumulative env-step budget.
+- **Effect-size threshold**: curriculum counts as an improvement iff Δ(curriculum − baseline) ≥ **20 survival steps** with non-overlapping 95% CIs (per §2).
+- **Temporal-evolution check (mandatory)**: plot survival vs. cumulative env-step for both arms across the whole run, with the two stage boundaries (Stage-1→2 at episode 15,000; Stage-2→3 at episode 75,000) marked. The window of interest is the **first 2M env-steps of Stage 3** (does the curriculum arm recover above baseline faster?) and the **final 2M env-steps** (plateau comparison).
+- **Time-locked boundary analysis**: at each stage boundary, measure the survival drop and the recovery time (env-steps to return to pre-boundary survival). Pre-specified window: 500k env-steps each side of each boundary.
+- **Diagnostic cross-check**: at the end of Stage 1, confirm actor entropy has fallen below the uniform-policy level (ln 6) and reward-head positive-sample MAE has dropped — if not, the Stage-1 warm-up failed to escape the documented stuck-policy regime and any null Stage-3 result is attributable to that, not to the curriculum idea.
+
+## Modality fingerprint match (cross-stage weight-transfer guarantee)
+
+Weight transfer across stages only works if the agent's observation vector and sensor/noise layout are identical at every stage — otherwise the encoder's input dimension changes and the carried weights are meaningless. This was verified by **live-loading each stage config through the real env loader** (`load_env_params`) and resetting the env:
+
+- **Observation vector**: fixed **27-dim** in all three stages, with byte-identical per-modality breakdown — Satiation 1, Interoceptive-Nociception 1, Extero-Nociception 1, Olfaction 5, Collision 5, Proprioception 6, Visual 8. The visual patch is sized by `visual_sensor_range`, **not** by grid height/width, so the 5×5 → 10×10 scale-up does **not** change the observation shape. This is the empirical proof the curriculum is shape-safe.
+- **Noise layout**: the `perceptual_noise.modalities` block has the identical 10-entry order (injury, nutrition, satiation, interoceptive_nociception, extero_nociception, olfaction, collision, proprioception, visual, location) → internal length-13 padded noise arrays, identical across stages. Noise is disabled in all stages, but the *layout* still has to match for the modality indices to line up.
+- **Body + sensory blocks**: every parsed key/value under `body:`, `sensory:`, and `perceptual_noise:` is value-identical across the three stages and value-identical to the running from-scratch baseline env config (`configs/experiment/hypervigilance/01-interoNocicept.yaml`), confirmed by a comment-stripped diff. The only differences between stage files are entity counts/params and grid height/width — exactly the dimensions the curriculum is meant to vary.
+
+## Entity → v2.0 schema mapping
+
+The intended entities map onto the current v2.0 ("unified animal entity") schema as follows. Mapping was verified against the running dreamer_srl env config and the v2.0 config-schema reference.
+
+| Spec entity | v2.0 schema home | Encoding | Stages present |
+|---|---|---|---|
+| food | `environment.resources`, `type: food` | `res_type` 0 | 1, 2, 3 |
+| hiding predator (static lethal ambush) | `environment.resources`, `type: hiding_predator` | `res_type` 1; static, damage [15,45], nociception 0.9 | 1, 2, 3 |
+| chasing predator (mobile hunter) | `environment.predators[]` (legacy section, auto-projected) | class `predator`, behaviour `hunt` — **slowed "bridge" form in Stage 2, full strength in Stage 3** (see bridge-chaser note below) | 2 (bridge), 3 (full) |
+| rabbit (neutral animal / distractor) | `environment.neutral_animals[]` (legacy section, auto-projected) | class `neutral`, behaviour `wander` | **3 only** |
+| rock (mild-damage obstacle) | `environment.obstacles[]` | `blocking: false`, damage [1,5] | 1, 2, 3 |
+| bush (line-of-sight break) | `environment.obstacles[]`, `hides_agent: true` | hides agent from hunter | 2, 3 |
+
+The legacy `predators:` / `neutral_animals:` dual-section form is **still accepted** by the v2.0 loader (auto-projected into the unified animal array), and is what the running dreamer_srl baseline uses — so the stage configs use it too, for maximal byte-similarity to the baseline. **No spec entity is inexpressible in the current schema** (see §"Schema flags" — none found).
+
+### Stage-2 bridge-chaser note (user-locked)
+
+The chasing predator enters at Stage 2 in a **slowed, lower-damage, shorter-detection "bridge" form** rather than at full strength, so the agent's first exposure to a moving hunter is a gentle introduction. Full strength is restored at **Stage 3** (`03_10x10_full_task.yaml`, untouched). The bridge values follow the prior `dreamer_curriculum/02_predator_slow.yaml` precedent. The deltas, all on the single `environment.predators[0]` entry of `02_5x5_food_hide_chase_rock_bush.yaml`, are:
+
+| Field | Stage 2 (bridge) | Stage 3 (full) | Effect of the bridge |
+|---|---|---|---|
+| `move_interval` | **8** | 1 | hunter moves ~8× less often → slower pursuit |
+| `attack_delay` | **8** | 3 | more warning steps before a strike lands |
+| `damage` | **[5.0, 15.0]** | [15.0, 45.0] | ~1/3 damage → a hit is survivable, not instant death |
+| `detection_range` | **2** | 5 | tighter detection cone → fewer / later engagements |
+
+**Rationale.** A full-strength hunter on a tiny 5×5 grid kills almost immediately, which floods the world model with deaths and reproduces the dense-lethality regime the diagnosis blamed for the stuck policy. The bridge chaser keeps death events **occasional and recoverable**, letting the continuation ("alive/dead") head and the reward head's heavy-negative tail get sampled cleanly before Stage 3 turns the hunter back up. This smooths the cross-stage difficulty ramp without introducing any new entity or sensor.
+
+**Fingerprint safety.** All four bridge fields are **dynamic predator-behaviour parameters** — none belongs to the cross-stage modality fingerprint (sensor flags, body block, perceptual-noise block, observation layout). The edit was load-checked: all three stage configs load cleanly through `load_env_params` (no `ValueError`), and the `sensory` + `body` + `perceptual_noise` blocks remain **byte-identical across Stages 1, 2, and 3**, so the **27-dim observation and the weight-transfer guarantee are unchanged**.
+
+## Per-stage budget justification
+
+Throughput anchor: dreamer_srl XS at num_envs=16 runs at **~40 env-steps/sec** (the three running parity cells logged 40.2 / 41.7 / 41.1 SPS), and reached **~47,000 episodes / ~7.4M env-steps in ~50h** on the 10×10 full task (~157 env-steps/episode averaged over the run). The schedule is on **episodes** (the engine contract), so per-stage episode budgets are chosen from per-stage episode-length expectations:
+
+- **Stage 1 — 15,000 episodes** (cumulative 15,000). Benign 5×5 world; once eating is learned, episodes run long (toward the 500-step cap / starvation, few deaths) → ~150–250 steps/ep → ~2.5–3.5M env-steps. Enough for the reward head to sample the eating tail repeatedly and the actor to leave uniform, before any moving threat. Anchored to the 15–16k Stage-1 budgets used by the two prior dreamer curricula.
+- **Stage 2 — 60,000 episodes** (cumulative 75,000; the longest stage by episode count). A moving hunter on a tiny 5×5 grid kills fast early → short episodes (~20–50 steps), so a high episode count is needed to feed the continuation/reward heads enough death-terminal samples (the under-sampled signal the diagnosis flags). ~2.5–5M env-steps; yield rises as bush-hiding is learned.
+- **Stage 3 — 685,000 episodes** (cumulative **760,000** = total). The bulk stage and the measurement stage. The cap is deliberately loose — far above the ~47k episodes the from-scratch baseline consumed — because runs are evaluated / stopped long before the cap. On 10×10 the task yields ~60 steps/ep early rising to ~200 late.
+
+Checkpoint frequencies `[7500, 30000, 100000]`: 2 checkpoints in each short stage (mid + end, to capture the post-warm-up and post-bridge weights for offline probing), coarse 100k cadence on the long Stage 3 to bound disk use while still resolving the survival inflection.
+
+## Schema flags
+
+**None.** Every entity in the locked spec is expressible in the current v2.0 schema with no new keys: food and the static hiding predator are `resources` entries, the chasing predator is a `predators[]` entry, the rabbit is a `neutral_animals[]` entry, and rock/bush are `obstacles` entries (bush via the existing `hides_agent: true` flag). All three stage configs load cleanly through `load_env_params` with the mandatory-key loader (no `ValueError`), and produce the identical 27-dim observation. No schema-affecting change is required, so no `developer` routing is needed for the env side. (The only code dependency is the **continual engine port** itself — the `--configs-dir` + `--continual-schedule` reader — which `senior-developer` owns.)
+
+## 6. Failure-Mode Catalog (pre-decided)
+
+- **Stage-1 stuck policy** (actor entropy stays at ln 6, survival flat ~30): reproduces the documented small-grid failure. This **refutes H1** for the curriculum-as-built, and is attributed to the warm-up-contamination risk the user accepted (hiding predator on from step 0), **not** to a bad run. Diagnostic: actor entropy + reward-head positive-MAE at end of Stage 1.
+- **Catastrophic forgetting at a boundary** (survival collapses at Stage-2→3 and does not recover to baseline within the Stage-3 budget): **refutes H1**, logged as negative transfer. Distinguished from a normal boundary dip by the recovery-time analysis (§5).
+- **Training instability** (NaN, value-head explosion, KL blow-up): **refutes the run, not the hypothesis** — re-launch the affected seed. If ≥ 2 of 5 seeds diverge, escalate as a stability finding (the agent config, shared with the baseline, may need attention) rather than scoring the experiment.
+- **Saturation at the 500-step cap** on Stage 1 (episodes routinely hit max_steps): this is **expected and fine** on the benign stage — it is not a ceiling problem, it means the agent survives. Only a Stage-3 plateau well below 500 is the scientific outcome of interest.
+- **Insufficient Stage-3 horizon** (both arms still rising at the cap, as the baseline parity cells were): if the curriculum and baseline curves have not plateaued, report the comparison **at matched env-step budget** and flag that the plateau question is horizon-limited — do not declare a null from non-converged curves.
+- **Seed noise drowning a ~20-step effect**: the 5-seed design targets this; if the 95% CIs still overlap at a Δ near 20, the pre-registered verdict is **null** (not "promising, add seeds") unless the user explicitly authorizes a seed extension.
+
+## 7. Intended launch command shape (depends on the in-flight code port)
+
+The continual engine that reads `--configs-dir` + `--continual-schedule` is being ported by `senior-developer`; these commands are valid **once that port lands**. Curriculum arm (one per seed, seed swapped):
+
+```
+python train.py \
+  --agent_config configs/models/dreamer_srl/01_food_only_buf256k.yaml \
+  --configs-dir configs/experiment/dreamer_srl_curriculum \
+  --continual-schedule configs/continual/dreamer_srl_3stage_size_curriculum.yaml \
+  --num-envs 16 \
+  --seed 42 \
+  --device cuda:0 \
+  --wandb-group dreamer_srl_curriculum \
+  --wandb-job-type prod \
+  --wandb-name dreamer_v3_dsrl_curric3_s42 \
+  --tag        dreamer_v3_dsrl_curric3_s42
+```
+
+From-scratch baseline arm (single-stage, no `--configs-dir`):
+
+```
+python train.py \
+  --agent_config configs/models/dreamer_srl/01_food_only_buf256k.yaml \
+  --config configs/experiment/dreamer_srl_curriculum/03_10x10_full_task.yaml \
+  --num-envs 16 \
+  --seed 42 \
+  --device cuda:0 \
+  --wandb-group dreamer_srl_curriculum \
+  --wandb-job-type prod \
+  --wandb-name dreamer_v3_dsrl_fromscratch10x10_s42 \
+  --tag        dreamer_v3_dsrl_fromscratch10x10_s42
+```
+
+(`training-runner` owns the real launch via `run_command.py` and the agent train script; the `python` here is illustrative of the argument shape. WandB project/entity are left unset so the repo defaults apply.)
+
+## 8. Results / Analysis / Conclusions
+
+_Left blank until training completes. Filled by `experiment-designer` (or `senior-developer` per user preference) in the results phase._
+
