@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `subagent_engineering` topic.
 
 **Folder definition**: Subagent + worktree usage gotchas
-**Insights**: 13
-**Last updated**: 2026-05-28
+**Insights**: 14
+**Last updated**: 2026-06-09
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-09 | 17:24 | [20260609_1724_verbatim_embed_fidelity_diff_check](20260609_1724_verbatim_embed_fidelity_diff_check.md) | Parallel sub-agents transcribing source into docs silently corrupt non-ASCII/whitespace (mojibake, escaped apostrophes, glyph swaps, alignment collapse, injected annotations); a programmatic diff-every-block-against-src:line check is mandatory — agents claiming byte-for-byte were wrong on 15/80 blocks. |
 | 2026-05-28 | 16:47 | [20260528_1647_bg_isolation_subagent_bypass](20260528_1647_bg_isolation_subagent_bypass.md) | Sub-agents spawned via Agent tool bypass the bg-session guard that blocks top-level Edit/Write/NotebookEdit. 4-tier hierarchy. Extends 20260519_1810. |
 | 2026-05-21 | 01:52 | `20260521_0152_parity_tested_refactor_verification_chain` | A 4-agent verification chain (senior-developer plan → code-reviewer + math-reviewer in parallel pre-impl audit → developer commit-by-commit with parity gates → senior-developer Verification Protocol) successfully shipped a high-stakes architectural refactor on a parity-tested codebase. The pre-implementation reviewer round caught 3 plan-doc bugs that would have produced silent failures during implementation (non-runnable diagnostic pseudocode using wrong NNX-state key syntax, missing L2-coverage-gap callout, incomplete C3.a 5-constraint grep checklist). Reusable template for any future refactor of bit-identity-tested code; the pre-impl reviewer round is the load-bearing piece. |
 | 2026-05-16 | 15:12 | `20260516_1512_multi_agent_symposium_pattern` | Multi-agent symposium pattern (4 profs in parallel → postdoc synthesis → PI portfolio call → top-level AskUserQuestion). Three non-obvious mechanics: sidecar-per-prof avoids parallel-write race; postdoc applies mid-round user-refined constraints; PI cannot directly call AskUserQuestion in subagent mode (top-level surfaces). Evolution of the v2 research chain at symposium scale. |

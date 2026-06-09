@@ -57,4 +57,5 @@ After the user observed that a research-synthesis memo was effectively unreadabl
 ## Backlinks
 - [[20260516_1431_v2_three_role_architecture]] (memory_system_design, 2026-05-16) — Memory System v2 separates code/memory knowledge into three surfaces — curated s
 - [[20260528_0216_foam_wikilinks_filename_as_id_sparse_aliases]] (memory_system_design, 2026-05-28) — Project-wide doc-linking convention adopted: [[filename]] wikilinks for new cros
+- [[20260609_1725_env_docs_tutorial_primer_pattern]] (memory_system_design, 2026-06-09) — Pattern for turning reference docs into a tutorial set: re-sync to code-as-truth
 <!-- END BACKLINKS -->
