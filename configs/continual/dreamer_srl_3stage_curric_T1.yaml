@@ -1,0 +1,55 @@
+# Continual schedule: dreamer_srl_3stage_curric_T1 (budget ablation, loosest of T1–T4)
+# ----------------------------------------------------------------------------
+# Plain-language purpose:
+#   One of four budget-tightness variants of the dreamer_srl 3-stage size+entity
+#   curriculum. All four (T1=loosest .. T4=most aggressive) drive the SAME three
+#   stage env configs in configs/experiment/dreamer_srl_curriculum/ — they differ
+#   ONLY in continual.episode_boundaries and continual.checkpoint_frequencies.
+#   The engine swaps the live env config to the next stage at each cumulative
+#   episode boundary below; agent weights carry across boundaries unchanged.
+#
+# Why a budget sweep (live-data motivation):
+#   On Stage 1 (5x5: food + static hiding predator + rock) survival PLATEAUS by
+#   ~episode 1,000 (confirmed on run crvnmbo8). The original schedule's Stage-1
+#   budget of 15,000 episodes — and the whole [15000,75000,760000] CAP — was
+#   therefore ~10x longer than needed. T1–T4 are progressively tighter budgets
+#   run in parallel (seed 42 held constant) to find the MINIMUM viable budget
+#   that still reaches the Stage-3 survival plateau without degrading vs looser
+#   budgets.
+#
+# T1 (this file) is the agreed/loosest of the four — generous margin above the
+# ~1k-episode Stage-1 plateau, with Stage 2 and 3 scaled proportionally.
+#
+# Stage sources (alphabetical order in configs/experiment/dreamer_srl_curriculum/
+# — the engine loads them sorted):
+#   01_5x5_food_hide_rock.yaml             -- 5x5: food + static hiding predator + rock
+#   02_5x5_food_hide_chase_rock_bush.yaml  -- 5x5: + slowed "bridge" chaser + bush
+#   03_10x10_full_task.yaml                -- 10x10: + rabbit + full-strength hunter (target task)
+#
+# Per-stage EPISODE spans for THIS variant (boundaries are cumulative):
+#   Stage 1 (food + static hazard, 5x5)  : delta  3,000 episodes  (0      -> 3000)
+#       ~plateau (~1k from crvnmbo8) + 3x margin.
+#   Stage 2 (bridge chaser, 5x5)         : delta 10,000 episodes  (3000   -> 13000)
+#       the threat-learning bridge: feeds the continuation/reward heads enough
+#       occasional, recoverable death-terminal samples before the full task.
+#   Stage 3 (full target task, 10x10)    : delta 150,000 episodes (13000  -> 163000)
+#       the target task and the measurement stage; cap kept loose, runs evaluated
+#       at matched env-step budget before the cap.
+#   Total episodes (cap): 163,000.
+#
+# Checkpoint frequencies [1500, 5000, 25000]: one int per stage, parallel to
+#   boundaries. Each is <= its stage span and > 0 (S1: 1500<=3000, 2 ckpts;
+#   S2: 5000<=10000, 2 ckpts; S3: 25000<=150000, coarse, ~6 ckpts).
+#
+# Design doc (§"Budget ablation (T1–T4)"):
+#   docs/experiments/active/continual_learning/DREAMER_SRL_3STAGE_SIZE_CURRICULUM.md
+
+continual:
+  # Cumulative episode boundaries.
+  # Stage 1 (01_5x5_food_hide_rock)            runs while ep_count <   3000.
+  # Stage 2 (02_5x5_food_hide_chase_rock_bush) runs from ep   3000 until ep  13000.
+  # Stage 3 (03_10x10_full_task)               runs from ep  13000 until ep 163000 = total.
+  episode_boundaries: [3000, 13000, 163000]
+
+  # One int per stage. Parallel to episode_boundaries above.
+  checkpoint_frequencies: [1500, 5000, 25000]

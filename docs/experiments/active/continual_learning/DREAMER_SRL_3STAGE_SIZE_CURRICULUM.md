@@ -3,7 +3,7 @@ title: "dreamer_srl 3-stage size+entity curriculum vs from-scratch on the 10×10
 topic: continual_learning
 status: active
 created: 2026-06-09
-last_updated: 2026-06-09  # Stage-2 chaser slowed to a bridge form (full strength deferred to Stage 3)
+last_updated: 2026-06-11  # Budget ablation T1–T4 added (Stage-1 plateau ~1k eps from crvnmbo8; original budget ~10x too long)
 phase: 2
 wandb_tag: "dreamer_v3_dsrl_curric3_*"
 develop_link: docs/develop/active/diagnosis/dreamer_hypervigilance_learning_failure.md
@@ -139,6 +139,30 @@ Throughput anchor: dreamer_srl XS at num_envs=16 runs at **~40 env-steps/sec** (
 - **Stage 3 — 685,000 episodes** (cumulative **760,000** = total). The bulk stage and the measurement stage. The cap is deliberately loose — far above the ~47k episodes the from-scratch baseline consumed — because runs are evaluated / stopped long before the cap. On 10×10 the task yields ~60 steps/ep early rising to ~200 late.
 
 Checkpoint frequencies `[7500, 30000, 100000]`: 2 checkpoints in each short stage (mid + end, to capture the post-warm-up and post-bridge weights for offline probing), coarse 100k cadence on the long Stage 3 to bound disk use while still resolving the survival inflection.
+
+## Budget ablation (T1–T4)
+
+**What this is, in plain language.** The original schedule above gave Stage 1 a 15,000-episode budget and capped the whole curriculum at 760,000 episodes. Live training data shows that was far too generous: on Stage 1 (the small 5×5 world with food, one static ambush hazard, and rocks) the agent's survival **flattens out by about episode 1,000** — confirmed on the first running curriculum seed (the run logged under the short ID `crvnmbo8`). So the agent spends ~14,000 episodes on a stage it has already mastered, and the cap is roughly **10× longer than the curriculum actually needs**. Rather than guess a single tighter number, we run **four progressively tighter budget schedules side by side** — T1 (loosest of the four, the agreed starting point) through T4 (most aggressive, Stage 1 sitting right at the observed plateau) — and read off the smallest budget that still works.
+
+**Held constant across all four.** Same three stage env configs (`configs/experiment/dreamer_srl_curriculum/` — `01`/`02`/`03`, untouched), same agent config, **seed 42 held constant across all four**, noise off. The four schedules differ **only** in `episode_boundaries` and `checkpoint_frequencies`. All four run **in parallel on node 114, GPUs 0–3** (one schedule per GPU).
+
+**The four schedules** (S1 = Stage-1 span, etc.; spans are the per-stage deltas of the cumulative boundaries):
+
+| Variant | Schedule file (`configs/continual/`) | `episode_boundaries` | S1 / S2 / S3 spans | Total eps | `checkpoint_frequencies` |
+|---|---|---|---|---|---|
+| **T1** (loosest) | `dreamer_srl_3stage_curric_T1.yaml` | `[3000, 13000, 163000]` | 3,000 / 10,000 / 150,000 | 163,000 | `[1500, 5000, 25000]` |
+| **T2** | `dreamer_srl_3stage_curric_T2.yaml` | `[2000, 9000, 109000]` | 2,000 / 7,000 / 100,000 | 109,000 | `[1000, 3500, 20000]` |
+| **T3** | `dreamer_srl_3stage_curric_T3.yaml` | `[1500, 6500, 71500]` | 1,500 / 5,000 / 65,000 | 71,500 | `[750, 2500, 13000]` |
+| **T4** (most aggressive) | `dreamer_srl_3stage_curric_T4.yaml` | `[1000, 4000, 44000]` | 1,000 / 3,000 / 40,000 | 44,000 | `[500, 1500, 8000]` |
+
+**Per-stage budget logic** (shared by all four; only the magnitude tightens from T1 to T4):
+- **Stage 1** — the food + static-hazard 5×5 warm-up. Budget is set to the **~1,000-episode plateau plus a shrinking margin**: 3× margin (T1), 2× (T2), 1.5× (T3), down to no real margin (T4, 1,000 eps right at the plateau). This is the stage the live data says was over-budgeted, so it absorbs most of the tightening.
+- **Stage 2** — the **threat-learning bridge** (slowed "bridge" chaser + bushes, still 5×5). Held proportionally larger than Stage 1 because its job is to feed the world model's continuation ("alive/dead") and reward heads enough *occasional, recoverable* death-terminal samples before the full task — the under-sampled signal the diagnosis blamed for the stuck policy.
+- **Stage 3** — the **full 10×10 target task** and the measurement stage. Carries the bulk of the budget in every variant; the cap stays deliberately loose (runs are evaluated at matched environment-step budget, then stopped, well before the cap).
+
+**Validation (all four files).** Each schedule was load-checked through PyYAML and verified against the schedule contract: `episode_boundaries` strictly increasing and length 3 (= the three stage configs); `checkpoint_frequencies` length 3, every entry > 0 and ≤ its stage span. **All four PASS** every check (T1 → 2/2/6 checkpoints per stage; T2 → 2/2/5; T3 → 2/2/5; T4 → 2/2/5).
+
+**Pre-registered read.** The winner is **the smallest total-episode budget (i.e. the most aggressive of T1–T4) that still reaches the Stage-3 survival-step plateau without degrading versus the looser budgets** — concretely, whose Stage-3 final survival is statistically indistinguishable from (or better than) the next-looser variant's. If T4 holds the plateau, it sets the new minimum viable budget; if survival drops off at some Tn, the looser neighbour Tn−1 is the floor. This ablation fixes the curriculum's budget before the multi-seed curriculum-vs-from-scratch comparison (§2–§5) is launched at scale.
 
 ## Schema flags
 
