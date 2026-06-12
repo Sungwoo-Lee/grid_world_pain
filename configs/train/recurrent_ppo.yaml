@@ -1,0 +1,19 @@
+# rPPO-specific training defaults.
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# configs/train/default.yaml is shared by BOTH rPPO (train.py) and dreamer
+# (src/algorithms/dreamer_srl/dreamer_srl_main.py). rPPO wants sparser logging,
+# sparser checkpoint/video cadence, and wants to RETAIN ALL checkpoints; dreamer
+# keeps the default.yaml values. train.py merges this file ONLY when the agent
+# config declares agent.algorithm == "RecurrentPPO".
+#
+# PRECEDENCE
+# ----------
+# Merged ABOVE configs/train/default.yaml but BELOW the experiment --config and
+# the --agent_config (and below CLI flags like --log-interval / --checkpoint-frequency),
+# so these remain overridable defaults. Dreamer never loads this file.
+training:
+  log_interval: 500             # one WandB row every 500 training iterations
+  checkpoint_frequency: 200000  # checkpoint + eval video every 200,000 episodes
+  max_checkpoints_to_keep: null # null -> Orbax max_to_keep=None -> keep ALL checkpoints (no rotation)

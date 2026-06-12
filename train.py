@@ -302,6 +302,20 @@ def main():
         train_defaults = Config.load_yaml(train_config_path)
         config.merge(train_defaults)
 
+    # Merge rPPO-specific training defaults (configs/train/recurrent_ppo.yaml).
+    # default.yaml above is SHARED with dreamer; rPPO needs sparser logging + all-checkpoint
+    # retention, so peek the agent algorithm and merge the rPPO overrides for RecurrentPPO
+    # only. Precedence: above train/default.yaml, below the experiment --config and the
+    # --agent_config (and below CLI flags), so they stay overridable defaults. Dreamer never
+    # loads this file. NOTE: continual (--configs-dir) rPPO runs set per-stage frequencies
+    # from the schedule and replace `config` below, so this default applies to single --config runs.
+    if Config.load_yaml(args.agent_config).get("agent.algorithm") == "RecurrentPPO":
+        rppo_train_path = os.path.join(os.path.dirname(__file__), "configs", "train", "recurrent_ppo.yaml")
+        if os.path.exists(rppo_train_path):
+            if not args.quiet:
+                print(f"Loading rPPO train defaults from {rppo_train_path}")
+            config.merge(Config.load_yaml(rppo_train_path))
+
     # Merge Evaluation Defaults
     eval_config_path = os.path.join(os.path.dirname(__file__), "configs", "evaluation", "default.yaml")
     if os.path.exists(eval_config_path):
