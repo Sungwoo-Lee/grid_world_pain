@@ -43,4 +43,5 @@ When analysing whether the RL agent discriminates predator from rabbit, I anchor
 ## Backlinks
 - [[20260609_1719_predator_discrimination_visual_count_elimination]] (hypervigilance, 2026-06-09) — The chasing-rabbit rPPO agent can identify an approaching predator BEFORE contac
 - [[20260609_1747_avoidance_is_post_contact_not_preemptive]] (hypervigilance, 2026-06-09) — Predator-only eval (same chasing-rabbit model, rabbits removed) shows the agent 
+- [[20260615_1612_testbed_isolation_makes_means_honest]] (hypervigilance, 2026-06-15) — Methodology decision: rather than abandon mean-level measures (we need scalable 
 <!-- END BACKLINKS -->

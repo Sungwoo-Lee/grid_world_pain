@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `hypervigilance` topic.
 
 **Folder definition**: Hypervigilance experiments
-**Insights**: 15
-**Last updated**: 2026-06-09
+**Insights**: 16
+**Last updated**: 2026-06-15
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-15 | 16:12 | `20260615_1612_testbed_isolation_makes_means_honest` | Methodology decision: keep mean-level measures (we need scalable numbers) but build dedicated isolated TEST environments (frozen-checkpoint probes, no retraining) that strip the confounds which made means misleading in the complex training world, so the mean becomes a trustworthy proxy for the trajectory-level truth. Every new testbed must first be calibrated against a known discriminator (Cell C) and a known class-blind agent (cell-08) before its numbers are trusted. First testbeds: predator-solo / rabbit-solo. Anchor: behavior_measurement_charter.md. |
 | 2026-06-09 | 17:47 | `20260609_1747_avoidance_is_post_contact_not_preemptive` | Predator-only eval (same chasing-rabbit model, rabbits removed) shows the agent does NOT pre-empt the lone approaching predator — it forages/rests in place until contact (~step 11) and only hides reactively after a hit. Conclusion: predator avoidance is POST-CONTACT / pain-reactive, not anticipatory; the visual rabbit-count signal is real but doesn't drive reliable pre-emption. SUPERSEDES `20260609_1719`. Confidence medium (predator-only world is out-of-distribution, N=20). |
 | 2026-06-09 | 17:21 | `20260609_1721_aggregate_stats_hide_conditional_behavior` | Methodology post-mortem: a confidently-wrong 'agent cannot discriminate predator/rabbit' conclusion came from over-trusting an incomplete proof + defending it with confounds and AGGREGATE stats that averaged away a CONDITIONAL behaviour. Mechanism only surfaced by reading individual trajectories step-by-step and inspecting the raw 27-dim observation vector — which the user had urged for several turns. Rules: inspect agent inputs + single trajectories early; bin by conditioning state; a careful observer's repeated contradicting observation is evidence the model is wrong; check docs/memory first. |
 | 2026-06-09 | 17:20 | `20260609_1720_chasing_rabbit_avoidance_damage_driven` | Making rabbits actively hunt (harmless, R4) did NOT create predator-level avoidance — agent tolerates the harmless chaser (rides at dist 0), forages through it. No-predator transfer: ignores chasers (500/500 survival, M1=0). Matched-aggression control (predator≡rabbit chase params, only damage differs): dies 91%. 1-vs-1 matched pre-contact gap collapses to ~0. Avoidance is pain-consequence-driven, not motion-driven. Built eval_rollout --record tooling + configs 04/05/06. |
