@@ -12,6 +12,24 @@ status: snapshot
 
 > This is the first reader-facing summary of the **June predator-vs-rabbit discrimination thread**. It builds on, but does not replace, the five earlier `sameprop_rabbit_avoidance_study` summaries (2026-05-09 → 2026-05-21), which cover the matched-smell rounds that preceded this work. This document is append-only — later re-summaries will be written as fresh dated files, not edits to this one.
 
+> **MOST IMPORTANT FINDING — read this first (methodological).** The single most consequential
+> result of this study is not a fact about the agent but about *how we measure it*: **mean /
+> aggregate metrics declared the agent "class-blind" when it was, in fact, discriminating** — and
+> only a **full step-by-step trajectory read** (plus inspection of the agent's raw 27-number
+> observation vector) revealed it. Concretely, in the episode that exposed this: when the harmless
+> **rabbit** approached the agent it **kept eating and ignored it**; moments later when the
+> **predator** approached it **stopped eating and dived into a bush** — a clear predator-specific
+> defensive response, despite the two animals carrying identical smell and identical chasing
+> motion. Every aggregate we had — mean predator-vs-rabbit distance ≈ 0, a distance-matched flee
+> rate of 76% vs 76%, interrupted-feeding = 0.000 — had averaged this conditional behaviour away
+> to zero, producing a confidently-wrong "the agent cannot discriminate" conclusion that survived
+> several analysis turns until the trajectory read overturned it. The transferable lesson — **a
+> mean is the wrong instrument whenever the behaviour is gated on a latent state; read individual
+> trajectories before trusting any aggregate** — is what now drives the project's shift to
+> purpose-built test environments, and is captured as the reusable `trajectory-story` analysis
+> skill. (The agent-level verdict below — pain-reactive, not anticipatory — still stands; this
+> finding is about the *method* that produced it.)
+
 ## Take-home messages — the whole study in 6 bullets
 
 1. **The setup.** We progressively stripped away every external difference between a harmful "predator" and a harmless "rabbit" — matching smell, chase behaviour, approach speed, and (in the final config) the strike-and-retreat rhythm — leaving danger (does contact hurt?) as the only thing separating them, then asked whether the agent avoids the dangerous one *before* contact.
