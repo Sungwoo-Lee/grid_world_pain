@@ -121,9 +121,15 @@ choice, approach-avoidance conflict, barrier anticipation, graded lethality, etc
 
 | Testbed | Isolates | Status |
 |---|---|---|
-| predator-solo | harmful animal alone | designed; configs pending |
-| rabbit-solo | harmless animal alone | designed; configs pending |
-| _(future testbeds appended here as the program grows)_ | | |
+| predator-solo / rabbit-solo | harmful vs harmless animal in isolation | **tested 2026-06-16 — FAILED** (inverts controls; isolation destroys the contrast) |
+| both-present-matched (cell-08 world) | within-world per-class contrast, symmetric geometry | **tested — FAILED** (discriminator's gap collapses; both flat) |
+| Cell C native world (2×2 cell) | agent-driven vs world-driven | **tested — PIVOTAL** (class-blind agent reproduces the gap → world-driven) |
+| symmetric mirror arena | class signal, geometry controlled | **tested — FAILED** (neither agent discriminates) |
+
+> **Validation outcome (2026-06-16):** no test world calibrated — the apparent discrimination is a
+> spatial-encounter artifact, not class-recognition (a known class-blind agent reproduces the gap in
+> the asymmetric geometry; the effect vanishes under geometry control). The program lacks a confirmed
+> genuine discriminator. Full write-up: [[testbed_solo_validation_results]].
 
 ## Links
 
