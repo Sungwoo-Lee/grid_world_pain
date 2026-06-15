@@ -4,9 +4,9 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-06-15
+**Last updated**: 2026-06-16
 **Active folders**: 7
-**Total insights**: 98
+**Total insights**: 99
 **Last audit**: (none)
 
 ---
@@ -20,7 +20,7 @@
 | `nmn_diagnosis` | NMN performance diagnosis findings | 16 | 2026-05-28 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 17 | 2026-05-29 | [dreamer, decision, learned_lesson, refutation, meta, design] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 26 | 2026-05-29 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
-| `hypervigilance` | Hypervigilance experiments | 14 | 2026-06-15 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta] |
+| `hypervigilance` | Hypervigilance experiments | 15 | 2026-06-16 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta] |
 | `env_entities` | Env entity architecture decisions | 3 | 2026-06-09 | [design, decision, learned_lesson, meta] |
 
 ---
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-06-16: Captured 1 insight into existing `hypervigilance` from the autonomous overnight discrimination-metric testbed search: `20260616_0142_discrimination_is_spatial_encounter_artifact` — the predator-vs-rabbit bush-dive 'discrimination' is a spatial-encounter artifact (a known class-blind agent reproduces the +0.31 gap in Cell C's asymmetric world; both agents flat under geometry control); no isolated test world calibrated as a metric; resolves insight 1428's open question. All tags reused (hypervigilance, refutation, learned_lesson, decision). No new tags promoted.
 - 2026-06-15: Captured 1 insight into existing `hypervigilance` from the predator-rabbit measurement-direction rethink + testbed-charter session: `20260615_1612_testbed_isolation_makes_means_honest` — keep mean-level measures but build isolated TEST environments (frozen-checkpoint probes, no retraining) that strip confounds so the mean becomes a trustworthy proxy for the trajectory-level truth; every new testbed must be calibrated against a known discriminator (Cell C) and a known class-blind agent (cell-08) first. Builds on `20260609_1721_aggregate_stats_hide_conditional_behavior`. All tags reused (hypervigilance, design, decision, learned_lesson). No new tags promoted.
 - 2026-06-09: Captured 1 insight into existing `hypervigilance` from the predator-only control + trajectory-level read session: `20260609_1747_avoidance_is_post_contact_not_preemptive` — evaluating the same chasing-rabbit model with rabbits removed shows the agent does NOT pre-empt the lone approaching predator (forages/rests until contact ~step 11; only reactive post-hit hiding), so predator avoidance is post-contact / pain-reactive, not anticipatory. **Supersedes** `20260609_1719_predator_discrimination_visual_count_elimination` (its visual-channel-count fact is preserved; its pre-emptive-avoidance interpretation is refuted by the control test). No new tags promoted (reused hypervigilance, refutation, learned_lesson).
 - 2026-06-09: Captured 3 insights from the docs/environment v2.0 re-sync + JAX-tutorial conversion session: 1 into existing `subagent_engineering` (`20260609_1724_verbatim_embed_fidelity_diff_check` — parallel sub-agents transcribing source into docs silently corrupt non-ASCII/whitespace (mojibake, escaped apostrophes, glyph swaps, alignment collapse, injected annotations); a programmatic diff-every-block-against-src:line check is mandatory — agents claiming byte-for-byte were wrong on 15/80 blocks), 1 into existing `memory_system_design` (`20260609_1725_env_docs_tutorial_primer_pattern` — tutorial-grade reference docs = re-sync to code-as-truth first, then one shared API-primer with stable HTML anchors + per-doc verbatim embeds with primer-linked callouts + a hub learning path), 1 into existing `env_entities` (`20260609_1726_doc_audit_surfaces_latent_bugs` — a code-as-truth re-sync of all 14 env docs doubled as a bug-finder, ~13 latent findings; top two: overeating_death never ends the episode, info[termination_reason] unreliable when a body system is disabled). All tags reused (subagent, learned_lesson, meta, decision, design). No new tags promoted.

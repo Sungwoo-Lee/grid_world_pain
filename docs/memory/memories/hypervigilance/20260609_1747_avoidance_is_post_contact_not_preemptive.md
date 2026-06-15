@@ -47,4 +47,5 @@ Evaluating the trained chasing-rabbit agent in a world with the **rabbits remove
 ## Backlinks
 - [[20260609_1719_predator_discrimination_visual_count_elimination]] (hypervigilance, 2026-06-09) — The chasing-rabbit rPPO agent can identify an approaching predator BEFORE contac
 - [[20260615_1612_testbed_isolation_makes_means_honest]] (hypervigilance, 2026-06-15) — Methodology decision: rather than abandon mean-level measures (we need scalable 
+- [[20260616_0142_discrimination_is_spatial_encounter_artifact]] (hypervigilance, 2026-06-16) — Autonomous testbed search (4 designs, frozen-checkpoint evals of a Cell C 'discr
 <!-- END BACKLINKS -->

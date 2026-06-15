@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-06-15
+**Last updated**: 2026-06-16
 
 ---
 
@@ -54,6 +54,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-06-16: 1 insight from the autonomous discrimination-metric testbed search (`20260616_0142_discrimination_is_spatial_encounter_artifact`) reused existing tags `hypervigilance`, `refutation`, `learned_lesson`, `decision` — no new tags promoted.
 - 2026-06-15: 1 insight from the predator-rabbit measurement-direction rethink + testbed-charter session (`20260615_1612_testbed_isolation_makes_means_honest`) reused existing tags `hypervigilance`, `design`, `decision`, `learned_lesson` — no new tags promoted.
 - 2026-06-09: 1 insight from the predator-only control session (`20260609_1747_avoidance_is_post_contact_not_preemptive`, supersedes `20260609_1719`) reused existing tags `hypervigilance`, `refutation`, `learned_lesson` — no new tags promoted.
 - 2026-06-09: 3 insights from the docs/environment v2.0 re-sync + JAX-tutorial conversion session (`20260609_1724_verbatim_embed_fidelity_diff_check`, `20260609_1725_env_docs_tutorial_primer_pattern`, `20260609_1726_doc_audit_surfaces_latent_bugs`) reused existing tags `subagent`, `learned_lesson`, `meta`, `decision`, `design` — no new tags promoted.
