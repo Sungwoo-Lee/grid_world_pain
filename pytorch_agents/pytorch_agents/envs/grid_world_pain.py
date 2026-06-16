@@ -58,7 +58,7 @@ class GridWorldPainWrapper(gym.Env):
 
     Args:
         config_path: Absolute path to the project's YAML env config (e.g.
-            ``configs/experiment/dreamer_curriculum/01_food_only.yaml``).
+            ``configs/environment/experiment/archive/dreamer_curriculum/01_food_only.yaml``).
         seed: Integer seed passed to the initial JAX PRNG key.
         apply_noise: If True (default for production), pass apply_noise=True to
             get_observation so injury-modulated sensory noise is realized.

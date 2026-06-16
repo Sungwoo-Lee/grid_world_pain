@@ -437,7 +437,8 @@ Left (historical analysis prose — point-in-time records, not copy-paste comman
 | **C4** (list-replace + omission) | `test_c4_explicit_empty_entities_suppresses_base`, `test_c4_omitting_entities_leaks_base_animals` | PASSED |
 | **C9** (sparse == full rollout) | `test_c9_sparse_equals_full_rollout` | PASSED |
 | **Parity gate** | `pytest tests/env/test_unified_parity.py -q` | **31 passed, 82 skipped** (identical to pre-change baseline) |
-| **Full env suite** | `pytest tests/env/ -q` | Pending (running at report time) |
+| **Full env suite (first run)** | `pytest tests/env/ -q` | 129 passed / 159 skipped / 1 failed / 6 errors — 1 missed path in `test_distributional_yaml.py` fixed (commit `5be278c`) |
+| **Full env suite (second run, after fix)** | `pytest tests/env/ -q` | Pending at final report time |
 | **C8 smoke** | `load_env_config` + Camp-A merge of `dreamer_curriculum/01_food_only.yaml` | PASSED (5×5, 1 resource, 3 animals) |
 | **INDEX regen** | `scripts/regen_dev_index.py` | 130 docs indexed, CONFIG_LAYERING plan visible |
 
@@ -455,7 +456,9 @@ Pre-change baseline: 31 passed / 82 skipped (parity), 141 passed / 147 skipped (
 
 3. **The `01_food_only.yaml` standalone load (C8b)** — When loaded via the Camp-B path (standalone, no base seed), this config raises `ValueError` for `sensory.injury_observable` because the key was added after the archived config was written. This was a **pre-existing behavior** (it always failed standalone; it only worked via Camp-A which seeded the base). The parity test correctly skips `01_food_only.yaml` (no fixture for it). No regression introduced.
 
-4. **`tests/env/test_extends_layering.py` worked example** — The plan suggested comparing the full `00-5X5_NoPred.yaml` against a sparse rewrite. Instead, the test compares a fresh sparse config (no disk file needed except the base default.yaml) against an equivalent manually-merged config. This is a cleaner test of the mechanism: it avoids the legacy-schema complication (`predators:`/`neutral_animals:` vs `entities:`) that would have required a non-trivial sparse rewrite to produce a byte-identical result. The contract (sparse `extends:` == manual merge) is still fully verified by C9.
+4. **Missed file in initial reference sweep**: `tests/env/test_distributional_yaml.py` had `_DISTRIBUTIONAL_CONFIG` pointing to the old path. The initial grep used a different pattern than `test_distributional_yaml.py` (which stores the path in a Python variable that spans two lines — `os.path.join(_ROOT, "configs", "experiment", ...)` — and the grep matched the `os.path.join` form but not every occurrence). Found by the first full env suite run (1 failed / 6 errors). Fixed in commit `5be278c`. Second full env suite run confirmed zero failures.
+
+5. **`tests/env/test_extends_layering.py` worked example** — The plan suggested comparing the full `00-5X5_NoPred.yaml` against a sparse rewrite. Instead, the test compares a fresh sparse config (no disk file needed except the base default.yaml) against an equivalent manually-merged config. This is a cleaner test of the mechanism: it avoids the legacy-schema complication (`predators:`/`neutral_animals:` vs `entities:`) that would have required a non-trivial sparse rewrite to produce a byte-identical result. The contract (sparse `extends:` == manual merge) is still fully verified by C9.
 
 ### Blockers / follow-up items
 
