@@ -41,6 +41,7 @@ spatially-confined rabbits do, so any agent looks predator-avoidant.
 - **Eat-suppression** told the same story: Cell C's selective predator-suppression (Δ −0.370) exists
   ONLY in its native asymmetric world; in the symmetric mirror arena it collapses to −0.012
   (cell-08 −0.016) — i.e. also geometry-mediated.
+- **Trajectory-level cross-check (charter rule #7, done post-hoc):** confirms the means. Step-by-step dumps show the rabbits locked in their TL/BR corners (distance 5-16 the whole episode, never approaching the agent) while the predator roams the full grid — so a class-blind agent 'avoids the predator more' only because the predator is the sole animal that gets near. Flee-decomposition shows NO predator-specific avoidance (both agents flee the close-range rabbit as much/more); symmetric world flat at trajectory level too (cell-08 dist-1 flee predator +0.592 vs rabbit +0.564).
 - **Solo worlds (predator-only / rabbit-only, cross-world contrast):** FAIL and INVERT — cell-08 showed
   the only suppression (−0.119, a reactive response to a lone lethal predator); Cell C looked flat
   (+0.069 bush-dive). Single-animal isolation destroys the contrast discrimination is made of and adds

@@ -99,6 +99,30 @@ trajectory in predator-only is truncated by early death). This is a charter-leve
   (so its *own* failure to discriminate there could be OOD confusion) — but the airtight leg of the
   argument (a class-blind agent reproducing the gap in Cell C's world) does not depend on that.
 
+## Trajectory-level cross-check (charter rule #7 — done 2026-06-16, post-hoc)
+
+The mean-level verdict above was, in a first pass, reached from aggregates ALONE — a lapse, since
+the charter (and this study's whole premise) requires a `trajectory-story` cross-check before any
+verdict. The check was then run on the recordings and **confirms** the conclusion (it did not
+overturn it), adding concrete step-level evidence:
+
+- **Encounter geometry, seen directly.** In Cell C's world the agent is near the predator ~2× as
+  often as near a rabbit (Cell C agent: predator near-≤3 = 25% vs rabbit 12%; rabbits *far* 87% of
+  steps). A step-by-step dump of a class-blind (cell-08) episode shows the two rabbits **locked in
+  their TL/BR corners (distance 5–16 the whole episode), never approaching the foraging agent**,
+  while the predator roams the full grid and is the only animal that closes in.
+- **No predator-specific avoidance in the flee-decomposition.** In Cell C's world, *both* agents, at
+  close range, flee the rabbit as much or more than the predator (Cell C dist-1: rabbit +0.545/93%
+  vs predator +0.279/67%). So the bush-dive RATE gap reflects *where* onsets occur (predator near
+  food/bushes; rabbits in corners), not class-specific defensive intensity.
+- **Symmetric world is flat at the trajectory level too.** cell-08 flees predator vs rabbit
+  near-identically (dist-1 +0.592 vs +0.564) — the class-blind signature; Cell C shows only a small,
+  noisy residual.
+
+Conclusion: the trajectory read agrees with the means here — the "discrimination" is encounter-frequency
+geometry. (The lesson cuts both ways: aggregates can hide a real effect *or* manufacture a fake one;
+both require the trajectory cross-check, which is why rule #7 is non-negotiable.)
+
 ## Links / manifest
 
 - Charter governing this: [[behavior_measurement_charter]]
