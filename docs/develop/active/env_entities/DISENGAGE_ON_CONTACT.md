@@ -1,7 +1,7 @@
 ---
 title: "Env Feature — disengage_on_contact (strike-and-retreat for hunting animals)"
 topic: env_entities
-status: implemented
+status: active
 created: 2026-06-09
 last_updated: 2026-06-09
 aliases: [disengage_on_contact, env_entities_strike_retreat]
