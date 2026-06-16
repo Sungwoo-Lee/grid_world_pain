@@ -78,18 +78,19 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# recurrent_ppo hypervigilance pilot (2026-05-29).
-# Run: 04-sameProp_R4_chasingRabbit, seed 42, node 110, GPU 0.
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
-  train.py \
-  --config configs/experiment/hypervigilance/04-sameProp_R4_chasingRabbit.yaml \
-  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
-  --episodes 10000000 \
-  --num-envs 128 \
+# dreamer_srl 3-stage size curriculum prod (2026-06-10).
+# Run: dreamer_srl_curric3_size_s42_n114_gpu0, seed 42, node 114, GPU 0.
+# Uses dreamer_srl_main.py (not train.py). GPU selected via CUDA_VISIBLE_DEVICES.
+# Curriculum flags: --configs-dir + --continual-schedule (replaces --env-config/--episodes).
+# Total episodes: 760000 (from schedule's episode_boundaries[-1]). Multi-week run.
+CUDA_VISIBLE_DEVICES=0 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+  src/algorithms/dreamer_srl/dreamer_srl_main.py \
+  --configs-dir configs/experiment/dreamer_srl_curriculum \
+  --continual-schedule configs/continual/dreamer_srl_3stage_size_curriculum.yaml \
+  --agent-config configs/models/dreamer_srl/01_food_only_buf256k.yaml \
+  --num-envs 16 \
   --seed 42 \
-  --device cuda:0 \
-  --log-interval 50 \
-  --wandb-group hypervigilance \
-  --wandb-job-type pilot \
-  --wandb-name "recurrent_ppo_04-sameProp_R4_chasingRabbit_s42" \
-  --tag "recurrent_ppo_04-sameProp_R4_chasingRabbit_s42"
+  --legacy-grad-loop \
+  --log-interval 2000 \
+  --wandb-project grid_world_pain \
+  --wandb-name dreamer_srl_curric3_size_s42_n114_gpu0
