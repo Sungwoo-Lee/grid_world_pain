@@ -12,6 +12,7 @@ v2.0 changes (CP1 — unified animal entity):
 """
 import re as _re
 import logging
+import os as _os
 import yaml
 import numpy as np
 import jax.numpy as jnp
@@ -21,6 +22,80 @@ from src.environment.state import EnvParams
 
 from src.utils.config import Config
 import warnings
+
+# ── `extends:` config layering ───────────────────────────────────────────────
+# Root of all YAML configs in the repo; used to resolve `extends:` targets.
+_CONFIGS_ROOT = _os.path.abspath(
+    _os.path.join(_os.path.dirname(__file__), "..", "..", "configs")
+)
+
+
+def _resolve_extends(config_path: str, _seen: frozenset) -> Config:
+    """Recursively resolve `extends:` chains and return a merged Config.
+
+    Rules:
+    - If the YAML has a top-level ``extends:`` key (str or list[str]),
+      each named base is loaded (recursively resolving its own ``extends:``),
+      deep-merged in declared order, and THIS file's keys are merged on top.
+    - If there is no ``extends:`` key the file is loaded STANDALONE —
+      byte-for-byte today's behaviour (what every archived/full config relies on).
+    - ``extends`` targets are repo-relative paths under ``configs/`` with an
+      implicit ``.yaml`` suffix, e.g. ``extends: environment/default``
+      resolves to ``configs/environment/default.yaml``.
+    - The ``extends:`` key itself is stripped from the merged result before
+      return (it is meta, not an env param).
+    - Cycle detection: a config that (transitively) extends itself raises
+      ``ValueError``.
+    """
+    abs_path = _os.path.abspath(config_path)
+    if abs_path in _seen:
+        raise ValueError(
+            f"Config `extends:` cycle detected at {config_path!r}"
+        )
+    _seen = _seen | {abs_path}
+
+    raw = Config.load_yaml(config_path).to_dict()
+    extends = raw.pop("extends", None)  # strip meta key — not an env param
+
+    if extends is None:
+        # STANDALONE — byte-for-byte today's behaviour.
+        return Config(raw)
+
+    bases = [extends] if isinstance(extends, str) else list(extends)
+    merged = Config({})
+    for base_rel in bases:
+        base_path = _os.path.join(_CONFIGS_ROOT, base_rel + ".yaml")
+        if not _os.path.exists(base_path):
+            raise ValueError(
+                f"Config `extends:` target {base_rel!r} not found "
+                f"(looked for {base_path!r})"
+            )
+        merged.merge(_resolve_extends(base_path, _seen))
+    merged.merge(Config(raw))  # this file's keys win
+    return merged
+
+
+def load_env_config(config_path: str) -> Config:
+    """Resolve a config file to a fully-merged Config, honouring ``extends:``.
+
+    - A config with ``extends: environment/default`` (or a list) gets the
+      named base(s) deep-merged underneath it; this file's keys win.
+    - A config **without** ``extends:`` loads exactly as today (standalone,
+      byte-identical to ``Config.load_yaml(config_path)``).
+    - ``get_mandatory`` validation in ``load_env_params`` runs on the merged
+      result — the no-fallback contract is satisfied post-merge.
+
+    Authoring note (list-replace semantics):
+      ``Config.merge`` / ``deep_update`` replaces list values wholesale — the
+      override list wins; elements are NOT merged.  To *suppress* a base list
+      block (e.g. ``entities:`` or ``resources:``) a sparse config MUST
+      declare it explicitly as an empty list (``entities: []``).  Omitting the
+      key entirely causes the base's list to survive the merge unchanged.
+
+    See plan docs/develop/active/refactors/CONFIG_LAYERING_AND_EXPERIMENT_REORG.md
+    for design rationale.
+    """
+    return _resolve_extends(config_path, _seen=frozenset())
 
 _log = logging.getLogger(__name__)
 

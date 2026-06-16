@@ -804,7 +804,7 @@ def test_t8_real_train_py_smoke():
     the real entrypoint and parse its stdout for the new WandB keys.
     """
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    smoke_config = os.path.join(project_root, "configs", "experiment", "behavior_measures", "smoke_test.yaml")
+    smoke_config = os.path.join(project_root, "configs", "environment", "experiment", "archive", "behavior_measures", "smoke_test.yaml")
     agent_config = os.path.join(project_root, "configs", "models", "recurrent_ppo", "recurrent_ppo.yaml")
 
     assert os.path.exists(smoke_config), f"Smoke config not found: {smoke_config}"

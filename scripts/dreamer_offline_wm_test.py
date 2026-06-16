@@ -9,7 +9,7 @@ and writes JSON + Markdown reports under tmp/ with a pre-registered pass/fail ve
 Usage:
   python scripts/dreamer_offline_wm_test.py \
     --checkpoint results/JAX_DreamerV3/20260509-050606_dreamer_conv_NoPred_rr06_s0_n113 \
-    --env-config configs/experiment/basic/00-5X5_NoPred.yaml \
+    --env-config configs/environment/experiment/archive/basic/00-5X5_NoPred.yaml \
     --agent-config configs/models/dreamer_v3/dreamer_v3_rr06.yaml \
     --num-starts 200 \
     --output tmp/20260509_wm_imagination_test_A1.json
@@ -76,7 +76,7 @@ if _REPO not in sys.path:
 
 import orbax.checkpoint as ocp
 from src.utils.config import Config, get_default_config
-from src.environment.config_loader import load_env_params
+from src.environment.config_loader import load_env_params, load_env_config
 from src.environment.wrapper import ParallelEnv
 from src.environment.sensor import get_observation_breakdown
 from src.models.dreamer_v3_trainer import DreamerTrainer
@@ -92,7 +92,7 @@ def parse_args():
                    help="Path to the run directory (parent of models/)  OR  path to models/ directly. "
                         "The script accepts either form.")
     p.add_argument("--env-config", required=True,
-                   help="Path to environment YAML (e.g. configs/experiment/basic/00-5X5_NoPred.yaml)")
+                   help="Path to environment YAML (e.g. configs/environment/experiment/archive/basic/00-5X5_NoPred.yaml)")
     p.add_argument("--agent-config", required=True,
                    help="Path to agent YAML (e.g. configs/models/dreamer_v3/dreamer_v3_rr06.yaml)")
     p.add_argument("--env-seed", type=int, default=ENV_SEED,
@@ -125,8 +125,9 @@ def load_merged_config(env_config_path: str, agent_config_path: str) -> Config:
             config.merge(Config.load_yaml(cand))
 
     # Merge environment / ablation config
-    env_cfg = Config.load_yaml(env_config_path)
-    config.merge(env_cfg)
+    # load_env_config: if env YAML has `extends:`, its base is merged inside;
+    # if standalone (archived), it loads as-is.
+    config.merge(load_env_config(env_config_path))
 
     # Merge agent config
     agent_cfg = Config.load_yaml(agent_config_path)

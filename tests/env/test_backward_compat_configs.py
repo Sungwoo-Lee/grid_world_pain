@@ -1,6 +1,6 @@
 """CP1 backward-compat test — all migrated experiment configs load without error.
 
-For each config in configs/experiment/**/*.yaml:
+For each config in configs/environment/experiment/**/*.yaml:
   1. Call load_env_params(Config(yaml)) — assert no exception.
   2. Assert params.animal_property.shape[0] == total animals expected from YAML.
   3. Assert params.predator_enabled key is NOT present (migration sweep check).
@@ -23,7 +23,7 @@ from src.environment.config_loader import load_env_params
 
 def _collect_all_configs():
     configs = sorted(
-        glob.glob(os.path.join(_ROOT, "configs", "experiment", "**", "*.yaml"), recursive=True) +
+        glob.glob(os.path.join(_ROOT, "configs", "environment", "experiment", "**", "*.yaml"), recursive=True) +
         glob.glob(os.path.join(_ROOT, "configs", "continual", "**", "*.yaml"), recursive=True) +
         glob.glob(os.path.join(_ROOT, "configs", "verification", "**", "*.yaml"), recursive=True)
     )

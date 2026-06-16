@@ -7,7 +7,7 @@ from src.environment.core import jax_reset, jax_step
 
 def test_c1():
     print("Testing C1...")
-    config = Config.load_yaml('configs/experiment/labmeeting/basic-00-predator.yaml')
+    config = Config.load_yaml('configs/environment/experiment/archive/labmeeting/basic-00-predator.yaml')
     params = load_env_params(config)
     num_pred = params.pred_damage.shape[0]
     print(f"C1 Check: params.pred_damage.shape[0] = {num_pred} (Expected: 1)")
@@ -16,7 +16,7 @@ def test_c1():
 def test_c2():
     print("Testing C2...")
     # Load basic config and inject two predator entries
-    config = Config.load_yaml('configs/experiment/labmeeting/basic-00-predator.yaml')
+    config = Config.load_yaml('configs/environment/experiment/archive/labmeeting/basic-00-predator.yaml')
     config._config['environment']['predators'] = [
         {
             "name": "predator1", "count": 2, "property": [0.0, 1.0, 0.0, 0.0, 0.0],
@@ -40,7 +40,7 @@ def test_c2():
 
 def test_c3():
     print("Testing C3...")
-    config = Config.load_yaml('configs/experiment/labmeeting/basic-00-predator.yaml')
+    config = Config.load_yaml('configs/environment/experiment/archive/labmeeting/basic-00-predator.yaml')
     config._config['environment']['predators'][0]['count'] = 3
     config._config['environment']['random_start_pos'] = True
     config._config['environment']['height'] = 10

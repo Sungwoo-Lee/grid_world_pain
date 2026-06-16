@@ -15,7 +15,7 @@ Usage:
   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \\
     scripts/dreamer_srl_offline_wm_test.py \\
     --checkpoint results/JAX_DreamerSRL/dreamer_srl_v2_10x10_ext_XS_envs_16_4M_s42 \\
-    --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \\
+    --env-config configs/environment/experiment/archive/hypervigilance/01-interoNocicept.yaml \\
     --agent-config configs/models/dreamer_srl/agent_xs.yaml \\
     --num-starts 200 \\
     --output tmp/20260518_dreamer_srl_wm_diag_yxij4lrc.json
@@ -68,7 +68,7 @@ if _REPO not in sys.path:
 
 import orbax.checkpoint as ocp
 from src.utils.config import Config, get_default_config
-from src.environment.config_loader import load_env_params
+from src.environment.config_loader import load_env_params, load_env_config
 from src.environment.wrapper import ParallelEnv
 from src.environment.sensor import get_observation_breakdown
 from src.algorithms.dreamer_srl.agent import build_agent
@@ -90,13 +90,13 @@ Examples:
   # Run against the yxij4lrc winner (16-env XS, 4M steps):
   python scripts/dreamer_srl_offline_wm_test.py \\
     --checkpoint results/JAX_DreamerSRL/dreamer_srl_v2_10x10_ext_XS_envs_16_4M_s42 \\
-    --env-config configs/experiment/hypervigilance/01-interoNocicept.yaml \\
+    --env-config configs/environment/experiment/archive/hypervigilance/01-interoNocicept.yaml \\
     --agent-config configs/models/dreamer_srl/agent_xs.yaml
 
   # Quick CPU smoke run (used by the pytest smoke test):
   python scripts/dreamer_srl_offline_wm_test.py \\
     --checkpoint /tmp/ckpt_dir \\
-    --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \\
+    --env-config configs/environment/experiment/archive/dreamer_curriculum/01_food_only.yaml \\
     --agent-config configs/models/dreamer_srl/01_food_only.yaml \\
     --num-real-steps 100 --num-starts 5 --horizon-max 5 --horizons 1,5 \\
     --source real_env --device cpu
@@ -140,7 +140,9 @@ def load_merged_config(env_config_path: str, agent_config_path: str):
         cand = os.path.join(_REPO, "configs", sub, "default.yaml")
         if os.path.exists(cand):
             config.merge(Config.load_yaml(cand))
-    config.merge(Config.load_yaml(env_config_path))
+    # load_env_config: if env YAML has `extends:`, its base is merged inside;
+    # if standalone (archived), it loads as-is.
+    config.merge(load_env_config(env_config_path))
     config.merge(Config.load_yaml(agent_config_path))
     return config
 

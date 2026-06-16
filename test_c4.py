@@ -6,7 +6,7 @@ from src.environment.renderer_v2 import render_jax_state_v2
 
 def test_c4():
     print("Testing C4 (Renderer with multiple predators)...")
-    config = Config.load_yaml('configs/experiment/labmeeting/basic-00-predator.yaml')
+    config = Config.load_yaml('configs/environment/experiment/archive/labmeeting/basic-00-predator.yaml')
     config._config['environment']['predators'][0]['count'] = 3
     config._config['environment']['random_start_pos'] = True
     config._config['environment']['height'] = 10

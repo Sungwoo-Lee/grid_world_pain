@@ -14,7 +14,7 @@ Writes a CSV trace to tmp/sps_bench_<label>_<YYYYMMDD_HHMMSS>.csv with columns:
 Config used:
   Agent config: configs/models/dreamer_srl/01_food_only_smoke.yaml  (if present; else
                 configs/models/dreamer_srl/01_food_only.yaml — see NOTE below)
-  Env config:   configs/experiment/dreamer_curriculum/01_food_only.yaml
+  Env config:   configs/environment/experiment/archive/dreamer_curriculum/01_food_only.yaml
 
 CLI overrides applied:
   --num-envs N        (default 16)
@@ -53,7 +53,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
 
 SMOKE_AGENT_CFG = os.path.join(PROJECT_ROOT, "configs", "dreamer_srl", "01_food_only_smoke.yaml")
 FALLBACK_AGENT_CFG = os.path.join(PROJECT_ROOT, "configs", "dreamer_srl", "01_food_only.yaml")
-ENV_CFG = os.path.join(PROJECT_ROOT, "configs", "experiment", "dreamer_curriculum", "01_food_only.yaml")
+ENV_CFG = os.path.join(PROJECT_ROOT, "configs", "environment", "experiment", "archive", "dreamer_curriculum", "01_food_only.yaml")
 TRAINER_SCRIPT = os.path.join(PROJECT_ROOT, "src", "algorithms", "dreamer_srl", "dreamer_srl_main.py")
 
 TMP_DIR = os.path.join(PROJECT_ROOT, "tmp")

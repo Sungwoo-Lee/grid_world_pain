@@ -12,7 +12,7 @@ Plan ref: §"Test Plan §(e) — JIT-recompile test" and §"Per-episode logging"
          description (CP5, accumulators.py build_episode_log_dict).
 
 Config used for non-degenerate tests:
-  configs/experiment/v2_smoke/02-entities-distributional.yaml
+  configs/environment/experiment/archive/v2_smoke/02-entities-distributional.yaml
   — 1 predator (tag='predator0', detection_range=[0,5]) + 2 wander rabbits
 """
 import os
@@ -38,7 +38,7 @@ from src.behavior.accumulators import build_episode_log_dict, sampled_wandb_keys
 # ── Config paths ─────────────────────────────────────────────────────────────
 
 _DIST_CONFIG = os.path.join(
-    _ROOT, "configs", "experiment", "v2_smoke", "02-entities-distributional.yaml"
+    _ROOT, "configs", "environment", "experiment", "archive", "v2_smoke", "02-entities-distributional.yaml"
 )
 
 # Minimal legacy config with degenerate ranges (all scalars).

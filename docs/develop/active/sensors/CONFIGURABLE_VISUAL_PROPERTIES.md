@@ -131,6 +131,10 @@ cleanly — see [[UNIFIED_ANIMAL_ENTITY_AND_PER_EPISODE_SAMPLING]].
 - **`v3.0` branch** — all of this lands on v3.0 (created from the v2.0 tip `871f146`).
 - A parallel refactor, **`docs/develop/active/refactors/CONFIGURABLE_INITIAL_STATE_RANGES.md`** (other
   session), also touches the config system on v3.0 — check for overlap before large edits.
+- A parallel refactor, **[[CONFIG_LAYERING_AND_EXPERIMENT_REORG]]** (the `extends:`-layering + move of
+  `configs/experiment/` → `configs/environment/experiment/` and archive), is recommended to land
+  **first** — author this visual-properties change against the final config paths and the new
+  `load_env_config` chokepoint to avoid a second parity-slug churn.
 
 ## Why this matters (experiment-environment context — owned by the other session)
 This refactor is the platform enabler for the **behavior-probe** program. Read these for the

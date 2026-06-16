@@ -39,7 +39,7 @@ from src.algorithms.dreamer_srl.checkpoint import (
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-_FOOD_ONLY_ENV_CFG = os.path.join(_REPO, "configs/experiment/dreamer_curriculum/01_food_only.yaml")
+_FOOD_ONLY_ENV_CFG = os.path.join(_REPO, "configs/environment/experiment/archive/dreamer_curriculum/01_food_only.yaml")
 _FOOD_ONLY_AGENT_CFG = os.path.join(_REPO, "configs/models/dreamer_srl/01_food_only.yaml")
 
 

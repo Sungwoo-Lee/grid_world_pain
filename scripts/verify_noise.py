@@ -5,19 +5,15 @@ B4 fix: EnvState constructor updated to use unified animal_* fields
 """
 import jax
 import jax.numpy as jnp
-import yaml
 from src.utils.config import Config
-from src.environment.config_loader import load_env_params
+from src.environment.config_loader import load_env_params, load_env_config
 from src.environment.sensor import get_observation
 from src.environment.state import EnvState
 
 def verify_noise():
     # 1. Load default config
     config_path = "configs/environment/default.yaml"
-    with open(config_path, "r") as f:
-        config_dict = yaml.safe_load(f)
-
-    config = Config(config_dict)
+    config = load_env_config(config_path)  # honours `extends:` if present; standalone otherwise
 
     # 2. Load EnvParams
     params = load_env_params(config)

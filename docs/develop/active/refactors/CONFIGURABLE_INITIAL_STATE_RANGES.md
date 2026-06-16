@@ -10,7 +10,7 @@ last_updated: 2026-06-16
 
 > **Status**: PLANNED
 > **Opened**: 2026-06-16
-> **Related**: [[20260616_1557_hunger_gated_avoidance]] (Training prerequisite — initial-state coverage), [[experiment_environment_designs_v1]] (eval-probe hungry/injured starts)
+> **Related**: [[20260616_1557_hunger_gated_avoidance]] (Training prerequisite — initial-state coverage), [[experiment_environment_designs_v1]] (eval-probe hungry/injured starts), [[CONFIG_LAYERING_AND_EXPERIMENT_REORG]] (parallel config-system refactor — recommended to land FIRST; this refactor authors against its final paths)
 
 ---
 

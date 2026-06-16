@@ -46,7 +46,7 @@ def _config_slug(config_path: str) -> str:
 
 def _collect_configs():
     configs = sorted(
-        glob.glob(os.path.join(_ROOT, "configs", "experiment", "**", "*.yaml"), recursive=True) +
+        glob.glob(os.path.join(_ROOT, "configs", "environment", "experiment", "**", "*.yaml"), recursive=True) +
         glob.glob(os.path.join(_ROOT, "configs", "continual", "**", "*.yaml"), recursive=True) +
         glob.glob(os.path.join(_ROOT, "configs", "verification", "**", "*.yaml"), recursive=True)
     )

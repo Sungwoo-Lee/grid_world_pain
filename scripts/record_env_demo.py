@@ -2,14 +2,13 @@ import os
 import jax
 import jax.numpy as jnp
 from tqdm import tqdm
-import yaml
 import sys
 
 # Ensure project root is in path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.utils.config import Config
-from src.environment.config_loader import load_env_params
+from src.environment.config_loader import load_env_params, load_env_config
 from src.environment.core import jax_step, jax_reset
 from src.environment.sensor import get_observation, get_observation_breakdown
 from src.environment.renderer import render_jax_state, save_jax_video
@@ -20,11 +19,9 @@ def main():
     if not os.path.exists(config_path):
         print(f"Error: Config not found at {config_path}")
         return
-        
-    with open(config_path, 'r') as f:
-        config_dict = yaml.safe_load(f)
-    config = Config(config_dict)
-    
+
+    config = load_env_config(config_path)  # honours `extends:` if present; standalone otherwise
+
     # 2. Setup Params
     params = load_env_params(config)
     seed = 42

@@ -56,7 +56,7 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # ---------------------------------------------------------------------------
 # WandB-field convention (the agent fills all four below)
 # ---------------------------------------------------------------------------
-#   --wandb-group     experiment family — top dir under configs/experiment/
+#   --wandb-group     experiment family — top dir under configs/environment/experiment/
 #                       e.g. 'basic', 'hypervigilance', 'noise'
 #
 #   --wandb-job-type  operational category. Default 'prod'.
@@ -85,7 +85,7 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # Total episodes: 760000 (from schedule's episode_boundaries[-1]). Multi-week run.
 CUDA_VISIBLE_DEVICES=0 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
   src/algorithms/dreamer_srl/dreamer_srl_main.py \
-  --configs-dir configs/experiment/dreamer_srl_curriculum \
+  --configs-dir configs/environment/experiment/archive/dreamer_srl_curriculum \
   --continual-schedule configs/continual/dreamer_srl_3stage_size_curriculum.yaml \
   --agent-config configs/models/dreamer_srl/01_food_only_buf256k.yaml \
   --num-envs 16 \

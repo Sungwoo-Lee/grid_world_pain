@@ -26,7 +26,7 @@ def eval_agent_and_params():
     """Build a tiny agent + env_params for eval tests."""
     _root = '/media/nas01/projects/Interoceptive-AI/grid_world_pain'
     env_cfg = get_default_config()
-    env_cfg.merge(Config.load_yaml(f'{_root}/configs/experiment/dreamer_curriculum/01_food_only.yaml'))
+    env_cfg.merge(Config.load_yaml(f'{_root}/configs/environment/experiment/archive/dreamer_curriculum/01_food_only.yaml'))
     for rel in ['configs/train/default.yaml', 'configs/evaluation/default.yaml',
                 'configs/visualization/default.yaml']:
         env_cfg.merge(Config.load_yaml(os.path.join(_root, rel)))

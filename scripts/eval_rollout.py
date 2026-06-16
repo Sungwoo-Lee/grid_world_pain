@@ -47,7 +47,7 @@ import orbax.checkpoint as ocp
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.environment.config_loader import Config, load_env_params, load_behavior_measure_cfg
+from src.environment.config_loader import Config, load_env_params, load_behavior_measure_cfg, load_env_config
 from src.environment.core import jax_reset, jax_step
 from src.environment.sensor import get_observation, get_observation_breakdown
 
@@ -424,7 +424,7 @@ def main():
         jax.config.update("jax_platform_name", "cpu")
 
     # --- Load configs ---
-    config = Config.load_yaml(args.config)
+    config = load_env_config(args.config)  # honours `extends:` if present; standalone otherwise
     bm_cfg = load_behavior_measure_cfg(config)
     if bm_cfg is None:
         print("WARNING: behavior_measures block absent in config; using defaults for eval.", flush=True)

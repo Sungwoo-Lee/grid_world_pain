@@ -11,7 +11,7 @@ Usage::
 
     /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \\
         src/algorithms/dreamer_srl/dreamer_srl_main.py \\
-        --env-config configs/experiment/dreamer_curriculum/01_food_only.yaml \\
+        --env-config configs/environment/experiment/archive/dreamer_curriculum/01_food_only.yaml \\
         --agent-config configs/models/dreamer_srl/01_food_only.yaml \\
         --total-steps 5000 --num-envs 1 --seed 0 \\
         --wandb-project grid_world_pain \\
@@ -37,7 +37,7 @@ from flax import nnx
 # Project imports
 sys.path.insert(0, '/media/nas01/projects/Interoceptive-AI/grid_world_pain')
 from src.utils.config import Config
-from src.environment.config_loader import load_env_params
+from src.environment.config_loader import load_env_params, load_env_config
 from src.environment.wrapper import ParallelEnv
 from src.algorithms.dreamer_srl.agent import build_agent
 from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
@@ -101,7 +101,8 @@ def _load_stage_env_cfg(project_root: str, stage_yaml_path: str):
     """
     import os as _os
     from src.utils.config import get_default_config, Config as _Config
-    cfg = get_default_config()  # loads configs/environment/default.yaml
+    from src.environment.config_loader import load_env_config as _load_env_config
+    cfg = get_default_config()  # seed base (archived/standalone stage configs rely on this)
     for rel in [
         'configs/train/default.yaml',
         'configs/evaluation/default.yaml',
@@ -110,7 +111,9 @@ def _load_stage_env_cfg(project_root: str, stage_yaml_path: str):
         p = _os.path.join(project_root, rel)
         if _os.path.exists(p):
             cfg.merge(_Config.load_yaml(p))
-    cfg.merge(_Config.load_yaml(stage_yaml_path))
+    # load_env_config: if stage YAML has `extends:`, its base is merged inside;
+    # if standalone (archived), it loads as-is and merges on top of defaults.
+    cfg.merge(_load_env_config(stage_yaml_path))
     return cfg
 
 
@@ -399,7 +402,7 @@ def main() -> None:
             raise ValueError(
                 "Exactly one of --env-config or --configs-dir is required."
             )
-        env_cfg = get_default_config()  # loads configs/environment/default.yaml
+        env_cfg = get_default_config()  # seed base (archived/standalone configs rely on this)
         # Merge Training defaults (training.checkpoint_frequency etc.)
         # Ported from train.py:L297-L327
         for _cfg_rel in [
@@ -410,7 +413,9 @@ def main() -> None:
             _cfg_path = _os.path.join(_project_root, _cfg_rel)
             if _os.path.exists(_cfg_path):
                 env_cfg.merge(Config.load_yaml(_cfg_path))
-        env_cfg.merge(Config.load_yaml(args.env_config))  # experiment-specific overrides
+        # load_env_config: if env YAML has `extends:`, its base is merged inside;
+        # if standalone (archived), it loads as-is and merges on top of defaults.
+        env_cfg.merge(load_env_config(args.env_config))
 
     agent_cfg = Config.load_yaml(args.agent_config)
 

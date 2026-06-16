@@ -21,7 +21,7 @@ from src.environment.core import jax_reset, jax_step
 def test_per_entity_info_keys_present_and_finite():
     """T1: new info keys exist, are scalar, and are non-NaN for a config with rabbits."""
     config = Config.load_yaml(
-        "configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml"
+        "configs/environment/experiment/archive/hypervigilance/01-interoNocicept_sameProp.yaml"
     )
     params = load_env_params(config)
     key = jax.random.PRNGKey(0)

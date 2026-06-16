@@ -123,7 +123,7 @@ def main():
         epilog="""
 examples:
   %(prog)s 113 "bash train_command-new.sh"
-  %(prog)s 114 "bash scripts/launch_sheeprl.sh configs/experiment/basic/01-5X5_Pred.yaml 0 tag"
+  %(prog)s 114 "bash scripts/launch_sheeprl.sh configs/environment/experiment/archive/basic/01-5X5_Pred.yaml 0 tag"
   %(prog)s --foreground 113 "nvidia-smi"
   %(prog)s --no-tail 114 "bash long_running.sh"
 """,

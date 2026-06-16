@@ -36,7 +36,7 @@ def recorded_episode(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp('recording')
 
     env_cfg = get_default_config()
-    env_cfg.merge(Config.load_yaml(f'{_ROOT}/configs/experiment/dreamer_curriculum/01_food_only.yaml'))
+    env_cfg.merge(Config.load_yaml(f'{_ROOT}/configs/environment/experiment/archive/dreamer_curriculum/01_food_only.yaml'))
     for rel in ['configs/train/default.yaml', 'configs/evaluation/default.yaml',
                 'configs/visualization/default.yaml']:
         env_cfg.merge(Config.load_yaml(os.path.join(_ROOT, rel)))

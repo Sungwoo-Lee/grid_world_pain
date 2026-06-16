@@ -44,7 +44,7 @@ def config_slug(config_path: str) -> str:
 
 def collect_configs():
     configs = []
-    configs += sorted(glob.glob(os.path.join(_ROOT, "configs", "experiment", "**", "*.yaml"), recursive=True))
+    configs += sorted(glob.glob(os.path.join(_ROOT, "configs", "environment", "experiment", "**", "*.yaml"), recursive=True))
     configs += sorted(glob.glob(os.path.join(_ROOT, "configs", "continual", "**", "*.yaml"), recursive=True))
     configs += sorted(glob.glob(os.path.join(_ROOT, "configs", "verification", "**", "*.yaml"), recursive=True))
     env_default = os.path.join(_ROOT, "configs", "environment", "default.yaml")

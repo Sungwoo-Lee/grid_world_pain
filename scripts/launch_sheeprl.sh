@@ -12,7 +12,7 @@ set -euo pipefail
 # Args:
 #   <config-yaml>        Path (relative to project root or absolute) to the
 #                        env YAML for our gridworld task (e.g.
-#                        configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml).
+#                        configs/environment/experiment/archive/basic/01-5X5_PredInterval3_NutGain18.yaml).
 #   <gpu-index>          CUDA index for torch (0..N-1).
 #   <env-id-tag>         Unique tag for the run (becomes part of WandB run name
 #                        via sheeprl's exp_name template). E.g. "gwp_5x5_pred".
@@ -27,11 +27,11 @@ set -euo pipefail
 #                        E.g. env.use_jax_vector_env=true
 #
 # Examples:
-#   bash scripts/launch_sheeprl.sh configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml 0 gwp_5x5_pred
-#   bash scripts/launch_sheeprl.sh configs/experiment/hypervigilance/01-interoNocicept.yaml 1 gwp_10x10_intero 500000
-#   bash scripts/launch_sheeprl.sh configs/experiment/hypervigilance/01-interoNocicept.yaml 3 sps_n4 5000 4
-#   bash scripts/launch_sheeprl.sh configs/experiment/basic/01-5X5_PredInterval3_NutGain18.yaml 0 gwp_5x5_pred_S 200_000 1 S
-#   bash scripts/launch_sheeprl.sh configs/experiment/dreamer_curriculum/01_food_only.yaml 3 jaxvec_smoke 1000 4 XS env.use_jax_vector_env=true
+#   bash scripts/launch_sheeprl.sh configs/environment/experiment/archive/basic/01-5X5_PredInterval3_NutGain18.yaml 0 gwp_5x5_pred
+#   bash scripts/launch_sheeprl.sh configs/environment/experiment/archive/hypervigilance/01-interoNocicept.yaml 1 gwp_10x10_intero 500000
+#   bash scripts/launch_sheeprl.sh configs/environment/experiment/archive/hypervigilance/01-interoNocicept.yaml 3 sps_n4 5000 4
+#   bash scripts/launch_sheeprl.sh configs/environment/experiment/archive/basic/01-5X5_PredInterval3_NutGain18.yaml 0 gwp_5x5_pred_S 200_000 1 S
+#   bash scripts/launch_sheeprl.sh configs/environment/experiment/archive/dreamer_curriculum/01_food_only.yaml 3 jaxvec_smoke 1000 4 XS env.use_jax_vector_env=true
 
 cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 
