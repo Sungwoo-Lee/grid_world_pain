@@ -19,9 +19,11 @@
 #      raising the cost of a mistake and testing whether avoidance becomes more ANTICIPATORY.
 #
 # Confound removals vs cell 06:
-#   - The 4 hiding_predator resources are REMOVED (they were a second damage source that would
-#     confound a clean 1-vs-1 -- as cell 05 did). Bush obstacles are KEPT (the agent needs
-#     cover; the M2 bush-dive behaviour-measure needs hides_agent: true).
+#   - The legacy 4 hiding_predator RESOURCES are REMOVED (they were a second damage source that
+#     would confound a clean 1-vs-1 -- as cell 05 did). A hiding predator now exists ONLY as an
+#     INERT count:0 static predator-class ANIMAL (unified-animal-system template, latest schema)
+#     so the 1-vs-1 purpose is byte-unchanged -- bump its count>0 to add a passive contact hazard.
+#     Bush obstacles are KEPT (the agent needs cover; the M2 bush-dive measure needs hides_agent: true).
 #   - The 2-rabbit corner layout collapses to a single full-grid rabbit, so the old "decoupled
 #     food away from fixed rabbit corners" layout rationale is moot. Food is a simple symmetric
 #     foraging task (4 quadrants x 2 = 8 food sources) so survival isn't starvation-capped and
@@ -133,6 +135,27 @@ environment:
       stamina_recovery_rate:    1.0
       hunt_stamina_threshold:   0.3
       lose_interest_multiplier: 3.0
+
+    # -- Hiding predator: a LURKING predator in the UNIFIED ANIMAL SYSTEM (v2.0 refactor),
+    #    NOT the legacy `type: hiding_predator` resource. class:predator => emits the predator
+    #    smell + predator visual channel + is_damaging; behaviour:static => never moves, never
+    #    chases (static branch is pass-through); harms only on co-location (at_animal &
+    #    animal_is_damaging, NOT hunt-gated). count:0 keeps cell-08's clean 1-vs-1 purpose
+    #    UNCHANGED (range(0) => zero instances); bump count>0 to activate a passive contact
+    #    hazard. The 5 hunt/distributional fields are OPTIONAL for static and omitted here.
+    - class: "predator"
+      behaviour: "static"
+      tag: "hide"
+      count: 0                                 # INERT slot — schema template only
+      properties: [0.0, 1.0, 0.0, 0.0, 0.0]   # matched predator smell
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      move_interval: 1                         # unused for static
+      nociception_intensity: 0.9
+      damage: [15.0, 45.0]                     # sub-lethal contact hazard (classic hiding-predator range)
+      spawn_area: [[1, 1], [10, 10]]           # sits somewhere on the full grid
+      patrol_area: [[1, 1], [10, 10]]          # unused for static (kept for parser parity)
+      attack_delay: 3
+      disengage_on_contact: false              # static: irrelevant (never engages)
 
   location_areas:
     - type: "grass"
