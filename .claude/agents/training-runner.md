@@ -165,7 +165,7 @@ Apply the default convention below. The four WandB fields MUST all be set explic
 
 | Flag | Value rule | Example |
 |---|---|---|
-| `--wandb-group` | Top dir under `configs/experiment/` (the experiment family) | `basic`, `hypervigilance`, `noise` |
+| `--wandb-group` | Top dir under `configs/environment/experiment/` (the experiment family) | `basic`, `hypervigilance`, `noise` |
 | `--wandb-job-type` | Operational category. Default **`prod`**. Override only when the user signals it ("debug run", "test run", "pilot", "ablation") | `prod`, `debug`, `pilot`, `test`, `ablation` |
 | `--wandb-name` | Run display name in WandB web. Format: `<algo>_<config_stem>_n<node>` (single-seed) or `<algo>_<config_stem>_s<seed>_n<node>` (seed override). `<algo>` is the agent_config file stem. `<config_stem>` is the env config file stem (no `.yaml`, no path). | `dreamer_v3_00-5X5_NoPred_n113` |
 | `--tag` | Identical to `--wandb-name`. Drives `results/JAX_<algo>/<ts>_<tag>/` and `logs/<ts>_<tag>.log` locally; appears as `Config.tag` in WandB. | `dreamer_v3_00-5X5_NoPred_n113` |

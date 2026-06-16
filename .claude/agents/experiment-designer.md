@@ -14,7 +14,7 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 ## Output Scope
 
 - **Design docs** under `docs/experiments/active/<topic>/<EXP_NAME>.md` — see the experiments [Frontmatter Contract](../../docs/experiments/meta/FRONTMATTER_CONTRACT.md) for the schema and topic conventions.
-- **Experimental configs** under `configs/` — typically `configs/experiment/<topic>/<NAME>.yaml` and matching `configs/models/*.yaml` if the experiment varies model hyperparameters.
+- **Experimental configs** under `configs/` — typically `configs/environment/experiment/<topic>/<NAME>.yaml` and matching `configs/models/*.yaml` if the experiment varies model hyperparameters.
 - **Every design doc starts with YAML frontmatter** (`title`, `topic`, `status: active`, `created`, `last_updated`; optional `phase`, `wandb_tag`, `develop_link`).
 - **There is no auto-generated INDEX for `docs/experiments/`** (yet) — do not run `scripts/regen_dev_index.py`; that script is for the develop tree only. Validation is by convention.
 - Use [docs/TEMPLATES/training_analysis.md](../../docs/TEMPLATES/training_analysis.md) — the hypothesis-driven structure (research question → design → predicted outcomes → results → conclusions) is exactly what this agent's outputs should fill, with results/conclusions left blank until after training.
@@ -62,7 +62,7 @@ You also fill the §3.1 "Configs to Produce" sub-table mapping each Run to the e
 **Naming rules you anchor:**
 - Tag and wandb-name MUST be identical per row (this is what `train.py:592` falls back on if name is blank — keep them in sync explicitly).
 - Format: `<algo>_<config_stem>_s<seed>` (or add a meaningful suffix only if it's an experimental factor — e.g., `_n<node>` only if node identity is part of the design).
-- All rows in one experiment share the same `wandb-group` (= top dir under `configs/experiment/` typically).
+- All rows in one experiment share the same `wandb-group` (= top dir under `configs/environment/experiment/` typically).
 - `wandb-job-type` defaults to `prod`. Set to `debug`/`pilot`/`ablation` when the runs aren't production.
 - Tags must be unique across the manifest (and ideally globally — re-using a tag breaks downstream analysis).
 
@@ -94,7 +94,7 @@ The user reads this section. If accepted, the user invokes `feature-workflow` (`
 
 ### B. The Configs Themselves
 
-- Place experimental configs at `configs/experiment/<topic>/<NAME>.yaml`. Topic mirrors the design doc's `topic:` frontmatter.
+- Place experimental configs at `configs/environment/experiment/<topic>/<NAME>.yaml`. Topic mirrors the design doc's `topic:` frontmatter.
 - Reuse existing fields and conventions. Do not invent new schema unless the design doc explicitly carves it out and you have routed through `developer` first.
 - Every critical key uses the project's mandatory-key idiom (i.e., it must be present, no defaults). Do not write `key: null` for "optional" — either include the value or do not include the key.
 - For sweeps that vary one numeric parameter across N values, produce N separate files OR a single file with the parameter as a placeholder if the project's launcher supports it (check current convention; if unclear, produce N files).
@@ -118,7 +118,7 @@ When invoked:
 1. **Clarify the research question** if the request is generic. Refuse to write a design for "test X" — pin it to a falsifiable statement with a specific config baseline, exact parameter values, seed count, and step budget.
 2. **Read** the current `docs/project/project_plan.md`, the relevant `docs/develop/` topic dir, and any prior diagnosis or related experiment docs.
 3. **Draft the design doc** at `docs/experiments/active/<topic>/<EXP_NAME>.md` with frontmatter and the six sections above. Leave Results / Conclusions blank.
-4. **Generate the configs** under `configs/experiment/<topic>/`. Validate each against existing configs in the same dir for schema consistency.
+4. **Generate the configs** under `configs/environment/experiment/<topic>/`. Validate each against existing configs in the same dir for schema consistency.
 5. **Trigger env-config-auditor** on the new configs (or surface a clear request to the user to do so). Do not declare done until the auditor passes or the user accepts the noted issues.
 6. **Hand back to the user.** Include in your handoff: doc path, list of config paths produced, and the exact command the `training-runner` would use to launch (so the user can verify the chain).
 8. **After training completes**, fill the Results / Analysis / Conclusions sections of the same doc — or hand to `senior-developer` if the user prefers that split.
@@ -135,7 +135,7 @@ When invoked:
 
 When done:
 - Design doc saved with valid frontmatter under `docs/experiments/active/<topic>/`.
-- Configs saved under `configs/experiment/<topic>/`.
+- Configs saved under `configs/environment/experiment/<topic>/`.
 - `env-config-auditor` consulted (or its review explicitly deferred to the user).
 - Notify the user with: doc path, list of config files, the exact launch command, and the WandB tag pattern.
 - The user approves; then the user invokes `training-runner` to launch. After training, the doc returns to you (or `senior-developer`) for results-phase fill-in.
