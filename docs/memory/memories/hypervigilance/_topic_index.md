@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `hypervigilance` topic.
 
 **Folder definition**: Hypervigilance experiments
-**Insights**: 17
+**Insights**: 18
 **Last updated**: 2026-06-16
 
 ---
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-16 | 15:14 | `20260616_1514_experimental_env_as_behavior_platform` | Reframe: 'gap tracks the world not the agent' is NOT a failure — it is the intended mechanism of a behavior-measurement PLATFORM (an experimental environment exists to force/induce a target behavior). Decision: continue the experimental-environment program but shift focus from a narrow predator-rabbit discrimination metric to ENVIRONMENT SETTINGS for future TRAINING and EVALUATION. |
 | 2026-06-16 | 01:42 | `20260616_0142_discrimination_is_spatial_encounter_artifact` | Autonomous testbed search shows the predator-vs-rabbit bush-dive 'discrimination' is a SPATIAL-ENCOUNTER ARTIFACT not class-recognition: a KNOWN class-blind agent (cell-08) reproduces the full +0.31 bush-dive gap in Cell C's asymmetric decoupled-food world, and BOTH agents go flat under geometry control. No isolated test world calibrated as a discrimination metric. Resolves insight 1428's open question (the +37pp event-level gap was itself spatially mediated). |
 | 2026-06-15 | 16:12 | `20260615_1612_testbed_isolation_makes_means_honest` | Methodology decision: keep mean-level measures (we need scalable numbers) but build dedicated isolated TEST environments (frozen-checkpoint probes, no retraining) that strip the confounds which made means misleading in the complex training world, so the mean becomes a trustworthy proxy for the trajectory-level truth. Every new testbed must first be calibrated against a known discriminator (Cell C) and a known class-blind agent (cell-08) before its numbers are trusted. First testbeds: predator-solo / rabbit-solo. Anchor: behavior_measurement_charter.md. |
 | 2026-06-09 | 17:47 | `20260609_1747_avoidance_is_post_contact_not_preemptive` | Predator-only eval (same chasing-rabbit model, rabbits removed) shows the agent does NOT pre-empt the lone approaching predator — it forages/rests in place until contact (~step 11) and only hides reactively after a hit. Conclusion: predator avoidance is POST-CONTACT / pain-reactive, not anticipatory; the visual rabbit-count signal is real but doesn't drive reliable pre-emption. SUPERSEDES `20260609_1719`. Confidence medium (predator-only world is out-of-distribution, N=20). |

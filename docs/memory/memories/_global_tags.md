@@ -54,6 +54,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-06-16: 1 insight from the testbed-search reframe (`20260616_1514_experimental_env_as_behavior_platform`) reused existing tags `hypervigilance`, `design`, `decision` — no new tags promoted.
 - 2026-06-16: 1 insight from the autonomous discrimination-metric testbed search (`20260616_0142_discrimination_is_spatial_encounter_artifact`) reused existing tags `hypervigilance`, `refutation`, `learned_lesson`, `decision` — no new tags promoted.
 - 2026-06-15: 1 insight from the predator-rabbit measurement-direction rethink + testbed-charter session (`20260615_1612_testbed_isolation_makes_means_honest`) reused existing tags `hypervigilance`, `design`, `decision`, `learned_lesson` — no new tags promoted.
 - 2026-06-09: 1 insight from the predator-only control session (`20260609_1747_avoidance_is_post_contact_not_preemptive`, supersedes `20260609_1719`) reused existing tags `hypervigilance`, `refutation`, `learned_lesson` — no new tags promoted.

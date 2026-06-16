@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-06-16
 **Active folders**: 7
-**Total insights**: 99
+**Total insights**: 100
 **Last audit**: (none)
 
 ---
@@ -20,7 +20,7 @@
 | `nmn_diagnosis` | NMN performance diagnosis findings | 16 | 2026-05-28 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 17 | 2026-05-29 | [dreamer, decision, learned_lesson, refutation, meta, design] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 26 | 2026-05-29 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
-| `hypervigilance` | Hypervigilance experiments | 15 | 2026-06-16 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta] |
+| `hypervigilance` | Hypervigilance experiments | 16 | 2026-06-16 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta] |
 | `env_entities` | Env entity architecture decisions | 3 | 2026-06-09 | [design, decision, learned_lesson, meta] |
 
 ---
@@ -52,6 +52,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-06-16: Captured 1 insight into existing `hypervigilance` from the testbed-search reframe: `20260616_1514_experimental_env_as_behavior_platform` — the 'gap tracks the world not the agent' result is reframed as the intended mechanism of a behavior-measurement PLATFORM (not a failure); program continues with focus shifted from a narrow discrimination metric to ENVIRONMENT SETTINGS for future training + evaluation. Builds on `20260616_0142`. All tags reused (hypervigilance, design, decision). No new tags promoted.
 - 2026-06-16: Captured 1 insight into existing `hypervigilance` from the autonomous overnight discrimination-metric testbed search: `20260616_0142_discrimination_is_spatial_encounter_artifact` — the predator-vs-rabbit bush-dive 'discrimination' is a spatial-encounter artifact (a known class-blind agent reproduces the +0.31 gap in Cell C's asymmetric world; both agents flat under geometry control); no isolated test world calibrated as a metric; resolves insight 1428's open question. All tags reused (hypervigilance, refutation, learned_lesson, decision). No new tags promoted.
 - 2026-06-15: Captured 1 insight into existing `hypervigilance` from the predator-rabbit measurement-direction rethink + testbed-charter session: `20260615_1612_testbed_isolation_makes_means_honest` — keep mean-level measures but build isolated TEST environments (frozen-checkpoint probes, no retraining) that strip confounds so the mean becomes a trustworthy proxy for the trajectory-level truth; every new testbed must be calibrated against a known discriminator (Cell C) and a known class-blind agent (cell-08) first. Builds on `20260609_1721_aggregate_stats_hide_conditional_behavior`. All tags reused (hypervigilance, design, decision, learned_lesson). No new tags promoted.
 - 2026-06-09: Captured 1 insight into existing `hypervigilance` from the predator-only control + trajectory-level read session: `20260609_1747_avoidance_is_post_contact_not_preemptive` — evaluating the same chasing-rabbit model with rabbits removed shows the agent does NOT pre-empt the lone approaching predator (forages/rests until contact ~step 11; only reactive post-hit hiding), so predator avoidance is post-contact / pain-reactive, not anticipatory. **Supersedes** `20260609_1719_predator_discrimination_visual_count_elimination` (its visual-channel-count fact is preserved; its pre-emptive-avoidance interpretation is refuted by the control test). No new tags promoted (reused hypervigilance, refutation, learned_lesson).
