@@ -177,7 +177,7 @@ class TestParseSingleField:
 # ── Tests: all 5 fields via non-degenerate config file ───────────────────
 
 _DISTRIBUTIONAL_CONFIG = os.path.join(
-    _ROOT, "configs", "experiment", "v2_smoke", "02-entities-distributional.yaml"
+    _ROOT, "configs", "environment", "experiment", "archive", "v2_smoke", "02-entities-distributional.yaml"
 )
 
 
