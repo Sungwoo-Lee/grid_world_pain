@@ -925,6 +925,39 @@ def load_env_params(config: Config) -> EnvParams:
         # Passthrough mode — kernel is unused but kept as zeros for shape stability.
         interoceptive_kernel = jnp.zeros(interoceptive_kernel_length, dtype=jnp.float32)
 
+    # Configurable initial-state ranges (Fork B2: conditional-mandatory).
+    # Range keys are required ONLY when the matching random_start_* flag is true;
+    # when the flag is false, sentinels are used (values never read at runtime).
+    _rand_nutr = bool(config.get_mandatory('body.random_start_nutrition'))
+    _rand_inj  = bool(config.get_mandatory('body.random_start_injury'))
+    _max_nutr  = float(config.get_mandatory('body.max_nutrition'))
+    _max_inj   = float(config.get_mandatory('body.max_injury'))
+
+    if _rand_nutr:
+        start_nutrition_low  = float(config.get_mandatory('body.start_nutrition_low'))
+        start_nutrition_high = float(config.get_mandatory('body.start_nutrition_high'))
+        if not (0.0 <= start_nutrition_low <= start_nutrition_high <= _max_nutr):
+            raise ValueError(
+                f"body.start_nutrition_low/high must satisfy 0 <= low <= high <= max_nutrition "
+                f"({_max_nutr}); got low={start_nutrition_low}, high={start_nutrition_high}")
+    else:
+        # Sentinel: unused when random_start_nutrition is False.
+        # Keeps params pytree shape static across configs (traced floats).
+        start_nutrition_low  = 0.0
+        start_nutrition_high = _max_nutr
+
+    if _rand_inj:
+        start_injury_low  = float(config.get_mandatory('body.start_injury_low'))
+        start_injury_high = float(config.get_mandatory('body.start_injury_high'))
+        if not (0.0 <= start_injury_low <= start_injury_high <= _max_inj):
+            raise ValueError(
+                f"body.start_injury_low/high must satisfy 0 <= low <= high <= max_injury "
+                f"({_max_inj}); got low={start_injury_low}, high={start_injury_high}")
+    else:
+        # Sentinel: unused when random_start_injury is False.
+        start_injury_low  = 0.0
+        start_injury_high = _max_inj / 2.0
+
     return EnvParams(
         height=height,
         width=width,
@@ -993,6 +1026,10 @@ def load_env_params(config: Config) -> EnvParams:
         setpoint=config.get_mandatory('body.satiation_setpoint'),
         start_satiation=config.get_mandatory('body.start_satiation'),
         start_nutrition=config.get_mandatory('body.start_nutrition'),
+        start_nutrition_low=start_nutrition_low,
+        start_nutrition_high=start_nutrition_high,
+        start_injury_low=start_injury_low,
+        start_injury_high=start_injury_high,
         metabolic_cost=config.get_mandatory('body.metabolic_cost'),
         nutrition_to_satiation_scaling_factor=config.get_mandatory('body.nutrition_to_satiation_scaling_factor'),
         recovery_base_rate=config.get_mandatory('body.recovery_base_rate'),

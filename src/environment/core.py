@@ -915,8 +915,10 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     body_key1, body_key2, body_key3 = jax.random.split(body_key, 3)
 
     if params.random_start_nutrition:
-        min_start_nutr = params.max_nutrition / 2.0
-        nutrition = jax.random.uniform(body_key2, (), minval=min_start_nutr, maxval=params.max_nutrition)
+        nutrition = jax.random.uniform(
+            body_key2, (),
+            minval=params.start_nutrition_low,
+            maxval=params.start_nutrition_high)
     else:
         nutrition = params.start_nutrition
 
@@ -924,8 +926,10 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     satiation = params.max_satiation * jnp.power(fullness_ratio, params.nutrition_to_satiation_scaling_factor)
 
     if params.random_start_injury:
-        max_start_injury = params.max_injury / 2.0
-        injury = jax.random.uniform(body_key3, (), minval=0.0, maxval=max_start_injury)
+        injury = jax.random.uniform(
+            body_key3, (),
+            minval=params.start_injury_low,
+            maxval=params.start_injury_high)
     else:
         injury = 0.0
 

@@ -164,8 +164,12 @@ class EnvParams:
     max_injury: float
     food_nutrition_gain: float
     setpoint: float
-    start_satiation: float              # For non-random start
+    start_satiation: float              # For non-random start (note: dead in reset path; satiation derived from nutrition)
     start_nutrition: float
+    start_nutrition_low: float          # lower bound when random_start_nutrition
+    start_nutrition_high: float         # upper bound when random_start_nutrition
+    start_injury_low: float             # lower bound when random_start_injury
+    start_injury_high: float            # upper bound when random_start_injury
     metabolic_cost: float
     nutrition_to_satiation_scaling_factor: float
     recovery_base_rate: float
