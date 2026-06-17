@@ -854,3 +854,107 @@ def test_t8_real_train_py_smoke():
 
     print("T8 PASS: train.py completed successfully with behavior_measures enabled")
     print(f"T8: returncode={result.returncode}")
+
+
+# ---------------------------------------------------------------------------
+# T9 — eval_seeds generator spec (dict form) reproduces canonical list exactly
+# ---------------------------------------------------------------------------
+
+# Canonical 200-seed list: sorted(np.random.default_rng(42).integers(0, 2**31, size=200, dtype=np.int64).tolist())
+_CANONICAL_200_SEEDS = tuple(
+    sorted(np.random.default_rng(42).integers(0, 2**31, size=200, dtype=np.int64).tolist())
+)
+
+_VALID_BM_YAML_DICT_SPEC = """\
+behavior_measures:
+  enabled: true
+  cue_radius: 3.0
+  obs_window: 5
+  eval_n_episodes: 200
+  eval_seeds: {rng: 42, sort: true}
+  eval_policy_mode: "deterministic"
+  eval_max_steps: 500
+  eval_obs_noise: "training"
+  motif_window_K: 7
+  motif_features:
+    - "net_displacement"
+    - "path_length"
+    - "threat_distance_change_rate"
+    - "min_threat_distance"
+    - "bush_occupancy_fraction"
+    - "eat_events_per_window"
+    - "action_entropy"
+    - "mode_action_fraction"
+    - "stay_in_place_fraction"
+    - "drive_injury_change"
+  motif_kmeans_k: 6
+  motif_kmeans_seed: 42
+  motif_standardise: "zscore_pooled"
+  eval_output_root: "results/eval"
+"""
+
+
+def test_eval_seeds_dict_spec_reproduces_canonical():
+    """T9a: dict spec {rng: 42, sort: true} reproduces the canonical 200-seed list exactly."""
+    config = _make_config(_VALID_BM_YAML_DICT_SPEC)
+    cfg = load_behavior_measure_cfg(config)
+    assert isinstance(cfg, BehaviorMeasureCfg)
+    assert len(cfg.eval_seeds) == 200, f"Expected 200 seeds, got {len(cfg.eval_seeds)}"
+    assert len(set(cfg.eval_seeds)) == 200, "eval_seeds contains duplicates"
+    assert cfg.eval_seeds == _CANONICAL_200_SEEDS, (
+        f"Dict spec did not reproduce canonical seed list. "
+        f"First mismatch at index {next(i for i,(a,b) in enumerate(zip(cfg.eval_seeds, _CANONICAL_200_SEEDS)) if a != b)}."
+    )
+    print("T9a PASS: dict spec {rng: 42, sort: true} reproduces canonical 200-seed list exactly")
+
+
+def test_eval_seeds_dict_spec_missing_rng_raises():
+    """T9b: dict spec without 'rng' key raises ValueError."""
+    yaml_str = _VALID_BM_YAML_DICT_SPEC.replace(
+        "  eval_seeds: {rng: 42, sort: true}",
+        "  eval_seeds: {sort: true}",
+    )
+    config = _make_config(yaml_str)
+    with pytest.raises(ValueError, match="rng"):
+        load_behavior_measure_cfg(config)
+    print("T9b PASS: dict spec missing 'rng' raises ValueError")
+
+
+def test_eval_seeds_legacy_list_path_preserved():
+    """T9c: Legacy explicit-list path still works and preserves declared order (no sorting applied).
+
+    Uses eval_seeds: [3, 1, 2] with eval_n_episodes: 3 — order must survive unchanged.
+    """
+    yaml_str = """\
+behavior_measures:
+  enabled: true
+  cue_radius: 3.0
+  obs_window: 5
+  eval_n_episodes: 3
+  eval_seeds: [3, 1, 2]
+  eval_policy_mode: "deterministic"
+  eval_max_steps: 500
+  eval_obs_noise: "training"
+  motif_window_K: 7
+  motif_features:
+    - "net_displacement"
+    - "path_length"
+    - "threat_distance_change_rate"
+    - "min_threat_distance"
+    - "bush_occupancy_fraction"
+    - "eat_events_per_window"
+    - "action_entropy"
+    - "mode_action_fraction"
+    - "stay_in_place_fraction"
+    - "drive_injury_change"
+  motif_kmeans_k: 6
+  motif_kmeans_seed: 42
+  motif_standardise: "zscore_pooled"
+  eval_output_root: "results/eval"
+"""
+    config = _make_config(yaml_str)
+    cfg = load_behavior_measure_cfg(config)
+    assert cfg.eval_seeds == (3, 1, 2), (
+        f"Legacy list order must be preserved; expected (3, 1, 2), got {cfg.eval_seeds}"
+    )
+    print(f"T9c PASS: legacy list path preserved order: {cfg.eval_seeds}")

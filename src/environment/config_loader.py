@@ -175,7 +175,25 @@ def load_behavior_measure_cfg(config) -> "BehaviorMeasureCfg | None":
     motif_std       = config.get_mandatory("behavior_measures.motif_standardise")
     eval_output     = config.get_mandatory("behavior_measures.eval_output_root")
 
-    # ----- validation -----
+    # ----- eval_seeds: accept list/tuple (legacy) OR dict generator spec -----
+    if isinstance(eval_seeds_raw, dict):
+        # Generator spec form: { rng: <int>, sort: <bool> }
+        # `rng` is mandatory — missing it would silently produce wrong seeds.
+        if 'rng' not in eval_seeds_raw:
+            raise ValueError(
+                "behavior_measures.eval_seeds dict spec is missing mandatory key 'rng'. "
+                "Expected form: {rng: <int>, sort: <bool>}."
+            )
+        _rng_seed = int(eval_seeds_raw['rng'])
+        # `sort: true` is the default and is load-bearing: episode i uses eval_seeds[i],
+        # so the order must stay fixed for cross-run / cross-cell episode-index comparability.
+        _do_sort = bool(eval_seeds_raw.get('sort', True))
+        _generated = np.random.default_rng(_rng_seed).integers(
+            0, 2**31, size=eval_n_eps, dtype=np.int64
+        ).tolist()
+        eval_seeds_raw = sorted(_generated) if _do_sort else _generated
+
+    # ----- validation (runs for both list/tuple and generated-from-spec paths) -----
     if cue_radius <= 0:
         raise ValueError(f"behavior_measures.cue_radius must be > 0; got {cue_radius}.")
     if obs_window < 1:
@@ -183,7 +201,7 @@ def load_behavior_measure_cfg(config) -> "BehaviorMeasureCfg | None":
     if eval_n_eps < 1:
         raise ValueError(f"behavior_measures.eval_n_episodes must be >= 1; got {eval_n_eps}.")
     if not isinstance(eval_seeds_raw, (list, tuple)):
-        raise ValueError(f"behavior_measures.eval_seeds must be a list/tuple; got {type(eval_seeds_raw)}.")
+        raise ValueError(f"behavior_measures.eval_seeds must be a list/tuple or dict spec; got {type(eval_seeds_raw)}.")
     if len(eval_seeds_raw) != eval_n_eps:
         raise ValueError(
             f"behavior_measures.eval_seeds length ({len(eval_seeds_raw)}) != eval_n_episodes ({eval_n_eps})."
