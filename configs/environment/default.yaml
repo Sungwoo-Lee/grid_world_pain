@@ -306,6 +306,7 @@ sensory:
   #Visual sensor
   visual_sensor_enabled: true
   visual_sensor_range: 0
+  visual_vector_size: 8   # width of per-entity visual property vectors (v3.0+); default 8 preserves byte-parity
   #Proprioception sensor
   proprioception_enabled: true
 

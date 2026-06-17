@@ -279,6 +279,33 @@ def _read_properties(entry, entity_label):
         return entry['property']
     raise ValueError(f"{entity_label}: missing required key 'properties'.")
 
+def _one_hot_list(channel: int, V: int) -> list:
+    """Return a Python list encoding one-hot(channel, V)."""
+    v = [0.0] * V
+    v[channel] = 1.0
+    return v
+
+
+def _read_visual_properties(entry: dict, default_channel: int, V: int, entity_label: str) -> list:
+    """Read optional visual_properties from a config entry.
+
+    If `visual_properties` is present, validates it has length V and returns it.
+    If absent, returns one_hot(default_channel, V) as the default appearance vector.
+    Raises ValueError if the length does not match V.
+    """
+    if 'visual_properties' in entry:
+        vp = list(entry['visual_properties'])
+        if len(vp) != V:
+            raise ValueError(
+                f"{entity_label}: 'visual_properties' has length {len(vp)} "
+                f"but visual_vector_size is {V}. "
+                f"Length must equal visual_vector_size."
+            )
+        return [float(x) for x in vp]
+    # Default: one-hot of the entity's current channel
+    return _one_hot_list(default_channel, V)
+
+
 def _read_properties_std(entry, entity_label):
     """Same, for the `*_std` variant."""
     if 'properties_std' in entry:
@@ -292,7 +319,7 @@ def _read_properties_std(entry, entity_label):
         return entry['property_std']
     raise ValueError(f"{entity_label}: missing required key 'properties_std'.")
 
-def _load_animals(config: Config):
+def _load_animals(config: Config, visual_vector_size: int = 8):
     """Build unified animal arrays from the YAML config (v2.0).
 
     Supports two YAML paths, detected automatically:
@@ -520,6 +547,7 @@ def _load_animals(config: Config):
         animal_is_damaging = jnp.zeros(0, dtype=jnp.bool_)
         animal_disengage_on_contact = jnp.zeros(0, dtype=jnp.bool_)
         animal_visual_channel = jnp.zeros(0, dtype=jnp.int32)
+        animal_visual_property = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
         animal_classes = ()
         animal_behaviours = ()
         animal_tags = ()
@@ -541,6 +569,7 @@ def _load_animals(config: Config):
             animal_lose_interest_low, animal_lose_interest_high,
             animal_classes_int, animal_behaviours_int,
             animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
+            animal_visual_property,
             animal_classes, animal_behaviours, animal_tags,
             hunt_idx, wander_idx, static_idx,
             predator_indices, neutral_indices,
@@ -602,6 +631,7 @@ def _load_animals(config: Config):
     is_damaging_list = []
     disengage_on_contact_list = []
     visual_channel_list = []
+    visual_property_list = []
     classes_tuple = []
     behaviours_tuple = []
     tags_tuple = []
@@ -610,6 +640,8 @@ def _load_animals(config: Config):
     static_idx_list = []
     predator_idx_list = []
     neutral_idx_list = []
+
+    V = visual_vector_size  # shorthand
 
     for i, e in enumerate(entries):
         cls = e['class']
@@ -629,7 +661,17 @@ def _load_animals(config: Config):
         behaviours_int_list.append(ANIMAL_BEHAVIOUR_TO_INT[beh])
         is_damaging_list.append(cls in ANIMAL_DAMAGING_CLASSES)
         disengage_on_contact_list.append(bool(e['disengage_on_contact']))
-        visual_channel_list.append(ANIMAL_CLASS_TO_VIS_CHANNEL[cls])
+        default_vis_ch = ANIMAL_CLASS_TO_VIS_CHANNEL[cls]
+        visual_channel_list.append(default_vis_ch)
+        # Visual properties live in the raw YAML source (dist_source), not the normalised entry dict.
+        _raw_src = e['dist_source']
+        if V != 8 and 'visual_properties' not in _raw_src:
+            raise ValueError(
+                f"Animal entity {e['tag_label']!r}: 'visual_properties' is required "
+                f"when visual_vector_size={V} (only the default V=8 can auto-generate "
+                f"one-hot defaults from the class→channel map)."
+            )
+        visual_property_list.append(_read_visual_properties(_raw_src, default_vis_ch, V, e['tag_label']))
         classes_tuple.append(cls)
         behaviours_tuple.append(beh)
         tags_tuple.append(_normalise_tag(e['tag_raw'], i, e.get('type_label', e['tag_label'])))
@@ -672,6 +714,7 @@ def _load_animals(config: Config):
     animal_is_damaging = jnp.array(is_damaging_list, dtype=jnp.bool_)
     animal_disengage_on_contact = jnp.array(disengage_on_contact_list, dtype=jnp.bool_)
     animal_visual_channel = jnp.array(visual_channel_list, dtype=jnp.int32)
+    animal_visual_property = jnp.array(visual_property_list, dtype=jnp.float32)  # [N, V]
 
     animal_classes = tuple(classes_tuple)
     animal_behaviours = tuple(behaviours_tuple)
@@ -704,6 +747,7 @@ def _load_animals(config: Config):
         animal_lose_interest_low, animal_lose_interest_high,
         animal_classes_int, animal_behaviours_int,
         animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
+        animal_visual_property,
         animal_classes, animal_behaviours, animal_tags,
         hunt_idx, wander_idx, static_idx,
         predator_indices, neutral_indices,
@@ -713,7 +757,14 @@ def _load_animals(config: Config):
 
 def load_env_params(config: Config) -> EnvParams:
     """Loads environment parameters from a Config object with strict retrieval."""
-    
+
+    # ── Visual vector size (V) ────────────────────────────────────────────────
+    # Read-site default of 8: preserves byte-parity for all ~86 archived configs
+    # that do not declare this key. The one permitted read-site default in this
+    # plan (see CONFIGURABLE_VISUAL_PROPERTIES_PLAN.md §D1).
+    _vis_v = config.get('sensory.visual_vector_size')
+    visual_vector_size: int = int(_vis_v) if _vis_v is not None else 8
+
     # Build resource arrays
     raw_resources = config.get_mandatory('environment.resources')
     expanded_resources = []
@@ -744,12 +795,26 @@ def load_env_params(config: Config) -> EnvParams:
         res_spawn_area = jnp.array([[a[0][0]-1, a[0][1]-1, a[1][0], a[1][1]] for a in [r_get(r, 'spawn_area') for r in expanded_resources]])
         res_max_cons = jnp.array([r_get(r, 'max_consumption') for r in expanded_resources], dtype=jnp.int32)
         res_reg_delay = jnp.array([r_get(r, 'regeneration_delay') for r in expanded_resources], dtype=jnp.int32)
-        
+
         # Damage can be scalar (Feb 12) or range [min, max] (tuningEnv)
         raw_damage = [r_get(r, 'damage') for r in expanded_resources]
         res_damage = jnp.array([d if isinstance(d, list) else [d, d] for d in raw_damage])
-        
+
         res_nociception = jnp.array([r.get('nociception_intensity', 0.9 if r_get(r, 'type') in ('hiding_predator', 'danger') else 0.0) for r in expanded_resources])
+
+        # Visual property vectors: food→channel 3, hiding_predator→channel 4
+        _res_vis_list = []
+        for r in expanded_resources:
+            _rtype = r_get(r, 'type')
+            _default_ch = 3 if _rtype == 'food' else 4  # food=3, hiding_predator=4
+            if visual_vector_size != 8 and 'visual_properties' not in r:
+                raise ValueError(
+                    f"Resource type={_rtype!r}: 'visual_properties' is required "
+                    f"when visual_vector_size={visual_vector_size} (only V=8 can "
+                    f"auto-generate one-hot defaults from the channel map)."
+                )
+            _res_vis_list.append(_read_visual_properties(r, _default_ch, visual_vector_size, f'Resource({_rtype})'))
+        res_visual_property = jnp.array(_res_vis_list, dtype=jnp.float32)
     else:
         res_type = jnp.zeros(0, dtype=jnp.int32)
         res_property = jnp.zeros((0, 5))
@@ -759,6 +824,7 @@ def load_env_params(config: Config) -> EnvParams:
         res_max_cons = jnp.zeros(0, dtype=jnp.int32)
         res_reg_delay = jnp.zeros(0, dtype=jnp.int32)
         res_damage = jnp.zeros((0, 2))
+        res_visual_property = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
 
     # ── Guard against stale `predator_enabled` key (removed in v2.0) ──────────
     # The 86 migrated configs have this key stripped by the CP1 migration sweep.
@@ -782,11 +848,12 @@ def load_env_params(config: Config) -> EnvParams:
         animal_lose_interest_low, animal_lose_interest_high,
         animal_classes_int, animal_behaviours_int,
         animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
+        animal_visual_property,
         animal_classes, animal_behaviours, animal_tags,
         hunt_idx, wander_idx, static_idx,
         predator_indices, neutral_indices,
         pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
-    ) = _load_animals(config)
+    ) = _load_animals(config, visual_vector_size=visual_vector_size)
 
     # Build Obstacle arrays
     raw_obstacles = config.get_mandatory('environment.obstacles')
@@ -820,6 +887,19 @@ def load_env_params(config: Config) -> EnvParams:
         obstacle_names = tuple(sorted(list(set([o.get('name', 'rock') for o in expanded_obstacles]))))
         name_to_idx = {name: i for i, name in enumerate(obstacle_names)}
         obs_type = jnp.array([name_to_idx[o.get('name', 'rock')] for o in expanded_obstacles], dtype=jnp.int32)
+
+        # Visual property vectors: rock→channel 6
+        _obs_vis_list = []
+        for o in expanded_obstacles:
+            _oname = o.get('name', 'rock')
+            if visual_vector_size != 8 and 'visual_properties' not in o:
+                raise ValueError(
+                    f"Obstacle name={_oname!r}: 'visual_properties' is required "
+                    f"when visual_vector_size={visual_vector_size} (only V=8 can "
+                    f"auto-generate one-hot defaults from the channel map)."
+                )
+            _obs_vis_list.append(_read_visual_properties(o, 6, visual_vector_size, f'Obstacle({_oname})'))
+        obs_visual_property = jnp.array(_obs_vis_list, dtype=jnp.float32)
     else:
         obs_blocking = jnp.zeros(0, dtype=jnp.bool_)
         obs_hides_agent = jnp.zeros(0, dtype=jnp.bool_)
@@ -831,6 +911,7 @@ def load_env_params(config: Config) -> EnvParams:
         obs_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
         obs_type = jnp.zeros(0, dtype=jnp.int32)
         obstacle_names = ("rock",)
+        obs_visual_property = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
     
     # Build Grid Location Types
     import numpy as np
@@ -847,7 +928,43 @@ def load_env_params(config: Config) -> EnvParams:
             r1, c1, r2, c2 = area[0][0], area[0][1], area[1][0], area[1][1]
             grid_np[r1-1:r2, c1-1:c2] = type_idx
     grid_location_type = jnp.array(grid_np)
-    
+
+    # ── Visual background property table [3, V] ───────────────────────────────
+    # Rows: grass (loc 1 → index 0), sand (loc 2 → index 1), plain (loc 0 → index 2)
+    # Default: one-hot(0/1/2, V). At V≠8, require explicit sensory.visual_background_properties.
+    _vbg_raw = config.get('sensory.visual_background_properties')
+    if visual_vector_size != 8:
+        if _vbg_raw is None:
+            raise ValueError(
+                "'sensory.visual_background_properties' is required when "
+                f"visual_vector_size={visual_vector_size} (a 3×V table of floats, "
+                "rows = [grass, sand, plain])."
+            )
+        _vbg = list(_vbg_raw)
+        if len(_vbg) != 3 or any(len(row) != visual_vector_size for row in _vbg):
+            raise ValueError(
+                f"'sensory.visual_background_properties' must be a 3×{visual_vector_size} "
+                f"table; got shape {len(_vbg)}×{[len(r) for r in _vbg]}."
+            )
+        visual_background_property = jnp.array(
+            [[float(x) for x in row] for row in _vbg], dtype=jnp.float32
+        )
+    else:
+        if _vbg_raw is not None:
+            # User explicitly supplied it at V=8 — validate and use it.
+            _vbg = list(_vbg_raw)
+            if len(_vbg) != 3 or any(len(row) != 8 for row in _vbg):
+                raise ValueError(
+                    f"'sensory.visual_background_properties' must be a 3×8 table when "
+                    f"visual_vector_size=8; got shape {len(_vbg)}×{[len(r) for r in _vbg]}."
+                )
+            visual_background_property = jnp.array(
+                [[float(x) for x in row] for row in _vbg], dtype=jnp.float32
+            )
+        else:
+            # Default: one-hot rows for grass(0), sand(1), plain(2)
+            visual_background_property = jnp.eye(8, dtype=jnp.float32)[:3]  # [3, 8]
+
     # ── Type-Level Placement: Group entities by spawn area ──
     # Preserve today's [res, pred, obs, neutral] index order for type_entity_map
     # (N1 fix: jax_reset placement uses this ordering for the resolve-scan).
@@ -966,6 +1083,7 @@ def load_env_params(config: Config) -> EnvParams:
         res_type=res_type,
         res_property=res_property,
         res_property_std=res_property_std,
+        res_visual_property=res_visual_property,
         res_nociception=res_nociception,
         res_spawn_area=res_spawn_area,
         res_max_cons=res_max_cons,
@@ -995,6 +1113,7 @@ def load_env_params(config: Config) -> EnvParams:
         animal_is_damaging=animal_is_damaging,
         animal_disengage_on_contact=animal_disengage_on_contact,
         animal_visual_channel=animal_visual_channel,
+        animal_visual_property=animal_visual_property,
         animal_classes=animal_classes,
         animal_behaviours=animal_behaviours,
         animal_tags=animal_tags,
@@ -1008,6 +1127,7 @@ def load_env_params(config: Config) -> EnvParams:
         obs_damage=obs_damage,
         obs_property=obs_property,
         obs_property_std=obs_property_std,
+        obs_visual_property=obs_visual_property,
         obs_nociception=obs_nociception,
         obs_spawn_area=obs_spawn_area,
         obs_type=obs_type,
@@ -1061,6 +1181,8 @@ def load_env_params(config: Config) -> EnvParams:
         nociception_enabled=config.get_mandatory('sensory.nociception_enabled'),
         location_sensor_enabled=config.get_mandatory('sensory.location_sensor'),
         olfactory_vector_size=config.get_mandatory('sensory.vector_size'),
+        visual_vector_size=visual_vector_size,
+        visual_background_property=visual_background_property,
         nociception_size=config.get_mandatory('sensory.nociception_size'),
         action_dim=4 + int(config.get_mandatory('environment.rest_action_enabled')) + int(config.get_mandatory('environment.eat_action_enabled')),
 

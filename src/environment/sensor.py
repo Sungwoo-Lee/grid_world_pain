@@ -143,17 +143,33 @@ def get_visual_offsets(sensor_range):
     return offsets_arr
 
 def sense_visual(agent_pos, state: EnvState, params: EnvParams):
-    """Matmul-optimized Visual Sensor (simplified object recognition).
+    """Matmul-optimized Visual Sensor (configurable per-entity appearance vectors).
 
-    Channel mapping:
+    Each entity type carries a per-entity visual_property vector of length V
+    (params.visual_vector_size, default 8) set from the config. The sensor
+    aggregates these vectors via exact-cell-match matmul, identical in structure
+    to the olfactory sensor.
+
+    Default channel mapping at V=8 (matches pre-v3.0 one-hot encoding):
       0: Grass (loc 1), 1: Sand (loc 2), 2: Plain (loc 0)
       3: Food (res_type 0), 4: Hiding Predator (res_type 1)
-      5: Predator (animal_visual_channel=5), 6: Rock (obstacle), 7: Neutral Animal (channel=7)
+      5: Predator (animal_visual_channel=5), 6: Rock (obstacle)
+      7: Neutral Animal (animal_visual_channel=7)
+
+    Custom visual_properties on any entity overrides the class default.
+    Custom V (visual_vector_size≠8) requires explicit visual_properties on all
+    entities and visual_background_properties in the config (enforced at load time).
 
     B2 fix: dynamic entities are now [res, animal, obs] — unified animals replace the
-    old separate pred/neutral lists. Each animal uses params.animal_visual_channel for
-    its per-entity visual channel index (predator=5, neutral=7).
+    old separate pred/neutral lists. Concat order is preserved for byte-parity.
+
+    STATIC ONLY (v1): visual_property arrays are consumed directly from EnvParams
+    (static per-episode). If per-episode visual jitter is added in a future version,
+    it MUST reuse the per-subset property_key draw-order pattern established by
+    UNIFIED_ANIMAL_ENTITY_AND_PER_EPISODE_SAMPLING to avoid PRNG parity breaks.
     """
+    V = params.visual_vector_size  # width of visual property vectors
+
     vis_range = params.visual_sensor_range
     offsets = get_visual_offsets(vis_range)  # [num_cells, 2]
     num_cells = offsets.shape[0]
@@ -168,10 +184,12 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     # Safe coordinates for indexing background
     safe_coords = jnp.where(is_in_bounds[:, None], cell_coords, 0)
 
-    # 2. Background (Grid Properties) - Vectorized Indexing
+    # 2. Background (Grid Properties) - lookup into [3, V] table
+    # Table rows: grass (index 0), sand (index 1), plain (index 2)
+    # Selector: loc 1 -> 0, loc 2 -> 1, loc 0 -> 2
     loc_types = params.grid_location_type[safe_coords[:, 0], safe_coords[:, 1]]
-    # Mapping: loc 1 -> channel 0, loc 2 -> channel 1, loc 0 -> channel 2
-    vis_background = jax.nn.one_hot(jnp.where(loc_types == 1, 0, jnp.where(loc_types == 2, 1, 2)), 8)
+    bg_selector = jnp.where(loc_types == 1, 0, jnp.where(loc_types == 2, 1, 2))
+    vis_background = params.visual_background_property[bg_selector]  # [num_cells, V]
     vis_background = vis_background * is_in_bounds[:, None]
 
     # 3. Dynamic Entities (Resources, Animals, Obstacles) — B2 fix: unified animal list
@@ -193,16 +211,16 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     parts_active.append(jnp.ones(num_obs, dtype=jnp.bool_))
     all_active = jnp.concatenate(parts_active, axis=0)  # [Total_E]
 
-    # Visual Property Matrix [Total_E, 8]
-    res_props = jax.nn.one_hot(jnp.where(params.res_type == 0, 3, 4), 8)  # [num_res, 8]
-    obs_props = jax.nn.one_hot(jnp.full((num_obs,), 6), 8)                 # [num_obs, 8]
+    # Visual Property Matrix [Total_E, V] — from config vectors
+    res_props = params.res_visual_property        # [num_res, V]
+    obs_props = params.obs_visual_property        # [num_obs, V]
     parts_props = [res_props]
     if num_animal > 0:
-        # Each animal uses its per-entity visual channel (predator=5, neutral=7)
-        animal_props = jax.nn.one_hot(params.animal_visual_channel, 8)     # [N, 8]
+        # Each animal uses its per-entity visual property vector
+        animal_props = params.animal_visual_property  # [N, V]
         parts_props.append(animal_props)
     parts_props.append(obs_props)
-    all_props = jnp.concatenate(parts_props, axis=0)  # [Total_E, 8]
+    all_props = jnp.concatenate(parts_props, axis=0)  # [Total_E, V]
 
     # Apply activity mask
     all_props = all_props * all_active[:, None]
@@ -210,7 +228,7 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     # Compute Matches [num_cells, Total_E]
     matches = jnp.all(cell_coords[:, None, :] == all_pos[None, :, :], axis=-1)
 
-    # Sum properties: [num_cells, Total_E] @ [Total_E, 8] -> [num_cells, 8]
+    # Sum properties: [num_cells, Total_E] @ [Total_E, V] -> [num_cells, V]
     vis_entities = jnp.matmul(matches.astype(jnp.float32), all_props)
 
     # Final assembly
@@ -359,7 +377,7 @@ def get_observation_breakdown(params: EnvParams):
     # 8. Visual
     if params.visual_sensor_enabled:
         num_vis_cells = 2 * (params.visual_sensor_range**2) + 2 * params.visual_sensor_range + 1
-        breakdown["Visual"] = int(num_vis_cells * 8)
+        breakdown["Visual"] = int(num_vis_cells * params.visual_vector_size)
     
     # 9. Location
     if params.location_sensor_enabled:
@@ -388,7 +406,7 @@ def build_sensory_viz(obs, state, params, true_obs=None):
             olf_obs = obs[ptr:ptr+dim]
             olf_true = true_obs[t_ptr:t_ptr+dim] if true_obs is not None else olf_obs
             ptr += dim; t_ptr += dim
-            viz.append({'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true, 'type': 'spectrum', 'labels': ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'NEU', 'RCK']})
+            viz.append({'name': 'Olfactory', 'vector': olf_obs, 'true_vector': olf_true, 'type': 'spectrum', 'labels': ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'RCK', 'NEU']})
         
         elif sensor_name == "Extero Nociception":
             noc_obs = float(obs[ptr])
@@ -422,7 +440,12 @@ def build_sensory_viz(obs, state, params, true_obs=None):
             vis_obs = obs[ptr:ptr+dim]
             vis_true = true_obs[t_ptr:t_ptr+dim] if true_obs is not None else vis_obs
             ptr += dim; t_ptr += dim
-            viz.append({'name': 'Visual', 'vector': vis_obs, 'true_vector': vis_true, 'type': 'visual_grid', 'num_features': 8, 'range': params.visual_sensor_range, 'labels': ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'NEU', 'RCK']})
+            _V = params.visual_vector_size
+            _vis_labels = (
+                ['GRS', 'SND', 'PLN', 'FOD', 'DNG', 'PRD', 'RCK', 'NEU']
+                if _V == 8 else [str(i) for i in range(_V)]
+            )
+            viz.append({'name': 'Visual', 'vector': vis_obs, 'true_vector': vis_true, 'type': 'visual_grid', 'num_features': _V, 'range': params.visual_sensor_range, 'labels': _vis_labels})
         
         elif sensor_name == "Proprioception":
             proprio_vec = obs[ptr:ptr+dim]

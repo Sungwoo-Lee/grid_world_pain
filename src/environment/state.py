@@ -91,6 +91,7 @@ class EnvParams:
     res_type: jnp.ndarray       # [num_res] int (0:food, 1:hiding_predator)
     res_property: jnp.ndarray   # [num_res, vector_size]
     res_property_std: jnp.ndarray # [num_res, vector_size]
+    res_visual_property: jnp.ndarray  # [num_res, visual_vector_size] (visual appearance vector)
     res_nociception: jnp.ndarray # [num_res]
     res_spawn_area: jnp.ndarray # [num_res, 4] (min_r, min_c, max_r, max_c)
     res_max_cons: jnp.ndarray   # [num_res]
@@ -123,6 +124,7 @@ class EnvParams:
     animal_is_damaging: jnp.ndarray        # [N] bool (precomputed from class)
     animal_disengage_on_contact: jnp.ndarray  # [N] bool (opt-in: drain stamina→0 on agent contact)
     animal_visual_channel: jnp.ndarray     # [N] int (5=predator, 7=neutral, ...)
+    animal_visual_property: jnp.ndarray   # [N, visual_vector_size] (visual appearance vector)
     # Static tags / labels (pytree_node=False — not JAX arrays)
     animal_classes: tuple = struct.field(pytree_node=False)    # len N strings
     animal_behaviours: tuple = struct.field(pytree_node=False) # len N strings
@@ -145,6 +147,7 @@ class EnvParams:
     obs_damage: jnp.ndarray     # [num_obs, 2] [min, max]
     obs_property: jnp.ndarray   # [num_obs, vector_size]
     obs_property_std: jnp.ndarray # [num_obs, vector_size]
+    obs_visual_property: jnp.ndarray  # [num_obs, visual_vector_size] (visual appearance vector)
     obs_nociception: jnp.ndarray # [num_obs]
     obs_type: jnp.ndarray       # [num_obs] int32 index for names
     obstacle_names: tuple[str, ...] = struct.field(pytree_node=False)
@@ -217,6 +220,8 @@ class EnvParams:
     proprioception_enabled: bool = struct.field(pytree_node=False)
     action_dim: int = struct.field(pytree_node=False)
     olfactory_vector_size: int = struct.field(pytree_node=False)
+    visual_vector_size: int = struct.field(pytree_node=False)  # width of visual property vectors (V); shape-determining, not traced
+    visual_background_property: jnp.ndarray  # [3, visual_vector_size] (grass/sand/plain rows)
     nociception_size: int = struct.field(pytree_node=False)
 
     # Perceptual Noise Parameters (Vectorized across modalities)
