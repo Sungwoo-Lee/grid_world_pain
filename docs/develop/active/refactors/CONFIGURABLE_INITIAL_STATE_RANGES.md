@@ -1,7 +1,7 @@
 ---
 title: "Configurable Initial Internal-State Randomization Ranges"
 topic: refactors
-status: implemented
+status: active
 created: 2026-06-16
 last_updated: 2026-06-18
 ---

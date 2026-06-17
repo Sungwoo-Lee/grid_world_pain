@@ -15,6 +15,10 @@ aliases: [configurable-visual-properties, visual-properties-refactor]
 > the experiment-environment context docs. The formal checkpointed plan should be authored by
 > `senior-developer` under this same `docs/develop/active/sensors/` topic; this doc is the seed +
 > rationale it builds on.
+>
+> **➡️ The checkpointed implementation plan is now written:** [[CONFIGURABLE_VISUAL_PROPERTIES_PLAN]]
+> (v1 = static, default-width-8, byte-parity gate). That doc is the source of truth for the
+> `developer` agent; this doc remains the rationale/context it builds on.
 
 ## Purpose (read this first)
 
