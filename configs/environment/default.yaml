@@ -254,6 +254,15 @@ body:
   random_start_satiation: false
   random_start_nutrition: false
   random_start_injury: false
+  # Initial-state randomization ranges — uniform draw bounds for a randomized start.
+  # READ ONLY when the matching random_start_* flag above is true (conditional-mandatory);
+  # inert while the flags are false. Full reachable span is [0, max]; e.g. set
+  # start_nutrition_high below max_nutrition/2 for a hungry start, or raise start_injury_low
+  # toward max_injury for a badly-injured start.
+  start_nutrition_low: 0
+  start_nutrition_high: 100
+  start_injury_low: 0
+  start_injury_high: 100
   # Body state limits
   max_satiation: 100
   max_nutrition: 100
