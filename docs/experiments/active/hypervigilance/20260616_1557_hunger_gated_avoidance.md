@@ -2,7 +2,7 @@
 title: "Training program: hunger-gated avoidance under olfactory uncertainty"
 study: hunger_gated_avoidance
 generated: 2026-06-16T15:57
-last_updated: 2026-06-16T16:58
+last_updated: 2026-06-19T01:30
 status: living-plan
 ---
 
@@ -12,6 +12,10 @@ status: living-plan
 > Carry-forward awareness sections are stable; each new training round is added as a new `### Step N`
 > under **Training program**, and its one-line entry is added to the **Step log** table. Do **not**
 > rewrite earlier steps — append the next one and update the log.
+>
+> **v3.0 note (2026-06-19).** Config references below are v3.0: the cell-08 base is now **archived**,
+> new runs are authored as sparse `extends: environment/default` overrides, and the initial-state
+> randomization prerequisite has **shipped**. See [`CONFIG_GUIDE`](../../../environment/CONFIG_GUIDE.md).
 
 ## Purpose (read first)
 
@@ -71,43 +75,26 @@ Sources: summary `docs/experiments/summaries/20260612_1625_predator_rabbit_discr
 (§2 endpoints, §3 verdict, Appendix A); insights `20260609_1719` (vision-count elimination),
 `20260508_1445` (discriminating channels), `20260616_0142` (spatial-encounter artifact).
 
-## Training prerequisite — initial-state coverage (needs a small code change)
+## Training prerequisite — initial-state coverage (✅ shipped in v3.0)
 
 **Why it matters.** The agent's *starting* internal state is set once at episode reset. The eval
-probes ([[experiment_environment_designs_v1]]) treat that starting state as a **dial** (start
-hungry, start injured) to induce behaviour — so for a probe read to be valid, the trained agent must
-have *experienced* those starts; otherwise the probe measures out-of-distribution behaviour. Equally,
-**hunger-gated risk-taking can only be learned if the agent makes decisions across the full hunger
-range** — a fixed full start exposes it to hunger only as a slow late-episode drift.
+probes ([[experiment_environment_designs_v1]]) treat that starting state as a **dial** (start hungry,
+start injured); for a probe read to be valid the trained agent must have *experienced* those starts.
+Equally, **hunger-gated risk-taking can only be learned if the agent makes decisions across the full
+hunger range** — a fixed full start exposes it to hunger only as a slow late-episode drift.
 
-**Current implementation (verified in `src/environment/core.py` `jax_reset`, ~L915–930).**
-- `08` trains with `random_start_{satiation,nutrition,injury}: false` → **every episode starts
-  identical** (nutrition 100 → satiation 100, injury 0).
-- The randomisation mechanism exists but is **narrow and hardcoded**:
-  - `random_start_nutrition: true` → nutrition ~ `U[max/2, max]` — **upper half only, never hungry**;
-    satiation is *derived* from nutrition (`start_satiation` is not the lever — `start_nutrition` is).
-  - `random_start_injury: true` → injury ~ `U[0, max/2]` — **≤ 50% only**.
-  - `random_start_satiation` is loaded but **unused** in the reset (a no-op).
-- So even flipping the flags on **cannot reach** the hungry (<50%) / badly-injured (>50%) starts the
-  probes use.
+**Resolved (v3.0).** The start-state bounds are now **config-driven** — `body.start_nutrition_{low,high}`
+and `body.start_injury_{low,high}`, required only when the matching `random_start_*` flag is `true`
+(conditional-mandatory, no ripple to existing configs). The old code was locked to the upper half of
+nutrition / lower half of injury; the new keys cover the **full** range, so training can start the
+agent genuinely hungry or injured. Satiation stays *derived* from nutrition (nutrition is the hunger
+lever; `random_start_satiation` is a documented no-op). See [[CONFIGURABLE_INITIAL_STATE_RANGES]] and
+[`CONFIG_GUIDE`](../../../environment/CONFIG_GUIDE.md) §3.4.
 
-**Required change (route to `senior-developer` → `developer`).** Make the start-state bounds
-**config-driven** — e.g. `body.start_nutrition_{low,high}`, `body.start_injury_{low,high}` — covering
-the full hungry→full and 0→high-injury range, and either wire up `random_start_satiation` or document
-nutrition as the lever. Small, localised edit in `core.py` (~L917–928).
-
-> **Plan written**: the implementation plan for this change now exists at
-> [[CONFIGURABLE_INITIAL_STATE_RANGES]] (`docs/develop/active/refactors/`). It adopts the
-> `body.start_nutrition_{low,high}` / `body.start_injury_{low,high}` schema, keeps satiation
-> *derived* from nutrition (nutrition is the hunger lever; `random_start_satiation` left as a
-> documented no-op), and makes the new range keys mandatory only when the matching
-> `random_start_*` flag is `true` — so no existing config changes. Awaiting user approval of the
-> three design forks before the `developer` agent implements.
-
-**Decision for the user.** Train the Step 1 agents with **randomised initial internal state** spanning
-the eval-probe range (recommended — makes the probes in-distribution *and* is arguably required for
-hunger-gating to be learnable), or keep a **fixed full start** (cleaner discrimination read, but the
-probes become OOD)? This gates config generation for Step 1.
+**Decision for the user (still open).** Train the Step 1 agents with **randomised initial internal
+state** spanning the eval-probe range (recommended — makes the probes in-distribution *and* is arguably
+required for hunger-gating to be learnable), or keep a **fixed full start** (cleaner discrimination
+read, but the probes become OOD)? This shapes Step 1 config generation.
 
 ## Training program
 
@@ -115,7 +102,7 @@ probes become OOD)? This gates config generation for Step 1.
 
 | Step | Goal | Base config | Knob(s) | Status |
 |---|---|---|---|---|
-| 1 | **Discrimination-onset map** — find *when* the agent starts to tell predator from rabbit, sweeping smell mean-gap × per-episode std | `08-singlePredRabbit_disengage.yaml` (smell only) | Δμ (mean gap) **×** σ (`properties_std`) | **proposed — awaiting feedback** |
+| 1 | **Discrimination-onset map** — find *when* the agent starts to tell predator from rabbit, sweeping smell mean-gap × per-episode std | cell-08 scene → fresh sparse `extends:` | Δμ (mean gap) **×** σ (`properties_std`) | **proposed — awaiting feedback** |
 | 2 | **Add sensory (perceptual) noise** as a further difference | from Step 1's chosen point | `perceptual_noise` block (per-step obs noise) | future |
 
 *(further steps appended below)*
@@ -141,26 +128,34 @@ June work exposed). Step 1 fills the space cleanly, in the 1-vs-1 cell-08 base, 
 - **Δμ** — olfactory **mean separation** between predator and rabbit.
 - **σ** — **`properties_std`**, the per-episode smell jitter.
 
-**Base config.** [`configs/experiment/hypervigilance/08-singlePredRabbit_disengage.yaml`](../../../../configs/experiment/hypervigilance/08-singlePredRabbit_disengage.yaml)
-— one predator + one rabbit, byte-identical chase (matched aggression, `disengage_on_contact`,
-full-grid roam), lethal predator damage `[5,120]`. **Only the two `properties` (mean) and
-`properties_std` (σ) vectors change.** Knob convention: predator fixed `[0,1,0,0,0]`; rabbit moved
-toward ch 2 by gap `g` → rabbit `[0, 1−g, g, 0, 0]`; σ applied to ch 1 & 2 of both animals.
+**Base scene.** The cell-08 contrast — one predator + one rabbit, byte-identical chase (matched
+aggression, `disengage_on_contact`, full-grid roam), lethal predator damage `[5,120]`. The original
+config is now archived at
+[`…/archive/hypervigilance/08-singlePredRabbit_disengage.yaml`](../../../../configs/environment/experiment/archive/hypervigilance/08-singlePredRabbit_disengage.yaml)
+(frozen, standalone). **Do not edit the archived file** — author each Step 1 run as a fresh **sparse
+`extends: environment/default`** config (v3.0), overriding only the two animals' smell (`properties` /
+`properties_std`) and the initial-state keys.
 
-**Using 10 GPUs — one parallel wave, then refine.** A grid was "too slow" only when runs are
-sequential; with 10 GPUs the whole design runs **in one wave** (wall-clock = a single training). The
-trained cell-08 is the σ=0/g=0 anchor — reuse it, spend **zero GPUs** there, and put all 10 on new
-points. Weight the σ=0 row densely (cleanest learnability onset) + two noise rows to see how σ shifts
-it:
+**Smell knob — symmetric (no presence/absence giveaway).** Both animals sit on olfactory channels
+2 & 3, mirrored around 0.5, slid apart by a separation `s` — predator `[0, 0.5+s, 0.5-s, 0, 0]`,
+rabbit `[0, 0.5-s, 0.5+s, 0, 0]`; `properties_std` (= σ) on ch 2 & 3 of both. `s=0` → identical (no
+cue); `s=0.5` → orthogonal. (A pinned-predator scheme was rejected: leaving the predator at zero on
+channel 3 turns that channel into a pure "rabbit present" flag, trivialising the gap at any s.)
 
-| # | Rabbit smell `g` | σ (`properties_std`) | d&prime; ≈ | Role |
+**Using 10 GPUs — one parallel wave, then refine.** A grid is "too slow" only when runs are
+sequential; with 10 GPUs the whole design runs **in one wave** (wall-clock = a single training). Spend
+one GPU on a fresh **matched anchor** (`s=0`, the new baseline — we deliberately retrain rather than
+reuse cell-08) and the rest across the (s, σ) design; weight the σ=0 row densely (cleanest learnability
+onset) + two noise rows to see how σ shifts it:
+
+| # | Separation `s` → pred (ch2,ch3) / rabbit | σ (`properties_std`) | d&prime; ≈ | Role |
 |---|---|---|---|---|
-| — | g = 0 (= cell-08) | 0 | 0 | **anchor — reuse, no GPU** |
-| 1–5 | g = 0.1 / 0.2 / 0.4 / 0.7 / 1.0 | 0 | ∞ (reducible) | learnability onset along Δμ |
-| 6–8 | g = 0.2 / 0.4 / 1.0 | 0.2 | 1.4 / 2.8 / 7.1 | onset under mild noise |
-| 9–10 | g = 0.2 / 1.0 | 0.4 | 0.7 / 3.5 | onset under strong noise (g=0.2/σ=0.4 ≈ old `5/7/4`, re-tested cleanly) |
+| 1 | s = 0 → (0.5,0.5)/(0.5,0.5) | 0 | 0 | **matched anchor (fresh baseline)** |
+| 2–5 | s = 0.05 / 0.1 / 0.25 / 0.5 | 0 | ∞ (reducible) | learnability onset along Δμ |
+| 6–8 | s = 0.1 / 0.25 / 0.5 | 0.2 | 1.4 / 3.5 / 7.1 | onset under mild noise |
+| 9–10 | s = 0.1 / 0.5 | 0.4 | 0.7 / 3.5 | onset under strong noise |
 
-*(exact g/σ values are a proposal — adjust freely)*
+*(exact s/σ values + the 0.5 center are a proposal — adjust freely)*
 
 - **Wave 2 (optional, +10 GPUs):** bisect around wherever Wave 1 shows the transition for a sharp
   threshold.
@@ -169,7 +164,7 @@ it:
   same wall-clock as one. Warm-start only to make a cheap Wave 2.
 
 **Read-out.** Per run, the **pre-contact predator-vs-rabbit gap** (distance held, flee rate,
-bush-dive rate) as a surface over (g, σ). Expect a **threshold**: flat near the sameProp anchor,
+bush-dive rate) as a surface over (s, σ). Expect a **threshold**: flat near the sameProp anchor,
 rising once the smell is separable/learnable enough. On the **σ > 0** runs, additionally look for the
 **hunger-gated split** (avoid when satiated, risk eating when hungry) — the irreducible regime is
 where it should appear.
@@ -203,8 +198,9 @@ survive degraded perception. **Status.** Sketch — opens after Step 1.
 
 ## Links
 
-- Base config: [`08-singlePredRabbit_disengage.yaml`](../../../../configs/experiment/hypervigilance/08-singlePredRabbit_disengage.yaml);
-  pre-`sameProp` distinct-smell reference: [`01-interoNocicept.yaml`](../../../../configs/experiment/hypervigilance/01-interoNocicept.yaml)
+- Base scene (archived): [`08-singlePredRabbit_disengage.yaml`](../../../../configs/environment/experiment/archive/hypervigilance/08-singlePredRabbit_disengage.yaml);
+  pre-`sameProp` distinct-smell reference: [`01-interoNocicept.yaml`](../../../../configs/environment/experiment/archive/hypervigilance/01-interoNocicept.yaml)
+- v3.0 config authoring: [`CONFIG_GUIDE`](../../../environment/CONFIG_GUIDE.md) (sparse `extends:`, init-state ranges §3.4); init-range plan [[CONFIGURABLE_INITIAL_STATE_RANGES]]
 - Prior thread (why full-match was a dead end): [[sameprop_chasing_rabbit]],
   summary `docs/experiments/summaries/20260612_1625_predator_rabbit_discrimination.md`
 - Latest reframe (gap tracks the world, env-as-behavior-platform): [[testbed_solo_validation_results]]
