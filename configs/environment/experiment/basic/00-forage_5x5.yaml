@@ -23,6 +23,7 @@ environment:
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       visual_properties: [0,0,0,1,0,0,0,0]
+      visual_properties_std: [0,0,0,0,0,0,0,0]
       max_consumption: 12
       regeneration_delay: 0
       damage: [0.0, 0.0]
