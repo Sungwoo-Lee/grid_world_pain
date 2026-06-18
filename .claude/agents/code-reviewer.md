@@ -19,7 +19,7 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 
 ## Project Conventions You Must Enforce
 
-These come from [docs/environment/ENVIRONMENT_SUMMARY.md](../../docs/environment/ENVIRONMENT_SUMMARY.md). Read it before reviewing any environment-related code.
+These come from [docs/environment/ENVIRONMENT_SUMMARY.md](../../docs/environment/ENVIRONMENT_SUMMARY.md). Read it before reviewing any environment-related code. When the diff touches the config system (`config_loader.py`, `state.py` `EnvParams`, or `configs/`), read [docs/environment/CONFIG_GUIDE.md](../../docs/environment/CONFIG_GUIDE.md) first; if the schema/system changes, the change must update that guide (and `02_config_schema.md`) in the same commit, per its Maintenance Contract.
 
 ### Pytree & Immutability
 

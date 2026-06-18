@@ -21,6 +21,7 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 
 Read these before auditing:
 
+- **[docs/environment/CONFIG_GUIDE.md](../../docs/environment/CONFIG_GUIDE.md) — READ THIS BEFORE ANY CONFIG WORK.** The config-system guide (`extends:` layering, deep-merge list-replace footgun, v3.0 feature surface, no-fallback workflow). If your audit surfaces a change that alters the config schema or system, that change MUST UPDATE this guide and `02_config_schema.md` in the same change — per the guide's Maintenance Contract.
 - [docs/environment/ENVIRONMENT_SUMMARY.md](../../docs/environment/ENVIRONMENT_SUMMARY.md) — the canonical env reference (observation table, config-to-EnvParams mapping, latent-bug FAQ).
 - [docs/environment/02_config_schema.md](../../docs/environment/02_config_schema.md) — YAML → `EnvParams` loading, mandatory keys, expansion rules.
 - [docs/environment/09_sensors_and_observation.md](../../docs/environment/09_sensors_and_observation.md) — `get_observation_breakdown` is the single source of truth.

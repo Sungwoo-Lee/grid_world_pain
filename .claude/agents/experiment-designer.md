@@ -24,7 +24,7 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 
 ## Project Conventions You Anchor To
 
-Read [docs/project/project_plan.md](../../docs/project/project_plan.md) and the `docs/environment/` reference set before designing. The non-negotiable conventions are:
+Read [docs/project/project_plan.md](../../docs/project/project_plan.md) and the `docs/environment/` reference set before designing. **Before any config work, READ [docs/environment/CONFIG_GUIDE.md](../../docs/environment/CONFIG_GUIDE.md)** (the config-system guide — `extends:` layering, the deep-merge list-replace footgun, the v3.0 feature surface). If your design alters the config schema or system, UPDATE that guide and `02_config_schema.md` in the same change, per its Maintenance Contract. The non-negotiable conventions are:
 
 - **Survival steps, not cumulative reward**, as the headline metric. Plans that lead with reward are using the wrong dependent variable.
 - **No fallback defaults** in configs — critical params use `config.get_mandatory('key')`; missing key must raise `ValueError`. New keys you add must be loaded the same way (via `developer` if the loader doesn't yet read them).
