@@ -2,7 +2,7 @@
 title: "Training program: hunger-gated avoidance under olfactory uncertainty"
 study: hunger_gated_avoidance
 generated: 2026-06-16T15:57
-last_updated: 2026-06-19T01:30
+last_updated: 2026-06-19T01:45
 status: living-plan
 ---
 
@@ -91,10 +91,10 @@ agent genuinely hungry or injured. Satiation stays *derived* from nutrition (nut
 lever; `random_start_satiation` is a documented no-op). See [[CONFIGURABLE_INITIAL_STATE_RANGES]] and
 [`CONFIG_GUIDE`](../../../environment/CONFIG_GUIDE.md) §3.4.
 
-**Decision for the user (still open).** Train the Step 1 agents with **randomised initial internal
-state** spanning the eval-probe range (recommended — makes the probes in-distribution *and* is arguably
-required for hunger-gating to be learnable), or keep a **fixed full start** (cleaner discrimination
-read, but the probes become OOD)? This shapes Step 1 config generation.
+**Decision (locked 2026-06-19).** Train Step 1 with **randomised initial internal state** — both
+`random_start_nutrition` and `random_start_injury` on, spanning the full range (exact bounds set by
+`experiment-designer` + `env-config-auditor`: nutrition kept above instant-starvation, injury below
+the death line).
 
 ## Training program
 
@@ -102,7 +102,7 @@ read, but the probes become OOD)? This shapes Step 1 config generation.
 
 | Step | Goal | Base config | Knob(s) | Status |
 |---|---|---|---|---|
-| 1 | **Discrimination-onset map** — find *when* the agent starts to tell predator from rabbit, sweeping smell mean-gap × per-episode std | cell-08 scene → fresh sparse `extends:` | Δμ (mean gap) **×** σ (`properties_std`) | **proposed — awaiting feedback** |
+| 1 | **Discrimination-onset map** — find *when* the agent starts to tell predator from rabbit, sweeping smell mean-gap × per-episode std | cell-08 scene → fresh sparse `extends:` | Δμ (mean gap) **×** σ (`properties_std`) | **design locked — configs in progress** |
 | 2 | **Add sensory (perceptual) noise** as a further difference | from Step 1's chosen point | `perceptual_noise` block (per-step obs noise) | future |
 
 *(further steps appended below)*
@@ -174,7 +174,7 @@ where it should appear.
   control** on the anchor + a mid rung so a gap isn't an encounter artifact (item 4).
 - 1-vs-1 keeps the **vision-count** leak (item 1) small but nonzero — confirm at the anchor.
 
-**Status.** Proposed — awaiting feedback before config generation.
+**Status.** Design locked (2026-06-19) — `experiment-designer` generating the 10 configs.
 
 ---
 
@@ -185,16 +185,17 @@ where it should appear.
 smell std) as a further uncertainty source, and test whether the discrimination + hunger-gating
 survive degraded perception. **Status.** Sketch — opens after Step 1.
 
-## Cross-cutting open questions (program level)
+## Decisions locked (2026-06-19)
 
-- **Fresh-init vs warm-start** — run Step 1's wave fresh (clean, recommended) or warm-start from
-  cell-08 to save compute (risks under-reporting discrimination)?
-- **Run length** — full ~10 M-episode trainings per point, or shorter runs since we only need the
-  onset threshold (discrimination may emerge late, so full is safer)?
-- **Satiation read** — rely on cell 08's existing body/food dynamics to produce the hungry-vs-satiated
-  contrast for the σ>0 runs, or actively manipulate food scarcity to guarantee both regimes occur?
-- **Predator lethality** — keep cell 08's lethal `[5,120]` band, or soften it so risk-taking while
-  hungry is survivable enough to be learnable?
+- **Initial state** — randomise **nutrition + injury** across the full range (covers hunger-gating
+  learnability + the forage/recovery/conflict eval probes).
+- **Predator lethality** — **keep lethal `[5,120]`** (matches cell-08). *Watch-out:* risk-taking while
+  hungry is often fatal, so if hunger-gated *staying* never emerges, revisit lethality first.
+- **Init method** — **fresh-init** every run (no cell-08 warm-start).
+- **Scope** — **full 10-run wave now**, full ~10 M-episode length per point, single seed (42) per
+  point; multi-seed hardening is a follow-up.
+- **Satiation contrast** — provided by the randomised nutrition start (no extra food-scarcity
+  manipulation needed for the first wave).
 
 ## Links
 
