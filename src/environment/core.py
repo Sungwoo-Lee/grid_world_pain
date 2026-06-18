@@ -394,6 +394,16 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         respawn_mask[:, None], new_sampled_prop, state.res_property_sampled
     )
 
+    # Re-sample visual property for respawned resources (independent stream: fold_in with 0x7150A1).
+    visual_property_key_step = jax.random.fold_in(property_key, 0x7150A1)
+    vis_noise = jax.random.normal(visual_property_key_step, shape=params.res_visual_property.shape)
+    new_sampled_vis_prop = jnp.clip(
+        params.res_visual_property + params.res_visual_property_std * vis_noise, 0.0, None
+    )
+    res_visual_property_sampled_after_reg = jnp.where(
+        respawn_mask[:, None], new_sampled_vis_prop, state.res_visual_property_sampled
+    )
+
     # 2. Agent Movement
     new_agent_pos, just_collided = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)
 
@@ -640,6 +650,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         res_reg_timer=next_reg_timer,
         res_cons_count=next_cons_count,
         res_property_sampled=res_property_sampled_after_reg,
+        res_visual_property_sampled=res_visual_property_sampled_after_reg,
         # Unified animal fields (positions + state mutate; sampled distributional fields unchanged in step)
         animal_pos=new_animal_pos,
         animal_state=new_animal_state,
@@ -647,11 +658,13 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         animal_move_timer=new_animal_mt,
         animal_attack_timer=new_animal_at,
         animal_property_sampled=state.animal_property_sampled,
+        animal_visual_property_sampled=state.animal_visual_property_sampled,
         animal_detect_sampled=state.animal_detect_sampled,
         animal_max_stamina_sampled=state.animal_max_stamina_sampled,
         animal_recovery_sampled=state.animal_recovery_sampled,
         animal_hunt_thresh_sampled=state.animal_hunt_thresh_sampled,
         animal_lose_interest_sampled=state.animal_lose_interest_sampled,
+        obs_visual_property_sampled=state.obs_visual_property_sampled,
         satiation=new_satiation,
         nutrition=new_nutrition,
         injury_level=new_injury,
@@ -966,6 +979,41 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     else:
         animal_property_sampled = jnp.zeros((0, params.animal_property.shape[-1] if params.animal_property.shape[0] == 0 else params.animal_property.shape[-1]), dtype=jnp.float32)
 
+    # 6b. Visual property sampling — INDEPENDENT stream via fold_in(property_key, 0x7150A1).
+    # This constant is unique (not reusing 0xAE1 which is the animal_episode_key constant)
+    # so the olfactory draws above are byte-unchanged by construction.
+    # Clip at 0.0 only (no upper bound: visual intensities are unbounded; with std=0 → exactly mean).
+    visual_property_key = jax.random.fold_in(property_key, 0x7150A1)
+    vis_key_res, vis_key_pred, vis_key_obs, vis_key_neutral = jax.random.split(visual_property_key, 4)
+
+    def _sample_visual_property(sub_key, mean, std):
+        noise = jax.random.normal(sub_key, shape=mean.shape)
+        return jnp.clip(mean + std * noise, 0.0, None)
+
+    res_visual_property_sampled = _sample_visual_property(
+        vis_key_res, params.res_visual_property, params.res_visual_property_std)
+    obs_visual_property_sampled = _sample_visual_property(
+        vis_key_obs, params.obs_visual_property, params.obs_visual_property_std)
+
+    # Animals: same pred/neutral subset pattern as olfactory sampling
+    if N > 0:
+        animal_visual_property_sampled = jnp.zeros_like(params.animal_visual_property)
+        if num_pred_class > 0:
+            p_idx = jnp.array(list(params.predator_indices), dtype=jnp.int32)
+            pred_vis_mean = params.animal_visual_property[p_idx]
+            pred_vis_std  = params.animal_visual_property_std[p_idx]
+            pred_vis_sampled = _sample_visual_property(vis_key_pred, pred_vis_mean, pred_vis_std)
+            animal_visual_property_sampled = animal_visual_property_sampled.at[p_idx].set(pred_vis_sampled)
+        if num_neutral_class > 0:
+            n_idx = jnp.array(list(params.neutral_indices), dtype=jnp.int32)
+            neutral_vis_mean = params.animal_visual_property[n_idx]
+            neutral_vis_std  = params.animal_visual_property_std[n_idx]
+            neutral_vis_sampled = _sample_visual_property(vis_key_neutral, neutral_vis_mean, neutral_vis_std)
+            animal_visual_property_sampled = animal_visual_property_sampled.at[n_idx].set(neutral_vis_sampled)
+    else:
+        animal_visual_property_sampled = jnp.zeros(
+            (0, params.animal_visual_property.shape[-1]), dtype=jnp.float32)
+
     # 7. Per-episode distributional sampling for the 5 behavioural fields.
     #    5 independent uniform draws per field — shape (N,) each.
     #    For wander/static entries the ranges are [0, 0] (from _load_animals);
@@ -997,6 +1045,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         res_cons_count=jnp.zeros(num_res, dtype=jnp.int32),
         res_reg_timer=jnp.zeros(num_res, dtype=jnp.int32),
         res_property_sampled=res_property_sampled,
+        res_visual_property_sampled=res_visual_property_sampled,
         # Unified animal fields
         animal_pos=animal_pos_init,
         animal_state=jnp.zeros(N, dtype=jnp.int32),           # PATROL=0
@@ -1004,6 +1053,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         animal_move_timer=jnp.zeros(N, dtype=jnp.int32),
         animal_attack_timer=jnp.zeros(N, dtype=jnp.int32),
         animal_property_sampled=animal_property_sampled,
+        animal_visual_property_sampled=animal_visual_property_sampled,
         animal_detect_sampled=animal_detect_sampled,
         animal_max_stamina_sampled=animal_max_stamina_sampled,
         animal_recovery_sampled=animal_recovery_sampled,
@@ -1011,6 +1061,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         animal_lose_interest_sampled=animal_lose_interest_sampled,
         obs_pos=obs_pos,
         obs_property_sampled=obs_property_sampled,
+        obs_visual_property_sampled=obs_visual_property_sampled,
         satiation=jnp.array(satiation, dtype=jnp.float32),
         nutrition=jnp.array(nutrition, dtype=jnp.float32),
         injury_level=jnp.array(injury, dtype=jnp.float32),

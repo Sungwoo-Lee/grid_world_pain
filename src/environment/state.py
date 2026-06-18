@@ -39,6 +39,7 @@ class EnvState:
     res_cons_count: jnp.ndarray # [num_res] int
     res_reg_timer: jnp.ndarray  # [num_res] int
     res_property_sampled: jnp.ndarray # [num_res, vector_size]
+    res_visual_property_sampled: jnp.ndarray  # [num_res, visual_vector_size] (per-episode sampled)
 
     # Animals (unified — predators + neutrals, predators-first ordering)
     animal_pos: jnp.ndarray              # [N, 2]
@@ -47,6 +48,7 @@ class EnvState:
     animal_move_timer: jnp.ndarray       # [N] int
     animal_attack_timer: jnp.ndarray     # [N] int (zero for non-hunt entities)
     animal_property_sampled: jnp.ndarray # [N, vector_size]
+    animal_visual_property_sampled: jnp.ndarray  # [N, visual_vector_size] (per-episode sampled)
     # Per-episode-sampled behavioural params (NEW — all five fields, degenerate [s,s] for legacy configs)
     animal_detect_sampled: jnp.ndarray         # [N] float
     animal_max_stamina_sampled: jnp.ndarray    # [N] float
@@ -57,6 +59,7 @@ class EnvState:
     # Obstacles
     obs_pos: jnp.ndarray        # [num_obs, 2]
     obs_property_sampled: jnp.ndarray # [num_obs, vector_size]
+    obs_visual_property_sampled: jnp.ndarray  # [num_obs, visual_vector_size] (per-episode sampled)
 
     # Body
     satiation: jnp.ndarray       # [] float
@@ -92,6 +95,7 @@ class EnvParams:
     res_property: jnp.ndarray   # [num_res, vector_size]
     res_property_std: jnp.ndarray # [num_res, vector_size]
     res_visual_property: jnp.ndarray  # [num_res, visual_vector_size] (visual appearance vector)
+    res_visual_property_std: jnp.ndarray  # [num_res, visual_vector_size] (per-episode visual jitter std; zeros = deterministic)
     res_nociception: jnp.ndarray # [num_res]
     res_spawn_area: jnp.ndarray # [num_res, 4] (min_r, min_c, max_r, max_c)
     res_max_cons: jnp.ndarray   # [num_res]
@@ -125,6 +129,7 @@ class EnvParams:
     animal_disengage_on_contact: jnp.ndarray  # [N] bool (opt-in: drain stamina→0 on agent contact)
     animal_visual_channel: jnp.ndarray     # [N] int (5=predator, 7=neutral, ...)
     animal_visual_property: jnp.ndarray   # [N, visual_vector_size] (visual appearance vector)
+    animal_visual_property_std: jnp.ndarray  # [N, visual_vector_size] (per-episode visual jitter std; zeros = deterministic)
     # Static tags / labels (pytree_node=False — not JAX arrays)
     animal_classes: tuple = struct.field(pytree_node=False)    # len N strings
     animal_behaviours: tuple = struct.field(pytree_node=False) # len N strings
@@ -148,6 +153,7 @@ class EnvParams:
     obs_property: jnp.ndarray   # [num_obs, vector_size]
     obs_property_std: jnp.ndarray # [num_obs, vector_size]
     obs_visual_property: jnp.ndarray  # [num_obs, visual_vector_size] (visual appearance vector)
+    obs_visual_property_std: jnp.ndarray  # [num_obs, visual_vector_size] (per-episode visual jitter std; zeros = deterministic)
     obs_nociception: jnp.ndarray # [num_obs]
     obs_type: jnp.ndarray       # [num_obs] int32 index for names
     obstacle_names: tuple[str, ...] = struct.field(pytree_node=False)

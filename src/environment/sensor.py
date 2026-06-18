@@ -211,13 +211,15 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     parts_active.append(jnp.ones(num_obs, dtype=jnp.bool_))
     all_active = jnp.concatenate(parts_active, axis=0)  # [Total_E]
 
-    # Visual Property Matrix [Total_E, V] — from config vectors
-    res_props = params.res_visual_property        # [num_res, V]
-    obs_props = params.obs_visual_property        # [num_obs, V]
+    # Visual Property Matrix [Total_E, V] — per-episode sampled vectors from EnvState.
+    # With std=0 (default), sampled == mean == params.*_visual_property (byte-identical).
+    # With std>0, each episode draws a fresh stochastic appearance vector per entity.
+    res_props = state.res_visual_property_sampled        # [num_res, V]
+    obs_props = state.obs_visual_property_sampled        # [num_obs, V]
     parts_props = [res_props]
     if num_animal > 0:
-        # Each animal uses its per-entity visual property vector
-        animal_props = params.animal_visual_property  # [N, V]
+        # Each animal uses its per-episode sampled visual property vector
+        animal_props = state.animal_visual_property_sampled  # [N, V]
         parts_props.append(animal_props)
     parts_props.append(obs_props)
     all_props = jnp.concatenate(parts_props, axis=0)  # [Total_E, V]

@@ -319,6 +319,27 @@ def _read_properties_std(entry, entity_label):
         return entry['property_std']
     raise ValueError(f"{entity_label}: missing required key 'properties_std'.")
 
+
+def _read_visual_properties_std(entry: dict, V: int, entity_label: str) -> list:
+    """Read optional visual_properties_std from a config entry.
+
+    If `visual_properties_std` is present, validates it has length V and returns it.
+    If absent (including all archived/pre-std configs), returns zeros of length V so
+    that std=0 is the default and observations are byte-identical to pre-change.
+    Raises ValueError if the length does not match V.
+    """
+    if 'visual_properties_std' in entry:
+        vps = list(entry['visual_properties_std'])
+        if len(vps) != V:
+            raise ValueError(
+                f"{entity_label}: 'visual_properties_std' has length {len(vps)} "
+                f"but visual_vector_size is {V}. "
+                f"Length must equal visual_vector_size."
+            )
+        return [float(x) for x in vps]
+    # Default: zeros of length V → deterministic (std=0 → sampled == mean exactly)
+    return [0.0] * V
+
 def _load_animals(config: Config, visual_vector_size: int = 8):
     """Build unified animal arrays from the YAML config (v2.0).
 
@@ -548,6 +569,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         animal_disengage_on_contact = jnp.zeros(0, dtype=jnp.bool_)
         animal_visual_channel = jnp.zeros(0, dtype=jnp.int32)
         animal_visual_property = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
+        animal_visual_property_std = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
         animal_classes = ()
         animal_behaviours = ()
         animal_tags = ()
@@ -569,7 +591,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
             animal_lose_interest_low, animal_lose_interest_high,
             animal_classes_int, animal_behaviours_int,
             animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
-            animal_visual_property,
+            animal_visual_property, animal_visual_property_std,
             animal_classes, animal_behaviours, animal_tags,
             hunt_idx, wander_idx, static_idx,
             predator_indices, neutral_indices,
@@ -632,6 +654,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
     disengage_on_contact_list = []
     visual_channel_list = []
     visual_property_list = []
+    visual_property_std_list = []
     classes_tuple = []
     behaviours_tuple = []
     tags_tuple = []
@@ -672,6 +695,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
                 f"one-hot defaults from the class→channel map)."
             )
         visual_property_list.append(_read_visual_properties(_raw_src, default_vis_ch, V, e['tag_label']))
+        visual_property_std_list.append(_read_visual_properties_std(_raw_src, V, e['tag_label']))
         classes_tuple.append(cls)
         behaviours_tuple.append(beh)
         tags_tuple.append(_normalise_tag(e['tag_raw'], i, e.get('type_label', e['tag_label'])))
@@ -714,7 +738,8 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
     animal_is_damaging = jnp.array(is_damaging_list, dtype=jnp.bool_)
     animal_disengage_on_contact = jnp.array(disengage_on_contact_list, dtype=jnp.bool_)
     animal_visual_channel = jnp.array(visual_channel_list, dtype=jnp.int32)
-    animal_visual_property = jnp.array(visual_property_list, dtype=jnp.float32)  # [N, V]
+    animal_visual_property = jnp.array(visual_property_list, dtype=jnp.float32)      # [N, V]
+    animal_visual_property_std = jnp.array(visual_property_std_list, dtype=jnp.float32)  # [N, V]
 
     animal_classes = tuple(classes_tuple)
     animal_behaviours = tuple(behaviours_tuple)
@@ -747,7 +772,7 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         animal_lose_interest_low, animal_lose_interest_high,
         animal_classes_int, animal_behaviours_int,
         animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
-        animal_visual_property,
+        animal_visual_property, animal_visual_property_std,
         animal_classes, animal_behaviours, animal_tags,
         hunt_idx, wander_idx, static_idx,
         predator_indices, neutral_indices,
@@ -804,6 +829,7 @@ def load_env_params(config: Config) -> EnvParams:
 
         # Visual property vectors: food→channel 3, hiding_predator→channel 4
         _res_vis_list = []
+        _res_vis_std_list = []
         for r in expanded_resources:
             _rtype = r_get(r, 'type')
             _default_ch = 3 if _rtype == 'food' else 4  # food=3, hiding_predator=4
@@ -814,7 +840,9 @@ def load_env_params(config: Config) -> EnvParams:
                     f"auto-generate one-hot defaults from the channel map)."
                 )
             _res_vis_list.append(_read_visual_properties(r, _default_ch, visual_vector_size, f'Resource({_rtype})'))
+            _res_vis_std_list.append(_read_visual_properties_std(r, visual_vector_size, f'Resource({_rtype})'))
         res_visual_property = jnp.array(_res_vis_list, dtype=jnp.float32)
+        res_visual_property_std = jnp.array(_res_vis_std_list, dtype=jnp.float32)
     else:
         res_type = jnp.zeros(0, dtype=jnp.int32)
         res_property = jnp.zeros((0, 5))
@@ -825,6 +853,7 @@ def load_env_params(config: Config) -> EnvParams:
         res_reg_delay = jnp.zeros(0, dtype=jnp.int32)
         res_damage = jnp.zeros((0, 2))
         res_visual_property = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
+        res_visual_property_std = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
 
     # ── Guard against stale `predator_enabled` key (removed in v2.0) ──────────
     # The 86 migrated configs have this key stripped by the CP1 migration sweep.
@@ -848,7 +877,7 @@ def load_env_params(config: Config) -> EnvParams:
         animal_lose_interest_low, animal_lose_interest_high,
         animal_classes_int, animal_behaviours_int,
         animal_is_damaging, animal_disengage_on_contact, animal_visual_channel,
-        animal_visual_property,
+        animal_visual_property, animal_visual_property_std,
         animal_classes, animal_behaviours, animal_tags,
         hunt_idx, wander_idx, static_idx,
         predator_indices, neutral_indices,
@@ -890,6 +919,7 @@ def load_env_params(config: Config) -> EnvParams:
 
         # Visual property vectors: rock→channel 6
         _obs_vis_list = []
+        _obs_vis_std_list = []
         for o in expanded_obstacles:
             _oname = o.get('name', 'rock')
             if visual_vector_size != 8 and 'visual_properties' not in o:
@@ -899,7 +929,9 @@ def load_env_params(config: Config) -> EnvParams:
                     f"auto-generate one-hot defaults from the channel map)."
                 )
             _obs_vis_list.append(_read_visual_properties(o, 6, visual_vector_size, f'Obstacle({_oname})'))
+            _obs_vis_std_list.append(_read_visual_properties_std(o, visual_vector_size, f'Obstacle({_oname})'))
         obs_visual_property = jnp.array(_obs_vis_list, dtype=jnp.float32)
+        obs_visual_property_std = jnp.array(_obs_vis_std_list, dtype=jnp.float32)
     else:
         obs_blocking = jnp.zeros(0, dtype=jnp.bool_)
         obs_hides_agent = jnp.zeros(0, dtype=jnp.bool_)
@@ -912,6 +944,7 @@ def load_env_params(config: Config) -> EnvParams:
         obs_type = jnp.zeros(0, dtype=jnp.int32)
         obstacle_names = ("rock",)
         obs_visual_property = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
+        obs_visual_property_std = jnp.zeros((0, visual_vector_size), dtype=jnp.float32)
     
     # Build Grid Location Types
     import numpy as np
@@ -1084,6 +1117,7 @@ def load_env_params(config: Config) -> EnvParams:
         res_property=res_property,
         res_property_std=res_property_std,
         res_visual_property=res_visual_property,
+        res_visual_property_std=res_visual_property_std,
         res_nociception=res_nociception,
         res_spawn_area=res_spawn_area,
         res_max_cons=res_max_cons,
@@ -1114,6 +1148,7 @@ def load_env_params(config: Config) -> EnvParams:
         animal_disengage_on_contact=animal_disengage_on_contact,
         animal_visual_channel=animal_visual_channel,
         animal_visual_property=animal_visual_property,
+        animal_visual_property_std=animal_visual_property_std,
         animal_classes=animal_classes,
         animal_behaviours=animal_behaviours,
         animal_tags=animal_tags,
@@ -1128,6 +1163,7 @@ def load_env_params(config: Config) -> EnvParams:
         obs_property=obs_property,
         obs_property_std=obs_property_std,
         obs_visual_property=obs_visual_property,
+        obs_visual_property_std=obs_visual_property_std,
         obs_nociception=obs_nociception,
         obs_spawn_area=obs_spawn_area,
         obs_type=obs_type,
