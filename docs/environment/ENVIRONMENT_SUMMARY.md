@@ -36,6 +36,7 @@ If you only need one subsystem, jump directly to its doc — each is self-contai
 | # | Document | Topic |
 |---|----------|-------|
 | — | **This file** | Hub: conventions, step-flow diagram, observation table, config summary |
+| — | [Config Guide](CONFIG_GUIDE.md) | v3.0 config-system workflow: `extends:` layering, sparse overrides, authoring a config, adding a key, parity gate, Maintenance Contract |
 | 00 | [JAX & Advanced-API Primer](00_jax_primer.md) | Tutorial: every advanced JAX/Flax/Orbax API the env uses, taught once |
 | 01 | [State & Parameters](01_state_and_params.md) | `EnvState`, `EnvParams` pytree definitions |
 | 02 | [Config Schema](02_config_schema.md) | YAML → `EnvParams` loading, mandatory keys, expansion |

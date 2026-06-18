@@ -2,6 +2,8 @@
 
 > **Source**: `src/environment/config_loader.py`, `src/environment/state.py`, `configs/environment/default.yaml` | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
+> **v3.0 updates** — For the config-system workflow (`extends:` layering, sparse overrides, authoring), see the companion [CONFIG_GUIDE.md](CONFIG_GUIDE.md). New v3.0 fields not yet enumerated below in full: top-level `extends:` (layered-config marker); per-entity `visual_properties` / `visual_properties_std` plus `sensory.visual_vector_size` (default 8) and `sensory.visual_background_properties` (3×V, required when V≠8); conditional-mandatory `body.start_{nutrition,injury}_{low,high}`; and the `behavior_measures.eval_seeds` list-or-`{rng, sort}`-spec form.
+
 ---
 
 ## Overview — what this document is about
@@ -288,9 +290,11 @@ def _load_animals(config: Config):
          and stored as degenerate ranges [s, s]. `attack_delay` and `damage` for
          neutrals are internally auto-filled to 0 and [0.0, 0.0] (NC-1 fix —
          the legacy schema never carried them on neutral entries).
-      2. `environment.entities:` (new schema) — not used by any config yet; CP3
-         activates this path fully. If detected, a deprecation warning is emitted
-         when the legacy sections are also present.
+      2. `environment.entities:` (new schema) — now the canonical animal schema:
+         the modern `configs/environment/default.yaml` base and the live
+         basic-curriculum configs (`configs/environment/experiment/basic/`) use it.
+         If detected, a deprecation warning is emitted when the legacy sections
+         are also present (the unified `entities:` schema takes precedence).
 
     Returns a flat tuple of all unified `animal_*` arrays and dispatch tuples,
     ordered as expected by the `load_env_params` caller.
