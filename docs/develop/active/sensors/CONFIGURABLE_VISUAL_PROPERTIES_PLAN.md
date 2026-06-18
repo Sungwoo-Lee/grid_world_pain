@@ -490,5 +490,71 @@ state to unwind.
 
 ---
 
-<!-- NEW ISSUES discovered during implementation: append "## Issue #2: ..." here, or create a
-     separate doc and cross-reference. -->
+## Per-episode visual sampling — Implementation Report (v3.0 extension)
+
+> **Implemented by**: developer
+> **Date**: 2026-06-18
+> **Branch**: `v3.0`
+
+### Summary
+
+Added per-episode Gaussian sampling of visual properties, mirroring the existing olfactory `properties_std` mechanism. Default std=0 → byte-identical to before; std>0 → per-episode stochastic appearance.
+
+**Key derivation constant used**: `0x7150A1` (unique, not reusing `0xAE1` which is the `animal_episode_key` constant).
+
+**File-by-file:**
+
+- **`src/environment/state.py`** — Added 3 new `EnvParams` fields: `res_visual_property_std [num_res, V]`, `animal_visual_property_std [N, V]`, `obs_visual_property_std [num_obs, V]`. Added 3 new `EnvState` fields: `res_visual_property_sampled [num_res, V]`, `animal_visual_property_sampled [N, V]`, `obs_visual_property_sampled [num_obs, V]`.
+
+- **`src/environment/config_loader.py`** — Added `_read_visual_properties_std()` helper (optional key, defaults to zeros of length V). Plumbed through all entity loading paths: resource loop, obstacle loop, `_load_animals()` for both zero-animal and N>0 cases. Updated `EnvParams(...)` constructor call with all 3 new std fields.
+
+- **`src/environment/core.py (jax_reset)`** — Added `_sample_visual_property(sub_key, mean, std)` helper (clips at 0, no upper bound). Derives `visual_property_key = jax.random.fold_in(property_key, 0x7150A1)` and splits 4-way (res/pred/obs/neutral). Samples `res_visual_property_sampled`, `obs_visual_property_sampled`, and `animal_visual_property_sampled` (same pred/neutral subset pattern as olfactory). Stores all in `EnvState`. Olfactory sampling lines are untouched.
+
+- **`src/environment/core.py (jax_step)`** — On resource respawn, re-samples `res_visual_property_sampled` using `jax.random.fold_in(property_key, 0x7150A1)`. Carries `animal_visual_property_sampled` and `obs_visual_property_sampled` unchanged via `state._replace`. Added to `new_state`.
+
+- **`src/environment/sensor.py`** — `sense_visual` now reads `state.res_visual_property_sampled`, `state.animal_visual_property_sampled`, `state.obs_visual_property_sampled` instead of `params.res_visual_property`, `params.animal_visual_property`, `params.obs_visual_property`. Background `params.visual_background_property` stays static.
+
+- **6 live configs** (`configs/environment/default.yaml` + 5 `configs/environment/experiment/basic/*.yaml`) — Added `visual_properties_std: [0,0,0,0,0,0,0,0]` next to each `visual_properties` entry. All zeros → backward compatible.
+
+- **`tests/env/test_visual_sampling.py`** (NEW) — 7 tests covering the 4 verification gates.
+
+### Verification Gates
+
+| Gate | Test | Result |
+|------|------|--------|
+| 1 (olfactory unchanged) | `test_olfactory_sampled_unchanged_by_visual_key` | PASS |
+| 2 (std>0 stochastic, animals) | `test_visual_sampling_stochastic_when_std_positive` | PASS |
+| 2b (std>0 stochastic, resources) | `test_visual_sampling_resource_std_positive` | PASS |
+| 3 (determinism, same key) | `test_visual_sampling_deterministic_same_key` | PASS |
+| 3 (std=0 = mean exactly) | `test_visual_sampling_std0_equals_mean` | PASS |
+| 4 (std=0 byte-parity proxy) | `test_visual_obs_unchanged_when_std0` | PASS |
+| 4 multi-config | `test_visual_obs_unchanged_all_configs` | PASS |
+
+### Test results
+
+```
+pytest tests/env/test_visual_sampling.py -v   → 7 passed, 0 failed
+pytest tests/env/test_visual_parity.py -q     → 15 passed, 0 failed (byte-parity preserved)
+pytest tests/env/ -q                           → 164 passed, 167 skipped, 0 failed
+                                                 (baseline: 157 passed, 167 skipped)
+```
+
+### Std=0 byte-parity confirmation
+
+With all `visual_properties_std` set to zeros (the default for all configs), `state.res_visual_property_sampled == params.res_visual_property` exactly (byte-equal, not just approximately). Confirmed by `test_visual_sampling_std0_equals_mean` and `test_visual_obs_unchanged_all_configs`. The `test_visual_parity.py` fixture gate (15 passed) is the primary byte-parity proof.
+
+### Olfactory unchanged proof
+
+The visual key is derived as `visual_property_key = jax.random.fold_in(property_key, 0x7150A1)`. The olfactory stream uses `property_key` directly via `jax.random.split(property_key, 4)` (→ `prop_key_res/pred/obs/neutral`). `fold_in` does NOT modify `property_key` — it returns a NEW key derived from it, leaving the 4-way split of `property_key` byte-unchanged. The `animal_episode_key` uses `fold_in(property_key, 0xAE1)` — a different constant — and is also unaffected. `test_olfactory_sampled_unchanged_by_visual_key` verifies by confirming `animal_property_sampled` differs between seeds (the olfactory draw is live and stochastic), and that re-running with the same key produces bit-identical olfactory results.
+
+### Speed check
+
+This change adds one `fold_in`, one 4-way key split, three `jax.random.normal` calls, and three `jnp.clip(..., 0, None)` calls per reset. These are all trivially O(V) and negligible vs. placement+observation. With `std=0` (all zeros), the `mean + 0 * noise` still generates noise but the result is clipped to mean — no JIT branch on std. Speed impact is expected to be below measurement noise.
+
+No before/after speed run conducted (ops added are too small to register against the existing placement/sensor overhead). Flagging per Speed Check Protocol for senior-developer to decide whether a measurement is warranted.
+
+### Deviations from task spec
+
+None. All 5 steps implemented exactly as specified. `visual_properties_std` optional in YAML (defaults to zeros → no breaking change to any config). Archived configs not touched.
+
+**Implemented by**: developer
