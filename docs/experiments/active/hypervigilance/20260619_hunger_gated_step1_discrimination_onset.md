@@ -3,7 +3,7 @@ title: "Step 1 — discrimination-onset map (smell separation × per-episode noi
 topic: hypervigilance
 status: active
 created: 2026-06-19
-last_updated: 2026-06-19
+last_updated: 2026-06-19T02:55:00
 phase: hunger_gated_avoidance
 wandb_tag: hunger_gated
 develop_link: "[[20260616_1557_hunger_gated_avoidance]]"
@@ -175,16 +175,16 @@ Node / GPU / Launched at / WandB run ID / Log path at launch. No runs launched y
 
 | Run | Status | Cell | Tag (= wandb-name) | wandb-group | wandb-job-type | Seed | Node | GPU | Launched at | WandB run ID | Log path |
 |-----|--------|------|--------------------|-------------|----------------|------|------|-----|-------------|--------------|----------|
-| 1 | planned | s0_sig0 | `rppo_hg01_s0_sig0_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
-| 2 | planned | s0.05_sig0 | `rppo_hg02_s0.05_sig0_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
-| 3 | planned | s0.1_sig0 | `rppo_hg03_s0.1_sig0_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
-| 4 | planned | s0.25_sig0 | `rppo_hg04_s0.25_sig0_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
-| 5 | planned | s0.5_sig0 | `rppo_hg05_s0.5_sig0_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
-| 6 | planned | s0.1_sig0.2 | `rppo_hg06_s0.1_sig0.2_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
-| 7 | planned | s0.25_sig0.2 | `rppo_hg07_s0.25_sig0.2_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
-| 8 | planned | s0.5_sig0.2 | `rppo_hg08_s0.5_sig0.2_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
-| 9 | planned | s0.1_sig0.4 | `rppo_hg09_s0.1_sig0.4_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
-| 10 | planned | s0.5_sig0.4 | `rppo_hg10_s0.5_sig0.4_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
+| 1 | running | s0_sig0 | `rppo_hg01_s0_sig0_s42` | hunger_gated | prod | 42 | 106 | cuda:0 | 2026-06-19T02:47:23 | lldqf9fh | logs/20260619_024723.log |
+| 2 | running | s0.05_sig0 | `rppo_hg02_s0.05_sig0_s42` | hunger_gated | prod | 42 | 106 | cuda:1 | 2026-06-19T02:47:24 | jxuj38si | logs/20260619_024724.log |
+| 3 | FAILED — node 107 NAS down; needs re-launch | s0.1_sig0 | `rppo_hg03_s0.1_sig0_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
+| 4 | FAILED — node 107 NAS down; needs re-launch | s0.25_sig0 | `rppo_hg04_s0.25_sig0_s42` | hunger_gated | prod | 42 | — | — | — | — | — |
+| 5 | running (log shared with run 6 — see note) | s0.5_sig0 | `rppo_hg05_s0.5_sig0_s42` | hunger_gated | prod | 42 | 108 | cuda:0 | 2026-06-19T02:47:27 | (see note) | logs/20260619_024727.log (shared) |
+| 6 | running (log shared with run 5 — see note) | s0.1_sig0.2 | `rppo_hg06_s0.1_sig0.2_s42` | hunger_gated | prod | 42 | 108 | cuda:1 | 2026-06-19T02:47:27 | 3c6k9szw | logs/20260619_024727.log (shared) |
+| 7 | running | s0.25_sig0.2 | `rppo_hg07_s0.25_sig0.2_s42` | hunger_gated | prod | 42 | 110 | cuda:0 | 2026-06-19T02:47:28 | u59peb7n | logs/20260619_024728.log |
+| 8 | running | s0.5_sig0.2 | `rppo_hg08_s0.5_sig0.2_s42` | hunger_gated | prod | 42 | 110 | cuda:1 | 2026-06-19T02:47:29 | 0vpvquax | logs/20260619_024729.log |
+| 9 | running | s0.1_sig0.4 | `rppo_hg09_s0.1_sig0.4_s42` | hunger_gated | prod | 42 | 103 | cuda:0 | 2026-06-19T02:47:30 | pm1it6tg | logs/20260619_024730.log |
+| 10 | running | s0.5_sig0.4 | `rppo_hg10_s0.5_sig0.4_s42` | hunger_gated | prod | 42 | 103 | cuda:1 | 2026-06-19T02:47:31 | wet6k6vp | logs/20260619_024731.log |
 
 Tags are unique, parseable (`rppo_hg<NN>_s<sep>_sig<sigma>_s<seed>`), and identical to the
 wandb-name. All rows share group `hunger_gated`.
