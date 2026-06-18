@@ -6,6 +6,7 @@ Point-in-time records of the structural state of `src/` at moments worth remembe
 
 | Captured | Label | Source commit | Stats | Link |
 |---|---|---|---|---|
+| 2026-06-19 01:15 | v3_config_system_overhaul | c62334f | 834 nodes / 1133 edges / 73 communities | [snapshot](20260619_0115_v3_config_system_overhaul.md) |
 | 2026-05-16 13:22 | v2_memory_build_complete | 0dab341 | 735 nodes / 1009 edges / 59 communities | [snapshot](20260516_1322_v2_memory_build_complete.md) |
 
 ## Why snapshot?
