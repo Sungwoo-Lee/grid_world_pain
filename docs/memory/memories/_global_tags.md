@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-06-16
+**Last updated**: 2026-06-19
 
 ---
 
@@ -26,6 +26,7 @@
 | `dreamer` | `20260508_1431_diagnostic_battery_refutes_four_fixes` | DreamerV3 model/config decisions, failure-mode diagnoses |
 | `film` | `20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse` | FiLM-gating / conditional modulation (architecture, hyperparameters, behaviour under noise) |
 | `refutation` | `20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse` | Negative-result insight: a pre-registered hypothesis is refuted (or a candidate cause is ruled out) |
+| `config` | `20260619_0111_config_v3_extends_layering_default_base` | Config loader / layering / schema / authoring system |
 
 ---
 
@@ -54,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-06-19: 4 insights from the v3.0 config-system overhaul session (`20260619_0111_config_v3_extends_layering_default_base`, `20260619_0112_configurable_visual_properties_and_std`, `20260619_0113_configurable_initial_state_ranges`, `20260619_0114_config_guide_maintenance_contract`) promoted new tag `config`. Existing tags `design`, `decision`, `meta`, `learned_lesson` reused. New folder `config_system` opened.
 - 2026-06-16: 1 insight from the testbed-search reframe (`20260616_1514_experimental_env_as_behavior_platform`) reused existing tags `hypervigilance`, `design`, `decision` — no new tags promoted.
 - 2026-06-16: 1 insight from the autonomous discrimination-metric testbed search (`20260616_0142_discrimination_is_spatial_encounter_artifact`) reused existing tags `hypervigilance`, `refutation`, `learned_lesson`, `decision` — no new tags promoted.
 - 2026-06-15: 1 insight from the predator-rabbit measurement-direction rethink + testbed-charter session (`20260615_1612_testbed_isolation_makes_means_honest`) reused existing tags `hypervigilance`, `design`, `decision`, `learned_lesson` — no new tags promoted.
