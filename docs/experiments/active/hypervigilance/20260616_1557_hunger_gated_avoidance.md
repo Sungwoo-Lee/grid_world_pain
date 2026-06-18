@@ -102,7 +102,7 @@ the death line).
 
 | Step | Goal | Base config | Knob(s) | Status |
 |---|---|---|---|---|
-| 1 | **Discrimination-onset map** — find *when* the agent starts to tell predator from rabbit, sweeping smell mean-gap × per-episode std | cell-08 scene → fresh sparse `extends:` | Δμ (mean gap) **×** σ (`properties_std`) | **design locked — configs in progress** |
+| 1 | **Discrimination-onset map** — find *when* the agent starts to tell predator from rabbit, sweeping smell mean-gap × per-episode std | cell-08 scene → fresh sparse `extends:` | Δμ (mean gap) **×** σ (`properties_std`) | **configs + pre-registered design done** → [[20260619_hunger_gated_step1_discrimination_onset]] (10 configs in `configs/environment/experiment/hunger_gated/`; pending env-config-auditor pre-flight + PI consult) |
 | 2 | **Add sensory (perceptual) noise** as a further difference | from Step 1's chosen point | `perceptual_noise` block (per-step obs noise) | future |
 
 *(further steps appended below)*
@@ -174,7 +174,10 @@ where it should appear.
   control** on the anchor + a mid rung so a gap isn't an encounter artifact (item 4).
 - 1-vs-1 keeps the **vision-count** leak (item 1) small but nonzero — confirm at the anchor.
 
-**Status.** Design locked (2026-06-19) — `experiment-designer` generating the 10 configs.
+**Status.** Design locked (2026-06-19); the 10 configs + the pre-registered design doc are written —
+see [[20260619_hunger_gated_step1_discrimination_onset]] (configs under
+`configs/environment/experiment/hunger_gated/`, init-state bounds nutrition `[10,100]` / injury
+`[0,80]`). Next: env-config-auditor pre-flight → PI consult → training-runner.
 
 ---
 
