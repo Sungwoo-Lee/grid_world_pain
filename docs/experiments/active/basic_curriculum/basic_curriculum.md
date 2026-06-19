@@ -26,11 +26,11 @@ grid → a roomy 10×10 grid) and the **predators get more dangerous** (start ab
 slow and short-sighted, then fast, then numerous, then numerous *and* far-seeing while
 food becomes scarce). The five levels are:
 
-- **Level 0** — empty 5×5 world, food only, no predator. Pure "find and eat food".
-- **Level 1** — same small world, plus one **slow, short-sighted** predator. First "avoid the threat".
-- **Level 2** — bigger 8×8 world, one **fast** predator. Adds speed and space.
-- **Level 3** — full 10×10 world, **two fast** predators. Multiple simultaneous threats.
-- **Level 4** — 10×10 world, two **far-seeing** predators, **scarce** food. Hardest: nowhere is safe.
+- **Level 0** (`00-static_predator_5x5`) — 5×5, food + **non-moving (static/hiding) predators only**; no chaser, no cover.
+- **Level 1** (`01-slow_predator_5x5`) — 5×5, adds a **slow** moving predator (moves 1-in-3 steps) + **cover** (bush/rock).
+- **Level 2** (`02-fast_predator_8x8`) — 8×8, the moving predator now moves **every step** (fast); bigger world.
+- **Level 3** (`03-predator_and_rabbit_10x10`) — 10×10, fast predator **plus a harmless wandering rabbit** (predator-vs-neutral).
+- **Level 4** (`04-far_sight_predator_10x10`) — 10×10, predator **detects from far away** (detection 5 vs 3). Hardest.
 
 These configs are the **first real users** of the project's new
 [config-layering feature](../../../develop/active/refactors/CONFIG_LAYERING_AND_EXPERIMENT_REORG.md):
@@ -70,7 +70,10 @@ The user locked the following decisions; this doc implements them, it does not r
 | Grid size (`height`/`width`) | How much room to evade and how far food is | 5×5 → 8×8 → 10×10 |
 | Predator `move_interval` | Predator speed (steps between predator moves) | 3 (slow) → 1 (fast) |
 | Predator `detection_range` | How far the predator can sense the agent | 3 (short) → 5 (long, "keen") |
-| Predator count | Number of simultaneous threats | 0 → 1 → 2 |
+| Hunt predator count | Moving chasers (capped at 1) | 0 (L0) → 1 (L1–L4) |
+| Hiding predator count | Static ambush hazards (hurt on contact) | 2 → 2 → 3 → 4 → 4 (per-quadrant, from archive) |
+| Rabbit | Harmless moving look-alike (neutral) | none → 1 at L3–L4 |
+| Bush / Rock | Cover (bush hides the agent) + obstacles | none at L0 → 3/3 → 6/6 → 10/12 (from archive) |
 | Food `count` | Foraging pressure (scarcity) | generous (2 on small grid, scaled up on big) → scarce (2 on big grid) |
 
 All other predator fields (damage, stamina set, attack delay, smell/visual `properties`,
@@ -85,13 +88,13 @@ knobs above. This keeps the difficulty progression interpretable.
 Grid sizes, predator settings, and food counts per level. "Adds vs previous" names the
 single new difficulty ingredient introduced at each step.
 
-| Level | File stem | Grid | Predators | Predator speed (`move_interval`) | Predator sight (`detection_range`) | Food | Obstacles | Adds vs previous |
-|---|---|---|---|---|---|---|---|---|
-| **0** | `00-forage_5x5` | 5×5 | 0 | — | — | 2 | 0 | Baseline: pure foraging/navigation |
-| **1** | `01-slowPred_5x5` | 5×5 | 1 | 3 (slow) | 3 (short) | 2 | 0 | First predator → first avoidance |
-| **2** | `02-fastPred_8x8` | 8×8 | 1 | 1 (fast) | 3 (short) | 3 | 0 | Predator speed + a larger world |
-| **3** | `03-multiPred_10x10` | 10×10 | 2 | 1 (fast) | 3 (short) | 4 | 0 | Two simultaneous threats, full grid |
-| **4** | `04-keenPred_10x10` | 10×10 | 2 | 1 (fast) | 5 (long) | 2 | 0 | Long-range sight + scarce food (hypervigilance) |
+| Level | File stem | Grid | Hunt predator (moving) | Hiding predator (static) | Rabbit | Bush | Rock | Food | Adds vs previous |
+|---|---|---|---|---|---|---|---|---|---|
+| **0** | `00-static_predator_5x5` | 5×5 | — | 2 | — | 0 | 0 | 2 | Baseline: forage + avoid non-moving predators |
+| **1** | `01-slow_predator_5x5` | 5×5 | 1 (slow: `mv 3, det 3`) | 2 | — | 3 | 3 | 2 | First moving predator (slow) + cover |
+| **2** | `02-fast_predator_8x8` | 8×8 | 1 (fast: `mv 1, det 3`) | 3 | — | 6 | 6 | 3 | Predator moves every step + larger world |
+| **3** | `03-predator_and_rabbit_10x10` | 10×10 | 1 (fast: `mv 1, det 3`) | 4 | 1 | 10 | 12 | 4 | Adds a harmless rabbit (discrimination) |
+| **4** | `04-far_sight_predator_10x10` | 10×10 | 1 (far-sight: `mv 1, det 5`) | 4 | 1 | 10 | 12 | 2 | Predator detects from far + scarce food |
 
 Predator non-varying fields, identical on every predator at every level (copied from the
 standard environment's predator): `damage: [15.0, 45.0]`, `max_stamina: 30`,
@@ -146,11 +149,11 @@ is `<algo>_basic_L<level>_s<seed>` (e.g. `recurrentppo_basic_L4_s0`), all rows s
 
 | Level | Env config path | Agent config |
 |---|---|---|
-| 0 | `configs/environment/experiment/basic/00-forage_5x5.yaml` | _study-owned_ |
-| 1 | `configs/environment/experiment/basic/01-slowPred_5x5.yaml` | _study-owned_ |
-| 2 | `configs/environment/experiment/basic/02-fastPred_8x8.yaml` | _study-owned_ |
-| 3 | `configs/environment/experiment/basic/03-multiPred_10x10.yaml` | _study-owned_ |
-| 4 | `configs/environment/experiment/basic/04-keenPred_10x10.yaml` | _study-owned_ |
+| 0 | `configs/environment/experiment/basic/00-static_predator_5x5.yaml` | _study-owned_ |
+| 1 | `configs/environment/experiment/basic/01-slow_predator_5x5.yaml` | _study-owned_ |
+| 2 | `configs/environment/experiment/basic/02-fast_predator_8x8.yaml` | _study-owned_ |
+| 3 | `configs/environment/experiment/basic/03-predator_and_rabbit_10x10.yaml` | _study-owned_ |
+| 4 | `configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml` | _study-owned_ |
 
 ---
 

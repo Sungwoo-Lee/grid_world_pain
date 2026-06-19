@@ -1,0 +1,82 @@
+# Basic curriculum — 02-fast_predator_8x8
+# the predator now moves EVERY step (fast); larger 8x8 arena.
+# Sparse override of configs/environment/default.yaml (extends:); body/sensory/noise/behavior_measures inherited.
+# Composition: hunt_predator=1 hiding_predator(static)=3 rabbit=0 food=3 bush=6 rock=6 | grid 8x8
+extends: environment/default
+
+environment:
+  height: 8
+  width: 8
+  start_pos: [4, 4]
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [8, 8]]
+    - type: "sand"
+      area: [[0, 0], [0, 0]]
+  resources:
+    - name: "food"
+      type: "food"
+      count: 3
+      spawn_area: [[1, 1], [8, 8]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 1, 0, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+    - name: "hiding_predator"
+      type: "hiding_predator"
+      count: 3
+      spawn_area: [[1, 1], [8, 8]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 1, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: -1
+      regeneration_delay: 20
+      damage: [15.0, 45.0]
+      nociception_intensity: 0.9
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count: 1
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: 1
+      damage: [15.0, 45.0]
+      attack_delay: 3
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [8, 8]]
+      patrol_area: [[1, 1], [8, 8]]
+      detection_range: 3
+      max_stamina: 30
+      stamina_recovery_rate: 1
+      hunt_stamina_threshold: 0.7
+      lose_interest_multiplier: 1.5
+  obstacles:
+    - name: "bush"
+      count: 6
+      area: [[1, 1], [8, 8]]
+      blocking: false
+      hides_agent: true
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "rock"
+      count: 6
+      area: [[1, 1], [8, 8]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]

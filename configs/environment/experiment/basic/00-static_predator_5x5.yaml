@@ -1,0 +1,42 @@
+# Basic curriculum — 00-static_predator_5x5
+# food + non-moving (static/hiding) predators only; no chaser, no cover.
+# Sparse override of configs/environment/default.yaml (extends:); body/sensory/noise/behavior_measures inherited.
+# Composition: hunt_predator=0 hiding_predator(static)=2 rabbit=0 food=2 bush=0 rock=0 | grid 5x5
+extends: environment/default
+
+environment:
+  height: 5
+  width: 5
+  start_pos: [3, 3]
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [5, 5]]
+    - type: "sand"
+      area: [[0, 0], [0, 0]]
+  resources:
+    - name: "food"
+      type: "food"
+      count: 2
+      spawn_area: [[1, 1], [5, 5]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 1, 0, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+    - name: "hiding_predator"
+      type: "hiding_predator"
+      count: 2
+      spawn_area: [[1, 1], [5, 5]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 1, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: -1
+      regeneration_delay: 20
+      damage: [15.0, 45.0]
+      nociception_intensity: 0.9
+  entities: []
+  obstacles: []
