@@ -102,7 +102,8 @@ the death line).
 
 | Step | Goal | Base config | Knob(s) | Status |
 |---|---|---|---|---|
-| 1 | **Discrimination-onset map** — find *when* the agent starts to tell predator from rabbit, sweeping smell mean-gap × per-episode std | cell-08 scene → fresh sparse `extends:` | Δμ (mean gap) **×** σ (`properties_std`) | **configs + pre-registered design done** → [[20260619_hunger_gated_step1_discrimination_onset]] (10 configs in `configs/environment/experiment/hunger_gated/`; pending env-config-auditor pre-flight + PI consult) |
+| 1 | **Discrimination-onset map** — find *when* the agent starts to tell predator from rabbit, sweeping smell mean-gap × per-episode std | cell-08 scene → fresh sparse `extends:` | Δμ (mean gap) **×** σ (`properties_std`) | **DONE (results filled)** → [[20260619_hunger_gated_step1_discrimination_onset]]. Verdict: weak distal tilt (never reached threshold), survival by reactive tank-and-hide, lethal `[5,120]` likely masked any hunger-gate (40–70 % death). |
+| 1b | **Hypervigilance under food scarcity + olfactory ambiguity** — add a *reason to approach* (scarce food) so the stay-vs-flee decision is forced, under the most-ambiguous separated smell + kept lethality; scarce vs abundant | cell-08 scene → fresh sparse `extends:` | **food scarcity** (scarce vs abundant), food block only | **configs + pre-registered design done** → [[20260620_hypervig_scarcity_olfactory_ambiguity]] (2 configs in `configs/environment/experiment/hypervig_scarcity/`; pending env-config-auditor pre-flight) |
 | 2 | **Add sensory (perceptual) noise** as a further difference | from Step 1's chosen point | `perceptual_noise` block (per-step obs noise) | future |
 
 *(further steps appended below)*

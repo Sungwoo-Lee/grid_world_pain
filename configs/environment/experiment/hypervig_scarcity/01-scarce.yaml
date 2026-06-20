@@ -1,0 +1,254 @@
+# Hypervigilance under food scarcity + olfactory ambiguity — condition A: SCARCE food.
+#
+# Sparse v3.0 override of environment/default. Reproduces the cell-08 contrast (1 predator +
+# 1 rabbit, byte-identical matched chase, disengage_on_contact, full-grid roam, LETHAL predator
+# damage [5,120], harmless rabbit) under a HIGH-AMBIGUITY symmetric smell, and makes food SCARCE
+# so the agent must venture toward food (across the roaming animal's territory) and DECIDE
+# stay-vs-flee under the ambiguous animal.
+#
+# This file is the SCARCE arm. Its ONLY difference from the ABUNDANT arm (02-abundant.yaml) is
+# the `resources:` (food) block — everything else (animals, smell, obstacles, body, init-state)
+# is byte-identical, so the scarcity contrast is pure.
+#
+# Olfactory knob (per-episode draw, held fixed within an episode), HIGH AMBIGUITY:
+#   predator properties = [0, 0.55, 0.45, 0, 0]   (s=0.05 separation: ch2=0.5+s, ch3=0.5-s)
+#   rabbit   properties = [0, 0.45, 0.55, 0, 0]   (mirror)
+#   properties_std (sigma) = [0, 0.4, 0.4, 0, 0]  on ch2 & ch3 of BOTH animals (strong jitter).
+#   This is the most-ambiguous separated rung from Step 1 (s=0.05, sigma=0.4): the two smells
+#   barely separate (0.1-cell mean gap) and jitter by 0.4 every episode, so smell is IRREDUCIBLY
+#   ambiguous and the stay-vs-flee call must combine the weak cue with internal hunger state.
+#   Visual channels stay at class defaults (predator ch5, rabbit ch7); visual_sensor_range:0
+#   (inherited) keeps vision CONTACT-ONLY, so smell is the only distal class cue.
+#
+# Food scarcity (THIS arm): 2 food sources on DIAGONAL corners (Top-Left + Bottom-Right) so the
+# agent must traverse the full grid — through the animal's roam — to alternate between them.
+#   max_consumption: 4       (each cell yields 4 eats = +20 net nutrition, then depletes)
+#   regeneration_delay: 40   (a depleted cell is gone for 40 steps before respawning)
+# Budget: 2 cells x 4 eats x ~12 regen-cycles over 500 steps ~= +480 net nutrition vs ~500
+# metabolic drain — survivable ONLY with sensible foraging, so hunger genuinely pressures the
+# stay-vs-flee decision (vs the abundant arm where the agent can camp on food and never starve).
+#
+# Initial internal state randomised (nutrition + injury) so the hunger-gated decision is
+# learnable across the full hunger range. Single training seed 42; fresh-init; ~10M episodes.
+# Lists declared explicitly to defeat the deep-merge list-replace footgun.
+
+extends: environment/default
+
+environment:
+  height: 10
+  width: 10
+  start_pos: [5, 5]
+  max_steps: 500
+  rest_action_enabled: true
+  eat_action_enabled: true
+  random_start_pos: true
+
+  placement:
+    mode: per_entity
+
+  # -- SCARCE food: 2 sources, diagonal corners, slow regen. THE ONLY DIFF vs 02-abundant.yaml. --
+  resources:
+    - name: "food" # Top Left
+      type: "food"
+      count: 1
+      spawn_area: [[1, 1], [5, 5]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 1, 0, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: 4
+      regeneration_delay: 40
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+    - name: "food" # Bottom Right
+      type: "food"
+      count: 1
+      spawn_area: [[6, 6], [10, 10]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 1, 0, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: 4
+      regeneration_delay: 40
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+
+  # -- ONE predator + ONE rabbit, behaviourally BYTE-IDENTICAL (matched chase). --
+  # Differ ONLY in: class (=> is_damaging + visual channel), damage, nociception_intensity,
+  # and the SYMMETRIC olfactory mean (mirrored around 0.5, separation s=0.05).
+  entities:
+    # -- Predator: damaging. Wide damage range => ~1-in-6 contacts instantly lethal. --
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "full"
+      count: 1
+      properties: [0, 0.55, 0.45, 0, 0]        # symmetric smell: ch2=0.5+s, ch3=0.5-s (s=0.05)
+      properties_std: [0, 0.4, 0.4, 0, 0]      # per-episode jitter sigma=0.4 on ch2 & ch3
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: 1
+      nociception_intensity: 0.9
+      damage: [5.0, 120.0]                # LETHAL: >=100 (~1/6) kills (death at injury>=100)
+      spawn_area: [[1, 1], [10, 10]]      # FULL grid
+      patrol_area: [[1, 1], [10, 10]]     # FULL grid
+      attack_delay: 3
+      disengage_on_contact: true          # strike-and-retreat (stamina->0 on contact)
+      detection_range:          10
+      max_stamina:              60
+      stamina_recovery_rate:    1.0
+      hunt_stamina_threshold:   0.3
+      lose_interest_multiplier: 3.0
+
+    # -- Rabbit: harmless (class neutral => is_damaging=False). BYTE-IDENTICAL chase profile. --
+    - class: "neutral"
+      behaviour: "hunt"
+      tag: "rab"
+      count: 1
+      properties: [0, 0.45, 0.55, 0, 0]        # symmetric smell: ch2=0.5-s, ch3=0.5+s (mirror of predator)
+      properties_std: [0, 0.4, 0.4, 0, 0]      # IDENTICAL jitter sigma=0.4 on ch2 & ch3
+      visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: 1
+      nociception_intensity: 0.0          # harmless: no nociceptive signature
+      damage: [0.0, 0.0]                   # harmless; neutral class makes this moot too
+      spawn_area: [[1, 1], [10, 10]]      # FULL grid -- IDENTICAL to predator
+      patrol_area: [[1, 1], [10, 10]]     # FULL grid -- IDENTICAL to predator
+      attack_delay: 3                      # IDENTICAL to predator
+      disengage_on_contact: true           # IDENTICAL to predator
+      detection_range:          10
+      max_stamina:              60
+      stamina_recovery_rate:    1.0
+      hunt_stamina_threshold:   0.3
+      lose_interest_multiplier: 3.0
+
+    # -- Inert hiding-predator slot (count:0 => zero instances). Schema-template parity with
+    #    cell-08; keeps the clean 1-vs-1 purpose. Bump count>0 to add a passive contact hazard. --
+    - class: "predator"
+      behaviour: "static"
+      tag: "hide"
+      count: 0
+      properties: [0, 0.55, 0.45, 0, 0]        # would emit the same predator smell if activated
+      properties_std: [0, 0.4, 0.4, 0, 0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: 1
+      nociception_intensity: 0.9
+      damage: [15.0, 45.0]
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      attack_delay: 3
+      disengage_on_contact: false
+
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [10, 10]]
+    - type: "sand"
+      area: [[0, 0], [0, 0]]
+
+  obstacles:
+    - name: "rock" # Top Left
+      count: 3
+      area: [[1, 1], [5, 5]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "rock" # Top Right
+      count: 3
+      area: [[1, 6], [5, 10]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "rock" # Bottom Left
+      count: 3
+      area: [[6, 1], [10, 5]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "rock" # Bottom Right
+      count: 3
+      area: [[6, 6], [10, 10]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "tree"
+      count: 0
+      area: [[5, 15], [5, 15]]
+      blocking: true
+      damage: [0.1, 0.5]
+      nociception_intensity: 0.1
+      properties: [0.0, 0.0, 0.0, 0.0, 1.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "bush" # Top Left
+      count: 3
+      area: [[1, 1], [5, 5]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "bush" # Top Right
+      count: 3
+      area: [[1, 6], [5, 10]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "bush" # Bottom Left
+      count: 3
+      area: [[6, 1], [10, 5]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "bush" # Bottom Right
+      count: 3
+      area: [[6, 6], [10, 10]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+
+body:
+  # Initial-state randomization ON (locked decision 2026-06-19) — full functional range.
+  # Satiation is DERIVED from nutrition at reset (S = max_S*(N/max_N)^1 = N here); nutrition is
+  # the hunger lever. random_start_satiation is a documented no-op and stays false.
+  random_start_satiation: false
+  random_start_nutrition: true
+  start_nutrition_low: 10      # hungry but above instant-starvation (metabolic_cost=1/step)
+  start_nutrition_high: 100    # = max_nutrition: spans hungry -> full
+  random_start_injury: true
+  start_injury_low: 0          # healthy
+  start_injury_high: 80        # badly injured but strictly below the 100 death line

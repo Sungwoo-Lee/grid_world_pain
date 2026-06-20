@@ -143,6 +143,10 @@ also means olfaction is the sole distal cue; if a stronger/learnable distal cue 
 separate design lever. Raw per-run numbers: `tmp/20260620_164156_hunger_gated_step1_results.json`
 (analysis run via `experiment-analyzer`, eval-rollouts on the final 10M checkpoints).
 
+**Follow-up launched from these results:** [[20260620_hypervig_scarcity_olfactory_ambiguity]] keeps the
+lethality + high-ambiguity smell but adds **food scarcity** (a *reason to approach*) to force the
+stay-vs-flee decision the tank-and-hide strategy sidestepped here, crossing scarce vs abundant food.
+
 ## 2. Experimental Design
 
 ### 2.1 Independent Variables
