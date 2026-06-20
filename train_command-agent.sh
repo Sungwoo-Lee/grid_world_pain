@@ -78,73 +78,34 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# basic-curriculum 5-run sweep — 2026-06-19
-# 5 standalone single-config RecurrentPPO runs (no curriculum/continual schedule),
-# one per GPU across nodes 113 and 114.
-# Each run is launched from a per-node /tmp script (CIFS-bypass); this file is the audit record.
-# Showing Run 1 (node 113, cuda:0) as the representative canonical invocation.
+# hypervigilance scarcity-vs-abundant experiment — 2026-06-20
+# Two recurrent_ppo runs on node 108, seed 42, ~10M episodes, fresh-init.
+# Launched via CIFS-bypass /tmp scripts; this file is the audit record.
 #
-# Run 1 / 5: rppo_basic00_static_n113 — static predators only, 5x5 grid
-# Node 113, cuda:0
+# Run A: rppo_hvs_scarce_s42 — scarce food arm (01-scarce.yaml)
+# Node 108, cuda:0
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/basic/00-static_predator_5x5.yaml \
+  --config configs/environment/experiment/hypervig_scarcity/01-scarce.yaml \
   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --device cuda:0 \
-  --num-envs 128 \
+  --num-envs 16 \
   --episodes 10000000 \
-  --wandb-group basic \
+  --seed 42 \
+  --wandb-group hypervig_scarcity \
   --wandb-job-type prod \
-  --wandb-name rppo_basic00_static_n113 \
-  --tag rppo_basic00_static_n113
-
-# Run 2 / 5: rppo_basic01_slow_n113 — slow chasing predator, 5x5 grid
-# Node 113, cuda:1
+  --wandb-name rppo_hvs_scarce_s42 \
+  --tag rppo_hvs_scarce_s42
+#
+# Run B: rppo_hvs_abundant_s42 — abundant food arm (02-abundant.yaml)
+# Node 108, cuda:1
 # /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-#   --config configs/environment/experiment/basic/01-slow_predator_5x5.yaml \
+#   --config configs/environment/experiment/hypervig_scarcity/02-abundant.yaml \
 #   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
 #   --device cuda:1 \
-#   --num-envs 128 \
+#   --num-envs 16 \
 #   --episodes 10000000 \
-#   --wandb-group basic \
+#   --seed 42 \
+#   --wandb-group hypervig_scarcity \
 #   --wandb-job-type prod \
-#   --wandb-name rppo_basic01_slow_n113 \
-#   --tag rppo_basic01_slow_n113
-#
-# Run 3 / 5: rppo_basic02_fast_n114 — fast predator, 8x8 grid
-# Node 114, cuda:0
-# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-#   --config configs/environment/experiment/basic/02-fast_predator_8x8.yaml \
-#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
-#   --device cuda:0 \
-#   --num-envs 128 \
-#   --episodes 10000000 \
-#   --wandb-group basic \
-#   --wandb-job-type prod \
-#   --wandb-name rppo_basic02_fast_n114 \
-#   --tag rppo_basic02_fast_n114
-#
-# Run 4 / 5: rppo_basic03_rabbit_n114 — predator + wandering rabbit, 10x10 grid
-# Node 114, cuda:1
-# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-#   --config configs/environment/experiment/basic/03-predator_and_rabbit_10x10.yaml \
-#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
-#   --device cuda:1 \
-#   --num-envs 128 \
-#   --episodes 10000000 \
-#   --wandb-group basic \
-#   --wandb-job-type prod \
-#   --wandb-name rppo_basic03_rabbit_n114 \
-#   --tag rppo_basic03_rabbit_n114
-#
-# Run 5 / 5: rppo_basic04_farsight_n114 — far-sighted predator (det=5), 10x10 grid
-# Node 114, cuda:2
-# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-#   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
-#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
-#   --device cuda:2 \
-#   --num-envs 128 \
-#   --episodes 10000000 \
-#   --wandb-group basic \
-#   --wandb-job-type prod \
-#   --wandb-name rppo_basic04_farsight_n114 \
-#   --tag rppo_basic04_farsight_n114
+#   --wandb-name rppo_hvs_abundant_s42 \
+#   --tag rppo_hvs_abundant_s42
