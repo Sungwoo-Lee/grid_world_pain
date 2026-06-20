@@ -78,34 +78,125 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# hypervigilance scarcity-vs-abundant experiment — 2026-06-20
-# Two recurrent_ppo runs on node 108, seed 42, ~10M episodes, fresh-init.
+# hunger_gated_lindecay sweep — 2026-06-20
+# 9 recurrent_ppo runs across nodes 101/102/103/110/106, seed 42, ~10M episodes, fresh-init.
+# wandb-group: hunger_gated_lindecay, job-type: prod
 # Launched via CIFS-bypass /tmp scripts; this file is the audit record.
+# (10th cell 01-s0_sig0 held for a free GPU — not launched here.)
 #
-# Run A: rppo_hvs_scarce_s42 — scarce food arm (01-scarce.yaml)
-# Node 108, cuda:0
+# Run 02: rppo_hg02_s0.05_sig0_dp1_s42   — node 101, cuda:0
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/hypervig_scarcity/01-scarce.yaml \
+  --config configs/environment/experiment/hunger_gated_lindecay/02-s0.05_sig0.yaml \
   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --device cuda:0 \
   --num-envs 16 \
   --episodes 10000000 \
   --seed 42 \
-  --wandb-group hypervig_scarcity \
+  --wandb-group hunger_gated_lindecay \
   --wandb-job-type prod \
-  --wandb-name rppo_hvs_scarce_s42 \
-  --tag rppo_hvs_scarce_s42
+  --wandb-name rppo_hg02_s0.05_sig0_dp1_s42 \
+  --tag rppo_hg02_s0.05_sig0_dp1_s42
 #
-# Run B: rppo_hvs_abundant_s42 — abundant food arm (02-abundant.yaml)
-# Node 108, cuda:1
+# Run 03: rppo_hg03_s0.1_sig0_dp1_s42    — node 101, cuda:1
 # /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-#   --config configs/environment/experiment/hypervig_scarcity/02-abundant.yaml \
+#   --config configs/environment/experiment/hunger_gated_lindecay/03-s0.1_sig0.yaml \
 #   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
 #   --device cuda:1 \
 #   --num-envs 16 \
 #   --episodes 10000000 \
 #   --seed 42 \
-#   --wandb-group hypervig_scarcity \
+#   --wandb-group hunger_gated_lindecay \
 #   --wandb-job-type prod \
-#   --wandb-name rppo_hvs_abundant_s42 \
-#   --tag rppo_hvs_abundant_s42
+#   --wandb-name rppo_hg03_s0.1_sig0_dp1_s42 \
+#   --tag rppo_hg03_s0.1_sig0_dp1_s42
+#
+# Run 04: rppo_hg04_s0.25_sig0_dp1_s42   — node 102, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/hunger_gated_lindecay/04-s0.25_sig0.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --device cuda:0 \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --seed 42 \
+#   --wandb-group hunger_gated_lindecay \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_hg04_s0.25_sig0_dp1_s42 \
+#   --tag rppo_hg04_s0.25_sig0_dp1_s42
+#
+# Run 05: rppo_hg05_s0.5_sig0_dp1_s42    — node 102, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/hunger_gated_lindecay/05-s0.5_sig0.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --device cuda:1 \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --seed 42 \
+#   --wandb-group hunger_gated_lindecay \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_hg05_s0.5_sig0_dp1_s42 \
+#   --tag rppo_hg05_s0.5_sig0_dp1_s42
+#
+# Run 06: rppo_hg06_s0.1_sig0.2_dp1_s42  — node 103, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/hunger_gated_lindecay/06-s0.1_sig0.2.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --device cuda:0 \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --seed 42 \
+#   --wandb-group hunger_gated_lindecay \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_hg06_s0.1_sig0.2_dp1_s42 \
+#   --tag rppo_hg06_s0.1_sig0.2_dp1_s42
+#
+# Run 07: rppo_hg07_s0.25_sig0.2_dp1_s42 — node 103, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/hunger_gated_lindecay/07-s0.25_sig0.2.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --device cuda:1 \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --seed 42 \
+#   --wandb-group hunger_gated_lindecay \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_hg07_s0.25_sig0.2_dp1_s42 \
+#   --tag rppo_hg07_s0.25_sig0.2_dp1_s42
+#
+# Run 08: rppo_hg08_s0.5_sig0.2_dp1_s42  — node 110, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/hunger_gated_lindecay/08-s0.5_sig0.2.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --device cuda:0 \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --seed 42 \
+#   --wandb-group hunger_gated_lindecay \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_hg08_s0.5_sig0.2_dp1_s42 \
+#   --tag rppo_hg08_s0.5_sig0.2_dp1_s42
+#
+# Run 09: rppo_hg09_s0.1_sig0.4_dp1_s42  — node 110, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/hunger_gated_lindecay/09-s0.1_sig0.4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --device cuda:1 \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --seed 42 \
+#   --wandb-group hunger_gated_lindecay \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_hg09_s0.1_sig0.4_dp1_s42 \
+#   --tag rppo_hg09_s0.1_sig0.4_dp1_s42
+#
+# Run 10: rppo_hg10_s0.5_sig0.4_dp1_s42  — node 106, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/hunger_gated_lindecay/10-s0.5_sig0.4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --device cuda:1 \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --seed 42 \
+#   --wandb-group hunger_gated_lindecay \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_hg10_s0.5_sig0.4_dp1_s42 \
+#   --tag rppo_hg10_s0.5_sig0.4_dp1_s42
