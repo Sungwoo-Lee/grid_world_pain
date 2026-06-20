@@ -147,6 +147,12 @@ separate design lever. Raw per-run numbers: `tmp/20260620_164156_hunger_gated_st
 lethality + high-ambiguity smell but adds **food scarcity** (a *reason to approach*) to force the
 stay-vs-flee decision the tank-and-hide strategy sidestepped here, crossing scarce vs abundant food.
 
+**Sensor follow-up (paired re-run):** [[20260620_hunger_gated_step1_linear_olfactory_decay]] re-runs
+this exact 10-cell sweep with the **only** change being a longer-range distal smell cue (olfactory
+decay exponent 2.0 → 1.0, linear instead of inverse-square), testing whether more advance warning
+converts the reactive tank-and-hide agent into a **pre-emptive** avoider. This Step-1 wave is the
+steep-decay (2.0) arm of that comparison.
+
 ## 2. Experimental Design
 
 ### 2.1 Independent Variables

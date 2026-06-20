@@ -1,0 +1,25 @@
+# Hunger-gated avoidance — Step-1 LINEAR-OLFACTORY-DECAY re-run. Run 02: s=0.05, sigma=0.
+#
+# Paired-comparison arm of the Step-1 discrimination-onset sweep. This config is the EXACT
+# Step-1 cell, byte-identical scene + olfactory smell vectors + lethal predator [5,120] +
+# 1-vs-1 byte-identical chase + randomised starts (nutrition [10,100], injury [0,80]) + abundant
+# food, with the SOLE change being the olfactory distance-weighting exponent.
+#
+# decay_power 2.0 -> 1.0 : smell falls off LINEARLY (1/dist) instead of inverse-square (1/dist^2),
+# so the distal olfactory cue carries farther (~0.33 vs ~0.11 at 3 cells). This gives the agent
+# advance warning so it CAN act pre-emptively.
+#
+# CAVEAT (documented in the design doc): decay_power is GLOBAL to the olfactory sensor — it
+# lengthens the range of ALL smells (food + obstacles too), not just the animals'. That is
+# intrinsic to the sensor manipulation; the paired comparison is unaffected because the matched
+# Step-1 baseline differs from this arm ONLY by decay_power.
+#
+# Inheritance: extends the matched Step-1 config (which itself extends environment/default), then
+# overrides one key. sensory is a dict, so the deep-merge merges this single key into the inherited
+# sensory block, leaving olfactory_enabled / sensor_radius / vector_size / visual_* untouched.
+# Single training seed 42; fresh-init; ~10M episodes (same as Step-1).
+
+extends: environment/experiment/hunger_gated/02-s0.05_sig0
+
+sensory:
+  decay_power: 1.0
