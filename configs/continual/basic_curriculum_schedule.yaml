@@ -1,0 +1,35 @@
+# Continual-learning schedule for the basic difficulty curriculum.
+# ---------------------------------------------------------------------------
+# Stage source (alphabetic order in configs/environment/experiment/basic/):
+#   00-static_predator_5x5        -- food + 2 static hiding predators, no chaser
+#   01-slow_predator_5x5          -- + a SLOW moving predator + cover (bush/rock)
+#   02-fast_predator_8x8          -- predator moves every step; 8x8
+#   03-predator_and_rabbit_10x10  -- + a harmless rabbit; 10x10
+#   04-far_sight_predator_10x10   -- predator detects from far (det 5); scarce food
+#
+# Run with:
+#   python train.py \
+#     --configs-dir configs/environment/experiment/basic \
+#     --continual-schedule configs/continual/basic_curriculum_schedule.yaml \
+#     --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#     --tag rppo_basic_curriculum
+#
+# All 5 stages share obs_dim=27, action_dim=6, and an identical sensor
+# fingerprint (verified), so the startup dim/fingerprint guard passes.
+# RecurrentPPO carries network weights across boundaries; recurrent hidden
+# state is reset at each transition (by design).
+#
+# Rationale for boundaries (from-scratch survival-step convergence, measured in
+# docs/experiments/active/basic_curriculum/basic_curriculum_convergence.md):
+#   - L0/L1 converge by ~0.2M but COLLAPSE from over-training at ~3.8M / ~9.0M.
+#     Budgeting them 1M each learns the skill and stops well before collapse.
+#   - L2 ~1.4M, L3 ~1.2M  -> 2M each (with carry-forward margin).
+#   - L4 ~3.6M (hardest, slowest) -> 4M as the final stage.
+# Per-stage budgets: [1.0M, 1.0M, 2.0M, 2.0M, 4.0M]  ->  10M total.
+
+continual:
+  # Cumulative episode boundaries. Stage i runs while episode_count < boundaries[i].
+  episode_boundaries: [1000000, 2000000, 4000000, 6000000, 10000000]
+
+  # One per stage. ~10 checkpoints on short stages, ~20 on the long final stage.
+  checkpoint_frequencies: [100000, 100000, 200000, 200000, 200000]
