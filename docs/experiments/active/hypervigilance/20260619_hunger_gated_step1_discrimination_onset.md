@@ -70,6 +70,79 @@ lives in §2–§5.
 
 ---
 
+## Results & Verdict (filled 2026-06-20)
+
+> **Headline (plain language).** Across the whole sweep the agent **never learned to keep
+> meaningfully more distance from the harmful predator than from the byte-identical harmless
+> rabbit.** A *small but statistically real* avoidance tilt — the agent lets the rabbit drift a
+> little closer and flees the predator a little more, about **0.1–0.2 of a cell** — switches on the
+> moment the two smells differ at all (even the smallest separation, `s = 0.05`), but it **never
+> grows to the pre-registered "real discrimination" bar of half a cell** at any separation or noise
+> level. So the *discrimination-onset* hypothesis is **refuted at threshold** (there's a signal, but
+> it's far too weak to count), and there is **no clean onset `s*`** — the tilt is a low flat plateau,
+> not a rising curve. Hunger did **not** gate avoidance either (the satiated-vs-hungry difference is
+> ~0 or slightly *negative*), so the *hunger-gating* hypothesis is **refuted** — **but** the predator
+> is lethal and the agent **dies in ~40–70 % of episodes**, so per our pre-registered watch-out the
+> honest reading is **"the lethal predator likely prevented a hunger-gate from ever being
+> reinforced," not "no hunger-gate exists."** The matched-smell anchor (`hg01`) is a **clean null**
+> (gap ≈ 0, CI includes 0), so the small gaps elsewhere are a genuine *olfactory* effect, not the
+> vision-count leak. Mechanistically the agent survives by **reactive tank-and-hide** (bush-diving
+> and healing from injury), **not** by keeping its distance — which is exactly why the pre-contact
+> distance gaps stay tiny even when the smells are fully distinct. **Single seed (42) → provisional.**
+
+### The (s × σ) discrimination surface (final checkpoint, 200 eval episodes each)
+
+`ca_gap` = closest-approach gap (predator − rabbit, cells; **positive = predator held farther**);
+`gating_gap` = satiated − hungry closest-approach (σ>0 runs). H₁a bar = ca_gap ≥ 0.50 with CI
+excluding 0 **and** flee_gap > 0, ≥2 of 3 measures agreeing.
+
+| run | s | σ | survival | death | ca_gap (95% CI) | flee_gap | bdive_gap | H₁a | gating_gap (95% CI) |
+|---|---|---|---|---|---|---|---|---|---|
+| hg01 | 0.0 | 0.0 | 276 | 0.66 | +0.01 [-0.12, +0.13] | +0.003 | +0.019 | ✗ | — |
+| hg02 | 0.05 | 0.0 | 325 | 0.48 | +0.15 [+0.03, +0.26] | +0.014 | +0.039 | ✗ | — |
+| hg03 | 0.1 | 0.0 | 353 | 0.39 | +0.14 [+0.05, +0.22] | +0.042 | +0.058 | ✗ | — |
+| hg04 | 0.25 | 0.0 | 362 | 0.40 | +0.13 [+0.02, +0.22] | +0.047 | +0.069 | ✗ | — |
+| hg05 | 0.5 | 0.0 | 349 | 0.40 | +0.08 [-0.03, +0.18] | +0.061 | +0.050 | ✗ | — |
+| hg06 | 0.1 | 0.2 | 298 | 0.56 | +0.14 [+0.03, +0.23] | -0.002 | +0.004 | ✗ | -0.15 [-0.26, -0.04] |
+| hg07 | 0.25 | 0.2 | 308 | 0.54 | +0.20 [+0.09, +0.30] | +0.014 | +0.048 | ✗ | -0.00 [-0.10, +0.10] |
+| hg08 | 0.5 | 0.2 | 333 | 0.47 | +0.21 [+0.12, +0.29] | +0.047 | +0.089 | ✗ | -0.02 [-0.11, +0.08] |
+| hg09 | 0.1 | 0.4 | 242 | 0.69 | +0.21 [+0.09, +0.32] | -0.017 | +0.035 | ✗ | -0.08 [-0.22, +0.07] |
+| hg10 | 0.5 | 0.4 | 315 | 0.54 | +0.16 [+0.05, +0.25] | +0.018 | +0.037 | ✗ | +0.02 [-0.08, +0.12] |
+
+### Verdict against the pre-registered criteria
+
+- **H₁a — discrimination onset: REFUTED at threshold.** No run reaches the 0.50-cell bar (max is
+  `hg08` at +0.21). The gap *is* CI-positive on every separated run (a real, weak olfactory tilt that
+  turns on at `s = 0.05` and never climbs), but it is 2–6× below the behaviourally-meaningful
+  threshold. No `s*` exists on any σ row.
+- **Anchor check — PASS (clean null).** `hg01` (no smell signal) shows ca_gap +0.01 [−0.12, +0.13],
+  flee +0.003, bdive +0.019 — all CIs include 0. **No vision-count-elimination leak**, so the map is
+  read against 0, and the small separated-run gaps are genuine smell-driven effects.
+- **H₁b — hunger-gating: REFUTED, but "lethality masks gating" applies.** The satiated−hungry gap is
+  ≈0 or *negative* on all σ>0 runs (`hg06` is −0.15 [−0.26, −0.04] — the *wrong* direction). With
+  death rates of 47–69 % on those runs and the agent dying while pinned at distance 1, this triggers
+  the pre-registered **"lethal [5,120] prevented the gate from being reinforced"** verdict — **not**
+  "no hunger-gate exists." Revisit lethality before any "gating absent" claim.
+
+### Mechanism (trajectory cross-check — means confirmed)
+
+Visual channels are **contact-only** (`visual_sensor_range: 0`), so the agent's *only distal* class
+cue is the olfactory gradient. At the anchor the two smell channels are byte-identical (nothing to
+discriminate); at `s = 0.25/0.5` they separate and the agent uses the signal **weakly**. In the step
+dumps the predator orbits at distance 1 for long stretches while the agent eats, rests, and dives
+into bushes (injury oscillates 0→35→0) — it survives by **tanking and hiding**, never by holding a
+standoff. This is why even fully-separable smells produce only a ~0.2-cell gap.
+
+### Limitations & next step
+
+Single seed → **provisional** (multi-seed hardening required before any onset/null is believed).
+The clearest follow-up implied by the data: **a sub-lethal predator** (e.g. `[15,45]`) so a
+hungry agent can *survive* taking a risk and a hunger-gate has a chance to be reinforced — directly
+testing whether the H₁b null here is real or a lethality artifact. The contact-only visual channel
+also means olfaction is the sole distal cue; if a stronger/learnable distal cue is wanted, that is a
+separate design lever. Raw per-run numbers: `tmp/20260620_164156_hunger_gated_step1_results.json`
+(analysis run via `experiment-analyzer`, eval-rollouts on the final 10M checkpoints).
+
 ## 2. Experimental Design
 
 ### 2.1 Independent Variables
