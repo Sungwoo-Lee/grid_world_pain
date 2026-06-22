@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `env_entities` topic.
 
 **Folder definition**: Env entity architecture decisions
-**Insights**: 4
-**Last updated**: 2026-06-19
+**Insights**: 7
+**Last updated**: 2026-06-23
 
 ---
 
@@ -13,6 +13,9 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-23 | 01:45 | `20260623_0145_proxy_benchmark_contention_misestimate` | A proxy benchmark on a contended GPU mis-estimated the env change's cost (predicted step-SPS +-3%); a clean idle-node re-measure showed a real -13% step-throughput regression driven by the +2 animal hot-path slots (reset +28%, negligible in wall-clock). Lesson: measure perf deltas on a clean idle node. Trimming rabbit 3->2 recovered ~half. |
+| 2026-06-23 | 01:44 | `20260623_0144_inactive_resource_slots_revive_respawn` | Blocker: a per-episode activation mask must be threaded through the respawn/regeneration logic too. Inactive resource slots revived on step 1 because update_resources overloaded res_active=False to mean 'eaten, regrow', collapsing every episode to max count. Fix: a separate immutable res_allocated mask gates respawn. |
+| 2026-06-23 | 01:43 | `20260623_0143_per_episode_count_variance_masking` | Added per-episode entity-count variance to break layout-overfitting: allocate count_high slots and per-episode activate K~U[low,high] via a boolean mask (res_active + new animal_active/obs_active); default scene moved to whole-grid spawn; scalar count stays backward-compatible; shipped via a two-commit parity discipline. |
 | 2026-06-19 | 01:12 | [20260619_0112_configurable_visual_properties_and_std](20260619_0112_configurable_visual_properties_and_std.md) | v3.0 makes the visual sensor config-driven like olfaction: each entity carries a visual_properties vector (len = sensory.visual_vector_size, default 8) instead of a hardcoded one-hot channel, plus optional visual_properties_std for per-episode Gaussian sampling on an INDEPENDENT PRNG stream (fold_in 0x7150A1) so olfaction stays byte-identical. Defaults reproduce today's one-hot (parity-via-defaults). |
 | 2026-06-09 | 17:26 | [20260609_1726_doc_audit_surfaces_latent_bugs](20260609_1726_doc_audit_surfaces_latent_bugs.md) | A code-as-truth re-sync of all 14 env docs doubled as a bug-finder, surfacing ~13 latent code findings; top two: overeating_death sets a termination reason but never ends the episode, and info[termination_reason] is unreliable when with_nutrition/with_injury are disabled. |
 | 2026-06-09 | 17:22 | [20260609_1722_renderer_no_neutral_icon_and_attack_delay_ride](20260609_1722_renderer_no_neutral_icon_and_attack_delay_ride.md) | Two env findings: (1) renderer has no agent+neutral composite icon, so a rabbit on the agent's cell isn't drawn — visually 'disappears' (cosmetic; rabbit persists in state, no despawn/respawn). (2) Harmless chasing rabbit rides the agent's cell after contact because the post-contact attack-pause (attack_delay) is set only on at_damaging, so only predators bounce; decouple pause from damage to make a harmless chaser bounce. |

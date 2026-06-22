@@ -55,4 +55,5 @@ Four dreamer-srl training cells launched 2026-05-28 03:30 KST all crashed at epi
 ## Backlinks
 - [[20260622_1704_continual_bm_transition_nameerror_refactor_drift]] (cluster_ops, 2026-06-22) — The continual stage-transition crash (NameError: m1_candidates) was introduced b
 - [[20260622_1746_dreamer_srl_recompile_storm_done_count]] (dreamer_diagnosis, 2026-06-22) — dreamer_srl crashed all 5 basic-curriculum runs because the per-step env-reset p
+- [[20260623_0144_inactive_resource_slots_revive_respawn]] (env_entities, 2026-06-23) — Blocker: a per-episode activation mask must be threaded through the respawn/rege
 <!-- END BACKLINKS -->

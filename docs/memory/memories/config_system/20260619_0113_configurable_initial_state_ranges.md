@@ -46,4 +46,5 @@ The agent's start `nutrition` and `injury` randomization bounds — previously h
 - [[20260619_0111_config_v3_extends_layering_default_base]] (config_system, 2026-06-19) — v3.0 makes configs/environment/default.yaml the canonical BASE; experiment confi
 - [[20260622_1744_olfactory_uncertainty_two_knob_design]] (hypervigilance, 2026-06-22) — The olfactory-ambiguity sweep isolates one IV (predator-vs-rabbit smell distingu
 - [[20260622_1746_start_injury_dead_needs_random_range]] (config_system, 2026-06-22) — A plain body.start_injury key is IGNORED by the env reset path — injury starts a
+- [[20260623_0143_per_episode_count_variance_masking]] (env_entities, 2026-06-23) — Added per-episode entity-count variance to break layout-overfitting: JAX static 
 <!-- END BACKLINKS -->

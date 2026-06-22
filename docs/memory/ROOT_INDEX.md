@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-06-22
 **Active folders**: 9
-**Total insights**: 123
+**Total insights**: 125
 **Last audit**: (none)
 
 ---
@@ -21,7 +21,7 @@
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 18 | 2026-06-22 | [dreamer, decision, learned_lesson, refutation, meta, design] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 28 | 2026-06-22 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
 | `hypervigilance` | Hypervigilance experiments | 24 | 2026-06-22 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise] |
-| `env_entities` | Env entity architecture decisions | 4 | 2026-06-19 | [design, decision, learned_lesson, meta, config] |
+| `env_entities` | Env entity architecture decisions | 7 | 2026-06-23 | [design, decision, learned_lesson, meta, config] |
 | `config_system` | Config loader/layering/schema | 4 | 2026-06-22 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 1 | 2026-06-22 | [learned_lesson, decision] |
 
@@ -54,6 +54,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-06-23: Captured 3 insights into existing `env_entities` from the per-episode-environment-variance feature session: `20260623_0143_per_episode_count_variance_masking` (JAX static shapes -> allocate count_high + per-episode activate K~U[low,high] via res_active/animal_active/obs_active masks; whole-grid default; scalar-count backward-compat; two-commit parity discipline), `20260623_0144_inactive_resource_slots_revive_respawn` (blocker: inactive resource slots revived on step 1 because update_resources overloaded res_active=False as 'eaten'; fix = immutable res_allocated mask; both reviewers caught it; a mask must cover the respawn path), `20260623_0145_proxy_benchmark_contention_misestimate` (a contended-GPU proxy benchmark hid a real -13% step-SPS regression that a clean idle-node measure revealed; reset +28% negligible; rabbit trimmed 3->2 to recover ~half). All tags reused (design, decision, config, learned_lesson, meta). No new tags promoted.
 - 2026-06-22: Captured 1 insight into the **new** `curriculum_learning` folder from the basic-curriculum continual-schedule session: `20260622_1748_basic_curriculum_overtraining_collapse_and_intervals` — easy rPPO worlds (L0 static-forage, L1 slow-predator) converge ~0.2M but over-train-collapse (~3.8M/9.0M) to a degenerate entropy~0 policy; stable levels converge 1.2-3.6M; curriculum stage budgets [1M,1M,2M,2M,4M] set below each collapse onset. **Why new folder**: algorithm-agnostic curriculum/continual training-dynamics findings, distinct from `cluster_ops` (ops) and `dreamer_diagnosis` (model). Definition lock: `Curriculum/continual training`. All tags reused (learned_lesson, decision).
 - 2026-06-22: Captured 2 insights from the dreamer_srl basic-curriculum crash → recompile-storm fix session: 1 into existing `dreamer_diagnosis` (`20260622_1746_dreamer_srl_recompile_storm_done_count` — the per-step env-reset sized arrays to the variable done-env count, a PyTorch→JAX port trap that compiled a new XLA executable per width, accumulated CUDA graphs, and OOM'd/stalled all 5 runs; fixed with a masked fixed-width reset + fixed scan bucket; verified + code-reviewer APPROVE), 1 into existing `cluster_ops` (`20260622_1747_dreamer_srl_single_config_budget_source` — single-config mode reads the budget from `env_cfg.training.*` not the agent config, so a budget-free scene config exits at 100 episodes; pass `--episodes`/`--log-interval` on the CLI; WandB's 200000 is a display artifact). All tags reused (dreamer, learned_lesson, decision, meta, training_runner). No new tags promoted.
 - 2026-06-22: Captured 4 insights into existing `hypervigilance` from the olfactory-ambiguity / hunger-gated training program session: `20260622_1744_olfactory_uncertainty_two_knob_design` (one IV - predator-vs-rabbit smell distinguishability - split into two orthogonal knobs: mean separation s symmetric scheme x per-episode noise sigma; per-episode draw makes sigma=0 reducible and sigma>0 irreducible; smell is the sole distal cue), `20260622_1745_discrimination_weak_lethality_masks_gating` (10-run sweep: discrimination weak, never reaches the 0.5-cell bar (max +0.21), anchor a clean null, H1b refuted but 47-69% death -> pre-registered 'lethality masks gating' verdict; reactive tank-and-hide; extends `20260609_1747` + `20260616_0142`), `20260622_1746_olfactory_decay_power_distal_cue_strength` (sense_resource weights smell by 1/dist^decay_power; default 2.0 steep -> weak distal cue; linear-decay 1.0 re-run tests pre-emptive avoidance; decay_power is global to the sensor), `20260622_1747_hypervigilance_asymmetric_stakes_scarcity` (1:1 + lethal + scarce food + high ambiguity -> hypervigilance via asymmetric stakes; scarce food forces the stay-vs-flee decision). All tags reused (hypervigilance, design, decision, refutation, learned_lesson, noise). No new tags promoted.
