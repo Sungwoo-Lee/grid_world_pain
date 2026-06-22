@@ -332,75 +332,83 @@ or hides, C1 is pure passive decay and the recovery verdict is "passive only".
 
 ---
 
-## 4. Managing conflicting needs — eat vs. stay safe
+## 4. Managing conflicting needs — eat the nearby food vs. flee to the far cover
 
 ### 4.1 The behavior in one sentence
 
-When the only food sits next to the only danger, how does the agent trade off the drive to eat against
-the drive to stay safe — and does that trade-off shift with how hungry it is?
+When the agent is **both hungry and injured** and a predator is closing in, does it grab the **nearby
+food** (relieve hunger, but stay exposed) or commit to the **distant bush** (escape the threat, but
+abandon the food)? Food and cover are placed **far apart**, so the agent cannot do both — the choice
+is a single, concrete, observable decision.
 
 ### 4.2 The isolating world
 
-Conflict requires the two drives to be **physically inseparable**: food is co-located with the threat,
-so the agent cannot satisfy hunger without accepting risk. One damaging predator, food placed in the
-predator's region, safe (empty) region elsewhere:
+The conflict is made **spatial**: the two ways to relieve the two drives sit at opposite ends of the
+world, with the agent between/near one of them and a predator approaching.
 
 | Knob | Value | Why |
 |---|---|---|
-| Grid | 11×11 | Room for a clear risky-vs-safe partition. |
-| Predator | count 1, `hunt`, damaging, patrol confined to the **food region** | The danger guards the resource. |
-| Rabbit | count 0 | Conflict is eat-vs-flee; the harmless animal is removed to isolate the trade-off. |
-| Food | concentrated in the **predator's region only** (e.g. one quadrant) | Forces the agent to enter danger to eat — the conflict. |
-| Safe zone | the opposite region: no food, no predator, bushes | A genuine refuge the agent can retreat to. |
-| `random_start_pos` | true | — |
+| Grid | **7×7** (small — sized for isolation, not scale) | Smallest grid where food and bush are clearly separate directions: opposite corners are ~8 cells apart (Manhattan), well beyond the agent's **cue radius of 3**, so the two options are mutually exclusive — committing to one abandons the other. Smaller (5×5) puts both inside reach and the choice isn't forced. |
+| Food | **one** source, placed **next to the agent's start** | Hunger can be relieved immediately *if* the agent chooses to stay and eat. |
+| Bush | **one** bush (`hides_agent: true`), distance from the food **swept: near / middle / far** (≈3 / 5 / 8 cells) on the same 7×7 | The only refuge from the predator. Sweeping its distance turns the **flee-cost** into the independent variable: cheap escape (near) vs. expensive escape (far). |
+| Predator | count 1, `hunt`, damaging, spawned so it **approaches** the agent/food area | The closing threat that forces the timing of the decision. |
+| Rabbit | count 0 | Isolate eat-vs-flee; no harmless distractor. |
+| `start_pos` | **fixed, next to the food** (not random) | We want the agent to begin within reach of food so the decision (stay+eat vs. run to cover) is clean and comparable across seeds. |
 
-### 4.3 The internal-state dial — this is the independent variable
+The **swept independent variable is the bush distance** (near/middle/far) — three configs on the same
+grid. Everything else (start, food, predator approach, internal state) is held fixed, so any change in
+the choice is attributable to how far safety is.
 
-Sweep starting hunger across three levels, run as separate eval sets:
+### 4.3 The internal-state dial — both drives switched ON
 
-- **Low need** (`start_satiation: 90`): little reason to risk the food region → expect the agent to
-  stay safe.
-- **Mid need** (`start_satiation: 50`).
-- **High need** (`start_satiation: 20`): strong drive to eat → expect the agent to accept risk and
-  enter the food region.
+A single, deliberately conflicted starting state (not a sweep): **low nutrition + high injury**.
 
-A genuine conflict-manager shifts its risk-taking *monotonically* with need. A reflexive agent does the
-same thing regardless of the dial.
+- **Low nutrition** (`start_nutrition` low → low satiation): strong drive to **eat** the nearby food.
+- **High injury** (`start_injury` high, well below the death line): the agent is already hurt, so a
+  further predator hit is near-lethal — a strong drive to **escape to cover**.
+
+Both drives are active at once and point at **different locations**, which is the conflict. (For
+interpretability, run a small set of **control conditions** alongside — e.g. *no predator* and
+*no injury / sated* — to confirm the agent goes to food when nothing opposes it; the bush-choice is
+only meaningful as a *change* from that baseline.)
 
 ### 4.4 Candidate mean-level measures
 
-| Measure | Definition | Expected shape |
+| Measure | Definition (per episode → fraction/mean over eval episodes) | Reads on |
 |---|---|---|
-| **K1 — risk-region dwell fraction** | fraction of steps spent in the predator/food region. | increases with hunger |
-| **K2 — eat-under-threat ratio (M5)** | reuse M5: per-step eat probability with predator near ÷ when safe. | rises toward 1 as hunger rises |
-| **K3 — need-elasticity slope** | slope of K1 (or K2) across the three hunger levels. **The headline conflict measure.** | significantly > 0 |
-| **K4 — survival cost** | survival steps as a function of hunger level (does risk-taking get it killed?). | the trade-off's downside |
+| **K1 — choice outcome** | Which target the agent commits to first: **eats the food** vs. **reaches the bush** vs. **neither (dies/wanders)**. The headline categorical measure. | the decision itself |
+| **K2 — time-to-commit** | Steps until the agent is unambiguously heading to one target (distance to it decreasing monotonically while the other increases). | decisiveness vs. dithering |
+| **K3 — eat-then-flee vs. flee-only** | Does it grab a bite *then* run to cover, or abandon food entirely? | how it sequences the two needs |
+| **K4 — survival outcome** | Did the chosen action keep it alive (reached cover before a lethal hit / ate without being caught)? | the cost of the choice |
 
-K3 is the headline: a single number for "how much does the agent let need override safety". It is read
-*across* the three hunger sweeps, which is why this family ships as a 3-config set.
+K1 is the headline: under hunger+injury+approaching-predator, *what does it actually choose*. K2–K4
+describe how cleanly and at what cost.
+
+**K5 — flee-cost flip point (the across-variant headline).** Plot K1 (flee-to-bush rate) against the near/middle/far bush distance. A genuine trade-off **declines** as the bush gets farther (escape gets too costly → the agent stays and gambles on eating); the *distance at which the choice flips* is a single interpretable number for how the agent prices safety against hunger+injury. A flat curve = the choice ignores flee-cost (reflexive).
 
 ### 4.5 Anti-confound clause (conflict)
 
-> **What would make K-measures an artifact:** if the food region happened to be the region the agent
-> spawns in or naturally traverses, K1 (dwell fraction) would be high regardless of any eat-vs-flee
-> reasoning — a geometry effect again.
+> **What would make the choice an artifact:** if the predator's approach path physically **blocked**
+> the route to the food (or to the bush), the "decision" would just be which target was reachable —
+> geometry, not a weighed trade-off.
 
 Ruled out by:
 
-1. **K3 is a *slope across the need dial*, not an absolute level.** A geometry artifact (food region
-   is "on the way") produces a *constant* dwell fraction across hunger levels — slope ≈ 0. Only a
-   genuine need-modulated trade-off makes dwell *increase* with hunger. The headline claim is the
-   slope, which geometry cannot fake.
-2. **Random spawn** decorrelates spawn position from the food region.
-3. **Symmetric safe/risky partition** (same size, same cover) so the regions differ only in
-   food+danger, not in traversability.
+1. **Both targets must stay genuinely reachable** at decision time — position the predator so it
+   threatens the food area without walling off either the food or the bush. Verify in the trajectory
+   that an unblocked path to *both* existed when the agent chose.
+2. **Control conditions** (§4.3): if the agent goes to food under *no predator* and to the bush only
+   when the predator + injury are present, the choice is threat/state-driven, not geometry.
+3. **Far, symmetric separation**: food and bush equidistant-ish from the start in opposite directions,
+   so neither is "on the way" — the agent must actively pick a direction.
 
 ### 4.6 Trajectory cross-check (mandatory)
 
-Step dumps at low vs. high need must show qualitatively different episodes: at low need the agent
-should be visibly camping the safe zone; at high need it should make *deliberate forays* into the food
-region, eat, and retreat. If the episodes look identical across need levels, K3's slope is noise and the
-conflict verdict is "need-insensitive".
+Read the step dump: the agent should **commit to one target** (monotonic approach), not oscillate
+between them. Confirm K1 against what the steps show — e.g. at high injury + closing predator it turns
+*away* from the nearby food and runs the long way to the bush (survival overrides hunger), whereas in
+the *no-predator* control it walks straight to the food. If the episodes look the same with and without
+the threat, the conflict read is "state-insensitive" and K1 is not measuring a trade-off.
 
 ---
 
@@ -460,9 +468,11 @@ inherit the cell-08 sensor/body/noise/`behavior_measures` blocks unchanged unles
 | 5 | `avoid_mirror_PR.yaml` | `testbed_arena_PR.yaml` | mirror of row 4: predator = right half, rabbit = left half. (PL+PR averaged.) |
 | 6 | `recover_hunger.yaml` | `testbed_forage_only.yaml` | `body.start_satiation: 20`, `body.start_nutrition: 20`; predator+rabbit count 0 (already). |
 | 7 | `recover_injury.yaml` | `testbed_forage_only.yaml` | `body.start_injury: 60`, `body.random_start_injury: false`; predator+rabbit count 0; food kept for metabolism. |
-| 8 | `conflict_lowneed.yaml` | `08-singlePredRabbit_disengage.yaml` | grid → 11×11; rabbit count 0; predator patrol confined to one quadrant; ALL food in that quadrant; opposite quadrant = bushes only (safe zone); `body.start_satiation: 90`. |
-| 9 | `conflict_midneed.yaml` | row 8 | `body.start_satiation: 50`. |
-| 10 | `conflict_highneed.yaml` | row 8 | `body.start_satiation: 20`. |
+| 8a | `conflict_bush_near.yaml` | `08-singlePredRabbit_disengage.yaml` | grid → 7×7; rabbit count 0; **one** food next to a **fixed** `start_pos` (corner); **one** bush (`hides_agent: true`) **~3 cells** away; **one** `hunt` predator on a flank (threatens without blocking either path); low nutrition + high injury start (`body.start_nutrition` low, `body.start_injury` high, `random_start_*: false`). |
+| 8b | `conflict_bush_mid.yaml` | row 8a | bush moved to **~5 cells** from the food. |
+| 8c | `conflict_bush_far.yaml` | row 8a | bush moved to the **opposite corner (~8 cells)**. |
+| 9 | `conflict_ctrl_nopred.yaml` | row 8c | control: predator `count: 0` (expect → food regardless of bush distance). |
+| 10 | `conflict_ctrl_sated.yaml` | row 8c | control: sated + uninjured start (expect → food / no urgency). |
 
 **Pre-flight requirement:** before any of these launch, the generated configs go through
 `env-config-auditor` (obs↔noise sync, `hides_agent` present for M2, `eval_seeds` length = 200, no
