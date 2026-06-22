@@ -78,11 +78,23 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # The agent leaves --wandb-project and --wandb-entity unset so those defaults apply.
 # ---------------------------------------------------------------------------
 
-# hunger_gated_lindecay sweep — 2026-06-20
-# 9 recurrent_ppo runs across nodes 101/102/103/110/106, seed 42, ~10M episodes, fresh-init.
+# hunger_gated_lindecay sweep — 2026-06-20 through 2026-06-22
+# 10 recurrent_ppo runs across nodes 101/102/103/110/106/108, seed 42, ~10M episodes, fresh-init.
 # wandb-group: hunger_gated_lindecay, job-type: prod
 # Launched via CIFS-bypass /tmp scripts; this file is the audit record.
-# (10th cell 01-s0_sig0 held for a free GPU — not launched here.)
+#
+# Run 01: rppo_hg01_s0_sig0_dp1_s42      — node 108, cuda:0  (held anchor; launched 2026-06-22)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/hunger_gated_lindecay/01-s0_sig0.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --device cuda:0 \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --seed 42 \
+#   --wandb-group hunger_gated_lindecay \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_hg01_s0_sig0_dp1_s42 \
+#   --tag rppo_hg01_s0_sig0_dp1_s42
 #
 # Run 02: rppo_hg02_s0.05_sig0_dp1_s42   — node 101, cuda:0
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
