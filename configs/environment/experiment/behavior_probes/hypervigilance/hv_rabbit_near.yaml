@@ -1,0 +1,32 @@
+# Hypervigilance conflict probe — chasing rabbit (harmless) (hv_rabbit_near)
+# Same conflict geometry as environment/experiment/behavior_probes/conflict/conflict_bush_near, but matched to model hg10:
+#   - sensory.decay_power: 1.0 (hg10 trained with decay_power=1, NOT the default 2.0)
+#   - chasing rabbit (harmless) chase params + smell match hg10's training distribution.
+# Predator vs. chasing-rabbit contrast: IDENTICAL motion; only class/damage/smell differ.
+# Model: results/JAX_RecurrentPPO/20260620-180026_rppo_hg10_s0.5_sig0.4_dp1_s42
+extends: environment/experiment/behavior_probes/conflict/conflict_bush_near
+
+sensory:
+  decay_power: 1.0                                # CRITICAL: match hg10's olfactory distance discounting
+
+environment:
+  entities:
+    - class: "neutral"
+      behaviour: "hunt"
+      tag: "rab"
+      count: 1
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]      # hg10 rabbit smell (s=0.5 separation)
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0,0,0,0,0,0,0,1]       # neutral visual channel 7
+      visual_properties_std: [0,0,0,0,0,0,0,0]
+      damage: [0.0, 0.0]                          # HARMLESS
+      nociception_intensity: 0.1
+      move_interval: 1
+      spawn_area: [[5, 3], [5, 3]]
+      patrol_area: [[1, 1], [7, 7]]
+      detection_range: 5
+      max_stamina: 30
+      stamina_recovery_rate: 1
+      hunt_stamina_threshold: 0.7
+      lose_interest_multiplier: 1.5
+      attack_delay: 3
