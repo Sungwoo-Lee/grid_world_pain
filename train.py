@@ -79,7 +79,7 @@ from src.models.drqn_network import DRQNNetwork, get_action_drqn_nnx
 from src.models.drqn_trainer import RecurrentReplayBuffer as DRQNReplayBuffer, update_step_drqn
 from src.models.ppo_network import ActorCriticMLP, get_action_and_value_ppo_nnx
 from src.models.ppo_trainer import train_iteration_ppo
-from src.utils.config import get_default_config, Config
+from src.utils.config import get_default_config, Config, dump_config_yaml
 
 # Orbax
 import orbax.checkpoint as ocp
@@ -575,7 +575,7 @@ def main():
     # Save config
     config_save_path = os.path.join(models_dir, "config.yaml")
     with open(config_save_path, 'w') as f:
-        yaml.dump(config.to_dict(), f, default_flow_style=False)
+        dump_config_yaml(config.to_dict(), f)
     if not args.quiet:
         print(f"Config saved to: {config_save_path}")
 
@@ -584,7 +584,7 @@ def main():
         for i, (name, cfg) in enumerate(zip(schedule.stage_names, schedule.stage_configs)):
             out = os.path.join(models_dir, f"stage_{i:02d}_{name}.yaml")
             with open(out, "w") as f:
-                yaml.dump(cfg.to_dict(), f, default_flow_style=False)
+                dump_config_yaml(cfg.to_dict(), f)
         sched_dump = {
             "continual": {
                 "episode_boundaries": schedule.episode_boundaries,
@@ -593,7 +593,7 @@ def main():
             }
         }
         with open(os.path.join(models_dir, "schedule.yaml"), "w") as f:
-            yaml.dump(sched_dump, f, default_flow_style=False)
+            dump_config_yaml(sched_dump, f)
         if not args.quiet:
             print(f"Stage configs and schedule saved under {models_dir}")
 
@@ -1218,22 +1218,14 @@ def main():
                             episode_dist_sums[_bk][:] = 0.0
                         if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[:, :]  = 0.0
                         if num_predator_for_log > 0: episode_dist_per_predator_sums[:, :] = 0.0
-                        # Behavior-measure toolkit v1: stage-transition wipe
+                        # Behavior-measure toolkit v1: stage-transition wipe.
+                        # Use the canonical per-env reset helper (_bm_reset_env wraps
+                        # bm_reset_env from src.behavior.accumulators) so this site
+                        # stays in sync with every other BMState-reset call in this file
+                        # (episode-end at ~train.py:1409 and 1683).
                         if bm_enabled:
-                            m1_candidates[:, :]  = 0; m1_interrupted[:, :]  = 0
-                            m2_onsets[:, :]      = 0; m2_dives[:, :]        = 0
-                            m5_threat_steps[:, :] = 0; m5_safe_steps[:, :]  = 0
-                            m5_eat_threat[:, :]  = 0; m5_eat_safe[:, :]     = 0
-                            m1_candidates_tag[:, :]  = 0; m1_interrupted_tag[:, :]  = 0
-                            m2_onsets_tag[:, :]      = 0; m2_dives_tag[:, :]        = 0
-                            m5_threat_steps_tag[:, :] = 0; m5_safe_steps_tag[:, :]  = 0
-                            m5_eat_threat_tag[:, :]  = 0; m5_eat_safe_tag[:, :]     = 0
-                            m1_candidate_age[:, :] = -1; m1_candidate_tag_idx[:, :] = -1
-                            m2_onset_age[:, :]     = -1; m2_onset_tag_idx[:, :]     = -1
-                            m2_in_bush_seen[:, :]  = False
-                            m_prev_threat_in_R[:, :]     = False
-                            m_prev_threat_in_R_tag[:, :] = False
-                            m1_steps_since_eat[:] = 0
+                            for _i in range(num_envs):
+                                _bm_reset_env(_i)   # full per-env BMState reset (M1/M2/M5 per-class + per-tag + K-buffer + age/seen state)
 
                         # --- DreamerV3 only: clear replay buffers to prevent
                         # cross-stage dynamics contamination of the world model.

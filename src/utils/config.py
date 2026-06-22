@@ -1,6 +1,27 @@
 import yaml
 import os
 
+
+class _FlowListDumper(yaml.SafeDumper):
+    pass
+
+
+def _represent_list_flow_if_scalar(dumper, data):
+    # Inline (flow style) only when every element is a scalar; nested lists/dicts stay block.
+    scalar = all(isinstance(x, (int, float, str, bool, type(None))) for x in data)
+    return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=scalar)
+
+
+_FlowListDumper.add_representer(list, _represent_list_flow_if_scalar)
+
+
+def dump_config_yaml(data, stream):
+    """Dump a plain dict (e.g. Config.to_dict()) to YAML: scalar lists inline,
+    all mappings block, source key order preserved."""
+    yaml.dump(data, stream, Dumper=_FlowListDumper,
+              default_flow_style=False, sort_keys=False)
+
+
 class Config:
     def __init__(self, config_dict=None):
         self._config = config_dict or {}
