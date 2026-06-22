@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `hypervigilance` topic.
 
 **Folder definition**: Hypervigilance experiments
-**Insights**: 18
-**Last updated**: 2026-06-16
+**Insights**: 24
+**Last updated**: 2026-06-22
 
 ---
 
@@ -13,6 +13,12 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-22 | 17:47 | `20260622_1747_hypervigilance_asymmetric_stakes_scarcity` | To elicit hypervigilance the redesign keeps 1:1 predator:rabbit (for analyzability) and drives danger-dominance via ASYMMETRIC STAKES (approach-predator = death vs avoid-rabbit = missed scarce meal) under high ambiguity; scarce food removes the camp-safely option and forces the stay-vs-flee decision. |
+| 2026-06-22 | 17:46 | `20260622_1746_olfactory_decay_power_distal_cue_strength` | The olfactory sensor weights smell by 1/dist^decay_power (default 2.0, inverse-square) -> steep falloff (~0.11 at 3 cells) makes the distal cue weak; a linear-decay (1.0) re-run of the whole sweep tests whether a longer-range cue (~0.33 at 3 cells) enables pre-emptive avoidance. decay_power is GLOBAL to the sensor. |
+| 2026-06-22 | 17:45 | `20260622_1745_discrimination_weak_lethality_masks_gating` | In the olfactory_ambiguity 10-run sweep the agent never learned pre-contact discrimination above threshold (max +0.21 vs the 0.5-cell bar); anchor is a clean null; H1b hunger-gating refuted but 47-69% death rates trigger the pre-registered 'lethality masks gating' verdict, not 'no gating'. |
+| 2026-06-22 | 17:44 | `20260622_1744_olfactory_uncertainty_two_knob_design` | The olfactory-ambiguity sweep isolates one IV (predator-vs-rabbit smell distinguishability) split into two orthogonal knobs - mean separation s (symmetric scheme) and per-episode noise sigma (properties_std); everything else held to the cell-08 contrast. |
+| 2026-06-22 | 17:45 | `20260622_1745_frozen_probe_eval_match_sensory_renderer` | Frozen-checkpoint probe eval: the env's sensory params (esp. decay_power) MUST match the eval model's TRAINING value or olfaction is off-distribution; canonical eval renderer is renderer.py (render_recordings.py), NOT renderer_v2. |
+| 2026-06-22 | 17:44 | `20260622_1744_hypervig_probe_hg10_overgeneralizes_threat` | New conflict/hypervigilance behavior-probe: hg10 (~7.2M, partial) flees a harmless chasing rabbit identically to a damaging predator and starves avoiding food, while eating fine with no animal — a hypervigilance signature (caveat: mid-training, one seed). |
 | 2026-06-16 | 15:14 | `20260616_1514_experimental_env_as_behavior_platform` | Reframe: 'gap tracks the world not the agent' is NOT a failure — it is the intended mechanism of a behavior-measurement PLATFORM (an experimental environment exists to force/induce a target behavior). Decision: continue the experimental-environment program but shift focus from a narrow predator-rabbit discrimination metric to ENVIRONMENT SETTINGS for future TRAINING and EVALUATION. |
 | 2026-06-16 | 01:42 | `20260616_0142_discrimination_is_spatial_encounter_artifact` | Autonomous testbed search shows the predator-vs-rabbit bush-dive 'discrimination' is a SPATIAL-ENCOUNTER ARTIFACT not class-recognition: a KNOWN class-blind agent (cell-08) reproduces the full +0.31 bush-dive gap in Cell C's asymmetric decoupled-food world, and BOTH agents go flat under geometry control. No isolated test world calibrated as a discrimination metric. Resolves insight 1428's open question (the +37pp event-level gap was itself spatially mediated). |
 | 2026-06-15 | 16:12 | `20260615_1612_testbed_isolation_makes_means_honest` | Methodology decision: keep mean-level measures (we need scalable numbers) but build dedicated isolated TEST environments (frozen-checkpoint probes, no retraining) that strip the confounds which made means misleading in the complex training world, so the mean becomes a trustworthy proxy for the trajectory-level truth. Every new testbed must first be calibrated against a known discriminator (Cell C) and a known class-blind agent (cell-08) before its numbers are trusted. First testbeds: predator-solo / rabbit-solo. Anchor: behavior_measurement_charter.md. |

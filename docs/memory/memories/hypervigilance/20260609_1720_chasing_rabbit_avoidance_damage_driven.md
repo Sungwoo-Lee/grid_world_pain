@@ -50,4 +50,5 @@ The R4 experiment made the two neutral rabbits actively HUNT the agent (`behavio
 - [[20260609_1722_renderer_no_neutral_icon_and_attack_delay_ride]] (env_entities, 2026-06-09) — Two env/rendering findings from the chasing-rabbit work: (1) the renderer has no
 - [[20260609_1747_avoidance_is_post_contact_not_preemptive]] (hypervigilance, 2026-06-09) — Predator-only eval (same chasing-rabbit model, rabbits removed) shows the agent 
 - [[20260616_0142_discrimination_is_spatial_encounter_artifact]] (hypervigilance, 2026-06-16) — Autonomous testbed search (4 designs, frozen-checkpoint evals of a Cell C 'discr
+- [[20260622_1744_hypervig_probe_hg10_overgeneralizes_threat]] (hypervigilance, 2026-06-22) — New conflict/hypervigilance behavior-probe: the hg10 rPPO checkpoint (~7.2M, par
 <!-- END BACKLINKS -->
