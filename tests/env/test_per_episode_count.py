@@ -453,7 +453,13 @@ environment:
 # ---------------------------------------------------------------------------
 
 def test_mask_stable_within_episode():
-    """animal_active and obs_active must not change across steps within an episode."""
+    """animal_active, obs_active, AND res_active count must not increase across steps.
+
+    res_active can legitimately shift (eaten slots regrow), BUT the ACTIVE COUNT
+    must never exceed the reset K — inactive (never-allocated) resource slots must
+    not revive.  This is the regression test for the resource-revival blocker
+    (PER_EPISODE_ENV_VARIANCE fix, 2026-06-23).
+    """
     extra = """
 environment:
   entities:
@@ -475,6 +481,18 @@ environment:
       hunt_stamina_threshold: 0.7
       lose_interest_multiplier: 1.5
       attack_delay: 3
+  resources:
+    - name: "food"
+      type: "food"
+      count_low: 1
+      count_high: 4
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      max_consumption: 12
+      regeneration_delay: 5
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
   obstacles:
     - name: "bush"
       count_low: 1
@@ -488,10 +506,22 @@ environment:
       properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
 """
     params = _load_yaml_config(extra)
-    key = jax.random.PRNGKey(99)
-    state = jax_reset(params, key)
+    # Use a key that gives K < count_high for food, so inactive slots exist.
+    # Search for a seed where food K < 4 (the count_high).
+    found_partial = False
+    for seed in range(200):
+        key = jax.random.PRNGKey(seed)
+        state = jax_reset(params, key)
+        reset_food_K = int(jnp.sum(state.res_active))
+        if reset_food_K < 4:  # count_high is 4 → inactive slots exist
+            found_partial = True
+            break
+    assert found_partial, "Could not find a reset with food K < count_high in 200 seeds"
+
     initial_animal_active = state.animal_active.copy()
     initial_obs_active = state.obs_active.copy()
+    # Reset K is the maximum the active count should ever reach within this episode.
+    max_allowed_food_active = reset_food_K
 
     for step in range(50):
         action = step % 4
@@ -501,6 +531,14 @@ environment:
         )
         assert jnp.array_equal(state.obs_active, initial_obs_active), (
             f"obs_active changed at step {step}"
+        )
+        # Key regression check: inactive resource slots must NOT revive.
+        # Active count must never EXCEED the count drawn at reset.
+        current_food_active = int(jnp.sum(state.res_active))
+        assert current_food_active <= max_allowed_food_active, (
+            f"res_active count EXCEEDED reset K at step {step}: "
+            f"{current_food_active} > {max_allowed_food_active} "
+            f"(resource-revival blocker regression)"
         )
         if done:
             break

@@ -127,17 +127,39 @@ def update_body(state: EnvState, info: dict, params: EnvParams) -> tuple[jnp.nda
     
     return new_satiation, new_nutrition, new_injury, new_buffer, new_nociception_history, new_rest_streak, done
 
-def update_resources(res_active, res_reg_timer, res_cons_count, params):
-    """Updates resource timers and regeneration."""
-    # Regeneration
+def update_resources(res_active, res_reg_timer, res_cons_count, params,
+                     res_allocated=None):
+    """Updates resource timers and regeneration.
+
+    res_allocated: per-episode allocation mask set once at jax_reset, never mutated
+    (PER_EPISODE_ENV_VARIANCE fix).  Only slots that were allocated (K-mask=True at
+    reset) are eligible for respawn.  Slots that were never activated (count_high − K
+    inactive slots) have res_allocated=False and must stay inert all episode —
+    otherwise update_resources would treat their timer=0 / res_active=False state as
+    "eaten, please regrow" and revive them on step 1.
+
+    When res_allocated is None (legacy callers) falls back to all-True so that
+    degenerate-range configs (all slots allocated) are byte-identical to pre-fix.
+    """
+    # Regeneration: only tick the timer for slots that are allocated and inactive.
+    if res_allocated is None:
+        _allocated = jnp.ones_like(res_active, dtype=jnp.bool_)
+    else:
+        _allocated = res_allocated
     needs_reg_update = jnp.logical_and(jnp.logical_not(res_active), res_reg_timer > 0)
     new_reg_timer = jnp.where(needs_reg_update, res_reg_timer - 1, res_reg_timer)
-    
-    # Respawn where timer hits 0
-    respawn_mask = jnp.logical_and(jnp.logical_not(res_active), new_reg_timer <= 0)
+
+    # Respawn where timer hits 0 AND the slot was actually allocated (fix: & _allocated).
+    # Without the _allocated gate, slots that start with timer=0 and res_active=False
+    # (the inactive K-mask slots) satisfy (~active & timer<=0) → True and revive on
+    # step 1, silently collapsing per-episode count variance to count_high every episode.
+    respawn_mask = jnp.logical_and(
+        jnp.logical_and(jnp.logical_not(res_active), new_reg_timer <= 0),
+        _allocated
+    )
     new_active = jnp.where(respawn_mask, True, res_active)
     new_cons_count = jnp.where(respawn_mask, 0, res_cons_count)
-    
+
     return new_active, new_reg_timer, new_cons_count, respawn_mask
 
 def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
@@ -397,8 +419,11 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     key, respawn_key, hunt_key, wander_key, damage_key, property_key = jax.random.split(state.key, 6)
 
     # 1. Resource Regeneration (before agent moves)
+    # Pass res_allocated so inactive (never-existed) slots cannot revive (fix for
+    # resource-revival blocker: PER_EPISODE_ENV_VARIANCE 2026-06-23).
     new_active, new_reg_timer, new_cons_count, respawn_mask = update_resources(
-        state.res_active, state.res_reg_timer, state.res_cons_count, params
+        state.res_active, state.res_reg_timer, state.res_cons_count, params,
+        res_allocated=state.res_allocated
     )
 
     # Displace resources that just respawned
@@ -677,6 +702,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         current_step=next_step,
         res_pos=res_pos_after_reg,
         res_active=final_active,
+        res_allocated=state.res_allocated,  # never mutated: carry through unchanged
         res_reg_timer=next_reg_timer,
         res_cons_count=next_cons_count,
         res_property_sampled=res_property_sampled_after_reg,
@@ -1172,6 +1198,10 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         # (count_high - K) start inactive. For degenerate-range configs, res_activation_mask
         # is all-True, so this is byte-identical to jnp.ones(num_res) → parity preserved.
         res_active=res_activation_mask,
+        # res_allocated is the immutable per-episode allocation mask: set once here,
+        # never modified by jax_step.  update_resources gates respawn on it to prevent
+        # inactive (never-existed) slots from reviving after step 1 (revival-blocker fix).
+        res_allocated=res_activation_mask,
         res_cons_count=jnp.zeros(num_res, dtype=jnp.int32),
         res_reg_timer=jnp.zeros(num_res, dtype=jnp.int32),
         res_property_sampled=res_property_sampled,

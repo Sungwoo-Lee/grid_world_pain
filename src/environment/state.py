@@ -36,6 +36,7 @@ class EnvState:
     # Resources
     res_pos: jnp.ndarray        # [num_res, 2]
     res_active: jnp.ndarray     # [num_res] bool
+    res_allocated: jnp.ndarray  # [num_res] bool — set once at reset, never mutated; gates respawn
     res_cons_count: jnp.ndarray # [num_res] int
     res_reg_timer: jnp.ndarray  # [num_res] int
     res_property_sampled: jnp.ndarray # [num_res, vector_size]

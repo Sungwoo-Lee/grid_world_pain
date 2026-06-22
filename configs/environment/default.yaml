@@ -86,7 +86,7 @@ environment:
       behaviour: "wander"
       tag: "rabbit"
       count_low: 1   # at least 1 neutral distractor
-      count_high: 3  # up to 3 to vary olfactory/visual scene statistics
+      count_high: 2  # trimmed from 3→2 to recover ~half the hot-path step-SPS regression
       properties: [0.0, 0.5, 0.7, 0.0, 0.0]
       properties_std: [0.0, 0.4, 0.4, 0.0, 0.0]
       visual_properties: [0,0,0,0,0,0,0,1]
