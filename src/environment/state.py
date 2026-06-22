@@ -56,10 +56,15 @@ class EnvState:
     animal_hunt_thresh_sampled: jnp.ndarray    # [N] float
     animal_lose_interest_sampled: jnp.ndarray  # [N] float
 
+    # Animals — per-episode activation mask (NEW — per-episode count-range feature)
+    animal_active: jnp.ndarray  # [N] bool; False for inactive (parked off-grid) slots
+
     # Obstacles
     obs_pos: jnp.ndarray        # [num_obs, 2]
     obs_property_sampled: jnp.ndarray # [num_obs, vector_size]
     obs_visual_property_sampled: jnp.ndarray  # [num_obs, visual_vector_size] (per-episode sampled)
+    # Per-episode activation mask (NEW — per-episode count-range feature)
+    obs_active: jnp.ndarray     # [num_obs] bool; False for inactive (parked off-grid) slots
 
     # Body
     satiation: jnp.ndarray       # [] float
@@ -144,6 +149,27 @@ class EnvParams:
     # today's per-type PRNG draw shapes).
     predator_indices: tuple = struct.field(pytree_node=False)  # tuple[int, ...], len N_pred_class
     neutral_indices: tuple = struct.field(pytree_node=False)   # tuple[int, ...], len N_neutral_class
+
+    # Per-episode count-range fields (NEW — per-episode count-range feature).
+    # For each config entry, stores the [low, high] bounds for K-sampling at reset.
+    # Slot→entry maps: res_entry_id[i] = index of the config entry that allocated slot i.
+    # Degenerate entries (count_low == count_high) never trigger a K-draw at reset;
+    # the activation mask is all-True (byte-identical to pre-feature behaviour).
+    res_count_low: jnp.ndarray        # [num_res_entries] int32 — per-entry lower bound
+    res_count_high: jnp.ndarray       # [num_res_entries] int32 — per-entry upper bound (= alloc size)
+    res_entry_id: jnp.ndarray         # [num_res] int32 — slot → entry index
+    animal_count_low: jnp.ndarray     # [num_animal_entries] int32
+    animal_count_high: jnp.ndarray    # [num_animal_entries] int32
+    animal_entry_id: jnp.ndarray      # [N] int32 — slot → entry index
+    obs_count_low: jnp.ndarray        # [num_obs_entries] int32
+    obs_count_high: jnp.ndarray       # [num_obs_entries] int32
+    obs_entry_id: jnp.ndarray         # [num_obs] int32 — slot → entry index
+    # Whether any entry in each class has a genuine range (low < high).
+    # When all entries are degenerate, the K-draw is skipped entirely so the
+    # PRNG stream is byte-identical to pre-feature code (parity guard).
+    has_res_range: bool = struct.field(pytree_node=False)
+    has_animal_range: bool = struct.field(pytree_node=False)
+    has_obs_range: bool = struct.field(pytree_node=False)
 
     # Obstacles
     obs_blocking: jnp.ndarray   # [num_obs] bool

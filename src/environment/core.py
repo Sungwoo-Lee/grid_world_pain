@@ -2,8 +2,15 @@ import jax
 import jax.numpy as jnp
 from .state import EnvState, EnvParams
 
-def move_agent(pos: jnp.ndarray, action: int, obs_pos: jnp.ndarray, obs_blocking: jnp.ndarray, params: EnvParams) -> jnp.ndarray:
-    """Calculates New Agent position based on action, considering obstacles."""
+def move_agent(pos: jnp.ndarray, action: int, obs_pos: jnp.ndarray, obs_blocking: jnp.ndarray, params: EnvParams,
+               obs_active: jnp.ndarray = None) -> jnp.ndarray:
+    """Calculates New Agent position based on action, considering obstacles.
+
+    obs_active: per-episode obstacle activation mask (PER_EPISODE_ENV_VARIANCE).
+    When provided, inactive obstacles (obs_active=False) are transparent to
+    collision. When None (caller did not pass it), falls back to all-True
+    (byte-identical to pre-feature behaviour for degenerate-range configs).
+    """
     # 0: Up, 1: Right, 2: Down, 3: Left, 4+: Stay
     moves = jnp.array([
         [-1, 0], # Up
@@ -13,24 +20,28 @@ def move_agent(pos: jnp.ndarray, action: int, obs_pos: jnp.ndarray, obs_blocking
         [0, 0],  # Rest/Stay
         [0, 0],  # Eat/Stay
     ], dtype=jnp.int32)
-    
+
     # Clip action to valid range [0, 5]
     action = jnp.clip(action, 0, 5).astype(jnp.int32)
     move = moves[action]
-    
+
     new_pos = pos + move
     # Clamp to grid boundaries
     new_pos = jnp.array([
         jnp.clip(new_pos[0], 0, params.height - 1),
         jnp.clip(new_pos[1], 0, params.width - 1)
     ])
-    
-    # Obstacle collision check
+
+    # Obstacle collision check — AND with obs_active so inactive obstacles are transparent
+    if obs_active is None:
+        _eff_blocking = obs_blocking
+    else:
+        _eff_blocking = obs_blocking & obs_active
     is_collision = jnp.any(jnp.logical_and(
         jnp.all(obs_pos == new_pos, axis=-1),
-        obs_blocking
+        _eff_blocking
     ))
-    
+
     # If collision, stay at current position
     final_pos = jnp.where(is_collision, pos, new_pos)
     return final_pos, is_collision
@@ -133,7 +144,8 @@ def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
                hunt_detect, hunt_max_stamina, hunt_recovery, hunt_thresh,
                hunt_lose_interest, hunt_patrol, hunt_move_int,
                agent_pos, obs_pos, obs_blocking_for_collision, obs_hides_agent, key,
-               grid_height: int = 10, grid_width: int = 10):
+               grid_height: int = 10, grid_width: int = 10,
+               obs_active: jnp.ndarray = None):
     """Hunt behaviour update (verbatim body of the old update_predators).
 
     Receives sliced arrays of shape (N_pred, ...) so PRNG draw shapes are
@@ -143,6 +155,10 @@ def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
       - obs_blocking (params.obs_blocking) for check_collision inside the function
       - params.obs_hides_agent for the agent_hidden computation inside the function
     Both must be passed separately to preserve byte-parity.
+
+    obs_active: per-episode obstacle activation mask (PER_EPISODE_ENV_VARIANCE).
+    Inactive obstacles are transparent to collision and do not conceal the agent.
+    None → all-True (byte-identical to pre-feature code).
     """
     # 1. Timers
     new_move_timer = hunt_mt - 1
@@ -158,10 +174,11 @@ def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
     )
 
     # 2. State Transitions
-    # agent_hidden: uses obs_hides_agent (bush concealment) — same as old update_predators internal logic
+    # agent_hidden: uses obs_hides_agent (bush concealment) AND obs_active (inactive bushes don't hide).
+    _eff_hides = obs_hides_agent if obs_active is None else (obs_hides_agent & obs_active)
     agent_hidden = jnp.any(jnp.logical_and(
         jnp.all(obs_pos == agent_pos, axis=-1),
-        obs_hides_agent
+        _eff_hides
     ))
 
     rested_enough = hunt_stamina >= (hunt_max_stamina * hunt_thresh)
@@ -223,9 +240,10 @@ def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
     # Hard Grid Boundaries (Always enforced)
     new_pos = jnp.clip(new_pos, 0, jnp.stack([grid_height - 1, grid_width - 1]))
 
-    # Obstacle Collision — uses obs_blocking_for_collision (params.obs_blocking), same as old code
+    # Obstacle Collision — uses obs_blocking_for_collision AND obs_active (inactive obstacles transparent).
+    _eff_blocking_hunt = obs_blocking_for_collision if obs_active is None else (obs_blocking_for_collision & obs_active)
     def check_collision(p_pos, old_p_pos):
-        is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), obs_blocking_for_collision))
+        is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), _eff_blocking_hunt))
         return jnp.where(is_coll, old_p_pos, p_pos)
 
     new_pos = jax.vmap(check_collision)(new_pos, hunt_pos)
@@ -240,11 +258,15 @@ def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
 
 
 def _wander_step(wand_pos, wand_mt, wand_patrol, wand_move_int, obs_pos, obs_blocking, key,
-                 grid_height: int = 10, grid_width: int = 10):
+                 grid_height: int = 10, grid_width: int = 10,
+                 obs_active: jnp.ndarray = None):
     """Wander behaviour update (verbatim body of the old update_neutral_animals).
 
     Receives sliced arrays of shape (N_neutral, ...) so PRNG draw shapes are
     byte-identical to the pre-refactor update_neutral_animals call. (B1 fix)
+
+    obs_active: per-episode obstacle activation mask (PER_EPISODE_ENV_VARIANCE).
+    Inactive obstacles are transparent to collision. None → all-True (byte-identical).
     """
     # 1. Timers
     new_move_timer = wand_mt - 1
@@ -267,9 +289,10 @@ def _wander_step(wand_pos, wand_mt, wand_patrol, wand_move_int, obs_pos, obs_blo
     # Hard Grid Boundaries
     new_pos = jnp.clip(new_pos, 0, jnp.stack([grid_height - 1, grid_width - 1]))
 
-    # Obstacle Collision
+    # Obstacle Collision — inactive obstacles are transparent
+    _eff_blocking_wand = obs_blocking if obs_active is None else (obs_blocking & obs_active)
     def check_collision(p_pos, old_p_pos):
-        is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), obs_blocking))
+        is_coll = jnp.any(jnp.logical_and(jnp.all(obs_pos == p_pos, axis=-1), _eff_blocking_wand))
         return jnp.where(is_coll, old_p_pos, p_pos)
 
     new_pos = jax.vmap(check_collision)(new_pos, wand_pos)
@@ -332,6 +355,7 @@ def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, 
             hunt_key,
             grid_height=params.height,
             grid_width=params.width,
+            obs_active=state.obs_active,  # NEW: inactive obstacles transparent
         )
         # Scatter back
         new_pos     = new_pos.at[h_idx].set(new_hunt_pos)
@@ -354,6 +378,7 @@ def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, 
             wander_key,
             grid_height=params.height,
             grid_width=params.width,
+            obs_active=state.obs_active,  # NEW: inactive obstacles transparent
         )
         new_pos = new_pos.at[w_idx].set(new_wand_pos)
         new_mt  = new_mt.at[w_idx].set(new_wand_mt)
@@ -405,7 +430,8 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     )
 
     # 2. Agent Movement
-    new_agent_pos, just_collided = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params)
+    new_agent_pos, just_collided = move_agent(state.agent_pos, action, state.obs_pos, params.obs_blocking, params,
+                                              obs_active=state.obs_active)
 
     # 3. Unified Animal Update (per-subset call pattern — B1 fix)
     # hunt_key feeds hunt subset (N_pred draw shapes, byte-identical to old predator_key).
@@ -478,8 +504,9 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # ate_food is already calculated above
     
     # Predator Damage (unified — B5 fix: use at_damaging for damage + hit_predator)
+    # AND with animal_active so inactive (off-grid) animals cannot bite.
     at_animal = jnp.all(new_animal_pos == new_agent_pos, axis=-1)         # POST-step positions
-    at_damaging = jnp.logical_and(at_animal, params.animal_is_damaging)
+    at_damaging = jnp.logical_and(at_animal, params.animal_is_damaging & state.animal_active)
     # Sample animal damage (preserving today's draw shape = all N animals, using damage_key)
     sampled_pred_damage = jax.random.uniform(damage_key, (params.animal_damage.shape[0],),
                                              minval=params.animal_damage[:, 0],
@@ -498,21 +525,22 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     )
 
     # Rock/Obstacle Damage
-    # 1. Overlap damage (non-blocking rocks at current pos)
+    # 1. Overlap damage (non-blocking rocks at current pos) — AND with obs_active
     at_obs = jnp.all(state.obs_pos == new_agent_pos, axis=-1)
     # Sample obstacle damage
     sampled_obs_damage = jax.random.uniform(damage_key, (params.obs_damage.shape[0],),
                                            minval=params.obs_damage[:, 0],
                                            maxval=params.obs_damage[:, 1])
-    damage_obs_overlap = jnp.sum(jnp.where(jnp.logical_and(at_obs, jnp.logical_not(params.obs_blocking)), sampled_obs_damage, 0.0))
-    
-    # 2. Collision damage (blocking rocks)
-    # Target the specific obstacle we hit
+    damage_obs_overlap = jnp.sum(jnp.where(
+        jnp.logical_and(at_obs, jnp.logical_not(params.obs_blocking)) & state.obs_active,
+        sampled_obs_damage, 0.0))
+
+    # 2. Collision damage (blocking rocks) — AND with obs_active
     at_attempted_obs = jnp.all(state.obs_pos == attempted_pos, axis=-1)
-    damage_obs_collision = jnp.where(just_collided, jnp.max(jnp.where(at_attempted_obs, sampled_obs_damage, 0.0), initial=0.0), 0.0)
-    
-    # Calculate collision NOC intensity for sensing
-    collision_noc = jnp.where(just_collided, jnp.max(jnp.where(at_attempted_obs, params.obs_nociception, 0.0), initial=0.0), 0.0)
+    damage_obs_collision = jnp.where(just_collided, jnp.max(jnp.where(at_attempted_obs & state.obs_active, sampled_obs_damage, 0.0), initial=0.0), 0.0)
+
+    # Calculate collision NOC intensity for sensing — inactive obstacles emit no noc
+    collision_noc = jnp.where(just_collided, jnp.max(jnp.where(at_attempted_obs & state.obs_active, params.obs_nociception, 0.0), initial=0.0), 0.0)
     
     total_damage = damage_res + damage_pred + damage_obs_overlap + damage_obs_collision
     
@@ -530,7 +558,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     at_neutral_pre = (
         jnp.logical_and(
             jnp.all(state.animal_pos == new_agent_pos, axis=-1),
-            ~params.animal_is_damaging
+            (~params.animal_is_damaging) & state.animal_active
         )
         if state.animal_pos.shape[0] > 0 else jnp.zeros(0, dtype=jnp.bool_)
     )
@@ -607,8 +635,9 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         else jnp.zeros((0,), dtype=jnp.float32)
     )
     # Legacy aliases — kept for one release cycle (C5); computed from per-class masks.
+    # Mask inactive animals OUT of the distance min (they should read 99.0 = "absent").
     if len(params.predator_indices) > 0:
-        pred_mask = params.animal_is_damaging  # predator_class ≡ damaging in current schema
+        pred_mask = params.animal_is_damaging & state.animal_active
         dist_to_pred = jnp.min(jnp.where(pred_mask, dist_per_animal, 99.0))
         dist_per_predator = dist_per_animal[jnp.array(params.predator_indices, dtype=jnp.int32)]
     else:
@@ -616,7 +645,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         dist_per_predator = jnp.zeros((0,), dtype=jnp.float32)
 
     if len(params.neutral_indices) > 0:
-        neutral_mask = ~params.animal_is_damaging
+        neutral_mask = (~params.animal_is_damaging) & state.animal_active
         dist_to_neutral = jnp.min(jnp.where(neutral_mask, dist_per_animal, 99.0))
         dist_per_neutral = dist_per_animal[jnp.array(params.neutral_indices, dtype=jnp.int32)]
     else:
@@ -635,9 +664,10 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # Mirrors the agent_hidden computation inside update_predators (line ~150);
     # recomputed here at minimal cost because EnvParams is in scope and we want it on `info`.
     # Uses new_agent_pos (post-step position) — correct for M2's "agent dives into bush" semantics.
+    # AND with obs_active: inactive bushes do not conceal the agent.
     agent_in_bush = jnp.any(jnp.logical_and(
         jnp.all(state.obs_pos == new_agent_pos, axis=-1),
-        params.obs_hides_agent
+        params.obs_hides_agent & state.obs_active
     )) if state.obs_pos.shape[0] > 0 else jnp.array(False)
     info['agent_in_bush'] = agent_in_bush
 
@@ -664,6 +694,9 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         animal_recovery_sampled=state.animal_recovery_sampled,
         animal_hunt_thresh_sampled=state.animal_hunt_thresh_sampled,
         animal_lose_interest_sampled=state.animal_lose_interest_sampled,
+        # Per-episode activation masks: constant within an episode (set at reset, unchanged by step)
+        animal_active=state.animal_active,
+        obs_active=state.obs_active,
         obs_visual_property_sampled=state.obs_visual_property_sampled,
         satiation=new_satiation,
         nutrition=new_nutrition,
@@ -1014,6 +1047,100 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         animal_visual_property_sampled = jnp.zeros(
             (0, params.animal_visual_property.shape[-1]), dtype=jnp.float32)
 
+    # 7b. Per-episode count-range activation masks (NEW — PER_EPISODE_ENV_VARIANCE).
+    #
+    # For each entity class (res / animal / obs):
+    #   - If ALL entries are degenerate (low == high), skip the K-draw entirely so
+    #     the PRNG stream is byte-identical to pre-feature code (parity guard).
+    #     The mask is all-True (same as the fixed-count semantics).
+    #   - If ANY entry has a genuine range (low < high), derive a per-episode key
+    #     via fold_in(property_key, <class-specific constant>) and draw K per entry.
+    #     Slots [K:count_high] for that entry are set False and parked off-grid.
+    #
+    # Fold-in constants are chosen to not collide with existing uses
+    # (0xAE1 = animal_episode_key, 0x7150A1 = visual_property_key):
+    _COUNT_KEY_RES    = 0xC0A1  # resource activation
+    _COUNT_KEY_ANIMAL = 0xC0A2  # animal activation
+    _COUNT_KEY_OBS    = 0xC0A3  # obstacle activation
+
+    def _build_activation_mask(count_low_arr, count_high_arr, entry_id_arr,
+                               has_range: bool, fold_const: int, num_slots: int,
+                               rng_key):
+        """Return (mask [num_slots bool], positions_park [not used here]).
+
+        When has_range=False (pure Python bool, static), returns all-True without
+        any jax.random call so the PRNG stream is untouched.
+        When has_range=True, draws K per entry and builds the mask.
+        """
+        if (not has_range) or num_slots == 0:
+            return jnp.ones(num_slots, dtype=jnp.bool_)
+        # Derive independent key for count-activation draws
+        act_key = jax.random.fold_in(rng_key, fold_const)
+        num_entries = count_low_arr.shape[0]
+        # Draw K per entry: randint(act_key_i, (), low, high+1) → K_i in [low, high]
+        entry_keys = jax.random.split(act_key, num_entries)
+        def _draw_k(ek, lo, hi):
+            # When lo==hi, uniform([lo, hi+1)) always returns lo (integer draw)
+            return jax.random.randint(ek, (), lo, hi + 1)
+        K_per_entry = jax.vmap(_draw_k)(entry_keys, count_low_arr, count_high_arr)
+        # Build slot mask: slot s is active iff its within-entry rank < K_entry
+        # entry_id_arr[s] = which entry slot s belongs to.
+        # within_rank[s] = how many slots for the same entry came before slot s
+        # = cumcount(entry_id_arr)[s]
+        # Computed as: rank[s] = sum_{t < s} (entry_id_arr[t] == entry_id_arr[s])
+        # Vectorized: (arange(num_slots)[:, None] > arange(num_slots)[None, :]) &
+        #             (entry_id_arr[:, None] == entry_id_arr[None, :])  → too large.
+        # Instead, use lax.scan to build cumcount:
+        def _cumcount(carry, eid):
+            counts = carry
+            rank = counts[eid]
+            counts = counts.at[eid].add(1)
+            return counts, rank
+        _, slot_rank = jax.lax.scan(
+            _cumcount,
+            jnp.zeros(num_entries, dtype=jnp.int32),
+            entry_id_arr
+        )
+        # slot_rank[s] = rank of slot s within its entry (0-based)
+        # Slot is active iff slot_rank[s] < K[entry_id[s]]
+        slot_K = K_per_entry[entry_id_arr]  # [num_slots] — K for this slot's entry
+        mask = slot_rank < slot_K
+        return mask
+
+    # Resource activation mask
+    num_res_entries_for_mask = params.res_count_low.shape[0]
+    res_activation_mask = _build_activation_mask(
+        params.res_count_low, params.res_count_high, params.res_entry_id,
+        params.has_res_range, _COUNT_KEY_RES, num_res,
+        property_key
+    )
+
+    # Animal activation mask
+    animal_activation_mask = _build_activation_mask(
+        params.animal_count_low, params.animal_count_high, params.animal_entry_id,
+        params.has_animal_range, _COUNT_KEY_ANIMAL, N,
+        property_key
+    )
+
+    # Obstacle activation mask
+    num_obs_slots_for_mask = params.obs_blocking.shape[0]
+    obs_activation_mask = _build_activation_mask(
+        params.obs_count_low, params.obs_count_high, params.obs_entry_id,
+        params.has_obs_range, _COUNT_KEY_OBS, num_obs,
+        property_key
+    )
+
+    # Park inactive slots off-grid: position (height, width) is outside [0,h-1]x[0,w-1]
+    # so they can never overlap the agent, never collide, and are excluded from sensing.
+    _off_grid = jnp.array([params.height, params.width], dtype=jnp.int32)
+
+    if num_res > 0 and params.has_res_range:
+        res_pos = jnp.where(res_activation_mask[:, None], res_pos, _off_grid[None, :])
+    if N > 0 and params.has_animal_range:
+        animal_pos_init = jnp.where(animal_activation_mask[:, None], animal_pos_init, _off_grid[None, :])
+    if num_obs > 0 and params.has_obs_range:
+        obs_pos = jnp.where(obs_activation_mask[:, None], obs_pos, _off_grid[None, :])
+
     # 7. Per-episode distributional sampling for the 5 behavioural fields.
     #    5 independent uniform draws per field — shape (N,) each.
     #    For wander/static entries the ranges are [0, 0] (from _load_animals);
@@ -1041,7 +1168,10 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         agent_pos=agent_pos,
         current_step=jnp.array(0, dtype=jnp.int32),
         res_pos=res_pos,
-        res_active=jnp.ones(num_res, dtype=jnp.bool_),
+        # res_active starts from the activation mask (not all-ones) so inactive slots
+        # (count_high - K) start inactive. For degenerate-range configs, res_activation_mask
+        # is all-True, so this is byte-identical to jnp.ones(num_res) → parity preserved.
+        res_active=res_activation_mask,
         res_cons_count=jnp.zeros(num_res, dtype=jnp.int32),
         res_reg_timer=jnp.zeros(num_res, dtype=jnp.int32),
         res_property_sampled=res_property_sampled,
@@ -1059,9 +1189,12 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         animal_recovery_sampled=animal_recovery_sampled,
         animal_hunt_thresh_sampled=animal_hunt_thresh_sampled,
         animal_lose_interest_sampled=animal_lose_interest_sampled,
+        # Per-episode activation masks (NEW — PER_EPISODE_ENV_VARIANCE)
+        animal_active=animal_activation_mask,
         obs_pos=obs_pos,
         obs_property_sampled=obs_property_sampled,
         obs_visual_property_sampled=obs_visual_property_sampled,
+        obs_active=obs_activation_mask,
         satiation=jnp.array(satiation, dtype=jnp.float32),
         nutrition=jnp.array(nutrition, dtype=jnp.float32),
         injury_level=jnp.array(injury, dtype=jnp.float32),

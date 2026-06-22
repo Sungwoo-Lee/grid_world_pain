@@ -437,8 +437,8 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
             )
         raw_entities = config.get('environment.entities') or []
         for i_raw, ent in enumerate(raw_entities):
-            count = ent.get('count', 1)
-            for _ in range(count):
+            _lo, count = _resolve_count_range(ent, f'Entity[{i_raw}]')
+            for _ in range(count):  # allocate count_high slots
                 cls = ent.get('class')
                 if cls is None:
                     raise ValueError(f"entities[{i_raw}]: missing required field 'class'.")
@@ -476,8 +476,8 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         # Legacy path: re-project predators (hunt) + neutrals (wander)
         raw_predators = config.get('environment.predators') or []
         for i_raw, p in enumerate(raw_predators):
-            count = p.get('count', 1)
-            for _ in range(count):
+            _lo, count = _resolve_count_range(p, f'Predator[{i_raw}]')
+            for _ in range(count):  # allocate count_high slots
                 tag_raw = p.get('tag')
                 tag_label = str(tag_raw) if tag_raw else f'pred{len(entries)}'
                 def _p_get(key, _p=p, _label=tag_label):
@@ -508,8 +508,8 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
 
         raw_neutrals = config.get('environment.neutral_animals') or []
         for i_raw, n in enumerate(raw_neutrals):
-            count = n.get('count', 1)
-            for _ in range(count):
+            _lo, count = _resolve_count_range(n, f'NeutralAnimal[{i_raw}]')
+            for _ in range(count):  # allocate count_high slots
                 tag_raw = n.get('tag')
                 tag_label = str(tag_raw) if tag_raw else f'rabbit{len(entries)}'
                 def _n_get(key, _n=n, _label=tag_label):
@@ -780,6 +780,42 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
     )
 
 
+def _resolve_count_range(entry: dict, entity_label: str):
+    """Return (count_low, count_high) from a YAML entity entry.
+
+    Rules (per-episode count-range feature — PER_EPISODE_ENV_VARIANCE plan):
+    - Both ``count_low`` + ``count_high`` present → use them.
+      Validates 0 <= low <= high.
+    - Only ``count`` present → degenerate range (count_low = count_high = count).
+      Backward-compatible: byte-identical to pre-feature behaviour.
+    - Both styles present simultaneously → ValueError (ambiguous).
+    - Neither → degenerate (1, 1), matching the old r.get('count', 1) default.
+
+    This is an optional-fallback (not get_mandatory) because count_low/count_high are
+    genuinely optional; absence means "use the scalar count or default of 1".
+    """
+    has_range  = ('count_low'  in entry) or ('count_high' in entry)
+    has_scalar = 'count' in entry
+
+    if has_range and has_scalar:
+        raise ValueError(
+            f"{entity_label}: 'count' and 'count_low'/'count_high' are mutually exclusive. "
+            "Use either the scalar 'count: N' OR the range 'count_low: L / count_high: H'."
+        )
+    if has_range:
+        lo = int(entry.get('count_low', 0))
+        hi = int(entry.get('count_high', 0))
+        if not (0 <= lo <= hi):
+            raise ValueError(
+                f"{entity_label}: count_low={lo} and count_high={hi} must satisfy "
+                "0 <= count_low <= count_high."
+            )
+        return lo, hi
+    else:
+        n = int(entry.get('count', 1))
+        return n, n
+
+
 def load_env_params(config: Config) -> EnvParams:
     """Loads environment parameters from a Config object with strict retrieval."""
 
@@ -793,11 +829,19 @@ def load_env_params(config: Config) -> EnvParams:
     # Build resource arrays
     raw_resources = config.get_mandatory('environment.resources')
     expanded_resources = []
+    # Per-entry count-range metadata (NEW — PER_EPISODE_ENV_VARIANCE)
+    res_count_low_list = []   # per-entry int32 lower bound
+    res_count_high_list = []  # per-entry int32 upper bound
+    res_entry_id_list = []    # per-slot → entry index
     if raw_resources:
-        for r in raw_resources:
-            count = r.get('count', 1) 
-            for _ in range(count):
+        for i_entry, r in enumerate(raw_resources):
+            lo, hi = _resolve_count_range(r, f'Resource[{i_entry}]')
+            res_count_low_list.append(lo)
+            res_count_high_list.append(hi)
+            # Allocate count_high slots (not count); activate K in jax_reset
+            for slot_i in range(hi):
                 expanded_resources.append(r)
+                res_entry_id_list.append(i_entry)
     
     if expanded_resources:
         def r_get(r, key):
@@ -884,13 +928,55 @@ def load_env_params(config: Config) -> EnvParams:
         pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
     ) = _load_animals(config, visual_vector_size=visual_vector_size)
 
+    # ── Animal count-range metadata (NEW — PER_EPISODE_ENV_VARIANCE) ──────────
+    # Re-read the raw entity entries to extract per-entry count_low / count_high.
+    # This mirrors the expansion done in _load_animals (but here we only need counts).
+    animal_count_low_list = []   # per-entry int32 lower bound
+    animal_count_high_list = []  # per-entry int32 upper bound
+    animal_entry_id_list = []    # per-slot → entry index
+    _has_entities = config.get('environment.entities') is not None
+    if _has_entities:
+        _raw_ents = config.get('environment.entities') or []
+        for i_raw, ent in enumerate(_raw_ents):
+            lo, hi = _resolve_count_range(ent, f'Entity[{i_raw}]')
+            animal_count_low_list.append(lo)
+            animal_count_high_list.append(hi)
+            for _s in range(hi):
+                animal_entry_id_list.append(i_raw)
+    else:
+        # Legacy predators: each raw entry is a single-slot entry (no count_low/count_high)
+        _raw_preds = config.get('environment.predators') or []
+        for i_raw, p in enumerate(_raw_preds):
+            lo, hi = _resolve_count_range(p, f'Predator[{i_raw}]')
+            animal_count_low_list.append(lo)
+            animal_count_high_list.append(hi)
+            for _s in range(hi):
+                animal_entry_id_list.append(i_raw)
+        # Legacy neutrals: same pattern, offset entry indices
+        _raw_neutrals = config.get('environment.neutral_animals') or []
+        _n_pred_entries = len(_raw_preds)
+        for i_raw, n in enumerate(_raw_neutrals):
+            lo, hi = _resolve_count_range(n, f'NeutralAnimal[{i_raw}]')
+            animal_count_low_list.append(lo)
+            animal_count_high_list.append(hi)
+            for _s in range(hi):
+                animal_entry_id_list.append(_n_pred_entries + i_raw)
+
     # Build Obstacle arrays
     raw_obstacles = config.get_mandatory('environment.obstacles')
     expanded_obstacles = []
-    for o in raw_obstacles:
-        count = o.get('count', 1)
-        for _ in range(count):
+    # Per-entry count-range metadata (NEW — PER_EPISODE_ENV_VARIANCE)
+    obs_count_low_list = []   # per-entry int32 lower bound
+    obs_count_high_list = []  # per-entry int32 upper bound
+    obs_entry_id_list = []    # per-slot → entry index
+    for i_entry, o in enumerate(raw_obstacles):
+        lo, hi = _resolve_count_range(o, f'Obstacle[{i_entry}]')
+        obs_count_low_list.append(lo)
+        obs_count_high_list.append(hi)
+        # Allocate count_high slots (not count); activate K in jax_reset
+        for slot_i in range(hi):
             expanded_obstacles.append(o)
+            obs_entry_id_list.append(i_entry)
             
     if expanded_obstacles:
         def obs_get(o, key):
@@ -1157,6 +1243,19 @@ def load_env_params(config: Config) -> EnvParams:
         static_idx=static_idx,
         predator_indices=predator_indices,
         neutral_indices=neutral_indices,
+        # Per-episode count-range metadata (NEW — PER_EPISODE_ENV_VARIANCE)
+        res_count_low=jnp.array(res_count_low_list, dtype=jnp.int32) if res_count_low_list else jnp.zeros(0, dtype=jnp.int32),
+        res_count_high=jnp.array(res_count_high_list, dtype=jnp.int32) if res_count_high_list else jnp.zeros(0, dtype=jnp.int32),
+        res_entry_id=jnp.array(res_entry_id_list, dtype=jnp.int32) if res_entry_id_list else jnp.zeros(0, dtype=jnp.int32),
+        animal_count_low=jnp.array(animal_count_low_list, dtype=jnp.int32) if animal_count_low_list else jnp.zeros(0, dtype=jnp.int32),
+        animal_count_high=jnp.array(animal_count_high_list, dtype=jnp.int32) if animal_count_high_list else jnp.zeros(0, dtype=jnp.int32),
+        animal_entry_id=jnp.array(animal_entry_id_list, dtype=jnp.int32) if animal_entry_id_list else jnp.zeros(0, dtype=jnp.int32),
+        obs_count_low=jnp.array(obs_count_low_list, dtype=jnp.int32) if obs_count_low_list else jnp.zeros(0, dtype=jnp.int32),
+        obs_count_high=jnp.array(obs_count_high_list, dtype=jnp.int32) if obs_count_high_list else jnp.zeros(0, dtype=jnp.int32),
+        obs_entry_id=jnp.array(obs_entry_id_list, dtype=jnp.int32) if obs_entry_id_list else jnp.zeros(0, dtype=jnp.int32),
+        has_res_range=any(lo < hi for lo, hi in zip(res_count_low_list, res_count_high_list)),
+        has_animal_range=any(lo < hi for lo, hi in zip(animal_count_low_list, animal_count_high_list)),
+        has_obs_range=any(lo < hi for lo, hi in zip(obs_count_low_list, obs_count_high_list)),
         obs_blocking=obs_blocking,
         obs_hides_agent=obs_hides_agent,
         obs_damage=obs_damage,

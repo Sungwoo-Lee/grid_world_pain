@@ -34,14 +34,14 @@ def sense_collision(agent_pos, state: EnvState, params: EnvParams):
         cell_coords >= jnp.array([params.height, params.width])
     ), axis=-1)
     
-    # 2. Blocking Obstacles (Rocks)
+    # 2. Blocking Obstacles (Rocks) — inactive obstacles are transparent (PER_EPISODE_ENV_VARIANCE)
     def check_blocking_rock(coord):
         # coord: [2]
         is_here = jnp.all(state.obs_pos == coord, axis=-1)
-        # Check if any rock at this position is blocking
-        is_blocking = jnp.logical_and(is_here, params.obs_blocking)
+        # Check if any rock at this position is blocking AND active
+        is_blocking = jnp.logical_and(is_here, params.obs_blocking & state.obs_active)
         return jnp.any(is_blocking)
-        
+
     is_blocked_by_rock = jax.vmap(check_blocking_rock)(cell_coords)
     
     # Total collision: OOB or Blocking Rock
@@ -71,19 +71,20 @@ def sense_extero_nociception(agent_pos, state: EnvState, params: EnvParams):
     max_res = jnp.max(res_intensities, initial=0.0)
 
     # 2. Animal Contact (B2 fix — unified; only damaging animals emit nociception)
+    # AND with animal_active so inactive animals cannot trigger nociception (PER_EPISODE_ENV_VARIANCE)
     if state.animal_pos.shape[0] > 0:
         dist_animal = jnp.linalg.norm(state.animal_pos - agent_pos, axis=-1)
         animal_intensities = jnp.where(
-            jnp.logical_and(dist_animal < 0.1, params.animal_is_damaging),
+            jnp.logical_and(dist_animal < 0.1, params.animal_is_damaging & state.animal_active),
             params.animal_nociception, 0.0
         )
         max_animal = jnp.max(animal_intensities, initial=0.0)
     else:
         max_animal = 0.0
 
-    # 3. Rock Overlap Contact (Non-blocking)
+    # 3. Rock Overlap Contact (Non-blocking) — AND with obs_active (PER_EPISODE_ENV_VARIANCE)
     dist_obs = jnp.linalg.norm(state.obs_pos - agent_pos, axis=-1)
-    obs_intensities = jnp.where(dist_obs < 0.1, params.obs_nociception, 0.0)
+    obs_intensities = jnp.where(dist_obs < 0.1, params.obs_nociception * state.obs_active, 0.0)
     max_obs_overlap = jnp.max(obs_intensities, initial=0.0)
 
     # 4. Rock Collision Contact (Bumping)
@@ -204,11 +205,11 @@ def sense_visual(agent_pos, state: EnvState, params: EnvParams):
     parts_pos.append(state.obs_pos)
     all_pos = jnp.concatenate(parts_pos, axis=0)  # [Total_E, 2]
 
-    # Combine activity status (animals/obstacles always active)
+    # Combine activity status — use per-episode masks (PER_EPISODE_ENV_VARIANCE)
     parts_active = [state.res_active]
     if num_animal > 0:
-        parts_active.append(jnp.ones(num_animal, dtype=jnp.bool_))
-    parts_active.append(jnp.ones(num_obs, dtype=jnp.bool_))
+        parts_active.append(state.animal_active)
+    parts_active.append(state.obs_active)
     all_active = jnp.concatenate(parts_active, axis=0)  # [Total_E]
 
     # Visual Property Matrix [Total_E, V] — per-episode sampled vectors from EnvState.
@@ -318,8 +319,9 @@ def get_observation(state: EnvState, params: EnvParams, apply_noise=True):
     # B2 fix: unified animal_chem replaces separate pred_chem + neutral_chem calls.
     if params.olfactory_enabled:
         res_chem = sense_resource(state.agent_pos, state.res_pos, state.res_active, state.res_property_sampled, params.sensor_radius, params.sensor_decay)
-        animal_chem = sense_resource(state.agent_pos, state.animal_pos, jnp.ones(state.animal_pos.shape[0], dtype=jnp.bool_), state.animal_property_sampled, params.sensor_radius, params.sensor_decay)
-        obs_chem = sense_resource(state.agent_pos, state.obs_pos, jnp.ones(state.obs_pos.shape[0], dtype=jnp.bool_), state.obs_property_sampled, params.sensor_radius, params.sensor_decay)
+        # Use per-episode masks so inactive animals/obstacles contribute zero olfaction (PER_EPISODE_ENV_VARIANCE)
+        animal_chem = sense_resource(state.agent_pos, state.animal_pos, state.animal_active, state.animal_property_sampled, params.sensor_radius, params.sensor_decay)
+        obs_chem = sense_resource(state.agent_pos, state.obs_pos, state.obs_active, state.obs_property_sampled, params.sensor_radius, params.sensor_decay)
         obs_parts.append(res_chem + animal_chem + obs_chem)
     
     # 6. Collision
