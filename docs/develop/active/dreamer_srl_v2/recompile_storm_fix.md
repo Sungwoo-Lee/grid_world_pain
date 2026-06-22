@@ -3,7 +3,7 @@ title: "dreamer-srl basic-curriculum recompile-storm fix"
 topic: dreamer
 status: implemented
 created: 2026-06-22
-last_updated: 2026-06-22
+last_updated: 2026-06-22-fix3-refinement
 ---
 
 # dreamer-srl basic-curriculum recompile-storm fix
@@ -213,3 +213,86 @@ instead of `lax.cond` (simpler, XLA-constant-folds the common case, no double-tr
 ---
 
 *Implemented by: developer*
+
+---
+
+## Fix-3 Refinement — Remove compile-cost inflation for replay_ratio=1
+
+### Plain-language summary
+
+The original Fix-3 wrapped `jnp.where(is_real, new, old)` masking around all ~140
+float leaves of the scan carry *inside* `lax.scan`. Because `is_real = scan_step_local
+< n_real_steps` and `n_real_steps` is a traced JAX array, XLA cannot fold these selects
+away even when they are a runtime no-op. For every shipped config (`replay_ratio=1`,
+`num_envs=16`), `n_grad_steps` is a constant 16 every iteration — Fix-3 was solving a
+non-problem and paying +10.7% HLO op-lines / +25% flops in the scan body as the price.
+The five basic-level re-launches stalled compiling for 60+ minutes at 0% GPU because of
+this inflation.
+
+Full investigation: `docs/reviews/dreamer_srl_basic_recompile_diagnosis.md`
+§ "Fix 3 compile-cost investigation".
+
+### Change
+
+One new Python constant at startup (alongside `_SCAN_BUCKET`, `dreamer_srl_main.py:~668`):
+
+```python
+_grad_steps_constant: bool = (
+    replay_ratio > 0
+    and (replay_ratio * num_envs) == int(replay_ratio * num_envs)
+)
+```
+
+In the scan branch (the `else` at ~line 1465), gated on `_grad_steps_constant and _n_extra == 0`:
+
+- **LEAN PATH** (True for all shipped configs): carry has 10 fields (no
+  `scan_step_local` / `n_real_steps`); body returns post-`train_step` states directly —
+  zero `jnp.where` masking ops. Compiles to 1592 HLO op-lines, 0 `stablehlo.select` ops.
+- **PAD-AND-MASK PATH** (False for fractional replay_ratio): identical to original Fix-3 body.
+  Carry has 12 fields; masking intact. Only activated when `replay_ratio * num_envs` is
+  non-integer (e.g. ratio=0.3).
+
+Fix 1 (masked env reset), Fix 2 (autoreset key split), the overflow fallback, and
+the legacy `--legacy-grad-loop` path are all **unchanged**.
+
+### Before/after op counts (proxy scan body, CPU)
+
+| Metric | Before (masked Fix-3) | After (lean path) | Delta |
+|---|---|---|---|
+| `stablehlo.select` ops | 20 | **0** | -20 |
+| HLO op-lines in scan body | 1763 | **1592** | -171 (-9.7%) |
+| Flops (proxy body) | 4.96e7 | **3.96e7** | -25% |
+| Compile time (proxy, CPU) | 0.78s | **0.68s** | -13% |
+
+Probe scripts: `tmp/20260622_fix3_compile_probe.py`, `tmp/20260622_fix3_foldcheck.py`,
+`tmp/20260622_170200_verify_lean_path.py`.
+
+### Recompile storm still absent
+
+Fix 1 is intact — `JAX_LOG_COMPILES=1` on `02-fast_predator_8x8.yaml` `--num-envs 16`
+shows no `[2,256]`, `[3,256]`, `[4,256]` variable-width reset compiles.
+
+### Test results
+
+```
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest \
+  tests/algorithms/dreamer_srl/test_agent.py \
+  tests/algorithms/dreamer_srl/test_train.py \
+  tests/algorithms/dreamer_srl/test_loss.py \
+  tests/algorithms/dreamer_srl/test_utils.py \
+  tests/algorithms/dreamer_srl/test_prefill.py \
+  tests/algorithms/dreamer_srl/test_buffers.py -v
+
+29 passed in 30.85s + 7 passed, 1 skipped in 30.58s = 36 passed, 1 skipped
+```
+
+### Checkpoints
+
+- [x] `_grad_steps_constant` Python bool added at startup (~line 668)
+- [x] Lean scan body (no masking, 10-field carry) implemented for `_grad_steps_constant=True`
+- [x] Pad-and-mask scan body preserved for fractional ratio path
+- [x] Verify script confirms 0 selects (lean) vs 20 selects (masked)
+- [x] All 36 dreamer_srl tests pass (1 pre-existing skip)
+- [x] No variable-width reset compiles in `JAX_LOG_COMPILES` trace
+
+*Fix-3 refinement implemented by: developer*
