@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 27
+**Insights**: 28
 **Last updated**: 2026-06-22
 
 ---
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-22 | 17:47 | `20260622_1747_dreamer_srl_single_config_budget_source` | dreamer_srl single-config (`--env-config`) reads the training budget from `env_cfg.training.*` (seeded from `configs/train/default.yaml`: episodes=100, checkpoint_frequency=10000, log_interval=10), NOT from the agent config — only `algo.*` is read from the agent YAML. So a budget-free scene config silently runs 100 episodes and exits in ~20s with 0 grad steps. Fix: pass `--episodes 10000000 --log-interval 2000` on the CLI (both override; CLI>agent>env). `checkpoint_frequency` has NO CLI flag (env-config only; in episodes; default 10000 is correct for terminate-on-convergence runs — the preset's 200000 risks 0 checkpoints). WandB showing 200000 is a display artifact (run spreads agent_config over env_config when logging). Curriculum mode unaffected (schedule sets budget). Also in built-in auto-memory for the training-runner. |
 | 2026-06-22 | 17:04 | `20260622_1704_continual_bm_transition_nameerror_refactor_drift` | The continual stage-transition crash (NameError: m1_candidates) was introduced by commit 89ade04 (2026-05-12) — a delete-heavy refactor that migrated train.py's behavior-measure accumulators to a BMState object but missed one of six reset sites (the continual stage-transition wipe added the day before). Latent ~40 days because the trigger (continual + behavior_measures + an actual stage transition) was exactly the path the continual-learning review left UNVERIFIED. Fixed with the canonical per-env _bm_reset_env loop + a fast regression smoke. |
 | 2026-05-29 | 18:25 | `20260529_1825_log_interval_anchored_rows_per_session` | log_interval should be anchored to ~140 WandB rows / 24h session, not env-steps-per-row. Dreamer-srl @ ~38 SPS / num_envs=16 reaches 250–500× fewer episodes than rPPO in the same wall-clock, so copying rPPO's env-step cadence (50000) gave 4–6 rows/session — empirically useless across 4 prior cells (oxm78on8/50cpronf/2r5hc0oz/hbqje3dt). Fix: `log_interval=2000` for dreamer-srl @ XS/num_envs=16 → ~140 rows in a 22k-episode session, same row-shape resolution rPPO has at production scale. New YAML carries the rationale + the 4 prior-crash run IDs as the evidence trail. |
 | 2026-05-29 | 18:24 | `20260529_1824_dreamer_srl_wandb_spread_and_config_save_parity` | Lifted rPPO's `**config.to_dict()` spread pattern into `dreamer_srl_main.py` so the UI filter `agent.algorithm = DreamerV3` works cleanly — pre-fix, the entire agent YAML was wrapped under `wandb_config["agent"]`, producing a doubly-nested `agent.agent.algorithm` that confused the filter. Post-fix smoke (`mo1pkvm5`): `wandb.config["agent"] == {"algorithm": "DreamerV3"}`. Trade-off: filter paths flatten — old saved views querying `agent.algo.gamma` / `env.environment.height` won't match post-fix runs; new paths are `algo.gamma` / `environment.height`. Also added `env_config.yaml` + `agent_config.yaml` save to `<results_dir>/models/` for reproducibility parity with rPPO. |
