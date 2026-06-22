@@ -2,7 +2,7 @@
 
 > **Source**: `src/environment/config_loader.py`, `src/environment/state.py`, `configs/environment/default.yaml` | **Back to hub**: [ENVIRONMENT_SUMMARY](ENVIRONMENT_SUMMARY.md)
 
-> **v3.0 updates** — For the config-system workflow (`extends:` layering, sparse overrides, authoring), see the companion [CONFIG_GUIDE.md](CONFIG_GUIDE.md). New v3.0 fields not yet enumerated below in full: top-level `extends:` (layered-config marker); per-entity `visual_properties` / `visual_properties_std` plus `sensory.visual_vector_size` (default 8) and `sensory.visual_background_properties` (3×V, required when V≠8); conditional-mandatory `body.start_{nutrition,injury}_{low,high}`; and the `behavior_measures.eval_seeds` list-or-`{rng, sort}`-spec form.
+> **v3.0 updates** — For the config-system workflow (`extends:` layering, sparse overrides, authoring), see the companion [CONFIG_GUIDE.md](CONFIG_GUIDE.md). New v3.0 fields not yet enumerated below in full: top-level `extends:` (layered-config marker); per-entity `visual_properties` / `visual_properties_std` plus `sensory.visual_vector_size` (default 8) and `sensory.visual_background_properties` (3×V, required when V≠8); conditional-mandatory `body.start_{nutrition,injury}_{low,high}`; `behavior_measures.eval_seeds` list-or-`{rng, sort}`-spec form; and per-entity `count_low`/`count_high` for per-episode count ranges (see [Entity Count Expansion](#entity-count-expansion) and CONFIG_GUIDE §3.6).
 
 ---
 
@@ -783,6 +783,46 @@ Each entity definition in YAML carries an optional `count` field (default `1`). 
 
 When an entity list is empty (e.g. no animals configured), the loader builds zero-size arrays of the correct dtype and shape so `jax.vmap` does not need entity-count conditionals.
 
+### Per-episode count ranges (v3.0 PER\_EPISODE\_ENV\_VARIANCE)
+
+An entity entry may declare a **count range** instead of a fixed `count`, causing the engine to redraw the actual count K at every episode reset:
+
+| YAML keys | Meaning | Fallback |
+|-----------|---------|---------|
+| `count_low: L` + `count_high: H` | allocate H slots; draw K ∈ [L, H] at reset | — |
+| `count: N` only | degenerate range: `count_low = count_high = N` → K always N; byte-identical to pre-v3.0 | — |
+| neither | `count_low = count_high = 1` (same as `count: 1`) | — |
+| both `count` and `count_low`/`count_high` present | `ValueError` (ambiguous) | — |
+
+**Slot allocation.** The loader always allocates `count_high` slots — the JAX array shape is static. The surplus `count_high − K` slots are marked inactive each episode via three boolean masks stored in `EnvState`:
+
+| Mask | Shape | Guards |
+|------|-------|--------|
+| `res_active` | `[num_res]` bool | resource sensing (olfaction, extero-noc, visual), interaction logic |
+| `animal_active` | `[num_animal]` bool | animal movement, damage, olfaction, visual, distance metrics |
+| `obs_active` | `[num_obs]` bool | obstacle collision, damage, bush concealment, visual, olfaction |
+
+Inactive slots are also **parked off-grid** (position set to `(height, width)`) so they cannot physically overlap the agent or resolve-overlaps candidates.
+
+**Per-entry K-draw.** K is drawn **per YAML entry** from a `fold_in`-derived PRNG key in `jax_reset`, after the existing animal-field draws. The draw is **skipped** when every entry in a class is degenerate (ensures byte-identical PRNG streams for configs that use only `count: N`).
+
+**EnvParams fields added for count ranges:**
+
+| Field | Shape | Class | Notes |
+|-------|-------|-------|-------|
+| `res_count_low` | `[num_res_entries]` int | resource | per-entry lower bound |
+| `res_count_high` | `[num_res_entries]` int | resource | per-entry upper bound = allocation per entry |
+| `res_entry_id` | `[num_res]` int | resource | maps each slot to its entry |
+| `has_res_range` | scalar bool | resource | True if any entry has `count_low < count_high` |
+| `animal_count_low` | `[num_animal_entries]` int | animal | per-entry lower bound |
+| `animal_count_high` | `[num_animal_entries]` int | animal | per-entry upper bound |
+| `animal_entry_id` | `[num_animal]` int | animal | maps each slot to its entry |
+| `has_animal_range` | scalar bool | animal | True if any entry has range |
+| `obs_count_low` | `[num_obs_entries]` int | obstacle | per-entry lower bound |
+| `obs_count_high` | `[num_obs_entries]` int | obstacle | per-entry upper bound |
+| `obs_entry_id` | `[num_obs]` int | obstacle | maps each slot to its entry |
+| `has_obs_range` | scalar bool | obstacle | True if any entry has range |
+
 ---
 
 ## Resource Entity Fields
@@ -799,7 +839,9 @@ Each entry under `environment.resources` (after `count` expansion):
 | `regeneration_delay` | `res_reg_delay [N]` | yes | steps before respawn |
 | `damage` | `res_damage [N, 2]` | yes | `[lo, hi]` per-event; scalar → `[s, s]` |
 | `nociception_intensity` | `res_nociception [N]` | optional | default `0.9` for hiding\_predator/danger, `0.0` for food |
-| `count` | (expansion only) | optional | default `1` |
+| `count` | (expansion only) | optional | default `1`; mutually exclusive with `count_low`/`count_high` |
+| `count_low` | `res_count_low [E]` (per-entry) | optional | v3.0: per-episode lower bound; requires `count_high`; absence → `count` fallback |
+| `count_high` | `res_count_high [E]` (per-entry) | optional | v3.0: per-episode upper bound = slot allocation; requires `count_low` |
 
 ---
 
@@ -817,7 +859,9 @@ Each entry under `environment.obstacles` (after `count` expansion):
 | `damage` | `obs_damage [N, 2]` | optional | `0.0` → `[0,0]` | per-event damage range |
 | `nociception_intensity` | `obs_nociception [N]` | optional | `0.3` | |
 | `name` | `obs_type [N]` int | optional | `"rock"` | index into `obstacle_names` |
-| `count` | (expansion only) | optional | `1` | |
+| `count` | (expansion only) | optional | `1` | mutually exclusive with `count_low`/`count_high` |
+| `count_low` | `obs_count_low [E]` (per-entry) | optional | — | v3.0: per-episode lower bound; requires `count_high` |
+| `count_high` | `obs_count_high [E]` (per-entry) | optional | — | v3.0: per-episode upper bound = slot allocation | |
 
 `obstacle_names` is the **sorted unique** tuple of all obstacle `name` values (`config_loader.py:720`). Renaming an obstacle can shift its index — don't hardcode indices outside the config.
 

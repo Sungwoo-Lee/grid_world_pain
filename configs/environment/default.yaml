@@ -15,11 +15,18 @@ environment:
   placement:
     mode: per_entity
 
+  # Scene: full-grid spawn + per-episode count ranges (v3.0 PER_EPISODE_ENV_VARIANCE).
+  # Each episode redraws K in [count_low, count_high] for each entity entry;
+  # count_high slots are allocated, the remaining (count_high - K) are inactive (off-grid).
+  # Rationale: prevents layout-memorisation by varying entity counts + positions each episode.
+  # Backward-compat: configs that extend this and re-declare resources/entities/obstacles
+  # are fully insulated (Config.merge replaces list values wholesale).
   resources:
-    - name: "food" # Top Left
+    - name: "food"
       type: "food"
-      count: 2
-      spawn_area: [[1, 1], [5, 5]]
+      count_low: 2   # per-episode lower bound (inclusive); K drawn uniform [low, high]
+      count_high: 6  # per-episode upper bound (inclusive); allocation size
+      spawn_area: [[1, 1], [10, 10]]   # full grid (was 4 quadrant entries)
       properties: [1.0, 0.0, 0.0, 0.0, 0.0]
       properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       visual_properties: [0,0,0,1,0,0,0,0]
@@ -29,88 +36,11 @@ environment:
       damage: [0.0, 0.0]
       nociception_intensity: 0.0
 
-    - name: "food" # Top Right
-      type: "food"
-      count: 0
-      spawn_area: [[1, 6], [5, 10]]
-      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,1,0,0,0,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-      max_consumption: 12
-      regeneration_delay: 0
-      damage: [0.0, 0.0]
-      nociception_intensity: 0.0
-
-    - name: "food" # Bottom Right
-      type: "food"
-      count: 2
-      spawn_area: [[6, 6], [10, 10]]
-      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,1,0,0,0,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-      max_consumption: 12
-      regeneration_delay: 0
-      damage: [0.0, 0.0]
-      nociception_intensity: 0.0
-
-    - name: "food" # Bottom Left
-      type: "food"
-      count: 0
-      spawn_area: [[6, 1], [10, 5]]
-      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,1,0,0,0,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-      max_consumption: 12
-      regeneration_delay: 0
-      damage: [0.0, 0.0]
-      nociception_intensity: 0.0
-
-    - name: "hiding_predator" # Top Left
+    - name: "hiding_predator"
       type: "hiding_predator"
-      count: 1
-      spawn_area: [[1, 1], [5, 5]]
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,0,1,0,0,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-      max_consumption: -1
-      damage: [15.0, 45.0]
-      regeneration_delay: 20
-      nociception_intensity: 0.9
-
-    - name: "hiding_predator" # Top Right
-      type: "hiding_predator"
-      count: 1
-      spawn_area: [[1, 6], [5, 10]]
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,0,1,0,0,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-      max_consumption: -1
-      damage: [15.0, 45.0]
-      regeneration_delay: 20
-      nociception_intensity: 0.9
-
-    - name: "hiding_predator" # Bottom Right
-      type: "hiding_predator"
-      count: 1
-      spawn_area: [[6, 6], [10, 10]]
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,0,1,0,0,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-      max_consumption: -1
-      damage: [15.0, 45.0]
-      regeneration_delay: 20
-      nociception_intensity: 0.9
-
-    - name: "hiding_predator" # Bottom Left
-      type: "hiding_predator"
-      count: 1
-      spawn_area: [[6, 1], [10, 5]]
+      count_low: 2   # per-episode lower bound
+      count_high: 4  # per-episode upper bound; was 4 fixed (1 per quadrant)
+      spawn_area: [[1, 1], [10, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       visual_properties: [0,0,0,0,1,0,0,0]
@@ -121,18 +51,17 @@ environment:
       nociception_intensity: 0.9
 
       
-  # -- Unified entities schema (v2.0+). Migrated from the legacy split
-  #    `predators:` / `neutral_animals:` lists; every field value is byte-identical
-  #    so environment generation is UNCHANGED (parity-preserving migration).
+  # -- Unified entities schema (v2.0+). Scene rewrite (v3.0 PER_EPISODE_ENV_VARIANCE):
+  #    collapsed from quadrant blocks to single full-grid entries with count ranges.
   #    `class` => visual channel + smell + is_damaging; `behaviour` => movement
-  #    controller (hunt / wander / static). Order [predator, rabbit, rabbit]
-  #    matches the legacy [predators..., neutral_animals...] array order.
+  #    controller (hunt / wander / static).
   entities:
     # -- Predator: damaging hunter (class predator => is_damaging). --
     - class: "predator"
       behaviour: "hunt"
       tag: "pred"
-      count: 1
+      count_low: 1   # always at least 1 threat present
+      count_high: 2  # occasionally 2 predators to prevent single-predator-position policy
       properties: [0.0, 0.7, 0.5, 0.0, 0.0]
       properties_std: [0.0, 0.4, 0.4, 0.0, 0.0]
       visual_properties: [0,0,0,0,0,1,0,0]
@@ -140,7 +69,7 @@ environment:
       move_interval: 1
       damage: [15.0, 45.0]
       nociception_intensity: 0.9
-      spawn_area: [[1, 1], [10, 10]]
+      spawn_area: [[1, 1], [10, 10]]   # full grid (unchanged from before)
       patrol_area: [[1, 1], [10, 10]]
       # Five chase fields are MANDATORY for behaviour: hunt.
       detection_range: 5
@@ -150,13 +79,14 @@ environment:
       lose_interest_multiplier: 1.5
       attack_delay: 3
 
-    # -- Rabbit (Top-Left quadrant): harmless wanderer (class neutral => is_damaging=False). --
-    #    behaviour: wander => the five chase fields are OPTIONAL and omitted (as legacy neutrals had none).
-    #    damage:[0,0] + attack_delay:0 are now EXPLICIT (the legacy loader auto-filled them for neutrals).
+    # -- Rabbit: harmless wanderer (class neutral => is_damaging=False). --
+    #    Collapsed from 2 quadrant entries to 1 full-grid entry with count_low/high.
+    #    behaviour: wander => five chase fields are OPTIONAL (omitted).
     - class: "neutral"
       behaviour: "wander"
-      tag: "rabbit_tl"
-      count: 1
+      tag: "rabbit"
+      count_low: 1   # at least 1 neutral distractor
+      count_high: 3  # up to 3 to vary olfactory/visual scene statistics
       properties: [0.0, 0.5, 0.7, 0.0, 0.0]
       properties_std: [0.0, 0.4, 0.4, 0.0, 0.0]
       visual_properties: [0,0,0,0,0,0,0,1]
@@ -165,24 +95,8 @@ environment:
       nociception_intensity: 0.1
       damage: [0.0, 0.0]
       attack_delay: 0
-      spawn_area: [[1, 1], [5, 5]]
-      patrol_area: [[1, 1], [5, 5]]
-
-    # -- Rabbit (Bottom-Right quadrant): identical profile, different quadrant. --
-    - class: "neutral"
-      behaviour: "wander"
-      tag: "rabbit_br"
-      count: 1
-      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
-      properties_std: [0.0, 0.4, 0.4, 0.0, 0.0]
-      visual_properties: [0,0,0,0,0,0,0,1]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-      move_interval: 1
-      nociception_intensity: 0.1
-      damage: [0.0, 0.0]
-      attack_delay: 0
-      spawn_area: [[6, 6], [10, 10]]
-      patrol_area: [[6, 6], [10, 10]]
+      spawn_area: [[1, 1], [10, 10]]   # full grid (was 2 separate quadrant entries)
+      patrol_area: [[1, 1], [10, 10]]
 
   location_areas:
     - type: "grass"
@@ -191,39 +105,10 @@ environment:
       area: [[0, 0], [0, 0]]
 
   obstacles:
-    - name: "rock" # Top Left
-      count: 3
-      area: [[1, 1], [5, 5]]
-      blocking: false
-      damage: [1, 5]
-      nociception_intensity: 0.9
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,0,0,0,1,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-    - name: "rock" # Top Right
-      count: 3
-      area: [[1, 6], [5, 10]]
-      blocking: false
-      damage: [1, 5]
-      nociception_intensity: 0.9
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,0,0,0,1,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-    - name: "rock" # Bottom Left
-      count: 3
-      area: [[6, 1], [10, 5]]
-      blocking: false
-      damage: [1, 5]
-      nociception_intensity: 0.9
-      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,0,0,0,1,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-    - name: "rock" # Bottom Right
-      count: 3
-      area: [[6, 6], [10, 10]]
+    - name: "rock"
+      count_low: 6    # per-episode lower bound; was 12 fixed (3 per quadrant)
+      count_high: 12  # per-episode upper bound; allocation size
+      area: [[1, 1], [10, 10]]   # full grid (was 4 quadrant entries)
       blocking: false
       damage: [1, 5]
       nociception_intensity: 0.9
@@ -241,42 +126,10 @@ environment:
       properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
       visual_properties: [0,0,0,0,0,0,1,0]
       visual_properties_std: [0,0,0,0,0,0,0,0]
-    - name: "bush" # Top Left
-      count: 0
-      area: [[1, 1], [5, 5]]
-      blocking: false
-      damage: [0.0, 0.0]
-      nociception_intensity: 0.0
-      hides_agent: true
-      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,0,0,0,1,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-    - name: "bush" # Top Right
-      count: 5
-      area: [[1, 6], [5, 10]]
-      blocking: false
-      damage: [0.0, 0.0]
-      nociception_intensity: 0.0
-      hides_agent: true
-      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,0,0,0,1,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-    - name: "bush" # Bottom Left
-      count: 5
-      area: [[6, 1], [10, 5]]
-      blocking: false
-      damage: [0.0, 0.0]
-      nociception_intensity: 0.0
-      hides_agent: true
-      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
-      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,0,0,0,1,0]
-      visual_properties_std: [0,0,0,0,0,0,0,0]
-    - name: "bush" # Bottom Right
-      count: 0
-      area: [[6, 6], [10, 10]]
+    - name: "bush"
+      count_low: 4    # per-episode lower bound; was 10 fixed (5+5 across 2 quadrants)
+      count_high: 10  # per-episode upper bound; allocation size
+      area: [[1, 1], [10, 10]]   # full grid (was 4 quadrant entries)
       blocking: false
       damage: [0.0, 0.0]
       nociception_intensity: 0.0

@@ -34,14 +34,23 @@ def _collect_all_configs():
 
 
 def _count_yaml_animals(cfg_dict):
-    """Count total animals from raw YAML (predators + neutral_animals, respecting count:)."""
+    """Count total animals from raw YAML (predators + neutral_animals, respecting count:).
+
+    For entries with count_low/count_high (v3.0 per-episode ranges), uses count_high
+    (the slot allocation size, which equals the JAX array dimension).
+    """
+    def _entry_count(entry):
+        if "count_high" in entry:
+            return entry["count_high"]
+        return entry.get("count", 1)
+
     total = 0
     for pred in (cfg_dict.get("environment", {}).get("predators") or []):
-        total += pred.get("count", 1)
+        total += _entry_count(pred)
     for neu in (cfg_dict.get("environment", {}).get("neutral_animals") or []):
-        total += neu.get("count", 1)
+        total += _entry_count(neu)
     for ent in (cfg_dict.get("environment", {}).get("entities") or []):
-        total += ent.get("count", 1)
+        total += _entry_count(ent)
     return total
 
 

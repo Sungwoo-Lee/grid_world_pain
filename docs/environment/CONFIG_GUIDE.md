@@ -126,6 +126,32 @@ behavior_measures:
 
 `rng` is mandatory inside the dict; `sort: true` (the default) keeps the seed order fixed so episode *i* is comparable across runs.
 
+### 3.6 Per-episode entity count ranges (v3.0 PER\_EPISODE\_ENV\_VARIANCE)
+
+Instead of a fixed `count: N`, each entity entry may declare a range. The engine draws an actual count K uniformly from `[count_low, count_high]` at each episode reset:
+
+```yaml
+environment:
+  resources:
+    - name: "food"
+      type: "food"
+      count_low: 2          # per-episode lower bound (inclusive)
+      count_high: 6         # per-episode upper bound (inclusive); allocation size
+      spawn_area: [[1, 1], [10, 10]]
+      # ... other fields unchanged
+```
+
+**How it works.** The loader allocates `count_high` entity slots — the array shape is fixed (JAX requires it). At each episode reset, K is redrawn and the surplus `count_high − K` slots are **marked inactive**: their positions are parked off-grid so they cannot collide, cause damage, or be sensed.
+
+**Backward compatibility.** `count: N` (no range keys) behaves exactly as before — it is treated as `count_low = count_high = N`, so all K slots are always active (all-True mask). The K-draw is **skipped entirely** when every entry in a class uses a degenerate range, so existing configs produce byte-identical output.
+
+**Constraint.** Do not specify both `count` and `count_low`/`count_high` on the same entry — the loader raises `ValueError`. Use one style or the other.
+
+**Applies to all three entity classes:**
+- `resources:` — food, hiding\_predator
+- `entities:` — predator, rabbit (any `class`/`behaviour` animal)
+- `obstacles:` — rock, bush, tree
+
 ---
 
 ## 4. How to author a new config (worked example)
