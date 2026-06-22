@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import glob
-import math
 import sys
 import time
 from dataclasses import dataclass
@@ -210,62 +209,21 @@ class Player:
         self._posterior_state: Optional[jax.Array] = None
         self._prev_action: Optional[jax.Array] = None
 
-    def init_states(self, reset_envs=None, done_mask: Optional[np.ndarray] = None) -> None:
+    def init_states(self, reset_envs=None) -> None:
         """Reset player recurrent + posterior state.
 
         Sheeprl PlayerDV3.init_states — reset all envs if reset_envs is None.
         Called at startup and after done episodes.
-
-        Fix (recompile-storm): when done_mask is provided (preferred path for the
-        training loop), use a fixed-width boolean-mask reset over all num_envs.
-        This ensures get_initial_states(num_envs) is called with a CONSTANT batch
-        size, eliminating the variable-shape XLA recompiles that fired when
-        get_initial_states(n_done) was called with n_done in 1..16 on desynchronized
-        basic-level episodes.
-
-        Idiom mirrors §S4 arithmetic mask already used in RSSM.dynamic:
-            h = (1 - mask[:,None]) * h + mask[:,None] * h0_full
-        where mask[i]=1 for done envs.  Bit-for-bit equivalent to the old
-        scatter (only the done slots receive h0; living slots keep their values).
-
-        done_mask: bool/float array of shape [num_envs] — 1.0 for done envs.
-                   When provided, reset_envs is ignored.
-        reset_envs: legacy list of done env indices.  Used only when done_mask
-                    is None (full-reset path on curriculum stage transition or startup).
         """
-        if done_mask is not None:
-            # Fixed-width masked reset (recompile-storm fix).
-            # get_initial_states(num_envs) is constant-shape → compiled once.
-            h0_full, z0_full = self.world_model.rssm.get_initial_states(self.num_envs)
-            action_dim = self.actor.action_dim
-
-            mask = jnp.asarray(done_mask, dtype=jnp.float32)  # [B]
-
-            # Recurrent state: [B, recurrent_state_size]
-            m_h = mask[:, None]  # [B, 1]
-            self._recurrent_state = (1.0 - m_h) * self._recurrent_state + m_h * h0_full
-
-            # Posterior state: [B, num_cat, num_cls]
-            m_z = mask[:, None, None]  # [B, 1, 1]
-            self._posterior_state = (1.0 - m_z) * self._posterior_state + m_z * z0_full
-
-            # Previous action: [B, action_dim]
-            m_a = mask[:, None]  # [B, 1]
-            zeros_a = jnp.zeros((self.num_envs, action_dim), dtype=jnp.float32)
-            self._prev_action = (1.0 - m_a) * self._prev_action + m_a * zeros_a
-            return
-
         if reset_envs is None:
-            # Reset all envs (startup / curriculum stage transition)
+            # Reset all envs
             h0, z0 = self.world_model.rssm.get_initial_states(self.num_envs)
             self._recurrent_state = h0   # [B, recurrent_state_size]
             self._posterior_state = z0   # [B, num_cat, num_cls]
             action_dim = self.actor.action_dim
             self._prev_action = jnp.zeros((self.num_envs, action_dim), dtype=jnp.float32)
         else:
-            # Legacy path: reset only the done envs via index scatter.
-            # Kept for any caller that passes reset_envs without done_mask;
-            # the hot training-loop path now uses done_mask instead.
+            # Reset only the done envs
             n_done = len(reset_envs)
             if n_done == 0:
                 return
@@ -652,32 +610,6 @@ def main() -> None:
         device=args.buffer_device,  # Step 2: "cpu" (default) or "gpu" (opt-in via --buffer-device)
     )
     player = Player(world_model, actor, num_envs)
-
-    # Fix 3 (recompile-storm): compute a fixed scan bucket so jit_scan always
-    # receives the same leading dimension, preventing XLA from building a new
-    # executable each time n_grad_steps varies.
-    #
-    # SCAN_BUCKET = ceil(replay_ratio * num_envs), lower-bounded at 1.
-    # With replay_ratio=1, num_envs=16 → SCAN_BUCKET=16 (matches steady-state
-    # n_grad_steps exactly; no padding overhead in the common case).
-    # With replay_ratio=0.5, num_envs=16 → SCAN_BUCKET=8 (n_grad_steps alternates
-    # 0 and 8; the scan only fires when n_grad_steps>0, so it sees only 8).
-    # If n_grad_steps ever exceeds SCAN_BUCKET (extreme catchup burst at startup),
-    # the excess steps are silently clamped — they are handled by the legacy loop
-    # fallback below (see comment in the scan block).
-    _SCAN_BUCKET: int = max(1, math.ceil(replay_ratio * num_envs))
-
-    # Python-level constant: True when n_grad_steps is invariant across all
-    # steady-state iterations.  This happens iff replay_ratio * num_envs is a
-    # positive integer — in which case Ratio() always returns that same int,
-    # the scan leading dim never changes, and Fix-3's pad-and-mask machinery
-    # is unnecessary (and inflates compile cost).  All shipped configs use
-    # replay_ratio=1 so _grad_steps_constant=True for every current run.
-    # The fractional-ratio path (e.g. ratio=0.3) is False and keeps masking.
-    _grad_steps_constant: bool = (
-        replay_ratio > 0
-        and (replay_ratio * num_envs) == int(replay_ratio * num_envs)
-    )
 
     # -----------------------------------------------------------------------
     # 8. Build JIT'd train_step (factory captures horizon + scalars statically)
@@ -1136,11 +1068,8 @@ def main() -> None:
             }
             buffer.add(reset_data, env_idxes=dones_idxes, validate_args=False)
 
-            # Reset player state for done envs — use fixed-width boolean-mask path
-            # (recompile-storm fix 1): builds get_initial_states(num_envs) which is
-            # constant-shape, instead of get_initial_states(n_done) which varies 1..16.
-            _done_mask = dones.astype(np.float32)  # [num_envs] — 1.0 for done envs
-            player.init_states(done_mask=_done_mask)
+            # Reset player state for done envs
+            player.init_states(reset_envs=dones_idxes)
 
             # Set is_first=1 in step_data so the NEXT row written has is_first=1
             # (sheeprl L656: step_data["is_first"][:, dones_idxes] = ones_like(...))
@@ -1163,15 +1092,11 @@ def main() -> None:
                 if bm_enabled:
                     bm_reset_env(_bm_state, i)
 
-            # Env auto-reset: get fresh obs for done envs.
-            # Fix 2 (recompile-storm): split into num_envs keys (constant shape) and
-            # index by env_idx directly — instead of splitting into len(dones_idxes)
-            # keys (variable 1..16) which caused XLA to build a new _threefry_split
-            # executable for each distinct count.
+            # Env auto-reset: get fresh obs for done envs
             key, k_autoreset = jax.random.split(key)
-            reset_keys = jax.random.split(k_autoreset, num_envs)  # [num_envs, 2] — constant shape
-            for env_idx in dones_idxes:
-                k_env = reset_keys[env_idx]
+            reset_keys = jax.random.split(k_autoreset, len(dones_idxes))
+            for idx_local, env_idx in enumerate(dones_idxes):
+                k_env = reset_keys[idx_local]
                 # Reset single env by overwriting its state
                 from src.environment.core import jax_reset
                 from src.environment.sensor import get_observation
@@ -1484,18 +1409,7 @@ def main() -> None:
                     # Anti-pattern avoided: graphdef captured in closure (hashable
                     # static); state pytree in carry (pure JAX array tree).
                     # Reference: src/models/dreamer_v3_trainer.py:685-833 (_scan_train_gpu)
-                    #
-                    # Fix 3 (recompile-storm): scan always runs exactly _SCAN_BUCKET
-                    # steps (constant, set at startup).  When n_grad_steps < _SCAN_BUCKET
-                    # the surplus steps are masked (carry unchanged); when n_grad_steps >
-                    # _SCAN_BUCKET the excess is handled by a short legacy fallback loop
-                    # below.  n_real_steps is carried as a JAX int so it participates in
-                    # traced computation without becoming a Python-side shape variable.
                     # -------------------------------------------------------
-
-                    # Clamp real steps to bucket; overflow handled by legacy loop.
-                    _n_real  = min(n_grad_steps, _SCAN_BUCKET)
-                    _n_extra = n_grad_steps - _n_real  # overflow (normally 0)
 
                     # Split all modules + optimizers into (graphdef, state) pairs.
                     # graphdef is static metadata (hashable, captured in closure).
@@ -1508,216 +1422,112 @@ def main() -> None:
                     graphdef_ac_opt,  state_ac_opt  = nnx.split(actor_opt)
                     graphdef_cr_opt,  state_cr_opt  = nnx.split(critic_opt)
 
-                    # scan_xs shape: [_SCAN_BUCKET, seq_len, batch_size, ...] — constant.
-                    # No padding needed when _grad_steps_constant (n_real == bucket always).
-                    if _n_real < _SCAN_BUCKET:
-                        # Build a "dummy" filler row by taking the last real row
-                        _dummy_row = {k: v[_n_real - 1:_n_real] for k, v in local_data_gpu.items()}
-                        _pad_rows = {k: jnp.tile(v, (_SCAN_BUCKET - _n_real,) + (1,) * (v.ndim - 1))
-                                     for k, v in _dummy_row.items()}
-                        scan_xs = {k: jnp.concatenate([local_data_gpu[k][:_n_real], _pad_rows[k]], axis=0)
-                                   for k in local_data_gpu}
-                    else:
-                        scan_xs = {k: v[:_SCAN_BUCKET] for k, v in local_data_gpu.items()}
+                    # Carry: all mutable state as pure pytrees.
+                    # step_idx tracks the cumulative grad step count for Polyak
+                    # scheduling; it's a JAX int so jnp.where can act on it traced.
+                    init_carry = (
+                        state_wm, state_ac, state_cr, state_tg,
+                        state_wm_opt, state_ac_opt, state_cr_opt,
+                        moments, key,
+                        jnp.array(cumulative_grad_steps, dtype=jnp.int32),
+                    )
 
-                    if _grad_steps_constant and _n_extra == 0:
-                        # -------------------------------------------------------
-                        # LEAN PATH — replay_ratio=1 (all shipped configs).
-                        # n_grad_steps == _SCAN_BUCKET == _n_real on every iteration,
-                        # so there is never any padding.  The carry omits
-                        # scan_step_local and n_real_steps, and the body returns
-                        # post-train_step states directly — no jnp.where masking.
-                        # This removes 20 stablehlo.select ops and ~171 HLO op-lines
-                        # vs. the Fix-3 masked body (see fix3_compile_probe results
-                        # in docs/reviews/dreamer_srl_basic_recompile_diagnosis.md).
-                        # -------------------------------------------------------
-                        init_carry = (
-                            state_wm, state_ac, state_cr, state_tg,
-                            state_wm_opt, state_ac_opt, state_cr_opt,
-                            moments, key,
-                            jnp.array(cumulative_grad_steps, dtype=jnp.int32),
+                    # Scan inputs: the pre-stacked local_data_gpu dict, already
+                    # on device. lax.scan slices axis 0 → each body call receives
+                    # {k: v[i]} automatically.
+                    scan_xs = local_data_gpu  # dict[str, [n_grad_steps, ...]]
+
+                    def _scan_body(carry, batch_i):
+                        """One gradient step inside jax.lax.scan.
+
+                        carry = (s_wm, s_ac, s_cr, s_tg,
+                                 s_wm_opt, s_ac_opt, s_cr_opt,
+                                 moments, key, step_idx)
+                        batch_i = {k: v[i, ...]} — one slice of local_data_gpu.
+
+                        graphdef_* are captured via Python closure (hashable static
+                        metadata) — they never enter the carry, which prevents
+                        JIT retracing. This is rule 1+3 from the nnx.split/merge
+                        insight: docs/memory/memories/dreamer_diagnosis/
+                        20260519_1509_nnx_lax_scan_split_merge_pattern.md
+                        target_update_freq, critic_tau captured as Python ints/floats.
+                        """
+                        (s_wm, s_ac, s_cr, s_tg,
+                         s_wm_opt, s_ac_opt, s_cr_opt,
+                         carry_moments, carry_key, step_idx) = carry
+
+                        # --- Polyak update on target_critic (scan-safe form) ---
+                        # Replaces the Python if-conditional (lines 921-929 legacy path).
+                        # jnp.where is elementwise: both branches always evaluated
+                        # (XLA requirement), but only one is selected. This is safe
+                        # because both branches are pure arithmetic on JAX arrays.
+                        do_update = (step_idx % target_update_freq) == 0
+                        tau_val = jnp.where(step_idx == 0,
+                                            jnp.float32(1.0),
+                                            jnp.float32(critic_tau))
+
+                        # Reconstruct critic + target_critic to extract Param substate.
+                        # Mirrors CPU path: nnx.state(critic, nnx.Param).
+                        # Note: _cr_for_polyak and _tg_for_polyak are temporary;
+                        # _cr reconstructed again below for train_step (same graphdef).
+                        _cr_for_polyak = nnx.merge(graphdef_cr, s_cr)
+                        _tg_for_polyak = nnx.merge(graphdef_tg, s_tg)
+                        online_params = nnx.state(_cr_for_polyak, nnx.Param)
+                        target_params = nnx.state(_tg_for_polyak, nnx.Param)
+
+                        new_target_params = jax.tree.map(
+                            lambda c, t: jnp.where(
+                                do_update,
+                                (1.0 - tau_val) * t + tau_val * c,
+                                t,
+                            ),
+                            online_params, target_params,
+                        )
+                        # Write updated Param substate back; extract full state
+                        nnx.update(_tg_for_polyak, new_target_params)
+                        s_tg_new = nnx.state(_tg_for_polyak)
+
+                        # --- Reconstruct all modules for train_step ---
+                        _wm   = nnx.merge(graphdef_wm,     s_wm)
+                        _ac   = nnx.merge(graphdef_ac,     s_ac)
+                        _cr   = nnx.merge(graphdef_cr,     s_cr)
+                        _tg   = nnx.merge(graphdef_tg,     s_tg_new)
+                        _wm_o = nnx.merge(graphdef_wm_opt, s_wm_opt)
+                        _ac_o = nnx.merge(graphdef_ac_opt, s_ac_opt)
+                        _cr_o = nnx.merge(graphdef_cr_opt, s_cr_opt)
+
+                        # --- Train step ---
+                        carry_key, k_train = jax.random.split(carry_key)
+                        new_moments, losses = train_step(
+                            _wm, _ac, _cr, _tg,
+                            _wm_o, _ac_o, _cr_o,
+                            carry_moments, batch_i, k_train,
                         )
 
-                        def _scan_body(carry, batch_i):
-                            """Lean scan body — no masking, constant step count.
-
-                            carry = (s_wm, s_ac, s_cr, s_tg,
-                                     s_wm_opt, s_ac_opt, s_cr_opt,
-                                     moments, key, step_idx)
-                            batch_i = {k: v[i, ...]} — one slice of scan_xs.
-
-                            graphdef_* captured via Python closure (static metadata).
-                            target_update_freq, critic_tau captured as Python ints/floats.
-                            """
-                            (s_wm, s_ac, s_cr, s_tg,
-                             s_wm_opt, s_ac_opt, s_cr_opt,
-                             carry_moments, carry_key, step_idx) = carry
-
-                            # --- Polyak update on target_critic (scan-safe form) ---
-                            do_update = (step_idx % target_update_freq) == 0
-                            tau_val = jnp.where(step_idx == 0,
-                                                jnp.float32(1.0),
-                                                jnp.float32(critic_tau))
-
-                            _cr_for_polyak = nnx.merge(graphdef_cr, s_cr)
-                            _tg_for_polyak = nnx.merge(graphdef_tg, s_tg)
-                            online_params = nnx.state(_cr_for_polyak, nnx.Param)
-                            target_params = nnx.state(_tg_for_polyak, nnx.Param)
-
-                            new_target_params = jax.tree.map(
-                                lambda c, t: jnp.where(
-                                    do_update,
-                                    (1.0 - tau_val) * t + tau_val * c,
-                                    t,
-                                ),
-                                online_params, target_params,
-                            )
-                            nnx.update(_tg_for_polyak, new_target_params)
-                            s_tg_new = nnx.state(_tg_for_polyak)
-
-                            # --- Reconstruct all modules for train_step ---
-                            _wm   = nnx.merge(graphdef_wm,     s_wm)
-                            _ac   = nnx.merge(graphdef_ac,     s_ac)
-                            _cr   = nnx.merge(graphdef_cr,     s_cr)
-                            _tg   = nnx.merge(graphdef_tg,     s_tg_new)
-                            _wm_o = nnx.merge(graphdef_wm_opt, s_wm_opt)
-                            _ac_o = nnx.merge(graphdef_ac_opt, s_ac_opt)
-                            _cr_o = nnx.merge(graphdef_cr_opt, s_cr_opt)
-
-                            # --- Train step ---
-                            carry_key, k_train = jax.random.split(carry_key)
-                            new_moments, losses = train_step(
-                                _wm, _ac, _cr, _tg,
-                                _wm_o, _ac_o, _cr_o,
-                                carry_moments, batch_i, k_train,
-                            )
-
-                            # Return post-train_step states directly — no masking needed
-                            # because every scan iteration is a real gradient step.
-                            new_carry = (
-                                nnx.state(_wm),
-                                nnx.state(_ac),
-                                nnx.state(_cr),
-                                s_tg_new,
-                                nnx.state(_wm_o),
-                                nnx.state(_ac_o),
-                                nnx.state(_cr_o),
-                                new_moments,
-                                carry_key,
-                                step_idx + jnp.int32(1),
-                            )
-                            return new_carry, losses
-
-                        # Run the lean scan over _SCAN_BUCKET steps (constant)
-                        final_carry, losses_stack = jax.lax.scan(
-                            _scan_body, init_carry, scan_xs,
+                        # --- Extract updated state pytrees for next iteration ---
+                        new_carry = (
+                            nnx.state(_wm),
+                            nnx.state(_ac),
+                            nnx.state(_cr),
+                            s_tg_new,       # target_critic: Polyak-updated above
+                            nnx.state(_wm_o),
+                            nnx.state(_ac_o),
+                            nnx.state(_cr_o),
+                            new_moments,
+                            carry_key,
+                            step_idx + 1,
                         )
+                        return new_carry, losses
 
-                        (s_wm_f, s_ac_f, s_cr_f, s_tg_f,
-                         s_wm_opt_f, s_ac_opt_f, s_cr_opt_f,
-                         moments, key, _step_idx_f) = final_carry
+                    # Run the scan over all n_grad_steps
+                    final_carry, losses_stack = jax.lax.scan(
+                        _scan_body, init_carry, scan_xs,
+                    )
 
-                    else:
-                        # -------------------------------------------------------
-                        # PAD-AND-MASK PATH — fractional replay_ratio or overflow.
-                        # n_grad_steps < _SCAN_BUCKET is possible; surplus steps are
-                        # masked (carry unchanged).  Keeps Fix-3 masking for the case
-                        # where it is actually needed.
-                        # -------------------------------------------------------
-                        _n_real_jax = jnp.array(_n_real, dtype=jnp.int32)
-                        init_carry = (
-                            state_wm, state_ac, state_cr, state_tg,
-                            state_wm_opt, state_ac_opt, state_cr_opt,
-                            moments, key,
-                            jnp.array(cumulative_grad_steps, dtype=jnp.int32),
-                            jnp.array(0, dtype=jnp.int32),  # scan_step_local
-                            _n_real_jax,                     # number of real grad steps
-                        )
-
-                        def _scan_body(carry, batch_i):
-                            """Masked scan body — handles fractional replay_ratio.
-
-                            carry = (s_wm, s_ac, s_cr, s_tg,
-                                     s_wm_opt, s_ac_opt, s_cr_opt,
-                                     moments, key, step_idx,
-                                     scan_step_local, n_real_steps)
-                            batch_i = {k: v[i, ...]} — one slice of scan_xs.
-                            """
-                            (s_wm, s_ac, s_cr, s_tg,
-                             s_wm_opt, s_ac_opt, s_cr_opt,
-                             carry_moments, carry_key, step_idx,
-                             scan_step_local, n_real_steps) = carry
-
-                            # --- Polyak update on target_critic (scan-safe form) ---
-                            do_update = (step_idx % target_update_freq) == 0
-                            tau_val = jnp.where(step_idx == 0,
-                                                jnp.float32(1.0),
-                                                jnp.float32(critic_tau))
-
-                            _cr_for_polyak = nnx.merge(graphdef_cr, s_cr)
-                            _tg_for_polyak = nnx.merge(graphdef_tg, s_tg)
-                            online_params = nnx.state(_cr_for_polyak, nnx.Param)
-                            target_params = nnx.state(_tg_for_polyak, nnx.Param)
-
-                            new_target_params = jax.tree.map(
-                                lambda c, t: jnp.where(
-                                    do_update,
-                                    (1.0 - tau_val) * t + tau_val * c,
-                                    t,
-                                ),
-                                online_params, target_params,
-                            )
-                            nnx.update(_tg_for_polyak, new_target_params)
-                            s_tg_new = nnx.state(_tg_for_polyak)
-
-                            # --- Reconstruct all modules for train_step ---
-                            _wm   = nnx.merge(graphdef_wm,     s_wm)
-                            _ac   = nnx.merge(graphdef_ac,     s_ac)
-                            _cr   = nnx.merge(graphdef_cr,     s_cr)
-                            _tg   = nnx.merge(graphdef_tg,     s_tg_new)
-                            _wm_o = nnx.merge(graphdef_wm_opt, s_wm_opt)
-                            _ac_o = nnx.merge(graphdef_ac_opt, s_ac_opt)
-                            _cr_o = nnx.merge(graphdef_cr_opt, s_cr_opt)
-
-                            # --- Train step ---
-                            carry_key, k_train = jax.random.split(carry_key)
-                            new_moments, losses = train_step(
-                                _wm, _ac, _cr, _tg,
-                                _wm_o, _ac_o, _cr_o,
-                                carry_moments, batch_i, k_train,
-                            )
-
-                            # --- Masking: surplus steps are no-ops ---
-                            is_real = scan_step_local < n_real_steps
-
-                            s_wm_out     = jax.tree.map(lambda n, o: jnp.where(is_real, n, o), nnx.state(_wm),   s_wm)
-                            s_ac_out     = jax.tree.map(lambda n, o: jnp.where(is_real, n, o), nnx.state(_ac),   s_ac)
-                            s_cr_out     = jax.tree.map(lambda n, o: jnp.where(is_real, n, o), nnx.state(_cr),   s_cr)
-                            s_tg_out     = jax.tree.map(lambda n, o: jnp.where(is_real, n, o), s_tg_new,         s_tg)
-                            s_wm_opt_out = jax.tree.map(lambda n, o: jnp.where(is_real, n, o), nnx.state(_wm_o), s_wm_opt)
-                            s_ac_opt_out = jax.tree.map(lambda n, o: jnp.where(is_real, n, o), nnx.state(_ac_o), s_ac_opt)
-                            s_cr_opt_out = jax.tree.map(lambda n, o: jnp.where(is_real, n, o), nnx.state(_cr_o), s_cr_opt)
-                            moments_out  = jax.tree.map(lambda n, o: jnp.where(is_real, n, o), new_moments,       carry_moments)
-                            losses_out   = jax.tree.map(lambda v: jnp.where(is_real, v, jnp.zeros_like(v)), losses)
-                            step_idx_out = step_idx + jnp.where(is_real, jnp.int32(1), jnp.int32(0))
-
-                            new_carry = (
-                                s_wm_out, s_ac_out, s_cr_out, s_tg_out,
-                                s_wm_opt_out, s_ac_opt_out, s_cr_opt_out,
-                                moments_out, carry_key, step_idx_out,
-                                scan_step_local + 1, n_real_steps,
-                            )
-                            return new_carry, losses_out
-
-                        # Run the masked scan over _SCAN_BUCKET steps (constant)
-                        final_carry, losses_stack = jax.lax.scan(
-                            _scan_body, init_carry, scan_xs,
-                        )
-
-                        (s_wm_f, s_ac_f, s_cr_f, s_tg_f,
-                         s_wm_opt_f, s_ac_opt_f, s_cr_opt_f,
-                         moments, key, _step_idx_f,
-                         _scan_step_local_f, _n_real_f) = final_carry
+                    # Unpack final carry and write state back to live modules
+                    (s_wm_f, s_ac_f, s_cr_f, s_tg_f,
+                     s_wm_opt_f, s_ac_opt_f, s_cr_opt_f,
+                     moments, key, _step_idx_f) = final_carry
 
                     nnx.update(world_model,   s_wm_f)
                     nnx.update(actor,         s_ac_f)
@@ -1727,36 +1537,11 @@ def main() -> None:
                     nnx.update(actor_opt,     s_ac_opt_f)
                     nnx.update(critic_opt,    s_cr_opt_f)
 
-                    # Recover last real-step losses from the stacked output.
-                    # losses_stack shape: [_SCAN_BUCKET, ...]; take the last real row.
-                    _last_real_idx = _n_real - 1
-                    last_losses = jax.tree.map(lambda x: x[_last_real_idx], losses_stack)
+                    # Recover last-step losses from the stacked output
+                    last_losses = jax.tree.map(lambda x: x[-1], losses_stack)
 
-                    # Advance the Python counter by the real (non-padded) steps
-                    cumulative_grad_steps += _n_real
-
-                    # Handle overflow: n_grad_steps > _SCAN_BUCKET (rare catchup burst).
-                    # Fall back to the Python for-loop for the excess steps.
-                    if _n_extra > 0:
-                        _extra_data = {k: v[_n_real:] for k, v in local_data_gpu.items()}
-                        for _i in range(_n_extra):
-                            if cumulative_grad_steps % target_update_freq == 0:
-                                tau = 1.0 if cumulative_grad_steps == 0 else critic_tau
-                                online_params = nnx.state(critic, nnx.Param)
-                                target_params = nnx.state(target_critic, nnx.Param)
-                                new_target_params = jax.tree.map(
-                                    lambda c, t: (1.0 - tau) * t + tau * c,
-                                    online_params, target_params,
-                                )
-                                nnx.update(target_critic, new_target_params)
-                            _batch = {k: v[_i] for k, v in _extra_data.items()}
-                            key, k_train = jax.random.split(key)
-                            moments, last_losses = train_step(
-                                world_model, actor, critic, target_critic,
-                                wm_opt, actor_opt, critic_opt,
-                                moments, _batch, k_train,
-                            )
-                            cumulative_grad_steps += 1
+                    # Advance the Python counter by n_grad_steps (CP3 continuity)
+                    cumulative_grad_steps += n_grad_steps
 
                 t_train_total += time.time() - t_train_start
 

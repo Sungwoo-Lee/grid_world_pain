@@ -1,9 +1,9 @@
 ---
 title: "dreamer-srl basic-curriculum recompile-storm fix"
 topic: dreamer
-status: implemented
+status: reverted
 created: 2026-06-22
-last_updated: 2026-06-22-fix3-refinement
+last_updated: 2026-06-23-compile-regression-revert
 ---
 
 # dreamer-srl basic-curriculum recompile-storm fix
@@ -296,3 +296,73 @@ shows no `[2,256]`, `[3,256]`, `[4,256]` variable-width reset compiles.
 - [x] No variable-width reset compiles in `JAX_LOG_COMPILES` trace
 
 *Fix-3 refinement implemented by: developer*
+
+---
+
+## REVERT — 2026-06-23: Entire fix reverted due to GPU compile regression
+
+### Plain-language summary
+
+All three fixes (Fix 1 masked reset, Fix 2 constant-width autoreset key split, Fix 3
+lean/masked scan bucket) were reverted to their pre-fix forms (matching commit `1c90524`
+for those regions) because the combined effect of Fixes 1–3 caused every config —
+including the known-good 47k-episode baseline — to stall 80+ minutes compiling on GPU
+with climbing RSS. No config reached training. The fixes stopped the variable-done-count
+recompile crash on basic configs, but the `train_step` GPU compile cost ballooned
+unacceptably.
+
+Decision (user): revert to pre-fix code that trained. The recompile-storm crash on basic
+configs returns and is accepted (deferred). Goal is to restore working Dreamer training on
+proven curriculum/baseline configs.
+
+### What was reverted (3 regions, `dreamer_srl_main.py` only)
+
+| Region | Reverted to |
+|---|---|
+| `Player.init_states` (~212–288) | Pre-fix signature `(reset_envs=None)` only; masked-reset path removed entirely |
+| Autoreset call-site (~1068) | `player.init_states(reset_envs=dones_idxes)` (variable-width scatter) |
+| Autoreset key split (~1092) | `jax.random.split(k_autoreset, len(dones_idxes))` (variable-width) |
+| `_SCAN_BUCKET`/`_grad_steps_constant` startup block (~611–638) | Removed entirely |
+| Scan path (~1409–1548) | Single scan path with `scan_xs = local_data_gpu` (variable leading dim); no lean/masked branching; `last_losses = losses_stack[-1]`; `cumulative_grad_steps += n_grad_steps` |
+| `import math` (line 26) | Removed (only used by `_SCAN_BUCKET`) |
+
+### What was NOT reverted (preserved)
+
+- `load_env_config(args.env_config)` at line ~418 — the c13a3ac config-layering integration stays
+- `--episodes` / `--log-interval` CLI handling
+- Continual `--configs-dir`/`--continual-schedule` engine
+- WandB/config-save, results-dir naming
+- `agent.py` — untouched throughout
+
+### Verification
+
+```
+grep -c "done_mask"           dreamer_srl_main.py  → 0
+grep -c "_SCAN_BUCKET"        dreamer_srl_main.py  → 0
+grep -c "_grad_steps_constant" dreamer_srl_main.py → 0
+grep -c "^import math"        dreamer_srl_main.py  → 0
+grep -n "load_env_config"     dreamer_srl_main.py  → line 418 still present
+```
+
+Module imports cleanly. Both curriculum (`03_10x10_full_task.yaml`) and basic
+(`00-static_predator_5x5.yaml`) configs load and build env_params without error.
+
+### Test results (post-revert)
+
+```
+pytest tests/algorithms/dreamer_srl/ \
+  --ignore=tests/algorithms/dreamer_srl/test_lax_scan_train.py \
+  -m "not slow" -q
+
+100 passed, 2 skipped in 153.36s
+```
+
+`test_lax_scan_train.py` collection error is pre-existing (missing config file at
+`configs/dreamer_srl/01_food_only.yaml`), confirmed present on HEAD before this revert.
+
+### Status update
+
+`status: reverted` — the fix regions are at `1c90524` form; the recompile-storm
+crash on basic configs is a known open issue, deferred.
+
+*Revert implemented by: developer*
