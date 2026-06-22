@@ -90,6 +90,149 @@ un-jitted env wrapper) · vmap ✅ · PRNG ✅ · sensor sync ✅ (obs constant 
 all basic levels) · config protocol ✅.
 
 ---
+
+## Post-fix correctness review
+
+### Plain-language verdict
+
+The recompile-storm fix was reviewed not for "does the storm go away" (the user already
+confirmed empirically that it does) but for "does the fix still train the same agent."
+The answer is **yes, with one cosmetic-but-worth-noting caveat about random-number
+bookkeeping that does not fire in any of the configs actually being run.**
+
+**Verdict: APPROVE-WITH-NITS.**
+
+The three fixes preserve training semantics. Fix 1 (the masked reset of the agent's
+memory state when an environment dies) is exactly equivalent to the old code — living
+environments keep their memory untouched, dead ones get the correct fresh-start memory.
+Fix 3 (running a fixed number of gradient-step slots and "masking off" the extra ones)
+correctly nulls every extra slot's effect on the network weights, the optimizer, the
+slow-moving target network, the running normalizer, and the logged numbers — extra slots
+are genuine no-ops, not just "ignored in logging." The one nit: the extra slots still
+*consume random keys* even though they do nothing else, so the random stream is advanced
+slightly further than the old code would advance it. This only matters when the number of
+real gradient steps per iteration is less than the fixed slot count, which **never happens
+for any current config** (all use replay-ratio 1 with 16 environments, so real-steps =
+slot-count = 16 exactly, every iteration). It would only surface with a fractional
+replay-ratio, and even then it does not corrupt training — it just breaks bit-for-bit
+parity with the old `--legacy-grad-loop` path. No code changes are required to ship the
+launched runs.
+
+### Risk 1 — Masked reset bit-for-bit equivalence (Fix 1): PASS
+
+`Player.init_states(done_mask=...)`, `dreamer_srl_main.py:236-256`.
+
+- **(a) Living envs unchanged — PASS.** For a living slot `mask[i]=0`, the select is
+  `(1.0 - 0.0)*state + 0.0*h0 = state`. Multiply-by-1.0 and add-0.0 are exact in IEEE
+  fp32 (no rounding, no drift). Recurrent (`:246`), posterior (`:250`) and prev-action
+  (`:255`) all use this idiom. No accidental reset.
+- **(b) Dead envs get the true initial state — PASS.** For a done slot `mask[i]=1`, the
+  select is `h0_full[i]`. `get_initial_states(num_envs)` (`agent.py:931-969`) returns the
+  deterministic mode-based `(h0, z0)` — **no PRNG consumed** (CP4 mandate, `agent.py:945`),
+  so `h0_full[i]` is identical to what the old `get_initial_states(n_done)` scatter
+  produced for that slot. The fix changes the *batch size* the function is called with
+  (16 vs n_done), not the per-row value — and the per-row value is independent of batch
+  size (a tiled constant + a deterministic transition). Bit-identical.
+- **(c) Slot alignment — PASS.** `_done_mask = dones.astype(np.float32)`
+  (`dreamer_srl_main.py:1130`), shape `[num_envs]`, same `dones` array indexed
+  env-wise everywhere else in the loop (episode bookkeeping `:1139`, autoreset `:1161`).
+  No transpose, no off-by-one. `mask[:,None]` / `mask[:,None,None]` broadcast against
+  `[B,recurrent]` and `[B,S,D]` on the leading (env) axis — correct.
+- **(d) Recurrent AND posterior masked consistently — PASS.** Both use the same `mask`
+  with shape-appropriate broadcasts; prev-action is masked the same way. The Player stores
+  the posterior in *unflattened* `[B,S,D]` form (`dreamer_srl_main.py:316,325`), and
+  `z0_full` is `[B,S,D]` (`agent.py:957`), so `m_z = mask[:,None,None]` is the right rank.
+  None scattered while the other is masked.
+
+### Risk 2 — Surplus gradient-step masking (Fix 3): PASS on the dangerous channels, ONE nit
+
+`_scan_body`, `dreamer_srl_main.py:1528-1631`; `is_real = scan_step_local < n_real_steps`
+(`:1601`).
+
+The high-risk question — does a padding (surplus) scan iteration silently corrupt
+training? — is **answered cleanly NO for every state-bearing channel:**
+
+| Channel | Masked? | Line | Padding effect |
+|---|---|---|---|
+| World-model params/state | `jnp.where(is_real, new, old)` | 1603 | none (old kept) |
+| Actor params/state | same | 1604 | none |
+| Critic params/state | same | 1605 | none |
+| Target-critic (EMA) | same, over `s_tg_new` | 1606 | none |
+| WM / actor / critic **optimizer** state (Adam moments) | same | 1607-1609 | none |
+| Moments normalizer (§S7) | same | 1610 | none |
+| `step_idx` (Polyak schedule counter) | `+ where(is_real,1,0)` | 1614 | not advanced |
+| Logged losses | `where(is_real, v, 0)` | 1612 | zeroed; `last_losses` taken from `losses_stack[_n_real-1]` (`:1654-1655`), a real row |
+| `cumulative_grad_steps` | `+= _n_real` (Python) | 1658 | counts real steps only |
+
+Padding rows feed the last *real* data row (`:1517-1523`, tiled), so even the
+forward/backward pass inside a padding step runs on valid (not garbage/NaN) data — and
+its result is then discarded by the masks above. The target-critic Polyak update is
+double-protected: even if `do_update` fires on a padding step (because `step_idx` is
+frozen at a multiple of `target_update_freq`), its result is masked out by `s_tg_out`
+(`:1606`). Replay-buffer pointers are untouched by the scan entirely (buffer is sampled
+once before the scan, `:1391-1411`; `cumulative_grad_steps` advances by `_n_real` only).
+
+**The one nit — PRNG over-advancement on padding steps (🟡 concern, dormant):**
+`carry_key, k_train = jax.random.split(carry_key)` (`:1589`) runs on *every* scan
+iteration including padding, and `carry_key` is propagated **unmasked** into the carry
+(`:1626`). So when `_n_real < _SCAN_BUCKET`, the `key` returned to the outer loop
+(`:1641`) has been split `_SCAN_BUCKET` times instead of `_n_real` times.
+
+- **Does this corrupt the real gradient steps?** No. Real steps occupy scan indices
+  `0.._n_real-1` and consume their keys *before* any padding step runs on the same chain,
+  so the random numbers the real `train_step`s see are unaffected by padding.
+- **Does it break determinism?** No. The advancement is a fixed function of `_SCAN_BUCKET`
+  (a startup constant), so same seed + same config still reproduces the same run.
+- **What it does break:** bit-for-bit parity with the `--legacy-grad-loop` reference,
+  which splits the key `n_grad_steps` times — when padding fires, downstream draws (next
+  iteration's actions, autoreset keys, buffer sampling) diverge from the legacy path.
+  `tests/algorithms/dreamer_srl/test_grad_parity.py` is in the ignored-test list, so this
+  divergence is untested.
+- **When does padding actually fire?** Only when `n_grad_steps < _SCAN_BUCKET`, i.e. when
+  `replay_ratio * num_envs` is non-integer (e.g. ratio 0.3). **Every shipped dreamer_srl
+  config uses `replay_ratio: 1`** (`configs/models/dreamer_srl/*.yaml`), so with 16 envs
+  `_SCAN_BUCKET = 16` and steady-state `n_grad_steps = int(16*1.0) = 16` — `_n_real ==
+  _SCAN_BUCKET` every iteration, **padding never fires**, and the key advances by exactly
+  16 splits as the legacy path would. The first gated iteration (`Ratio._prev is None`
+  returns a large `int(ratio_steps)`) overflows the bucket and is handled by the legacy
+  fallback loop (`:1662-1681`) with `_n_real = 16` — still no padding.
+
+**Recommendation (only if a fractional replay-ratio is ever used — hand to `developer`):**
+mask the key like every other carry channel so the legacy and scan paths stay
+bit-identical. Inside `_scan_body`, replace the unmasked `carry_key` at `:1626` with
+`jnp.where(is_real, carry_key, prev_carry_key)` (capturing the pre-split key), OR — simpler
+and clearer — make `train_step`'s key consumption itself conditional. Not required for the
+current `replay_ratio=1` runs; do this before any fractional-ratio sweep.
+
+### Risk 3 — New recompile trigger / shape bug introduced: PASS
+
+- `_SCAN_BUCKET = max(1, math.ceil(replay_ratio * num_envs))` (`:668`) is a Python int
+  computed once from two startup constants — it does not vary, so the scan leading dim is
+  constant (confirmed empirically: single `float32[16,...]` scan compile).
+- `scan_xs` is always built at width `_SCAN_BUCKET` — the `_n_real < bucket` branch pads
+  by tiling (`:1517-1523`), the `else` branch slices `[:_SCAN_BUCKET]` (`:1525`). Constant
+  shape either way; the mask (`is_real`) is a scalar comparison, not a variable-width
+  array.
+- Edge cases checked: the scan block only runs when `n_grad_steps > 0` (`:1391`), so
+  `_n_real >= 1` and `_n_real-1 >= 0` — the filler-row slice (`:1519`) and the
+  last-real-loss index (`:1654`) are always in-bounds. Overflow slicing
+  (`[:_SCAN_BUCKET]` scan + `[_n_real:]` legacy, `:1525/1663`) partitions the rows with no
+  overlap or gap.
+- Fix 2 (`jax.random.split(k_autoreset, num_envs)`, `:1160`, indexed by `env_idx`) is
+  constant-width and correct — each done env reads its own row `reset_keys[env_idx]`,
+  preserving per-env key independence.
+
+### Post-fix conventions audit
+pytree ✅ · JIT ✅ (all three variable-shape leading dims now constant-width) ·
+vmap ✅ · PRNG ⚠️ (sound + deterministic; non-bit-identical to legacy path only under a
+fractional replay-ratio, which no current config uses) · sensor sync ✅ · config protocol ✅.
+
+**Conclusion: APPROVE-WITH-NITS — safe to ship the launched `replay_ratio=1` runs as-is;
+mask `carry_key` (Fix 3) before any fractional-replay-ratio sweep.**
+
+*Post-fix review by: code-reviewer*
+
+---
 *Reviewed by code-reviewer (reproduced with `JAX_LOG_COMPILES=1`). Source runs:
 `logs/20260620_16470{9}.log`, `…1647{10,11,12}.log`; WandB
 zcg33koq/1sphik88/yvyx8x42/2uc2yg7f/c9lelny1.*
