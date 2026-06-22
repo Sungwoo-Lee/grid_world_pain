@@ -1,7 +1,7 @@
 # Config Audit — Hunger-Gated Step 1 Discrimination-Onset Sweep (Pre-Flight)
 
 **Scope:** Multi-config sweep (10 v3.0 sparse configs)
-**Files audited:** `configs/environment/experiment/hunger_gated/01-s0_sig0.yaml` … `10-s0.5_sig0.4.yaml`
+**Files audited:** `configs/environment/experiment/olfactory_ambiguity/01-s0_sig0.yaml` … `10-s0.5_sig0.4.yaml`
 **Audited by:** env-config-auditor
 **Date:** 2026-06-19
 

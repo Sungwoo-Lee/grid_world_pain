@@ -2,8 +2,8 @@
 
 **Scope:** Multi-config sweep (10 v3.0 nested-extends sparse configs)
 **Files audited:**
-- `configs/environment/experiment/hunger_gated_lindecay/01-s0_sig0.yaml` through `10-s0.5_sig0.4.yaml` (10 new files)
-- `configs/environment/experiment/hunger_gated/01-s0_sig0.yaml` through `10-s0.5_sig0.4.yaml` (10 Step-1 twins, read-only reference)
+- `configs/environment/experiment/olfactory_ambiguity_lindecay/01-s0_sig0.yaml` through `10-s0.5_sig0.4.yaml` (10 new files)
+- `configs/environment/experiment/olfactory_ambiguity/01-s0_sig0.yaml` through `10-s0.5_sig0.4.yaml` (10 Step-1 twins, read-only reference)
 **Audited by:** env-config-auditor
 **Date:** 2026-06-20
 
@@ -199,7 +199,7 @@ All 10 lindecay configs loaded successfully via:
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python -c "
 from src.environment.config_loader import load_env_config, load_env_params
 from src.environment.sensor import get_observation_breakdown
-p = load_env_params(load_env_config('configs/environment/experiment/hunger_gated_lindecay/<name>.yaml'))
+p = load_env_params(load_env_config('configs/environment/experiment/olfactory_ambiguity_lindecay/<name>.yaml'))
 print(get_observation_breakdown(p))
 "
 ```

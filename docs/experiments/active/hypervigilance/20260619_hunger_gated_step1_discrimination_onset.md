@@ -279,16 +279,16 @@ is under test, so every run uses the **same** agent config (`configs/models/recu
 
 | Run | Config (env) | Config (agent) |
 |-----|--------------|----------------|
-| 1 | `configs/environment/experiment/hunger_gated/01-s0_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 2 | `configs/environment/experiment/hunger_gated/02-s0.05_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 3 | `configs/environment/experiment/hunger_gated/03-s0.1_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 4 | `configs/environment/experiment/hunger_gated/04-s0.25_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 5 | `configs/environment/experiment/hunger_gated/05-s0.5_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 6 | `configs/environment/experiment/hunger_gated/06-s0.1_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 7 | `configs/environment/experiment/hunger_gated/07-s0.25_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 8 | `configs/environment/experiment/hunger_gated/08-s0.5_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 9 | `configs/environment/experiment/hunger_gated/09-s0.1_sig0.4.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 10 | `configs/environment/experiment/hunger_gated/10-s0.5_sig0.4.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 1 | `configs/environment/experiment/olfactory_ambiguity/01-s0_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 2 | `configs/environment/experiment/olfactory_ambiguity/02-s0.05_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 3 | `configs/environment/experiment/olfactory_ambiguity/03-s0.1_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 4 | `configs/environment/experiment/olfactory_ambiguity/04-s0.25_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 5 | `configs/environment/experiment/olfactory_ambiguity/05-s0.5_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 6 | `configs/environment/experiment/olfactory_ambiguity/06-s0.1_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 7 | `configs/environment/experiment/olfactory_ambiguity/07-s0.25_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 8 | `configs/environment/experiment/olfactory_ambiguity/08-s0.5_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 9 | `configs/environment/experiment/olfactory_ambiguity/09-s0.1_sig0.4.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 10 | `configs/environment/experiment/olfactory_ambiguity/10-s0.5_sig0.4.yaml` | `configs/models/recurrent_ppo.yaml` |
 
 ---
 
@@ -389,7 +389,7 @@ replaying the fixed `eval_seeds` resets — so this does **not** gate the launch
 2. **PI consult** (multi-run launch decision) per the agent playbook.
 3. **training-runner** launches the wave with user-supplied node + GPU. Suggested loop:
    ```bash
-   for f in configs/environment/experiment/hunger_gated/*.yaml; do
+   for f in configs/environment/experiment/olfactory_ambiguity/*.yaml; do
      stem=$(basename "$f" .yaml)        # e.g. 01-s0_sig0
      # tag = rppo_hg<stem-with-dash-stripped>_s42  → see Launch Manifest for the exact per-run tag
      python train.py --config "$f" --agent_config configs/models/recurrent_ppo.yaml \

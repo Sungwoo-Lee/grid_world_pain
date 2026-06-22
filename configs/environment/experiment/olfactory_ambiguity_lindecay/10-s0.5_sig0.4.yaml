@@ -19,7 +19,7 @@
 # sensory block, leaving olfactory_enabled / sensor_radius / vector_size / visual_* untouched.
 # Single training seed 42; fresh-init; ~10M episodes (same as Step-1).
 
-extends: environment/experiment/hunger_gated/10-s0.5_sig0.4
+extends: environment/experiment/olfactory_ambiguity/10-s0.5_sig0.4
 
 sensory:
   decay_power: 1.0

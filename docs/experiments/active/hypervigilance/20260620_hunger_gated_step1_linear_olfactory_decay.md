@@ -184,16 +184,16 @@ No model hyperparameter is under test, so every run uses the **same** agent conf
 
 | Run | Config (env) | Config (agent) |
 |-----|--------------|----------------|
-| 1 | `configs/environment/experiment/hunger_gated_lindecay/01-s0_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 2 | `configs/environment/experiment/hunger_gated_lindecay/02-s0.05_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 3 | `configs/environment/experiment/hunger_gated_lindecay/03-s0.1_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 4 | `configs/environment/experiment/hunger_gated_lindecay/04-s0.25_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 5 | `configs/environment/experiment/hunger_gated_lindecay/05-s0.5_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 6 | `configs/environment/experiment/hunger_gated_lindecay/06-s0.1_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 7 | `configs/environment/experiment/hunger_gated_lindecay/07-s0.25_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 8 | `configs/environment/experiment/hunger_gated_lindecay/08-s0.5_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 9 | `configs/environment/experiment/hunger_gated_lindecay/09-s0.1_sig0.4.yaml` | `configs/models/recurrent_ppo.yaml` |
-| 10 | `configs/environment/experiment/hunger_gated_lindecay/10-s0.5_sig0.4.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 1 | `configs/environment/experiment/olfactory_ambiguity_lindecay/01-s0_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 2 | `configs/environment/experiment/olfactory_ambiguity_lindecay/02-s0.05_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 3 | `configs/environment/experiment/olfactory_ambiguity_lindecay/03-s0.1_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 4 | `configs/environment/experiment/olfactory_ambiguity_lindecay/04-s0.25_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 5 | `configs/environment/experiment/olfactory_ambiguity_lindecay/05-s0.5_sig0.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 6 | `configs/environment/experiment/olfactory_ambiguity_lindecay/06-s0.1_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 7 | `configs/environment/experiment/olfactory_ambiguity_lindecay/07-s0.25_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 8 | `configs/environment/experiment/olfactory_ambiguity_lindecay/08-s0.5_sig0.2.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 9 | `configs/environment/experiment/olfactory_ambiguity_lindecay/09-s0.1_sig0.4.yaml` | `configs/models/recurrent_ppo.yaml` |
+| 10 | `configs/environment/experiment/olfactory_ambiguity_lindecay/10-s0.5_sig0.4.yaml` | `configs/models/recurrent_ppo.yaml` |
 
 ### Verification (run at design time, 2026-06-20)
 

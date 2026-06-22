@@ -1,4 +1,4 @@
-# Hunger-gated avoidance — Step-1 LINEAR-OLFACTORY-DECAY re-run. Run 04: s=0.25, sigma=0.
+# Hunger-gated avoidance — Step-1 LINEAR-OLFACTORY-DECAY re-run. Run 05: s=0.5, sigma=0.
 #
 # Paired-comparison arm of the Step-1 discrimination-onset sweep. This config is the EXACT
 # Step-1 cell, byte-identical scene + olfactory smell vectors + lethal predator [5,120] +
@@ -19,7 +19,7 @@
 # sensory block, leaving olfactory_enabled / sensor_radius / vector_size / visual_* untouched.
 # Single training seed 42; fresh-init; ~10M episodes (same as Step-1).
 
-extends: environment/experiment/hunger_gated/04-s0.25_sig0
+extends: environment/experiment/olfactory_ambiguity/05-s0.5_sig0
 
 sensory:
   decay_power: 1.0
