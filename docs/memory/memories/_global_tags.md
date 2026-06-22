@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-06-22: 1 insight into the new `curriculum_learning` folder (`20260622_1748_basic_curriculum_overtraining_collapse_and_intervals`) reused existing tags `learned_lesson`, `decision` — no new tags promoted.
 - 2026-06-22: 2 insights from the dreamer_srl basic-curriculum recompile-storm session (`20260622_1746_dreamer_srl_recompile_storm_done_count` into `dreamer_diagnosis`, `20260622_1747_dreamer_srl_single_config_budget_source` into `cluster_ops`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `meta`, `training_runner` — no new tags promoted.
 - 2026-06-22: 4 insights from the olfactory-ambiguity / hunger-gated training program session (`20260622_1744_olfactory_uncertainty_two_knob_design`, `20260622_1745_discrimination_weak_lethality_masks_gating`, `20260622_1746_olfactory_decay_power_distal_cue_strength`, `20260622_1747_hypervigilance_asymmetric_stakes_scarcity`) reused existing tags `hypervigilance`, `design`, `decision`, `refutation`, `learned_lesson`, `noise` - no new tags promoted.
 - 2026-06-22: 3 insights from the conflict/hypervigilance behavior-probe session (`20260622_1744_hypervig_probe_hg10_overgeneralizes_threat`, `20260622_1745_frozen_probe_eval_match_sensory_renderer`, `20260622_1746_start_injury_dead_needs_random_range`) reused existing tags `hypervigilance`, `learned_lesson`, `decision`, `config` — no new tags promoted.
