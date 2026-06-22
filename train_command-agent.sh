@@ -97,17 +97,34 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --tag rppo_hg01_s0_sig0_dp1_s42
 #
 # Run 02: rppo_hg02_s0.05_sig0_dp1_s42   — node 101, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/hunger_gated_lindecay/02-s0.05_sig0.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --device cuda:0 \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --seed 42 \
+#   --wandb-group hunger_gated_lindecay \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_hg02_s0.05_sig0_dp1_s42 \
+#   --tag rppo_hg02_s0.05_sig0_dp1_s42
+
+# ---------------------------------------------------------------------------
+# basic_curriculum continual-learning run — 2026-06-22
+# RecurrentPPO, 5-stage schedule (00→04 basic configs), ~10M total steps
+# (1M/1M/2M/2M/4M), node 106 cuda:0, wandb-group: basic_curriculum
+# Re-launch after BMState stage-transition NameError fix in train.py
+# ---------------------------------------------------------------------------
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/hunger_gated_lindecay/02-s0.05_sig0.yaml \
+  --configs-dir configs/environment/experiment/basic \
+  --continual-schedule configs/continual/basic_curriculum_schedule.yaml \
   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --num-envs 128 \
   --device cuda:0 \
-  --num-envs 16 \
-  --episodes 10000000 \
-  --seed 42 \
-  --wandb-group hunger_gated_lindecay \
+  --wandb-group basic_curriculum \
   --wandb-job-type prod \
-  --wandb-name rppo_hg02_s0.05_sig0_dp1_s42 \
-  --tag rppo_hg02_s0.05_sig0_dp1_s42
+  --wandb-name rppo_basic_curriculum_n106 \
+  --tag rppo_basic_curriculum_n106
 #
 # Run 03: rppo_hg03_s0.1_sig0_dp1_s42    — node 101, cuda:1
 # /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
