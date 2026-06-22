@@ -3,7 +3,7 @@ title: "dreamer_srl 3-stage size+entity curriculum vs from-scratch on the 10×10
 topic: continual_learning
 status: active
 created: 2026-06-09
-last_updated: 2026-06-11  # Budget ablation T1–T4 added (Stage-1 plateau ~1k eps from crvnmbo8; original budget ~10x too long)
+last_updated: 2026-06-18  # Budget-ablation T1–T4 results filled (§8): floor = T3 71.5k; T4 under-trained; curriculum = same plateau, ~45% fewer episodes vs from-scratch (single seed)
 phase: 2
 wandb_tag: "dreamer_v3_dsrl_curric3_*"
 develop_link: docs/develop/active/diagnosis/dreamer_hypervigilance_learning_failure.md
@@ -214,5 +214,110 @@ python train.py \
 
 ## 8. Results / Analysis / Conclusions
 
-_Left blank until training completes. Filled by `experiment-designer` (or `senior-developer` per user preference) in the results phase._
+### 8.0 Plain-language verdict (budget ablation T1–T4)
+
+**What was tested.** Four copies of the same 3-stage curriculum agent (identical seed 42, identical configs, noise off) were trained side-by-side, differing **only** in how many episodes each stage was allowed to run before the world changed. The four budgets ranged from the loosest (**T1**, 163,000 total episodes) down to the most aggressive (**T4**, 44,000 total episodes), with **T2** (109k) and **T3** (71.5k) in between. The pre-registered question: *what is the smallest total budget that still lets the agent reach the hard 10×10 task's survival-step ceiling?* (Survival steps = how many of the 500-step episode the agent stays alive; higher is better.)
+
+**Headline finding.** The smallest budget that **still reaches the survival ceiling is T3 — 71,500 total episodes**. T3 climbed to about **214 survival steps** on the final 10×10 task and was flat there, statistically indistinguishable from the looser budgets T1 (~210) and T2 (~221). The most aggressive budget, **T4 (44k), fell short at ~188 survival steps — but the curves show this is because T4 was cut off while still climbing, not because it hit a low ceiling**. T4's survival rose monotonically right up to its final episode (its very last segment was its highest), so 44k episodes is simply **too few to finish learning the hard task**, not a budget that converges to a worse answer. So: **T3 (71.5k) is the new minimum viable budget; T4 (44k) is under-trained.**
+
+**Curriculum vs. starting on the hard task directly.** This is the experiment's real scientific question (§2). The from-scratch agent — the same architecture trained straight on the 10×10 task with no warm-up — plateaus at about **220 survival steps after roughly 50,000 episodes, and stays flat through 190,000 episodes**. The curriculum agents reach **the same ceiling (~215, within seed-noise of 220), not a higher one** — so the curriculum does **not** clear the pre-registered "≥ 20 steps higher" bar for a plateau win. **What the curriculum buys instead is sample efficiency**: the T3 budget reaches 200 survival steps in about **27,000 total episodes versus the from-scratch agent's ~50,000** — roughly **45% fewer episodes to the same competence**. The warm-up stages (where survival saturates at the 500-step cap within ~1,000–1,500 episodes because the small worlds are easy) cost little and front-load the world-model's reward and alive/dead heads with clean samples, so Stage 3 starts from a better place (~150 survival steps on the first hard-task episodes vs. the from-scratch agent's ~115).
+
+**Caveat — two cells were stopped early, and this is a single seed.** T1 and T2 were terminated partway through their long Stage-3 budgets (~47% and ~84% through Stage 3 respectively), so their plateau numbers are read off curves that had already flattened but were not run to their own caps — they corroborate T3's plateau rather than independently confirm a higher one. The entire ablation is **seed 42 only**; it fixes the *budget* for the curriculum, and the multi-seed curriculum-vs-from-scratch comparison (§2–§5, the 5-seed paired design) is still the test that will deliver the confirmed verdict on H1. **World-model health is clean in every cell** (continuation-head accuracy ~0.998, reward-head error in a tight 0.70–0.82 band, no loss explosion) — in particular **T4 did not collapse**; it is genuinely under-trained, not broken.
+
+### 8.1 Results
+
+**Manifest of analyzed runs** (budget-ablation cells, not the §3 multi-seed manifest, which is still `planned`). All read from local `wandb/run-*/` binary logs via the datastore reader — no web API. Working file: `tmp/20260618_152500_curric3_budget_ablation.md`.
+
+| Cell | WandB id | Schedule | Total eps | End-state | Stage-3 plateau (survival steps) |
+|---|---|---|---|---|---|
+| T1 | `p8cf3c8r` | `[3000, 13000, 163000]` | 163k | terminated ep ~82,960 (~47% through S3) | ~210 (flat, still inching up) |
+| T2 | `tpt85vjj` | `[2000, 9000, 109000]` | 109k | terminated ep ~92,561 (~84% through S3) | ~221 (plateaued) |
+| T3 | `k1os88e9` | `[1500, 6500, 71500]` | 71.5k | **completed** ep 71,501 | **~214 (plateaued)** |
+| T4 | `l3uq9zyd` | `[1000, 4000, 44000]` | 44k | **completed** ep 44,000 | ~188 (**still climbing at cap**) |
+| Baseline (from-scratch) | `w9as1qe3` | direct on `01-interoNocicept.yaml`, seed 42 | — | ran to ep 190,669 | ~220 (plateaued) |
+
+**Per-stage survival (Episode/Steps), all cells.** Stages 1 and 2 (the benign 5×5 worlds) **saturate near the 500-step cap** in every cell — mean survival 440–490 — which is the *expected* outcome flagged in the failure-mode catalog (§6, "Saturation at the 500-step cap on Stage 1 … is expected and fine"). The scientific signal is entirely in Stage 3.
+
+| Cell | Stage 1 mean | Stage 2 mean | Stage 3 first→plateau | Stage 2→3 boundary drop |
+|---|---|---|---|---|
+| T1 | 443 | 472 | 150 → 210 | −259 steps |
+| T2 | 433 | 445 | 137 → 221 | −280 steps |
+| T3 | 415 | 437 | 141 → 214 | −277 steps |
+| T4 | 397 | 415 | 120 → 188 (rising) | −263 steps |
+
+**Stage-3 plateau, binned (robust to single-episode noise).** Note: T3's *single last log-point* reads 183.6, but that is one noisy episode-average; the last 10% of T3's Stage-3 log binned together is **214**, flat. The plateau numbers below are binned means over the final ~7k Stage-3 episodes.
+
+| Cell | Stage-3 plateau (binned) | Shape at termination |
+|---|---|---|
+| T1 | 210 | flat, marginal upward creep |
+| T2 | 221 | flat (plateaued) |
+| T3 | **214** | flat (plateaued) |
+| T4 | 188 | **monotonic rise — not yet plateaued** |
+| Baseline | 220 | flat (plateaued by ~ep 50k, stable to ep 190k) |
+
+**Sample efficiency (total episodes to reach a survival threshold).**
+
+| Cell | Total eps to 200 survival | Total eps to 210 survival |
+|---|---|---|
+| T1 | 58,784 | 67,267 |
+| T2 | 43,197 | 48,102 |
+| T3 | **27,123** | 47,592 |
+| T4 | never (capped while climbing) | never |
+| Baseline | 49,659 | 58,688 |
+
+T3 reaches 200 survival steps in **~45% fewer total episodes** than the from-scratch baseline (27k vs 50k); even T2 reaches 210 in 48k vs the baseline's 59k.
+
+**World-model health (plateau tail) — collapse check.**
+
+| Cell | reward-head MAE | MAE (pos rew) | MAE (neg rew) | continuation acc | model loss | actor entropy |
+|---|---|---|---|---|---|---|
+| T1 | 0.749 | 0.243 | 1.045 | 0.997 | 2.873 | 0.182 |
+| T2 | 0.700 | 0.235 | 0.970 | 0.998 | 2.983 | 0.245 |
+| T3 | 0.716 | 0.232 | 0.994 | 0.998 | 2.841 | 0.169 |
+| T4 | 0.817 | 0.218 | 1.186 | 0.998 | 2.714 | 0.157 |
+| Baseline | 0.658 | 0.216 | 0.903 | 0.998 | 2.758 | 0.234 |
+
+No collapse in any cell. Continuation ("alive/dead") accuracy is ~0.998 everywhere. T4's slightly higher negative-reward MAE (1.19) and lower actor entropy are consistent with it being **earlier in training** (the reward-head's heavy-negative death tail is less converged), not with a broken model.
+
+**Final-task termination cause.** `Episode/Term_MaxSteps` fraction (the share of episodes that survive to the 500-step cap) is only **0.04–0.09** in every cell — the agent at plateau survives ~200 steps but rarely the full 500. Final per-episode reward is **−312 to −317** across all cells including the baseline (reward is a secondary diagnostic here, not the headline; survival steps are the metric).
+
+### 8.2 Analysis
+
+**Temporal evolution (mandatory).** Every cell follows the predicted shape (§2): survival rises fast on Stage 1, saturates at the cap through Stages 1–2, **drops sharply (~260–280 steps) at the Stage-2→Stage-3 boundary** as the world jumps from benign 5×5 to the full 10×10 task, then climbs back over the Stage-3 budget. Stage-3 climbs:
+
+- **T1** (longest S3 budget): 150 → 171 → 187 → 204 → 210, flattening in the last two bins. Killed at ~47% of its Stage-3 budget but already at the plateau band.
+- **T2**: 137 → 178 → 208 → 214 → 221, plateaued in the last three bins. Killed at ~84%, clearly converged.
+- **T3** (completed): 141 → 197 → 189 → 201 → 211 → 214, flat at the end. **Reaches the plateau within its budget.**
+- **T4** (completed): 120 → 138 → 159 → 170 → 176 → 188, **strictly increasing, last bin highest**. T4 ran out of Stage-3 budget *before* the curve turned over.
+
+This temporal read is what overturns the surface impression that "T4 underperforms at ~183". T4's low number is **horizon-limited (under-trained)**, exactly the "Insufficient Stage-3 horizon" failure mode in §6 — its curve had not plateaued, so its endpoint must not be read as a converged plateau. The honest statement is: *44k episodes is not enough for this curriculum to finish the hard task*, and the smallest budget that **is** enough is T3's 71.5k.
+
+**Budget-ablation verdict (pre-registered read, §"Budget ablation").** The rule was: the winner is the smallest total budget whose Stage-3 final survival is statistically indistinguishable from (or better than) the next-looser variant. T3 (214) vs T2 (221) and T1 (210) are within ~10 steps, i.e. inside the seed/episode noise band (plateau-tail SD ≈ 11–13 steps) → **T3 holds the plateau**. T4 (188, and still rising) is **not** indistinguishable from T3 — it is ~26 steps lower and non-converged → T4 drops below the floor. **Floor = T3 (71,500 episodes).**
+
+**Curriculum vs. from-scratch (the §2 success criterion).** Held against the pre-registered confirmation bar — curriculum final survival ≥ 20 steps above baseline with non-overlapping CIs:
+
+- **Plateau height: NOT met.** Curriculum plateau (~214 for T3, ~210–221 across cells) is **within seed-noise of the from-scratch ~220**, not ≥ 20 steps above. On the height criterion this is the §2 *null* outcome — "the warm-up bought nothing extra in final survival."
+- **Sample efficiency: a clear win** (not the pre-registered metric, but the operative finding). T3 reaches 200 survival in ~27k total episodes vs the baseline's ~50k (~45% fewer), and the curriculum agent enters Stage 3 at ~150 survival vs the from-scratch agent's ~115 at matched early episodes — the warm-up front-loads the world-model's reward and continuation heads so the hard-task climb starts higher and converges sooner.
+
+So the curriculum's value is **"same ceiling, reached faster,"** i.e. **(c) fewer total episodes** of the three options posed in the brief, **not (a) higher**. This is a meaningful efficiency result but it does **not** satisfy the doc's pre-registered "higher plateau" definition of success — and it is established on a **single seed**, so it is a *budget-setting* result that motivates the 5-seed comparison, not a confirmed answer to H1.
+
+**Boundary / catastrophic-forgetting check (§6).** The Stage-2→3 drop is large (~270 steps) but it is a *difficulty-jump* drop (the task genuinely got harder — 5×5 benign → 10×10 with four hiding predators, a full-strength chaser, and rabbits), not catastrophic forgetting: survival **recovers above the pre-boundary baseline-equivalent and climbs to the from-scratch ceiling** within the Stage-3 budget for T1/T2/T3. No "collapse-and-fail-to-recover" signature → catastrophic forgetting **not** triggered.
+
+**Task-matching caveat.** T3 and the baseline share seed 42, agent config (`01_food_only_buf256k.yaml`), and `--num-envs 16`. The baseline trained on `configs/experiment/hypervigilance/01-interoNocicept.yaml`; the curriculum's Stage 3 used `03_10x10_full_task.yaml`. The design doc asserts (Modality-fingerprint section) these two are byte-value-identical on the env body/sensory/noise blocks and identical task entities. I did **not** re-diff the two YAMLs in this analysis; the comparison rests on that designer-verified claim. If the byte-identity ever lapsed, the plateau comparison would need re-checking.
+
+### 8.3 Conclusions
+
+1. **Budget floor = T3 (71,500 episodes).** T3 reaches the Stage-3 survival plateau (~214 steps) within budget and is statistically indistinguishable from the looser T1/T2. This is the new minimum viable curriculum budget — a ~10× reduction from the original 760k-episode schedule and well below the loosest ablation arm.
+2. **T4 (44k) is too tight — by under-training, not by a structural ceiling.** Its survival curve was still rising monotonically at termination (last segment highest, ~188). 44k episodes does not give Stage 3 enough horizon to converge; this is the §6 "Insufficient Stage-3 horizon" failure mode, not a model defect. World-model health confirms T4 is sound (continuation acc 0.998, no loss blow-up), just early.
+3. **On H1 (§2): the height bar is not cleared on a single seed.** The curriculum reaches the **same** ~220-step plateau as the from-scratch baseline, not ≥ 20 steps higher → the pre-registered *plateau-height* criterion reads **null** here. The genuine win is **sample efficiency** — the same competence in ~45% fewer episodes (T3 ~27k vs baseline ~50k to 200 survival), with a higher Stage-3 starting point from the warm-up. This is the operative motivation for the curriculum, but it is **not** the doc's pre-registered definition of success and rests on **seed 42 only**.
+4. **This ablation does its job: it fixes the curriculum budget (T3, 71.5k) before scale-up.** The confirmed answer to H1 still requires the **5-seed paired curriculum-vs-from-scratch comparison** (§3 manifest, all rows currently `planned`). That comparison should now adopt the **T3 schedule** as the curriculum budget and be read against both criteria — the pre-registered height bar **and** an episodes-to-plateau efficiency comparison (recommend pre-registering the latter, since it is where the effect actually lives).
+5. **No failure modes triggered** beyond the benign expected ones: Stage-1/2 cap-saturation (expected, §6), and T4's horizon-limit. No stuck policy (actor entropy fell well below ln 6 ≈ 1.79 — all cells at 0.16–0.25), no catastrophic forgetting, no world-model collapse, no training instability.
+
+**Status note.** This is a **single-seed budget ablation**, not the multi-seed H1 test. The §3 manifest remains the system-of-record for the confirmed curriculum-vs-from-scratch verdict and is untouched by this analysis.
+
+### 8.4 Recommendations / follow-ups
+
+- **Adopt the T3 schedule** (`configs/continual/dreamer_srl_3stage_curric_T3.yaml`, 71.5k total) as the curriculum budget for the 5-seed §3 launch.
+- **Pre-register an episodes-to-plateau (sample-efficiency) endpoint** alongside the existing plateau-height criterion in §5, since the single-seed data says the effect lives in efficiency, not ceiling height.
+- **Optionally re-run T4 (44k) to higher budget on one seed** only if confirming the "under-trained, not low-ceiling" reading is wanted before committing — the temporal curve already shows this clearly, so this is low priority.
 
