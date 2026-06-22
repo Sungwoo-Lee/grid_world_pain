@@ -4,9 +4,9 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-06-19
+**Last updated**: 2026-06-22
 **Active folders**: 8
-**Total insights**: 104
+**Total insights**: 105
 **Last audit**: (none)
 
 ---
@@ -19,7 +19,7 @@
 | `subagent_engineering` | Subagent + worktree usage gotchas | 14 | 2026-06-09 | [meta, learned_lesson, worktree, subagent, decision, design] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 16 | 2026-05-28 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 17 | 2026-05-29 | [dreamer, decision, learned_lesson, refutation, meta, design] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 26 | 2026-05-29 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 27 | 2026-06-22 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
 | `hypervigilance` | Hypervigilance experiments | 16 | 2026-06-16 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta] |
 | `env_entities` | Env entity architecture decisions | 4 | 2026-06-19 | [design, decision, learned_lesson, meta, config] |
 | `config_system` | Config loader/layering/schema | 3 | 2026-06-19 | [config, design, decision, meta, learned_lesson] |
@@ -53,6 +53,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-06-22: Captured 1 insight into existing `cluster_ops` from the continual-learning curriculum debugging session: `20260622_1704_continual_bm_transition_nameerror_refactor_drift` — the continual stage-transition NameError (m1_candidates) was introduced by the delete-heavy BMState refactor 89ade04 missing 1 of 6 reset sites; latent ~40 days in the continual+behavior_measures+transition path the review left unverified; fixed via the canonical _bm_reset_env loop + a fast 2-stage smoke test. Same failure class as `20260529_1826`. All tags reused (learned_lesson, decision, meta).
 - 2026-06-19: Captured 4 insights from the v3.0 config-system overhaul session: 3 into the **new** `config_system` folder (`20260619_0111_config_v3_extends_layering_default_base` — default.yaml as canonical base + opt-in `extends:` deep-merge layering + experiment reorg to archive/; `20260619_0113_configurable_initial_state_ranges` — conditional-mandatory start_{nutrition,injury}_{low,high}; `20260619_0114_config_guide_maintenance_contract` — CONFIG_GUIDE.md + Maintenance Contract wired into 5 config-caring agent profiles), 1 into existing `env_entities` (`20260619_0112_configurable_visual_properties_and_std` — config-driven visual sensor + per-episode std on an independent PRNG stream; extends `20260529_1823`). **Why new folder**: config loader/layering/schema infrastructure is broader than entity-architecture (`env_entities`) and will keep growing. Definition lock: `Config loader/layering/schema`. Promoted new tag `config`. Other tags reused (design, decision, meta, learned_lesson).
 - 2026-06-16: Captured 1 insight into existing `hypervigilance` from the testbed-search reframe: `20260616_1514_experimental_env_as_behavior_platform` — the 'gap tracks the world not the agent' result is reframed as the intended mechanism of a behavior-measurement PLATFORM (not a failure); program continues with focus shifted from a narrow discrimination metric to ENVIRONMENT SETTINGS for future training + evaluation. Builds on `20260616_0142`. All tags reused (hypervigilance, design, decision). No new tags promoted.
 - 2026-06-16: Captured 1 insight into existing `hypervigilance` from the autonomous overnight discrimination-metric testbed search: `20260616_0142_discrimination_is_spatial_encounter_artifact` — the predator-vs-rabbit bush-dive 'discrimination' is a spatial-encounter artifact (a known class-blind agent reproduces the +0.31 gap in Cell C's asymmetric world; both agents flat under geometry control); no isolated test world calibrated as a metric; resolves insight 1428's open question. All tags reused (hypervigilance, refutation, learned_lesson, decision). No new tags promoted.

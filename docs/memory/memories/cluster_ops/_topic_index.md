@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 26
-**Last updated**: 2026-05-29
+**Insights**: 27
+**Last updated**: 2026-06-22
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-22 | 17:04 | `20260622_1704_continual_bm_transition_nameerror_refactor_drift` | The continual stage-transition crash (NameError: m1_candidates) was introduced by commit 89ade04 (2026-05-12) — a delete-heavy refactor that migrated train.py's behavior-measure accumulators to a BMState object but missed one of six reset sites (the continual stage-transition wipe added the day before). Latent ~40 days because the trigger (continual + behavior_measures + an actual stage transition) was exactly the path the continual-learning review left UNVERIFIED. Fixed with the canonical per-env _bm_reset_env loop + a fast regression smoke. |
 | 2026-05-29 | 18:25 | `20260529_1825_log_interval_anchored_rows_per_session` | log_interval should be anchored to ~140 WandB rows / 24h session, not env-steps-per-row. Dreamer-srl @ ~38 SPS / num_envs=16 reaches 250–500× fewer episodes than rPPO in the same wall-clock, so copying rPPO's env-step cadence (50000) gave 4–6 rows/session — empirically useless across 4 prior cells (oxm78on8/50cpronf/2r5hc0oz/hbqje3dt). Fix: `log_interval=2000` for dreamer-srl @ XS/num_envs=16 → ~140 rows in a 22k-episode session, same row-shape resolution rPPO has at production scale. New YAML carries the rationale + the 4 prior-crash run IDs as the evidence trail. |
 | 2026-05-29 | 18:24 | `20260529_1824_dreamer_srl_wandb_spread_and_config_save_parity` | Lifted rPPO's `**config.to_dict()` spread pattern into `dreamer_srl_main.py` so the UI filter `agent.algorithm = DreamerV3` works cleanly — pre-fix, the entire agent YAML was wrapped under `wandb_config["agent"]`, producing a doubly-nested `agent.agent.algorithm` that confused the filter. Post-fix smoke (`mo1pkvm5`): `wandb.config["agent"] == {"algorithm": "DreamerV3"}`. Trade-off: filter paths flatten — old saved views querying `agent.algo.gamma` / `env.environment.height` won't match post-fix runs; new paths are `algo.gamma` / `environment.height`. Also added `env_config.yaml` + `agent_config.yaml` save to `<results_dir>/models/` for reproducibility parity with rPPO. |
 | 2026-05-28 | 02:18 | `20260528_0218_git_lock_parallel_session_contamination` | When `.git/index.lock` from a parallel Claude session clears and your `git add <file> && git commit` runs, the commit consumes EVERYTHING currently staged in the index — including files staged by the queued parallel session, despite staging by name only. Concrete contamination: a 1-file diary commit ended up with `.gitignore` + `train_command-agent.sh` from a parallel session. Recovery: `git diff --cached --stat` before commit; if a parallel commit lands on top of a contaminated one, use `git commit -C <hash>` to re-create it after the reset rather than blind `--soft HEAD~1`. Refines the project's "stage by name only" rule with the parallel-session caveat. |
