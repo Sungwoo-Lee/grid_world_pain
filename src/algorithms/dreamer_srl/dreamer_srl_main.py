@@ -209,21 +209,61 @@ class Player:
         self._posterior_state: Optional[jax.Array] = None
         self._prev_action: Optional[jax.Array] = None
 
-    def init_states(self, reset_envs=None) -> None:
+    def init_states(self, reset_envs=None, done_mask: Optional[np.ndarray] = None) -> None:
         """Reset player recurrent + posterior state.
 
         Sheeprl PlayerDV3.init_states — reset all envs if reset_envs is None.
         Called at startup and after done episodes.
+
+        Fix 1 (recompile-storm): when done_mask is provided (preferred path for the
+        training loop), use a fixed-width boolean-mask reset over all num_envs.
+        This ensures get_initial_states(num_envs) is called with a CONSTANT batch
+        size, eliminating the variable-shape XLA recompiles that fired when
+        get_initial_states(n_done) was called with n_done in 1..16 on desynchronized
+        episodes.
+
+        Idiom mirrors rPPO's jnp.where(done, reset, keep) pattern — same outcome,
+        fixed shape.  Bit-for-bit equivalent to the old scatter (only the done slots
+        receive h0; living slots keep their exact values).
+
+        done_mask: bool/float array of shape [num_envs] — 1.0 for done envs.
+                   When provided, reset_envs is ignored.
+        reset_envs: legacy list of done env indices.  Used only when done_mask
+                    is None (full-reset path on curriculum stage transition or startup).
         """
+        if done_mask is not None:
+            # Fixed-width masked reset (Fix 1 — recompile-storm fix).
+            # get_initial_states(num_envs) is constant-shape → compiled once.
+            h0_full, z0_full = self.world_model.rssm.get_initial_states(self.num_envs)
+            action_dim = self.actor.action_dim
+
+            mask = jnp.asarray(done_mask, dtype=jnp.float32)  # [B]
+
+            # Recurrent state: [B, recurrent_state_size]
+            m_h = mask[:, None]  # [B, 1]
+            self._recurrent_state = (1.0 - m_h) * self._recurrent_state + m_h * h0_full
+
+            # Posterior state: [B, num_cat, num_cls]
+            m_z = mask[:, None, None]  # [B, 1, 1]
+            self._posterior_state = (1.0 - m_z) * self._posterior_state + m_z * z0_full
+
+            # Previous action: [B, action_dim]
+            m_a = mask[:, None]  # [B, 1]
+            zeros_a = jnp.zeros((self.num_envs, action_dim), dtype=jnp.float32)
+            self._prev_action = (1.0 - m_a) * self._prev_action + m_a * zeros_a
+            return
+
         if reset_envs is None:
-            # Reset all envs
+            # Reset all envs (startup / curriculum stage transition)
             h0, z0 = self.world_model.rssm.get_initial_states(self.num_envs)
             self._recurrent_state = h0   # [B, recurrent_state_size]
             self._posterior_state = z0   # [B, num_cat, num_cls]
             action_dim = self.actor.action_dim
             self._prev_action = jnp.zeros((self.num_envs, action_dim), dtype=jnp.float32)
         else:
-            # Reset only the done envs
+            # Legacy path: reset only the done envs via index scatter.
+            # Kept for any caller that passes reset_envs without done_mask;
+            # the hot training-loop path now uses done_mask instead.
             n_done = len(reset_envs)
             if n_done == 0:
                 return
@@ -1068,8 +1108,11 @@ def main() -> None:
             }
             buffer.add(reset_data, env_idxes=dones_idxes, validate_args=False)
 
-            # Reset player state for done envs
-            player.init_states(reset_envs=dones_idxes)
+            # Reset player state for done envs — use fixed-width boolean-mask path
+            # (Fix 1 — recompile-storm fix): builds get_initial_states(num_envs) which is
+            # constant-shape, instead of get_initial_states(n_done) which varies 1..16.
+            _done_mask = dones.astype(np.float32)  # [num_envs] — 1.0 for done envs
+            player.init_states(done_mask=_done_mask)
 
             # Set is_first=1 in step_data so the NEXT row written has is_first=1
             # (sheeprl L656: step_data["is_first"][:, dones_idxes] = ones_like(...))
@@ -1092,11 +1135,15 @@ def main() -> None:
                 if bm_enabled:
                     bm_reset_env(_bm_state, i)
 
-            # Env auto-reset: get fresh obs for done envs
+            # Env auto-reset: get fresh obs for done envs.
+            # Fix 2 (recompile-storm): split into num_envs keys (constant shape) and
+            # index by env_idx directly — instead of splitting into len(dones_idxes)
+            # keys (variable 1..16) which caused XLA to build a new _threefry_split
+            # executable for each distinct count.
             key, k_autoreset = jax.random.split(key)
-            reset_keys = jax.random.split(k_autoreset, len(dones_idxes))
-            for idx_local, env_idx in enumerate(dones_idxes):
-                k_env = reset_keys[idx_local]
+            reset_keys = jax.random.split(k_autoreset, num_envs)  # [num_envs, 2] — constant shape
+            for env_idx in dones_idxes:
+                k_env = reset_keys[env_idx]
                 # Reset single env by overwriting its state
                 from src.environment.core import jax_reset
                 from src.environment.sensor import get_observation
