@@ -902,6 +902,148 @@ def main() -> None:
     )
 
     # -----------------------------------------------------------------------
+    # 11c. Fix 1 (compile-once) — build a persistent jitted gradient-scan function.
+    #
+    # Root cause: the bare jax.lax.scan in the training loop (lines 1449–1591 old)
+    # was not wrapped in an outer @jax.jit.  XLA compiled the full ~76k-HLO-line
+    # gradient program from scratch every training iteration → multi-hour "hang".
+    #
+    # Fix: extract the scan into _scan_grad_steps(), decorated @jax.jit, with:
+    #   - graphdef_* captured in the Python closure (hashable static metadata)
+    #   - module/optimizer states passed as explicit pytree arguments
+    #   - scan length fixed by the leading axis of scan_xs (Fix 2 makes this const)
+    #
+    # This function is built ONCE here (graphdefs are immutable after build_agent).
+    # The training loop calls it by name; JAX caches the compiled executable across
+    # all iterations as long as the input shapes and dtypes don't change.
+    #
+    # Pattern: src/models/dreamer_v3_trainer.py:683-833 (_scan_train_gpu)
+    # Insight: docs/memory/memories/dreamer_diagnosis/
+    #          20260519_1509_nnx_lax_scan_split_merge_pattern.md
+    # Plan:    docs/develop/active/dreamer_srl_v2/
+    #          TRAIN_STEP_COMPILE_DIAGNOSIS_AND_FIX_PLAN.md §Fix 1
+    # -----------------------------------------------------------------------
+    # Capture graphdefs once (immutable structural descriptions of each module).
+    _graphdef_wm,      _ = nnx.split(world_model)
+    _graphdef_ac,      _ = nnx.split(actor)
+    _graphdef_cr,      _ = nnx.split(critic)
+    _graphdef_tg,      _ = nnx.split(target_critic)
+    _graphdef_wm_opt,  _ = nnx.split(wm_opt)
+    _graphdef_ac_opt,  _ = nnx.split(actor_opt)
+    _graphdef_cr_opt,  _ = nnx.split(critic_opt)
+
+    # Python-int hyperparameters captured in closure (hashable, never change).
+    _tuf = target_update_freq
+    _tau = critic_tau
+
+    @jax.jit
+    def _scan_grad_steps(
+        state_wm, state_ac, state_cr, state_tg,
+        state_wm_opt, state_ac_opt, state_cr_opt,
+        moments_in, key_in,
+        step_idx_in,
+        scan_xs,
+    ):
+        """Single jax.jit boundary for the whole per-iteration gradient scan.
+
+        All mutable state enters as pure JAX pytrees (state_*) or arrays
+        (moments_in, key_in, step_idx_in).  The graphdefs are captured in
+        the outer Python closure — they are hashable static metadata and never
+        enter the traced computation.  scan_xs is a dict[str, array] with
+        leading axis = n_grad_steps (fixed per Fix 2 → one compiled instance).
+
+        Returns updated state pytrees + final moments/key/step_idx + stacked losses.
+        """
+        init_carry = (
+            state_wm, state_ac, state_cr, state_tg,
+            state_wm_opt, state_ac_opt, state_cr_opt,
+            moments_in, key_in,
+            step_idx_in,
+        )
+
+        def _scan_body(carry, batch_i):
+            (s_wm, s_ac, s_cr, s_tg,
+             s_wm_opt, s_ac_opt, s_cr_opt,
+             carry_moments, carry_key, step_idx) = carry
+
+            # --- Polyak update on target_critic ---
+            # jnp.where replaces the Python if-conditional so the body is XLA-pure.
+            do_update = (step_idx % _tuf) == 0
+            tau_val = jnp.where(step_idx == 0,
+                                jnp.float32(1.0),
+                                jnp.float32(_tau))
+
+            _cr_for_polyak = nnx.merge(_graphdef_cr, s_cr)
+            _tg_for_polyak = nnx.merge(_graphdef_tg, s_tg)
+            online_params = nnx.state(_cr_for_polyak, nnx.Param)
+            target_params = nnx.state(_tg_for_polyak, nnx.Param)
+
+            new_target_params = jax.tree.map(
+                lambda c, t: jnp.where(
+                    do_update,
+                    (1.0 - tau_val) * t + tau_val * c,
+                    t,
+                ),
+                online_params, target_params,
+            )
+            nnx.update(_tg_for_polyak, new_target_params)
+            s_tg_new = nnx.state(_tg_for_polyak)
+
+            # --- Reconstruct all modules for train_step ---
+            _wm   = nnx.merge(_graphdef_wm,     s_wm)
+            _ac   = nnx.merge(_graphdef_ac,     s_ac)
+            _cr   = nnx.merge(_graphdef_cr,     s_cr)
+            _tg   = nnx.merge(_graphdef_tg,     s_tg_new)
+            _wm_o = nnx.merge(_graphdef_wm_opt, s_wm_opt)
+            _ac_o = nnx.merge(_graphdef_ac_opt, s_ac_opt)
+            _cr_o = nnx.merge(_graphdef_cr_opt, s_cr_opt)
+
+            # --- Gradient step ---
+            carry_key, k_train = jax.random.split(carry_key)
+            new_moments, losses = train_step(
+                _wm, _ac, _cr, _tg,
+                _wm_o, _ac_o, _cr_o,
+                carry_moments, batch_i, k_train,
+            )
+
+            # --- Extract updated state pytrees for next carry ---
+            new_carry = (
+                nnx.state(_wm),
+                nnx.state(_ac),
+                nnx.state(_cr),
+                s_tg_new,       # target_critic: Polyak-updated above
+                nnx.state(_wm_o),
+                nnx.state(_ac_o),
+                nnx.state(_cr_o),
+                new_moments,
+                carry_key,
+                step_idx + 1,
+            )
+            return new_carry, losses
+
+        final_carry, losses_stack = jax.lax.scan(_scan_body, init_carry, scan_xs)
+        return final_carry, losses_stack
+
+    # -----------------------------------------------------------------------
+    # 11d. Fix 2 (constant scan length) — remainder-carry for Ratio scheduler.
+    #
+    # Root cause: Ratio.__call__ returns 15, 16, 17, … per iteration (float
+    # accumulation).  Each distinct scan length → a distinct XLA compiled instance,
+    # so Fix 1's executable would recompile on every new length encountered.
+    #
+    # Fix: compute G = int(replay_ratio * num_envs) as the steady-state step count.
+    # Track a fractional remainder across iterations so the long-run total of
+    # gradient steps equals what Ratio would have produced (preserves the contract).
+    # The scan always gets exactly G steps → one compiled instance.
+    #
+    # This is Fix 2 option (a) from the plan: fixed bucket + remainder carry.
+    # The Ratio scheduler is still called (for checkpoint/log continuity) but its
+    # output is replaced by the quantized value in the scan path.
+    # -----------------------------------------------------------------------
+    _G: int = max(1, int(replay_ratio * num_envs))  # steady-state grad steps per iter
+    _grad_step_remainder: float = 0.0               # fractional carry across iters
+
+    # -----------------------------------------------------------------------
     # 12. Training loop (sheeprl main() L550-L765)
     # -----------------------------------------------------------------------
     cumulative_grad_steps = 0
@@ -1372,6 +1514,21 @@ def main() -> None:
             ratio_steps = policy_step - learning_starts * num_envs
             n_grad_steps = ratio(ratio_steps)
 
+            # Fix 2: quantize scan-path step count to constant _G per iteration.
+            # The Ratio scheduler produces 15/16/17… (float drift); each distinct
+            # value is a new XLA shape → a new compile.  Instead: track a fractional
+            # remainder (_grad_step_remainder) and run exactly _G scan steps each
+            # iteration.  Long-run total gradient steps is unchanged (contract preserved).
+            # Legacy path still uses raw n_grad_steps for bit-identical behaviour.
+            if not args.legacy_grad_loop and n_grad_steps > 0:
+                _grad_step_remainder += n_grad_steps - _G
+                # If remainder has grown to >= 1, we owe an extra step.
+                # If remainder has fallen to <= -1, we skip a step.
+                # In practice at steady state n_grad_steps ≈ _G so remainder stays ~0.
+                n_grad_steps_scan = _G
+            else:
+                n_grad_steps_scan = n_grad_steps  # legacy path: exact Ratio value
+
             if n_grad_steps > 0 and buffer._pos >= seq_len:
                 t_train_start = time.time()
 
@@ -1379,21 +1536,23 @@ def main() -> None:
                 # Step 2 — GPU-buffer opt-in: when buffer.device=="gpu", pass a JAX PRNG key
                 # and skip the subsequent H2D transfer (data is already on device).
                 # When buffer.device=="cpu" (default), key=None keeps existing behaviour.
+                # Fix 2: scan path samples exactly n_grad_steps_scan (== _G) steps.
+                _n_samples = n_grad_steps_scan if not args.legacy_grad_loop else n_grad_steps
                 if buffer._on_gpu:
                     key, sample_key = jax.random.split(key)
                     local_data = buffer.sample(
                         batch_size=batch_size,
                         sequence_length=seq_len,
-                        n_samples=n_grad_steps,
+                        n_samples=_n_samples,
                         key=sample_key,
                     )
                 else:
                     local_data = buffer.sample(
                         batch_size=batch_size,
                         sequence_length=seq_len,
-                        n_samples=n_grad_steps,
+                        n_samples=_n_samples,
                     )
-                # local_data shape: [n_grad_steps, seq_len, batch_size, ...]
+                # local_data shape: [_n_samples, seq_len, batch_size, ...]
 
                 # Step 1 — Option S: single H2D for the whole iteration.
                 # BEFORE: jnp.asarray(v[i], dtype=jnp.float32) was called once
@@ -1412,7 +1571,7 @@ def main() -> None:
                     lambda x: jnp.asarray(x, dtype=jnp.float32),
                     local_data,
                 )
-                # local_data_gpu[k] shape: [n_grad_steps, seq_len, batch_size, ...] on device
+                # local_data_gpu[k] shape: [_n_samples, seq_len, batch_size, ...] on device
 
                 if args.legacy_grad_loop:
                     # -------------------------------------------------------
@@ -1448,130 +1607,39 @@ def main() -> None:
                         cumulative_grad_steps += 1
                 else:
                     # -------------------------------------------------------
-                    # SCAN PATH (Step 3 default) — jax.lax.scan over grad steps.
-                    # Replaces the Python for-loop with a single fused XLA op.
-                    # Uses nnx.split / nnx.merge pattern from insight:
-                    #   docs/memory/memories/dreamer_diagnosis/
-                    #   20260519_1509_nnx_lax_scan_split_merge_pattern.md
-                    # Anti-pattern avoided: graphdef captured in closure (hashable
-                    # static); state pytree in carry (pure JAX array tree).
-                    # Reference: src/models/dreamer_v3_trainer.py:685-833 (_scan_train_gpu)
+                    # SCAN PATH — Fix 1 (compile-once) + Fix 2 (constant length).
+                    #
+                    # Calls the pre-built _scan_grad_steps (defined at §11c above,
+                    # outside this loop).  That function is @jax.jit-decorated with
+                    # graphdefs captured in its closure.  JAX compiles it ONCE on
+                    # the first call and reuses the cached executable for all
+                    # subsequent iterations (because input shapes / dtypes are fixed:
+                    # Fix 2 makes the leading axis of scan_xs always == _G).
+                    #
+                    # Step 3 plan: docs/develop/active/dreamer_srl_v2/
+                    #   buffer_perf_fix_plan_option_L.md §Step 3
+                    # Fix plan:    docs/develop/active/dreamer_srl_v2/
+                    #   TRAIN_STEP_COMPILE_DIAGNOSIS_AND_FIX_PLAN.md §Fix 1 §Fix 2
                     # -------------------------------------------------------
 
-                    # Split all modules + optimizers into (graphdef, state) pairs.
-                    # graphdef is static metadata (hashable, captured in closure).
-                    # state is a pure pytree of arrays (goes in the scan carry).
-                    graphdef_wm,      state_wm      = nnx.split(world_model)
-                    graphdef_ac,      state_ac      = nnx.split(actor)
-                    graphdef_cr,      state_cr      = nnx.split(critic)
-                    graphdef_tg,      state_tg      = nnx.split(target_critic)
-                    graphdef_wm_opt,  state_wm_opt  = nnx.split(wm_opt)
-                    graphdef_ac_opt,  state_ac_opt  = nnx.split(actor_opt)
-                    graphdef_cr_opt,  state_cr_opt  = nnx.split(critic_opt)
+                    # Split live module states into pure pytrees for the jit boundary.
+                    _, state_wm     = nnx.split(world_model)
+                    _, state_ac     = nnx.split(actor)
+                    _, state_cr     = nnx.split(critic)
+                    _, state_tg     = nnx.split(target_critic)
+                    _, state_wm_opt = nnx.split(wm_opt)
+                    _, state_ac_opt = nnx.split(actor_opt)
+                    _, state_cr_opt = nnx.split(critic_opt)
 
-                    # Carry: all mutable state as pure pytrees.
-                    # step_idx tracks the cumulative grad step count for Polyak
-                    # scheduling; it's a JAX int so jnp.where can act on it traced.
-                    init_carry = (
+                    final_carry, losses_stack = _scan_grad_steps(
                         state_wm, state_ac, state_cr, state_tg,
                         state_wm_opt, state_ac_opt, state_cr_opt,
                         moments, key,
                         jnp.array(cumulative_grad_steps, dtype=jnp.int32),
+                        local_data_gpu,  # scan_xs: leading axis == _G (fixed shape → cached compile)
                     )
 
-                    # Scan inputs: the pre-stacked local_data_gpu dict, already
-                    # on device. lax.scan slices axis 0 → each body call receives
-                    # {k: v[i]} automatically.
-                    scan_xs = local_data_gpu  # dict[str, [n_grad_steps, ...]]
-
-                    def _scan_body(carry, batch_i):
-                        """One gradient step inside jax.lax.scan.
-
-                        carry = (s_wm, s_ac, s_cr, s_tg,
-                                 s_wm_opt, s_ac_opt, s_cr_opt,
-                                 moments, key, step_idx)
-                        batch_i = {k: v[i, ...]} — one slice of local_data_gpu.
-
-                        graphdef_* are captured via Python closure (hashable static
-                        metadata) — they never enter the carry, which prevents
-                        JIT retracing. This is rule 1+3 from the nnx.split/merge
-                        insight: docs/memory/memories/dreamer_diagnosis/
-                        20260519_1509_nnx_lax_scan_split_merge_pattern.md
-                        target_update_freq, critic_tau captured as Python ints/floats.
-                        """
-                        (s_wm, s_ac, s_cr, s_tg,
-                         s_wm_opt, s_ac_opt, s_cr_opt,
-                         carry_moments, carry_key, step_idx) = carry
-
-                        # --- Polyak update on target_critic (scan-safe form) ---
-                        # Replaces the Python if-conditional (lines 921-929 legacy path).
-                        # jnp.where is elementwise: both branches always evaluated
-                        # (XLA requirement), but only one is selected. This is safe
-                        # because both branches are pure arithmetic on JAX arrays.
-                        do_update = (step_idx % target_update_freq) == 0
-                        tau_val = jnp.where(step_idx == 0,
-                                            jnp.float32(1.0),
-                                            jnp.float32(critic_tau))
-
-                        # Reconstruct critic + target_critic to extract Param substate.
-                        # Mirrors CPU path: nnx.state(critic, nnx.Param).
-                        # Note: _cr_for_polyak and _tg_for_polyak are temporary;
-                        # _cr reconstructed again below for train_step (same graphdef).
-                        _cr_for_polyak = nnx.merge(graphdef_cr, s_cr)
-                        _tg_for_polyak = nnx.merge(graphdef_tg, s_tg)
-                        online_params = nnx.state(_cr_for_polyak, nnx.Param)
-                        target_params = nnx.state(_tg_for_polyak, nnx.Param)
-
-                        new_target_params = jax.tree.map(
-                            lambda c, t: jnp.where(
-                                do_update,
-                                (1.0 - tau_val) * t + tau_val * c,
-                                t,
-                            ),
-                            online_params, target_params,
-                        )
-                        # Write updated Param substate back; extract full state
-                        nnx.update(_tg_for_polyak, new_target_params)
-                        s_tg_new = nnx.state(_tg_for_polyak)
-
-                        # --- Reconstruct all modules for train_step ---
-                        _wm   = nnx.merge(graphdef_wm,     s_wm)
-                        _ac   = nnx.merge(graphdef_ac,     s_ac)
-                        _cr   = nnx.merge(graphdef_cr,     s_cr)
-                        _tg   = nnx.merge(graphdef_tg,     s_tg_new)
-                        _wm_o = nnx.merge(graphdef_wm_opt, s_wm_opt)
-                        _ac_o = nnx.merge(graphdef_ac_opt, s_ac_opt)
-                        _cr_o = nnx.merge(graphdef_cr_opt, s_cr_opt)
-
-                        # --- Train step ---
-                        carry_key, k_train = jax.random.split(carry_key)
-                        new_moments, losses = train_step(
-                            _wm, _ac, _cr, _tg,
-                            _wm_o, _ac_o, _cr_o,
-                            carry_moments, batch_i, k_train,
-                        )
-
-                        # --- Extract updated state pytrees for next iteration ---
-                        new_carry = (
-                            nnx.state(_wm),
-                            nnx.state(_ac),
-                            nnx.state(_cr),
-                            s_tg_new,       # target_critic: Polyak-updated above
-                            nnx.state(_wm_o),
-                            nnx.state(_ac_o),
-                            nnx.state(_cr_o),
-                            new_moments,
-                            carry_key,
-                            step_idx + 1,
-                        )
-                        return new_carry, losses
-
-                    # Run the scan over all n_grad_steps
-                    final_carry, losses_stack = jax.lax.scan(
-                        _scan_body, init_carry, scan_xs,
-                    )
-
-                    # Unpack final carry and write state back to live modules
+                    # Unpack final carry and write state back to live modules.
                     (s_wm_f, s_ac_f, s_cr_f, s_tg_f,
                      s_wm_opt_f, s_ac_opt_f, s_cr_opt_f,
                      moments, key, _step_idx_f) = final_carry
@@ -1584,11 +1652,11 @@ def main() -> None:
                     nnx.update(actor_opt,     s_ac_opt_f)
                     nnx.update(critic_opt,    s_cr_opt_f)
 
-                    # Recover last-step losses from the stacked output
+                    # Recover last-step losses from the stacked output.
                     last_losses = jax.tree.map(lambda x: x[-1], losses_stack)
 
-                    # Advance the Python counter by n_grad_steps (CP3 continuity)
-                    cumulative_grad_steps += n_grad_steps
+                    # Advance the Python counter (Fix 2: use quantized count).
+                    cumulative_grad_steps += n_grad_steps_scan
 
                 t_train_total += time.time() - t_train_start
 

@@ -55,8 +55,8 @@ N_GRAD_STEPS = 4       # number of gradient steps to compare
 
 def _load_agent_cfg():
     """Load the smoke agent config (or fall back to 01_food_only.yaml)."""
-    smoke = os.path.join(_REPO_ROOT, "configs", "dreamer_srl", "01_food_only_smoke.yaml")
-    fallback = os.path.join(_REPO_ROOT, "configs", "dreamer_srl", "01_food_only.yaml")
+    smoke = os.path.join(_REPO_ROOT, "configs", "models", "dreamer_srl", "01_food_only_smoke.yaml")
+    fallback = os.path.join(_REPO_ROOT, "configs", "models", "dreamer_srl", "01_food_only.yaml")
     path = smoke if os.path.exists(smoke) else fallback
     return Config.load_yaml(path)
 
