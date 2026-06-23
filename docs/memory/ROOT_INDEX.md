@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-06-23
 **Active folders**: 9
-**Total insights**: 127
+**Total insights**: 130
 **Last audit**: (none)
 
 ---
@@ -19,9 +19,9 @@
 | `subagent_engineering` | Subagent + worktree usage gotchas | 14 | 2026-06-09 | [meta, learned_lesson, worktree, subagent, decision, design] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 16 | 2026-05-28 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 18 | 2026-06-22 | [dreamer, decision, learned_lesson, refutation, meta, design] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 28 | 2026-06-22 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 29 | 2026-06-24 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
 | `hypervigilance` | Hypervigilance experiments | 25 | 2026-06-23 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise] |
-| `env_entities` | Env entity architecture decisions | 8 | 2026-06-23 | [design, decision, learned_lesson, meta, config, dreamer] |
+| `env_entities` | Env entity architecture decisions | 10 | 2026-06-24 | [design, decision, learned_lesson, meta, config, dreamer] |
 | `config_system` | Config loader/layering/schema | 4 | 2026-06-22 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 1 | 2026-06-22 | [learned_lesson, decision] |
 
@@ -54,6 +54,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-06-24: Captured 3 insights from the bush perfect-refuge feature session: 2 into existing `env_entities` (`20260624_0516_bush_blocks_animals_movement_toggle` — per-obstacle blocks_animals toggle blocks animal movement into bushes, default off byte-transparent, move_agent untouched so the agent still hides; `20260624_0517_bush_spawn_exclusion_free_via_overlap_resolution` — animal spawn-exclusion from bushes is already free since resolve_overlaps_global gives unique cells, verified 0/2000, so Phase-2 needed no code), 1 into existing `cluster_ops` (`20260624_0518_yaml_unquoted_date_breaks_string_sort` — unquoted YAML dates parse as datetime.date and broke regen_dev_index's string sort; fix = str() coercion). All tags reused (design, decision, learned_lesson, meta). No new tags promoted.
 - 2026-06-23: Captured 1 insight into existing `hypervigilance` from the nutrition-sweep diagnostic: `20260623_1623_nutrition_runway_confounds_hypervig_read` — hg10's eat-failure is driven by initial nutrition (survival runway) + a wander-away-from-adjacent-food policy, not animal avoidance; at low nutrition it starves even with NO animal. Refines (adds a confound caveat to) `20260622_1744_hypervig_probe_hg10_overgeneralizes_threat`. Counts set to actual file totals. All tags reused (hypervigilance, learned_lesson, refutation). No new tags.
 - 2026-06-23: Captured 1 insight into existing `env_entities` from the rPPO recompile-safety check (cross-session share): `20260623_1616_rppo_reset_recompile_immune` — rPPO is recompile-IMMUNE to per-episode count-variance (resets all envs at fixed shape + jnp.where; K-activation traced + count_high-static masks; empirically 1 compile / 0 recompiles over 800 steps), the OPPOSITE of the Dreamer done-count-sized reset storm `20260622_1746`. Tags reused (learned_lesson, meta, dreamer); added `dreamer` to env_entities top-tags.
 - 2026-06-23: Captured 3 insights into existing `env_entities` from the per-episode-environment-variance feature session: `20260623_0143_per_episode_count_variance_masking` (JAX static shapes -> allocate count_high + per-episode activate K~U[low,high] via res_active/animal_active/obs_active masks; whole-grid default; scalar-count backward-compat; two-commit parity discipline), `20260623_0144_inactive_resource_slots_revive_respawn` (blocker: inactive resource slots revived on step 1 because update_resources overloaded res_active=False as 'eaten'; fix = immutable res_allocated mask; both reviewers caught it; a mask must cover the respawn path), `20260623_0145_proxy_benchmark_contention_misestimate` (a contended-GPU proxy benchmark hid a real -13% step-SPS regression that a clean idle-node measure revealed; reset +28% negligible; rabbit trimmed 3->2 to recover ~half). All tags reused (design, decision, config, learned_lesson, meta). No new tags promoted.

@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-06-24: 3 insights from the bush perfect-refuge feature session (`20260624_0516_bush_blocks_animals_movement_toggle`, `20260624_0517_bush_spawn_exclusion_free_via_overlap_resolution` into env_entities; `20260624_0518_yaml_unquoted_date_breaks_string_sort` into cluster_ops) reused existing tags `design`, `decision`, `learned_lesson`, `meta` - no new tags promoted.
 - 2026-06-23: 1 insight into existing `hypervigilance` (`20260623_1623_nutrition_runway_confounds_hypervig_read`) reused existing tags `hypervigilance`, `learned_lesson`, `refutation` — no new tags promoted.
 - 2026-06-23: 1 insight into existing `env_entities` (`20260623_1616_rppo_reset_recompile_immune`) reused existing tags `learned_lesson`, `meta`, `dreamer` - no new tags promoted.
 - 2026-06-23: 3 insights from the per-episode-environment-variance feature session (`20260623_0143_per_episode_count_variance_masking`, `20260623_0144_inactive_resource_slots_revive_respawn`, `20260623_0145_proxy_benchmark_contention_misestimate`) reused existing tags `design`, `decision`, `config`, `learned_lesson`, `meta` - no new tags promoted.

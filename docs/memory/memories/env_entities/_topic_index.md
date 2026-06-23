@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `env_entities` topic.
 
 **Folder definition**: Env entity architecture decisions
-**Insights**: 8
-**Last updated**: 2026-06-23
+**Insights**: 10
+**Last updated**: 2026-06-24
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-24 | 05:17 | `20260624_0517_bush_spawn_exclusion_free_via_overlap_resolution` | A planned Phase-2 to keep animals from SPAWNING on bush cells needed NO code and zero added reset cost: resolve_overlaps_global already gives every entity a unique cell, so animals never spawn on a bush. Verified empirically 0/2000 resets on the whole-grid default. Cheap test-first probe avoided a needless placement-cost regression. |
+| 2026-06-24 | 05:16 | `20260624_0516_bush_blocks_animals_movement_toggle` | Bushes (non-blocking + hides_agent) conceal the agent so hunting predators lose interest, but were not physically impassable to animals. Added a per-obstacle blocks_animals toggle (default off) that blocks ANIMAL movement only (hunt+wander collision), move_agent untouched so the agent still enters. Default-off byte-transparent; commit 523364a. |
 | 2026-06-23 | 16:16 | `20260623_1616_rppo_reset_recompile_immune` | rPPO (recurrent_ppo) is recompile-IMMUNE to the new per-episode count-variance: resets ALL envs every step at fixed (num_envs) shape then jnp.where(done,...), and the K-activation is a traced scalar with count_high-static masks. Verified empirically (1 compile, 0 recompiles over 800 steps). Opposite of the Dreamer done-count-sized reset storm. |
 | 2026-06-23 | 01:45 | `20260623_0145_proxy_benchmark_contention_misestimate` | A proxy benchmark on a contended GPU mis-estimated the env change's cost (predicted step-SPS +-3%); a clean idle-node re-measure showed a real -13% step-throughput regression driven by the +2 animal hot-path slots (reset +28%, negligible in wall-clock). Lesson: measure perf deltas on a clean idle node. Trimming rabbit 3->2 recovered ~half. |
 | 2026-06-23 | 01:44 | `20260623_0144_inactive_resource_slots_revive_respawn` | Blocker: a per-episode activation mask must be threaded through the respawn/regeneration logic too. Inactive resource slots revived on step 1 because update_resources overloaded res_active=False to mean 'eaten, regrow', collapsing every episode to max count. Fix: a separate immutable res_allocated mask gates respawn. |
