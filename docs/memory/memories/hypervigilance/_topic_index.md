@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `hypervigilance` topic.
 
 **Folder definition**: Hypervigilance experiments
-**Insights**: 24
-**Last updated**: 2026-06-22
+**Insights**: 25
+**Last updated**: 2026-06-23
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-23 | 16:23 | `20260623_1623_nutrition_runway_confounds_hypervig_read` | Nutrition sweep (injury 0, nutr 10→100): hg10's eat-failure is driven by initial nutrition + a wander-away-from-adjacent-food policy, NOT animal avoidance — at low nutrition it starves even with NO animal; the animal only raises the nutrition threshold. Confounds the earlier 'unconditional hypervigilance' read (1744). |
 | 2026-06-22 | 17:47 | `20260622_1747_hypervigilance_asymmetric_stakes_scarcity` | To elicit hypervigilance the redesign keeps 1:1 predator:rabbit (for analyzability) and drives danger-dominance via ASYMMETRIC STAKES (approach-predator = death vs avoid-rabbit = missed scarce meal) under high ambiguity; scarce food removes the camp-safely option and forces the stay-vs-flee decision. |
 | 2026-06-22 | 17:46 | `20260622_1746_olfactory_decay_power_distal_cue_strength` | The olfactory sensor weights smell by 1/dist^decay_power (default 2.0, inverse-square) -> steep falloff (~0.11 at 3 cells) makes the distal cue weak; a linear-decay (1.0) re-run of the whole sweep tests whether a longer-range cue (~0.33 at 3 cells) enables pre-emptive avoidance. decay_power is GLOBAL to the sensor. |
 | 2026-06-22 | 17:45 | `20260622_1745_discrimination_weak_lethality_masks_gating` | In the olfactory_ambiguity 10-run sweep the agent never learned pre-contact discrimination above threshold (max +0.21 vs the 0.5-cell bar); anchor is a clean null; H1b hunger-gating refuted but 47-69% death rates trigger the pre-registered 'lethality masks gating' verdict, not 'no gating'. |
