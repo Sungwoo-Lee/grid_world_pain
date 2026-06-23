@@ -468,3 +468,54 @@ so this measures only the collection loop and env-reset overhead.)
 - [x] Episode completion confirmed: 351 eps in 21.7s
 
 *Re-implemented by: developer*
+
+---
+
+## Fix 3b — 2026-06-23: Fixed-width reset_data buffer write
+
+### Plain-language summary
+
+The coordinator flagged that `reset_data` in the training loop was still built at
+variable width `[1, R, ...]` where `R=len(dones_idxes)` varies 1..16. While investigation
+confirmed the CPU buffer path (`SequentialReplayBuffer.add` with `env_idxes`) is pure
+numpy and never causes JAX recompiles, the pattern was inconsistent with the fixed-width
+idiom of Fix 1+2 and is unsafe for the GPU buffer path (`--buffer-device gpu` uses
+`jnp.at[].set()` which is traced by JAX).
+
+Fix 3b: build `reset_data` at constant `[1, num_envs, ...]` and add a `done_mask`
+parameter to `SequentialReplayBuffer.add()` that gates writes per env-column using numpy
+boolean indexing. This is the same masked-write idiom as Fix 1.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `src/algorithms/dreamer_srl/dreamer_srl_main.py` | `reset_data` built at `[1, num_envs, ...]`; call uses `done_mask=dones` |
+| `src/algorithms/dreamer_srl/buffers.py` | `add()` gains `done_mask` parameter; converts to `env_idxes` + column slice internally |
+
+### JAX_LOG_COMPILES result
+
+Identical to Fix 1+2 baseline: **309 total compilations, 0 float32[N,256] scatter shapes,
+scatter×21 / _squeeze×21 actual compiles** (all from env-state `at[env_idx].set` during
+autoreset warmup, not from buffer write). The CPU buffer path was never a JAX recompile
+source. The fix is a correctness/safety improvement, not a compile-count improvement.
+
+### Test results
+
+```
+pytest tests/algorithms/dreamer_srl/ \
+  --ignore=tests/algorithms/dreamer_srl/test_lax_scan_train.py -q
+→ 103 passed, 2 skipped in 395.07s
+```
+
+### Checkpoints
+
+- [x] `SequentialReplayBuffer.add()` gains `done_mask` parameter (CPU + GPU paths)
+- [x] `reset_data` built at fixed `[1, num_envs, ...]` in training loop
+- [x] `buffer.add(reset_data, done_mask=dones)` call site updated
+- [x] Smoke test: `done_mask=[True,False,True,False]` writes only env 0+2, env 1+3 unchanged
+- [x] Full test suite: 103 passed, 2 skipped
+- [x] JAX_LOG_COMPILES: 309 total (same as Fix 1+2; confirms CPU path was not a recompile source)
+- [x] Episode completion: 351 eps in 21.8s (183.7 env-steps/s — same as Fix 1+2)
+
+*Fix 3b implemented by: developer*
