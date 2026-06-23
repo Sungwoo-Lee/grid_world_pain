@@ -121,7 +121,7 @@ def render_index(docs: list[tuple[Path, dict]]) -> str:
         lines.append(f"### {topic}")
         lines.append("")
         for p, fm in sorted(
-            by_topic[topic], key=lambda x: x[1].get("last_updated", ""), reverse=True
+            by_topic[topic], key=lambda x: str(x[1].get("last_updated", "")), reverse=True
         ):
             rel = p.relative_to(DEVELOP)
             phase = f" — phase {fm['phase']}" if fm.get("phase") else ""
@@ -142,7 +142,7 @@ def render_index(docs: list[tuple[Path, dict]]) -> str:
         lines.append("")
         for p, fm in sorted(
             archive_by_topic[topic],
-            key=lambda x: x[1].get("last_updated", ""),
+            key=lambda x: str(x[1].get("last_updated", "")),
             reverse=True,
         ):
             rel = p.relative_to(DEVELOP)
