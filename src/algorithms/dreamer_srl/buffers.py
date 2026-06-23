@@ -121,6 +121,7 @@ class SequentialReplayBuffer:
         data: Dict[str, np.ndarray],
         env_idxes: Optional[List[int]] = None,
         validate_args: bool = False,
+        done_mask: Optional[np.ndarray] = None,
     ) -> None:
         """Add data to the replay buffer (ring-buffer semantics).
 
@@ -137,16 +138,31 @@ class SequentialReplayBuffer:
         boundaries (sheeprl@33b6366:dreamer_v3.py:L650:
             rb.add(reset_data, dones_idxes, validate_args=...)).
 
+        Fix 3 (recompile-storm): when done_mask is provided (preferred path for the
+        training loop), data has shape [sequence_length, n_envs, ...] (FULL width).
+        Only the env columns where done_mask[e]=True are written; non-done columns
+        at this time slot retain their existing ring-buffer values.  Pure numpy —
+        no JAX ops involved.  This eliminates the variable-width env_idxes=dones_idxes
+        path that previously caused XLA recompiles when data was shaped [1,R,...] for
+        variable R.  Takes precedence over env_idxes when both are supplied.
+
         Args:
             data (Dict[str, np.ndarray]): transitions to add, each array shaped
-                [sequence_length, n_envs, ...] when env_idxes is None, or
-                [sequence_length, len(env_idxes), ...] when env_idxes is given.
+                [sequence_length, n_envs, ...] when env_idxes is None or done_mask
+                is provided, or [sequence_length, len(env_idxes), ...] when env_idxes
+                is given.
             env_idxes (Optional[List[int]]): env column indices to write into.
                 None → write all env columns (legacy behaviour, no shape change).
+                Ignored when done_mask is provided.
                 Authorized by: docs/reviews/dreamer_srl_v2_cp7_driver_review.md §P1
                 Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L193-L221
                               sheeprl@33b6366:dreamer_v3.py:L650
             validate_args (bool): if True, validate shapes. Defaults to False.
+            done_mask (Optional[np.ndarray]): boolean or float array of shape
+                [n_envs]. When provided, data must be full-width [seq, n_envs, ...]
+                and only columns where done_mask[e] is truthy are written.
+                Fix 3 (recompile-storm): preferred over env_idxes for the reset_data
+                boundary write in the training loop.
         """
         if validate_args:
             if not isinstance(data, dict):
@@ -199,6 +215,19 @@ class SequentialReplayBuffer:
             data_to_store = {k: v[-self._buffer_size - next_pos:] for k, v in data.items()}
         else:
             data_to_store = data
+
+        # Fix 3 (recompile-storm): when done_mask is provided, convert it to env_idxes
+        # and slice data_to_store to only the done columns.  Data arrives at fixed width
+        # [seq, num_envs, ...]; we extract only the done columns here (pure numpy —
+        # no JAX traces involved) so the rest of the write path is identical to the
+        # existing env_idxes branch.
+        if done_mask is not None:
+            _done_cols = list(np.where(np.asarray(done_mask, dtype=bool))[0])
+            if len(_done_cols) == 0:
+                # No done envs this step — nothing to write (pos/full unchanged).
+                return
+            data_to_store = {k: v[:, _done_cols] for k, v in data_to_store.items()}
+            env_idxes = _done_cols
 
         if self._on_gpu:
             # GPU path: jnp arrays, functional .at[].set() updates.

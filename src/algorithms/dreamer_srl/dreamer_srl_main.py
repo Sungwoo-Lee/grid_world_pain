@@ -1091,22 +1091,22 @@ def main() -> None:
             # Ported from sheeprl@33b6366:dreamer_v3.py:L639-L657
             # Authorized by: docs/reviews/dreamer_srl_v2_cp7_driver_review.md §P1
             #
-            # NOTE: reset_data shape is [1, R, ...] where R=len(dones_idxes) — this is
-            # pure numpy/CPU data written to the CPU replay buffer; no JAX traces it, so
-            # the variable width R does NOT cause XLA recompiles here.  The buffer.add
-            # call below is the only consumer and it accepts variable-width env_idxes.
-            reset_envs = len(dones_idxes)
+            # Fix 3 (recompile-storm): build reset_data at fixed width [1, num_envs, ...]
+            # (all envs, not just done envs), then write only done-env columns via the
+            # buffer.add done_mask path.  Previously used [1, R, ...] with R=len(dones_idxes)
+            # (variable), which is pure numpy but keeps the pattern consistent and future-safe
+            # if any downstream path ever traces through JAX.
             # next_obs still holds the true terminal obs (env auto-reset not yet run)
             reset_data = {
-                "obs":        next_obs[dones_idxes][np.newaxis],                         # [1, R, obs_dim]
-                "actions":    np.zeros((1, reset_envs, actions_oh.shape[-1]),
-                                       dtype=np.float32),                                 # [1, R, action_dim]
-                "rewards":    step_data["rewards"][:, dones_idxes],                      # [1, R, 1]
-                "terminated": step_data["terminated"][:, dones_idxes],                   # [1, R, 1]
-                "truncated":  step_data["truncated"][:, dones_idxes],                    # [1, R, 1]
-                "is_first":   np.zeros((1, reset_envs, 1), dtype=np.float32),            # [1, R, 1]
+                "obs":        next_obs[np.newaxis],                                       # [1, B, obs_dim]
+                "actions":    np.zeros((1, num_envs, actions_oh.shape[-1]),
+                                       dtype=np.float32),                                 # [1, B, action_dim]
+                "rewards":    step_data["rewards"],                                       # [1, B, 1]
+                "terminated": step_data["terminated"],                                    # [1, B, 1]
+                "truncated":  step_data["truncated"],                                     # [1, B, 1]
+                "is_first":   np.zeros((1, num_envs, 1), dtype=np.float32),              # [1, B, 1]
             }
-            buffer.add(reset_data, env_idxes=dones_idxes, validate_args=False)
+            buffer.add(reset_data, done_mask=dones, validate_args=False)
 
             # Reset player state for done envs — use fixed-width boolean-mask path
             # (Fix 1 — recompile-storm fix): builds get_initial_states(num_envs) which is
