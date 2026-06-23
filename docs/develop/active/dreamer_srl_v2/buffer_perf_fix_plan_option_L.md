@@ -468,6 +468,13 @@ This step **may break bit-identity** on the existing `test_grad_parity.py` — `
 | Step 3 legacy (`--legacy-grad-loop true`) | n105, smoke, 50k steps | **28.33** | Completed in 1899s; matches Step 2 within noise (the legacy path is unchanged code, so this is the parity check). |
 | Step 3 scan (`--legacy-grad-loop false`, default) | n105, smoke, 50k steps | **0.4** | Ran 5h 13min, made it to iter 1202/3125 (~38%), then **OOM'd**: `RESOURCE_EXHAUSTED: Underlying backend ran out of memory trying to instantiate command buffer with 35 (total of 2 alive graphs in the process). Failed to instantiate CUDA graph: CUDA_ERROR_OUT_OF_MEMORY`. |
 
+> **RESOLVED 2026-06-24** — the root cause is now identified and measured: the Step-3
+> scan was shipped **without the `@jax.jit` wrapper this plan's own pseudocode (lines
+> 389–438) prescribed**. The bare `lax.scan` re-compiles a ~76 k-line program every
+> iteration (hours on GPU), which IS the 70× slowdown + CUDA-graph OOM below. Diagnosis +
+> prioritized fix: [[TRAIN_STEP_COMPILE_DIAGNOSIS_AND_FIX_PLAN]]. Candidate (a) below was
+> closest; the fix is the outer jit + a constant per-iteration grad-step count.
+
 **Diagnosis**:
 1. The 70× slowdown is the runtime behaviour of the scan body itself — not compilation. Per-iteration cost is dominated by something we don't yet understand. Candidates: (a) per-iteration retracing because of how the carry pytree is shaped, (b) `nnx.merge` + `nnx.state` overhead × 7 modules × 3125 iterations adding up, (c) CUDA-graph capture being triggered every step instead of cached.
 2. The "35 alive command buffers" OOM is XLA's CUDA-graph caching mechanism accumulating buffers without recycling — separate issue from (1), but probably related root cause (something about the scan body is forcing fresh compilation/graph capture per iteration).
