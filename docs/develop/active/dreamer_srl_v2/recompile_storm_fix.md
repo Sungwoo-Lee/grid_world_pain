@@ -1,9 +1,9 @@
 ---
 title: "dreamer-srl basic-curriculum recompile-storm fix"
 topic: dreamer
-status: reverted
+status: active
 created: 2026-06-22
-last_updated: 2026-06-23-compile-regression-revert
+last_updated: 2026-06-23-fix1-fix2-reapplied
 ---
 
 # dreamer-srl basic-curriculum recompile-storm fix
@@ -366,3 +366,105 @@ pytest tests/algorithms/dreamer_srl/ \
 crash on basic configs is a known open issue, deferred.
 
 *Revert implemented by: developer*
+
+---
+
+## Re-application — 2026-06-23: Fix 1 + Fix 2 re-applied without Fix 3
+
+### Plain-language summary
+
+Fix 1 (masked env reset) and Fix 2 (constant-width autoreset key split) are re-applied
+at HEAD (commit `2e28812`). Fix 3 (scan bucket + masking) is deliberately excluded
+because it was the source of the GPU compile regression documented in the REVERT section
+above.
+
+The working hypothesis from the user's analysis (confirmed by the rPPO memory insight
+`docs/memory/memories/env_entities/20260623_1616_rppo_reset_recompile_immune.md`):
+Fix 1+2 touch only the CPU-side Python hot path (Player.init_states + autoreset loop)
+and do NOT affect the train_step / scan body. Therefore they should not cause GPU
+compile cost inflation.
+
+### Files changed
+
+| File | Lines changed | Description |
+|---|---|---|
+| `src/algorithms/dreamer_srl/dreamer_srl_main.py` | ~212–285 | `Player.init_states`: added `done_mask` path (arithmetic mask over num_envs) |
+| `src/algorithms/dreamer_srl/dreamer_srl_main.py` | ~1111–1115 | Call site: `player.init_states(done_mask=dones.astype(np.float32))` |
+| `src/algorithms/dreamer_srl/dreamer_srl_main.py` | ~1143–1146 | Autoreset key split: `jax.random.split(k, num_envs)` constant [16,2] |
+
+No changes to the scan body, `_SCAN_BUCKET`, or `_grad_steps_constant`.
+No changes to `agent.py`.
+
+### JAX_LOG_COMPILES verification (node 114, 03_predator_full + buf256k, 4000 steps)
+
+**BEFORE (reverted code, variable-n_done scatter):**
+```
+Episodes: 354 in 29.7s (134.6 env-steps/s)
+Total XLA compilations: 731
+jit(scatter) with float32[N,256] shapes: float32[1,256] × 2, float32[2,256] × 2,
+  float32[3,256] × 2, float32[4,256] × 2, float32[5,256] × 2, float32[16,256] × 10
+  = 5 distinct variable-width n_done shapes → the recompile storm
+jit(tile) compilations: 12 (called each time init_states fires, no caching)
+```
+
+**AFTER (Fix 1 + Fix 2):**
+```
+Episodes: 351 in 21.7s (184.1 env-steps/s)
+Total XLA compilations: 309
+jit(scatter) with float32[N,256] shapes: 0 — ELIMINATED
+jit(tile) compilations: 2 (one real compile, one JAX log duplicate)
+jit(tile) unique shapes: float32[1,256] only — CONSTANT
+jit(_threefry_split) unique shapes: uint32[2] only — CONSTANT
+```
+
+**Key evidence:**
+- `scatter` with `float32[1,256]..float32[5,256]` update shapes: 10 → **0** (Fix 1 eliminated the variable-n_done scatter entirely)
+- `tile` (get_initial_states input): 12 compilations → **2** (Fix 1: called once at constant batch size)
+- `_threefry_split`: `uint32[2]` only (Fix 2: key split at constant num_envs=16)
+- Total compilations: 731 → **309** (-58%)
+
+### Speed check
+
+| Metric | BEFORE | AFTER | Delta |
+|---|---|---|---|
+| env-steps/s | 134.6 | 184.1 | +37% |
+| Total XLA compilations | 731 | 309 | -58% |
+| scatter float32[N,256] shapes | 5 distinct | 0 | eliminated |
+
+(No train_step scan compiled in either run — total-steps=4000 is below learning_starts
+so this measures only the collection loop and env-reset overhead.)
+
+### Test results (post re-application)
+
+```
+# Core unit tests (fast):
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest \
+  tests/algorithms/dreamer_srl/test_agent.py \
+  tests/algorithms/dreamer_srl/test_train.py \
+  tests/algorithms/dreamer_srl/test_loss.py \
+  tests/algorithms/dreamer_srl/test_utils.py \
+  tests/algorithms/dreamer_srl/test_buffers.py -q
+→ 34 passed, 1 skipped in 32.73s
+
+# Full test suite (excluding pre-existing broken test_lax_scan_train.py):
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest \
+  tests/algorithms/dreamer_srl/ \
+  --ignore=tests/algorithms/dreamer_srl/test_lax_scan_train.py -q
+→ 103 passed, 2 skipped in 364.20s
+```
+
+`test_lax_scan_train.py` collection error is pre-existing (wrong config path at
+`configs/dreamer_srl/01_food_only.yaml`), not caused by this change.
+
+### Checkpoints
+
+- [x] Fix 1 re-applied: `Player.init_states` done_mask path + call site
+- [x] Fix 2 re-applied: autoreset key split at constant num_envs
+- [x] Fix 3 deliberately excluded (no `_SCAN_BUCKET`, no scan masking)
+- [x] Full test suite: 103 passed, 2 skipped (pre-existing)
+- [x] JAX_LOG_COMPILES: float32[N,256] scatter eliminated (0 vs 5 distinct shapes before)
+- [x] Total compilations: 731 → 309 (-58%)
+- [x] Speed: 134.6 → 184.1 env-steps/s (+37%)
+- [x] Episode completion confirmed: 351 eps in 21.7s
+
+*Re-implemented by: developer*
