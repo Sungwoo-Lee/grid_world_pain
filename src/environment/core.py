@@ -353,6 +353,11 @@ def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, 
     new_mt      = animal_mt
     new_at      = animal_at
 
+    # Effective blocking for animals: union of physical blocking and the
+    # optional blocks_animals flag.  Default false → obs_blocking unchanged
+    # (byte-identical to pre-feature behaviour when blocks_animals is all-False).
+    obs_block_for_animals = params.obs_blocking | params.obs_blocks_animals
+
     # ── Branch A: HUNT subset ────────────────────────────────────────────────
     if len(params.hunt_idx) > 0:
         h_idx = jnp.array(params.hunt_idx, dtype=jnp.int32)
@@ -372,7 +377,7 @@ def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, 
             params.animal_move_int[h_idx],
             agent_pos,
             state.obs_pos,
-            params.obs_blocking,      # for check_collision (byte-parity with old obs_blocking arg)
+            obs_block_for_animals,    # merged: obs_blocking | obs_blocks_animals
             params.obs_hides_agent,   # for agent_hidden (byte-parity with old internal params.obs_hides_agent)
             hunt_key,
             grid_height=params.height,
@@ -396,7 +401,7 @@ def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, 
             params.animal_patrol[w_idx],
             params.animal_move_int[w_idx],
             state.obs_pos,
-            params.obs_blocking,
+            obs_block_for_animals,    # merged: obs_blocking | obs_blocks_animals
             wander_key,
             grid_height=params.height,
             grid_width=params.width,

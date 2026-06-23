@@ -985,6 +985,7 @@ def load_env_params(config: Config) -> EnvParams:
             return val
         obs_blocking = jnp.array([o.get('blocking', True) for o in expanded_obstacles], dtype=jnp.bool_)
         obs_hides_agent = jnp.array([o.get('hides_agent', False) for o in expanded_obstacles], dtype=jnp.bool_)
+        obs_blocks_animals = jnp.array([o.get('blocks_animals', False) for o in expanded_obstacles], dtype=jnp.bool_)
         
         # Obstacle damage ranges
         raw_obs_damage = [o.get('damage', 0.0) for o in expanded_obstacles]
@@ -1021,6 +1022,7 @@ def load_env_params(config: Config) -> EnvParams:
     else:
         obs_blocking = jnp.zeros(0, dtype=jnp.bool_)
         obs_hides_agent = jnp.zeros(0, dtype=jnp.bool_)
+        obs_blocks_animals = jnp.zeros(0, dtype=jnp.bool_)
         obs_damage = jnp.zeros((0, 2), dtype=jnp.float32)
         obs_nociception = jnp.zeros(0, dtype=jnp.float32)
         chem_dim = res_property.shape[-1]
@@ -1258,6 +1260,7 @@ def load_env_params(config: Config) -> EnvParams:
         has_obs_range=any(lo < hi for lo, hi in zip(obs_count_low_list, obs_count_high_list)),
         obs_blocking=obs_blocking,
         obs_hides_agent=obs_hides_agent,
+        obs_blocks_animals=obs_blocks_animals,
         obs_damage=obs_damage,
         obs_property=obs_property,
         obs_property_std=obs_property_std,

@@ -173,8 +173,9 @@ class EnvParams:
     has_obs_range: bool = struct.field(pytree_node=False)
 
     # Obstacles
-    obs_blocking: jnp.ndarray   # [num_obs] bool
-    obs_hides_agent: jnp.ndarray # [num_obs] bool (bush-type concealment)
+    obs_blocking: jnp.ndarray      # [num_obs] bool
+    obs_hides_agent: jnp.ndarray   # [num_obs] bool (bush-type concealment)
+    obs_blocks_animals: jnp.ndarray # [num_obs] bool (blocks animal movement; agent still enters)
     obs_spawn_area: jnp.ndarray # [num_obs, 4] (min_r, min_c, max_r, max_c)
     obs_damage: jnp.ndarray     # [num_obs, 2] [min, max]
     obs_property: jnp.ndarray   # [num_obs, vector_size]

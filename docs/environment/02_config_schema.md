@@ -854,8 +854,9 @@ Each entry under `environment.obstacles` (after `count` expansion):
 | `area` | `obs_spawn_area [N, 4]` | yes | — | 1-based → 0-based exclusive |
 | `properties` | `obs_property [N, V]` | yes | — | olfactory signature |
 | `properties_std` | `obs_property_std [N, V]` | yes | — | std dev |
-| `blocking` | `obs_blocking [N]` bool | optional | `True` | blocks movement |
+| `blocking` | `obs_blocking [N]` bool | optional | `True` | blocks movement for both agent and animals |
 | `hides_agent` | `obs_hides_agent [N]` bool | optional | `False` | bush-type concealment |
+| `blocks_animals` | `obs_blocks_animals [N]` bool | optional | `False` | blocks animal movement; agent still enters freely |
 | `damage` | `obs_damage [N, 2]` | optional | `0.0` → `[0,0]` | per-event damage range |
 | `nociception_intensity` | `obs_nociception [N]` | optional | `0.3` | |
 | `name` | `obs_type [N]` int | optional | `"rock"` | index into `obstacle_names` |
@@ -1084,6 +1085,7 @@ def load_behavior_measure_cfg(config) -> "BehaviorMeasureCfg | None":
 | Per-animal `tag` | `"idx{i}"` | `_normalise_tag()` `config_loader.py:165` |
 | Per-obstacle `blocking` | `True` | `config_loader.py:704` |
 | Per-obstacle `hides_agent` | `False` | `config_loader.py:705` |
+| Per-obstacle `blocks_animals` | `False` | `config_loader.py:706` |
 | Per-obstacle `damage` | `0.0` → `[0,0]` | `config_loader.py:708` |
 | Per-obstacle `nociception_intensity` | `0.3` | `config_loader.py:711` |
 | Per-obstacle `count` | `1` | `config_loader.py:695` |
@@ -1099,7 +1101,7 @@ def load_behavior_measure_cfg(config) -> "BehaviorMeasureCfg | None":
 |----------|------------------------------|------------------------|
 | Grid shape | `height`, `width`, `max_steps` | `grid_location_type [H,W]` |
 | Animal metadata | `animal_classes`, `animal_behaviours`, `animal_tags`, `hunt_idx`, `wander_idx`, `static_idx`, `predator_indices`, `neutral_indices` | `animal_property [N,V]`, `animal_property_std [N,V]`, `animal_nociception [N]`, `animal_move_int [N]`, `animal_damage [N,2]`, `animal_attack_delay [N]`, `animal_spawn_area [N,4]`, `animal_patrol [N,4]`, all ten `animal_*_low/high` arrays, `animal_classes_int [N]`, `animal_behaviours_int [N]`, `animal_is_damaging [N]`, `animal_visual_channel [N]` |
-| Obstacles | `obstacle_names` | `obs_blocking [N]`, `obs_hides_agent [N]`, `obs_spawn_area [N,4]`, `obs_damage [N,2]`, `obs_property [N,V]`, `obs_property_std [N,V]`, `obs_nociception [N]`, `obs_type [N]` |
+| Obstacles | `obstacle_names` | `obs_blocking [N]`, `obs_hides_agent [N]`, `obs_blocks_animals [N]`, `obs_spawn_area [N,4]`, `obs_damage [N,2]`, `obs_property [N,V]`, `obs_property_std [N,V]`, `obs_nociception [N]`, `obs_type [N]` |
 | Placement | `max_per_type`, `num_types`, `num_entities`, `placement_mode` | `type_areas [T,4]`, `type_counts [T]`, `type_entity_map [T,max_per_type]` |
 | Body flags | `smoothing_duration`, `overeating_death`, `use_homeostatic_reward`, `with_satiation`, `with_nutrition`, `with_injury`, `random_start_satiation`, `random_start_nutrition`, `random_start_injury`, `random_start_pos`, `rest_action_enabled`, `eat_action_enabled` | `max_satiation`, `max_nutrition`, `max_injury`, `food_nutrition_gain`, `setpoint`, `start_satiation`, `start_nutrition`, `metabolic_cost`, `nutrition_to_satiation_scaling_factor`, `recovery_base_rate`, `recovery_accel_rate`, `death_penalty`, `eating_nutrition_cost`, `eating_reward_penalty`, `start_pos [2]` |
 | Sensory flags | `sensor_range`, `visual_sensor_enabled`, `visual_sensor_range`, `local_view_size`, `olfactory_enabled`, `nociception_enabled`, `location_sensor_enabled`, `injury_observable`, `nutrition_observable`, `interoceptive_nociception_enabled`, `interoceptive_convolution_enabled`, `interoceptive_kernel_length`, `proprioception_enabled`, `action_dim`, `olfactory_vector_size`, `nociception_size` | `sensor_radius`, `sensor_decay`, `interoceptive_kernel [K]` |
