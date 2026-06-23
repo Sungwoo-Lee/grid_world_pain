@@ -1,0 +1,23 @@
+# Long-L4 variant of the basic-curriculum continual schedule.
+# ---------------------------------------------------------------------------
+# Hypothesis under test: the original curriculum gave the TARGET level (L4
+# far-sight) only 4M episodes and tied the from-scratch far-sight baseline
+# (~261 survival steps, run rppo_basic04_farsight_n114 / c8cd77ft, 10M eps).
+# Does giving L4 FAR more training let the curriculum agent SURPASS that baseline?
+#
+# Stages 0-3 are IDENTICAL to basic_curriculum_schedule.yaml (same warm-start
+# into L4 — isolates the L4-budget variable). Stage 4 runs from ep 6M to ~1B
+# (~994M episodes on far-sight, ~100x the original 10M total). The run trains
+# L4 until manually stopped; checkpoints every 2M for best-model selection.
+#
+# Run:
+#   python train.py \
+#     --configs-dir configs/environment/experiment/basic \
+#     --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#     --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#     --tag rppo_basic_curriculum_longL4
+
+continual:
+  # Cumulative. Stages 0-3 unchanged; stage 4 = 6M -> 1B (~994M episodes on L4).
+  episode_boundaries: [1000000, 2000000, 4000000, 6000000, 1000000000]
+  checkpoint_frequencies: [100000, 100000, 200000, 200000, 2000000]
