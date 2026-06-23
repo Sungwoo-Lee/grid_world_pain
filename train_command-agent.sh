@@ -115,16 +115,53 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # (1M/1M/2M/2M/4M), node 106 cuda:0, wandb-group: basic_curriculum
 # Re-launch after BMState stage-transition NameError fix in train.py
 # ---------------------------------------------------------------------------
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic \
+#   --continual-schedule configs/continual/basic_curriculum_schedule.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 128 \
+#   --device cuda:0 \
+#   --wandb-group basic_curriculum \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic_curriculum_n106 \
+#   --tag rppo_basic_curriculum_n106
+
+# ---------------------------------------------------------------------------
+# basic_curriculum long-L4 continual run — 2026-06-23
+# RecurrentPPO (unmodulated), 5-stage schedule (longL4 variant), stage 4 runs ~1B eps
+# (1M/1M/2M/2M then stage-4 runs from 6M to 1B — manually stopped by user).
+# Node 114, cuda:1, wandb-group: basic_curriculum
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic \
+#   --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 128 \
+#   --device cuda:1 \
+#   --wandb-group basic_curriculum \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic_curriculum_longL4 \
+#   --tag rppo_basic_curriculum_longL4
+
+# ---------------------------------------------------------------------------
+# basic_curriculum long-L4 continual run — FiLM/NMN modulated — 2026-06-24
+# RecurrentPPO + NMN FiLM modulator (per-neuron γ/β, temp_clip [0.5, 5.0])
+# 5-stage longL4 schedule: stages 0-3 = 1M/1M/2M/2M eps; stage 4 far-sight
+# runs from 6M to 1B eps (manually stopped). Comparison target: unmod run oq2vvh8g.
+# Node 114, cuda:2, wandb-group: basic_curriculum
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --configs-dir configs/environment/experiment/basic \
-  --continual-schedule configs/continual/basic_curriculum_schedule.yaml \
-  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml \
   --num-envs 128 \
-  --device cuda:0 \
+  --device cuda:2 \
   --wandb-group basic_curriculum \
   --wandb-job-type prod \
-  --wandb-name rppo_basic_curriculum_n106 \
-  --tag rppo_basic_curriculum_n106
+  --wandb-name rppo_nmn_film_curric_longL4_n114 \
+  --tag rppo_nmn_film_curric_longL4_n114
 #
 # Run 03: rppo_hg03_s0.1_sig0_dp1_s42    — node 101, cuda:1
 # /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
