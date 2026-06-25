@@ -4,7 +4,7 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-06-23
+**Last updated**: 2026-06-24
 **Active folders**: 9
 **Total insights**: 130
 **Last audit**: (none)
@@ -23,7 +23,7 @@
 | `hypervigilance` | Hypervigilance experiments | 25 | 2026-06-23 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise] |
 | `env_entities` | Env entity architecture decisions | 10 | 2026-06-24 | [design, decision, learned_lesson, meta, config, dreamer] |
 | `config_system` | Config loader/layering/schema | 4 | 2026-06-22 | [config, design, decision, meta, learned_lesson] |
-| `curriculum_learning` | Curriculum/continual training | 1 | 2026-06-22 | [learned_lesson, decision] |
+| `curriculum_learning` | Curriculum/continual training | 3 | 2026-06-24 | [learned_lesson, decision, refutation] |
 
 ---
 
@@ -54,6 +54,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-06-24: Captured 2 insights into existing `curriculum_learning` from the continual-curriculum result + plasticity diagnosis session: `20260624_0516_curriculum_underperformed_baseline_negative_transfer` (the continual curriculum UNDERPERFORMED the from-scratch baseline — negative transfer, warm-start-accelerated entropy collapse; refines `20260622_1748`) and `20260624_0517_continual_failure_is_plasticity_loss_not_budget` (the deficit is loss-of-plasticity not under-training; field shift catastrophic-forgetting -> loss-of-plasticity; more target training won't fix it; fixes = entropy floor / ReDo / no recurrent-reset). All tags reused (learned_lesson, decision, refutation).
 - 2026-06-24: Captured 3 insights from the bush perfect-refuge feature session: 2 into existing `env_entities` (`20260624_0516_bush_blocks_animals_movement_toggle` — per-obstacle blocks_animals toggle blocks animal movement into bushes, default off byte-transparent, move_agent untouched so the agent still hides; `20260624_0517_bush_spawn_exclusion_free_via_overlap_resolution` — animal spawn-exclusion from bushes is already free since resolve_overlaps_global gives unique cells, verified 0/2000, so Phase-2 needed no code), 1 into existing `cluster_ops` (`20260624_0518_yaml_unquoted_date_breaks_string_sort` — unquoted YAML dates parse as datetime.date and broke regen_dev_index's string sort; fix = str() coercion). All tags reused (design, decision, learned_lesson, meta). No new tags promoted.
 - 2026-06-23: Captured 1 insight into existing `hypervigilance` from the nutrition-sweep diagnostic: `20260623_1623_nutrition_runway_confounds_hypervig_read` — hg10's eat-failure is driven by initial nutrition (survival runway) + a wander-away-from-adjacent-food policy, not animal avoidance; at low nutrition it starves even with NO animal. Refines (adds a confound caveat to) `20260622_1744_hypervig_probe_hg10_overgeneralizes_threat`. Counts set to actual file totals. All tags reused (hypervigilance, learned_lesson, refutation). No new tags.
 - 2026-06-23: Captured 1 insight into existing `env_entities` from the rPPO recompile-safety check (cross-session share): `20260623_1616_rppo_reset_recompile_immune` — rPPO is recompile-IMMUNE to per-episode count-variance (resets all envs at fixed shape + jnp.where; K-activation traced + count_high-static masks; empirically 1 compile / 0 recompiles over 800 steps), the OPPOSITE of the Dreamer done-count-sized reset storm `20260622_1746`. Tags reused (learned_lesson, meta, dreamer); added `dreamer` to env_entities top-tags.
