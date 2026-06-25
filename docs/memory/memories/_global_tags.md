@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-06-24: 1 insight into existing `hypervigilance` (`20260624_0517_indist_random_init_reverses_hypervig`, supersedes `20260622_1744`) reused existing tags `hypervigilance`, `refutation`, `learned_lesson` — no new tags promoted.
 - 2026-06-24: 2 insights into existing `curriculum_learning` (`20260624_0516_curriculum_underperformed_baseline_negative_transfer`, `20260624_0517_continual_failure_is_plasticity_loss_not_budget`) reused existing tags `learned_lesson`, `decision`, `refutation` — no new tags promoted.
 - 2026-06-24: 3 insights from the bush perfect-refuge feature session (`20260624_0516_bush_blocks_animals_movement_toggle`, `20260624_0517_bush_spawn_exclusion_free_via_overlap_resolution` into env_entities; `20260624_0518_yaml_unquoted_date_breaks_string_sort` into cluster_ops) reused existing tags `design`, `decision`, `learned_lesson`, `meta` - no new tags promoted.
 - 2026-06-23: 1 insight into existing `hypervigilance` (`20260623_1623_nutrition_runway_confounds_hypervig_read`) reused existing tags `hypervigilance`, `learned_lesson`, `refutation` — no new tags promoted.

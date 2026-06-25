@@ -9,7 +9,8 @@ related: ["20260609_1720_chasing_rabbit_avoidance_damage_driven", "20260616_1514
 session_origin: claude_code
 session_label: "conflict + hypervigilance behavior-probe build & eval (v3.0)"
 importance: high
-status: active
+status: superseded
+superseded_by: ["20260624_0517_indist_random_init_reverses_hypervig"]
 valid_until: 2026-08-31
 confidence: medium
 supersedes: []
@@ -50,4 +51,5 @@ A new "conflict-needs" behavior probe (hungry+injured agent next to food, an ani
 ## Backlinks
 - [[20260622_1745_frozen_probe_eval_match_sensory_renderer]] (hypervigilance, 2026-06-22) — Frozen-checkpoint probe eval: the env config's sensory params (esp. decay_power)
 - [[20260623_1623_nutrition_runway_confounds_hypervig_read]] (hypervigilance, 2026-06-23) — A nutrition sweep (injury 0, nutr 10->100) shows hg10's eat-failure is driven by
+- [[20260624_0517_indist_random_init_reverses_hypervig]] (hypervigilance, 2026-06-24) — Re-running the probes on the IN-DISTRIBUTION model (random-init hg10, trained on
 <!-- END BACKLINKS -->
