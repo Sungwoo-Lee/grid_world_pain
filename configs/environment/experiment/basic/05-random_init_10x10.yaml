@@ -1,0 +1,117 @@
+# Basic curriculum — 05-random_init_10x10
+# "Proper random init" generalisation stage: per-episode variance on EVERYTHING.
+#   - body start: random nutrition [0,100] + random injury [0,100] (hungry/injured starts visited)
+#   - scene counts redrawn each episode: predator 0-2, rabbit 0-2, hiding_predator 2-4,
+#     food 1-4, bush 4-10, rock 6-12  (count_high slots allocated, extras inactive off-grid)
+#   - full-grid spawn + random_start_pos (positions redrawn each episode)
+# Smell kept CLEAN (properties_std 0) — this stage tests scene/body-state generalisation,
+#   NOT olfactory ambiguity. obs_dim=27 / sensor fingerprint unchanged (count ranges &
+#   random init do not alter obs layout), so the continual dim/fingerprint guard still passes.
+# Sparse override of configs/environment/default.yaml (extends:); sensory/noise/behavior_measures inherited.
+extends: environment/default
+
+environment:
+  height: 10
+  width: 10
+  start_pos: [5, 5]
+  random_start_pos: true
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [10, 10]]
+    - type: "sand"
+      area: [[0, 0], [0, 0]]
+  resources:
+    - name: "food"
+      type: "food"
+      count_low: 1
+      count_high: 4
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 1, 0, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+    - name: "hiding_predator"
+      type: "hiding_predator"
+      count_low: 2
+      count_high: 4
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 1, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: -1
+      regeneration_delay: 20
+      damage: [15.0, 45.0]
+      nociception_intensity: 0.9
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: 1
+      damage: [15.0, 120.0]
+      attack_delay: 3
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: 3
+      max_stamina: 30
+      stamina_recovery_rate: 1
+      hunt_stamina_threshold: 0.7
+      lose_interest_multiplier: 1.5
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rabbit"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: 1
+      damage: [0.0, 0.0]
+      attack_delay: 0
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+  obstacles:
+    - name: "bush"
+      count_low: 4
+      count_high: 10
+      area: [[1, 1], [10, 10]]
+      blocking: false
+      hides_agent: true
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+    - name: "rock"
+      count_low: 6
+      count_high: 12
+      area: [[1, 1], [10, 10]]
+      blocking: false
+      damage: [1, 5]
+      nociception_intensity: 0.9
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 1, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+
+body:
+  random_start_nutrition: true
+  start_nutrition_low: 0
+  start_nutrition_high: 100
+  random_start_injury: true
+  start_injury_low: 0
+  start_injury_high: 100
