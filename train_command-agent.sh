@@ -173,17 +173,107 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # Node 112, cuda:0, wandb-group: basic
 # CIFS-bypass: launched via /tmp script — this file is the audit record.
 # ---------------------------------------------------------------------------
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/basic/05-random_init_10x10.yaml \
-  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
-  --num-envs 16 \
-  --total-timesteps 10000000 \
-  --checkpoint-frequency 1000 \
-  --device cuda:0 \
-  --wandb-group basic \
-  --wandb-job-type prod \
-  --wandb-name rppo_basic05_randinit_n112 \
-  --tag rppo_basic05_randinit_n112
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/05-random_init_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 16 \
+#   --total-timesteps 10000000 \
+#   --checkpoint-frequency 1000 \
+#   --device cuda:0 \
+#   --wandb-group basic \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic05_randinit_n112 \
+#   --tag rppo_basic05_randinit_n112
+
+# ---------------------------------------------------------------------------
+# NMN FiLM grouping_size screen — 2026-06-27
+# RecurrentPPO + NMN FiLM modulator, 8-point group-count curve (grouping_size 1→128)
+# Env: 04-far_sight_predator_10x10 (far-sight L4, from scratch, no curriculum)
+# Budget: 10M episodes, num_envs=128, seed=42, checkpoint_frequency=100000
+# temp_clip: [0.5, 10.0] (non-binding ceiling; de-confounds temperature rail)
+# Nodes 106–109, 2 GPUs each; wandb-group: basic_curriculum, job-type: prod
+# Design doc: docs/experiments/active/basic_curriculum/NMN_FILM_GROUPING_SCREEN.md
+# CIFS-bypass: launched via /tmp scripts — this file is the audit record.
+# ---------------------------------------------------------------------------
+# Run 1: rppo_nmn_film_g1_screen_s42   — node 106, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 10 --device cuda:0 --seed 42 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g1_screen_s42 \
+#   --tag rppo_nmn_film_g1_screen_s42
+#
+# Run 2: rppo_nmn_film_g2_screen_s42   — node 106, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g2_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 10 --device cuda:1 --seed 42 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g2_screen_s42 \
+#   --tag rppo_nmn_film_g2_screen_s42
+#
+# Run 3: rppo_nmn_film_g4_screen_s42   — node 107, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g4_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 10 --device cuda:0 --seed 42 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g4_screen_s42 \
+#   --tag rppo_nmn_film_g4_screen_s42
+#
+# Run 4: rppo_nmn_film_g8_screen_s42   — node 107, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g8_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 10 --device cuda:1 --seed 42 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g8_screen_s42 \
+#   --tag rppo_nmn_film_g8_screen_s42
+#
+# Run 5: rppo_nmn_film_g16_screen_s42  — node 108, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g16_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 10 --device cuda:0 --seed 42 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g16_screen_s42 \
+#   --tag rppo_nmn_film_g16_screen_s42
+#
+# Run 6: rppo_nmn_film_g32_screen_s42  — node 108, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g32_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 10 --device cuda:1 --seed 42 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g32_screen_s42 \
+#   --tag rppo_nmn_film_g32_screen_s42
+#
+# Run 7: rppo_nmn_film_g64_screen_s42  — node 109, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g64_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 10 --device cuda:0 --seed 42 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g64_screen_s42 \
+#   --tag rppo_nmn_film_g64_screen_s42
+#
+# Run 8: rppo_nmn_film_g128_screen_s42 — node 109, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g128_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 10 --device cuda:1 --seed 42 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g128_screen_s42 \
+#   --tag rppo_nmn_film_g128_screen_s42
 #
 # Run 03: rppo_hg03_s0.1_sig0_dp1_s42    — node 101, cuda:1
 # /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
@@ -288,3 +378,29 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --wandb-job-type prod \
 #   --wandb-name rppo_hg10_s0.5_sig0.4_dp1_s42 \
 #   --tag rppo_hg10_s0.5_sig0.4_dp1_s42
+
+# ---------------------------------------------------------------------------
+# basic standalone — random-init 10x10 — RE-LAUNCH 2026-06-27
+# PRIOR LAUNCH (same date) used --total-timesteps 10000000 which caused exit in ~45s
+# (single-config mode reads episodes default = 100 → ran 100 eps and stopped).
+# FIX: replaced with --episodes 10000000 (episode-budget convention).
+# RecurrentPPO (unmodulated), single-config from scratch, 10M episodes.
+# 05-random_init_10x10: per-episode randomised predator/food/bush/rock counts,
+# random start nutrition [0,100] + injury [0,100], full-grid spawn, clean smell.
+# Standalone (NOT continual). Level 4 basic converged ~3.6M steps → 10M gives margin.
+# Node 112, cuda:0, wandb-group: basic
+# Supersedes defunct WandB run k9wyijj3.
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/environment/experiment/basic/05-random_init_10x10.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --num-envs 16 \
+  --episodes 10000000 \
+  --checkpoint-frequency 100000 \
+  --device cuda:0 \
+  --log-interval 50 \
+  --wandb-group basic \
+  --wandb-job-type prod \
+  --wandb-name rppo_basic05_randinit_n112 \
+  --tag rppo_basic05_randinit_n112
