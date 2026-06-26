@@ -1,0 +1,67 @@
+# Agent config — NMN FiLM grouping screen, grouping_size=1 (num_groups=128)
+# ------------------------------------------------------------------------------
+# Part of the 10-run FiLM grouping_size screen (see
+#   docs/experiments/active/basic_curriculum/NMN_FILM_GROUPING_SCREEN.md).
+#
+# WHAT THIS FILE VARIES vs the canonical FiLM agent
+#   (configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml):
+#     1. modulation.grouping_size: 1  ->  1
+#        => num_groups = ceil(hidden_size=128 / 1) = 128 modulation groups.
+#           grouping_size is the PRIMARY sweep axis: it sets how many neurons
+#           share one (gamma, beta) FiLM pair. Larger grouping_size = fewer,
+#           larger groups = coarser, more-regularised modulation.
+#     2. modulation.temp_clip: [0.5, 5.0]  ->  [0.5, 10.0]
+#        => held NON-BINDING and IDENTICAL across all 10 screen runs so that
+#           grouping_size is the only varying modulation-capacity knob. The
+#           prior g=1 run railed its temperature at the 5.0 ceiling (100% at the
+#           rail late), which would otherwise confound capacity with temperature
+#           headroom. 10.0 is the architecture's own default envelope upper bound
+#           (src/models/neuromodulator.py:71 default temp_clip = (0.1, 10.0)).
+#
+# Everything else (all PPO/encoding/hierarchical hyperparameters and the rest of
+# the modulation block) is BYTE-IDENTICAL to recurrent_ppo_nmn_film_g1_tempceil5.yaml.
+# Seed is supplied at launch via --seed (NOT a config key).
+
+agent:
+  algorithm: "RecurrentPPO"
+  lr_actor: 0.0005
+  lr_critic: 0.0001
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  sequence_length: 128
+  frame_stack: 1
+  fc_layers: [128,128]
+  actor_fc_layers: [128,128]
+  critic_fc_layers: [128,128]
+  hidden_size: 128
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+
+  # v8-anchored parity options (see NMN_PERFORMANCE_DIAGNOSIS_v8 §2.2)
+  rnn_type: "GRU"          # required for gate-bias injection
+  activation: "relu"
+  return_mode: "MC"        # MC: cleaner per v8 (smaller seed variance + lower critic loss)
+
+  encoding_mode: "hierarchical"
+
+  hierarchical_params:
+    default_mlp: [128,128]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+    multimodal_hub: [128,128]
+
+  # FiLM modulator — grouping screen. Only grouping_size + temp_clip ceiling differ
+  # from recurrent_ppo_nmn_film_g1_tempceil5.yaml (see header).
+  modulation:
+    type: "FiLM"
+    mod_hidden_size: 16
+    grouping_size: 1        # <-- PRIMARY sweep axis; num_groups = ceil(128/1) = 128
+    percept_bias_init: 3.0
+    memory_bias_init: 0.0
+    temp_clip: [0.5, 10.0]     # <-- held non-binding & identical across all 10 screen runs
+    memory_clip: [-2.0, 2.0]
