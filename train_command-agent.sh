@@ -152,16 +152,38 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # Node 114, cuda:2, wandb-group: basic_curriculum
 # CIFS-bypass: launched via /tmp script — this file is the audit record.
 # ---------------------------------------------------------------------------
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic \
+#   --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml \
+#   --num-envs 128 \
+#   --device cuda:2 \
+#   --wandb-group basic_curriculum \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_curric_longL4_n114 \
+#   --tag rppo_nmn_film_curric_longL4_n114
+
+# ---------------------------------------------------------------------------
+# basic standalone — random-init 10x10 — 2026-06-27
+# RecurrentPPO (unmodulated), single-config from scratch, 10M steps.
+# 05-random_init_10x10: per-episode randomised predator/food/bush/rock counts,
+# random start nutrition [0,100] + injury [0,100], full-grid spawn, clean smell.
+# Standalone (NOT continual). Level 4 basic converged ~3.6M steps → 10M gives margin.
+# checkpoint_frequency in episodes: ~1000 eps ≈ 200k steps at ~200 avg steps/ep.
+# Node 112, cuda:0, wandb-group: basic
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --configs-dir configs/environment/experiment/basic \
-  --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
-  --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_tempceil5.yaml \
-  --num-envs 128 \
-  --device cuda:2 \
-  --wandb-group basic_curriculum \
+  --config configs/environment/experiment/basic/05-random_init_10x10.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --num-envs 16 \
+  --total-timesteps 10000000 \
+  --checkpoint-frequency 1000 \
+  --device cuda:0 \
+  --wandb-group basic \
   --wandb-job-type prod \
-  --wandb-name rppo_nmn_film_curric_longL4_n114 \
-  --tag rppo_nmn_film_curric_longL4_n114
+  --wandb-name rppo_basic05_randinit_n112 \
+  --tag rppo_basic05_randinit_n112
 #
 # Run 03: rppo_hg03_s0.1_sig0_dp1_s42    — node 101, cuda:1
 # /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
