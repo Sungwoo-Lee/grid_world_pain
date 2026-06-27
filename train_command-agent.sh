@@ -215,7 +215,7 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --wandb-name rppo_nmn_film_g2_screen_s42 \
 #   --tag rppo_nmn_film_g2_screen_s42
 #
-# Run 3: rppo_nmn_film_g4_screen_s42   — node 107, cuda:0
+# Run 3: rppo_nmn_film_g4_screen_s42   — node 110, cuda:0 (reassigned from 107; 107 had no NAS mount)
 # /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
 #   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
 #   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g4_screen.yaml \
@@ -225,7 +225,7 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --wandb-name rppo_nmn_film_g4_screen_s42 \
 #   --tag rppo_nmn_film_g4_screen_s42
 #
-# Run 4: rppo_nmn_film_g8_screen_s42   — node 107, cuda:1
+# Run 4: rppo_nmn_film_g8_screen_s42   — node 110, cuda:1 (reassigned from 107; 107 had no NAS mount)
 # /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
 #   --config configs/environment/experiment/basic/04-far_sight_predator_10x10.yaml \
 #   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g8_screen.yaml \
@@ -404,3 +404,106 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
   --wandb-job-type prod \
   --wandb-name rppo_basic05_randinit_n112 \
   --tag rppo_basic05_randinit_n112
+
+# ---------------------------------------------------------------------------
+# NMN FiLM grouping_size screen — CONTINUAL (CURRICULUM) RE-LAUNCH 2026-06-27
+# RecurrentPPO + NMN FiLM modulator, 8-point group-count curve (grouping_size 1→128)
+# REPLACES the from-scratch single-env screen (terminated same day).
+# Env: 5-stage basic curriculum (00→04 only), via frozen dir basic_curriculum/
+#   (basic_curriculum_schedule_longL4 expects 5 stages; basic/ has 6 after
+#    05-random_init_10x10 was added 2026-06-27 → fix: use dedicated basic_curriculum/ dir).
+# Budget: schedule-driven (no --episodes); checkpoints from schedule.
+# num_envs=128, seed=42, log-interval=10. Matches rppo_nmn_film_curric_longL4_n114 exactly,
+# varying only agent_config + tag + node/GPU.
+# Nodes 106 (cuda:0/1), 110 (cuda:0/1), 108 (cuda:0/1), 109 (cuda:0/1)
+# wandb-group: basic_curriculum, job-type: prod
+# Design doc: docs/experiments/active/basic_curriculum/NMN_FILM_GROUPING_SCREEN.md
+# CIFS-bypass: launched via /tmp scripts — this file is the audit record.
+# ---------------------------------------------------------------------------
+# Run 1: rppo_nmn_film_g1_curric_longL4_s42   — node 106, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic_curriculum \
+#   --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_screen.yaml \
+#   --num-envs 128 --seed 42 --log-interval 10 \
+#   --device cuda:0 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g1_curric_longL4_s42 \
+#   --tag rppo_nmn_film_g1_curric_longL4_s42
+#
+# Run 2: rppo_nmn_film_g2_curric_longL4_s42   — node 106, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic_curriculum \
+#   --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g2_screen.yaml \
+#   --num-envs 128 --seed 42 --log-interval 10 \
+#   --device cuda:1 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g2_curric_longL4_s42 \
+#   --tag rppo_nmn_film_g2_curric_longL4_s42
+#
+# Run 3: rppo_nmn_film_g4_curric_longL4_s42   — node 110, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic_curriculum \
+#   --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g4_screen.yaml \
+#   --num-envs 128 --seed 42 --log-interval 10 \
+#   --device cuda:0 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g4_curric_longL4_s42 \
+#   --tag rppo_nmn_film_g4_curric_longL4_s42
+#
+# Run 4: rppo_nmn_film_g8_curric_longL4_s42   — node 110, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic_curriculum \
+#   --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g8_screen.yaml \
+#   --num-envs 128 --seed 42 --log-interval 10 \
+#   --device cuda:1 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g8_curric_longL4_s42 \
+#   --tag rppo_nmn_film_g8_curric_longL4_s42
+#
+# Run 5: rppo_nmn_film_g16_curric_longL4_s42  — node 108, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic_curriculum \
+#   --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g16_screen.yaml \
+#   --num-envs 128 --seed 42 --log-interval 10 \
+#   --device cuda:0 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g16_curric_longL4_s42 \
+#   --tag rppo_nmn_film_g16_curric_longL4_s42
+#
+# Run 6: rppo_nmn_film_g32_curric_longL4_s42  — node 108, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic_curriculum \
+#   --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g32_screen.yaml \
+#   --num-envs 128 --seed 42 --log-interval 10 \
+#   --device cuda:1 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g32_curric_longL4_s42 \
+#   --tag rppo_nmn_film_g32_curric_longL4_s42
+#
+# Run 7: rppo_nmn_film_g64_curric_longL4_s42  — node 109, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic_curriculum \
+#   --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g64_screen.yaml \
+#   --num-envs 128 --seed 42 --log-interval 10 \
+#   --device cuda:0 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g64_curric_longL4_s42 \
+#   --tag rppo_nmn_film_g64_curric_longL4_s42
+#
+# Run 8: rppo_nmn_film_g128_curric_longL4_s42 — node 109, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --configs-dir configs/environment/experiment/basic_curriculum \
+#   --continual-schedule configs/continual/basic_curriculum_schedule_longL4.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g128_screen.yaml \
+#   --num-envs 128 --seed 42 --log-interval 10 \
+#   --device cuda:1 \
+#   --wandb-group basic_curriculum --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g128_curric_longL4_s42 \
+#   --tag rppo_nmn_film_g128_curric_longL4_s42
