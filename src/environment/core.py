@@ -413,6 +413,20 @@ def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, 
     # ── Branch C: STATIC — pass-through, no PRNG draws ──────────────────────
     # (No scatter needed; positions stay as-is.)
 
+    # ── Ghost-predator fix: re-park inactive slots off-grid every step ────────
+    # Without this gate, the hunt/wander movement updates above un-park inactive
+    # slots (animal_active=False) from their off-grid sentinel (height, width):
+    # the hard-grid clip inside _hunt_step / _wander_step forces the position into
+    # [0, h-1]×[0, w-1], so after step 1 the inactive slot lands at (h-1, w-1)
+    # and visually chases the agent (with 0 damage — all harm gates already check
+    # animal_active — but the slot appears on-grid).
+    # Fix: after all subset movement updates, re-park any inactive slot back to the
+    # off-grid sentinel.  jnp.where on a static boolean mask is vmap-safe and
+    # recompile-safe.  For all-active configs animal_active is all-True, so
+    # jnp.where(True, new_pos, off_grid) == new_pos — byte-identical, no-op.
+    _off_grid = jnp.array([params.height, params.width], dtype=jnp.int32)
+    new_pos = jnp.where(state.animal_active[:, None], new_pos, _off_grid[None, :])
+
     return new_pos, new_state, new_stamina, new_mt, new_at
 
 @jax.jit
