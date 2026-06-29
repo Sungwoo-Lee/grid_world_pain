@@ -132,3 +132,46 @@ nutrition:
 
 **Status:** Phase 1a controlled sweep RUN; signal found (satiety delays foraging). Not yet
 multi-seed-confirmed. Phase 1b (naturalistic) not started.
+
+### 2026-06-29 — Phase 1a quantitative confirmation (8 levels × 8 seeds)
+
+Levels nutr 0/10/15/20/25/50/75/100, seeds 42–49. Recordings:
+`results/eval/forage_nutrition_ms/nutr{level}/`. Measures computed from `snapshots`:
+**A = latency to reach food** (first step nutrition rises = first successful eat);
+**B = departure delay** (first step the agent leaves the start cell).
+
+| nutr | survived | reach-food A | departure-delay B |
+|---|---|---|---|
+| 0  | 0/8 | never | 1 |
+| 10 | 0/8 | never | 1 |
+| 15 | 0/8 | never | 1 |
+| 20 | 8/8 | 13 | 1 |
+| 25 | 8/8 | **9** | 1 |
+| 50 | 8/8 | 11 | 3 |
+| 75 | 8/8 | 11 | 3 |
+| 100 | 8/8 | 14 | 5 |
+
+**Key results:**
+1. **The probe is deterministic** — every measure is ±0.0 across all 8 seeds (fixed geometry, no
+   animals → no behavioral variance). So **1 episode/level suffices**; seeds add nothing here.
+   (Multi-seed will matter again only once we add random placement or threats.)
+2. **Sharp survival floor between nutr 15 and 20** for food 6 cells away: ≤15 starves en route
+   (0/8), ≥20 survives (8/8). The floor is a controllable boundary (moves with food distance).
+3. **Two distinct foraging-disruption signatures emerge — opposite ends, different causes:**
+   - **Satiety dithering (high nutrition):** the agent sits and *Rests* before bothering to
+     forage. Captured cleanly by **B (departure delay): monotonic 1→3→5** with satiety. This is
+     the clean "hunger drives foraging *initiative*" measure.
+   - **Desperation meander (near the death floor, nutr20):** the agent leaves immediately (B=1)
+     but takes a *disorganized, meandering path* (reaches @13 vs 25's @9) — reproducible across
+     all 8 seeds. Inflates A at the low end. NOT a satiety-delay; a path-efficiency disruption.
+   - Net: **A (reach latency) is U-shaped** (compound of both effects); **B is the clean,
+     monotonic satiety measure.**
+
+**Crystallized Phase-1a metric candidate:** **pre-departure delay B** = Rest/non-approach steps
+before the agent commits to moving toward food. Monotonic in satiety, deterministic, trajectory-
+grounded. A second measure — **path inefficiency** (reach-steps minus shortest-path) — captures
+the separate near-floor desperation-meander effect and is worth keeping as a distinct readout.
+
+**Status:** Phase 1a COMPLETE. Signal found and confirmed; metric candidate (B) crystallized;
+desperation-meander noted as a second, distinct signature. **Next: Phase 1b (naturalistic /
+random food placement) to test whether B and the meander survive outside the fixed geometry.**
