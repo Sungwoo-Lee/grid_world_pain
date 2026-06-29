@@ -175,3 +175,60 @@ the separate near-floor desperation-meander effect and is worth keeping as a dis
 **Status:** Phase 1a COMPLETE. Signal found and confirmed; metric candidate (B) crystallized;
 desperation-meander noted as a second, distinct signature. **Next: Phase 1b (naturalistic /
 random food placement) to test whether B and the meander survive outside the fixed geometry.**
+
+### 2026-06-29 — User trajectory-level findings + direction test (Phase 1a robustness)
+
+Two interpretive findings from the nutrition-sweep trajectories (user-observed):
+
+1. **Low-nutrition foraging is disorganized.** Near the starvation floor (nutr 20) the agent
+   leaves immediately but cannot go *straight* to food (meanders, reaches @13 vs nutr25's @9).
+   Hypothesis: this may be tangled with an **initial-condition effect** — the agent's start
+   position and/or the fresh recurrent hidden state at episode reset, not purely a nutrition
+   effect. OPEN: disentangle init-condition from nutrition.
+
+2. **The "up-first, then straight-down" path is OPTIMAL, not noise.** The olfactory sensor
+   reports smell **intensity only — no direction** (≈ 1/dist^p). To localize food the agent must
+   *move and observe whether intensity rises or falls* (gradient sampling). The observed one-step
+   probe (Up, away from the row-7 food → smell drops → reverse → direct descent) is the
+   theoretically optimal strategy under a non-directional sensor. This is a real behavioral
+   capability, not a quirk.
+
+**Test (this is the direction sweep):** is the probe-then-direct optimal approach **preserved in
+all four directions**, or is it a learned bias toward the down-axis (because in the fixed probe
+the food was always straight down)? Design: food at grid CENTER, agent starts on each of the four
+sides (top/bottom/left/right) at equal distance — varies starting location, isolates approach
+direction, keeps food clear of walls. Crossed with nutr {20, 25} to also check whether the
+low-nutrition meander (finding 1) is direction-dependent or appears in every direction.
+Configs: `configs/environment/experiment/behavior_probes/explore/forage_direction/` (explore tier
+until validated; promote to core/ if the optimal approach holds in all directions).
+
+### 2026-06-29 — Direction-test result: the "up-first" is a FIXED opening, not an adaptive probe
+
+Ran food-at-center, agent on each of 4 sides × nutr {20,25} (8 configs, seed 42). Optimal path = 4
+steps. Steps-to-reach-food: bottom 4–5 (food UP), left 6 (food RIGHT), top 7–8 (food DOWN),
+right 7–10 (food LEFT).
+
+**Decisive observation: in ALL 8 runs the agent's first action is `Up`, independent of food
+direction.** So the "up-then-direct" path seen in the original (food-DOWN) probe is NOT a
+direction-adaptive gradient probe — it is a **stereotyped fixed opening move**, followed by
+genuine gradient-following.
+
+- **Capability preserved (good):** after the fixed opening, the agent reads the (non-directional)
+  smell gradient and orients to the food correctly in every direction. Directional foraging is
+  robust → the core foraging probe is geometry-fair *in aggregate*, but has a per-direction bias.
+- **Bias exposed:** efficiency depends on alignment of the up-opening with the food bearing —
+  food-up (bottom start) is near-optimal (the opening aligns); food-down (top start) is worst (the
+  opening walks into the wall, away from food); left/right cost an orthogonal opening + reorient.
+- **Refines user finding #2:** "optimal up-then-down" = fixed first-step prior + gradient-following
+  thereafter, NOT an info-gathering probe chosen for this food.
+- **Refines user finding #1:** the low-nutrition meander is direction-dependent (nutr20 is cleaner
+  than nutr25 for top/bottom/left, but the right-start nutr20 meanders badly and hits a wall) —
+  supports an initial-condition × direction interaction, not a pure nutrition effect.
+
+**Open:** is the fixed up-opening a property of the recurrent state at reset (no obs history yet)?
+Test by giving a few warm-up steps, or by checking the first-action distribution from many random
+starts. OPEN follow-up before promoting forage_direction to core/.
+
+**Status:** Phase 1a direction robustness CHARACTERIZED. Foraging works in all directions; opening
+move is a fixed "up" prior. Configs in explore/forage_direction/ (not yet promoted — pending the
+fixed-opening investigation).
