@@ -236,3 +236,161 @@ mask `carry_key` (Fix 3) before any fractional-replay-ratio sweep.**
 *Reviewed by code-reviewer (reproduced with `JAX_LOG_COMPILES=1`). Source runs:
 `logs/20260620_16470{9}.log`, `…1647{10,11,12}.log`; WandB
 zcg33koq/1sphik88/yvyx8x42/2uc2yg7f/c9lelny1.*
+
+---
+
+## Fix 3 compile-cost investigation
+
+### Plain-language headline
+
+The recompile-storm fix shipped three changes. Two of them (Fix 1 and Fix 2) fixed
+real bugs — they made array shapes that genuinely changed size every step into
+fixed-size arrays, which is what stopped the storm. The third change ("Fix 3") solved
+a problem that **did not exist for the runs we are actually launching**, and in doing so
+it made the one big compile those runs need **measurably slower**. The five basic runs
+that have now been "compiling at 0% GPU for 60+ minutes" are almost certainly paying that
+inflated compile cost.
+
+Here is the chain in plain terms. The training loop does a batch of gradient updates each
+iteration. The number of updates per iteration is set by the "replay ratio." For every
+config we ship, that ratio is 1 and we run 16 parallel environments, which works out to
+**exactly 16 gradient updates every single iteration — a constant, never varying.** Fix 3
+was built to handle the case where that number *wobbles* (it pads the batch up to a fixed
+size of 16 and then "masks off" the padding so the extra slots do nothing). But since the
+number is already a rock-solid 16, there is never any padding to mask. The masking
+machinery still gets compiled, though — XLA cannot delete it, because whether a slot is
+"real" or "padding" is decided by a runtime number, not a compile-time constant. So we pay
+the full compile price for machinery that, at run time, is a no-op on every step.
+
+**Verdict: Fix 3 inflated the gradient-step compile and is NOT needed for any
+`replay_ratio=1` config. Fix 1 is the load-bearing fix and must stay. The leanest correct
+fix is to take the original un-padded gradient-step loop whenever the per-iteration update
+count is provably constant (which is every shipped config), and only use Fix 3's
+pad-and-mask machinery under a fractional replay ratio.**
+
+### What I measured (this dev node, CPU — instruction count is backend-independent)
+
+I built the real dreamer_srl XS agent (the architecture all five basic runs use) plus its
+three optimizers, split them into the exact `(graphdef, state)` pytrees the scan carry
+holds, and lowered two versions of the gradient-step scan to HLO: the **original
+un-masked** body and the **Fix-3 masked** body. The model's forward/backward math was
+replaced by a cheap arithmetic stand-in so the measured difference is *purely* the masking
+overhead Fix 3 adds, not the model's own cost. Probe scripts:
+`tmp/20260622_fix3_compile_probe.py`, `tmp/20260622_fix3_foldcheck.py`.
+
+| Quantity | Original (un-masked) | Fix-3 (masked) | Inflation |
+|---|---|---|---|
+| Combined trainer-state leaf count | 146 leaves (140 float) | — | — |
+| HLO op-lines in scan body | 1592 | 1763 | **+10.7%** |
+| `stablehlo.select` ops emitted | 0 | 20 | **+20** (one per float-leaf group) |
+| Compiled-executable flops | 3.96e7 | 4.96e7 | **+25%** |
+| Lower+compile wall time (CPU) | 0.61 s | 0.74 s | **+21%** |
+
+These deltas are a **lower bound**. The stand-in train_step is tiny; the real Dreamer
+train_step body (world model + actor + critic + target Polyak + three Adam optimizer
+states, all unrolled inside the scan) is orders of magnitude larger, and per the memory
+insight [[20260521_0151_xla_scan_body_compile_dominates_module_count]] the XLA-GPU compile
+time scales with that body's **instruction count and pytree size**. Fix 3 wraps a
+`jnp.where(is_real, new, old)` around **every one of the 140 float leaves** of the combined
+trainer state — i.e. it adds a full-size `select` over each parameter / optimizer-moment
+array, and forces XLA to keep both the pre-update and post-update copy of every parameter
+buffer live simultaneously at the select point. That roughly doubles live-buffer pressure
+inside the body and enlarges the scheduling/optimization search space that dominates
+GPU-side compile *time* — which is exactly the 60-minute, 0%-GPU, stable-RSS symptom.
+
+### Refuting the "XLA folds it away" claim (the load-bearing error)
+
+Both `recompile_storm_fix.md` (lines 98–100) and the Risk-2 review above asserted that
+"when `_n_real == _SCAN_BUCKET` … `is_real` is always True and XLA may constant-fold these
+selects — no runtime overhead in the steady state." **This is false, and it is the crux of
+the regression.** XLA constant-folds on *compile-time* constants, not on values that merely
+happen to be true at run time. In the shipped code, `n_real_steps` enters the carry as
+`_n_real_jax = jnp.array(_n_real, dtype=jnp.int32)` (`dreamer_srl_main.py:1503,1510`) — a
+**traced device array** — so `is_real = scan_step_local < n_real_steps`
+(`:1601`) is a traced predicate of unknown value at compile time. XLA must emit every
+select. Direct test (`tmp/20260622_fix3_foldcheck.py`):
+
+```
+TRACED  n_real (real Fix-3 code): selects = 20   op-lines = 1763
+STATIC  n_real (lean fix)       : selects =  0   op-lines = 1592
+=> masking NOT foldable; the lean path removes 171 op-lines and all 20 selects
+```
+
+The selects vanish only when the predicate is a Python-level constant (i.e. when the code
+*structurally* takes an un-masked path), never from XLA folding a runtime-true value.
+
+### Was Fix 3 even targeting the right thing? (No, for these configs)
+
+The diagnosis named the gradient-step scan as the *secondary* recompile source (line
+37–40). I re-checked whether `n_grad_steps` actually varies for the launched configs by
+replaying the real `Ratio` scheduler with the production parameters (`replay_ratio=1`,
+`num_envs=16`, `learning_starts=1024`, `ratio_steps = policy_step - learning_starts*num_envs`):
+
+```
+distinct n_grad_steps values over 2000 iterations (when >0): {16: 1999}
+```
+
+**`n_grad_steps` is a constant 16 on every single training iteration** — there is not even
+a startup catchup burst (the first positive `ratio_steps` is small because `Ratio._prev`
+is seeded to it). Therefore the *original un-masked scan* would have compiled **exactly
+once** (`scan_xs` leading dim = 16, invariant) for these configs. The scan was never a
+storm contributor here; at worst it was a single one-time large compile. Fix 3's bucketing
+solved a non-problem for `replay_ratio=1` **and** inflated the one compile those runs do
+need. (Fractional replay ratios — e.g. 0.3 — *would* make `n_grad_steps` wobble and *do*
+need bucketing, but no shipped config uses one.)
+
+By contrast, Fix 1's target is genuinely variable: `len(dones_idxes)` cycles 1…16 every
+step as predators kill envs at desynchronized times. That is the real storm and Fix 1 (the
+masked fixed-width agent-memory reset) is the load-bearing fix that must remain. Fix 2
+(autoreset key split widened to `num_envs`) likewise fixes a genuinely variable width and
+stays.
+
+### Leanest correct fix (hand-off: developer)
+
+Gate the scan path on whether the per-iteration gradient-step count is provably constant.
+The candidate in the prompt is correct; the precise change:
+
+1. **At startup**, alongside `_SCAN_BUCKET` (`dreamer_srl_main.py:668`), compute a Python
+   bool: `_grad_steps_constant = (replay_ratio == 1.0)` — or, more robustly, derive it from
+   whether `replay_ratio * num_envs` is a positive integer, since that is the exact
+   condition under which `Ratio(replay_ratio)` returns a constant `int(num_envs *
+   replay_ratio)` every steady-state iteration. (`replay_ratio == 1` is the only shipped
+   case and is sufficient; the integer test is the general guard.)
+2. **In the scan branch** (the `else` at `:1465`), when `_grad_steps_constant` is True and
+   `n_grad_steps == _SCAN_BUCKET` (no overflow), take an **un-masked** scan body: the
+   original `_scan_body` form **without** the `scan_step_local` / `n_real_steps` carry
+   fields and **without** the ten `jnp.where(is_real, …)` wraps (`:1601-1614`). Return the
+   post-`train_step` states directly (the NO-MASK body measured above). This restores the
+   original compile cost — 0 selects, 171 fewer op-lines, ~25% less flops in the body.
+3. **Keep the existing pad-and-mask `_scan_body` for the fractional-ratio path only** — when
+   `_grad_steps_constant` is False, `n_grad_steps` can wobble and the bucket+mask is
+   required (and the dormant `carry_key` over-advance nit from the Risk-2 review still
+   applies there and should be fixed before any fractional-ratio sweep).
+
+Simplest possible implementation: keep one `_scan_body` but make the masking
+*structurally* conditional on the Python bool `_grad_steps_constant` — when True, skip
+building the `is_real` predicate and the `jnp.where` wraps entirely (return `new` states
+straight), and drop the two extra carry ints. Because the branch is a Python `if` evaluated
+at trace time, the un-masked body is what gets compiled — no select ops emitted. This is a
+~30-line localized change in the single `else` block; no change to Fix 1, Fix 2, the legacy
+loop, the overflow fallback, or `agent.py`.
+
+**Do NOT touch the five running processes on nodes 113/114** — this fix is for the *next*
+launch. Whether to kill-and-relaunch the current five (which appear stuck in the inflated
+compile) vs. let them finish the one-time compile is the user's call; if a 60-minute
+compile is the only cost and they then train, they may simply be slow-but-correct. The
+lean fix removes the inflation for all future launches.
+
+### Fix-3 investigation conventions audit
+pytree ✅ · JIT ⚠️ (masking ops compiled-but-runtime-noop for `replay_ratio=1`; not a
+*recompile* trigger — `_SCAN_BUCKET` is constant — but a compile-*cost* inflation) ·
+vmap ✅ · PRNG ✅ (no change) · sensor sync ✅ · config protocol ✅.
+
+**Conclusion: Fix 3 inflated the gradient-step compile (+~11% HLO op-lines / +25% flops /
++21% compile time as a lower bound, larger in the real body) and is unnecessary for every
+`replay_ratio=1` config; Fix 1 is load-bearing and stays. Take the original un-masked scan
+when the per-iteration update count is provably constant; reserve pad-and-mask for
+fractional replay ratios. Hand to `developer`.**
+
+*Fix-3 compile-cost investigation by: code-reviewer (measured on dev node CPU via
+`tmp/20260622_fix3_compile_probe.py` + `tmp/20260622_fix3_foldcheck.py`).*
