@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 29
-**Last updated**: 2026-06-24
+**Insights**: 30
+**Last updated**: 2026-06-29
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-29 | 17:24 | `20260629_1724_rppo_single_config_episode_budget` | rPPO single-config training: --total-timesteps is SILENTLY IGNORED when episodes>0 (train.py:1183), and episodes defaults to 100 -> run exits in ~45s; the budget knob is --episodes <N>. Twin of the dreamer_srl single-config budget gotcha. |
 | 2026-06-24 | 05:18 | `20260624_0518_yaml_unquoted_date_breaks_string_sort` | Unquoted YAML dates parse as Python datetime.date, not str; regen_dev_index.py crashed (TypeError str vs datetime.date) because its sort key mixed date objects with a '' fallback. Fix: coerce the sort key to str() (ISO dates still sort chronologically). Commit e8a3489. |
 | 2026-06-22 | 17:47 | `20260622_1747_dreamer_srl_single_config_budget_source` | dreamer_srl single-config (`--env-config`) reads the training budget from `env_cfg.training.*` (seeded from `configs/train/default.yaml`: episodes=100, checkpoint_frequency=10000, log_interval=10), NOT from the agent config — only `algo.*` is read from the agent YAML. So a budget-free scene config silently runs 100 episodes and exits in ~20s with 0 grad steps. Fix: pass `--episodes 10000000 --log-interval 2000` on the CLI (both override; CLI>agent>env). `checkpoint_frequency` has NO CLI flag (env-config only; in episodes; default 10000 is correct for terminate-on-convergence runs — the preset's 200000 risks 0 checkpoints). WandB showing 200000 is a display artifact (run spreads agent_config over env_config when logging). Curriculum mode unaffected (schedule sets budget). Also in built-in auto-memory for the training-runner. |
 | 2026-06-22 | 17:04 | `20260622_1704_continual_bm_transition_nameerror_refactor_drift` | The continual stage-transition crash (NameError: m1_candidates) was introduced by commit 89ade04 (2026-05-12) — a delete-heavy refactor that migrated train.py's behavior-measure accumulators to a BMState object but missed one of six reset sites (the continual stage-transition wipe added the day before). Latent ~40 days because the trigger (continual + behavior_measures + an actual stage transition) was exactly the path the continual-learning review left UNVERIFIED. Fixed with the canonical per-env _bm_reset_env loop + a fast regression smoke. |

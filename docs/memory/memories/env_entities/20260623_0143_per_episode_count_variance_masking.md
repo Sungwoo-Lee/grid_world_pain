@@ -66,4 +66,5 @@ in-flight run is affected (all current experiment configs override the scene).
 - [[20260623_0145_proxy_benchmark_contention_misestimate]] (env_entities, 2026-06-23) — A proxy benchmark on a contended GPU mis-estimated the env change's cost (predic
 - [[20260623_1616_rppo_reset_recompile_immune]] (env_entities, 2026-06-23) — rPPO (recurrent_ppo) is recompile-IMMUNE to the new per-episode count-variance: 
 - [[20260624_0517_bush_spawn_exclusion_free_via_overlap_resolution]] (env_entities, 2026-06-24) — A planned 'Phase 2' to keep animals from SPAWNING on bush cells needed NO implem
+- [[20260629_1723_ghost_predator_inactive_slots_render]] (env_entities, 2026-06-29) — Per-episode count masking gated damage/sensing/obs by animal_active but NOT per-
 <!-- END BACKLINKS -->
