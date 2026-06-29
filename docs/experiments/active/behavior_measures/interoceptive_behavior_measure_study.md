@@ -99,3 +99,36 @@ Phase 2's exact target (avoidance vs. foraging-suppression vs. both) is **delibe
 - Earlier concrete probe designs (conflict/hypervigilance): [[experiment_environment_designs_v1]]
 - Why the in-distribution model matters: [[20260624_0517_indist_random_init_reverses_hypervig]]
 - Phase 1a configs: `configs/environment/experiment/behavior_probes/forage_nutrition/`
+
+## Findings log
+
+### 2026-06-29 — Phase 1a first run (single seed=42, 1 ep/level, nutrition 0/25/50/75/100)
+
+**Setup:** 10×10, agent fixed start, single food 6 cells straight ahead ("Down"), no threat,
+injury 0. Subject ckpt 8900007. Recordings: `results/eval/forage_nutrition/nutr{000..100}/`.
+
+**Qualitative result — hunger changes the *timing* of foraging, not the path.** Every survivor
+walks the identical straight 6-step line to the food (no meandering). What scales with starting
+nutrition:
+
+| nutrition | pre-departure Rest steps | step reaches food | at-food behavior |
+|---|---|---|---|
+| 0 | — | **dies @ step 2** (starves crossing) | n/a — survival floor, not foraging |
+| 25 | ~0 | t8 | one long continuous eat-bout to ~65, then leaves |
+| 50 | 2 | t10 | continuous eat to ~96 |
+| 75 | 2 | t11 | eat to 100 then rest (sated) |
+| 100 | 4 | t13 | nibble-and-rest top-up, holds ~100 |
+
+**Emergent candidate measures (trajectory-grounded, not assumed):**
+- **(A) Latency to reach food** = steps until first on-food-cell. Monotonic ↑ with nutrition (8→10→11→13).
+- **(B) Pre-departure delay** = Rest/non-approach steps before committing to the food. ↑ with satiety (0→2→2→4).
+- **(C) Eat-bout structure** = hungry → one long refill bout; full → eat-rest top-up oscillation. (Harder to scalarize.)
+
+**Caveats / next:**
+- Single seed, single episode per level — the monotonic trend needs **multiple seeds** to trust (action sampling is stochastic; geometry is fixed).
+- **Nutrition 0 is a death floor.** Useful foraging range ≈ 15–100. The most urgent-forager regime (just above the floor, e.g. 10/15/20) is unsampled — add a **finer low-end sweep**, possibly with food closer so a starving agent can reach it and we can watch desperation foraging.
+- First action is always "Eat" regardless of level — likely an init artifact, ignore.
+- **Next step:** finer low-end + multi-seed to confirm measures (A)/(B) are monotonic, then crystallize one as the Phase-1a metric.
+
+**Status:** Phase 1a controlled sweep RUN; signal found (satiety delays foraging). Not yet
+multi-seed-confirmed. Phase 1b (naturalistic) not started.
