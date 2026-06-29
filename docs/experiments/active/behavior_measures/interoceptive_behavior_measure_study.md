@@ -263,3 +263,8 @@ does pain make avoidance earlier/more preemptive)? (2) bush-distance sweep (near
 cover still reached in time when farther? (3) predator-approach direction (does the fixed-opening
 bias from foraging affect escape routing?). Probe stays in explore/ until an avoidance measure is
 validated across a sweep, then promote to core/.
+
+**Settings note (avoidance probe):** `max_steps` set to **100** (was inheriting 500 but never
+reached it — the no-food run starves at ~step 100 since nutrition starts 100 and drains ~1/step).
+The cap now matches the nutrition-bounded observation window. init nutrition = 100 (fixed, full),
+init injury = 0 (fixed). To observe avoidance over a longer horizon, add food or raise the window.

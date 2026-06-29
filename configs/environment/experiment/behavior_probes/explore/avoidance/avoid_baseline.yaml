@@ -6,6 +6,7 @@
 extends: environment/default
 
 environment:
+  max_steps: 100                # match the no-food starvation window (nutrition 100 drains ~1/step)
   height: 10
   width: 10
   start_pos: [5, 5]
