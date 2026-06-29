@@ -10,6 +10,9 @@ Configs are split by how stable/maintained they are:
   changing one means re-checking the measure it underpins.
   - `forage_nutrition/` — Phase 1a. Controlled foraging vs. starting nutrition (validated the
     *departure-delay* satiety measure). Subject model: `basic05_randinit_n112` ckpt 8900007.
+  - `forage_direction/` — Phase 1a robustness. Food at center, agent on each of 4 sides; confirms
+    foraging works in all directions (gradient-following), and exposed a fixed "up-first" opening
+    move. Same subject model.
 
 - **`explore/`** — *exploratory*. Iterative / one-off probes that may be dropped. Not maintained;
   do not build new work on these without first promoting them to `core/`. Several encode

@@ -199,7 +199,7 @@ the food was always straight down)? Design: food at grid CENTER, agent starts on
 sides (top/bottom/left/right) at equal distance — varies starting location, isolates approach
 direction, keeps food clear of walls. Crossed with nutr {20, 25} to also check whether the
 low-nutrition meander (finding 1) is direction-dependent or appears in every direction.
-Configs: `configs/environment/experiment/behavior_probes/explore/forage_direction/` (explore tier
+Configs: `configs/environment/experiment/behavior_probes/core/forage_direction/` (explore tier
 until validated; promote to core/ if the optimal approach holds in all directions).
 
 ### 2026-06-29 — Direction-test result: the "up-first" is a FIXED opening, not an adaptive probe
@@ -230,5 +230,5 @@ Test by giving a few warm-up steps, or by checking the first-action distribution
 starts. OPEN follow-up before promoting forage_direction to core/.
 
 **Status:** Phase 1a direction robustness CHARACTERIZED. Foraging works in all directions; opening
-move is a fixed "up" prior. Configs in explore/forage_direction/ (not yet promoted — pending the
+move is a fixed "up" prior. Configs in core/forage_direction/ (not yet promoted — pending the
 fixed-opening investigation).
