@@ -1,0 +1,26 @@
+# Hypervigilance probe — NON-CHASING (wandering) harmless rabbit (hv_rabbitwander_mid)
+# Same conflict geometry + hg10 olfaction (decay_power 1.0) as hv_rabbit_mid, but the rabbit
+# WANDERS instead of hunting — the in-distribution rabbit hg10 trained on (harmless + benign motion).
+# Contrast vs hv_rabbit_mid (chasing): isolates motion-triggered flight from identity-blind flight.
+# Model: results/JAX_RecurrentPPO/20260620-180026_rppo_hg10_s0.5_sig0.4_dp1_s42
+extends: environment/experiment/behavior_probes/explore/conflict/conflict_bush_mid
+
+sensory:
+  decay_power: 1.0
+
+environment:
+  entities:
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rab"
+      count: 1
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]      # hg10 rabbit smell (same as chasing version)
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0,0,0,0,0,0,0,1]       # neutral visual channel 7
+      visual_properties_std: [0,0,0,0,0,0,0,0]
+      move_interval: 1
+      damage: [0.0, 0.0]                          # HARMLESS
+      nociception_intensity: 0.1
+      attack_delay: 0
+      spawn_area: [[5, 3], [5, 3]]
+      patrol_area: [[1, 1], [7, 7]]               # wanders the grid (does NOT pursue the agent)

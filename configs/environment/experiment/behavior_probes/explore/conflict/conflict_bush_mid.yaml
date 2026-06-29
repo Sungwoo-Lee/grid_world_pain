@@ -1,0 +1,16 @@
+# Conflict-needs probe — variant: MID (~5 cells). Same as NEAR, bush moved farther.
+extends: environment/experiment/behavior_probes/explore/conflict/conflict_bush_near
+
+environment:
+  obstacles:
+    - name: "bush"
+      count: 1
+      area: [[5, 4], [5, 4]]            # MID: ~5 cells from start
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0,0,0,0,0,0,1,0]
+      visual_properties_std: [0,0,0,0,0,0,0,0]

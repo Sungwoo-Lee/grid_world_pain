@@ -28,7 +28,7 @@ The earlier "hg10 is hypervigilant / fails to eat" conclusion was an **off-distr
   - chasing rabbit: EAT/501 at every level. wander rabbit: EAT/501 at every level.
   - predator: ate/18-21 (reaches food and eats, predator then kills it; survives slightly longer at nutr100).
 - Both models are hg10 s0.5/sig0.4; they differ in random_start (false->true) and decay_power (1.0->2.0). The random-init model's training ranges (nutr[10,100], inj[0,80]) cover all probe start states.
-- Configs: configs/environment/experiment/behavior_probes/nutrition_sweep_d2/ (decay 2.0). Eval videos: results/eval/conflict_probe_preview/random_init/ (paired with static_init/).
+- Configs: configs/environment/experiment/behavior_probes/explore/nutrition_sweep_d2/ (decay 2.0). Eval videos: results/eval/conflict_probe_preview/random_init/ (paired with static_init/).
 - Caveats: one seed, one episode per cell; 7x7 single-corner-food geometry is still mildly off-distribution vs the 10x10 quadrant-food training (but the agent eats fine, so it isn't breaking).
 
 ## Decisions and actions

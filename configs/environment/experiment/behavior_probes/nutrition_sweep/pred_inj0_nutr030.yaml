@@ -1,9 +1,0 @@
-# Nutrition sweep @ injury 0 — pred, nutrition 30 (pred_inj0_nutr030)
-# Diagnostic: does the eat-vs-flee decision depend on hunger? injury=0 (no fear pressure),
-# nutrition swept 10(very low)->100(full). Same animal+geometry+hg10 olfaction.
-extends: environment/experiment/behavior_probes/hypervigilance/hv_pred_near
-
-body:
-  random_start_injury: false      # injury starts at 0
-  random_start_nutrition: false
-  start_nutrition: 30          # swept; satiation derives from this at reset

@@ -1,0 +1,7 @@
+# Conflict-needs CONTROL — sated + uninjured start. Expect → food / no urgency to flee.
+extends: environment/experiment/behavior_probes/explore/conflict/conflict_bush_far
+
+body:
+  random_start_injury: false         # uninjured (injury starts at 0)
+  start_satiation: 100
+  start_nutrition: 100

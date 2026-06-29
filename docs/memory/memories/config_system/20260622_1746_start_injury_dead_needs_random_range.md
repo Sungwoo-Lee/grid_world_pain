@@ -25,7 +25,7 @@ There is **no `body.start_injury` key that the reset path reads** — `injury_le
 ## Evidence, measurements, facts
 - `src/environment/core.py` reset: injury is assigned only inside `if params.random_start_injury:` (uniform low/high); the else path leaves it 0. (Mirror of the note that `start_satiation` is "dead in the reset path".)
 - Verified: a probe config with `start_injury: 70` loaded to `injury_level = 0`; switching to `random_start_injury: true` + `start_injury_low/high: 70` gave `injury_level = 70`.
-- Used in configs/environment/experiment/behavior_probes/conflict/conflict_bush_near.yaml (and the hypervigilance set inherits it).
+- Used in configs/environment/experiment/behavior_probes/explore/conflict/conflict_bush_near.yaml (and the hypervigilance set inherits it).
 
 ## Decisions and actions
 - All injured-start probe configs use the degenerate-range trick.

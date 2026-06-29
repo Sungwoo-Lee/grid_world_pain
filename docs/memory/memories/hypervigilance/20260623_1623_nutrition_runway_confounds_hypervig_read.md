@@ -29,7 +29,7 @@ A nutrition sweep on hg10 (injury fixed at 0, nutrition swept 10/30/50/70/100, o
   - **chasing rabbit**: nutr10 FLEE/11 | nutr30 FLEE/31 | nutr50+ EAT/501
   - **predator**:       nutr10 FLEE/11 | nutr30 ate/41 | nutr50 ate/111 | nutr70 ate/141 | nutr100 EAT/501
 - Step dump (no-animal): at BOTH nutr10 and nutr30 the agent starts at food-dist 1 and walks AWAY (dist 1→2→…→7), nutrition strictly decreasing (no eating). nutr10 dies step 11; nutr30 has runway to forage later → EAT/501. Same early positions → policy is nutrition-independent; nutrition = runway only.
-- Configs: configs/environment/experiment/behavior_probes/nutrition_sweep/ (20 configs). Model: hg10 step 7200007. Canonical renderer.py eval.
+- Configs: configs/environment/experiment/behavior_probes/explore/nutrition_sweep/ (20 configs). Model: hg10 step 7200007. Canonical renderer.py eval.
 - Probe caveat: the agent wandering off an *adjacent* food suggests the 7×7 single-corner-food geometry is **off-distribution** vs hg10's 10×10 quadrant-food training.
 
 ## Decisions and actions

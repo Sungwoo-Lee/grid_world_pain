@@ -29,7 +29,7 @@ A new "conflict-needs" behavior probe (hungry+injured agent next to food, an ani
   - **Harmless chasing rabbit**: survived 21, never reached food (fled), starved (nutrition 0); injury stayed 0.69 (rabbit did zero damage — confirmed harmless).
   - **Predator**: survived 16, never reached food (fled), killed (injury → 1.0).
 - Trajectories for predator vs rabbit are near-identical at every bush distance (near/mid/far); at "far" both flee to the bush (min dist 1). Agent never reaches food in any animal-present condition (min food dist 1 = immediate flight).
-- Configs: configs/environment/experiment/behavior_probes/hypervigilance/{hv_pred,hv_rabbit}_{near,mid,far}.yaml + hv_ctrl_noanimal.yaml.
+- Configs: configs/environment/experiment/behavior_probes/explore/hypervigilance/{hv_pred,hv_rabbit}_{near,mid,far}.yaml + hv_ctrl_noanimal.yaml.
 - Pipeline: eval_rollout.py --record (chasingRabbit/hg10 checkpoint) → .rec.gz → render_recordings.py (canonical renderer.py). Videos under results/eval/conflict_probe_preview/.
 
 ## Decisions and actions

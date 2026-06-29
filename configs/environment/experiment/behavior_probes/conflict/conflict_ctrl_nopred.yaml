@@ -1,5 +1,0 @@
-# Conflict-needs CONTROL — no predator. Expect the agent to go to food (nothing opposes hunger).
-extends: environment/experiment/behavior_probes/conflict/conflict_bush_far
-
-environment:
-  entities: []               # suppress the predator (list-replace)
