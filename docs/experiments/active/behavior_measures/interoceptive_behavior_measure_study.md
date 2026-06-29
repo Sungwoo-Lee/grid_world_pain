@@ -306,3 +306,32 @@ rather than the agent's choice? Test by varying bush distance (can it still reac
 when the bush is far?) and predator speed. Candidate validated measure: *animal-adjacent fraction*
 (separates predator-evasion from rabbit-tolerance) — promote avoidance to core/ once it holds across
 a bush-distance sweep.
+
+### 2026-06-30 — Added wandering rabbit: avoidance reflex is APPROACH-triggered, not presence/identity
+
+Added a non-chasing (wander) harmless rabbit to the matrix (in-distribution neutral motion — what
+the agent actually trained on). Configs: `explore/avoidance/avoid_rabbitwander_inj{00,70}.yaml`.
+
+| animal | inj | flees to cover? | bush-use | adjacent% | min-dist | Δinj |
+|---|---|---|---|---|---|---|
+| predator (chases)        | 0/70 | yes @dist1, bush@t6 | 21–22% | 22–26% | 0 | +37 / −43 |
+| rabbit CHASING (harmless)| 0/70 | yes @dist1, bush@t6 | 15–20% | 33–53% | 0 | +0 / −70 |
+| rabbit WANDERING (harmless)| 0/70 | **NO — 0% bush** | 0% | 0% | 2 (never adjacent) | +0 / −70 |
+| no animal                | 0/70 | n/a | 0% | — | — | +0 / −70 |
+
+**Finding — the flee-to-cover reflex is triggered by an animal APPROACHING to adjacency, not by
+presence or identity:**
+- A *chasing* animal (predator OR harmless rabbit) closes to dist 1 → agent bolts to bush
+  (identical reflex). A *wandering* rabbit never pursues (min-dist 2, never adjacent) → agent
+  **never enters the bush (0%)**, behaving exactly like the no-animal control.
+- Cleanly separates **motion from identity**: the approach/chase drives avoidance, not the animal's
+  presence and not which animal it is.
+
+Combined avoidance picture for this agent: (1) reflex trigger = approach-to-adjacency (identity- &
+injury-blind); (2) no approach → no avoidance; (3) sustained discrimination is damage-driven
+(evades predator, tolerates the harmless chaser once unhurt by it).
+
+**Caveat:** single seed — the wander rabbit happened not to reach adjacency. Multi-seed would
+confirm a wanderer *never* triggers the reflex even if it drifts adjacent. **Status:** avoidance
+matrix characterized; the approach-triggered reflex + damage-driven sustained discrimination is the
+candidate avoidance story to validate across a bush-distance sweep before promoting to core/.

@@ -1,0 +1,61 @@
+# Avoidance matrix — animal=rabbitwander (a WANDERING, harmless rabbit — in-distribution neutral
+# motion, does NOT chase the agent), start injury=70.
+# 10x10, agent center [5,5]; hides_agent bush 3 cells LEFT [5,2]; rabbit spawns RIGHT [5,9] and wanders.
+# Full nutrition (100), max_steps 100. Subject: basic05_randinit_n112 ckpt 8900007.
+# Contrast vs avoid_rabbit_inj70 (same rabbit but HUNTING): isolates the effect of chasing motion.
+# Study: docs/experiments/active/behavior_measures/interoceptive_behavior_measure_study.md
+extends: environment/default
+
+environment:
+  max_steps: 100
+  height: 10
+  width: 10
+  start_pos: [5, 5]
+  random_start_pos: false
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [10, 10]]
+    - type: "sand"
+      area: [[0, 0], [0, 0]]
+  resources: []
+  entities:
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rabbitwander"
+      count: 1
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0,0,0,0,0,0,0,1]
+      visual_properties_std: [0,0,0,0,0,0,0,0]
+      move_interval: 1
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.1
+      spawn_area: [[5, 9], [5, 9]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: 12
+      max_stamina: 30
+      stamina_recovery_rate: 1
+      hunt_stamina_threshold: 0.7
+      lose_interest_multiplier: 1.5
+      attack_delay: 0
+  obstacles:
+    - name: "bush"
+      count: 1
+      area: [[5, 2], [5, 2]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0,0,0,0,0,0,1,0]
+      visual_properties_std: [0,0,0,0,0,0,0,0]
+
+body:
+  random_start_satiation: false
+  random_start_nutrition: false
+  random_start_injury: true
+  start_satiation: 100
+  start_nutrition: 100
+  start_injury_low: 70
+  start_injury_high: 70
