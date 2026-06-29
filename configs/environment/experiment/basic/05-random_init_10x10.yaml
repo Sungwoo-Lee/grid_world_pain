@@ -57,13 +57,13 @@ environment:
       properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
       visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
       visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
-      move_interval: 1
+      move_interval: [1, 2]      # per-episode range: full-speed <-> half-speed
       damage: [15.0, 120.0]
-      attack_delay: 3
+      attack_delay: [2, 4]        # per-episode range: attack windup
       nociception_intensity: 0.9
       spawn_area: [[1, 1], [10, 10]]
       patrol_area: [[1, 1], [10, 10]]
-      detection_range: 3
+      detection_range: [3, 7]   # per-episode range: near <-> far threat sensing
       max_stamina: 30
       stamina_recovery_rate: 1
       hunt_stamina_threshold: 0.7
