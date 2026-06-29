@@ -369,3 +369,37 @@ level, NOT mere presence. It is a motion-triggered reflex, not a multi-sensory t
 **Caveat:** single seed. **Status:** avoidance trigger characterized (motion/approach-driven reflex
 + damage-driven sustained discrimination). Next: multi-seed confirmation + bush-distance sweep,
 then promote avoidance to core/.
+
+### 2026-06-30 — CORRECTION: olfaction IS necessary for the flee reflex (olf-zeroed chaser ignored)
+
+Probe (user-designed): chasing, harmless, rabbit-VISUAL animal with olfactory property set to
+`[0, 0, 0.5, 0, 0]` — the predator-identifiable channel (ch1, the 0.7) zeroed. Configs:
+`explore/avoidance/avoid_rabbit_olfzero_inj{00,70}`.
+
+| condition (all CHASE, harmless except pred) | inj | flees to bush? | bush-use | adjacent | Δinj |
+|---|---|---|---|---|---|
+| rabbit-smell [0,.5,.7]   | 0/70 | **YES** (bush@t6) | 15–20% | 33–53% | +0/−70 |
+| OLF-ZEROED [0,0,.5]      | 0/70 | **NO** (0% bush)  | 0% | 48–49% | +0/−70 |
+| predator-smell [0,.7,.5] | 0/70 | **YES** (bush@t6) | 21–22% | 22–26% | +37/−43 |
+
+**Result (trajectory):** with the zeroed smell the chasing animal reaches the agent's own cell
+(dist 0) while the agent keeps Resting; it never bolts to cover, then drifts to a corner with the
+animal sitting on it. The ONLY difference from the (fleeing) chasing rabbit is the olfactory vector
+(visual = rabbit ch7 in both) — so olfaction is decisively responsible.
+
+**This CORRECTS the 2026-06-30 "avoidance is purely motion-triggered, smell-independent" claim
+(the `avoid_rabbitwander_predsmell` section).** Revised model: the flee-to-cover reflex requires
+**BOTH (a) an approaching/chasing animal AND (b) a recognizable olfactory signature**:
+- chase + rabbit-smell → flees; chase + predator-smell → flees; chase + zeroed-smell → NO flee;
+  wander + any smell → no flee.
+- Predator-vs-rabbit *identity* does not change the reflex (both trigger equally), but **degrading
+  the smell abolishes it**. The earlier "predator-smell wanderer ignored" stays consistent — it had
+  no approach motion (motion is also necessary).
+
+**Hypothesis surfaced:** olfactory channel 1 (zeroed here) may be the "animal-present" signal
+(both predator 0.7 and neutral 0.5 have it high), with channel 2 the predator/neutral discriminator.
+Zeroing ch1 ⇒ agent does not register an animal ⇒ no avoidance. **Testable:** zero ch2 instead, or
+keep ch1 / drop ch2, and re-run. This is the next probe before any avoidance measure is promoted.
+
+**Status:** avoidance trigger revised — needs approach motion AND recognizable olfaction. Single
+seed; the channel-role hypothesis is unconfirmed (one config).
