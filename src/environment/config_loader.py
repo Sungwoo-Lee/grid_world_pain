@@ -549,8 +549,12 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         animal_property_std = jnp.zeros((0, chem_dim))
         animal_nociception = jnp.zeros(0)
         animal_move_int = jnp.zeros(0, dtype=jnp.int32)
+        animal_move_int_low = jnp.zeros(0, dtype=jnp.int32)
+        animal_move_int_high = jnp.zeros(0, dtype=jnp.int32)
         animal_damage = jnp.zeros((0, 2))
         animal_attack_delay = jnp.zeros(0, dtype=jnp.int32)
+        animal_attack_delay_low = jnp.zeros(0, dtype=jnp.int32)
+        animal_attack_delay_high = jnp.zeros(0, dtype=jnp.int32)
         animal_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
         animal_patrol = jnp.zeros((0, 4), dtype=jnp.int32)
         animal_detect_low = jnp.zeros(0)
@@ -596,6 +600,8 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
             hunt_idx, wander_idx, static_idx,
             predator_indices, neutral_indices,
             pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
+            animal_move_int_low, animal_move_int_high,
+            animal_attack_delay_low, animal_attack_delay_high,
         )
 
     # ── Build per-field arrays ─────────────────────────────────────────────────
@@ -604,7 +610,31 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
     chem_dim = len(props_list[0])
 
     noc_list = [float(e['nociception']) for e in entries]
-    move_int_list = [int(e['move_interval']) for e in entries]
+
+    # move_interval: scalar OR [lo, hi] integer range (per-episode sampling).
+    # A scalar s is stored as degenerate range (s, s) → always samples s (backward compat).
+    move_int_list = []  # list of (lo_int, hi_int) tuples
+    for i, e in enumerate(entries):
+        mi = e['move_interval']
+        if mi is None:
+            raise ValueError(
+                f"Animal entity {e['tag_label']!r} (index {i}) is missing mandatory field 'move_interval'."
+            )
+        if isinstance(mi, list):
+            if len(mi) != 2:
+                raise ValueError(
+                    f"Animal entity {e['tag_label']!r} (index {i}): 'move_interval' must be a scalar "
+                    f"or a 2-element list [low, high]; got {mi!r}."
+                )
+            lo, hi = int(mi[0]), int(mi[1])
+            if hi < lo:
+                raise ValueError(
+                    f"Animal entity {e['tag_label']!r} (index {i}): 'move_interval' range "
+                    f"must satisfy low <= high; got [{lo}, {hi}]."
+                )
+        else:
+            lo = hi = int(mi)
+        move_int_list.append((lo, hi))
 
     damage_list = []
     for i, e in enumerate(entries):
@@ -615,14 +645,30 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
             )
         damage_list.append(d if isinstance(d, list) else [float(d), float(d)])
 
-    attack_delay_list = []
+    # attack_delay: scalar OR [lo, hi] integer range (per-episode sampling).
+    # A scalar s is stored as degenerate range (s, s) → always samples s (backward compat).
+    attack_delay_list = []  # list of (lo_int, hi_int) tuples
     for i, e in enumerate(entries):
         a = e['attack_delay']
         if a is None:
             raise ValueError(
                 f"Animal entity {e['tag_label']!r} (index {i}) is missing mandatory field 'attack_delay'."
             )
-        attack_delay_list.append(int(a))
+        if isinstance(a, list):
+            if len(a) != 2:
+                raise ValueError(
+                    f"Animal entity {e['tag_label']!r} (index {i}): 'attack_delay' must be a scalar "
+                    f"or a 2-element list [low, high]; got {a!r}."
+                )
+            lo, hi = int(a[0]), int(a[1])
+            if hi < lo:
+                raise ValueError(
+                    f"Animal entity {e['tag_label']!r} (index {i}): 'attack_delay' range "
+                    f"must satisfy low <= high; got [{lo}, {hi}]."
+                )
+        else:
+            lo = hi = int(a)
+        attack_delay_list.append((lo, hi))
 
     spawn_list = [_parse_area(e['spawn_area'], h, w) for e in entries]
     patrol_list = [_parse_area(e['patrol_area'], h, w) for e in entries]
@@ -716,9 +762,15 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
     animal_property = jnp.array(props_list, dtype=jnp.float32)
     animal_property_std = jnp.array(stds_list, dtype=jnp.float32)
     animal_nociception = jnp.array(noc_list, dtype=jnp.float32)
-    animal_move_int = jnp.array(move_int_list, dtype=jnp.int32)
+    # move_int_list and attack_delay_list are now lists of (lo, hi) tuples.
+    # Keep legacy fixed arrays using lo (degenerate range = lo == hi for scalar configs).
+    animal_move_int = jnp.array([lo for lo, hi in move_int_list], dtype=jnp.int32)
+    animal_move_int_low = jnp.array([lo for lo, hi in move_int_list], dtype=jnp.int32)
+    animal_move_int_high = jnp.array([hi for lo, hi in move_int_list], dtype=jnp.int32)
     animal_damage = jnp.array(damage_list, dtype=jnp.float32)
-    animal_attack_delay = jnp.array(attack_delay_list, dtype=jnp.int32)
+    animal_attack_delay = jnp.array([lo for lo, hi in attack_delay_list], dtype=jnp.int32)
+    animal_attack_delay_low = jnp.array([lo for lo, hi in attack_delay_list], dtype=jnp.int32)
+    animal_attack_delay_high = jnp.array([hi for lo, hi in attack_delay_list], dtype=jnp.int32)
     animal_spawn_area = jnp.array(spawn_list, dtype=jnp.int32)
     animal_patrol = jnp.array(patrol_list, dtype=jnp.int32)
 
@@ -777,6 +829,8 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         hunt_idx, wander_idx, static_idx,
         predator_indices, neutral_indices,
         pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
+        animal_move_int_low, animal_move_int_high,
+        animal_attack_delay_low, animal_attack_delay_high,
     )
 
 
@@ -926,6 +980,8 @@ def load_env_params(config: Config) -> EnvParams:
         hunt_idx, wander_idx, static_idx,
         predator_indices, neutral_indices,
         pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
+        animal_move_int_low, animal_move_int_high,
+        animal_attack_delay_low, animal_attack_delay_high,
     ) = _load_animals(config, visual_vector_size=visual_vector_size)
 
     # ── Animal count-range metadata (NEW — PER_EPISODE_ENV_VARIANCE) ──────────
@@ -1216,8 +1272,12 @@ def load_env_params(config: Config) -> EnvParams:
         animal_property_std=animal_property_std,
         animal_nociception=animal_nociception,
         animal_move_int=animal_move_int,
+        animal_move_int_low=animal_move_int_low,
+        animal_move_int_high=animal_move_int_high,
         animal_damage=animal_damage,
         animal_attack_delay=animal_attack_delay,
+        animal_attack_delay_low=animal_attack_delay_low,
+        animal_attack_delay_high=animal_attack_delay_high,
         animal_spawn_area=animal_spawn_area,
         animal_patrol=animal_patrol,
         animal_detect_low=animal_detect_low,

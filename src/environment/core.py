@@ -374,7 +374,7 @@ def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, 
             hunt_thresh_s[h_idx],
             lose_int_s[h_idx],
             params.animal_patrol[h_idx],
-            params.animal_move_int[h_idx],
+            state.animal_move_int_sampled[h_idx],
             agent_pos,
             state.obs_pos,
             obs_block_for_animals,    # merged: obs_blocking | obs_blocks_animals
@@ -399,7 +399,7 @@ def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, 
             animal_pos[w_idx],
             animal_mt[w_idx],
             params.animal_patrol[w_idx],
-            params.animal_move_int[w_idx],
+            state.animal_move_int_sampled[w_idx],
             state.obs_pos,
             obs_block_for_animals,    # merged: obs_blocking | obs_blocks_animals
             wander_key,
@@ -557,8 +557,9 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
                                              maxval=params.animal_damage[:, 1])
     damage_pred = jnp.sum(jnp.where(at_damaging, sampled_pred_damage, 0.0))
 
-    # Trigger Attack Delay for damaging animals that hit the agent
-    new_animal_at = jnp.where(at_damaging, params.animal_attack_delay, new_animal_at)
+    # Trigger Attack Delay for damaging animals that hit the agent.
+    # Use per-episode sampled value (degenerate range = scalar for backward compat).
+    new_animal_at = jnp.where(at_damaging, state.animal_attack_delay_sampled, new_animal_at)
 
     # Strike-and-retreat: opt-in animals lose all stamina on contact, which makes
     # the existing hunt cycle disengage (HUNT→RETURN), retreat to patrol centre,
@@ -739,6 +740,8 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         animal_recovery_sampled=state.animal_recovery_sampled,
         animal_hunt_thresh_sampled=state.animal_hunt_thresh_sampled,
         animal_lose_interest_sampled=state.animal_lose_interest_sampled,
+        animal_move_int_sampled=state.animal_move_int_sampled,
+        animal_attack_delay_sampled=state.animal_attack_delay_sampled,
         # Per-episode activation masks: constant within an episode (set at reset, unchanged by step)
         animal_active=state.animal_active,
         obs_active=state.obs_active,
@@ -1186,12 +1189,12 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     if num_obs > 0 and params.has_obs_range:
         obs_pos = jnp.where(obs_activation_mask[:, None], obs_pos, _off_grid[None, :])
 
-    # 7. Per-episode distributional sampling for the 5 behavioural fields.
-    #    5 independent uniform draws per field — shape (N,) each.
+    # 7. Per-episode distributional sampling for the 5 float + 2 integer behavioural fields.
+    #    7 independent draws per field — shape (N,) each.
     #    For wander/static entries the ranges are [0, 0] (from _load_animals);
-    #    jax.random.uniform([0,0]) = 0.0 exactly, so these are harmless.
+    #    jax.random.uniform([0,0]) = 0.0 exactly for float fields; randint([s,s+1)) = s for int fields.
     if N > 0:
-        ep_keys = jax.random.split(animal_episode_key, 5)
+        ep_keys = jax.random.split(animal_episode_key, 7)
         animal_detect_sampled = jax.random.uniform(
             ep_keys[0], (N,), minval=params.animal_detect_low, maxval=jnp.maximum(params.animal_detect_high, params.animal_detect_low))
         animal_max_stamina_sampled = jax.random.uniform(
@@ -1202,12 +1205,20 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
             ep_keys[3], (N,), minval=params.animal_hunt_thresh_low, maxval=jnp.maximum(params.animal_hunt_thresh_high, params.animal_hunt_thresh_low))
         animal_lose_interest_sampled = jax.random.uniform(
             ep_keys[4], (N,), minval=params.animal_lose_interest_low, maxval=jnp.maximum(params.animal_lose_interest_high, params.animal_lose_interest_low))
+        # Integer sampling: randint half-open [lo, hi+1) is inclusive on both ends.
+        # Degenerate range (lo == hi): randint([s, s+1)) always yields s — byte-identical to scalar.
+        animal_move_int_sampled = jax.random.randint(
+            ep_keys[5], (N,), params.animal_move_int_low, params.animal_move_int_high + 1)
+        animal_attack_delay_sampled = jax.random.randint(
+            ep_keys[6], (N,), params.animal_attack_delay_low, params.animal_attack_delay_high + 1)
     else:
         animal_detect_sampled        = jnp.zeros(0, dtype=jnp.float32)
         animal_max_stamina_sampled   = jnp.zeros(0, dtype=jnp.float32)
         animal_recovery_sampled      = jnp.zeros(0, dtype=jnp.float32)
         animal_hunt_thresh_sampled   = jnp.zeros(0, dtype=jnp.float32)
         animal_lose_interest_sampled = jnp.zeros(0, dtype=jnp.float32)
+        animal_move_int_sampled      = jnp.zeros(0, dtype=jnp.int32)
+        animal_attack_delay_sampled  = jnp.zeros(0, dtype=jnp.int32)
 
     state = EnvState(
         agent_pos=agent_pos,
@@ -1238,6 +1249,8 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         animal_recovery_sampled=animal_recovery_sampled,
         animal_hunt_thresh_sampled=animal_hunt_thresh_sampled,
         animal_lose_interest_sampled=animal_lose_interest_sampled,
+        animal_move_int_sampled=animal_move_int_sampled,
+        animal_attack_delay_sampled=animal_attack_delay_sampled,
         # Per-episode activation masks (NEW — PER_EPISODE_ENV_VARIANCE)
         animal_active=animal_activation_mask,
         obs_pos=obs_pos,

@@ -50,12 +50,15 @@ class EnvState:
     animal_attack_timer: jnp.ndarray     # [N] int (zero for non-hunt entities)
     animal_property_sampled: jnp.ndarray # [N, vector_size]
     animal_visual_property_sampled: jnp.ndarray  # [N, visual_vector_size] (per-episode sampled)
-    # Per-episode-sampled behavioural params (NEW — all five fields, degenerate [s,s] for legacy configs)
+    # Per-episode-sampled behavioural params (NEW — all five float fields, degenerate [s,s] for legacy configs)
     animal_detect_sampled: jnp.ndarray         # [N] float
     animal_max_stamina_sampled: jnp.ndarray    # [N] float
     animal_recovery_sampled: jnp.ndarray       # [N] float
     animal_hunt_thresh_sampled: jnp.ndarray    # [N] float
     animal_lose_interest_sampled: jnp.ndarray  # [N] float
+    # Per-episode-sampled integer timer params (NEW — move_interval + attack_delay distributional sampling)
+    animal_move_int_sampled: jnp.ndarray       # [N] int  (sampled from [move_int_low, move_int_high])
+    animal_attack_delay_sampled: jnp.ndarray   # [N] int  (sampled from [attack_delay_low, attack_delay_high])
 
     # Animals — per-episode activation mask (NEW — per-episode count-range feature)
     animal_active: jnp.ndarray  # [N] bool; False for inactive (parked off-grid) slots
@@ -128,6 +131,12 @@ class EnvParams:
     animal_hunt_thresh_high: jnp.ndarray   # [N]
     animal_lose_interest_low: jnp.ndarray  # [N]
     animal_lose_interest_high: jnp.ndarray # [N]
+    # Per-episode integer randint bounds for move_interval and attack_delay
+    # (low == high for legacy scalar configs → randint([s, s+1)) always yields s)
+    animal_move_int_low: jnp.ndarray       # [N] int
+    animal_move_int_high: jnp.ndarray      # [N] int
+    animal_attack_delay_low: jnp.ndarray   # [N] int
+    animal_attack_delay_high: jnp.ndarray  # [N] int
     # Per-entity int-coded class/behaviour (for damage masking and visual channel)
     animal_classes_int: jnp.ndarray        # [N] int (0=predator, 1=neutral, ...)
     animal_behaviours_int: jnp.ndarray     # [N] int (0=wander, 1=hunt, 2=static)
