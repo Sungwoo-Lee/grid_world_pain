@@ -335,3 +335,37 @@ injury-blind); (2) no approach → no avoidance; (3) sustained discrimination is
 confirm a wanderer *never* triggers the reflex even if it drifts adjacent. **Status:** avoidance
 matrix characterized; the approach-triggered reflex + damage-driven sustained discrimination is the
 candidate avoidance story to validate across a bush-distance sweep before promoting to core/.
+
+### 2026-06-30 — Predator-smell on a wandering rabbit: olfactory identity does NOT trigger avoidance
+
+Added `avoid_rabbitwander_predsmell_inj{00,70}`: a wandering, harmless, rabbit-visual animal with
+ONLY its olfactory `properties` flipped to the predator's `[0,0.7,0.5]` (vs rabbit `[0,0.5,0.7]`).
+Isolates the olfactory channel.
+
+| condition | inj | bush-use | adjacent | Δinj |
+|---|---|---|---|---|
+| wander, rabbit-smell      | 0/70 | 0% | 0% / 0% | +0/−70 |
+| wander, PREDATOR-smell    | 0/70 | **0%** | 0% / 3% | +0/−70 |
+| chase, rabbit-smell (ref) | 0/70 | 15–20% | 33–53% | — |
+| chase, predator-smell(ref)| 0/70 | 21–22% | 22–26% | +37/−43 |
+
+**Finding:** the predator's olfactory signature ALONE does NOT trigger avoidance. The predator-
+smelling wanderer is ignored exactly like the plain wander rabbit (0% bush) — even when it drifted
+adjacent (inj70, min-dist 1) the agent did not flee to cover. No preemptive/distal response to
+predator odor.
+
+**Avoidance trigger pinned down by elimination:** the flee-to-cover reflex is driven by **sustained
+approach/chase motion to adjacency**, NOT by olfactory identity, NOT visual identity, NOT injury
+level, NOT mere presence. It is a motion-triggered reflex, not a multi-sensory threat appraisal.
+
+| candidate trigger | drives avoidance? | evidence |
+|---|---|---|
+| animal approaching/chasing to adjacency | YES | predator & chasing-rabbit both trigger |
+| olfactory identity (predator smell) | no | predator-smell wanderer ignored |
+| visual identity | no | chasing rabbit (rabbit visual) triggers anyway |
+| injury / pain level | no | flee timing identical inj 0 vs 70 |
+| mere presence | no | wandering rabbit ignored, like control |
+
+**Caveat:** single seed. **Status:** avoidance trigger characterized (motion/approach-driven reflex
++ damage-driven sustained discrimination). Next: multi-seed confirmation + bush-distance sweep,
+then promote avoidance to core/.
