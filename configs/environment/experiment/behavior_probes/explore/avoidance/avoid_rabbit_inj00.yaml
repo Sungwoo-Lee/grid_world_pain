@@ -1,12 +1,12 @@
-# Avoidance probe BASELINE — does the agent dive into the bush as a predator closes in?
-# Subject: basic05_randinit_n112 ckpt 8900007 (10x10, decay 2.0, in-distribution).
-# Agent center [5,5]; bush (hides_agent) 3 cells LEFT at [5,2]; predator 4 cells RIGHT at [5,9], hunts left.
-# Full nutrition + injury 0 -> isolate avoidance (no hunger/pain drive). NO food.
+# Avoidance matrix — animal=rabbit (a HUNTING but HARMLESS rabbit (identical motion to predator)), start injury=0.
+# 10x10, agent center [5,5]; hides_agent bush 3 cells LEFT [5,2]; animal approaches from RIGHT [5,9].
+# Full nutrition (100), max_steps 100 (nutrition-bounded window). Subject: basic05_randinit_n112 ckpt 8900007.
+# Tests threat discrimination (pred vs rabbit, identical motion) and injury effect on avoidance.
 # Study: docs/experiments/active/behavior_measures/interoceptive_behavior_measure_study.md
 extends: environment/default
 
 environment:
-  max_steps: 100                # match the no-food starvation window (nutrition 100 drains ~1/step)
+  max_steps: 100
   height: 10
   width: 10
   start_pos: [5, 5]
@@ -18,17 +18,17 @@ environment:
       area: [[0, 0], [0, 0]]
   resources: []
   entities:
-    - class: "predator"
+    - class: "neutral"
       behaviour: "hunt"
-      tag: "pred"
+      tag: "rabbit"
       count: 1
-      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
       properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
-      visual_properties: [0,0,0,0,0,1,0,0]
+      visual_properties: [0,0,0,0,0,0,0,1]
       visual_properties_std: [0,0,0,0,0,0,0,0]
       move_interval: 1
-      damage: [15.0, 45.0]
-      nociception_intensity: 0.9
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.1
       spawn_area: [[5, 9], [5, 9]]
       patrol_area: [[1, 1], [10, 10]]
       detection_range: 12

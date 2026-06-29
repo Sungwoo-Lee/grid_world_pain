@@ -1,12 +1,12 @@
-# Avoidance CONTROL (no predator) — does the agent seek the bush ANYWAY (absent threat)?
-# Subject: basic05_randinit_n112 ckpt 8900007 (10x10, decay 2.0, in-distribution).
-# Agent center [5,5]; bush (hides_agent) 3 cells LEFT at [5,2]; predator 4 cells RIGHT at [5,9], hunts left.
-# Full nutrition + injury 0 -> isolate avoidance (no hunger/pain drive). NO food.
+# Avoidance matrix — animal=none (NO animal), start injury=70.
+# 10x10, agent center [5,5]; hides_agent bush 3 cells LEFT [5,2]; animal approaches from RIGHT [5,9].
+# Full nutrition (100), max_steps 100 (nutrition-bounded window). Subject: basic05_randinit_n112 ckpt 8900007.
+# Tests threat discrimination (pred vs rabbit, identical motion) and injury effect on avoidance.
 # Study: docs/experiments/active/behavior_measures/interoceptive_behavior_measure_study.md
 extends: environment/default
 
 environment:
-  max_steps: 100                # match the no-food starvation window (nutrition 100 drains ~1/step)
+  max_steps: 100
   height: 10
   width: 10
   start_pos: [5, 5]
@@ -37,5 +37,5 @@ body:
   random_start_injury: true
   start_satiation: 100
   start_nutrition: 100
-  start_injury_low: 0
-  start_injury_high: 0
+  start_injury_low: 70
+  start_injury_high: 70

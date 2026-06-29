@@ -268,3 +268,41 @@ validated across a sweep, then promote to core/.
 reached it — the no-food run starves at ~step 100 since nutrition starts 100 and drains ~1/step).
 The cap now matches the nutrition-bounded observation window. init nutrition = 100 (fixed, full),
 init injury = 0 (fixed). To observe avoidance over a longer horizon, add food or raise the window.
+
+### 2026-06-30 — Avoidance 2×3 matrix: animal {pred, rabbit, none} × injury {0, 70}
+
+Extended the avoidance probe to a matrix. Rabbit = neutral class, **hunt** behaviour, harmless
+(damage 0) — IDENTICAL motion to the predator, so the only difference is harmful-vs-harmless.
+High injury = 70. Configs: `explore/avoidance/avoid_{pred,rabbit,none}_inj{00,70}.yaml`. All single
+seed 42, max_steps 100, full nutrition. Measures from recordings (bush = obs_pos cell).
+
+| config | flee trigger | bush@ | bush-use | animal-adjacent% | Δinjury |
+|---|---|---|---|---|---|
+| pred_inj00   | animal dist 1, t4 | t6 | 22% | 26% | +37 (hit) |
+| pred_inj70   | animal dist 1, t4 | t6 | 21% | 22% | −43 (heal − hits) |
+| rabbit_inj00 | animal dist 1, t4 | t6 | 15% | **53%** | +0 (harmless) |
+| rabbit_inj70 | animal dist 1, t4 | t6 | 20% | 33% | −70 (heal) |
+| none_inj00   | n/a | never | 0% | — | +0 |
+| none_inj70   | n/a | never | 0% | — | −70 (heal) |
+
+**Findings:**
+1. **Escape reflex is stereotyped & undiscriminating.** Flee-to-cover trigger is IDENTICAL across
+   all 4 animal runs — flee when animal is adjacent (dist 1, t4), reach bush t6 — for predator AND
+   harmless rabbit, at injury 0 AND 70. A fixed reflex (cf. the fixed "up-first" foraging opening),
+   not a threat appraisal. The bush conceals the agent from the neutral too (rabbit wanders off
+   during the hide), so this is not a hides_agent mechanism artifact.
+2. **Discrimination is in the SUSTAINED phase, damage-driven.** Agent keeps evading/re-hiding the
+   predator (takes hits, +37) but TOLERATES the harmless rabbit adjacent (53% adj, drifts along the
+   wall with it trailing, stops re-hiding). Learns "rabbit is safe" via experienced harm, not
+   up-front identity.
+3. **Injury does NOT make avoidance earlier/preemptive (core Phase-2 result).** Flee trigger at
+   inj70 == inj0 (dist 1, t4). The simple "pain → heightened vigilance / earlier flight" hypothesis
+   is REFUTED for this agent.
+4. **Bonus mechanisms:** (a) high injury alone never triggers hiding (control 0% bush at inj70 —
+   hiding needs an animal); (b) **injury heals over time** (70 → 0 when not hit; negative Δinjury).
+
+**Open:** is the "flee at dist 1" reflex a function of the predator's detection_range/attack timing
+rather than the agent's choice? Test by varying bush distance (can it still reach cover at dist 1
+when the bush is far?) and predator speed. Candidate validated measure: *animal-adjacent fraction*
+(separates predator-evasion from rabbit-tolerance) — promote avoidance to core/ once it holds across
+a bush-distance sweep.
