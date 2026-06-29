@@ -232,3 +232,34 @@ starts. OPEN follow-up before promoting forage_direction to core/.
 **Status:** Phase 1a direction robustness CHARACTERIZED. Foraging works in all directions; opening
 move is a fixed "up" prior. Configs in core/forage_direction/ (not yet promoted — pending the
 fixed-opening investigation).
+
+### 2026-06-29 — Avoidance probe (Phase 2 start): agent dives into bush as cover — confirmed
+
+First avoidance probe. 10×10, agent center [5,5], one `hides_agent` bush 3 cells LEFT [5,2], one
+hunting predator 4 cells RIGHT [5,9] closing in; full nutrition + injury 0 (isolate avoidance); no
+food. Baseline + no-predator control. Configs: `explore/avoidance/`. Recordings:
+`results/eval/avoidance/`.
+
+**Result — the agent dives into the bush as cover, and it is threat-driven:**
+- **Baseline:** Rests as predator approaches (dist 4→1), then bolts LEFT into the bush only when the
+  predator is **adjacent (dist 1)**; reaches cover in 3 steps. The hide **breaks predator tracking**
+  (predator loses the agent, wanders, dist→8). Agent then **emerges when safe, gets re-detected,
+  flees back** — a hide/emerge oscillation. Survives the full episode (101, starvation cap, no
+  food), final injury 37 (hits taken during transitions).
+- **Control (no predator):** agent **never enters the bush** (0 visits); Rests then idly wanders
+  away from it.
+
+**Establishes:** bush-diving is **cover-seeking avoidance, not bush-affinity** (control proves it).
+
+**Two behavioral signatures (candidate avoidance measures):**
+- **Reactive/last-moment flight** — flees at predator dist ≈1, NOT preemptively (echoes prior
+  insight that this agent's avoidance is post-contact, not anticipatory). Candidate measure:
+  *flee-trigger distance* (predator distance at the step the agent first moves toward cover).
+- **Cover use** — fraction of threatened steps spent hidden in the bush; and *time-to-cover* from
+  threat onset.
+
+**Open / next:** (1) does the flee-trigger distance change with **injury** (Phase 2 core question —
+does pain make avoidance earlier/more preemptive)? (2) bush-distance sweep (near/mid/far) — is
+cover still reached in time when farther? (3) predator-approach direction (does the fixed-opening
+bias from foraging affect escape routing?). Probe stays in explore/ until an avoidance measure is
+validated across a sweep, then promote to core/.

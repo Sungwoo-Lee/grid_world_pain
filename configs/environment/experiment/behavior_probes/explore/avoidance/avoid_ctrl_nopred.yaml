@@ -1,0 +1,40 @@
+# Avoidance CONTROL (no predator) — does the agent seek the bush ANYWAY (absent threat)?
+# Subject: basic05_randinit_n112 ckpt 8900007 (10x10, decay 2.0, in-distribution).
+# Agent center [5,5]; bush (hides_agent) 3 cells LEFT at [5,2]; predator 4 cells RIGHT at [5,9], hunts left.
+# Full nutrition + injury 0 -> isolate avoidance (no hunger/pain drive). NO food.
+# Study: docs/experiments/active/behavior_measures/interoceptive_behavior_measure_study.md
+extends: environment/default
+
+environment:
+  height: 10
+  width: 10
+  start_pos: [5, 5]
+  random_start_pos: false
+  location_areas:
+    - type: "grass"
+      area: [[1, 1], [10, 10]]
+    - type: "sand"
+      area: [[0, 0], [0, 0]]
+  resources: []
+  entities: []
+  obstacles:
+    - name: "bush"
+      count: 1
+      area: [[5, 2], [5, 2]]
+      blocking: false
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+      hides_agent: true
+      properties: [0.0, 0.0, 0.0, 1.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0,0,0,0,0,0,1,0]
+      visual_properties_std: [0,0,0,0,0,0,0,0]
+
+body:
+  random_start_satiation: false
+  random_start_nutrition: false
+  random_start_injury: true
+  start_satiation: 100
+  start_nutrition: 100
+  start_injury_low: 0
+  start_injury_high: 0
