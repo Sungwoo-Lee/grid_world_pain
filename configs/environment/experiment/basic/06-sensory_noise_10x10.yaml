@@ -1,0 +1,56 @@
+# Basic curriculum — 06-sensory_noise_10x10
+# ---------------------------------------------------------------------------
+# PURPOSE (plain language): a hypervigilance probe. This level takes the random-init
+# scene of level 05 and adds INJURY-GATED SENSORY NOISE: when the agent is healthy it
+# perceives the predator's smell clearly, but as injury rises the SMELL channel becomes
+# progressively unreliable (noise grows with injury). The intended effect — via
+# precision-weighting (predictive-coding pain model): once the agent can no longer trust
+# its distal threat cue, it should fall back on a "danger" prior and over-react
+# defensively (avoid even ambiguous cues = hypervigilance). The agent's INTEROCEPTION is
+# kept CLEAN so the "I am injured" gating signal stays reliable.
+#
+# Design rationale (see session analysis):
+#   - Couple injury to the THREAT channel (olfaction), NOT to interoception. If injury
+#     perception itself got noisy, the gating trigger would be corrupted.
+#   - Maximise the healthy<->injured CONTRAST on olfaction: low baseline sigma (clear when
+#     healthy) + high injury_noise_scale (heavily degraded when injured). Noise math:
+#     sigma_eff = sigma_base * (1 + alpha * injury/max_injury)
+#     olfaction: 0.15 -> 0.75 at max injury (alpha=4.0).
+#   - Random start injury (inherited from 05) makes the agent VISIT the high-injury regime
+#     at episode start, so the gated olfaction is exercised across its full range without
+#     the agent first having to be bitten into a death spiral.
+#
+# NOTE: this is a first principled config, NOT a tuned sweep. The single most important
+# knob is olfaction.injury_noise_scale; a proper study would sweep olfaction.{sigma, scale}.
+#
+# Inherits the entire random-init scene (predator 0-2, rabbit 0-2, random start
+# nutrition/injury, full-grid spawn) from 05; only adds + enables perceptual_noise.
+# The partial modality overrides below DEEP-MERGE into default.yaml's perceptual_noise
+# block (clip ranges + modality index order preserved).
+extends: environment/experiment/basic/05-random_init_10x10
+
+perceptual_noise:
+  enabled: true
+  modalities:
+    # --- Interoception kept CLEAN (no injury coupling) so the pain-gate stays reliable ---
+    satiation:
+      mode: "constant"
+      injury_noise_scale: 0.0
+    interoceptive_nociception:
+      mode: "constant"
+      injury_noise_scale: 0.0
+    extero_nociception:
+      mode: "constant"
+      injury_noise_scale: 0.0
+    # --- THREAT channel: clear when healthy, heavily degraded when injured (the lever) ---
+    olfaction:
+      mode: "state_dependent"
+      sigma: 0.15
+      injury_noise_scale: 4.0       # sigma_eff: 0.15 -> 0.75 at max injury
+    # --- Optional: mild injury-gated ambiguity on the on-contact visual ID channel ---
+    visual:
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 2.0
+    # injury / nutrition stay clean (default sigma 0.0); collision / proprioception /
+    # location keep their default tiny constant sensor noise.
