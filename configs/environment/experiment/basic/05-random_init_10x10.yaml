@@ -58,7 +58,7 @@ environment:
       visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
       visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
       move_interval: 1
-      damage: [15.0, 45.0]
+      damage: [15.0, 120.0]
       attack_delay: 3
       nociception_intensity: 0.9
       spawn_area: [[1, 1], [10, 10]]
