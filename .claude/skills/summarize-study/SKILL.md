@@ -276,7 +276,7 @@ Do **not** edit any other section of the README — it is the operating contract
 Why a `note` and not a structured row: `.claude/skills/diary/SKILL.md`'s structured subcommands (`session-start`, `implemented`, `verified`, `insight`, `training-start`, `training-done`) don't have a "summary-doc-created" type. The diary's `note` subcommand is the catch-all for events that don't fit a structured row.
 
 ```bash
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py note \
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/diary_append.py note \
   --text "Summary report: [<filename-stem>](../experiments/summaries/<filename>.md) — <one-line scope>. Covers <N> experiments + <M> memory insights from <window>."
 ```
 
@@ -370,5 +370,5 @@ Reproduce the commit-message tone, README-index row format, and diary note forma
 - `docs/experiments/summaries/README.md` — folder operating contract (sections: Purpose, Filename convention, What goes inside, What's NOT here, Index, Conventions).
 - `.claude/skills/memorize/SKILL.md` — companion skill; same auto-commit pattern at Step 9.
 - `.claude/skills/diary/SKILL.md` — companion skill; this skill calls the `note` subcommand.
-- `scripts/diary_append.py` — diary helper script (see `--help` for arg details).
+- `scripts/claude/diary_append.py` — diary helper script (see `--help` for arg details).
 - Project root `CLAUDE.md` — project-wide rules (no fallback defaults, conda env, auto-commit authorization, git safety).

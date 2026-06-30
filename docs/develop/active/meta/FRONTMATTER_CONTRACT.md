@@ -10,7 +10,7 @@ aliases: [frontmatter_contract]
 
 # Develop Docs Frontmatter Contract
 
-Every markdown file under `docs/develop/{active,archive}/` carries a YAML frontmatter block that drives the auto-generated `INDEX.md`. Hand-editing `INDEX.md` is forbidden — re-run `scripts/regen_dev_index.py` instead.
+Every markdown file under `docs/develop/{active,archive}/` carries a YAML frontmatter block that drives the auto-generated `INDEX.md`. Hand-editing `INDEX.md` is forbidden — re-run `scripts/claude/regen_dev_index.py` instead.
 
 ## Required fields
 
@@ -34,7 +34,7 @@ Every markdown file under `docs/develop/{active,archive}/` carries a YAML frontm
 
 `filim`, `precision`, `noise`, `hypervigilance`, `neuromodulation`, `diagnosis`, `dreamer`, `continual_learning`, `behavior`, `sensors`, `refactors`, `issues`, `meta`.
 
-To add a new topic: extend `VALID_TOPICS` in `scripts/regen_dev_index.py` and update this contract in the same commit.
+To add a new topic: extend `VALID_TOPICS` in `scripts/claude/regen_dev_index.py` and update this contract in the same commit.
 
 ## Valid `status` values
 
@@ -49,12 +49,12 @@ When a new version replaces an older one:
 1. Write the new doc with `status: active` and `supersedes: <old-filename>.md`.
 2. Edit the old doc's frontmatter: set `status: superseded` and add `superseded_by: <new-filename>.md`.
 3. **`git mv`** the old doc into `docs/develop/archive/` — never plain `mv`. Preserving `git log --follow` is mandatory.
-4. Run `python scripts/regen_dev_index.py` and confirm exit 0.
+4. Run `python scripts/claude/regen_dev_index.py` and confirm exit 0.
 5. Update incoming links in `docs/project/project_plan.md` (and elsewhere if found via `grep -rn`) to point at the new doc.
 
 ## Validation
 
-`scripts/regen_dev_index.py` validates:
+`scripts/claude/regen_dev_index.py` validates:
 
 - All required fields are present.
 - `status` and `topic` are in the valid enums.

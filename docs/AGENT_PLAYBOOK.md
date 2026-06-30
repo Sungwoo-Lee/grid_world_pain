@@ -141,7 +141,7 @@ These apply across multiple flows. The `agent-manager` flags them as preconditio
 - **Survival steps as headline metric** for any RL evaluation. Cumulative reward is at best a secondary diagnostic.
 - **Temporal evolution mandatory** in any training analysis — not just end-of-training snapshots.
 - **No fallback defaults** for critical config params — `config.get_mandatory()` everywhere, missing key → `ValueError`. Plans list new keys explicitly.
-- **Frontmatter contracts**: develop tree is auto-INDEX'd via `scripts/regen_dev_index.py`; experiments tree is by-convention only (no INDEX). Don't run `regen_dev_index.py` for `docs/experiments/`.
+- **Frontmatter contracts**: develop tree is auto-INDEX'd via `scripts/claude/regen_dev_index.py`; experiments tree is by-convention only (no INDEX). Don't run `regen_dev_index.py` for `docs/experiments/`.
 - **Soft-split rule**: pre-existing experiment-shaped docs under `docs/develop/active/{hypervigilance,noise,diagnosis}/` are NOT migrated retroactively. Read as reference, write new docs to `docs/experiments/active/<topic>/`.
 - **Dirty working tree for verification.** `developer` does NOT commit; `senior-developer` reads the uncommitted diff. Once committed, the verification signal is lost.
 

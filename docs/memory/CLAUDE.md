@@ -124,7 +124,7 @@ Field semantics:
 - `folder` must equal the folder the file lives under — required for self-description if the file is extracted.
 - `tags` reuse from `_global_tags.md`; new tags require a row in that file.
 - `summary` is the 1-2 sentence plain-English summary surfaced in recall listings.
-- `related` is auto-populated from body `[[id]]` tokens by `scripts/regen_memory_links.py` — do not hand-type.
+- `related` is auto-populated from body `[[id]]` tokens by `scripts/claude/regen_memory_links.py` — do not hand-type.
 - `session_origin` is `claude_code` for Claude Code sessions; `claude_web` for Claude.ai web sessions.
 - `session_label` is a free-form string identifying the session (e.g., a branch name or task theme).
 - `importance` is `high`, `medium`, or `low` — how important this insight is for future recall.
@@ -145,7 +145,7 @@ All four layers are mandatory — skipping any of them is a regression.
 1. **Pre-classification**: before writing an insight, read `ROOT_INDEX.md`. Match against existing folder definitions. Strong match → use that folder. Medium match → ask the user. No match → proceed to layer 2.
 2. **New-folder justification**: any new folder requires a one-line "Why a new folder" justification in the insight's `## References` section, naming the closest existing folder and explaining why the new insight does not fit there.
 3. **Definition lock in `ROOT_INDEX.md`**: when creating a new folder, append a row with `folder | 1-line definition (≤ ~30 chars) | count=1 | last_update=YYYY-MM-DD | tags=[…]`. Future-Claude must match against this definition verbatim — if it needs to change, that is an audit-level event.
-4. **Audit trigger**: when active folder count ≥ 10 OR last audit > 30 days, run `scripts/lint_memory.py` to produce the full punch list (broken refs, orphans, tag-dictionary drift, near-duplicate folder definitions, `raw_source` resolution). Review the output with the user and log the audit in `ROOT_INDEX.md` "Change history".
+4. **Audit trigger**: when active folder count ≥ 10 OR last audit > 30 days, run `scripts/claude/lint_memory.py` to produce the full punch list (broken refs, orphans, tag-dictionary drift, near-duplicate folder definitions, `raw_source` resolution). Review the output with the user and log the audit in `ROOT_INDEX.md` "Change history".
 
 ---
 
@@ -158,7 +158,7 @@ The raw conversation is the JSONL Claude Code writes per session — there is no
 - **Sync responsibility**: `/memorize` Step 7.5 (mandatory, automatic) runs `./sync-agent-data.sh claude push` after writing the insights and before the diary log + commit, so the JSONL is mirrored to NAS by the time the new insight's `raw_source` link goes live. Non-gating — if the push errors (NAS unreachable, rsync failure), the capture still completes and a one-line warning is surfaced at Step 10. The user no longer needs to remember to push manually.
 - **Reading the raw conversation** (L4 — only on explicit user confirmation):
   - Best: `claude --resume <UUID>` re-enters the session in Claude Code (full UI, navigation, search).
-  - Ad-hoc: `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` produces a one-shot markdown view. Apply the section 10 large-file warning protocol before reading the resulting file in context.
+  - Ad-hoc: `python scripts/claude/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` produces a one-shot markdown view. Apply the section 10 large-file warning protocol before reading the resulting file in context.
 - **Cross-node**: on a fresh node, `./sync-agent-data.sh claude pull` brings down all JSONLs; `raw_source` links resolve afterwards.
 
 The legacy `_archive/raw_conversations/` directory is no longer used. New insights point at the synced JSONL directly. Existing insights with `_archive/raw_conversations/...md` raw_source values were backfilled to point at the JSONL when this design changed.
@@ -259,7 +259,7 @@ Obsidian renders `[[<id>]]` as a clickable link in the `docs/.obsidian` vault; t
 
 ### `related:` frontmatter
 
-`related:` is **auto-populated** from body `[[id]]` tokens by `scripts/regen_memory_links.py`. Do not hand-type it. The canonical form is:
+`related:` is **auto-populated** from body `[[id]]` tokens by `scripts/claude/regen_memory_links.py`. Do not hand-type it. The canonical form is:
 
 ```yaml
 related: ["id1", "id2"]    # sorted, double-quoted, single-line
@@ -268,20 +268,20 @@ related: []                # when no links
 
 The regenerator is additive: it merges any `[[id]]` tokens it finds with whatever is already in `related:`, never removes existing IDs. Running it twice in a row is always idempotent.
 
-### `scripts/regen_memory_links.py`
+### `scripts/claude/regen_memory_links.py`
 
 | Mode | Command | Effect |
 |---|---|---|
-| Default | `python scripts/regen_memory_links.py` | Walk all insights; add body `[[id]]` tokens to `related:` in canonical form. |
-| One-time migration | `python scripts/regen_memory_links.py --normalise-existing` | Same algorithm; explicitly documented as the migration pass for pre-existing hand-typed `related:` values. |
-| Pre-commit check | `python scripts/regen_memory_links.py --check` | Read-only; exits 0 if no files would change, 1 if any would. |
-| Custom root | `python scripts/regen_memory_links.py --root <path>` | Override the default `docs/memory` root. |
+| Default | `python scripts/claude/regen_memory_links.py` | Walk all insights; add body `[[id]]` tokens to `related:` in canonical form. |
+| One-time migration | `python scripts/claude/regen_memory_links.py --normalise-existing` | Same algorithm; explicitly documented as the migration pass for pre-existing hand-typed `related:` values. |
+| Pre-commit check | `python scripts/claude/regen_memory_links.py --check` | Read-only; exits 0 if no files would change, 1 if any would. |
+| Custom root | `python scripts/claude/regen_memory_links.py --root <path>` | Override the default `docs/memory` root. |
 
 The script is stdlib-only (no PyYAML); it parses frontmatter with regex and rewrites only the `related:` line, preserving every other byte of the file.
 
 ### `/memorize` Step 9 contract
 
-Step 9 (auto-commit) **must** run `scripts/regen_memory_links.py` before staging, so any `[[id]]` tokens written in the body during Step 4 are reflected in `related:` before the commit lands. See `.claude/skills/memorize/SKILL.md` Step 9 for the exact command.
+Step 9 (auto-commit) **must** run `scripts/claude/regen_memory_links.py` before staging, so any `[[id]]` tokens written in the body during Step 4 are reflected in `related:` before the commit lands. See `.claude/skills/memorize/SKILL.md` Step 9 for the exact command.
 
 ### `[[id|alias]]` form
 

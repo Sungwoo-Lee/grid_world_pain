@@ -71,10 +71,10 @@ These are documented in [ENVIRONMENT_SUMMARY.md §Cross-Doc Clarifications](../.
 ## Code-side Wiki
 
 When answering a codebase question or starting a review, check `src/graphify-out/GRAPH_REPORT.md`
-(if present — gitignored, regenerated on demand via `python scripts/regen_code_graph.py`).
+(if present — gitignored, regenerated on demand via `python scripts/claude/regen_code_graph.py`).
 The report lists god-nodes (most-connected functions/classes), surprising cross-module connections,
 and 59 community clusters. If absent or stale, fall back to grep / Read.
-See `scripts/regen_code_graph.py` for install steps (`pip install graphifyy`).
+See `scripts/claude/regen_code_graph.py` for install steps (`pip install graphifyy`).
 
 ## Review Workflow
 

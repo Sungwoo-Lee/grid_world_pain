@@ -91,7 +91,7 @@ When implementation is complete:
 - Leave the working tree dirty (uncommitted) for verification.
 - **Log to the daily diary** (mandatory):
   ```bash
-  /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py implemented \
+  /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/diary_append.py implemented \
     --subject "<one-line summary of what was implemented>" \
     --link    "<plan-doc-path-relative-to-repo-root>" \
     --session "${CLAUDE_CODE_SESSION_ID:0:8}/developer"

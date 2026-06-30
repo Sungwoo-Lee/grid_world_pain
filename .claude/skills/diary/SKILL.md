@@ -1,13 +1,13 @@
 ---
 name: diary
-description: "Append an event to the project's daily diary at docs/diary/YYYY-MM-DD.md. ALWAYS use this skill when one of these moments fires, even if the user does not ask for it: (a) a top-level Claude session is starting or wrapping up, (b) the developer agent finishes implementing a plan or the senior-developer finishes verifying one, (c) /memorize captures one or more insights, (d) the training-runner launches a training run on a lab node, (e) the experiment-analyzer finishes analyzing a training run, (f) a multi-step session is wrapping up — in addition to session-end, fire progress-report to write a concise plain-language summary into the Progress reports section. Also trigger on the explicit slash command /diary or natural-language phrases like 'log this in the diary', 'add to today's diary', 'note this'. The skill records a single short row per event (or one concise Progress report per session — re-calls within the same session REPLACE the existing entry in place rather than appending a new one, keeping the diary scannable) and links out to the authoritative document — it does NOT duplicate plans, insights, or analyses. For training runs the same row is edited from 'running' to 'done' when the analysis completes, so the diary is a single-glance status board across parallel sessions. The skill calls scripts/diary_append.py, which uses an exclusive flock to handle concurrent writes from parallel Claude sessions."
+description: "Append an event to the project's daily diary at docs/diary/YYYY-MM-DD.md. ALWAYS use this skill when one of these moments fires, even if the user does not ask for it: (a) a top-level Claude session is starting or wrapping up, (b) the developer agent finishes implementing a plan or the senior-developer finishes verifying one, (c) /memorize captures one or more insights, (d) the training-runner launches a training run on a lab node, (e) the experiment-analyzer finishes analyzing a training run, (f) a multi-step session is wrapping up — in addition to session-end, fire progress-report to write a concise plain-language summary into the Progress reports section. Also trigger on the explicit slash command /diary or natural-language phrases like 'log this in the diary', 'add to today's diary', 'note this'. The skill records a single short row per event (or one concise Progress report per session — re-calls within the same session REPLACE the existing entry in place rather than appending a new one, keeping the diary scannable) and links out to the authoritative document — it does NOT duplicate plans, insights, or analyses. For training runs the same row is edited from 'running' to 'done' when the analysis completes, so the diary is a single-glance status board across parallel sessions. The skill calls scripts/claude/diary_append.py, which uses an exclusive flock to handle concurrent writes from parallel Claude sessions."
 ---
 
 # Diary — log short-timeline events to `docs/diary/YYYY-MM-DD.md`
 
 This skill appends one row to today's diary file for a notable event. The diary is the project's at-a-glance status board across parallel Claude sessions: who started what, what landed, what insights were captured, what's training, what finished training.
 
-The skill is a thin wrapper over `scripts/diary_append.py`, which holds an exclusive `flock` while doing the read-modify-write so concurrent updates queue rather than clobber.
+The skill is a thin wrapper over `scripts/claude/diary_append.py`, which holds an exclusive `flock` while doing the read-modify-write so concurrent updates queue rather than clobber.
 
 **Authoritative reference**: `docs/diary/README.md` (folder purpose + section schema). Treat it as ground truth for the row layouts. This SKILL.md describes WHEN to invoke and WHICH subcommand to use; the README + the script's `--help` carry the contract.
 
@@ -37,14 +37,14 @@ The diary is a pointer index, not a duplicate of any of these.
 
 ## How to invoke
 
-The skill calls `scripts/diary_append.py` via Bash with the conda Python interpreter. One subcommand per call. Default date = today (Asia/Seoul); override with `--date YYYY-MM-DD`. Default time = now (HH:MM); override with `--time HH:MM`.
+The skill calls `scripts/claude/diary_append.py` via Bash with the conda Python interpreter. One subcommand per call. Default date = today (Asia/Seoul); override with `--date YYYY-MM-DD`. Default time = now (HH:MM); override with `--time HH:MM`.
 
-Use `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py <subcommand> <args>`.
+Use `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/diary_append.py <subcommand> <args>`.
 
 ### `session-start` — when a multi-step session begins
 
 ```bash
-.../python scripts/diary_append.py session-start \
+.../python scripts/claude/diary_append.py session-start \
   --label "<short-label, e.g., 'memory + memorize ship'>" \
   --summary "<one-line goal of this session>" \
   --link "<optional plan or doc path>"
@@ -55,7 +55,7 @@ Inserts a row into `## Sessions` with `Ended` blank (`(open)`).
 ### `session-end` — when the session wraps up
 
 ```bash
-.../python scripts/diary_append.py session-end \
+.../python scripts/claude/diary_append.py session-end \
   --label "<must match the session-start label>" \
   --commits "<space-separated commit hashes from this session>"
 ```
@@ -65,15 +65,15 @@ Edits the matching open `Sessions` row in place: sets `Ended = HH:MM`, appends c
 ### `implemented` / `verified` / `insight` — single-event rows
 
 ```bash
-.../python scripts/diary_append.py implemented \
+.../python scripts/claude/diary_append.py implemented \
   --subject "<one-line, e.g., '/memorize skill'>" \
   --link   "<commit hash, plan path, or insight ID>"
 
-.../python scripts/diary_append.py verified \
+.../python scripts/claude/diary_append.py verified \
   --subject "<one-line, e.g., 'Memory system seed'>" \
   --link   "<plan doc path>"
 
-.../python scripts/diary_append.py insight \
+.../python scripts/claude/diary_append.py insight \
   --subject "<one-line, copy from the insight's summary frontmatter>" \
   --link   "<docs/memory/memories/<topic>/<id>.md>"
 ```
@@ -85,7 +85,7 @@ For `insight`: emit one call per insight written. If `/memorize` writes 2 insigh
 ### `training-start` — when a training launches
 
 ```bash
-.../python scripts/diary_append.py training-start \
+.../python scripts/claude/diary_append.py training-start \
   --tag "<TAG from the launch manifest>" \
   --node 113 --gpu 1 \
   --cell "<cell letter, or '-' if not part of a cell battery>" \
@@ -98,7 +98,7 @@ Inserts a row into `## Training runs` with `Status = running` and `Ended` blank.
 ### `training-done` — when the analysis completes
 
 ```bash
-.../python scripts/diary_append.py training-done \
+.../python scripts/claude/diary_append.py training-done \
   --tag "<must match the training-start TAG>" \
   --result "<one-line result, e.g., 'survival 23 ± 2 steps'>" \
   --analysis "<docs/experiments/active/<topic>/<analysis-doc>.md>"
@@ -136,7 +136,7 @@ If the cumulative report would blow past these bounds, prune older details into 
 **Invocation** (use heredocs for the multi-line fields; keep bodies tight):
 
 ```bash
-.../python scripts/diary_append.py progress-report \
+.../python scripts/claude/diary_append.py progress-report \
   --title "Behavior-measure toolkit shipped + Round 2.6 launched" \
   --what-this-did "$(cat <<'EOF'
 - Built a four-measure behavior-analysis toolkit (event-level + spatial), 29 tests.
@@ -170,7 +170,7 @@ EOF
 ### `note` — free-form
 
 ```bash
-.../python scripts/diary_append.py note --text "<bullet content>"
+.../python scripts/claude/diary_append.py note --text "<bullet content>"
 ```
 
 Prepends a bullet to `## Notes`. Use sparingly; structured rows are preferred.
@@ -261,5 +261,5 @@ Parallel Claude sessions writing to the same daily file would race if each one r
 
 - `docs/diary/README.md` — folder purpose, section schema, conventions.
 - `docs/diary/TEMPLATE.md` — daily file template.
-- `scripts/diary_append.py` — the helper script (see `--help` for arg details).
+- `scripts/claude/diary_append.py` — the helper script (see `--help` for arg details).
 - Companion skills: `.claude/skills/memorize/SKILL.md` (capture), `.claude/skills/recall/SKILL.md` (read).

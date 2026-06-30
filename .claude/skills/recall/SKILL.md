@@ -50,7 +50,7 @@ When rendering a recalled insight in drill-down (Step 4), if the insight's `## K
 - If `src/graphify-out/GRAPH_REPORT.md` exists: append one line after the insight body:
   > → To see the current structure: `graphify explain <symbol>` or open `src/graphify-out/graph.html`.
 - If `src/graphify-out/` is missing: append one line:
-  > → Code graph not generated locally. Run `python scripts/regen_code_graph.py` to enable live structural lookup.
+  > → Code graph not generated locally. Run `python scripts/claude/regen_code_graph.py` to enable live structural lookup.
 
 Apply this hint only when a God-nodes top-10 symbol actually appears in the insight's body. Do not add it for every insight — only when there is a genuine code-symbol match. Check `src/graphify-out/GRAPH_REPORT.md` lazily (read it only when you have a candidate insight to cross-reference, never preemptively).
 

@@ -283,7 +283,7 @@ After a successful launch:
 - For plan-driven launches, also report which manifest row was updated (`plan_doc` + `run_id`).
 - **Log to the daily diary** (mandatory):
   ```bash
-  /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py training-start \
+  /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/diary_append.py training-start \
     --tag     "<TAG from --wandb-name or launch manifest>" \
     --node    <node-int>     --gpu <gpu-int> \
     --cell    "<cell letter, or '-' if not part of a cell battery>" \

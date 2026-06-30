@@ -111,7 +111,7 @@ When the analysis is complete:
 - Working `tmp/` files left for traceability (they're gitignored anyway).
 - **Log to the daily diary** (mandatory) — for **each** training run analyzed (or once per analysis if it covers multiple runs sharing a tag):
   ```bash
-  /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py training-done \
+  /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/diary_append.py training-done \
     --tag      "<TAG that training-runner used at training-start>" \
     --result   "<one-line headline finding, e.g. 'survival 23 ± 2 steps'>" \
     --analysis "<docs/experiments/active/<topic>/<NAME>.md>" \

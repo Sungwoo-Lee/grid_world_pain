@@ -49,7 +49,7 @@ Optional: `supersedes`, `superseded_by`, `phase`. Read [FRONTMATTER_CONTRACT.md]
 
 ### Mechanics
 
-- **After writing or moving a doc**, run `python scripts/regen_dev_index.py` so `docs/develop/INDEX.md` updates. Never hand-edit `INDEX.md`.
+- **After writing or moving a doc**, run `python scripts/claude/regen_dev_index.py` so `docs/develop/INDEX.md` updates. Never hand-edit `INDEX.md`.
 - **When superseding a doc**: set `status: superseded` and `superseded_by:` on the old one, then `git mv` it under `docs/develop/archive/` (plain `mv` loses `git log --follow`).
 - Use **`docs/TEMPLATES/issue_plan.md`** as the planning template. The template does NOT include the frontmatter block — add it yourself when copying.
 
@@ -63,10 +63,10 @@ Optional: `supersedes`, `superseded_by`, `phase`. Read [FRONTMATTER_CONTRACT.md]
 ## Code-side Wiki
 
 When answering a codebase question or writing a plan, check `src/graphify-out/GRAPH_REPORT.md`
-(if present — gitignored, regenerated on demand via `python scripts/regen_code_graph.py`).
+(if present — gitignored, regenerated on demand via `python scripts/claude/regen_code_graph.py`).
 The report lists god-nodes (most-connected functions/classes), surprising cross-module connections,
 and 59 community clusters. If absent or stale, fall back to grep / Read.
-See `scripts/regen_code_graph.py` for install steps (`pip install graphifyy`).
+See `scripts/claude/regen_code_graph.py` for install steps (`pip install graphifyy`).
 
 ## Configuration Protocol
 
@@ -95,7 +95,7 @@ When the plan you're writing is a bug fix (vs. a new feature):
 7. **Fill the Verification Report** in the plan doc — table with `✅`/`⚠️`/`❌` per file, one-line conclusion, signed `Verified by: senior-developer`.
 8. **Log to the daily diary** (mandatory, after the report is written):
    ```bash
-   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py verified \
+   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/diary_append.py verified \
      --subject "<one-line: what was verified, e.g. 'Memory system seed (all 9 plan checkpoints)'>" \
      --link    "<plan-doc-path-relative-to-repo-root>" \
      --session "${CLAUDE_CODE_SESSION_ID:0:8}/senior-developer"

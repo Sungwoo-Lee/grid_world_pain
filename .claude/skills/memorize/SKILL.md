@@ -31,13 +31,13 @@ Do **not** use for:
 | Topic registry | `docs/memory/ROOT_INDEX.md` | Read before classifying (safeguard layer 1). |
 | Tag dictionary | `docs/memory/memories/_global_tags.md` | Reuse existing tags. |
 | Insight template | `docs/memory/TEMPLATES/insight.md` | Copy as starting point. |
-| Code-graph snapshots | `docs/memory/code_snapshots/` | `python scripts/snapshot_code_graph.py <label>` |
+| Code-graph snapshots | `docs/memory/code_snapshots/` | `python scripts/claude/snapshot_code_graph.py <label>` |
 | Insight path | `docs/memory/memories/<topic>/<id>.md` | `<topic>` is English snake_case ≤ ~3 words. |
 | Insight filename | `YYYYMMDD_HHMM_<slug>.md` | `date +%Y%m%d_%H%M`; slug ≤ ~6 words English snake_case. |
 | Frontmatter | 16 fields | id, date, time, folder, tags, summary, related, session_origin, session_label, importance, status, valid_until, confidence, supersedes, raw_source, raw_completeness. |
 | Body sections | 5 named, in order | `## Key conclusion` / `## Evidence, measurements, facts` / `## Decisions and actions` / `## Open questions and follow-ups` / `## References`. |
 | Raw archive | `docs/memory/_archive/raw_conversations/<id>.md` | Gitignored (local-only). Pointed at by insight `raw_source`. |
-| Full-raw helper | `scripts/claude_jsonl_to_md.py <jsonl> <out>` | Use conda Python `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python`. |
+| Full-raw helper | `scripts/claude/claude_jsonl_to_md.py <jsonl> <out>` | Use conda Python `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python`. |
 
 ## Step-by-step flow
 
@@ -76,7 +76,7 @@ Show the candidate list and ask:
 
 > N+1. Code-graph snapshot of `src/` — captures the structural state at HEAD for future comparison
 
-If the user picks it (Y or includes its number), invoke `python scripts/snapshot_code_graph.py <auto-label>` AFTER the insights have been written and committed (so the snapshot commit is separate from the insight commits — different epistemic kind). The auto-label should be derived from the session theme (the same one that goes into the diary's progress-report), mapped to `[a-z0-9_]+` (replace hyphens and spaces with underscores, lowercase).
+If the user picks it (Y or includes its number), invoke `python scripts/claude/snapshot_code_graph.py <auto-label>` AFTER the insights have been written and committed (so the snapshot commit is separate from the insight commits — different epistemic kind). The auto-label should be derived from the session theme (the same one that goes into the diary's progress-report), mapped to `[a-z0-9_]+` (replace hyphens and spaces with underscores, lowercase).
 
 This is opt-in per-capture, NOT mandatory. Do not surface the option if the heuristic returns < 5 files and there is no architectural framing (refactor / ship / pivot language) in the session.
 
@@ -119,7 +119,7 @@ This is a hard step. A capture that skips it creates the risk of two contradicto
    - `raw_source: none` and `raw_completeness: none` for now (Step 7 may overwrite).
 
 3. Fill all 5 body sections in plain English. `## Open questions and follow-ups` writes "None" if there are none. `## References` includes the "Why a new folder" line if applicable.
-   - When referencing another insight, write `[[<insight_id>]]` inline in the body section (typically `## References` or `## Decisions and actions`). The `related:` frontmatter is auto-populated by `scripts/regen_memory_links.py` — do not hand-type it.
+   - When referencing another insight, write `[[<insight_id>]]` inline in the body section (typically `## References` or `## Decisions and actions`). The `related:` frontmatter is auto-populated by `scripts/claude/regen_memory_links.py` — do not hand-type it.
 
 ### Step 5 — Update the topic index
 
@@ -153,7 +153,7 @@ For each insight written, set the frontmatter fields:
 
 In each insight's `## References` section, add one line:
 
-> Raw conversation: synced via `./sync-agent-data.sh claude push`. To read on another node: `./sync-agent-data.sh claude pull`, then either `claude --resume <UUID>` (re-enter the session) or `python scripts/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot markdown view).
+> Raw conversation: synced via `./sync-agent-data.sh claude push`. To read on another node: `./sync-agent-data.sh claude pull`, then either `claude --resume <UUID>` (re-enter the session) or `python scripts/claude/claude_jsonl_to_md.py <jsonl> /tmp/<id>.md` (one-shot markdown view).
 
 ### Step 7.5 — Sync `claude_data/` to NAS (automatic, mandatory)
 
@@ -179,7 +179,7 @@ If the sync succeeds, no need to mention it in the user-facing Step 10 report (i
 After all insights are written and indexes updated, call the diary helper for **each** insight written. One call per insight; the script flock-protects concurrent invocations from parallel sessions.
 
 ```bash
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/diary_append.py insight \
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/diary_append.py insight \
   --subject "<copy from the insight's frontmatter `summary` field>" \
   --link   "docs/memory/memories/<topic>/<id>.md"
 ```
@@ -195,13 +195,13 @@ Before staging, run both regenerators in order:
 1. **Link regenerator** — populates `related:` from body `[[id]]` tokens and normalises any hand-typed values:
 
 ```bash
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/regen_memory_links.py
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/regen_memory_links.py
 ```
 
 2. **Graph regenerator** — rebuilds `GRAPH_REPORT.md` and injects per-insight Backlinks blocks (idempotent):
 
 ```bash
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/regen_memory_graph.py
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/regen_memory_graph.py
 ```
 
 Then stage by name only — include any insight files either regenerator touched (each prints which files it updated):
@@ -244,8 +244,8 @@ Recovery (deterministic, no LLM judgement needed — content is mechanical):
 1. From the user checkout: `git stash push -u -m "memorize-propagation-overlap" -- docs/memory/GRAPH_REPORT.md docs/diary/<today>.md`
 2. Re-run the ff-merge: `git -C <user> merge <worktree-branch> --ff-only` — now succeeds.
 3. Drop the stash: `git stash drop`. The user's pre-merge content for GRAPH_REPORT was a regen artefact (will be re-regenerated below); the diary content is recovered in step 4.
-4. Re-add any diary rows that were lost: `python scripts/diary_append.py …` for each row that was in the user's stashed diary but not in the post-merge diary. (Compare with `git show stash@{0}:docs/diary/<today>.md` before dropping the stash if you need to see what was there.)
-5. Re-run `python scripts/regen_memory_graph.py` to refresh GRAPH_REPORT.md with the merged state.
+4. Re-add any diary rows that were lost: `python scripts/claude/diary_append.py …` for each row that was in the user's stashed diary but not in the post-merge diary. (Compare with `git show stash@{0}:docs/diary/<today>.md` before dropping the stash if you need to see what was there.)
+5. Re-run `python scripts/claude/regen_memory_graph.py` to refresh GRAPH_REPORT.md with the merged state.
 6. Commit the diary + GRAPH_REPORT updates as a small post-hoc fix-up: `docs(memory): post-merge diary + GRAPH_REPORT refresh`.
 
 This pattern is documented because the underlying friction (multiple skills auto-regenerate `GRAPH_REPORT.md` at different cadences across checkouts) is not eliminated — only made recoverable. A future reconciliation script could automate this; for now it's a 5-minute manual procedure.
@@ -277,5 +277,5 @@ Report in plain English:
 - `docs/memory/TEMPLATES/insight.md` — copy as starting point.
 - `docs/memory/ROOT_INDEX.md` — topic registry.
 - `docs/memory/memories/_global_tags.md` — tag dictionary.
-- `scripts/claude_jsonl_to_md.py` — full-raw archive helper.
+- `scripts/claude/claude_jsonl_to_md.py` — full-raw archive helper.
 - `docs/develop/active/meta/claude_memory_system_design.md` — design rationale.
