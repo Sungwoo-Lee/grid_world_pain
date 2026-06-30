@@ -99,6 +99,7 @@ Phase 2's exact target (avoidance vs. foraging-suppression vs. both) is **delibe
 - Earlier concrete probe designs (conflict/hypervigilance): [[experiment_environment_designs_v1]]
 - Why the in-distribution model matters: [[20260624_0517_indist_random_init_reverses_hypervig]]
 - Phase 1a configs: `configs/environment/experiment/behavior_probes/core/forage_nutrition/`
+- Statistics for model comparison (Welch t, Mann–Whitney U, Cohen's d, paired Wilcoxon, Bonferroni, effect-size vs significance): [[model_comparison_statistics_tutorial]]
 
 ## Findings log
 
