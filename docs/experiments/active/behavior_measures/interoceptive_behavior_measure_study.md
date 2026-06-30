@@ -418,23 +418,22 @@ per-column min–max normalized mean).
 - **Bush-use rate** (fraction of episodes that enter the bush): predator & chasing-rabbit = **1.00±0.00**
   (always); olf-zeroed chaser = 0.03–0.13; wander = 0.00–0.17; none = 0. → chasing + recognizable
   smell is necessary AND sufficient, across 30 seeds.
-- **Flee-trigger distance = 1.0±0.0** and **bush-entry step = 6.0±0.0** for every recognizable
+- **Flight-initiation distance (FID) = 1.0±0.0** and **bush-entry step = 6.0±0.0** for every recognizable
   chaser at BOTH injury levels — the escape reflex is **perfectly deterministic and injury-
   independent** (zero variance under initial-state jitter).
-- **Discrimination is statistically real:** chasing-rabbit adjacent-fraction 0.46±0.09 vs predator
-  0.34±0.08 at inj0 (~7 SE apart) — the agent tolerates the harmless chaser closer than the predator.
+- **Discrimination is statistically real:** chasing-rabbit proximity fraction 0.46±0.09 vs predator 0.34±0.08 at inj0 (~7 SE apart) — the agent tolerates the harmless chaser closer than the predator.
 - **The variance is downstream, not in the reflex:** predator Δinjury = +22±25 (inj0) — damage taken
   is highly variable episode to episode; and predator inj70 survival = 91±21 (sometimes injury-death
   as hits push 60–80 → 100), vs ~96±3 starvation-bounded elsewhere.
-- olf-zeroed chaser adjacent ≈ 0.50 (animal sits on the agent, no flee) — confirms no avoidance.
+- olf-zeroed chaser proximity fraction ≈ 0.50 (animal sits on the agent, no flee) — confirms no avoidance.
 
 **Takeaway:** the flee-to-cover reflex is a near-deterministic function of (recognizable-smell ∧
 approach); injury and seed don't move it. Behavioral variability appears only in the *consequences*
 (damage absorbed, survival). These criteria are now validated as measures for the avoidance family.
 
-**Status:** avoidance quantified (n=30). Candidate measures validated: flee-rate, flee-trigger-dist,
-reach-cover-step (all deterministic), adjacent-fraction (discrimination), Δinjury & survival (the
-variable consequences). Next family or a bush-distance sweep to make flee-trigger non-degenerate.
+**Status:** avoidance quantified (n=30). Candidate measures validated: bush-use rate, flight-initiation distance (FID),
+bush-entry step (all deterministic), animal-proximity fraction (discrimination), injury change &
+survival steps (the variable consequences). Next family or a bush-distance sweep to make FID non-degenerate.
 
 ### Measures & definitions — avoidance family (canonical names)
 
@@ -448,10 +447,10 @@ then averaged (mean±std) over the 30 seeds. The three cover metrics are keyed o
 | **bush-use rate** (0–1) | per episode 1 if the agent ever stands on the bush cell, else 0; averaged over seeds = fraction of episodes that used the bush. *(was "flee rate")* |
 | **bush-entry step** | step index of the FIRST time the agent stands on the bush cell (latency). NaN/excluded if it never enters. *(was "reach-cover step")* |
 | **bush-dwell fraction** (0–1) | fraction of all `T` steps the agent stands on the bush cell (how long hidden). *(was "bush-use fraction")* |
-| **flee-trigger dist** | animal–agent distance at the first step the agent leaves its start cell (how close the threat was when avoidance began). |
-| **adjacent fraction** (0–1) | fraction of steps the animal is at distance ≤ 1 (on/next-to the agent). |
-| **min dist** | smallest animal–agent distance over the episode (closest approach). |
-| **Δ injury** | injury at last step − injury at first step (positive = net harmed; negative = net healed). |
+| **flight-initiation distance (FID)** | animal–agent distance at the first step the agent leaves its start cell — the predator–prey distance at flight onset (standard ethology term, abbrev. FID). |
+| **animal-proximity fraction** (0–1) | fraction of steps the animal is at distance ≤ 1 of the agent (on/next-to it) — time spent in close proximity *to the animal*. |
+| **closest approach (to animal)** | smallest agent–animal distance reached over the episode — how close the animal got. |
+| **injury change (end − start)** | agent injury at the last step minus injury at the first step (positive = net harmed; negative = net healed over the episode). |
 | **survival steps** | episode length `T` (until death or the max_steps cap). |
 
 Heatmap + CSV: `results/eval/avoidance_stat/STATS/avoidance_stats_{heatmap.png,csv}` (gitignored).
