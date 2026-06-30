@@ -189,7 +189,7 @@ def _run_symlog(fixture) -> tuple:
     """symlog: sign(x)*log(|x|+1) — deterministic, expect max_abs_diff < 1e-6."""
     import jax.numpy as jnp
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.utils import symlog
     x_np = fixture["x"]
     torch_out = fixture["torch_out"]
@@ -211,7 +211,7 @@ def _run_symexp(fixture) -> tuple:
     """
     import jax.numpy as jnp
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.utils import symexp
     x_np = fixture["x"]
     torch_out = fixture["torch_out"]
@@ -239,7 +239,7 @@ def _run_init_weights(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.utils import init_weights
     # Precise Hafner constant — must match src/algorithms/dreamer_srl/utils.py
     HAFNER_CONST = 0.87962566103423978
@@ -274,7 +274,7 @@ def _run_uniform_init_weights(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.utils import uniform_init_weights
     in_features = int(fixture["in_features"])
     out_features = int(fixture["out_features"])
@@ -298,7 +298,7 @@ def _run_compute_lambda_values(fixture) -> tuple:
     """compute_lambda_values: λ-return recursion — deterministic, expect < 1e-6."""
     import jax.numpy as jnp
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.utils import compute_lambda_values
     rewards = fixture["rewards"]
     values = fixture["values"]
@@ -320,7 +320,7 @@ def _run_moments_update(fixture) -> tuple:
     """moments_update: percentile EMA — deterministic, expect < 1e-6 (DEVIATION D-001: no all_gather)."""
     import jax.numpy as jnp
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.utils import moments_init, moments_update
     x_np = fixture["x"]
     decay = float(fixture["decay"])
@@ -352,7 +352,7 @@ def _run_ratio(fixture) -> tuple:
     """Ratio.__call__: replay-ratio scheduler — integer-exact, no float threshold needed."""
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.utils import Ratio
     ratio_val = float(fixture["ratio"])
     steps = fixture["steps"].tolist()
@@ -371,7 +371,7 @@ def _run_prepare_obs(fixture) -> tuple:
     """prepare_obs: obs-dict reshape — deterministic, expect < 1e-6."""
     import jax.numpy as jnp
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.utils import prepare_obs
     obs_state = fixture["obs_state"]
     num_envs = int(fixture["num_envs"])
@@ -402,7 +402,7 @@ def _run_buffer_storage_state_after_deterministic_adds(fixture) -> tuple:
     """
     import sys, os
     import numpy as np
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
 
     buffer_size = int(fixture["buffer_size"])
@@ -450,7 +450,7 @@ def _run_buffer_sample_at_indices_matches_sheeprl(fixture) -> tuple:
     """
     import sys, os
     import numpy as np
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
 
     buffer_size = int(fixture["buffer_size"])
@@ -507,7 +507,7 @@ def _run_buffer_is_first_marker_placement_in_straddling_window(fixture) -> tuple
     """
     import sys, os
     import numpy as np
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
 
     buffer_size = int(fixture["buffer_size"])
@@ -563,7 +563,7 @@ def _run_buffer_parallel_env_lane_non_interference(fixture) -> tuple:
     """
     import sys, os
     import numpy as np
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
 
     buffer_size = int(fixture["buffer_size"])
@@ -624,10 +624,10 @@ def _run_cadence_yaml_key_parity_with_sheeprl_xs(fixture) -> tuple:
     import sys, os
     import numpy as np
     import yaml
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
     yaml_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "configs", "dreamer_srl", "agent_xs.yaml",
     )
     with open(yaml_path) as fh:
@@ -694,7 +694,7 @@ def _run_cadence_env_grad_step_trace_5000_iters(fixture) -> tuple:
     """
     import sys, os
     import numpy as np
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.utils import Ratio
 
     num_envs = int(fixture["num_envs"])
@@ -756,7 +756,7 @@ def _run_zero_init_reward_head(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from flax import nnx
     from src.algorithms.dreamer_srl.agent import RewardHead
 
@@ -798,7 +798,7 @@ def _run_zero_init_critic_head(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from flax import nnx
     from src.algorithms.dreamer_srl.agent import CriticHead
 
@@ -848,7 +848,7 @@ def _run_layernorm_gru_cell(fixture) -> tuple:
     import jax
     import jax.numpy as jnp
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from flax import nnx
     from src.algorithms.dreamer_srl.agent import LayerNormGRUCell
 
@@ -890,7 +890,7 @@ def _run_action_shift(fixture) -> tuple:
     """
     import jax.numpy as jnp
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.agent import action_shift
 
     actions_np   = fixture["actions"]           # [T, B, A]
@@ -929,7 +929,7 @@ def _load_rssm_from_fixture_diff(f):
     import jax
     import jax.numpy as jnp
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from flax import nnx
     from src.algorithms.dreamer_srl.agent import RSSM
 
@@ -1273,7 +1273,7 @@ def _run_twohot_bins_endpoints(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.loss import TwoHotEncoding
 
     torch_bins = fixture["torch_bins"]  # [255] from sheeprl PyTorch
@@ -1309,7 +1309,7 @@ def _run_twohot_encode(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.loss import TwoHotEncoding
     from src.algorithms.dreamer_srl.utils import symlog
 
@@ -1360,7 +1360,7 @@ def _run_twohot_log_prob(fixture) -> tuple:
     """
     import jax.numpy as jnp
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.loss import TwoHotEncoding
 
     logits_np = fixture["logits"]                    # [T, B, 255]
@@ -1401,7 +1401,7 @@ def _run_critic_loss_two_terms(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.train import compute_critic_loss
 
     qv_logits_np   = fixture["qv_logits"]        # [H, BT, 255]
@@ -1468,7 +1468,7 @@ def _run_critic_target_lambda(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.loss import TwoHotEncoding
 
     qv_logits_np     = fixture["qv_logits"]        # [H, BT, 255]
@@ -1504,7 +1504,7 @@ def _run_discount_weighting(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.train import compute_discount
 
     continues_np    = fixture["continues"]                  # [H+1, BT, 1]
@@ -1541,7 +1541,7 @@ def _run_polyak_first_call(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.train import polyak_update
 
     tau = float(fixture["tau"])
@@ -1584,7 +1584,7 @@ def _run_polyak_subsequent_call(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.train import polyak_update
 
     tau = float(fixture["tau"])
@@ -1630,7 +1630,7 @@ def _run_polyak_before_train(fixture) -> tuple:
     import jax.numpy as jnp
     import numpy as np
     import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     from src.algorithms.dreamer_srl.train import polyak_update
 
     online_s0 = jnp.asarray(fixture["online_step0"])   # [8]

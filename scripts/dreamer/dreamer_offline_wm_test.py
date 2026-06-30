@@ -70,7 +70,7 @@ THRESH_PER_CHANNEL = {
 # Local project imports (after env var set)
 # ─────────────────────────────────────────────────────────────────────────────
 # Add repo root to path if needed
-_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 

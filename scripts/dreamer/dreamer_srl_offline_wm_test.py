@@ -62,7 +62,7 @@ MIN_SAMPLES_PER_SIDE = 30   # below this n, pos/neg MAE is flagged low_n and exc
 # ---------------------------------------------------------------------------
 # Repo root + project imports (set up before any src.* imports)
 # ---------------------------------------------------------------------------
-_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 

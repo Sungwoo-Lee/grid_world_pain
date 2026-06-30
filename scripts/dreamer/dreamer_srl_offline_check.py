@@ -78,7 +78,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, REPO_ROOT)
 
 FIXTURE_PATH = os.path.join(

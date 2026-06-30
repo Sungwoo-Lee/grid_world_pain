@@ -104,7 +104,7 @@ def test_offline_wm_smoke(tiny_checkpoint, tmp_path):
     json_out = str(tmp_path / "smoke_out.json")
 
     # Import here so the test can run as a subprocess alternative
-    from scripts.dreamer_srl_offline_wm_test import main
+    from scripts.dreamer.dreamer_srl_offline_wm_test import main
 
     argv = [
         "--checkpoint", checkpoint_dir,

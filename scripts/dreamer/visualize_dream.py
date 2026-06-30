@@ -73,7 +73,7 @@ import numpy as np
 # ---------------------------------------------------------------------------
 # Ensure project root is on sys.path
 # ---------------------------------------------------------------------------
-_PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+_PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 

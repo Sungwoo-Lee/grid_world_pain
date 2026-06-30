@@ -45,7 +45,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)
 ))))
 
-OFFLINE_CHECK_SCRIPT = os.path.join(REPO_ROOT, "scripts", "dreamer_srl_offline_check.py")
+OFFLINE_CHECK_SCRIPT = os.path.join(REPO_ROOT, "scripts", "dreamer", "dreamer_srl_offline_check.py")
 FIXTURE_PATH = os.path.join(
     REPO_ROOT, "tests", "fixtures", "dreamer_srl", "end_to_end_parity_input.npz"
 )
