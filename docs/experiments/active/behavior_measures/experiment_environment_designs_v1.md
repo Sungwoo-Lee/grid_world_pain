@@ -62,7 +62,7 @@ testbed config.
 
 These hold across every probe unless a section overrides them.
 
-- **Frozen checkpoint, eval-only.** Each world is consumed by `scripts/eval_rollout.py --config <this>`
+- **Frozen checkpoint, eval-only.** Each world is consumed by `scripts/eval/eval_rollout.py --config <this>`
   on an already-trained checkpoint. No weights change. The 27-dim observation is identical across all
   configs (same sensors block as the testbeds), so any checkpoint loads into any probe.
 - **Confound-matched base.** All worlds inherit the cell-08 / testbed sensor, body, noise, and
@@ -440,7 +440,7 @@ internal dial (K3). This is the structural answer to
    agent exists, and v1 ship Foraging + Recovery + Conflict first (the three that do not require a
    discriminator to be meaningful)?
 3. **Passive/do-nothing baseline mechanism.** §3 and §2 both call for scripted control policies
-   (do-nothing; class-label-shuffle). Does `scripts/eval_rollout.py` support a scripted policy, or is
+   (do-nothing; class-label-shuffle). Does `scripts/eval/eval_rollout.py` support a scripted policy, or is
    that a `senior-developer` feature request before these probes can run?
 4. **Grid-size variants.** I propose one shrink variant per family for size-invariance. Is that worth
    the extra configs in v1, or defer size-invariance to a later robustness study?

@@ -25,7 +25,7 @@ deliverable, not an input.** So this study must not start by assuming a metric.
 
 1. **Trajectory-first (qualitative).** Build a small probe environment, run the frozen agent in
    it, and *watch what it actually does* step-by-step (via the `trajectory-story` skill, which
-   reads the `.rec.gz` recordings that `scripts/eval_rollout.py --record` writes). Look at the
+   reads the `.rec.gz` recordings that `scripts/eval/eval_rollout.py --record` writes). Look at the
    behavior before naming any number.
 2. **Metric-second (quantitative).** Only once a trajectory pattern *clearly and repeatably*
    tracks the internal-state sweep do we crystallize it into an episode-level number. The metric
@@ -80,7 +80,7 @@ Phase 2's exact target (avoidance vs. foraging-suppression vs. both) is **delibe
 
 ```
 # 1. roll out the frozen agent in a probe env, recording trajectories
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/eval_rollout.py \
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/eval/eval_rollout.py \
   --config environment/experiment/behavior_probes/<probe>.yaml \
   --checkpoint results/JAX_RecurrentPPO/20260627-015427_rppo_basic05_randinit_n112/models/8900007 \
   --record
@@ -90,7 +90,7 @@ Phase 2's exact target (avoidance vs. foraging-suppression vs. both) is **delibe
 #    -> use the `trajectory-story` skill on the written .rec.gz files
 
 # 3. (optional, canonical video) render to mp4
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/render_recordings.py <recordings_dir>
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/eval/render_recordings.py <recordings_dir>
 ```
 
 ## Links

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Avoidance behavior-probe statistics + journal-style heatmap (reusable).
 
-Reads eval recordings written by `scripts/eval_rollout.py --record`, computes the
+Reads eval recordings written by `scripts/eval/eval_rollout.py --record`, computes the
 canonical avoidance measures per episode, aggregates mean +/- std over all
 seeds/episodes per config, writes a stats CSV, and renders a polished heatmap
 (rows = experiment config, columns = criterion) via _heatmap_style.render.
