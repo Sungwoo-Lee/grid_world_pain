@@ -71,4 +71,5 @@ number); the *platform* is sound.
 ## Backlinks
 - [[20260622_1744_hypervig_probe_hg10_overgeneralizes_threat]] (hypervigilance, 2026-06-22) — New conflict/hypervigilance behavior-probe: the hg10 rPPO checkpoint (~7.2M, par
 - [[20260622_1745_frozen_probe_eval_match_sensory_renderer]] (hypervigilance, 2026-06-22) — Frozen-checkpoint probe eval: the env config's sensory params (esp. decay_power)
+- [[20260630_1715_behavior_measure_study_method_and_tooling]] (behavior_measures, 2026-06-30) — Interoceptive behavior-measure study: discover MEASURES of foraging/avoidance vs
 <!-- END BACKLINKS -->

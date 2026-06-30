@@ -50,4 +50,5 @@ Evaluating the trained chasing-rabbit agent in a world with the **rabbits remove
 - [[20260616_0142_discrimination_is_spatial_encounter_artifact]] (hypervigilance, 2026-06-16) — Autonomous testbed search (4 designs, frozen-checkpoint evals of a Cell C 'discr
 - [[20260622_1745_discrimination_weak_lethality_masks_gating]] (hypervigilance, 2026-06-22) — In the olfactory_ambiguity 10-run sweep the agent never learned pre-contact disc
 - [[20260630_1629_injury_gated_olfactory_noise_hypervig]] (hypervigilance, 2026-06-30) — Basic level 06 design: induce hypervigilance via INJURY-GATED OLFACTORY perceptu
+- [[20260630_1717_avoidance_reflex_needs_motion_and_olfaction]] (behavior_measures, 2026-06-30) — Avoidance probe (predator/rabbit + bush): the flee-to-cover reflex requires BOTH
 <!-- END BACKLINKS -->

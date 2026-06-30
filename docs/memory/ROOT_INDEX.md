@@ -5,8 +5,8 @@
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
 **Last updated**: 2026-06-30
-**Active folders**: 9
-**Total insights**: 138
+**Active folders**: 10
+**Total insights**: 142
 **Last audit**: (none)
 
 ---
@@ -24,6 +24,7 @@
 | `env_entities` | Env entity architecture decisions | 12 | 2026-06-30 | [design, decision, learned_lesson, meta, config, dreamer] |
 | `config_system` | Config loader/layering/schema | 4 | 2026-06-22 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 3 | 2026-06-24 | [learned_lesson, decision, refutation] |
+| `behavior_measures` | Behavior-measure platform & probes | 4 | 2026-06-30 | [design, decision, meta, learned_lesson, hypervigilance, refutation] |
 
 ---
 
@@ -54,6 +55,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-06-30: Opened the **new** `behavior_measures` folder (4 insights) from the interoceptive behavior-measure study build session: `20260630_1715_behavior_measure_study_method_and_tooling` (study scope + trajectory-first→metric-second method + core/explore config tiering + reusable scripts/behavior_measures/ heatmap tooling + deterministic-probe→initial-state-jitter statistics; frozen in-distribution subject ckpt 8900007), `20260630_1716_foraging_hunger_timing_fixed_opening` (hunger sets foraging TIMING not path; satiety departure-delay measure; death floor nutr 15-20; 'up-first' is a fixed opening prior + gradient-following, preserved in all 4 dirs), `20260630_1717_avoidance_reflex_needs_motion_and_olfaction` (flee-to-cover needs BOTH approach motion AND recognizable olfaction — olf-zeroed chaser ignored, corrects same-day 'motion-only' read; discrimination sustained & damage-driven; injury NOT preemptive; injury heals; high injury alone never hides), `20260630_1718_cover_use_late_emerging_run_vs_hide` (early randpred 1.5M RUNS/kites instead of hiding — cover-seeking is late-emerging; bush-use metrics discriminate run-vs-hide, movement metrics flat). **Why new folder**: general foraging+avoidance behavior measurement, broader than `hypervigilance`, with its own anchor doc + config tier + tooling. Definition lock: `Behavior-measure platform & probes`. All tags reused (design, decision, meta, learned_lesson, hypervigilance, refutation) — no new tags. **NOTE: active folder count now 10 → audit threshold reached (scripts/lint_memory.py review due).**
 - 2026-06-30: Captured 3 insights from the basic level 05/06 randomization + sensory-noise session: 1 into `hypervigilance` (`20260630_1629_injury_gated_olfactory_noise_hypervig` — level-06 design: induce hypervigilance via INJURY-GATED OLFACTORY perceptual noise / precision-weighting; couple injury to the threat channel not interoception, maximise healthy<->injured contrast; untested hypothesis), 1 into `env_entities` (`20260630_1630_predator_params_per_episode_ranges` — predator behavioural params per-episode rangeable via [lo,hi]; 5 fields already wired, ADDED move_interval+attack_delay via int randint(lo,hi+1); scalar==degenerate [s,s]==deterministic), 1 into `cluster_ops` (`20260630_1631_training_runner_double_launch_relay_auth` — runner's post-launch check re-invoked run_command.py -> duplicate process; runner refused coordinator-relayed kill approval; resolved with targeted kill -INT <PID>). All tags reused (hypervigilance, design, decision, noise, config, learned_lesson, training_runner, meta). No new tags promoted.
 - 2026-06-29: Captured 2 insights from the basic-05 random-init + ghost-predator bug session: 1 into existing `env_entities` (`20260629_1723_ghost_predator_inactive_slots_render` — per-episode count masking gated damage/sensing/obs by animal_active but NOT per-step movement/render, so inactive 'ghost' predators un-parked and stuck to the agent dealing 0 damage while invisible to it; fix = re-park inactive slots off-grid each step in update_animals; verified purely cosmetic, survival byte-identical, ghost-steps 1514->0; extends `20260623_0143`), 1 into existing `cluster_ops` (`20260629_1724_rppo_single_config_episode_budget` — rPPO single-config --total-timesteps is ignored when episodes>0, episodes defaults to 100 -> ~45s exit, use --episodes <N>; twin of the dreamer_srl budget gotcha `20260622_1747`). All tags reused (design, learned_lesson, decision, config, training_runner, meta). No new tags promoted.
 - 2026-06-24: Captured 1 insight into existing `hypervigilance` from the in-distribution re-eval: `20260624_0517_indist_random_init_reverses_hypervig` — the random-init (decay-2.0, 10M) model eats normally at all nutrition levels and ignores harmless rabbits (NO hypervigilance); the prior 'hypervigilance/eat-failure' was an off-distribution artifact of a static-init model on depleted starts. **Supersedes `20260622_1744`** (flipped to superseded). Counts set to actual file totals. All tags reused (hypervigilance, refutation, learned_lesson). No new tags.

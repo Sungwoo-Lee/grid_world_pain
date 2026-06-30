@@ -50,4 +50,5 @@ A nutrition sweep on hg10 (injury fixed at 0, nutrition swept 10/30/50/70/100, o
 ## Backlinks
 - [[20260622_1744_hypervig_probe_hg10_overgeneralizes_threat]] (hypervigilance, 2026-06-22) — New conflict/hypervigilance behavior-probe: the hg10 rPPO checkpoint (~7.2M, par
 - [[20260624_0517_indist_random_init_reverses_hypervig]] (hypervigilance, 2026-06-24) — Re-running the probes on the IN-DISTRIBUTION model (random-init hg10, trained on
+- [[20260630_1716_foraging_hunger_timing_fixed_opening]] (behavior_measures, 2026-06-30) — Phase-1a foraging probe: hunger changes the TIMING of foraging, not the path — f
 <!-- END BACKLINKS -->
