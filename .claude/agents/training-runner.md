@@ -214,6 +214,14 @@ Notes:
 
 ### 4b. Post-launch sanity: confirm exactly ONE process started
 
+> ⚠️ **The post-launch check must be READ-ONLY — never re-invoke the launch path.**
+> Verify with `pgrep` / `nvidia-smi` / `echo "n" | ./terminate_command.py` **only**. Do NOT
+> wrap the check in `run_command.py <node> "...train.py..."` or `bash $TMP_SCRIPT` — that is a
+> **LAUNCH, not a check**, and fires a SECOND training process on the same GPU. This exact
+> mistake — a `sleep 15 && run_command.py <node> "bash ..."` verification step — produced a
+> duplicate run on 2026-06-30 (intended `eylrft3q` + accidental duplicate `uegqltpq` on node
+> 110 GPU 0). The wait-then-verify step is a plain `pgrep`/SSH read and nothing else.
+
 Right after `run_command.py` returns, verify exactly one `train.py` process matching this launch's `--tag` is alive on the target node. **Preferred check:** use `terminate_command.py` in scan-and-abort mode — it's already wired for this exact pattern, gives a tidy printout, and aborts cleanly when the user (or `--yes` is omitted) does not confirm a kill:
 
 ```bash
@@ -228,7 +236,7 @@ ssh -o BatchMode=yes -p 1800 vncuser@192.168.0.<NODE> "pgrep -af 'train.py.*--ta
 
 Expected: a single PID (the one you just launched).
 
-If 2+ PIDs come back — something went wrong (re-fired script, race in `run_command.py`, residue from a prior session, hook re-trigger). **Halt** and clean up via `terminate_command.py` per §4c. Do NOT declare success, do NOT auto-relaunch, do NOT update the manifest.
+If 2+ PIDs come back — something went wrong (re-fired script, race in `run_command.py`, residue from a prior session, hook re-trigger). **Halt** and clean up via `terminate_command.py` per §4c. Do NOT declare success, do NOT auto-relaunch, do NOT update the manifest. If the two PIDs share the SAME `--tag` (the usual verification-relaunch case), `terminate_command.py <tag>` would kill BOTH — instead kill the specific duplicate PID only with `./run_command.py <node> "kill -INT <PID>"`, keeping the first/intended PID alive.
 
 If 0 PIDs come back — the launch failed (config error, immediate exit). Tail the log for the error and surface it. Do not retry without surfacing the failure first.
 
