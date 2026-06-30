@@ -9,16 +9,16 @@ seeds/episodes per config, writes a stats CSV, and renders a polished heatmap
 Measures (see "Measures & definitions" in the study anchor doc):
   Bush use:
     bush_use_rate       % of EPISODES the agent ever enters the bush ("entered bush")
-    bush_entry_step     step of first entry onto the bush cell
+    bush_entry_step     steps until first entry onto the bush cell ('steps to reach bush')
     bush_dwell          % of the episode's STEPS spent on the bush cell ("time in bush")
   Distance to animal:
     fid                 animal-agent distance at the agent's first move (flight-initiation distance)
     time_near_animal    % of steps the animal is within 1 cell ("time near animal")
     closest_approach    smallest animal-agent distance over the episode
-  Movement & pursuit:
+  Movement & chase:
     time_moving         % of steps the agent's position changes
     spatial_spread      radius of gyration: sqrt(var(row)+var(col)), in cells
-    pursuit_duration    longest unbroken run of steps with the animal within <=2 cells
+    pursuit_duration    longest unbroken run of steps with the animal within <=2 cells ('longest chase')
   Outcome:
     injury_change       injury(last) - injury(first)  (+ harmed / - healed)
     survival_steps      episode length
@@ -45,14 +45,14 @@ from src.utils.eval_recording import load_episode
 # (key, display label, group, decimals, is_percent)
 MEASURES = [
     ("bush_use_rate",    "entered bush\n(% of episodes)", "Bush use", 0, True),
-    ("bush_entry_step",  "bush-entry\nstep",              "Bush use", 0, False),
+    ("bush_entry_step",  "steps to\nreach bush",          "Bush use", 0, False),
     ("bush_dwell",       "time in bush\n(%)",             "Bush use", 0, True),
     ("fid",              "flight-initiation\ndistance (FID)", "Distance to animal", 1, False),
     ("time_near_animal", "time near\nanimal (%)",         "Distance to animal", 0, True),
     ("closest_approach", "closest\napproach",             "Distance to animal", 2, False),
-    ("time_moving",      "time moving\n(%)",              "Movement & pursuit", 0, True),
-    ("spatial_spread",   "spatial spread\n(R_g)",         "Movement & pursuit", 2, False),
-    ("pursuit_duration", "pursuit duration\n(steps)",     "Movement & pursuit", 0, False),
+    ("time_moving",      "time moving\n(%)",              "Movement & chase", 0, True),
+    ("spatial_spread",   "spatial spread\n(R_g)",         "Movement & chase", 2, False),
+    ("pursuit_duration", "longest chase\n(steps)",        "Movement & chase", 0, False),
     ("injury_change",    "injury change\n(end − start)",  "Outcome", 0, False),
     ("survival_steps",   "survival\nsteps",               "Outcome", 0, False),
 ]
