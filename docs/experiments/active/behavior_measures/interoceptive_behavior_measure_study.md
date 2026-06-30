@@ -237,7 +237,7 @@ fixed-opening investigation).
 
 First avoidance probe. 10×10, agent center [5,5], one `hides_agent` bush 3 cells LEFT [5,2], one
 hunting predator 4 cells RIGHT [5,9] closing in; full nutrition + injury 0 (isolate avoidance); no
-food. Baseline + no-predator control. Configs: `explore/avoidance/`. Recordings:
+food. Baseline + no-predator control. Configs: `core/avoidance/`. Recordings:
 `results/eval/avoidance/`.
 
 **Result — the agent dives into the bush as cover, and it is threat-driven:**
@@ -273,7 +273,7 @@ init injury = 0 (fixed). To observe avoidance over a longer horizon, add food or
 
 Extended the avoidance probe to a matrix. Rabbit = neutral class, **hunt** behaviour, harmless
 (damage 0) — IDENTICAL motion to the predator, so the only difference is harmful-vs-harmless.
-High injury = 70. Configs: `explore/avoidance/avoid_{pred,rabbit,none}_inj{00,70}.yaml`. All single
+High injury = 70. Configs: `core/avoidance/avoid_{pred,rabbit,none}_inj{00,70}.yaml`. All single
 seed 42, max_steps 100, full nutrition. Measures from recordings (bush = obs_pos cell).
 
 | config | flee trigger | bush@ | bush-use | animal-adjacent% | Δinjury |
@@ -310,7 +310,7 @@ a bush-distance sweep.
 ### 2026-06-30 — Added wandering rabbit: avoidance reflex is APPROACH-triggered, not presence/identity
 
 Added a non-chasing (wander) harmless rabbit to the matrix (in-distribution neutral motion — what
-the agent actually trained on). Configs: `explore/avoidance/avoid_rabbitwander_inj{00,70}.yaml`.
+the agent actually trained on). Configs: `core/avoidance/avoid_rabbitwander_inj{00,70}.yaml`.
 
 | animal | inj | flees to cover? | bush-use | adjacent% | min-dist | Δinj |
 |---|---|---|---|---|---|---|
@@ -374,7 +374,7 @@ then promote avoidance to core/.
 
 Probe (user-designed): chasing, harmless, rabbit-VISUAL animal with olfactory property set to
 `[0, 0, 0.5, 0, 0]` — the predator-identifiable channel (ch1, the 0.7) zeroed. Configs:
-`explore/avoidance/avoid_rabbit_olfzero_inj{00,70}`.
+`core/avoidance/avoid_rabbit_olfzero_inj{00,70}`.
 
 | condition (all CHASE, harmless except pred) | inj | flees to bush? | bush-use | adjacent | Δinj |
 |---|---|---|---|---|---|

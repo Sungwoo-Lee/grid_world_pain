@@ -13,6 +13,9 @@ Configs are split by how stable/maintained they are:
   - `forage_direction/` — Phase 1a robustness. Food at center, agent on each of 4 sides; confirms
     foraging works in all directions (gradient-following), and exposed a fixed "up-first" opening
     move. Same subject model.
+  - `avoidance/` — Phase 2. Predator/rabbit + bush probe (animal {pred, rabbit, none} × injury
+    {0,70}, plus chasing/wander × smell ablations). Found: flee-to-cover reflex needs BOTH approach
+    motion AND a recognizable olfactory signature; injury does not heighten avoidance. Same model.
 
 - **`explore/`** — *exploratory*. Iterative / one-off probes that may be dropped. Not maintained;
   do not build new work on these without first promoting them to `core/`. Several encode
