@@ -16,7 +16,7 @@ build/
 !vendor/sheeprl/
 evaaa/
 temp_configs/
-wandb/
+/wandb/
 logs/
 .wandb_api_key
 legacy/

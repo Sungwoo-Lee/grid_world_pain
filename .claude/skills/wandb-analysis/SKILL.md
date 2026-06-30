@@ -26,17 +26,17 @@ Trigger when user:
 
 ## Available Scripts
 
-All scripts are in `scripts/` and require `PYTHONPATH=scripts` or running from the project root.
+All scripts are in `scripts/wandb/` and require `PYTHONPATH=scripts/wandb` or adding that folder to the path.
 
-### Primary Tool: `scripts/wandb_metrics.py`
+### Primary Tool: `scripts/wandb/wandb_metrics.py`
 
 Five subcommands: `config`, `discover`, `extract`, `compare`, `timeseries`.
 
 #### `config` — Show run hyperparameters
 
 ```bash
-PYTHONPATH=scripts python scripts/wandb_metrics.py config RUN_NAME
-PYTHONPATH=scripts python scripts/wandb_metrics.py config RUN_NAME --json
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py config RUN_NAME
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py config RUN_NAME --json
 ```
 
 Shows algorithm type, hyperparameters, environment settings, and all logged config. Use this to **identify what algorithm a run used** before analyzing metrics.
@@ -44,7 +44,7 @@ Shows algorithm type, hyperparameters, environment settings, and all logged conf
 #### `discover` — List all metrics in a run
 
 ```bash
-PYTHONPATH=scripts python scripts/wandb_metrics.py discover RUN_NAME
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py discover RUN_NAME
 ```
 
 Lists every metric grouped by prefix (e.g., Episode/, Policy/, WorldModel/, etc.). **Always run this first** to see what metrics are available before extracting.
@@ -52,8 +52,8 @@ Lists every metric grouped by prefix (e.g., Episode/, Policy/, WorldModel/, etc.
 #### `extract` — Pull stats for a single run
 
 ```bash
-PYTHONPATH=scripts python scripts/wandb_metrics.py extract RUN_NAME
-PYTHONPATH=scripts python scripts/wandb_metrics.py extract RUN_NAME --metrics "Episode/*,*loss*"
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py extract RUN_NAME
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py extract RUN_NAME --metrics "Episode/*,*loss*"
 ```
 
 Outputs per-metric stats: steady-state (last 20%), final value, min, max, count, plus trajectory (first -> last).
@@ -62,13 +62,13 @@ Outputs per-metric stats: steady-state (last 20%), final value, min, max, count,
 
 ```bash
 # Auto-discovery (works with any algorithm)
-PYTHONPATH=scripts python scripts/wandb_metrics.py compare RUN1 RUN2 --labels "A,B"
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py compare RUN1 RUN2 --labels "A,B"
 
 # Filter to specific metrics
-PYTHONPATH=scripts python scripts/wandb_metrics.py compare RUN1 RUN2 --metrics "Episode/*,*loss*"
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py compare RUN1 RUN2 --metrics "Episode/*,*loss*"
 
 # Use a named preset (curated metrics with pass/fail criteria)
-PYTHONPATH=scripts python scripts/wandb_metrics.py compare RUN1 RUN2 --preset dreamer_v3
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py compare RUN1 RUN2 --preset dreamer_v3
 ```
 
 **Available presets**: `dreamer_v3`, `recurrent_ppo`. Presets add a "Criterion" column with expected ranges.
@@ -80,23 +80,23 @@ Use this when the user asks **how** a metric changed over training, not just wha
 **Windowed mode** (default) — divides training into N equal windows and shows mean/std/min/max per window:
 ```bash
 # Default 10 windows
-PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps"
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps"
 
 # More granular: 20 windows
-PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps" --windows 20
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps" --windows 20
 
 # Multiple metrics
-PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps,Episode/Reward,*loss*"
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps,Episode/Reward,*loss*"
 ```
 
 **Raw mode** — outputs every downsampled data point (step, value):
 ```bash
-PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps" --raw
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps" --raw
 ```
 
 **Multi-run comparison** — side-by-side temporal comparison:
 ```bash
-PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN1 RUN2 --metrics "Episode/Steps" --labels "A,B"
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py timeseries RUN1 RUN2 --metrics "Episode/Steps" --labels "A,B"
 ```
 
 **Options**:
@@ -117,13 +117,13 @@ PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN1 RUN2 --metric
 ### Speed Benchmark: `scripts/benchmark_wandb_speed.py`
 
 ```bash
-PYTHONPATH=scripts python scripts/benchmark_wandb_speed.py RUN1 RUN2 [...]
-PYTHONPATH=scripts python scripts/benchmark_wandb_speed.py RUN1 --csv
+PYTHONPATH=scripts/wandb python scripts/wandb/benchmark_wandb_speed.py RUN1 RUN2 [...]
+PYTHONPATH=scripts/wandb python scripts/wandb/benchmark_wandb_speed.py RUN1 --csv
 ```
 
 Outputs: `s/it`, `it/s`, `SPS` (env steps/sec), total wall-clock time, iterations, timesteps.
 
-### Legacy: `scripts/compare_wandb_runs.py`
+### Legacy: `scripts/wandb/compare_wandb_runs.py`
 
 Backward-compatible wrapper. Defaults to `--preset dreamer_v3`.
 
@@ -134,37 +134,37 @@ Extract run names from user message. Format: `YYYYMMDD-HHMMSS_model_config...`
 
 ### Step 2: Get run config
 ```bash
-PYTHONPATH=scripts python scripts/wandb_metrics.py config RUN_NAME
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py config RUN_NAME
 ```
 This tells you the algorithm, hyperparameters, and environment. Essential for knowing how to interpret the metrics.
 
 ### Step 3: Discover available metrics
 ```bash
-PYTHONPATH=scripts python scripts/wandb_metrics.py discover RUN_NAME
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py discover RUN_NAME
 ```
 See what the algorithm actually logged. Different algorithms log different metrics.
 
 ### Step 4: Check training speed
 ```bash
-PYTHONPATH=scripts python scripts/benchmark_wandb_speed.py RUN_NAME
+PYTHONPATH=scripts/wandb python scripts/wandb/benchmark_wandb_speed.py RUN_NAME
 ```
 
 ### Step 5: Extract or compare metrics
 ```bash
 # Single run — summary stats
-PYTHONPATH=scripts python scripts/wandb_metrics.py extract RUN_NAME
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py extract RUN_NAME
 
 # Multi-run comparison
-PYTHONPATH=scripts python scripts/wandb_metrics.py compare RUN1 RUN2 --labels "A,B"
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py compare RUN1 RUN2 --labels "A,B"
 ```
 
 ### Step 6: Temporal analysis (when needed)
 ```bash
 # How did key metrics evolve over training?
-PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps,Episode/Reward"
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py timeseries RUN_NAME --metrics "Episode/Steps,Episode/Reward"
 
 # Compare learning curves between runs
-PYTHONPATH=scripts python scripts/wandb_metrics.py timeseries RUN1 RUN2 --metrics "Episode/Steps" --labels "A,B" --windows 15
+PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py timeseries RUN1 RUN2 --metrics "Episode/Steps" --labels "A,B" --windows 15
 ```
 
 ### Step 7: Assess training health
