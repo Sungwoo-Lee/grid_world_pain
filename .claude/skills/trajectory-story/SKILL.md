@@ -1,6 +1,6 @@
 ---
 name: trajectory-story
-description: "Step-level, story-level QUALITATIVE analysis of an RL agent's behaviour from eval-rollout recordings (the .rec.gz files written by scripts/eval_rollout.py --record). Use when the question is 'what does the agent ACTUALLY do' rather than 'what do the summary metrics say' — e.g. 'tell the story of this run', 'read episode X step-by-step', 'does the agent avoid/approach/flee Y before contact', 'trajectory-level / qualitative behaviour read', 'why does the agent do Z', or when aggregate measures (mean distance, M1/M2/M5, flee-rate) seem to contradict what the video shows. Also use to inspect the RAW observation vector the agent receives (e.g. visual-channel counts). Distinct from wandb-analysis (metric curves over training) and experiment-analyzer (verdict-level results write-up): this is the per-step, per-episode microscope. Calls scripts/trajectory_story.py."
+description: "Step-level, story-level QUALITATIVE analysis of an RL agent's behaviour from eval-rollout recordings (the .rec.gz files written by scripts/eval/eval_rollout.py --record). Use when the question is 'what does the agent ACTUALLY do' rather than 'what do the summary metrics say' — e.g. 'tell the story of this run', 'read episode X step-by-step', 'does the agent avoid/approach/flee Y before contact', 'trajectory-level / qualitative behaviour read', 'why does the agent do Z', or when aggregate measures (mean distance, M1/M2/M5, flee-rate) seem to contradict what the video shows. Also use to inspect the RAW observation vector the agent receives (e.g. visual-channel counts). Distinct from wandb-analysis (metric curves over training) and experiment-analyzer (verdict-level results write-up): this is the per-step, per-episode microscope. Calls scripts/eval/trajectory_story.py."
 ---
 
 # Trajectory-story — step-by-step, story-level behaviour analysis of eval recordings
@@ -32,7 +32,7 @@ Hard-won lessons from the chasing-rabbit study (memory: `20260609_1721_aggregate
 `scripts/eval/trajectory_story.py` — run from project root with the conda interpreter
 (`/home/vncuser/miniconda3/envs/grid_world_pain/bin/python`). It reads the recordings dir
 `results/eval/<run>/models/<ckpt>/recordings/<pct>/` (must contain `run_meta.pkl` + `episode_*.rec.gz`,
-which `scripts/eval_rollout.py --record` writes). It is animal-layout-agnostic — it reads classes/tags from `run_meta`.
+which `scripts/eval/eval_rollout.py --record` writes). It is animal-layout-agnostic — it reads classes/tags from `run_meta`.
 
 | Subcommand | What it gives |
 |---|---|

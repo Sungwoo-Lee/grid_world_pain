@@ -19,7 +19,7 @@
       "id": 3,
       "name": "explicit-raw-archive-request",
       "prompt": "Today's session covered the design of a new in-repo session-memory system at docs/memory/. Key decisions:\n- Coexists with built-in MEMORY.md (split by insight density)\n- English-only content; no Korean (despite the reference being Korean)\n- Raw archives gitignored (local-only)\n- Genesis insight written as smoke test\n\nSave this to memory and include the FULL raw transcript from this session — I want it auditable later. Run non-interactively: default Y on candidates; for the raw-archive question, the answer is 'full' because I just told you so.",
-      "expected_output": "One insight file (or split if multiple distinct decisions are detected). raw_source pointing at docs/memory/_archive/raw_conversations/<id>.md; raw_completeness=full; the archive itself written via scripts/claude_jsonl_to_md.py against the most-recent JSONL under ~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/. Insight's References section notes that raw_source is local-only.",
+      "expected_output": "One insight file (or split if multiple distinct decisions are detected). raw_source pointing at docs/memory/_archive/raw_conversations/<id>.md; raw_completeness=full; the archive itself written via scripts/claude/claude_jsonl_to_md.py against the most-recent JSONL under ~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/. Insight's References section notes that raw_source is local-only.",
       "files": []
     }
   ]

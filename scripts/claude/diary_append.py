@@ -62,8 +62,8 @@ def _find_repo_root() -> Path:
             if parent == candidate:
                 break  # filesystem root — give up
             candidate = parent
-        # Last resort: assume script is scripts/diary_append.py → repo root is ../
-        return Path(__file__).resolve().parent.parent
+        # Last resort: assume script is scripts/claude/diary_append.py → repo root is ../../
+        return Path(__file__).resolve().parent.parent.parent
 
 
 REPO_ROOT = _find_repo_root()

@@ -100,7 +100,7 @@ def main() -> None:
         _stub_exit()
         return  # unreachable; _stub_exit() calls sys.exit(0)
 
-    repo_root = Path(__file__).resolve().parent.parent  # scripts/ -> repo root
+    repo_root = Path(__file__).resolve().parents[2]  # scripts/claude/ -> repo root
     if args.scope == "src":
         scan_target = repo_root / "src"
         if not scan_target.is_dir():

@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOTS_DIR = REPO_ROOT / "docs" / "memory" / "code_snapshots"
 CONDA_PIP = "/home/vncuser/miniconda3/envs/grid_world_pain/bin/pip"
 

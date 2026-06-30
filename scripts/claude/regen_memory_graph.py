@@ -17,7 +17,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROOT = ROOT / "docs" / "memory"
 
 # Regex to match insight IDs inside [[...]] tokens.

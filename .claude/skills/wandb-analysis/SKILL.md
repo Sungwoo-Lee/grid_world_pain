@@ -114,7 +114,7 @@ PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py timeseries RUN1 R
 - `--entity ENTITY` — WandB entity (default: sungwoolee)
 - `--project PROJECT` — WandB project (default: grid_world_pain)
 
-### Speed Benchmark: `scripts/benchmark_wandb_speed.py`
+### Speed Benchmark: `scripts/wandb/benchmark_wandb_speed.py`
 
 ```bash
 PYTHONPATH=scripts/wandb python scripts/wandb/benchmark_wandb_speed.py RUN1 RUN2 [...]

@@ -12,7 +12,7 @@ from pathlib import Path
 
 # ─── Constants ──────────────────────────────────────────────────────────────
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ROOT = ROOT / "docs" / "memory"
 TODAY: date = date.today()  # overridable with --today YYYY-MM-DD for deterministic testing
 ORPHAN_DAYS = 30

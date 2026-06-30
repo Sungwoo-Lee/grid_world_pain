@@ -66,7 +66,7 @@ WandB metrics answer "what do the summary numbers say"; they do NOT answer "what
 - **Required frontmatter**: `title`, `topic`, `status: active`, `created`, `last_updated`. Optional: `phase`, `wandb_tag` (the runs' tag pattern), `develop_link` (if tied to a develop-side spec), `supersedes` / `superseded_by`.
 - **Template**: [docs/TEMPLATES/training_analysis.md](../../docs/TEMPLATES/training_analysis.md) — hypothesis-driven structure (research question → design → predicted outcomes → results → analysis → conclusions). Mode A fills the back half; Mode B fills the entire doc with a retroactive frame.
 - **Working files** in `tmp/YYYYMMDD_HHMMSS_<topic>.md`, written after each extraction step.
-- **No INDEX script** — `docs/experiments/` is not auto-indexed (yet). Do NOT run `scripts/regen_dev_index.py`.
+- **No INDEX script** — `docs/experiments/` is not auto-indexed (yet). Do NOT run `scripts/claude/regen_dev_index.py`.
 
 ## Metrics Requested
 
