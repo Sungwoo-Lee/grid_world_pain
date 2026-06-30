@@ -11,7 +11,7 @@ whether tougher predator strategies push the agent back toward hiding.
 
 | Config | Factor changed | vs basic-05 |
 |---|---|---|
-| `01-more_hiding_predators` | hiding_predator count | `2–4` → **`4–8`** (more ambush spots → running is risky) |
+| `01-more_hiding_predators` | hiding_predator count | `2–4` → **`2–12`** (more ambush spots → running is risky) |
 | `02-relentless_stamina` | predator `max_stamina` | `[30,30]` → **`[30,150]`** (high draws chase ~150 steps → toward starvation) |
 | `03-fast_move_interval` | predator `move_interval` | `[1,3]` → **`[1,1]`** (always full-speed, no slow episodes) |
 | `04-all_combined` | all three above | — |

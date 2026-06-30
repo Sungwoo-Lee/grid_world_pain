@@ -22,8 +22,8 @@ environment:
       nociception_intensity: 0.0
     - name: "hiding_predator"
       type: "hiding_predator"
-      count_low: 4        # VARIANT: was 2
-      count_high: 8       # VARIANT: was 4 — more ambush predators so running around is risky
+      count_low: 2        # basic-05 baseline (unchanged)
+      count_high: 12      # VARIANT: was 4 — more ambush predators so running around is risky
       spawn_area: [[1, 1], [10, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]

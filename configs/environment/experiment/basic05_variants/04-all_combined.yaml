@@ -23,8 +23,8 @@ environment:
       nociception_intensity: 0.0
     - name: "hiding_predator"
       type: "hiding_predator"
-      count_low: 4        # FACTOR 1
-      count_high: 8       # FACTOR 1
+      count_low: 2        # FACTOR 1 (basic-05 baseline floor)
+      count_high: 12      # FACTOR 1: was 4 — more ambush predators
       spawn_area: [[1, 1], [10, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
