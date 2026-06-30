@@ -415,10 +415,10 @@ low=[0,10]/high=[60,80], nutrition=[90,100], 30 seeds/config, geometry fixed. Co
 per-column min–max normalized mean).
 
 **Statistics confirm the qualitative story, and show WHERE variance lives:**
-- **Flee rate** (fraction of episodes that dive to cover): predator & chasing-rabbit = **1.00±0.00**
+- **Bush-use rate** (fraction of episodes that enter the bush): predator & chasing-rabbit = **1.00±0.00**
   (always); olf-zeroed chaser = 0.03–0.13; wander = 0.00–0.17; none = 0. → chasing + recognizable
   smell is necessary AND sufficient, across 30 seeds.
-- **Flee-trigger distance = 1.0±0.0** and **reach-cover step = 6.0±0.0** for every recognizable
+- **Flee-trigger distance = 1.0±0.0** and **bush-entry step = 6.0±0.0** for every recognizable
   chaser at BOTH injury levels — the escape reflex is **perfectly deterministic and injury-
   independent** (zero variance under initial-state jitter).
 - **Discrimination is statistically real:** chasing-rabbit adjacent-fraction 0.46±0.09 vs predator
@@ -435,3 +435,23 @@ approach); injury and seed don't move it. Behavioral variability appears only in
 **Status:** avoidance quantified (n=30). Candidate measures validated: flee-rate, flee-trigger-dist,
 reach-cover-step (all deterministic), adjacent-fraction (discrimination), Δinjury & survival (the
 variable consequences). Next family or a bush-distance sweep to make flee-trigger non-degenerate.
+
+### Measures & definitions — avoidance family (canonical names)
+
+Metric names standardized (2026-06-30). All computed per episode from `.rec.gz` snapshots
+(`agent_pos`, `animal_pos`, `obs_pos`=bush, `injury_level`; `T`=episode length; distance = Manhattan),
+then averaged (mean±std) over the 30 seeds. The three cover metrics are keyed on "bush" and capture
+*whether / when / how long*:
+
+| Metric | Definition |
+|---|---|
+| **bush-use rate** (0–1) | per episode 1 if the agent ever stands on the bush cell, else 0; averaged over seeds = fraction of episodes that used the bush. *(was "flee rate")* |
+| **bush-entry step** | step index of the FIRST time the agent stands on the bush cell (latency). NaN/excluded if it never enters. *(was "reach-cover step")* |
+| **bush-dwell fraction** (0–1) | fraction of all `T` steps the agent stands on the bush cell (how long hidden). *(was "bush-use fraction")* |
+| **flee-trigger dist** | animal–agent distance at the first step the agent leaves its start cell (how close the threat was when avoidance began). |
+| **adjacent fraction** (0–1) | fraction of steps the animal is at distance ≤ 1 (on/next-to the agent). |
+| **min dist** | smallest animal–agent distance over the episode (closest approach). |
+| **Δ injury** | injury at last step − injury at first step (positive = net harmed; negative = net healed). |
+| **survival steps** | episode length `T` (until death or the max_steps cap). |
+
+Heatmap + CSV: `results/eval/avoidance_stat/STATS/avoidance_stats_{heatmap.png,csv}` (gitignored).
