@@ -73,6 +73,7 @@ See `scripts/regen_code_graph.py` for install steps (`pip install graphifyy`).
 - **No fallback defaults** for critical config params. The `developer` agent must use `config.get_mandatory('key')` — missing YAML key → `ValueError`.
 - New config keys added by plans must be listed in the plan's File Changes section with the exact YAML path and value.
 - When a plan touches the config system (`config_loader.py`, `state.py` `EnvParams`, or `configs/`), read [docs/environment/CONFIG_GUIDE.md](../../docs/environment/CONFIG_GUIDE.md) first; if the plan changes the schema/system, the plan must require updating that guide (and `02_config_schema.md`) in the same change, per its Maintenance Contract.
+- When a plan **adds, moves, renames, or deletes a file under `scripts/`** (or changes a caller of one), the plan must list [docs/environment/SCRIPTS_DEPENDENCY_MAP.md](../../docs/environment/SCRIPTS_DEPENDENCY_MAP.md) in its File Changes section so `developer` updates it in the same change, per that map's Maintenance Contract.
 
 ## Bug-Triage Discipline
 

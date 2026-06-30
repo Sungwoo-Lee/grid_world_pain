@@ -16,6 +16,14 @@ A script can be referenced in four different ways, and a reorg must respect all 
 
 Bottom line up front: training and data-sync are almost fully decoupled from `scripts/` (only `launch_sheeprl.sh` matters). The real coupling lives in (a) the WandB import cluster, (b) `render_recordings.py` (called from `src/`), (c) a handful of test files, (d) the Claude skills/agents, and (e) the `sys.path` depth issue above.
 
+## Maintenance Contract
+
+**This map must stay in step with the code.** Any change that **adds, moves, renames, or deletes a file under `scripts/`** — or that adds/removes a caller of a `scripts/` file (a new subprocess path in `src/`, a new skill/agent command, a new test import, a new settings allowlist entry) — must update the affected rows of this document **in the same change**, not later.
+
+- **Who owns the update.** The `senior-developer` agent must list this file in the **File Changes** section of any plan that touches `scripts/` layout or callers; the `developer` agent then updates it as part of implementing that plan. A direct `scripts/` change made outside a plan (by top-level Claude or any agent) carries the same duty.
+- **What to update.** The hard-edge tables (§1), the Claude-tooling table (§2), the per-file roll-up (§3), the clusters (§4), and the orphan list (§5) — whichever the change touches. Keep the verbatim line numbers accurate; they are the authoritative "what to rewrite" list.
+- **Cheap re-verification.** When in doubt, re-run the sweep: `grep -rn "scripts/" --include=*.py --include=*.md --include=*.json . | grep -v worktrees` and reconcile every hit against this map.
+
 ---
 
 ## How this map was built
