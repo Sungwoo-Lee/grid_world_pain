@@ -1,0 +1,44 @@
+# basic05 variant 02 — RELENTLESS PREDATOR STAMINA
+# Purpose: let the chasing predator's per-episode max_stamina range beyond 100 ([30,150]),
+# so SOME episodes spawn a predator that can chase long enough to drive the agent to
+# starvation (no natural disengage). Only predator max_stamina changes; rest inherits basic-05.
+# (Must redeclare the whole `entities` list because the config system replaces lists wholesale.)
+extends: environment/experiment/basic/05-random_init_10x10
+
+environment:
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 3]
+      damage: [15.0, 120.0]
+      attack_delay: [1, 3]
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: [1, 7]
+      max_stamina: [30, 150]             # VARIANT: was [30,30] — sometimes relentless (chases toward starvation)
+      stamina_recovery_rate: [1, 1]
+      hunt_stamina_threshold: [0.7, 0.7]
+      lose_interest_multiplier: [1.5, 1.5]
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rabbit"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [0.0, 0.0]
+      attack_delay: [0, 0]
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]

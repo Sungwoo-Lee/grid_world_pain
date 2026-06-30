@@ -1,0 +1,72 @@
+# basic05 variant 04 — ALL FACTORS COMBINED
+# Purpose: combine the three predator-pressure factors:
+#   (1) more hiding predators (4-8, was 2-4)  -> running around is risky
+#   (2) predator max_stamina [30,150] (was [30,30]) -> sometimes chases toward starvation
+#   (3) predator move_interval fixed 1 (was [1,3])  -> always full-speed
+# Redeclares both `resources` and `entities` (lists are replaced wholesale); rest inherits basic-05.
+extends: environment/experiment/basic/05-random_init_10x10
+
+environment:
+  resources:
+    - name: "food"
+      type: "food"
+      count_low: 1
+      count_high: 4
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 1, 0, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+    - name: "hiding_predator"
+      type: "hiding_predator"
+      count_low: 4        # FACTOR 1
+      count_high: 8       # FACTOR 1
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 1, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: -1
+      regeneration_delay: 20
+      damage: [15.0, 45.0]
+      nociception_intensity: 0.9
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]              # FACTOR 3: was [1,3]
+      damage: [15.0, 120.0]
+      attack_delay: [1, 3]
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: [1, 7]
+      max_stamina: [30, 150]             # FACTOR 2: was [30,30]
+      stamina_recovery_rate: [1, 1]
+      hunt_stamina_threshold: [0.7, 0.7]
+      lose_interest_multiplier: [1.5, 1.5]
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rabbit"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [0.0, 0.0]
+      attack_delay: [0, 0]
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]

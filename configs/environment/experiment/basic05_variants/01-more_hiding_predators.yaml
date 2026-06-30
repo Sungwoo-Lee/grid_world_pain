@@ -1,0 +1,35 @@
+# basic05 variant 01 — MORE HIDING PREDATORS
+# Purpose: test whether a denser field of static ambush predators stops the agent from
+# "just running around" — running becomes risky because more cells hide an ambush.
+# Only the hiding_predator count is changed (2-4 -> 4-8); everything else inherits basic-05.
+# (Must redeclare the whole `resources` list because the config system replaces lists wholesale.)
+extends: environment/experiment/basic/05-random_init_10x10
+
+environment:
+  resources:
+    - name: "food"
+      type: "food"
+      count_low: 1
+      count_high: 4
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [1.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 1, 0, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: 12
+      regeneration_delay: 0
+      damage: [0.0, 0.0]
+      nociception_intensity: 0.0
+    - name: "hiding_predator"
+      type: "hiding_predator"
+      count_low: 4        # VARIANT: was 2
+      count_high: 8       # VARIANT: was 4 — more ambush predators so running around is risky
+      spawn_area: [[1, 1], [10, 10]]
+      properties: [0.0, 0.0, 0.0, 0.0, 0.0]
+      properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 1, 0, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      max_consumption: -1
+      regeneration_delay: 20
+      damage: [15.0, 45.0]
+      nociception_intensity: 0.9
