@@ -392,6 +392,30 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # Supersedes defunct WandB run k9wyijj3.
 # CIFS-bypass: launched via /tmp script — this file is the audit record.
 # ---------------------------------------------------------------------------
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/05-random_init_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --checkpoint-frequency 100000 \
+#   --device cuda:0 \
+#   --log-interval 50 \
+#   --wandb-group basic \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic05_randinit_n112 \
+#   --tag rppo_basic05_randinit_n112
+
+# ---------------------------------------------------------------------------
+# basic standalone — random-init 10x10 + FULLY RANDOMISED PREDATOR — 2026-06-30
+# RecurrentPPO (unmodulated), single-config from scratch, 10M episodes.
+# 05-random_init_10x10 (commit 033c255): predator/rabbit count 0-2, random start
+# nutrition/injury, AND per-episode predator behaviour — detection_range [1,7],
+# move_interval [1,3], attack_delay [1,3]. Fully randomised predator behaviour
+# distinguishes this run from the prior basic-05 run on node 112 (WandB ga5fkr1q).
+# Standalone (NOT continual). Episode budget 10M (manual stop convention).
+# Node 110, cuda:0, wandb-group: basic
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
   --config configs/environment/experiment/basic/05-random_init_10x10.yaml \
   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
@@ -402,8 +426,8 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
   --log-interval 50 \
   --wandb-group basic \
   --wandb-job-type prod \
-  --wandb-name rppo_basic05_randinit_n112 \
-  --tag rppo_basic05_randinit_n112
+  --wandb-name rppo_basic05_randpred_n110 \
+  --tag rppo_basic05_randpred_n110
 
 # ---------------------------------------------------------------------------
 # NMN FiLM grouping_size screen — CONTINUAL (CURRICULUM) RE-LAUNCH 2026-06-27
