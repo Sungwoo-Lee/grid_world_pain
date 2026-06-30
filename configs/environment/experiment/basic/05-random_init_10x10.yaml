@@ -64,10 +64,10 @@ environment:
       spawn_area: [[1, 1], [10, 10]]
       patrol_area: [[1, 1], [10, 10]]
       detection_range: [1, 7]    # per-episode range: near(1) <-> far(7) threat sensing
-      max_stamina: 30
-      stamina_recovery_rate: 1
-      hunt_stamina_threshold: 0.7
-      lose_interest_multiplier: 1.5
+      max_stamina: [30, 30]              # fixed (degenerate range form)
+      stamina_recovery_rate: [1, 1]      # fixed (degenerate range form)
+      hunt_stamina_threshold: [0.7, 0.7] # fixed (degenerate range form)
+      lose_interest_multiplier: [1.5, 1.5] # fixed (degenerate range form)
     - class: "neutral"
       behaviour: "wander"
       tag: "rabbit"
@@ -77,9 +77,9 @@ environment:
       properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
       visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
       visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
-      move_interval: 1
+      move_interval: [1, 1]              # fixed (degenerate range form)
       damage: [0.0, 0.0]
-      attack_delay: 0
+      attack_delay: [0, 0]               # fixed (degenerate range form)
       nociception_intensity: 0.1
       spawn_area: [[1, 1], [10, 10]]
       patrol_area: [[1, 1], [10, 10]]
