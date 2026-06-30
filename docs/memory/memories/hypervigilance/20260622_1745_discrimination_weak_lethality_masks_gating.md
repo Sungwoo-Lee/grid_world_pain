@@ -63,4 +63,5 @@ exists."**
 - [[20260622_1744_olfactory_uncertainty_two_knob_design]] (hypervigilance, 2026-06-22) — The olfactory-ambiguity sweep isolates one IV (predator-vs-rabbit smell distingu
 - [[20260622_1746_olfactory_decay_power_distal_cue_strength]] (hypervigilance, 2026-06-22) — The olfactory sensor weights smell by 1/dist^decay_power (default 2.0, inverse-s
 - [[20260622_1747_hypervigilance_asymmetric_stakes_scarcity]] (hypervigilance, 2026-06-22) — To elicit hypervigilance the redesign keeps 1:1 predator:rabbit (for analyzabili
+- [[20260630_1629_injury_gated_olfactory_noise_hypervig]] (hypervigilance, 2026-06-30) — Basic level 06 design: induce hypervigilance via INJURY-GATED OLFACTORY perceptu
 <!-- END BACKLINKS -->

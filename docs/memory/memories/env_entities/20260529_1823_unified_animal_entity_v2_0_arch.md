@@ -65,4 +65,5 @@ The v2.0 branch (created 2026-05-28) replaces the two-class predator-vs-neutral 
 - [[20260609_1722_renderer_no_neutral_icon_and_attack_delay_ride]] (env_entities, 2026-06-09) — Two env/rendering findings from the chasing-rabbit work: (1) the renderer has no
 - [[20260609_1726_doc_audit_surfaces_latent_bugs]] (env_entities, 2026-06-09) — A code-as-truth re-sync of all 14 env docs doubled as a cheap bug-finder, surfac
 - [[20260619_0112_configurable_visual_properties_and_std]] (env_entities, 2026-06-19) — v3.0 makes the visual sensor config-driven like olfaction: each entity carries a
+- [[20260630_1630_predator_params_per_episode_ranges]] (env_entities, 2026-06-30) — Predator behavioural params are per-episode randomizable via a [lo,hi] range. 5 
 <!-- END BACKLINKS -->

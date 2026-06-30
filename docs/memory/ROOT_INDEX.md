@@ -4,9 +4,9 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-06-29
+**Last updated**: 2026-06-30
 **Active folders**: 9
-**Total insights**: 135
+**Total insights**: 138
 **Last audit**: (none)
 
 ---
@@ -19,9 +19,9 @@
 | `subagent_engineering` | Subagent + worktree usage gotchas | 14 | 2026-06-09 | [meta, learned_lesson, worktree, subagent, decision, design] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 16 | 2026-05-28 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 18 | 2026-06-22 | [dreamer, decision, learned_lesson, refutation, meta, design] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 30 | 2026-06-29 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
-| `hypervigilance` | Hypervigilance experiments | 26 | 2026-06-24 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise] |
-| `env_entities` | Env entity architecture decisions | 11 | 2026-06-29 | [design, decision, learned_lesson, meta, config, dreamer] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 31 | 2026-06-30 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
+| `hypervigilance` | Hypervigilance experiments | 27 | 2026-06-30 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise] |
+| `env_entities` | Env entity architecture decisions | 12 | 2026-06-30 | [design, decision, learned_lesson, meta, config, dreamer] |
 | `config_system` | Config loader/layering/schema | 4 | 2026-06-22 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 3 | 2026-06-24 | [learned_lesson, decision, refutation] |
 
@@ -54,6 +54,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-06-30: Captured 3 insights from the basic level 05/06 randomization + sensory-noise session: 1 into `hypervigilance` (`20260630_1629_injury_gated_olfactory_noise_hypervig` — level-06 design: induce hypervigilance via INJURY-GATED OLFACTORY perceptual noise / precision-weighting; couple injury to the threat channel not interoception, maximise healthy<->injured contrast; untested hypothesis), 1 into `env_entities` (`20260630_1630_predator_params_per_episode_ranges` — predator behavioural params per-episode rangeable via [lo,hi]; 5 fields already wired, ADDED move_interval+attack_delay via int randint(lo,hi+1); scalar==degenerate [s,s]==deterministic), 1 into `cluster_ops` (`20260630_1631_training_runner_double_launch_relay_auth` — runner's post-launch check re-invoked run_command.py -> duplicate process; runner refused coordinator-relayed kill approval; resolved with targeted kill -INT <PID>). All tags reused (hypervigilance, design, decision, noise, config, learned_lesson, training_runner, meta). No new tags promoted.
 - 2026-06-29: Captured 2 insights from the basic-05 random-init + ghost-predator bug session: 1 into existing `env_entities` (`20260629_1723_ghost_predator_inactive_slots_render` — per-episode count masking gated damage/sensing/obs by animal_active but NOT per-step movement/render, so inactive 'ghost' predators un-parked and stuck to the agent dealing 0 damage while invisible to it; fix = re-park inactive slots off-grid each step in update_animals; verified purely cosmetic, survival byte-identical, ghost-steps 1514->0; extends `20260623_0143`), 1 into existing `cluster_ops` (`20260629_1724_rppo_single_config_episode_budget` — rPPO single-config --total-timesteps is ignored when episodes>0, episodes defaults to 100 -> ~45s exit, use --episodes <N>; twin of the dreamer_srl budget gotcha `20260622_1747`). All tags reused (design, learned_lesson, decision, config, training_runner, meta). No new tags promoted.
 - 2026-06-24: Captured 1 insight into existing `hypervigilance` from the in-distribution re-eval: `20260624_0517_indist_random_init_reverses_hypervig` — the random-init (decay-2.0, 10M) model eats normally at all nutrition levels and ignores harmless rabbits (NO hypervigilance); the prior 'hypervigilance/eat-failure' was an off-distribution artifact of a static-init model on depleted starts. **Supersedes `20260622_1744`** (flipped to superseded). Counts set to actual file totals. All tags reused (hypervigilance, refutation, learned_lesson). No new tags.
 - 2026-06-24: Captured 2 insights into existing `curriculum_learning` from the continual-curriculum result + plasticity diagnosis session: `20260624_0516_curriculum_underperformed_baseline_negative_transfer` (the continual curriculum UNDERPERFORMED the from-scratch baseline — negative transfer, warm-start-accelerated entropy collapse; refines `20260622_1748`) and `20260624_0517_continual_failure_is_plasticity_loss_not_budget` (the deficit is loss-of-plasticity not under-training; field shift catastrophic-forgetting -> loss-of-plasticity; more target training won't fix it; fixes = entropy floor / ReDo / no recurrent-reset). All tags reused (learned_lesson, decision, refutation).

@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-06-29
+**Last updated**: 2026-06-30
 
 ---
 
@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-06-30: 3 insights from the basic level 05/06 randomization + sensory-noise session (`20260630_1629_injury_gated_olfactory_noise_hypervig` into hypervigilance, `20260630_1630_predator_params_per_episode_ranges` into env_entities, `20260630_1631_training_runner_double_launch_relay_auth` into cluster_ops) reused existing tags `hypervigilance`, `design`, `decision`, `noise`, `config`, `learned_lesson`, `training_runner`, `meta` — no new tags promoted.
 - 2026-06-29: 2 insights from the basic-05 random-init + ghost-predator bug session (`20260629_1723_ghost_predator_inactive_slots_render` into env_entities, `20260629_1724_rppo_single_config_episode_budget` into cluster_ops) reused existing tags `design`, `learned_lesson`, `decision`, `config`, `training_runner`, `meta` — no new tags promoted.
 - 2026-06-24: 1 insight into existing `hypervigilance` (`20260624_0517_indist_random_init_reverses_hypervig`, supersedes `20260622_1744`) reused existing tags `hypervigilance`, `refutation`, `learned_lesson` — no new tags promoted.
 - 2026-06-24: 2 insights into existing `curriculum_learning` (`20260624_0516_curriculum_underperformed_baseline_negative_transfer`, `20260624_0517_continual_failure_is_plasticity_loss_not_budget`) reused existing tags `learned_lesson`, `decision`, `refutation` — no new tags promoted.
