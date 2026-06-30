@@ -28,3 +28,10 @@ All scripts run from the repo root with the project conda interpreter
   (as written by `scripts/eval_rollout.py --record`). Configs auto-discovered; `--ckpt`,
   `--configs`, `--title` optional. To generate the input recordings, run the stat-variant configs
   in `configs/environment/experiment/behavior_probes/explore/avoidance_stat/` with many seeds.
+
+
+- **`_heatmap_style.py`** — shared journal-style heatmap renderer (`render(...)`). Card-style cells,
+  per-criterion colour (sequential `crest` for magnitude metrics; diverging-at-0 `RdBu_r` for signed
+  metrics like injury change), two-tier mean/std annotation, column-group headers, row-group
+  separators, Helvetica-like font, and **PNG (300 dpi) + PDF (vector)** output for submission.
+  Imported by `avoidance_stats_heatmap.py`; reuse for future behavior-measure matrices.
