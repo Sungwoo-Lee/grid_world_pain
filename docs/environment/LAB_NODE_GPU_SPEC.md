@@ -1,46 +1,61 @@
 # Lab Node GPU Spec — `gw-101` … `gw-114`
 
-> **Purpose (read this before assigning a node:GPU for any training launch).** This documents
-> the GPU hardware on every lab node so a launch never requests a GPU that does not exist or
-> mis-matches the job. The single most important fact: **every node has exactly TWO GPUs,
-> indices `0` and `1` — there is NO GPU `2`** (requesting `cuda:2` fails). The cluster is
-> **homogeneous** — every node is the same card — so GPU selection is about which GPU is
-> *free*, not about "spec": there is no high-spec/low-spec tier to match to task complexity.
+> **Purpose (read before assigning a node:GPU for any training launch).** This documents the
+> GPU hardware on every lab node so a launch never (a) requests a GPU index that does not exist,
+> or (b) wastes a high-end card on a small job (or starves a big job onto a weak card). The
+> cluster is **HETEROGENEOUS** — four different GPU classes — and **GPU count varies per node**
+> (most have 2; node 114 has 4). Match the card to the job: this project's standard rPPO/Dreamer
+> runs (10×10 grid, `--num-envs 16`) are small and belong on the **low/mid tier**; reserve the
+> RTX 6000 Ada / 4090 nodes for jobs that actually need the compute or VRAM.
 
-**Probed:** 2026-06-30 via `run_command.py <node> "nvidia-smi --query-gpu=index,name,memory.total"`.
+**Probed:** 2026-06-30 via **direct SSH** `nvidia-smi --query-gpu=index,name,memory.total` with
+per-node captured output. (An earlier `run_command.py`-based probe was WRONG — its parallel calls
+shared one timestamped NAS log, so every node reported one node's output. Always probe with the
+`scripts/lab/gpu_status.py` tool, which captures per-node.)
 
 ## The hard rules
-1. **Valid GPU indices are `0` and `1` only.** Never request `cuda:2` (or higher) on any node — there is no third GPU. (This is the bug this doc exists to prevent.)
-2. **All GPUs are identical** — `NVIDIA GeForce RTX 2080 Ti`, **11 GB** (11264 MiB) each. There is no "use the fast GPU for the hard job" decision to make; pick by **availability** (which of `0`/`1` is free per `nvidia-smi`).
-3. **Memory budget:** ~11 GB per GPU. A standard rPPO run (`--num-envs 16`, 10×10 grid) uses well under that; two small jobs can share one GPU but will contend — prefer one job per GPU when GPUs are free.
+1. **GPU indices are per-node — check the table.** Most nodes have GPUs `0,1` only (no `2`).
+   **Node 114 has `0,1,2,3`.** Never assume an index exists.
+2. **The cluster is heterogeneous — match card to job:**
+   - **Low (RTX 2080 Ti, 11 GB):** 101, 103, 104, 105 — fine for standard small rPPO/Dreamer runs.
+   - **Mid-high (RTX 3090, 24 GB):** 106–112 — the workhorse bulk; default for routine runs.
+   - **High (RTX 4090, 24 GB):** 102, 113 — fast; use when 3090s are full or the job is compute-heavy.
+   - **Top (RTX 6000 Ada, 49 GB ×4):** 114 — reserve for big-VRAM / many-parallel / heaviest jobs.
+   - **Anti-pattern:** do NOT put a tiny rPPO job on 114 while a 2080 Ti sits idle, and do NOT
+     starve a large job onto an 11 GB 2080 Ti when a 24/49 GB card is free.
 
-## Per-node inventory
+## Per-node inventory (confirmed 2026-06-30)
 
-| Node | GPUs | Model (each) | VRAM each | Notes |
+| Node | GPUs | Model (each) | VRAM each | Tier |
 |---|---|---|---|---|
-| 101 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed 2026-06-30 |
-| 102 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
-| 103 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
-| 104 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
-| 105 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
-| 106 | 0, 1 | RTX 2080 Ti | 11 GB | **down at probe time** (SSH refused); spec from cluster homogeneity — re-verify when up |
-| 107 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
-| 108 | 0, 1 | RTX 2080 Ti (inferred) | 11 GB | 2 GPUs confirmed (no GPU 2); model inferred — couldn't re-query live (active run held SSH) |
-| 109 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
-| 110 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
-| 111 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
-| 112 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
-| 113 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
-| 114 | 0, 1 | RTX 2080 Ti | 11 GB | confirmed |
+| 101 | 0, 1 | RTX 2080 Ti | 11 GB | low |
+| 102 | 0, 1 | RTX 4090 | 24 GB | high |
+| 103 | 0, 1 | RTX 2080 Ti | 11 GB | low |
+| 104 | 0, 1 | RTX 2080 Ti | 11 GB | low |
+| 105 | 0, 1 | RTX 2080 Ti | 11 GB | low |
+| 106 | 0, 1 | RTX 3090 | 24 GB | mid-high |
+| 107 | 0, 1 | RTX 3090 | 24 GB | mid-high |
+| 108 | 0, 1 | RTX 3090 | 24 GB | mid-high |
+| 109 | 0, 1 | RTX 3090 | 24 GB | mid-high |
+| 110 | 0, 1 | RTX 3090 | 24 GB | mid-high |
+| 111 | 0, 1 | RTX 3090 | 24 GB | mid-high |
+| 112 | 0, 1 | RTX 3090 | 24 GB | mid-high |
+| 113 | 0, 1 | RTX 4090 | 24 GB | high |
+| 114 | 0, 1, 2, 3 | RTX 6000 Ada Generation | 49 GB | top |
+
+**Totals:** 14 nodes, **30 GPUs** — 8× 2080 Ti, 14× 3090, 4× 4090, 4× RTX 6000 Ada.
 
 ## How to use when assigning GPUs for a launch
-- **Count:** at most **2 concurrent runs per node** (one per GPU). For N runs across the cluster, spread them: e.g. 4 runs → `108:0, 108:1, 109:0, 109:1`.
-- **Index:** only `0` or `1`. If you catch yourself about to write `:2`, stop.
-- **Availability ≠ existence:** this doc says the GPU *exists*; the training-runner still does a live `nvidia-smi` pre-flight to confirm the chosen GPU is *free* (and that the node is reachable — see the NAS-mount / reachability caveats in memory). A GPU being busy is transient; the index map here is static hardware.
-- **Reachability caveat:** some nodes intermittently drop off (NAS unmount or SSH refused — 106 was down at this probe; 107 has had no-NAS-mount incidents). Reachability is not in this doc because it changes hour to hour — the runner's pre-flight is the source of truth for "is it up right now".
+- **Existence:** only use indices listed above for that node (114 → up to 3; everyone else → 0/1).
+- **Tier match:** default routine rPPO/Dreamer → a low or mid-high node; escalate to 4090/Ada only
+  for genuinely heavier jobs or when lower tiers are saturated.
+- **Live availability:** this table is static *hardware*. For *current* free/busy state + running
+  processes, run `scripts/lab/gpu_status.py` (or the `gpu-status` skill) — that is the source of
+  truth for "is this GPU free right now / is the node up". Reachability changes hour to hour
+  (NAS unmounts, SSH refused), so it is intentionally NOT baked into this static table.
 
 ## Maintenance
-Re-run the probe and update this table if hardware changes or a previously-unverified node (106 down, 108 model inferred) is confirmed:
+Re-probe and update this table if hardware changes:
 ```bash
-for n in $(seq 101 114); do echo "== $n =="; ./run_command.py $n "nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader"; done
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/lab/gpu_status.py --spec-only
 ```

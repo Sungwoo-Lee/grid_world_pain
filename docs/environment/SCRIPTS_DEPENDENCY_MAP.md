@@ -101,6 +101,7 @@ These are commands hardcoded in skills and agent profiles with the full conda in
 | `scripts/eval/render_recordings.py` | skill `trajectory-story` (L60); plus the two `src/` subprocess paths in §1b; `docs/environment/12_renderer.md` cites its **internal lines L31/L45**. |
 | `scripts/lab/launch_sheeprl.sh` | agent `training-runner` (L16); `run_command.py` docstring examples (L26,126); `pytorch_agents/run_dreamer_v3.py:10` docstring. The one real training-launch path. |
 | `scripts/lab/bootstrap_lab_ssh.sh` | agent `training-runner` (L81). |
+| `scripts/lab/gpu_status.py` | skill `gpu-status` (.claude/skills/gpu-status/SKILL.md); top-level Claude's GPU-assignment-before-launch flow; maintenance command in `docs/environment/LAB_NODE_GPU_SPEC.md`. Read-only direct-SSH nvidia-smi query across nodes 101-114. |
 | `scripts/claude/regen_code_graph.py` | on-demand hint only — skill `recall` (L53), agents `senior-developer`/`code-reviewer`, README. Output is gitignored; low stakes. |
 
 **Lower-stakes (doc-mention only, no executable caller):** `scripts/claude/lint_memory.py`, `scripts/claude/open_conversation.py`.
@@ -133,6 +134,7 @@ Stakes legend: **CODE** = breaks Python/subprocess; **TOOL** = breaks a skill/ag
 | `scripts/claude/open_conversation.py` | design doc (mention) | HAND | doc mention |
 | `scripts/lab/launch_sheeprl.sh` | `training-runner`; `run_command.py` docstrings | TOOL | agent + docstrings |
 | `scripts/lab/bootstrap_lab_ssh.sh` | `training-runner` (L81) | TOOL | agent |
+| `scripts/lab/gpu_status.py` | `gpu-status` skill; launch GPU-assignment; spec-doc maint | TOOL | skill + doc |
 | `scripts/dreamer/dreamer_srl_offline_wm_test.py` | `tests/scripts/...:107` (import) | TEST | test import |
 | `scripts/dreamer/dreamer_srl_offline_check.py` | `tests/.../test_end_to_end_parity.py:48` (subprocess) | TEST | test path |
 | `scripts/dreamer/sheeprl_jax_diff.py` | tests README + docs (mentions) | HAND | depth fix only |
