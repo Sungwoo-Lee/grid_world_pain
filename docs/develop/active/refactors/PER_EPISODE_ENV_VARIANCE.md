@@ -413,3 +413,127 @@ The resource-revival blocker must be fixed before this scene trains. Handoff to
 ### Cross-references
 
 - Code-review (JAX correctness, full site-by-site audit): [[per_episode_count_activation_masks]] — same blocker, independently found.
+
+---
+
+## Implementation Report (Fix commit — resource-revival blocker)
+
+> **Implemented by**: developer (claude-sonnet-4-6) — commit `61e0c73`
+> **Date**: 2026-06-23
+
+### What was implemented
+
+This session fixed the resource-revival blocker identified in the Verification Report, extended the regression test to catch it, trimmed the rabbit range, and regenerated the 2 default parity fixtures.
+
+**File-by-file:**
+
+1. **`src/environment/state.py`** — Added `res_allocated: jnp.ndarray  # [num_res] bool` to `EnvState`. This field is the per-episode allocation mask (= `res_activation_mask` at reset) and is never mutated by `jax_step`.
+
+2. **`src/environment/core.py`** — Three changes:
+   - `update_resources`: added optional `res_allocated` parameter; gates `respawn_mask` with `& _allocated` so slots with `res_allocated=False` can never revive. Falls back to all-True (degenerate-range configs byte-identical to pre-fix).
+   - `jax_step` call to `update_resources`: passes `res_allocated=state.res_allocated`.
+   - `jax_step` `new_state._replace(...)`: passes through `res_allocated=state.res_allocated` (unchanged within episode).
+   - `jax_reset` `EnvState(...)`: sets `res_allocated=res_activation_mask` alongside `res_active=res_activation_mask`.
+
+3. **`tests/env/test_per_episode_count.py`** — Extended `test_mask_stable_within_episode`:
+   - Added a food resource entry with `count_low: 1, count_high: 4, regeneration_delay: 5`.
+   - Searches for a reset seed with food K < count_high (inactive slots exist).
+   - Asserts `jnp.sum(state.res_active) <= reset_food_K` at every step for 50 steps.
+   - **Pre-fix**: FAILED at step 0 — K=2 at reset, jumped to K=4 after step 0 (all inactive slots revived immediately because timer=0 & active=False satisfied the old respawn condition).
+   - **Post-fix**: PASSED.
+
+4. **`configs/environment/default.yaml`** — Rabbit entry `count_high: 3 → 2` (user-approved trim to recover ~half the hot-path SPS regression by removing one animal slot from the per-step traced scan).
+
+5. **`tests/env/fixtures/parity/configs__environment__default.npz`** — Deliberately regenerated. The per-step trajectory changed (inactive food/hiding_predator slots no longer revive) and the rabbit allocation is now 2 slots instead of 3.
+
+6. **`tests/env/fixtures/visual_parity/configs__environment__default.npz`** — Deliberately regenerated. Same trajectory change + rabbit slot reduction.
+
+### Bug-fix pre/post confirmation
+
+| State | `test_mask_stable_within_episode` |
+|---|---|
+| Pre-fix (current code at session start) | **FAILED** — `res_active count EXCEEDED reset K at step 0: 4 > 2` |
+| Post-fix | **PASSED** |
+
+### Test results
+
+| Suite | Command | Result |
+|---|---|---|
+| Regression test | `pytest tests/env/test_per_episode_count.py` | **10/10 passed** (78 s) |
+| Backward compat | `pytest tests/env/test_backward_compat_configs.py` | **48 passed, 111 skipped** (18 s) |
+| Parity suites | `pytest tests/env/test_unified_parity.py tests/env/test_visual_parity.py` | **34 passed, 133 skipped** (309 s) |
+| Full env suite | `pytest tests/env/ -q --ignore=test_visual_parity.py --ignore=test_unified_parity.py` | **132 passed, 124 skipped, 1 warning** (268 s) |
+
+All non-default parity fixtures passed without regeneration (scene unchanged for non-default configs).
+
+### Speed check
+
+Not measured in this session. This commit makes inactive resource slots stay off rather than reviving on step 1 — meaning the effective average entity count per episode is now K < count_high rather than count_high for resources. This slightly *reduces* per-step cost vs the buggy code (fewer active resources to scan), so there is no new regression risk from this fix alone. The rabbit trim (count_high 3→2) similarly reduces per-step cost.
+
+Combined effect vs the speed benchmark in the Verification Report (−13% SPS, +28-30% reset): both the bug fix and the rabbit trim are expected to partially recover that regression. A fresh speed measurement on an idle node would confirm the combined delta, but is not blocking for this fix commit.
+
+### Deviations from plan
+
+None. All three file changes named in the "For developer to fix" section were implemented as specified. The fixture regeneration followed the plan's documented procedure (inline script, only the 2 default fixtures).
+
+**Implemented by**: developer
+
+---
+
+## Implementation Report — Ghost-Predator Fix (2026-06-29)
+
+### Summary
+
+This report covers a follow-on bug fix to the PER_EPISODE_ENV_VARIANCE feature, implementing the "ghost predators" fix described in the task brief. Two separate commits were made:
+
+1. **Bug fix** (`3634887`): Re-park inactive animal slots off-grid every step in `update_animals` (core.py) + regression test + re-captured parity fixture.
+2. **Config fix** (`87bca6d`): Changed predator damage from `[15.0, 120.0]` to `[15.0, 45.0]` in `configs/environment/experiment/basic/05-random_init_10x10.yaml`.
+
+### File-by-file
+
+**`src/environment/core.py`** — Added 12 lines before the `return` statement of `update_animals` (after Branch C comment). The re-parking block:
+```python
+_off_grid = jnp.array([params.height, params.width], dtype=jnp.int32)
+new_pos = jnp.where(state.animal_active[:, None], new_pos, _off_grid[None, :])
+```
+Mirrors the reset parking in `jax_reset`. Is vmap-safe, recompile-safe, and a no-op for all-active (fixed-count) configs.
+
+**`tests/env/test_inactive_animal_offgrid.py`** — New regression test with 3 test functions:
+- `test_inactive_slot_stays_offgrid`: Core regression — inactive predator stays at `(height, width)` every step. Confirmed FAIL on pre-fix code (slot moved to `(9, 9)` on step 1), PASS after fix.
+- `test_active_slot_still_chases_and_damages`: Guards against over-masking — active predator still chases and raises injury. PASS after fix.
+- `test_allactive_config_no_offgrid_parking`: Legacy fixed-count config (basic/04) — no slot ever ends up at `(height, width)`. PASS (fix is a no-op).
+
+**`tests/env/fixtures/parity/configs__environment__default.npz`** — Re-captured. The `configs/environment/default.yaml` uses `count_low/count_high` for predators, so its fixture was captured with the buggy code. The ONLY diff was `dist_per_predator` for the inactive slot: `10.0` (buggy on-grid distance) vs `11.401754` (correct off-grid distance from `(10, 10)`). Active predator distance, agent_pos, body fields, and damage were byte-identical. Re-captured using `scripts/generate_parity_fixtures.py`.
+
+**`configs/environment/experiment/basic/05-random_init_10x10.yaml`** — Changed predator `damage: [15.0, 120.0]` to `[15.0, 45.0]`. Max 120 exceeded `max_injury: 100` (one-shot kill). Now matches all other basic levels.
+
+### Regression test pre-fix / post-fix state
+
+| Test | Pre-fix | Post-fix |
+|---|---|---|
+| `test_inactive_slot_stays_offgrid` | **FAIL** — slot at `(9, 9)` on step 1 | **PASS** — slot stays at `(10, 10)` all 15 steps |
+| `test_active_slot_still_chases_and_damages` | **FAIL** — inactive slot guard fires | **PASS** — active predator damages, inactive stays off-grid |
+| `test_allactive_config_no_offgrid_parking` | PASS (no-op) | PASS (no-op) |
+
+### Test results
+
+| Suite | Command | Result |
+|---|---|---|
+| Regression test | `pytest tests/env/test_inactive_animal_offgrid.py` | **3/3 passed** (33 s) |
+| Unified parity | `pytest tests/env/test_unified_parity.py` | **27 passed, 188 skipped** |
+| Visual parity | `pytest tests/env/test_visual_parity.py` | **7 passed** |
+| Full env suite (excl. parity) | `pytest tests/env/ -q` | **139 passed, 179 skipped, 1 warning** |
+
+### Speed check
+
+Skipped. The fix adds a single `jnp.where` over the animal array (shape `(N, 2)` where N ≤ 14 for basic configs). This is O(N) element-wise with no dynamic shapes and no new PRNG draws — negligible hot-path cost relative to the `_hunt_step`/`_wander_step` vmap operations it follows. No regression expected.
+
+### Parity fixture re-capture rationale
+
+Only `configs__environment__default.npz` was re-captured. It is the single fixture for a count-range config (predator `count_low:1, count_high:2`). The diff was confined to `dist_per_predator[1]` (the inactive slot's distance) at step 1 onward. Active predator position/distance, agent position, body state, and damage were byte-identical pre/post-fix.
+
+### Deviations from plan
+
+None. All files changed match the plan specification exactly. No scope expansion.
+
+**Implemented by**: developer (2026-06-29)
