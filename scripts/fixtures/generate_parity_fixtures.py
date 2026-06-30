@@ -6,7 +6,7 @@ reference obs/state for all 86 migrated configs.
 Saves one .npz per config under tests/env/fixtures/parity/<slug>.npz.
 
 Usage:
-    /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/generate_parity_fixtures.py
+    /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/fixtures/generate_parity_fixtures.py
 """
 import sys
 import os
@@ -20,7 +20,7 @@ import jax.numpy as jnp
 
 # Ensure project root on path
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_ROOT = os.path.dirname(_HERE)
+_ROOT = os.path.dirname(os.path.dirname(_HERE))
 sys.path.insert(0, _ROOT)
 
 from src.utils.config import Config
