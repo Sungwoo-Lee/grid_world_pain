@@ -330,11 +330,50 @@ Implemented by: developer
 
 ## Verification Report
 
-> **Verified by**: _TBD_
-> **Date**: _TBD_
+> **Verified by**: senior-developer
+> **Date**: 2026-06-30
+> **Verdict**: ✅ **PASS-WITH-NITS** — every relocated script resolves the repo root correctly, every *executable* caller points at the new subfolder path, the one failing test is a genuinely pre-existing parameter mismatch unrelated to the move, and the map + README are accurate. The nits are non-breaking documentation drift (stale path mentions inside docstrings / comments / READMEs that no code executes).
 
-| File | Change | Status | Notes |
-|------|--------|:------:|-------|
-| | | | |
+### Plain-language summary
 
-**Conclusion**: _TBD_
+The reorg moved 28 loose scripts into topic subfolders (`wandb/`, `eval/`, `dreamer/`, `claude/`, `lab/`, `media/`) plus 3 strays into existing folders, and deleted 2 spent one-shots. The risk in such a move is twofold: (a) a script that figures out the repo root by counting parent directories now counts wrong and can't import `src`, and (b) some caller still points at the old flat path. I smoke-ran at least one script from every new subfolder and the moved-into-existing ones — **none** raised `No module named 'src'`, so all depth fixes are correct. I traced every high-stakes executable caller (the 2 `src/` render subprocess paths, the 2 pytest pins, the 7 diary-logger callers, the WandB skill's `PYTHONPATH`, the lab launch-script callers) — **all** now point at the correct new path. The single failing test (`test_offline_wm_smoke`) fails for a reason that has nothing to do with the move (see below), so it does not block. **Approved to merge**; the developer may optionally sweep the cosmetic stale-path mentions listed under Nits.
+
+### Verification matrix
+
+| Item verified | Method | Status | Notes |
+|---|---|:--:|---|
+| Depth fix — `scripts/wandb/` (3 files) | `PYTHONPATH=scripts/wandb python <f> --help` | ✅ | all exit 0; bare `from wandb_utils import …` resolves |
+| Depth fix — `scripts/eval/` (5 files) | `python <f> --help` | ✅ | all exit 0; no `src` import error (incl. `render_recordings.py`) |
+| Depth fix — `scripts/dreamer/` (5 files) | `python <f> --help` | ✅ | all exit 0; `sheeprl_jax_diff.py` (~30 path lines) resolves; `dreamer_srl_offline_check.py` prints "PASS — CP8 …" |
+| Depth fix — `scripts/claude/` (9 files) | `--help` / run / import | ✅ | no `src` error; `regen_dev_index.py` exits 0; `diary_append.py` `REPO_ROOT` = repo root |
+| Depth fix — `scripts/media/` (3 files) | `--help` | ✅ | `record_env_demo.py` resolves; `md_to_pdf.py` needs `markdown` pkg (pre-existing env gap, not the move); `video_to_gif.py` prints usage |
+| Depth fix — `verification/analyze_noise_diagnostics.py` | `--help` | ✅ | exit 0; standalone CSV reader, no `src` import |
+| `verification/verify_noise.py` | `PYTHONPATH=. python … --help` | ✅ | resolves `src` under `PYTHONPATH=.` exactly as the plan stated; bare-invocation `No module named 'src'` is unchanged pre/post-move (file has zero `__file__`/`sys.path` math) — not a regression |
+| `fixtures/generate_parity_fixtures.py` | inspect + import | ✅ | `_ROOT = dirname(dirname(_HERE))` = repo root (depth fix correct) |
+| `lab/launch_sheeprl.sh`, `lab/bootstrap_lab_ssh.sh` | read dir logic | ✅ | `launch_sheeprl.sh` uses a hardcoded absolute `cd` (move-safe); `bootstrap_lab_ssh.sh` has no relative-path logic |
+| Pre-existing failure claim (`test_offline_wm_smoke`) | read test + script + locate error origin | ✅ | **Confirmed independent.** Import succeeds; failure is at script L746 `if n_valid < max(m_starts//4, 50)` — test passes `--num-starts 5` (floor 50) but the real-env rollout yields only 36 valid starts → `RuntimeError`. Threshold is a pre-registered constant in the script body, byte-identical pre/post-move. Path/import-independent. |
+| Caller — `src/` render subprocess ×2 | grep | ✅ | `evaluation_core.py:295` + `dreamer_srl/eval.py:232` → `scripts/eval/render_recordings.py` |
+| Caller — pytest pins ×2 | grep | ✅ | `test_dreamer_srl_offline_wm_test.py:107` import + `test_end_to_end_parity.py:48` subprocess → `scripts/dreamer/…` |
+| Caller — `diary_append.py` (4 agents) | grep | ✅ | developer/experiment-analyzer/senior-developer/training-runner all → `scripts/claude/diary_append.py` |
+| Caller — `wandb-analysis` skill | grep | ✅ | `PYTHONPATH=scripts/wandb` + all `scripts/wandb/…` paths throughout |
+| Caller — lab scripts (`run_command.py`, `run_dreamer_v3.py`, training-runner) | grep | ✅ | all → `scripts/lab/launch_sheeprl.sh` / `bootstrap_lab_ssh.sh` |
+| `SCRIPTS_DEPENDENCY_MAP.md` accuracy | grep for flat paths | ✅ | clean — all rows use new subfolder paths |
+| `scripts/README.md` accuracy | read | ✅ | uses `scripts/media/…`; layout note correct |
+| Diff-stat scope | `git diff --stat` | ✅ | 291 ins / 723 del; the 723 deletions are dominated by the 2 intended `git rm`s (`migrate_dev_frontmatter.py` 330 + `rewrite_dev_links.py` 149 = 479) + `sheeprl_jax_diff.py` path reflow — no disproportionate/accidental deletion |
+| Speed | N/A | ✅ | pure relocation, no `src/` hot-path logic changed — speed-skip is correct |
+
+### Nits (non-breaking — optional cleanup for `developer`)
+
+None of these break execution; they are stale *mentions* the Phase 7 sweep missed. The Implementation Report's claim of "zero stale flat `scripts/<file>` paths in operational files" is therefore slightly overstated — it is accurate for **executable** references (all correct) but not for docstrings/comments/READMEs.
+
+- **N1** — `scripts/lab/launch_sheeprl.sh` L30-34: the usage *example* comments still read `bash scripts/launch_sheeprl.sh …` (the primary Usage line L10 is correctly updated to `scripts/lab/…`).
+- **N2** — `scripts/wandb/wandb_metrics.py` (L17-27) and `scripts/wandb/compare_wandb_runs.py` (L9-17): internal docstring usage examples still print `python scripts/wandb_metrics.py …` (old flat path) — shows up in `--help` epilog.
+- **N3** — stale flat-path mentions in non-executable docstrings / comments / READMEs: `tests/algorithms/dreamer_srl/README.md` (L71,73), `tests/fixtures/dreamer_srl/README.md` (L27), `tests/algorithms/dreamer_srl/test_end_to_end_parity.py` docstring (L12,27), `tests/algorithms/dreamer_srl/test_eval_recording.py:115` comment, `tests/algorithms/dreamer_srl/test_render_upload.py:92` assert string, `tests/scripts/test_dreamer_srl_offline_wm_test.py:1` docstring, `pytorch_agents/README.md:8`, `scripts/dreamer/dreamer_srl_offline_wm_test.py` own docstring usage example, `configs/environment/experiment/archive/hypervigilance/testbed_{forage_only,predator_solo,rabbit_solo}.yaml` header comments, `docs/develop/active/behavior/TRAINING_METRICS_ANALYSIS.md` (several).
+
+### Approved deviations
+
+The 5 deviations the developer recorded (`.gitignore` `wandb/`→`/wandb/` anchor fix; Phase-4 depth fixes landing in the Phase-7 commit; README scope; `regen_dev_index.py` self-reference; `senior-developer.md` regen_code_graph reference) are all reasonable, necessary for correctness, and verified in place. No out-of-scope file changes beyond these.
+
+**Conclusion**: ✅ PASS-WITH-NITS. The reorg is functionally complete and correct — every depth fix resolves, every executable caller is rewired, the one test failure is a confirmed pre-existing parameter mismatch independent of the move, and the dependency map + README are accurate. Merge approved. The N1-N3 doc-mention nits are optional cleanup and do not gate the merge.
+
+Verified by: senior-developer
