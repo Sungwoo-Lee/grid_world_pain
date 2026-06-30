@@ -29,7 +29,7 @@ Hard-won lessons from the chasing-rabbit study (memory: `20260609_1721_aggregate
 
 ## The script
 
-`scripts/trajectory_story.py` — run from project root with the conda interpreter
+`scripts/eval/trajectory_story.py` — run from project root with the conda interpreter
 (`/home/vncuser/miniconda3/envs/grid_world_pain/bin/python`). It reads the recordings dir
 `results/eval/<run>/models/<ckpt>/recordings/<pct>/` (must contain `run_meta.pkl` + `episode_*.rec.gz`,
 which `scripts/eval_rollout.py --record` writes). It is animal-layout-agnostic — it reads classes/tags from `run_meta`.
@@ -54,10 +54,10 @@ which `scripts/eval_rollout.py --record` writes). It is animal-layout-agnostic �
 
 ```bash
 # 1) record episodes (small N for qualitative work)
-python scripts/eval_rollout.py --config <cfg> --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+python scripts/eval/eval_rollout.py --config <cfg> --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --checkpoint <ckpt-dir> --output-root results/eval/<name> --eval-n-episodes 20 --record --record-n-episodes 20 --device gpu
 # 2) render
-python scripts/render_recordings.py results/eval/<name>/models/<ckpt>/recordings/<pct>/ --workers 8 --fps 5 --concat
+python scripts/eval/render_recordings.py results/eval/<name>/models/<ckpt>/recordings/<pct>/ --workers 8 --fps 5 --concat
 # 3) the consolidated eval_*.mp4 can be ~17 min for 20 episodes and may not open — make a short first-5 clip (stream-copy, instant):
 VD=results/eval/<name>/models/<ckpt>/videos
 printf "file '%s'\n" "$PWD/$VD/<pct>/episode_00000"{0,1,2,3,4}".mp4" > /tmp/c.txt
@@ -66,8 +66,8 @@ ffmpeg -y -f concat -safe 0 -i /tmp/c.txt -c copy "$VD/eval_first5.mp4"
 
 ## References
 
-- Script: `scripts/trajectory_story.py` (`--help` on each subcommand).
-- Recording format: `src/utils/eval_recording.py` (per-step snapshots: agent_pos, animal_pos, obs, actions, injury, nutrition, obs_pos); `--record` hook in `scripts/eval_rollout.py`.
+- Script: `scripts/eval/trajectory_story.py` (`--help` on each subcommand).
+- Recording format: `src/utils/eval_recording.py` (per-step snapshots: agent_pos, animal_pos, obs, actions, injury, nutrition, obs_pos); `--record` hook in `scripts/eval/eval_rollout.py`.
 - Worked example + the lessons: chasing-rabbit study `docs/experiments/active/hypervigilance/sameprop_chasing_rabbit.md`; obs audit `docs/reviews/chasingRabbit_obs_classLeak_audit.md`.
 - Memory: `docs/memory/memories/hypervigilance/20260609_1721_aggregate_stats_hide_conditional_behavior.md`, `…1747_avoidance_is_post_contact_not_preemptive.md`, `…1720_chasing_rabbit_avoidance_damage_driven.md`.
 - Siblings: `wandb-analysis` (training-metric curves), `summarize-study` (study-level report). Owner agent: `experiment-analyzer`.

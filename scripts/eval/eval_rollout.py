@@ -44,7 +44,7 @@ import jax.numpy as jnp
 import numpy as np
 import orbax.checkpoint as ocp
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.environment.config_loader import Config, load_env_params, load_behavior_measure_cfg, load_env_config

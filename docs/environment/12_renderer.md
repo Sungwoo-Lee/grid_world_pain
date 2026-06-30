@@ -25,14 +25,14 @@ Both renderers are pure Python (NumPy + Matplotlib, Agg backend) and run on CPU.
 
 `render_jax_state` from `src/environment/renderer.py` (V1) is the current production default. It is imported by:
 
-- `scripts/render_recordings.py` (offline post-hoc video export, called automatically by eval) — `renderer.py:45`
-- `scripts/record_env_demo.py` — `renderer.py:15`
-- `scripts/benchmark_render.py` — `renderer.py:39`
+- `scripts/eval/render_recordings.py` (offline post-hoc video export, called automatically by eval) — `renderer.py:45`
+- `scripts/media/record_env_demo.py` — `renderer.py:15`
+- `scripts/eval/benchmark_render.py` — `renderer.py:39`
 - `save_snapshot.py` — `renderer.py:14`
 
 `render_jax_state_v2` from `src/environment/renderer_v2.py` is available and used in `test_c4.py` but not yet wired into the eval pipeline.
 
-To swap the entire pipeline to V2, change the imports in `scripts/render_recordings.py` lines 31 and 45 (see "Swapping the Active Renderer" section below).
+To swap the entire pipeline to V2, change the imports in `scripts/eval/render_recordings.py` lines 31 and 45 (see "Swapping the Active Renderer" section below).
 
 ---
 

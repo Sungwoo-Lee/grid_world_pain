@@ -44,7 +44,7 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")          # avoid GPU init / OOM â€
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 import numpy as np
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.utils.eval_recording import load_episode, load_run_meta
 
 def man(a, b): return abs(int(a[0]) - int(b[0])) + abs(int(a[1]) - int(b[1]))

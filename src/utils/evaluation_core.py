@@ -292,7 +292,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     if render_video and config.get_mandatory('testing.auto_render_after_eval'):
         import subprocess, sys as _sys
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        render_script = os.path.join(project_root, "scripts", "render_recordings.py")
+        render_script = os.path.join(project_root, "scripts", "eval", "render_recordings.py")
         consolidated_mp4 = os.path.join(video_dir, f"eval_{checkpoint_pct}.mp4")
         fps = config.get('visualization.fps', 5)
         cmd = [
@@ -325,7 +325,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     elif render_video:
         if not quiet:
             print(f"  --- Recordings written to {recordings_dir}. "
-                  f"Auto-render disabled. Render with: python scripts/render_recordings.py {recordings_dir} ---", flush=True)
+                  f"Auto-render disabled. Render with: python scripts/eval/render_recordings.py {recordings_dir} ---", flush=True)
 
     mean_reward = float(np.mean(episode_rewards)) if episode_rewards else 0.0
     mean_length = float(np.mean(episode_lengths)) if episode_lengths else 0.0

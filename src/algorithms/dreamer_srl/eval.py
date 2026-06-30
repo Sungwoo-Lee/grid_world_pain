@@ -229,7 +229,7 @@ def _render_and_upload(
         Path to the consolidated MP4, or None if render failed.
     """
     _project_root = '/media/nas01/projects/Interoceptive-AI/grid_world_pain'
-    render_script = os.path.join(_project_root, 'scripts', 'render_recordings.py')
+    render_script = os.path.join(_project_root, 'scripts', 'eval', 'render_recordings.py')
     consolidated = os.path.join(results_dir, 'videos', f'eval_{checkpoint_pct}.mp4')
 
     cmd = [
