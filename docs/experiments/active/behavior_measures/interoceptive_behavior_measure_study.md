@@ -403,3 +403,35 @@ keep ch1 / drop ch2, and re-run. This is the next probe before any avoidance mea
 
 **Status:** avoidance trigger revised — needs approach motion AND recognizable olfaction. Single
 seed; the channel-role hypothesis is unconfirmed (one config).
+
+### 2026-06-30 — Avoidance QUANTITATIVE analysis (30 seeds/config, statistics + heatmap)
+
+Promoted the criteria to measures and ran statistics. Variation injected via small initial-state
+jitter (eval policy is deterministic, so seeds alone don't vary action choice): injury bands
+low=[0,10]/high=[60,80], nutrition=[90,100], 30 seeds/config, geometry fixed. Configs:
+`explore/avoidance_stat/` (extend the core/avoidance probes). NO video. Per-episode measures from
+`.rec.gz`; mean±std over 30 seeds. Outputs (gitignored): `results/eval/avoidance_stat/STATS/`
+`avoidance_stats.csv` + `avoidance_stats_heatmap.png` (rows=experiment, cols=criterion, color =
+per-column min–max normalized mean).
+
+**Statistics confirm the qualitative story, and show WHERE variance lives:**
+- **Flee rate** (fraction of episodes that dive to cover): predator & chasing-rabbit = **1.00±0.00**
+  (always); olf-zeroed chaser = 0.03–0.13; wander = 0.00–0.17; none = 0. → chasing + recognizable
+  smell is necessary AND sufficient, across 30 seeds.
+- **Flee-trigger distance = 1.0±0.0** and **reach-cover step = 6.0±0.0** for every recognizable
+  chaser at BOTH injury levels — the escape reflex is **perfectly deterministic and injury-
+  independent** (zero variance under initial-state jitter).
+- **Discrimination is statistically real:** chasing-rabbit adjacent-fraction 0.46±0.09 vs predator
+  0.34±0.08 at inj0 (~7 SE apart) — the agent tolerates the harmless chaser closer than the predator.
+- **The variance is downstream, not in the reflex:** predator Δinjury = +22±25 (inj0) — damage taken
+  is highly variable episode to episode; and predator inj70 survival = 91±21 (sometimes injury-death
+  as hits push 60–80 → 100), vs ~96±3 starvation-bounded elsewhere.
+- olf-zeroed chaser adjacent ≈ 0.50 (animal sits on the agent, no flee) — confirms no avoidance.
+
+**Takeaway:** the flee-to-cover reflex is a near-deterministic function of (recognizable-smell ∧
+approach); injury and seed don't move it. Behavioral variability appears only in the *consequences*
+(damage absorbed, survival). These criteria are now validated as measures for the avoidance family.
+
+**Status:** avoidance quantified (n=30). Candidate measures validated: flee-rate, flee-trigger-dist,
+reach-cover-step (all deterministic), adjacent-fraction (discrimination), Δinjury & survival (the
+variable consequences). Next family or a bush-distance sweep to make flee-trigger non-degenerate.

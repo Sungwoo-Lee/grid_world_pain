@@ -1,0 +1,12 @@
+# STAT variant of core/avoidance/avoid_rabbit_inj70 — small initial-state jitter for
+# quantitative statistics (run many seeds). Injury band [60,80], nutrition band [90,100];
+# geometry + animal type + injury LEVEL unchanged (large structural differences preserved).
+extends: environment/experiment/behavior_probes/core/avoidance/avoid_rabbit_inj70
+
+body:
+  random_start_injury: true
+  start_injury_low: 60
+  start_injury_high: 80
+  random_start_nutrition: true
+  start_nutrition_low: 90
+  start_nutrition_high: 100
