@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 31
+**Insights**: 33
 **Last updated**: 2026-06-30
 
 ---
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-30 | 18:30 | `20260630_1830_scripts_reorg_dependency_map_and_contract` | Safe script-folder reorg recipe: build a FOUR-surface caller-dependency map (intra-folder imports, src/ subprocess paths, tests, Claude skills/agents/settings) + the __file__-depth hazard; group BY FUNCTION not lifecycle so bare-name import clusters (the WandB scripts) stay co-located = 0 import edits; wire a Maintenance Contract into CLAUDE.md + developer/senior-developer profiles (reuses the CONFIG_GUIDE pattern). Outcome: 31 git-mv + 2 git-rm into scripts/{wandb,eval,dreamer,claude,lab,media}/, verdict PASS-WITH-NITS. |
+| 2026-06-30 | 18:29 | `20260630_1829_script_relocation_depth_and_gitignore_hazards` | Two silent breaks when moving a script one folder deeper, independent of callers: (1) repo-root computed from __file__ by fixed parent hops resolves one level too shallow -> `No module named 'src'`; re-depth to parents[2]/triple-dirname (sheeprl_jax_diff.py had ~30 such lines). (2) A top-level .gitignore pattern matching the new subfolder name (`wandb/`) silently un-tracks the moved files; anchor it to repo root (`/wandb/`). |
 | 2026-06-30 | 16:31 | `20260630_1631_training_runner_double_launch_relay_auth` | Two launch gotchas: (1) the training-runner's OWN post-launch check re-invoked run_command.py -> DUPLICATE process on the same GPU; (2) the runner refused a coordinator-relayed kill approval (only a direct user message = authority), so top-level Claude did a targeted kill -INT <PID> (pattern-based terminate_command.py would kill BOTH). |
 | 2026-06-29 | 17:24 | `20260629_1724_rppo_single_config_episode_budget` | rPPO single-config training: --total-timesteps is SILENTLY IGNORED when episodes>0 (train.py:1183), and episodes defaults to 100 -> run exits in ~45s; the budget knob is --episodes <N>. Twin of the dreamer_srl single-config budget gotcha. |
 | 2026-06-24 | 05:18 | `20260624_0518_yaml_unquoted_date_breaks_string_sort` | Unquoted YAML dates parse as Python datetime.date, not str; regen_dev_index.py crashed (TypeError str vs datetime.date) because its sort key mixed date objects with a '' fallback. Fix: coerce the sort key to str() (ISO dates still sort chronologically). Commit e8a3489. |
