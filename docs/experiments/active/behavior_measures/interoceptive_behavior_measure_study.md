@@ -437,20 +437,24 @@ survival steps (the variable consequences). Next family or a bush-distance sweep
 
 ### Measures & definitions — avoidance family (canonical names)
 
-Metric names standardized (2026-06-30). All computed per episode from `.rec.gz` snapshots
-(`agent_pos`, `animal_pos`, `obs_pos`=bush, `injury_level`; `T`=episode length; distance = Manhattan),
-then averaged (mean±std) over the 30 seeds. The three cover metrics are keyed on "bush" and capture
-*whether / when / how long*:
+Metric names standardized (2026-06-30; expanded with movement metrics). All computed per episode
+from `.rec.gz` snapshots (`agent_pos`, `animal_pos`, `obs_pos`=bush, `injury_level`; `T`=episode
+length; distance = Manhattan), then averaged (mean±std) over the 30 seeds. Proportions are reported
+as **percentages** (of an episode's steps, or of episodes for "entered bush"), grouped Bush use /
+Distance to animal / Movement & pursuit / Outcome:
 
-| Metric | Definition |
-|---|---|
-| **bush-use rate** (0–1) | per episode 1 if the agent ever stands on the bush cell, else 0; averaged over seeds = fraction of episodes that used the bush. *(was "flee rate")* |
-| **bush-entry step** | step index of the FIRST time the agent stands on the bush cell (latency). NaN/excluded if it never enters. *(was "reach-cover step")* |
-| **bush-dwell fraction** (0–1) | fraction of all `T` steps the agent stands on the bush cell (how long hidden). *(was "bush-use fraction")* |
-| **flight-initiation distance (FID)** | animal–agent distance at the first step the agent leaves its start cell — the predator–prey distance at flight onset (standard ethology term, abbrev. FID). |
-| **animal-proximity fraction** (0–1) | fraction of steps the animal is at distance ≤ 1 of the agent (on/next-to it) — time spent in close proximity *to the animal*. |
-| **closest approach (to animal)** | smallest agent–animal distance reached over the episode — how close the animal got. |
-| **injury change (end − start)** | agent injury at the last step minus injury at the first step (positive = net harmed; negative = net healed over the episode). |
-| **survival steps** | episode length `T` (until death or the max_steps cap). |
+| Group | Metric | Definition |
+|---|---|---|
+| Bush use | **entered bush (% of episodes)** | per episode 1 if the agent ever stands on the bush cell else 0; mean ×100 = % of episodes that used the bush. *(was "bush-use rate" / "flee rate")* |
+| Bush use | **bush-entry step** | step index of the FIRST time the agent stands on the bush cell (latency). N/A if it never enters. *(was "reach-cover step")* |
+| Bush use | **time in bush (%)** | % of the episode's steps the agent stands on the bush cell (how long hidden). *(was "bush-dwell fraction")* |
+| Distance to animal | **flight-initiation distance (FID)** | animal–agent distance at the first step the agent leaves its start cell — predator–prey distance at flight onset (standard ethology term). |
+| Distance to animal | **time near animal (%)** | % of steps the animal is at distance ≤ 1 of the agent (on/next-to it). *(was "animal-proximity fraction")* |
+| Distance to animal | **closest approach** | smallest agent–animal distance reached over the episode (cells). |
+| Movement & pursuit | **time moving (%)** | % of steps the agent's position changes (moves vs rests/eats-in-place). High = flight/kiting; low = settles in cover. |
+| Movement & pursuit | **spatial spread (R_g)** | radius of gyration = √(var(row)+var(col)) of the agent's positions, in cells. ≈0 = localized (hides); large = roams the arena (runs). |
+| Movement & pursuit | **pursuit duration (steps)** | longest unbroken run of steps with the animal within ≤2 cells. Long = sustained chase (kiting); short = chase broken (cover cuts tracking). |
+| Outcome | **injury change (end − start)** | agent injury at last step minus first step (+ net harmed / − net healed). |
+| Outcome | **survival steps** | episode length `T` (until death or the max_steps cap). |
 
 Heatmap + CSV: `results/eval/avoidance_stat/STATS/avoidance_stats_{heatmap.png,csv}` (gitignored).

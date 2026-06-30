@@ -31,20 +31,20 @@ def _text_color(rgba):
     return "white" if (0.299 * r + 0.587 * g + 0.114 * b) < 0.55 else "#222222"
 
 
-def _fmt(mu, sd):
+def _fmt(mu, sd, dec=2):
     if np.isnan(mu):
         return None, None
-    m = f"{mu:.2f}" if abs(mu) < 10 else f"{mu:.0f}"
-    s = f"±{sd:.2f}" if abs(sd) < 10 else f"±{sd:.0f}"
-    return m, s
+    return f"{mu:.{dec}f}", f"±{sd:.{dec}f}"
 
 
 def render(mean, std, row_labels, col_labels, *, signed_cols=(), col_groups=None,
-          row_group_bounds=(), title="", caption="", out_png=None, out_pdf=None):
+          row_group_bounds=(), col_decimals=None, title="", caption="", out_png=None, out_pdf=None):
     """mean/std: (nrow,ncol) arrays (NaN allowed). signed_cols: indices using the
     diverging-at-0 map. col_groups: list of (name,[col idxs]). row_group_bounds:
     row indices where a separator is drawn ABOVE the row."""
     nrow, ncol = mean.shape
+    if col_decimals is None:
+        col_decimals = [2] * ncol
     # per-column facecolors
     face = np.zeros((nrow, ncol, 4))
     for j in range(ncol):
@@ -72,7 +72,7 @@ def render(mean, std, row_labels, col_labels, *, signed_cols=(), col_groups=None
             ax.add_patch(FancyBboxPatch((j + pad, i + pad), 1 - 2 * pad, 1 - 2 * pad,
                                         boxstyle="round,pad=0,rounding_size=0.06",
                                         linewidth=0, facecolor=fc, mutation_aspect=1))
-            m, s = _fmt(mean[i, j], std[i, j])
+            m, s = _fmt(mean[i, j], std[i, j], col_decimals[j])
             if m is None:
                 ax.text(j + 0.5, i + 0.5, "–", ha="center", va="center", color=MUTED, fontsize=11)
                 continue
