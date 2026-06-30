@@ -2,6 +2,8 @@
 
 This directory contains helper scripts for environment maintenance and asset generation.
 
+> **Reorganizing this folder?** See [`docs/environment/SCRIPTS_DEPENDENCY_MAP.md`](../docs/environment/SCRIPTS_DEPENDENCY_MAP.md) first — it lists every caller of every script (training, `src/`, tests, Claude skills/agents, settings) and the `sys.path` depth hazard, so files can be moved into subfolders without breaking anything.
+
 ## 🎥 Recording a Demo
 Use `record_env_demo.py` to record a video of the environment using a random policy and default parameters.
 
