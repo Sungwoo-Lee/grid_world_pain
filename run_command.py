@@ -23,7 +23,7 @@ Cluster facts (hardcoded — change here only if the cluster changes):
 
 Usage:
     ./run_command.py 113 "bash train_command-new.sh"
-    ./run_command.py 114 "bash scripts/launch_sheeprl.sh basic/01-5X5_Pred.yaml 0 gwp_5x5"
+    ./run_command.py 114 "bash scripts/lab/launch_sheeprl.sh basic/01-5X5_Pred.yaml 0 gwp_5x5"
     ./run_command.py --foreground 113 "nvidia-smi"
     ./run_command.py --no-tail 114 "bash my_overnight_run.sh"
     ./run_command.py --log /tmp/custom.log 113 "echo hello"
@@ -123,7 +123,7 @@ def main():
         epilog="""
 examples:
   %(prog)s 113 "bash train_command-new.sh"
-  %(prog)s 114 "bash scripts/launch_sheeprl.sh configs/environment/experiment/archive/basic/01-5X5_Pred.yaml 0 tag"
+  %(prog)s 114 "bash scripts/lab/launch_sheeprl.sh configs/environment/experiment/archive/basic/01-5X5_Pred.yaml 0 tag"
   %(prog)s --foreground 113 "nvidia-smi"
   %(prog)s --no-tail 114 "bash long_running.sh"
 """,

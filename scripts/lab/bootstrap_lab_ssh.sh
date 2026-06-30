@@ -16,7 +16,7 @@
 #   6. Verify key auth works to node 101.
 #
 # Usage:
-#   bash scripts/bootstrap_lab_ssh.sh
+#   bash scripts/lab/bootstrap_lab_ssh.sh
 
 set -euo pipefail
 

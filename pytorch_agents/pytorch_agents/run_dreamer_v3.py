@@ -7,7 +7,7 @@
 #   GWP-PATCH-A  register per-tag MeanMetrics on the aggregator after startup
 #   GWP-PATCH-B  forward terminal Episode/* keys to the aggregator
 
-This module is the entry point called by ``scripts/launch_sheeprl.sh`` via
+This module is the entry point called by ``scripts/lab/launch_sheeprl.sh`` via
 ``python -m pytorch_agents.run_dreamer_v3 ...``.  It replaces the original
 ``python -m sheeprl ...`` call so we can inject our two metric-parity hooks
 without forking the entire sheeprl package.

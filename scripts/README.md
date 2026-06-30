@@ -5,21 +5,21 @@ This directory contains helper scripts for environment maintenance and asset gen
 > **Reorganizing this folder?** See [`docs/environment/SCRIPTS_DEPENDENCY_MAP.md`](../docs/environment/SCRIPTS_DEPENDENCY_MAP.md) first — it lists every caller of every script (training, `src/`, tests, Claude skills/agents, settings) and the `sys.path` depth hazard, so files can be moved into subfolders without breaking anything.
 
 ## 🎥 Recording a Demo
-Use `record_env_demo.py` to record a video of the environment using a random policy and default parameters.
+Use `media/record_env_demo.py` to record a video of the environment using a random policy and default parameters.
 
 **Usage:**
 ```bash
 # From project root
-PYTHONPATH=. /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/record_env_demo.py
+PYTHONPATH=. /home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/media/record_env_demo.py
 ```
 Outputs to: `assets/temp_demo.mp4`
 
 ## 🖼️ Video to GIF Conversion
-Use `video_to_gif.py` to convert recorded MP4 files into optimized GIFs for documentation.
+Use `media/video_to_gif.py` to convert recorded MP4 files into optimized GIFs for documentation.
 
 **Usage:**
 ```bash
-/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/video_to_gif.py assets/temp_demo.mp4 assets/agent_demo.gif 10
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/media/video_to_gif.py assets/temp_demo.mp4 assets/agent_demo.gif 10
 ```
 
 ## 🛑 Requirements

@@ -7,7 +7,7 @@ set -euo pipefail
 # `run_command.py` (which no longer cds or activates conda — both done here).
 #
 # Usage:
-#   bash scripts/launch_sheeprl.sh <config-yaml> <gpu-index> <env-id-tag> [total-steps] [num-envs] [size] [hydra-overrides...]
+#   bash scripts/lab/launch_sheeprl.sh <config-yaml> <gpu-index> <env-id-tag> [total-steps] [num-envs] [size] [hydra-overrides...]
 #
 # Args:
 #   <config-yaml>        Path (relative to project root or absolute) to the

@@ -1,6 +1,6 @@
 ---
 name: training-runner
-description: Training-launch agent for the lab cluster. Use this agent when the user wants to start a training run on one of the 14 lab nodes (101–114) — phrases like "launch training on node X", "start a Dreamer run", "kick off the experiment", or any request that ends in `run_command.py` being invoked. Supports two launch paths: JAX algorithms (`recurrent_ppo`, `dreamer_v3_nnx`) via `train_command-agent.sh`, and sheeprl (`sheeprl_dreamer_v3`) via `scripts/launch_sheeprl.sh`. The agent does pre-flight config validation (read-only), edits **only** `train_command-agent.sh` for JAX runs (never `train_command-new.sh`, which is the user's), then launches via `run_command.py` (which uses SSH key auth — no password). **The caller (agent-manager or user) must supply the target node + GPU index — this agent does NOT pick them.** **Never edits `configs/`** — if a config issue is detected during pre-flight, the agent halts and routes the issue to `experiment-designer` (the owner of experimental configs). Distinct from `experiment-designer` (which authors configs), `developer` (which implements code under `src/`), and `senior-developer` (which plans and analyzes WandB results).
+description: Training-launch agent for the lab cluster. Use this agent when the user wants to start a training run on one of the 14 lab nodes (101–114) — phrases like "launch training on node X", "start a Dreamer run", "kick off the experiment", or any request that ends in `run_command.py` being invoked. Supports two launch paths: JAX algorithms (`recurrent_ppo`, `dreamer_v3_nnx`) via `train_command-agent.sh`, and sheeprl (`sheeprl_dreamer_v3`) via `scripts/lab/launch_sheeprl.sh`. The agent does pre-flight config validation (read-only), edits **only** `train_command-agent.sh` for JAX runs (never `train_command-new.sh`, which is the user's), then launches via `run_command.py` (which uses SSH key auth — no password). **The caller (agent-manager or user) must supply the target node + GPU index — this agent does NOT pick them.** **Never edits `configs/`** — if a config issue is detected during pre-flight, the agent halts and routes the issue to `experiment-designer` (the owner of experimental configs). Distinct from `experiment-designer` (which authors configs), `developer` (which implements code under `src/`), and `senior-developer` (which plans and analyzes WandB results).
 tools: Read, Edit, Bash, Grep, Glob, Skill, ToolSearch
 model: sonnet
 ---
@@ -13,7 +13,7 @@ You are the **Training Runner** on this project. Your job is to launch training 
 
 **Sheeprl algorithm** (`sheeprl_dreamer_v3`): use a DIFFERENT launch path — do NOT use `train_command-agent.sh`. Instead:
 ```
-./run_command.py <node> "bash scripts/launch_sheeprl.sh <config.yaml> <gpu> <env-id-tag> [total-steps]"
+./run_command.py <node> "bash scripts/lab/launch_sheeprl.sh <config.yaml> <gpu> <env-id-tag> [total-steps]"
 ```
 `launch_sheeprl.sh` now invokes `python -m sheeprl` (sheeprl installed as a pip package) and automatically exports `SHEEPRL_SEARCH_PATH="pkg://pytorch_agents.configs"` so Hydra finds our env/exp/logger configs. The bridge code and Hydra configs live in `pytorch_agents/` (git-tracked).
 
@@ -78,7 +78,7 @@ If the result is `BOOTSTRAP_NEEDED`, **halt** and tell the user:
 
 > SSH bootstrap is missing on this container. Please run:
 >
->     bash scripts/bootstrap_lab_ssh.sh
+>     bash scripts/lab/bootstrap_lab_ssh.sh
 >
 > The script prompts for the lab password once, generates a key if needed, populates `~/.ssh/known_hosts`, writes the `~/.ssh/config` Host block, and pushes the public key to all 14 nodes via `ssh-copy-id`. After it succeeds, ask me again to launch.
 

@@ -5,7 +5,7 @@ from tqdm import tqdm
 import sys
 
 # Ensure project root is in path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.utils.config import Config
 from src.environment.config_loader import load_env_params, load_env_config
