@@ -74,4 +74,5 @@ The original-JAX-Dreamer trainer was retrofitted on 2026-02-21 (commit `0dec9e0`
 - [[20260519_1507_dreamer_srl_v2_cpu_buffer_regression]] (dreamer_diagnosis, 2026-05-19) — dreamer-srl v2's replay buffer is 100% numpy/CPU (faithful to sheeprl's PyTorch 
 - [[20260519_1509_nnx_lax_scan_split_merge_pattern]] (dreamer_diagnosis, 2026-05-19) — To run a flax NNX Module inside jax.lax.scan without re-tracing on every call, s
 - [[20260521_0151_xla_scan_body_compile_dominates_module_count]] (dreamer_diagnosis, 2026-05-21) — Earlier claim — that dreamer-srl's 7-module decomposition CAUSED the 70× lax.sca
+- [[20260630_1720_dreamer_srl_train_step_jit_compile_once]] (dreamer_diagnosis, 2026-06-30) — The dreamer_srl gradient-step lax.scan was written bare in the Python loop with 
 <!-- END BACKLINKS -->

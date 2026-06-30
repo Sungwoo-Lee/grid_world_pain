@@ -68,4 +68,5 @@ in-flight run is affected (all current experiment configs override the scene).
 - [[20260624_0517_bush_spawn_exclusion_free_via_overlap_resolution]] (env_entities, 2026-06-24) — A planned 'Phase 2' to keep animals from SPAWNING on bush cells needed NO implem
 - [[20260629_1723_ghost_predator_inactive_slots_render]] (env_entities, 2026-06-29) — Per-episode count masking gated damage/sensing/obs by animal_active but NOT per-
 - [[20260630_1630_predator_params_per_episode_ranges]] (env_entities, 2026-06-30) — Predator behavioural params are per-episode randomizable via a [lo,hi] range. 5 
+- [[20260630_1721_per_episode_variance_dreamer_recompile_safe]] (env_entities, 2026-06-30) — The per-episode environment-variance feature (count ranges via count_high-static
 <!-- END BACKLINKS -->

@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `env_entities` topic.
 
 **Folder definition**: Env entity architecture decisions
-**Insights**: 12
+**Insights**: 13
 **Last updated**: 2026-06-30
 
 ---
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-30 | 17:21 | [20260630_1721_per_episode_variance_dreamer_recompile_safe](20260630_1721_per_episode_variance_dreamer_recompile_safe.md) | Per-episode env-variance (count ranges via count_high-static allocation + res/animal/obs_active masks, plus per-episode behavioural ranges e.g. predator move_interval[1,3]/detection[1,7]) is recompile-SAFE under dreamer_srl, not just rPPO. Basic L05 smoke = ~315 compiles == fixed-count baseline (~309), no storm — variance is all traced per-episode VALUES over static-max shapes, never array dims. Generalises rPPO immunity (20260623_1616) to Dreamer. |
 | 2026-06-30 | 16:30 | `20260630_1630_predator_params_per_episode_ranges` | Predator behavioural params are per-episode rangeable via field:[lo,hi]. 5 fields already wired (v2.0 DISTRIBUTIONAL_FIELDS, uniform-sampled at reset); ADDED move_interval+attack_delay (int randint(lo,hi+1) inclusive). A scalar s == degenerate [s,s] == deterministic, so all timing fields share one [lo,hi] expression. Verified behaviourally. nociception_intensity left fixed. |
 | 2026-06-29 | 17:23 | `20260629_1723_ghost_predator_inactive_slots_render` | Per-episode count masking gated damage/sensing/obs (animal_active) but NOT per-step movement/render, so inactive 'ghost' predators un-park and stick to the agent dealing 0 damage while invisible to it; fix = re-park inactive slots off-grid each step in update_animals; verified purely cosmetic (survival byte-identical, ghost-steps 1514->0). |
 | 2026-06-24 | 05:17 | `20260624_0517_bush_spawn_exclusion_free_via_overlap_resolution` | A planned Phase-2 to keep animals from SPAWNING on bush cells needed NO code and zero added reset cost: resolve_overlaps_global already gives every entity a unique cell, so animals never spawn on a bush. Verified empirically 0/2000 resets on the whole-grid default. Cheap test-first probe avoided a needless placement-cost regression. |

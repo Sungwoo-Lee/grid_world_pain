@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `dreamer_diagnosis` topic.
 
 **Folder definition**: DreamerV3 failure investigation
-**Insights**: 18
-**Last updated**: 2026-06-22
+**Insights**: 19
+**Last updated**: 2026-06-30
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-06-30 | 17:20 | [20260630_1720_dreamer_srl_train_step_jit_compile_once](20260630_1720_dreamer_srl_train_step_jit_compile_once.md) | The dreamer_srl gradient-step lax.scan had NO enclosing @jax.jit, so the ~76k-HLO train_step (WM+actor+critic+target+3 optimizers, T/H loops unrolled) recompiled from scratch EVERY iteration — the multi-hour GPU-0% RSS-climbing 'hang'. Measured: 76k HLO / ~75s compiles ONCE when wrapped in one persistent @jax.jit (vs per-iter without). Fix = @jax.jit the scan built once + constant n_grad_steps; then trains at 40-71 SPS. Short --total-steps tests (grad_steps=0) masked it. Second of two bugs (with the reset storm 20260622_1746). |
 | 2026-06-22 | 17:46 | `20260622_1746_dreamer_srl_recompile_storm_done_count` | dreamer_srl crashed all 5 basic-curriculum runs (zero checkpoints, ~1800 iters in 35h) because the per-step env-reset sizes arrays to the variable done-env count `len(dones_idxes)` (1..16, desynchronized predator deaths) — a faithful sheeprl/PyTorch idiom that is a JAX trap: each distinct width compiles a new XLA executable, alive graphs accumulate 9→27, GPU OOMs (24GB) / stalls in 15-min compiles (49GB, node went down). The 3-stage curriculum was immune (benign Stage 1 → all 16 envs end together → constant count 16). Fix: masked fixed-width reset (always num_envs, `(1-m)*state+m*h0`) + fixed `SCAN_BUCKET` grad-step bucket. Verified (JAX_LOG_COMPILES) the `[2..15,256]` reset widths are gone; code-reviewer APPROVE (bit-for-bit; one dormant PRNG nit, fires only under fractional replay_ratio). General rule: PyTorch→JAX ports must convert variable-length 'operate on the changed subset' idioms to fixed-width masked ops. |
 | 2026-05-29 | 18:26 | `20260529_1826_lazy_import_schema_drift_first_call_crash` | 4 dreamer-srl cells launched 2026-05-28 03:30 KST all crashed at episode 10000 (first checkpoint trigger, ~7h in) with `AttributeError: 'EnvState' object has no attribute 'animal_pos'` in `src/utils/eval_recording.py:37`. Root cause: `eval_recording.py` is lazy-imported inside `src/algorithms/dreamer_srl/eval.py:68`. Between training start and first checkpoint, a parallel session pulled the CP6 EnvState unification (predator_pos / neutral_pos → unified `animal_pos`). Interpreter had OLD EnvState class cached; lazy import loaded NEW eval_recording.py from disk — schema mismatch surfaces only at first lazy-call site. Lesson: avoid lazy imports for modules reading attrs off already-imported classes when the working tree may be updated mid-training; hoist to module-top for fail-loud-at-boot, or use one worktree per training. |
 | 2026-05-21 | 01:51 | `20260521_0151_xla_scan_body_compile_dominates_module_count` | Earlier claim — that dreamer-srl's 7-module decomposition CAUSED the 70× lax.scan regression — was a partial story. The JointTrainer refactor (composite of 7→1) landed cleanly with full math-equivalence preserved (5/5 atol=1e-5) but the XLA-GPU scan-body compile-time was still pathologically unbounded (6h31m / 85 GB RSS, no iter progress). Refines [[20260519_1507_dreamer_srl_v2_cpu_buffer_regression]]'s causal claim. The real dominant cost is XLA-GPU compiling the full Dreamer train_step body inside lax.scan; module-count cost is real but secondary. Three follow-up diagnostic angles documented (JAX_LOG_COMPILES, total_steps scaling, original-Dreamer compile profile comparison). |

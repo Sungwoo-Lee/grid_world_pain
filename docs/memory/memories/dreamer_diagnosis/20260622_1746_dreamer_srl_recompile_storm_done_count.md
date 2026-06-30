@@ -49,4 +49,6 @@ Five `dreamer_srl` runs on the basic difficulty curriculum (L0–L4, one per lev
 ## Backlinks
 - [[20260622_1747_dreamer_srl_single_config_budget_source]] (cluster_ops, 2026-06-22) — In dreamer_srl single-config (--env-config) mode the training budget is read fro
 - [[20260623_1616_rppo_reset_recompile_immune]] (env_entities, 2026-06-23) — rPPO (recurrent_ppo) is recompile-IMMUNE to the new per-episode count-variance: 
+- [[20260630_1720_dreamer_srl_train_step_jit_compile_once]] (dreamer_diagnosis, 2026-06-30) — The dreamer_srl gradient-step lax.scan was written bare in the Python loop with 
+- [[20260630_1721_per_episode_variance_dreamer_recompile_safe]] (env_entities, 2026-06-30) — The per-episode environment-variance feature (count ranges via count_high-static
 <!-- END BACKLINKS -->
