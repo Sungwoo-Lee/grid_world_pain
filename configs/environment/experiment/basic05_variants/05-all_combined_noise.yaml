@@ -1,0 +1,43 @@
+# basic05 variant 05 — ALL PREDATOR-PRESSURE FACTORS + INJURY-GATED SENSORY NOISE
+# ---------------------------------------------------------------------------
+# PURPOSE (plain language): the hardest hypervigilance probe — it stacks the level-06
+# sensory-noise mechanism on top of variant-04's tougher predators. Extends variant-04
+# (which itself extends basic-05 -> default), so it inherits ALL of:
+#   - variant-04 predator pressure: hiding_predator 2-12, predator max_stamina [30,150]
+#     (chases toward starvation), move_interval fixed [1,1] (always full-speed)
+#   - basic-05 random init: predator/rabbit 0-2, random start nutrition/injury [0,100],
+#     detection_range [1,7], attack_delay [1,3], full-grid spawn
+# and ADDS the level-06 injury-gated noise: when the agent is injured its OLFACTION
+# (the distal threat cue) becomes unreliable, so under a danger prior it should over-react
+# defensively (hypervigilance). Interoception is kept CLEAN so the pain-gate stays reliable.
+#   sigma_eff = sigma_base * (1 + alpha * injury/max_injury);  olfaction: 0.15 -> 0.75 at max injury.
+#
+# The perceptual_noise block below is identical to basic/06-sensory_noise_10x10.yaml and
+# DEEP-MERGES into default.yaml's noise block (clip ranges + modality index order preserved).
+extends: environment/experiment/basic05_variants/04-all_combined
+
+perceptual_noise:
+  enabled: true
+  modalities:
+    # --- Interoception kept CLEAN (no injury coupling) so the pain-gate stays reliable ---
+    satiation:
+      mode: "constant"
+      injury_noise_scale: 0.0
+    interoceptive_nociception:
+      mode: "constant"
+      injury_noise_scale: 0.0
+    extero_nociception:
+      mode: "constant"
+      injury_noise_scale: 0.0
+    # --- THREAT channel: clear when healthy, heavily degraded when injured (the lever) ---
+    olfaction:
+      mode: "state_dependent"
+      sigma: 0.15
+      injury_noise_scale: 4.0       # sigma_eff: 0.15 -> 0.75 at max injury
+    # --- Optional: mild injury-gated ambiguity on the on-contact visual ID channel ---
+    visual:
+      mode: "state_dependent"
+      sigma: 0.1
+      injury_noise_scale: 2.0
+    # injury / nutrition stay clean (default sigma 0.0); collision / proprioception /
+    # location keep their default tiny constant sensor noise.
