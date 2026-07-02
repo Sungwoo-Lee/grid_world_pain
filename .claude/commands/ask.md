@@ -17,6 +17,7 @@ Rules for good options:
 - Use the `preview` field when a side-by-side comparison helps (code snippets, config diffs, layout mockups).
 - Keep each question's `header` to a short chip (≤12 chars).
 - Don't ask about things you can verify yourself in the repo — ask only what's genuinely mine to decide.
+- **Every substantive question must include a final `Skip / no preference` option**, so I can skip that one question while still answering the others. When I pick it, treat that decision as deferred — use your best judgment (state the default you're assuming) and, if it still matters later, re-surface it in a subsequent round. Never block on a skipped question.
 
 **Always end every round with a control question.** The LAST question in every `AskUserQuestion` call must be a follow-up that asks whether to continue, with `header: "Next"` and options like:
 - `Stop here` — we're aligned; act on the answers, no more questions.
