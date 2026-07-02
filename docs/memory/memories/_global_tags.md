@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-07-03: 2 completeness-pass insights (`20260703_0352_blocking_obstacle_felt_not_seen` env_entities; `20260703_0353_wandb_log_code_hang_progress_recheck` cluster_ops) reused existing tags `design`, `learned_lesson`, `decision`, `training_runner`, `meta` — no new tags.
 - 2026-07-03: 3 insights from the basic 05/06/07 promotion + GPU-tooling + predator-jump session (`20260703_0342_lab_gpu_heterogeneous_probe_contamination` cluster_ops; `20260703_0343_predator_jump_pounce_mechanism`, `20260703_0344_attack_range_float_threshold_gotcha` env_entities) reused existing tags `training_runner`, `learned_lesson`, `meta`, `decision`, `design`, `config` — no new tags.
 - 2026-06-30: 2 insights from the scripts/ folder reorganization session (`20260630_1829_script_relocation_depth_and_gitignore_hazards`, `20260630_1830_scripts_reorg_dependency_map_and_contract`, both into `cluster_ops`) reused existing tags `learned_lesson`, `meta`, `design`, `decision` — no new tags promoted.
 - 2026-06-30: 2 insights from the dreamer_srl train_step-compile-hang session (`20260630_1720_dreamer_srl_train_step_jit_compile_once` into `dreamer_diagnosis`, `20260630_1721_per_episode_variance_dreamer_recompile_safe` into `env_entities`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `meta`, `config` — no new tags promoted.

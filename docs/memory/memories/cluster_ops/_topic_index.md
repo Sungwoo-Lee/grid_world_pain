@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 34
+**Insights**: 35
 **Last updated**: 2026-07-03
 
 ---
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-03 | 03:53 | `20260703_0353_wandb_log_code_hang_progress_recheck` | Lab nodes (108/109/110/113) hit a ~8-min wandb.run.log_code() SSL hang before training starts: process ALIVE with correct budget but 0% util / 0 iterations. The 60-90s alive+tqdm-total check PASSES during the hang, so 'alive' != 'training' — add a PROGRESS recheck (iterations advancing) before declaring healthy. Self-resolves; durable fix = timeout around log_code(). |
 | 2026-07-03 | 03:42 | `20260703_0342_lab_gpu_heterogeneous_probe_contamination` | Lab cluster is HETEROGENEOUS (2080 Ti/3090/4090/RTX 6000 Ada; node 114 has 4 GPUs), NOT homogeneous. An earlier run_command.py probe was wrong because that wrapper shares one timestamped NAS log per second -> parallel node queries collide and echo one node's output. Fix: direct-SSH per-node capture via scripts/lab/gpu_status.py (+ gpu-status skill + LAB_NODE_GPU_SPEC doc). Match card to job. |
 | 2026-06-30 | 18:30 | `20260630_1830_scripts_reorg_dependency_map_and_contract` | Safe script-folder reorg recipe: build a FOUR-surface caller-dependency map (intra-folder imports, src/ subprocess paths, tests, Claude skills/agents/settings) + the __file__-depth hazard; group BY FUNCTION not lifecycle so bare-name import clusters (the WandB scripts) stay co-located = 0 import edits; wire a Maintenance Contract into CLAUDE.md + developer/senior-developer profiles (reuses the CONFIG_GUIDE pattern). Outcome: 31 git-mv + 2 git-rm into scripts/{wandb,eval,dreamer,claude,lab,media}/, verdict PASS-WITH-NITS. |
 | 2026-06-30 | 18:29 | `20260630_1829_script_relocation_depth_and_gitignore_hazards` | Two silent breaks when moving a script one folder deeper, independent of callers: (1) repo-root computed from __file__ by fixed parent hops resolves one level too shallow -> `No module named 'src'`; re-depth to parents[2]/triple-dirname (sheeprl_jax_diff.py had ~30 such lines). (2) A top-level .gitignore pattern matching the new subfolder name (`wandb/`) silently un-tracks the moved files; anchor it to repo root (`/wandb/`). |
