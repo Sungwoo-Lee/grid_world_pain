@@ -25,6 +25,8 @@ Rules for good options:
 
 (Since a call allows up to 4 questions, reserve one slot for this control question — keep the substantive questions to 3 or fewer per round so it always fits.)
 
-After I answer: if I picked `Ask more`, immediately fire another `AskUserQuestion` round (which itself ends with the same control question), and keep looping until I pick `Stop here`. Once I pick `Stop here`, stop asking and proceed with everything I've chosen.
+After I answer: if I picked `Ask more`, generate the next round from what is *actually* still open — (1) decisions my previous answers just unlocked, (2) adjacent forks in this same task I haven't raised yet, (3) assumptions you were about to make silently. Then apply a quality gate to each candidate question: **would picking it wrong actually cause rework or change what we build/do?** Only ask questions that clear that bar.
+
+If, when I pick `Ask more`, **no** genuinely-open decision clears the gate, do NOT pad the round with trivial or invented questions. Instead say briefly that nothing substantive is left, and either stop or ask me what I'd like to decide next. Ranked by rework-risk, ask the most consequential decisions first. Keep looping until I pick `Stop here`, then proceed with everything I've chosen.
 
 Topic: $ARGUMENTS
