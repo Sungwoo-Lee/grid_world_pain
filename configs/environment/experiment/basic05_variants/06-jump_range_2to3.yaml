@@ -1,0 +1,54 @@
+# basic level-07 variant — JUMP REACH 2-OR-3 (attack_range value [2,4])
+# ---------------------------------------------------------------------------
+# PURPOSE: ablation of basic level 07 (all predator-pressure + noise + jump) that widens the
+# predator's pounce reach from a fixed 2 cells to a per-episode mix of 2 OR 3 cells.
+#
+# WHY the value is [2,4] and not [2,3]: attack_range is a FLOAT threshold compared as
+# `manhattan_dist <= attack_range`, and distances are integers. A float in [2,3) never covers
+# distance 3 (3 <= 2.7 is false), so [2,3] behaves IDENTICALLY to [2,2]. [2,4] samples uniformly
+# in [2,4): landing in [2,3) -> effective reach 2, in [3,4) -> effective reach 3, giving the
+# intended ~50/50 pounce-from-2 vs pounce-from-3 per episode. (Verified empirically.)
+#
+# Everything else identical to basic/07. Extends basic/07 (-> 06 -> 05 -> default); only
+# REDECLARES `entities` to override attack_range on the predator (list-replace footgun).
+extends: environment/experiment/basic/07-jump_attack_10x10
+
+environment:
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [15.0, 120.0]
+      attack_delay: [1, 3]
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: [1, 7]
+      max_stamina: [30, 150]
+      stamina_recovery_rate: [1, 1]
+      hunt_stamina_threshold: [0.7, 0.7]
+      lose_interest_multiplier: [1.5, 1.5]
+      attack_range: [2, 4]           # VARIANT: was [2,2] -> effective per-episode reach 2 OR 3 (see header)
+      attack_success_rate: 0.5
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rabbit"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [0.0, 0.0]
+      attack_delay: [0, 0]
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]

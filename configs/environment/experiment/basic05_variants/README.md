@@ -16,6 +16,7 @@ whether tougher predator strategies push the agent back toward hiding.
 | `03-fast_move_interval` | predator `move_interval` | `[1,3]` → **`[1,1]`** (always full-speed, no slow episodes) |
 | `04-all_combined` | all three above | — |
 | `05-all_combined_noise` | variant-04 + level-06 sensory noise | all-combined predators **plus** injury-gated olfactory noise (hardest hypervigilance probe) |
+| `06-jump_range_2to3` | **level-07** + wider jump reach | extends basic/07 (all + noise + jump); `attack_range [2,4]` = per-episode pounce reach 2 **or** 3 cells (a literal `[2,3]` float would never reach 3) |
 
 Everything else (counts, random start nutrition/injury, detection_range `[1,7]`,
 attack_delay `[1,3]`, damage, smell, obstacles) is inherited from basic-05 unchanged.
