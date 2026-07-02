@@ -226,6 +226,8 @@ If `environment.entities:` is present it takes precedence; legacy sections are i
 | `patrol_area` | optional (default full grid) | optional (default full grid) |
 | `tag` | optional (default `idx{i}`) | optional (default `idx{i}`) |
 | `count` | optional (default `1`) | optional (default `1`) |
+| `attack_range` | optional (default `[0,0]` = jump disabled) | optional (default `[0,0]`) |
+| `attack_success_rate` | optional (default `0.0`) | optional (default `0.0`) |
 
 ### Distributional fields (per-episode sampling)
 
@@ -240,6 +242,19 @@ The five fields in `DISTRIBUTIONAL_FIELDS` (`config_loader.py:36–41`) can be a
 | `lose_interest_multiplier` | `animal_lose_interest_low` | `animal_lose_interest_high` | per-episode |
 
 `damage` is separately per-event (re-sampled on every collision hit) and uses `[lo, hi]` format stored in `animal_damage [N, 2]`.
+
+### Jump/pounce feature (predator lunge attack)
+
+Two further **OPTIONAL** fields on any entity (both default to a jump-disabled no-op) — see [PREDATOR_JUMP_MECHANISM.md](../develop/active/env_entities/PREDATOR_JUMP_MECHANISM.md) for the full design and JAX-correctness argument:
+
+| YAML key | Meaning | Cadence | Array(s) |
+|----------|---------|---------|----------|
+| `attack_range` | scalar or `[lo, hi]` Manhattan-distance jump-trigger range. Missing → `[0,0]` (jump disabled). | per-episode, sampled from an **independent `fold_in` stream** — NOT part of the size-7 `ep_keys` split used by the five `DISTRIBUTIONAL_FIELDS` above | `animal_attack_range_low [N]`, `animal_attack_range_high [N]` (`EnvParams`) → `animal_attack_range_sampled [N]` (`EnvState`, sampled at reset) |
+| `attack_success_rate` | float in `[0,1]`, probability a fired jump lands on the agent. Missing → `0.0`. | plain `EnvParams` leaf — **NOT per-episode sampled** | `animal_attack_success_rate [N]` |
+
+Trigger (all must hold, evaluated in `_hunt_step`): predator in HUNT this step (post-transition `next_state==1`), agent within `attack_range_sampled` (Manhattan), agent not hidden in a bush, cooldown up (`attack_timer<=0`), and `attack_range_sampled>0`. A fired jump **replaces** that step's normal 1-cell chase move: on success the predator lands exactly on the agent (existing on-cell damage logic then applies, unchanged); on a miss it lands on a uniformly-random valid (in-bounds, non-blocking — bush cells count as valid) Chebyshev-1 neighbour of the agent, with a stay-put fallback. The cooldown (`attack_delay`, reused from the existing field) is set on **any** attempt, hit or miss.
+
+The static `EnvParams.has_attack_feature` bool (True iff any animal has `attack_range_high>0`) gates the entire jump code path in `_hunt_step` at trace time — a disabled config (the default) takes the byte-identical pre-feature code path, guaranteeing PRNG-stream parity for every existing config.
 
 ### Index dispatch tuples (static)
 
@@ -1100,7 +1115,7 @@ def load_behavior_measure_cfg(config) -> "BehaviorMeasureCfg | None":
 | Category | Static (`pytree_node=False`) | Dynamic (traced by JAX) |
 |----------|------------------------------|------------------------|
 | Grid shape | `height`, `width`, `max_steps` | `grid_location_type [H,W]` |
-| Animal metadata | `animal_classes`, `animal_behaviours`, `animal_tags`, `hunt_idx`, `wander_idx`, `static_idx`, `predator_indices`, `neutral_indices` | `animal_property [N,V]`, `animal_property_std [N,V]`, `animal_nociception [N]`, `animal_move_int [N]`, `animal_damage [N,2]`, `animal_attack_delay [N]`, `animal_spawn_area [N,4]`, `animal_patrol [N,4]`, all ten `animal_*_low/high` arrays, `animal_classes_int [N]`, `animal_behaviours_int [N]`, `animal_is_damaging [N]`, `animal_visual_channel [N]` |
+| Animal metadata | `animal_classes`, `animal_behaviours`, `animal_tags`, `hunt_idx`, `wander_idx`, `static_idx`, `predator_indices`, `neutral_indices`, `has_attack_feature` | `animal_property [N,V]`, `animal_property_std [N,V]`, `animal_nociception [N]`, `animal_move_int [N]`, `animal_damage [N,2]`, `animal_attack_delay [N]`, `animal_spawn_area [N,4]`, `animal_patrol [N,4]`, all ten `animal_*_low/high` arrays, `animal_attack_range_low [N]`, `animal_attack_range_high [N]`, `animal_attack_success_rate [N]` (jump/pounce feature — see [PREDATOR_JUMP_MECHANISM.md](../develop/active/env_entities/PREDATOR_JUMP_MECHANISM.md)), `animal_classes_int [N]`, `animal_behaviours_int [N]`, `animal_is_damaging [N]`, `animal_visual_channel [N]` |
 | Obstacles | `obstacle_names` | `obs_blocking [N]`, `obs_hides_agent [N]`, `obs_blocks_animals [N]`, `obs_spawn_area [N,4]`, `obs_damage [N,2]`, `obs_property [N,V]`, `obs_property_std [N,V]`, `obs_nociception [N]`, `obs_type [N]` |
 | Placement | `max_per_type`, `num_types`, `num_entities`, `placement_mode` | `type_areas [T,4]`, `type_counts [T]`, `type_entity_map [T,max_per_type]` |
 | Body flags | `smoothing_duration`, `overeating_death`, `use_homeostatic_reward`, `with_satiation`, `with_nutrition`, `with_injury`, `random_start_satiation`, `random_start_nutrition`, `random_start_injury`, `random_start_pos`, `rest_action_enabled`, `eat_action_enabled` | `max_satiation`, `max_nutrition`, `max_injury`, `food_nutrition_gain`, `setpoint`, `start_satiation`, `start_nutrition`, `metabolic_cost`, `nutrition_to_satiation_scaling_factor`, `recovery_base_rate`, `recovery_accel_rate`, `death_penalty`, `eating_nutrition_cost`, `eating_reward_penalty`, `start_pos [2]` |

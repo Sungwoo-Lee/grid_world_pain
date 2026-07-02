@@ -555,6 +555,10 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         animal_attack_delay = jnp.zeros(0, dtype=jnp.int32)
         animal_attack_delay_low = jnp.zeros(0, dtype=jnp.int32)
         animal_attack_delay_high = jnp.zeros(0, dtype=jnp.int32)
+        animal_attack_range_low = jnp.zeros(0)
+        animal_attack_range_high = jnp.zeros(0)
+        animal_attack_success_rate = jnp.zeros(0)
+        has_attack_feature = False
         animal_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
         animal_patrol = jnp.zeros((0, 4), dtype=jnp.int32)
         animal_detect_low = jnp.zeros(0)
@@ -602,6 +606,8 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
             pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
             animal_move_int_low, animal_move_int_high,
             animal_attack_delay_low, animal_attack_delay_high,
+            animal_attack_range_low, animal_attack_range_high,
+            animal_attack_success_rate, has_attack_feature,
         )
 
     # ── Build per-field arrays ─────────────────────────────────────────────────
@@ -669,6 +675,40 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         else:
             lo = hi = int(a)
         attack_delay_list.append((lo, hi))
+
+    # ── Jump/pounce feature (predator lunge attack) — OPTIONAL for every entity ──
+    # See docs/develop/active/env_entities/PREDATOR_JUMP_MECHANISM.md.
+    # attack_range: scalar OR [lo, hi] float Manhattan-distance jump-trigger range.
+    # Missing -> [0, 0] (jump disabled). Deliberately NOT mandatory for hunt (unlike
+    # detection_range) and NOT part of DISTRIBUTIONAL_FIELDS/the size-7 ep_keys split
+    # — it is sampled at reset from an INDEPENDENT fold_in key (core.py jax_reset)
+    # so the existing seven per-episode sampled arrays stay byte-identical.
+    attack_range_low_list = []
+    attack_range_high_list = []
+    for i, e in enumerate(entries):
+        lo, hi = _parse_distributional(
+            e['dist_source'], 'attack_range', mandatory=False,
+            entity_label=e['tag_label'], idx=i
+        )
+        attack_range_low_list.append(lo)
+        attack_range_high_list.append(hi)
+
+    # attack_success_rate: scalar float in [0, 1]. Missing -> 0.0 (jump-disabled
+    # is a no-op regardless of this value since the trigger also gates on
+    # attack_range > 0). NOT per-episode sampled — a plain EnvParams leaf.
+    attack_success_rate_list = []
+    for i, e in enumerate(entries):
+        v = e['dist_source'].get('attack_success_rate')
+        if v is None:
+            attack_success_rate_list.append(0.0)
+        else:
+            v = float(v)
+            if not (0.0 <= v <= 1.0):
+                raise ValueError(
+                    f"Animal entity {e['tag_label']!r} (index {i}): 'attack_success_rate' "
+                    f"must be in [0, 1]; got {v}."
+                )
+            attack_success_rate_list.append(v)
 
     spawn_list = [_parse_area(e['spawn_area'], h, w) for e in entries]
     patrol_list = [_parse_area(e['patrol_area'], h, w) for e in entries]
@@ -771,6 +811,10 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
     animal_attack_delay = jnp.array([lo for lo, hi in attack_delay_list], dtype=jnp.int32)
     animal_attack_delay_low = jnp.array([lo for lo, hi in attack_delay_list], dtype=jnp.int32)
     animal_attack_delay_high = jnp.array([hi for lo, hi in attack_delay_list], dtype=jnp.int32)
+    animal_attack_range_low = jnp.array(attack_range_low_list, dtype=jnp.float32)
+    animal_attack_range_high = jnp.array(attack_range_high_list, dtype=jnp.float32)
+    animal_attack_success_rate = jnp.array(attack_success_rate_list, dtype=jnp.float32)
+    has_attack_feature = any(hi > 0 for hi in attack_range_high_list)
     animal_spawn_area = jnp.array(spawn_list, dtype=jnp.int32)
     animal_patrol = jnp.array(patrol_list, dtype=jnp.int32)
 
@@ -831,6 +875,8 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
         animal_move_int_low, animal_move_int_high,
         animal_attack_delay_low, animal_attack_delay_high,
+        animal_attack_range_low, animal_attack_range_high,
+        animal_attack_success_rate, has_attack_feature,
     )
 
 
@@ -982,6 +1028,8 @@ def load_env_params(config: Config) -> EnvParams:
         pred_spawn_area_for_placement, neutral_spawn_area_for_placement,
         animal_move_int_low, animal_move_int_high,
         animal_attack_delay_low, animal_attack_delay_high,
+        animal_attack_range_low, animal_attack_range_high,
+        animal_attack_success_rate, has_attack_feature,
     ) = _load_animals(config, visual_vector_size=visual_vector_size)
 
     # ── Animal count-range metadata (NEW — PER_EPISODE_ENV_VARIANCE) ──────────
@@ -1278,6 +1326,10 @@ def load_env_params(config: Config) -> EnvParams:
         animal_attack_delay=animal_attack_delay,
         animal_attack_delay_low=animal_attack_delay_low,
         animal_attack_delay_high=animal_attack_delay_high,
+        animal_attack_range_low=animal_attack_range_low,
+        animal_attack_range_high=animal_attack_range_high,
+        animal_attack_success_rate=animal_attack_success_rate,
+        has_attack_feature=has_attack_feature,
         animal_spawn_area=animal_spawn_area,
         animal_patrol=animal_patrol,
         animal_detect_low=animal_detect_low,

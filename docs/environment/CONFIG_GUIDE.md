@@ -152,6 +152,17 @@ environment:
 - `entities:` — predator, rabbit (any `class`/`behaviour` animal)
 - `obstacles:` — rock, bush, tree
 
+### 3.7 Predator jump / pounce (`attack_range` + `attack_success_rate`)
+
+A hunting animal may occasionally lunge several cells in one step instead of its normal 1-cell chase move, either landing on the agent (hit) or beside it (miss) — see [PREDATOR_JUMP_MECHANISM.md](../develop/active/env_entities/PREDATOR_JUMP_MECHANISM.md) for the full design. Both keys are **optional**; omitting either leaves the jump disabled (byte-identical to today):
+
+```yaml
+    attack_range: [3, 5]          # or a scalar, e.g. 4. Absent -> [0,0] = disabled.
+    attack_success_rate: 0.6      # float in [0,1]. Absent -> 0.0.
+```
+
+A bushed (`hides_agent`) agent can never be jumped onto — the jump reuses the existing `agent_hidden` gate.
+
 ---
 
 ## 4. How to author a new config (worked example)

@@ -167,7 +167,12 @@ def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
                hunt_lose_interest, hunt_patrol, hunt_move_int,
                agent_pos, obs_pos, obs_blocking_for_collision, obs_hides_agent, key,
                grid_height: int = 10, grid_width: int = 10,
-               obs_active: jnp.ndarray = None):
+               obs_active: jnp.ndarray = None,
+               attack_range_s: jnp.ndarray = None,
+               attack_success_rate: jnp.ndarray = None,
+               hunt_attack_delay: jnp.ndarray = None,
+               hunt_active: jnp.ndarray = None,
+               has_attack_feature: bool = False):
     """Hunt behaviour update (verbatim body of the old update_predators).
 
     Receives sliced arrays of shape (N_pred, ...) so PRNG draw shapes are
@@ -181,6 +186,13 @@ def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
     obs_active: per-episode obstacle activation mask (PER_EPISODE_ENV_VARIANCE).
     Inactive obstacles are transparent to collision and do not conceal the agent.
     None → all-True (byte-identical to pre-feature code).
+
+    Jump/pounce feature (attack_range_s / attack_success_rate / hunt_attack_delay /
+    hunt_active / has_attack_feature): see
+    docs/develop/active/env_entities/PREDATOR_JUMP_MECHANISM.md. `has_attack_feature`
+    is a Python-static bool — when False (default), the jump block below is skipped
+    entirely at TRACE time (no extra jax.random.split, no extra draws, no extra
+    `where`s), so the disabled path is byte-identical to pre-feature `_hunt_step`.
     """
     # 1. Timers
     new_move_timer = hunt_mt - 1
@@ -269,6 +281,56 @@ def _hunt_step(hunt_pos, hunt_state, hunt_stamina, hunt_mt, hunt_at,
         return jnp.where(is_coll, old_p_pos, p_pos)
 
     new_pos = jax.vmap(check_collision)(new_pos, hunt_pos)
+
+    # ── Jump / pounce override (predator lunge attack) ──────────────────────
+    # Guarded by the STATIC has_attack_feature bool: when False (default / every
+    # existing config), this entire block is skipped at TRACE time — no extra
+    # jax.random.split, no extra draws, no extra `where`s — so the disabled path
+    # is byte-identical to pre-feature `_hunt_step`. See
+    # docs/develop/active/env_entities/PREDATOR_JUMP_MECHANISM.md.
+    if has_attack_feature:
+        jump_attempted = (
+            (next_state == 1) & (dist <= attack_range_s) & jnp.logical_not(agent_hidden)
+            & (new_attack_timer <= 0) & (attack_range_s > 0) & hunt_active
+        )
+
+        # Tail key — the `key` left over after `subkey3` above is otherwise
+        # discarded, so these draws cannot perturb jitter_r/jitter_c/rand_choice
+        # (parity-safe: the disabled path never reaches this branch at all).
+        key, jkey_succ, jkey_nbr = jax.random.split(key, 3)
+        success = jax.random.uniform(jkey_succ, (hunt_pos.shape[0],)) < attack_success_rate
+        jump_success = jump_attempted & success
+
+        # Miss target: uniformly-random VALID Chebyshev-1 neighbour of the agent
+        # (same 8-cell candidate set for every predator). Bush (non-blocking)
+        # cells ARE valid miss targets — only out-of-bounds / blocking obstacles
+        # are excluded (Fork F3). Fallback: stay put if no neighbour is valid.
+        offsets = jnp.array([
+            [-1, -1], [-1, 0], [-1, 1],
+            [0, -1],           [0, 1],
+            [1, -1],  [1, 0],  [1, 1],
+        ], dtype=jnp.int32)
+        cand = agent_pos[None, :] + offsets                                    # (8, 2)
+        in_bounds = (
+            (cand[:, 0] >= 0) & (cand[:, 0] < grid_height)
+            & (cand[:, 1] >= 0) & (cand[:, 1] < grid_width)
+        )
+        blocked = jax.vmap(
+            lambda c: jnp.any(jnp.all(obs_pos == c, axis=-1) & _eff_blocking_hunt)
+        )(cand)
+        valid = in_bounds & jnp.logical_not(blocked)                           # (8,)
+        score = jnp.where(
+            valid[None, :], jax.random.uniform(jkey_nbr, (hunt_pos.shape[0], 8)), -1.0
+        )
+        pick = jnp.argmax(score, axis=-1)                                      # (N_pred,)
+        miss_pos = jnp.where(jnp.any(valid), cand[pick], hunt_pos)             # fallback: stay put
+
+        jump_pos = jnp.where(
+            jump_success[:, None], jnp.broadcast_to(agent_pos, hunt_pos.shape), miss_pos
+        )
+        new_pos = jnp.where(jump_attempted[:, None], jump_pos, new_pos)        # override AFTER clips
+        # Cooldown on ANY attempt (hit OR miss).
+        new_attack_timer = jnp.where(jump_attempted, hunt_attack_delay, new_attack_timer)
 
     # Reset timer
     new_move_timer = jnp.where(should_move, hunt_move_int, new_move_timer)
@@ -383,6 +445,11 @@ def update_animals(state: 'EnvState', agent_pos, params: 'EnvParams', hunt_key, 
             grid_height=params.height,
             grid_width=params.width,
             obs_active=state.obs_active,  # NEW: inactive obstacles transparent
+            attack_range_s=state.animal_attack_range_sampled[h_idx],
+            attack_success_rate=params.animal_attack_success_rate[h_idx],
+            hunt_attack_delay=state.animal_attack_delay_sampled[h_idx],
+            hunt_active=state.animal_active[h_idx],
+            has_attack_feature=params.has_attack_feature,
         )
         # Scatter back
         new_pos     = new_pos.at[h_idx].set(new_hunt_pos)
@@ -742,6 +809,7 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         animal_lose_interest_sampled=state.animal_lose_interest_sampled,
         animal_move_int_sampled=state.animal_move_int_sampled,
         animal_attack_delay_sampled=state.animal_attack_delay_sampled,
+        animal_attack_range_sampled=state.animal_attack_range_sampled,
         # Per-episode activation masks: constant within an episode (set at reset, unchanged by step)
         animal_active=state.animal_active,
         obs_active=state.obs_active,
@@ -1211,6 +1279,14 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
             ep_keys[5], (N,), params.animal_move_int_low, params.animal_move_int_high + 1)
         animal_attack_delay_sampled = jax.random.randint(
             ep_keys[6], (N,), params.animal_attack_delay_low, params.animal_attack_delay_high + 1)
+        # Jump/pounce feature: attack_range sampled from an INDEPENDENT fold_in
+        # stream — NOT part of the size-7 ep_keys split above (widening it to 8
+        # would change all seven existing draws for every config; see "PRNG tail
+        # is free" / "size-locked at 7" in PREDATOR_JUMP_MECHANISM.md).
+        attack_range_key = jax.random.fold_in(animal_episode_key, 0xA77AC7)
+        animal_attack_range_sampled = jax.random.uniform(
+            attack_range_key, (N,), minval=params.animal_attack_range_low,
+            maxval=jnp.maximum(params.animal_attack_range_high, params.animal_attack_range_low))
     else:
         animal_detect_sampled        = jnp.zeros(0, dtype=jnp.float32)
         animal_max_stamina_sampled   = jnp.zeros(0, dtype=jnp.float32)
@@ -1219,6 +1295,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         animal_lose_interest_sampled = jnp.zeros(0, dtype=jnp.float32)
         animal_move_int_sampled      = jnp.zeros(0, dtype=jnp.int32)
         animal_attack_delay_sampled  = jnp.zeros(0, dtype=jnp.int32)
+        animal_attack_range_sampled  = jnp.zeros(0, dtype=jnp.float32)
 
     state = EnvState(
         agent_pos=agent_pos,
@@ -1251,6 +1328,7 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         animal_lose_interest_sampled=animal_lose_interest_sampled,
         animal_move_int_sampled=animal_move_int_sampled,
         animal_attack_delay_sampled=animal_attack_delay_sampled,
+        animal_attack_range_sampled=animal_attack_range_sampled,
         # Per-episode activation masks (NEW — PER_EPISODE_ENV_VARIANCE)
         animal_active=animal_activation_mask,
         obs_pos=obs_pos,

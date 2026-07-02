@@ -59,6 +59,9 @@ class EnvState:
     # Per-episode-sampled integer timer params (NEW — move_interval + attack_delay distributional sampling)
     animal_move_int_sampled: jnp.ndarray       # [N] int  (sampled from [move_int_low, move_int_high])
     animal_attack_delay_sampled: jnp.ndarray   # [N] int  (sampled from [attack_delay_low, attack_delay_high])
+    # Jump/pounce feature (predator lunge attack) — sampled from an INDEPENDENT
+    # fold_in key at reset (NOT part of the size-7 ep_keys split). 0 = jump disabled.
+    animal_attack_range_sampled: jnp.ndarray   # [N] float (sampled from [attack_range_low, attack_range_high])
 
     # Animals — per-episode activation mask (NEW — per-episode count-range feature)
     animal_active: jnp.ndarray  # [N] bool; False for inactive (parked off-grid) slots
@@ -137,6 +140,11 @@ class EnvParams:
     animal_move_int_high: jnp.ndarray      # [N] int
     animal_attack_delay_low: jnp.ndarray   # [N] int
     animal_attack_delay_high: jnp.ndarray  # [N] int
+    # Jump/pounce feature (predator lunge attack) — OPTIONAL, default [0,0]/0.0 =
+    # disabled. See docs/develop/active/env_entities/PREDATOR_JUMP_MECHANISM.md.
+    animal_attack_range_low: jnp.ndarray      # [N] float — jump-trigger Manhattan-distance range, low bound
+    animal_attack_range_high: jnp.ndarray     # [N] float — jump-trigger Manhattan-distance range, high bound
+    animal_attack_success_rate: jnp.ndarray   # [N] float in [0,1] — P(fired jump lands on agent); NOT per-episode sampled
     # Per-entity int-coded class/behaviour (for damage masking and visual channel)
     animal_classes_int: jnp.ndarray        # [N] int (0=predator, 1=neutral, ...)
     animal_behaviours_int: jnp.ndarray     # [N] int (0=wander, 1=hunt, 2=static)
@@ -180,6 +188,10 @@ class EnvParams:
     has_res_range: bool = struct.field(pytree_node=False)
     has_animal_range: bool = struct.field(pytree_node=False)
     has_obs_range: bool = struct.field(pytree_node=False)
+    # True iff any animal has attack_range_high > 0 (jump/pounce feature enabled).
+    # Guards the jump block in `_hunt_step` — a False value is a provable no-op
+    # (no extra jax.random.split, no extra draws) for backward-compat.
+    has_attack_feature: bool = struct.field(pytree_node=False)
 
     # Obstacles
     obs_blocking: jnp.ndarray      # [num_obs] bool
