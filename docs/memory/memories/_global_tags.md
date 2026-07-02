@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-06-30
+**Last updated**: 2026-07-03
 
 ---
 
@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-07-03: 3 insights from the basic 05/06/07 promotion + GPU-tooling + predator-jump session (`20260703_0342_lab_gpu_heterogeneous_probe_contamination` cluster_ops; `20260703_0343_predator_jump_pounce_mechanism`, `20260703_0344_attack_range_float_threshold_gotcha` env_entities) reused existing tags `training_runner`, `learned_lesson`, `meta`, `decision`, `design`, `config` — no new tags.
 - 2026-06-30: 2 insights from the scripts/ folder reorganization session (`20260630_1829_script_relocation_depth_and_gitignore_hazards`, `20260630_1830_scripts_reorg_dependency_map_and_contract`, both into `cluster_ops`) reused existing tags `learned_lesson`, `meta`, `design`, `decision` — no new tags promoted.
 - 2026-06-30: 2 insights from the dreamer_srl train_step-compile-hang session (`20260630_1720_dreamer_srl_train_step_jit_compile_once` into `dreamer_diagnosis`, `20260630_1721_per_episode_variance_dreamer_recompile_safe` into `env_entities`) reused existing tags `dreamer`, `learned_lesson`, `decision`, `meta`, `config` — no new tags promoted.
 - 2026-06-30: 4 insights into the new `behavior_measures` folder (`20260630_1715_behavior_measure_study_method_and_tooling`, `20260630_1716_foraging_hunger_timing_fixed_opening`, `20260630_1717_avoidance_reflex_needs_motion_and_olfaction`, `20260630_1718_cover_use_late_emerging_run_vs_hide`) reused existing tags `design`, `decision`, `meta`, `learned_lesson`, `hypervigilance`, `refutation` — no new tags promoted.

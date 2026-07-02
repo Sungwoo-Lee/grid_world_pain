@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `env_entities` topic.
 
 **Folder definition**: Env entity architecture decisions
-**Insights**: 13
-**Last updated**: 2026-06-30
+**Insights**: 15
+**Last updated**: 2026-07-03
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-03 | 03:44 | `20260703_0344_attack_range_float_threshold_gotcha` | Float distributional fields (attack_range, detection_range) compared as dist<=range on INTEGER distances have a narrow-range trap: [2,3] floors to 2 always (3<=2.7 false) == [2,2]. For effective reach {2,3} set [2,4]. Convention: reach {k,k+1} -> range [k,k+2]. Caught by running the env. |
+| 2026-07-03 | 03:43 | `20260703_0343_predator_jump_pounce_mechanism` | Opt-in predator JUMP/POUNCE: hunting predator within sampled attack_range of an UN-hidden agent (cooldown up) teleports onto the agent (hit, prob=attack_success_rate) or a random adjacent cell (miss); any attempt resets attack_delay. Bush blocks it (agent_hidden reused) so hiding beats running. Disabled=byte-identical no-op (tail-key + fold_in PRNG). Plan->impl->code-review APPROVE->env-verified; commit ea13ea9. |
 | 2026-06-30 | 17:21 | [20260630_1721_per_episode_variance_dreamer_recompile_safe](20260630_1721_per_episode_variance_dreamer_recompile_safe.md) | Per-episode env-variance (count ranges via count_high-static allocation + res/animal/obs_active masks, plus per-episode behavioural ranges e.g. predator move_interval[1,3]/detection[1,7]) is recompile-SAFE under dreamer_srl, not just rPPO. Basic L05 smoke = ~315 compiles == fixed-count baseline (~309), no storm — variance is all traced per-episode VALUES over static-max shapes, never array dims. Generalises rPPO immunity (20260623_1616) to Dreamer. |
 | 2026-06-30 | 16:30 | `20260630_1630_predator_params_per_episode_ranges` | Predator behavioural params are per-episode rangeable via field:[lo,hi]. 5 fields already wired (v2.0 DISTRIBUTIONAL_FIELDS, uniform-sampled at reset); ADDED move_interval+attack_delay (int randint(lo,hi+1) inclusive). A scalar s == degenerate [s,s] == deterministic, so all timing fields share one [lo,hi] expression. Verified behaviourally. nociception_intensity left fixed. |
 | 2026-06-29 | 17:23 | `20260629_1723_ghost_predator_inactive_slots_render` | Per-episode count masking gated damage/sensing/obs (animal_active) but NOT per-step movement/render, so inactive 'ghost' predators un-park and stick to the agent dealing 0 damage while invisible to it; fix = re-park inactive slots off-grid each step in update_animals; verified purely cosmetic (survival byte-identical, ghost-steps 1514->0). |
