@@ -23,7 +23,8 @@
 # NOTE: this is a first principled config, NOT a tuned sweep. The single most important
 # knob is olfaction.injury_noise_scale; a proper study would sweep olfaction.{sigma, scale}.
 #
-# Inherits the entire random-init scene (predator 0-2, rabbit 0-2, random start
+# Inherits the FULL basic-05 scene — now including variant-04 all-predator-pressure (hiding 2-12,
+# max_stamina [30,150], move_interval [1,1]) via 05's update — plus random start
 # nutrition/injury, full-grid spawn) from 05; only adds + enables perceptual_noise.
 # The partial modality overrides below DEEP-MERGE into default.yaml's perceptual_noise
 # block (clip ranges + modality index order preserved).

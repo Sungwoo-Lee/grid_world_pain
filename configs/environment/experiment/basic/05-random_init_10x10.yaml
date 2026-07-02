@@ -1,7 +1,7 @@
 # Basic curriculum — 05-random_init_10x10
-# "Proper random init" generalisation stage: per-episode variance on EVERYTHING.
+# "Proper random init" + ALL predator-pressure factors folded in (was random-init only; variant-04 merged 2026-07-02).
 #   - body start: random nutrition [0,100] + random injury [0,100] (hungry/injured starts visited)
-#   - scene counts redrawn each episode: predator 0-2, rabbit 0-2, hiding_predator 2-4,
+#   - scene counts redrawn each episode: predator 0-2, rabbit 0-2, hiding_predator 2-12,
 #     food 1-4, bush 4-10, rock 6-12  (count_high slots allocated, extras inactive off-grid)
 #   - full-grid spawn + random_start_pos (positions redrawn each episode)
 # Smell kept CLEAN (properties_std 0) — this stage tests scene/body-state generalisation,
@@ -37,7 +37,7 @@ environment:
     - name: "hiding_predator"
       type: "hiding_predator"
       count_low: 2
-      count_high: 4
+      count_high: 12     # ALL-COMBINED: more ambush predators, running is risky (was 4)
       spawn_area: [[1, 1], [10, 10]]
       properties: [0.0, 0.0, 0.0, 0.0, 0.0]
       properties_std: [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -57,14 +57,14 @@ environment:
       properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
       visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
       visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
-      move_interval: [1, 3]      # per-episode range: full-speed(1) <-> 1/3-speed(3)
+      move_interval: [1, 1]      # ALL-COMBINED: always full-speed (was [1,3])
       damage: [15.0, 120.0]
       attack_delay: [1, 3]        # per-episode range: attack windup
       nociception_intensity: 0.9
       spawn_area: [[1, 1], [10, 10]]
       patrol_area: [[1, 1], [10, 10]]
       detection_range: [1, 7]    # per-episode range: near(1) <-> far(7) threat sensing
-      max_stamina: [30, 30]              # fixed (degenerate range form)
+      max_stamina: [30, 150]             # ALL-COMBINED: relentless, can chase toward starvation (was [30,30])
       stamina_recovery_rate: [1, 1]      # fixed (degenerate range form)
       hunt_stamina_threshold: [0.7, 0.7] # fixed (degenerate range form)
       lose_interest_multiplier: [1.5, 1.5] # fixed (degenerate range form)
