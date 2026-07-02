@@ -1,0 +1,99 @@
+# NOISE-matched avoidance probe for the v5_allnoise model (rppo_basic05v5_allnoise).
+# Frozen-probe principle: eval sensory config must match the model's TRAINING regime.
+# Extends the CORE probe (fixed-init, for seed-42 videos).
+# Adds vs the clean probe: (A) perceptual_noise block (verbatim v5 values),
+#   (B) behavior_measures.eval_obs_noise=training, (C) animal properties_std -> [0,0.4,0.4,0,0].
+# Study: docs/experiments/active/behavior_measures/interoceptive_behavior_measure_study.md
+extends: environment/experiment/behavior_probes/core/avoidance/avoid_pred_inj70
+
+# (A) Perceptual noise (verbatim from v5_allnoise saved config); (B) eval applies training noise.
+perceptual_noise:
+  enabled: true
+  modalities:
+    injury:
+      mode: state_dependent
+      sigma: 0.0
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    nutrition:
+      mode: state_dependent
+      sigma: 0.0
+      injury_noise_scale: 1.5
+      clip_min: 0.0
+      clip_max: 1.0
+    satiation:
+      mode: constant
+      sigma: 0.1
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    interoceptive_nociception:
+      mode: constant
+      sigma: 0.1
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    extero_nociception:
+      mode: constant
+      sigma: 0.1
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 100.0
+    olfaction:
+      mode: state_dependent
+      sigma: 0.15
+      injury_noise_scale: 4.0
+      clip_min: 0.0
+      clip_max: 100.0
+    collision:
+      mode: constant
+      sigma: 0.01
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    proprioception:
+      mode: constant
+      sigma: 0.05
+      injury_noise_scale: 0.0
+      clip_min: 0.0
+      clip_max: 1.0
+    visual:
+      mode: state_dependent
+      sigma: 0.1
+      injury_noise_scale: 2.0
+      clip_min: 0.0
+      clip_max: 100.0
+    location:
+      mode: constant
+      sigma: 0.01
+      injury_noise_scale: 0.0
+      clip_min: -1.0
+      clip_max: 1.0
+
+behavior_measures:
+  eval_obs_noise: training
+
+# (C) Entities redeclared in full (list-replace) to add v5's olfactory-signature noise
+# properties_std=[0.0, 0.4, 0.4, 0.0, 0.0]; everything else identical to the clean probe.
+environment:
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count: 1
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.4, 0.4, 0.0, 0.0]
+      visual_properties: [0,0,0,0,0,1,0,0]
+      visual_properties_std: [0,0,0,0,0,0,0,0]
+      move_interval: 1
+      damage: [15.0, 45.0]
+      nociception_intensity: 0.9
+      spawn_area: [[5, 9], [5, 9]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: 12
+      max_stamina: 30
+      stamina_recovery_rate: 1
+      hunt_stamina_threshold: 0.7
+      lose_interest_multiplier: 1.5
+      attack_delay: 3
