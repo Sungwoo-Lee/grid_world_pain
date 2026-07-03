@@ -231,7 +231,7 @@ behavior_measures:
   # All 14 keys mandatory (no fallback defaults).  Schema defined in
   # docs/experiments/active/behavior_measures/behavior_measure_toolkit_v1_design.md sec.6
   # Loader: src/environment/config_loader.py::load_behavior_measure_cfg.
-  enabled: true
+  enabled: false   # online M1/M2/M5 off by default — behaviour is measured offline in the eval/experimental env (redundant online). Turn on per-config if a run needs online accumulation.
   cue_radius: 3.0                # R (cells), user-locked
   obs_window: 5                  # K (steps), user-locked
   # Offline eval-rollout protocol
