@@ -806,14 +806,39 @@ None. `ppo_trainer.py` and DreamerV3's continue-predictor now carry explicit fol
 
 ## Verification Report
 
-> **Verified by**: [senior-developer]
-> **Date**: [date]
+> **Verified by**: senior-developer
+> **Date**: 2026-07-04
+> **Scope**: Part 2 (commit `3c60f6f`). Part 1 (commit `ef0fd25`) verified at its own landing; this
+> pass focuses on the value-target-changing Part 2 and re-confirms Part 1 via the unchanged env suite.
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| | | | |
+| `src/models/recurrent_ppo_trainer.py` | `Transition.next_value` field; `compute_gae` gains `terminateds` arg; `collect_trajectories` computes `V(true next state)` pre-auto-reset (GAE-gated); `train_iteration` derives `terminated` mask + feeds true next-values | ✅ | Bootstrap correctly uses `(1 - terminated)` where `terminated = (termination_reason >= 2)`; accumulation reset correctly keeps `(1 - done)`. `next_value` read from `next_state` **before** the auto-reset block, with `h_new` — matches the removed `final_v` recurrence. Byte-correct against plan intent. |
+| `src/models/ppo_trainer.py` | comment-only follow-up flag on `compute_gae` | ✅ | No logic change; deferred follow-up recorded. |
+| `src/models/dreamer_v3_trainer.py` | comment-only follow-up flag on continue-head loss | ✅ | No logic change; DreamerV3 continue bootstrap **NOT** silently altered — confirmed. |
+| `tests/models/test_gae_truncation.py` | new 5-test unit suite | ✅ | Re-ran: 5/5 pass. Fail-before claim credible (old 6-arg signature `TypeError` + semantic 1.0-vs-5.95 divergence). |
+| `configs/models/recurrent_ppo/*.yaml` | (unchanged) | ✅ | Independently grep-confirmed: all 13 configs use `return_mode: "MC"` → `compute_gae` off the live path; Part 2 leaves the 6 live runs byte-identical. |
+| `train.py` | (unchanged) | ✅ | Confirmed `nnx.jit(train_iteration, static_argnums=(6,))` (line 801) — `config`/`return_mode` static, so the MC/GAE branch resolves at trace time (no runtime cost). |
 
-**Conclusion**: [one-line summary]
+**Speed verdict**: ✅ no regression. 0.00% delta on the specified gate config (`basic/05` + default MC-mode
+`recurrent_ppo.yaml`), same GPU/seed/step-budget, warm-up excluded. The MC/GAE gate is a JIT-static
+branch, so the extra forward pass never executes in MC mode; the +4–9% measured under an explicit
+GAE-mode config is informative only (no live config uses GAE) and within the plan's accepted band.
+
+**Combined suite (cross-cutting, all four fixes together)**: `pytest tests/env/ tests/models/` →
+**199 passed, 492 skipped, 0 failed** (720.64s). The 492 skips are the pre-existing fixture-presence
+data-driven skips; the single warning is a pre-existing `entities:`/legacy-schema deprecation, not a
+regression. The four commits (`3c60f6f`, `a3ab4cc`, `0bebe06`, `9eacf82`) do not interact badly.
+
+**Out-of-scope changes**: none. Comment-only touches to `ppo_trainer.py` / `dreamer_v3_trainer.py`
+were directed by the verification task (not silent scope creep) and change no logic. The plan doc's
+Part-2 File Changes list scoped Part 2 to `recurrent_ppo_trainer.py`; the two comment flags are an
+accepted, directed addition.
+
+**Conclusion**: PASS. Part 2 is RL-correct (death vs. truncation asymmetry right, true next-state
+bootstrap read pre-reset), the live MC-mode runs are provably unaffected (0.00% speed delta, GAE path
+never traced), and the DreamerV3/ppo_trainer follow-ups remain open and are recorded as such in the
+diagnosis doc. Signed: senior-developer.
 
 ---
 
