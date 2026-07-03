@@ -416,8 +416,186 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 # Node 110, cuda:0, wandb-group: basic
 # CIFS-bypass: launched via /tmp script — this file is the audit record.
 # ---------------------------------------------------------------------------
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/05-random_init_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --checkpoint-frequency 100000 \
+#   --device cuda:0 \
+#   --log-interval 50 \
+#   --wandb-group basic \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic05_randpred_n110 \
+#   --tag rppo_basic05_randpred_n110
+
+# ---------------------------------------------------------------------------
+# basic05_variants — 4-run predator-pressure sweep — 2026-06-30
+# RecurrentPPO (unmodulated), single-config (standalone, NOT continual), 10M episodes each.
+# Four variants of 05-random_init_10x10 testing increased predator difficulty:
+#   v1 (01-more_hiding_predators): more ambush predators (count_high 4→12) — node 108 cuda:0
+#   v2 (02-relentless_stamina):    predator max_stamina [30,150] (sometimes chases to starvation) — node 108 cuda:1
+#   v3 (03-fast_move_interval):    predator move_interval fixed 1 (always full-speed) — node 109 cuda:0
+#   v4 (04-all_combined):          all three factors combined — node 109 cuda:1
+# num_envs=16, checkpoint_frequency=100000, log_interval=50
+# wandb-group: basic05_variants, job-type: prod
+# CIFS-bypass: launched via /tmp scripts — this file is the audit record.
+# NOTE: Runs 1 and 2 (node 108) were SKIPPED on initial launch (2026-06-30) — nas01
+#   CIFS share not mounted on node 108 at that time. User remounted nas01 on node 108
+#   (confirmed 52T free). RE-LAUNCHED 2026-06-30 via CIFS-bypass /tmp scripts.
+# ---------------------------------------------------------------------------
+# Run 1: rppo_basic05v1_hiding_n108 — node 108, cuda:0 — RE-LAUNCHED 2026-06-30
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/01-more_hiding_predators.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --checkpoint-frequency 100000 \
+#   --device cuda:0 \
+#   --log-interval 50 \
+#   --wandb-group basic05_variants \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic05v1_hiding_n108 \
+#   --tag rppo_basic05v1_hiding_n108
+#
+# Run 2: rppo_basic05v2_stamina_n108 — node 108, cuda:1 — RE-LAUNCHED 2026-06-30
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/02-relentless_stamina.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --checkpoint-frequency 100000 \
+#   --device cuda:1 \
+#   --log-interval 50 \
+#   --wandb-group basic05_variants \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic05v2_stamina_n108 \
+#   --tag rppo_basic05v2_stamina_n108
+
+# Run 3: rppo_basic05v3_fastmove_n109 — node 109, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/03-fast_move_interval.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --checkpoint-frequency 100000 \
+#   --device cuda:0 \
+#   --log-interval 50 \
+#   --wandb-group basic05_variants \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic05v3_fastmove_n109 \
+#   --tag rppo_basic05v3_fastmove_n109
+
+# Run 4: rppo_basic05v4_all_n109 — node 109, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/04-all_combined.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --checkpoint-frequency 100000 \
+#   --device cuda:1 \
+#   --log-interval 50 \
+#   --wandb-group basic05_variants \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic05v4_all_n109 \
+#   --tag rppo_basic05v4_all_n109
+
+# ---------------------------------------------------------------------------
+# Run 5: rppo_basic05v5_allnoise_n110 — node 110, cuda:1 — 2026-07-02
+# basic05_variants/05-all_combined_noise: extends variant-04 (all predator-pressure
+# factors combined: more hiding predators, relentless stamina, fast move-interval)
+# AND ADDS level-06 injury-gated sensory noise on olfaction (0.15 -> 0.75 sigma at
+# max injury) + mild visual noise. Interoception kept clean so pain-gate stays
+# reliable. The hardest hypervigilance probe in the basic05_variants family.
+# RecurrentPPO (unmodulated), single-config from scratch (standalone, NOT continual).
+# num_envs=16, episodes=10000000, checkpoint_frequency=100000, log_interval=50.
+# GPU 0 on node 110 busy with rppo_basic05_randpred_n110 (PID 1154); GPU 1 free.
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/05-all_combined_noise.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --checkpoint-frequency 100000 \
+#   --device cuda:1 \
+#   --log-interval 50 \
+#   --wandb-group basic05_variants \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic05v5_allnoise_n110 \
+#   --tag rppo_basic05v5_allnoise_n110
+
+# ---------------------------------------------------------------------------
+# basic standalone — level 07 jump/attack 10x10 — 2026-07-03
+# RecurrentPPO (unmodulated), single-config from scratch (standalone, NOT continual).
+# 07-jump_attack_10x10: extends basic/06 (all predator-pressure factors combined +
+# injury-gated olfactory noise), ADDS predator jump/pounce (teleport onto an
+# un-hidden agent within attack_range when cooldown is up; stochastic hit/miss).
+# The toughest basic level — bush refuge becomes the only reliable defense.
+# num_envs=16, episodes=10000000 (episode-budget convention), checkpoint_frequency=100000,
+# log_interval=50.
+# Node 113, cuda:0 (both 113 GPUs confirmed free RTX 4090; nas01 mounted, 52T free).
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# NOTE: superseded as the active block below — this run (tag rppo_basic07_jump_n113,
+# WandB u1tyn8xk) remains ALIVE on node 113 cuda:0; left untouched by the 2026-07-03 launch.
+# ---------------------------------------------------------------------------
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/07-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 16 \
+#   --episodes 10000000 \
+#   --checkpoint-frequency 100000 \
+#   --device cuda:0 \
+#   --log-interval 50 \
+#   --wandb-group basic \
+#   --wandb-job-type prod \
+#   --wandb-name rppo_basic07_jump_n113 \
+#   --tag rppo_basic07_jump_n113
+
+# ---------------------------------------------------------------------------
+# basic standalone — level 07 + wider jump reach (attack_range 2-or-3) — 2026-07-03
+# RecurrentPPO (unmodulated), single-config from scratch (standalone, NOT continual).
+# 06-jump_range_2to3: basic level 07 (jump/pounce predator) with attack_range widened
+# to [2,4] -> per-episode pounce reach randomised to 2 or 3 cells (vs. level 07's
+# narrower reach). Tests whether wider ambush range further stresses bush-refuge
+# reliance as the agent's primary defense.
+# num_envs=16, episodes=10000000 (episode-budget convention), checkpoint_frequency=100000,
+# log_interval=50.
+# Node 113, cuda:1 (GPU 0 busy with basic/07 run u1tyn8xk; GPU 1 confirmed free RTX 4090;
+# nas01 confirmed mounted, 52T free).
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/basic/05-random_init_10x10.yaml \
+  --config configs/environment/experiment/basic05_variants/06-jump_range_2to3.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --num-envs 16 \
+  --episodes 10000000 \
+  --checkpoint-frequency 100000 \
+  --device cuda:1 \
+  --log-interval 50 \
+  --wandb-group basic05_variants \
+  --wandb-job-type prod \
+  --wandb-name rppo_basic07_jumpreach23_n113 \
+  --tag rppo_basic07_jumpreach23_n113
+
+# ---------------------------------------------------------------------------
+# basic standalone — level 07 jump/attack 10x10 — RE-LAUNCH after extends: fix — 2026-07-03
+# RecurrentPPO (unmodulated), single-config from scratch (standalone, NOT continual).
+# 07-jump_attack_10x10: extends basic/06 (all predator-pressure factors combined +
+# injury-gated olfactory noise) + random-init nutrition/injury + predator jump/pounce.
+# RE-LAUNCH RATIONALE: the config-loader `extends:` chain was previously not
+# resolved by train.py, so inherited layers (noise + random-init + all-combined +
+# jump) were silently dropped. Fixed upstream; this run verifies the fix by
+# checking the saved config.yaml for perceptual_noise.enabled=true and
+# random_start_injury=true.
+# num_envs=16, episodes=10000000 (episode-budget convention), checkpoint_frequency=100000,
+# log_interval=50.
+# Node 108, cuda:0 (confirmed free RTX 3090; nas01 mounted 52T free; JAX GPU-compile
+# check passed jax 0.9.0.1).
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/environment/experiment/basic/07-jump_attack_10x10.yaml \
   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
   --num-envs 16 \
   --episodes 10000000 \
@@ -426,8 +604,8 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
   --log-interval 50 \
   --wandb-group basic \
   --wandb-job-type prod \
-  --wandb-name rppo_basic05_randpred_n110 \
-  --tag rppo_basic05_randpred_n110
+  --wandb-name rppo_basic07_jump_v2_n108 \
+  --tag rppo_basic07_jump_v2_n108
 
 # ---------------------------------------------------------------------------
 # NMN FiLM grouping_size screen — CONTINUAL (CURRICULUM) RE-LAUNCH 2026-06-27
@@ -531,3 +709,102 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --wandb-group basic_curriculum --wandb-job-type prod \
 #   --wandb-name rppo_nmn_film_g128_curric_longL4_s42 \
 #   --tag rppo_nmn_film_g128_curric_longL4_s42
+
+# ---------------------------------------------------------------------------
+# NMN FiLM grouping_size screen — basic05_variants/04-all_combined (single-env,
+# NOT continual) — 2026-07-02
+# RecurrentPPO + NMN FiLM modulator, 8-point group-count curve (grouping_size 1->128).
+# Env: basic05_variants/04-all_combined (all three predator-pressure factors
+# combined: more hiding predators count_high 4->12, predator max_stamina
+# [30,150], predator move_interval fixed 1). Harder than the basic_curriculum
+# far-sight screen (this env family has never been curriculum-staged).
+# Pre-flight: env config resolves/builds cleanly, obs_dim=27 action_dim=6
+# (matches expectation); all 8 agent configs verified byte-identical except
+# modulation.grouping_size (and header comments).
+# Cards are 11GB RTX 2080 Ti (nodes 101/103/104/105), smaller than the 24GB
+# cards used for the earlier far-sight screen at --num-envs 128. Smoke-tested
+# --num-envs 128 on node 101 (200-episode --no-wandb dry run): peak GPU memory
+# well under 11GB, no OOM -> used 128 uniformly across all 8 runs.
+# Budget: 10M episodes, seed=42, checkpoint_frequency=100000, log_interval=50.
+# Nodes 101, 103, 104, 105 (2 GPUs each); wandb-group: basic05_variants, job-type: prod
+# CIFS-bypass: launched via /tmp scripts — this file is the audit record.
+# ---------------------------------------------------------------------------
+# Run 1: rppo_nmn_film_g1_basic05all_s42   — node 101, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/04-all_combined.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g1_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 50 --device cuda:0 --seed 42 \
+#   --wandb-group basic05_variants --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g1_basic05all_s42 \
+#   --tag rppo_nmn_film_g1_basic05all_s42
+#
+# Run 2: rppo_nmn_film_g2_basic05all_s42   — node 101, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/04-all_combined.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g2_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 50 --device cuda:1 --seed 42 \
+#   --wandb-group basic05_variants --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g2_basic05all_s42 \
+#   --tag rppo_nmn_film_g2_basic05all_s42
+#
+# Run 3: rppo_nmn_film_g4_basic05all_s42   — node 103, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/04-all_combined.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g4_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 50 --device cuda:0 --seed 42 \
+#   --wandb-group basic05_variants --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g4_basic05all_s42 \
+#   --tag rppo_nmn_film_g4_basic05all_s42
+#
+# Run 4: rppo_nmn_film_g8_basic05all_s42   — node 103, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/04-all_combined.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g8_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 50 --device cuda:1 --seed 42 \
+#   --wandb-group basic05_variants --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g8_basic05all_s42 \
+#   --tag rppo_nmn_film_g8_basic05all_s42
+#
+# Run 5: rppo_nmn_film_g16_basic05all_s42  — node 104, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/04-all_combined.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g16_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 50 --device cuda:0 --seed 42 \
+#   --wandb-group basic05_variants --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g16_basic05all_s42 \
+#   --tag rppo_nmn_film_g16_basic05all_s42
+#
+# Run 6: rppo_nmn_film_g32_basic05all_s42  — node 104, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/04-all_combined.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g32_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 50 --device cuda:1 --seed 42 \
+#   --wandb-group basic05_variants --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g32_basic05all_s42 \
+#   --tag rppo_nmn_film_g32_basic05all_s42
+#
+# Run 7: rppo_nmn_film_g64_basic05all_s42  — node 105, cuda:0
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/04-all_combined.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g64_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 50 --device cuda:0 --seed 42 \
+#   --wandb-group basic05_variants --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g64_basic05all_s42 \
+#   --tag rppo_nmn_film_g64_basic05all_s42
+#
+# Run 8: rppo_nmn_film_g128_basic05all_s42 — node 105, cuda:1
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic05_variants/04-all_combined.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g128_screen.yaml \
+#   --num-envs 128 --episodes 10000000 --checkpoint-frequency 100000 \
+#   --log-interval 50 --device cuda:1 --seed 42 \
+#   --wandb-group basic05_variants --wandb-job-type prod \
+#   --wandb-name rppo_nmn_film_g128_basic05all_s42 \
+#   --tag rppo_nmn_film_g128_basic05all_s42
