@@ -23,6 +23,9 @@ shared one timestamped NAS log, so every node reported one node's output. Always
    - **Top (RTX 6000 Ada, 49 GB ×4):** 114 — reserve for big-VRAM / many-parallel / heaviest jobs.
    - **Anti-pattern:** do NOT put a tiny rPPO job on 114 while a 2080 Ti sits idle, and do NOT
      starve a large job onto an 11 GB 2080 Ti when a 24/49 GB card is free.
+3. **Pack-node-first — fill one node's free GPUs before spilling to the next.** People claim whole
+   nodes per job set; scattering one person's runs one-GPU-each across many nodes blocks colleagues
+   from getting a clean node. See the allocation-policy section below.
 
 ## Per-node inventory (confirmed 2026-06-30)
 
@@ -53,6 +56,21 @@ shared one timestamped NAS log, so every node reported one node's output. Always
   processes, run `scripts/lab/gpu_status.py` (or the `gpu-status` skill) — that is the source of
   truth for "is this GPU free right now / is the node up". Reachability changes hour to hour
   (NAS unmounts, SSH refused), so it is intentionally NOT baked into this static table.
+
+## GPU allocation policy: pack-node-first (fill one node before spilling to the next)
+
+When a single person launches **multiple** runs, assign them to **all usable GPUs on one node
+first**, and only move to a second node once the first node's GPUs are exhausted. Lab convention is
+that people claim a **whole node** per job set, so scattering one person's runs one-GPU-each across
+many nodes leaves every node half-occupied and blocks colleagues from getting a clean node.
+
+- **Pack order:** run 1 → `nodeA:0`, run 2 → `nodeA:1` (node 114 → `0,1,2,3`), then spill to
+  `nodeB:0`, `nodeB:1`, … — never open a third node while node A or B still has a free GPU that fits.
+- **Tier match still applies:** first pick the node whose tier fits the job (routine rPPO → a
+  low/mid node), THEN fill that node before opening another. Don't cram tiny jobs onto a 4090/Ada
+  node just to keep them together — choose the right-tier node first, then pack it.
+- **Live state first:** consult `scripts/lab/gpu_status.py` (or the `gpu-status` skill) so "fill
+  this node" means filling its actually-free GPUs, not ones a colleague is already using.
 
 ## Maintenance
 Re-probe and update this table if hardware changes:
