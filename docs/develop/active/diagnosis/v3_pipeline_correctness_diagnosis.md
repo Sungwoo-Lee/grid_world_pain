@@ -199,16 +199,34 @@ which does it correctly. **Recommendation:** in a follow-up plan, either replace
 with the full `config.get('agent.modulation')` dict (one line, matching train + eval_rollout)
 or formally retire the root `evaluation.py`.
 
-**Latent gap L2 — continual-run eval uses the first-stage environment (pre-existing, medium
-for continual only).** For continual runs, `models/config.yaml` is **stage 0** (`config` is set
-to `schedule.stage_configs[0]` at line 365 before the save). Per-stage configs *are* dumped for
-auditability (`stage_XX_<name>.yaml`, lines 593–605), but neither `evaluation.py` nor
-`eval_rollout.py` reads them — both reconstruct the env from `models/config.yaml`. So a checkpoint
-trained in a *later* stage is evaluated against the **stage-0 environment**, which can differ
-(predators, scene, noise). This does not affect single-config runs (the overwhelming majority).
-**Recommendation:** follow-up plan to let eval select a stage config (e.g. `--stage`) or to save
-the final-stage config as the canonical `config.yaml` for continual runs. Flag to
-`experiment-analyzer` if any continual checkpoints have already been evaluated.
+**Latent gap L2 / Finding E — continual-run eval uses the first-stage environment (pre-existing, medium
+for continual only). STATUS: FIXED, commit `a3ab4cc`.** For continual runs, `models/config.yaml` is
+**stage 0** (`config` is set to `schedule.stage_configs[0]` at line 365 before the save). Per-stage
+configs *are* dumped for auditability (`stage_XX_<name>.yaml`, lines 593–605), but neither
+`evaluation.py` nor `eval_rollout.py` reads them — both reconstruct the env from `models/config.yaml`.
+So a checkpoint trained in a *later* stage is evaluated against the **stage-0 environment**, which can
+differ (predators, scene, noise). This does not affect single-config runs (the overwhelming majority).
+
+**Fix (live path only, `scripts/eval/eval_rollout.py`).** Added `_resolve_continual_stage_config()`:
+when `--config` is the run's own stage-0 `config.yaml` and a `schedule.yaml` is present next to the
+checkpoint (the continual-run signature), it reads the checkpoint's **own saved `stage` field**
+(`ckpt_data['stage']`, train.py ~line 2428) and loads the matching `stage_XX_<name>.yaml` instead. An
+explicitly different `--config` (e.g. an out-of-distribution eval config) is left untouched, and
+non-continual runs (no `schedule.yaml`) are unaffected — single-config eval behavior is unchanged.
+The checkpoint→stage mapping was recoverable (not a blocker): the checkpoint's own `stage` field is
+ground truth, **not** a recompute from `episode_boundaries` — confirmed empirically on a real
+checkpoint from `results/JAX_RecurrentPPO/20260507-163055_continual_5x5_NoPred-to-PredInt3_rppo_s0/`,
+where episode 811 (past boundary 800) was still recorded as stage 0 due to per-iteration
+transition-check timing; a naive boundary-recompute would have silently picked the wrong stage.
+Verified end-to-end against real continual-run checkpoints on disk (`results/JAX_RecurrentPPO/
+20260623-220259_rppo_basic_curriculum_longL4/`): per-checkpoint stage resolution matches the
+checkpoint's actual stage across all 5 curriculum stages, and a full `eval_rollout.py` run succeeds
+with stage-appropriate behavior metrics for both an early and a late checkpoint. Regression test:
+`tests/scripts/test_eval_rollout_stage_config.py` (5 cases, all passing; fail with `AttributeError`
+pre-fix). Root `evaluation.py`'s `--all` multi-checkpoint loop was judged **not straightforward** to
+fix the same way (it loads one config for a whole batch of checkpoints spanning possibly several
+stages, needing a larger per-checkpoint refactor) and was left untouched — it is deprecated and only
+wired to `generate_demo.sh`. Implemented by: developer.
 
 **Latent gap L3 — best-effort checkpoint restore keeps init weights silently (pre-existing,
 low/robustness).** `_merge_restored_into_module_state` (`evaluation.py` lines 77–94) copies
@@ -298,6 +316,14 @@ changes.
 3. Whoever ran the generator should confirm it was a deliberate schema migration and not an
    accidental local regen; the working-tree state at audit start suggests an uncommitted generator
    run that has not yet been paired with a test update.
+
+**Status: FIXED, commit `0bebe06`.** `test_unified_parity.py` now reads the unified `animal_*`
+keys (sliced by `predator_indices`/`neutral_indices`) with a fallback to the legacy `pred_*`/
+`neutral_*` keys for fixtures not yet regenerated, so the N1/N2/B1 predator/neutral position
+assertions hard-execute against both fixture generations instead of silently skipping. The
+regenerated fixtures were committed together with the test fix. See Implementation Report in
+this repo's commit `0bebe06` for verification detail (pass/skip counts, perturbation sanity
+check).
 
 ---
 
@@ -447,9 +473,9 @@ path)**:
 | **B** | Truncation treated as death: `death_penalty` (−100) applied on timeout (`core.py:706,722`) **+** GAE bootstrap zeroed on truncation (`recurrent_ppo_trainer.py:63`) | **CONFIRMED** — survivor reward −100.186 (−100 is the penalty); trainer `done`=True on timeout ⇒ bootstrap dropped. **Affects all 6 live runs.** | **Pre-existing** (byte-identical to `main`) | **HIGH** (corrupts the optimised survival objective + value targets; systematic in a survival task) — but shared by all historical runs, so comparability preserved | **senior-developer fix plan → developer** + regression test. Add a `terminated`-only mask (true death, `reason∈{2,3,4}`) for the `(1−·)` bootstrap and gate `death_penalty` on true death, keeping `done` for episode/hidden resets. |
 | **A** | Root `evaluation.py` modulation whitelist omits `memory_clip` (`:252–259`) → `KeyError`; DreamerV3 passes plain dict where `Config` expected (`:293–300`) → `AttributeError` | **REPRODUCED** `KeyError('memory_clip')`; live `eval_rollout.py` unaffected | Pre-existing | **Medium** (confirmed crash, but deprecated demo-only path; live path proven correct) | **senior-developer fix plan → developer.** Replace hand-built dict with `config.get('agent.modulation')` (null-normalised), mirroring `train.py:745` / `eval_rollout.py:540`; pass `Config`+`obs_breakdown`+`modulation_config` to `DreamerTrainer`; or retire root `evaluation.py`. |
 | **M1/M2** | Interrupted-feeding & bush-dive rates: denominator-timing mismatch + pending-at-episode-end events dropped (`accumulators.py`), preferentially dropping death-by-predator interruptions | Consistent with e2e eval showing `interrupted_feeding_rate: NaN` on a 5-episode run | **v3.0-new** (behaviour measures are new code; bias is in the new logic, not a regression of old behaviour) | **Medium** (distorts *analysis* numbers, not training) | **senior-developer metric-fix plan → developer.** Resolve pending events at episode boundary or exclude from denominator; align per-class and per-tag denominators to the same instant. Cross-link `experiment-analyzer`. |
-| **L2** | Continual-run eval reconstructs env from stage-0 `config.yaml`; later-stage checkpoints eval'd against stage-0 environment | Not exercised (no live continual run) | Pre-existing | **Medium for continual only** (single-config runs unaffected) | **senior-developer plan → developer.** Save final-stage config as canonical, or add `--stage` selection to eval. Flag any already-evaluated continual checkpoints to `experiment-analyzer`. |
+| **L2 / E** | Continual-run eval reconstructs env from stage-0 `config.yaml`; later-stage checkpoints eval'd against stage-0 environment | **FIXED, commit `a3ab4cc`** — verified against real continual checkpoints on disk across all 5 curriculum stages + regression test | Pre-existing | **Medium for continual only** (single-config runs unaffected) | **DONE (live `eval_rollout.py` path).** Auto-detects the checkpoint's own stage from its saved `stage` field and loads the matching `stage_XX_<name>.yaml`. Root `evaluation.py`'s `--all` batch loop not fixed (not straightforward — deprecated, demo-only). |
 | **L3** | Silent partial restore in root `evaluation.py` (`_merge_restored_into_module_state`) keeps init weights for absent leaves | **Live path IMMUNE** — `eval_rollout.py:610–629` raises on missing/mismatched leaf; two-seed test proved complete restore | Pre-existing | **Low** (root `evaluation.py` only) | Fold into the **A** fix plan — add the same strict-leaf assertion the live path already has. |
-| **C** | Uncommitted parity-fixture churn: `pred_*/neutral_*` → unified `animal_*` schema rename in golden snapshots | Benign — shared data byte-identical; only storage-key names changed | **v3.0-new** (CP1 animal-entity refactor) | **Low but MUST-FIX-BEFORE-COMMIT** (committing fixtures alone silently no-ops the animal-position parity asserts) | **senior-developer plan → developer** (topic `refactors`/`issues`). Commit fixtures **with** a `test_unified_parity.py` update reading `animal_*` keys, or hold fixtures until the test is migrated. |
+| **C** | Uncommitted parity-fixture churn: `pred_*/neutral_*` → unified `animal_*` schema rename in golden snapshots | Benign — shared data byte-identical; only storage-key names changed | **v3.0-new** (CP1 animal-entity refactor) | **Low but MUST-FIX-BEFORE-COMMIT** (committing fixtures alone silently no-ops the animal-position parity asserts) | **FIXED, commit `0bebe06`** — `test_unified_parity.py` migrated to read the unified `animal_*` keys (sliced by `predator_indices`/`neutral_indices`) with a legacy-key fallback for still-unregenerated fixtures; regenerated fixtures committed together with the test fix. Verified: 34 passed/244 skipped before and after (unchanged — skip count is fixture-presence only); 1545 previously-silent array assertions across the 8 regenerated configs now execute for real; perturbation sanity check confirmed the migrated assertion fails on injected divergence. |
 | minor | basic/00 M2-NaN (no bushes); observability-gate `random_start_pos`; `temp_clip` dead lower bound; value-loss comment mismatch | per surface docs | mixed | **Low / nits** | Batch into a housekeeping plan or address opportunistically. |
 
 ### Top recommendation — what to fix first
