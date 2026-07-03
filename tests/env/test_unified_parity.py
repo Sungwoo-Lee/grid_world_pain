@@ -77,6 +77,29 @@ def _run_episode(params, key):
     return state_list, info_list
 
 
+def _fixture_subset(fixture, step_i, field, legacy_key, idx, slug):
+    """Fetch a per-animal-class fixture array (pred/neutral position or property_sampled).
+
+    Two fixture schemas coexist in tests/env/fixtures/parity/: older fixtures still
+    carry the legacy split keys (e.g. step000_pred_pos); fixtures regenerated after
+    the unified-animal refactor only carry the unified step000_animal_{field} array,
+    which must be sliced by predator_indices / neutral_indices (idx) to recover the
+    same subset. Prefer the legacy key when present (untouched fixture, exact byte
+    match); otherwise slice the unified array. If NEITHER is present, fail loudly —
+    that is a real data gap, not something to silently skip.
+    """
+    legacy = fixture.get(f"step{step_i:03d}_{legacy_key}")
+    if legacy is not None:
+        return legacy
+    unified = fixture.get(f"step{step_i:03d}_animal_{field}")
+    if unified is not None:
+        return unified[np.array(idx)]
+    raise AssertionError(
+        f"Fixture for {slug} has neither legacy '{legacy_key}' nor unified "
+        f"'animal_{field}' at step {step_i} — cannot verify parity."
+    )
+
+
 # ── Collect test cases ────────────────────────────────────────────────────────
 
 _all_configs = _collect_configs()
@@ -141,64 +164,62 @@ def test_parity(config_path, slug, has_fixture):
                     err_msg=f"{field} mismatch at step {step_i} for {slug}"
                 )
 
-        # N1: predator placement at reset (step 0) — animal_pos[pred_idx] vs old pred_pos
+        # N1: predator placement at reset (step 0) — animal_pos[pred_idx] vs fixture
         if step_i == 0 and num_pred > 0 and pred_idx is not None:
-            old_pred_pos = fixture.get(f"step000_pred_pos")
-            if old_pred_pos is not None:
-                new_pred_pos = np.array(state.animal_pos[pred_idx])
-                np.testing.assert_array_equal(
-                    new_pred_pos, old_pred_pos,
-                    err_msg=f"N1: animal_pos[predator_indices] != old pred_pos at reset for {slug}"
-                )
+            old_pred_pos = _fixture_subset(fixture, step_i, "pos", "pred_pos", pred_idx, slug)
+            new_pred_pos = np.array(state.animal_pos[pred_idx])
+            np.testing.assert_array_equal(
+                new_pred_pos, old_pred_pos,
+                err_msg=f"N1: animal_pos[predator_indices] != fixture pred_pos at reset for {slug}"
+            )
 
         # N1: neutral placement at reset
         if step_i == 0 and num_neutral > 0 and neutral_idx is not None:
-            old_neutral_pos = fixture.get(f"step000_neutral_pos")
-            if old_neutral_pos is not None:
-                new_neutral_pos = np.array(state.animal_pos[neutral_idx])
-                np.testing.assert_array_equal(
-                    new_neutral_pos, old_neutral_pos,
-                    err_msg=f"N1: animal_pos[neutral_indices] != old neutral_pos at reset for {slug}"
-                )
+            old_neutral_pos = _fixture_subset(fixture, step_i, "pos", "neutral_pos", neutral_idx, slug)
+            new_neutral_pos = np.array(state.animal_pos[neutral_idx])
+            np.testing.assert_array_equal(
+                new_neutral_pos, old_neutral_pos,
+                err_msg=f"N1: animal_pos[neutral_indices] != fixture neutral_pos at reset for {slug}"
+            )
 
         # N2: property sampling at reset
         if step_i == 0 and num_pred > 0 and pred_idx is not None:
-            old_pred_prop = fixture.get(f"step000_pred_property_sampled")
-            if old_pred_prop is not None:
-                new_pred_prop = np.array(state.animal_property_sampled[pred_idx])
-                np.testing.assert_allclose(
-                    new_pred_prop, old_pred_prop, rtol=1e-5, atol=1e-5,
-                    err_msg=f"N2: animal_property_sampled[predator_indices] != old pred_property_sampled at reset for {slug}"
-                )
+            old_pred_prop = _fixture_subset(
+                fixture, step_i, "property_sampled", "pred_property_sampled", pred_idx, slug
+            )
+            new_pred_prop = np.array(state.animal_property_sampled[pred_idx])
+            np.testing.assert_allclose(
+                new_pred_prop, old_pred_prop, rtol=1e-5, atol=1e-5,
+                err_msg=f"N2: animal_property_sampled[predator_indices] != fixture pred_property_sampled at reset for {slug}"
+            )
 
         if step_i == 0 and num_neutral > 0 and neutral_idx is not None:
-            old_neutral_prop = fixture.get(f"step000_neutral_property_sampled")
-            if old_neutral_prop is not None:
-                new_neutral_prop = np.array(state.animal_property_sampled[neutral_idx])
-                np.testing.assert_allclose(
-                    new_neutral_prop, old_neutral_prop, rtol=1e-5, atol=1e-5,
-                    err_msg=f"N2: animal_property_sampled[neutral_indices] != old neutral_property_sampled at reset for {slug}"
-                )
+            old_neutral_prop = _fixture_subset(
+                fixture, step_i, "property_sampled", "neutral_property_sampled", neutral_idx, slug
+            )
+            new_neutral_prop = np.array(state.animal_property_sampled[neutral_idx])
+            np.testing.assert_allclose(
+                new_neutral_prop, old_neutral_prop, rtol=1e-5, atol=1e-5,
+                err_msg=f"N2: animal_property_sampled[neutral_indices] != fixture neutral_property_sampled at reset for {slug}"
+            )
 
         # B1: per-subset PRNG — pred_pos at each step
         if num_pred > 0 and pred_idx is not None:
-            old_pred_pos = fixture.get(f"step{step_i:03d}_pred_pos")
-            if old_pred_pos is not None:
-                new_pred_pos = np.array(state.animal_pos[pred_idx])
-                np.testing.assert_array_equal(
-                    new_pred_pos, old_pred_pos,
-                    err_msg=f"B1: animal_pos[predator_indices] != old pred_pos at step {step_i} for {slug}"
-                )
+            old_pred_pos = _fixture_subset(fixture, step_i, "pos", "pred_pos", pred_idx, slug)
+            new_pred_pos = np.array(state.animal_pos[pred_idx])
+            np.testing.assert_array_equal(
+                new_pred_pos, old_pred_pos,
+                err_msg=f"B1: animal_pos[predator_indices] != fixture pred_pos at step {step_i} for {slug}"
+            )
 
         # B1: wander PRNG — neutral_pos at each step
         if num_neutral > 0 and neutral_idx is not None:
-            old_neutral_pos = fixture.get(f"step{step_i:03d}_neutral_pos")
-            if old_neutral_pos is not None:
-                new_neutral_pos = np.array(state.animal_pos[neutral_idx])
-                np.testing.assert_array_equal(
-                    new_neutral_pos, old_neutral_pos,
-                    err_msg=f"B1: animal_pos[neutral_indices] != old neutral_pos at step {step_i} for {slug}"
-                )
+            old_neutral_pos = _fixture_subset(fixture, step_i, "pos", "neutral_pos", neutral_idx, slug)
+            new_neutral_pos = np.array(state.animal_pos[neutral_idx])
+            np.testing.assert_array_equal(
+                new_neutral_pos, old_neutral_pos,
+                err_msg=f"B1: animal_pos[neutral_indices] != fixture neutral_pos at step {step_i} for {slug}"
+            )
 
     # ── Info dict parity (B5 + legacy aliases) ───────────────────────────────
     for step_i, info in enumerate(info_list):
