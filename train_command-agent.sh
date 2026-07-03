@@ -579,6 +579,30 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
   --tag rppo_basic07_jumpreach23_n113
 
 # ---------------------------------------------------------------------------
+# basic standalone — level 06 sensory noise 10x10 — RE-LAUNCH after extends: fix — 2026-07-03
+# RecurrentPPO (unmodulated), single-config from scratch (standalone, NOT continual).
+# 06-sensory_noise_10x10: extends basic/05 (random-init nutrition/injury + all
+# combined predator-pressure factors), ADDS injury-gated olfactory sensory noise.
+# RE-LAUNCH RATIONALE: the config-loader `extends:` chain was previously not
+# resolved by train.py, so the inherited noise layer was silently dropped. Fixed
+# upstream; this run verifies the fix by checking the saved config.yaml for
+# perceptual_noise.enabled=true, olfaction injury_noise_scale=4.0, and
+# random_start_injury=true.
+# num_envs=16, episodes=10000000 (episode-budget convention), checkpoint_frequency=100000,
+# log_interval=50.
+# Node 110, cuda:0 (confirmed free RTX 3090; nas01 mounted 52T free; JAX GPU-compile
+# check passed jax 0.9.0.1).
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/environment/experiment/basic/06-sensory_noise_10x10.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --num-envs 16 --episodes 10000000 --checkpoint-frequency 100000 \
+  --device cuda:0 --log-interval 50 \
+  --wandb-group basic --wandb-job-type prod \
+  --wandb-name rppo_basic06_noise_n110 --tag rppo_basic06_noise_n110
+
+# ---------------------------------------------------------------------------
 # basic standalone — level 07 jump/attack 10x10 — RE-LAUNCH after extends: fix — 2026-07-03
 # RecurrentPPO (unmodulated), single-config from scratch (standalone, NOT continual).
 # 07-jump_attack_10x10: extends basic/06 (all predator-pressure factors combined +
@@ -808,3 +832,109 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --wandb-group basic05_variants --wandb-job-type prod \
 #   --wandb-name rppo_nmn_film_g128_basic05all_s42 \
 #   --tag rppo_nmn_film_g128_basic05all_s42
+
+# ---------------------------------------------------------------------------
+# basic05_variants/06 — jump-REACH comparison to basic/07 — RE-LAUNCH after
+# extends: fix — 2026-07-03
+# RecurrentPPO (unmodulated), single-config from scratch (standalone, NOT continual).
+# 06-jump_range_2to3.yaml: extends basic/07-jump_attack_10x10 (all predator-pressure
+# factors + injury-gated olfactory noise + random-init + jump/pounce), REDECLARES
+# only the predator's attack_range to [2,4] so the per-episode pounce reach is
+# uniformly 2 OR 3 cells (vs. basic/07's fixed reach). Same config as the earlier
+# rppo_basic07_jumpreach23_n113 entry above but on GPU 0 (not 1) with the
+# convention-matching tag, launched after the config-loader extends: fix so the
+# inherited noise + random-init layers are no longer silently dropped.
+# num_envs=16, episodes=10000000 (episode-budget convention), checkpoint_frequency=100000,
+# log_interval=50.
+# Node 113, cuda:0 (confirmed free RTX 4090; nas01 mounted 52T free; JAX GPU-compile
+# check passed jax 0.9.0.1).
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/environment/experiment/basic05_variants/06-jump_range_2to3.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --num-envs 16 --episodes 10000000 --checkpoint-frequency 100000 \
+  --device cuda:0 --log-interval 50 \
+  --wandb-group basic --wandb-job-type prod \
+  --wandb-name rppo_basic07_jumpreach_n113 --tag rppo_basic07_jumpreach_n113
+
+# ---------------------------------------------------------------------------
+# basic standalone — 05-random_init_10x10 (all-combined predator pressure +
+# random-init nutrition/injury) — RE-LAUNCH after extends: fix — 2026-07-03
+# RecurrentPPO (unmodulated), single-config from scratch (standalone, NOT continual).
+# 05-random_init_10x10: extends environment/default (sensory/noise/behavior_measures
+# inherited); random-init nutrition/injury + all predator-pressure factors folded
+# in directly in this file (more hiding predators, relentless stamina, fast
+# move-interval) — proper random init merged with variant-04 on 2026-07-02.
+# RE-LAUNCH RATIONALE: the config-loader `extends:` chain was previously not
+# resolved by train.py, so the inherited `environment/default` layer was silently
+# dropped. Fixed upstream; this run verifies the fix by checking the saved
+# config.yaml for random_start_injury=true and predator count_high=2,
+# move_interval=[1,1] (proves the all-combined + random-init layers are present).
+# num_envs=16, episodes=10000000 (episode-budget convention), checkpoint_frequency=100000,
+# log_interval=50.
+# Node 109, cuda:0 (confirmed free RTX 3090; nas01 mounted 52T free; JAX GPU-compile
+# check passed jax 0.9.0.1).
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/environment/experiment/basic/05-random_init_10x10.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --num-envs 16 --episodes 10000000 --checkpoint-frequency 100000 \
+  --device cuda:0 --log-interval 50 \
+  --wandb-group basic --wandb-job-type prod \
+  --wandb-name rppo_basic05_alcomb_n109 --tag rppo_basic05_alcomb_n109
+
+# ---------------------------------------------------------------------------
+# basic05_variants/02 — relentless predator stamina — RE-LAUNCH after extends:
+# fix — 2026-07-03 — PACKED onto node 108 GPU 1 (GPU 0 already runs basic/07,
+# left untouched)
+# RecurrentPPO (unmodulated), single-config from scratch (standalone, NOT continual).
+# 02-relentless_stamina.yaml: extends basic05_variants/... -> basic/05-random_init_10x10
+# (random-init nutrition/injury + all-combined predator-pressure factors), REDECLARES
+# only the predator's max_stamina to [30,150] (some episodes spawn a relentless
+# chaser that can drive the agent to starvation) and move_interval [1,3].
+# RE-LAUNCH RATIONALE: supersedes the pre-fix 2026-06-30 run tagged
+# rppo_basic05v2_stamina_n108 (same config, same node/GPU) — that run predates the
+# config-loader extends: fix, so inherited layers (random_start_injury, all-combined
+# predator pressure) were silently dropped. Verifies via saved config.yaml:
+# random_start_injury=true, predator move_interval=[1,3], max_stamina=[30,150].
+# num_envs=16, episodes=10000000 (episode-budget convention), checkpoint_frequency=100000,
+# log_interval=50.
+# Node 108, cuda:1 (GPU 0 busy with basic/07 jump run, PID confirmed via nvidia-smi
+# 91% util; GPU 1 confirmed free 0% util/5MiB; nas01 mounted 52T free; JAX GPU-compile
+# check passed jax 0.9.0.1).
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/environment/experiment/basic05_variants/02-relentless_stamina.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --num-envs 16 --episodes 10000000 --checkpoint-frequency 100000 \
+  --device cuda:1 --log-interval 50 \
+  --wandb-group basic --wandb-job-type prod \
+  --wandb-name rppo_basic05v02_relentstam_n108 --tag rppo_basic05v02_relentstam_n108
+
+# ---------------------------------------------------------------------------
+# basic05_variants/03 — fixed fast predator move_interval — PACKED onto node 109
+# GPU 1 (GPU 0 already runs basic/05 all-combined, left untouched) — 2026-07-03
+# RecurrentPPO (unmodulated), single-config from scratch (standalone, NOT continual).
+# 03-fast_move_interval.yaml: extends basic/05-random_init_10x10 (random-init
+# nutrition/injury + all-combined predator-pressure factors), REDECLARES only the
+# predator's move_interval to a fixed [1,1] (always full-speed, no slow-predator
+# episodes) and max_stamina [30,30].
+# Verifies via saved config.yaml: random_start_injury=true, predator
+# move_interval=[1,1], max_stamina=[30,30].
+# num_envs=16, episodes=10000000 (episode-budget convention), checkpoint_frequency=100000,
+# log_interval=50.
+# Node 109, cuda:1 (GPU 0 busy with rppo_basic05_alcomb_n109, 78% util; GPU 1
+# confirmed free 0% util/63MiB; nas01 mounted 52T free; JAX GPU-compile check
+# passed jax 0.9.0.1).
+# CIFS-bypass: launched via /tmp script — this file is the audit record.
+# ---------------------------------------------------------------------------
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+  --config configs/environment/experiment/basic05_variants/03-fast_move_interval.yaml \
+  --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+  --num-envs 16 --episodes 10000000 --checkpoint-frequency 100000 \
+  --device cuda:1 --log-interval 50 \
+  --wandb-group basic --wandb-job-type prod \
+  --wandb-name rppo_basic05v03_fastmove_n109 --tag rppo_basic05v03_fastmove_n109
