@@ -1,7 +1,7 @@
 ---
 title: "train.py does not resolve `extends:` — training configs lose inherited layers"
 topic: diagnosis
-status: active
+status: archive
 created: 2026-07-03
 last_updated: 2026-07-03
 ---
@@ -52,6 +52,41 @@ parent chain (`load_env_config` / `_resolve_extends`) is never invoked. `train.p
 
 Broadly: any v3.0-era config that relies on `extends` to inherit layers it does not itself
 redeclare has trained wrong since the v3.0 extends system landed (2026-06-19).
+
+## Fix landed (2026-07-03)
+Fixed in `train.py`: both the single `--config` path (main(), ~line 372) and the continual
+`--configs-dir` per-stage path (`_build_continual_schedule`, ~line 192) now load through
+`load_env_config()` (resolves `extends:`) instead of `Config.load_yaml` (plain YAML, no
+resolution). The continual path had the identical bug — confirmed independently before the
+fix (basic/06, basic/07 stage configs loaded with `random_start_injury=False` instead of the
+inherited `True`) and confirmed fixed after.
+
+Merge-order analysis: the resolved env config's top-level namespaces
+(`environment`, `body`, `sensory`, `perceptual_noise`, `behavior_measures`,
+`visualization.local_view_size`) do not collide with the train/eval/wandb/CLI keys merged
+earlier in `train.py` (`training`, `testing`, `wandb`, `episodes`/`seed`/`tag`) — the one
+shared top-level key, `visualization`, deep-merges without clobbering because
+`configs/environment/default.yaml` only sets the `local_view_size` leaf, disjoint from
+`configs/visualization/default.yaml`'s leaves, and re-asserting `local_view_size` is
+idempotent (same source file, same value). A legacy no-`extends:` config was confirmed to
+load byte-identical to before (backward-compat preserved). `pytest tests/env/ -q`: 192
+passed, 492 skipped, 0 failed (pre-existing skip count, unaffected by this change).
+
+Acceptance-test before/after (5 configs, `load_env_params` on train.py's exact merge
+sequence vs. `load_env_params(load_env_config(path))` ground truth):
+
+| Config | Before fix | After fix |
+|---|---|---|
+| basic/05 | MATCH (self-contained) | MATCH |
+| basic/06 | MISMATCH (random_start_injury, hiding count range, max_stamina) | MATCH |
+| basic/07 | MISMATCH (noise, random_start_injury, hiding count range) | MATCH |
+| basic05_variants/04-all_combined | MISMATCH (random_start_injury) | MATCH |
+| basic05_variants/06-jump_range_2to3 | MISMATCH (noise, random_start_injury, hiding count range) | MATCH |
+
+Verification script (scratch, not committed): `tmp/20260703_extends_fix_verify.py`.
+
+Portfolio decision on relaunching the affected runs (basic/07, jump-reach, the variants, v5)
+is still open — left to the user / senior-developer.
 
 ## Recommended fix (NOT yet applied — needs user decision + senior-developer)
 1. `train.py`: load `--config` via `load_env_config(args.config)` (resolves extends) instead of
