@@ -187,7 +187,7 @@ def _build_continual_schedule(base_config: Config,
 
     # 3. Pre-build per-stage Config objects by cloning base and merging each stage YAML.
     # Resolve `extends:` per stage (load_env_config) for the same reason as the single
-    # --config path — see docs/develop/active/diagnosis/EXTENDS_NOT_RESOLVED_IN_TRAINING.md.
+    # --config path — see docs/develop/archive/EXTENDS_NOT_RESOLVED_IN_TRAINING.md.
     # A stage file with no `extends:` key loads byte-identically to Config.load_yaml.
     stage_configs = []
     for p in paths:
@@ -375,7 +375,7 @@ def main():
         # Resolve `extends:` chains (load_env_config) — a plain Config.load_yaml here would
         # silently drop every layer inherited from a non-default `extends` parent (noise,
         # random-init, all-combined predators, etc.). See
-        # docs/develop/active/diagnosis/EXTENDS_NOT_RESOLVED_IN_TRAINING.md.
+        # docs/develop/archive/EXTENDS_NOT_RESOLVED_IN_TRAINING.md.
         # A config with NO `extends:` key loads byte-identically to Config.load_yaml
         # (load_env_config's own documented standalone behaviour), so this is backward-compatible.
         user_config = load_env_config(args.config)

@@ -51,4 +51,5 @@ The config system was restructured so `configs/environment/default.yaml` is the 
 - [[20260619_0112_configurable_visual_properties_and_std]] (env_entities, 2026-06-19) — v3.0 makes the visual sensor config-driven like olfaction: each entity carries a
 - [[20260619_0113_configurable_initial_state_ranges]] (config_system, 2026-06-19) — v3.0 exposes the agent's start nutrition/injury randomization bounds as config k
 - [[20260619_0114_config_guide_maintenance_contract]] (config_system, 2026-06-19) — To keep the v3.0 config system maintained across sessions, a collaborator-facing
+- [[20260703_1507_train_py_ignores_extends_drops_layers]] (config_system, 2026-07-03) — SEVERE: train.py loads --config via Config.load_yaml (plain YAML), which does NO
 <!-- END BACKLINKS -->
