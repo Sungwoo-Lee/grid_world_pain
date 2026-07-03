@@ -225,6 +225,11 @@ class DreamerTrainer(nnx.Module):
                 loss_rew = -jnp.mean(jnp.sum(rew_target * jax.nn.log_softmax(rew_pred), axis=-1))
 
                 # Continue Loss
+                # KNOWN LIMITATION (Finding B, Part 2 — deferred follow-up, NOT fixed here):
+                # `terminal` is real-death OR timeout, so the continue-head is trained to predict
+                # "episode over" (cont=0) on TIMEOUT too, same conflation `recurrent_ppo_trainer.py`
+                # had before its Part-2 fix. DreamerV3 was explicitly out of scope for that fix;
+                # see docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
                 cont_pred = wm.continue_head(feat)
                 loss_cont = optax.sigmoid_binary_cross_entropy(cont_pred, 1.0 - terminal[..., None]).mean()
 

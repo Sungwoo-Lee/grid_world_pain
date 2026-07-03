@@ -37,7 +37,13 @@ class PPOBatch(NamedTuple):
     targets: jnp.ndarray
 
 def compute_gae(rewards, values_next, dones, gamma, lmbda):
-    """Computes Generalized Advantage Estimation."""
+    """Computes Generalized Advantage Estimation.
+
+    KNOWN LIMITATION (Finding B, Part 2 — deferred follow-up, NOT fixed here): `done` below is
+    real-death OR timeout, so the `(1 - done)` bootstrap is zeroed on TIMEOUT too, same issue
+    `recurrent_ppo_trainer.py`'s `compute_gae` had before its Part-2 fix. This file was explicitly
+    out of scope for that fix; see docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
+    """
     def gae_scan(carry, x):
         gae, next_v = carry
         reward, next_v_val, done = x

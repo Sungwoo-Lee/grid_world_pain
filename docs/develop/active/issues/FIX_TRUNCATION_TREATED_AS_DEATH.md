@@ -407,10 +407,19 @@ Part 1:
       failed. The parity fixtures do not store `reward`, only state/positions, so no fixture
       regeneration was needed or performed.
 
-Part 2 (only if approved):
-- [ ] `test_gae_truncation.py` pins bootstrap-retained-on-truncation, zeroed-on-death.
-- [ ] Speed benchmark s/it recorded before/after on the same node/config/seed; delta reported.
-- [ ] A short real training run produces finite advantages/targets (no NaN) and sane value loss.
+Part 2 (approved and implemented 2026-07-04):
+- [x] `test_gae_truncation.py` pins bootstrap-retained-on-truncation, zeroed-on-death. — confirmed:
+      fails pre-fix with `TypeError` (old 6-arg `compute_gae` signature) AND semantically (a
+      hand-computed check against the pre-fix `compute_gae` on a timeout step returns 1.0 —
+      the death-case number — instead of the correct 5.95); 5/5 pass post-fix.
+- [x] Speed benchmark s/it recorded before/after on the same node/config/seed; delta reported. —
+      confirmed: 0.00% delta on `basic/05` + default (MC-mode) `recurrent_ppo.yaml`, the config
+      the task's speed gate specifies — see Implementation Report for the MC-vs-GAE gating that
+      makes this true, plus a supplementary GAE-mode-only measurement (+4–9%, informative only,
+      not gating since no live config uses GAE mode).
+- [x] A short real training run produces finite advantages/targets (no NaN) and sane value loss. —
+      confirmed in both MC mode (Loss values ~0.04–0.36, no NaN) and GAE mode (Loss values
+      ~75–91, no NaN) — see Implementation Report.
 
 ## Implementation Report
 
@@ -584,9 +593,216 @@ hypothesis text at all — it lives only in this plan doc, correctly labeled).
 
 ### Blockers / follow-ups
 
-None for Part 1. Part 2 (GAE truncation bootstrap) remains a distinct, unapproved follow-up per the
-plan's recommendation — flagged here for `senior-developer`/user to decide on separately, not
-implemented, not started.
+None for Part 1. Part 2 (GAE truncation bootstrap) is now implemented — see the Part 2
+Implementation Report below.
+
+---
+
+## Part 2 Implementation Report
+
+> **Implemented by**: developer
+> **Date**: 2026-07-04
+
+### Plain-language summary
+
+This is the second half of the Finding-B fix. Part 1 (already committed, `ef0fd25`) stopped the
+environment from punishing "survived to the time limit" the same as "died" in the *reward*. Part 2
+fixes the matching bug on the *learning* side: when an episode is cut off by the clock (a
+"truncation"), the trainer's value-estimator (the "critic", which predicts how much future reward
+is still coming) must keep counting the future it didn't get to see — not throw it away as if the
+world had truly ended. Before this fix, the trainer's `compute_gae` function zeroed that future
+estimate on BOTH real death and timeout, because it only ever saw a single merged `done` flag.
+After this fix, it consults `termination_reason` (already carried into the trainer) to tell the two
+apart: real death (reason 2/3/4) still zeroes the future estimate; timeout (reason 1) now retains
+it, matching standard reinforcement-learning practice.
+
+**Important finding not anticipated by the plan**: every currently-live `recurrent_ppo` config sets
+`return_mode: "MC"` (Monte Carlo returns), not `"GAE"` — `compute_gae` (and therefore this whole
+fix) is **not on the code path any live training run actually uses**. See "Deviation: MC-mode
+gating" below for how this was handled and why it matters for the speed gate.
+
+### What was implemented, file-by-file
+
+**`src/models/recurrent_ppo_trainer.py`** — the primary Part-2 file, exactly as scoped:
+
+1. **`Transition` struct**: added `next_value: jnp.ndarray = None` — V(true next state), computed
+   pre-auto-reset (additive field, matches plan).
+2. **`compute_gae`**: added a `terminateds` parameter. The delta bootstrap
+   (`gamma * next_value * (1 - terminated)`) is now gated on `terminated` (real death only,
+   RETAINED on truncation); the GAE accumulation-reset term (`gamma * lmbda * (1 - done) * gae`)
+   is unchanged, still gated on the merged `done` (death OR timeout — an episode boundary still
+   cuts the advantage chain either way, since a new episode starts on both).
+3. **`collect_trajectories`**: after `jax_step` and before the auto-reset overwrites `next_state`,
+   computes `V(true next state)` using `h_new` (this step's post-forward hidden state) and stores
+   it as `Transition.next_value`. **Gated on `return_mode == "GAE"`** (see deviation below) — a
+   plain Python `if` resolved at JIT trace time (zero runtime branch cost either way), since
+   `return_mode` comes from `config`, which is itself a static `jit` argument
+   (`nnx.jit(train_iteration, static_argnums=(6,))` in `train.py`).
+4. **`train_iteration`** (GAE branch): derives `terminateds = (termination_reason >= 2)`, passes
+   `trajectories.next_value` directly to `compute_gae` as `values_next`. This **supersedes and
+   removes** the old `obs_final` / `final_v` / `values_with_next` concatenate-and-shift logic —
+   `trajectories.next_value` already holds the correct value for every step, including the last,
+   so no separate post-rollout forward pass is needed. Also removed the now-unused
+   `from src.environment.sensor import get_observation` import at the top of `train_iteration`
+   (still imported separately inside `collect_trajectories`, which needs its own copy).
+
+**`src/models/ppo_trainer.py`** and **`src/models/dreamer_v3_trainer.py`** — one-line comment only,
+per this session's explicit task delegation (not the plan doc's Part-2 File Changes list, which
+scoped Part 2 to `recurrent_ppo_trainer.py` only — flagged here as directed, not a silent
+expansion): both files share the same `done`-conflates-timeout-and-death pattern in their own
+GAE/continue-predictor code and were left functionally untouched, with a comment marking the
+deferred follow-up and linking this doc. `ppo_trainer.py`'s `compute_gae` docstring and
+`dreamer_v3_trainer.py`'s continue-loss computation (`cont_target = 1.0 - terminal[..., None]`,
+line ~229) were the two sites. No logic changed in either file.
+
+### Deviation: MC-mode gating (not in the plan's literal snippet)
+
+The plan's `collect_trajectories` snippet computes `next_value` **unconditionally**, every step,
+regardless of `return_mode`. Investigating the actual config landscape before benchmarking
+surfaced that **`return_mode: "MC"` is the default in `recurrent_ppo.yaml` and every other live
+`recurrent_ppo_*.yaml` config** (checked via `grep -rn "return_mode" configs/models/recurrent_ppo/`
+— 13 files, all `"MC"`, zero `"GAE"`). `compute_gae` (and its new `next_value` bootstrap) is only
+consumed by the GAE branch of `train_iteration`'s "Compute Advantages and Targets" step — the MC
+branch calls `compute_mc_returns`, which never reads `next_value`. Implementing the plan literally
+would have added a full extra value-head forward pass, every rollout step, to **every currently
+training rPPO run**, for a correctness benefit that mode never uses.
+
+I gated the extra forward pass on `return_mode.upper() == "GAE"` (a static, trace-time Python `if`,
+zero runtime cost either way — see point 3 above). Under MC mode, `next_value` is set to
+`jnp.zeros_like(value)` (a cheap allocation, not a matmul) purely to keep the `Transition`
+PyTree's leaf structure consistent for `jax.lax.scan`'s stacking. This deviates from the plan's
+literal code (which didn't anticipate the MC/GAE split) but preserves 100% of its intent — Part 2's
+correctness fix is fully present and correct whenever GAE mode is used — while eliminating the
+speed cost for the mode actually in use today. Flagged here for `senior-developer` to confirm this
+reading of the plan's intent is correct.
+
+Also fixed a **transcription bug in the plan's own Part-2 code snippet**: the plan's
+`get_action_and_value_nnx` unpacking example (`_, next_value, _, _, _ = ...`) would have assigned
+`log_prob` (return position 1) to `next_value`, not `value` (return position 2) —
+`get_action_and_value_nnx` returns `(action, log_prob, value, h_new, mod_info)`. I used a direct
+`model(obs, h)` call instead (mirroring the existing `final_v` pattern this fix removes), which
+avoids the bug entirely and also avoids an unnecessary categorical action sample on a step whose
+action is never used.
+
+### Regression test — fail-before / pass-after evidence
+
+New file: **`tests/models/test_gae_truncation.py`** (5 tests, unit-level on `compute_gae`, no env
+needed, per the plan's Part-2 test spec).
+
+**Pre-fix** (Part-1-only code, via `git stash` isolating `recurrent_ppo_trainer.py` — confirmed
+0-line diff against the stash before dropping it, so this is a faithful revert/restore, not an
+approximation):
+```
+FAILED tests/models/test_gae_truncation.py::test_bootstrap_retained_on_truncation - TypeError: compute_gae() takes 6 positional arguments but 7 were given
+FAILED tests/models/test_gae_truncation.py::test_bootstrap_zeroed_on_real_death - TypeError: ...
+FAILED tests/models/test_gae_truncation.py::test_truncation_bootstrap_does_not_leak_across_episode_boundary - TypeError: ...
+FAILED tests/models/test_gae_truncation.py::test_death_bootstrap_does_not_leak_across_episode_boundary - TypeError: ...
+4 failed, 1 passed in 1.84s   # the 5th test (termination_reason mask formula) doesn't call compute_gae
+```
+The `TypeError`s alone prove old code lacks the death/truncation distinction, but to rule out "the
+test just doesn't match the old API" as opposed to "the old code has the bug", I also ran the old
+6-arg `compute_gae` directly against the truncation scenario:
+```
+OLD compute_gae on a timeout step (pre-fix): 1.0
+Expected CORRECT (bootstrap retained):        5.95
+Bug confirmed: True
+```
+This is the death-case number (1.0), not the truncation-case number (5.95) — i.e. old code
+concretely conflates timeout with death, not just "doesn't have the parameter".
+
+**Post-fix**: all 5 tests pass:
+```
+tests/models/test_gae_truncation.py::test_bootstrap_retained_on_truncation PASSED
+tests/models/test_gae_truncation.py::test_bootstrap_zeroed_on_real_death PASSED
+tests/models/test_gae_truncation.py::test_truncation_bootstrap_does_not_leak_across_episode_boundary PASSED
+tests/models/test_gae_truncation.py::test_death_bootstrap_does_not_leak_across_episode_boundary PASSED
+tests/models/test_gae_truncation.py::test_termination_reason_to_terminated_mask PASSED
+5 passed in 2.41s
+```
+
+### Full test-suite results
+
+- `pytest tests/models/` (5 collected, all new): **5 passed, 0 failed**, 2.2s.
+- `pytest tests/env/` (686 collected): **194 passed, 492 skipped, 0 failed**, 735.11s (0:12:15) —
+  identical pass/skip counts to Part 1's run, confirming Part 2 introduces no env-level regression
+  (expected: Part 2 touches only trainer-side value/advantage computation, never environment state
+  or reward).
+
+### Speed benchmark (the mandatory gate)
+
+**Setup**: `basic/05` (`configs/environment/experiment/basic/05-random_init_10x10.yaml`) +
+non-modulated `recurrent_ppo.yaml` (default config, `return_mode: "MC"`), seed 0, identical
+`--total-timesteps 1638400` (100 iterations at the config's default 128 envs × 128 steps/iter),
+same GPU (`CUDA_VISIBLE_DEVICES=0`, local RTX 4090), same machine, sequential (not concurrent) runs.
+Timing method: parsed tqdm's per-iteration elapsed-time stamps from the training log (`Training: 0it
+[MM:SS, ..., Iter=N, ...]`), comparing iteration 10 → iteration 100 (skips early iterations so
+one-time JIT-compile overhead — visible as a ~60s jump before iteration 1 — is excluded from the
+steady-state measurement) to get s/it.
+
+| Run | Command | Steady-state s/it (iter 10→100) |
+|---|---|---|
+| BEFORE (Part-1-only, stashed) | `tmp/20260704_speed_before.log` | 0.2667 s/it |
+| AFTER (Part 1 + Part 2) | `tmp/20260704_speed_after.log` | 0.2667 s/it |
+
+**Delta: 0.00%.** Cross-checked with several different warm-up cutoffs (k0 = 10, 20, 30, 50 —
+`before`/`after` re-derived from the same two logs at each cutoff): deltas ranged −4.55% to +0.00%,
+i.e. noise-floor level (±1s second-resolution rounding on a ~24s window), no consistent direction.
+This result is a direct consequence of the MC-mode gating above: with `return_mode: "MC"` (every
+live config), the new bootstrap-value forward pass never executes — the only change on this code
+path is a cheap `jnp.zeros_like(value)` allocation for `Transition.next_value`, and removing the
+old `obs_final`/`final_v` computation (which was itself GAE-branch-only, so also never ran in MC
+mode) is a wash. **Verdict: PASS the speed gate cleanly** (<5% threshold, in fact indistinguishable
+from zero).
+
+**Supplementary (informative, non-gating) measurement — GAE mode**: since GAE mode is where Part
+2's correctness fix actually changes behavior, I also ran a smaller before/after comparison with a
+temporary `return_mode: "GAE"` copy of the agent config (`tmp/20260704_recurrent_ppo_gae.yaml`,
+scratch-only, not committed), `num_envs=64`/`num_steps=64` (smaller for a faster supplementary
+check), 200 iterations:
+
+| Cutoff | BEFORE (Part-1-only GAE branch) | AFTER (Part 2 GAE branch) | Delta |
+|---|---|---|---|
+| iter 10→200 | 0.1263 s/it | 0.1316 s/it | **+4.17%** |
+| iter 20→200 | 0.1222 s/it | 0.1333 s/it | **+9.09%** |
+
+This +4–9% reflects the genuine extra value-head forward pass Part 2 adds when GAE mode is
+actually exercised — consistent with the plan's own risk table ("Medium–High... roughly doubles
+the network forward in collect", tempered because the forward pass is only part of the total
+iteration cost, which also includes multiple PPO update epochs). This is **not part of the gate**
+(no live config uses GAE mode today) but is recorded here so a future switch to GAE mode has the
+real cost on record, per the plan's "5–15%: commit but flag it prominently" guidance.
+
+### Smoke test — sane loss/value numbers, no NaN
+
+Both extracted directly from the speed-benchmark training logs above (100/200 real training
+iterations each, not a synthetic exercise):
+
+- **MC mode** (`tmp/20260704_speed_after.log`, post-fix): `Iter=100, Loss=0.1234, Rew=-137.02` (and
+  all 99 preceding iterations) — finite, no NaN/Inf, no crash, no traceback.
+- **GAE mode** (`tmp/20260704_speed_gae_after.log`, post-fix, exercises the new bootstrap code path
+  directly): `Iter=200, Loss=90.7972, Rew=-143.17` — finite (GAE-mode loss is on a different,
+  unnormalized scale than MC, expected — not a regression signal), no NaN/Inf in the full log
+  (checked via `grep -i "nan\|inf\|error\|traceback"`, zero matches beyond the word "info").
+
+### Deviations from the plan (summary)
+
+1. **MC-mode gating** of the extra forward pass in `collect_trajectories` (not in the plan's
+   literal snippet) — see dedicated section above. Rationale: zero benefit + real cost for every
+   currently-live config; implemented as a static trace-time branch, zero risk.
+2. **Fixed a bug in the plan's own Part-2 code example** (tuple-unpacking off-by-one in the
+   `get_action_and_value_nnx` snippet) by using a direct `model()` call instead — see above.
+3. **Added one-line, comment-only follow-up flags** to `ppo_trainer.py` and `dreamer_v3_trainer.py`
+   per this session's explicit task delegation, even though neither file is in the plan doc's
+   Part-2 File Changes list. No logic changed in either file. Flagged here for `senior-developer`
+   to fold into the plan doc's File Changes section if this is confirmed as intended scope.
+4. Removed `obs_final` / `final_v` / `values_with_next` from `train_iteration`'s GAE branch, as the
+   plan's own note anticipated ("`developer` should confirm nothing else consumes `final_v` before
+   deleting it" — confirmed via grep, nothing else in the file references them).
+
+### Blockers / follow-ups
+
+None. `ppo_trainer.py` and DreamerV3's continue-predictor now carry explicit follow-up comments
+(see above) but remain unimplemented — future work, not blocking this fix.
 
 ## Verification Report
 
