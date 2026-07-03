@@ -688,7 +688,13 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     }
     
     new_satiation, new_nutrition, new_injury, next_injury_buffer, next_nociception_history, new_rest_streak, done = update_body(state, info, params)
-    
+    # `done` here is REAL DEATH only (starvation / over-eating / injury). update_body does not know
+    # about the step clock, so it never fires on a timeout. Capture it BEFORE the truncation merge
+    # below so the death_penalty can be gated on real death and NOT on surviving to the step limit.
+    # Finding B — see docs/develop/active/diagnosis/v3_pipeline_correctness_diagnosis.md and
+    # docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
+    real_death = done
+
     # Max Steps Truncation
     next_step = state.current_step + 1
     truncated = next_step >= params.max_steps
@@ -703,8 +709,12 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     reason = jnp.where(new_injury >= params.max_injury, 4, reason)
     
     info['termination_reason'] = reason
+    # `done` below is the EPISODE-END flag: real death OR timeout. It is used ONLY for episode reset,
+    # hidden-state reset, and boundary bookkeeping. It must NOT gate the death_penalty — surviving to
+    # max_steps (truncation, reason == 1) is the SUCCESS outcome of a survival task and must not be
+    # punished like death. The penalty is gated on `real_death` (captured above). Finding B.
     done = jnp.logical_or(done, truncated)
-    
+
     # 6. Reward (Homeostatic driven by Satiation)
     reward_homeostatic = 0.0
     reward_extrinsic = 0.0
@@ -718,11 +728,13 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
         prev_drive = calculate_drive(state.satiation, state.injury_level, params)
         curr_drive = calculate_drive(new_satiation, new_injury, params)
         reward_homeostatic = prev_drive - curr_drive
-        # Death penalty based on Nutrition starvation
-        reward_homeostatic = jnp.where(done, reward_homeostatic - params.death_penalty, reward_homeostatic)
+        # Death penalty gated on REAL DEATH only (starvation / over-eating / injury), NOT on `done`.
+        # Timeout / truncation (reason == 1) keeps just the normal homeostatic step value. Finding B.
+        reward_homeostatic = jnp.where(real_death, reward_homeostatic - params.death_penalty, reward_homeostatic)
     else:
         reward_extrinsic = jnp.where(ate_food, 1.0, 0.0)
-        reward_extrinsic = jnp.where(done, -params.death_penalty, reward_extrinsic)
+        # Death penalty gated on REAL DEATH only — NOT on timeout. Finding B.
+        reward_extrinsic = jnp.where(real_death, -params.death_penalty, reward_extrinsic)
     
     reward = reward_homeostatic + reward_extrinsic
     # Apply eating penalty if ate food

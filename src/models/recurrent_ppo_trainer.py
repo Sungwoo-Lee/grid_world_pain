@@ -60,6 +60,10 @@ def compute_gae(rewards, values, values_next, dones, gamma, lmbda):
     """
     def gae_scan(gae, x):
         reward, value, next_value, done = x
+        # KNOWN LIMITATION (Finding B, Part 2 deferred): `done` here is real-death OR timeout, so the
+        # (1 - done) bootstrap is zeroed on TIMEOUT too. Correct RL truncation handling would zero the
+        # bootstrap only on real death and RETAIN gamma*V(s') on timeout. See
+        # docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md (Part 2).
         delta = reward + gamma * next_value * (1 - done) - value
         gae = delta + gamma * lmbda * (1 - done) * gae
         return gae, gae
