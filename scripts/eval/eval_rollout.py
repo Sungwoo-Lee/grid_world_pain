@@ -394,6 +394,107 @@ def _compute_online_replay(episodes, bm_cfg):
     return results
 
 
+def _resolve_continual_stage_config(config_arg: str, checkpoint_arg: str,
+                                     quiet: bool = False) -> Optional[str]:
+    """Resolve the environment config for a continual (multi-stage curriculum)
+    checkpoint to its OWN stage, instead of always evaluating against stage 0.
+
+    Background (see docs/develop/active/diagnosis/v3_pipeline_correctness_diagnosis.md,
+    Finding E / L2): a continual run's CheckpointManager root (`models/`) always
+    contains a stage-0 `config.yaml` PLUS per-stage `stage_{i:02d}_<name>.yaml`
+    dumps and a `schedule.yaml` manifest (train.py ~line 592-605). Evaluating every
+    checkpoint against `config.yaml` silently evaluates later-stage checkpoints in
+    the wrong (stage-0) environment.
+
+    Detection is conservative and backward-compatible: this only fires when
+    (a) `checkpoint_arg`'s CheckpointManager root has a `schedule.yaml` (i.e. this
+    is actually a continual run) AND (b) `config_arg` is exactly that run's own
+    stage-0 `config.yaml` -- the common `--config <run>/models/config.yaml`
+    invocation pattern that the diagnosis found buggy. An explicitly different
+    `--config` (e.g. an out-of-distribution / generalization eval config) is left
+    untouched; the caller's choice always wins. Non-continual runs (no
+    `schedule.yaml`) return None and the caller uses `--config` exactly as before.
+
+    The checkpoint's stage is read directly from the checkpoint's own saved
+    payload (`ckpt_data['stage']`, train.py ~line 2428) rather than recomputed
+    from the episode count and `episode_boundaries` -- the per-iteration
+    stage-transition check means a checkpoint's *recorded* stage can lag one
+    behind what the boundary alone would imply (confirmed empirically on a real
+    continual checkpoint: episode 811 with boundary 800 was still saved as stage
+    0, not the recomputed stage 1). Reading the checkpoint's own field is ground
+    truth; recomputing from boundaries is not.
+    """
+    ckpt_path = Path(checkpoint_arg).resolve()
+    try:
+        explicit_step = int(ckpt_path.name)
+        ckpt_root = ckpt_path.parent
+    except ValueError:
+        explicit_step = None
+        ckpt_root = ckpt_path
+
+    schedule_path = ckpt_root / "schedule.yaml"
+    if not schedule_path.exists():
+        return None  # not a continual run; unchanged behavior
+
+    default_cfg_path = (ckpt_root / "config.yaml").resolve()
+    if Path(config_arg).resolve() != default_cfg_path:
+        return None  # caller explicitly chose a different config; leave it alone
+
+    sched = Config.load_yaml(str(schedule_path))
+    stage_names = sched.get_mandatory("continual.stage_names")
+
+    restore_mngr = ocp.CheckpointManager(str(ckpt_root))
+    step = explicit_step if explicit_step is not None else restore_mngr.latest_step()
+    if step is None:
+        raise ValueError(f"No checkpoint steps found under {ckpt_root}.")
+
+    _cpu_device = jax.local_devices()[0]
+
+    def _cpu_restore_arg(_x):
+        return ocp.ArrayRestoreArgs(
+            restore_type=jax.Array,
+            sharding=jax.sharding.SingleDeviceSharding(_cpu_device),
+        )
+
+    target = {"stage": 0}
+    restore_args = jax.tree_util.tree_map(_cpu_restore_arg, target)
+    try:
+        restored = restore_mngr.restore(
+            step,
+            args=ocp.args.PyTreeRestore(item=target, restore_args=restore_args,
+                                         partial_restore=True),
+        )
+        stage_idx = int(restored["stage"])
+    except Exception as e:
+        raise ValueError(
+            f"Continual run detected ({schedule_path}) but could not read the "
+            f"'stage' field from checkpoint step {step} under {ckpt_root}: {e}. "
+            f"Pass a --config other than the stage-0 config.yaml to bypass "
+            f"stage auto-detection."
+        ) from e
+
+    if not (0 <= stage_idx < len(stage_names)):
+        raise ValueError(
+            f"Checkpoint step {step} reports stage index {stage_idx}, out of "
+            f"range for {len(stage_names)} stages in {schedule_path}."
+        )
+
+    stage_cfg_path = ckpt_root / f"stage_{stage_idx:02d}_{stage_names[stage_idx]}.yaml"
+    if not stage_cfg_path.exists():
+        raise ValueError(
+            f"Resolved stage config {stage_cfg_path} does not exist "
+            f"(stage {stage_idx}: {stage_names[stage_idx]})."
+        )
+
+    if not quiet:
+        print(f"[eval_rollout] Continual run detected at {ckpt_root}; checkpoint "
+              f"step {step} belongs to stage {stage_idx} "
+              f"('{stage_names[stage_idx]}'). Using stage config: {stage_cfg_path} "
+              f"(overrides stage-0 {default_cfg_path})", flush=True)
+
+    return str(stage_cfg_path)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Offline evaluation rollout for behavior-measure toolkit v1.",
@@ -424,7 +525,14 @@ def main():
         jax.config.update("jax_platform_name", "cpu")
 
     # --- Load configs ---
-    config = load_env_config(args.config)  # honours `extends:` if present; standalone otherwise
+    # Finding E / L2 fix: for a continual (multi-stage curriculum) run whose
+    # checkpoint is being evaluated via the default `--config <run>/models/config.yaml`
+    # pattern, evaluate against the checkpoint's OWN stage config, not stage 0's.
+    # See _resolve_continual_stage_config for the detection rule and rationale.
+    _stage_config_path = _resolve_continual_stage_config(args.config, args.checkpoint,
+                                                           quiet=args.quiet)
+    config_path = _stage_config_path if _stage_config_path is not None else args.config
+    config = load_env_config(config_path)  # honours `extends:` if present; standalone otherwise
     bm_cfg = load_behavior_measure_cfg(config)
     if bm_cfg is None:
         print("WARNING: behavior_measures block absent in config; using defaults for eval.", flush=True)
@@ -737,6 +845,7 @@ def main():
     # --- Metadata ---
     metadata = {
         "config": args.config,
+        "config_resolved": config_path,
         "checkpoint": args.checkpoint,
         "agent_type": agent_type,
         "n_episodes": n_eps,
