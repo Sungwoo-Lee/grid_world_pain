@@ -63,7 +63,7 @@ from typing import NamedTuple, List, Optional
 from dataclasses import dataclass
 import glob
 
-from src.environment.config_loader import load_env_params, load_behavior_measure_cfg
+from src.environment.config_loader import load_env_params, load_behavior_measure_cfg, load_env_config
 from src.behavior.accumulators import (
     make_bm_state, bm_step_update, bm_reset_env,
     bm_finalise_episode as _bm_finalise_episode_shared,
@@ -185,11 +185,14 @@ def _build_continual_schedule(base_config: Config,
     if any(f <= 0 for f in ckpt_freqs):
         raise ValueError(f"checkpoint_frequencies must be > 0: {ckpt_freqs}")
 
-    # 3. Pre-build per-stage Config objects by cloning base and merging each stage YAML
+    # 3. Pre-build per-stage Config objects by cloning base and merging each stage YAML.
+    # Resolve `extends:` per stage (load_env_config) for the same reason as the single
+    # --config path — see docs/develop/active/diagnosis/EXTENDS_NOT_RESOLVED_IN_TRAINING.md.
+    # A stage file with no `extends:` key loads byte-identically to Config.load_yaml.
     stage_configs = []
     for p in paths:
         stage_cfg = Config(yaml.safe_load(yaml.dump(base_config.to_dict())))  # deep copy
-        stage_cfg.merge(Config.load_yaml(p))
+        stage_cfg.merge(load_env_config(p))
         stage_configs.append(stage_cfg)
 
     return ContinualSchedule(
@@ -369,7 +372,13 @@ def main():
     elif args.config:
         if not args.quiet:
             print(f"Loading override config from: {args.config}")
-        user_config = Config.load_yaml(args.config)
+        # Resolve `extends:` chains (load_env_config) — a plain Config.load_yaml here would
+        # silently drop every layer inherited from a non-default `extends` parent (noise,
+        # random-init, all-combined predators, etc.). See
+        # docs/develop/active/diagnosis/EXTENDS_NOT_RESOLVED_IN_TRAINING.md.
+        # A config with NO `extends:` key loads byte-identically to Config.load_yaml
+        # (load_env_config's own documented standalone behaviour), so this is backward-compatible.
+        user_config = load_env_config(args.config)
         config.merge(user_config)
 
     # Merge Agent Config (--agent_config) - REQUIRED

@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-07-03
 **Active folders**: 10
-**Total insights**: 151
+**Total insights**: 153
 **Last audit**: (none)
 
 ---
@@ -21,8 +21,8 @@
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 19 | 2026-06-30 | [dreamer, decision, learned_lesson, refutation, meta, design] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 35 | 2026-07-03 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
 | `hypervigilance` | Hypervigilance experiments | 27 | 2026-06-30 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise] |
-| `env_entities` | Env entity architecture decisions | 16 | 2026-07-03 | [design, decision, learned_lesson, meta, config, dreamer] |
-| `config_system` | Config loader/layering/schema | 4 | 2026-06-22 | [config, design, decision, meta, learned_lesson] |
+| `env_entities` | Env entity architecture decisions | 17 | 2026-07-03 | [design, decision, learned_lesson, meta, config, dreamer] |
+| `config_system` | Config loader/layering/schema | 5 | 2026-07-03 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 3 | 2026-06-24 | [learned_lesson, decision, refutation] |
 | `behavior_measures` | Behavior-measure platform & probes | 4 | 2026-06-30 | [design, decision, meta, learned_lesson, hypervigilance, refutation] |
 
@@ -55,6 +55,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-07-03: Captured 2 insights from the train.py extends-bug diagnosis: 1 into `config_system` (`20260703_1507_train_py_ignores_extends_drops_layers` — train.py loads --config via Config.load_yaml, NOT load_env_config, so extends: is never resolved and inherited layers silently drop to default; basic/07 trained without noise/random-init/all-combined; latent since v3.0; + the verify-actual-state methodology lesson now in CLAUDE.md), 1 into `env_entities` (`20260703_1508_eval_video_drops_true_obs_no_noise_contrast` — training video-eval drops true_obs so noise videos show no contrast; red herring vs the deeper bug). All tags reused. No new tags.
 - 2026-07-03: Captured 2 more insights (completeness pass) from the same session: `20260703_0352_blocking_obstacle_felt_not_seen` (env_entities — a blocking rock stops the agent and is felt via the collision sensor + bump-pain, invisible to vision/smell; non-blocking is seen but not in the collision sensor) and `20260703_0353_wandb_log_code_hang_progress_recheck` (cluster_ops — ~8-min wandb log_code() hang means 'alive' != 'training'; add a progress recheck to launch verification). All tags reused. No new tags.
 - 2026-07-03: Captured 3 insights from the basic 05/06/07 promotion + GPU-tooling + predator-jump session: 1 into `cluster_ops` (`20260703_0342_lab_gpu_heterogeneous_probe_contamination` — cluster is heterogeneous; run_command.py shared-NAS-log probe corrupted the spec; fix = direct-SSH gpu_status.py + gpu-status skill + LAB_NODE_GPU_SPEC), 2 into `env_entities` (`20260703_0343_predator_jump_pounce_mechanism` — opt-in jump/pounce, bush blocks it, disabled=byte-identical, plan->impl->review->env-verified ea13ea9; `20260703_0344_attack_range_float_threshold_gotcha` — float range on integer distance: [2,3]==[2,2], use [2,4] for reach {2,3}). All tags reused (training_runner, learned_lesson, meta, decision, design, config). No new tags.
 - 2026-06-30: Captured 2 insights into existing `cluster_ops` from the scripts/ folder reorganization session: `20260630_1829_script_relocation_depth_and_gitignore_hazards` (two silent move-hazards — __file__-depth repo-root math must be re-depthed on a folder move, and a top-level .gitignore pattern matching the new subfolder name un-tracks the moved files) and `20260630_1830_scripts_reorg_dependency_map_and_contract` (map-before-move across 4 caller surfaces + group-by-function to preserve bare-import clusters + a CLAUDE.md/agent-profile Maintenance Contract; 31 git-mv + 2 git-rm, PASS-WITH-NITS). All tags reused (learned_lesson, meta, design, decision) — no new tags.
