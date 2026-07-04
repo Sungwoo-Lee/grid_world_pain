@@ -7,7 +7,7 @@ environment:
   max_steps: 500
   rest_action_enabled: true
   eat_action_enabled: true
-  random_start_pos: true 
+  random_start_pos: false
 
   # Entity placement overlap resolution strategy.
   # "per_entity": Sequential scan over all entities (fast on small grids ≤100 cells)
