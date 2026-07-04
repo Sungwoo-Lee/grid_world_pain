@@ -98,3 +98,66 @@ def test_termination_reason_to_terminated_mask():
     terminated = (reasons >= 2).astype(jnp.float32)
     expected = jnp.array([0.0, 0.0, 1.0, 1.0, 1.0])
     assert jnp.array_equal(terminated, expected)
+
+
+# ---------------------------------------------------------------------------
+# Finding B-2 sibling: plain (non-recurrent) PPO trainer's `compute_gae`.
+#
+# `src.models.ppo_trainer.compute_gae` has a different signature from the
+# recurrent trainer's version above — it takes no separate `values` (V(s_t))
+# baseline array, only `values_next`. That is a pre-existing, independent
+# quirk of this file's GAE formula (see the NOTE in `compute_gae`'s docstring)
+# and is NOT part of this fix's scope. These tests pin only the death-vs-
+# truncation bootstrap distinction, isolated via single-step / two-step cases
+# where that pre-existing quirk cannot contaminate the numbers being checked.
+# ---------------------------------------------------------------------------
+from src.models.ppo_trainer import compute_gae as ppo_compute_gae
+
+
+def test_ppo_trainer_bootstrap_retained_on_truncation():
+    """A single timeout step (done=True, terminated=False) must RETAIN gamma*V(s')."""
+    rewards = jnp.array([2.0])
+    values_next = jnp.array([5.0])  # V(true next state), pre-auto-reset
+    dones = jnp.array([True])
+    terminateds = jnp.array([False])  # truncation, NOT real death
+
+    advantages = ppo_compute_gae(rewards, values_next, dones, terminateds, GAMMA, LAMBDA)
+
+    assert advantages[0] == pytest.approx(1.9499998, abs=1e-5)
+
+
+def test_ppo_trainer_bootstrap_zeroed_on_real_death():
+    """A single real-death step (done=True, terminated=True) must ZERO gamma*V(s')."""
+    rewards = jnp.array([2.0])
+    values_next = jnp.array([5.0])
+    dones = jnp.array([True])
+    terminateds = jnp.array([True])  # real death
+
+    advantages = ppo_compute_gae(rewards, values_next, dones, terminateds, GAMMA, LAMBDA)
+
+    assert advantages[0] == pytest.approx(-3.0, abs=1e-5)
+
+
+def test_ppo_trainer_truncation_bootstrap_does_not_leak_across_episode_boundary():
+    """A truncation step followed by the first step of a brand-new episode: the truncated
+    step's advantage must differ from the matching real-death case by exactly the retained
+    bootstrap term `gamma * V(s')`, and the second step's advantage must be identical in both
+    cases (i.e. the `done` flag at t=0 still cuts the accumulation chain either way).
+    """
+    rewards = jnp.array([2.0, 3.0])
+    values_next = jnp.array([5.0, 4.0])
+    dones = jnp.array([True, False])
+
+    trunc_terminateds = jnp.array([False, False])
+    death_terminateds = jnp.array([True, False])
+
+    adv_trunc = ppo_compute_gae(rewards, values_next, dones, trunc_terminateds, GAMMA, LAMBDA)
+    adv_death = ppo_compute_gae(rewards, values_next, dones, death_terminateds, GAMMA, LAMBDA)
+
+    # t=0 differs exactly by the retained bootstrap term.
+    assert float(adv_trunc[0] - adv_death[0]) == pytest.approx(GAMMA * float(values_next[0]), abs=1e-5)
+    assert adv_trunc[0] == pytest.approx(2.9499998, abs=1e-5)
+    assert adv_death[0] == pytest.approx(-2.0, abs=1e-5)
+
+    # t=1 is unaffected by t=0's terminated flag (episode boundary at t=0 still cuts the chain).
+    assert float(adv_trunc[1]) == pytest.approx(float(adv_death[1]), abs=1e-6)

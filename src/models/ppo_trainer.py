@@ -11,6 +11,12 @@ class Transition(NamedTuple):
     done: jnp.ndarray
     log_prob: jnp.ndarray
     value: jnp.ndarray
+    # V(true next state), computed BEFORE auto-reset overwrites it with a fresh episode start
+    # (Finding B, Part 2 — docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md). Used as
+    # the GAE bootstrap value so truncation (timeout) retains gamma*V(s') instead of losing it to
+    # the rollout's auto-reset. Only populated when return_mode == "GAE" (see collect_trajectories);
+    # zeros otherwise, since MC mode never reads it.
+    next_value: jnp.ndarray = None
     step_info: Any = None
 
 class StepInfo(NamedTuple):
@@ -36,25 +42,36 @@ class PPOBatch(NamedTuple):
     advantages: jnp.ndarray
     targets: jnp.ndarray
 
-def compute_gae(rewards, values_next, dones, gamma, lmbda):
+def compute_gae(rewards, values_next, dones, terminateds, gamma, lmbda):
     """Computes Generalized Advantage Estimation.
 
-    KNOWN LIMITATION (Finding B, Part 2 — deferred follow-up, NOT fixed here): `done` below is
-    real-death OR timeout, so the `(1 - done)` bootstrap is zeroed on TIMEOUT too, same issue
-    `recurrent_ppo_trainer.py`'s `compute_gae` had before its Part-2 fix. This file was explicitly
-    out of scope for that fix; see docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
+    RL-correct truncation handling (Finding B, Part 2 —
+    docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md):
+      - the delta bootstrap (`gamma * next_v_val`) is gated on `terminated` (REAL death,
+        termination_reason in {2,3,4}) — RETAINED (not zeroed) on timeout (truncation).
+      - the GAE accumulation reset is still gated on `done` (death OR timeout) — an episode
+        boundary still cuts the advantage chain on both, since a new episode starts either way.
+    `values_next` MUST be V(s') of the TRUE next state (Transition.next_value, computed pre-reset
+    in collect_trajectories), not a value computed on an auto-reset fresh-episode observation.
+
+    NOTE (pre-existing, out of scope for this fix): unlike recurrent_ppo_trainer.py's `compute_gae`,
+    this function does not take a separate `values` (V(s_t)) baseline array. The `next_v` carried
+    across scan steps here is not V(s_t) but a value shifted from the neighboring timestep, which
+    numerically diverges from a textbook GAE recursion. This is an independent, pre-existing bug
+    unrelated to the truncation-vs-death distinction addressed here — flagged, not fixed, per this
+    task's scope (see Implementation Report).
     """
     def gae_scan(carry, x):
         gae, next_v = carry
-        reward, next_v_val, done = x
-        delta = reward + gamma * next_v_val * (1 - done) - next_v
+        reward, next_v_val, done, terminated = x
+        delta = reward + gamma * next_v_val * (1 - terminated) - next_v
         gae = delta + gamma * lmbda * (1 - done) * gae
         return (gae, next_v_val), gae
 
     _, advantages = jax.lax.scan(
-        gae_scan, 
-        (0.0, values_next[-1]), 
-        (rewards, values_next, dones),
+        gae_scan,
+        (0.0, values_next[-1]),
+        (rewards, values_next, dones, terminateds),
         reverse=True
     )
     return advantages
@@ -105,25 +122,43 @@ def ppo_loss_fn(model, batch, clip_eps, ent_coef, vf_coef):
     
     return total_loss, (policy_loss, value_loss, entropy_loss)
 
-def collect_trajectories(model, env_params, last_state, last_key, num_steps):
+def collect_trajectories(model, env_params, last_state, last_key, num_steps, return_mode="MC"):
     """Collects parallel trajectories using jax.lax.scan."""
     from src.environment.core import jax_step, jax_reset
     from src.environment.sensor import get_observation
 
+    # `return_mode` is a static (non-traced) string from `config`, which is itself a static jit
+    # argument (see train.py's `nnx.jit(train_iteration_ppo, static_argnums=(5,))`). This plain
+    # Python comparison is therefore resolved once at trace time, not per-step at runtime.
+    use_gae_bootstrap = return_mode.upper() == "GAE"
+
     def scan_fn(carry, _):
         state, key = carry
-        
+
         obs = jax.vmap(get_observation, in_axes=(0, None))(state, env_params)
         key, act_key = jax.random.split(key)
         act_keys = jax.random.split(act_key, state.agent_pos.shape[0])
-        
+
         from .ppo_network import get_action_and_value_ppo_nnx
         action, log_prob, value = jax.vmap(
             get_action_and_value_ppo_nnx, in_axes=(None, 0, 0)
         )(model, obs, act_keys)
-        
+
         next_state, reward, done, info = jax.vmap(jax_step, in_axes=(0, 0, None))(state, action, env_params)
-        
+
+        # Bootstrap value: V(TRUE next state), computed BEFORE auto-reset (below) overwrites
+        # `next_state` with a fresh episode start. Finding B, Part 2 —
+        # docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md. Gated on GAE mode:
+        # `compute_gae` is the only consumer of `next_value` (MC mode uses `compute_mc_returns`,
+        # which never reads it). No live `ppo` config uses GAE mode, so this static, trace-time
+        # branch keeps the extra value-head forward pass entirely out of the MC-mode hot path.
+        if use_gae_bootstrap:
+            obs_next_true = jax.vmap(get_observation, in_axes=(0, None))(next_state, env_params)
+            _, next_value = model(obs_next_true)
+            next_value = next_value.squeeze(-1)
+        else:
+            next_value = jnp.zeros_like(value)
+
         reset_key, key = jax.random.split(key)
         reset_state = jax.vmap(jax_reset, in_axes=(None, 0))(env_params, jax.random.split(reset_key, state.agent_pos.shape[0]))
         
@@ -147,8 +182,8 @@ def collect_trajectories(model, env_params, last_state, last_key, num_steps):
             termination_reason=info['termination_reason'],
         )
         trans = Transition(
-            obs=obs, action=action, reward=reward, done=done, 
-            log_prob=log_prob, value=value, step_info=step_info
+            obs=obs, action=action, reward=reward, done=done,
+            log_prob=log_prob, value=value, step_info=step_info, next_value=next_value
         )
         return (final_state, key), trans
 
@@ -168,15 +203,15 @@ def update_step_ppo(model, optimizer, batch, config):
 
 def train_iteration_ppo(model, optimizer, env_params, env_state, key, config):
     """Performs one full PPO iteration (collect + N epochs)."""
-    from src.environment.sensor import get_observation
-    
+    return_mode = getattr(config, 'return_mode', 'GAE')
+
     # 1. Collect rollouts
     trajectories, next_env_state, key = collect_trajectories(
-        model, env_params, env_state, key, config.num_steps
+        model, env_params, env_state, key, config.num_steps, return_mode=return_mode
     )
-    
+
     # 2. Compute Advantages and Targets
-    if getattr(config, 'return_mode', 'GAE').upper() == "MC":
+    if return_mode.upper() == "MC":
         returns = jax.vmap(compute_mc_returns, in_axes=(1, 1, None), out_axes=1)(
             trajectories.reward, trajectories.done, config.gamma
         )
@@ -184,13 +219,17 @@ def train_iteration_ppo(model, optimizer, env_params, env_state, key, config):
         targets = returns
         advantages = returns - trajectories.value
     else:
-        obs_final = jax.vmap(get_observation, in_axes=(0, None))(next_env_state, env_params)
-        _, final_v = model(obs_final)
-        final_v = final_v.squeeze()
-        
-        values_with_next = jnp.concatenate([trajectories.value, final_v.reshape(1, -1)], axis=0)
-        advantages = jax.vmap(compute_gae, in_axes=(1, 1, 1, None, None), out_axes=1)(
-            trajectories.reward, values_with_next[1:], trajectories.done, config.gamma, config.gae_lambda
+        # GAE. Real-termination mask (Finding B, Part 2): termination_reason 2/3/4 = real death;
+        # 1 = timeout (truncation); 0 = still active. Gates the value bootstrap only — the
+        # accumulation reset inside compute_gae still uses `done` (death OR timeout).
+        terminateds = (trajectories.step_info.termination_reason >= 2).astype(trajectories.done.dtype)
+        # trajectories.next_value already holds V(s') of the TRUE next state, computed
+        # pre-auto-reset inside collect_trajectories — supersedes the old final-value forward
+        # pass + concatenate-and-shift (values_with_next) approach, which used the auto-reset
+        # (fresh episode start) value on every done step, including timeouts.
+        advantages = jax.vmap(compute_gae, in_axes=(1, 1, 1, 1, None, None), out_axes=1)(
+            trajectories.reward, trajectories.next_value, trajectories.done, terminateds,
+            config.gamma, config.gae_lambda
         )
         targets = advantages + trajectories.value
         advantages = (advantages - jnp.mean(advantages)) / (jnp.std(advantages) + 1e-8)
