@@ -61,6 +61,7 @@ gating is a static, trace-time branch as documented.
 **Severity:** High (systematic bias in the learning signal of every live rPPO run; longstanding, shared by all historical runs, so run-to-run comparability is preserved)
 **Where:** `src/models/recurrent_ppo_trainer.py:90-106` (`compute_mc_returns`, reverse scan with initial carry `0.0`), consumed at `:315-324`
 **Status: NEW** (never documented as a correctness caveat; the 2026-07-04 truncation cluster fixed the GAE path only)
+**Fix plan (2026-07-04, approved — WP-B):** [[fix_plan_h4_mc_window_bootstrap]] — bootstrap the MC carry at the window edge with `V(s'_last)` under 3c60f6f death-vs-truncation gating; GAE migration deferred as a future experiment-level choice.
 
 **What happens.** Every live rPPO config sets `return_mode: "MC"` (grep: all 13
 `configs/models/recurrent_ppo/*.yaml`) and `sequence_length: 128`, while episodes run up to

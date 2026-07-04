@@ -87,8 +87,33 @@ def compute_gae(rewards, values, values_next, dones, terminateds, gamma, lmbda):
     )
     return advantages
 
-def compute_mc_returns(rewards, dones, gamma):
-    """Computes Monte Carlo returns."""
+def compute_mc_returns(rewards, dones, terminateds, bootstrap_value, gamma):
+    """Computes Monte Carlo returns with a value bootstrap at the rollout-window edge.
+
+    H4 fix (docs/develop/active/issues/diag_fable5_20260704/fix_plan_h4_mc_window_bootstrap.md):
+    the reverse-scan carry is initialised with V(s') of the window's LAST step instead of
+    0.0, so steps near the window edge keep an estimate of their future return. Edge-step
+    gating follows the 3c60f6f truncation semantics:
+      - real death at the edge  (done AND terminated)  -> bootstrap zeroed (future truly gone)
+      - timeout at the edge     (done, NOT terminated) -> bootstrap retained
+      - window cut mid-episode  (NOT done)             -> bootstrap retained
+    Mid-window episode boundaries are unchanged: the return still resets on merged `done`
+    (finite-horizon MC treatment of mid-window timeouts is deliberate — 02_rppo_stack.md,
+    Finding 1 sibling note).
+
+    Args:
+        rewards:         (T,) rewards
+        dones:           (T,) merged episode-end flags (death OR timeout)
+        terminateds:     (T,) real-death flags (termination_reason >= 2)
+        bootstrap_value: ()  V(s') of the TRUE (pre-auto-reset) next state after step T-1
+        gamma:           discount factor
+    """
+    # Edge gate: zero the carry only on REAL death at the window edge. The AND with done
+    # guards against the known env quirk where overeating sets termination_reason=3
+    # without done=True (KNOWN_BUGS) — a continuing episode must keep its bootstrap.
+    edge_death = jnp.logical_and(dones[-1].astype(bool), terminateds[-1].astype(bool))
+    dones_for_reset = dones.at[-1].set(edge_death.astype(dones.dtype))
+
     def mc_scan(carry, x):
         ret = carry
         reward, done = x
@@ -98,9 +123,9 @@ def compute_mc_returns(rewards, dones, gamma):
         return ret, ret
 
     _, returns = jax.lax.scan(
-        mc_scan, 
-        0.0, 
-        (rewards, dones),
+        mc_scan,
+        bootstrap_value,
+        (rewards, dones_for_reset),
         reverse=True
     )
     return returns
@@ -173,7 +198,7 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
     use_gae_bootstrap = return_mode.upper() == "GAE"
 
     def scan_fn(carry, _):
-        state, h_state, key = carry
+        state, h_state, key, _prev_next_state, _prev_h_new = carry
 
         # 1. Sense
         with jax.named_scope("rppo_sense"):
@@ -199,8 +224,11 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
         # `next_state` with a fresh episode start. Uses h_new (this step's post-forward hidden
         # state) so it reflects the RNN state that would carry into the continuation.
         # Finding B, Part 2 — docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
-        # Gated on GAE mode: `compute_gae` is the only consumer of `next_value` (MC mode uses
-        # `compute_mc_returns`, which never reads it). Every currently-live rPPO config sets
+        # Gated on GAE mode: `compute_gae` is the only consumer of the PER-STEP `next_value`
+        # (MC mode uses `compute_mc_returns`, which never reads it). Note: since the H4 fix,
+        # MC mode DOES take a SINGLE window-edge bootstrap value, computed post-scan from the
+        # pre-reset (next_state, h_new) carried out of the scan — one forward per window, not
+        # per step. Every currently-live rPPO config sets
         # `return_mode: "MC"`, so this Python-level (static, trace-time) branch keeps the extra
         # value-head forward pass — and its speed cost — entirely out of the MC-mode hot path.
         if use_gae_bootstrap:
@@ -255,13 +283,27 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
             step_info=step_info, next_value=next_value
         )
         
-        return (final_state, final_h, key), (trans, h_state)
+        return (final_state, final_h, key, next_state, h_new), (trans, h_state)
 
-    (final_state, final_h, final_key), (trajectories, h_states) = jax.lax.scan(
-        scan_fn, (last_state, last_h_state, last_key), None, length=num_steps
+    (final_state, final_h, final_key, boot_state, boot_h), (trajectories, h_states) = jax.lax.scan(
+        scan_fn, (last_state, last_h_state, last_key, last_state, last_h_state), None,
+        length=num_steps
     )
-    
-    return trajectories, h_states, final_state, final_h, final_key
+
+    # H4 fix: window-edge bootstrap value = V(TRUE next state) of the LAST window step,
+    # from the pre-auto-reset (boot_state, boot_h) carried out of the scan. One value
+    # forward per 128-step window — negligible vs the per-step collection forward.
+    # In GAE mode the exact per-step quantity already exists; expose its edge slice so
+    # the return signature is uniform (train_iteration's GAE branch does not consume it).
+    if use_gae_bootstrap:
+        bootstrap_value = trajectories.next_value[-1]
+    else:
+        with jax.named_scope("rppo_mc_edge_bootstrap"):
+            obs_boot = jax.vmap(get_observation, in_axes=(0, None))(boot_state, env_params)
+            _, v_boot, _, _ = jax.vmap(model, in_axes=(0, h_axes))(obs_boot, boot_h)
+            bootstrap_value = v_boot.squeeze(-1)
+
+    return trajectories, h_states, final_state, final_h, final_key, bootstrap_value
 
 def update_step(model, optimizer, batch, config):
     """Performs a single PPO update step using NNX patterns."""
@@ -306,17 +348,19 @@ def train_iteration(model, optimizer, env_params, env_state, h_state, key, confi
     
     # 1. Collect rollouts
     with jax.named_scope("rppo_collect_trajectories"):
-        trajectories, h_states, next_env_state, next_h_state, key = collect_trajectories(
+        trajectories, h_states, next_env_state, next_h_state, key, bootstrap_value = collect_trajectories(
             model, env_params, env_state, h_state, key, config.num_steps, rnn_type=rnn_type, return_mode=return_mode
         )
 
     # 2. Compute Advantages and Targets
     with jax.named_scope("rppo_advantages"):
         if return_mode.upper() == "MC":
-            # Monte Carlo Returns (PyTorch parity)
-            # Use vmap over batch dimension (axis 1)
-            returns = jax.vmap(compute_mc_returns, in_axes=(1, 1, None), out_axes=1)(
-                trajectories.reward, trajectories.done, config.gamma
+            # Monte Carlo Returns (PyTorch parity) with window-edge bootstrap (H4 fix).
+            # Real-death mask: same termination_reason >= 2 mapping as the GAE branch below.
+            # Use vmap over batch dimension (axis 1); bootstrap_value is (num_envs,) -> axis 0.
+            terminateds = (trajectories.step_info.termination_reason >= 2).astype(trajectories.done.dtype)
+            returns = jax.vmap(compute_mc_returns, in_axes=(1, 1, 1, 0, None), out_axes=1)(
+                trajectories.reward, trajectories.done, terminateds, bootstrap_value, config.gamma
             )
             # Normalize returns
             returns = (returns - jnp.mean(returns)) / (jnp.std(returns) + 1e-7)
