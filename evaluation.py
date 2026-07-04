@@ -74,24 +74,57 @@ def peel_nnx_state(st):
     return st
 
 
-def _merge_restored_into_module_state(module_state, restored_state):
+def _merge_restored_into_module_state(module_state, restored_state, _path="", _missing=None):
     """
     Recursively copy leaves from restored_state into the structure of module_state.
     Handles Orbax restoring with string keys ('0','1') where module has int keys (0,1).
     Returns a new dict with module_state structure but values from restored_state.
+
+    Finding L3 (docs/reviews/diag_v3_pipeline_jax.md): any param key/subtree present
+    in module_state but ABSENT from restored_state is left at its freshly-initialised
+    (random) value -- previously with no warning or error. This now records the
+    dotted path of every such uncovered leaf into `_missing` (a list, mutated in
+    place) so callers can assert full checkpoint coverage via `_assert_full_restore`
+    instead of silently proceeding with a half-random model.
     """
+    if _missing is None:
+        _missing = []
     if isinstance(module_state, dict):
         out = {}
         for k in module_state.keys():
+            sub_path = f"{_path}.{k}" if _path else str(k)
             # Restored may have str(k) when module has int k (e.g. Sequential indices)
             rkey = k if k in restored_state else (str(k) if str(k) in restored_state else None)
             if rkey is not None:
-                out[k] = _merge_restored_into_module_state(module_state[k], restored_state[rkey])
+                out[k] = _merge_restored_into_module_state(module_state[k], restored_state[rkey], sub_path, _missing)
             else:
                 out[k] = module_state[k]  # keep original if not in restored
+                _collect_uncovered_leaf_paths(module_state[k], sub_path, _missing)
         return out
     # Leaf (array or other): use restored value if we have a matching leaf
     return restored_state
+
+
+def _collect_uncovered_leaf_paths(node, path, missing):
+    """Recursively append the dotted path of every leaf under `node` to `missing`."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            _collect_uncovered_leaf_paths(v, f"{path}.{k}" if path else str(k), missing)
+    else:
+        missing.append(path)
+
+
+def _assert_full_restore(missing_paths, label):
+    """Fail loudly (Finding L3) if any param leaf was left at its randomly
+    initialised value instead of being restored from the checkpoint. Without
+    this, a train/eval structural mismatch silently loads a half-random model
+    and reports meaningless survival numbers with no signal anything is wrong."""
+    if missing_paths:
+        raise ValueError(
+            f"[{label}] Incomplete checkpoint restore: {len(missing_paths)} param "
+            f"leaf(ves) left at randomly-initialised values (absent from checkpoint):\n  "
+            + "\n  ".join(sorted(missing_paths))
+        )
 
 def main():
     parser = argparse.ArgumentParser(description="JAX GridWorld Evaluation")
@@ -246,18 +279,12 @@ def main():
             rnn_type = config.get_mandatory('agent.rnn_type')
             activation = config.get_mandatory('agent.activation')
             
-            # Read modulation config (type can be null = disabled baseline)
-            mod_type = config.get('agent.modulation.type')
-            if mod_type is not None:
-                modulation_config = {
-                    'type': mod_type,
-                    'mod_hidden_size': config.get_mandatory('agent.modulation.mod_hidden_size'),
-                    'grouping_size': config.get_mandatory('agent.modulation.grouping_size'),
-                    'percept_bias_init': config.get_mandatory('agent.modulation.percept_bias_init'),
-                    'memory_bias_init': config.get_mandatory('agent.modulation.memory_bias_init'),
-                    'temp_clip': config.get_mandatory('agent.modulation.temp_clip'),
-                }
-            else:
+            # Read neuromodulation config exactly as train.py does (train.py:745-747):
+            # the WHOLE dict, not a hand-picked whitelist, so eval and train share one
+            # source of truth and no future key (e.g. memory_clip) can silently drift
+            # out of sync (Finding A #1 / #4, docs/reviews/diag_v3_pipeline_jax.md).
+            modulation_config = config.get('agent.modulation')
+            if modulation_config is not None and modulation_config.get('type') is None:
                 modulation_config = None
             
             model = ActorCriticRNN(
@@ -279,26 +306,35 @@ def main():
                 from flax.nnx.statelib import to_pure_dict
                 model_state = restored['model']
                 peeled_state = peel_nnx_state(model_state)
-                
+
                 # Robustly merge restored state into current model structure
                 current_struct = to_pure_dict(nnx.state(model, nnx.Param))
-                merged_state = _merge_restored_into_module_state(current_struct, peeled_state)
+                missing = []
+                merged_state = _merge_restored_into_module_state(current_struct, peeled_state, _missing=missing)
+                # Finding L3: fail loudly on a train/eval structural mismatch instead of
+                # silently loading a half-random model.
+                _assert_full_restore(missing, "RecurrentPPO model")
                 nnx.update(model, merged_state)
                 print(f"  [Success] Restored RecurrentPPO model weights from iteration {iteration}")
             else:
                 print(f"  [Warning] 'model' key not found in restored checkpoint. Keys: {list(restored.keys())}")
-            
+
         elif algorithm == "DreamerV3":
             from src.models.dreamer_v3_trainer import DreamerTrainer
-            dreamer_config = {
-                'model_lr': config.get_mandatory('agent.model_lr'),
-                'actor_lr': config.get_mandatory('agent.actor_lr'),
-                'value_lr': config.get_mandatory('agent.value_lr'),
-                'batch_size': config.get_mandatory('agent.batch_size'),
-                'sequence_length': config.get_mandatory('agent.sequence_length'),
-            }
-            trainer = DreamerTrainer(input_dim, action_dim, dreamer_config, rngs=rngs)
-            
+            # Build the trainer exactly as train.py does (train.py:815-817): pass the
+            # full Config object (DreamerTrainer.__init__ calls config.get_mandatory(...),
+            # which a plain dict does not support) plus obs_breakdown and
+            # modulation_config, so the rebuilt world model matches the shape train.py
+            # saved (Finding A #2, docs/reviews/diag_v3_pipeline_jax.md).
+            dreamer_mod_config = config.get('agent.modulation')
+            if dreamer_mod_config is not None and dreamer_mod_config.get('type') is None:
+                dreamer_mod_config = None
+            trainer = DreamerTrainer(
+                input_dim, action_dim, config, rngs=rngs,
+                obs_breakdown=get_observation_breakdown(params),
+                modulation_config=dreamer_mod_config,
+            )
+
             restored = checkpointer.restore(iteration)
             from flax.nnx.statelib import to_pure_dict
             # Peel Orbax 'value' wrappers
@@ -309,13 +345,17 @@ def main():
             wm_struct = to_pure_dict(nnx.state(trainer.agent.wm, nnx.Param))
             actor_struct = to_pure_dict(nnx.state(trainer.agent.ac.actor, nnx.Param))
             critic_struct = to_pure_dict(nnx.state(trainer.agent.ac.critic, nnx.Param))
-            wm_state = _merge_restored_into_module_state(wm_struct, wm_restored)
-            actor_state = _merge_restored_into_module_state(actor_struct, actor_restored)
-            critic_state = _merge_restored_into_module_state(critic_struct, critic_restored)
+            missing = []
+            wm_state = _merge_restored_into_module_state(wm_struct, wm_restored, "wm", missing)
+            actor_state = _merge_restored_into_module_state(actor_struct, actor_restored, "actor", missing)
+            critic_state = _merge_restored_into_module_state(critic_struct, critic_restored, "critic", missing)
+            # Finding L3: fail loudly on a train/eval structural mismatch instead of
+            # silently loading a half-random model.
+            _assert_full_restore(missing, "DreamerV3 model")
             nnx.update(trainer.agent.wm, wm_state)
             nnx.update(trainer.agent.ac.actor, actor_state)
             nnx.update(trainer.agent.ac.critic, critic_state)
-            model = trainer.agent 
+            model = trainer.agent
         else:
             raise ValueError(f"Unsupported algorithm for JAX evaluation: {algorithm}")
             
