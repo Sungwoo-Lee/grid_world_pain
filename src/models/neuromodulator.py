@@ -166,7 +166,9 @@ class NeuromodulatorRNN(nnx.Module):
         z_mem, _ = _get_signal(self.head_memory, self.z_mem_baseline)
         z_mem = jnp.clip(z_mem, self.memory_clip[0], self.memory_clip[1])
 
-        # Temperature (bounded)
+        # Temperature (bounded). Note: softplus(x) + 0.5 >= 0.5 always, so
+        # temp_clip[0] (default 0.1) is a dead lower bound in practice — the
+        # effective floor is 0.5. Only temp_clip[1] (upper bound) is reachable.
         z_act_raw = self.head_action(h_mod_new)
         temperature = jnp.clip(jax.nn.softplus(z_act_raw) + 0.5, self.temp_clip[0], self.temp_clip[1])
 
