@@ -1269,14 +1269,15 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
     if num_obs > 0 and params.has_obs_range:
         obs_pos = jnp.where(obs_activation_mask[:, None], obs_pos, _off_grid[None, :])
 
-    # 7. Per-episode distributional sampling for the 5 float + 2 integer behavioural fields.
+    # 7. Per-episode distributional sampling for the 4 float + 3 integer behavioural fields.
     #    7 independent draws per field — shape (N,) each.
     #    For wander/static entries the ranges are [0, 0] (from _load_animals);
     #    jax.random.uniform([0,0]) = 0.0 exactly for float fields; randint([s,s+1)) = s for int fields.
     if N > 0:
-        ep_keys = jax.random.split(animal_episode_key, 7)
-        animal_detect_sampled = jax.random.uniform(
-            ep_keys[0], (N,), minval=params.animal_detect_low, maxval=jnp.maximum(params.animal_detect_high, params.animal_detect_low))
+        ep_keys = jax.random.split(animal_episode_key, 7)  # split size UNCHANGED (parity)
+        # detection_range: inclusive-integer randint([lo, hi+1)) — mirrors move_interval/attack_delay.
+        animal_detect_sampled = jax.random.randint(
+            ep_keys[0], (N,), params.animal_detect_low, params.animal_detect_high + 1)
         animal_max_stamina_sampled = jax.random.uniform(
             ep_keys[1], (N,), minval=params.animal_max_stamina_low, maxval=jnp.maximum(params.animal_max_stamina_high, params.animal_max_stamina_low))
         animal_recovery_sampled = jax.random.uniform(
@@ -1296,18 +1297,18 @@ def jax_reset(params: EnvParams, key: jax.random.PRNGKey) -> EnvState:
         # would change all seven existing draws for every config; see "PRNG tail
         # is free" / "size-locked at 7" in PREDATOR_JUMP_MECHANISM.md).
         attack_range_key = jax.random.fold_in(animal_episode_key, 0xA77AC7)
-        animal_attack_range_sampled = jax.random.uniform(
-            attack_range_key, (N,), minval=params.animal_attack_range_low,
-            maxval=jnp.maximum(params.animal_attack_range_high, params.animal_attack_range_low))
+        # inclusive-integer randint([lo, hi+1)) — degenerate [s,s] still yields s (parity).
+        animal_attack_range_sampled = jax.random.randint(
+            attack_range_key, (N,), params.animal_attack_range_low, params.animal_attack_range_high + 1)
     else:
-        animal_detect_sampled        = jnp.zeros(0, dtype=jnp.float32)
+        animal_detect_sampled        = jnp.zeros(0, dtype=jnp.int32)
         animal_max_stamina_sampled   = jnp.zeros(0, dtype=jnp.float32)
         animal_recovery_sampled      = jnp.zeros(0, dtype=jnp.float32)
         animal_hunt_thresh_sampled   = jnp.zeros(0, dtype=jnp.float32)
         animal_lose_interest_sampled = jnp.zeros(0, dtype=jnp.float32)
         animal_move_int_sampled      = jnp.zeros(0, dtype=jnp.int32)
         animal_attack_delay_sampled  = jnp.zeros(0, dtype=jnp.int32)
-        animal_attack_range_sampled  = jnp.zeros(0, dtype=jnp.float32)
+        animal_attack_range_sampled  = jnp.zeros(0, dtype=jnp.int32)
 
     state = EnvState(
         agent_pos=agent_pos,

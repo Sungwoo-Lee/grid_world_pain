@@ -108,8 +108,10 @@ ANIMAL_CLASS_TO_INT = {"predator": 0, "neutral": 1}
 ANIMAL_CLASS_TO_VIS_CHANNEL = {"predator": 5, "neutral": 7}
 ANIMAL_DAMAGING_CLASSES = {"predator"}
 ANIMAL_BEHAVIOUR_TO_INT = {"wander": 0, "hunt": 1, "static": 2}
+# detection_range moved to inclusive-integer sampling (see
+# docs/develop/active/issues/INCLUSIVE_INTEGER_RANGE_SAMPLING.md);
+# only genuinely-continuous fields remain here.
 DISTRIBUTIONAL_FIELDS = (
-    "detection_range",
     "max_stamina",
     "stamina_recovery_rate",
     "hunt_stamina_threshold",
@@ -360,8 +362,11 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
 
     YAML cadence notes:
       - `damage: [lo, hi]` is per-event (re-sampled on every collision).
-      - `detection_range: [lo, hi]` (and four siblings in DISTRIBUTIONAL_FIELDS)
-        are per-episode (re-sampled at reset). Cadence is determined by field name.
+      - `detection_range: [lo, hi]` is per-episode, inclusive-integer (mirrors
+        `move_interval`/`attack_delay`) — see INCLUSIVE_INTEGER_RANGE_SAMPLING.md.
+      - The four siblings in DISTRIBUTIONAL_FIELDS (`max_stamina`,
+        `stamina_recovery_rate`, `hunt_stamina_threshold`, `lose_interest_multiplier`)
+        are per-episode, float-uniform. Cadence is determined by field name.
 
     Mandatory-key rule by behaviour:
       - `behaviour: hunt` — all five distributional fields are MANDATORY.
@@ -555,14 +560,14 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
         animal_attack_delay = jnp.zeros(0, dtype=jnp.int32)
         animal_attack_delay_low = jnp.zeros(0, dtype=jnp.int32)
         animal_attack_delay_high = jnp.zeros(0, dtype=jnp.int32)
-        animal_attack_range_low = jnp.zeros(0)
-        animal_attack_range_high = jnp.zeros(0)
+        animal_attack_range_low = jnp.zeros(0, dtype=jnp.int32)
+        animal_attack_range_high = jnp.zeros(0, dtype=jnp.int32)
         animal_attack_success_rate = jnp.zeros(0)
         has_attack_feature = False
         animal_spawn_area = jnp.zeros((0, 4), dtype=jnp.int32)
         animal_patrol = jnp.zeros((0, 4), dtype=jnp.int32)
-        animal_detect_low = jnp.zeros(0)
-        animal_detect_high = jnp.zeros(0)
+        animal_detect_low = jnp.zeros(0, dtype=jnp.int32)
+        animal_detect_high = jnp.zeros(0, dtype=jnp.int32)
         animal_max_stamina_low = jnp.zeros(0)
         animal_max_stamina_high = jnp.zeros(0)
         animal_recovery_low = jnp.zeros(0)
@@ -678,20 +683,30 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
 
     # ── Jump/pounce feature (predator lunge attack) — OPTIONAL for every entity ──
     # See docs/develop/active/env_entities/PREDATOR_JUMP_MECHANISM.md.
-    # attack_range: scalar OR [lo, hi] float Manhattan-distance jump-trigger range.
-    # Missing -> [0, 0] (jump disabled). Deliberately NOT mandatory for hunt (unlike
-    # detection_range) and NOT part of DISTRIBUTIONAL_FIELDS/the size-7 ep_keys split
-    # — it is sampled at reset from an INDEPENDENT fold_in key (core.py jax_reset)
-    # so the existing seven per-episode sampled arrays stay byte-identical.
+    # attack_range: scalar OR [lo, hi] INCLUSIVE-INTEGER Manhattan-distance jump range.
+    # Compared against integer grid distance (core.py `dist <= attack_range_s`), so a
+    # fractional bound is meaningless and is rejected loudly (see
+    # INCLUSIVE_INTEGER_RANGE_SAMPLING.md). Missing -> [0, 0] (jump disabled).
+    # Deliberately NOT mandatory for hunt (unlike detection_range) and NOT part of
+    # DISTRIBUTIONAL_FIELDS/the size-7 ep_keys split — it is sampled at reset from an
+    # INDEPENDENT fold_in key (core.py jax_reset) so the existing seven per-episode
+    # sampled arrays stay byte-identical.
     attack_range_low_list = []
     attack_range_high_list = []
     for i, e in enumerate(entries):
-        lo, hi = _parse_distributional(
+        lo_f, hi_f = _parse_distributional(
             e['dist_source'], 'attack_range', mandatory=False,
             entity_label=e['tag_label'], idx=i
         )
-        attack_range_low_list.append(lo)
-        attack_range_high_list.append(hi)
+        for _b in (lo_f, hi_f):
+            if _b != int(_b):
+                raise ValueError(
+                    f"Animal entity {e['tag_label']!r} (index {i}): 'attack_range' bound "
+                    f"{_b} is not a whole number; this field is compared against integer "
+                    f"grid distance and must be integer-valued."
+                )
+        attack_range_low_list.append(int(lo_f))
+        attack_range_high_list.append(int(hi_f))
 
     # attack_success_rate: scalar float in [0, 1]. Missing -> 0.0 (jump-disabled
     # is a no-op regardless of this value since the trigger also gates on
@@ -713,9 +728,33 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
     spawn_list = [_parse_area(e['spawn_area'], h, w) for e in entries]
     patrol_list = [_parse_area(e['patrol_area'], h, w) for e in entries]
 
+    # detection_range: scalar OR [lo, hi] INCLUSIVE-INTEGER HUNT-trigger Manhattan range.
+    # Mandatory for hunt entities; compared against integer grid distance (core.py
+    # `dist <= hunt_detect`), so integer-valued (see INCLUSIVE_INTEGER_RANGE_SAMPLING.md).
+    detect_range_list = []  # list of (lo_int, hi_int)
+    for i, e in enumerate(entries):
+        lo_f, hi_f = _parse_distributional(
+            e['dist_source'], 'detection_range',
+            mandatory=e['mandatory_dist'],
+            entity_label=e['tag_label'], idx=i
+        )
+        for _b in (lo_f, hi_f):
+            if _b != int(_b):
+                raise ValueError(
+                    f"Animal entity {e['tag_label']!r} (index {i}): 'detection_range' bound "
+                    f"{_b} is not a whole number; this field is compared against integer "
+                    f"grid distance and must be integer-valued."
+                )
+        lo, hi = int(lo_f), int(hi_f)
+        if hi < lo:
+            raise ValueError(
+                f"Animal entity {e['tag_label']!r} (index {i}): 'detection_range' range "
+                f"must satisfy low <= high; got [{lo}, {hi}]."
+            )
+        detect_range_list.append((lo, hi))
+
     # Distributional fields (per entry)
     dist_field_names = (
-        ("detection_range", "animal_detect"),
         ("max_stamina", "animal_max_stamina"),
         ("stamina_recovery_rate", "animal_recovery"),
         ("hunt_stamina_threshold", "animal_hunt_thresh"),
@@ -811,15 +850,15 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
     animal_attack_delay = jnp.array([lo for lo, hi in attack_delay_list], dtype=jnp.int32)
     animal_attack_delay_low = jnp.array([lo for lo, hi in attack_delay_list], dtype=jnp.int32)
     animal_attack_delay_high = jnp.array([hi for lo, hi in attack_delay_list], dtype=jnp.int32)
-    animal_attack_range_low = jnp.array(attack_range_low_list, dtype=jnp.float32)
-    animal_attack_range_high = jnp.array(attack_range_high_list, dtype=jnp.float32)
+    animal_attack_range_low = jnp.array(attack_range_low_list, dtype=jnp.int32)
+    animal_attack_range_high = jnp.array(attack_range_high_list, dtype=jnp.int32)
     animal_attack_success_rate = jnp.array(attack_success_rate_list, dtype=jnp.float32)
     has_attack_feature = any(hi > 0 for hi in attack_range_high_list)
     animal_spawn_area = jnp.array(spawn_list, dtype=jnp.int32)
     animal_patrol = jnp.array(patrol_list, dtype=jnp.int32)
 
-    animal_detect_low = jnp.array(dist_lows['animal_detect'], dtype=jnp.float32)
-    animal_detect_high = jnp.array(dist_highs['animal_detect'], dtype=jnp.float32)
+    animal_detect_low = jnp.array([lo for lo, hi in detect_range_list], dtype=jnp.int32)
+    animal_detect_high = jnp.array([hi for lo, hi in detect_range_list], dtype=jnp.int32)
     animal_max_stamina_low = jnp.array(dist_lows['animal_max_stamina'], dtype=jnp.float32)
     animal_max_stamina_high = jnp.array(dist_highs['animal_max_stamina'], dtype=jnp.float32)
     animal_recovery_low = jnp.array(dist_lows['animal_recovery'], dtype=jnp.float32)

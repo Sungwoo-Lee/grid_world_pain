@@ -123,9 +123,11 @@ class EnvParams:
     animal_attack_delay: jnp.ndarray   # [N] int
     animal_spawn_area: jnp.ndarray     # [N, 4] int
     animal_patrol: jnp.ndarray         # [N, 4] int
-    # Per-episode uniform bounds (low == high for legacy scalar configs)
-    animal_detect_low: jnp.ndarray         # [N]
-    animal_detect_high: jnp.ndarray        # [N]
+    # Per-episode bounds (low == high for legacy scalar configs).
+    # animal_detect_low/high are inclusive-integer randint bounds (int); the four
+    # siblings below are float-uniform bounds.
+    animal_detect_low: jnp.ndarray         # [N] int — inclusive-integer HUNT-trigger range, low bound
+    animal_detect_high: jnp.ndarray        # [N] int — inclusive-integer HUNT-trigger range, high bound
     animal_max_stamina_low: jnp.ndarray    # [N]
     animal_max_stamina_high: jnp.ndarray   # [N]
     animal_recovery_low: jnp.ndarray       # [N]
@@ -142,8 +144,8 @@ class EnvParams:
     animal_attack_delay_high: jnp.ndarray  # [N] int
     # Jump/pounce feature (predator lunge attack) — OPTIONAL, default [0,0]/0.0 =
     # disabled. See docs/develop/active/env_entities/PREDATOR_JUMP_MECHANISM.md.
-    animal_attack_range_low: jnp.ndarray      # [N] float — jump-trigger Manhattan-distance range, low bound
-    animal_attack_range_high: jnp.ndarray     # [N] float — jump-trigger Manhattan-distance range, high bound
+    animal_attack_range_low: jnp.ndarray      # [N] int — inclusive-integer jump-trigger Manhattan range, low bound
+    animal_attack_range_high: jnp.ndarray     # [N] int — inclusive-integer jump-trigger Manhattan range, high bound
     animal_attack_success_rate: jnp.ndarray   # [N] float in [0,1] — P(fired jump lands on agent); NOT per-episode sampled
     # Per-entity int-coded class/behaviour (for damage masking and visual channel)
     animal_classes_int: jnp.ndarray        # [N] int (0=predator, 1=neutral, ...)

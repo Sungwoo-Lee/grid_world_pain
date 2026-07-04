@@ -1,13 +1,13 @@
-# basic level-07 variant — JUMP REACH 2-OR-3 (attack_range value [2,4])
+# basic level-07 variant — JUMP REACH 2-OR-3 (attack_range value [2,3])
 # ---------------------------------------------------------------------------
 # PURPOSE: ablation of basic level 07 (all predator-pressure + noise + jump) that widens the
 # predator's pounce reach from a fixed 2 cells to a per-episode mix of 2 OR 3 cells.
 #
-# WHY the value is [2,4] and not [2,3]: attack_range is a FLOAT threshold compared as
-# `manhattan_dist <= attack_range`, and distances are integers. A float in [2,3) never covers
-# distance 3 (3 <= 2.7 is false), so [2,3] behaves IDENTICALLY to [2,2]. [2,4] samples uniformly
-# in [2,4): landing in [2,3) -> effective reach 2, in [3,4) -> effective reach 3, giving the
-# intended ~50/50 pounce-from-2 vs pounce-from-3 per episode. (Verified empirically.)
+# attack_range is sampled as an INCLUSIVE INTEGER (jax.random.randint([lo, hi+1))), compared
+# as `manhattan_dist <= attack_range` against an integer distance. [2,3] therefore samples
+# exactly {2, 3} each episode, ~50/50 pounce-from-2 vs pounce-from-3 — no workaround needed.
+# (Previously this field sampled a FLOAT uniformly in [lo, hi), so [2,3) never reached distance
+# 3 and the workaround was [2,4); see docs/develop/active/issues/INCLUSIVE_INTEGER_RANGE_SAMPLING.md.)
 #
 # Everything else identical to basic/07. Extends basic/07 (-> 06 -> 05 -> default); only
 # REDECLARES `entities` to override attack_range on the predator (list-replace footgun).
@@ -35,7 +35,7 @@ environment:
       stamina_recovery_rate: [1, 1]
       hunt_stamina_threshold: [0.7, 0.7]
       lose_interest_multiplier: [1.5, 1.5]
-      attack_range: [2, 4]           # VARIANT: was [2,2] -> effective per-episode reach 2 OR 3 (see header)
+      attack_range: [2, 3]           # inclusive-integer {2,3} (was [2,4] float-workaround; see INCLUSIVE_INTEGER_RANGE_SAMPLING.md)
       attack_success_rate: 0.5
     - class: "neutral"
       behaviour: "wander"
