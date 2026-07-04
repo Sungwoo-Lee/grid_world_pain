@@ -42,4 +42,5 @@ When you drop a frozen training checkpoint into a behavior-probe env and render 
 ## Backlinks
 - [[20260624_0517_indist_random_init_reverses_hypervig]] (hypervigilance, 2026-06-24) — Re-running the probes on the IN-DISTRIBUTION model (random-init hg10, trained on
 - [[20260630_1715_behavior_measure_study_method_and_tooling]] (behavior_measures, 2026-06-30) — Interoceptive behavior-measure study: discover MEASURES of foraging/avoidance vs
+- [[20260704_2012_noise_matched_frozen_probe]] (behavior_measures, 2026-07-04) — A noise-trained agent must be probed with a config carrying its EXACT training p
 <!-- END BACKLINKS -->

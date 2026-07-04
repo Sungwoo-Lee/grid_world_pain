@@ -6,7 +6,7 @@
 
 **Last updated**: 2026-07-03
 **Active folders**: 10
-**Total insights**: 153
+**Total insights**: 156
 **Last audit**: (none)
 
 ---
@@ -24,7 +24,7 @@
 | `env_entities` | Env entity architecture decisions | 17 | 2026-07-03 | [design, decision, learned_lesson, meta, config, dreamer] |
 | `config_system` | Config loader/layering/schema | 5 | 2026-07-03 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 3 | 2026-06-24 | [learned_lesson, decision, refutation] |
-| `behavior_measures` | Behavior-measure platform & probes | 4 | 2026-06-30 | [design, decision, meta, learned_lesson, hypervigilance, refutation] |
+| `behavior_measures` | Behavior-measure platform & probes | 7 | 2026-07-04 | [design, decision, meta, learned_lesson, hypervigilance, refutation, noise] |
 
 ---
 
@@ -55,6 +55,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-07-04: Captured 3 insights into existing `behavior_measures` from the avoidance result-tables + videos + eval-organization session: `20260704_2012_noise_matched_frozen_probe` (noise-trained agents need a probe carrying their exact perceptual_noise block + entity smell-std + eval_obs_noise: training; verified the eval injects noise, agent obs != true_obs; extends the sensory-match principle), `20260704_2013_probe_rerun_stale_checkpoint_contamination` (re-running a sweep on an advanced ckpt writes new recordings alongside old ones and the auto-aggregating heatmap mixes checkpoints — 720/360; fix = rm -rf output-root before re-eval), `20260704_2014_deterministic_probe_significance_inflates` (near-deterministic probes inflate p AND Cohen's d; judge by effect size + magnitude + overlap; spatial spread R_g significant-but-weak vs categorical bush-use; rendered-math stats tutorial written). All tags reused (design, decision, noise, learned_lesson, meta). No new tags.
 - 2026-07-03: Captured 2 insights from the train.py extends-bug diagnosis: 1 into `config_system` (`20260703_1507_train_py_ignores_extends_drops_layers` — train.py loads --config via Config.load_yaml, NOT load_env_config, so extends: is never resolved and inherited layers silently drop to default; basic/07 trained without noise/random-init/all-combined; latent since v3.0; + the verify-actual-state methodology lesson now in CLAUDE.md), 1 into `env_entities` (`20260703_1508_eval_video_drops_true_obs_no_noise_contrast` — training video-eval drops true_obs so noise videos show no contrast; red herring vs the deeper bug). All tags reused. No new tags.
 - 2026-07-03: Captured 2 more insights (completeness pass) from the same session: `20260703_0352_blocking_obstacle_felt_not_seen` (env_entities — a blocking rock stops the agent and is felt via the collision sensor + bump-pain, invisible to vision/smell; non-blocking is seen but not in the collision sensor) and `20260703_0353_wandb_log_code_hang_progress_recheck` (cluster_ops — ~8-min wandb log_code() hang means 'alive' != 'training'; add a progress recheck to launch verification). All tags reused. No new tags.
 - 2026-07-03: Captured 3 insights from the basic 05/06/07 promotion + GPU-tooling + predator-jump session: 1 into `cluster_ops` (`20260703_0342_lab_gpu_heterogeneous_probe_contamination` — cluster is heterogeneous; run_command.py shared-NAS-log probe corrupted the spec; fix = direct-SSH gpu_status.py + gpu-status skill + LAB_NODE_GPU_SPEC), 2 into `env_entities` (`20260703_0343_predator_jump_pounce_mechanism` — opt-in jump/pounce, bush blocks it, disabled=byte-identical, plan->impl->review->env-verified ea13ea9; `20260703_0344_attack_range_float_threshold_gotcha` — float range on integer distance: [2,3]==[2,2], use [2,4] for reach {2,3}). All tags reused (training_runner, learned_lesson, meta, decision, design, config). No new tags.

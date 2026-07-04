@@ -49,4 +49,7 @@ A long-running study to **discover the right measures** of an agent's foraging a
 - [[20260630_1716_foraging_hunger_timing_fixed_opening]] (behavior_measures, 2026-06-30) — Phase-1a foraging probe: hunger changes the TIMING of foraging, not the path — f
 - [[20260630_1717_avoidance_reflex_needs_motion_and_olfaction]] (behavior_measures, 2026-06-30) — Avoidance probe (predator/rabbit + bush): the flee-to-cover reflex requires BOTH
 - [[20260630_1718_cover_use_late_emerging_run_vs_hide]] (behavior_measures, 2026-06-30) — Cross-model: an EARLY model (randpred, 1.5M) RUNS/kites around the grid perimete
+- [[20260704_2012_noise_matched_frozen_probe]] (behavior_measures, 2026-07-04) — A noise-trained agent must be probed with a config carrying its EXACT training p
+- [[20260704_2013_probe_rerun_stale_checkpoint_contamination]] (behavior_measures, 2026-07-04) — Re-running an avoidance-probe sweep on an ADVANCED checkpoint writes the new rec
+- [[20260704_2014_deterministic_probe_significance_inflates]] (behavior_measures, 2026-07-04) — A near-deterministic behavior probe (tiny within-model variance) makes p-values 
 <!-- END BACKLINKS -->
