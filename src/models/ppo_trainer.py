@@ -42,36 +42,37 @@ class PPOBatch(NamedTuple):
     advantages: jnp.ndarray
     targets: jnp.ndarray
 
-def compute_gae(rewards, values_next, dones, terminateds, gamma, lmbda):
+def compute_gae(rewards, values, values_next, dones, terminateds, gamma, lmbda):
     """Computes Generalized Advantage Estimation.
 
     RL-correct truncation handling (Finding B, Part 2 —
     docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md):
-      - the delta bootstrap (`gamma * next_v_val`) is gated on `terminated` (REAL death,
+      - the delta bootstrap (`gamma * next_value`) is gated on `terminated` (REAL death,
         termination_reason in {2,3,4}) — RETAINED (not zeroed) on timeout (truncation).
       - the GAE accumulation reset is still gated on `done` (death OR timeout) — an episode
         boundary still cuts the advantage chain on both, since a new episode starts either way.
     `values_next` MUST be V(s') of the TRUE next state (Transition.next_value, computed pre-reset
     in collect_trajectories), not a value computed on an auto-reset fresh-episode observation.
 
-    NOTE (pre-existing, out of scope for this fix): unlike recurrent_ppo_trainer.py's `compute_gae`,
-    this function does not take a separate `values` (V(s_t)) baseline array. The `next_v` carried
-    across scan steps here is not V(s_t) but a value shifted from the neighboring timestep, which
-    numerically diverges from a textbook GAE recursion. This is an independent, pre-existing bug
-    unrelated to the truncation-vs-death distinction addressed here — flagged, not fixed, per this
-    task's scope (see Implementation Report).
+    Args:
+        rewards:      (T,) rewards at each timestep
+        values:       (T,) V(s_t) for t = 0..T-1 — the advantage baseline
+        values_next:  (T,) V(s_{t+1}) for t = 0..T-1 — TRUE next-state value, pre-auto-reset
+        dones:        (T,) episode-end flags (real death OR timeout) — gates accumulation reset only
+        terminateds:  (T,) real-termination flags (real death only) — gates the value bootstrap
+        gamma:        discount factor
+        lmbda:        GAE lambda
     """
-    def gae_scan(carry, x):
-        gae, next_v = carry
-        reward, next_v_val, done, terminated = x
-        delta = reward + gamma * next_v_val * (1 - terminated) - next_v
+    def gae_scan(gae, x):
+        reward, value, next_value, done, terminated = x
+        delta = reward + gamma * next_value * (1 - terminated) - value
         gae = delta + gamma * lmbda * (1 - done) * gae
-        return (gae, next_v_val), gae
+        return gae, gae
 
     _, advantages = jax.lax.scan(
         gae_scan,
-        (0.0, values_next[-1]),
-        (rewards, values_next, dones, terminateds),
+        0.0,
+        (rewards, values, values_next, dones, terminateds),
         reverse=True
     )
     return advantages
@@ -227,9 +228,9 @@ def train_iteration_ppo(model, optimizer, env_params, env_state, key, config):
         # pre-auto-reset inside collect_trajectories — supersedes the old final-value forward
         # pass + concatenate-and-shift (values_with_next) approach, which used the auto-reset
         # (fresh episode start) value on every done step, including timeouts.
-        advantages = jax.vmap(compute_gae, in_axes=(1, 1, 1, 1, None, None), out_axes=1)(
-            trajectories.reward, trajectories.next_value, trajectories.done, terminateds,
-            config.gamma, config.gae_lambda
+        advantages = jax.vmap(compute_gae, in_axes=(1, 1, 1, 1, 1, None, None), out_axes=1)(
+            trajectories.reward, trajectories.value, trajectories.next_value,
+            trajectories.done, terminateds, config.gamma, config.gae_lambda
         )
         targets = advantages + trajectories.value
         advantages = (advantages - jnp.mean(advantages)) / (jnp.std(advantages) + 1e-8)

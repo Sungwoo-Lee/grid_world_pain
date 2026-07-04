@@ -103,13 +103,11 @@ def test_termination_reason_to_terminated_mask():
 # ---------------------------------------------------------------------------
 # Finding B-2 sibling: plain (non-recurrent) PPO trainer's `compute_gae`.
 #
-# `src.models.ppo_trainer.compute_gae` has a different signature from the
-# recurrent trainer's version above — it takes no separate `values` (V(s_t))
-# baseline array, only `values_next`. That is a pre-existing, independent
-# quirk of this file's GAE formula (see the NOTE in `compute_gae`'s docstring)
-# and is NOT part of this fix's scope. These tests pin only the death-vs-
-# truncation bootstrap distinction, isolated via single-step / two-step cases
-# where that pre-existing quirk cannot contaminate the numbers being checked.
+# `src.models.ppo_trainer.compute_gae` now takes the same `(rewards, values,
+# values_next, dones, terminateds, gamma, lmbda)` signature as the recurrent
+# trainer's version above (advantage-baseline fix — see
+# test_ppo_trainer_advantage_baseline_uses_v_st below). These tests mirror the
+# death-vs-truncation bootstrap cases already pinned for the recurrent trainer.
 # ---------------------------------------------------------------------------
 from src.models.ppo_trainer import compute_gae as ppo_compute_gae
 
@@ -117,47 +115,101 @@ from src.models.ppo_trainer import compute_gae as ppo_compute_gae
 def test_ppo_trainer_bootstrap_retained_on_truncation():
     """A single timeout step (done=True, terminated=False) must RETAIN gamma*V(s')."""
     rewards = jnp.array([2.0])
+    values = jnp.array([1.0])
     values_next = jnp.array([5.0])  # V(true next state), pre-auto-reset
     dones = jnp.array([True])
     terminateds = jnp.array([False])  # truncation, NOT real death
 
-    advantages = ppo_compute_gae(rewards, values_next, dones, terminateds, GAMMA, LAMBDA)
+    advantages = ppo_compute_gae(rewards, values, values_next, dones, terminateds, GAMMA, LAMBDA)
 
-    assert advantages[0] == pytest.approx(1.9499998, abs=1e-5)
+    expected = rewards[0] + GAMMA * values_next[0] * 1.0 - values[0]  # bootstrap retained
+    assert advantages[0] == pytest.approx(float(expected), abs=1e-5)
+    assert advantages[0] == pytest.approx(5.95, abs=1e-5)
 
 
 def test_ppo_trainer_bootstrap_zeroed_on_real_death():
     """A single real-death step (done=True, terminated=True) must ZERO gamma*V(s')."""
     rewards = jnp.array([2.0])
+    values = jnp.array([1.0])
     values_next = jnp.array([5.0])
     dones = jnp.array([True])
     terminateds = jnp.array([True])  # real death
 
-    advantages = ppo_compute_gae(rewards, values_next, dones, terminateds, GAMMA, LAMBDA)
+    advantages = ppo_compute_gae(rewards, values, values_next, dones, terminateds, GAMMA, LAMBDA)
 
-    assert advantages[0] == pytest.approx(-3.0, abs=1e-5)
+    expected = rewards[0] + GAMMA * values_next[0] * 0.0 - values[0]  # bootstrap zeroed
+    assert advantages[0] == pytest.approx(float(expected), abs=1e-5)
+    assert advantages[0] == pytest.approx(1.0, abs=1e-5)
 
 
 def test_ppo_trainer_truncation_bootstrap_does_not_leak_across_episode_boundary():
     """A truncation step followed by the first step of a brand-new episode: the truncated
-    step's advantage must differ from the matching real-death case by exactly the retained
-    bootstrap term `gamma * V(s')`, and the second step's advantage must be identical in both
-    cases (i.e. the `done` flag at t=0 still cuts the accumulation chain either way).
+    step must still retain its own bootstrap, but must NOT inherit GAE advantage propagated
+    backward from the new episode (the `done` flag must still cut the accumulation chain).
     """
     rewards = jnp.array([2.0, 3.0])
+    values = jnp.array([1.0, 0.5])
     values_next = jnp.array([5.0, 4.0])
     dones = jnp.array([True, False])
+    terminateds = jnp.array([False, False])
 
-    trunc_terminateds = jnp.array([False, False])
-    death_terminateds = jnp.array([True, False])
+    advantages = ppo_compute_gae(rewards, values, values_next, dones, terminateds, GAMMA, LAMBDA)
 
-    adv_trunc = ppo_compute_gae(rewards, values_next, dones, trunc_terminateds, GAMMA, LAMBDA)
-    adv_death = ppo_compute_gae(rewards, values_next, dones, death_terminateds, GAMMA, LAMBDA)
+    assert advantages[0] == pytest.approx(5.95, abs=1e-5)
 
-    # t=0 differs exactly by the retained bootstrap term.
-    assert float(adv_trunc[0] - adv_death[0]) == pytest.approx(GAMMA * float(values_next[0]), abs=1e-5)
-    assert adv_trunc[0] == pytest.approx(2.9499998, abs=1e-5)
-    assert adv_death[0] == pytest.approx(-2.0, abs=1e-5)
 
-    # t=1 is unaffected by t=0's terminated flag (episode boundary at t=0 still cuts the chain).
-    assert float(adv_trunc[1]) == pytest.approx(float(adv_death[1]), abs=1e-6)
+def test_ppo_trainer_death_bootstrap_does_not_leak_across_episode_boundary():
+    """Same as above, but t=0 is a REAL DEATH (terminated=True) — bootstrap must be zeroed,
+    and the episode boundary must still cut the accumulation chain.
+    """
+    rewards = jnp.array([2.0, 3.0])
+    values = jnp.array([1.0, 0.5])
+    values_next = jnp.array([5.0, 4.0])
+    dones = jnp.array([True, False])
+    terminateds = jnp.array([True, False])
+
+    advantages = ppo_compute_gae(rewards, values, values_next, dones, terminateds, GAMMA, LAMBDA)
+
+    assert advantages[0] == pytest.approx(1.0, abs=1e-5)
+
+
+def test_ppo_trainer_advantage_baseline_uses_v_st():
+    """Regression test for the advantage-baseline bug found during the B-2 sibling port
+    (commit 926c2c3): `ppo_trainer.compute_gae` used to have no separate `values` (V(s_t))
+    argument — it subtracted a value SHIFTED from the neighbouring timestep as the baseline,
+    instead of V(s_t), which diverges from the textbook GAE recursion
+    `delta_t = r_t + gamma*V(s_{t+1})*(1-terminated) - V(s_t)`.
+
+    Hand-computed 3-step example (mid-rollout, non-terminal steps, real death at t=2):
+        rewards      = [1.0, 2.0, 3.0]
+        values       = [5.0, 4.0, 3.0]   # V(s_t)
+        values_next  = [4.0, 3.0, 0.0]   # V(s_{t+1}), true next-state value
+        dones        = [False, False, True]
+        terminateds  = [False, False, True]
+
+    Textbook-correct advantages (backward GAE recursion, gamma=lambda=0.9):
+        t=2: delta = 3 + 0.9*0*(1-1) - 3 = 0.0;  gae2 = 0.0
+        t=1: delta = 2 + 0.9*3*(1-0) - 4 = 0.7;  gae1 = 0.7 + 0.81*1*gae2 = 0.7
+        t=0: delta = 1 + 0.9*4*(1-0) - 5 = -0.4; gae0 = -0.4 + 0.81*1*gae1 = 0.167
+        -> [0.167, 0.7, 0.0]
+
+    Before this fix, the buggy shifted-value baseline produced [7.3753, 7.13, 3.0] on
+    this exact input (confirmed by re-running the pre-fix `compute_gae` against this
+    test data) — wildly different in both sign and magnitude from the textbook values.
+    """
+    rewards = jnp.array([1.0, 2.0, 3.0])
+    values = jnp.array([5.0, 4.0, 3.0])
+    values_next = jnp.array([4.0, 3.0, 0.0])
+    dones = jnp.array([False, False, True])
+    terminateds = jnp.array([False, False, True])
+
+    gamma = 0.9
+    lmbda = 0.9
+
+    advantages = ppo_compute_gae(rewards, values, values_next, dones, terminateds, gamma, lmbda)
+
+    expected = jnp.array([0.167, 0.7, 0.0])
+    assert jnp.allclose(advantages, expected, atol=1e-3), (
+        f"expected textbook-correct advantages {expected}, got {advantages} "
+        "(pre-fix shifted-value baseline would give [7.3753, 7.13, 3.0])"
+    )
