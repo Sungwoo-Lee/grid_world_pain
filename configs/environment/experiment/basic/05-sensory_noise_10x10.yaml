@@ -1,9 +1,10 @@
-# Basic curriculum — 06-sensory_noise_10x10
+# Basic curriculum — 05-sensory_noise_10x10
 # ---------------------------------------------------------------------------
-# PURPOSE (plain language): a hypervigilance probe. This level takes the random-init
-# scene of level 05 and adds INJURY-GATED SENSORY NOISE: when the agent is healthy it
-# perceives the predator's smell clearly, but as injury rises the SMELL channel becomes
-# progressively unreliable (noise grows with injury). The intended effect — via
+# PURPOSE (plain language): the HARDEST level and a hypervigilance probe. It stacks
+# INJURY-GATED SENSORY NOISE on top of the level-04 JUMP scene, so the full stack here is
+# random-init + all-combined predator pressure + jump/pounce + injury-gated noise. When the
+# agent is healthy it perceives the predator's smell clearly, but as injury rises the SMELL
+# channel becomes progressively unreliable (noise grows with injury). The intended effect — via
 # precision-weighting (predictive-coding pain model): once the agent can no longer trust
 # its distal threat cue, it should fall back on a "danger" prior and over-react
 # defensively (avoid even ambiguous cues = hypervigilance). The agent's INTEROCEPTION is
@@ -16,19 +17,20 @@
 #     healthy) + high injury_noise_scale (heavily degraded when injured). Noise math:
 #     sigma_eff = sigma_base * (1 + alpha * injury/max_injury)
 #     olfaction: 0.15 -> 0.75 at max injury (alpha=4.0).
-#   - Random start injury (inherited from 05) makes the agent VISIT the high-injury regime
-#     at episode start, so the gated olfaction is exercised across its full range without
-#     the agent first having to be bitten into a death spiral.
+#   - Random start injury (inherited down the chain from level 03) makes the agent VISIT the
+#     high-injury regime at episode start, so the gated olfaction is exercised across its full
+#     range without the agent first having to be bitten into a death spiral.
 #
 # NOTE: this is a first principled config, NOT a tuned sweep. The single most important
 # knob is olfaction.injury_noise_scale; a proper study would sweep olfaction.{sigma, scale}.
 #
-# Inherits the FULL basic-05 scene — now including variant-04 all-predator-pressure (hiding 2-12,
-# max_stamina [30,150], move_interval [1,1]) via 05's update — plus random start
-# nutrition/injury, full-grid spawn) from 05; only adds + enables perceptual_noise.
-# The partial modality overrides below DEEP-MERGE into default.yaml's perceptual_noise
-# block (clip ranges + modality index order preserved).
-extends: environment/experiment/basic/05-random_init_10x10
+# extends basic/04-jump_attack (-> basic/03-random_init -> default), so it inherits the FULL
+# stack: random-init all-predator-pressure (hiding 2-12, max_stamina [30,150], move_interval
+# [1,1]), random start nutrition/injury, full-grid spawn, AND the jump/pounce (attack_range
+# {2,3}, attack_success_rate 0.5). Noise now sits on TOP of jump — this is the hardest level.
+# It only adds + enables perceptual_noise. The partial modality overrides below DEEP-MERGE
+# into default.yaml's perceptual_noise block (clip ranges + modality index order preserved).
+extends: environment/experiment/basic/04-jump_attack_10x10
 
 perceptual_noise:
   enabled: true
