@@ -1,12 +1,12 @@
 ---
-title: "Known-Bugs Ledger"
+title: "Known Bugs"
 topic: issues
 status: active
 created: 2026-07-04
 last_updated: 2026-07-04
 ---
 
-# Known-Bugs Ledger
+# Known Bugs
 
 ## What this is (plain-language entry point)
 
