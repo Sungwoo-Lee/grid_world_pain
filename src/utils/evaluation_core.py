@@ -180,7 +180,12 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     
     # Noise diagnostics: Record true (noise-free) observations alongside noised obs
     # Mandatory key — no fallback default.
-    record_true_obs = config.get_mandatory('testing.record_true_observations') and record_stats
+    # Needed for: (a) the STATS pass CSV (true_* columns), and (b) the VIDEO pass
+    # recording (.rec.gz) when the env has perceptual noise enabled — otherwise the
+    # sensory panel falls back to true_obs=obs and the noise is invisible in the video.
+    record_true_obs = config.get_mandatory('testing.record_true_observations') and (
+        record_stats or (render_video and params.perceptual_noise_enabled)
+    )
     
     stats_dir = os.path.join(results_dir, "stats", str(checkpoint_pct))
     # Build stat_headers and action_map whenever we might record (single or parallel path)
