@@ -150,7 +150,7 @@ def ppo_loss_fn(model, batch, clip_eps, ent_coef, vf_coef):
     surr2 = jnp.clip(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * batch.advantages
     policy_loss = -jnp.mean(jnp.minimum(surr1, surr2))
     
-    # 2. Value Loss (simple MSE for MC mode, clipped for GAE)
+    # 2. Value Loss (plain MSE, used for both MC and GAE modes)
     value_loss = 0.5 * jnp.mean(jnp.square(new_values - batch.targets))
     
     # 3. Entropy Loss
