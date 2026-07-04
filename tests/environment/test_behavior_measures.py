@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from src.utils.config import Config
 from src.environment.config_loader import load_env_params, load_behavior_measure_cfg, BehaviorMeasureCfg
 from src.environment.core import jax_reset, jax_step
+from src.behavior.accumulators import make_bm_state, bm_step_update, bm_finalise_episode
 
 # ---------------------------------------------------------------------------
 # Minimal env YAML template (same as per-tag tests, plus one hides_agent bush).
@@ -958,3 +959,117 @@ behavior_measures:
         f"Legacy list order must be preserved; expected (3, 1, 2), got {cfg.eval_seeds}"
     )
     print(f"T9c PASS: legacy list path preserved order: {cfg.eval_seeds}")
+
+
+# ---------------------------------------------------------------------------
+# T10 — Finding C-math #2 regression: per-class vs per-tag denominators must
+# be counted at the SAME instant (record time), not diverge on overwrite or
+# episode-end.  These tests use the REAL src.behavior.accumulators functions
+# (BMState / bm_step_update / bm_finalise_episode) — not the standalone
+# `_run_bm_step` mirror above — so they exercise the exact production code
+# path used by train.py.
+# ---------------------------------------------------------------------------
+
+def test_m1_denominator_consistent_pending_at_episode_end():
+    """T10a: a single M1 candidate that is still pending (unresolved, age < K)
+    when the episode ends must be counted in the per-tag denominator exactly
+    like it already is in the per-class denominator.
+
+    Pre-fix: the per-tag denominator (``m1_candidates_tag``) was only
+    incremented at *resolution* time (age >= bm_K), while the per-class
+    denominator (``m1_candidates``) was incremented at *record* time. A
+    candidate that is still pending when ``bm_finalise_episode`` runs (i.e.
+    the episode ends before the K-step look-ahead completes) is therefore
+    counted in the per-class population but NOT in the per-tag population —
+    the two disagree. This test fails on the pre-fix code and passes after
+    the fix (Finding C-math #2).
+    """
+    bm = make_bm_state(num_envs=1, num_predator_tags=1, num_neutral_tags=0, bm_R=3.0, bm_K=5)
+
+    # 3 safe steps (no eat, predator far).
+    for _ in range(3):
+        bm_step_update(bm, _make_step(ate_food=False, dist_pred=5.0), np.zeros(1, dtype=bool))
+
+    # Step: eat WHILE predator is in radius -> candidate recorded (age=0, still pending).
+    bm_step_update(bm, _make_step(ate_food=True, dist_pred=2.0), np.zeros(1, dtype=bool))
+
+    # Episode ends HERE — before the candidate's K-step look-ahead has resolved
+    # (age=0 < bm_K=5). Finalise immediately, as train.py does at episode end.
+    ep_data = bm_finalise_episode(bm, 0, predator_tags=("TL",), neutral_tags=())
+
+    per_class_denom = int(bm.m1_candidates[0, 0])
+    per_tag_denom = int(bm.m1_candidates_tag[0, 0])  # index 0 = the single predator tag slot
+
+    assert per_class_denom == 1, f"Expected per-class candidate denom=1, got {per_class_denom}"
+    assert per_tag_denom == per_class_denom, (
+        f"Per-tag denominator ({per_tag_denom}) must equal per-class denominator "
+        f"({per_class_denom}) for a single-tag class — they diverged, meaning the "
+        f"pending-at-episode-end candidate was counted in one population but not "
+        f"the other (Finding C-math #2 regression)."
+    )
+    assert ep_data["interrupted_feeding_denom_predator_raw"] == 1
+    print(f"T10a PASS: per-class denom={per_class_denom}, per-tag denom={per_tag_denom} (consistent)")
+
+
+def test_m1_denominator_consistent_on_overwrite():
+    """T10b: when a new M1 candidate overwrites a still-pending one (within K
+    steps), BOTH candidates must contribute to the per-tag denominator, exactly
+    matching the per-class denominator (which counts every record-time event).
+
+    Pre-fix: the first (overwritten) candidate's per-tag denominator entry was
+    never recorded, because per-tag counting only happened at resolution and
+    the overwrite discards the pending slot before it ever resolves. Per-class
+    correctly counted both events (2), but per-tag only counted the second
+    (1) — the two diverge. Fails pre-fix, passes post-fix.
+    """
+    bm = make_bm_state(num_envs=1, num_predator_tags=1, num_neutral_tags=0, bm_R=3.0, bm_K=5)
+
+    # Candidate #1: eat while predator near -> recorded, pending (age=0).
+    bm_step_update(bm, _make_step(ate_food=True, dist_pred=2.0), np.zeros(1, dtype=bool))
+    # One step later, still pending (age=1 < K=5). Candidate #2 fires and overwrites
+    # the still-pending slot before it ever resolves.
+    bm_step_update(bm, _make_step(ate_food=True, dist_pred=2.0), np.zeros(1, dtype=bool))
+
+    # Episode ends here, before candidate #2 resolves either.
+    ep_data = bm_finalise_episode(bm, 0, predator_tags=("TL",), neutral_tags=())
+
+    per_class_denom = int(bm.m1_candidates[0, 0])
+    per_tag_denom = int(bm.m1_candidates_tag[0, 0])
+
+    assert per_class_denom == 2, f"Expected per-class candidate denom=2 (two record events), got {per_class_denom}"
+    assert per_tag_denom == per_class_denom, (
+        f"Per-tag denominator ({per_tag_denom}) must equal per-class denominator "
+        f"({per_class_denom}) — the overwritten first candidate must still count "
+        f"in the per-tag population (Finding C-math #2 regression)."
+    )
+    assert ep_data["interrupted_feeding_denom_predator_raw"] == 2
+    print(f"T10b PASS: per-class denom={per_class_denom}, per-tag denom={per_tag_denom} (consistent on overwrite)")
+
+
+def test_m2_denominator_consistent_pending_at_episode_end():
+    """T10c: an M2 bush-dive onset that is still pending (unresolved) when the
+    episode ends must be counted in the per-tag onset denominator exactly like
+    the per-class onset denominator. Same Finding C-math #2 pattern as M1,
+    applied to ``m2_onsets`` / ``m2_onsets_tag``.
+    """
+    bm = make_bm_state(num_envs=1, num_predator_tags=1, num_neutral_tags=0, bm_R=3.0, bm_K=5)
+
+    # Predator far, agent not in bush (establishes prev_threat_in_R=False).
+    bm_step_update(bm, _make_step(in_bush=False, dist_pred=5.0), np.zeros(1, dtype=bool))
+    # Predator enters radius -> onset recorded (age=0, still pending).
+    bm_step_update(bm, _make_step(in_bush=False, dist_pred=2.0), np.zeros(1, dtype=bool))
+
+    # Episode ends HERE — before the onset's K-step look-ahead has resolved.
+    ep_data = bm_finalise_episode(bm, 0, predator_tags=("TL",), neutral_tags=())
+
+    per_class_denom = int(bm.m2_onsets[0, 0])
+    per_tag_denom = int(bm.m2_onsets_tag[0, 0])
+
+    assert per_class_denom == 1, f"Expected per-class onset denom=1, got {per_class_denom}"
+    assert per_tag_denom == per_class_denom, (
+        f"Per-tag onset denominator ({per_tag_denom}) must equal per-class onset "
+        f"denominator ({per_class_denom}) — they diverged (Finding C-math #2 "
+        f"regression, M2 variant)."
+    )
+    assert ep_data["bush_dive_denom_predator_raw"] == 1
+    print(f"T10c PASS: per-class denom={per_class_denom}, per-tag denom={per_tag_denom} (consistent)")

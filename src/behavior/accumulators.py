@@ -223,10 +223,11 @@ def bm_step_update(bm: BMState, info_np_t: dict, done_mask: np.ndarray) -> None:
                         tag_j = bm.m1_candidate_tag_idx[env_i, c]
                         if tag_j >= 0:
                             bm.m1_interrupted_tag[env_i, tag_j] += 1
-                    # Record the candidate for per-tag too
-                    tag_j = bm.m1_candidate_tag_idx[env_i, c]
-                    if tag_j >= 0:
-                        bm.m1_candidates_tag[env_i, tag_j] += 1
+                    # NOTE: the per-tag denominator (m1_candidates_tag) is incremented at
+                    # candidate-RECORD time below (same instant as the per-class
+                    # m1_candidates denominator), not here at resolution time — Finding
+                    # C-math #2 (per-class vs per-tag denominators counted at different
+                    # instants, diverging on overwrite / episode-end).
                     bm.m1_candidate_age[env_i, c] = -1
                     bm.m1_candidate_tag_idx[env_i, c] = -1
 
@@ -249,6 +250,11 @@ def bm_step_update(bm: BMState, info_np_t: dict, done_mask: np.ndarray) -> None:
                     bm.m1_candidate_tag_idx[env_i, c] = _neutral_slice.start + min(best_j, num_neutral_for_log - 1)
                 else:
                     bm.m1_candidate_tag_idx[env_i, c] = -1
+                # Per-tag denominator counted HERE, at record time — same instant as
+                # the per-class m1_candidates denominator (Finding C-math #2 fix).
+                tag_j = bm.m1_candidate_tag_idx[env_i, c]
+                if tag_j >= 0:
+                    bm.m1_candidates_tag[env_i, tag_j] += 1
 
     # --- M2: bush-dive detection ---
     for c in range(_NUM_CLASSES):
@@ -272,6 +278,11 @@ def bm_step_update(bm: BMState, info_np_t: dict, done_mask: np.ndarray) -> None:
                     bm.m2_onset_tag_idx[env_i, c] = _neutral_slice.start + min(best_j, num_neutral_for_log - 1)
                 else:
                     bm.m2_onset_tag_idx[env_i, c] = -1
+                # Per-tag denominator counted HERE, at onset-record time — same instant
+                # as the per-class m2_onsets denominator (Finding C-math #2 fix).
+                tag_j = bm.m2_onset_tag_idx[env_i, c]
+                if tag_j >= 0:
+                    bm.m2_onsets_tag[env_i, tag_j] += 1
 
             # 2. Mark if bush entered during window
             if bm.m2_onset_age[env_i, c] >= 0 and in_bush_t[env_i]:
@@ -286,10 +297,8 @@ def bm_step_update(bm: BMState, info_np_t: dict, done_mask: np.ndarray) -> None:
                         tag_j = bm.m2_onset_tag_idx[env_i, c]
                         if tag_j >= 0:
                             bm.m2_dives_tag[env_i, tag_j] += 1
-                    # Record per-tag onset count
-                    tag_j = bm.m2_onset_tag_idx[env_i, c]
-                    if tag_j >= 0:
-                        bm.m2_onsets_tag[env_i, tag_j] += 1
+                    # NOTE: the per-tag denominator (m2_onsets_tag) was counted at
+                    # onset-RECORD time above, not here — see Finding C-math #2 fix.
                     bm.m2_onset_age[env_i, c] = -1
                     bm.m2_onset_tag_idx[env_i, c] = -1
                     bm.m2_in_bush_seen[env_i, c] = False
