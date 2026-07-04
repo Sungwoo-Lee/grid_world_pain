@@ -14,7 +14,10 @@ This is a **single-glance registry of the bugs this project has found**, so that
 planning and development does not re-discover the same problem from scratch. Each row is a
 one-line summary; the real detail lives behind the links (a diagnosis doc, a fix plan, a
 memory insight, or a fix commit). It is **not** a place to reproduce the analysis — open the
-linked source for that.
+linked source for that. **This doc is intentionally a compact index, not an encyclopedia**:
+it covers the project's whole git history but keeps only bugs a future planner/developer
+benefits from remembering. For on-demand depth on any row (or bugs deliberately left out),
+ask the `bug-curator` agent, which reconstructs the full story from git and memory.
 
 **How to read it.** Rows are grouped by status. **Open / undecided** items (things that still
 need a decision) come first, because those are the ones that can bite a new plan. **Fixed**
@@ -98,6 +101,11 @@ reward bug, the fix plan [[FIX_TRUNCATION_TREATED_AS_DEATH]].
 | **Dreamer reset-storm recompile (out-of-memory)** | The per-step reset sized arrays to the **variable number of finished environments**, forcing a fresh compile per size and eventually running out of GPU memory / stalling all runs. Fixed with a fixed-width masked reset. | FIXED | High (OOM / stall) | dreamer_srl | memory `20260622_1746_dreamer_srl_recompile_storm_done_count` |
 | **Dreamer REINFORCE resamples actions** | The dreamer_srl v1 policy loss **re-drew actions at loss time**, pairing the probability of a *new* action with the advantage of the *old* one — the v1 root-cause failure. Fixed by carrying the taken action through the loss. | FIXED | High (was the v1 root cause) | dreamer_srl | memory `20260518_1512_reinforce_resampling_bug_imag_action_threading` |
 | **Lazy import crashes hours into training** | Four runs crashed ~7 hours in because a helper was **imported only on first use**, after a parallel session had changed a data schema; the mismatch surfaced only at that late first call. | FIXED | Med (delayed crash) | dreamer_srl / tooling | memory `20260529_1826_lazy_import_schema_drift_first_call_crash` |
+| **Silent encode/decode layout drift** | A knob-gated change to Dreamer's reward two-hot encoding shipped in the trainer but **not** in an offline diagnostic script, so the tool decoded the model's outputs with the *old* layout and reported wrong numbers with **no error** — a fake 5.7× regression. General class: any auxiliary tool falling out of sync with production's evolving data layout. | FIXED | Med (silent wrong analysis; recurrence-prone) | dreamer encode / diagnostics | `f5df600` + `1703a4c` · memory `20260511_1535_encode_decode_flag_mismatch_silent_class_bug` |
+| **Noise painted on wrong sensory channel** | The evaluation sensory visualiser assumed a different modality order than the observation vector actually used, so perceptual noise showed up on the **wrong channel**; fixed by making channel order YAML-driven and unifying the true-observation computation. | FIXED | Med (diagnostics mislead; shaped current ordering design) | eval / sensory viz | `eee4f08` (diagnosis) → `2e4ac34` |
+| **JAX arrays returned read-only → crash** | The JAX vector-env handed back **non-writable** arrays; a downstream numpy in-place write crashed the run. Now returns writable numpy copies. | FIXED | Med (training crash) | jax_vector_env | `d729e2c` |
+| **Behavior-metric NaN on zero denominator** | A behavior ratio (eat-under-threat) produced **NaN** whenever its denominator was zero (no safe-eat events), poisoning logged metrics; guarded. Same zero-denominator class recurs across ratio metrics. | FIXED | Low–Med (analysis numbers; recurrence class) | behavior measures | `e5e1155` |
+| **Dead config key silently ignored** | The `memory_clip` clamp config key existed but was **never enforced** — a no-op that looked active — so the neuromodulator's memory value went unclamped; later actually implemented. (This same key later crashed the old eval rebuild — Finding A above.) | FIXED | Low–Med (silent no-op; dead-key class) | neuromod (NeuromodulatorRNN) | `014a195` → `ea4bb6e` |
 
 ## Latent / needs-verification (recorded, not confirmed closed)
 
