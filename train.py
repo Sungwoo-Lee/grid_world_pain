@@ -397,8 +397,13 @@ def main():
     if args.no_wandb: config.set('wandb.disabled', True)
     if args.tag: config.set('tag', args.tag)
     if args.seed is not None: config.set('seed', args.seed)
-    if args.no_satiation: config.set('environment.with_satiation', False)
-    if args.no_overeating_death: config.set('environment.overeating_death', False)
+    # Fix (Finding G3/L4): these must land on the SAME keys load_env_params() reads
+    # ('body.with_satiation' / 'body.overeating_death'), not 'environment.*' -- the previous
+    # keys were never read back by anything, so the saved config.yaml kept the YAML default
+    # (e.g. with_satiation: true) even though the run actually trained without satiation.
+    if args.no_satiation: config.set('body.with_satiation', False)
+    if args.no_overeating_death: config.set('body.overeating_death', False)
+    if args.checkpoint_frequency is not None: config.set('training.checkpoint_frequency', args.checkpoint_frequency)
 
     # 1.5 Print Combined Configuration (Always)
     if not args.quiet:
@@ -465,21 +470,33 @@ def main():
         episodes = schedule.episode_boundaries[-1]
     else:
         episodes = args.episodes if args.episodes is not None else config.get_mandatory('episodes')
+        # Fix (Finding G3/L4): persist into `config` (dumped to models/config.yaml below) so
+        # re-evaluating the run reads back what actually trained, not the pre-override YAML
+        # default. Continual (--configs-dir) runs are excluded: episode budget there comes
+        # from the schedule, not this key, and is already dumped separately (schedule.yaml).
+        config.set('episodes', episodes)
     env_max_steps = config.get_mandatory('environment.max_steps')
     num_envs = args.num_envs or config.get_mandatory('training.num_envs')
     log_interval = args.log_interval or config.get('training.log_interval', 1)
     log_accumulate = args.log_accumulate if args.log_accumulate is not None else config.get('training.log_accumulate', True)
-    
+    config.set('training.num_envs', num_envs)
+    config.set('training.log_interval', log_interval)
+    config.set('training.log_accumulate', log_accumulate)
+
     # Budget scales with parallelization: episodes * steps per episode * num environments
     total_timesteps = args.total_timesteps or (episodes * env_max_steps * num_envs)
-    
+
     if algorithm in ["RecurrentPPO", "PPO"]:
         if algorithm == "RecurrentPPO":
             num_steps = args.num_steps or config.get_mandatory('agent.sequence_length')
+            config.set('agent.sequence_length', num_steps)
         else:
             num_steps = args.num_steps or config.get_mandatory('agent.num_steps')
+            config.set('agent.num_steps', num_steps)
         hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
         lr = args.lr or config.get_mandatory('agent.lr_actor')
+        config.set('agent.hidden_size', hidden_size)
+        config.set('agent.lr_actor', lr)
     elif algorithm == "DreamerV3":
         # collect_interval: how many env steps to collect per iteration per env.
         # 1 = sheeprl-style (canonical, fine-grained), 128 = full sequence (JAX-optimized).
@@ -488,10 +505,16 @@ def main():
         # Dreamer has many hidden sizes; using rssm_deter_dim as a proxy for summary/logging
         hidden_size = args.hidden_size or config.get_mandatory('agent.rssm_deter_dim')
         lr = args.lr or config.get_mandatory('agent.actor_lr')
+        config.set('agent.collect_interval', num_steps)
+        config.set('agent.rssm_deter_dim', hidden_size)
+        config.set('agent.actor_lr', lr)
     else:
         num_steps = args.num_steps or config.get_mandatory('agent.num_steps')
         hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
         lr = args.lr or config.get_mandatory('agent.lr')
+        config.set('agent.num_steps', num_steps)
+        config.set('agent.hidden_size', hidden_size)
+        config.set('agent.lr', lr)
 
     seed = args.seed if args.seed is not None else config.get_mandatory('seed')
 
