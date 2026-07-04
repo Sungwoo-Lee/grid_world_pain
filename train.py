@@ -1531,12 +1531,17 @@ def main():
                             act_flat = transitions['action'].transpose(1, 0, 2).reshape(B * T, -1)
                             rew_flat = transitions['reward'].transpose(1, 0).reshape(B * T)
                             done_flat = transitions['terminal'].transpose(1, 0).reshape(B * T)
+                            # termination_reason (0=active,1=timeout,2=starvation,3=overeating,4=injury)
+                            # threaded through to the buffer so the Dreamer continue-head target can
+                            # distinguish real death from timeout/truncation (Finding B, Dreamer analog).
+                            # See docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
+                            term_reason_flat = transitions['termination_reason'].transpose(1, 0).reshape(B * T)
                             is_first_arr = transitions['is_first']
                             if is_first_arr.ndim == 3:
                                 is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
                             else:
                                 is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
-                            buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+                            buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat, term_reason_flat)
 
                         with jax.named_scope("dreamer_positive_buffer_copy"):
                             # Copy positive-reward blocks to the dedicated positive buffer
@@ -1562,7 +1567,8 @@ def main():
                                             act_flat[blk_start:blk_end],
                                             rew_flat[blk_start:blk_end],
                                             done_flat[blk_start:blk_end],
-                                            is_first_flat[blk_start:blk_end]
+                                            is_first_flat[blk_start:blk_end],
+                                            term_reason_flat[blk_start:blk_end]
                                         )
                         # Still need numpy for cpu-side stats calculation
                         transitions_np = jax.device_get(transitions)
@@ -1575,12 +1581,13 @@ def main():
                             act_flat = transitions_np['action'].transpose(1, 0, 2).reshape(B * T, -1)
                             rew_flat = transitions_np['reward'].transpose(1, 0).reshape(B * T)
                             done_flat = transitions_np['terminal'].transpose(1, 0).reshape(B * T)
+                            term_reason_flat = transitions_np['termination_reason'].transpose(1, 0).reshape(B * T)
                             is_first_arr = transitions_np['is_first'].astype(bool)
                             if is_first_arr.ndim == 3:
                                 is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
                             else:
                                 is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
-                            buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat)
+                            buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat, term_reason_flat)
 
                         with jax.named_scope("dreamer_positive_buffer_copy"):
                             # Copy positive-reward blocks to the dedicated positive buffer
@@ -1603,7 +1610,8 @@ def main():
                                             act_flat[blk_start:blk_end],
                                             rew_flat[blk_start:blk_end],
                                             done_flat[blk_start:blk_end],
-                                            is_first_flat[blk_start:blk_end]
+                                            is_first_flat[blk_start:blk_end],
+                                            term_reason_flat[blk_start:blk_end]
                                         )
                     
                     # Update statistics (Vectorized where possible)

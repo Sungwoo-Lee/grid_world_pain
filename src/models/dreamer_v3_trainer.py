@@ -50,6 +50,22 @@ def compute_lambda_values(rewards, values, continues, LAMBDA=0.95):
 
     return returns
 
+
+def compute_continue_target(term_reason):
+    """Continue-head target: 1.0 unless REAL death, 0.0 only on real death.
+
+    Mirrors the `termination_reason >= 2` mapping used for the GAE truncation-bootstrap
+    fix in `recurrent_ppo_trainer.py` (Finding B, Part 2): 0 = still active, 1 = timeout
+    (truncation — the episode would have continued, so continue-target stays 1.0),
+    2/3/4 = real death (starvation / over-eating / injury, continue-target 0.0).
+    See docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
+
+    term_reason: (...,) float array of termination-reason codes.
+    Returns: same shape, float32 array of continue targets (1.0 = alive/would-continue).
+    """
+    real_death = (term_reason >= 2.0).astype(jnp.float32)
+    return 1.0 - real_death
+
 # -----------------------------------------------------------------------------
 # Training Step
 # -----------------------------------------------------------------------------
@@ -128,6 +144,7 @@ class DreamerTrainer(nnx.Module):
         action = batch['action']
         reward = batch['reward']
         terminal = batch['terminal']
+        term_reason = batch['term_reason']
         is_first = batch['is_first']
 
         B, T, _ = obs.shape
@@ -225,13 +242,15 @@ class DreamerTrainer(nnx.Module):
                 loss_rew = -jnp.mean(jnp.sum(rew_target * jax.nn.log_softmax(rew_pred), axis=-1))
 
                 # Continue Loss
-                # KNOWN LIMITATION (Finding B, Part 2 — deferred follow-up, NOT fixed here):
-                # `terminal` is real-death OR timeout, so the continue-head is trained to predict
-                # "episode over" (cont=0) on TIMEOUT too, same conflation `recurrent_ppo_trainer.py`
-                # had before its Part-2 fix. DreamerV3 was explicitly out of scope for that fix;
-                # see docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
+                # Continue-head target is 0 only on REAL death (termination_reason in {2,3,4}),
+                # and 1 on TIMEOUT/truncation (termination_reason == 1) — the episode was cut
+                # off, not ended, so the imagined-rollout bootstrap should NOT treat it as death.
+                # Fixes the DreamerV3 analog of Finding B, Part 2 (recurrent_ppo_trainer.py GAE
+                # truncation-bootstrap fix). See
+                # docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
                 cont_pred = wm.continue_head(feat)
-                loss_cont = optax.sigmoid_binary_cross_entropy(cont_pred, 1.0 - terminal[..., None]).mean()
+                cont_target = compute_continue_target(term_reason)[..., None]
+                loss_cont = optax.sigmoid_binary_cross_entropy(cont_pred, cont_target).mean()
 
                 # KL Loss
                 q_logits = posts['logits']
@@ -276,7 +295,6 @@ class DreamerTrainer(nnx.Module):
             latent_entropy = -jnp.sum(q_dist * jax.nn.log_softmax(q_logits), axis=-1).mean()
 
             # Continue Accuracy
-            cont_target = 1.0 - terminal[..., None]
             cont_acc = jnp.mean((nnx.sigmoid(cont_pred) > 0.5) == cont_target.astype(jnp.bool_))
 
             metrics = {
@@ -691,8 +709,8 @@ class DreamerTrainer(nnx.Module):
                         b_size, b_cap, b_seq_len,
                         pos_size, pos_cap,
                         pos_slots, recent_slots, recent_window, buf_idx):
-        obs, actions, rewards, dones, is_first = main_arrays
-        pos_obs, pos_actions, pos_rewards, pos_dones, pos_is_first = pos_arrays
+        obs, actions, rewards, dones, is_first, term_reason = main_arrays
+        pos_obs, pos_actions, pos_rewards, pos_dones, pos_is_first, pos_term_reason = pos_arrays
 
         num_blocks = b_size // b_seq_len
         max_blocks = b_cap // b_seq_len
@@ -727,6 +745,7 @@ class DreamerTrainer(nnx.Module):
                 pos_batch_rew = pos_rewards[pos_indices]       # (pos_slots, seq_len)
                 pos_batch_done = pos_dones[pos_indices]        # (pos_slots, seq_len)
                 pos_batch_first = pos_is_first[pos_indices]    # (pos_slots, seq_len)
+                pos_batch_term_reason = pos_term_reason[pos_indices]  # (pos_slots, seq_len)
 
                 # --- Pool 2: Recent blocks from main buffer ---
                 recent_blocks_count = jnp.minimum(recent_window // b_seq_len, num_blocks)
@@ -747,6 +766,7 @@ class DreamerTrainer(nnx.Module):
                 recent_batch_rew = rewards[recent_indices]
                 recent_batch_done = dones[recent_indices]
                 recent_batch_first = is_first[recent_indices]
+                recent_batch_term_reason = term_reason[recent_indices]
 
                 # --- Pool 3: Uniform random from main buffer (existing behavior) ---
                 uniform_block_idx = jax.random.randint(key_uniform, (uniform_slots,), 0, num_blocks)
@@ -758,6 +778,7 @@ class DreamerTrainer(nnx.Module):
                 uniform_batch_rew = rewards[uniform_indices]
                 uniform_batch_done = dones[uniform_indices]
                 uniform_batch_first = is_first[uniform_indices]
+                uniform_batch_term_reason = term_reason[uniform_indices]
 
                 # --- Fallback: if positive buffer is empty, replace with uniform from main ---
                 # When num_pos_blocks == 0, pos_batch_* contains garbage or zeros
@@ -771,6 +792,7 @@ class DreamerTrainer(nnx.Module):
                 pos_batch_rew = jnp.where(has_positive_data, pos_batch_rew, rewards[fallback_indices])
                 pos_batch_done = jnp.where(has_positive_data, pos_batch_done, dones[fallback_indices])
                 pos_batch_first = jnp.where(has_positive_data, pos_batch_first, is_first[fallback_indices])
+                pos_batch_term_reason = jnp.where(has_positive_data, pos_batch_term_reason, term_reason[fallback_indices])
 
             # --- Concatenate all pools into the training batch ---
             with jax.named_scope("replay_concat"):
@@ -780,6 +802,7 @@ class DreamerTrainer(nnx.Module):
                     'reward': jnp.concatenate([pos_batch_rew, recent_batch_rew, uniform_batch_rew], axis=0),
                     'terminal': jnp.concatenate([pos_batch_done, recent_batch_done, uniform_batch_done], axis=0),
                     'is_first': jnp.concatenate([pos_batch_first, recent_batch_first, uniform_batch_first], axis=0),
+                    'term_reason': jnp.concatenate([pos_batch_term_reason, recent_batch_term_reason, uniform_batch_term_reason], axis=0),
                 }
             
             # gradient step
@@ -802,7 +825,7 @@ class DreamerTrainer(nnx.Module):
         graphdef, _ = nnx.split(self)
         
         # Extract buffer arrays to pass explicitly (prevents JIT retracing)
-        buffer_arrays = (buffer.obs, buffer.actions, buffer.rewards, buffer.dones, buffer.is_first)
+        buffer_arrays = (buffer.obs, buffer.actions, buffer.rewards, buffer.dones, buffer.is_first, buffer.term_reason)
         
         # Mixture sampling config (static)
         sampling_mode = self.config.get_mandatory('agent.sampling_mode')
@@ -813,12 +836,12 @@ class DreamerTrainer(nnx.Module):
         # Positive buffer arrays (or zeros if not using mixture / positive buffer empty)
         if positive_buffer is not None and positive_buffer.size > 0:
             pos_arrays = (positive_buffer.obs, positive_buffer.actions, positive_buffer.rewards,
-                          positive_buffer.dones, positive_buffer.is_first)
+                          positive_buffer.dones, positive_buffer.is_first, positive_buffer.term_reason)
             pos_size = positive_buffer.size
             pos_cap = positive_buffer.capacity
         else:
             # Dummy arrays — will be ignored when pos_slots fallback triggers
-            pos_arrays = (buffer.obs, buffer.actions, buffer.rewards, buffer.dones, buffer.is_first)
+            pos_arrays = (buffer.obs, buffer.actions, buffer.rewards, buffer.dones, buffer.is_first, buffer.term_reason)
             pos_size = 0
             pos_cap = buffer.capacity
 
@@ -905,6 +928,7 @@ class DreamerTrainer(nnx.Module):
                 'reward': buffer.rewards[recent_indices],
                 'terminal': buffer.dones[recent_indices],
                 'is_first': buffer.is_first[recent_indices],
+                'term_reason': buffer.term_reason[recent_indices],
             }
 
             # Pool 3: Uniform from main buffer
@@ -912,7 +936,7 @@ class DreamerTrainer(nnx.Module):
 
             # Concatenate
             combined = {}
-            for key in ['obs', 'action', 'reward', 'terminal', 'is_first']:
+            for key in ['obs', 'action', 'reward', 'terminal', 'is_first', 'term_reason']:
                 combined[key] = np.concatenate([pos_batch[key], recent_batch[key], uniform_batch[key]], axis=0)
             all_batches.append(combined)
         
@@ -938,31 +962,37 @@ class ReplayBuffer:
             self.rewards = jnp.zeros((capacity,), dtype=jnp.float32)
             self.dones = jnp.zeros((capacity,), dtype=jnp.float32)
             self.is_first = jnp.zeros((capacity,), dtype=jnp.float32)
+            # termination_reason codes (0=active,1=timeout,2=starvation,3=overeating,4=injury).
+            # Threaded through so the continue-head target can distinguish real death from
+            # timeout/truncation. See docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
+            self.term_reason = jnp.zeros((capacity,), dtype=jnp.float32)
         else:
             self.obs = np.zeros((capacity, obs_dim), dtype=np.float32)
             self.actions = np.zeros((capacity, action_dim), dtype=np.float32)
             self.rewards = np.zeros((capacity,), dtype=np.float32)
             self.dones = np.zeros((capacity,), dtype=np.float32)
             self.is_first = np.zeros((capacity,), dtype=np.float32)
+            self.term_reason = np.zeros((capacity,), dtype=np.float32)
 
         self.idx = 0
         self.size = 0
 
-    def add_batch(self, obs, actions, rewards, dones, is_firsts):
+    def add_batch(self, obs, actions, rewards, dones, is_firsts, term_reasons):
         """Vectorized addition of a batch of transitions.
-        
+
         Caller must pass data in ENV-MAJOR order: the first sequence_length
         entries = env0's trajectory, next sequence_length = env1's, etc.
         This ensures sample() returns temporal sequences for the RSSM.
-        
+
         obs: (num_items, obs_dim)
         actions: (num_items, act_dim)
         rewards: (num_items,)
         dones: (num_items,)
         is_firsts: (num_items,)
+        term_reasons: (num_items,) — termination_reason codes (see __init__ docstring).
         """
         num_items = obs.shape[0]
-        
+
         if self._on_gpu:
             indices = (self.idx + jnp.arange(num_items)) % self.capacity
             self.obs = self.obs.at[indices].set(obs)
@@ -970,6 +1000,7 @@ class ReplayBuffer:
             self.rewards = self.rewards.at[indices].set(rewards)
             self.dones = self.dones.at[indices].set(dones)
             self.is_first = self.is_first.at[indices].set(is_firsts)
+            self.term_reason = self.term_reason.at[indices].set(term_reasons)
         else:
             indices = (self.idx + np.arange(num_items)) % self.capacity
             self.obs[indices] = obs
@@ -977,7 +1008,8 @@ class ReplayBuffer:
             self.rewards[indices] = rewards
             self.dones[indices] = dones
             self.is_first[indices] = is_firsts
-        
+            self.term_reason[indices] = term_reasons
+
         self.idx = (self.idx + num_items) % self.capacity
         self.size = min(self.size + num_items, self.capacity)
 
@@ -1013,7 +1045,8 @@ class ReplayBuffer:
             'action': self.actions[indices],
             'reward': self.rewards[indices],
             'terminal': self.dones[indices],
-            'is_first': self.is_first[indices] if self._on_gpu else self.is_first[indices].astype(np.float32)
+            'is_first': self.is_first[indices] if self._on_gpu else self.is_first[indices].astype(np.float32),
+            'term_reason': self.term_reason[indices]
         }
 
     def sample_multiple(self, num_batches, batch_size, key=None):
