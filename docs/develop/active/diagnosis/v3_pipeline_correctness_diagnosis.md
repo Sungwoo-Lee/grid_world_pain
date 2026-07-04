@@ -5,6 +5,7 @@ status: active
 created: 2026-07-04
 last_updated: 2026-07-04
 phase: complete
+verified: 2026-07-04
 ---
 
 # v3.0 Training + Evaluation Pipeline Correctness Diagnosis
@@ -510,6 +511,17 @@ path)**:
 | **L3** | Silent partial restore in root `evaluation.py` (`_merge_restored_into_module_state`) keeps init weights for absent leaves | **FIXED, commit `2ad9104`** — live path was already IMMUNE (`eval_rollout.py:610–629` raises on missing/mismatched leaf; two-seed test proved complete restore); root `evaluation.py` now has an equivalent strict-completeness assertion | Pre-existing | **Low** (root `evaluation.py` only) | **DONE.** Folded into the **A** fix — `_assert_full_restore` raises `ValueError` listing every param leaf left at its randomly-initialised value, for both RecurrentPPO and DreamerV3 restore paths. |
 | **C** | Uncommitted parity-fixture churn: `pred_*/neutral_*` → unified `animal_*` schema rename in golden snapshots | Benign — shared data byte-identical; only storage-key names changed | **v3.0-new** (CP1 animal-entity refactor) | **Low but MUST-FIX-BEFORE-COMMIT** (committing fixtures alone silently no-ops the animal-position parity asserts) | **FIXED, commit `0bebe06`** — `test_unified_parity.py` migrated to read the unified `animal_*` keys (sliced by `predator_indices`/`neutral_indices`) with a legacy-key fallback for still-unregenerated fixtures; regenerated fixtures committed together with the test fix. Verified: 34 passed/244 skipped before and after (unchanged — skip count is fixture-presence only); 1545 previously-silent array assertions across the 8 regenerated configs now execute for real; perturbation sanity check confirmed the migrated assertion fails on injected divergence. |
 | minor | basic/00 M2-NaN (no bushes); observability-gate `random_start_pos`; `temp_clip` dead lower bound; value-loss comment mismatch | per surface docs | mixed | **Low / nits** | Batch into a housekeeping plan or address opportunistically. |
+| **PPO-baseline** (NEW, opened by G1b verification) | `ppo_trainer.compute_gae`'s advantage baseline is wrong: the value subtracted in `delta` (`- next_v`, the reverse-scan carry) is a value shifted from the *neighbouring* timestep, not `V(s_t)`. Unlike `recurrent_ppo_trainer.compute_gae`, this function takes no separate `values`/`V(s_t)` array. | Surfaced while verifying the G1b truncation-bootstrap fix (commit `926c2c3`); confirmed present pre- and post-fix (the `- next_v` term was untouched by G1b). | **Pre-existing** (not introduced by G1b) | **Low real-world** — no live config uses plain `ppo` (`configs/models/ppo/*.yaml` are unreferenced), so zero production impact; but a genuine correctness defect for anyone who does enable plain-PPO GAE mode | **Flagged, NOT fixed** — documented in the `compute_gae` docstring NOTE (commit `926c2c3`) and the commit body; left unfixed per the G1b task's scope. Independent of the death-vs-timeout mask. Follow-up: separate a `values` (`V(s_t)`) baseline argument the way `recurrent_ppo_trainer.compute_gae` already does — a small `senior-developer` → `developer` plan if plain-PPO is ever revived. |
+
+### Verification note — Group-1 / Group-2 fixes (`5b093bf`, `926c2c3`, `2ad9104`)
+
+`senior-developer` verified the three Group-1/Group-2 commits on 2026-07-04 (in addition to
+the earlier B-2/E/F/C batch). Verdict: **all three PASS.** Plumbing, diff scope, and
+regression tests were checked; the combined `tests/models/` suite is green (13/13) and the
+three fix-specific test files pass (19/19). Full detail: the `senior-developer` verification
+message for this session. One new open item was opened by the review — the **PPO-baseline**
+row above (a pre-existing `compute_gae` baseline defect the G1b fix correctly flagged but
+left unfixed).
 
 ### Top recommendation — what to fix first
 
