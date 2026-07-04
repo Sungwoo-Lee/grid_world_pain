@@ -183,7 +183,8 @@ pre-existing.
   dict, identical to how `train.py` builds it (line 745). No whitelist, no mismatch. In-training
   periodic eval uses the *live* model object directly, so it also cannot disagree.
 
-**Latent gap L1 — stale modulation whitelist in the root `evaluation.py` (pre-existing, low).**
+**Latent gap L1 / Finding A — stale modulation whitelist in the root `evaluation.py`
+(pre-existing, low). STATUS: FIXED, commit `2ad9104`.**
 The root `evaluation.py` (lines 252–259) reconstructs the model from a **hard-coded 6-key
 whitelist**: `type, mod_hidden_size, grouping_size, percept_bias_init, memory_bias_init,
 temp_clip`. But `ActorCriticRNN.__init__` reads **`memory_clip` unconditionally via bracket
@@ -195,9 +196,25 @@ raises `KeyError`**. This is **not a v3.0 regression** — `main`'s `evaluation.
 6-key whitelist and `main`'s network already read `memory_clip` via bracket — but it is now
 squarely load-bearing. Mitigating factor: the root `evaluation.py` is **only wired to
 `generate_demo.sh`** (a demo-video helper) and is superseded by `scripts/eval/eval_rollout.py`,
-which does it correctly. **Recommendation:** in a follow-up plan, either replace the whitelist
-with the full `config.get('agent.modulation')` dict (one line, matching train + eval_rollout)
-or formally retire the root `evaluation.py`.
+which does it correctly.
+
+**Fix (root `evaluation.py`, both halves of Finding A).** The RecurrentPPO branch now builds
+`modulation_config` the same way `train.py:745-747` does — `config.get('agent.modulation')`,
+null-normalised when `type` is unset — instead of the 6-key whitelist, so `memory_clip` (and any
+future modulation key `ActorCriticRNN` reads) can no longer drift out of sync. Separately, the
+DreamerV3 branch (previously a plain 5-key `dict` that crashed `DreamerTrainer`'s
+`config.get_mandatory(...)` calls with `AttributeError`, and silently omitted `obs_breakdown`/
+`modulation_config`) now passes the full `Config` object plus `obs_breakdown` and
+`modulation_config`, mirroring `train.py:815-817`. Regression test:
+`tests/scripts/test_evaluation_model_rebuild.py` — `test_modulated_rppo_eval_rebuild_succeeds`
+builds a real FiLM-modulated (`memory_clip`-bearing) checkpoint and round-trips it through
+`evaluation.py`'s actual `main()` (fails with `KeyError('memory_clip')` pre-fix, passes post-fix);
+`test_dreamer_eval_rebuild_signature` exercises `main()`'s real DreamerV3 construction call-site
+via a spy (fails an `isinstance(..., Config)` assertion pre-fix, passes post-fix — no on-disk
+DreamerV3 checkpoint fixture exists to round-trip the full network end-to-end, so the
+network-internal build itself is verified at the call-site/signature level, per the fix plan's own
+allowance); `test_plain_rppo_eval_rebuild_still_succeeds` confirms the common, non-modulated case
+is unaffected. Implemented by: developer.
 
 **Latent gap L2 / Finding E — continual-run eval uses the first-stage environment (pre-existing, medium
 for continual only). STATUS: FIXED, commit `a3ab4cc`.** For continual runs, `models/config.yaml` is
@@ -229,15 +246,27 @@ stages, needing a larger per-checkpoint refactor) and was left untouched — it 
 wired to `generate_demo.sh`. Implemented by: developer.
 
 **Latent gap L3 — best-effort checkpoint restore keeps init weights silently (pre-existing,
-low/robustness).** `_merge_restored_into_module_state` (`evaluation.py` lines 77–94) copies
-restored leaves into the module structure but, when a module key is **absent from the restored
-checkpoint**, **keeps the freshly-initialised value** (line 91) with no error and no
-completeness assertion. If train's saved structure ever diverged from eval's reconstruction
-(e.g. a modulation-config mismatch, or a param added in v3.0), some layers would silently run on
-**random init weights** and evaluation would report degraded-but-not-crashing numbers. There is
-no "all restored leaves consumed / all module leaves filled" check. **Recommendation:** follow-up
-plan to add a strict-restore assertion (count and diff the leaf sets, error on any unfilled or
-unused leaf). Verify `eval_rollout.py`'s restore path has the same gap.
+low/robustness). STATUS: FIXED, commit `2ad9104`.** `_merge_restored_into_module_state`
+(`evaluation.py` lines 77–94) copies restored leaves into the module structure but, when a module
+key is **absent from the restored checkpoint**, **keeps the freshly-initialised value** (line 91)
+with no error and no completeness assertion. If train's saved structure ever diverged from eval's
+reconstruction (e.g. a modulation-config mismatch, or a param added in v3.0), some layers would
+silently run on **random init weights** and evaluation would report degraded-but-not-crashing
+numbers. There is no "all restored leaves consumed / all module leaves filled" check.
+
+**Fix.** `_merge_restored_into_module_state` now threads an accumulator (`_missing`) that records
+the dotted path of every param leaf/subtree left at its randomly-initialised value (i.e. absent
+from the restored checkpoint), and a new `_assert_full_restore(missing, label)` raises a `ValueError`
+listing every such leaf if the list is non-empty — called right after the merge and before
+`nnx.update(...)`, for both the RecurrentPPO and DreamerV3 (`wm`/`actor`/`critic`) restore paths.
+This mirrors the strict completeness check the live path already has
+(`scripts/eval/eval_rollout.py:713-737`). Regression tests (`tests/scripts/
+test_evaluation_model_rebuild.py`): `test_merge_reports_missing_leaves` confirms the accumulator
+correctly records absent leaves without altering the merge's existing behavior;
+`test_assert_full_restore_raises_on_incomplete_checkpoint` constructs a deliberate structural
+mismatch (a whole missing param subtree) and confirms it now raises `ValueError` naming the missing
+leaf, instead of silently proceeding; `test_assert_full_restore_passes_on_complete_checkpoint`
+confirms a fully-covering checkpoint is unaffected. Implemented by: developer.
 
 **Latent gap L4 — architecture-affecting CLI overrides not written back to saved config
 (pre-existing, low).** `--hidden_size` (and `--num_steps`, `--lr`) are resolved into local
@@ -424,13 +453,17 @@ predator `move_interval: [1,1]`, `max_stamina: [30,150]` (basic/05's all-predato
 `perceptual_noise.enabled: true` with `olfaction.injury_noise_scale: 4.0` (basic/06's lever). No residual
 `extends:` key. Confirms the config-loader fix holds through a real train run into the saved config eval reads.
 
-### E2E-4 — Finding A reproduction (deprecated root `evaluation.py`) — REPRODUCED
+### E2E-4 — Finding A reproduction (deprecated root `evaluation.py`) — REPRODUCED, then FIXED
 
 Built a FiLM-modulated model exactly as root `evaluation.py:252–259` does (its hard-coded 6-key
 modulation whitelist) against `recurrent_ppo_nmn_film_g1_screen.yaml` (which sets `memory_clip: [-2.0, 2.0]`).
 Result: **`KeyError('memory_clip')`** at model construction — confirmed. Any modulation-enabled
 RecurrentPPO checkpoint fails to build through the root `evaluation.py`. This path is only wired to
 `generate_demo.sh`; the live `eval_rollout.py` uses the full modulation dict and is unaffected.
+
+**Post-fix (commit `2ad9104`):** re-ran the same repro end-to-end through `evaluation.py`'s actual
+`main()` — a real FiLM-modulated (`memory_clip: [-2.0, 2.0]`) checkpoint now builds and restores
+without error. See Latent gap L1 / Finding A above for the fix detail and regression tests.
 
 ---
 
@@ -471,10 +504,10 @@ path)**:
 | # | Finding | Ground-truth result | v3.0-new? | Real severity | Fix-flow |
 |---|---------|---------------------|-----------|---------------|----------|
 | **B** | Truncation treated as death: `death_penalty` (−100) applied on timeout (`core.py:706,722`) **+** GAE bootstrap zeroed on truncation (`recurrent_ppo_trainer.py:63`) | **CONFIRMED** — survivor reward −100.186 (−100 is the penalty); trainer `done`=True on timeout ⇒ bootstrap dropped. **Affects all 6 live runs.** | **Pre-existing** (byte-identical to `main`) | **HIGH** (corrupts the optimised survival objective + value targets; systematic in a survival task) — but shared by all historical runs, so comparability preserved | **FIXED — Part 1 `ef0fd25` (reward gate on real death, `core.py`), Part 2 `3c60f6f` (GAE truncation bootstrap, `recurrent_ppo_trainer.py`); both verified by `senior-developer` 2026-07-04.** `terminated`-only mask (true death, `reason∈{2,3,4}`) gates the value bootstrap; `V(true next state)` stored pre-auto-reset; MC/GAE branch is JIT-static so live MC-mode runs pay 0.00% cost. **`ppo_trainer.py` sibling FIXED, commit `926c2c3`** (2026-07-04) — same mask + a `next_value` pre-auto-reset fix (this file had the auto-reset-before-value-read issue on every step, not just the last); no live config uses plain PPO, so zero production effect. **Open follow-up (deferred, comment-only):** same pattern still in `dreamer_v3_trainer.py` continue-head. |
-| **A** | Root `evaluation.py` modulation whitelist omits `memory_clip` (`:252–259`) → `KeyError`; DreamerV3 passes plain dict where `Config` expected (`:293–300`) → `AttributeError` | **REPRODUCED** `KeyError('memory_clip')`; live `eval_rollout.py` unaffected | Pre-existing | **Medium** (confirmed crash, but deprecated demo-only path; live path proven correct) | **senior-developer fix plan → developer.** Replace hand-built dict with `config.get('agent.modulation')` (null-normalised), mirroring `train.py:745` / `eval_rollout.py:540`; pass `Config`+`obs_breakdown`+`modulation_config` to `DreamerTrainer`; or retire root `evaluation.py`. |
+| **A** | Root `evaluation.py` modulation whitelist omits `memory_clip` (`:252–259`) → `KeyError`; DreamerV3 passes plain dict where `Config` expected (`:293–300`) → `AttributeError` | **FIXED, commit `2ad9104`** — both branches rebuilt to mirror train.py exactly; regression tests reproduce the pre-fix crash then confirm post-fix success | Pre-existing | **Medium** (confirmed crash, but deprecated demo-only path; live path proven correct) | **DONE.** RecurrentPPO branch now uses `config.get('agent.modulation')` (null-normalised), mirroring `train.py:745` / `eval_rollout.py:540`; DreamerV3 branch now passes `Config`+`obs_breakdown`+`modulation_config` to `DreamerTrainer`, mirroring `train.py:815-817`. |
 | **M1/M2** | Interrupted-feeding & bush-dive rates: denominator-timing mismatch + pending-at-episode-end events dropped (`accumulators.py`), preferentially dropping death-by-predator interruptions | Consistent with e2e eval showing `interrupted_feeding_rate: NaN` on a 5-episode run | **v3.0-new** (behaviour measures are new code; bias is in the new logic, not a regression of old behaviour) | **Medium** (distorts *analysis* numbers, not training) | **senior-developer metric-fix plan → developer.** Resolve pending events at episode boundary or exclude from denominator; align per-class and per-tag denominators to the same instant. Cross-link `experiment-analyzer`. |
 | **L2 / E** | Continual-run eval reconstructs env from stage-0 `config.yaml`; later-stage checkpoints eval'd against stage-0 environment | **FIXED, commit `a3ab4cc`** — verified against real continual checkpoints on disk across all 5 curriculum stages + regression test | Pre-existing | **Medium for continual only** (single-config runs unaffected) | **DONE (live `eval_rollout.py` path).** Auto-detects the checkpoint's own stage from its saved `stage` field and loads the matching `stage_XX_<name>.yaml`. Root `evaluation.py`'s `--all` batch loop not fixed (not straightforward — deprecated, demo-only). |
-| **L3** | Silent partial restore in root `evaluation.py` (`_merge_restored_into_module_state`) keeps init weights for absent leaves | **Live path IMMUNE** — `eval_rollout.py:610–629` raises on missing/mismatched leaf; two-seed test proved complete restore | Pre-existing | **Low** (root `evaluation.py` only) | Fold into the **A** fix plan — add the same strict-leaf assertion the live path already has. |
+| **L3** | Silent partial restore in root `evaluation.py` (`_merge_restored_into_module_state`) keeps init weights for absent leaves | **FIXED, commit `2ad9104`** — live path was already IMMUNE (`eval_rollout.py:610–629` raises on missing/mismatched leaf; two-seed test proved complete restore); root `evaluation.py` now has an equivalent strict-completeness assertion | Pre-existing | **Low** (root `evaluation.py` only) | **DONE.** Folded into the **A** fix — `_assert_full_restore` raises `ValueError` listing every param leaf left at its randomly-initialised value, for both RecurrentPPO and DreamerV3 restore paths. |
 | **C** | Uncommitted parity-fixture churn: `pred_*/neutral_*` → unified `animal_*` schema rename in golden snapshots | Benign — shared data byte-identical; only storage-key names changed | **v3.0-new** (CP1 animal-entity refactor) | **Low but MUST-FIX-BEFORE-COMMIT** (committing fixtures alone silently no-ops the animal-position parity asserts) | **FIXED, commit `0bebe06`** — `test_unified_parity.py` migrated to read the unified `animal_*` keys (sliced by `predator_indices`/`neutral_indices`) with a legacy-key fallback for still-unregenerated fixtures; regenerated fixtures committed together with the test fix. Verified: 34 passed/244 skipped before and after (unchanged — skip count is fixture-presence only); 1545 previously-silent array assertions across the 8 regenerated configs now execute for real; perturbation sanity check confirmed the migrated assertion fails on injected divergence. |
 | minor | basic/00 M2-NaN (no bushes); observability-gate `random_start_pos`; `temp_clip` dead lower bound; value-loss comment mismatch | per surface docs | mixed | **Low / nits** | Batch into a housekeeping plan or address opportunistically. |
 
