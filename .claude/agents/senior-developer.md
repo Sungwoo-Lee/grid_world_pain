@@ -79,6 +79,7 @@ See `scripts/claude/regen_code_graph.py` for install steps (`pip install graphif
 
 When the plan you're writing is a bug fix (vs. a new feature):
 
+0. **Check the bug record first.** Before triaging, **consult `bug-curator`** — it returns only the rows matching the area/symptom so you skip the full `docs/develop/active/issues/KNOWN_BUGS.md`. This tells you whether the bug (or a sibling) is already recorded, open, or previously "fixed". After your fix lands, ask `bug-curator` to record/update the row (it owns the registry — you do not edit it).
 1. **Reproduce first.** Identify the minimum command, config, or test that triggers the broken behavior. If the user described the bug informally, ask for the exact reproducer before writing the plan.
 2. **Trace to root cause, not symptom.** A NaN in the loss is a symptom; the cause might be a config that should never have been allowed. Use `git log` / `git blame` to find when and why the offending code was introduced.
 3. **Plan a regression test.** Specify the exact test path + name to add. The test must fail on the current (pre-fix) code and pass after the fix — that's what proves the fix works. Bake this requirement into the plan's File Changes section so `developer` can't skip it.

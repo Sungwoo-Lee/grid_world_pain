@@ -11,9 +11,12 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 | [code-reviewer](.claude/agents/code-reviewer.md) | opus | JAX/Flax/vmap/PRNG correctness review | `docs/reviews/` |
 | [math-reviewer](.claude/agents/math-reviewer.md) | opus | Verify equations match cited papers | `docs/reviews/` |
 | [env-config-auditor](.claude/agents/env-config-auditor.md) | sonnet | YAML/env soundness, obs↔noise sync, pre-flight before training | `docs/reviews/` |
+| [bug-curator](.claude/agents/bug-curator.md) | sonnet | Owns + serves the Known Bugs registry — returns only the rows matching a query so callers skip the full doc; records/updates bugs. Does NOT fix code | `docs/develop/active/issues/KNOWN_BUGS.md` |
 | [experiment-designer](.claude/agents/experiment-designer.md) | opus | Experiment design + config generation | `configs/`, `docs/experiments/active/<topic>/` |
 | [experiment-analyzer](.claude/agents/experiment-analyzer.md) | opus | Post-hoc training-result analysis (WandB, run comparisons) | `docs/experiments/active/<topic>/` |
 | [training-runner](.claude/agents/training-runner.md) | sonnet | Pre-flight check + launch training on lab nodes (101–114) via `run_command.py`; configs are read-only | `train_command-new.sh` |
+
+For known-bug context ("is this a known issue in X?"), **consult `bug-curator`** — it returns only the matching rows — rather than reading the full `docs/develop/active/issues/KNOWN_BUGS.md` into context.
 
 ### Researchers
 

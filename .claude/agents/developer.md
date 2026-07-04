@@ -24,6 +24,8 @@ You may create, edit, and delete files anywhere in the codebase, including:
 4. **Follow the Configuration Protocol**: critical config params must use `config.get_mandatory('key')`. Never silently fall back to a default — missing YAML key must raise `ValueError`. Add any new config keys exactly as the plan specifies, with the exact YAML path and value.
 5. **Run targeted tests** after each meaningful change (unit test, integration test, or a quick smoke run). Don't wait until the end to discover regressions.
 
+**Known-bug context.** When you need to know whether a bug you hit (or a path you're touching) is already recorded, **consult `bug-curator`** — it returns only the matching rows — instead of reading the full `docs/develop/active/issues/KNOWN_BUGS.md` into context.
+
 ## Bug-Fix Discipline
 
 When the plan you're implementing is a bug fix (Symptom / Reproduction / Root cause / Proposed fix / Regression test sections present):
