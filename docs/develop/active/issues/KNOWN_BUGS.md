@@ -3,7 +3,7 @@ title: "Known Bugs"
 topic: issues
 status: active
 created: 2026-07-04
-last_updated: 2026-07-04
+last_updated: 2026-07-05
 ---
 
 # Known Bugs
@@ -21,8 +21,9 @@ ask the `bug-curator` agent, which reconstructs the full story from git and memo
 
 **How to read it.** Rows are grouped by status. **Open / undecided** items (things that still
 need a decision) come first, because those are the ones that can bite a new plan. **Fixed**
-items follow — split into the recent *v3.0 pipeline-audit cluster* (a whole-pipeline correctness
-sweep run on 2026-07-04, see [[v3_pipeline_correctness_diagnosis]]) and *older historical fixes*.
+items follow — split into the *Fable 5 re-diagnosis cluster* (a second whole-pipeline sweep,
+2026-07-04, see [[00_combined_diagnosis]]), the earlier *v3.0 pipeline-audit cluster*
+(2026-07-04, see [[v3_pipeline_correctness_diagnosis]]), and *older historical fixes*.
 A short **latent / needs-verification** section lists findings that were recorded but never
 confirmed closed. Each row leads with a short plain-English name; where it helps cross-reference,
 the diagnosis doc's finding label (Finding A, B, E, F, …) is kept in parentheses at the end.
@@ -54,6 +55,12 @@ inheritance ignored, eval using the wrong stage, ghost predators).
 
 | Bug | What happened | Status | Severity | Area | Detail links |
 |-----|---------------|--------|----------|------|--------------|
+| **Fable 5 re-diagnosis — six High findings not yet fixed** (H5–H10, umbrella) | The 2026-07-04 whole-pipeline re-diagnosis left six High-rated defects unfixed: dreamer_srl's replay buffer bleeds the previous episode's terminal reward/death flag into each new episode's first row (H5); DreamerV3 pairs actions and observations one step out of line (H6) and, after its replay buffer wraps, splices two different environments into one training sequence (H7); the eval CSV column shift (H8) and the always-zero offline feeding metric (H9), broken out as their own rows below; and the batch training path corrupting behavior metrics at episode boundaries (H10). Plus Med/Low clusters. This row is a pointer — individual rows get added as each is fixed. | **OPEN** | High (per diagnosis) | dreamer_srl / DreamerV3 / eval / behavior measures | [[00_combined_diagnosis]] (source of record; per-area reports 01–07 in the same folder) |
+| **Eval CSV sensor columns shifted one left** (H8) | The per-step evaluation stats CSV omits one sensor header ("Interoceptive Nociception", on by default) while the values stay positional — so every sensor column from there on holds its **neighbour's** numbers and the last is silently dropped. Any name-based reader gets wrong per-modality values with no error. | **OPEN** | Med–High (wrong numbers in current study analyses; training unaffected) | eval CSV (`evaluation_core.py:204-243`) | [[00_combined_diagnosis]] H8 · [[06_evaluation_path]] |
+| **Offline interrupted-feeding rate is structurally always zero** (H9) | The offline replay path that current studies consume (`online_replay.json`) checks the interrupted-feeding measure (M1) **before** updating the eating timer it depends on, so the condition can never fire — the rate is always 0.0 by construction. | **OPEN** | Med–High (current study numbers; training unaffected) | eval replay (`eval_rollout.py:341-350`) | [[00_combined_diagnosis]] H9 · [[07_behavior_measures]] |
+| **Plain-PPO MC returns also lack the window-edge bootstrap** | The plain-PPO trainer has the **identical** Monte-Carlo window-edge defect that H4 fixed for rPPO (returns cut to zero at each rollout-window boundary instead of bootstrapping); deliberately left unfixed as out of scope. | **OPEN** | Low (no live config uses plain PPO) | ppo trainer (`src/models/ppo_trainer.py:80`) | [[fix_plan_h4_mc_window_bootstrap]] |
+| **Three stale env tests reference retired configs** | Two cases in the truncation-not-death test (`tests/env/test_truncation_not_death.py`) and one in the inactive-animal-offgrid test (`tests/env/test_inactive_animal_offgrid.py`) still point at basic-ladder configs retired by the 2026-07-02 re-leveling (`b093023`). Red since then; formerly masked by the config soft-fail that the H3 fix removed. Need their config paths updated to the re-leveled ladder. | **OPEN** | Low (test hygiene) | env tests | [[fix_plan_h1h2h3_resume_config]] (Verification Report, known-red baseline) |
+| **Dreamer-srl offline world-model smoke test red** | The offline world-model smoke test fails deterministically with "Only 36 valid starting states (< 50)". Empirically verified pre-existing and independent of the H1–H4 fixes; root cause not yet triaged. | **OPEN — needs triage** | Low–Med | dreamer_srl tests (`tests/scripts/test_dreamer_srl_offline_wm_test.py`) | [[fix_plan_h1h2h3_resume_config]] (Verification Report) |
 | **Behavior-metric episode-end rule undecided** (M1/M2) | For the interrupted-feeding (M1) and bush-dive (M2) behavior metrics, there is **no agreed rule for what to do with events still in progress when an episode ends** — three conflicting write-ups exist (finish them / drop them / leave them out of the denominator). Needs one decision. | **UNDECIDED — needs user call** | Med (analysis numbers, not training) | behavior measures (`src/behavior/accumulators.py`) | [[v3_pipeline_correctness_diagnosis]] Finding M1/M2 · `docs/reviews/diag_v3_pipeline_math.md` |
 | **CLI overrides not saved to config** (Finding L4) | When you pass model-size flags on the command line (`--hidden_size`, `--num_steps`, `--lr`), the values are **not written into the saved config**, so a later evaluation rebuilds the model at the wrong size and fails to restore. A sibling of the same kind: a dead config key means `--no-satiation` isn't reflected in the saved config, so re-evaluation runs with satiation back *on*. | **OPEN — follow-up** | Low (rarely-used flags; sizes usually set in YAML) | `train.py` config-save | [[v3_pipeline_correctness_diagnosis]] §4.4 (L4) + §4.5 |
 | **Dreamer-srl checkpoints drop the optimizer's momentum on save** | Saved checkpoints keep only the world-model/actor/critic/target-critic weights — the Adam optimizer's momentum state is never saved — so resuming or continuing a run silently restarts optimizer momentum from zero. | **OPEN** | Med (resume / continual-learning correctness) | dreamer_srl checkpoint (`src/algorithms/dreamer_srl/checkpoint.py:85-88`) | memory `20260609_1726_doc_audit_surfaces_latent_bugs` |
@@ -67,6 +74,19 @@ inheritance ignored, eval using the wrong stage, ghost predators).
 
 ---
 
+## Fixed — Fable 5 re-diagnosis cluster (2026-07-05)
+
+Source of record: [[00_combined_diagnosis]] (roll-up of the 2026-07-04 re-diagnosis; per-area
+reports 01–07 in the same folder). Implementation + Verification Reports live in the fix plans
+[[fix_plan_h1h2h3_resume_config]] and [[fix_plan_h4_mc_window_bootstrap]].
+
+| Bug | What happened | Status | Severity | Area | Fix commit + detail |
+|-----|---------------|--------|----------|------|---------------------|
+| **Resume silently restored nothing — trained from random weights** (H1) | rPPO `--load-checkpoint` never actually restored: the saved parameter paths didn't match the live model's (a DictKey/GetAttrKey naming mismatch), the resulting error was **swallowed**, and training continued from fresh random weights while looking like a resume. Closes the long-latent "checkpoint restore may not map onto model" risk (memory `20260509_1536`) — confirmed real, now fixed; restore fails loudly on any mismatch. | FIXED | **High** (silent fake resume) | `train.py` checkpoint restore | `9ee2a30` · [[fix_plan_h1h2h3_resume_config]] · [[00_combined_diagnosis]] H1 |
+| **Continual resume ran the wrong stage's world** (H2) | Resuming a continual run restored the stage counter, which **suppressed the environment rebuild** for that stage — so a stage-N resume kept training on the stage-0 world with stage-N bookkeeping. | FIXED | **High** (wrong-environment training) | `train.py` continual resume | `9ee2a30` · [[fix_plan_h1h2h3_resume_config]] · [[00_combined_diagnosis]] H2 |
+| **Typo'd config path silently trained on the default env** (H3) | A missing or misspelled `--config` path produced only a warning; the empty config fell through to the built-in default environment and the run proceeded with **no error**. Now a bad path fails loudly. | FIXED | **High** (silent wrong-environment training) | config loader (`src/utils/config.py`) | `9ee2a30` · [[fix_plan_h1h2h3_resume_config]] · [[00_combined_diagnosis]] H3 |
+| **MC returns had no bootstrap at the rollout-window edge** (H4) | rPPO's Monte-Carlo return mode — the live mode in **all 13 live configs** — cut returns to zero at every 128-step rollout-window boundary instead of bootstrapping from the value estimate, position-dependently biasing every value target (episodes run to 500 steps). **Comparability caveat: runs trained before this fix are not comparable to post-fix runs.** | FIXED | **High** (biased value targets in every live rPPO run) | rPPO trainer (`recurrent_ppo_trainer.py`) | `5488c98` · [[fix_plan_h4_mc_window_bootstrap]] · [[00_combined_diagnosis]] H4 |
+
 ## Fixed — v3.0 pipeline-audit cluster (2026-07-04)
 
 Source of record: [[v3_pipeline_correctness_diagnosis]] (final findings table) and, for the
@@ -76,7 +96,7 @@ reward bug, the fix plan [[FIX_TRUNCATION_TREATED_AS_DEATH]].
 |-----|---------------|--------|----------|------|---------------------|
 | **Config inheritance ignored** | `train.py` loaded a config **without applying its `extends:` inheritance**, so every inherited layer (perceptual noise, random start ranges, combined-predator scene) was **silently dropped** — training ran on a stripped-down environment that *looked* correct. | FIXED | **High** (silent wrong-environment training) | config loader | `22c73ba` · memory `20260703_1507_train_py_ignores_extends_drops_layers` · [[v3_pipeline_correctness_diagnosis]] Purpose + E2E-3 |
 | **Survival punished like death** (Finding B, Part 1) | Surviving to the step limit (the *success* outcome) was hit with the full **−100 death penalty**, the same as dying — swamping the learning signal by roughly 500×. Pre-existing (identical to `main`). | FIXED | **High** (corrupts the survival objective) | env reward (`core.py`) | `ef0fd25` · [[FIX_TRUNCATION_TREATED_AS_DEATH]] Part 1 |
-| **Value estimate dropped on timeout** (Finding B, Part 2) | On a time-limit ending the trainer **threw away its estimate of future reward** instead of keeping it, teaching the critic to expect a cut-off single-step reward rather than the real continuation. | FIXED | **High** (corrupts value targets) | rPPO trainer | `3c60f6f` · [[FIX_TRUNCATION_TREATED_AS_DEATH]] Part 2 |
+| **Value estimate dropped on timeout** (Finding B, Part 2) | On a time-limit ending the trainer **threw away its estimate of future reward** instead of keeping it, teaching the critic to expect a cut-off single-step reward rather than the real continuation. **Scope caveat found later:** `3c60f6f` fixed the **GAE branch only, which no live config uses** — live runs (MC mode) were only actually corrected by the H4 window-edge fix (`5488c98`, Fable 5 cluster above). | FIXED | **High** (corrupts value targets) | rPPO trainer | `3c60f6f` · [[FIX_TRUNCATION_TREATED_AS_DEATH]] Part 2 · [[02_rppo_stack]] |
 | **Plain-PPO timeout bootstrap bug** (Finding B sibling) | Same "value dropped on timeout" defect in the plain-PPO trainer, plus a related bug where the next-state value was read *after* the auto-reset every step. | FIXED | Low (no live config uses plain PPO) | ppo trainer | `926c2c3` |
 | **Dreamer treats timeout as death** (Finding B sibling) | DreamerV3's "will the episode continue?" head was trained to treat a time-limit ending as a real death; now it only counts genuine death. | FIXED | Med | dreamer trainer | `5b093bf` |
 | **Plain-PPO advantage baseline bug** (Finding B sibling) | Plain-PPO computed its advantage against a **value shifted from the neighbouring step** instead of the value of the current state. | FIXED | Low (no live config uses plain PPO) | ppo trainer | `8c1ad2f` |
@@ -115,5 +135,4 @@ reward bug, the fix plan [[FIX_TRUNCATION_TREATED_AS_DEATH]].
 
 | Finding | What was recorded | Status | Severity | Area | Detail links |
 |---------|-------------------|--------|----------|------|--------------|
-| **Checkpoint restore may not map onto model** | A recorded risk that saved checkpoints **don't map cleanly onto the model's parameter tree** on restore (an Orbax-vs-NNX structure skew). Never confirmed fixed. | LATENT — verify | Med (silent wrong-weights risk) | checkpoint restore | memory `20260509_1536_train_py_checkpoint_restore_nnx_skew` |
 | **Env doc-audit latent findings** | An environment documentation audit surfaced ~13 latent findings; the top two: **over-eating never actually ends the episode**, and the **termination-reason field is unreliable when a body system is switched off**. Status of each not individually tracked. Also from this audit: `auto_reset_step()` in `src/environment/wrapper.py:35` ignores its own `key` argument — **verified dead code, no callers anywhere in `src`/`scripts`** — not an active bug, just a remove-on-touch candidate. | LATENT — verify | Med | env body / termination | memory `20260609_1726_doc_audit_surfaces_latent_bugs` |
