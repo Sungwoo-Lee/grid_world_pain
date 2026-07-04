@@ -29,8 +29,14 @@ class Config:
     @classmethod
     def load_yaml(cls, path):
         if not os.path.exists(path):
-            print(f"Warning: Config file {path} not found. Using defaults.")
-            return cls()
+            # Strict Config (H3, diag_fable5_20260704/01 Finding 5): a missing
+            # config file must be a hard error, never a silent empty config —
+            # a typo'd --config used to train silently on default.yaml.
+            # Intentional optional loads must guard with os.path.exists at the
+            # call site (all existing ones already do).
+            raise FileNotFoundError(
+                f"Config file not found: {path!r}. "
+                f"Optional loads must check os.path.exists before calling load_yaml.")
         with open(path, 'r') as f:
             return cls(yaml.safe_load(f))
 

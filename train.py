@@ -80,6 +80,7 @@ from src.models.drqn_trainer import RecurrentReplayBuffer as DRQNReplayBuffer, u
 from src.models.ppo_network import ActorCriticMLP, get_action_and_value_ppo_nnx
 from src.models.ppo_trainer import train_iteration_ppo
 from src.utils.config import get_default_config, Config, dump_config_yaml
+from src.utils.checkpoint_restore import restore_rppo_training_state
 
 # Orbax
 import orbax.checkpoint as ocp
@@ -1112,92 +1113,73 @@ def main():
     iteration_episodes = []
 
     # --- Checkpoint Restoration (Continual Learning / Transfer) ---
+    # H1 fix (diag_fable5_20260704/01 Finding 1): restore-to-target, FATAL on
+    # any failure. The old strict-match block never matched a single leaf and
+    # a blanket except silently trained from random weights.
     if args.load_checkpoint:
         if args.debug: print(f"[DEBUG] Phase 6.5: Restoring Checkpoint from {args.load_checkpoint}...", flush=True)
         if not args.quiet:
             print(f"Restoring checkpoint from {args.load_checkpoint}...")
-            
-        try:
-            restore_mngr = ocp.CheckpointManager(os.path.abspath(args.load_checkpoint))
-            # orbax CheckpointManager.latest_step() returns the largest step number
-            step = restore_mngr.latest_step()
-            
-            if step is not None:
-                # Load the raw state tree using PyTreeRestore, avoiding StandardRestore shape panic
-                restored = restore_mngr.restore(step, args=ocp.args.PyTreeRestore())
-                
-                # Check if this is a standard NNX model/optimizer setup, or Dreamer
-                if algorithm == "DreamerV3":
-                    nnx.update(trainer.agent.wm, restored['wm'])
-                    nnx.update(trainer.agent.ac.actor, restored['actor'])
-                    nnx.update(trainer.agent.ac.critic, restored['critic'])
-                    key = restored['key']
-                    global_step = restored['step']
-                    iteration = restored['iteration']
-                    total_episodes_completed = restored['episode']
-                    if schedule is not None:
-                        current_stage = restored.get('stage', 0)
-                    if not args.quiet: print(f"  -> DreamerV3 Model fully restored (Step: {step}).")
-                elif 'model' in locals() and 'optimizer' in locals():
-                    # Enforce Strict Architecture Matching
-                    restored_model_state = restored['model']
-                    current_model_state = nnx.state(model)
-                    
-                    # We flatten both states and map matching keys/shapes
-                    flat_restored, tree_def = jax.tree_util.tree_flatten_with_path(restored_model_state)
-                    flat_current, current_def = jax.tree_util.tree_flatten_with_path(current_model_state)
-                    
-                    # Convert paths to string keys for easy lookup
-                    restored_dict = {str(k): v for k, v in flat_restored}
-                    current_dict = {str(k): v for k, v in flat_current}
-                    
-                    mismatches = []
-                    
-                    # Check for mismatches or missing layers
-                    for k, cur_v in current_dict.items():
-                        if k not in restored_dict:
-                            mismatches.append(f"Layer '{k}': Missing in Checkpoint (Current expects shape {getattr(cur_v, 'shape', 'No Shape')})")
-                        else:
-                            res_v = restored_dict[k]
-                            cur_shape = getattr(cur_v, 'shape', None)
-                            res_shape = getattr(res_v, 'shape', None)
-                            
-                            if cur_shape != res_shape:
-                                mismatches.append(f"Layer '{k}': Checkpoint Shape {res_shape} != Current Shape {cur_shape}")
-                                
-                    for k in restored_dict.keys():
-                        if k not in current_dict:
-                            res_shape = getattr(restored_dict[k], 'shape', 'No Shape')
-                            mismatches.append(f"Layer '{k}': Missing in Current (Checkpoint has shape {res_shape})")
 
-                    if mismatches:
-                        error_msg = "Architecture mismatch detected between checkpoint and current environment!\n"
-                        error_msg += "The following structure differences were found:\n"
-                        error_msg += "\n".join([f"  - {m}" for m in mismatches])
-                        raise ValueError(error_msg)
-                    
-                    # If we survived, the structures are identical. Reconstruct and apply.
-                    valid_flat = [restored_dict[str(k)] for k, _ in flat_current]
-                    valid_tree = jax.tree_util.tree_unflatten(current_def, valid_flat)
-                    
-                    nnx.update(model, valid_tree)
-                    nnx.update(optimizer, restored['optimizer'])
-                    if not args.quiet: print(f"  -> Model and Optimizer strictly matched and fully restored (Step: {step}).")
-                    
-                    # Also restore standard training counters
-                    if 'h_state' in restored: h_state = restored['h_state']
-                    if 'key' in restored: key = restored['key']
-                    global_step = restored.get('step', global_step)
-                    iteration = restored.get('iteration', iteration)
-                    total_episodes_completed = restored.get('episode', total_episodes_completed)
-                    if schedule is not None:
-                        current_stage = restored.get('stage', 0)
-                    
-            else:
-                if not args.quiet: print(f"Warning: No valid checkpoint steps found at {args.load_checkpoint}.")
-        except Exception as e:
-            if not args.quiet:
-                print(f"Error restoring checkpoint: {e}")
+        if algorithm == "DreamerV3":
+            restore_mngr = ocp.CheckpointManager(os.path.abspath(args.load_checkpoint))
+            step = restore_mngr.latest_step()
+            if step is None:
+                raise FileNotFoundError(
+                    f"--load-checkpoint given but no checkpoint steps found under "
+                    f"{args.load_checkpoint!r} — refusing to silently train from scratch.")
+            restored = restore_mngr.restore(step, args=ocp.args.PyTreeRestore())
+            nnx.update(trainer.agent.wm, restored['wm'])
+            nnx.update(trainer.agent.ac.actor, restored['actor'])
+            nnx.update(trainer.agent.ac.critic, restored['critic'])
+            key = restored['key']
+            global_step = restored['step']
+            iteration = restored['iteration']
+            total_episodes_completed = restored['episode']
+            if schedule is not None:
+                current_stage = restored.get('stage', 0)
+            if not args.quiet: print(f"  -> DreamerV3 Model fully restored (Step: {step}).")
+        elif algorithm == "RecurrentPPO":
+            restored_meta = restore_rppo_training_state(
+                args.load_checkpoint, model, optimizer, h_state, key,
+                quiet=args.quiet)
+            h_state = restored_meta['h_state']
+            key = restored_meta['key']
+            global_step = int(restored_meta['step'])
+            iteration = int(restored_meta['iteration'])
+            total_episodes_completed = int(restored_meta['episode'])
+            if schedule is not None:
+                current_stage = int(restored_meta['stage'])
+        else:
+            raise ValueError(
+                f"--load-checkpoint is not supported for algorithm {algorithm!r} "
+                f"(only RecurrentPPO and DreamerV3 save checkpoints).")
+
+    # --- H2 fix (diag_fable5_20260704/01 Finding 2): continual resume must
+    # rebuild the env for the restored stage. The env above was built from
+    # stage 0 BEFORE restore, and restoring current_stage makes the in-loop
+    # transition check compare equal — so without this block a stage-N resume
+    # trains stage-N counters on a stage-0 world.
+    if args.load_checkpoint and schedule is not None:
+        resumed_stage = schedule.stage_for_episode(total_episodes_completed)
+        if resumed_stage != current_stage and not args.quiet:
+            print(f"[RESUME] Checkpoint 'stage' field ({current_stage}) != "
+                  f"schedule-derived stage ({resumed_stage}) for "
+                  f"ep={total_episodes_completed}; trusting the schedule.")
+        current_stage = resumed_stage
+        # Unconditional rebuild (idempotent for stage 0; resume is rare).
+        params = load_env_params(schedule.stage_configs[current_stage])
+        env = ParallelEnv(params)
+        key, reset_key = jax.random.split(key)
+        env_state, obs = env.reset(reset_key, num_envs)
+        # Fresh env episodes -> fresh recurrent state (mirrors the in-loop
+        # stage-transition block at the 'Fix 4' comment).
+        if algorithm == "RecurrentPPO":
+            h_state = model.initial_state(num_envs)
+        if not args.quiet:
+            print(f"[RESUME] Stage {current_stage}:"
+                  f"{schedule.stage_names[current_stage]} environment rebuilt "
+                  f"at ep={total_episodes_completed}.")
 
     start_time = datetime.now()
     if args.debug: print(f"[DEBUG] Loop start time: {start_time.strftime('%H:%M:%S')}", flush=True)

@@ -38,6 +38,9 @@ The previously landed fixes themselves (`extends:` resolution, commit `22c73ba`;
 persistence, commit `75976e2`) were **verified correct on their intended paths** — details and
 one incompleteness below. Everything here is a report only; no code was changed.
 
+> **Fix plan (2026-07-04):** Findings 1, 2, and 5 (= combined-report rows H1–H3) are covered by
+> [[fix_plan_h1h2h3_resume_config]] — approved work package WP-A, handed to `developer`.
+
 ---
 
 ## Finding 1 — `--load-checkpoint` never restores RecurrentPPO; failure is silently swallowed

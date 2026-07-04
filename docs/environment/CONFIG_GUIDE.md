@@ -27,6 +27,8 @@ The rest of this guide explains the merge model and its one footgun, where confi
 
 The single chokepoint that implements this is `load_env_config(path)` in `config_loader.py`. It resolves any `extends:` chain (a config may extend a config that itself extends another), strips the `extends:` key (it is metadata, not an env param), deep-merges, and hands the merged result to the existing `load_env_params(...)`. Mandatory-key validation runs **after** the merge — so a sparse config satisfies a required key *through the base*, and the no-fallback contract still holds.
 
+**Missing config file = hard error.** As of the 2026-07-04 strict-load fix (H3, [[fix_plan_h1h2h3_resume_config]]), the low-level loader `Config.load_yaml` raises `FileNotFoundError` when the given path does not exist — it no longer prints a warning and returns an empty config. A typo'd `--config` path used to train silently on `configs/environment/default.yaml`; now it dies immediately. Intentional *optional* loads (train/eval/logger/visualization defaults, etc.) must guard with `os.path.exists(path)` at the call site — every existing optional call site already does.
+
 ### Deep-merge semantics and the list-replace footgun
 
 Deep-merge treats **dicts** and **lists** differently:
