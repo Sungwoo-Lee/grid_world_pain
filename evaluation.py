@@ -126,6 +126,83 @@ def _assert_full_restore(missing_paths, label):
             + "\n  ".join(sorted(missing_paths))
         )
 
+
+def _load_eval_config(config_path, eval_default_path, vis_config_path):
+    """Load an environment/training config YAML and apply the same
+    evaluation-defaults + visualization-defaults merge as the top-level config
+    load in main(), so a per-checkpoint stage config (Finding L2, below) is
+    prepared identically to the run's own stage-0 `models/config.yaml`."""
+    with open(config_path, 'r') as f:
+        cfg = Config(yaml.safe_load(f))
+    if os.path.exists(eval_default_path):
+        cfg.merge(Config.load_yaml(eval_default_path))
+    if os.path.exists(vis_config_path):
+        cfg.merge(Config.load_yaml(vis_config_path))
+    return cfg
+
+
+def _resolve_checkpoint_stage_config(models_dir, restored, quiet=False):
+    """Resolve a checkpoint's OWN curriculum-stage environment config for a
+    continual (multi-stage) run (Finding L2, docs/develop/active/diagnosis/
+    v3_pipeline_correctness_diagnosis.md), instead of always evaluating every
+    checkpoint against the shared stage-0 `models/config.yaml` loaded once for
+    the whole `--all` batch.
+
+    Mirrors scripts/eval/eval_rollout.py's `_resolve_continual_stage_config`
+    (Finding E, commit a3ab4cc), adapted for evaluation.py's `--all` loop where
+    a SINGLE invocation evaluates MANY checkpoints that may each belong to a
+    different curriculum stage. Detection is conservative: this only fires
+    when `models/schedule.yaml` exists (the continual-run signature); a
+    non-continual run has no such file and this returns None (unchanged,
+    single-config behavior).
+
+    The checkpoint's stage is read from its OWN saved `restored['stage']`
+    field -- already present in the full checkpoint payload dict returned by
+    `checkpointer.restore(iteration)` for both RecurrentPPO and DreamerV3
+    (train.py ~line 2436/2447), so no extra partial-restore call is needed --
+    rather than recomputed from episode_boundaries: train.py's per-iteration
+    stage-transition check means a checkpoint's recorded stage can lag one
+    behind what a boundary-only recompute would give (see Finding E), so the
+    checkpoint's own field is ground truth.
+    """
+    schedule_path = os.path.join(models_dir, "schedule.yaml")
+    if not os.path.exists(schedule_path):
+        return None  # not a continual run; unchanged behavior
+
+    if 'stage' not in restored:
+        raise ValueError(
+            f"Continual run detected ({schedule_path}) but the checkpoint "
+            f"payload has no 'stage' field; cannot resolve its curriculum-"
+            f"stage config."
+        )
+
+    sched = Config.load_yaml(schedule_path)
+    stage_names = sched.get_mandatory("continual.stage_names")
+    stage_idx = int(restored['stage'])
+
+    if not (0 <= stage_idx < len(stage_names)):
+        raise ValueError(
+            f"Checkpoint reports stage index {stage_idx}, out of range for "
+            f"{len(stage_names)} stages in {schedule_path}."
+        )
+
+    stage_cfg_path = os.path.join(
+        models_dir, f"stage_{stage_idx:02d}_{stage_names[stage_idx]}.yaml"
+    )
+    if not os.path.exists(stage_cfg_path):
+        raise ValueError(
+            f"Resolved stage config {stage_cfg_path} does not exist "
+            f"(stage {stage_idx}: {stage_names[stage_idx]})."
+        )
+
+    if not quiet:
+        print(f"  [Stage] Continual run; checkpoint belongs to stage "
+              f"{stage_idx} ('{stage_names[stage_idx]}'). Using stage config: "
+              f"{stage_cfg_path}")
+
+    return stage_cfg_path
+
+
 def main():
     parser = argparse.ArgumentParser(description="JAX GridWorld Evaluation")
     parser.add_argument("--results_dir", type=str, required=True, help="Path to results directory (Required)")
@@ -162,20 +239,11 @@ def main():
         return
 
     print(f"Loading training configuration from {config_path}...")
-    with open(config_path, 'r') as f:
-        saved_config_dict = yaml.safe_load(f)
-        config = Config(saved_config_dict)
-
-    # 1.1 Merge evaluation defaults (Strictly)
+    # 1.1 Merge evaluation defaults (Strictly) + visualization config (icons, layout)
+    # so evaluation video matches training/tuningEnv.
     eval_default_path = "configs/evaluation/default.yaml"
-    if os.path.exists(eval_default_path):
-        eval_defaults = Config.load_yaml(eval_default_path)
-        config.merge(eval_defaults)
-    # Merge visualization config (icons, layout) so evaluation video matches training/tuningEnv
     vis_config_path = "configs/visualization/default.yaml"
-    if os.path.exists(vis_config_path):
-        vis_defaults = Config.load_yaml(vis_config_path)
-        config.merge(vis_defaults)
+    config = _load_eval_config(config_path, eval_default_path, vis_config_path)
 
     # 2. Resolve Parameters (No Safe Defaults)
     seed = args.seed or config.get_mandatory('testing.seed')
@@ -260,25 +328,52 @@ def main():
         iteration_str = os.path.basename(ckpt_path)
         iteration = int(iteration_str)
         print(f"\nEvaluating Iteration: {iteration}")
-        
+
+        # Restore the full checkpoint payload FIRST (before building env params /
+        # model): for a continual run this dict already carries the checkpoint's
+        # own 'stage' field (train.py ~line 2436/2447), which the Finding L2 fix
+        # below uses to resolve this checkpoint's OWN curriculum-stage config
+        # instead of always using the shared stage-0 config.yaml loaded above.
+        restored = checkpointer.restore(iteration)
+
+        # Finding L2 (docs/develop/active/diagnosis/v3_pipeline_correctness_diagnosis.md):
+        # evaluate each checkpoint against ITS OWN stage ENVIRONMENT, not always
+        # stage 0. Non-continual runs (no schedule.yaml) fall through to the
+        # shared `params` loaded once above -- unchanged behavior. Mirrors
+        # eval_rollout.py's Finding E split: only the environment config swaps
+        # per checkpoint -- agent hyperparameters (`agent.*`) are read from the
+        # stage-0 `config` throughout (below), matching train.py, where the
+        # SAME policy is trained continuously across stages and only the
+        # environment changes; some historical continual runs' per-stage
+        # config dumps do not even carry an `agent:` section (see stage_XX
+        # dumps predating the schedule-builder's later self-containment fix),
+        # so agent hyperparams must not be read from the per-stage dump.
+        stage_cfg_path = _resolve_checkpoint_stage_config(models_dir, restored, quiet=False)
+        if stage_cfg_path is not None:
+            with open(stage_cfg_path, 'r') as f:
+                ckpt_env_config = Config(yaml.safe_load(f))
+            ckpt_params = load_env_params(ckpt_env_config)
+        else:
+            ckpt_params = params
+
         # Reconstruct Model based on algorithm
-        test_state = jax_reset(params, jax.random.PRNGKey(seed))
-        obs = get_observation(test_state, params)
+        test_state = jax_reset(ckpt_params, jax.random.PRNGKey(seed))
+        obs = get_observation(test_state, ckpt_params)
         input_dim = obs.shape[0]
-        
+
         # Dynamic action dimension (matching train_jax.py)
-        rest_enabled = params.rest_action_enabled
-        eat_enabled = params.eat_action_enabled
+        rest_enabled = ckpt_params.rest_action_enabled
+        eat_enabled = ckpt_params.eat_action_enabled
         action_dim = 4 + int(rest_enabled) + int(eat_enabled)
-        
+
         print(f"  [Model] Input Dim: {input_dim}, Action Dim: {action_dim}")
-        
+
         rngs = nnx.Rngs(jax.random.PRNGKey(seed))
-        
+
         if algorithm == "RecurrentPPO":
             rnn_type = config.get_mandatory('agent.rnn_type')
             activation = config.get_mandatory('agent.activation')
-            
+
             # Read neuromodulation config exactly as train.py does (train.py:745-747):
             # the WHOLE dict, not a hand-picked whitelist, so eval and train share one
             # source of truth and no future key (e.g. memory_clip) can silently drift
@@ -286,7 +381,7 @@ def main():
             modulation_config = config.get('agent.modulation')
             if modulation_config is not None and modulation_config.get('type') is None:
                 modulation_config = None
-            
+
             model = ActorCriticRNN(
                 input_dim=input_dim,
                 action_dim=action_dim,
@@ -295,13 +390,10 @@ def main():
                 rnn_type=rnn_type,
                 activation=activation,
                 modulation_config=modulation_config,
-                observation_breakdown=get_observation_breakdown(params),
+                observation_breakdown=get_observation_breakdown(ckpt_params),
                 encoding_config=config.to_dict().get('agent', {})
             )
-            
-            # Restore via manager (returns the raw dict)
-            restored = checkpointer.restore(iteration)
-            
+
             if 'model' in restored:
                 from flax.nnx.statelib import to_pure_dict
                 model_state = restored['model']
@@ -331,11 +423,10 @@ def main():
                 dreamer_mod_config = None
             trainer = DreamerTrainer(
                 input_dim, action_dim, config, rngs=rngs,
-                obs_breakdown=get_observation_breakdown(params),
+                obs_breakdown=get_observation_breakdown(ckpt_params),
                 modulation_config=dreamer_mod_config,
             )
 
-            restored = checkpointer.restore(iteration)
             from flax.nnx.statelib import to_pure_dict
             # Peel Orbax 'value' wrappers
             wm_restored = peel_nnx_state(restored['wm'])
@@ -360,7 +451,7 @@ def main():
             raise ValueError(f"Unsupported algorithm for JAX evaluation: {algorithm}")
             
         evaluate_jax_checkpoint(
-            model, params, config, num_episodes, seed, results_dir, iteration,
+            model, ckpt_params, config, num_episodes, seed, results_dir, iteration,
             render_video=render_video, quiet=False, num_envs=num_envs, debug=args.debug
         )
 

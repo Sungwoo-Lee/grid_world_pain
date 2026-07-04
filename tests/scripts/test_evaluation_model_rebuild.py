@@ -50,6 +50,7 @@ jax.config.update("jax_platform_name", "cpu")
 
 import orbax.checkpoint as ocp
 import pytest
+import yaml
 from flax import nnx
 
 from src.utils.config import Config, get_default_config, dump_config_yaml
@@ -195,14 +196,22 @@ def test_dreamer_eval_rebuild_signature(tmp_path, monkeypatch):
 
     monkeypatch.setattr(dvt.DreamerTrainer, "__init__", _spy_init)
 
-    # evaluation.py enumerates checkpoints by digit-named subdirs and only
-    # touches orbax AFTER model construction, so a bare "0" dir is enough to
-    # reach the (spied) DreamerTrainer construction call.
+    # Finding L2 (docs/develop/active/diagnosis/v3_pipeline_correctness_diagnosis.md)
+    # now restores the full checkpoint payload BEFORE model construction (it
+    # needs the checkpoint's own 'stage' field to resolve a continual run's
+    # per-checkpoint environment config), so a bare "0" dir with no real orbax
+    # payload no longer reaches the (spied) DreamerTrainer construction call --
+    # a real (minimal) checkpoint save is required first.
     models_dir = tmp_path / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
     with open(models_dir / "config.yaml", "w") as f:
         dump_config_yaml(config.to_dict(), f)
-    (models_dir / "0").mkdir()
+    _ckpt_mgr = ocp.CheckpointManager(
+        str(models_dir.resolve()), checkpointers=ocp.StandardCheckpointer()
+    )
+    _ckpt_mgr.save(0, args=ocp.args.StandardSave({"dummy": 0.0}))
+    _ckpt_mgr.wait_until_finished()
+    _ckpt_mgr.close()
 
     argv = ["evaluation.py", "--results_dir", str(tmp_path), "--episodes", "1",
             "--no-render", "--device", "cpu"]
@@ -286,3 +295,83 @@ def test_plain_rppo_eval_rebuild_still_succeeds(tmp_path, monkeypatch):
             "--no-render", "--device", "cpu"]
     monkeypatch.setattr(sys, "argv", argv)
     ev.main()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Finding L2 — --all batch loop must evaluate each checkpoint against ITS OWN
+# curriculum-stage environment, not always the shared stage-0 config.yaml.
+# ---------------------------------------------------------------------------
+
+def test_all_checkpoints_evaluated_against_own_stage_env(tmp_path, monkeypatch):
+    """Regression for Finding L2 (docs/develop/active/diagnosis/
+    v3_pipeline_correctness_diagnosis.md): for a continual (multi-stage
+    curriculum) run, evaluation.py's --all loop always loaded the shared
+    stage-0 models/config.yaml for EVERY checkpoint, so a later-stage
+    checkpoint was evaluated in the wrong environment.
+
+    Builds a minimal two-stage continual run on disk (schedule.yaml + two
+    stage_XX configs that differ only in `environment.max_steps`, an
+    easy-to-assert env-level field) with two REAL checkpoints tagged stage 0
+    and stage 1 respectively (mirroring train.py's saved 'stage' field), then
+    runs evaluation.py's actual `main()` with --all. A spy on
+    evaluate_jax_checkpoint captures the `params` object actually passed for
+    each checkpoint.
+
+    Pre-fix: both checkpoints receive stage-0's params (max_steps == 15).
+    Post-fix: checkpoint 5 (stage 0) receives max_steps == 15, checkpoint 20
+    (stage 1) receives max_steps == 42 -- its OWN stage's environment.
+    """
+    config = _merged_config(AGENT_CONFIG_MODULATED)
+    config.set("agent.modulation.type", None)  # baseline, keeps the fixture simple
+    config.set("environment.max_steps", 15)
+
+    model, _ = _build_rppo_model(config)
+
+    models_dir = tmp_path / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    with open(models_dir / "config.yaml", "w") as f:
+        dump_config_yaml(config.to_dict(), f)
+
+    stage1_config = Config(yaml.safe_load(yaml.dump(config.to_dict())))  # deep copy
+    stage1_config.set("environment.max_steps", 42)
+    with open(models_dir / "stage_00_stage0.yaml", "w") as f:
+        dump_config_yaml(config.to_dict(), f)
+    with open(models_dir / "stage_01_stage1.yaml", "w") as f:
+        dump_config_yaml(stage1_config.to_dict(), f)
+    with open(models_dir / "schedule.yaml", "w") as f:
+        dump_config_yaml({
+            "continual": {
+                "episode_boundaries": [10, 20],
+                "checkpoint_frequencies": [5, 5],
+                "stage_names": ["stage0", "stage1"],
+            }
+        }, f)
+
+    checkpointer = ocp.CheckpointManager(
+        str(models_dir.resolve()), checkpointers=ocp.StandardCheckpointer()
+    )
+    model_state = nnx.state(model, nnx.Param)
+    checkpointer.save(5, args=ocp.args.StandardSave({"model": model_state, "stage": 0}))
+    checkpointer.save(20, args=ocp.args.StandardSave({"model": model_state, "stage": 1}))
+    checkpointer.wait_until_finished()
+    checkpointer.close()
+
+    captured_max_steps = {}
+
+    def _spy_evaluate(model, params, config, num_episodes, seed, results_dir, iteration, **kw):
+        captured_max_steps[iteration] = int(params.max_steps)
+        # Skip the actual (slow) rollout -- this test only checks which env
+        # params reached evaluate_jax_checkpoint, not the rollout itself.
+
+    monkeypatch.setattr(ev, "evaluate_jax_checkpoint", _spy_evaluate)
+
+    argv = ["evaluation.py", "--results_dir", str(tmp_path), "--all",
+            "--episodes", "1", "--no-render", "--device", "cpu"]
+    monkeypatch.setattr(sys, "argv", argv)
+    ev.main()
+
+    assert captured_max_steps == {5: 15, 20: 42}, (
+        f"checkpoint 5 (stage 0) and checkpoint 20 (stage 1) must each be "
+        f"evaluated against their OWN stage's environment.max_steps, got: "
+        f"{captured_max_steps}"
+    )
