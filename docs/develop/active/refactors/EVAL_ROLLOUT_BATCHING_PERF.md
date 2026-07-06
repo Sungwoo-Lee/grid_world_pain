@@ -301,4 +301,71 @@ Batched wall-clock is near-constant (~18s) across all three because it is fixed 
 
 ---
 
+## Implementation Report — Tier 3 (video decoupling + fast rendering)
+
+> **Implemented by**: developer
+> **Date**: 2026-07-06
+
+### What this section is (plain-language entry point)
+
+Tier 3 makes video rendering — turning a saved eval recording into an MP4 you can actually watch — fast and crash-proof, without changing anything about how the behavior-probe results tables are computed. It touches only `scripts/eval/render_recordings.py`. The headline fix: rendering several episodes' videos at once used to crash with `OSError: [Errno 24] Too many open files` whenever the script was launched from a background/non-interactive context (a `nohup`'d job, some SSH non-interactive commands, job schedulers) — those contexts commonly cap a process at ~1024 open files even though an interactive shell here allows over a million. The script now raises its own limit at startup, so it survives regardless of how it was launched.
+
+### Summary of what was built (file-by-file)
+
+- **`scripts/eval/render_recordings.py`**
+  - **FD-limit fix (`_raise_fd_limit`, L48–71; called at `main()` L158 before the worker pool is created, and again defensively inside `_worker_init` L82).** Reads the process's current soft/hard `RLIMIT_NOFILE` and raises the soft limit toward `min(8192, hard)` (or straight to 8192 if the hard limit is unlimited), wrapped in `try/except (ValueError, OSError): pass` so it can never crash the render if the limit can't be changed. Called in the main process *before* the `ProcessPoolExecutor` is created so forked workers inherit the raised limit (Linux's default multiprocessing start method is `fork`); also called defensively inside `_worker_init` in case a different start method is ever used.
+  - **`--max-episodes N`** (L150–152) and **`--stride S`** (L153–155) flags: `episode_files` (sorted `episode_*.rec.gz` glob) is sliced `[::stride]` then `[:max_episodes]` (L174–179) before building the render task list. Both default to "no filtering" (`stride=1`, `max_episodes=None`), so **default behavior renders every episode, unchanged** from before this change.
+  - **Decoupling note added to the module docstring** (L15–29): documents explicitly that the stats path (`eval_rollout.py --record` → `avoidance_stats_heatmap.py`) never invokes this script (confirmed by grep — no `render_recordings`/`subprocess` references in `eval_rollout.py` besides a docstring mention and a `--record` help string), and that the two `src/` auto-render callers (`evaluation_core.py`, `dreamer_srl/eval.py`) are separate, config-gated invocations, not the stats path.
+  - No `--workers` default change: the existing `max(1, cpu_count-1)` default is safe now that the FD-limit fix is in place; the docstring documents the FD-per-render budget (~250 fds/render is the plan's stated worst case; measured ~70–105 fds/render in this environment — see Verify section) so a future maintainer understands why the fix exists.
+
+### Deviations from the plan (and why)
+
+- None in scope. The plan's contingency wording ("if the current worker default is unsafe, pick a sensible default") turned out unnecessary once the FD-limit fix is applied — no `--workers` default change was needed, only documentation of the interaction.
+- `docs/environment/12_renderer.md` cites `render_recordings.py`'s two renderer imports at "lines 31 and 45" (that doc's own line-number citation, not something this plan's File Changes list named). Adding the FD-limit function and the two new CLI flags shifted those imports to **L78/L93**. Per task scope (only `render_recordings.py` and `SCRIPTS_DEPENDENCY_MAP.md` were authorized for this Tier), I did **not** edit `12_renderer.md` — instead I flagged the now-stale citation in `SCRIPTS_DEPENDENCY_MAP.md`'s `render_recordings.py` row (§3) so `senior-developer` can decide whether to route a follow-up edit there. This is a flag, not a silent scope expansion.
+
+### Verify — reproducing the real failure, then confirming the fix
+
+**Reproduction is real, not simulated by assertion.** A per-process `RLIMIT_NOFILE` is per-process, not a sum across parallel worker processes, so I first measured actual per-render fd usage directly (`/proc/<pid>/fd` sampling): a single worker process peaks at **~70–105 concurrently-open fds** during a render in this environment (lower than the plan's "~250" worst-case estimate, likely matplotlib/fontconfig-version-dependent — noted, not disputed, since the plan's number is a stated upper bound not a promise). To get a clean, deterministic repro of the exact failure mode, I set the soft limit below that measured usage (`ulimit -Sn 50`) — this is the same failure class the plan describes (a background context imposing a low soft limit below what a render needs), just made deterministic instead of environment-dependent.
+
+- **Pre-fix (git HEAD copy of the script, `JAX_PLATFORMS=cpu`, `ulimit -Sn 50`, `--workers 6`, 16 staged episodes): crashes with exactly `OSError: [Errno 24] Too many open files`**, raised from `imageio_ffmpeg`'s `subprocess.run(...)` → `os.pipe()` inside a render worker, propagated through the `ProcessPoolExecutor` as the top-level exception (full traceback captured at `tmp/20260706_render_test/prefix_run_50_6w_cpu.log`).
+- **Post-fix, identical setup, launched via `nohup` (a genuine backgrounded/non-interactive context, not just a simulated one) with the same `ulimit -Sn 50`: exit code 0, all 16 episodes rendered to valid MP4s**, confirmed via `file episode_000000.mp4` → `ISO Media, MP4 Base Media v1` (log at `tmp/20260706_render_test/postfix_run_50_6w_cpu.log`).
+- **`--max-episodes 3`**: rendered exactly episodes 0,1,2 (verified file listing). **`--stride 4`**: rendered exactly episodes 0,4,8,12 (verified). **Default (no flags), `--concat --cleanup-per-episode`**: all 16 episodes rendered, consolidated into `eval_8500010.mp4`, per-episode files cleaned up — confirms backward-compatible default and that existing `--concat`/`--cleanup-per-episode` flows are unaffected.
+- **Existing test suite**: `tests/algorithms/dreamer_srl/test_eval_recording.py` (4 tests) + `tests/algorithms/dreamer_srl/test_render_upload.py` (3 tests, including one that runs `render_recordings.py` as a real subprocess and asserts an MP4 is produced) — **7/7 passed**.
+
+Staged test data: 16 real episodes copied from `results/eval/avoidance/sweeps/b03_randinit/avoid_rabbitwander_inj00/models/8500010/recordings/8500010/` into `tmp/20260706_render_smoke/recordings/8500010/` (gitignored scratch, not committed).
+
+### Speed check (before/after)
+
+The FD-limit fix is one cheap `getrlimit`/`setrlimit` syscall pair at startup — expected to have no measurable throughput cost, confirmed directly:
+
+| Config | Pre-fix (git HEAD) | Post-fix | Command |
+|---|---|---|---|
+| 16 episodes, `--workers 16`, normal ulimit | 41.3s wall | 39.0s wall (no regression — within run-to-run noise) | `time (JAX_PLATFORMS=cpu python .../render_recordings.py <dir> --workers 16 --fps 5)` |
+
+Parallelism itself (not new to this change, but confirmed working end-to-end with the fix in place):
+
+| Config | Wall clock | Speedup |
+|---|---|---|
+| 4 episodes, `--workers 1` (sequential) | 87.7s | 1.0x (baseline) |
+| 4 episodes, `--workers 4` (parallel) | 25.3s | **3.5x** |
+
+**Fast full-sweep invocation** (one process, internal `--workers` parallelism, FD-safe regardless of launch context):
+```
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/eval/render_recordings.py \
+  <results_dir>/recordings/<checkpoint_pct> --workers <cpu_count-1> --fps 5 \
+  --concat --cleanup-per-episode
+```
+Representative-subset fast pass (e.g. spot-checking a sweep without rendering all 30 episodes per config):
+```
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/eval/render_recordings.py \
+  <results_dir>/recordings/<checkpoint_pct> --workers <cpu_count-1> --fps 5 --max-episodes 5
+```
+
+### Blockers / follow-ups for `senior-developer`
+
+- `docs/environment/12_renderer.md`'s "lines 31 and 45" citation for the two renderer imports in `render_recordings.py` is now stale (they moved to L78/L93). Flagged in `SCRIPTS_DEPENDENCY_MAP.md`'s `render_recordings.py` row; out of this Tier's authorized scope (not `render_recordings.py` or the dependency map itself) so not edited directly.
+- None blocking merge. `.rec.gz` format untouched, `eval_rollout.py` untouched, stats/heatmap path untouched, no new config keys.
+
+---
+
 <!-- NEW ISSUES discovered during implementation: append as "## Issue #2" (related) or new doc (independent), cross-referenced both ways. -->

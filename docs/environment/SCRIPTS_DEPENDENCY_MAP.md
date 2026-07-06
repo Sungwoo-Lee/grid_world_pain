@@ -103,7 +103,7 @@ These are commands hardcoded in skills and agent profiles with the full conda in
 | `scripts/claude/claude_jsonl_to_md.py` | skill `memorize` (L40,156,280). |
 | `scripts/eval/trajectory_story.py` | skill `trajectory-story` (primary tool); agent `experiment-analyzer` (L59). |
 | `scripts/eval/eval_rollout.py` | skill `trajectory-story` (writes the `.rec.gz` the toolchain consumes); agent `experiment-analyzer` (L59). |
-| `scripts/eval/render_recordings.py` | skill `trajectory-story` (L60); plus the two `src/` subprocess paths in §1b; `docs/environment/12_renderer.md` cites its **internal lines L31/L45**. |
+| `scripts/eval/render_recordings.py` | skill `trajectory-story` (L60); plus the two `src/` subprocess paths in §1b; `docs/environment/12_renderer.md` cites its **internal lines L31/L45 — now stale** (added 2026-07-06, Tier 3: an FD-limit fix + `--max-episodes`/`--stride` flags shifted the two renderer imports to **L78/L93**; `12_renderer.md`'s citation was out of scope for this change and needs a follow-up edit). Neither `src/` caller (`evaluation_core.py`, `dreamer_srl/eval.py`) passes the new flags, so their behavior (render all episodes, default `--workers`) is unchanged. |
 | `scripts/lab/launch_sheeprl.sh` | agent `training-runner` (L16); `run_command.py` docstring examples (L26,126); `pytorch_agents/run_dreamer_v3.py:10` docstring. The one real training-launch path. |
 | `scripts/lab/bootstrap_lab_ssh.sh` | agent `training-runner` (L81). |
 | `scripts/lab/gpu_status.py` | skill `gpu-status` (.claude/skills/gpu-status/SKILL.md); top-level Claude's GPU-assignment-before-launch flow; maintenance command in `docs/environment/LAB_NODE_GPU_SPEC.md`. Read-only direct-SSH nvidia-smi query across nodes 101-114. |

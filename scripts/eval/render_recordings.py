@@ -11,6 +11,22 @@ Writes one MP4 per episode to:
 
 And a single consolidated:
     results/<run>/videos/eval_<checkpoint_pct>.mp4
+
+Fully decoupled from the stats/results-table path: the behavior-probe pipeline
+(`eval_rollout.py --record` → `avoidance_stats_heatmap.py`) reads `.rec.gz`
+recordings directly and never invokes this script. Rendering is always a
+separate, optional, later invocation over the same recordings directory —
+run it only when you actually want videos.
+
+FD-limit note: each rendered episode opens ~250 matplotlib font/icon file
+descriptors, so `--workers` parallel renders can exhaust a low soft
+`RLIMIT_NOFILE` (some background/non-interactive launch contexts, e.g. nohup'd
+jobs or job schedulers, default the soft limit to ~1024) and crash with
+`OSError: [Errno 24] Too many open files`. This script raises its own soft
+limit toward the hard limit at startup (see `_raise_fd_limit`) so a single
+`render_recordings.py --workers N` invocation is robust regardless of launch
+context — prefer this over launching multiple separate render processes,
+which would only multiply FD pressure rather than fixing it.
 """
 import argparse
 import os
@@ -23,6 +39,37 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 _WORKER_STATE = {}
 
+# Target soft RLIMIT_NOFILE. Each render worker opens ~250 font/icon fds via
+# matplotlib; this comfortably covers a couple dozen parallel workers plus
+# normal process overhead (stdio, pipes, sockets).
+_TARGET_SOFT_NOFILE = 8192
+
+
+def _raise_fd_limit(target: int = _TARGET_SOFT_NOFILE) -> None:
+    """Raise the soft RLIMIT_NOFILE toward the hard limit, best-effort.
+
+    Background/non-interactive launch contexts (nohup, some SSH non-interactive
+    commands, job schedulers) commonly default the soft fd limit to ~1024 even
+    when the hard limit is much higher (or unlimited). Rendering several
+    episodes in parallel with matplotlib (~250 fds per render) can exhaust a
+    1024 soft limit with only a handful of concurrent workers, crashing with
+    `OSError: [Errno 24] Too many open files`. Call this once, in the main
+    process, before spawning the worker pool (fork inherits the raised limit),
+    so the fix applies regardless of how the script was launched. Never
+    raises: if the limit can't be changed (e.g. sandboxed further, or already
+    at the hard cap), it silently leaves the limit as-is.
+    """
+    import resource
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        if soft >= target:
+            return
+        new_soft = target if hard == resource.RLIM_INFINITY else min(target, hard)
+        if new_soft > soft:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (new_soft, hard))
+    except (ValueError, OSError):
+        pass  # never crash the render because we couldn't raise the fd limit
+
 
 def _worker_init(run_meta_path: str):
     """Runs once per worker: loads icons + matplotlib + run metadata into globals."""
@@ -32,6 +79,7 @@ def _worker_init(run_meta_path: str):
     from src.utils.eval_recording import load_run_meta
     from pathlib import Path as _P
 
+    _raise_fd_limit()  # best-effort; also applied in the parent, but cheap and safe to repeat
     meta = load_run_meta(_P(run_meta_path).parent)
     _WORKER_STATE['params'] = meta['params']
     _WORKER_STATE['icon_config'] = meta['icon_config']
@@ -99,7 +147,15 @@ def main():
                     help="Skip episodes whose MP4 already exists.")
     ap.add_argument("--cleanup-per-episode", action="store_true",
                     help="After --concat succeeds, delete per-episode MP4s. Keeps only eval_<pct>.mp4.")
+    ap.add_argument("--max-episodes", type=int, default=None,
+                    help="Render only the first N episodes (after --stride selection, if given). "
+                         "Default: render all episodes (backward-compatible).")
+    ap.add_argument("--stride", type=int, default=1,
+                    help="Render only every Nth episode (1 = every episode, the default). "
+                         "Useful for a fast representative-subset pass instead of a full sweep.")
     args = ap.parse_args()
+
+    _raise_fd_limit()  # do this before creating the worker pool so forked workers inherit it
 
     rec_dir = Path(args.recordings_dir)
     run_meta_path = rec_dir / "run_meta.pkl"
@@ -114,6 +170,13 @@ def main():
     episode_files = sorted(rec_dir.glob("episode_*.rec.gz"))
     if not episode_files:
         raise SystemExit(f"No episode_*.rec.gz files in {rec_dir}")
+
+    if args.stride > 1:
+        episode_files = episode_files[::args.stride]
+    if args.max_episodes is not None:
+        episode_files = episode_files[:args.max_episodes]
+    if not episode_files:
+        raise SystemExit(f"--stride/--max-episodes selected 0 episodes from {rec_dir}")
 
     tasks = []
     for ep_file in episode_files:
