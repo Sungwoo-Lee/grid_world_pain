@@ -84,6 +84,20 @@ In the current food-only configs all episode ends are truncations (`terminated=0
 only effect 1 fires (duplicated last-step reward). In any predator/starvation stage,
 all three fire. Fix is the three-line zeroing block sheeprl has.
 
+> **Fix planned (2026-07-06, work package WP-C):** the port of the missing zeroing block
+> — restore sheeprl's `dreamer_v3.py:L653-656` "Reset already inserted step data" for done
+> envs (zero `rewards`/`terminated`/`truncated` on the done columns of the staged
+> `step_data`; the `is_first=1` set is already present) plus a buffer-content regression
+> test — is specified in
+> [[fix_plan_h5_dreamer_srl_buffer_reset]]. Scope is fenced to this block + test only;
+> Findings 2-9 remain out of scope.
+>
+> **Fix plan:** implemented and verified 2026-07-06 — helper `_reset_terminal_step_data`
+> in `dreamer_srl_main.py` + buffer-content regression test
+> (`tests/algorithms/dreamer_srl/test_terminal_step_data_reset.py`, RED pre-fix / GREEN
+> post-fix). See the Implementation Report and Verification Report in
+> [[fix_plan_h5_dreamer_srl_buffer_reset]].
+
 ---
 
 ## Finding 2 — Observation reconstruction loss deviates from the reference in two ways (extra symlog + halved weight)

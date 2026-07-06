@@ -339,6 +339,27 @@ class Player:
 # main
 # ---------------------------------------------------------------------------
 
+def _reset_terminal_step_data(step_data: dict, dones_idxes: list) -> None:
+    """Zero the staged reward/termination flags and set is_first for done envs.
+
+    Restores sheeprl's post-done "Reset already inserted step data" block, which
+    the JAX port previously dropped (only the is_first set was ported). Without
+    this, the next row written for a done env inherits the *previous* episode's
+    terminal reward and death flag while showing the fresh reset observation.
+
+    In-place, pure numpy. Zeroes ONLY the done-env columns — non-done envs keep
+    their live in-flight reward/flag values for their own next buffer.add.
+
+    Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L653-L656.
+    Fix for H5 — see docs/develop/active/issues/diag_fable5_20260704/
+    fix_plan_h5_dreamer_srl_buffer_reset.md
+    """
+    step_data["rewards"][:, dones_idxes]    = 0.0
+    step_data["terminated"][:, dones_idxes] = 0.0
+    step_data["truncated"][:, dones_idxes]  = 0.0
+    step_data["is_first"][:, dones_idxes]   = 1.0
+
+
 def main() -> None:
     """Training-loop driver — port of sheeprl dreamer_v3.py:L361-L765 main()."""
 
@@ -1256,10 +1277,15 @@ def main() -> None:
             _done_mask = dones.astype(np.float32)  # [num_envs] — 1.0 for done envs
             player.init_states(done_mask=_done_mask)
 
-            # Set is_first=1 in step_data so the NEXT row written has is_first=1
-            # (sheeprl L656: step_data["is_first"][:, dones_idxes] = ones_like(...))
+            # Reset the already-staged step_data for done envs so the NEXT row
+            # written (buffer.add(step_data) at the top of the next iteration) does
+            # NOT inherit this episode's terminal reward / death flag. The port
+            # previously set only is_first here and dropped sheeprl's reward/
+            # terminated/truncated zeroing (H5). Restored via the helper.
+            # Ported from sheeprl@33b6366:dreamer_v3.py:L652-L656 ("Reset already
+            # inserted step data"). Fix H5 — see fix_plan_h5_dreamer_srl_buffer_reset.md
             is_first_next[dones_idxes] = 1.0
-            step_data["is_first"][:, dones_idxes] = 1.0
+            _reset_terminal_step_data(step_data, dones_idxes)
 
             # Reset episode tracking for done envs
             episode_lengths[list(dones_idxes)] = 0
