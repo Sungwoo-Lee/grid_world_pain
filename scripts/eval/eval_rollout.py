@@ -244,6 +244,235 @@ def _run_episode_with_recording(
     return ep_data, recorder
 
 
+def _rollout_scan_jit(model, params, states0, h0, max_steps):
+    """nnx.jit-wrapped scan body. MUST be entered via `nnx.jit`, not called eagerly.
+
+    Root-cause note (found empirically while building the parity harness — flag
+    for `code-reviewer`): after `nnx.update(model, restored_tree)` restores a
+    checkpoint, calling `model(...)` **eagerly** (no `nnx.jit` anywhere in the call
+    stack) reads a stale/inconsistent view of the restored parameters — a plain
+    Python attribute read does not see the same values an `nnx.jit`-traced read
+    does, even though `nnx.state(model)` checksums identically either way. The
+    legacy per-episode path never hits this because its only forward-pass entry
+    point, `get_action_and_value_nnx`, is itself `@nnx.jit`-decorated, so the
+    first-ever forward pass of the whole process (and every one after) already
+    goes through the split/merge that correctly materializes the restored state.
+    A prior version of this function called `model(...)` directly inside a bare
+    `jax.lax.scan` with no enclosing `nnx.jit` — `lax.scan` alone does not fix
+    this (it only compiles the OUTER XLA loop; it does not perform nnx's
+    graphdef/state split) — and every batched trajectory silently diverged from
+    the legacy reference after step 0. Wrapping the whole scan in `nnx.jit` (this
+    function) makes `_run_episodes_batched` self-contained and exactly correct.
+    """
+    v_step = jax.vmap(jax_step, in_axes=(0, 0, None))
+    v_obs = jax.vmap(get_observation, in_axes=(0, None))
+    v_obs_true = jax.vmap(lambda s, p: get_observation(s, p, apply_noise=False), in_axes=(0, None))
+
+    def scan_fn(carry, _):
+        state, h = carry
+        logits, _value, h_new, _mod_info = model(v_obs(state, params), h)
+        action = jnp.argmax(logits, axis=-1)
+        next_state, reward, done, info = v_step(state, action, params)
+        next_obs = v_obs(next_state, params)
+        next_true_obs = v_obs_true(next_state, params)
+
+        step_out = {
+            "pre_agent_pos": state.agent_pos,
+            "action": action,
+            "reward": reward,
+            "done": done,
+            "ate_food": info["ate_food"],
+            "agent_in_bush": info["agent_in_bush"],
+            "dist_per_predator": info["dist_per_predator"],
+            "dist_per_neutral": info["dist_per_neutral"],
+            "hit_predator": info["hit_predator"],
+            "hit_neutral": info["hit_neutral"],
+            "termination_reason": info["termination_reason"],
+            "snap_agent_pos": next_state.agent_pos,
+            "snap_satiation": next_state.satiation,
+            "snap_nutrition": next_state.nutrition,
+            "snap_injury_level": next_state.injury_level,
+            "snap_rest_streak": next_state.rest_streak,
+            "snap_res_pos": next_state.res_pos,
+            "snap_res_active": next_state.res_active,
+            "snap_animal_pos": next_state.animal_pos,
+            "snap_obs_pos": next_state.obs_pos,
+            "obs": next_obs,
+            "true_obs": next_true_obs,
+        }
+        return (next_state, h_new), step_out
+
+    (_final_state, _final_h), scan_out = jax.lax.scan(
+        scan_fn, (states0, h0), None, length=max_steps
+    )
+    return scan_out
+
+
+def _run_episodes_batched(
+    params,
+    model,
+    seeds,
+    max_steps: int,
+    record: bool = False,
+    record_n_episodes: int = 0,
+):
+    """Batched (single-process, vmapped) rollout of ALL episodes at once (Tier 2).
+
+    Bit-for-bit parity contract with `_run_episode` / `_run_episode_with_recording`:
+    see docs/develop/active/refactors/EVAL_ROLLOUT_BATCHING_PERF.md for the full
+    correctness argument. The two facts that make exact parity possible: (1) an
+    episode is a pure function of its reset key `jax.random.PRNGKey(seed)` — all
+    per-step stochasticity is carried in `state.key` — and (2) the eval policy is
+    deterministic argmax with no cross-batch coupling (LayerNorm normalizes over
+    the feature axis, never the batch axis).
+
+    PRNG parity crux (concern a): the per-env reset key MUST be the stacked,
+    directly-vmapped `jax.random.PRNGKey(seed)` — NOT `ParallelEnv.reset`, whose
+    internal `jax.random.split(key, num_envs)` derives a completely different key
+    set and would silently corrupt every trajectory.
+
+    Returns (episodes, recorders):
+      - episodes: list of per-episode dicts, SAME schema as `_run_episode`
+        (agent_pos, action, ate_food, agent_in_bush, dist_per_predator,
+        dist_per_neutral, hit_predator, hit_neutral, nociception,
+        termination_reason, length). Caller adds `seed` afterward, exactly as
+        the legacy per-episode loop does.
+      - recorders: list of EpisodeRecorder|None (None for episodes beyond
+        `record_n_episodes`, or when `record=False`).
+    """
+    import flax.nnx as nnx
+    from src.utils.eval_recording import EpisodeRecorder, _snapshot_state
+    from types import SimpleNamespace
+
+    num_envs = len(seeds)
+    keys = jnp.stack([jax.random.PRNGKey(int(s)) for s in seeds])
+
+    v_reset = jax.vmap(jax_reset, in_axes=(None, 0))
+    v_obs = jax.vmap(get_observation, in_axes=(0, None))
+    v_obs_true = jax.vmap(lambda s, p: get_observation(s, p, apply_noise=False), in_axes=(0, None))
+
+    states0 = v_reset(params, keys)
+
+    # --- Checkpoint (concern a): PRNG reset-key parity guard. Permanent regression
+    # guard, not just a one-off manual check — this is THE correctness-critical
+    # invariant of the whole batched path. Cheap: num_envs unbatched jax_reset calls,
+    # once per config eval (negligible next to the max_steps scan).
+    for i, s in enumerate(seeds):
+        ref_key = jax_reset(params, jax.random.PRNGKey(int(s))).key
+        if not bool(jnp.array_equal(states0.key[i], ref_key)):
+            raise RuntimeError(
+                f"Batched reset PRNG parity check failed at seed index {i} (seed={s}): "
+                "state.key from the batched vmap(jax_reset) does not match "
+                "jax_reset(params, PRNGKey(seed)) called directly. The batched reset "
+                "must use jnp.stack([PRNGKey(s) for s in seeds]) + vmap(jax_reset), NOT "
+                "ParallelEnv.reset (whose internal jax.random.split(key, num_envs) "
+                "derives a different key set)."
+            )
+
+    h0 = model.initial_state(batch_size=num_envs)
+    obs0 = v_obs(states0, params)
+    true_obs0 = v_obs_true(states0, params)
+
+    # --- Checkpoint (concern b): vmap axis correctness. logits are (num_envs,
+    # action_dim) by construction (model(obs, h) with a batched leading axis) and
+    # scan_fn's `jnp.argmax(logits, axis=-1)` gives (num_envs,) — the bare
+    # `jnp.argmax(logits)` in get_action_and_value_nnx is only correct unbatched.
+    # (Read `model.action_dim` rather than probing with an eager forward call —
+    # see _rollout_scan_jit's docstring for why an eager, non-nnx.jit call here
+    # would itself be numerically unsafe.)
+    action_dim = model.action_dim
+
+    scan_out = nnx.jit(_rollout_scan_jit, static_argnames=("max_steps",))(
+        model, params, states0, h0, max_steps
+    )
+    assert scan_out["action"].shape == (max_steps, num_envs), (
+        f"Expected batched action shape (max_steps={max_steps}, num_envs={num_envs}), "
+        f"got {scan_out['action'].shape}"
+    )
+    assert bool(jnp.all(scan_out["action"] < action_dim)), (
+        f"Batched action indices out of range for action_dim={action_dim} — "
+        "argmax likely reduced over the wrong axis."
+    )
+
+    # Bring everything to host ONCE (per Design step 4).
+    scan_out = jax.tree_util.tree_map(np.asarray, scan_out)
+    states0_np = jax.tree_util.tree_map(np.asarray, states0)
+    obs0_np = np.asarray(obs0)
+    true_obs0_np = np.asarray(true_obs0)
+
+    done_seq = scan_out["done"]  # (max_steps, num_envs) bool
+    # `max_steps` truncation guarantees every env reaches done=True within the
+    # scan window (core.py: truncated = next_step >= params.max_steps fires on the
+    # max_steps-th step call at the latest), so argmax always finds a real hit.
+    T = np.argmax(done_seq, axis=0) + 1  # (num_envs,) — episode length, matches legacy `T`
+
+    episodes = []
+    recorders = []
+    for i in range(num_envs):
+        Ti = int(T[i])
+
+        ep_data = {
+            "agent_pos": np.asarray(scan_out["pre_agent_pos"][:Ti, i], dtype=np.int32),
+            "action": np.asarray(scan_out["action"][:Ti, i], dtype=np.int32),
+            "ate_food": np.asarray(scan_out["ate_food"][:Ti, i], dtype=bool),
+            "agent_in_bush": np.asarray(scan_out["agent_in_bush"][:Ti, i], dtype=bool),
+            "dist_per_predator": np.asarray(scan_out["dist_per_predator"][:Ti, i], dtype=np.float32),
+            "dist_per_neutral": np.asarray(scan_out["dist_per_neutral"][:Ti, i], dtype=np.float32),
+            "hit_predator": np.asarray(scan_out["hit_predator"][:Ti, i], dtype=bool),
+            "hit_neutral": np.asarray(scan_out["hit_neutral"][:Ti, i], dtype=bool),
+            # No live info dict ever carries a 'nociception'/'exteroception_nociception'
+            # key (verified against core.py's jax_step info schema) — the legacy
+            # `.get(..., 0.0)` fallback always fires, so this is always exactly 0.0.
+            "nociception": np.zeros(Ti, dtype=np.float32),
+            "termination_reason": np.int32(scan_out["termination_reason"][Ti - 1, i]),
+            "length": np.int32(Ti),
+        }
+        episodes.append(ep_data)
+
+        if record and i < record_n_episodes:
+            recorder = EpisodeRecorder(episode_index=i, train_episode=i, seed=int(seeds[i]))
+
+            # Initial snapshot (pre-loop), exactly matching
+            # _run_episode_with_recording's recorder.append(state, obs0, true_obs0,
+            # action_idx=-1, reward=0.0) call.
+            init_state = SimpleNamespace(
+                agent_pos=states0_np.agent_pos[i], satiation=states0_np.satiation[i],
+                nutrition=states0_np.nutrition[i], injury_level=states0_np.injury_level[i],
+                rest_streak=states0_np.rest_streak[i], res_pos=states0_np.res_pos[i],
+                res_active=states0_np.res_active[i], animal_pos=states0_np.animal_pos[i],
+                obs_pos=states0_np.obs_pos[i],
+            )
+            recorder.snapshots.append(_snapshot_state(init_state))
+            recorder.obs.append(np.asarray(obs0_np[i]))
+            recorder.true_obs.append(np.asarray(true_obs0_np[i]))
+            recorder.actions.append(-1)
+            recorder.rewards.append(0.0)
+
+            for t in range(Ti):
+                step_state = SimpleNamespace(
+                    agent_pos=scan_out["snap_agent_pos"][t, i],
+                    satiation=scan_out["snap_satiation"][t, i],
+                    nutrition=scan_out["snap_nutrition"][t, i],
+                    injury_level=scan_out["snap_injury_level"][t, i],
+                    rest_streak=scan_out["snap_rest_streak"][t, i],
+                    res_pos=scan_out["snap_res_pos"][t, i],
+                    res_active=scan_out["snap_res_active"][t, i],
+                    animal_pos=scan_out["snap_animal_pos"][t, i],
+                    obs_pos=scan_out["snap_obs_pos"][t, i],
+                )
+                recorder.snapshots.append(_snapshot_state(step_state))
+                recorder.obs.append(np.asarray(scan_out["obs"][t, i]))
+                recorder.true_obs.append(np.asarray(scan_out["true_obs"][t, i]))
+                recorder.actions.append(int(scan_out["action"][t, i]))
+                recorder.rewards.append(float(scan_out["reward"][t, i]))
+
+            recorders.append(recorder)
+        else:
+            recorders.append(None)
+
+    return episodes, recorders
+
+
 def _detect_threat_onsets(episodes, bm_cfg):
     """Scan episodes for threat-onset events (rising edge of dist < R per class).
 
@@ -526,6 +755,12 @@ def main():
                         help="Emit .rec.gz recordings compatible with render_recordings.py.")
     parser.add_argument("--record-n-episodes", type=int, default=10,
                         help="Number of episodes to record (first N of --eval-n-episodes).")
+    parser.add_argument("--batched", action="store_true", default=False,
+                        help="Run ALL episodes as one vmapped batch + lax.scan (Tier 2 perf "
+                             "path) instead of the legacy per-episode Python loop. Additive: "
+                             "the legacy loop stays the default until parity is proven per "
+                             "docs/develop/active/refactors/EVAL_ROLLOUT_BATCHING_PERF.md. "
+                             "Requires eval_policy_mode == 'deterministic'.")
     args = parser.parse_args()
 
     if args.device == "cpu":
@@ -574,6 +809,16 @@ def main():
         extra = [seeds[-1] + i + 1 for i in range(n_eps - len(seeds))]
         seeds = seeds + extra
     seeds = seeds[:n_eps]
+
+    if args.batched and bm_cfg.eval_policy_mode != "deterministic":
+        raise NotImplementedError(
+            "--batched only supports eval_policy_mode == 'deterministic' (argmax). "
+            f"Got '{bm_cfg.eval_policy_mode}'. The batched path's parity argument "
+            "(docs/develop/active/refactors/EVAL_ROLLOUT_BATCHING_PERF.md) relies on "
+            "the eval policy being deterministic argmax with the RNG key unused; "
+            "stochastic batched sampling is out of scope for this change. Drop "
+            "--batched to use the legacy per-episode loop."
+        )
 
     params = load_env_params(config)
     max_steps = int(config.get_mandatory("environment.max_steps"))
@@ -785,42 +1030,65 @@ def main():
     # --- Run episodes ---
     t_start = time.time()
     episodes = []
-    for ep_idx in range(n_eps):
-        key = jax.random.PRNGKey(seeds[ep_idx])
+    if args.batched:
+        # Tier 2 — all n_eps episodes as one vmapped batch + lax.scan over max_steps.
+        # See _run_episodes_batched docstring + the plan doc for the parity argument.
         if not args.quiet:
-            print(f"[eval_rollout] Episode {ep_idx + 1}/{n_eps} (seed={seeds[ep_idx]})...", end="\r", flush=True)
-
-        # When recording, use the recorder-aware variant; otherwise use the fast path.
-        should_record = args.record and ep_idx < rec_n_eps
-        if should_record:
-            ep_data, recorder = _run_episode_with_recording(
-                params, policy_fn, key, max_steps=max_steps,
-                deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
-                episode_index=ep_idx,
-                seed=seeds[ep_idx],
-            )
-        else:
-            ep_data = _run_episode(
-                params, policy_fn, key, max_steps=max_steps,
-                deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
-            )
-            recorder = None
-
-        ep_data["seed"] = np.int32(seeds[ep_idx])
-        episodes.append(ep_data)
-
-        # Save .npz (unchanged schema)
-        np.savez_compressed(
-            out_dir / "episodes" / f"{ep_idx:04d}.npz",
-            **ep_data,
+            print(f"[eval_rollout] Running batched rollout: {n_eps} episodes as one "
+                  f"vmapped batch (max_steps={max_steps})...", flush=True)
+        episodes, recorders = _run_episodes_batched(
+            params, model, seeds, max_steps,
+            record=args.record, record_n_episodes=rec_n_eps,
         )
-
-        # Write recording file if applicable
-        if should_record and recorder is not None:
-            out_path = rec_dir / f"episode_{ep_idx:06d}.rec.gz"
-            recorder.write(out_path)
+        for ep_idx, ep_data in enumerate(episodes):
+            ep_data["seed"] = np.int32(seeds[ep_idx])
+            np.savez_compressed(
+                out_dir / "episodes" / f"{ep_idx:04d}.npz",
+                **ep_data,
+            )
+            recorder = recorders[ep_idx]
+            if recorder is not None:
+                out_path = rec_dir / f"episode_{ep_idx:06d}.rec.gz"
+                recorder.write(out_path)
+                if not args.quiet:
+                    print(f"[eval_rollout] Wrote recording: {out_path}", flush=True)
+    else:
+        for ep_idx in range(n_eps):
+            key = jax.random.PRNGKey(seeds[ep_idx])
             if not args.quiet:
-                print(f"[eval_rollout] Wrote recording: {out_path}", flush=True)
+                print(f"[eval_rollout] Episode {ep_idx + 1}/{n_eps} (seed={seeds[ep_idx]})...", end="\r", flush=True)
+
+            # When recording, use the recorder-aware variant; otherwise use the fast path.
+            should_record = args.record and ep_idx < rec_n_eps
+            if should_record:
+                ep_data, recorder = _run_episode_with_recording(
+                    params, policy_fn, key, max_steps=max_steps,
+                    deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
+                    episode_index=ep_idx,
+                    seed=seeds[ep_idx],
+                )
+            else:
+                ep_data = _run_episode(
+                    params, policy_fn, key, max_steps=max_steps,
+                    deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
+                )
+                recorder = None
+
+            ep_data["seed"] = np.int32(seeds[ep_idx])
+            episodes.append(ep_data)
+
+            # Save .npz (unchanged schema)
+            np.savez_compressed(
+                out_dir / "episodes" / f"{ep_idx:04d}.npz",
+                **ep_data,
+            )
+
+            # Write recording file if applicable
+            if should_record and recorder is not None:
+                out_path = rec_dir / f"episode_{ep_idx:06d}.rec.gz"
+                recorder.write(out_path)
+                if not args.quiet:
+                    print(f"[eval_rollout] Wrote recording: {out_path}", flush=True)
 
     if not args.quiet:
         print(f"\n[eval_rollout] {n_eps} episodes done in {time.time() - t_start:.1f}s", flush=True)
@@ -855,6 +1123,7 @@ def main():
         "config_resolved": config_path,
         "checkpoint": args.checkpoint,
         "agent_type": agent_type,
+        "rollout_mode": "batched" if args.batched else "legacy",
         "n_episodes": n_eps,
         "seeds": seeds,
         "eval_policy_mode": bm_cfg.eval_policy_mode,
