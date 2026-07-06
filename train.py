@@ -65,7 +65,7 @@ import glob
 
 from src.environment.config_loader import load_env_params, load_behavior_measure_cfg, load_env_config
 from src.behavior.accumulators import (
-    make_bm_state, bm_step_update, bm_reset_env,
+    make_bm_state, bm_step_update, bm_reset_env, bm_drive_batch,
     bm_finalise_episode as _bm_finalise_episode_shared,
 )
 from src.environment.wrapper import ParallelEnv
@@ -1635,17 +1635,22 @@ def main():
                     agent_in_bush_steps = transitions_np.get('agent_in_bush')          # [T, B] or None
 
                     # Behavior-measure toolkit v1: per-step sequential update for Site 2 (DreamerV3 batch)
-                    # The K-buffer must be driven step-by-step so done-discarding is episode-accurate.
-                    if bm_enabled and agent_in_bush_steps is not None:
-                        T2, B2 = done_steps.shape
-                        for t2 in range(T2):
-                            _bm_info_t2 = {
-                                'ate_food': transitions_np['ate_food'][t2].astype(bool),
-                                'agent_in_bush': agent_in_bush_steps[t2].astype(bool),
-                            }
-                            if dist_per_predator_steps is not None: _bm_info_t2['dist_per_predator'] = dist_per_predator_steps[t2]
-                            if dist_per_neutral_steps  is not None: _bm_info_t2['dist_per_neutral']  = dist_per_neutral_steps[t2]
-                            _bm_step_update(_bm_info_t2, done_steps[t2].astype(bool))
+                    # H10 fix: bm_drive_batch interleaves the per-step update with
+                    # per-done finalise/reset (rPPO Site-1 pattern) so no step after a
+                    # mid-batch done leaks into the finished episode. Finalised results
+                    # are keyed (t, env) and merged into ep_data in the done block below.
+                    bm_ep_results = {}
+                    if bm_enabled and agent_in_bush_steps is not None and _bm_state is not None:
+                        bm_ep_results = bm_drive_batch(
+                            _bm_state,
+                            ate_food_steps=transitions_np['ate_food'],
+                            agent_in_bush_steps=agent_in_bush_steps,
+                            dist_per_predator_steps=dist_per_predator_steps,
+                            dist_per_neutral_steps=dist_per_neutral_steps,
+                            done_steps=done_steps,
+                            predator_tags=predator_tags,
+                            neutral_tags=neutral_tags,
+                        )
 
                     # More vectorized stats handling
                     done_indices = np.where(done_steps) # (t_idxs, env_idxs)
@@ -1676,9 +1681,10 @@ def main():
                                         means = (episode_dist_per_predator_sums[i] + np.sum(dist_per_predator_steps[curr_start:d_idx+1, i], axis=0)) / ep_l_safe
                                         for j, tag in enumerate(predator_tags):
                                             ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
-                                    # Behavior-measure toolkit v1: per-episode finalisation (Site 2)
-                                    if bm_enabled:
-                                        _bm_finalise_episode(i, ep_data)
+                                    # Behavior-measure toolkit v1 (H10): merge the result
+                                    # that bm_drive_batch finalised at this done step.
+                                    if bm_enabled and agent_in_bush_steps is not None:
+                                        ep_data.update(bm_ep_results.pop((int(d_idx), int(i))))
 
                                 ep_info_buffer.append(ep_data)
                                 iteration_episodes.append(ep_data)
@@ -1692,9 +1698,6 @@ def main():
                                         episode_dist_sums[k][i] = 0.0
                                 if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
                                 if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
-                                # Behavior-measure toolkit v1: per-env reset (Site 2)
-                                if bm_enabled:
-                                    _bm_reset_env(i)
                                 curr_start = d_idx + 1
 
                             # Add leftover
@@ -1738,6 +1741,11 @@ def main():
                             episode_dist_per_neutral_sums  += np.sum(dist_per_neutral_steps, axis=0)
                         if num_predator_for_log > 0 and dist_per_predator_steps is not None:
                             episode_dist_per_predator_sums += np.sum(dist_per_predator_steps, axis=0)
+
+                    # H10 invariant: every episode bm_drive_batch finalised must have been
+                    # consumed by the done block above (both iterate the same done_steps).
+                    assert not bm_ep_results, \
+                        f"BM driver / done-block mismatch, unconsumed keys: {sorted(bm_ep_results)}"
 
                     global_step += num_envs * num_steps
 

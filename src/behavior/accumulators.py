@@ -408,6 +408,51 @@ def bm_finalise_episode(
     return ep_data
 
 
+def bm_drive_batch(
+    bm: BMState,
+    ate_food_steps: np.ndarray,          # [T, B]
+    agent_in_bush_steps: np.ndarray,     # [T, B]
+    dist_per_predator_steps,             # [T, B, P] or None
+    dist_per_neutral_steps,              # [T, B, N] or None
+    done_steps: np.ndarray,              # [T, B]
+    predator_tags: Tuple[str, ...],
+    neutral_tags: Tuple[str, ...],
+) -> dict:
+    """Drive the BM state machine over a whole [T, B] collected batch
+    (train.py DreamerV3 Site 2).
+
+    Interleaves the per-step update with per-done finalise/reset — the same
+    step -> finalise -> reset ordering as the per-step drivers (train.py
+    Site 1 rPPO, dreamer_srl_main) — so no step after a done leaks into the
+    finished episode, the next episode keeps its opening steps, and a second
+    done for the same env within the batch yields a second valid finalisation.
+    (H10 fix — see docs/develop/active/issues/diag_fable5_20260704/
+    fix_plan_h10_dreamer_batch_bm.md.)
+
+    Mutates ``bm`` (per-env reset at each done). Returns
+    ``{(t, i): ep_data}`` — one finalised ``*_raw`` dict per done event at
+    step ``t`` for env ``i``.
+    """
+    results: dict = {}
+    T = done_steps.shape[0]
+    for t in range(T):
+        info_t = {
+            'ate_food':      ate_food_steps[t].astype(bool),
+            'agent_in_bush': agent_in_bush_steps[t].astype(bool),
+        }
+        if dist_per_predator_steps is not None:
+            info_t['dist_per_predator'] = dist_per_predator_steps[t]
+        if dist_per_neutral_steps is not None:
+            info_t['dist_per_neutral'] = dist_per_neutral_steps[t]
+        done_t = done_steps[t].astype(bool)
+        bm_step_update(bm, info_t, done_t)
+        for i in np.where(done_t)[0]:
+            i = int(i)
+            results[(t, i)] = bm_finalise_episode(bm, i, predator_tags, neutral_tags)
+            bm_reset_env(bm, i)
+    return results
+
+
 def bm_finalise_to_wandb_keys(
     ep_data_raw: dict,
     predator_tags: Tuple[str, ...],
