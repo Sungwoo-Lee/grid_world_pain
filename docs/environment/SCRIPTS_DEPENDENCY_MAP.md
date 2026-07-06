@@ -50,8 +50,11 @@ These use **bare-name imports** (no `scripts.` prefix), which resolve only becau
 | `scripts/wandb/compare_wandb_runs.py:23` | `from wandb_utils import WANDB_ENTITY, WANDB_PROJECT, fetch_wandb_runs, match_wandb_run` | `scripts/wandb/wandb_utils.py` |
 | `scripts/wandb/compare_wandb_runs.py:24` | `from wandb_metrics import PRESETS, pull_and_analyze, print_compare_preset` | `scripts/wandb/wandb_metrics.py` |
 | `scripts/wandb/benchmark_wandb_speed.py:25` | `from wandb_utils import (WANDB_ENTITY, WANDB_PROJECT, fetch_wandb_runs, format_duration, match_wandb_run)` | `scripts/wandb/wandb_utils.py` |
+| `scripts/eval/parity_check_eval_rollout.py` | `sys.path.insert(0, str(PROJECT_ROOT / "scripts" / "behavior_measures"))` then `from avoidance_stats_heatmap import episode_measures, KEYS` (bare-name import, added 2026-07-06 — Tier 2 batched-rollout parity gate) | `scripts/behavior_measures/avoidance_stats_heatmap.py` |
 
 **Rule:** keep `wandb_utils.py`, `wandb_metrics.py`, `compare_wandb_runs.py`, `benchmark_wandb_speed.py` **in the same folder** (all now in `scripts/wandb/`). The `wandb-analysis` skill runs these with `PYTHONPATH=scripts/wandb python scripts/wandb/wandb_metrics.py ...`. Moving any of the four out of `scripts/wandb/` requires updating both the 4 imports above and the skill's `PYTHONPATH`/path.
+
+**Rule (parity harness):** `parity_check_eval_rollout.py` imports `episode_measures`/`KEYS` from `avoidance_stats_heatmap.py` **deliberately** — it is the acceptance test for Tier 2 batched-rollout parity and must compute the 11 avoidance measures through the SAME function the real stats pipeline uses, never a re-derived copy. Moving `avoidance_stats_heatmap.py` out of `scripts/behavior_measures/` requires updating the harness's `sys.path.insert` line above.
 
 > **Name-collision caution:** `scripts/wandb/wandb_utils.py` is a *different file* from `src/utils/wandb_utils.py`. The `src/` code (`train.py`, `evaluation_core.py`, `dreamer_srl/eval.py`) imports `from src.utils.wandb_utils` and does **not** touch the `scripts/wandb/` one.
 
@@ -61,8 +64,9 @@ These use **bare-name imports** (no `scripts.` prefix), which resolve only becau
 |---|---|---|
 | `src/utils/evaluation_core.py:295` | `render_script = os.path.join(project_root, "scripts", "eval", "render_recordings.py")` → `subprocess.run([...])` | `scripts/eval/render_recordings.py` |
 | `src/algorithms/dreamer_srl/eval.py:232` | `render_script = os.path.join(_project_root, 'scripts', 'eval', 'render_recordings.py')` → `subprocess.run([...])` | `scripts/eval/render_recordings.py` |
+| `scripts/eval/parity_check_eval_rollout.py` (`EVAL_ROLLOUT` constant, `_run_eval_rollout()`) | `EVAL_ROLLOUT = PROJECT_ROOT / "scripts" / "eval" / "eval_rollout.py"` → `subprocess.run([python, str(EVAL_ROLLOUT), --config, --checkpoint, --output-root, --batched?, ...])`, invoked once for the legacy path and once for the `--batched` path (added 2026-07-06, Tier 2) | `scripts/eval/eval_rollout.py` |
 
-**Rule:** moving `render_recordings.py` requires editing both lines above. (`evaluation_core.py:328` also prints a cosmetic "Render with: python scripts/eval/render_recordings.py ..." hint — non-breaking, but update for tidiness.)
+**Rule:** moving `render_recordings.py` requires editing both lines above. (`evaluation_core.py:328` also prints a cosmetic "Render with: python scripts/eval/render_recordings.py ..." hint — non-breaking, but update for tidiness.) Moving `eval_rollout.py` requires updating the harness's `EVAL_ROLLOUT` constant (it lives in the same `scripts/eval/` folder today, so this is currently a same-folder reference, not a cross-folder one).
 
 ### 1c. `scripts/` referenced from the test suite
 
@@ -70,6 +74,7 @@ These use **bare-name imports** (no `scripts.` prefix), which resolve only becau
 |---|---|---|
 | `tests/scripts/test_dreamer_srl_offline_wm_test.py:107` | `from scripts.dreamer.dreamer_srl_offline_wm_test import main` (uses `sys.path.insert(0, _REPO)`, `scripts.` package prefix) | `scripts/dreamer/dreamer_srl_offline_wm_test.py` |
 | `tests/algorithms/dreamer_srl/test_end_to_end_parity.py:48` | `OFFLINE_CHECK_SCRIPT = os.path.join(REPO_ROOT, "scripts", "dreamer", "dreamer_srl_offline_check.py")` → `subprocess.run([...])` | `scripts/dreamer/dreamer_srl_offline_check.py` |
+| `tests/scripts/test_eval_rollout_online_replay.py` and `tests/scripts/test_eval_rollout_stage_config.py` | `sys.path.insert(0, os.path.join(_REPO, "scripts", "eval"))` + `import eval_rollout as er` (bare-name import) | `scripts/eval/eval_rollout.py` |
 
 **Rule:** moving either target requires editing the matching test.
 
@@ -119,7 +124,8 @@ Stakes legend: **CODE** = breaks Python/subprocess; **TOOL** = breaks a skill/ag
 | `scripts/wandb/compare_wandb_runs.py` | `wandb-analysis` skill | TOOL | WandB cluster; skill |
 | `scripts/wandb/benchmark_wandb_speed.py` | `wandb-analysis` skill | CODE+TOOL | WandB cluster; skill |
 | `scripts/eval/render_recordings.py` | `src/` ×2 subprocess; `trajectory-story` skill; renderer doc | CODE+TOOL | `evaluation_core.py:295`, `eval.py:232`, skill L60, `12_renderer.md` |
-| `scripts/eval/eval_rollout.py` | `trajectory-story` skill; `experiment-analyzer` | TOOL | skill + agent commands |
+| `scripts/eval/eval_rollout.py` | `trajectory-story` skill; `experiment-analyzer`; tests `test_eval_rollout_online_replay.py` + `test_eval_rollout_stage_config.py` (§1c bare import); `scripts/eval/parity_check_eval_rollout.py` (subprocess ×2, added 2026-07-06 — Tier 2 `--batched` parity gate) | TOOL+TEST | skill + agent commands + 2 test `sys.path` inserts; harness `EVAL_ROLLOUT` constant |
+| `scripts/eval/parity_check_eval_rollout.py` | none (hand-run acceptance test for the Tier 2 batched-rollout change, added 2026-07-06) | HAND | depth fix only (`scripts/eval/`, already `parents[2]`) |
 | `scripts/eval/trajectory_story.py` | `trajectory-story` skill (primary); `experiment-analyzer` | TOOL | skill + agent |
 | `scripts/eval/motif_cluster.py` | none (test reimplements KMeans, no import) | HAND | depth fix only |
 | `scripts/eval/benchmark_render.py` | docs only | HAND | depth fix only |
@@ -146,17 +152,17 @@ Stakes legend: **CODE** = breaks Python/subprocess; **TOOL** = breaks a skill/ag
 | `scripts/fixtures/generate_parity_fixtures.py` | named in a test *docstring* only (not invoked) | HAND | depth fix only |
 | `scripts/fixtures/gen_cp1..8_fixtures.py` | hand-run generators; gen_cp8 in hint strings | HAND | already `scripts/fixtures/` depth |
 | `scripts/verification/verify_noise.py` | docs only | HAND | depth fix only |
-| `scripts/verification/analyze_noise_diagnostics.py` | archived docs only | ORPHAN | none |
+| `scripts/verification/analyze_noise_diagnostics.py` | archived docs only (2026-07-06: gained the `obs_intero_nociception`/`true_intero_nociception` modality pair as the name-based consumer of the H8 stats-CSV fix; still no runtime caller) | ORPHAN | none |
 | `scripts/verification/check_observability_gates.py` | `settings.local.json:4` | SETTINGS | allowlist |
 | `scripts/verification/check_olfaction_parity.py` | `settings.local.json:5` | SETTINGS | allowlist |
-| `scripts/behavior_measures/avoidance_stats_heatmap.py` | README + study doc | HAND | already `parents[2]` |
+| `scripts/behavior_measures/avoidance_stats_heatmap.py` | README + study doc; `scripts/eval/parity_check_eval_rollout.py` (bare import of `episode_measures`/`KEYS`, added 2026-07-06) | HAND+CODE | already `parents[2]`; harness's `sys.path.insert` line (§1a) |
 
 ---
 
 ## 4. Move-together clusters
 
 - **Cluster A — WandB analysis (import-coupled, MUST stay together):** `scripts/wandb/wandb_utils.py` (leaf) ← `scripts/wandb/wandb_metrics.py` ← `scripts/wandb/compare_wandb_runs.py`; `scripts/wandb/wandb_utils.py` ← `scripts/wandb/benchmark_wandb_speed.py`. Bare-name imports; splitting across folders breaks resolution unless rewritten. The `wandb-analysis` skill uses `PYTHONPATH=scripts/wandb`.
-- **Cluster B — eval → record → render pipeline (path/format-coupled, not imports):** `scripts/eval/eval_rollout.py` (writes `.rec.gz`) → `scripts/eval/render_recordings.py` (renders) → `scripts/eval/trajectory_story.py`, `scripts/behavior_measures/avoidance_stats_heatmap.py`, `scripts/eval/motif_cluster.py` (consume recordings). Coupling is the recording format (`src/utils/eval_recording.py`) plus the hardcoded `scripts/eval/render_recordings.py` subprocess path in `src/`.
+- **Cluster B — eval → record → render pipeline (path/format-coupled, not imports):** `scripts/eval/eval_rollout.py` (writes `.rec.gz`) → `scripts/eval/render_recordings.py` (renders) → `scripts/eval/trajectory_story.py`, `scripts/behavior_measures/avoidance_stats_heatmap.py`, `scripts/eval/motif_cluster.py` (consume recordings). Coupling is the recording format (`src/utils/eval_recording.py`) plus the hardcoded `scripts/eval/render_recordings.py` subprocess path in `src/`. **`scripts/eval/parity_check_eval_rollout.py` (added 2026-07-06)** joins this cluster from both ends: it subprocess-invokes `eval_rollout.py` twice (once legacy, once `--batched`) and imports `avoidance_stats_heatmap.episode_measures` directly (§1a) to score both runs identically — it is the Tier 2 acceptance gate for `eval_rollout.py`'s batched rollout path (docs/develop/active/refactors/EVAL_ROLLOUT_BATCHING_PERF.md).
 - **Cluster C — dreamer/sheeprl parity (path/string-coupled):** `scripts/fixtures/gen_cp*.py` → `scripts/dreamer/sheeprl_jax_diff.py`, `scripts/dreamer/dreamer_srl_offline_check.py`, `scripts/dreamer/dreamer_srl_offline_wm_test.py`, `scripts/dreamer/dreamer_offline_wm_test.py`. Coupling is fixture `.npz` paths under `tests/fixtures/dreamer_srl/` and hint strings, plus the two `tests/` files (§1c).
 - **Dev-tooling group (TOOL stakes, no imports between them):** all scripts under `scripts/claude/`. Independent files, but every executable one is hardcoded in a skill/agent (§2).
 

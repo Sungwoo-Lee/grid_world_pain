@@ -16,16 +16,18 @@ import pandas as pd
 import numpy as np
 
 MODALITY_PAIRS = [
-    ("Injury",              ["obs_intero_injury"],     ["true_intero_injury"]),
-    ("Nutrition",           ["obs_intero_nutrition"],   ["true_intero_nutrition"]),
-    ("Satiation",           ["obs_intero_satiation"],   ["true_intero_satiation"]),
-    ("Extero Nociception",  ["obs_noc"],                ["true_noc"]),
-    ("Location",            ["obs_loc_r", "obs_loc_c"], ["true_loc_r", "true_loc_c"]),
+    ("Injury",                  ["obs_intero_injury"],        ["true_intero_injury"]),
+    ("Nutrition",               ["obs_intero_nutrition"],     ["true_intero_nutrition"]),
+    ("Satiation",               ["obs_intero_satiation"],     ["true_intero_satiation"]),
+    ("Interoceptive Nociception", ["obs_intero_nociception"], ["true_intero_nociception"]),
+    ("Extero Nociception",      ["obs_noc"],                  ["true_noc"]),
+    ("Location",                ["obs_loc_r", "obs_loc_c"],   ["true_loc_r", "true_loc_c"]),
 ]
 # Olfaction, Collision, Visual, Proprioception have variable dims — detected dynamically
 
 EXPECTED_SIGMA = {
     "Injury": 0.05, "Nutrition": 0.10, "Satiation": 0.10,
+    "Interoceptive Nociception": 0.1,
     "Extero Nociception": 0.01, "Olfaction": 0.15, "Collision": 0.01,
     "Proprioception": 0.05, "Visual": 0.05, "Location": 0.01,
 }
@@ -93,8 +95,9 @@ def analyze_stats_dir(stats_dir):
         expected_sig = EXPECTED_SIGMA.get(name, "?")
         if isinstance(expected_sig, float):
             ratio = noise_std / expected_sig if expected_sig > 0 else float('inf')
-            # state_dependent noise (Injury) will have higher/lower std than a constant alpha, but let's use a wider range
-            if name == "Injury":
+            # state_dependent noise (Injury, Interoceptive Nociception) will have
+            # higher/lower std than a constant alpha, but let's use a wider range
+            if name in ("Injury", "Interoceptive Nociception"):
                 status = "OK (SD)" if 0.5 <= ratio <= 2.0 else f"CHECK ({ratio:.2f}x)"
             else:
                 status = "OK" if 0.8 <= ratio <= 1.2 else f"MISMATCH ({ratio:.2f}x)"

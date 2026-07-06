@@ -338,7 +338,16 @@ def _compute_online_replay(episodes, bm_cfg):
                     if ate[t]:
                         totals[f"m5_eat_safe_{prefix}"] += 1
 
-                # M1 — age FIRST (age-first ordering matches train.py)
+                # M1 — update steps_since_eat FIRST, then age/resolve, then record:
+                # same ordering as the online accumulator (accumulators.py:211 update,
+                # :215-232 resolve, :234-257 record; fix 3e1e53e), so "interrupted"
+                # means: no eat at any of the K steps after the candidate eat.
+                # NOTE: the denominator below still counts at RESOLUTION time, unlike
+                # the online record-time counting — known open divergence, see
+                # diag_fable5_20260704/07_behavior_measures.md Finding 4. Do not
+                # change it here.
+                steps_since_eat = 0 if ate[t] else steps_since_eat + 1
+
                 if cand_age >= 0:
                     cand_age += 1
                     if cand_age >= K:
@@ -346,8 +355,6 @@ def _compute_online_replay(episodes, bm_cfg):
                         if steps_since_eat >= K:
                             totals[f"m1_interrupted_{prefix}"] += 1
                         cand_age = -1
-
-                steps_since_eat = 0 if ate[t] else steps_since_eat + 1
 
                 if ate[t] and in_R:
                     cand_age = 0  # record new candidate

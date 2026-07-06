@@ -72,11 +72,25 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
     batched_obs = np.array(jax.device_get(jnp.stack(ep_obs)))
     batched_true_obs = np.array(jax.device_get(jnp.stack(ep_true_obs))) if ep_true_obs is not None else None
     
-    obs_header_indices = [i for i, h in enumerate(stat_headers) if h.startswith("obs_")]
+    # NOTE: obs_entity_{i}_r/_c are world-entity columns, NOT observation-vector
+    # columns — excluding them from the obs count is load-bearing (H8 mode B,
+    # diag_fable5_20260704/06_evaluation_path.md Finding 1 refinement).
+    obs_header_indices = [i for i, h in enumerate(stat_headers)
+                          if h.startswith("obs_") and not h.startswith("obs_entity_")]
     num_obs_headers = len(obs_header_indices)
-    
+
     true_obs_header_indices = [i for i, h in enumerate(stat_headers) if h.startswith("true_")]
     num_true_obs_headers = len(true_obs_header_indices)
+    # Fail loud on any header/vector drift instead of silently clamping.
+    if num_obs_headers != batched_obs.shape[-1]:
+        raise ValueError(
+            f"Stats-CSV drift: {num_obs_headers} obs_* headers but observation dim "
+            f"{batched_obs.shape[-1]} — header names and observation layout no longer "
+            f"derive from the same breakdown.")
+    if batched_true_obs is not None and num_true_obs_headers != batched_true_obs.shape[-1]:
+        raise ValueError(
+            f"Stats-CSV drift: {num_true_obs_headers} true_* headers but true-obs dim "
+            f"{batched_true_obs.shape[-1]}.")
     num_steps = len(ep_jax_states)
     # Compute per-class masks once (params is config-constant).
     _pred_mask = select_by_class(params, 'predator')
@@ -107,13 +121,13 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
                 float(batched_info['damage_obstacle'][t]),
             ]
             obs_vec = batched_obs[t]
-            for i in range(min(num_obs_headers, len(obs_vec))):
+            for i in range(num_obs_headers):
                 row.append(float(obs_vec[i]))
-            
+
             # True obs (if noise diagnostics enabled)
             if batched_true_obs is not None:
                 true_vec = batched_true_obs[t]
-                for i in range(min(num_true_obs_headers, len(true_vec))):
+                for i in range(num_true_obs_headers):
                     row.append(float(true_vec[i]))
             res_pos = batched_state['res_pos'][t]
             res_active = batched_state['res_active'][t]
@@ -139,6 +153,90 @@ def _write_episode_stats(stats_dir, episode_number, ep_jax_states, ep_jax_infos,
             writer.writerow(row)
     if debug:
         print(f"    [Stats] Saved to {stats_path}")
+
+
+def _sensor_stat_columns(sensor_name, dim, params, prefix):
+    """Stats-CSV column names for one sensor modality.
+
+    MUST have a branch for every key get_observation_breakdown() can emit, and
+    must return exactly `dim` names. Raises on unknown sensors so a new modality
+    can never silently shift the CSV again (silent encode/decode-drift class —
+    see docs/develop/active/issues/diag_fable5_20260704/06_evaluation_path.md
+    Finding 1).
+    """
+    if sensor_name == "Olfaction":
+        names = [f"{prefix}olf_{i}" for i in range(dim)]
+    elif sensor_name == "Extero Nociception":
+        names = [f"{prefix}noc"]
+    elif sensor_name == "Interoceptive Nociception":
+        names = [f"{prefix}intero_nociception"]
+    elif sensor_name in ("Satiation", "Nutrition", "Injury"):
+        names = [f"{prefix}intero_{sensor_name.lower()}"]
+    elif sensor_name == "Collision":
+        coll_offsets = get_visual_offsets(params.sensor_range)
+        names = [f"{prefix}coll_r{dr}c{dc}" for dr, dc in coll_offsets]
+    elif sensor_name == "Location":
+        names = [f"{prefix}loc_r", f"{prefix}loc_c"]
+    elif sensor_name == "Visual":
+        names = [f"{prefix}vis_{i}" for i in range(dim)]
+    elif sensor_name == "Proprioception":
+        names = [f"{prefix}prop_{i}" for i in range(dim)]
+    else:
+        raise ValueError(
+            f"No stats-CSV column mapping for sensor {sensor_name!r} (dim={dim}). "
+            f"Add a branch in _sensor_stat_columns when adding a sensor to "
+            f"get_observation_breakdown()."
+        )
+    if len(names) != dim:
+        raise ValueError(
+            f"Stats-CSV column mapping for {sensor_name!r} produced {len(names)} "
+            f"names for dim={dim}."
+        )
+    return names
+
+
+def build_stat_headers(params, breakdown, record_true_obs):
+    """Build the full stats-CSV header list (fixed columns, obs_*/true_* sensor
+    columns derived from get_observation_breakdown() order, world-entity columns,
+    tail). Single source of truth for the header layout — _write_episode_stats
+    writes values in the same breakdown order."""
+    stat_headers = ['step', 'pos_r', 'pos_c', 'action', 'reward',
+                    'satiation', 'nutrition', 'injury', 'rest_streak']
+    stat_headers += ['event_ate', 'event_collided', 'event_rested',
+                     'damage_total', 'damage_hiding_predator', 'damage_predator', 'damage_obstacle']
+    # Add headers for all observation parts based on breakdown
+    for sensor_name, dim in breakdown.items():
+        stat_headers += _sensor_stat_columns(sensor_name, dim, params, "obs_")
+
+    # Add headers for true observations if recording is enabled
+    if record_true_obs:
+        for sensor_name, dim in breakdown.items():
+            stat_headers += _sensor_stat_columns(sensor_name, dim, params, "true_")
+
+    # Add headers for world entities (matching _write_episode_stats loop)
+    # 1. Resources
+    for i in range(params.res_type.shape[0]):
+        res_name = f"res_{i}"
+        stat_headers += [f"{res_name}_r", f"{res_name}_c", f"{res_name}_active"]
+
+    # 2. Predators
+    for i in range(len(params.predator_indices)):
+        pred_name = f"pred_{i}"
+        stat_headers += [f"{pred_name}_r", f"{pred_name}_c"]
+
+    # 3. Neutrals
+    for i in range(len(params.neutral_indices)):
+        neu_name = f"neutral_{i}"
+        stat_headers += [f"{neu_name}_r", f"{neu_name}_c"]
+
+    # 4. Obstacles
+    for i in range(params.obs_blocking.shape[0]):
+        obs_name = f"obs_entity_{i}"
+        stat_headers += [f"{obs_name}_r", f"{obs_name}_c"]
+
+    # End of row
+    stat_headers += ["termination_reason", "max_satiation", "max_injury"]
+    return stat_headers
 
 
 def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
@@ -197,74 +295,7 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
         action_map.append("Eat")
     if record_stats:
         os.makedirs(stats_dir, exist_ok=True)
-        stat_headers = ['step', 'pos_r', 'pos_c', 'action', 'reward', 
-                       'satiation', 'nutrition', 'injury', 'rest_streak']
-        stat_headers += ['event_ate', 'event_collided', 'event_rested',
-                        'damage_total', 'damage_hiding_predator', 'damage_predator', 'damage_obstacle']
-        # Add headers for all observation parts based on breakdown
-        for sensor_name, dim in breakdown.items():
-            if sensor_name == "Olfaction":
-                for i in range(dim): stat_headers.append(f"obs_olf_{i}")
-            elif sensor_name == "Extero Nociception":
-                stat_headers.append("obs_noc")
-            elif sensor_name == "Collision":
-                coll_offsets = get_visual_offsets(params.sensor_range)
-                for i in range(dim):
-                    dr, dc = coll_offsets[i]
-                    stat_headers.append(f"obs_coll_r{dr}c{dc}")
-            elif sensor_name == "Location":
-                stat_headers += ["obs_loc_r", "obs_loc_c"]
-            elif sensor_name in ["Satiation", "Nutrition", "Injury"]:
-                stat_headers.append(f"obs_intero_{sensor_name.lower()}")
-            elif sensor_name == "Visual":
-                for i in range(dim): stat_headers.append(f"obs_vis_{i}")
-            elif sensor_name == "Proprioception":
-                for i in range(dim): stat_headers.append(f"obs_prop_{i}")
-        
-        # Add headers for true observations if recording is enabled
-        if record_true_obs:
-            for sensor_name, dim in breakdown.items():
-                if sensor_name == "Olfaction":
-                    for i in range(dim): stat_headers.append(f"true_olf_{i}")
-                elif sensor_name == "Extero Nociception":
-                    stat_headers.append("true_noc")
-                elif sensor_name == "Collision":
-                    coll_offsets = get_visual_offsets(params.sensor_range)
-                    for i in range(dim):
-                        dr, dc = coll_offsets[i]
-                        stat_headers.append(f"true_coll_r{dr}c{dc}")
-                elif sensor_name == "Location":
-                    stat_headers += ["true_loc_r", "true_loc_c"]
-                elif sensor_name in ["Satiation", "Nutrition", "Injury"]:
-                    stat_headers.append(f"true_intero_{sensor_name.lower()}")
-                elif sensor_name == "Visual":
-                    for i in range(dim): stat_headers.append(f"true_vis_{i}")
-                elif sensor_name == "Proprioception":
-                    for i in range(dim): stat_headers.append(f"true_prop_{i}")
-        
-        # Add headers for world entities (matching _write_episode_stats loop)
-        # 1. Resources
-        for i in range(params.res_type.shape[0]):
-            res_name = f"res_{i}"
-            stat_headers += [f"{res_name}_r", f"{res_name}_c", f"{res_name}_active"]
-        
-        # 2. Predators
-        for i in range(len(params.predator_indices)):
-            pred_name = f"pred_{i}"
-            stat_headers += [f"{pred_name}_r", f"{pred_name}_c"]
-
-        # 3. Neutrals
-        for i in range(len(params.neutral_indices)):
-            neu_name = f"neutral_{i}"
-            stat_headers += [f"{neu_name}_r", f"{neu_name}_c"]
-        
-        # 4. Obstacles
-        for i in range(params.obs_blocking.shape[0]):
-            obs_name = f"obs_entity_{i}"
-            stat_headers += [f"{obs_name}_r", f"{obs_name}_c"]
-            
-        # End of row
-        stat_headers += ["termination_reason", "max_satiation", "max_injury"]
+        stat_headers = build_stat_headers(params, breakdown, record_true_obs)
     
     if not quiet:
         print(f"  [DEBUG] Starting Evaluation: {num_episodes} episodes, num_envs={num_envs}, effective={effective_num_envs}, Render={render_video}", flush=True)

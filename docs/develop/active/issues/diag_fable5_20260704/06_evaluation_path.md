@@ -3,7 +3,7 @@ title: "Evaluation-Path Correctness Diagnosis (independent bug hunt)"
 topic: issues
 status: active
 created: 2026-07-04
-last_updated: 2026-07-04
+last_updated: 2026-07-06
 ---
 
 # Evaluation-Path Correctness Diagnosis
@@ -289,3 +289,24 @@ configuration flip away from live; Findings 5-7 degrade the qualitative tooling 
 team explicitly leans on when aggregates look suspicious.
 
 Reviewed by: code-reviewer (Fable 5 independent diagnosis pass, 2026-07-04)
+
+---
+
+## Fix plan pointer + refinement (appended 2026-07-06 by senior-developer)
+
+**Finding 1 (H8) has an approved fix plan**:
+[[fix_plan_h8h9_eval_output_correctness]] (WP-E, covers H8 + 07's H9).
+
+**Refinement to Finding 1, ground-truthed against real run CSVs during planning**: the
+claim "the CSV stays structurally valid (no error, column counts match)" holds only for
+envs **without obstacle entities**. Obstacle headers are named `obs_entity_{i}_r/c` and
+match the `startswith("obs_")` predicate in `_write_episode_stats`
+(`evaluation_core.py:74`), inflating `num_obs_headers`; combined with the missing
+intero-noc header, obstacle-bearing envs (including the **default** env) write the FULL
+observation vector under a header one name short — each data row is one field **longer**
+than the header (verified: header 171 / row 172 on
+`results/JAX_RecurrentPPO/20260703-154633_rppo_basic05v02_relentstam_n108/stats/4200006/`),
+so `pandas.read_csv` misassigns **every** column via an implicit index, not just the
+sensor block. Obstacle-free envs corrupt as originally described (same-width shift, last
+element dropped; verified header 83 / row 83 on the 20260627 film_g4 run). Both modes and
+their old-file remap recipes are documented in the fix plan's consumer analysis.

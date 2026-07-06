@@ -3,7 +3,7 @@ title: "Diagnosis 07 — Behavior-Measures Subsystem (M1/M2/M5, episode metrics,
 topic: issues
 status: active
 created: 2026-07-04
-last_updated: 2026-07-04
+last_updated: 2026-07-06
 ---
 
 # Diagnosis 07 — Behavior-Measures Subsystem
@@ -92,6 +92,10 @@ per-step loop that also handles that step's dones (finalise + reset) before adva
 t+1 — i.e., restructure Site 2 to the Site 1 (RecurrentPPO) pattern. The episode-scalar
 accumulators at Site 2 already segment correctly via `curr_start` slicing; only the BM state
 machine is wrong.
+
+**Fix plan (WP-F, 2026-07-06):** [[fix_plan_h10_dreamer_batch_bm]] — extracts the Site-2
+driver into a testable `bm_drive_batch` in `accumulators.py` with the interleaved ordering,
+plus a red-then-green regression test (mid-batch death, lost opening steps, double-done).
 
 ---
 
@@ -311,3 +315,14 @@ ones that can distort live study conclusions today and should be fixed first; Fi
 paths and should ride along with whatever episode-end rule the user decides.
 
 Reviewed by: code-reviewer (independent diagnosis, Fable 5 session, 2026-07-04)
+
+---
+
+## Fix plan pointer (appended 2026-07-06 by senior-developer)
+
+**Finding 3 (H9) has an approved fix plan**:
+[[fix_plan_h8h9_eval_output_correctness]] (WP-E, covers H9 + 06's H8). The fix reorders
+`_compute_online_replay`'s `steps_since_eat` update ahead of M1 resolution, matching the
+online accumulator's `3e1e53e` ordering (same K-window meaning). **Finding 4 (the
+offline-vs-online denominator-timing divergence) is explicitly fenced out of that plan and
+stays open**, as do Findings 1, 2, and 5.
