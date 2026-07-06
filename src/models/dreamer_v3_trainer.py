@@ -208,6 +208,11 @@ class DreamerTrainer(nnx.Module):
                 # Split keys for (T, B) to ensure independent sampling per environment per step
                 scan_rngs = random.split(scan_rng, T * B).reshape((T, B, -1))
 
+                # Convention (H6 fix): batch rows store the ARRIVAL observation
+                # with the action that produced it, so `action[t]` is already the
+                # prev-action for `embed[t]` — feed UNSHIFTED. Do not add a
+                # sheeprl-style shift here; the shift is baked into storage at
+                # collect_sequence. See fix_plan_h6h7_dreamer_v3_world_model.md.
                 env_inputs = (action, is_first)
                 env_inputs_T = jax.tree.map(lambda x: jnp.swapaxes(x, 0, 1), env_inputs)
 
@@ -613,6 +618,12 @@ class DreamerTrainer(nnx.Module):
     def collect_sequence(self, env_state, params, num_steps, key, dreamer_state=None):
         """Collects a sequence of transitions using jax.lax.scan.
         Includes auto-reset on done.
+
+        Row convention (H6 fix, WP-D): row t stores the observation RESULTING
+        FROM row t's action (sensed post-step, pre-reset — so the terminal
+        death/timeout observation is retained); reward/terminal/term_reason at
+        row t describe that same transition; is_first marks rows whose
+        predecessor ended an episode.
         """
         B = env_state.agent_pos.shape[0]
         if dreamer_state is None:
@@ -647,6 +658,22 @@ class DreamerTrainer(nnx.Module):
                 next_state_raw, reward, done, info = jax.vmap(
                     jax_step, in_axes=(0, 0, None))(state, action_idx, params)
 
+            # 3b. Sense the ARRIVAL observation (post-step, PRE-reset).
+            # H6 fix (WP-D): the buffer row for this step stores the observation
+            # PRODUCED BY this step's action — including the terminal (death/
+            # timeout) observation that the auto-reset below would otherwise
+            # discard — NOT the observation the policy acted from. This makes
+            # the stored (obs, action) pair match the RSSM's step contract
+            # (action = the action leading INTO the observation; see
+            # dreamer_v3_nnx.py RSSM.step and sheeprl dreamer_v3.py:82-104),
+            # so the training scan consumes rows unshifted and train-time
+            # pairing equals inference-time pairing (get_action).
+            # See docs/develop/active/issues/diag_fable5_20260704/
+            # fix_plan_h6h7_dreamer_v3_world_model.md
+            with jax.named_scope("dreamer_sense_arrival"):
+                obs_arrival = jax.vmap(get_observation, in_axes=(0, None))(
+                    next_state_raw, params)
+
             # 4. Auto-Reset
             with jax.named_scope("dreamer_env_reset"):
                 current_key, reset_key = jax.random.split(current_key)
@@ -671,7 +698,7 @@ class DreamerTrainer(nnx.Module):
             
             # Record transition
             transition = {
-                'obs': obs,
+                'obs': obs_arrival,   # H6: arrival obs (was: pre-step `obs`)
                 'action': jax.nn.one_hot(action_idx, self.agent.ac.actor.net.layers[-1].out_features),
                 'reward': reward,
                 'terminal': done,
@@ -951,6 +978,28 @@ import numpy as np
 
 class ReplayBuffer:
     def __init__(self, capacity=10_000, sequence_length=16, obs_dim=33, action_dim=4, device="gpu"):
+        # H7 fix (WP-D): writes wrap at `% capacity` (add_batch) while sample()
+        # only reads at offsets that are multiples of sequence_length from 0.
+        # If capacity is not a multiple of sequence_length, the first wrap
+        # shifts the write grid relative to the sampling grid and sampled
+        # sequences splice two envs mid-window with no is_first marker.
+        # Floor capacity to a multiple of sequence_length (runtime rounding —
+        # config YAML intentionally untouched). Mirrors the positive-buffer
+        # precedent at train.py (pos_cap rounding). See
+        # docs/develop/active/issues/diag_fable5_20260704/
+        # fix_plan_h6h7_dreamer_v3_world_model.md
+        rounded_capacity = (capacity // sequence_length) * sequence_length
+        if rounded_capacity <= 0:
+            raise ValueError(
+                f"ReplayBuffer capacity ({capacity}) must be at least one "
+                f"sequence_length ({sequence_length})."
+            )
+        if rounded_capacity != capacity:
+            print(f"[ReplayBuffer] capacity {capacity} is not a multiple of "
+                  f"sequence_length {sequence_length}; rounded down to "
+                  f"{rounded_capacity} (H7 fix — keeps sample windows "
+                  f"env-aligned after buffer wrap).")
+        capacity = rounded_capacity
         self.capacity = capacity
         self.sequence_length = sequence_length
         self.device = device

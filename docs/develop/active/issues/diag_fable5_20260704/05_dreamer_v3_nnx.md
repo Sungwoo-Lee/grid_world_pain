@@ -3,7 +3,7 @@ title: "Independent correctness diagnosis — DreamerV3-NNX training stack (trai
 topic: issues
 status: active
 created: 2026-07-04
-last_updated: 2026-07-04
+last_updated: 2026-07-06
 ---
 
 # DreamerV3-NNX training stack — independent bug hunt (2026-07-04)
@@ -325,3 +325,15 @@ collection-time state reset, eval symlog) are worth fixing in the same pass; 6�
 hygiene.
 
 Reviewed by: code-reviewer (independent diagnosis pass, Fable 5, 2026-07-04)
+
+---
+
+## Fix plan pointer (2026-07-06)
+
+Findings 1 (H6) and 2 (H7) now have an approved fix plan (work package WP-D):
+[[fix_plan_h6h7_dreamer_v3_world_model]]. Note: the plan's analysis shows Finding 1's
+sketched fix direction ("shift actions right at the training scan and realign
+reward/terminal/term_reason") would erase all death events from world-model training in
+this codebase (auto-reset never stores the terminal-arrival observation); the chosen fix
+instead records the arrival observation in `collect_sequence`, which reproduces sheeprl's
+post-shift pairing with the death row retained. Findings 3–10 remain open.
