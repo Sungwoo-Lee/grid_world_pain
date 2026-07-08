@@ -3,7 +3,7 @@ title: "Known Bugs"
 topic: issues
 status: active
 created: 2026-07-04
-last_updated: 2026-07-06
+last_updated: 2026-07-08
 ---
 
 # Known Bugs
@@ -21,7 +21,9 @@ ask the `bug-curator` agent, which reconstructs the full story from git and memo
 
 **How to read it.** Rows are grouped by status. **Open / undecided** items (things that still
 need a decision) come first, because those are the ones that can bite a new plan. **Fixed**
-items follow — split into the *Fable 5 re-diagnosis cluster* (a second whole-pipeline sweep,
+items follow — split into the *sheeprl-parity cluster* (both Dreamer implementations compared
+line-by-line against the sheeprl reference, 2026-07-08, see [[00_master_comparison]]), the
+*Fable 5 re-diagnosis cluster* (a second whole-pipeline sweep,
 2026-07-04, see [[00_combined_diagnosis]]), the earlier *v3.0 pipeline-audit cluster*
 (2026-07-04, see [[v3_pipeline_correctness_diagnosis]]), and *older historical fixes*.
 A short **latent / needs-verification** section lists findings that were recorded but never
@@ -55,8 +57,9 @@ inheritance ignored, eval using the wrong stage, ghost predators).
 
 | Bug | What happened | Status | Severity | Area | Detail links |
 |-----|---------------|--------|----------|------|--------------|
-| **DreamerV3 never tells the model an episode started during collection** | The action-selection path hard-codes the "episode just started" flag to false, so during experience collection the recurrent world-model state and the previous action are **never reset at episode boundaries** — and the first observation after a reset never enters the replay buffer. Rated Med in the original diagnosis; the H6/H7 fix review re-flagged it as **the remaining gap** in making training and inference see the same data. | **OPEN** | Med | DreamerV3-NNX collection (`get_action`) | [[05_dreamer_v3_nnx]] · `docs/reviews/review_h6h7_dreamer_v3_world_model.md` |
-| **Dreamer-srl world-model loss can spike to astronomical values (no gradient clipping)** | During live smoke runs for the H5 fix verification, the world-model loss transiently jumped to ~1e29–1e31 before recovering. Consistent with the already-recorded deviation that dreamer_srl **omits the reference implementation's gradient clipping** (diagnosis Finding 3) — previously theoretical, now with empirical evidence it bites in practice, so its priority is raised. | **OPEN — priority raised** | Med | dreamer_srl world-model training | [[04_dreamer_srl]] Finding 3 · [[fix_plan_h5_dreamer_srl_buffer_reset]] Verification Report §5 · `tmp/20260706_h5_speed_verify.log` |
+| **DreamerV3-NNX decoder ends in a LayerNorm the recipe doesn't have** (U6) | The decoder's output stack ends in a LayerNorm where the reference recipe ends in a bare Linear — a nonstandard constraint on the reconstruction head. The parity fix **stopped at a guard**: the MLP class is shared with the encoder, so removing the trailing LayerNorm would silently change the encoder too. Needs a split-the-class-then-remove follow-up. | **OPEN — follow-up needed** | Low–Med | DreamerV3-NNX decoder | [[06_nnx_recipe_deviation_register]] U6 · [[review_nnx_parity_fixes]] |
+| **DreamerV3-NNX imagined continues used as soft probabilities, not the recipe's hard 0/1** (register R1) | During imagination the "will the episode continue?" head's sigmoid output is used directly as a probability, where the reference recipe takes the Bernoulli mode (a hard 0/1). Whether to match the recipe is an open decision, recorded as a deliberate deviation for now. | **OPEN — undecided** | Low–Med | DreamerV3-NNX imagination | [[06_nnx_recipe_deviation_register]] R1 |
+| **Dreamer-srl curriculum swap credits one step to freshly-wiped episode counters** (C1) | At a curriculum stage swap, the swap iteration increments the just-zeroed episode step/reward counters once before the new stage's first real step, slightly skewing the first post-swap episode's logged numbers. A fix is in flight and may close this row within the day. | **OPEN — fix in flight** | Low | dreamer_srl curriculum logging | [[review_srl_parity_fixes]] C1 |
 | **Plain-PPO MC returns also lack the window-edge bootstrap** | The plain-PPO trainer has the **identical** Monte-Carlo window-edge defect that H4 fixed for rPPO (returns cut to zero at each rollout-window boundary instead of bootstrapping); deliberately left unfixed as out of scope. | **OPEN** | Low (no live config uses plain PPO) | ppo trainer (`src/models/ppo_trainer.py:80`) | [[fix_plan_h4_mc_window_bootstrap]] |
 | **Three stale env tests reference retired configs** | Two cases in the truncation-not-death test (`tests/env/test_truncation_not_death.py`) and one in the inactive-animal-offgrid test (`tests/env/test_inactive_animal_offgrid.py`) still point at basic-ladder configs retired by the 2026-07-02 re-leveling (`b093023`). Red since then; formerly masked by the config soft-fail that the H3 fix removed. Need their config paths updated to the re-leveled ladder. | **OPEN** | Low (test hygiene) | env tests | [[fix_plan_h1h2h3_resume_config]] (Verification Report, known-red baseline) |
 | **Dreamer-srl offline world-model smoke test red** | The offline world-model smoke test fails deterministically with "Only 36 valid starting states (< 50)". Empirically verified pre-existing and independent of the H1–H4 fixes; root cause not yet triaged. | **OPEN — needs triage** | Low–Med | dreamer_srl tests (`tests/scripts/test_dreamer_srl_offline_wm_test.py`) | [[fix_plan_h1h2h3_resume_config]] (Verification Report) |
@@ -72,6 +75,32 @@ inheritance ignored, eval using the wrong stage, ghost predators).
 | **FiLM gain shared across senses (intended)** | Whether the FiLM modulator applying one shared gain across sensory channels was a mistake. | **INTENDED — matches the design, not a bug** | modulation / FiLM | `docs/reviews/diag_v3_pipeline_math.md` |
 
 ---
+
+## Fixed — sheeprl-parity cluster (2026-07-08)
+
+Source of record: [[00_master_comparison]] — a line-by-line comparison of both in-house Dreamer
+implementations against the sheeprl reference (2026-07-06; P-rows = dreamer_srl, U-rows =
+DreamerV3-NNX). Fix plans with Implementation + Verification Reports: [[fix_plan_srl_parity]]
+and [[fix_plan_nnx_parity]]; post-fix reviews: [[review_srl_parity_fixes]] and
+[[review_nnx_parity_fixes]]. Fix commits: dreamer_srl `8c0fcf9`; DreamerV3-NNX `32c67ca`
+(+ `7304e75` follow-up). **Comparability caveat for the whole cluster:** both Dreamer stacks
+trained materially differently before this batch — pre-fix Dreamer runs are not comparable
+to post-fix runs.
+
+| Bug | What happened | Status | Severity | Area | Fix commit + detail |
+|-----|---------------|--------|----------|------|---------------------|
+| **Dreamer-srl trained with no gradient clipping — losses spiked to astronomical values** (P1) | None of the three optimizers (world model, actor, critic) clipped gradients, unlike the reference (norms 1000/100/100); the world-model loss empirically spiked to ~1e29–1e31 in live smoke runs. Closes the formerly open "loss spikes / missing gradient clipping" row — the fix covers **all three optimizers**, broader than that row's world-model-only framing. | FIXED | High (training stability) | dreamer_srl optimizers | `8c0fcf9` · [[fix_plan_srl_parity]] · [[00_master_comparison]] P1 |
+| **Dreamer-srl shared replay write-head punched garbage rows into other envs' streams** (P2) | With multiple parallel environments, the replay buffer's single shared write position let an episode-ending env's boundary handling write garbage rows into the **non-done** envs' columns at every reset — corrupting multi-env world-model training data. Dormant at 1 env. | FIXED | **High** (corrupt multi-env training data) | dreamer_srl replay buffer | `8c0fcf9` · [[fix_plan_srl_parity]] · [[00_master_comparison]] P2 |
+| **Dreamer-srl reconstruction loss half-weighted and decoder trained in the wrong space** (P3) | An extra 0.5 factor under-weighted the reconstruction loss by exactly 2× vs the reference, and the decoder was trained in real observation space (an extra symlog on its output) instead of symlog space — distorting the reconstruction-vs-KL/reward/continue balance and the gradient geometry. | FIXED | **High** | dreamer_srl world-model loss | `8c0fcf9` · [[fix_plan_srl_parity]] · [[00_master_comparison]] P3 |
+| **Dreamer-srl episode logging inherited a step and the previous episode's death reward** (P5) | Every logged episode's survival-steps count was one step too high and its reward total included the *predecessor's* terminal reward — biasing the project's **headline survival-steps metric** in every dreamer_srl run's logs (training itself unaffected). | FIXED | Med (headline-metric logging) | dreamer_srl episode logging | `8c0fcf9` · [[fix_plan_srl_parity]] · [[00_master_comparison]] P5 |
+| **Discount-factor typo in every gamma-carrying dreamer_srl config** (P4) | All 18 live configs that set the discount factor carried a typo'd value giving a ~5% shorter credit horizon than intended (~316 vs ~333 steps), under a comment falsely citing the sheeprl value. | FIXED | Med | dreamer_srl configs | `8c0fcf9` · [[fix_note_gamma_config]] · [[00_master_comparison]] P4 |
+| **Dreamer-srl prefill counted in iterations, not env steps; train gate waited for a full buffer** (P6, P8) | The learning-starts warm-up was counted in collection iterations rather than per-env steps — **16× the intended prefill at 16 envs** — and the train gate additionally required the ring buffer to have wrapped completely once, skipping up to a sequence-length of gradient steps after each wrap. | FIXED | Med/Low | dreamer_srl training loop | `8c0fcf9` · [[fix_plan_srl_parity]] · [[00_master_comparison]] P6, P8 |
+| **DreamerV3 never told the model an episode started during collection** | The action-selection path hard-coded the "episode just started" flag to false, so the recurrent state, previous action, and modulator hidden state were never reset at episode boundaries during collection. Closes the formerly open row: `get_action` now consumes the staged episode-start flag, zeroes the previous action, and resets the modulator state. | FIXED | Med (train-vs-inference mismatch) | DreamerV3-NNX collection (`get_action`) | `32c67ca` · [[fix_plan_nnx_parity]] · [[05_dreamer_v3_nnx]] |
+| **DreamerV3-NNX actor gradient contaminated by other losses** (U1) | Three stop-gradients present in the reference recipe were missing, so critic-loss and dynamics-backprop gradients leaked into the actor update — the policy gradient was not the pure REINFORCE estimator it claimed to be (empirically confirmed by probe). | FIXED | **High** | DreamerV3-NNX actor loss | `32c67ca` · [[fix_plan_nnx_parity]] · [[00_master_comparison]] U1 |
+| **DreamerV3-NNX reconstruction loss averaged where the recipe sums** (U3) | The observation loss took a mean over feature dimensions where the recipe sums them, under-weighting reconstruction by roughly the observation width (~40–60×). | FIXED | Med | DreamerV3-NNX world-model loss | `32c67ca` · [[fix_plan_nnx_parity]] · [[00_master_comparison]] U3 |
+| **DreamerV3-NNX value learning was DreamerV2-style, not V3** (U2) | The value targets bootstrapped from the **target** critic (the recipe uses the online critic) and the recipe's slow-critic regularizer was absent. | FIXED | Med | DreamerV3-NNX critic | `32c67ca` · [[fix_plan_nnx_parity]] · [[00_master_comparison]] U2 |
+| **DreamerV3-NNX trained ~1/128 as often as configured, with no prefill** (U4) | The replay-ratio knob was interpreted per sampled sequence instead of per env step — about 1/128 of the recipe's training intensity at an equal config value — and training started with no random prefill. The follow-up commit corrected the prefill-backlog accounting so prefill steps don't count as owed gradient steps. | FIXED | Med | DreamerV3-NNX training loop | `32c67ca` + `7304e75` · [[fix_plan_nnx_parity]] · [[00_master_comparison]] U4 |
+| **DreamerV3-NNX imagination ignored whether its start row had already ended** (U5) | Imagination discount weights started at 1 regardless of the source row's continue flag, so dream rollouts launched from terminal rows were fully weighted in the actor/critic losses. | FIXED | Low–Med | DreamerV3-NNX imagination | `32c67ca` · [[fix_plan_nnx_parity]] · [[00_master_comparison]] U5 |
 
 ## Fixed — Fable 5 re-diagnosis cluster (2026-07-05)
 
