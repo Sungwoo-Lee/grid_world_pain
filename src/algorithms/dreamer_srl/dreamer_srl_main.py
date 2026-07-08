@@ -40,10 +40,21 @@ from src.utils.config import Config, dump_config_yaml as _dump_config_yaml
 from src.environment.config_loader import load_env_params, load_env_config
 from src.environment.wrapper import ParallelEnv
 from src.algorithms.dreamer_srl.agent import build_agent
-from src.algorithms.dreamer_srl.buffers import SequentialReplayBuffer
+from src.algorithms.dreamer_srl.buffers import (
+    EnvIndependentSequentialReplayBuffer,
+    SequentialReplayBuffer,
+)
 from src.algorithms.dreamer_srl.loss import TwoHotEncoding
 from src.algorithms.dreamer_srl.train import make_train_step, polyak_update
-from src.algorithms.dreamer_srl.utils import Ratio, moments_init
+from src.algorithms.dreamer_srl.utils import (
+    ACTOR_CLIP_NORM,
+    CRITIC_CLIP_NORM,
+    WM_CLIP_NORM,
+    Ratio,
+    derive_prefill,
+    make_optim_tx,
+    moments_init,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +371,25 @@ def _reset_terminal_step_data(step_data: dict, dones_idxes: list) -> None:
     step_data["is_first"][:, dones_idxes]   = 1.0
 
 
+def _advance_episode_counters(episode_lengths, episode_rewards, rewards, dones) -> None:
+    """WP-SRL P5: advance per-env episode counters, excluding envs done this iter.
+
+    In-place, pure numpy. The done-block logging already counts the in-flight
+    terminal transition (`ep_len = counters + 1`, `ep_rew = counters +
+    rewards[i]`) and zeroes the done envs' counters; the previous unconditional
+    `episode_lengths += 1; episode_rewards += rewards` then leaked +1 survival
+    step (the project's headline metric) and the terminal reward into the
+    SUCCESSOR episode's counters ([[00_master_comparison]] §3 P5, area report
+    04 D-06). sheeprl needs no counters — it reads the gym wrapper's
+    `final_info["episode"]` (dreamer_v3.py:610-618).
+
+    Regression test: tests/algorithms/dreamer_srl/test_episode_metrics.py
+    """
+    alive = ~np.asarray(dones, dtype=bool)
+    episode_lengths[alive] += 1
+    episode_rewards[alive] += rewards[alive].astype(np.float32)
+
+
 def main() -> None:
     """Training-loop driver — port of sheeprl dreamer_v3.py:L361-L765 main()."""
 
@@ -481,11 +511,16 @@ def main() -> None:
     agent_cfg = Config.load_yaml(args.agent_config)
 
     # Mandatory agent config reads (no fallback defaults per CLAUDE.md)
-    learning_starts = agent_cfg.get_mandatory("algo.learning_starts", int)
+    learning_starts_cfg = agent_cfg.get_mandatory("algo.learning_starts", int)
     replay_ratio = agent_cfg.get_mandatory("algo.replay_ratio", float)
     seq_len = agent_cfg.get_mandatory("algo.per_rank_sequence_length", int)
     batch_size = agent_cfg.get_mandatory("algo.per_rank_batch_size", int)
     num_envs = args.num_envs  # CLI sets this; needed for total_timesteps calculation below
+    # WP-SRL P6: the config value is an ENV-STEP count (sheeprl semantics) —
+    # the prefill covers learning_starts_cfg env steps at EVERY env count.
+    # Pre-fix the raw value gated ITERATIONS, making prefill num_envs x too
+    # long. Ported from sheeprl@33b6366:dreamer_v3.py:508-511 (world_size==1).
+    learning_starts, prefill_steps = derive_prefill(learning_starts_cfg, num_envs)
 
     # Episode-budget resolution — mirrors train.py:439-451 dual-mode pattern.
     # Priority: --episodes > --total-(time)steps > training.episodes (mandatory).
@@ -577,7 +612,8 @@ def main() -> None:
 
     print(f"[dreamer-srl] obs_dim={obs_dim}, action_dim={action_dim}, num_envs={num_envs}")
     print(f"[dreamer-srl] episodes={episodes} (0=env-step mode), "
-          f"total_timesteps={total_timesteps}, learning_starts={learning_starts}")
+          f"total_timesteps={total_timesteps}, learning_starts={learning_starts} iters "
+          f"(= {learning_starts_cfg} env steps / {num_envs} envs; WP-SRL P6)")
     print(f"[dreamer-srl] seq_len={seq_len}, batch_size={batch_size}, horizon={horizon}")
 
     # -----------------------------------------------------------------------
@@ -654,22 +690,49 @@ def main() -> None:
 
     # -----------------------------------------------------------------------
     # 6. Construct optimizers (Flax 0.12.4: wrt=nnx.Param required)
+    # WP-SRL P1: gradient clipping restored — sheeprl clips on every step
+    # (dreamer_v3.py:193-197 WM norm 1000, :300-302 actor 100, :320-324
+    # critic 100). The unclipped WM loss was observed spiking to ~1e29 in
+    # live smokes; a single spike poisons Adam's second moment for thousands
+    # of steps (tests/algorithms/dreamer_srl/test_grad_clip.py).
     # -----------------------------------------------------------------------
-    wm_opt = nnx.Optimizer(world_model, optax.adam(wm_lr, eps=wm_eps), wrt=nnx.Param)
-    actor_opt = nnx.Optimizer(actor, optax.adam(actor_lr, eps=actor_eps), wrt=nnx.Param)
-    critic_opt = nnx.Optimizer(critic, optax.adam(critic_lr, eps=critic_eps), wrt=nnx.Param)
+    wm_opt = nnx.Optimizer(world_model, make_optim_tx(wm_lr, wm_eps, WM_CLIP_NORM), wrt=nnx.Param)
+    actor_opt = nnx.Optimizer(actor, make_optim_tx(actor_lr, actor_eps, ACTOR_CLIP_NORM), wrt=nnx.Param)
+    critic_opt = nnx.Optimizer(critic, make_optim_tx(critic_lr, critic_eps, CRITIC_CLIP_NORM), wrt=nnx.Param)
 
     # -----------------------------------------------------------------------
     # 7. Construct moments + ratio + buffer + player
     # -----------------------------------------------------------------------
     moments = moments_init()
     ratio = Ratio(ratio=replay_ratio, pretrain_steps=0)
-    buffer = SequentialReplayBuffer(
-        buffer_size=buffer_size,
-        n_envs=num_envs,
-        obs_keys=("obs",),
-        device=args.buffer_device,  # Step 2: "cpu" (default) or "gpu" (opt-in via --buffer-device)
-    )
+    # WP-SRL P2: per-env independent buffers + sheeprl capacity semantics.
+    # Sizing ported from sheeprl@33b6366:dreamer_v3.py:478
+    # (buffer_size = cfg.buffer.size // (num_envs * world_size), world_size == 1).
+    # The old construction passed the full cfg size per env column (num_envs x
+    # the reference capacity) AND shared one write head across envs (hole rows
+    # at partial dones — area report 04 D-03).
+    per_env_buffer_size = buffer_size // num_envs
+    if args.buffer_device == "gpu":
+        if num_envs != 1:
+            raise ValueError(
+                "--buffer-device gpu supports num_envs == 1 only (WP-SRL P2: "
+                "bincount sampling across per-env buffers would recompile per "
+                "allocation pattern on the traced GPU path)."
+            )
+        # Single-env: the plain buffer is semantically identical to a
+        # wrapper-of-one; keep it so the traced GPU add/sample path survives.
+        buffer = SequentialReplayBuffer(
+            buffer_size=per_env_buffer_size,
+            n_envs=1,
+            obs_keys=("obs",),
+            device="gpu",  # Step 2 opt-in via --buffer-device
+        )
+    else:
+        buffer = EnvIndependentSequentialReplayBuffer(
+            buffer_size=per_env_buffer_size,
+            n_envs=num_envs,
+            obs_keys=("obs",),
+        )
     player = Player(world_model, actor, num_envs)
 
     # -----------------------------------------------------------------------
@@ -723,7 +786,8 @@ def main() -> None:
                 "horizon": horizon,
                 "gamma": gamma,
                 "lmbda": lmbda,
-                "learning_starts": learning_starts,
+                "learning_starts": learning_starts,               # derived ITERATION count (WP-SRL P6)
+                "learning_starts_env_steps": learning_starts_cfg,  # config env-step value
                 "seq_len": seq_len,
                 "batch_size": batch_size,
                 # Spread env YAML first, then agent YAML — agent wins on collision.
@@ -1046,23 +1110,21 @@ def main() -> None:
         return final_carry, losses_stack
 
     # -----------------------------------------------------------------------
-    # 11d. Fix 2 (constant scan length) — remainder-carry for Ratio scheduler.
+    # 11d. Fix 2 (constant scan length) — quantized grad-step count.
     #
     # Root cause: Ratio.__call__ returns 15, 16, 17, … per iteration (float
     # accumulation).  Each distinct scan length → a distinct XLA compiled instance,
     # so Fix 1's executable would recompile on every new length encountered.
     #
-    # Fix: compute G = int(replay_ratio * num_envs) as the steady-state step count.
-    # Track a fractional remainder across iterations so the long-run total of
-    # gradient steps equals what Ratio would have produced (preserves the contract).
-    # The scan always gets exactly G steps → one compiled instance.
-    #
-    # This is Fix 2 option (a) from the plan: fixed bucket + remainder carry.
+    # WP-SRL P7 / D-015: the scan path runs a CONSTANT _G gradient steps per
+    # training iteration (one XLA executable — Fix 2, recompile-storm). The
+    # former fractional remainder carry was dead code and has been deleted;
+    # fractional replay ratios are QUANTIZED on this path (declared deviation
+    # D-015 in DEVIATION_LOG.md). Exact Ratio cadence: use --legacy-grad-loop.
     # The Ratio scheduler is still called (for checkpoint/log continuity) but its
     # output is replaced by the quantized value in the scan path.
     # -----------------------------------------------------------------------
     _G: int = max(1, int(replay_ratio * num_envs))  # steady-state grad steps per iter
-    _grad_step_remainder: float = 0.0               # fractional carry across iters
 
     # -----------------------------------------------------------------------
     # 12. Training loop (sheeprl main() L550-L765)
@@ -1118,15 +1180,14 @@ def main() -> None:
         # Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L558-L571.
         # Gate is inclusive (`<=`): iteration `learning_starts` is the LAST prefill
         # iteration; iteration `learning_starts + 1` is the first policy iteration.
-        # The train-gate at L490 uses `>=` and does NOT subtract `prefill_steps`
-        # from `policy_step` (unlike sheeprl L661 — see D-014). At iter_num ==
-        # learning_starts the train-gate fires for the first time and the Ratio
-        # scheduler returns `int(learning_starts * replay_ratio)` grad steps in a
-        # one-shot debt-repayment burst, then steady-state `replay_ratio` per iter
-        # from learning_starts+1 onwards. The "no gradient before learning_starts"
-        # hard invariant is preserved by the OUTER `if iter_num >= learning_starts`
-        # guard at L490 — NOT by `ratio(0) == 0`. Long-run replay ratio matches
-        # sheeprl by construction (Ratio class's self-correcting design).
+        # WP-SRL P6: `learning_starts` is the DERIVED iteration count
+        # (cfg env-step value // num_envs) and the train gate below feeds the
+        # Ratio scheduler `ratio_steps = policy_step - prefill_steps * num_envs`
+        # — both line-for-line matches of sheeprl dreamer_v3.py:508-511, 660-661
+        # at world_size == 1 (DEVIATION_LOG D-014 is historical as of this fix;
+        # the one-shot debt-repayment burst it described no longer occurs).
+        # The "no gradient before learning_starts" hard invariant is preserved
+        # by the OUTER `if iter_num >= learning_starts` guard at the train gate.
         key, k_player = jax.random.split(key)
         if iter_num <= learning_starts:
             # §S3 uniform-random prefill — seeds the buffer with diverse data.
@@ -1366,7 +1427,7 @@ def main() -> None:
 
                     # 3. Clear replay buffer — prevents cross-stage dynamics
                     #    contamination. Matches train.py:1224-1246. Cheap counter reset.
-                    _pre_size = buffer._pos if not buffer._full else buffer._buffer_size
+                    _pre_size = buffer.filled_size  # WP-SRL P2: class-agnostic (wrapper sums sub-buffers)
                     buffer.reset()
 
                     # 4. Wipe in-flight episode accumulators (all envs — partial
@@ -1522,40 +1583,41 @@ def main() -> None:
         obs = next_obs
         is_first = is_first_next
 
-        # Update episode tracking
-        episode_lengths += 1
-        episode_rewards += rewards.astype(np.float32)
+        # Update episode tracking — WP-SRL P5: skip envs that finished THIS
+        # iteration. Their terminal transition was already counted into the
+        # logged episode (ep_len = counters+1, ep_rew = counters+rewards[i] at
+        # the done block above); the unconditional increment previously leaked
+        # +1 step and the terminal reward into the SUCCESSOR episode's counters.
+        # sheeprl needs no counters (gym wrapper final_info, dreamer_v3.py:610-618).
+        _advance_episode_counters(episode_lengths, episode_rewards, rewards, dones)
 
         # -------------------------------------------------------------------
         # TRAIN GATE (sheeprl L660-L698)
         # -------------------------------------------------------------------
         if iter_num >= learning_starts:
             # Compute how many gradient steps are owed.
-            # D-014 fix: subtract prefill env-steps so the Ratio scheduler sees only
-            # policy-phase steps, not the accumulated prefill debt.  At learning_starts=0
-            # (D-012, food-only config) this is a no-op (prefill_steps * num_envs == 0).
-            # Sheeprl: ratio_steps = policy_step - prefill_steps * policy_steps_per_iter
-            # Ported from sheeprl@33b6366:dreamer_v3.py:L661
-            # Authorized by: docs/reviews/dreamer_srl_v2_cp7_driver_review.md §P3
-            ratio_steps = policy_step - learning_starts * num_envs
+            # WP-SRL P6: subtract prefill env-steps so the Ratio scheduler sees
+            # only policy-phase steps. `prefill_steps` carries sheeprl's
+            # intentional off-by-one (learning_starts - int(learning_starts > 0),
+            # dreamer_v3.py:508-511) — the earlier `learning_starts * num_envs`
+            # variant here (the stale "D-014 fix", S-01 in area report 04) is
+            # replaced by the line-for-line sheeprl formula. At
+            # learning_starts_cfg=0 (D-012 smoke configs) this is a no-op.
+            # Ported from sheeprl@33b6366:dreamer_v3.py:L660-L661 (world_size==1)
+            ratio_steps = policy_step - prefill_steps * num_envs
             n_grad_steps = ratio(ratio_steps)
 
-            # Fix 2: quantize scan-path step count to constant _G per iteration.
-            # The Ratio scheduler produces 15/16/17… (float drift); each distinct
-            # value is a new XLA shape → a new compile.  Instead: track a fractional
-            # remainder (_grad_step_remainder) and run exactly _G scan steps each
-            # iteration.  Long-run total gradient steps is unchanged (contract preserved).
-            # Legacy path still uses raw n_grad_steps for bit-identical behaviour.
+            # D-015: constant _G on the scan path (quantized ratio, declared);
+            # legacy path keeps the exact Ratio return.
             if not args.legacy_grad_loop and n_grad_steps > 0:
-                _grad_step_remainder += n_grad_steps - _G
-                # If remainder has grown to >= 1, we owe an extra step.
-                # If remainder has fallen to <= -1, we skip a step.
-                # In practice at steady state n_grad_steps ≈ _G so remainder stays ~0.
                 n_grad_steps_scan = _G
             else:
                 n_grad_steps_scan = n_grad_steps  # legacy path: exact Ratio value
 
-            if n_grad_steps > 0 and buffer._pos >= seq_len:
+            # WP-SRL P8: a wrapped-full buffer is sampleable; the old expression
+            # (`buffer._pos >= seq_len`) skipped up to seq_len-1 owed grad steps
+            # after every ring wrap because `_pos` cycles low (area report 04 D-07).
+            if n_grad_steps > 0 and buffer.ready_to_sample(seq_len):
                 t_train_start = time.time()
 
                 # Sample once for all gradient steps (sheeprl L664-L671)

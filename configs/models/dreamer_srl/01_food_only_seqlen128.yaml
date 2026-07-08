@@ -51,7 +51,7 @@ algo:
   total_steps: 5000            # smoke budget (XS default is 5000000)
 
   # Core dreamer algorithm
-  gamma: 0.996840347           # sheeprl dreamer_v3.yaml:L22
+  gamma: 0.996996996996997     # = 1 - 1/333; sheeprl dreamer_v3.yaml:L11
   lmbda: 0.95                  # sheeprl dreamer_v3.yaml:L23
   horizon: 15                  # sheeprl dreamer_v3.yaml:L24
   unimix: 0.01                 # sheeprl dreamer_v3.yaml:L25

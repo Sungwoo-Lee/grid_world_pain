@@ -46,6 +46,46 @@ import jax.numpy as jnp
 from src.algorithms.dreamer_srl.utils import symexp, symlog
 
 
+class SymlogDistribution:
+    """MSE-in-symlog-space observation distribution.
+
+    Ported from sheeprl@33b6366:sheeprl/utils/distribution.py:L152-L193
+    (SymlogDistribution — only the dist="mse", agg="sum" branch the DreamerV3
+    recipe uses). WP-SRL P3: replaces the divergent inline obs-loss assembly
+    in train.py, which carried an extra 0.5 factor (recon under-weighted
+    exactly 2x), trained the decoder in real space (extra symlog at loss
+    time), and dropped the tol clamp ([[02_world_model_losses]] rows 6-8, 22).
+
+    The raw decoder output IS the symlog-space prediction (`_mode`); `log_prob`
+    compares it to `symlog(value)`; real-space reconstructions only exist at
+    `mode`/`mean` consumption via `symexp` (distribution.py:170-175).
+    Includes the reference's small-error tolerance: squared distances below
+    `tol=1e-8` are zeroed (distribution.py:159, 181) — closes audit row 8.
+
+    Regression tests:
+        tests/algorithms/dreamer_srl/test_loss.py::test_symlog_distribution_matches_reference_formula
+        tests/algorithms/dreamer_srl/test_loss.py::test_obs_loss_exactly_2x_old_inline
+    """
+
+    def __init__(self, mode: jax.Array, dims: int, tol: float = 1e-8):
+        self._mode = mode
+        self._dims = tuple(-x for x in range(1, dims + 1))
+        self._tol = tol
+
+    @property
+    def mode(self) -> jax.Array:
+        return symexp(self._mode)
+
+    @property
+    def mean(self) -> jax.Array:
+        return symexp(self._mode)
+
+    def log_prob(self, value: jax.Array) -> jax.Array:
+        distance = (self._mode - symlog(value)) ** 2
+        distance = jnp.where(distance < self._tol, 0.0, distance)
+        return -distance.sum(self._dims)
+
+
 class TwoHotEncoding:
     """Two-hot encoding for reward / critic head distributions.
 

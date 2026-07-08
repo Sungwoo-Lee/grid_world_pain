@@ -12,12 +12,74 @@ in src.models. The only allowed shared import is src.utils.config.Config.
 from __future__ import annotations
 
 import warnings
-from typing import Any, Dict, Mapping, Optional, Sequence
+from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 import flax.struct
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
+
+
+# ---------------------------------------------------------------------------
+# WP-SRL P1: gradient-clip recipe constants + optimizer factory
+# ---------------------------------------------------------------------------
+# Pinned to sheeprl@33b6366:sheeprl/configs/algo/dreamer_v3.yaml
+#   :52  algo.world_model.clip_gradients: 1000.0
+#   :127 algo.actor.clip_gradients:       100.0
+#   :154 algo.critic.clip_gradients:      100.0
+# Applied in sheeprl at dreamer_v3.py:193-197 (WM), :300-302 (actor), :320-324
+# (critic) via fabric.clip_gradients(..., error_if_nonfinite=False).
+#
+# These are hardcoded reference-recipe constants, NOT config reads with
+# defaults (no-fallback-defaults rule does not apply) — exactly as fixed as
+# the two-hot bin count. If a future experiment needs them tunable, that is a
+# separate plan (config keys via get_mandatory + YAML additions).
+#
+# Substrate note: torch's clip_grad_norm_ uses
+# clip_coef = max_norm / (total_norm + 1e-6); optax.clip_by_global_norm omits
+# the 1e-6. Relative effect < 1e-6 at the clip boundary — substrate-class
+# (same family as D-003/D-007), no DEVIATION_LOG row needed.
+#
+# Regression test: tests/algorithms/dreamer_srl/test_grad_clip.py
+WM_CLIP_NORM: float = 1000.0
+ACTOR_CLIP_NORM: float = 100.0
+CRITIC_CLIP_NORM: float = 100.0
+
+
+def make_optim_tx(lr: float, eps: float, clip_norm: float) -> optax.GradientTransformation:
+    """clip-by-global-norm → Adam, matching sheeprl's clip-then-step order."""
+    return optax.chain(
+        optax.clip_by_global_norm(clip_norm),
+        optax.adam(lr, eps=eps),
+    )
+
+
+# ---------------------------------------------------------------------------
+# WP-SRL P6: learning_starts is an ENV-STEP count in the config
+# ---------------------------------------------------------------------------
+
+def derive_prefill(learning_starts_cfg: int, num_envs: int) -> Tuple[int, int]:
+    """Return (learning_starts_iters, prefill_steps) from the config env-step value.
+
+    Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L508-L511
+    (world_size == 1):
+        policy_steps_per_iter = num_envs
+        learning_starts = cfg.algo.learning_starts // policy_steps_per_iter
+        prefill_steps   = learning_starts - int(learning_starts > 0)
+
+    The config value is an ENV-STEP count (sheeprl semantics); the pre-fix
+    driver consumed it as an ITERATION count, making the prefill phase
+    num_envs x too long ([[00_master_comparison]] §3 P6; DEVIATION_LOG D-014
+    is historical as of this fix). The off-by-one in prefill_steps is
+    intentional (sheeprl L511). derive_prefill(0, n) == (0, 0) keeps the
+    D-012 zero-prefill smoke path unchanged.
+
+    Regression test: tests/algorithms/dreamer_srl/test_prefill.py::test_derive_prefill
+    """
+    learning_starts = learning_starts_cfg // num_envs
+    prefill_steps = learning_starts - int(learning_starts > 0)
+    return learning_starts, prefill_steps
 
 
 # ---------------------------------------------------------------------------

@@ -326,3 +326,182 @@ def test_bins_not_symexp_at_storage():
 
 # Need jax.nn for the test
 import jax  # noqa: E402 — after src imports to avoid shadowing
+
+
+# ---------------------------------------------------------------------------
+# WP-SRL P3 — SymlogDistribution + faithful obs-loss routing
+# (fix_plan_srl_parity.md; area report 02_world_model_losses rows 6-8, 22)
+#
+# Red evidence (pre-fix): these three tests fail at collection with
+# ImportError — SymlogDistribution does not exist ("red by absence").
+# The 2x ratio test additionally encodes the audited measured ratio
+# (area report 02 measured old/new = 0.500000).
+# ---------------------------------------------------------------------------
+
+def test_symlog_distribution_matches_reference_formula():
+    """SymlogDistribution.log_prob == -sum(where(dist^2 < tol, 0, dist^2)).
+
+    Reference: vendor/sheeprl/sheeprl/utils/distribution.py:L152-L193
+    (SymlogDistribution, dist="mse", agg="sum" branch): the raw decoder
+    output IS the symlog-space prediction; log_prob compares it to
+    symlog(value); squared distances below tol=1e-8 are zeroed
+    (distribution.py:159, 181 — audit row 8's missing clamp).
+
+    Fixture includes sub-tolerance elements (|pred - symlog(target)| = 1e-5,
+    squared 1e-10 < 1e-8) to exercise the clamp branch.
+    """
+    from src.algorithms.dreamer_srl.loss import SymlogDistribution
+    from src.algorithms.dreamer_srl.utils import symexp, symlog
+
+    rng = np.random.default_rng(0xD3EAF)
+    T, B, D = 4, 3, 6
+    pred = jnp.asarray(rng.standard_normal((T, B, D)), dtype=jnp.float32)
+    target = jnp.asarray(rng.standard_normal((T, B, D)) * 5.0, dtype=jnp.float32)
+    # Force sub-tol residuals at a few positions: target = symexp(pred + 1e-5)
+    # -> (pred - symlog(target))^2 ~ 1e-10 < tol=1e-8 -> zeroed by the clamp.
+    sub_tol_target = symexp(pred + 1e-5)
+    mask = np.zeros((T, B, D), dtype=bool)
+    mask[0, 0, :] = True    # FULL row sub-tol: clamped log_prob[0, 0] == -0.0 exactly
+    mask[2, 1, 2:5] = True
+    target = jnp.where(jnp.asarray(mask), sub_tol_target, target)
+
+    dist = SymlogDistribution(pred, dims=1)
+    got = dist.log_prob(target)  # [T, B]
+
+    distance = np.asarray((pred - symlog(target)) ** 2)
+    distance = np.where(distance < 1e-8, 0.0, distance)
+    want = -distance.sum(axis=-1)  # [T, B]
+
+    assert got.shape == (T, B)
+    max_diff = float(np.max(np.abs(np.asarray(got) - want)))
+    assert max_diff < 1e-6, (
+        f"SymlogDistribution.log_prob deviates from the reference formula by "
+        f"{max_diff:.3e} (tol-clamp or sum-dims drift)."
+    )
+    # The clamp must actually fire. In float32 a ~1e-10 residual is absorbed
+    # when summed with O(1) terms, so the discriminating cell is the FULL
+    # sub-tol row [0, 0]: with the clamp its log_prob is exactly -0.0; without
+    # the clamp it is ~ -D * 1e-10 != 0.
+    no_clamp_row00 = float(-np.asarray((pred - symlog(target)) ** 2)[0, 0].sum())
+    assert float(np.asarray(got)[0, 0]) == 0.0, (
+        f"log_prob[0, 0] = {float(np.asarray(got)[0, 0])!r}, expected exact "
+        "0.0 for a full sub-tol row — the tol=1e-8 clamp is not firing "
+        "(audit row 8 regression)."
+    )
+    assert no_clamp_row00 != 0.0, (
+        "Fixture drift: the unclamped full sub-tol row sums to exactly zero, "
+        "so the clamp check is vacuous. Re-derive the fixture."
+    )
+
+    # mode/mean apply symexp at consumption (distribution.py:170-175).
+    np.testing.assert_allclose(
+        np.asarray(dist.mode), np.asarray(symexp(pred)), rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        np.asarray(dist.mean), np.asarray(symexp(pred)), rtol=1e-6
+    )
+
+
+def test_obs_loss_exactly_2x_old_inline():
+    """The faithful obs NLL is exactly 2x the deleted inline formula.
+
+    The pre-fix inline assembly (train.py:709-711) computed
+        old = 0.5 * sum((symlog(recon) - symlog(target))^2)
+    i.e. a Normal(., 1) log-density with its -0.5 factor — under-weighting
+    reconstruction exactly 2x vs sheeprl's SymlogDistribution MSE form
+    (area report 02 measured the ratio at 0.500000). Fed identical
+    symlog-space residuals (recon = symexp(pred)), the faithful form must be
+        new = -SymlogDistribution(pred, dims=1).log_prob(target)
+            = sum((pred - symlog(target))^2)  == 2 * old.
+
+    Guards re-introduction of the 1/2.
+    """
+    from src.algorithms.dreamer_srl.loss import SymlogDistribution
+    from src.algorithms.dreamer_srl.utils import symlog
+
+    rng = np.random.default_rng(0xD3EAF + 1)
+    T, B, D = 5, 4, 8
+    pred = jnp.asarray(rng.standard_normal((T, B, D)), dtype=jnp.float32)
+    target = jnp.asarray(rng.standard_normal((T, B, D)) * 3.0, dtype=jnp.float32)
+    # No sub-tol residuals in this fixture (generic gaussian draws) — the tol
+    # clamp must not fire, so the ratio is exactly 2.
+
+    old = np.asarray(0.5 * jnp.sum((pred - symlog(target)) ** 2, axis=-1))  # [T, B]
+    new = -np.asarray(SymlogDistribution(pred, dims=1).log_prob(target))    # [T, B]
+
+    ratio = new / old
+    np.testing.assert_allclose(ratio, 2.0, rtol=1e-5, err_msg=(
+        "new/old obs-loss ratio != 2.0: the 0.5 inline factor (WP-SRL P3, "
+        "the 2x recon under-weighting) has been re-introduced or the "
+        "SymlogDistribution formula drifted."
+    ))
+
+
+def test_reconstruction_loss_with_symlog_po():
+    """reconstruction_loss end-to-end with po={'obs': SymlogDistribution(...)}.
+
+    Extends existing coverage to the newly-live call path (train.py routes
+    the WM loss through the faithful reconstruction_loss after WP-SRL P3):
+    total == mean of the manually assembled four-term sum, and the returned
+    obs term == mean of -po['obs'].log_prob(obs).
+    """
+    from src.algorithms.dreamer_srl.loss import (
+        IndependentBernoulli,
+        SymlogDistribution,
+        reconstruction_loss,
+    )
+
+    rng = np.random.default_rng(0xD3EAF + 2)
+    T, B, D = 4, 3, 6
+    S, C = 4, 8  # categoricals x classes
+    kl_dynamic, kl_representation = 0.5, 0.1
+    kl_free_nats, kl_regularizer = 1.0, 1.0
+    continue_scale_factor = 1.0
+
+    obs = jnp.asarray(rng.standard_normal((T, B, D)) * 2.0, dtype=jnp.float32)
+    obs_pred = jnp.asarray(rng.standard_normal((T, B, D)), dtype=jnp.float32)
+    reward_logits = jnp.asarray(rng.standard_normal((T, B, 255)), dtype=jnp.float32)
+    rewards = jnp.asarray(rng.standard_normal((T, B, 1)), dtype=jnp.float32)
+    cont_logits = jnp.asarray(rng.standard_normal((T, B, 1)), dtype=jnp.float32)
+    cont_targets = jnp.asarray(
+        rng.integers(0, 2, (T, B, 1)).astype(np.float32), dtype=jnp.float32
+    )
+    prior_logits = jnp.asarray(rng.standard_normal((T, B, S, C)), dtype=jnp.float32)
+    post_logits = jnp.asarray(rng.standard_normal((T, B, S, C)), dtype=jnp.float32)
+
+    po = {"obs": SymlogDistribution(obs_pred, dims=1)}
+    pr = TwoHotEncoding(reward_logits, dims=1)
+    pc = IndependentBernoulli(cont_logits)
+
+    total, kl_mean, kl_loss_mean, rew_mean, obs_mean, cont_mean = reconstruction_loss(
+        po, {"obs": obs}, pr, rewards,
+        prior_logits, post_logits,
+        kl_dynamic=kl_dynamic, kl_representation=kl_representation,
+        kl_free_nats=kl_free_nats, kl_regularizer=kl_regularizer,
+        pc=pc, continue_targets=cont_targets,
+        continue_scale_factor=continue_scale_factor,
+    )
+
+    # Manual four-term assembly (sheeprl loss.py:9-88 semantics).
+    obs_l = -np.asarray(po["obs"].log_prob(obs))                    # [T, B]
+    rew_l = -np.asarray(pr.log_prob(rewards))                       # [T, B]
+    cont_l = continue_scale_factor * (-np.asarray(pc.log_prob(cont_targets)))  # [T, B]
+    lp = np.asarray(jax.nn.log_softmax(post_logits, axis=-1))
+    lq = np.asarray(jax.nn.log_softmax(prior_logits, axis=-1))
+    kl = (np.exp(lp) * (lp - lq)).sum(axis=-1).sum(axis=-1)         # [T, B]
+    kl_l = (kl_dynamic * np.maximum(kl, kl_free_nats)
+            + kl_representation * np.maximum(kl, kl_free_nats))     # [T, B]
+    want_total = (kl_regularizer * kl_l + obs_l + rew_l + cont_l).mean()
+
+    assert abs(float(total) - float(want_total)) < 1e-4, (
+        f"reconstruction_loss total {float(total):.6f} != manual four-term "
+        f"sum {float(want_total):.6f}"
+    )
+    assert abs(float(obs_mean) - float(obs_l.mean())) < 1e-5, (
+        f"returned obs term {float(obs_mean):.6f} != mean(-po.log_prob) "
+        f"{float(obs_l.mean()):.6f}"
+    )
+    assert abs(float(kl_mean) - float(kl.mean())) < 1e-5
+    assert abs(float(kl_loss_mean) - float(kl_l.mean())) < 1e-5
+    assert abs(float(rew_mean) - float(rew_l.mean())) < 1e-5
+    assert abs(float(cont_mean) - float(cont_l.mean())) < 1e-5

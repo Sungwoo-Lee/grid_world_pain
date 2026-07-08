@@ -189,3 +189,76 @@ def test_no_gradient_step_before_learning_starts() -> None:
         f"Train gate never opened at or after learning_starts={learning_starts}. "
         f"Test is vacuous. Full trace: {grad_step_at_iter}."
     )
+
+
+# ---------------------------------------------------------------------------
+# WP-SRL P6 — learning_starts is an ENV-STEP count in the config
+# (fix_plan_srl_parity.md; area report 04 D-04 / S-01)
+#
+# Red evidence (pre-fix): fails at collection with ImportError —
+# derive_prefill does not exist ("red by absence"). Pre-fix the driver used
+# the raw config value as an ITERATION count, making the prefill phase
+# num_envs x longer than intended.
+# ---------------------------------------------------------------------------
+
+def test_derive_prefill() -> None:
+    """derive_prefill matches sheeprl dreamer_v3.py:508-511 at world_size=1.
+
+    sheeprl:
+        policy_steps_per_iter = num_envs
+        learning_starts = cfg.algo.learning_starts // policy_steps_per_iter
+        prefill_steps   = learning_starts - int(learning_starts > 0)
+
+    The prefill phase therefore covers the SAME env-step count
+    (learning_starts_iters * num_envs == cfg value) at every env count —
+    the pre-fix driver ran it num_envs x too long. The (0, n) case pins the
+    D-012 zero-prefill smoke path unchanged.
+    """
+    from src.algorithms.dreamer_srl.utils import derive_prefill
+
+    assert derive_prefill(1024, 1) == (1024, 1023)
+    assert derive_prefill(1024, 4) == (256, 255)
+    assert derive_prefill(1024, 16) == (64, 63)
+    assert derive_prefill(0, 4) == (0, 0)   # D-012 smoke configs: no prefill
+
+    # Prefill env-step coverage equals the config value at every env count.
+    for num_envs in (1, 4, 16):
+        learning_starts, _ = derive_prefill(1024, num_envs)
+        assert learning_starts * num_envs == 1024
+
+
+def test_no_gradient_step_before_learning_starts_multi_env() -> None:
+    """§S3 hard invariant at num_envs>1 with the WP-SRL P6 derivation.
+
+    Mirrors the post-fix driver: learning_starts/prefill_steps derived via
+    derive_prefill(cfg_value, num_envs); the train gate compares iter_num to
+    the DERIVED iteration count and feeds the Ratio scheduler
+    ratio_steps = policy_step - prefill_steps * num_envs (sheeprl
+    dreamer_v3.py:661). Invariant: zero gradient steps while
+    iter_num < learning_starts; positive steps once the gate opens.
+    """
+    from src.algorithms.dreamer_srl.utils import Ratio, derive_prefill
+
+    for num_envs in (1, 4):
+        cfg_learning_starts = 40
+        learning_starts, prefill_steps = derive_prefill(cfg_learning_starts, num_envs)
+
+        ratio = Ratio(ratio=1.0, pretrain_steps=0)
+        policy_step = 0
+        grad_step_at_iter: list[int] = []
+        for iter_num in range(1, learning_starts + 6):
+            policy_step += num_envs
+            if iter_num >= learning_starts:
+                ratio_steps = policy_step - prefill_steps * num_envs
+                grad_step_at_iter.append(int(ratio(ratio_steps)))
+            else:
+                grad_step_at_iter.append(0)
+
+        assert all(g == 0 for g in grad_step_at_iter[: learning_starts - 1]), (
+            f"num_envs={num_envs}: gradient step fired before the derived "
+            f"learning_starts={learning_starts}. Trace: {grad_step_at_iter}"
+        )
+        assert sum(grad_step_at_iter[learning_starts - 1:]) > 0, (
+            f"num_envs={num_envs}: gate never opened — vacuous test. "
+            f"Trace: {grad_step_at_iter}"
+        )

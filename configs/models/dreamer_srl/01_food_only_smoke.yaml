@@ -49,7 +49,7 @@ algo:
   per_rank_pretrain_steps: 0
   total_steps: 5000
 
-  gamma: 0.996840347
+  gamma: 0.996996996996997     # = 1 - 1/333; sheeprl dreamer_v3.yaml:L11
   lmbda: 0.95
   horizon: 7
   unimix: 0.01

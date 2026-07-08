@@ -146,6 +146,16 @@ class SequentialReplayBuffer:
         path that previously caused XLA recompiles when data was shaped [1,R,...] for
         variable R.  Takes precedence over env_idxes when both are supplied.
 
+        SUPERSEDED (WP-SRL P2, 2026-07-08): the training driver no longer calls
+        this done_mask branch on a SHARED multi-env buffer — the partial-column
+        write advanced the shared `_pos` past every non-done env's untouched
+        row, punching hole rows into their histories (area report 04 D-03).
+        The driver now routes done-boundary writes through
+        EnvIndependentSequentialReplayBuffer.add(done_mask=...), which forwards
+        full rows only to done envs' own sub-buffers. This branch is retained
+        (covered by existing tests; still valid at n_envs == 1, e.g. the GPU
+        buffer mode) but no multi-env driver path uses it.
+
         Args:
             data (Dict[str, np.ndarray]): transitions to add, each array shaped
                 [sequence_length, n_envs, ...] when env_idxes is None or done_mask
@@ -558,6 +568,30 @@ class SequentialReplayBuffer:
             return cpu_samples
 
     # ------------------------------------------------------------------
+    # ready_to_sample() / filled_size — WP-SRL P8/P2 driver conveniences
+    # (shared API with EnvIndependentSequentialReplayBuffer so the driver
+    # is class-agnostic; not in sheeprl, whose loop needs no such gate)
+    # ------------------------------------------------------------------
+
+    def ready_to_sample(self, sequence_length: int) -> bool:
+        """True when a sequence of `sequence_length` can be sampled.
+
+        WP-SRL P8: a wrapped-full ring buffer is sampleable even when `_pos`
+        has cycled below `sequence_length` — the old driver gate
+        (`buffer._pos >= seq_len`) skipped up to seq_len-1 owed gradient
+        steps after every ring wrap (area report 04 D-07).
+
+        Regression test:
+            tests/algorithms/dreamer_srl/test_env_independent_buffer.py::test_ready_to_sample_after_wrap
+        """
+        return bool(self._full or self._pos >= sequence_length)
+
+    @property
+    def filled_size(self) -> int:
+        """Number of stored transitions (capacity once the ring has wrapped)."""
+        return int(self._buffer_size if self._full else self._pos)
+
+    # ------------------------------------------------------------------
     # reset() — curriculum stage-boundary clear (not in sheeprl)
     # ------------------------------------------------------------------
 
@@ -646,3 +680,192 @@ class SequentialReplayBuffer:
             if clone:
                 samples[k] = samples[k].copy()
         return samples
+
+
+class EnvIndependentSequentialReplayBuffer:
+    """n_envs independent single-env SequentialReplayBuffers.
+
+    Structural port of sheeprl@33b6366:sheeprl/data/buffers.py:L529-L699
+    (EnvIndependentReplayBuffer with buffer_cls=SequentialReplayBuffer),
+    minus the memmap trio (D-004) and torch tensor methods. WP-SRL P2:
+    replaces the shared-write-head buffer whose done-mask reset writes
+    punched hole rows into non-done envs' columns (area report 04 D-03 —
+    probe: env-1 sampled sequence [21, 31, 0, 41]).
+
+    Pinned semantics (each a regression-test assertion in
+    tests/algorithms/dreamer_srl/test_env_independent_buffer.py):
+      1. Sizing: each sub-buffer holds cfg.buffer.size // num_envs
+         transitions (sheeprl dreamer_v3.py:478); division happens in the
+         DRIVER, mirroring sheeprl.
+      2. Regular add (all envs): env column e of `data` goes to sub-buffer
+         e; every sub-buffer's own `_pos` advances by 1 (buffers.py:645-654).
+      3. Reset write at done boundaries: routed ONLY to done envs'
+         sub-buffers (dreamer_v3.py:650); non-done envs' heads do NOT move —
+         no hole rows.
+      4. Sample: batch allocated across sub-buffers via
+         np.bincount(rng.integers(0, n_envs, (batch_size,))), per-sub-buffer
+         sample, concat along the batch axis (axis 2 of
+         [n_samples, seq_len, batch_size, ...]) (buffers.py:683-699).
+         Per-env valid-index exclusion comes for free from each sub-buffer's
+         own `_pos`.
+      5. RNG: unseeded np.random.default_rng() for the bincount (matches
+         sheeprl; parity row P-14's reproducibility caveat carries over).
+
+    CPU-only: the opt-in GPU buffer mode (--buffer-device gpu, Option M)
+    samples with traced jnp gathers; bincount allocation would produce
+    variable per-sub-buffer shapes -> recompile storm. The driver therefore
+    restricts GPU buffer mode to num_envs == 1, where the plain single-env
+    SequentialReplayBuffer is kept (semantically identical to a
+    wrapper-of-one). Multi-env GPU buffering is a declared non-goal of
+    WP-SRL (fix_plan_srl_parity.md P2 design note).
+    """
+
+    batch_axis: int = 2  # concat axis, mirrors SequentialReplayBuffer.batch_axis
+
+    def __init__(
+        self,
+        buffer_size: int,
+        n_envs: int = 1,
+        obs_keys: Sequence[str] = ("obs",),
+    ) -> None:
+        # Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L556-L590
+        if buffer_size <= 0:
+            raise ValueError(f"The buffer size must be greater than zero, got: {buffer_size}")
+        if n_envs <= 0:
+            raise ValueError(f"The number of environments must be greater than zero, got: {n_envs}")
+        self._buf: List[SequentialReplayBuffer] = [
+            SequentialReplayBuffer(
+                buffer_size=buffer_size,
+                n_envs=1,
+                obs_keys=obs_keys,
+                device="cpu",
+            )
+            for _ in range(n_envs)
+        ]
+        self._buffer_size = buffer_size
+        self._n_envs = n_envs
+        self._obs_keys = obs_keys
+        # bincount RNG — unseeded like sheeprl (buffers.py:589; P-14 caveat)
+        self._rng: np.random.Generator = np.random.default_rng()
+        self._concat_along_axis = SequentialReplayBuffer.batch_axis
+        self._on_gpu: bool = False  # driver's GPU-sample branch reads this
+
+    # ------------------------------------------------------------------
+    # Properties (sheeprl buffers.py:592-617)
+    # ------------------------------------------------------------------
+
+    @property
+    def buffer(self) -> Sequence[SequentialReplayBuffer]:
+        return tuple(self._buf)
+
+    @property
+    def buffer_size(self) -> int:
+        return self._buffer_size
+
+    @property
+    def full(self) -> Sequence[bool]:
+        return tuple(b.full for b in self._buf)
+
+    @property
+    def n_envs(self) -> int:
+        return self._n_envs
+
+    @property
+    def empty(self) -> Sequence[bool]:
+        return tuple(b.empty for b in self._buf)
+
+    def __len__(self) -> int:
+        return self._buffer_size
+
+    # ------------------------------------------------------------------
+    # add()
+    # ------------------------------------------------------------------
+
+    def add(
+        self,
+        data: Dict[str, np.ndarray],
+        validate_args: bool = False,
+        done_mask: Optional[np.ndarray] = None,
+    ) -> None:
+        """Route full-width [seq, n_envs, ...] data to per-env sub-buffers.
+
+        Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L627-L654.
+        `done_mask` replaces sheeprl's `indices` argument (Fix-3 fixed-width
+        convention): `data` is always full-width [seq, n_envs, ...]; when
+        done_mask is provided only the truthy columns are routed — non-done
+        sub-buffers are untouched (sheeprl dreamer_v3.py:650 — the
+        no-hole-rows property, WP-SRL P2).
+        """
+        if done_mask is not None:
+            indices = np.where(np.asarray(done_mask, dtype=bool))[0]
+        else:
+            indices = range(self._n_envs)
+        for env_idx in indices:
+            # sheeprl buffers.py:652-653: one column, width preserved
+            env_data = {k: v[:, env_idx:env_idx + 1] for k, v in data.items()}
+            self._buf[env_idx].add(env_data, validate_args=validate_args)
+
+    # ------------------------------------------------------------------
+    # sample()
+    # ------------------------------------------------------------------
+
+    def sample(
+        self,
+        batch_size: int,
+        sample_next_obs: bool = False,
+        clone: bool = False,
+        n_samples: int = 1,
+        sequence_length: int = 1,
+    ) -> Dict[str, np.ndarray]:
+        """bincount batch allocation across sub-buffers + batch-axis concat.
+
+        Ported from sheeprl@33b6366:sheeprl/data/buffers.py:L656-L699.
+        Output shape: [n_samples, sequence_length, batch_size, ...].
+        """
+        if batch_size <= 0 or n_samples <= 0:
+            raise ValueError(
+                f"'batch_size' ({batch_size}) and 'n_samples' ({n_samples}) "
+                "must be both greater than 0"
+            )
+        bs_per_buf = np.bincount(
+            self._rng.integers(0, self._n_envs, (batch_size,)),
+            minlength=self._n_envs,
+        )
+        per_buf_samples = [
+            b.sample(
+                batch_size=bs,
+                sample_next_obs=sample_next_obs,
+                clone=clone,
+                n_samples=n_samples,
+                sequence_length=sequence_length,
+            )
+            for b, bs in zip(self._buf, bs_per_buf)
+            if bs > 0
+        ]
+        samples: Dict[str, np.ndarray] = {}
+        for k in per_buf_samples[0].keys():
+            samples[k] = np.concatenate(
+                [s[k] for s in per_buf_samples], axis=self._concat_along_axis
+            )
+        return samples
+
+    # ------------------------------------------------------------------
+    # ready_to_sample() / filled_size / reset — driver conveniences
+    # (shared API with SequentialReplayBuffer; not in sheeprl)
+    # ------------------------------------------------------------------
+
+    def ready_to_sample(self, sequence_length: int) -> bool:
+        """WP-SRL P8 gate: every env column has >= sequence_length valid rows,
+        counting wrapped buffers as full (`_full or _pos >= seq_len`)."""
+        return all(b.ready_to_sample(sequence_length) for b in self._buf)
+
+    @property
+    def filled_size(self) -> int:
+        """Total stored transitions across sub-buffers
+        (continual-stage-swap logging, dreamer_srl_main.py)."""
+        return int(sum(b.filled_size for b in self._buf))
+
+    def reset(self) -> None:
+        """Curriculum stage-boundary clear — every sub-buffer's head to 0."""
+        for b in self._buf:
+            b.reset()

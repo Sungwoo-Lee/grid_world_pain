@@ -155,7 +155,12 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 
-from src.algorithms.dreamer_srl.loss import TwoHotEncoding, IndependentBernoulli, reconstruction_loss
+from src.algorithms.dreamer_srl.loss import (
+    IndependentBernoulli,
+    SymlogDistribution,
+    TwoHotEncoding,
+    reconstruction_loss,
+)
 from src.algorithms.dreamer_srl.utils import compute_lambda_values, moments_update, MomentsState
 from src.algorithms.dreamer_srl.agent import action_shift
 
@@ -641,8 +646,6 @@ def make_train_step(
             wm_opt, actor_opt, critic_opt, moments, batch, key,
         )
     """
-    from src.algorithms.dreamer_srl.utils import symlog as _symlog
-
     H_plus_1 = horizon + 1  # captured as Python int in the closure
 
     @nnx.jit
@@ -701,28 +704,26 @@ def make_train_step(
             """WM loss (reconstruction + KL). Returns (total_loss, aux_dict)."""
             wm_outputs = wm.observe(batch["obs"], shifted_actions, is_first, k_wm)
 
-            # Observation NLL — SymlogDistribution: Normal(symlog(pred), 1).log_prob(symlog(target))
-            # sheeprl L152-L162: po[k] = SymlogDistribution(reconstructed_obs[k], dims=1)
-            # dims=1 sums over the last 1 event dim (obs_dim axis)
-            reconstructed_obs = wm_outputs["reconstructed_obs"]  # [T, B, obs_dim]
-            obs_target = batch["obs"]                            # [T, B, obs_dim]
-            obs_log_prob = -0.5 * jnp.sum(
-                (_symlog(reconstructed_obs) - _symlog(obs_target)) ** 2, axis=-1
-            )  # [T, B]
-            obs_loss_unreduced = -obs_log_prob  # [T, B] — positive NLL
-
-            # Reward NLL (TwoHotEncoding)
-            pr = TwoHotEncoding(wm_outputs["reward_logits"], dims=1)  # [T, B, 255]
-            reward_loss_unreduced = -pr.log_prob(batch["rewards"])    # [T, B]
-
-            # Continue NLL (IndependentBernoulli — §S9)
+            # -----------------------------------------------------------------
+            # WP-SRL P3: WM loss routed through the faithful, Lever-B-ported
+            # reconstruction_loss (loss.py:424-582 == sheeprl loss.py:9-88).
+            # The previous inline assembly here mis-modelled the obs term as
+            # Normal(symlog(pred), 1) — the -0.5 factor under-weighted
+            # reconstruction exactly 2x, the decoder was trained in real space
+            # (extra symlog at loss time), and the tol=1e-8 clamp was missing
+            # ([[02_world_model_losses]] rows 6-8, 22 + Detail B/D). The raw
+            # decoder output is now the SYMLOG-SPACE prediction, per
+            # SymlogDistribution (sheeprl distribution.py:152-193).
+            #
+            # Distributions — sheeprl dreamer_v3.py:156-172
+            # -----------------------------------------------------------------
+            po = {"obs": SymlogDistribution(wm_outputs["reconstructed_obs"], dims=1)}
+            pr = TwoHotEncoding(wm_outputs["reward_logits"], dims=1)   # [T, B, 255]
             pc = IndependentBernoulli(wm_outputs["continue_logits"])   # logits: [T, B, 1]
             # §S10: continue target = 1 - terminated (NO gamma multiplier)
             # sheeprl L168: continues_targets = 1 - data["terminated"]
             continue_targets = 1.0 - batch["terminated"]               # [T, B, 1]
-            cont_loss_unreduced = continue_scale_factor * (-pc.log_prob(continue_targets))  # [T, B]
 
-            # KL losses (§S8: free-nats per-element BEFORE mean)
             num_cat = wm.rssm.num_categoricals
             num_cls = wm.rssm.num_classes
             post_logits = wm_outputs["posterior_logits"].reshape(
@@ -732,23 +733,35 @@ def make_train_step(
                 *wm_outputs["prior_logits"].shape[:2], num_cat, num_cls
             )  # [T, B, S, D]
 
-            log_post = jax.nn.log_softmax(post_logits, axis=-1)   # [T, B, S, D]
+            (
+                total,
+                kl_mean,
+                kl_loss_mean,
+                reward_loss_mean,
+                obs_loss_mean,
+                cont_loss_mean,
+            ) = reconstruction_loss(
+                po, {"obs": batch["obs"]}, pr, batch["rewards"],
+                prior_logits, post_logits,
+                kl_dynamic=kl_dynamic, kl_representation=kl_representation,
+                kl_free_nats=kl_free_nats, kl_regularizer=kl_regularizer,
+                pc=pc, continue_targets=continue_targets,
+                continue_scale_factor=continue_scale_factor,
+            )
+
+            # Logging-only KL split (aux; not part of the objective). The
+            # dyn/rep KL VALUES are numerically identical (only the gradient
+            # routing differs in the loss, which reconstruction_loss owns);
+            # recomputed here because reconstruction_loss returns only the
+            # combined kl_loss_mean. Keeps the pre-P3 WandB keys
+            # loss_dyn_kl / loss_rep_kl with unchanged semantics.
+            log_post = jax.nn.log_softmax(post_logits, axis=-1)    # [T, B, S, D]
             log_prior = jax.nn.log_softmax(prior_logits, axis=-1)  # [T, B, S, D]
-
-            def _kl(lp, lq):
-                """KL(p||q) summed over S categoricals and D classes → [T, B]."""
-                p = jnp.exp(lp)
-                return (p * (lp - lq)).sum(axis=-1).sum(axis=-1)  # [T, B]
-
-            kl_dyn = _kl(jax.lax.stop_gradient(log_post), log_prior)  # [T, B]
-            kl_repr = _kl(log_post, jax.lax.stop_gradient(log_prior))  # [T, B]
-            kl_raw = kl_dyn  # for logging
-
-            dyn_loss = kl_dynamic * jnp.maximum(kl_dyn, kl_free_nats)     # §S8 floor
-            repr_loss = kl_representation * jnp.maximum(kl_repr, kl_free_nats)
-            kl_loss_2d = dyn_loss + repr_loss  # [T, B]
-
-            total = (kl_regularizer * kl_loss_2d + obs_loss_unreduced + reward_loss_unreduced + cont_loss_unreduced).mean()
+            _kl_tb = jax.lax.stop_gradient(
+                (jnp.exp(log_post) * (log_post - log_prior)).sum(axis=-1).sum(axis=-1)
+            )  # [T, B]
+            dyn_kl_mean = (kl_dynamic * jnp.maximum(_kl_tb, kl_free_nats)).mean()
+            rep_kl_mean = (kl_representation * jnp.maximum(_kl_tb, kl_free_nats)).mean()
 
             # Commit 6: additional WM quality probes.
             # Mirrors src/models/dreamer_v3_trainer.py:L260-L289
@@ -772,15 +785,19 @@ def make_train_step(
                 (_nnx.sigmoid(wm_outputs["continue_logits"]) > 0.5) == cont_target_bool
             )
 
+            # WP-SRL P3: per-term means map 1:1 onto reconstruction_loss's six
+            # returned scalars (kl_mean = pre-floor dynamic KL, matching the
+            # pre-P3 semantics); WandB key NAMES are unchanged — VALUES shift
+            # (obs loss ~2x, total accordingly): that is the fix working.
             aux = {
                 "wm_outputs": wm_outputs,
-                "kl_mean": kl_raw.mean(),
-                "kl_loss_mean": kl_loss_2d.mean(),
-                "dyn_kl_mean":  dyn_loss.mean(),   # Commit 6: dynamic KL component
-                "rep_kl_mean":  repr_loss.mean(),  # Commit 6: representation KL component
-                "reward_loss_mean": reward_loss_unreduced.mean(),
-                "obs_loss_mean": obs_loss_unreduced.mean(),
-                "cont_loss_mean": cont_loss_unreduced.mean(),
+                "kl_mean": kl_mean,
+                "kl_loss_mean": kl_loss_mean,
+                "dyn_kl_mean":  dyn_kl_mean,   # Commit 6: dynamic KL component (logging-only recompute)
+                "rep_kl_mean":  rep_kl_mean,   # Commit 6: representation KL component (logging-only recompute)
+                "reward_loss_mean": reward_loss_mean,
+                "obs_loss_mean": obs_loss_mean,
+                "cont_loss_mean": cont_loss_mean,
                 # Commit 6: WM quality probes — mirrors dreamer_v3_trainer.py:L277-L289
                 "reward_mae":        rew_mae,
                 "reward_mae_pos":    rew_mae_pos,

@@ -549,3 +549,65 @@ class TestLaxScanMathEquivalence:
             f"Step-0 Polyak hard-copy: "
             f"max |legacy - scan| = {max_abs_err:.2e} exceeds 1e-4 tolerance."
         )
+
+
+# ---------------------------------------------------------------------------
+# WP-SRL P7 / D-015 — dead fractional-remainder carry deleted; scan path runs
+# a CONSTANT _G gradient steps per gated iteration.
+# (fix_plan_srl_parity.md; area report 04 D-05)
+#
+# Red evidence (pre-fix): test_grad_step_remainder_deleted FAILS on current
+# code — the dead `_grad_step_remainder` accumulator is still present in
+# dreamer_srl_main.py (a true red-first assertion, not red-by-absence).
+# ---------------------------------------------------------------------------
+
+def test_grad_step_remainder_deleted():
+    """The dead `_grad_step_remainder` accumulator is gone from the driver.
+
+    WP-SRL P7 decision (DEVIATION_LOG D-015): the accumulator was never
+    consumed (dead code); wiring it back would reintroduce variable scan
+    lengths and the per-length XLA recompile storm that the constant-length
+    design (Fix 2) exists to prevent. It was DELETED; fractional replay
+    ratios are quantized on the scan path (declared deviation D-015) and the
+    `--legacy-grad-loop` path keeps the exact Ratio cadence.
+
+    Source-level assertion (the accumulator was a loop-local in main(), not
+    an importable symbol).
+    """
+    import os
+    src_path = os.path.join(
+        _REPO_ROOT, "src", "algorithms", "dreamer_srl", "dreamer_srl_main.py"
+    )
+    with open(src_path) as f:
+        src = f.read()
+    assert "_grad_step_remainder" not in src, (
+        "`_grad_step_remainder` found in dreamer_srl_main.py — the dead "
+        "fractional-remainder carry deleted by WP-SRL P7 (D-015) has been "
+        "re-introduced. Either wire it correctly (breaking the constant-scan-"
+        "length contract — see D-015) or delete it again."
+    )
+
+
+def test_scan_path_runs_constant_G_steps():
+    """The scan-path grad-step count is the constant `_G` (D-015 contract).
+
+    Source-level guard: the non-legacy branch must assign
+    `n_grad_steps_scan = _G` (one compiled executable per run — Fix 2), and
+    `_G` must be the documented quantization `max(1, int(replay_ratio *
+    num_envs))`.
+    """
+    import os
+    import re
+    src_path = os.path.join(
+        _REPO_ROOT, "src", "algorithms", "dreamer_srl", "dreamer_srl_main.py"
+    )
+    with open(src_path) as f:
+        src = f.read()
+    assert re.search(r"_G:\s*int\s*=\s*max\(1,\s*int\(replay_ratio \* num_envs\)\)", src), (
+        "The `_G = max(1, int(replay_ratio * num_envs))` quantization is "
+        "missing — D-015's declared scan-path cadence has drifted."
+    )
+    assert re.search(r"n_grad_steps_scan\s*=\s*_G\b", src), (
+        "The scan path no longer assigns the constant `_G` step count — "
+        "variable scan lengths would recompile per length (Fix 2 regression)."
+    )
