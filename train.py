@@ -844,6 +844,12 @@ def main():
         ratio_scaled_updates = Ratio(config.get_mandatory('agent.replay_ratio'))
         cumulative_gradient_steps = 0
 
+        # WP-NNX F7 (U4): random-action prefill budget in ENV steps (global,
+        # matching sheeprl learning_starts, vendor yaml:17). While
+        # global_step < learning_starts, collection runs uniform-random
+        # actions and training is skipped. Mandatory key — no fallback.
+        learning_starts = config.get_mandatory('agent.learning_starts', int)
+
 
         buffer_device = config.get_mandatory('agent.buffer_device')
         buffer_capacity = config.get_mandatory('agent.buffer_capacity')
@@ -1524,8 +1530,12 @@ def main():
                     # Use JITTED collect_sequence (collect_interval steps per env per iteration)
                     key, collect_key = jax.random.split(key)
                     with jax.named_scope("dreamer_collect_sequence"):
+                        # WP-NNX F7 (U4): uniform-random actions until the
+                        # learning_starts prefill budget is met (static flag —
+                        # one extra compile for the prefill variant).
                         env_state, dreamer_state, key, transitions = trainer.collect_sequence(
-                            env_state, params, num_steps, collect_key, dreamer_state)
+                            env_state, params, num_steps, collect_key, dreamer_state,
+                            bool(global_step < learning_starts))
 
                     # Convert transitions to NumPy and add to buffer.
                     if buffer.device == "gpu":
@@ -1801,12 +1811,20 @@ def main():
                     metrics = {}
                     loss_msg = ""
                     with jax.named_scope("dreamer_train_multiple"):
-                        if buffer.size > max(config.get_mandatory('agent.batch_size') * 2, config.get_mandatory('agent.sequence_length')):
-                            # Dynamic gradient steps based on replay_ratio.
-                            # With collect_interval=1 (sheeprl-style): global_step increments by num_envs per iter,
-                            # ratio returns num_envs gradient steps. With collect_interval=128: increments by
-                            # num_envs*128, so we normalize to count sequences, not individual timesteps.
-                            train_steps = ratio_scaled_updates(global_step // num_steps)
+                        if global_step >= learning_starts and \
+                           buffer.size > max(config.get_mandatory('agent.batch_size') * 2, config.get_mandatory('agent.sequence_length')):
+                            # WP-NNX F7 (U4): replay_ratio now means what it
+                            # means in sheeprl — gradient steps per ENV STEP
+                            # (global, matching sheeprl's per-policy-step
+                            # Ratio; global_step increments by
+                            # num_envs * num_steps per iteration). Config
+                            # values were rescaled /collect_interval in the
+                            # same change window to keep effective intensity
+                            # unchanged — see fix_plan_nnx_parity.md
+                            # §Config handoff. Ratio carries fractional
+                            # remainders exactly, so tiny values (e.g.
+                            # 0.00390625) accumulate correctly.
+                            train_steps = ratio_scaled_updates(global_step)
 
                             if buffer.device == "gpu":
                                 # GPU path: sample + train all inside one JIT call

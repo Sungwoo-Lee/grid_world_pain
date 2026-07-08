@@ -123,16 +123,24 @@ Also cosmetic-tier: LayerNorm eps 1e-6 vs 1e-3, init std ~0.77×, dead `agent.un
    + P4 γ + P5 metric bleed — one package, one comparability break.
 2. **WP-srl-2 (multi-env correctness):** P2 buffer hole rows + P6 learning_starts + P7/P8 — before
    any multi-env dreamer_srl launch.
+   → **Routed 2026-07-08** (user approved "fix all"): items 1+2 merged into one work package
+   **WP-SRL** — P1/P2/P3/P5/P6/P7/P8 fixed, P9 declared, D-014 refreshed —
+   plan: [[fix_plan_srl_parity]]. P4 (γ) is carved out to the parallel **WP-GAMMA**
+   (experiment-designer, config-side). WP-SRL + WP-GAMMA form ONE dreamer_srl comparability
+   epoch: post-fix runs are not comparable to any earlier run.
 3. **WP-nnx-1:** U1 stop-gradients + U3 obs-loss sum (few lines each, biggest leverage) + the
    2-line is_first collection fix (known-open) — before the next result-bearing NNX run.
 4. **WP-nnx-2 (deliberate recipe alignment):** U2 online-critic bootstraps + slow regularizer,
    U4 replay-ratio semantics + prefill — bigger, decide consciously.
+   → **Routed 2026-07-08**: items 3+4 merged into one work package with per-item
+   recommendations (U4 cost-neutral rescale, U6 fix-now) — plan: [[fix_plan_nnx_parity]].
 5. **Log maintenance:** add D-rows for every kept deviation; refresh D-014; broaden the clipping row.
 
 ## 7. Reports
 
 [[01_rssm_architecture]] · [[02_world_model_losses]] · [[03_actor_critic_returns]] ·
-[[04_training_loop_replay]] · [[05_dreamer_v3_nnx_conventions]]
+[[04_training_loop_replay]] · [[05_dreamer_v3_nnx_conventions]] ·
+[[06_nnx_recipe_deviation_register]] (NNX kept/fixed/open dispositions after WP-NNX)
 
 Prior record: [[SHEEPRL_REFERENCE_AUDIT]] (v2 era) · [[DEVIATION_LOG]] (v1 era) ·
 Registry: [[KNOWN_BUGS]] · This week's fix cluster: [[00_combined_diagnosis]]

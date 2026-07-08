@@ -51,6 +51,20 @@ def compute_lambda_values(rewards, values, continues, LAMBDA=0.95):
     return returns
 
 
+def dreamer_obs_recon_loss(recon, obs):
+    """Observation reconstruction loss (WP-NNX F3 / U3).
+
+    Recipe: symlog-MSE log-prob SUMMED over the feature/event dim, mean over
+    batch & time only — sheeprl loss.py:61 via SymlogDistribution. The
+    previous all-dims mean under-weighted reconstruction by ~obs_dim (~40-60x
+    on this project's observation vectors) relative to reward/continue/KL.
+
+    recon, obs: (..., D) arrays (typically (B, T, D), symlog space).
+    Returns a scalar.
+    """
+    return jnp.mean(jnp.sum(jnp.square(recon - obs), axis=-1))
+
+
 def compute_continue_target(term_reason):
     """Continue-head target: 1.0 unless REAL death, 0.0 only on real death.
 
@@ -239,7 +253,7 @@ class DreamerTrainer(nnx.Module):
                 # Reconstruction Loss
                 feat = wm.get_feat(posts)
                 recon = wm.decoder(feat)
-                loss_recon = jnp.mean(jnp.square(recon - obs))
+                loss_recon = dreamer_obs_recon_loss(recon, obs)
 
                 # Reward Loss
                 rew_pred = wm.reward_head(feat)
@@ -361,10 +375,18 @@ class DreamerTrainer(nnx.Module):
         start_state = jax.tree.map(lambda x: x.reshape((-1,) + x.shape[2:]), posts)
         start_state = jax.lax.stop_gradient(start_state)
 
+        # WP-NNX F5 (U5): true continue of each imagination source row
+        # (sheeprl dreamer_v3.py:247-248 — continues[0] = 1 - terminated).
+        # Same (B, T) -> (B*T,) flattening as start_state.
+        true_cont0 = jax.lax.stop_gradient(
+            compute_continue_target(term_reason).reshape(-1))
+
         # Prepare modulator hidden state for imagination initialization
         if modulation_enabled:
             h_mod_start = h_mods_all.reshape((-1,) + h_mods_all.shape[2:])
             h_mod_start = jax.lax.stop_gradient(h_mod_start)
+        else:
+            h_mod_start = None
 
         # Pre-compute moments parameters for advantage normalization (OUTSIDE grad)
         # This avoids tracing through self.moments inside nnx.grad which causes OOM
@@ -373,149 +395,12 @@ class DreamerTrainer(nnx.Module):
         moments_invscale = jnp.maximum(1.0 / self.moments.max_, moments_high - moments_low)
 
         def behavior_loss_fn(actor, critic, rng):
-            if modulation_enabled:
-                def scan_imag(carry, key):
-                    prev_state, h_mod = carry
-                    feat = self.agent.wm.get_feat(prev_state)
-                    actor_out = actor(feat)
-                    dist = OneHotDist(actor_out)
-                    action = dist.sample(key)
-
-                    # Modulator imagination mode
-                    mod_input = jnp.concatenate([feat, action], axis=-1)
-                    mod_output, h_mod_new = self.agent.wm.modulator.forward_imagine(
-                        mod_input, h_mod)
-
-                    # RSSM imagine step with gate-bias
-                    prior = self.agent.wm.rssm.imagine_step(
-                        prev_state, action, key,
-                        gate_bias=mod_output.z_memory)
-
-                    next_feat = self.agent.wm.get_feat(prior)
-                    rew = from_twohot(self.agent.wm.reward_head(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
-                    # Injection C: Reward interpretation scale (imagination only)
-                    rew = rew * mod_output.z_reward.squeeze(-1)
-                    cont = nnx.sigmoid(
-                        self.agent.wm.continue_head(next_feat)).squeeze(-1)
-                    val = from_twohot(self.target_critic(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
-
-                    step_info = {
-                        'reward': rew, 'continue': cont, 'value': val,
-                        'feat': feat, 'action_dist': actor_out, 'action': action
-                    }
-                    return (prior, h_mod_new), step_info
-
-                imag_init = (start_state, h_mod_start)
-            else:
-                def scan_imag(prev_state, key):
-                    feat = self.agent.wm.get_feat(prev_state)
-                    actor_out = actor(feat)
-                    dist = OneHotDist(actor_out)
-                    action = dist.sample(key)
-                    prior = self.agent.wm.rssm.imagine_step(prev_state, action, key)
-
-                    next_feat = self.agent.wm.get_feat(prior)
-                    rew = from_twohot(self.agent.wm.reward_head(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
-                    cont = nnx.sigmoid(
-                        self.agent.wm.continue_head(next_feat)).squeeze(-1)
-                    val = from_twohot(self.target_critic(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
-
-                    step_info = {
-                        'reward': rew, 'continue': cont, 'value': val,
-                        'feat': feat, 'action_dist': actor_out, 'action': action
-                    }
-                    return prior, step_info
-
-                imag_init = start_state
-
-            with jax.named_scope("ac_imagine_scan"):
-                # Split keys for (HORIZON, IMAG_BATCH) for behavior learning
-                # IMAG_BATCH = B * T (flattened start_state)
-                imag_batch = start_state['deter'].shape[0]
-                rng_imag = random.split(rng, HORIZON * imag_batch).reshape((HORIZON, imag_batch, -1))
-                _, rollouts = jax.lax.scan(scan_imag, imag_init, rng_imag)
-
-            with jax.named_scope("ac_losses"):
-                rews = rollouts['reward']
-                conts = rollouts['continue']
-                vals = rollouts['value']
-
-                start_feat = self.agent.wm.get_feat(start_state)
-                v_start = from_twohot(self.target_critic(start_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
-
-                all_vals = jnp.concatenate([v_start[None], vals], axis=0)
-
-                # Lambda returns with global discount
-                lambda_returns = compute_lambda_values(rews, all_vals, conts * GAMMA)
-
-                norm_returns = (lambda_returns - moments_low) / moments_invscale
-
-                # Cumulative Discount Weighting
-                # weights[t] = \prod_{i=0}^{t-1} (conts[i] * GAMMA)
-                discount_weights = jnp.concatenate([jnp.ones_like(conts[:1]), conts[:-1] * GAMMA], axis=0)
-                discount_weights = jnp.cumprod(discount_weights, axis=0)
-                discount_weights = jax.lax.stop_gradient(discount_weights)
-
-                # Critic Loss — train on RAW lambda_returns (canonical DreamerV3)
-                v_pred_logits = critic(rollouts['feat'])
-                target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns), paper_canonical_bins=self._paper_canonical_twohot_bins)
-                loss_critic_step = -jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1)
-                loss_critic = jnp.mean(loss_critic_step * discount_weights)
-
-                # Actor Loss — normalize BOTH sides for consistent advantage
-                baseline = from_twohot(v_pred_logits, paper_canonical_bins=self._paper_canonical_twohot_bins)
-                norm_baseline = (baseline - moments_low) / moments_invscale
-                advantage = jax.lax.stop_gradient(norm_returns - norm_baseline)
-
-                actions = rollouts['action']
-                logits = rollouts['action_dist']
-                log_probs = jnp.sum(actions * jax.nn.log_softmax(logits), axis=-1)
-
-                ENTROPY_SCALE = self.config.get_mandatory('agent.entropy_scale', float)
-                entropy = -jnp.sum(jax.nn.softmax(logits) * jax.nn.log_softmax(logits), axis=-1)
-
-                loss_actor_step = -(log_probs * advantage + ENTROPY_SCALE * entropy)
-                loss_actor = jnp.mean(loss_actor_step * discount_weights)
-
-                if IMG_PROBE:
-                    # Imagined-rollout termination probe.
-                    # conts: (H, B) post-sigmoid continue prob. Termination ≡ cont < 0.5.
-                    term_mask = (conts < 0.5).astype(jnp.float32)            # (H, B)
-                    any_term = jnp.any(term_mask > 0, axis=0)                 # (B,)
-                    first_term_step = jnp.argmax(term_mask, axis=0)           # (B,) — argmax of bool returns first True; 0 if none
-                    first_term_step = jnp.where(any_term, first_term_step, HORIZON)  # HORIZON sentinel if never terminates
-                    first_term_step_f = first_term_step.astype(jnp.float32)
-
-                    imag_term_frac_h8  = jnp.mean(jnp.any(term_mask[:8] > 0, axis=0).astype(jnp.float32))
-                    imag_term_frac_h15 = jnp.mean(any_term.astype(jnp.float32))   # full HORIZON
-                    imag_first_term_mean = jnp.mean(first_term_step_f)
-                    imag_first_term_p10  = jnp.percentile(first_term_step_f, 10.0)
-                    imag_first_term_p50  = jnp.percentile(first_term_step_f, 50.0)
-                    imag_first_term_p90  = jnp.percentile(first_term_step_f, 90.0)
-
-                metrics = {
-                    'loss_critic': loss_critic,
-                    'loss_actor': loss_actor,
-                    'loss_actor_policy': jnp.mean(-log_probs * advantage * discount_weights),
-                    'loss_actor_entropy': jnp.mean(-ENTROPY_SCALE * entropy * discount_weights),
-                    'mean_return': jnp.mean(lambda_returns),
-                    'mean_norm_return': jnp.mean(norm_returns),
-                    'mean_value': jnp.mean(baseline),
-                    'mean_advantage': jnp.mean(advantage),
-                    'mean_entropy': jnp.mean(entropy),
-                    'value_mae': jnp.mean(jnp.abs(baseline - jax.lax.stop_gradient(lambda_returns)))
-                }
-
-                if IMG_PROBE:
-                    metrics.update({
-                        'imagined_termination_fraction_h8':  imag_term_frac_h8,
-                        'imagined_termination_fraction_h15': imag_term_frac_h15,
-                        'imagined_first_term_step_mean':     imag_first_term_mean,
-                        'imagined_term_step_p10':            imag_first_term_p10,
-                        'imagined_term_step_p50':            imag_first_term_p50,
-                        'imagined_term_step_p90':            imag_first_term_p90,
-                    })
-            return (loss_actor + loss_critic), (metrics, lambda_returns)
+            # Thin wrapper: the body lives in _behavior_loss so regression
+            # tests can probe gradient structure of individual loss
+            # components (WP-NNX F2 scaffolding; mechanical extraction).
+            return self._behavior_loss(actor, critic, rng, start_state,
+                                       h_mod_start, moments_low,
+                                       moments_invscale, true_cont0)
 
         with jax.named_scope("dreamer_optim"):
             grads_ac, (behavior_metrics, lambda_returns) = nnx.grad(behavior_loss_fn, argnums=(0,1), has_aux=True)(
@@ -539,6 +424,202 @@ class DreamerTrainer(nnx.Module):
 
         return {**model_metrics, **behavior_metrics}
 
+    def _behavior_loss(self, actor, critic, rng, start_state, h_mod_start,
+                       moments_low, moments_invscale, true_cont0=None):
+        """Behavior (actor + critic) loss on imagined rollouts.
+
+        Extracted verbatim from the train_step closure (WP-NNX F2) so tests
+        can take gradients of individual loss components. Numerically
+        identical to the pre-extraction closure. h_mod_start is None when
+        modulation is disabled.
+
+        true_cont0 (WP-NNX F5 / U5): (B*T,) true continue of each imagination
+        source row (0.0 = real-death replay row -> the whole imagined rollout
+        gets zero loss weight; sheeprl D:247-248). train_step always passes
+        it; None (tests/back-compat) reproduces the pre-F5 row0 = 1.
+
+        Returns: (loss_actor + loss_critic), (metrics, lambda_returns)
+        """
+        modulation_enabled = self.agent.wm.modulation_enabled
+        IMG_PROBE = self.config.get_mandatory('agent.imagined_rollout_probe', bool)
+        if modulation_enabled:
+            def scan_imag(carry, key):
+                prev_state, h_mod = carry
+                # WP-NNX F2 (U1): actor, critic, modulator, and step_info
+                # consume imagined features DETACHED (sheeprl dreamer_v3.py:
+                # 219,240,273,307) — discrete-action DreamerV3 trains the
+                # actor by REINFORCE only; no dynamics backprop, no
+                # critic-loss leak. The ST gradient stays alive inside the
+                # RSSM imagination chain itself, as in sheeprl.
+                feat = jax.lax.stop_gradient(self.agent.wm.get_feat(prev_state))
+                actor_out = actor(feat)
+                dist = OneHotDist(actor_out)
+                action = dist.sample(key)
+
+                # Modulator imagination mode
+                mod_input = jnp.concatenate([feat, action], axis=-1)
+                mod_output, h_mod_new = self.agent.wm.modulator.forward_imagine(
+                    mod_input, h_mod)
+
+                # RSSM imagine step with gate-bias
+                prior = self.agent.wm.rssm.imagine_step(
+                    prev_state, action, key,
+                    gate_bias=mod_output.z_memory)
+
+                next_feat = self.agent.wm.get_feat(prior)
+                rew = from_twohot(self.agent.wm.reward_head(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
+                # Injection C: Reward interpretation scale (imagination only)
+                rew = rew * mod_output.z_reward.squeeze(-1)
+                cont = nnx.sigmoid(
+                    self.agent.wm.continue_head(next_feat)).squeeze(-1)
+                # WP-NNX F4 (U2): bootstrap values from the ONLINE critic
+                # (sheeprl D:244); the slow critic is only a regularizer now.
+                val = from_twohot(critic(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
+
+                step_info = {
+                    'reward': rew, 'continue': cont, 'value': val,
+                    'feat': feat, 'action_dist': actor_out, 'action': action
+                }
+                return (prior, h_mod_new), step_info
+
+            imag_init = (start_state, h_mod_start)
+        else:
+            def scan_imag(prev_state, key):
+                # WP-NNX F2 (U1): see the modulated branch above — imagined
+                # features are detached at creation (sheeprl detach sites).
+                feat = jax.lax.stop_gradient(self.agent.wm.get_feat(prev_state))
+                actor_out = actor(feat)
+                dist = OneHotDist(actor_out)
+                action = dist.sample(key)
+                prior = self.agent.wm.rssm.imagine_step(prev_state, action, key)
+
+                next_feat = self.agent.wm.get_feat(prior)
+                rew = from_twohot(self.agent.wm.reward_head(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
+                cont = nnx.sigmoid(
+                    self.agent.wm.continue_head(next_feat)).squeeze(-1)
+                # WP-NNX F4 (U2): bootstrap values from the ONLINE critic
+                # (sheeprl D:244); the slow critic is only a regularizer now.
+                val = from_twohot(critic(next_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
+
+                step_info = {
+                    'reward': rew, 'continue': cont, 'value': val,
+                    'feat': feat, 'action_dist': actor_out, 'action': action
+                }
+                return prior, step_info
+
+            imag_init = start_state
+
+        with jax.named_scope("ac_imagine_scan"):
+            # Split keys for (HORIZON, IMAG_BATCH) for behavior learning
+            # IMAG_BATCH = B * T (flattened start_state)
+            imag_batch = start_state['deter'].shape[0]
+            rng_imag = random.split(rng, HORIZON * imag_batch).reshape((HORIZON, imag_batch, -1))
+            _, rollouts = jax.lax.scan(scan_imag, imag_init, rng_imag)
+
+        with jax.named_scope("ac_losses"):
+            rews = rollouts['reward']
+            conts = rollouts['continue']
+            vals = rollouts['value']
+
+            start_feat = self.agent.wm.get_feat(start_state)
+            # WP-NNX F4 (U2): v_start from the ONLINE critic (sheeprl D:244).
+            # All consumers (critic target, advantage, discount weights) are
+            # stop-gradient-protected, so no live gradient path is added.
+            v_start = from_twohot(critic(start_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
+
+            all_vals = jnp.concatenate([v_start[None], vals], axis=0)
+
+            # Lambda returns with global discount
+            lambda_returns = compute_lambda_values(rews, all_vals, conts * GAMMA)
+
+            norm_returns = (lambda_returns - moments_low) / moments_invscale
+
+            # Cumulative Discount Weighting
+            # weights[t] = \prod_{i=0}^{t-1} (conts[i] * GAMMA)
+            # WP-NNX F5 (U5): weight row 0 = the source row's TRUE continue
+            # (not 1) — rollouts imagined from death rows carry zero weight
+            # (sheeprl D:247-248,260).
+            if true_cont0 is None:
+                row0 = jnp.ones_like(conts[:1])
+            else:
+                row0 = true_cont0[None] * jnp.ones_like(conts[:1])
+            discount_weights = jnp.concatenate([row0, conts[:-1] * GAMMA], axis=0)
+            discount_weights = jnp.cumprod(discount_weights, axis=0)
+            discount_weights = jax.lax.stop_gradient(discount_weights)
+
+            # Critic Loss — RAW lambda_returns + slow-critic regularizer
+            # (WP-NNX F4 / U2; sheeprl dreamer_v3.py:307-316: the EMA critic
+            # no longer supplies bootstrap values — it regularizes the online
+            # critic toward its own predictions instead). Feats detached
+            # explicitly to mirror sheeprl D:307 (WP-NNX F2).
+            v_pred_logits = critic(jax.lax.stop_gradient(rollouts['feat']))
+            target_twohot = to_twohot(jax.lax.stop_gradient(lambda_returns), paper_canonical_bins=self._paper_canonical_twohot_bins)
+            slow_vals = from_twohot(self.target_critic(jax.lax.stop_gradient(rollouts['feat'])), paper_canonical_bins=self._paper_canonical_twohot_bins)
+            slow_twohot = to_twohot(jax.lax.stop_gradient(slow_vals), paper_canonical_bins=self._paper_canonical_twohot_bins)
+            loss_critic_lambda = -jnp.sum(target_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1)
+            loss_critic_slow_reg = -jnp.sum(slow_twohot * jax.nn.log_softmax(v_pred_logits), axis=-1)
+            loss_critic_step = loss_critic_lambda + loss_critic_slow_reg
+            loss_critic = jnp.mean(loss_critic_step * discount_weights)
+
+            # Actor Loss — normalize BOTH sides for consistent advantage
+            baseline = from_twohot(v_pred_logits, paper_canonical_bins=self._paper_canonical_twohot_bins)
+            norm_baseline = (baseline - moments_low) / moments_invscale
+            advantage = jax.lax.stop_gradient(norm_returns - norm_baseline)
+
+            # WP-NNX F2 (sheeprl D:286) — log_prob of the DETACHED action;
+            # kills the spurious ∇probs term riding the ST sample.
+            actions = jax.lax.stop_gradient(rollouts['action'])
+            logits = rollouts['action_dist']
+            log_probs = jnp.sum(actions * jax.nn.log_softmax(logits), axis=-1)
+
+            ENTROPY_SCALE = self.config.get_mandatory('agent.entropy_scale', float)
+            entropy = -jnp.sum(jax.nn.softmax(logits) * jax.nn.log_softmax(logits), axis=-1)
+
+            loss_actor_step = -(log_probs * advantage + ENTROPY_SCALE * entropy)
+            loss_actor = jnp.mean(loss_actor_step * discount_weights)
+
+            if IMG_PROBE:
+                # Imagined-rollout termination probe.
+                # conts: (H, B) post-sigmoid continue prob. Termination ≡ cont < 0.5.
+                term_mask = (conts < 0.5).astype(jnp.float32)            # (H, B)
+                any_term = jnp.any(term_mask > 0, axis=0)                 # (B,)
+                first_term_step = jnp.argmax(term_mask, axis=0)           # (B,) — argmax of bool returns first True; 0 if none
+                first_term_step = jnp.where(any_term, first_term_step, HORIZON)  # HORIZON sentinel if never terminates
+                first_term_step_f = first_term_step.astype(jnp.float32)
+
+                imag_term_frac_h8  = jnp.mean(jnp.any(term_mask[:8] > 0, axis=0).astype(jnp.float32))
+                imag_term_frac_h15 = jnp.mean(any_term.astype(jnp.float32))   # full HORIZON
+                imag_first_term_mean = jnp.mean(first_term_step_f)
+                imag_first_term_p10  = jnp.percentile(first_term_step_f, 10.0)
+                imag_first_term_p50  = jnp.percentile(first_term_step_f, 50.0)
+                imag_first_term_p90  = jnp.percentile(first_term_step_f, 90.0)
+
+            metrics = {
+                'loss_critic': loss_critic,
+                'loss_critic_slow_reg': jnp.mean(loss_critic_slow_reg * discount_weights),
+                'loss_actor': loss_actor,
+                'loss_actor_policy': jnp.mean(-log_probs * advantage * discount_weights),
+                'loss_actor_entropy': jnp.mean(-ENTROPY_SCALE * entropy * discount_weights),
+                'mean_return': jnp.mean(lambda_returns),
+                'mean_norm_return': jnp.mean(norm_returns),
+                'mean_value': jnp.mean(baseline),
+                'mean_advantage': jnp.mean(advantage),
+                'mean_entropy': jnp.mean(entropy),
+                'value_mae': jnp.mean(jnp.abs(baseline - jax.lax.stop_gradient(lambda_returns)))
+            }
+
+            if IMG_PROBE:
+                metrics.update({
+                    'imagined_termination_fraction_h8':  imag_term_frac_h8,
+                    'imagined_termination_fraction_h15': imag_term_frac_h15,
+                    'imagined_first_term_step_mean':     imag_first_term_mean,
+                    'imagined_term_step_p10':            imag_first_term_p10,
+                    'imagined_term_step_p50':            imag_first_term_p50,
+                    'imagined_term_step_p90':            imag_first_term_p90,
+                })
+        return (loss_actor + loss_critic), (metrics, lambda_returns)
+
+
     def get_action(self, obs, prev_state=None, eval_mode=False, rng=None):
         """Inference method with optional neuromodulation.
 
@@ -559,17 +640,28 @@ class DreamerTrainer(nnx.Module):
             prev_state['prev_action'] = jnp.zeros(
                 (B, self.agent.ac.actor.net.layers[-1].out_features))
 
-        prev_action = prev_state['prev_action']
+        # Episode-boundary reset (WP-NNX F1 / registry K1): consume the is_first
+        # flag staged by collect_sequence (analog of sheeprl player.init_states,
+        # vendor agent.py:643-659, which zeroes actions and resets latents per
+        # done env). RSSM.step masks deter/stoch itself (dreamer_v3_nnx.py:117-119);
+        # here we zero the stale prev_action (and reset mod_h below).
+        is_first = prev_state.get('is_first', jnp.zeros((B, 1)))
+        prev_action = prev_state['prev_action'] * (1.0 - is_first)
         obs_symlog = symlog(obs)
 
         key = random.split(rng)[0] if rng is not None else random.PRNGKey(0)
-        is_first = jnp.zeros((B, 1))
 
         if modulation_enabled:
             if 'mod_h' not in prev_state:
                 mod_h = self.agent.wm.modulator.initial_state(B)
             else:
-                mod_h = prev_state['mod_h']
+                # WP-NNX F1: modulator state resets at episode boundaries too.
+                # jnp.where (not mask-multiply) so this stays correct if
+                # initial_state ever becomes non-zero. is_first is (B, 1) and
+                # broadcasts against (B, mod_hidden).
+                mod_h = jnp.where(is_first > 0.5,
+                                  self.agent.wm.modulator.initial_state(B),
+                                  prev_state['mod_h'])
 
             mod_output, mod_h_new = self.agent.wm.modulator.forward_obs(
                 obs_symlog, mod_h)
@@ -614,10 +706,18 @@ class DreamerTrainer(nnx.Module):
 
         return action_idx, next_state
 
-    @nnx.jit(static_argnums=(3,))
-    def collect_sequence(self, env_state, params, num_steps, key, dreamer_state=None):
+    @nnx.jit(static_argnums=(3, 6))
+    def collect_sequence(self, env_state, params, num_steps, key,
+                         dreamer_state=None, random_actions=False):
         """Collects a sequence of transitions using jax.lax.scan.
         Includes auto-reset on done.
+
+        random_actions (STATIC, WP-NNX F7 / U4): when True, uniform-random
+        actions are executed instead of the policy's (sheeprl's
+        `learning_starts` random prefill, vendor yaml:17, dreamer_v3.py:
+        510-511,563). One extra compile for the prefill variant, then never
+        again. The RSSM belief update still runs (prev_action tracks the
+        executed random action).
 
         Row convention (H6 fix, WP-D): row t stores the observation RESULTING
         FROM row t's action (sensed post-step, pre-reset — so the terminal
@@ -651,6 +751,16 @@ class DreamerTrainer(nnx.Module):
                 current_key, act_key = jax.random.split(current_key)
                 action_idx, next_d_state = self.get_action(
                     obs, d_state, eval_mode=False, rng=act_key)
+
+            # 2b. Random-action prefill (WP-NNX F7 / U4). Static flag —
+            # resolved at trace time.
+            if random_actions:
+                current_key, rand_key = jax.random.split(current_key)
+                act_dim = self.agent.ac.actor.net.layers[-1].out_features
+                action_idx = jax.random.randint(rand_key, (B,), 0, act_dim)
+                # Keep the RSSM carry's prev_action consistent with the
+                # action actually executed (sheeprl's player pairs likewise).
+                next_d_state['prev_action'] = jax.nn.one_hot(action_idx, act_dim)
 
             # 3. Step Environment
             with jax.named_scope("dreamer_env_step"):
@@ -689,11 +799,11 @@ class DreamerTrainer(nnx.Module):
                     reset_state, next_state_raw
                 )
             
-            # 5. Prepare Dreamer state for NEXT step
-            # On reset, we should reset RSSM state too? 
-            # Dreamer typically handles this via 'is_first' flag in RSSM.step
-            # but here get_action handles it. 
-            # We need to set 'is_first' for the NEXT get_action call.
+            # 5. Prepare Dreamer state for NEXT step.
+            # Stage 'is_first' for the NEXT get_action call; get_action consumes
+            # it (WP-NNX F1): RSSM.step masks deter/stoch, get_action zeroes the
+            # stale prev_action and resets mod_h — the collection-time analog of
+            # sheeprl player.init_states.
             next_d_state['is_first'] = done[..., None].astype(jnp.float32)
             
             # Record transition

@@ -20,9 +20,14 @@
 #   encoding_mode: hierarchical -> flat    (sheeprl uses a flat MLP encoder)
 #
 # Plus one delta against the cascade-side Hafner-Atari replay_ratio baseline
-# (configs/models/dreamer_v3/dreamer_v3_rr06.yaml, NOT dreamer_v3.yaml which sits at 0.5):
+# (configs/models/dreamer_v3/dreamer_v3_rr06.yaml, whose post-U4 value is 0.00048828125):
 #
-#   replay_ratio:         0.0625 -> 1.0    (16x more grad updates per env step)
+#   replay_ratio:         -> 1.0    (WP-NNX U4/F7 2026-07-08: replay_ratio is now
+#                                    per-ENV-STEP, sheeprl semantics. 1.0 = full sheeprl
+#                                    recipe intensity — 1 grad update per env step —
+#                                    ~128x the grad steps this config performed under
+#                                    the old per-sequence counting. Deliberately NOT
+#                                    rescaled; see inline comment below.)
 #
 # Unchanged (matched-or-acceptable):
 #   batch_size:           16                (already matched to sheeprl)
@@ -55,9 +60,12 @@ agent:
   algorithm: "DreamerV3"
   batch_size: 16
   sequence_length: 64        # OVERRIDE vs dreamer_v3.yaml (128 -> 64). Mirrors sheeprl per_rank_sequence_length=64.
-  replay_ratio: 1.0          # OVERRIDE vs dreamer_v3_rr06.yaml (0.0625 -> 1.0). The 0.0625 baseline is the
-                             # Hafner-2023 Atari/DMC default that the cascade-side runs use; dreamer_v3.yaml
-                             # itself sits at 0.5. Mirrors sheeprl replay_ratio=1 (1 grad update per env step per env).
+  replay_ratio: 1.0          # OVERRIDE vs dreamer_v3_rr06.yaml. Mirrors sheeprl replay_ratio=1 (1 grad update per env step per env).
+                             # WP-NNX U4/F7: semantics changed to per-ENV-STEP (sheeprl); this value is DELIBERATELY
+                             # NOT rescaled ÷128 — this config's declared intent IS full sheeprl recipe intensity,
+                             # which the honest knob now delivers. ⚠ ~128x more grad steps than this config performed
+                             # pre-fix; launching it is a deliberate, expensive act.
+  learning_starts: 1024      # WP-NNX U4/F7: random-action prefill (env steps) before training starts. sheeprl default. MANDATORY key (get_mandatory) — missing key crashes training.
   collect_interval: 128      # Unchanged. JAX-loop scan length; the effective per-env grad/env ratio
                              # is governed by replay_ratio above.
   train_steps: 64            # Unchanged. Effective per-iter grad updates = Ratio(replay_ratio)(global_step / collect_interval).

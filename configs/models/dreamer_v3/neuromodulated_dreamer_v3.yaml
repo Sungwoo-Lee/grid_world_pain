@@ -2,7 +2,8 @@ agent:
   algorithm: "DreamerV3"
   batch_size: 16
   sequence_length: 128
-  replay_ratio: 1
+  replay_ratio: 0.0078125    # WP-NNX U4/F7: semantics changed to per-ENV-STEP (sheeprl); value rescaled ÷128 (1 -> 0.0078125) to preserve prior effective training intensity.
+  learning_starts: 1024      # WP-NNX U4/F7: random-action prefill (env steps) before training starts. sheeprl default. MANDATORY key (get_mandatory) — missing key crashes training.
   collect_interval: 128
   train_steps: 64
   model_lr: 1e-4

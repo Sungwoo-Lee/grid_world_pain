@@ -5,6 +5,11 @@
 #
 #     replay_ratio: 0.5  ->  0.0625
 #
+# (WP-NNX U4/F7 2026-07-08: replay_ratio is now per-ENV-STEP (sheeprl semantics);
+#  the values in this header — and the R-based cost model below — refer to the old
+#  per-sequence counting. The live key is the ÷128 rescale: 0.0625 -> 0.00048828125,
+#  which preserves the effective intensity this header describes.)
+#
 # This is the canonical Hafner-2023 Atari/DMC default. Our project default
 # (0.5) is 8× higher, which the conventional-failure-mode critique
 # (docs/project/critiques/dreamer_conventional_failure_modes_for_our_setup.md
@@ -41,8 +46,11 @@ agent:
   algorithm: "DreamerV3"
   batch_size: 16
   sequence_length: 128   # Steps per trajectory (same concept as Recurrent PPO sequence_length)
-  replay_ratio: 0.0625   # FIX-DELTA vs dreamer_v3.yaml (0.5 -> 0.0625). Hafner-2023 Atari/DMC default.
-  collect_interval: 128     # Env steps per iteration per env. 1 = sheeprl-style (canonical), 128 = full sequence (JAX-optimized)
+  replay_ratio: 0.00048828125   # FIX-DELTA vs dreamer_v3.yaml (8x lower; Hafner-2023 Atari/DMC default under the old counting).
+                                # WP-NNX U4/F7: semantics changed to per-ENV-STEP (sheeprl); value rescaled ÷128
+                                # (0.0625 -> 0.00048828125) to preserve prior effective training intensity.
+  learning_starts: 1024      # WP-NNX U4/F7: random-action prefill (env steps) before training starts. sheeprl default. MANDATORY key (get_mandatory) — missing key crashes training.
+  collect_interval: 128     # Env steps collected per iteration per env (JAX scan length). Training intensity is governed by replay_ratio (per-env-step), NOT this knob. (K5: old "1 = sheeprl-style (canonical)" note was misleading.)
   train_steps: 64
   model_lr: 1e-4
   actor_lr: 3e-5

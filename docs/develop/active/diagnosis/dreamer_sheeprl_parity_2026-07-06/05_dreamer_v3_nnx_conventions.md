@@ -221,3 +221,9 @@ fix; U2 and U4 are small but semantics-changing (pre/post-fix runs not comparabl
    Finding 10's nits (silent `config.get` defaults, unseeded `np.random`, per-call re-jit) stand.
 
 Reviewed by: code-reviewer (parity/convention audit, area 5 of 5, 2026-07-08)
+
+---
+
+**Fix routing (2026-07-08):** U1–U6 + K1's collection-reset fix are packaged as work package
+WP-NNX — plan with per-fix file changes, red-pre-fix regression tests, and the U4/U6 decision
+recommendations: [[fix_plan_nnx_parity]].
