@@ -43,6 +43,7 @@ from src.algorithms.dreamer_srl.agent import build_agent
 from src.algorithms.dreamer_srl.buffers import (
     EnvIndependentSequentialReplayBuffer,
     SequentialReplayBuffer,
+    validate_per_env_capacity,
 )
 from src.algorithms.dreamer_srl.loss import TwoHotEncoding
 from src.algorithms.dreamer_srl.train import make_train_step, polyak_update
@@ -371,7 +372,8 @@ def _reset_terminal_step_data(step_data: dict, dones_idxes: list) -> None:
     step_data["is_first"][:, dones_idxes]   = 1.0
 
 
-def _advance_episode_counters(episode_lengths, episode_rewards, rewards, dones) -> None:
+def _advance_episode_counters(episode_lengths, episode_rewards, rewards, dones,
+                              *, stage_swapped: bool = False) -> None:
     """WP-SRL P5: advance per-env episode counters, excluding envs done this iter.
 
     In-place, pure numpy. The done-block logging already counts the in-flight
@@ -383,8 +385,17 @@ def _advance_episode_counters(episode_lengths, episode_rewards, rewards, dones) 
     04 D-06). sheeprl needs no counters — it reads the gym wrapper's
     `final_info["episode"]` (dreamer_v3.py:610-618).
 
+    C1 (review_srl_parity_fixes.md): `stage_swapped=True` no-ops the advance.
+    On a curriculum stage-transition iteration the swap block has already
+    wiped ALL envs' counters (partial episodes deliberately dropped); the
+    pre-swap step's +1/reward must NOT be credited to the new stage's fresh
+    counters — consistent with the behavior/dist accumulators, which are
+    wiped at the same point and receive no post-wipe credit.
+
     Regression test: tests/algorithms/dreamer_srl/test_episode_metrics.py
     """
+    if stage_swapped:
+        return
     alive = ~np.asarray(dones, dtype=bool)
     episode_lengths[alive] += 1
     episode_rewards[alive] += rewards[alive].astype(np.float32)
@@ -712,6 +723,15 @@ def main() -> None:
     # the reference capacity) AND shared one write head across envs (hole rows
     # at partial dones — area report 04 D-03).
     per_env_buffer_size = buffer_size // num_envs
+    # N1 (review_srl_parity_fixes.md): fail fast at startup — a per-env
+    # capacity below seq_len passes ready_to_sample() once wrapped-full but
+    # crashes at the first post-prefill sample() (buffers.py:367-371).
+    validate_per_env_capacity(
+        per_env_buffer_size,
+        seq_len,
+        configured_buffer_size=buffer_size,
+        num_envs=num_envs,
+    )
     if args.buffer_device == "gpu":
         if num_envs != 1:
             raise ValueError(
@@ -1264,6 +1284,10 @@ def main() -> None:
         step_data["is_first"] = np.zeros((1, num_envs, 1), dtype=np.float32)
 
         # Handle done environments (sheeprl L639-L657)
+        # C1 (review_srl_parity_fixes.md): set on curriculum stage swaps so the
+        # end-of-iteration counter advance is skipped (swap wipes ALL counters;
+        # the pre-swap step must not credit the new stage's fresh counters).
+        _stage_swapped_this_iter = False
         dones_idxes = list(np.where(dones)[0])
         if dones_idxes:
             # Log episode info BEFORE resetting (sheeprl L610-L618)
@@ -1433,6 +1457,10 @@ def main() -> None:
                     # 4. Wipe in-flight episode accumulators (all envs — partial
                     #    episodes dropped). Risk 3 mitigation: clear iteration_episodes
                     #    so pre-swap per-tag keys don't reach WandB fan-out.
+                    #    C1: flag the swap so _advance_episode_counters below skips
+                    #    this iteration — otherwise the pre-swap step's +1/reward
+                    #    lands on non-done envs' freshly wiped counters.
+                    _stage_swapped_this_iter = True
                     episode_lengths[:] = 0
                     episode_rewards[:] = 0.0
                     for _k in BEHAVIOR_KEYS:
@@ -1589,7 +1617,11 @@ def main() -> None:
         # the done block above); the unconditional increment previously leaked
         # +1 step and the terminal reward into the SUCCESSOR episode's counters.
         # sheeprl needs no counters (gym wrapper final_info, dreamer_v3.py:610-618).
-        _advance_episode_counters(episode_lengths, episode_rewards, rewards, dones)
+        # C1: skipped entirely on curriculum stage-swap iterations — the swap
+        # block wiped all counters and the pre-swap step belongs to dropped
+        # partial episodes, not the new stage's first episode.
+        _advance_episode_counters(episode_lengths, episode_rewards, rewards, dones,
+                                  stage_swapped=_stage_swapped_this_iter)
 
         # -------------------------------------------------------------------
         # TRAIN GATE (sheeprl L660-L698)

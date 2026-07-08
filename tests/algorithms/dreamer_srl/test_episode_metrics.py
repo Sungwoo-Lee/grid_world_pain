@@ -106,3 +106,70 @@ def test_advance_skips_only_done_envs() -> None:
 
     np.testing.assert_array_equal(episode_lengths, np.array([5, 0, 8], dtype=np.int32))
     np.testing.assert_allclose(episode_rewards, np.array([3.5, 0.0, -0.5], dtype=np.float32))
+
+
+def test_stage_swap_iteration_skips_advance() -> None:
+    """C1 (review_srl_parity_fixes.md): swap-iteration advance must be skipped.
+
+    Curriculum stage-swap edge of the P5 fix: on a stage-transition iteration
+    the swap block (dreamer_srl_main.py step 4, ~:1436) wipes ALL envs'
+    episode counters — partial episodes of NON-done envs are deliberately
+    dropped. `_advance_episode_counters` then runs at the end of the same
+    iteration (~:1592) with the PRE-swap `rewards`/`dones`; unguarded, it
+    credits the pre-swap step's +1 length and reward to the non-done envs'
+    freshly wiped counters, i.e. into the NEW stage's first episode.
+
+    Fix: the driver tracks `_stage_swapped_this_iter` and passes it as
+    `stage_swapped=`; the helper no-ops when True, so all counters stay at
+    the swap block's zeros and every env starts the new stage clean —
+    consistent with the behavior/dist accumulators, which are wiped at the
+    same point and receive no post-wipe credit.
+
+    Red evidence (pre-fix): TypeError — `_advance_episode_counters` had no
+    `stage_swapped` parameter (the advance at :1592 was unconditional).
+    Old-code behavioral value: env 1 (alive through the swap) ends the swap
+    iteration with length=1, reward=3.0 instead of 0/0.0.
+    """
+    num_envs = 2
+    episode_lengths = np.zeros(num_envs, dtype=np.int32)
+    episode_rewards = np.zeros(num_envs, dtype=np.float32)
+
+    # Iteration 1 — ordinary step, no dones, no swap.
+    rewards = np.array([1.0, 2.0], dtype=np.float32)
+    dones = np.array([False, False])
+    _advance_episode_counters(episode_lengths, episode_rewards, rewards, dones,
+                              stage_swapped=False)
+    np.testing.assert_array_equal(episode_lengths, np.array([1, 1], dtype=np.int32))
+    np.testing.assert_allclose(episode_rewards, np.array([1.0, 2.0], dtype=np.float32))
+
+    # Iteration 2 — env 0 finishes (logged by the done block), completing the
+    # episode quota for the current stage -> stage swap fires this iteration.
+    rewards = np.array([10.0, 3.0], dtype=np.float32)
+    dones = np.array([True, False])
+
+    # Done block: log env 0 as (counters+1, counters+rewards[0]), zero env 0.
+    ep_len = int(episode_lengths[0]) + 1
+    ep_rew = float(episode_rewards[0]) + float(rewards[0])
+    assert (ep_len, ep_rew) == (2, 11.0)
+    episode_lengths[0] = 0
+    episode_rewards[0] = 0.0
+
+    # Swap block step 4: wipe ALL counters (env 1's in-flight partial episode
+    # is dropped — mirrors dreamer_srl_main.py:1436-1437).
+    episode_lengths[:] = 0
+    episode_rewards[:] = 0.0
+
+    # End-of-iteration advance with the PRE-swap rewards/dones: must no-op.
+    _advance_episode_counters(episode_lengths, episode_rewards, rewards, dones,
+                              stage_swapped=True)
+
+    np.testing.assert_array_equal(
+        episode_lengths, np.zeros(num_envs, dtype=np.int32),
+        err_msg="Pre-swap step leaked +1 length into the new stage's counters "
+                "(C1: swap-iteration advance not skipped)",
+    )
+    np.testing.assert_allclose(
+        episode_rewards, np.zeros(num_envs, dtype=np.float32),
+        err_msg="Pre-swap step's reward leaked into the new stage's counters "
+                "(C1: swap-iteration advance not skipped)",
+    )

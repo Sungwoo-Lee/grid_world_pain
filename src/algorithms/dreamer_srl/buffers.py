@@ -682,6 +682,39 @@ class SequentialReplayBuffer:
         return samples
 
 
+def validate_per_env_capacity(
+    per_env_buffer_size: int,
+    sequence_length: int,
+    *,
+    configured_buffer_size: int,
+    num_envs: int,
+) -> None:
+    """N1 (review_srl_parity_fixes.md): fail fast when per-env capacity < seq_len.
+
+    With WP-SRL P2's sheeprl sizing (`buffer.size // num_envs`, done in the
+    driver), a small configured buffer + many envs can leave each per-env
+    sub-buffer smaller than `algo.per_rank_sequence_length`. In that state
+    `ready_to_sample()` returns True once the ring wraps full, but every
+    `sample()` raises ("sequence length greater than the buffer size",
+    buffers.py:367-371) — the run crashes only at the FIRST post-prefill
+    sample instead of at startup. The driver calls this at buffer
+    construction (dreamer_srl_main.py, step 7) so the misconfiguration
+    surfaces before any environment step is paid for.
+
+    Regression test:
+        tests/algorithms/dreamer_srl/test_env_independent_buffer.py::test_per_env_capacity_guard
+    """
+    if per_env_buffer_size < sequence_length:
+        raise ValueError(
+            f"per-env replay-buffer capacity {per_env_buffer_size} "
+            f"(buffer.size {configured_buffer_size} // num_envs {num_envs}) is "
+            f"smaller than algo.per_rank_sequence_length {sequence_length}: "
+            f"every sample() would fail after prefill. Increase buffer.size to "
+            f"at least {sequence_length * num_envs}, reduce num_envs, or reduce "
+            f"the sequence length."
+        )
+
+
 class EnvIndependentSequentialReplayBuffer:
     """n_envs independent single-env SequentialReplayBuffers.
 

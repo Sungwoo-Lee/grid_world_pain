@@ -1280,7 +1280,10 @@ class MLPDecoder(nnx.Module):
             latent: [..., latent_dim]
 
         Returns:
-            reconstructed_obs: [..., obs_dim]
+            reconstructed_obs: [..., obs_dim] — symlog-space prediction
+                (WP-SRL P3: the obs loss symlogs the TARGET, so the raw
+                decoder output lives in symlog space; apply `symexp` for
+                real-space values, cf. loss.SymlogDistribution.mode/mean).
         """
         x = latent
         for lin, norm in zip(self.hidden_linears, self.hidden_norms):
@@ -1652,7 +1655,8 @@ class WorldModel(nnx.Module):
                 recurrent_states:    [T, B, recurrent_state_size]
                 posterior_logits:    [T, B, stochastic_size]
                 prior_logits:        [T, B, stochastic_size]
-                reconstructed_obs:   [T, B, obs_dim]
+                reconstructed_obs:   [T, B, obs_dim] — symlog-space (WP-SRL P3);
+                                     apply `symexp` for real-space values
                 reward_logits:       [T, B, bins]
                 continue_logits:     [T, B, 1]
         """
@@ -1709,6 +1713,7 @@ class WorldModel(nnx.Module):
         # Decoder, reward, continue predictions (sheeprl L149-L167)
         # Reshape to [T*B, latent_dim] for batched forward, then reshape back
         latent_flat = latent_states.reshape(T * B, -1)
+        # N2 note: symlog-space prediction (WP-SRL P3) — apply symexp for real-space obs
         reconstructed_obs = jax.vmap(self.decoder)(latent_flat).reshape(T, B, -1)
         reward_logits = jax.vmap(self.reward_model)(latent_flat).reshape(T, B, -1)
         continue_logits = jax.vmap(self.continue_model)(latent_flat).reshape(T, B, 1)

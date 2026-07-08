@@ -40,6 +40,7 @@ import pytest
 from src.algorithms.dreamer_srl.buffers import (
     EnvIndependentSequentialReplayBuffer,
     SequentialReplayBuffer,
+    validate_per_env_capacity,
 )
 
 
@@ -217,3 +218,50 @@ def test_constructor_validation() -> None:
         EnvIndependentSequentialReplayBuffer(buffer_size=8, n_envs=2).sample(
             batch_size=0, sequence_length=1
         )
+
+
+def test_per_env_capacity_guard() -> None:
+    """N1 (review_srl_parity_fixes.md): fail fast when per-env capacity < seq_len.
+
+    With P2's driver-side sizing (`buffer.size // num_envs`), a small
+    configured buffer + many envs makes `per_env_buffer_size < seq_len`
+    reachable. `ready_to_sample()` returns True once the ring wraps full, so
+    the run crashes only at the FIRST post-prefill `sample()` (buffers.py:
+    367-371) instead of at startup. The driver now calls
+    `validate_per_env_capacity(...)` before buffer construction.
+
+    Red evidence (pre-fix): whole file fails at collection with ImportError —
+    `validate_per_env_capacity` does not exist ("red by absence"; the
+    deferred-crash pathology itself is pinned behaviorally below).
+    """
+    # Guard fires: 128 // 16 = 8 < seq_len 64.
+    with pytest.raises(ValueError, match="per-env"):
+        validate_per_env_capacity(
+            per_env_buffer_size=8,
+            sequence_length=64,
+            configured_buffer_size=128,
+            num_envs=16,
+        )
+    # Guard passes at the boundary (per-env capacity == seq_len).
+    validate_per_env_capacity(
+        per_env_buffer_size=64,
+        sequence_length=64,
+        configured_buffer_size=1024,
+        num_envs=16,
+    )
+
+
+def test_deferred_crash_without_guard() -> None:
+    """The pathology the N1 guard preempts: gate says yes, sample() crashes.
+
+    A wrapped-full buffer with capacity < seq_len passes `ready_to_sample()`
+    (P8's `_full or _pos >= seq_len` is True via `_full`) yet every
+    `sample()` raises — i.e. without the startup guard the failure surfaces
+    only after the full prefill phase has been paid for.
+    """
+    buf = SequentialReplayBuffer(buffer_size=4, n_envs=1, obs_keys=("obs",))
+    for t in range(6):                      # wrap: _full = True
+        buf.add(_row([float(t)]))
+    assert buf.ready_to_sample(8)           # gate is (misleadingly) open
+    with pytest.raises(ValueError, match="greater than"):
+        buf.sample(batch_size=1, sequence_length=8)

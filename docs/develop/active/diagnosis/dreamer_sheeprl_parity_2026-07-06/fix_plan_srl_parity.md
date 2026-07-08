@@ -944,3 +944,71 @@ class, and a fresh CLI check of the GPU-mode guard the developer had only code-i
 **Conclusion**: All 9 plan items (P1/P3/P5/P6/P7/P2/P8 fixed, P9+P7-cadence declared as D-016/D-015) implemented exactly per the plan with zero out-of-scope edits, both true behavioral reds independently reproduced, both suites re-run green at the reported counts, GPU-guard gap closed by CLI check, speed clean — **verified, ready to commit**. Any run trained after this package + WP-GAMMA lands is a new comparability epoch; do not mix with pre-fix runs.
 
 Verified by: senior-developer
+
+## Implementation Report — Addendum (2026-07-08, review follow-up C1/N1/N2)
+
+Follow-up patch to the committed parity epoch (8c0fcf9), closing the three non-blocking
+findings from [[review_srl_parity_fixes]] (`docs/reviews/review_srl_parity_fixes.md`).
+
+**C1 (🟡, curriculum-swap counter edge).** On a stage-transition iteration the swap block
+wipes ALL envs' episode counters (step 4, `dreamer_srl_main.py` ~:1436), but the
+end-of-iteration `_advance_episode_counters` then ran with the pre-swap `rewards`/`dones`,
+crediting the pre-swap step's +1 length and reward to non-done envs' freshly wiped counters
+(the new stage's first episode). Fix (reviewer's suggested flag variant): the driver tracks
+`_stage_swapped_this_iter` (init False each iteration before the done block, set True in
+swap step 4) and passes it to `_advance_episode_counters`, which gained a keyword-only
+`stage_swapped: bool = False` and no-ops when True. The pre-swap step's credit is skipped
+consistently — matching the behavior/dist accumulators, which are wiped at the same point
+and receive no post-wipe credit. Non-swap iterations are byte-identical in behavior.
+
+**N1 (🟢, fail-fast buffer guard).** New module-level `validate_per_env_capacity()` in
+`buffers.py` raises `ValueError` (naming per-env capacity, configured `buffer.size`,
+`num_envs`, seq_len, and the minimum viable size) when `buffer_size // num_envs < seq_len`;
+the driver calls it right after computing `per_env_buffer_size` (step 7), before
+constructing either buffer class (covers both the wrapper and the GPU single-env path) —
+previously the misconfiguration passed `ready_to_sample()` once wrapped-full and crashed
+only at the first post-prefill `sample()` (`buffers.py:367-371`).
+
+**N2 (🟢, docstrings).** Three docstring/comment-only annotations in `agent.py`
+(`MLPDecoder.__call__` Returns ~:1283, `observe()` Returns ~:1655, decoder call site
+~:1712): `reconstructed_obs` is the **symlog-space** prediction post-P3; apply `symexp`
+for real-space values (cf. `loss.SymlogDistribution.mode/mean`). No behavior change.
+
+**File changes** (all within the flagged scope; nothing else touched):
+- `src/algorithms/dreamer_srl/dreamer_srl_main.py` — C1 flag + guarded advance; N1 guard call + import.
+- `src/algorithms/dreamer_srl/buffers.py` — N1 `validate_per_env_capacity()`.
+- `src/algorithms/dreamer_srl/agent.py` — N2 docstrings/comment only.
+- `tests/algorithms/dreamer_srl/test_episode_metrics.py` — +`test_stage_swap_iteration_skips_advance`.
+- `tests/algorithms/dreamer_srl/test_env_independent_buffer.py` — +`test_per_env_capacity_guard`, +`test_deferred_crash_without_guard`.
+
+**Red→green evidence** (red-first discipline; logs: `tmp/20260708_c1n1_red_prefix.log`,
+`tmp/20260708_c1n1_green_postfix.log`):
+- C1: pre-fix `test_stage_swap_iteration_skips_advance` **failed** —
+  `TypeError: _advance_episode_counters() got an unexpected keyword argument 'stage_swapped'`
+  (the advance at :1592 was unconditional; old-code behavioral value documented in the test:
+  alive env ends the swap iteration with length=1/reward=3.0 instead of 0/0.0). Post-fix: passes.
+- N1: pre-fix `test_env_independent_buffer.py` **failed at collection** — `ImportError:
+  cannot import name 'validate_per_env_capacity'` (red by absence, same convention as the
+  package's P2/P8 tests). The deferred-crash pathology is additionally pinned behaviorally:
+  `test_deferred_crash_without_guard` shows a wrapped-full capacity-4 buffer passing
+  `ready_to_sample(8)` yet raising on `sample(sequence_length=8)`. Post-fix: both pass.
+
+**Test results** (CPU, `grid_world_pain` env, 2026-07-08):
+- Targeted: `test_episode_metrics.py` + `test_env_independent_buffer.py` → **13 passed** (10 prior + 3 new).
+- Full `tests/algorithms/dreamer_srl/` → **132 passed, 2 skipped** (129-green baseline + 3 new; zero regressions; the 8 known-red rows live outside this directory and were not re-run — unaffected scope).
+
+**Speed check: skipped, with rationale.** The N1 guard is a startup-only integer
+comparison (before any env step); C1 adds one bool kwarg + early-return branch to a
+host-side numpy helper called once per driver iteration (sub-microsecond vs the ~130 ms
+iteration measured for the parent package); N2 is docstring-only. No JIT boundary, hot-path
+tensor op, or per-step model code is touched. Flagged here for senior-developer to confirm
+the skip during verification.
+
+**Deviations from the flagged scope:** none. The C1 fix uses the reviewer's suggested
+flag-skip variant (not the wipe-reorder variant) because it keeps the swap block's wipes
+co-located and makes the skip testable through the module-level helper. Working tree
+otherwise clean apart from the pre-existing `train_command-agent.sh` modification and the
+`docs/diary/2026-07-02.md` untracked file (both pre-declared, untouched). Not committed —
+ready for senior-developer verification.
+
+Implemented by: developer
