@@ -43,6 +43,7 @@ value-learning style, replay accounting, and discount weighting all changed).
 | C7 | block-aligned sequence sampling + mixture pools | KEPT — declared DreamerV4-inspired extension |
 | C8 | HORIZON/GAMMA/LAMBDA/FREE_NATS hardcoded constants | KEPT — recipe values; config-exposure is a separate refactor |
 | K2–K7 | eval path, unimix placement, checkpoint omissions, collect_interval validation, target-critic init, PRNG hygiene | OPEN — owned by [[KNOWN_BUGS]]; referenced, not duplicated (K6 note: U2's fix makes the regularizer the target critic's ONLY role, so its fresh-random init matters slightly more early in training — benign while `zero_init_reward_critic: true`) |
+| R1 | imagined continues enter the λ-return and the cumulative discount weights as **sigmoid PROBABILITIES** (`dreamer_v3_trainer.py:473-474,498-499,533,546`); the recipe takes the **Bernoulli MODE** — hard 0/1 at p=0.5 (`Independent(BernoulliSafeMode(...)).mode`, vendor `dreamer_v3.py:246`), so ours applies a soft geometric decay where sheeprl applies a hard cutoff | **OPEN — declared 2026-07-08 (post-WP-NNX review, [[review_nnx_parity_fixes]] finding 2), severity Low-Med.** Pre-existing — NOT introduced by WP-NNX, but it rides the exact lines F4/F5 modified. Fix shape if taken: `cont = (sigmoid(...) > 0.5).astype(f32)` at the two `scan_imag` sites; declare-or-fix decision belongs to senior-developer. Note a fix opens another comparability epoch for high-uncertainty continue predictions |
 
 ## Maintenance
 

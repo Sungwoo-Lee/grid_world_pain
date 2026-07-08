@@ -50,9 +50,10 @@ def test_call_site_counts_env_steps_not_sequences():
         "train.py still counts replay_ratio per SEQUENCE (global_step // "
         "num_steps) — 1/128 of sheeprl's per-env-step semantics (U4)"
     )
-    assert re.search(r"ratio_scaled_updates\(global_step\)", src), (
-        "expected the per-env-step call `ratio_scaled_updates(global_step)` "
-        "in train.py (WP-NNX F7)"
+    assert re.search(r"ratio_scaled_updates\(global_step\s*-\s*prefill_env_steps\)", src), (
+        "expected the per-env-step, prefill-subtracted call "
+        "`ratio_scaled_updates(global_step - prefill_env_steps)` in train.py "
+        "(WP-NNX F7 + review_nnx_parity_fixes.md finding 1)"
     )
 
 
@@ -93,6 +94,71 @@ def test_ratio_per_env_step_accumulation():
             f"{global_step} env steps (expected ~{expected}) — per-env-step "
             f"semantics broken"
         )
+
+
+def test_ratio_first_call_after_prefill_no_backlog_burst():
+    """Review finding 1 (review_nnx_parity_fixes.md): sheeprl subtracts the
+    random-prefill env steps from the Ratio argument before the first call
+    (vendor dreamer_v3.py:661, with the one-iteration-back convention
+    `prefill_steps = learning_starts_iters - 1`, vendor :511), so its first
+    post-prefill call performs ~one iteration's steady-state work. Pre-fix,
+    train.py passed the raw global_step, and Ratio's first-call branch
+    returns `int(step * ratio)` — a one-time backlog burst of
+    ≈ replay_ratio × learning_starts EXTRA gradient steps (~1,024 extra on
+    dreamer_v3_sheeprl_matched.yaml geometry: ratio 1.0, learning_starts
+    1024). This test simulates the ACTUAL call-site arithmetic (expression
+    extracted from train.py source, since train.py is not importable) and
+    asserts the first post-prefill call does no more than one iteration's
+    steady-state work plus a few steps' tolerance (sheeprl's own
+    one-iteration-back convention), and that steady-state accounting is
+    undistorted afterwards."""
+    src = open(TRAIN_PY).read()
+    m = re.search(r"ratio_scaled_updates\((.+)\)", src)
+    assert m, "could not find the ratio_scaled_updates(...) call site in train.py"
+    call_expr = m.group(1)
+
+    for r, num_envs, num_steps, learning_starts in [
+        (1.0, 4, 128, 1024),         # dreamer_v3_sheeprl_matched intensity (the discriminative case)
+        (0.00390625, 4, 128, 1024),  # live rescaled intensity (pre-fix burst was already ~4 — negligible)
+    ]:
+        env_steps_per_iter = num_envs * num_steps
+        # Mirror of the train.py prefill accounting (vendor :508-511):
+        # prefill_steps = learning_starts_iters - 1 (floored, clamped at 0),
+        # expressed in env steps.
+        prefill_env_steps = max(learning_starts // env_steps_per_iter - 1, 0) \
+            * env_steps_per_iter
+
+        ratio = Ratio(r)
+        global_step = 0
+        bursts = []
+        for _ in range(200):
+            global_step += env_steps_per_iter
+            if global_step >= learning_starts:
+                bursts.append(ratio(eval(call_expr, {}, {
+                    "global_step": global_step,
+                    "prefill_env_steps": prefill_env_steps,
+                    "learning_starts": learning_starts,
+                    "num_envs": num_envs,
+                    "num_steps": num_steps,
+                })))
+                if len(bursts) == 4:
+                    break
+        steady_state = r * env_steps_per_iter
+        assert bursts and bursts[0] <= steady_state + 4, (
+            f"post-prefill FIRST Ratio call burst {bursts[0]} gradient steps "
+            f"(ratio={r}, learning_starts={learning_starts}) — expected at "
+            f"most one iteration's steady-state work "
+            f"(~{steady_state:.0f} + a few steps; sheeprl subtracts the "
+            f"prefill, vendor dreamer_v3.py:661)"
+        )
+        # Steady state after the first call must be unaffected by the
+        # constant subtraction (deltas are what Ratio consumes).
+        for b in bursts[1:]:
+            assert abs(b - steady_state) <= 1.0, (
+                f"steady-state accounting distorted after prefill "
+                f"subtraction: got {b} grad steps/iter, expected "
+                f"~{steady_state:.2f}"
+            )
 
 
 # ---------------------------------------------------------------------------

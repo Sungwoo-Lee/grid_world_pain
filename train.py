@@ -850,6 +850,19 @@ def main():
         # actions and training is skipped. Mandatory key — no fallback.
         learning_starts = config.get_mandatory('agent.learning_starts', int)
 
+        # Review finding 1 (review_nnx_parity_fixes.md): subtract the prefill
+        # from the Ratio argument, mirroring sheeprl exactly (vendor
+        # dreamer_v3.py:508-511,661 — `ratio_steps = policy_step -
+        # prefill_steps * policy_steps_per_iter`, with the one-iteration-back
+        # convention `prefill_steps = learning_starts_iters - 1`). Without
+        # this, Ratio's first-call branch bursts ≈ replay_ratio ×
+        # learning_starts EXTRA gradient steps at the first post-prefill
+        # iteration (~1,024 extra on dreamer_v3_sheeprl_matched.yaml, ratio
+        # 1.0) instead of one iteration's steady-state work.
+        _env_steps_per_iter = num_envs * num_steps
+        prefill_env_steps = max(learning_starts // _env_steps_per_iter - 1, 0) \
+            * _env_steps_per_iter
+
 
         buffer_device = config.get_mandatory('agent.buffer_device')
         buffer_capacity = config.get_mandatory('agent.buffer_capacity')
@@ -1823,8 +1836,10 @@ def main():
                             # unchanged — see fix_plan_nnx_parity.md
                             # §Config handoff. Ratio carries fractional
                             # remainders exactly, so tiny values (e.g.
-                            # 0.00390625) accumulate correctly.
-                            train_steps = ratio_scaled_updates(global_step)
+                            # 0.00390625) accumulate correctly. The prefill
+                            # env steps are subtracted per vendor :661 (see
+                            # prefill_env_steps definition above).
+                            train_steps = ratio_scaled_updates(global_step - prefill_env_steps)
 
                             if buffer.device == "gpu":
                                 # GPU path: sample + train all inside one JIT call

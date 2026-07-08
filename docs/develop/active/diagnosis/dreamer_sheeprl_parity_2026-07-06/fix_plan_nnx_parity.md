@@ -496,6 +496,64 @@ Scratch artifacts (not for commit): `tmp/20260708_*` (extraction smokes, U1 prob
 
 > Implemented by: developer
 
+### Addendum — post-review follow-up patch (2026-07-08, after commit 32c67ca)
+
+Fixes the two yellow findings from [[review_nnx_parity_fixes]] (post-package
+code review), plus the finding-3 comment nit. Scope fence: `train.py` Ratio
+call site, the T7 test file, the F8 deviation register, one comment in
+`dreamer_v3_trainer.py`. No other code touched; the in-flight WP-SRL package
+and held γ config diffs left untouched.
+
+1. **Finding 1 — Ratio prefill-backlog burst (code fix).** Mechanism chosen:
+   **call-site subtraction mirroring vendor `dreamer_v3.py:508-511,661`
+   exactly** (not priming the private `Ratio._prev`, which would bypass the
+   first-call/`pretrain_steps` branch and poke a private attribute).
+   `train.py` now computes, next to the `learning_starts` read,
+   `prefill_env_steps = max(learning_starts // (num_envs*num_steps) - 1, 0) *
+   (num_envs*num_steps)` — sheeprl's one-iteration-back convention
+   (`prefill_steps = learning_starts_iters - 1`) expressed in env steps — and
+   passes `global_step - prefill_env_steps` to `ratio_scaled_updates`.
+   `src/models/dreamer_v3_util.py` untouched.
+2. **Regression test (red-first).** Extended
+   `tests/models/test_dreamer_nnx_replay_ratio_semantics.py` with
+   `test_ratio_first_call_after_prefill_no_backlog_burst`: extracts the
+   ACTUAL call-site expression from `train.py` source and simulates the
+   training loop; asserts the first post-prefill Ratio call does at most one
+   iteration's steady-state work (+4 steps tolerance, sheeprl's own
+   one-iteration-back behavior) and that steady state is undistorted after.
+   **Pre-fix: FAILED** — parity geometry (ratio 1.0, learning_starts 1024,
+   4 envs × collect 128) burst **1024** grad steps vs steady state 512
+   (`assert 1024 <= 512 + 4` red; subsequent iters correctly 512 — the
+   backlog is the one-time +≈ratio×prefill extra). **Post-fix: PASSES**
+   (first call = 512 = steady state). The pre-existing source pin in
+   `test_call_site_counts_env_steps_not_sequences` was updated to the new
+   expression `ratio_scaled_updates(global_step - prefill_env_steps)` (also
+   red pre-fix). Note: the review's ~1,536 pre-fix estimate assumed the gate
+   fires one iteration past `learning_starts`; with `learning_starts` an
+   exact multiple of env-steps/iter the measured pre-fix burst is 1,024 —
+   same defect, same fix. Live rescaled configs: with 16 envs × 128
+   `prefill_env_steps = 0` (prefill shorter than one iteration — vendor
+   accounting degenerates identically), so their behavior is bit-unchanged.
+3. **Finding 2 — sigmoid-continues deviation (docs only, per instruction).**
+   Added row **R1** (OPEN, severity Low-Med, fix shape
+   `(sigmoid > 0.5).astype(f32)` noted, declare-or-fix owned by
+   senior-developer) to [[06_nnx_recipe_deviation_register]]. No code change.
+4. **Finding 3 — comment fix (preferred smaller option).** The F4 comment at
+   `dreamer_v3_trainer.py` `v_start` now states `all_vals[0]` is structurally
+   unused (λ-computation consumes `values[1:]`/`values[-1]`; actor baseline
+   comes from `v_pred_logits`; matches sheeprl, XLA DCEs it). Dead compute
+   kept for shape parity — no code-behavior change.
+
+Tests: `tests/models/` full suite **46/46 passed** (135 s; was 45 before this
+patch — net +1 test). Known-red baseline rows are outside `tests/models/`;
+none touched. Speed check: **skipped with justification** — the runtime delta
+is one Python int subtraction per training iteration outside all JIT
+boundaries (provably not hot-path); the only behavioral delta is the intended
+removal of the one-time first-iteration burst (live configs bit-unchanged,
+`prefill_env_steps = 0` at 16-env geometry).
+
+> Implemented by: developer
+
 ## Verification Report
 
 > **Verified by**: senior-developer

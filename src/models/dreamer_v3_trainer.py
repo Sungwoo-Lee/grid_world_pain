@@ -522,9 +522,15 @@ class DreamerTrainer(nnx.Module):
             vals = rollouts['value']
 
             start_feat = self.agent.wm.get_feat(start_state)
-            # WP-NNX F4 (U2): v_start from the ONLINE critic (sheeprl D:244).
-            # All consumers (critic target, advantage, discount weights) are
-            # stop-gradient-protected, so no live gradient path is added.
+            # NOTE (review_nnx_parity_fixes.md finding 3): all_vals[0] is
+            # STRUCTURALLY UNUSED — compute_lambda_values consumes only
+            # values[1:] and values[-1], and the actor baseline comes from
+            # v_pred_logits, not all_vals. This matches sheeprl (its
+            # λ-computation never reads v'_0 either); the entry exists only
+            # for shape parity with the T+1 value stack and XLA dead-code-
+            # eliminates the compute. Which critic sources v_start therefore
+            # has no effect (WP-NNX F4 switched it to the online critic for
+            # consistency with the scan values, sheeprl D:244).
             v_start = from_twohot(critic(start_feat), paper_canonical_bins=self._paper_canonical_twohot_bins)
 
             all_vals = jnp.concatenate([v_start[None], vals], axis=0)
