@@ -27,8 +27,8 @@ varies per node**, so never assume an index/spec — check.
 | `--nodes 108 109` | Restrict to specific nodes |
 
 ## How to choose (match card to job)
-The project's standard rPPO/Dreamer runs (10×10 grid, `--num-envs 16`) are **small** — they fit
-on any card, including an 11 GB RTX 2080 Ti, and do **not** need a 49 GB RTX 6000 Ada.
+The project's standard rPPO runs (10×10 grid) use `--num-envs 128` — the `configs/train/default.yaml` default. **Do NOT override to 16** (a long-standing habit that silently shadowed the 128 default; the CLI flag wins over the config). Even at 128 envs they stay modest (a few GB), so they fit
+on any card, including an 11 GB RTX 2080 Ti, and do **not** need a 49 GB RTX 6000 Ada. DreamerV3's `num_envs` is a **per-run decision** — check the config/launch for the intended value; do not assume 16.
 
 1. Run `--free`.
 2. **Prefer the weakest free card that fits the job** (the list is already sorted that way):
