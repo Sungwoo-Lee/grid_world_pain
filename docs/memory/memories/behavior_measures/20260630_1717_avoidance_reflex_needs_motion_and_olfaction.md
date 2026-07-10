@@ -50,4 +50,5 @@ In the avoidance probe (agent centre, `hides_agent` bush, one animal approaching
 ## Backlinks
 - [[20260630_1715_behavior_measure_study_method_and_tooling]] (behavior_measures, 2026-06-30) — Interoceptive behavior-measure study: discover MEASURES of foraging/avoidance vs
 - [[20260630_1718_cover_use_late_emerging_run_vs_hide]] (behavior_measures, 2026-06-30) — Cross-model: an EARLY model (randpred, 1.5M) RUNS/kites around the grid perimete
+- [[20260710_1635_bush_hiding_metastable_dwell_measure]] (behavior_measures, 2026-07-10) — Bush-hiding on the hard-predator task is a metastable/intermittent mode (policy 
 <!-- END BACKLINKS -->

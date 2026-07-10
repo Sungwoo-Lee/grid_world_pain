@@ -45,4 +45,5 @@ Running the same avoidance probe on an **early checkpoint** (`randpred`, 1.5M st
 ## Backlinks
 - [[20260630_1715_behavior_measure_study_method_and_tooling]] (behavior_measures, 2026-06-30) — Interoceptive behavior-measure study: discover MEASURES of foraging/avoidance vs
 - [[20260704_2014_deterministic_probe_significance_inflates]] (behavior_measures, 2026-07-04) — A near-deterministic behavior probe (tiny within-model variance) makes p-values 
+- [[20260710_1635_bush_hiding_metastable_dwell_measure]] (behavior_measures, 2026-07-10) — Bush-hiding on the hard-predator task is a metastable/intermittent mode (policy 
 <!-- END BACKLINKS -->

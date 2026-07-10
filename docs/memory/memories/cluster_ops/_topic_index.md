@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 35
-**Last updated**: 2026-07-03
+**Insights**: 37
+**Last updated**: 2026-07-10
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-10 | 16:33 | `20260710_1633_rppo_resume_needs_matching_num_envs` | H1-fixed rPPO resume genuinely restores weights (bit-exact) + optimizer (Adam moments) + counters and is fatal-on-mismatch; but a resume MUST pass --num-envs matching the checkpoint's h_state batch dim (128-env ckpt needs --num-envs 128) or Orbax fatals. 128 envs accumulates episodes ~8x faster than 16 (10M overnight vs ~4 days). Gate-tested before a 100M resume. |
+| 2026-07-10 | 16:32 | `20260710_1632_num_envs_cli_override_config_owns_values` | All 6 ladder6 rPPO runs trained at num_envs=16 not the intended 128: a CLI --num-envs 16 flag silently overrode the config (train.py: X = args.X or config.get), and the gpu-status skill even documented 16 as 'standard'. Fixed with a config-owns-values convention (num_envs/seed/checkpoint_frequency config-owned per-algorithm; rPPO layers recurrent_ppo.yaml on default.yaml; episodes always-explicit since config default 100 is a smoke-test safety). Commits 944faab, 0104d3c. |
 | 2026-07-03 | 03:53 | `20260703_0353_wandb_log_code_hang_progress_recheck` | Lab nodes (108/109/110/113) hit a ~8-min wandb.run.log_code() SSL hang before training starts: process ALIVE with correct budget but 0% util / 0 iterations. The 60-90s alive+tqdm-total check PASSES during the hang, so 'alive' != 'training' — add a PROGRESS recheck (iterations advancing) before declaring healthy. Self-resolves; durable fix = timeout around log_code(). |
 | 2026-07-03 | 03:42 | `20260703_0342_lab_gpu_heterogeneous_probe_contamination` | Lab cluster is HETEROGENEOUS (2080 Ti/3090/4090/RTX 6000 Ada; node 114 has 4 GPUs), NOT homogeneous. An earlier run_command.py probe was wrong because that wrapper shares one timestamped NAS log per second -> parallel node queries collide and echo one node's output. Fix: direct-SSH per-node capture via scripts/lab/gpu_status.py (+ gpu-status skill + LAB_NODE_GPU_SPEC doc). Match card to job. |
 | 2026-06-30 | 18:30 | `20260630_1830_scripts_reorg_dependency_map_and_contract` | Safe script-folder reorg recipe: build a FOUR-surface caller-dependency map (intra-folder imports, src/ subprocess paths, tests, Claude skills/agents/settings) + the __file__-depth hazard; group BY FUNCTION not lifecycle so bare-name import clusters (the WandB scripts) stay co-located = 0 import edits; wire a Maintenance Contract into CLAUDE.md + developer/senior-developer profiles (reuses the CONFIG_GUIDE pattern). Outcome: 31 git-mv + 2 git-rm into scripts/{wandb,eval,dreamer,claude,lab,media}/, verdict PASS-WITH-NITS. |

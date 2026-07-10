@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-07-03
+**Last updated**: 2026-07-10
 
 ---
 
@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-07-10: 4 insights from the 128-env relaunch + config-owns-values + bush-hiding session (`20260710_1632_num_envs_cli_override_config_owns_values`, `20260710_1633_rppo_resume_needs_matching_num_envs` into cluster_ops; `20260710_1634_behavior_probe_eval_speed_parallel_batched_fdsafe`, `20260710_1635_bush_hiding_metastable_dwell_measure` into behavior_measures) reused existing tags `training_runner`, `config`, `learned_lesson`, `decision`, `meta`, `design`, `refutation` — no new tags promoted.
 - 2026-07-04: 3 insights into existing `behavior_measures` (`20260704_2012_noise_matched_frozen_probe`, `20260704_2013_probe_rerun_stale_checkpoint_contamination`, `20260704_2014_deterministic_probe_significance_inflates`) reused existing tags `design`, `decision`, `noise`, `learned_lesson`, `meta` — no new tags promoted.
 - 2026-07-03: 2 completeness-pass insights (`20260703_0352_blocking_obstacle_felt_not_seen` env_entities; `20260703_0353_wandb_log_code_hang_progress_recheck` cluster_ops) reused existing tags `design`, `learned_lesson`, `decision`, `training_runner`, `meta` — no new tags.
 - 2026-07-03: 3 insights from the basic 05/06/07 promotion + GPU-tooling + predator-jump session (`20260703_0342_lab_gpu_heterogeneous_probe_contamination` cluster_ops; `20260703_0343_predator_jump_pounce_mechanism`, `20260703_0344_attack_range_float_threshold_gotcha` env_entities) reused existing tags `training_runner`, `learned_lesson`, `meta`, `decision`, `design`, `config` — no new tags.

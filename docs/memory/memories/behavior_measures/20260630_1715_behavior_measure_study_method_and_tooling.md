@@ -52,4 +52,5 @@ A long-running study to **discover the right measures** of an agent's foraging a
 - [[20260704_2012_noise_matched_frozen_probe]] (behavior_measures, 2026-07-04) — A noise-trained agent must be probed with a config carrying its EXACT training p
 - [[20260704_2013_probe_rerun_stale_checkpoint_contamination]] (behavior_measures, 2026-07-04) — Re-running an avoidance-probe sweep on an ADVANCED checkpoint writes the new rec
 - [[20260704_2014_deterministic_probe_significance_inflates]] (behavior_measures, 2026-07-04) — A near-deterministic behavior probe (tiny within-model variance) makes p-values 
+- [[20260710_1634_behavior_probe_eval_speed_parallel_batched_fdsafe]] (behavior_measures, 2026-07-10) — The avoidance behavior-probe eval was sped ~8.8x (measured A/B/C). The dominant 
 <!-- END BACKLINKS -->
