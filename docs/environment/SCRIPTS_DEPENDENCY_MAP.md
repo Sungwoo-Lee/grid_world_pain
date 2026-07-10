@@ -144,7 +144,6 @@ Stakes legend: **CODE** = breaks Python/subprocess; **TOOL** = breaks a skill/ag
 | `scripts/dreamer/dreamer_srl_offline_wm_test.py` | `tests/scripts/...:107` (import) | TEST | test import |
 | `scripts/dreamer/dreamer_srl_offline_check.py` | `tests/.../test_end_to_end_parity.py:48` (subprocess) | TEST | test path |
 | `scripts/dreamer/sheeprl_jax_diff.py` | tests README + docs (mentions) | HAND | depth fix only |
-| `scripts/dreamer/dreamer_offline_wm_test.py` | referenced in sibling's comments only | HAND | depth fix only |
 | `scripts/dreamer/visualize_dream.py` | design doc + diary | HAND | depth fix only |
 | `scripts/media/record_env_demo.py` | README only | HAND | depth fix only |
 | `scripts/media/video_to_gif.py` | README only | HAND | depth fix only |
@@ -163,7 +162,7 @@ Stakes legend: **CODE** = breaks Python/subprocess; **TOOL** = breaks a skill/ag
 
 - **Cluster A — WandB analysis (import-coupled, MUST stay together):** `scripts/wandb/wandb_utils.py` (leaf) ← `scripts/wandb/wandb_metrics.py` ← `scripts/wandb/compare_wandb_runs.py`; `scripts/wandb/wandb_utils.py` ← `scripts/wandb/benchmark_wandb_speed.py`. Bare-name imports; splitting across folders breaks resolution unless rewritten. The `wandb-analysis` skill uses `PYTHONPATH=scripts/wandb`.
 - **Cluster B — eval → record → render pipeline (path/format-coupled, not imports):** `scripts/eval/eval_rollout.py` (writes `.rec.gz`) → `scripts/eval/render_recordings.py` (renders) → `scripts/eval/trajectory_story.py`, `scripts/behavior_measures/avoidance_stats_heatmap.py`, `scripts/eval/motif_cluster.py` (consume recordings). Coupling is the recording format (`src/utils/eval_recording.py`) plus the hardcoded `scripts/eval/render_recordings.py` subprocess path in `src/`. **`scripts/eval/parity_check_eval_rollout.py` (added 2026-07-06)** joins this cluster from both ends: it subprocess-invokes `eval_rollout.py` twice (once legacy, once `--batched`) and imports `avoidance_stats_heatmap.episode_measures` directly (§1a) to score both runs identically — it is the Tier 2 acceptance gate for `eval_rollout.py`'s batched rollout path (docs/develop/active/refactors/EVAL_ROLLOUT_BATCHING_PERF.md).
-- **Cluster C — dreamer/sheeprl parity (path/string-coupled):** `scripts/fixtures/gen_cp*.py` → `scripts/dreamer/sheeprl_jax_diff.py`, `scripts/dreamer/dreamer_srl_offline_check.py`, `scripts/dreamer/dreamer_srl_offline_wm_test.py`, `scripts/dreamer/dreamer_offline_wm_test.py`. Coupling is fixture `.npz` paths under `tests/fixtures/dreamer_srl/` and hint strings, plus the two `tests/` files (§1c).
+- **Cluster C — dreamer/sheeprl parity (path/string-coupled):** `scripts/fixtures/gen_cp*.py` → `scripts/dreamer/sheeprl_jax_diff.py`, `scripts/dreamer/dreamer_srl_offline_check.py`, `scripts/dreamer/dreamer_srl_offline_wm_test.py`. Coupling is fixture `.npz` paths under `tests/fixtures/dreamer_srl/` and hint strings, plus the two `tests/` files (§1c). (`dreamer_offline_wm_test.py` — the NNX offline diagnostic — moved out of `scripts/` on 2026-07-10 to `src/models/archive/dreamer_v3_nnx/scripts/` with the archived DreamerV3-NNX stack.)
 - **Dev-tooling group (TOOL stakes, no imports between them):** all scripts under `scripts/claude/`. Independent files, but every executable one is hardcoded in a skill/agent (§2).
 
 ---

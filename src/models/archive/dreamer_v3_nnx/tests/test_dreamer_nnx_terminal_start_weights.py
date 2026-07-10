@@ -17,6 +17,13 @@ reason 2 = starvation) must produce exactly zero actor and critic losses
 See docs/develop/active/diagnosis/dreamer_sheeprl_parity_2026-07-06/
 fix_plan_nnx_parity.md (F5) and 05_dreamer_v3_nnx_conventions.md (U5).
 """
+
+import os as _os_guard
+import pytest as _pytest_guard
+if _os_guard.environ.get("GWP_RUN_ARCHIVED_NNX_TESTS") != "1":
+    _pytest_guard.skip(
+        "archived DreamerV3-NNX stack -- set GWP_RUN_ARCHIVED_NNX_TESTS=1 to run",
+        allow_module_level=True)
 import os
 import sys
 

@@ -14,10 +14,17 @@ directly on `compute_continue_target` — no environment rollout needed.
 
 See docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
 """
+
+import os as _os_guard
+import pytest as _pytest_guard
+if _os_guard.environ.get("GWP_RUN_ARCHIVED_NNX_TESTS") != "1":
+    _pytest_guard.skip(
+        "archived DreamerV3-NNX stack -- set GWP_RUN_ARCHIVED_NNX_TESTS=1 to run",
+        allow_module_level=True)
 import jax.numpy as jnp
 import pytest
 
-from src.models.dreamer_v3_trainer import compute_continue_target
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_trainer import compute_continue_target
 
 
 def test_continue_target_is_one_on_timeout():

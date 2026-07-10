@@ -10,7 +10,7 @@ Usage:
   python scripts/dreamer_offline_wm_test.py \
     --checkpoint results/JAX_DreamerV3/20260509-050606_dreamer_conv_NoPred_rr06_s0_n113 \
     --env-config configs/environment/experiment/archive/basic/00-5X5_NoPred.yaml \
-    --agent-config configs/models/dreamer_v3/dreamer_v3_rr06.yaml \
+    --agent-config configs/models/archive/dreamer_v3_nnx/dreamer_v3_rr06.yaml \
     --num-starts 200 \
     --output tmp/20260509_wm_imagination_test_A1.json
 
@@ -70,7 +70,7 @@ THRESH_PER_CHANNEL = {
 # Local project imports (after env var set)
 # ─────────────────────────────────────────────────────────────────────────────
 # Add repo root to path if needed
-_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))))
 if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
@@ -79,8 +79,8 @@ from src.utils.config import Config, get_default_config
 from src.environment.config_loader import load_env_params, load_env_config
 from src.environment.wrapper import ParallelEnv
 from src.environment.sensor import get_observation_breakdown
-from src.models.dreamer_v3_trainer import DreamerTrainer
-from src.models.dreamer_v3_util import symlog, symexp, from_twohot
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_trainer import DreamerTrainer
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_util import symlog, symexp, from_twohot
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ def parse_args():
     p.add_argument("--env-config", required=True,
                    help="Path to environment YAML (e.g. configs/environment/experiment/archive/basic/00-5X5_NoPred.yaml)")
     p.add_argument("--agent-config", required=True,
-                   help="Path to agent YAML (e.g. configs/models/dreamer_v3/dreamer_v3_rr06.yaml)")
+                   help="Path to agent YAML (e.g. configs/models/archive/dreamer_v3_nnx/dreamer_v3_rr06.yaml)")
     p.add_argument("--env-seed", type=int, default=ENV_SEED,
                    help=f"PRNG seed for env reset + rollout (default {ENV_SEED})")
     p.add_argument("--num-real-steps", type=int, default=N_REAL_STEPS,

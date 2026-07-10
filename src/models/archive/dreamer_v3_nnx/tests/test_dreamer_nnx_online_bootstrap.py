@@ -15,6 +15,13 @@ and adds the two-hot cross-entropy regularizer `loss_critic_slow_reg`.
 See docs/develop/active/diagnosis/dreamer_sheeprl_parity_2026-07-06/
 fix_plan_nnx_parity.md (F4) and 05_dreamer_v3_nnx_conventions.md (U2).
 """
+
+import os as _os_guard
+import pytest as _pytest_guard
+if _os_guard.environ.get("GWP_RUN_ARCHIVED_NNX_TESTS") != "1":
+    _pytest_guard.skip(
+        "archived DreamerV3-NNX stack -- set GWP_RUN_ARCHIVED_NNX_TESTS=1 to run",
+        allow_module_level=True)
 import os
 import sys
 
@@ -29,7 +36,7 @@ import jax.numpy as jnp
 import numpy as np
 from flax import nnx
 
-from src.models.dreamer_v3_util import to_twohot, from_twohot
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_util import to_twohot, from_twohot
 from dreamer_nnx_rollout_replica import (
     replica_rollout, replica_discount_weights,
 )

@@ -158,8 +158,9 @@ def _resolve_checkpoint_stage_config(models_dir, restored, quiet=False):
 
     The checkpoint's stage is read from its OWN saved `restored['stage']`
     field -- already present in the full checkpoint payload dict returned by
-    `checkpointer.restore(iteration)` for both RecurrentPPO and DreamerV3
-    (train.py ~line 2436/2447), so no extra partial-restore call is needed --
+    `checkpointer.restore(iteration)` for RecurrentPPO (train.py checkpoint-save
+    block; DreamerV3-NNX archived 2026-07-10 → src/models/archive/dreamer_v3_nnx/),
+    so no extra partial-restore call is needed --
     rather than recomputed from episode_boundaries: train.py's per-iteration
     stage-transition check means a checkpoint's recorded stage can lag one
     behind what a boundary-only recompute would give (see Finding E), so the
@@ -412,41 +413,16 @@ def main():
                 print(f"  [Warning] 'model' key not found in restored checkpoint. Keys: {list(restored.keys())}")
 
         elif algorithm == "DreamerV3":
-            from src.models.dreamer_v3_trainer import DreamerTrainer
-            # Build the trainer exactly as train.py does (train.py:815-817): pass the
-            # full Config object (DreamerTrainer.__init__ calls config.get_mandatory(...),
-            # which a plain dict does not support) plus obs_breakdown and
-            # modulation_config, so the rebuilt world model matches the shape train.py
-            # saved (Finding A #2, docs/reviews/diag_v3_pipeline_jax.md).
-            dreamer_mod_config = config.get('agent.modulation')
-            if dreamer_mod_config is not None and dreamer_mod_config.get('type') is None:
-                dreamer_mod_config = None
-            trainer = DreamerTrainer(
-                input_dim, action_dim, config, rngs=rngs,
-                obs_breakdown=get_observation_breakdown(ckpt_params),
-                modulation_config=dreamer_mod_config,
-            )
-
-            from flax.nnx.statelib import to_pure_dict
-            # Peel Orbax 'value' wrappers
-            wm_restored = peel_nnx_state(restored['wm'])
-            actor_restored = peel_nnx_state(restored['actor'])
-            critic_restored = peel_nnx_state(restored['critic'])
-            # Merge restored state into module state structure (handles str vs int keys for Sequential)
-            wm_struct = to_pure_dict(nnx.state(trainer.agent.wm, nnx.Param))
-            actor_struct = to_pure_dict(nnx.state(trainer.agent.ac.actor, nnx.Param))
-            critic_struct = to_pure_dict(nnx.state(trainer.agent.ac.critic, nnx.Param))
-            missing = []
-            wm_state = _merge_restored_into_module_state(wm_struct, wm_restored, "wm", missing)
-            actor_state = _merge_restored_into_module_state(actor_struct, actor_restored, "actor", missing)
-            critic_state = _merge_restored_into_module_state(critic_struct, critic_restored, "critic", missing)
-            # Finding L3: fail loudly on a train/eval structural mismatch instead of
-            # silently loading a half-random model.
-            _assert_full_restore(missing, "DreamerV3 model")
-            nnx.update(trainer.agent.wm, wm_state)
-            nnx.update(trainer.agent.ac.actor, actor_state)
-            nnx.update(trainer.agent.ac.critic, critic_state)
-            model = trainer.agent
+            # Kept as a reachable branch: old DreamerV3-NNX results dirs exist on
+            # disk under results/, and pointing evaluation at one should get this
+            # clear message, not an UnboundLocalError.
+            raise ValueError(
+                "The in-house DreamerV3 (NNX) stack was archived on 2026-07-10 "
+                "(development stopped 2026-05-11; superseded by the sheeprl-parity port). "
+                "Use src/algorithms/dreamer_srl/ (entry: src/algorithms/dreamer_srl/"
+                "dreamer_srl_main.py) instead. Archived code: src/models/archive/"
+                "dreamer_v3_nnx/ — see its README and docs/develop/active/diagnosis/"
+                "dreamer_sheeprl_parity_2026-07-06/archive_plan_dreamer_v3_nnx.md.")
         else:
             raise ValueError(f"Unsupported algorithm for JAX evaluation: {algorithm}")
             

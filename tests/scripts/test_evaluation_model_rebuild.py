@@ -24,10 +24,10 @@ Tests below:
      modulated (FiLM, memory_clip-bearing) RecurrentPPO checkpoint, then runs
      it through evaluation.py's actual `main()`. Pre-fix: KeyError('memory_clip').
      Post-fix: completes cleanly.
-  2. test_dreamer_eval_rebuild_signature -- confirms DreamerTrainer is invoked
-     with a Config object (not a plain dict) plus obs_breakdown/modulation_config,
-     at the construction-signature level (no DreamerV3 checkpoint fixture
-     exists on disk to round-trip end-to-end).
+  2. test_dreamer_eval_archived_stub -- the DreamerV3-NNX stack was archived
+     2026-07-10 (src/models/archive/dreamer_v3_nnx/); evaluation.py's DreamerV3
+     branch is now a fail-fast stub, and this test pins its contract: a clear
+     ValueError naming the archive + the live replacement (dreamer_srl).
   3. test_merge_reports_missing_leaves -- unit test of the completeness
      tracking added to `_merge_restored_into_module_state` (Finding L3):
      absent leaves are collected, not silently dropped.
@@ -154,54 +154,23 @@ def test_modulated_rppo_eval_rebuild_succeeds(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Finding A #2 — DreamerV3 rebuild (signature-level; no on-disk checkpoint fixture)
+# Archived-stack stub — DreamerV3-NNX was archived 2026-07-10
+# (src/models/archive/dreamer_v3_nnx/); evaluation.py's DreamerV3 branch must
+# fail fast with a clear message pointing at the archive + dreamer_srl.
 # ---------------------------------------------------------------------------
 
-def test_dreamer_eval_rebuild_signature(tmp_path, monkeypatch):
-    """Confirms evaluation.py's ACTUAL DreamerV3 branch (real code path inside
-    ev.main(), not a reimplementation) now builds DreamerTrainer with a Config
-    object (supports get_mandatory/to_dict) plus obs_breakdown and
-    modulation_config, mirroring train.py:815-817 -- instead of the old plain
-    5-key dict that crashed with AttributeError.
-
-    No on-disk DreamerV3 checkpoint fixture exists (building + training a real
-    world model is out of scope for a unit test), so the heavy network build
-    is short-circuited: DreamerTrainer.__init__ is spied on to capture its
-    call-site arguments, then raises a sentinel exception before doing any
-    real work. This still exercises evaluation.py's own construction code
-    verbatim -- only the (expensive, irrelevant-to-this-fix) inside of
-    DreamerTrainer itself is skipped."""
-    dreamer_agent_dir = os.path.join(_REPO, "configs/models/dreamer_v3")
-    candidates = sorted(
-        f for f in os.listdir(dreamer_agent_dir) if f.endswith(".yaml")
-    ) if os.path.isdir(dreamer_agent_dir) else []
-    if not candidates:
-        pytest.skip("No configs/models/dreamer_v3/*.yaml fixture found on disk.")
-
+def test_dreamer_eval_archived_stub(tmp_path, monkeypatch):
+    """Pins the archived-stack stub contract: pointing evaluation.py's actual
+    main() at an on-disk results dir whose config says
+    `agent.algorithm: DreamerV3` (old DreamerV3-NNX result folders still exist
+    under results/) must raise the clear archived-stack ValueError — naming the
+    live replacement (dreamer_srl) — not an UnboundLocalError or a crash inside
+    a deleted code path. No NNX import is exercised."""
     config = _merged_config(AGENT_CONFIG_MODULATED)  # base env/testing scaffolding
-    config.merge(Config.load_yaml(os.path.join(dreamer_agent_dir, candidates[0])))
     config.set("agent.algorithm", "DreamerV3")
 
-    import src.models.dreamer_v3_trainer as dvt
-    captured = {}
-
-    class _Sentinel(Exception):
-        pass
-
-    def _spy_init(self, obs_dim, act_dim, cfg, rngs, obs_breakdown=None, modulation_config=None):
-        captured["config"] = cfg
-        captured["obs_breakdown"] = obs_breakdown
-        captured["modulation_config"] = modulation_config
-        raise _Sentinel()
-
-    monkeypatch.setattr(dvt.DreamerTrainer, "__init__", _spy_init)
-
-    # Finding L2 (docs/develop/active/diagnosis/v3_pipeline_correctness_diagnosis.md)
-    # now restores the full checkpoint payload BEFORE model construction (it
-    # needs the checkpoint's own 'stage' field to resolve a continual run's
-    # per-checkpoint environment config), so a bare "0" dir with no real orbax
-    # payload no longer reaches the (spied) DreamerTrainer construction call --
-    # a real (minimal) checkpoint save is required first.
+    # evaluation.py restores the full checkpoint payload BEFORE reaching the
+    # algorithm branch, so a real (minimal) orbax checkpoint save is required.
     models_dir = tmp_path / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
     with open(models_dir / "config.yaml", "w") as f:
@@ -217,18 +186,11 @@ def test_dreamer_eval_rebuild_signature(tmp_path, monkeypatch):
             "--no-render", "--device", "cpu"]
     monkeypatch.setattr(sys, "argv", argv)
 
-    with pytest.raises(_Sentinel):
+    with pytest.raises(ValueError, match="archived") as exc_info:
         ev.main()
-
-    assert isinstance(captured["config"], Config), (
-        "DreamerTrainer must receive the full Config object (get_mandatory-capable), "
-        "not a plain whitelist dict"
+    assert "dreamer_srl" in str(exc_info.value), (
+        "the archived-stack stub must name the live replacement (dreamer_srl)"
     )
-    params = load_env_params(config)
-    assert captured["obs_breakdown"] == get_observation_breakdown(params)
-    # modulation_config may legitimately be None (baseline); what matters is it
-    # was threaded through, not silently dropped.
-    assert "modulation_config" in captured
 
 
 # ---------------------------------------------------------------------------

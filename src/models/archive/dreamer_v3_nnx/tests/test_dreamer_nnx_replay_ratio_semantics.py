@@ -17,9 +17,18 @@ data from the untrained network. The fix adds a mandatory
 See docs/develop/active/diagnosis/dreamer_sheeprl_parity_2026-07-06/
 fix_plan_nnx_parity.md (F7) and 05_dreamer_v3_nnx_conventions.md (U4).
 """
+
+import os as _os_guard
+import pytest as _pytest_guard
+if _os_guard.environ.get("GWP_RUN_ARCHIVED_NNX_TESTS") != "1":
+    _pytest_guard.skip(
+        "archived DreamerV3-NNX stack -- set GWP_RUN_ARCHIVED_NNX_TESTS=1 to run",
+        allow_module_level=True)
 import os
 import re
 import sys
+
+import pytest
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 if _HERE not in sys.path:
@@ -30,15 +39,26 @@ from dreamer_nnx_fixtures import build_trainer_and_env, _REPO
 import jax
 import jax.numpy as jnp
 
-from src.models.dreamer_v3_util import Ratio
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_util import Ratio
 
 TRAIN_PY = os.path.join(_REPO, "train.py")
+
+# Archival note (2026-07-10): the three tests below were SOURCE-LEVEL PINS on the
+# live train.py DreamerV3 call sites (Ratio arithmetic, learning_starts gating).
+# Those call sites were deleted when the DreamerV3-NNX stack was archived
+# (archive_plan_dreamer_v3_nnx.md, train.py regions T4/T8), so the pins can never
+# hold again — they are skipped explicitly rather than left red. The remaining
+# tests in this file pin the Ratio CLASS itself and still run.
+_TRAIN_PY_PIN_SKIP = pytest.mark.skip(
+    reason="source-level pin on train.py's DreamerV3 call sites — deleted when the "
+           "NNX stack was archived 2026-07-10 (see archive_plan_dreamer_v3_nnx.md)")
 
 
 # ---------------------------------------------------------------------------
 # T7(a) — Ratio semantics at the call site
 # ---------------------------------------------------------------------------
 
+@_TRAIN_PY_PIN_SKIP
 def test_call_site_counts_env_steps_not_sequences():
     """Pin the actual train.py call-site arithmetic (source-level pin, as the
     expression is one line inside the training loop and train.py is not
@@ -57,6 +77,7 @@ def test_call_site_counts_env_steps_not_sequences():
     )
 
 
+@_TRAIN_PY_PIN_SKIP
 def test_learning_starts_mandatory_and_gating():
     """The random-prefill budget must be read via get_mandatory (no fallback
     default, per the Configuration Protocol) and must gate the train step."""
@@ -96,6 +117,7 @@ def test_ratio_per_env_step_accumulation():
         )
 
 
+@_TRAIN_PY_PIN_SKIP
 def test_ratio_first_call_after_prefill_no_backlog_burst():
     """Review finding 1 (review_nnx_parity_fixes.md): sheeprl subtracts the
     random-prefill env steps from the Ratio argument before the first call

@@ -3,10 +3,16 @@ title: "NNX DreamerV3 recipe-deviation register — kept / fixed / open disposit
 topic: diagnosis
 status: active
 created: 2026-07-08
-last_updated: 2026-07-08
+last_updated: 2026-07-10
 ---
 
 # NNX DreamerV3 recipe-deviation register
+
+> **Status note (2026-07-10)**: the DreamerV3-NNX stack this register describes was
+> **archived** to `src/models/archive/dreamer_v3_nnx/` per
+> [[archive_plan_dreamer_v3_nnx]]. This register is **frozen**; the open rows
+> **U6 and R1 are moot unless the stack is revived**. File paths below refer to
+> the pre-move locations (now under the archive).
 
 ## What this register is (plain-language entry point)
 

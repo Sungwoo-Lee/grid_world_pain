@@ -16,7 +16,7 @@ fix_plan_nnx_parity.md.
 import os
 import sys
 
-_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))))
 if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
@@ -30,7 +30,7 @@ from src.utils.config import Config, get_default_config
 from src.environment.config_loader import load_env_params
 from src.environment.core import jax_reset
 from src.environment.sensor import get_observation, get_observation_breakdown
-from src.models.dreamer_v3_trainer import DreamerTrainer
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_trainer import DreamerTrainer
 
 # Death-free fixture env (same rationale as the H6 tests): no mobile predator,
 # no static hiding_predator, starvation horizon ~100 steps, overeating_death
@@ -39,7 +39,7 @@ from src.models.dreamer_v3_trainer import DreamerTrainer
 ENV_CONFIG_NO_DEATH = os.path.join(
     _REPO, "configs/environment/experiment/archive/dreamer_curriculum/01_food_only.yaml"
 )
-DREAMER_AGENT_CONFIG = os.path.join(_REPO, "configs/models/dreamer_v3/dreamer_v3.yaml")
+DREAMER_AGENT_CONFIG = os.path.join(_REPO, "configs/models/archive/dreamer_v3_nnx/dreamer_v3.yaml")
 
 
 def build_config(max_steps):

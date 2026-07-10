@@ -6,8 +6,8 @@ from typing import NamedTuple, Tuple, Any, Optional
 from jax import random
 from functools import partial
 
-from src.models.dreamer_v3_nnx import DreamerV3Agent, RSSM, WorldModel, ActorCritic
-from src.models.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_nnx import DreamerV3Agent, RSSM, WorldModel, ActorCritic
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist
 from src.environment.core import jax_step, jax_reset
 from src.environment.sensor import get_observation
 
@@ -121,7 +121,7 @@ class DreamerTrainer(nnx.Module):
         feat_dim = self.agent.wm.deter_dim + self.agent.wm.stoch_dim * self.agent.wm.discrete
         self.target_critic = ActorCritic(feat_dim, act_dim, agent_config, rngs=rngs).critic
 
-        from src.models.dreamer_v3_util import Moments
+        from src.models.archive.dreamer_v3_nnx.dreamer_v3_util import Moments
         self.moments = Moments(decay=0.99, max_=1.0, percentile_low=0.05, percentile_high=0.95)
 
         self.model_opt = nnx.Optimizer(

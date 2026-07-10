@@ -4,8 +4,8 @@ from jax import random
 from flax import nnx
 from typing import Tuple, Dict, Any, Optional
 
-from src.models.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist, hafner_init
-from src.models.modulated_layer_norm_gru_cell import ModulatedLayerNormGRUCell
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_util import symlog, symexp, to_twohot, from_twohot, OneHotDist, hafner_init
+from src.models.archive.dreamer_v3_nnx.modulated_layer_norm_gru_cell import ModulatedLayerNormGRUCell
 
 # -----------------------------------------------------------------------------
 # Core Modules

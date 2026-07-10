@@ -25,10 +25,17 @@ See docs/develop/active/issues/diag_fable5_20260704/
 fix_plan_h6h7_dreamer_v3_world_model.md (plan) and 05_dreamer_v3_nnx.md
 (Finding 1).
 """
+
+import os as _os_guard
+import pytest as _pytest_guard
+if _os_guard.environ.get("GWP_RUN_ARCHIVED_NNX_TESTS") != "1":
+    _pytest_guard.skip(
+        "archived DreamerV3-NNX stack -- set GWP_RUN_ARCHIVED_NNX_TESTS=1 to run",
+        allow_module_level=True)
 import os
 import sys
 
-_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))))
 sys.path.insert(0, _REPO)
 
 import jax
@@ -42,7 +49,7 @@ from src.utils.config import Config, get_default_config
 from src.environment.config_loader import load_env_params
 from src.environment.core import jax_reset, jax_step
 from src.environment.sensor import get_observation, get_observation_breakdown
-from src.models.dreamer_v3_trainer import DreamerTrainer
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_trainer import DreamerTrainer
 
 # Death-free fixture env: no mobile predator, no static hiding_predator,
 # starvation horizon ~100 steps (start nutrition 100, metabolic cost 1/step),
@@ -51,7 +58,7 @@ from src.models.dreamer_v3_trainer import DreamerTrainer
 ENV_CONFIG_NO_DEATH = os.path.join(
     _REPO, "configs/environment/experiment/archive/dreamer_curriculum/01_food_only.yaml"
 )
-DREAMER_AGENT_CONFIG = os.path.join(_REPO, "configs/models/dreamer_v3/dreamer_v3.yaml")
+DREAMER_AGENT_CONFIG = os.path.join(_REPO, "configs/models/archive/dreamer_v3_nnx/dreamer_v3.yaml")
 
 
 def _build_config(max_steps):

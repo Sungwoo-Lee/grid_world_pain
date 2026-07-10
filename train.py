@@ -4,7 +4,9 @@ JAX Training Script for GridWorld RL Agents.
 This script mirrors train.py but uses JAX-native components:
 1. Loads configuration from YAML files.
 2. Initializes the JAX ParallelEnv for massive parallelization.
-3. Trains RecurrentPPO (or future DreamerV3) using Flax NNX.
+3. Trains RecurrentPPO using Flax NNX. (DreamerV3-NNX was archived 2026-07-10 →
+   src/models/archive/dreamer_v3_nnx/; the live world-model agent is
+   src/algorithms/dreamer_srl/.)
 4. Supports WandB logging, checkpointing, and results directory management.
 
 Arguments:
@@ -12,7 +14,7 @@ Arguments:
 - `--episodes <int>`: Number of training episodes (converted to timesteps).
 - `--num-envs <int>`: Number of parallel environments (default: 256).
 - `--total-timesteps <int>`: Total timesteps to train.
-- `--algorithm <str>`: Algorithm to use (RecurrentPPO, DreamerV3).
+- `--algorithm <str>`: Algorithm to use (RecurrentPPO).
 - `--seed <int>`: Random seed.
 - `--wandb-name <str>`: WandB run name.
 - `--no-wandb`: Disable WandB logging.
@@ -451,6 +453,15 @@ def main():
     # Determine Algorithm
     algorithm = config.get_mandatory('agent.algorithm')
 
+    if algorithm == "DreamerV3":
+        raise ValueError(
+            "The in-house DreamerV3 (NNX) stack was archived on 2026-07-10 "
+            "(development stopped 2026-05-11; superseded by the sheeprl-parity port). "
+            "Use src/algorithms/dreamer_srl/ (entry: src/algorithms/dreamer_srl/"
+            "dreamer_srl_main.py) instead. Archived code: src/models/archive/"
+            "dreamer_v3_nnx/ — see its README and docs/develop/active/diagnosis/"
+            "dreamer_sheeprl_parity_2026-07-06/archive_plan_dreamer_v3_nnx.md.")
+
     if args.profile:
         profile_trace_dir = os.path.join(profile_parent, f"{algorithm}_trace")
         os.makedirs(profile_trace_dir, exist_ok=True)
@@ -460,10 +471,10 @@ def main():
 
     # Strictly Resolve Parameters (No Safe Defaults)
     if schedule is not None:
-        if algorithm not in ("RecurrentPPO", "DreamerV3"):
+        if algorithm not in ("RecurrentPPO",):
             raise ValueError(
                 f"Continual learning (--configs-dir) is only supported for "
-                f"RecurrentPPO and DreamerV3, got algorithm='{algorithm}'. "
+                f"RecurrentPPO, got algorithm='{algorithm}'. "
                 "Use Option A: restrict to supported algorithms at startup.")
         if args.episodes is not None:
             raise ValueError("--episodes is incompatible with --configs-dir; "
@@ -498,17 +509,6 @@ def main():
         lr = args.lr or config.get_mandatory('agent.lr_actor')
         config.set('agent.hidden_size', hidden_size)
         config.set('agent.lr_actor', lr)
-    elif algorithm == "DreamerV3":
-        # collect_interval: how many env steps to collect per iteration per env.
-        # 1 = sheeprl-style (canonical, fine-grained), 128 = full sequence (JAX-optimized).
-        # The replay buffer samples sequence_length-step sequences for BPTT training regardless.
-        num_steps = args.num_steps or config.get_mandatory('agent.collect_interval')
-        # Dreamer has many hidden sizes; using rssm_deter_dim as a proxy for summary/logging
-        hidden_size = args.hidden_size or config.get_mandatory('agent.rssm_deter_dim')
-        lr = args.lr or config.get_mandatory('agent.actor_lr')
-        config.set('agent.collect_interval', num_steps)
-        config.set('agent.rssm_deter_dim', hidden_size)
-        config.set('agent.actor_lr', lr)
     else:
         num_steps = args.num_steps or config.get_mandatory('agent.num_steps')
         hidden_size = args.hidden_size or config.get_mandatory('agent.hidden_size')
@@ -825,84 +825,6 @@ def main():
         jit_train = nnx.jit(train_iteration, static_argnums=(6,))
 
         
-    elif algorithm == "DreamerV3":
-        from src.models.dreamer_v3_trainer import DreamerTrainer, ReplayBuffer
-        
-        # Read neuromodulation config (MUST be defined in config, even if empty/null)
-        # Using get() because get_mandatory() raises ValueError for null/None values
-        dreamer_mod_config = config.get('agent.modulation')
-        if dreamer_mod_config is not None and dreamer_mod_config.get('type') is None:
-            dreamer_mod_config = None
-        
-        key, init_key = jax.random.split(key)
-        # Use agent_config (Config object) directly to support get_mandatory inside trainer
-        trainer = DreamerTrainer(input_dim, action_dim, agent_config, rngs=nnx.Rngs(init_key),
-                                 obs_breakdown=obs_breakdown,
-                                 modulation_config=dreamer_mod_config)
-
-        from src.models.dreamer_v3_util import Ratio
-        ratio_scaled_updates = Ratio(config.get_mandatory('agent.replay_ratio'))
-        cumulative_gradient_steps = 0
-
-        # WP-NNX F7 (U4): random-action prefill budget in ENV steps (global,
-        # matching sheeprl learning_starts, vendor yaml:17). While
-        # global_step < learning_starts, collection runs uniform-random
-        # actions and training is skipped. Mandatory key — no fallback.
-        learning_starts = config.get_mandatory('agent.learning_starts', int)
-
-        # Review finding 1 (review_nnx_parity_fixes.md): subtract the prefill
-        # from the Ratio argument, mirroring sheeprl exactly (vendor
-        # dreamer_v3.py:508-511,661 — `ratio_steps = policy_step -
-        # prefill_steps * policy_steps_per_iter`, with the one-iteration-back
-        # convention `prefill_steps = learning_starts_iters - 1`). Without
-        # this, Ratio's first-call branch bursts ≈ replay_ratio ×
-        # learning_starts EXTRA gradient steps at the first post-prefill
-        # iteration (~1,024 extra on dreamer_v3_sheeprl_matched.yaml, ratio
-        # 1.0) instead of one iteration's steady-state work.
-        _env_steps_per_iter = num_envs * num_steps
-        prefill_env_steps = max(learning_starts // _env_steps_per_iter - 1, 0) \
-            * _env_steps_per_iter
-
-
-        buffer_device = config.get_mandatory('agent.buffer_device')
-        buffer_capacity = config.get_mandatory('agent.buffer_capacity')
-        buffer = ReplayBuffer(
-            capacity=buffer_capacity, 
-            sequence_length=config.get_mandatory('agent.sequence_length'), 
-            obs_dim=input_dim, 
-            action_dim=action_dim,
-            device=buffer_device
-        )
-
-        # Positive-reward buffer (only created if mixture mode)
-        sampling_mode = config.get_mandatory('agent.sampling_mode')
-        positive_buffer = None
-        if sampling_mode == 'mixture':
-            pos_cap = config.get_mandatory('agent.positive_buffer_capacity')
-            # Round capacity to multiple of sequence_length
-            seq_len = config.get_mandatory('agent.sequence_length')
-            pos_cap = (pos_cap // seq_len) * seq_len
-            positive_buffer = ReplayBuffer(
-                capacity=pos_cap,
-                sequence_length=seq_len,
-                obs_dim=input_dim,
-                action_dim=action_dim,
-                device=buffer_device
-            )
-        if algorithm == "DreamerV3":
-            # Initial Dreamer state (reset on every collect if we want, but better to persist)
-            # Initialize with zeros instead of None to avoid JIT re-trace on first call
-            dreamer_state = trainer.agent.wm.rssm.initial(num_envs)
-            # Add prev_action for consistency
-            dreamer_state['prev_action'] = jnp.zeros(
-                (num_envs, trainer.agent.ac.actor.net.layers[-1].out_features))
-            # Initial step is always 'first'
-            dreamer_state['is_first'] = jnp.ones((num_envs, 1))
-            # Initial modulator state if enabled
-            if trainer.agent.wm.modulation_enabled:
-                dreamer_state['mod_h'] = trainer.agent.wm.modulator.initial_state(num_envs)
-        else:
-            dreamer_state = None
 
     elif algorithm == "DQN":
         key, init_key = jax.random.split(key)
@@ -1140,25 +1062,7 @@ def main():
         if not args.quiet:
             print(f"Restoring checkpoint from {args.load_checkpoint}...")
 
-        if algorithm == "DreamerV3":
-            restore_mngr = ocp.CheckpointManager(os.path.abspath(args.load_checkpoint))
-            step = restore_mngr.latest_step()
-            if step is None:
-                raise FileNotFoundError(
-                    f"--load-checkpoint given but no checkpoint steps found under "
-                    f"{args.load_checkpoint!r} — refusing to silently train from scratch.")
-            restored = restore_mngr.restore(step, args=ocp.args.PyTreeRestore())
-            nnx.update(trainer.agent.wm, restored['wm'])
-            nnx.update(trainer.agent.ac.actor, restored['actor'])
-            nnx.update(trainer.agent.ac.critic, restored['critic'])
-            key = restored['key']
-            global_step = restored['step']
-            iteration = restored['iteration']
-            total_episodes_completed = restored['episode']
-            if schedule is not None:
-                current_stage = restored.get('stage', 0)
-            if not args.quiet: print(f"  -> DreamerV3 Model fully restored (Step: {step}).")
-        elif algorithm == "RecurrentPPO":
+        if algorithm == "RecurrentPPO":
             restored_meta = restore_rppo_training_state(
                 args.load_checkpoint, model, optimizer, h_state, key,
                 quiet=args.quiet)
@@ -1172,7 +1076,7 @@ def main():
         else:
             raise ValueError(
                 f"--load-checkpoint is not supported for algorithm {algorithm!r} "
-                f"(only RecurrentPPO and DreamerV3 save checkpoints).")
+                f"(only RecurrentPPO saves checkpoints).")
 
     # --- H2 fix (diag_fable5_20260704/01 Finding 2): continual resume must
     # rebuild the env for the restored stage. The env above was built from
@@ -1260,44 +1164,12 @@ def main():
                             for _i in range(num_envs):
                                 _bm_reset_env(_i)   # full per-env BMState reset (M1/M2/M5 per-class + per-tag + K-buffer + age/seen state)
 
-                        # --- DreamerV3 only: clear replay buffers to prevent
-                        # cross-stage dynamics contamination of the world model.
-                        if algorithm == "DreamerV3":
-                            # Cheap reset: mark as empty. sample() gates on self.size so
-                            # the (now stale) array contents become unreachable.
-                            pre_size = buffer.size
-                            buffer.idx = 0
-                            buffer.size = 0
-                            pos_pre_size = 0
-                            if positive_buffer is not None:
-                                pos_pre_size = positive_buffer.size
-                                positive_buffer.idx = 0
-                                positive_buffer.size = 0
-                            if not args.quiet:
-                                pbar.write(f"[STAGE] Cleared Dreamer replay buffer "
-                                           f"({pre_size} transitions) and positive buffer "
-                                           f"({pos_pre_size} transitions).")
-                            if wandb_enabled:
-                                wandb.log({
-                                    "stage/buffer_cleared_main":     pre_size,
-                                    "stage/buffer_cleared_positive": pos_pre_size,
-                                    "Episode/Number": total_episodes_completed,
-                                })
-
                         # --- Fix 4: reset agent recurrent state at stage transition.
                         # Symmetric with replay-buffer clearing — the env is fresh, so the
                         # agent's memory of the old env should not contaminate new-stage rollouts.
                         if algorithm == "RecurrentPPO":
                             # Same init as training startup (train.py:717)
                             h_state = model.initial_state(num_envs)
-                        elif algorithm == "DreamerV3":
-                            # Same init as training startup (train.py:772-780)
-                            dreamer_state = trainer.agent.wm.rssm.initial(num_envs)
-                            dreamer_state['prev_action'] = jnp.zeros(
-                                (num_envs, trainer.agent.ac.actor.net.layers[-1].out_features))
-                            dreamer_state['is_first'] = jnp.ones((num_envs, 1))
-                            if trainer.agent.wm.modulation_enabled:
-                                dreamer_state['mod_h'] = trainer.agent.wm.modulator.initial_state(num_envs)
 
                         current_stage = new_stage
 
@@ -1539,369 +1411,6 @@ def main():
                         postfix["T"] = f"{float(jnp.mean(mod_info.temperature)):.2f}"
                     pbar.set_postfix(postfix)
                         
-                elif algorithm == "DreamerV3":
-                    # Use JITTED collect_sequence (collect_interval steps per env per iteration)
-                    key, collect_key = jax.random.split(key)
-                    with jax.named_scope("dreamer_collect_sequence"):
-                        # WP-NNX F7 (U4): uniform-random actions until the
-                        # learning_starts prefill budget is met (static flag —
-                        # one extra compile for the prefill variant).
-                        env_state, dreamer_state, key, transitions = trainer.collect_sequence(
-                            env_state, params, num_steps, collect_key, dreamer_state,
-                            bool(global_step < learning_starts))
-
-                    # Convert transitions to NumPy and add to buffer.
-                    if buffer.device == "gpu":
-                        # STAY ON GPU: perform transpose/reshape in JAX (Zero Copy)
-                        T, B = transitions['obs'].shape[0], transitions['obs'].shape[1]
-                        with jax.named_scope("dreamer_buffer_add"):
-                            obs_flat = transitions['obs'].transpose(1, 0, 2).reshape(B * T, -1)
-                            act_flat = transitions['action'].transpose(1, 0, 2).reshape(B * T, -1)
-                            rew_flat = transitions['reward'].transpose(1, 0).reshape(B * T)
-                            done_flat = transitions['terminal'].transpose(1, 0).reshape(B * T)
-                            # termination_reason (0=active,1=timeout,2=starvation,3=overeating,4=injury)
-                            # threaded through to the buffer so the Dreamer continue-head target can
-                            # distinguish real death from timeout/truncation (Finding B, Dreamer analog).
-                            # See docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md.
-                            term_reason_flat = transitions['termination_reason'].transpose(1, 0).reshape(B * T)
-                            is_first_arr = transitions['is_first']
-                            if is_first_arr.ndim == 3:
-                                is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
-                            else:
-                                is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
-                            buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat, term_reason_flat)
-
-                        with jax.named_scope("dreamer_positive_buffer_copy"):
-                            # Copy positive-reward blocks to the dedicated positive buffer
-                            if positive_buffer is not None:
-                                seq_len = buffer.sequence_length
-                                num_items = obs_flat.shape[0]
-                                num_written_blocks = num_items // seq_len
-
-                                for b in range(num_written_blocks):
-                                    blk_start = b * seq_len
-                                    blk_end = blk_start + seq_len
-                                    blk_rewards = rew_flat[blk_start:blk_end]
-
-                                    # Check if this block contains any positive reward
-                                    if buffer._on_gpu:
-                                        has_positive = bool(jnp.any(blk_rewards > 0.0))
-                                    else:
-                                        has_positive = bool(np.any(blk_rewards > 0.0))
-
-                                    if has_positive:
-                                        positive_buffer.add_batch(
-                                            obs_flat[blk_start:blk_end],
-                                            act_flat[blk_start:blk_end],
-                                            rew_flat[blk_start:blk_end],
-                                            done_flat[blk_start:blk_end],
-                                            is_first_flat[blk_start:blk_end],
-                                            term_reason_flat[blk_start:blk_end]
-                                        )
-                        # Still need numpy for cpu-side stats calculation
-                        transitions_np = jax.device_get(transitions)
-                    else:
-                        # CPU path: existing logic
-                        transitions_np = jax.device_get(transitions)
-                        T, B = transitions_np['obs'].shape[0], transitions_np['obs'].shape[1]
-                        with jax.named_scope("dreamer_buffer_add"):
-                            obs_flat = transitions_np['obs'].transpose(1, 0, 2).reshape(B * T, -1)
-                            act_flat = transitions_np['action'].transpose(1, 0, 2).reshape(B * T, -1)
-                            rew_flat = transitions_np['reward'].transpose(1, 0).reshape(B * T)
-                            done_flat = transitions_np['terminal'].transpose(1, 0).reshape(B * T)
-                            term_reason_flat = transitions_np['termination_reason'].transpose(1, 0).reshape(B * T)
-                            is_first_arr = transitions_np['is_first'].astype(bool)
-                            if is_first_arr.ndim == 3:
-                                is_first_flat = is_first_arr.transpose(1, 0, 2).reshape(B * T)
-                            else:
-                                is_first_flat = is_first_arr.transpose(1, 0).reshape(B * T)
-                            buffer.add_batch(obs_flat, act_flat, rew_flat, done_flat, is_first_flat, term_reason_flat)
-
-                        with jax.named_scope("dreamer_positive_buffer_copy"):
-                            # Copy positive-reward blocks to the dedicated positive buffer
-                            if positive_buffer is not None:
-                                seq_len = buffer.sequence_length
-                                num_items = obs_flat.shape[0]
-                                num_written_blocks = num_items // seq_len
-
-                                for b in range(num_written_blocks):
-                                    blk_start = b * seq_len
-                                    blk_end = blk_start + seq_len
-                                    blk_rewards = rew_flat[blk_start:blk_end]
-
-                                    # Check if this block contains any positive reward
-                                    has_positive = bool(np.any(blk_rewards > 0.0))
-
-                                    if has_positive:
-                                        positive_buffer.add_batch(
-                                            obs_flat[blk_start:blk_end],
-                                            act_flat[blk_start:blk_end],
-                                            rew_flat[blk_start:blk_end],
-                                            done_flat[blk_start:blk_end],
-                                            is_first_flat[blk_start:blk_end],
-                                            term_reason_flat[blk_start:blk_end]
-                                        )
-                    
-                    # Update statistics (Vectorized where possible)
-                    rew_steps = transitions_np['reward'] # (T, B)
-                    done_steps = transitions_np['terminal'] # (T, B)
-
-                    # Extract behavioral info arrays [T, B] (or [T, B, num_entity] for per-instance)
-                    info_steps = {}
-                    for k in BEHAVIOR_KEYS + BEHAVIOR_DIST_KEYS + ['termination_reason']:
-                        if k in transitions_np:
-                            info_steps[k] = transitions_np[k]
-                    # Per-instance keys: shape [T, B, num_entity]
-                    dist_per_neutral_steps  = transitions_np.get('dist_per_neutral')   # [T, B, num_neutral] or None
-                    dist_per_predator_steps = transitions_np.get('dist_per_predator')  # [T, B, num_predator] or None
-                    # Behavior-measure toolkit v1: agent_in_bush (Site 2 direct extraction)
-                    agent_in_bush_steps = transitions_np.get('agent_in_bush')          # [T, B] or None
-
-                    # Behavior-measure toolkit v1: per-step sequential update for Site 2 (DreamerV3 batch)
-                    # H10 fix: bm_drive_batch interleaves the per-step update with
-                    # per-done finalise/reset (rPPO Site-1 pattern) so no step after a
-                    # mid-batch done leaks into the finished episode. Finalised results
-                    # are keyed (t, env) and merged into ep_data in the done block below.
-                    bm_ep_results = {}
-                    if bm_enabled and agent_in_bush_steps is not None and _bm_state is not None:
-                        bm_ep_results = bm_drive_batch(
-                            _bm_state,
-                            ate_food_steps=transitions_np['ate_food'],
-                            agent_in_bush_steps=agent_in_bush_steps,
-                            dist_per_predator_steps=dist_per_predator_steps,
-                            dist_per_neutral_steps=dist_per_neutral_steps,
-                            done_steps=done_steps,
-                            predator_tags=predator_tags,
-                            neutral_tags=neutral_tags,
-                        )
-
-                    # More vectorized stats handling
-                    done_indices = np.where(done_steps) # (t_idxs, env_idxs)
-
-                    if done_indices[0].size > 0:
-                        # Track episode returns/lengths
-                        for i in np.unique(done_indices[1]):
-                            d_idxs = done_indices[0][done_indices[1] == i]
-                            curr_start = 0
-                            for d_idx in d_idxs:
-                                ep_reward = float(episode_returns[i] + np.sum(rew_steps[curr_start:d_idx+1, i]))
-                                ep_length = int(episode_lengths[i] + (d_idx + 1 - curr_start))
-
-                                ep_data = {'r': ep_reward, 'l': ep_length}
-                                if info_steps:
-                                    for k in BEHAVIOR_KEYS:
-                                        ep_data[k] = float(episode_behavior[k][i] + np.sum(info_steps[k][curr_start:d_idx+1, i]))
-                                    for k in BEHAVIOR_DIST_KEYS:
-                                        ep_data[k] = float((episode_dist_sums[k][i] + np.sum(info_steps[k][curr_start:d_idx+1, i])) / max(ep_length, 1))
-                                    ep_data['termination_reason'] = int(info_steps['termination_reason'][d_idx, i])
-                                    # Per-tag finalisation (Site 2: DreamerV3 batch)
-                                    ep_l_safe = max(ep_length, 1)
-                                    if num_neutral_for_log > 0 and dist_per_neutral_steps is not None:
-                                        means = (episode_dist_per_neutral_sums[i] + np.sum(dist_per_neutral_steps[curr_start:d_idx+1, i], axis=0)) / ep_l_safe
-                                        for j, tag in enumerate(neutral_tags):
-                                            ep_data[f'mean_dist_rabbit_{tag}_raw'] = float(means[j])
-                                    if num_predator_for_log > 0 and dist_per_predator_steps is not None:
-                                        means = (episode_dist_per_predator_sums[i] + np.sum(dist_per_predator_steps[curr_start:d_idx+1, i], axis=0)) / ep_l_safe
-                                        for j, tag in enumerate(predator_tags):
-                                            ep_data[f'mean_dist_predator_{tag}_raw'] = float(means[j])
-                                    # Behavior-measure toolkit v1 (H10): merge the result
-                                    # that bm_drive_batch finalised at this done step.
-                                    if bm_enabled and agent_in_bush_steps is not None:
-                                        ep_data.update(bm_ep_results.pop((int(d_idx), int(i))))
-
-                                ep_info_buffer.append(ep_data)
-                                iteration_episodes.append(ep_data)
-                                total_episodes_completed += 1
-                                episode_returns[i] = 0
-                                episode_lengths[i] = 0
-                                if info_steps:
-                                    for k in BEHAVIOR_KEYS:
-                                        episode_behavior[k][i] = 0.0
-                                    for k in BEHAVIOR_DIST_KEYS:
-                                        episode_dist_sums[k][i] = 0.0
-                                if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[i, :]  = 0.0
-                                if num_predator_for_log > 0: episode_dist_per_predator_sums[i, :] = 0.0
-                                curr_start = d_idx + 1
-
-                            # Add leftover
-                            if curr_start < num_steps:
-                                episode_returns[i] += np.sum(rew_steps[curr_start:, i])
-                                episode_lengths[i] += (num_steps - curr_start)
-                                if info_steps:
-                                    for k in BEHAVIOR_KEYS:
-                                        episode_behavior[k][i] += np.sum(info_steps[k][curr_start:, i])
-                                    for k in BEHAVIOR_DIST_KEYS:
-                                        episode_dist_sums[k][i] += np.sum(info_steps[k][curr_start:, i])
-                                if num_neutral_for_log  > 0 and dist_per_neutral_steps is not None:
-                                    episode_dist_per_neutral_sums[i]  += np.sum(dist_per_neutral_steps[curr_start:, i], axis=0)
-                                if num_predator_for_log > 0 and dist_per_predator_steps is not None:
-                                    episode_dist_per_predator_sums[i] += np.sum(dist_per_predator_steps[curr_start:, i], axis=0)
-
-                        # Environments with NO dones in this batch
-                        no_done_mask = np.ones(num_envs, dtype=bool)
-                        no_done_mask[done_indices[1]] = False
-                        episode_returns[no_done_mask] += np.sum(rew_steps[:, no_done_mask], axis=0)
-                        episode_lengths[no_done_mask] += num_steps
-                        if info_steps:
-                            for k in BEHAVIOR_KEYS:
-                                episode_behavior[k][no_done_mask] += np.sum(info_steps[k][:, no_done_mask], axis=0)
-                            for k in BEHAVIOR_DIST_KEYS:
-                                episode_dist_sums[k][no_done_mask] += np.sum(info_steps[k][:, no_done_mask], axis=0)
-                        if num_neutral_for_log  > 0 and dist_per_neutral_steps is not None:
-                            episode_dist_per_neutral_sums[no_done_mask]  += np.sum(dist_per_neutral_steps[:, no_done_mask], axis=0)
-                        if num_predator_for_log > 0 and dist_per_predator_steps is not None:
-                            episode_dist_per_predator_sums[no_done_mask] += np.sum(dist_per_predator_steps[:, no_done_mask], axis=0)
-                    else:
-                        # No episodes finished at all
-                        episode_returns += np.sum(rew_steps, axis=0)
-                        episode_lengths += num_steps
-                        if info_steps:
-                            for k in BEHAVIOR_KEYS:
-                                episode_behavior[k] += np.sum(info_steps[k], axis=0)
-                            for k in BEHAVIOR_DIST_KEYS:
-                                episode_dist_sums[k] += np.sum(info_steps[k], axis=0)
-                        if num_neutral_for_log  > 0 and dist_per_neutral_steps is not None:
-                            episode_dist_per_neutral_sums  += np.sum(dist_per_neutral_steps, axis=0)
-                        if num_predator_for_log > 0 and dist_per_predator_steps is not None:
-                            episode_dist_per_predator_sums += np.sum(dist_per_predator_steps, axis=0)
-
-                    # H10 invariant: every episode bm_drive_batch finalised must have been
-                    # consumed by the done block above (both iterate the same done_steps).
-                    assert not bm_ep_results, \
-                        f"BM driver / done-block mismatch, unconsumed keys: {sorted(bm_ep_results)}"
-
-                    global_step += num_envs * num_steps
-
-                    if wandb_enabled and iteration_episodes and iteration % log_interval == 0:
-                        rewards = [ep['r'] for ep in iteration_episodes]
-                        lengths = [ep['l'] for ep in iteration_episodes]
-                        ep_log = {
-                            "Episode/Reward": np.mean(rewards),
-                            "Episode/Reward_Min": np.min(rewards),
-                            "Episode/Reward_Max": np.max(rewards),
-                            "Episode/Steps": np.mean(lengths),
-                            "Episode/Number": total_episodes_completed,
-                            **_stage_tag(),
-                        }
-                        # Behavioral metrics
-                        if 'ate_food' in iteration_episodes[0]:
-                            ep_log.update({
-                                "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
-                                "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
-                                # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
-                                "Episode/DangerHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
-                                "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
-                                "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
-                                "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
-                                "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
-                                "Episode/DamageDanger": np.mean([ep['damage_hiding_predator'] for ep in iteration_episodes]),
-                                "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
-                                "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
-                                "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
-                                "Episode/MeanDistRabbit": np.mean([ep['dist_to_neutral'] for ep in iteration_episodes]),
-                                "Episode/MeanDistHidingPredator": np.mean([ep['dist_to_hiding_predator'] for ep in iteration_episodes]),
-                                "Episode/RabbitHits": np.mean([ep['hit_neutral'] for ep in iteration_episodes]),
-                                "Episode/HidingPredatorHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
-                            })
-                            # Termination reason distribution (fraction of episodes ending each way)
-                            term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
-                            for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
-                                ep_log[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
-                            # Per-tag fan-out
-                            _append_per_tag_means(ep_log, iteration_episodes, neutral_tags,
-                                                  'mean_dist_rabbit',   'Episode/MeanDistRabbit')
-                            _append_per_tag_means(ep_log, iteration_episodes, predator_tags,
-                                                  'mean_dist_predator', 'Episode/MeanDistPredator')
-                            # Behavior-measure toolkit v1: WandB fan-out (Site 2)
-                            if bm_enabled:
-                                _bm_log_wandb(ep_log, iteration_episodes)
-                        wandb.log(ep_log)
-
-                    # Update progress bar
-                    pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
-                    pbar.refresh()
-
-                    metrics = {}
-                    loss_msg = ""
-                    with jax.named_scope("dreamer_train_multiple"):
-                        if global_step >= learning_starts and \
-                           buffer.size > max(config.get_mandatory('agent.batch_size') * 2, config.get_mandatory('agent.sequence_length')):
-                            # WP-NNX F7 (U4): replay_ratio now means what it
-                            # means in sheeprl — gradient steps per ENV STEP
-                            # (global, matching sheeprl's per-policy-step
-                            # Ratio; global_step increments by
-                            # num_envs * num_steps per iteration). Config
-                            # values were rescaled /collect_interval in the
-                            # same change window to keep effective intensity
-                            # unchanged — see fix_plan_nnx_parity.md
-                            # §Config handoff. Ratio carries fractional
-                            # remainders exactly, so tiny values (e.g.
-                            # 0.00390625) accumulate correctly. The prefill
-                            # env steps are subtracted per vendor :661 (see
-                            # prefill_env_steps definition above).
-                            train_steps = ratio_scaled_updates(global_step - prefill_env_steps)
-
-                            if buffer.device == "gpu":
-                                # GPU path: sample + train all inside one JIT call
-                                metrics, key = trainer.train_multiple_gpu(buffer, train_steps, key,
-                                                                           positive_buffer=positive_buffer)
-                            else:
-                                # CPU path: pre-sample on CPU, bulk transfer, then JIT train
-                                if config.get_mandatory('agent.sampling_mode') == 'mixture':
-                                    stacked = trainer._sample_mixture_cpu(buffer, positive_buffer, train_steps, config.get_mandatory('agent.batch_size'))
-                                else:
-                                    stacked = buffer.sample_multiple(train_steps, config.get_mandatory('agent.batch_size'))
-                                metrics, key = trainer.train_multiple_cpu(stacked, key)
-
-                            cumulative_gradient_steps += train_steps
-                            loss_msg = f"L: {metrics.get('loss_model', 0):.2f}"
-                    
-                    if wandb_enabled and iteration % log_interval == 0:
-                        wandb_logs = {
-                            "timesteps": global_step,                             "iteration": iteration,
-                             "Params/effective_replay_ratio": cumulative_gradient_steps / max(1, global_step),
-                             # Commit 7: Time/sps_env for Dreamer branch. Mirrors dreamer_srl_main.py:L590
-                             "Time/sps_env": global_step / max((datetime.now() - start_time).total_seconds(), 1e-9),
-                        }
-                        if positive_buffer is not None:
-                            pos_blocks = positive_buffer.size // positive_buffer.sequence_length
-                            pos_cap_blocks = positive_buffer.capacity // positive_buffer.sequence_length
-                            wandb_logs.update({
-                                "Params/positive_buffer_blocks": pos_blocks,
-                                "Params/positive_buffer_utilization": pos_blocks / max(pos_cap_blocks, 1),
-                                "Params/main_buffer_blocks": buffer.size // buffer.sequence_length,
-                            })
-                        for mk, mv in metrics.items():
-                            if mk.startswith('loss_actor') or mk.startswith('loss_critic') or \
-                               mk.startswith('mean_') or mk.startswith('entropy'):
-                                wandb_logs[f"Behavior/{mk}"] = float(mv)
-                            elif mk.startswith('loss_model') or mk.startswith('loss_recon') or \
-                                 mk.startswith('loss_kl') or mk.startswith('loss_rew') or \
-                                 mk.startswith('loss_cont') or mk.startswith('loss_dyn') or \
-                                 mk.startswith('loss_rep') or mk.startswith('model_') or \
-                                 mk.startswith('imagined_'):
-                                wandb_logs[f"WorldModel/{mk}"] = float(mv)
-                            elif mk.startswith('mod_'):
-                                wandb_logs[f"Modulator/{mk}"] = float(mv)
-                            else:
-                                wandb_logs[mk] = float(mv)
-                        wandb_logs.update(_stage_tag())
-                        wandb.log(wandb_logs)
-                    
-                    postfix = {
-                        "Iter": iteration,
-                        "Loss": loss_msg,
-                        "Rew": f"{np.mean([ep['r'] for ep in ep_info_buffer]) if ep_info_buffer else 0.0:.2f}",
-                    }
-                    if metrics:
-                        if 'model_reward_mae' in metrics:
-                            postfix["R_MAE"] = f"{float(metrics['model_reward_mae']):.3f}"
-                        if 'mean_entropy' in metrics:
-                            postfix["Ent"] = f"{float(metrics['mean_entropy']):.2f}"
-                        if dreamer_mod_config is not None and 'mod_z_reward_mean' in metrics:
-                            postfix["R_mod"] = f"{float(metrics['mod_z_reward_mean']):.2f}"
-                    pbar.set_postfix(postfix)
-                    if args.debug: print(f" Done.", flush=True)
 
                 elif algorithm == "DQN":
                     if args.debug: print(f"  [DEBUG] DQN Step Collection...", end="", flush=True)
@@ -2481,17 +1990,6 @@ def main():
                             'episode': total_episodes_completed,
                             'stage': current_stage,
                         }
-                    elif algorithm == "DreamerV3":
-                        ckpt_data = {
-                            'wm': nnx.state(trainer.agent.wm, nnx.Param),
-                            'actor': nnx.state(trainer.agent.ac.actor, nnx.Param),
-                            'critic': nnx.state(trainer.agent.ac.critic, nnx.Param),
-                            'key': key,
-                            'iteration': iteration,
-                            'step': global_step,
-                            'episode': total_episodes_completed,
-                            'stage': current_stage,
-                        }
 
                     if ckpt_data:
                         pbar.write(f"[CHECKPOINT] Saving model at episode {total_episodes_completed} (Iteration {iteration})...")
@@ -2515,7 +2013,7 @@ def main():
                                     if args.debug:
                                         print(f"  [EVAL] Pass 1: Video (eps={video_eps})")
                                     evaluate_jax_checkpoint(
-                                        model=model if algorithm == "RecurrentPPO" else trainer.agent,
+                                        model=model,
                                         params=params, config=config, num_episodes=video_eps, seed=seed,
                                         results_dir=results_dir, checkpoint_pct=total_episodes_completed,
                                         render_video=True, record_stats=False, wandb_enabled=wandb_enabled, debug=args.debug,
@@ -2530,7 +2028,7 @@ def main():
                                     if args.debug:
                                         print(f"  [EVAL] Pass 2: Stats (eps={stats_eps}, envs={stats_envs})")
                                     eval_results = evaluate_jax_checkpoint(
-                                        model=model if algorithm == "RecurrentPPO" else trainer.agent,
+                                        model=model,
                                         params=params, config=config, num_episodes=stats_eps, seed=seed,
                                         results_dir=results_dir, checkpoint_pct=total_episodes_completed,
                                         render_video=False, record_stats=True, wandb_enabled=wandb_enabled, debug=args.debug,

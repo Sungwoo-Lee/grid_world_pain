@@ -3,12 +3,17 @@ title: "WP-NNX fix plan — align DreamerV3-NNX to the canonical DreamerV3 recip
 topic: diagnosis
 status: active
 created: 2026-07-08
-last_updated: 2026-07-08
+last_updated: 2026-07-10
 ---
 
 # WP-NNX: DreamerV3-NNX recipe-alignment fix plan (U1–U6 + is_first)
 
 > **Status**: PLANNED
+> **Status note (2026-07-10)**: WP-NNX landed in `32c67ca`/`7304e75`, and then the
+> entire DreamerV3-NNX stack was **archived** to `src/models/archive/dreamer_v3_nnx/`
+> per [[archive_plan_dreamer_v3_nnx]]. File paths in this plan now refer to the
+> archive (pre-move line numbers preserved there); the WP-NNX regression tests moved
+> with the stack and run only via the `GWP_RUN_ARCHIVED_NNX_TESTS=1` opt-in.
 > **Opened**: 2026-07-08
 > **Related**: [[00_master_comparison]] (§4, §6 item WP-nnx) · [[05_dreamer_v3_nnx_conventions]] (full audit detail + probe evidence) · [[KNOWN_BUGS]] (is_first row = K1) · parallel work package: WP-SRL (dreamer_srl port fixes, `src/algorithms/` — separate plan, separate comparability epoch)
 

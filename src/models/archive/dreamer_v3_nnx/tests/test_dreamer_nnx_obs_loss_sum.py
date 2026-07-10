@@ -12,10 +12,17 @@ KL terms, materially shifting what the latent state is forced to encode.
 See docs/develop/active/diagnosis/dreamer_sheeprl_parity_2026-07-06/
 fix_plan_nnx_parity.md (F3) and 05_dreamer_v3_nnx_conventions.md (U3).
 """
+
+import os as _os_guard
+import pytest as _pytest_guard
+if _os_guard.environ.get("GWP_RUN_ARCHIVED_NNX_TESTS") != "1":
+    _pytest_guard.skip(
+        "archived DreamerV3-NNX stack -- set GWP_RUN_ARCHIVED_NNX_TESTS=1 to run",
+        allow_module_level=True)
 import os
 import sys
 
-_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))))
 if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
@@ -25,7 +32,7 @@ jax.config.update("jax_platform_name", "cpu")
 import jax.numpy as jnp
 import numpy as np
 
-from src.models.dreamer_v3_trainer import dreamer_obs_recon_loss
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_trainer import dreamer_obs_recon_loss
 
 
 def test_recon_loss_sums_over_feature_dim():

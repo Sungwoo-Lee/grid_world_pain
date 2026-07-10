@@ -23,10 +23,17 @@ See docs/develop/active/issues/diag_fable5_20260704/
 fix_plan_h6h7_dreamer_v3_world_model.md (plan) and 05_dreamer_v3_nnx.md
 (Finding 2).
 """
+
+import os as _os_guard
+import pytest as _pytest_guard
+if _os_guard.environ.get("GWP_RUN_ARCHIVED_NNX_TESTS") != "1":
+    _pytest_guard.skip(
+        "archived DreamerV3-NNX stack -- set GWP_RUN_ARCHIVED_NNX_TESTS=1 to run",
+        allow_module_level=True)
 import os
 import sys
 
-_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))))
 sys.path.insert(0, _REPO)
 
 import jax
@@ -35,7 +42,7 @@ jax.config.update("jax_platform_name", "cpu")
 import jax.numpy as jnp
 import pytest
 
-from src.models.dreamer_v3_trainer import ReplayBuffer
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_trainer import ReplayBuffer
 
 SEQ_LEN = 8
 

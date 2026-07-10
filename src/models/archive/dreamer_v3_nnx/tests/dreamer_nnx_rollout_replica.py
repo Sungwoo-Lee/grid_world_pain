@@ -21,10 +21,10 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
-from src.models.dreamer_v3_trainer import (
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_trainer import (
     compute_lambda_values, HORIZON, GAMMA,
 )
-from src.models.dreamer_v3_util import from_twohot, OneHotDist
+from src.models.archive.dreamer_v3_nnx.dreamer_v3_util import from_twohot, OneHotDist
 
 sg = jax.lax.stop_gradient
 
