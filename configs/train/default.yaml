@@ -1,12 +1,21 @@
 # Default Training Configuration
+#
+# Config-owns-values convention: num_envs, seed, and checkpoint_frequency are
+# CONFIG-OWNED — standard launches must NOT pass --num-envs / --seed /
+# --checkpoint-frequency on the CLI; this file (and, for RecurrentPPO,
+# configs/train/recurrent_ppo.yaml layered on top — see that file's header)
+# is authoritative. A CLI flag for one of these is only ever an intentional,
+# flagged-to-the-user deviation, never copied boilerplate. `episodes` is the
+# opposite: it is passed explicitly per run (see note below) because the real
+# budget genuinely varies by run (smoke=100 / standard=10M / extended=100M).
 training:
-  episodes: 100
+  episodes: 100  # smoke-test safety placeholder only — real runs always pass --episodes explicitly
   num_envs: 128
-  checkpoint_frequency: 10000 
+  checkpoint_frequency: 10000  # Dreamer's value (RecurrentPPO overrides to 200000 via configs/train/recurrent_ppo.yaml)
   max_checkpoints_to_keep: 20
   video_during_training: true
   stats_during_training: false
-  auto_analysis: false 
+  auto_analysis: false
   eval_video_episodes: 3
   eval_stats_episodes: 100
   eval_stats_num_envs: 10
@@ -14,6 +23,6 @@ training:
   device: "auto"
   log_interval: 10
   log_accumulate: true
-episodes: 100
+episodes: 100  # smoke-test safety placeholder only — real runs always pass --episodes explicitly
 seed: 42
 tag: "default"

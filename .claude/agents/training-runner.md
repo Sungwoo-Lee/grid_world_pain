@@ -138,10 +138,11 @@ Reason this rule exists: on 2026-05-07 the NMN noise-heterogeneity sweep launche
 ### 3. Edit `train_command-agent.sh` ONLY
 
 - Edit only `train_command-agent.sh`. The `configs/` tree is read-only for you, and `train_command-new.sh` is the user's.
-- Permitted edits in `train_command-agent.sh`: any of the `train.py` CLI flags listed in the script's header comment — `--config`, `--agent_config`, `--device`, `--num-envs`, `--episodes`, `--checkpoint-frequency`, `--log-interval`, `--seed`, the WandB fields, `--tag`, etc.
-- The script's header comment is the canonical reference for available `train.py` arguments. Read it before editing.
+- **Config-owns-values convention:** `--num-envs`, `--seed`, and `--checkpoint-frequency` are **config-owned** — `configs/train/default.yaml` is authoritative for these three values (Dreamer reads it directly; RecurrentPPO additionally layers `configs/train/recurrent_ppo.yaml` on top, which overrides `checkpoint_frequency` to `200000` and `log_interval` to `500` — both already correct in-config). Do **NOT** add these three flags to a standard launch command. Pass one only when the experiment explicitly calls for a deviation (e.g., GPU memory forces a smaller `--num-envs`, or a seed sweep needs an explicit `--seed` per row) — and when you do, **flag it to the user as a deviation** before launching, not as boilerplate copied from a prior launch.
+- **`--episodes` MUST be passed explicitly on every launch.** The config's `episodes: 100` is a smoke-test safety placeholder, not a real budget — never rely on it for a real run.
+- Permitted edits in `train_command-agent.sh`: `--config`, `--agent_config`, `--device`, `--episodes`, `--log-interval`, `--tag`, the WandB fields, `--load-checkpoint`, and (only as a flagged deviation) `--num-envs` / `--seed` / `--checkpoint-frequency`.
+- The script's header comment is the canonical reference for available `train.py` arguments and states this convention — read it before editing.
 - If the launch requires a different config than the ones already on disk, **halt** and route to `experiment-designer` to author it. Do not stub or invent a config file yourself.
-- If `--num-envs` / `--episodes` / `--checkpoint-frequency` need to deviate from the experiment's design (typically because of GPU memory or operational constraints), surface this to the user and confirm before changing — these are experimental-design parameters at the boundary of your scope.
 - Show the user the diff of `train_command-agent.sh` before launching.
 
 #### 3a. WandB-field values — two paths
