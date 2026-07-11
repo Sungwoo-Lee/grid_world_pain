@@ -5,7 +5,7 @@
 > or (b) wastes a high-end card on a small job (or starves a big job onto a weak card). The
 > cluster is **HETEROGENEOUS** — four different GPU classes — and **GPU count varies per node**
 > (most have 2; node 114 has 4). Match the card to the job: this project's standard rPPO/Dreamer
-> runs (10×10 grid, `--num-envs 16`) are small and belong on the **low/mid tier**; reserve the
+> runs (10×10 grid, `--num-envs 128`) are small and belong on the **low/mid tier**; reserve the
 > RTX 6000 Ada / 4090 nodes for jobs that actually need the compute or VRAM.
 
 **Probed:** 2026-06-30 via **direct SSH** `nvidia-smi --query-gpu=index,name,memory.total` with
@@ -26,6 +26,31 @@ shared one timestamped NAS log, so every node reported one node's output. Always
 3. **Pack-node-first — fill one node's free GPUs before spilling to the next.** People claim whole
    nodes per job set; scattering one person's runs one-GPU-each across many nodes blocks colleagues
    from getting a clean node. See the allocation-policy section below.
+
+4. **The project is NAS-based — do NOT fan read-heavy jobs across nodes.** All code, configs,
+   checkpoints, and results live on **one shared NAS** (`/media/nas01/…`, same path on every node).
+   A job that *reads* many checkpoints (e.g. a behaviour-probe eval sweep over hundreds of
+   checkpoints) is **NAS-I/O-bound, not GPU/CPU-bound** — distributing it across nodes for "speed"
+   **saturates the shared NAS and backfires**. See the "Shared-NAS storage" section below.
+
+## Shared-NAS storage — the bottleneck for read-heavy jobs
+This project is **NAS-based**: all code, configs, checkpoints, and results live on one shared NAS,
+mounted at the **same path on every node** (`/media/nas01/projects/Interoceptive-AI/grid_world_pain`).
+This changes how much you should parallelise:
+
+- **Read-bound sweeps do NOT scale by fanning out — they jam the NAS.** Frozen-checkpoint eval /
+  behaviour-probe sweeps read each checkpoint off the NAS. Running one ~150-way across all five
+  2080 Ti nodes (30-way × 5) **saturated the shared NAS I/O**: every node stalled at load ~137 with
+  processes stuck in **uninterruptible I/O (un-killable)**, and throughput dropped to **zero**. The
+  NAS — not the GPUs or CPUs — is the shared ceiling for read-heavy work. Keep such jobs on **one
+  machine at modest parallelism (~14-way)**, which the NAS serves fine.
+- **GPU *training* distributes fine.** A training run reads its config once and writes checkpoints
+  on an interval, so sustained NAS read load is low — pack-node-first across GPUs as usual.
+- **Outputs are shared; concurrent writes race.** Anything written under `results/` is visible on
+  every node (no collection step needed), but two jobs writing the *same* file will race — give
+  parallel jobs **distinct output paths**.
+- Aside: `nproc` under a detached/`nohup` remote context can misreport `1` — never size a worker
+  pool from `nproc`; pass the parallelism explicitly.
 
 ## Per-node inventory (confirmed 2026-06-30)
 
