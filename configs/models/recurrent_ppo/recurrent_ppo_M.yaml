@@ -1,0 +1,46 @@
+# Size preset M — mirrors DreamerV3 M (deter 1024, units 640×3). Standalone copy of recurrent_ppo.yaml with only hidden_size + hierarchical_params.default_mlp changed.
+agent:
+  algorithm: "RecurrentPPO"
+  lr_actor: 0.0005
+  lr_critic: 0.0001
+  gamma: 0.95
+  K_epochs: 4
+  eps_clip: 0.1
+  # update_timestep: 2000
+  sequence_length: 128     # Steps per rollout/sequence
+  frame_stack: 1
+  fc_layers: [128,128]
+  # recurrent_layers: [128]
+  actor_fc_layers: [128,128]
+  critic_fc_layers: [128,128]
+  hidden_size: 1024
+  entropy_coef: 0.01
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  use_layer_norm: true
+
+  # Parity Options
+  rnn_type: "GRU"       # "LSTM" or "GRU"
+  activation: "relu"     # "tanh" or "relu"
+  return_mode: "MC"      # "MC" or "GAE"
+
+  # Encoding Configuration
+  encoding_mode: "hierarchical"  # "flat" or "hierarchical"
+
+  hierarchical_params:
+    # Unimodal Phase 1: Independent MLPs for each sensor
+    # Available sensor names for overrides:
+    # [Injury, Nutrition, Satiation, Extero Nociception, Olfaction, Collision, Proprioception, Visual, Location]
+    default_mlp: [640, 640, 640]
+    unimodal_overrides:
+      visual: [128,128]
+      olfaction: [128,128]
+
+    # Multimodal Phase 2: Fusion hub
+    multimodal_hub: [128,128]
+
+  # Neuromodulation: DISABLED (true baseline, §5.2)
+  # For neuromodulated variant, use: configs/models/ppo/neuromodulated_ppo.yaml
+  modulation:
+    type: null
