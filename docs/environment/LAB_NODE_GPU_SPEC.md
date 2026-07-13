@@ -27,28 +27,51 @@ shared one timestamped NAS log, so every node reported one node's output. Always
    nodes per job set; scattering one person's runs one-GPU-each across many nodes blocks colleagues
    from getting a clean node. See the allocation-policy section below.
 
-4. **The project is NAS-based — do NOT fan read-heavy jobs across nodes.** All code, configs,
-   checkpoints, and results live on **one shared NAS** (`/media/nas01/…`, same path on every node).
-   A job that *reads* many checkpoints (e.g. a behaviour-probe eval sweep over hundreds of
-   checkpoints) is **NAS-I/O-bound, not GPU/CPU-bound** — distributing it across nodes for "speed"
-   **saturates the shared NAS and backfires**. See the "Shared-NAS storage" section below.
+4. **Eval sweeps are CPU-bound (multithreaded XLA compile) — thread-cap them, don't blame the NAS.**
+   A frozen-checkpoint / behaviour-probe eval sweep spawns one short-lived Python process per
+   checkpoint. Each process's cost is dominated by **JAX import + XLA compile (~13 s), which is
+   multithreaded and sizes its threadpools to the whole core count** — so a handful of concurrent
+   processes oversubscribe the CPU (measured: 16 procs → load 100 on a 20-core node; *stacked*
+   un-killable workers → load 137, throughput collapse). The shared ceiling is **CPU threads, not
+   NAS I/O** — parallel checkpoint reads are fine. See the "Eval-sweep parallelism" section below
+   for the measured fix (compile cache + 1-thread cap + node fan-out).
 
-## Shared-NAS storage — the bottleneck for read-heavy jobs
-This project is **NAS-based**: all code, configs, checkpoints, and results live on one shared NAS,
-mounted at the **same path on every node** (`/media/nas01/projects/Interoceptive-AI/grid_world_pain`).
-This changes how much you should parallelise:
+## Eval-sweep parallelism — CPU-bound, thread-cap it (measured 2026-07-13)
+All code, configs, checkpoints, and results live on one shared NAS, mounted at the **same path on
+every node** (`/media/nas01/projects/Interoceptive-AI/grid_world_pain`). A frozen-checkpoint eval
+sweep reads each checkpoint off that NAS, so the intuition is "don't fan out — you'll jam the NAS."
+**That intuition was wrong.** A measured breakdown of one `eval_rollout.py --batched` invocation
+(10x10 grid, 30 episodes, CPU) on a 20-core node:
 
-- **Read-bound sweeps do NOT scale by fanning out — they jam the NAS.** Frozen-checkpoint eval /
-  behaviour-probe sweeps read each checkpoint off the NAS. Running one ~150-way across all five
-  2080 Ti nodes (30-way × 5) **saturated the shared NAS I/O**: every node stalled at load ~137 with
-  processes stuck in **uninterruptible I/O (un-killable)**, and throughput dropped to **zero**. The
-  NAS — not the GPUs or CPUs — is the shared ceiling for read-heavy work. Keep such jobs on **one
-  machine at modest parallelism (~14-way)**, which the NAS serves fine.
-- **GPU *training* distributes fine.** A training run reads its config once and writes checkpoints
-  on an interval, so sustained NAS read load is low — pack-node-first across GPUs as usual.
-- **Outputs are shared; concurrent writes race.** Anything written under `results/` is visible on
-  every node (no collection step needed), but two jobs writing the *same* file will race — give
-  parallel jobs **distinct output paths**.
+| Config | s/eval | load (20 cores) |
+|---|---|---|
+| single eval, cold | 14.7 | — |
+| NPAR=16, no cache, no thread-cap | 3.43 | 100 |
+| NPAR=16, warm compile cache | 1.92 | 99 |
+| **NPAR=18, warm cache + 1-thread cap** | **0.66** | **29** |
+
+- **The bottleneck is CPU threads, not the NAS.** ~13 s of each eval is JAX import + XLA compile,
+  which is **multithreaded and sizes threadpools to the full core count**. Running N such processes
+  oversubscribes the box (16 -> load 100). The earlier "150-way across five nodes stalled at load
+  137, un-killable" incident was **CPU thread oversubscription amplified by *stacked* workers I
+  couldn't kill from a sandboxed container** — not NAS I/O saturation. Parallel checkpoint *reads*
+  are fine (as routine parallel work on this NAS has always shown).
+- **The fix (measured 5x speedup):**
+  1. **Persistent XLA compilation cache** — the compiled program depends only on *shapes*, which are
+     identical across a model's checkpoints (only weights differ), so eval #2..N hit the cache and
+     skip the ~7 s compile. Set `JAX_COMPILATION_CACHE_DIR` (+ `JAX_PERSISTENT_CACHE_MIN_*=0`).
+  2. **Thread-cap each process to 1 core** — `OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+     MKL_NUM_THREADS=1`, `XLA_FLAGS="--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"`.
+     This is what keeps load ~= core count instead of ~5x over.
+  3. **NPAR ~= core_count** (≈18 on a 20-core node) -> load ~29, ~0.66 s/eval.
+- **Fan-out across nodes now distributes fine** — each thread-capped node sits at a safe load ~29,
+  so nodes 101-105 give a near-linear wall-clock win (18.7k evals: ~3.4 h on one node -> ~41 min on
+  five). The earlier failure was thread thrash + stacking, *not* the shared NAS.
+- **One worker per node, never stack.** The disaster's real trigger was launching a second worker
+  before the first was dead. Launch exactly one worker per node; if you must adjust, kill first,
+  confirm zero `eval_rollout` procs, then relaunch.
+- **Outputs are shared; concurrent writes race.** Anything under `results/` is visible on every
+  node, but two jobs writing the *same* file race — give parallel jobs **distinct output paths**.
 - Aside: `nproc` under a detached/`nohup` remote context can misreport `1` — never size a worker
   pool from `nproc`; pass the parallelism explicitly.
 
