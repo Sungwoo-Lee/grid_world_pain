@@ -80,11 +80,22 @@ on a vncserver display, on THIS machine**.
 
 **This tier starts a VNC server and a browser — a visible, heavier side effect. Pause and ask the user
 to confirm before running it.** Once confirmed, follow the full recipe in
-[`references/local-fetch.md`](references/local-fetch.md). In one breath: start `vncserver :1`
-(`-SecurityTypes None`, no password prompt), pre-seed a throwaway Chrome profile that forces PDFs to
-*download* rather than open in-viewer, launch `DISPLAY=:1 google-chrome --user-data-dir=… "<url>"`,
-let real Chrome auto-clear the challenge (campus IP grants access), poll the download dir for a
-`*.pdf` with no `*.crdownload` sibling, verify, move it to the destination, then kill that Chrome.
+[`references/local-fetch.md`](references/local-fetch.md). **Two kinds of Cloudflare challenge — know which you're facing (learned 2026-07-13):**
+
+- *Managed / JS challenge* (e.g. OpenReview) — a real headed browser **auto-solves** it, but only on the
+normal human-facing page, not on a raw file endpoint. **Warm the cookie first:** load the landing /
+forum / abstract page, let the challenge clear (it writes a `cf_clearance` cookie into the profile),
+then **kill Chrome but KEEP the profile** and **relaunch the SAME profile** at the `/pdf` endpoint — the
+persisted cookie waves it through and the PDF downloads. Hitting `/pdf` cold **fails** (challenge fires,
+no file). This is the single most important Tier-3 rule.
+- *Interactive Turnstile captcha* (e.g. ScienceDirect) — a "Verify you are human" **checkbox** that does
+NOT auto-solve; it needs a real click. This container has no `xdotool`/`wmctrl`, so it is a **dead end
+for the automated path** — stop and report (the content is usually closed-access anyway).
+
+The mechanics (start `vncserver :1` with `-SecurityTypes None`; pre-seed a throwaway profile that forces
+PDF *download*; `DISPLAY=:1 google-chrome --no-sandbox …`; the two-phase warm-then-fetch launch; poll for
+a `*.pdf` with no `*.crdownload`; verify; `mv`; kill Chrome) and the **failure-diagnosis routine**
+(pipeline sanity-check + an `ffmpeg x11grab` screenshot you then read) are in the recipe.
 
 Because you are **local**, there is NO ssh-wrapping and NO scp anywhere in this tier — run the
 commands directly and `mv` the file to the destination path.
