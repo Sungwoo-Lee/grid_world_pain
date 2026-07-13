@@ -1,6 +1,6 @@
 ---
 name: academic-pdf-fetch
-description: "Download the PDF of ONE academic paper into the project's reference library. Fires on 'download this paper', 'get me the PDF of <title>', 'fetch this DOI/arXiv', a bare DOI (10.xxxx/...) or arXiv id (e.g. 2303.07507), 'add this to my references / sources folder', 'grab the published version of <paper>', or when a paywalled publisher is named (Springer, Elsevier/ScienceDirect, APS / Physical Review, Nature, Science/AAAS, Wiley, Cambridge, IEEE, ACM, PNAS, Oxford, Taylor & Francis). Runs INSIDE the lab container whose own egress IP is already a campus/institutional IP (115.145.189.x), so institutional journal access works with a plain LOCAL curl — no SSH, no tunnel, no scp, no jump host. Escalates lazily and stops at the first verified PDF: OA/Unpaywall resolve -> direct curl -> campus-authenticated curl (Tier 2) -> (only after you confirm) a real headed Chrome on a vncserver display to clear Cloudflare (Tier 3). Prefers the published version of record over a preprint. Legitimate access only — no Sci-Hub, no bulk/systematic crawling."
+description: "Download the PDF of ONE academic paper into the project's reference library. Fires on 'download this paper', 'get me the PDF of <title>', 'fetch this DOI/arXiv', a bare DOI (10.xxxx/...) or arXiv id (e.g. 2303.07507), 'add this to my references / sources folder', 'grab the published version of <paper>', or when a paywalled publisher is named (Springer, Elsevier/ScienceDirect, APS / Physical Review, Nature, Science/AAAS, Wiley, Cambridge, IEEE, ACM, PNAS, Oxford, Taylor & Francis). Runs INSIDE the lab container whose own egress IP is already a campus/institutional IP (115.145.189.x), so institutional journal access works with a plain LOCAL curl — no SSH, no tunnel, no scp, no jump host. Escalates lazily and stops at the first verified PDF: OA/Unpaywall resolve -> direct curl -> campus-authenticated curl (Tier 2) -> (only after you confirm) a real headed Chrome on a vncserver display to clear Cloudflare (Tier 3). Prefers the published version of record over a preprint. Legitimate access only — no Sci-Hub."
 ---
 
 # academic-pdf-fetch — get the version-of-record PDF into `references/<topic>/sources/`
@@ -102,8 +102,6 @@ A "Just a moment" / "cf-" body → Cloudflare → Tier 3.
 ## Guardrails (do not weaken these)
 - **Only lawful access:** open-access copies, or content licensed through the user's own institutional
   subscription. This skill is **not** for circumventing access controls.
-- **Low volume, one paper at a time.** No bulk / systematic / crawling downloads — that can get the
-  institution's access flagged.
 - **No Sci-Hub or similar.** Stop at legitimate sources.
 - If a paper cannot be obtained within this cascade, **say so plainly and name which lock blocked it**
   — do not silently escalate to dubious sources.
