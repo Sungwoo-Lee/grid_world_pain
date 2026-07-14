@@ -33,6 +33,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 from flax import nnx
+from tqdm import tqdm
 
 # Project imports
 sys.path.insert(0, '/media/nas01/projects/Interoceptive-AI/grid_world_pain')
@@ -1183,6 +1184,45 @@ def main() -> None:
         print(f"[dreamer-srl] Starting training loop: {total_iters_estimate} "
               f"iterations × {num_envs} envs (env-step mode)")
 
+    # -------------------------------------------------------------------------
+    # Startup config banner (rPPO style) — mirrors train.py:690-754.
+    # -------------------------------------------------------------------------
+    if not args.quiet:
+        _banner_width = 60
+        print("\n" + "=" * _banner_width)
+        print(" JAX/FLAX DREAMER-SRL CONFIGURATION ".center(_banner_width, "="))
+        print("=" * _banner_width)
+
+        def _print_section(title, data):
+            print(f"\n[{title}]")
+            for k, v in data.items():
+                print(f"  ● {k:.<25} {v}")
+
+        _with_satiation = env_cfg.get_mandatory('body.with_satiation')
+        _print_section("Environment", {
+            "Grid Size":  f"{env_params.height}x{env_params.width}",
+            "Max Steps":  env_max_steps,
+            "Mode":       "Interoceptive (Homeostasis)" if _with_satiation else "Conventional (Goal-driven)",
+        })
+        _print_section("Training", {
+            "Framework":       "JAX/Flax NNX (Dreamer-SRL)",
+            "Total Timesteps": f"{total_timesteps:,}",
+            "Episodes":        episodes if episodes > 0 else "(env-step mode)",
+            "Parallel Envs":   num_envs,
+            "Seq Length":      seq_len,
+            "Batch Size":      batch_size,
+            "Horizon":         horizon,
+            "Seed":            args.seed,
+            "Results":         results_dir,
+            "WandB":           "Enabled" if use_wandb else "Disabled",
+        })
+        print("\n--- RL API Specifications ---")
+        print(f"Action Dim: {action_dim}")
+        print(f"Observation Dim: {obs_dim}")
+        print("=" * _banner_width + "\n")
+
+    pbar = tqdm(total=episodes if episodes > 0 else None, disable=args.quiet, desc="Training")
+
     # Dual-mode while-loop — mirrors train.py:1169.
     # episodes > 0  → episode-driven (rPPO + JAX Dreamer-V3 default).
     # episodes == 0 → env-step fallback (preserves --total-steps backward compat).
@@ -1328,8 +1368,8 @@ def main() -> None:
                     ))
 
                 iteration_episodes.append(ep_data)
-                if not args.quiet:
-                    print(f"[iter {iter_num}] episode done: env={i} ep_len={ep_len} ep_rew={ep_rew:.3f}")
+                if args.debug:
+                    pbar.write(f"[iter {iter_num}] episode done: env={i} ep_len={ep_len} ep_rew={ep_rew:.3f}")
 
             # CP7-P1 fix: write reset_data second buffer entry at done boundaries.
             # Sheeprl writes TWO rows per done: (1) the normal step_data row (already
@@ -1512,7 +1552,7 @@ def main() -> None:
             if (total_episodes_completed > 0 and
                     total_episodes_completed // checkpoint_frequency_active >
                     last_ckpt_episode // checkpoint_frequency_active):
-                print(f"[dreamer-srl] Saving checkpoint @ episode {total_episodes_completed}...")
+                pbar.write(f"[CHECKPOINT] Saving model at episode {total_episodes_completed} (Iteration {iter_num})...")
                 _save_checkpoint(
                     _ckpt_manager,
                     episode=total_episodes_completed,
@@ -1530,7 +1570,7 @@ def main() -> None:
                 )
                 last_ckpt_episode = total_episodes_completed
                 _just_saved_ckpt = True
-                print(f"[dreamer-srl] Checkpoint saved.")
+                pbar.write("[CHECKPOINT] Saved.")
 
                 # -----------------------------------------------------------
                 # Commit F — Checkpoint-triggered eval (mirrors train.py:L2429-L2467)
@@ -1542,7 +1582,7 @@ def main() -> None:
                     # Pass 1: Video
                     if video_during_training:
                         if not args.quiet:
-                            print(f'[eval] checkpoint @ ep={total_episodes_completed}: video pass')
+                            pbar.write(f'[eval] checkpoint @ ep={total_episodes_completed}: video pass')
                         _eval_result = dreamer_srl_eval_rollout(
                             world_model=world_model,
                             actor=actor,
@@ -1582,7 +1622,7 @@ def main() -> None:
                     # Pass 2: Stats (no video; just scalar metrics)
                     if stats_during_training:
                         if not args.quiet:
-                            print(f'[eval] checkpoint @ ep={total_episodes_completed}: stats pass')
+                            pbar.write(f'[eval] checkpoint @ ep={total_episodes_completed}: stats pass')
                         _stats_result = dreamer_srl_eval_rollout(
                             world_model=world_model,
                             actor=actor,
@@ -1902,21 +1942,32 @@ def main() -> None:
             if use_wandb:
                 wandb.log(log_dict, step=policy_step)
 
-            if not args.quiet:
-                wm_loss = log_dict.get("WorldModel/loss_model", float("nan"))
-                inv_s = log_dict["Diagnostic/moments_invscale"]
+            wm_loss = log_dict.get("WorldModel/loss_model", float("nan"))
+            inv_s = log_dict["Diagnostic/moments_invscale"]
+            pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
+            pbar.set_postfix({
+                "iter":  iter_num,
+                "step":  policy_step,
+                "wm":    f"{wm_loss:.4f}",
+                "invsc": f"{inv_s:.3f}",
+                "sps":   f"{sps_env:.1f}",
+            })
+            pbar.refresh()
+            if args.debug:
                 # In episode-mode, show ep-progress; in env-step-mode, show iter-progress.
                 if episodes > 0:
                     progress = f"ep {total_episodes_completed}/{episodes}"
                 else:
                     progress = f"iter {iter_num}"
-                print(
+                pbar.write(
                     f"[{progress}] "
                     f"policy_step={policy_step} "
                     f"world_model_loss={wm_loss:.4f} "
                     f"moments_invscale={inv_s:.4f} "
                     f"sps={sps_env:.1f}"
                 )
+
+    pbar.close()
 
     # -----------------------------------------------------------------------
     # 13. Final log + finish
