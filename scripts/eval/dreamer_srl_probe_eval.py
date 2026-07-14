@@ -30,16 +30,53 @@ loaded from the checkpoint's own `models/agent_config.yaml`, since that
 describes the frozen network architecture whose shapes must match the
 checkpoint's saved parameters.
 
+Concurrent-sweep gotcha (CPU restore + topology)
+--------------------------------------------------
+A parallel sweep launches many of these processes at once. On GPU, each
+process's JAX init reserves GPU memory, so ~18 concurrent processes exhaust
+the GPU and the later ones fail with `CUDA_ERROR_OUT_OF_MEMORY` — hence
+`--device cpu` (default, matching `scripts/eval/eval_rollout.py`'s
+convention), which forces `jax_platform_name` to `cpu` before any array is
+created.
+
+Forcing CPU surfaces a second problem: `checkpoint.load_checkpoint()` (a bare
+`manager.restore(episode)` with no restore target) is "topology-locked" to
+whatever device sharding the checkpoint was SAVED with (GPU, at training
+time). Restoring on CPU with no target then raises `ValueError: Topology
+mismatch detected. ... Please provide a target tree with the desired
+topology`. The fix: build the FULL abstract target tree (matching every
+top-level key `save_checkpoint()` writes — `world_model`, `actor`, `critic`,
+`target_critic`, `key`, `iter_num`, `policy_step`,
+`total_episodes_completed`, `cumulative_grad_steps`, `stage`, `moments`) out
+of the freshly-built agent's own real (already CPU-resident, since
+`--device cpu` forced the platform before these were created) arrays, then
+restore INTO that target via `ocp.args.StandardRestore(item=target)`. Orbax
+then derives each leaf's destination sharding from the target leaf's OWN
+current device placement (CPU) rather than the checkpoint's saved GPU
+sharding, sidestepping the mismatch entirely — see
+`_get_sharding_for_target_leaf` in
+`orbax/checkpoint/_src/handlers/standard_checkpoint_handler.py`. A targeted
+restore like this also comes back typed exactly like the target (nnx.State /
+MomentsState, not a raw digit-keyed dict), so the old
+`_normalize_checkpoint()` post-processing (needed only for the untargeted
+`load_checkpoint()` path used in `dreamer_srl_offline_wm_test.py`) is not
+needed here — confirmed by the parity check in this file's validation.
+
 Usage
 -----
-    /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \\
+    JAX_PLATFORMS=cpu OMP_NUM_THREADS=1 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \\
         scripts/eval/dreamer_srl_probe_eval.py \\
         --agent-config results/JAX_DreamerSRL/<run>/models/agent_config.yaml \\
         --env-config configs/environment/experiment/behavior_probes/core/avoidance/avoid_pred_inj00.yaml \\
         --run-dir results/JAX_DreamerSRL/<run> \\
         --episode 30000 \\
         --output-root tmp/<probe_name>_eval \\
-        --n-episodes 30 --seed 0
+        --n-episodes 30 --seed 0 --device cpu
+
+`--device cpu` is the default (matches `eval_rollout.py`'s rPPO convention),
+so it is safe to launch many of these concurrently on the SAME GPU-trained
+run without GPU memory contention. Exporting `JAX_PLATFORMS=cpu` on the CLI
+too is redundant-but-harmless belt-and-suspenders for the same guarantee.
 """
 from __future__ import annotations
 
@@ -54,31 +91,48 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import jax
+import jax.numpy as jnp
+import orbax.checkpoint as ocp
 from flax import nnx
 
 from src.utils.config import Config, get_default_config
 from src.environment.config_loader import load_env_config, load_env_params
 from src.environment.sensor import get_observation_breakdown
 from src.algorithms.dreamer_srl.agent import build_agent
-from src.algorithms.dreamer_srl.checkpoint import make_checkpoint_manager, load_checkpoint
+from src.algorithms.dreamer_srl.checkpoint import make_checkpoint_manager
 from src.algorithms.dreamer_srl.eval import dreamer_srl_eval_rollout
+from src.algorithms.dreamer_srl.utils import moments_init
 
 
-def _normalize_checkpoint(d):
-    """Normalize an orbax-restored checkpoint pytree for nnx.update.
+def _build_restore_target(world_model, actor, critic, target_critic):
+    """Full abstract target tree matching every key `save_checkpoint()` writes
+    (src/algorithms/dreamer_srl/checkpoint.py:save_checkpoint).
 
-    Ported verbatim from scripts/dreamer/dreamer_srl_offline_wm_test.py:167-181
-    (the same two transforms applied there): digit-string keys -> int, and
-    unwrap single-key {'value': array} leaf dicts.
+    Values are REAL arrays (not jax.ShapeDtypeStruct) built from the
+    already-constructed agent + fresh placeholders, so each leaf carries its
+    OWN current device sharding. Passing this as `item=` to
+    `ocp.args.StandardRestore` makes orbax restore onto that device (CPU when
+    `--device cpu` forced the platform before this function ran), instead of
+    the checkpoint's saved GPU sharding — this is what fixes the topology
+    mismatch under forced-CPU execution. The exact VALUES here are
+    placeholders; only shape/dtype/device matter, since restore overwrites
+    them with the checkpoint's saved data.
     """
-    if isinstance(d, dict):
-        if set(d.keys()) == {'value'}:
-            return _normalize_checkpoint(d['value'])
-        return {
-            (int(k) if isinstance(k, str) and k.isdigit() else k): _normalize_checkpoint(v)
-            for k, v in d.items()
-        }
-    return d
+    moments = moments_init()
+    moments_target = {k: v for k, v in moments.__dict__.items() if isinstance(v, jax.Array)}
+    return {
+        'world_model': nnx.state(world_model, nnx.Param),
+        'actor': nnx.state(actor, nnx.Param),
+        'critic': nnx.state(critic, nnx.Param),
+        'target_critic': nnx.state(target_critic, nnx.Param),
+        'key': jax.random.PRNGKey(0),
+        'iter_num': jnp.array(0, dtype=jnp.int32),
+        'policy_step': jnp.array(0, dtype=jnp.int32),
+        'total_episodes_completed': jnp.array(0, dtype=jnp.int32),
+        'cumulative_grad_steps': jnp.array(0, dtype=jnp.int32),
+        'stage': jnp.array(0, dtype=jnp.int32),
+        'moments': moments_target,
+    }
 
 
 def _load_probe_env_cfg(env_config_path: str) -> Config:
@@ -112,7 +166,16 @@ def main():
                          help="Root dir for recordings/<episode>/episode_*.rec.gz output.")
     parser.add_argument('--n-episodes', type=int, default=30)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--device', default='cpu', choices=['cpu', 'gpu'],
+                         help="JAX device (default cpu — matches eval_rollout.py's rPPO "
+                              "convention; safe for high-concurrency sweeps on a shared GPU).")
     args = parser.parse_args()
+
+    # Force the platform BEFORE any array is created (must happen before the
+    # first jax.random.PRNGKey / nnx.Rngs / build_agent call below). Mirrors
+    # scripts/eval/eval_rollout.py's `--device cpu` handling.
+    if args.device == 'cpu':
+        jax.config.update('jax_platform_name', 'cpu')
 
     # --- 1. Load configs ---
     print(f'[probe-eval] Loading probe env config: {args.env_config}')
@@ -135,32 +198,35 @@ def main():
     )
     print('[probe-eval] build_agent OK')
 
-    # --- 3. Restore checkpoint ---
+    # --- 3. Restore checkpoint (topology-agnostic: restore INTO a real,
+    #     already-CPU-resident target tree so orbax uses ITS sharding, not
+    #     the checkpoint's saved GPU sharding — see module docstring) ---
     run_dir = os.path.abspath(args.run_dir)
-    print(f'[probe-eval] Restoring checkpoint step={args.episode} from {run_dir}/checkpoints/')
+    print(f'[probe-eval] Restoring checkpoint step={args.episode} from {run_dir}/checkpoints/ '
+          f'(device={args.device})')
     manager = make_checkpoint_manager(run_dir, max_to_keep=100)
-    ckpt = load_checkpoint(manager, args.episode)
-    if ckpt is None:
-        raise RuntimeError(
-            f'load_checkpoint returned None for step={args.episode} under {run_dir}/checkpoints/ '
-            f'— confirm the step exists (ls {run_dir}/checkpoints/).'
-        )
-    ckpt = _normalize_checkpoint(ckpt)
-    for key in ('world_model', 'actor'):
-        if key not in ckpt:
-            raise ValueError(f"Checkpoint at step={args.episode} is missing '{key}' — "
-                              f"cannot restore. Available top-level keys: {list(ckpt.keys())}")
+    target = _build_restore_target(world_model, actor, critic, target_critic)
 
     try:
-        nnx.update(world_model, ckpt['world_model'])
-        nnx.update(actor, ckpt['actor'])
+        restored = manager.restore(args.episode, args=ocp.args.StandardRestore(item=target))
     except Exception as e:
         raise ValueError(
-            f"Failed to restore checkpoint step={args.episode} into the agent built from "
-            f"--agent-config (obs_dim={obs_dim}, action_dim={action_dim}). This usually means "
-            f"the probe env config (--env-config) produces a different obs_dim/action_dim than "
-            f"the environment the checkpoint was trained on. Original error: {e}"
+            f"Failed to restore checkpoint step={args.episode} from {run_dir}/checkpoints/ into "
+            f"the agent built from --agent-config (obs_dim={obs_dim}, action_dim={action_dim}). "
+            f"This usually means either the step doesn't exist (ls {run_dir}/checkpoints/) or the "
+            f"probe env config (--env-config) produces a different obs_dim/action_dim than the "
+            f"environment the checkpoint was trained on. Original error: {e}"
         ) from e
+    if restored is None:
+        raise RuntimeError(
+            f'manager.restore returned None for step={args.episode} under {run_dir}/checkpoints/ '
+            f'— confirm the step exists (ls {run_dir}/checkpoints/).'
+        )
+
+    # Targeted StandardRestore returns leaves typed to match `target` (nnx.State,
+    # not a raw digit-keyed dict), so no _normalize_checkpoint step is needed here.
+    nnx.update(world_model, restored['world_model'])
+    nnx.update(actor, restored['actor'])
     print(f'[probe-eval] Checkpoint restored OK at step={args.episode}')
 
     # --- 4. Run probe rollout ---
