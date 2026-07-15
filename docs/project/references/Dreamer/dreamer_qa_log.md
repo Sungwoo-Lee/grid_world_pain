@@ -1315,3 +1315,270 @@ demonstration. Straight-through is enabling machinery, borrowed and credited.
 Dreamer-specific in this area: categorical latents ✅, KL balancing ✅;
 straight-through ❌ (Bengio's); Gumbel-max ❌ (nobody's in this lineage — our JAX
 port's choice, filling `draw()`).
+
+## Session 2026-07-16 — world-model forward pass, module-by-module
+
+### Q23 — Summary of world-model training
+
+**Q:** Give me the summary of your explanation.
+
+**A:** Seven modules, **one** loss scalar, **one** backward pass, **one** optimizer
+(`wm_opt`). XS: `z` = 32×32 = 1024 flat, `h` = 256, latent = **1280**.
+
+```
+batch from replay:   obs [64,16,D_obs], actions, rewards, terminated, is_first
+
+§S1   is_first[0] := 1                                   train.py:690
+§S2   actions := action_shift(actions)                   train.py:696   (a_t → a_{t-1})
+
+for t in 0..63:                                          agent.py:1687
+    h_t  = GRU( MLP([z_{t-1} ; a_{t-1}]), h_{t-1} )      ← memory.  NO observation.
+    ẑ_t  = sample( prior_net(h_t) )                      ← PREDICTION   (sample DISCARDED)
+    z_t  = sample( posterior_net([h_t ; φ(o_t)]) )       ← MEASUREMENT  (kept)
+
+latent = [z_t ; h_t]                                     [64,16,1280]
+ô_t, r̂_t, ĉ_t = decoder / reward_model / continue_model (latent)
+
+loss  =  1.0·(obs + reward + continue NLL)  +  0.5·max(KL(sg q‖p),1)  +  0.1·max(KL(q‖sg p),1)
+one backward → one Adam step (clip 1000) → all seven modules
+```
+
+The six load-bearing points: (1) reconstruction is same-`t`, prediction lives in the
+KL; (2) the posterior is anchored by reconstruction, not the KL (DreamerV2: remove
+image gradients → 0.04 gamer median); (3) `L_dyn` and `L_rep` are not opponents —
+`L_dyn` is a follower chasing the aggregate posterior; the real tug-of-war is
+`L_pred` vs `L_rep` at 10:1; (4) the KL floor `I(z_t;o_t|h_t)` is the world's
+per-step surprise, not an error; (5) the prior's *sample* is discarded during
+training — only logits reach the KL; (6) discreteness → staircase → straight-through.
+
+### Q24 — Is `q` the posterior and `p` the prior?
+
+**A:** Yes. `q` = posterior `q(z_t|h_t,φ(o_t))` (sees the obs); `p` = prior
+`p(z_t|h_t)` (doesn't).
+
+```
+L_dyn = KL( sg(q) ‖ p )     posterior frozen  →  the PRIOR moves
+L_rep = KL(  q ‖ sg(p) )    prior frozen      →  the POSTERIOR moves
+```
+
+Mnemonic: **whichever isn't stop-gradient'd is the one being trained.**
+
+⚠️ **DreamerV1 uses the opposite convention** (`p` = posterior, `q` = prior). It
+flipped at V2. Our code follows V2/V3.
+
+### Q25 — Does the GRU depend on `L_pred` only? And explain `z_t`
+
+**A:** **All three losses reach the GRU** — it's the most heavily-supervised module.
+Four paths per timestep:
+
+| # | path | from |
+|---|---|---|
+| 1 | `decoder(latent)` → `latent[1024:]` = **`h_t`** | `L_pred` — **direct** |
+| 2 | `decoder(latent)` → `latent[:1024]` = `z_t` → `posterior_net` → `h_t` | `L_pred` — via `z` |
+| 3 | `prior_net(h_t)` → `h_t` | `L_dyn` |
+| 4 | `posterior_net([h_t ; φ(o_t)])` → `h_t` | `L_rep` |
+
+Path 1 is the one people miss: **`latent = [z_t ; h_t]`, so `h_t` goes straight into
+the decoder.** It isn't internal plumbing — it's half the decoder's input. (The
+bottleneck claim is narrower than "all observations": `h_t` carries `o_1…o_{t-1}`;
+it's **`o_t`'s novelty** that has only one route, via `z_t`.) Then multiply by BPTT
+over all 64 steps.
+
+**The hidden premise in "which loss updates `z_t`'s weights":**
+
+> **`z_t` has no weights. It isn't a parameter.**
+
+| | what it is | trained? |
+|---|---|---|
+| `h_t` | **activation** — GRU output | ❌ the **GRU's weights** are |
+| `z_t` | **activation** — a sample from the posterior net's logits | ❌ the **posterior net's weights** are |
+| `initial_recurrent_state` | a genuine **parameter** (agent.py:673) | ✅ `tanh`'d → `h_0` |
+
+`z_t` has **two destinations**: `[z_t ; h_t]` → heads at time `t`, **and** → GRU input
+at `t+1`. That second path is how a measurement becomes memory — and why a gradient
+arriving at step 40 can reach the encoder's weights at step 3.
+
+### Q26 — The forward pass, with the models
+
+**A:**
+
+```
+Stage 1 — encode everything ONCE, outside the loop        agent.py:1671
+    embedded_obs = encoder(obs)      [64,16,D_obs] ──► [64,16,256]
+
+Stage 2 — initialise
+    h, z = rssm.get_initial_states(16)
+        h [16,256] = tanh(initial_recurrent_state)   ← the one learned "state" param
+        z [16,32,32] = the prior's MODE at h₀        ← deterministic, no PRNG
+
+Stage 3 — the loop over time (sequential: h_t needs h_{t-1})
+
+  ╔══ INPUTS to tick t ════════════════════════════════════════════╗
+  ║  z_{t-1} [16,32,32]   h_{t-1} [16,256]   a_{t-1} [16,A]        ║
+  ║  φ(o_t)  [16,256]     is_first [16,1]                          ║
+  ╚════════════════════════════════════════════════════════════════╝
+
+  (a) RESET (§S4, only if is_first=1)
+        a_{t-1} := (1−is_first)·a_{t-1}
+        h_{t-1} := (1−is_first)·h_{t-1} + is_first·h₀
+        z_{t-1} := (1−is_first)·z_{t-1} + is_first·z₀
+
+  (b) MEMORY — sequence model                        ◄── NO observation
+        concat([z_{t-1}, a_{t-1}])       [16,1024+A]
+          → recurrent_mlp_linear → norm → SiLU       [16,256]
+          → gru_cell(feat, h_{t-1})      ═══► h_t    [16,256]
+
+  (c) PRIOR — transition_*                           ◄── reads h_t ONLY
+        h_t → transition_hidden → norm → SiLU → transition_out  [16,1024]
+          → unimix → reshape → sample  ═══► ẑ_t
+
+  (d) POSTERIOR — repr_*                             ◄── reads h_t AND φ(o_t)
+        concat([h_t, φ(o_t)])            [16,512]
+          → repr_hidden → norm → SiLU → repr_out     [16,1024]
+          → unimix → reshape → sample  ═══► z_t
+
+  ╔══ OUTPUTS ═════════════════════════════════════════════════════╗
+  ║  h_t, z_t → tick t+1     z_logits, ẑ_logits → saved for the KL ║
+  ║  ẑ_t → DISCARDED  (agent.py:1688)                              ║
+  ╚════════════════════════════════════════════════════════════════╝
+
+Stage 4 — stack & assemble
+    latent = concat([z_all_flat, h_all], -1)         [64,16,1280]
+
+Stage 5 — heads (parallel, no time dependence)
+    ô = decoder(latent)                [64,16,D_obs]  ← SYMLOG space
+    r̂_logits = reward_model(latent)     [64,16,255]
+    ĉ_logits = continue_model(latent)   [64,16,1]
+```
+
+Five tensors out. Then the losses are just *"compare these against the batch"* —
+the first three look **outward** at the data; the fourth (`z_logits` vs `ẑ_logits`)
+looks **inward**, the model grading itself on how well it saw its own measurement
+coming.
+
+### Q27 — What are the inputs to generate `h_t`? Both `z_{t-1}` and `h_{t-1}`?
+
+**A:** **Three inputs** — yes, both, plus the action. But they enter **differently**:
+
+```
+z_{t-1} ──┐
+          ├─► concat ─► recurrent_mlp_linear ─► norm ─► SiLU ─► feat [256] ──┐
+a_{t-1} ──┘            (1024+A → 256)                                        │
+                                                                             ├─► gru_cell
+h_{t-1} ─────────────────────────────────────────────────────────────────────┘
+   (raw, no preprocessing)
+```
+
+`z_{t-1}`, `a_{t-1}` are the GRU's **input**; `h_{t-1}` is its **hidden state**
+(agent.py:1081-1087 — `recurrent_input` does *not* contain `h`). They finally meet
+inside the cell: `cat = concat([hx, x])` → `Linear(512→768)` → 3 gates.
+
+The asymmetry is deliberate: `z_{t-1}` is **32-hot sparse binary** → needs an
+embedding table (`recurrent_mlp_linear` = sum the 32 selected rows). `h_{t-1}` is
+already dense at the right width → nothing to embed.
+
+During training `z_{t-1}` is the **posterior**; in imagination the **prior** takes
+that slot.
+
+### Q28 — Why `Linear → norm → SiLU` for `z` and `a`?
+
+**A:** **It isn't special to `z`/`a`** — it's DreamerV3's universal MLP block. Every
+module uses `Linear(bias=False) → LayerNorm(eps=1e-3) → SiLU`: encoder, decoder,
+recurrent_mlp, transition, repr, reward, continue, actor, critic.
+
+What each piece does **here**:
+
+- **Linear** — the embedding (for a one-hot, a Linear *is* a lookup: sum 32 rows).
+- **LayerNorm** — scale control, and load-bearing here: `feat` gets **concatenated
+  with `h_{t-1}` and fed through one linear** inside the GRU. `feat` is a sum of 32
+  embedding vectors whose magnitude drifts as the table trains; `h` is a
+  gate-bounded GRU output. LN pins them to comparable scale.
+- **SiLU** — the real nonlinearity. Without it you'd have two linears with a
+  normalisation sandwiched. It's also what makes the gate arguments *nonlinear* in
+  `z`.
+
+Two details: **`bias=False`** because LayerNorm subtracts the mean and supplies its
+own shift `β`. **`eps=1e-3`, not the 1e-6 default** — Hafner's choice; our docstring
+(agent.py:80) records that the nnx default produces 1.72e-3 forward drift vs the
+reference.
+
+### Q29 — Brief intro: LayerNorm and SiLU
+
+**LayerNorm** (Ba, Kiros & Hinton 2016) — rescale each sample's feature vector to
+zero mean / unit variance, **across features, within one sample**:
+
+```
+μ = (1/D) Σᵢ uᵢ ;   σ² = (1/D) Σᵢ (uᵢ−μ)²
+LayerNorm(u)ᵢ = γᵢ·(uᵢ−μ)/√(σ²+ε) + βᵢ          γ, β learnable
+```
+
+For `[16,256]`: each of the 16 rows independently gets mean 0, var 1 across its own
+256 features.
+
+| | normalises over | depends on other samples? | train/eval modes? |
+|---|---|---|---|
+| **BatchNorm** | the **batch**, per feature | ✅ | ✅ running stats |
+| **LayerNorm** | the **features**, per sample | ❌ | ❌ |
+
+BatchNorm is unusable in an RNN (per-timestep stats, breaks at batch 1, needs
+running averages). Hence LN in RNNs and transformers. Dreamer is an RNN.
+
+**SiLU / Swish** — `SiLU(x) = x·sigmoid(x) = x/(1+e⁻ˣ)`.
+
+| `x` | −3 | −2 | **−1.278** | −1 | 0 | 1 | 2 | 3 |
+|---|---|---|---|---|---|---|---|---|
+| `SiLU(x)` | −0.14 | −0.24 | **−0.278** ← min | −0.27 | 0 | 0.73 | 1.76 | 2.86 |
+
+Large positive `x` → `≈ x` (like ReLU); large negative → `→ 0` (like ReLU); **in
+between it dips below zero** → non-monotonic; smooth everywhere. Beats ReLU because:
+smooth gradients; **no dying-ReLU** (ReLU's gradient is exactly 0 for all `x<0`, so a
+unit pushed negative never recovers); and it's **self-gated** — `x·sigmoid(x)` reads
+as *the unit gates the identity by its own value*.
+
+DreamerV1 used **ELU**; **SiLU + LayerNorm arrived with DreamerV3's architecture
+refresh**, among the changes that let one hyperparameter set span 150+ tasks.
+
+### Q30 — Does the reward model's gradient affect `h` and `z`?
+
+**A:** **Mechanically yes** — both paths, no `stop_gradient` anywhere in the chain
+(`agent.py:1718` → `train.py:721` → `loss.py:551`):
+
+```
+reward_loss
+   └─► reward_model weights
+   └─► latent [64,16,1280]
+          ├─ latent[...,1024:] = h_t  ──► gru_cell ──► BPTT into t−1, t−2, …
+          └─ latent[...,:1024] = z_t  ──STE──► repr_* ──► h_t, and ──► φ(o_t) ──► encoder
+```
+
+**But it does far less work than the 1:1 weights suggest**, for two reasons:
+
+**1. Dimensionality — an asymmetry hidden from every β.**
+
+```
+observation_loss = Σ over D_obs dims of squared error    ← D_obs terms
+reward_loss      = one 255-bin cross-entropy              ← 1 term
+continue_loss    = one Bernoulli NLL                      ← 1 term
+```
+
+All carry coefficient 1.0, so the effective ratio is **`D_obs : 1 : 1`**, not
+`1:1:1`. Reconstruction outweighs reward by roughly the observation width, purely
+from dimensionality. `β_pred = 1` hides it.
+
+**2. The ablations say to remove it.**
+
+> **DreamerV2:** stopping reward gradients into the encoder **helps slightly** —
+> better on 15 tasks. **DreamerV3 Nature:** stopping **task-specific** (reward +
+> value) gradients hurts **less** than stopping **task-agnostic** (reconstruction)
+> gradients.
+
+Against: removing *image* gradients → **0.04 gamer median**. Stark ordering. Their
+reading: representations specialised to *past* rewards generalise worse; the world
+model should model the **world**, not the task.
+
+**Project relevance** (flagged in [[dreamer_lit_review]] Paper 4): pain reward has
+exactly the punished profile — **sparse, high-magnitude, possibly mis-scaled**. A
+safer recipe keeps the encoder reconstruction-driven and lets pain enter only via
+the reward/value heads. **`dreamer_srl` does not stop reward gradients** (it follows
+sheeprl's default); the ablation would be a `stop_gradient` on `latent` in the
+reward head's call — **not a config knob today**.
