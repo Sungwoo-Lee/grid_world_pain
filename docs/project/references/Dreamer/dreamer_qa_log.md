@@ -903,3 +903,241 @@ Group 7 answered **"class 1."** Repeat ×32 → `z_t`.
   the data* are captured (different inputs → different logit patterns);
   correlations *given the input* are not. That's the price of the combinatorial
   capacity, and it's rarely mentioned.
+
+## Session 2026-07-15/16 — the non-differentiable-sample problem (step-by-step)
+
+> Asked as a slow walkthrough rather than one answer. Steps 1–2 plus two detours
+> are below as Q14–Q18; Q19 is the provenance finding that reframed the whole
+> thread and triggered a correction to [[dreamer_lit_review]].
+
+### Q14 — Step 1: where the gradient needs to go
+
+**Q:** I understood until §5. From §6 "The hard part: you can't differentiate a
+sample", explain step-by-step.
+
+**A:** The path from the posterior net's weights to the loss:
+
+```
+repr_out weights ─► logits ─► z_t ─► [z_t ; h_t] ─► decoder ─► ô_t ─► observation_loss
+```
+
+Chain rule:
+
+```
+∂loss/∂weights = (∂loss/∂ô_t) × (∂ô_t/∂z_t) × (∂z_t/∂logits) × (∂logits/∂weights)
+                                                    ↑ the problem
+```
+
+Every other factor is smooth (squared distance; Linear/LayerNorm/SiLU; Linear).
+**The whole problem reduces to `∂z_t/∂logits`** — and that arrow is not a formula,
+it's a *sampling operation*. If it's zero, the entire product is zero: not "small",
+**exactly zero**. Encoder, posterior net, GRU all receive nothing. Pass/fail for the
+world model.
+
+### Q15 — Step 2: what that derivative is, and why it's zero
+
+**A:** One group, 3 classes, randomness frozen. Slide `ℓ₁` upward:
+
+| `ℓ` | argmax | `z` |
+|---|---|---|
+| `[0.00, 1.0, 0.5]` | 2 | `[0,1,0]` |
+| `[0.90, 1.0, 0.5]` | 2 | `[0,1,0]` |
+| `[0.99, 1.0, 0.5]` | 2 | `[0,1,0]` |
+| `[1.01, 1.0, 0.5]` | **1** | **`[1,0,0]`** ← jump |
+
+```
+z₁
+ 1 |                     ┌───────────
+ 0 |─────────────────────┘
+   └─────────────────────┴──────────► ℓ₁
+                        1.0
+```
+
+Derivative: **exactly 0** on the flats (almost everywhere), **undefined** at the
+jump. Never useful.
+
+**Why zero is worse than small:** it's a *confident wrong statement* — "changing
+`ℓ₁` has no effect." And locally that's **true**. All the information lives in a
+jump the derivative cannot see. The optimiser concludes there's nothing to do.
+
+**This is discrete-specific.** Gaussian: `z = μ + σ·ε` → `∂z/∂μ = 1`. Nonzero,
+constant, perfect. That's why VAEs "just work" and nobody discusses this.
+
+### Q16 — Why does the staircase happen at all? Is it connected to 32×32?
+
+**A:** **The staircase IS the discreteness.** Topologically forced:
+
+> A continuous map from a connected space to a finite set **must be constant**.
+
+Logits live in `R³²` (connected). Output lives in `{32 one-hots}` (isolated
+points). Any map is constant (useless) or discontinuous (staircase). No third
+option. **Deciding `z` is discrete = accepting the staircase.**
+
+**Why not just use the softmax as `z`?** Geometry — the simplex:
+
+```
+              [1,0,0]  ← vertex: a REAL category
+                 ▲
+                ╱ ╲
+               ╱  ● ╲     ← interior: [0.7,0.2,0.1] — a BLEND, no such state exists
+              ╱_____╲
+        [0,1,0]     [0,0,1]
+```
+
+One-hot = **vertex**. Softmax output = **interior**. Handing the decoder an
+interior point hands it something that corresponds to nothing in the world —
+which is the Gaussian's "mass at 5.5" failure wearing new clothes.
+
+**And it destroys imagination.** Predator goes left or right 50/50. Softmax-as-`z`:
+every rollout identical, following the blend — *"the predator goes straight"*. The
+agent learns to dodge a predator that never exists. Sampled one-hot: this rollout
+left, next rollout right — each a **concrete, plausible** future.
+
+**Which decision causes what:**
+
+| decision | why | causes staircase? |
+|---|---|---|
+| **discrete** | multimodality — "either A or B" | ✅ **the whole cause** |
+| **factorised** (32 groups) | capacity: 32³² states from 1024 logits | ❌ no — just 32 staircases |
+
+The bargain: `want multimodality → must go discrete → must accept a staircase →
+must fake the gradient`.
+
+### Q17 — Are you comparing sampling vs one-hot?
+
+**A:** No — that table was badly built. They are **two independent axes**, each
+with its own alternative:
+
+| | **blend** (interior) | **one-hot** (vertex) |
+|---|---|---|
+| **deterministic** | `z = softmax(ℓ)` — mean-field failure, a non-state | `z = one_hot(argmax(ℓ))` — the **mode**. Real state, zero diversity |
+| **stochastic** | `z = softmax((ℓ+g)/τ)` — soft Gumbel-Softmax. Random, still a blend | `z = one_hot(argmax(ℓ+g))` ← **Dreamer** |
+
+Proof they're separable — **our code uses two of these cells** (agent.py:901-919):
+`get_initial_states` takes the `sample=False` branch (deterministic + vertex, the
+mode); every other RSSM call takes `sample=True` (stochastic + vertex).
+
+The staircase comes from the **support axis alone** — plain `argmax`, no noise,
+still has it. Randomness isn't the culprit; landing on vertices is.
+
+### Q18 — What is the Gumbel? (and: the dice example was wrong)
+
+**Q:** How does the Gumbel become the distribution of the maximum? Rolling 1000
+dice and taking the max sounds like it should skew to 6, not have mean 0.577 with
+a long right tail.
+
+**A:** **The dice example was wrong.** Dice are **bounded** — the max of 1000 rolls
+is 6, essentially always. Fisher–Tippett–Gnedenko says the max of many iid samples
+converges to one of **three** families, depending on the tail:
+
+| tail | limiting max distribution |
+|---|---|
+| **bounded** (dice, uniform) | **Weibull** ← piles up at the ceiling |
+| **heavy / power-law** (Cauchy, Pareto) | **Fréchet** |
+| **unbounded, exponentially decaying** (Gaussian, exponential) | **Gumbel** ✅ |
+
+Dice are in the **Weibull** branch. Wrong example entirely.
+
+**Correct example:** `X₁…Xₙ ~ Exponential(1)`. `P(max ≤ x) = (1−e^{−x})ⁿ`. Sub
+`x = log n + y`: `(1 − e^{−y}/n)ⁿ → exp(−e^{−y})` — the Gumbel CDF, exactly. Two
+things: the max **grows** (it sits near `log n`), and we **subtracted that growth**.
+The Gumbel describes `max − log n`, the *fluctuation around the typical max*. That's
+why it's centred at 0.577 rather than pinned at a ceiling — there is no ceiling.
+
+**Why right-skewed:** to land far **below** typical, *every* sample must be small —
+an **AND**, so probabilities multiply → **double-exponential** collapse
+(`exp(−e^{|x|})`). To land far **above**, only **one** sample must be big — an
+**OR** → merely **exponential** decay (`e^{−x}`). Left cliff, right ramp. The skew
+is the difference between AND and OR.
+
+**How it makes softmax exact** — not via the max story, via a race:
+
+```
+Gumbel = −log( Exponential(1) )        check: P(−log T ≤ x) = P(T ≥ e^{−x}) = exp(−e^{−x}) ✓
+```
+
+Give every class an **alarm clock** ringing at rate `e^{ℓ_k}`. Higher logit → faster
+clock. Whoever rings first wins. The classic exponential-race fact:
+
+```
+P(clock k rings first) = λ_k / Σ_j λ_j = e^{ℓ_k} / Σ_j e^{ℓ_j} = softmax(ℓ)_k
+```
+
+**Winning probability is your share of total rate.** And that race *is* the trick:
+
+```
+T_k ~ Exp(1);   T_k/e^{ℓ_k} ~ Exp(e^{ℓ_k});   argmin_k(T_k/e^{ℓ_k})  → softmax ✓
+−log(T_k/e^{ℓ_k}) = ℓ_k + (−log T_k) = ℓ_k + g_k,   g_k ~ Gumbel(0,1)
+−log is decreasing  ⟹  argmin over clocks ≡ argmax over (ℓ_k + g_k) ✓
+```
+
+Same race, two coordinate systems. The hinge: `g ~ Gumbel(0,1)` has CDF
+`exp(−e^{−x})`, and `g + ℓ` has CDF `exp(−e^{ℓ}·e^{−x})` — **adding `ℓ` multiplies
+the rate by `e^{ℓ}`.** Softmax needs to exponentiate the logits; shifting a Gumbel
+exponentiates them for free. No other distribution does this.
+
+Bonus: `∏_k exp(−e^{ℓ_k}e^{−x}) = Gumbel(logsumexp(ℓ), 1)` — the max of Gumbels is
+a Gumbel centred at the softmax's own normaliser, and it's independent of the
+argmax.
+
+### Q19 — Did the Gumbel come from the Dreamer papers, or from our JAX port?
+
+**Q:** Is this Gumbel trick from the original Dreamer papers? Or from the JAX
+implementation?
+
+**A:** **VERIFIED — it is not in the papers.** Searched the PDFs directly
+(`fitz`, since `pdftotext` isn't installed — the first attempt returned empty
+output that was *tool failure*, not evidence):
+
+```
+'gumbel' hits:   DreamerV2 (2021):        0
+                 DreamerV3 preprint:      0
+                 DreamerV3 Nature (2025): 0
+```
+
+Nor in sheeprl (`grep -rin gumbel vendor/sheeprl/` → nothing).
+
+**DreamerV2 Algorithm 1, verbatim from the PDF:**
+
+```
+Algorithm 1: Straight-Through Gradients with Automatic Differentiation
+    sample = one_hot(draw(logits))          # sample has no gradient
+    probs  = softmax(logits)                # want gradient of this
+    sample = sample + probs - stop_grad(probs)
+```
+
+`draw(logits)` — **the paper does not specify how you draw.** It cites
+**Bengio et al. 2013** for straight-through. **Zero** hits for Jang or Maddison
+(the one "Maddison" hit in the V3 preprint is Chris Maddison as an *AlphaGo
+co-author*, unrelated to the Concrete distribution).
+
+**Provenance chain:**
+
+| where | fills `draw()` with |
+|---|---|
+| Hafner's papers | **unspecified** |
+| sheeprl | PyTorch multinomial (`OneHotCategoricalStraightThrough`) |
+| our JAX port | **Gumbel-max** (`agent.py:915`, `:1542`) |
+
+The Gumbel came from the **JAX port**, filling a slot Hafner left open. It's a
+standard, exact sampler (and what `jax.random.categorical` uses internally),
+chosen because JAX wants an explicit PRNG key. This is precisely why **D-009** is
+approvable as substrate-class: `draw()` is a free slot, so any correct sampler
+fills it without changing the algorithm.
+
+**Two self-corrections this forced:**
+
+1. **The reparameterisation framing (Q18 and before) was imported, not the
+   lineage's.** Hafner never frames the categorical path as reparameterisation.
+   The papers' story is flat: *draw a sample somehow → attach the softmax gradient
+   → cite Bengio*. Several messages of scaffolding were built on a concept this
+   lineage does not use.
+2. **[[dreamer_lit_review]] had a real error** — it rendered Algorithm 1 as
+   `onehot(argmax(ℓ))` (the deterministic *mode*) instead of `onehot(draw(ℓ))` (a
+   *sample*), and called ST "unbiased" while the paper says *"This results in a
+   biased gradient estimate with low variance."* **Fixed 2026-07-16**, with an
+   additive correction note.
+
+**Root cause of the confusion:** our own code comments call the technique
+"straight-through Gumbel-softmax" (agent.py:882, 907, 1413, 1531, 1534, 1541).
+That is a **misnomer** — see Q20.

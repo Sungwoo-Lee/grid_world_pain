@@ -1177,21 +1177,49 @@ categorical), whereas a Gaussian prior cannot match a Gaussian-mixture
 posterior — a structural advantage for the reparameterised KL.
 
 Sampling $z_t$ is non-differentiable, but the **straight-through (ST)
-gradient** (Bengio et al., 2013) gives an unbiased gradient *through the
-forward path* by the identity in Algorithm 1:
+gradient** (Bengio et al., 2013) gives a usable — though **biased** —
+gradient through the sampling step, via the identity in Algorithm 1:
 
 $$
-\tilde z_t \;=\; \text{onehot}(\arg\max\,\ell_t) \;+\; \text{softmax}(\ell_t)
+\tilde z_t \;=\; \text{onehot}(\text{draw}(\ell_t)) \;+\; \text{softmax}(\ell_t)
 \;-\; \text{sg}(\text{softmax}(\ell_t)).
 $$
 
-In the forward pass $\tilde z_t = \text{onehot}(\arg\max\,\ell_t)$ exactly
+In the forward pass $\tilde z_t = \text{onehot}(\text{draw}(\ell_t))$ exactly
 (the last two terms cancel); in the backward pass the only non-zero term is
 $\text{softmax}(\ell_t)$, so $\partial \tilde z_t / \partial \ell_t =
 \partial\,\text{softmax}(\ell_t) / \partial \ell_t$. The estimator is biased
-(it ignores the contribution of the argmax to the loss) but has dramatically
+(it ignores the contribution of the sampling step to the loss) but has dramatically
 lower variance than score-function gradients on per-step losses such as the
 image, reward, and discount likelihoods.
+
+> **CORRECTION (2026-07-16).** This passage previously rendered Algorithm 1's
+> sampling step as `onehot(argmax(ℓ_t))` and described the ST gradient as
+> *unbiased*. Both were wrong, and verified against the PDF
+> (`Hafner et al. 2021`, Algorithm 1, p.4):
+>
+> ```
+> sample = one_hot(draw(logits))          # sample has no gradient
+> probs  = softmax(logits)                # want gradient of this
+> sample = sample + probs - stop_grad(probs)
+> ```
+>
+> The paper says **`draw`** — a *sample* from `Categorical(softmax(ℓ))` — not
+> `argmax`, which is the deterministic *mode*. The difference is load-bearing:
+> `argmax` always returns the top class, whereas `draw` returns the 9.9%-class
+> 9.9% of the time, and that stochasticity is what makes imagined rollouts
+> diverse. The paper also states plainly: *"This results in a **biased** gradient
+> estimate with low variance."* (§ Discrete latents.)
+>
+> Note the paper leaves **`draw` unspecified**. sheeprl fills it with PyTorch's
+> multinomial sampler (`OneHotCategoricalStraightThrough`); our JAX port fills it
+> with Gumbel-max (`agent.py:915`). Both are exact samplers; see D-014-adjacent
+> reasoning in `docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md` D-009.
+> **No Dreamer paper mentions Gumbel** (verified: 0 hits across the 2021, 2023,
+> and 2025 PDFs) — the papers cite Bengio et al. 2013 for straight-through, not
+> Jang/Maddison for Gumbel-Softmax. Gumbel-Softmax is a *different* technique
+> (a continuous relaxation, `softmax((ℓ+g)/τ)`), which Dreamer does **not** use.
+> See [[dreamer_qa_log]] Q19.
 
 **KL balancing as two stop-gradient halves.** The ELBO regulariser
 $\text{KL}(q \Vert p) = \mathbb{E}_q[\log q - \log p]$ has gradient
