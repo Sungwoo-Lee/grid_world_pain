@@ -1141,3 +1141,177 @@ fills it without changing the algorithm.
 **Root cause of the confusion:** our own code comments call the technique
 "straight-through Gumbel-softmax" (agent.py:882, 907, 1413, 1531, 1534, 1541).
 That is a **misnomer** — see Q20.
+
+### Q20 — Step 3(b): how does `sample + probs − sg(probs)` recover the gradient?
+
+**Q:** Let's follow the paper's version, not our script. How can
+`sample + probs - sg(probs)` recover the gradient?
+
+**A:**
+
+```
+sample = one_hot(draw(logits))          # a vertex. No gradient.
+probs  = softmax(logits)                # smooth. Has a gradient.
+output = sample + probs - sg(probs)
+```
+
+**Forward.** `sg(probs)` is numerically identical to `probs` — stop-gradient
+changes the tape, never the value. So `output = sample + probs − probs = sample`,
+**bit-exact**. With `ℓ = [2.0, 1.0, 0.1]` → `probs = [0.659, 0.242, 0.099]`, and
+`draw` returning class 1:
+
+```
+output = [0,1,0] + [0.659,0.242,0.099] − [0.659,0.242,0.099] = [0,1,0]
+```
+
+The decoder gets a clean vertex. No blend, no softening.
+
+**Backward.**
+
+| term | `∂/∂logits` | why |
+|---|---|---|
+| `sample` | **0** | the staircase — `draw` returns an integer index |
+| `probs` | **J** (softmax Jacobian) | smooth |
+| `− sg(probs)` | **0** | definition of stop-gradient |
+
+`∂output/∂logits = 0 + J − 0 = J`.
+
+**The insight — `probs − sg(probs)` is a zero with a gradient attached:**
+
+```
+value:       probs − probs = 0        ← identically zero, always
+derivative:    J   −   0   = J        ← the full softmax Jacobian
+```
+
+You add **zero** to the sample. The value cannot change. But the derivative of
+that nothing is `J`, and autodiff picks it up. Two channels through one
+expression: the **value** channel carries `sample` (the `probs` cancel); the
+**gradient** channel carries `J` (the `sample` and `sg` vanish).
+
+**The lie, precisely:**
+
+```
+forward computes:   z = one_hot(draw(ℓ))    ← staircase, derivative 0
+backward reports:   z = softmax(ℓ)          ← smooth ramp, derivative J
+```
+
+Different functions → **biased**. The paper says so outright: *"This results in a
+biased gradient estimate with low variance."*
+
+**Why it's a good lie:** `E[sample] = probs`. The softmax **is** the expectation of
+the one-hot. ST says *"I can't differentiate the sample, so I'll differentiate its
+mean."* And the split is cleaner than it looks:
+
+| piece | honest? |
+|---|---|
+| `∂loss/∂z` evaluated **at the vertex actually drawn** | **honest** — that's where the decoder ran |
+| `∂z/∂ℓ ≈ J`, routing it back to the logits | **fake** — this is the lie |
+
+The loss signal is real; only the routing is invented. The sample still matters —
+it decides **where** the loss is evaluated, even though `J` is the same regardless.
+
+**In words:** with class 1 drawn, `∂p₁/∂ℓ₁ = 0.242(1−0.242) = +0.183` and
+`∂p₁/∂ℓ₀ = 0.242(0−0.659) = −0.159`. If class 1 lowered the loss, the update
+raises `ℓ₁` and lowers its main rival `ℓ₀`. Direction right; magnitude fiction.
+
+**The trade:**
+
+| estimator | bias | variance |
+|---|---|---|
+| REINFORCE (score function) | **unbiased** ✅ | **enormous** ❌ |
+| straight-through | **biased** ❌ | **small** ✅ |
+
+Dreamer takes ST for the *world model*. Note it makes the **opposite** call for the
+**actor** on Atari (`ρ=1`, pure REINFORCE) — same menu, different dish, because the
+actor's gradient traverses a long imagined rollout where ST's bias compounds.
+
+### Q21 — Why not `sample − probs + sg(probs)`? Isn't the arrangement arbitrary?
+
+**A:** Not arbitrary — that version **flips the sign of the gradient**.
+
+```
+output = sample − probs + sg(probs)
+forward:   sample − probs + probs  =  sample     ← identical! ✓
+backward:  0      −  J   +  0      =  −J         ← the exact negative ✗
+```
+
+Gradient descent becomes gradient **ascent**. If class 1 lowered the loss, the
+correct update raises `ℓ₁`; this one lowers it. The model learns *"that choice
+helped → make it less likely."* It anti-learns and diverges.
+
+**The general family:** `output = sample + α·(probs − sg(probs))`. The bracket is
+always zero in value, so the forward is `sample` for **any** `α`. Only the backward
+changes:
+
+| expression | forward | backward | verdict |
+|---|---|---|---|
+| `sample + probs − sg(probs)` | `sample` ✓ | `+J` | ✅ the paper |
+| `sample − probs + sg(probs)` | `sample` ✓ | `−J` | ❌ anti-learning |
+| `sample + 2(probs − sg(probs))` | `sample` ✓ | `2J` | ⚠️ right direction, wrong scale |
+| `sample` alone | `sample` ✓ | `0` | ❌ no learning |
+| `probs + sg(sample − probs)` | `sample` ✓ | `+J` | ✅ same thing, different spelling |
+
+**Two constraints pin it:** (1) forward = `sample` → any `α`; (2) backward =
+`∂probs/∂ℓ` → **forces `α = 1`**. Constraint 2 *is* the design intent — "pretend the
+output was `probs`." Not `−probs`, not `2·probs`.
+
+**The clearer spelling:** `output = probs + sg(sample − probs)` — *"start from
+`probs`, which has the gradient I want; snap the value onto `sample` with a
+stop-gradient'd offset."* Identical maths; the ordering shows the intent.
+
+**⚠️ The part that should worry you:** every row's **forward** column says `sample`.
+**The forward pass cannot tell you which arrangement is correct.** A sign typo
+passes every value-based test — shapes match, one-hots are perfect, reconstruction
+looks fine — and the model simply never learns, with nothing in the output saying
+why. Same class as the `soft = softmax(logits)` trap: **sign and stop-gradient
+placement live entirely in the backward pass, where no forward assertion can see
+them.** This is exactly why the project has `tests/algorithms/dreamer_srl/test_grad_parity.py`
+comparing `jax.grad` vs `torch.autograd` head-by-head. Forward-only tests are
+structurally blind to this bug.
+
+### Q22 — Is `sample + probs − sg(probs)` Hafner's invention?
+
+**A:** **No, and he says so.** Verbatim from the DreamerV2 PDF:
+
+> *"In DreamerV2, we instead use a vector of several categorical variables and
+> optimize them using **straight-through gradients (Bengio et al., 2013)**, which
+> are easy to implement using automatic differentiation **as shown in Algorithm 1**."*
+
+The grammar is explicit: the **technique** is Bengio's; Algorithm 1 is a
+convenience *"easy to implement… as shown in"*, not a claimed contribution.
+
+| | contribution |
+|---|---|
+| **Hinton (2012)**, lecture 15b | the original "pretend the derivative is 1" idea — *believed*, unverified (no PDF locally) |
+| **Bengio, Léonard & Courville (2013)** | *Estimating or Propagating Gradients Through Stochastic Neurons…* — formalises it, names it, compares vs REINFORCE |
+| **autodiff folklore** (~2015+) | the `a + b − sg(b)` spelling — a custom gradient without a custom op |
+| **Hafner (2021)** | **none of the above** — *applies* borrowed machinery to categorical latents in an RSSM |
+
+**The idiom predates Dreamer.** VQ-VAE (2017) uses it, spelled the other way:
+`z_q = z_e + sg(quantize(z_e) − z_e)` — *"copy gradients from decoder input to
+encoder output."* Four years earlier.
+
+**One general recipe; both are special cases.** To build a node whose **value** is
+`f(x)` but whose **gradient** is `g′(x)`:
+
+```
+out = g(x) + sg( f(x) − g(x) )
+value:     g + (f − g) = f     ✓
+gradient:  g′ +   0    = g′    ✓
+```
+
+| | `f` (value you want) | `g` (gradient you want) |
+|---|---|---|
+| **Dreamer** | `sample` (a vertex) | `probs` (softmax) |
+| **VQ-VAE** | `quantize(z_e)` (a codebook entry) | `z_e` (identity → gradient copied straight through) |
+
+That makes Q12's "family resemblance" exact: they are the **same construction with
+different `f` and `g`**. The whole choose-then-embed vs embed-then-choose
+distinction lives entirely in what you plug into `f`.
+
+**So what IS DreamerV2's contribution here?** The **architectural choice**
+(Gaussian → 32×32 categorical in an RSSM), **KL balancing**, and the empirical
+demonstration. Straight-through is enabling machinery, borrowed and credited.
+Dreamer-specific in this area: categorical latents ✅, KL balancing ✅;
+straight-through ❌ (Bengio's); Gumbel-max ❌ (nobody's in this lineage — our JAX
+port's choice, filling `draw()`).
