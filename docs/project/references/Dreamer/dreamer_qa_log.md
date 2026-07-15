@@ -25,6 +25,8 @@ Companion documents:
 ## Append protocol
 
 - Add new entries at the bottom, continuing the number sequence.
+- Append **as the conversation goes**, not batched at the end — the log is expected
+  to stay current with the live discussion.
 - Keep the `**Q:**` text close to what was actually asked.
 - Keep the answer substantive — a reader should get the answer here, not a
   pointer to go and re-derive it.
@@ -691,3 +693,213 @@ docstring because an earlier rebuild **omitted it** — "cascade fix #30".
 agent.py:409: *"without this MLP, the GRU receives raw `[posterior_flat, action]`
 … a dimensional mismatch **and** a semantic difference."* It silently trains
 either way, which is what made it dangerous.
+
+### Q12 — Discretized latents in general; is VQ-VAE connected?
+
+**Q:** I think you need to introduce me the 32-hot or any discretized latent
+approach. You can start from VQ-VAE if you think it is connected.
+
+**A:** **Connected — but family resemblance, not shared mechanism.** Both are
+"discrete latents with straight-through gradients"; they solve overlapping but
+different problems, and the difference is exactly why Dreamer doesn't use VQ.
+
+**VQ-VAE (van den Oord et al., 2017):**
+
+```
+encoder → z_e(x) ∈ R^D            a continuous vector
+codebook  e_1 … e_K ∈ R^D         K learned embedding vectors
+quantize: z_q(x) = e_k,  k = argmin_j ||z_e(x) − e_j||₂     ← nearest neighbour
+decoder ← z_q
+```
+
+- **Straight-through gradient**: `argmin` has no derivative → *copy* the gradient
+  from `z_q` back to `z_e` (pretend the quantiser was the identity).
+- **Codebook loss** `||sg(z_e) − e||²` pulls codes to the encoder; **commitment
+  loss** `β||z_e − sg(e)||²` pulls the encoder to its code.
+- **No KL at all** — the prior is uniform over K codes, so KL = const `log K` and
+  drops out. The prior is learned in a **second stage** (a PixelCNN over the
+  frozen discrete codes).
+
+Side by side:
+
+| | VQ-VAE | Dreamer V2/V3 |
+|---|---|---|
+| encoder emits | a **vector** `z_e` | **logits** |
+| discretisation | nearest neighbour in embedding space | **sample** from a categorical |
+| deterministic? | **yes** (`argmin`) | **no** — stochastic |
+| codebook | explicit, learned vectors | none, explicitly |
+| gradient trick | straight-through *copy* | straight-through *Gumbel-softmax* |
+| prior | uniform → PixelCNN, **stage 2** | learned **jointly**, conditioned on `h_t` |
+| KL | absent (constant) | **the central term** |
+| pathology | **codebook collapse** (codes go unused) | KL spikes → patched by unimix |
+
+**The difference that decides it: VQ is deterministic.** VQ-VAE hands you
+*"code 47."* Dreamer hands you *"70% empty, 20% predator-left, 10% right."*
+Everything from Q6–Q8 collapses under a point estimate: `q(z|h,o)` becomes a
+delta, there is no aggregate posterior to train a prior against, you cannot take
+a `KL` between two `argmin` operations (no probability semantics), and there is
+no hedging in imagination — which was the entire reason PlaNet added the
+stochastic path.
+
+> **VQ-VAE discretises for compression. Dreamer discretises for multimodal
+> belief.** Same tool, different job.
+
+**But Dreamer *does* have a codebook — see Q11.** `recurrent_mlp_linear` is
+`Linear(1024 → 256)` on a 32-hot = the sum of 32 selected rows of a 1024-row
+table. That table **is** a codebook (1024 entries × 256 dims); Dreamer just never
+calls it one. The real distinction is **ordering**:
+
+- **VQ-VAE — embed first, then choose.** The code is picked by *proximity in
+  embedding space*; code identity is defined by where it sits. This is what makes
+  codebook collapse possible: codes far from any encoder output get no gradient
+  and die.
+- **Dreamer — choose first, then embed.** The code is picked by *sampling from
+  logits*; the embedding is learned freely downstream. There is no "distance", so
+  nothing to collapse. Unimix's 1% floor guarantees every class keeps gradient.
+
+Dreamer's is strictly simpler and sidesteps VQ's central pathology.
+
+**Wider landscape:**
+
+- **Straight-through estimator** (Bengio et al., 2013) — the umbrella trick:
+  forward hard, backward soft. Both approaches use it.
+- **Gumbel-Softmax / Concrete** (Jang et al.; Maddison et al., 2017) — a *relaxed*
+  categorical with temperature `τ`; `τ → 0` approaches one-hot. Dreamer uses the
+  **hard straight-through** variant at fixed temperature, not annealed.
+- **Factorisation is the scaling trick, and both use it.** VQ-VAE quantises each of
+  `H'×W'` spatial positions independently (e.g. 1024 positions × 512 codes ≈ 9216
+  bits). Dreamer: 32 abstract slots × 32 classes = **160 bits**. Same structural
+  move; Dreamer's slots aren't spatial and its budget is tiny, because it encodes
+  a *state*, not an image.
+- **VQ world models exist**: IRIS tokenises with a VQ-VAE + transformer over
+  tokens. DreamerV3 outperforms it on Atari 100k.
+
+**The arc — where multimodality lives:**
+
+| | latent | who handles multimodality |
+|---|---|---|
+| PlaNet / DreamerV1 | Gaussian | **nobody** — the weakness V2 fixed |
+| DreamerV2 / V3 | 32×32 categorical | **the latent** |
+| **Dreamer 4** | **continuous, tanh-projected bottleneck** | **the dynamics** (shortcut/diffusion forcing) |
+
+Dreamer 4 went *back to continuous* at the tokenizer. Not a reversal of V2's
+lesson — a **relocation**. Multimodality has to live somewhere; a diffusion model
+is natively multimodal, so once the dynamics is a diffusion-forcing transformer,
+the latent no longer carries that burden and can return to being a smooth,
+easy-to-predict continuous code.
+
+> Discrete latents were never the goal. **Representing "either A or B" was the
+> goal**, and 32×32 one-hots were the cheapest way to get it inside a GRU. When a
+> better multimodal dynamics model arrived, the discreteness was dropped.
+
+### Q13 — The categorical approach explained from scratch
+
+**Q:** Explain me the dreamer's categorical approach again. Think I'm new for this
+categorical approach.
+
+**A:** From the ground up.
+
+**1. A network cannot output "a category."** It outputs numbers. To represent a
+choice among 32 options it emits **32 numbers** read as preferences:
+
+```
+raw output (logits):   [ 2.0,  1.0,  0.1 ]
+softmax:               [ 0.66, 0.24, 0.10 ]    sum = 1
+```
+
+`softmax(x)_k = exp(x_k) / Σⱼ exp(x_j)`. The raw numbers are **logits** —
+unnormalised log-probabilities.
+
+**2. One-hot, and why not an integer.** Having chosen option 2, write it
+`[0, 1, 0]`. Why not the integer `2`? Because a number carries arithmetic that
+categories don't have — `2` implies it sits *between* 1 and 3 and is *twice* 1.
+For options `{empty, predator, food}` that's nonsense. **One-hot strips out all
+accidental ordering and magnitude**; every option is equidistant from every other.
+
+**3. Why a categorical latent at all.** Truth: *"the predator is at position 3 or
+position 8."*
+
+```
+truth:        ▁ ▁ █ ▁ ▁ ▁ ▁ █ ▁ ▁      either here or there
+Gaussian:     ▁ ▂ ▄ ▆ █ ▆ ▄ ▂ ▁ ▁      "around 5.5 ± 2"  ← WRONG. It's never at 5.5.
+Categorical:  ▁ ▁ █ ▁ ▁ ▁ ▁ █ ▁ ▁      "50% at 3, 50% at 8"  ← exactly right
+```
+
+A Gaussian is **unimodal**; asked for two possibilities it puts mass in the *gap*,
+on a state that never occurs. That is DreamerV2's whole case for the swap.
+
+**4. Capacity, and the factorisation fix.** One question with 32 answers = only
+`log₂32 = 5 bits`. Two ways to get more: one huge question (2¹⁶⁰ answers → 2¹⁶⁰
+logits, impossible), or **many small questions** ✅.
+
+```
+32 slots × 32 choices = 32³² = 2¹⁶⁰ ≈ 1.5e48 states   ...from only 32×32 = 1024 logits
+```
+
+Like a 32-character password over a 32-letter alphabet. **Combinatorial capacity
+at linear parameter cost.** That's what makes discrete latents practical.
+
+**5. The shapes.**
+
+```
+transition_out / repr_out  →  1024 numbers
+reshape                    →  [32, 32]      32 groups × 32 classes
+softmax(axis=-1)           →  per-group probabilities  ← normalised WITHIN each row only
+sample each group          →  each row picks one class
+z_t                        →  [32, 32]      each row: one 1.0, thirty-one 0.0
+flatten                    →  [1024]        exactly 32 ones, 992 zeros
+```
+
+Softmax runs **only along the last axis** → the 32 groups are independent → the KL
+is a *sum* of 32 per-group KLs.
+
+**6. You can't differentiate a sample.** `one_hot(argmax(logits))` is a
+**staircase** in the logits — flat everywhere, jumping at boundaries. Derivative
+zero almost everywhere. Three tricks fix it:
+
+- **Gumbel-max** — adding Gumbel noise then taking argmax gives an *exact*
+  categorical sample: `k = argmax_j(logit_j + g_j)`, `g_j ~ Gumbel(0,1)`. It
+  relocates randomness into an **additive noise term**, leaving the logits on a
+  deterministic path — the same move as the VAE's `z = μ + σ·ε`.
+- **Straight-through** (agent.py:915-923):
+  ```python
+  hard  = one_hot(argmax(logits + gumbel))
+  soft  = softmax(logits)
+  state = hard - stop_gradient(soft) + soft
+  ```
+  Forward: `hard − soft + soft = hard`, a genuine discrete one-hot. Backward:
+  `∂state/∂logits = ∂softmax/∂logits`. **The forward pass is a staircase; the
+  backward pretends it was a smooth ramp.** A lie → **biased**, but far lower
+  variance than REINFORCE.
+- **Unimix** (agent.py:819) — if softmax gives ~0 to a class, `log 0 = −∞` and the
+  KL explodes. So `probs = 0.99·softmax(logits) + 0.01·(1/32)`; every class keeps
+  ≥ `0.0003` mass → log-probs bounded → **KL bounded**. (`softmax(log p) = p`, so
+  calling the result "logits" is consistent.)
+
+**7. One group end to end.**
+
+```
+raw logits (group 7):  [ 3.2,  0.1, -1.5, …,  0.4 ]
+softmax:               [0.710, 0.031, 0.006, …, 0.043]
+unimix:                0.99 × 0.710 + 0.0003 = 0.7033  →  [0.7033, 0.0306, …]
+log:                   [-0.352, -3.487, …]             →  passed on as "logits"
++ gumbel:              [ 0.2, 1.8, -0.3, … ]
+argmax(logits+gumbel): → 1     ← noise favoured class 1 despite lower probability
+hard:                  [0, 1, 0, …, 0]
+state = hard − sg(soft) + soft  =  [0, 1, 0, …, 0]     ← value hard; gradient via soft
+```
+
+Group 7 answered **"class 1."** Repeat ×32 → `z_t`.
+
+**8. Two things newcomers assume wrongly.**
+
+- **The slots have no assigned meaning.** Nobody designs slot 7 to be "predator
+  direction." The network decides; the code may be distributed and
+  uninterpretable. Learned, not engineered.
+- **The factorisation has a real cost.** Given a fixed input `(h_t, o_t)` the 32
+  groups are independent — the posterior **cannot represent correlations between
+  slots at the same timestep**. If "slot 3 = A" should imply "slot 9 = B", a
+  factorised distribution can't express that within one step. Correlations *across
+  the data* are captured (different inputs → different logit patterns);
+  correlations *given the input* are not. That's the price of the combinatorial
+  capacity, and it's rarely mentioned.
