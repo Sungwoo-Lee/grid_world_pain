@@ -14,6 +14,23 @@
 # the --agent_config (and below CLI flags like --log-interval / --checkpoint-frequency),
 # so these remain overridable defaults. Dreamer never loads this file.
 training:
+  # DEPRECATED — legacy fallback only; ignored when the `logging:` block is active.
   log_interval: 500             # one WandB row every 500 training iterations
   checkpoint_frequency: 200000  # checkpoint + eval video every 200,000 episodes
   max_checkpoints_to_keep: null # null -> Orbax max_to_keep=None -> keep ALL checkpoints (no rotation)
+
+# Two-level logging: rPPO's PER-ALGO overrides on top of configs/train/default.yaml.
+# NOTE the deliberate omission: logging.episode.smoothing_episodes is NOT set here.
+# It is inherited from default.yaml so that rPPO and Dreamer necessarily share it —
+# that inheritance is the mechanism that enforces the universality rule. Do not add it.
+logging:
+  episode:
+    # rPPO's episode throughput is far below Dreamer's, so a larger interval keeps
+    # rows/session in the same ballpark. 4000 < 5000 -> windows still overlap.
+    interval_episodes: 4000
+  step:
+    # 1 rPPO iteration = num_steps(128) * num_envs(16) = 2048 env-steps, i.e. 128x a
+    # Dreamer iteration. 100 iters = ~204k env-steps of loss averaging.
+    smoothing_iters: 100
+    # 50 exactly preserves today's step-row cadence, so existing dashboards keep density.
+    interval_iters: 50

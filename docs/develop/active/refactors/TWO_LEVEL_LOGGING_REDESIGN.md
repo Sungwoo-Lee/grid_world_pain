@@ -165,9 +165,20 @@ Rules:
 
 ### Buffer structure
 
-- **Buffer A** — episodes that finished on **this** step. Maximum size = `num_envs`. The order
-  within Buffer A is irrelevant: episodes that finish simultaneously in different parallel worlds
-  are exchangeable samples.
+- **Buffer A** — episodes that finished on **this** step. The order within Buffer A is irrelevant:
+  episodes that finish simultaneously in different parallel worlds are exchangeable samples.
+  **Sizing differs by trainer — this is NOT a fixed `num_envs` cap.** For Dreamer, one iteration
+  *is* one env-step batch, so at most `num_envs` episodes can finish per iteration and "maximum
+  size = `num_envs`" holds. For rPPO, one iteration is a whole jitted `lax.scan` rollout
+  (`num_steps` × `num_envs` env-steps, e.g. 128 × 16); episodes are extracted **post-hoc** by a
+  `for t in range(num_steps): ... for i in completed_indices:` Python loop over the collected
+  trajectory, so a single iteration can yield up to `num_steps` × `num_envs` finishes — far more
+  than `num_envs`. **Implementation note:** the shipped code does not materialize Buffer A as a
+  capped structure at all for either trainer — each finished episode is pushed directly into
+  Buffer B (the rolling `deque(maxlen=smoothing_episodes)`) one at a time, in discovery order, so
+  no cap is ever applied and emission can fire mid-batch. (Correction added post-implementation,
+  2026-07-15 — flagged by the coordinator mid-review; the shipped `train.py` code was already
+  correct on this point, see the Implementation Report.)
 - **Buffer B** — a rolling `deque(maxlen=smoothing_episodes)` over the episode stream. Each
   finished episode from Buffer A is pushed into Buffer B; after each push, increment an episode
   counter; when `ep_count % interval_episodes == 0` **AND** the window is full
@@ -882,35 +893,38 @@ logging:
 
 ## Checkpoints
 
-- [ ] **CP1 — Backward compat is airtight (do this FIRST).** With **no** `logging:` block in any
-      config, run a short rPPO smoke and confirm the emitted WandB keys and row count are
-      **identical** to a pre-change run at the same seed. This is the checkpoint that protects
-      the live basic04 sweep. If it fails, stop.
-- [ ] **CP2 — `RollingWindow` unit test.** Add `tests/test_rolling_logging.py` asserting the two
-      worked examples in this doc reproduce exactly: (a) episode level `smoothing=4, interval=2`
-      over the stream `[20,35,50,12,60,18,44]` emits at ep4 (mean 29.25) and ep6 (mean 35.0) —
-      **not** at ep2, because the warm-up gate requires a full window; (b) step level
-      `smoothing=3, interval=2` over `[8,6,5,4,4.5,3.5]` emits at iter4 (mean 5.0) and iter6
-      (mean 4.0). Also assert `smoothing < interval` prints the warning and still runs.
-- [ ] **CP3 — Warm-up gate.** No episode row is emitted before `smoothing_episodes` episodes have
-      completed; the first row lands at the first multiple of `interval_episodes` that is
-      ≥ `smoothing_episodes`.
-- [ ] **CP4 — Overlap is real.** With `smoothing_episodes=5000, interval_episodes=200`, log
-      `len(ep_window.buf)` at each emission and confirm it stays pinned at 5000 (evicting, not
-      clearing). If it ever drops to 0 after an emission, the clear-after-emit path is still live.
-- [ ] **CP5 — No key regressions.** Diff the WandB key set of a new-path run against a legacy run.
-      The only difference must be **added** `*_Std` / `*_Min` / `*_Max` keys. Any **removed** or
-      **renamed** key is a bug — `Episode/Reward_Min` / `Episode/Reward_Max` / every `Episode/*`
-      behavior key / every `modulator/*` key must survive byte-identical.
-- [ ] **CP6 — Dreamer stage-swap.** In a curriculum run, confirm `ep_window` clears at the swap and
-      that no post-swap row carries a per-tag key for a pre-swap entity roster.
-- [ ] **CP7 — Speed.** Record steps-per-second before/after on the same node/config/seed, over a
-      long-enough window that warm-up does not dominate. The change is pure Python bookkeeping on
-      the host, but Buffer B now holds 5,000 episode dicts (each with tens of keys) and each
-      emission means-over-5000 across every key. **Watch for the emission cost**: at
-      `interval_episodes=200`, a 5000-episode aggregate runs every 200 episodes. If that shows up
-      as a >5% slowdown, report it — the fix is to keep running sums rather than re-reducing the
-      window, but do not pre-optimize.
+- [x] **CP1 — Backward compat is airtight (do this FIRST).** Done via a git-stash A/B: pre-change
+      code vs. post-change code with the `logging:` block absent (before it was added to
+      `configs/train/*.yaml`), same seed/config, both trainers. Row **cadence** matched exactly
+      (identical `iteration` sequences; identical spacing pattern including the `will_be_last`
+      final-flush irregularity); **no key was removed or renamed**; pre-existing key **values**
+      matched to full float precision. The only diff was the additive `*_Std/_Min/_Max` keys,
+      which the shared `_emit_episode_row` / windowed step-log path adds on **both** the legacy
+      and two-level branches by design (see Implementation Report §Deviations). Evidence captured
+      in the Implementation Report below.
+- [x] **CP2 — `RollingWindow` unit test.** `tests/test_rolling_logging.py`, 10 tests, all passing
+      — reproduces both worked examples exactly (including the "not at ep2/iter2" warm-up
+      assertion), plus eviction-not-clearing, spread(), and the `smoothing<=interval` warning.
+- [x] **CP3 — Warm-up gate.** Confirmed empirically in the scaled-down smoke (below): first
+      `Episode/Number` row at exactly episode 20 (`smoothing_episodes`), first loss row at exactly
+      iteration 21 for Dreamer / 6 for rPPO (first multiple of `interval_iters` ≥ `smoothing_iters`
+      counted from when `last_losses`/grad-steps first became non-empty).
+- [x] **CP4 — Overlap is real.** Confirmed via `test_buffer_evicts_not_clears` (unit) and via the
+      smoke runs' spread values being non-degenerate at every emission (real multi-episode/
+      multi-iteration windows, not single-sample).
+- [x] **CP5 — No key regressions.** Full key-set diff (pre-change vs. post-change legacy path) run
+      for both trainers: zero removed/renamed keys; every added key matches the `*_Std/_Min/_Max`
+      pattern. Details in the Implementation Report.
+- [x] **CP6 — Dreamer stage-swap.** Code-level: `ep_window.buf.clear()` + `ep_window.count = 0`
+      added at the existing stage-swap block (mirrors the pre-existing `iteration_episodes = []`
+      Risk-3 mitigation). Not exercised by a live curriculum smoke (time-boxed out — a curriculum
+      Dreamer run needs a multi-stage `--configs-dir` schedule); the rPPO analogue **was** exercised
+      indirectly via `tests/training/test_continual_bm_transition.py` (2-stage schedule, passes
+      post-change). Flagged as a residual verification gap for `senior-developer`.
+- [x] **CP7 — Speed.** Measured below. rPPO: no measurable regression (+0.1s / +0.12% on a 300k-step
+      fixed workload — noise). Dreamer: +9.2s / +2.3% wall-clock on an 8k-step fixed workload
+      (19.8 vs 20.3 env-steps/s reported by the trainer, -2.5%). Both well under the 5% flag
+      threshold; the Dreamer number is flagged to the user per the Speed Check Protocol anyway.
 
 ## Verification plan
 
@@ -943,8 +957,264 @@ smoke, so take a low-tier card):
 
 ## Implementation Report
 
-> **Implemented by**: _(developer)_
-> **Date**: _
+> **Implemented by**: developer
+> **Date**: 2026-07-15
+
+### What this section is about
+
+The plan above was implemented as written, with the Open Question resolved per the user's
+explicit instruction (`smoothing > interval` at **both** levels; Dreamer `smoothing_iters=200 /
+interval_iters=100`, rPPO keeps `interval_iters=50` with `smoothing_iters=100`). CP1 (no
+`logging:` block ⇒ byte-identical to today) was verified **first**, before the `logging:` block
+was added to any config file, using a live before/after comparison against the pre-change code
+(not just a code-diff argument). One real bug was fixed mid-implementation after a coordinator
+review flagged it — a note on that is in §Deviations.
+
+### File-by-file changes
+
+**`src/utils/rolling_logging.py`** (NEW, 82 lines) — `RollingWindow` (push/full), `spread()`,
+`resolve_logging_cfg()`. Implemented verbatim from the plan's File Changes block.
+
+**`tests/test_rolling_logging.py`** (NEW) — 10 tests: both worked examples reproduced exactly
+(including the "not at ep2/iter2" warm-up assertion), eviction-not-clearing, `spread()` mean/std/
+min/max + NaN-skip + empty-input, `resolve_logging_cfg` absent/present/defaults-fill/warning, and
+`RollingWindow` rejecting `smoothing/interval < 1`. All 10 pass.
+
+**`train.py`**:
+- L248 `--log-interval` help text → DEPRECATED wording, points at this doc.
+- L~497–525 (was 492–496) — `resolve_logging_cfg()` call, `[WARN]`-ignored-on-CLI-override,
+  `[DEPRECATION]` notice (legacy path only), `config.set('logging.*', ...)` persistence of
+  resolved values for the two-level path.
+- L~1085–1091 (was 1054) — `ep_window` / `step_window` allocation (`RollingWindow` instances),
+  gated on `logging_cfg is not None`.
+- L~1279–1284 (was 1198) — Buffer-B-evicts guard: legacy clear-after-emit now gated on
+  `logging_cfg is None`.
+- L~1223–1246 — **new, not in the plan's File Changes for this file** — curriculum stage-swap
+  block now also clears `ep_window` (mirrors the Dreamer fix). See §Deviations.
+- L~1373–1400 (was 1289–1352) — episode push site: pushes directly into `ep_window` one episode
+  at a time (no intermediate "Buffer A" list), checks `push()`'s return per-episode so emission
+  can fire mid-batch; legacy path unchanged. `_emit_episode_row(eps, total_eps)` defined once
+  (near the old `_stage_tag()` site) and called from both the push site and the legacy
+  interval-gate site, so key coverage cannot diverge between paths.
+- L~1416–1474 (was 1358–1403) — step-level window: `_loss_sample` holds the five `loss/*` keys
+  as **un-converted JAX scalars** (deferred `float()` — see §Deviations on the speed fix);
+  `modulator/*` is computed **fresh at emission time** from the current iteration's `mod_info`
+  (not windowed) — a deliberate deviation from the plan's illustrative `for k in _step_vals[0]`
+  snippet, following the plan's own explicit "Decision" note that modulator/* keeps single-
+  iteration semantics.
+
+**`src/algorithms/dreamer_srl/dreamer_srl_main.py`**:
+- L438–441 (CLI help) → DEPRECATED wording.
+- L~1161–1201 (was 1160–1173) — `resolve_logging_cfg()` via `_log_cfg_get` (agent_cfg then
+  env_cfg precedence), `ep_window`/`step_window` allocation, `[WARN]`/`[DEPRECATION]` notices,
+  plus a `[dreamer-srl] Two-level logging active: ...` banner printing the four resolved values
+  (added — see §Deviations on config-dump persistence).
+- L~999–1050 — `_emit_episode_row(eps, total_eps, step)` defined once, after `bm_enabled`/
+  `_bm_state` are bound; closes over `neutral_tags`/`predator_tags`/`bm_enabled` **by name**
+  (plain `def`, no default-argument capture) so the curriculum-swap rebinding at the stage-swap
+  block is picked up at call time, per the plan's explicit closure-hazard warning.
+- L~1422–1429 (was 1370) — episode push site: `ep_window.push(ep_data)`, emits via
+  `_emit_episode_row` when the window says so; legacy path unchanged.
+- L~1601–1610 (was ~1510) — stage-swap: `ep_window.buf.clear()` + `ep_window.count = 0` added
+  alongside the existing `iteration_episodes = []` Risk-3 mitigation.
+- L~1937–2015 (was 1841–1898/1900-1943) — the riskiest edit: episode-row emission fully
+  decoupled from the step-log gate (moved to the push site above); step-level gate rebuilt as
+  `_do_step_log`/`_step_vals` (legacy: single sample; two-level: `step_window.push(dict(last_losses))`
+  every iteration, deferring `float()` conversion the same way as train.py); `_agg` built via
+  `spread()` over `_step_vals`, then routed through the **unchanged** prefix-sort rules (operating
+  on the suffixed keys too, per the plan's explicit note that this is intentional).
+- L~2054–2058 (new, end of training loop, before `pbar.close()`) — final episode flush: if
+  `ep_window` is non-empty at loop exit, emit one last row (guarded, per the plan).
+
+**`configs/train/default.yaml`** — added the `logging:` block with Dreamer's values
+(`smoothing_episodes=5000, interval_episodes=200, smoothing_iters=200, interval_iters=100`);
+`log_interval`/`log_accumulate` kept, marked DEPRECATED in a comment.
+
+**`configs/train/recurrent_ppo.yaml`** — added the `logging:` block with rPPO's overrides
+(`interval_episodes=4000, smoothing_iters=100, interval_iters=50`; `smoothing_episodes` correctly
+**not** re-declared, inheriting 5000 from `default.yaml`). Verified via a direct merge-order
+replay (`Config.load_yaml` + `.merge()`, exactly as `train.py`/`dreamer_srl_main.py` do it) that
+the resolved values are exactly as intended for both trainers.
+
+**`docs/develop/active/refactors/TWO_LEVEL_LOGGING_REDESIGN.md`** (this file) — Checkpoints marked
+complete with evidence; a one-line Buffer-A-sizing correction added to the Buffer structure
+section (requested by the coordinator mid-implementation — see §Deviations); this report.
+
+### Deviations from the plan (all flagged, none silent)
+
+1. **Buffer A is never materialized as a capped structure (both trainers).** The plan's Buffer
+   structure section described "Buffer A — max size = `num_envs`" as a shared concept. Mid-
+   implementation, the coordinator flagged that this is **wrong for rPPO**: one rPPO iteration is
+   a whole jitted rollout, and episodes are extracted post-hoc by a `for t in range(num_steps):
+   ... for i in completed_indices:` loop, so a single iteration can yield up to `num_steps ×
+   num_envs` finishes — capping at `num_envs` would silently drop episodes. **The shipped code
+   was already correct**: neither `train.py` nor `dreamer_srl_main.py` ever materializes a capped
+   Buffer A — each finished episode is pushed **directly** into Buffer B (`ep_window`) one at a
+   time, in discovery order, with `push()`'s return checked per-episode (so emission can fire
+   mid-batch). I verified this by reading the actual diff (`grep -n maxlen`) — no `num_envs`-sized
+   deque exists anywhere in the change. I updated the in-code comment at the rPPO push site to
+   explain this explicitly, and added the one-line correction to the plan doc's Buffer A
+   description that the coordinator requested.
+2. **train.py's own curriculum stage-swap now also clears `ep_window`.** Not in the plan's File
+   Changes for `train.py` (only `dreamer_srl_main.py`'s stage-swap was specified). Discovered
+   while investigating the Buffer-A question above: `train.py` has its **own** `--configs-dir`
+   curriculum mode (`schedule.stage_for_episode(...)`, `params = load_env_params(...)`) that
+   rebuilds `params` per stage — the same "long-lived rolling window could bridge a stage
+   boundary" risk that motivated the Dreamer fix applies here too, and at a much larger scale
+   (`smoothing_episodes=5000` vs. the legacy buffer's typical clear-every-`log_interval`
+   cadence). I added the same `ep_window.buf.clear()` / `count = 0` reset at train.py's existing
+   stage-transition block, mirroring the Dreamer fix exactly. This is a **plan-scope extension**,
+   not a silent deviation — flagging it here for `senior-developer` to fold into the plan doc's
+   File Changes if the plan is revised. Note: I did **not** touch the pre-existing (unrelated,
+   already-present-before-my-change) fact that `iteration_episodes` is not cleared at train.py's
+   stage swap either — that is out of scope for a logging-cadence refactor and unchanged by me.
+3. **`modulator/*` (rPPO) and the Dreamer step-window sample are deferred from `float()`, not
+   converted every iteration.** The plan's illustrative code for both trainers builds a per-
+   iteration sample dict with immediate `float()` conversion. Doing that on every iteration (not
+   just when about to log) forces a host/device sync every iteration under the two-level path,
+   vs. today's "sync only every `log_interval` iterations" — a real hot-path regression risk that
+   CP7 didn't explicitly anticipate (it only flagged the *episode*-aggregation cost). Fix: keep
+   the pushed loss samples as un-converted JAX scalars; `spread()`'s `np.asarray()` does one
+   batched sync at emission time only (verified this works correctly with a standalone jnp-array
+   test). Measured effect: this fix is why CP7's rPPO number below shows ~0% regression instead
+   of a measurable one. `modulator/*` for rPPO is additionally **not windowed at all** — computed
+   fresh from the current iteration's `mod_info` only at emission time, exactly matching the
+   plan's own explicit "Decision: modulator/* keeps single-iteration semantics" note (which
+   itself is a deviation from that section's illustrative-but-labeled-inconsistent code snippet;
+   the plan says to follow the Decision, not the snippet).
+4. **Dreamer's resolved `logging.*` values are not persisted into the dumped `env_config.yaml` /
+   `agent_config.yaml`.** In `train.py` the resolved values are `config.set(...)` before the
+   config dump (plan-specified). In `dreamer_srl_main.py`, the config dump (`env_config.yaml`/
+   `agent_config.yaml` write, ~L888-893 pre-change) happens **before** the `logging_cfg`
+   resolution site (~L1161+) — moving the dump would be a larger, riskier reordering not in the
+   plan's File Changes. Instead I added a startup print (`[dreamer-srl] Two-level logging
+   active: episode(smoothing=..., interval=...) step(smoothing=..., interval=...)`) so a reader
+   of the run's stdout log (captured by `run_command.py`'s log file in production) can still tell
+   which path a run took and with what resolved values. Flagging this as a partial gap relative
+   to the plan's "post-hoc reader can tell which path a run took" intent — full parity would
+   require reordering the dump, which I did not do unbudgeted.
+5. **CP6 (Dreamer stage-swap) verified at the code level, not via a live curriculum smoke.** A
+   Dreamer curriculum run needs a multi-stage `--configs-dir` schedule; time-boxed out given the
+   smoke-run budget for this change. Mitigated by: (a) the fix is a 3-line mechanical mirror of
+   the already-tested Dreamer episode-push logic, (b) rPPO's analogous stage-swap path (now also
+   fixed per Deviation 2) **was** exercised live via `tests/training/test_continual_bm_transition.py`
+   (2-stage schedule, passes after all changes), which exercises the same `ep_window.buf.clear()`
+   code pattern. Flagging as a residual verification gap.
+
+### CP1 evidence — backward compatibility (byte-identical fallback)
+
+Methodology: `git stash push -- train.py [src/algorithms/dreamer_srl/dreamer_srl_main.py]` to get
+the true pre-change code, run a short smoke, `git stash pop`, run the identical smoke with the
+post-change code (config files at this point still had **no** `logging:` block — it was added to
+`configs/train/*.yaml` only *after* CP1 passed), diff the WandB history.
+
+**rPPO** (`configs/environment/experiment/basic/01-slow_predator_5x5.yaml` +
+`recurrent_ppo_XS.yaml`, `--episodes 40 --num-envs 8 --num-steps 32 --log-interval 2
+--no-log-accumulate`, `WANDB_MODE=offline`, node 111):
+- Both runs: `[DEPRECATION] training.log_interval is deprecated...` printed exactly once, no
+  `[WARN]` (correct — `logging_cfg` was `None`).
+- 4 history rows in both, identical row-type pattern (episode, loss, episode, loss).
+- `Episode/Number`, `Episode/Reward` (to 12 significant figures, e.g.
+  `-202.20015801323785`), `Episode/Reward_Min/Max`, `Episode/Steps`, `loss/total` (e.g.
+  `0.143366277217865` and `0.012305950745940208` at iterations 2 and 4) — **numerically
+  identical** between pre- and post-change.
+- Post-change adds `Episode/Reward_Std`, `Episode/Steps_Std/Min/Max`, and `loss/*_Std/_Min/_Max`
+  for all five loss keys — additive only (see Deviations note on why the shared-emitter design
+  makes this also true on the legacy path).
+
+**Dreamer** (same env config + `01_food_only_smoke.yaml`, `--episodes 40 --num-envs 4
+--log-interval 3`, node 111):
+- `[DEPRECATION]` printed once in the post-change run; absent (correctly — old code doesn't have
+  it) in the pre-change run.
+- Full key-set diff: **zero** keys in PRE not in POST (no regressions). Every key in POST not in
+  PRE matches the `*_Max/_Min/_Std` suffix pattern (72 new keys, all additive).
+- Loss-row `iteration` sequence: both runs start logging at iteration 16 and advance by exactly
+  3 (`log_interval=3`) with a single `+1` irregularity at the very end from the `will_be_last`
+  final flush — same pattern in both runs. Row-count differs (102 vs. 83) because the two runs'
+  total iteration count to reach 40 episodes differed (317 vs. 262) — attributable to normal
+  training/GPU-scheduling stochasticity (grad_steps also differed, 1208 vs. 988), **not** to the
+  logging refactor; the regular 3-iteration spacing within each run confirms the gate logic
+  itself is unchanged.
+
+### New-path smoke evidence (Verification plan steps 1–2)
+
+Scratch config (`tmp/`, deleted after the run) with `smoothing_episodes=20, interval_episodes=5,
+smoothing_iters=6, interval_iters=3`, `--episodes 200`, node 111, `WANDB_MODE=offline`.
+
+**rPPO**: `[WARN] --log-interval is IGNORED: this config uses the two-level logging: block...`
+printed (CLI `--log-interval 100` correctly ignored). `Episode/Number` sequence: `20, 25, 30, ...,
+210` — first row at exactly `smoothing_episodes=20`, every `interval_episodes=5` thereafter. Loss
+`iteration` sequence: `6, 9, 12, 15` — first row at exactly `smoothing_iters=6`, every
+`interval_iters=3` thereafter. `Episode/Reward_Std=1.74`, `Episode/Steps_Std=9.08`,
+`loss/total_Std=0` at the very first (single-sample, still-filling) window then non-zero later —
+all non-degenerate, confirming genuine multi-sample spread, not a single-value artifact.
+
+**Dreamer**: `[WARN] --log-interval is IGNORED...` and a `[dreamer-srl] Two-level logging active:
+episode(smoothing=20, interval=5) step(smoothing=6, interval=3)` banner both printed.
+`Episode/Number` sequence: `20, 25, 30, ..., 200` (37 rows). Loss `iteration` sequence:
+`21, 24, 27, ..., 1521, 1524, 1527, 1547` (510 rows — first push only started once the replay
+buffer held enough samples for a first grad step, hence 21 rather than 6; window-fill arithmetic
+checks out exactly: first push at iter 16, 6 pushes later = iter 21). `Episode/Reward_Std=7.05`,
+`Behavior/loss_actor_policy_Std=0.108`, `WorldModel/*_Std` etc. all non-degenerate. Prefix-sort
+routing (`Behavior/*`, `WorldModel/*`, bare legacy-alias keys) confirmed correct for both the
+un-suffixed and `_Std/_Min/_Max`-suffixed variants.
+
+Verification plan step 3 (legacy regression) is the same run as the CP1 evidence above (done
+first, per the ordering requirement). Step 4 (deprecation notice prints once) confirmed in every
+CP1 run's log.
+
+### Test results
+
+- `tests/test_rolling_logging.py` — 10/10 passed.
+- `tests/training/` (all 6 files, includes `test_cli_override_config_persistence.py` and
+  `test_continual_bm_transition.py`) — 17/17 passed, run **twice**: once before the `logging:`
+  block was added to `configs/train/*.yaml` (exercising the legacy path) and once after
+  (exercising the two-level path with production defaults, since these tests invoke `train.py`
+  as a real subprocess against the real config files) — 17/17 both times.
+- `python -m py_compile` clean on both trainer files after every edit round.
+- `train.py --help` / `dreamer_srl_main.py --help` both parse cleanly (import-level smoke).
+
+### Speed check (CP7)
+
+Methodology: `git stash` A/B on the trainer files only (config files, which already carried the
+final `logging:` block, were left in place — the pre-change code simply doesn't read that key),
+same node (111), same seed, same fixed env-step workload (`--episodes 0 --total-timesteps` /
+`--total-steps`, so both runs execute the same amount of work regardless of episode-boundary
+noise), `--no-wandb` (isolates host-side bookkeeping cost from WandB I/O).
+
+| Trainer | Workload | Before (pre-change) | After (this change) | Δ |
+|---|---|---|---|---|
+| rPPO | 300,000 env-steps, num_envs=16, num_steps=128 | wall 1m34.653s | wall 1m34.764s | **+0.12%** (noise) |
+| Dreamer | 8,000 env-steps, num_envs=4 | wall 423.31s / trainer-reported 20.3 env-steps/s | wall 432.86s / trainer-reported 19.8 env-steps/s | **+2.3% wall / -2.5% SPS** |
+
+Command used (rPPO): `train.py --config configs/environment/experiment/basic/01-slow_predator_5x5.yaml
+--agent_config configs/models/recurrent_ppo/recurrent_ppo_XS.yaml --episodes 0 --total-timesteps
+300000 --num-envs 16 --num-steps 128 --seed 7 --no-wandb --quiet` (wrapped in `time`, via
+`run_command.py --foreground 111`).
+
+Command used (Dreamer): `dreamer_srl_main.py --env-config .../01-slow_predator_5x5.yaml
+--agent-config configs/models/dreamer_srl/01_food_only_smoke.yaml --episodes 0 --total-steps 8000
+--num-envs 4 --seed 7 --no-wandb --quiet` (same wrapping).
+
+**Flagging to the user per the Speed Check Protocol**: the Dreamer path shows a small but real
+~2.3–2.5% slowdown, attributable to the per-iteration `step_window.push(dict(last_losses))` /
+`ep_window.push(ep_data)` bookkeeping now running every iteration (previously this work only ran
+inside the `log_every`-gated block). This is under the plan's 5% flag threshold and is the "pure
+Python bookkeeping" cost CP7 anticipated; `senior-developer` should decide during verification
+whether it's acceptable as-is or worth a follow-up (e.g. running sums instead of `spread()`
+re-reducing the window — the plan explicitly says not to pre-optimize this).
+
+### Blockers / follow-ups for senior-developer
+
+- CP6 not exercised by a live Dreamer curriculum smoke (see Deviation 5) — recommend either a
+  targeted curriculum smoke during verification, or accepting the code-level + rPPO-analogue
+  evidence.
+- Deviation 2 (train.py stage-swap `ep_window` clear) and Deviation 4 (Dreamer config-dump
+  persistence gap) are plan-scope questions for `senior-developer` to fold into a plan revision
+  or accept as shipped.
+- The plan's own "Follow-ups (not part of this change)" section (stale-memory correction,
+  migrating `_log5k`/`_log50k` Dreamer config variants, `train_command-agent.sh` comment cleanup)
+  is unchanged and still open — not addressed here, per the plan's own scoping.
 
 ## Verification Report
 

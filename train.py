@@ -245,7 +245,12 @@ def main():
     parser.add_argument("--lr", type=float, help="Learning rate (overrides agent config if provided)")
     parser.add_argument("--results-dir", type=str, help="Custom results directory")
     parser.add_argument("--wandb-entity", type=str, help="WandB Entity Name")
-    parser.add_argument("--log-interval", type=int, help="WandB logging interval in iterations (default: 1)")
+    parser.add_argument("--log-interval", type=int,
+                        help="DEPRECATED (use the config `logging:` block; ignored when that "
+                             "block is present). Legacy WandB logging interval in ITERATIONS "
+                             "— note 1 rPPO iteration = num_steps*num_envs env-steps, 128x a "
+                             "Dreamer iteration. See "
+                             "docs/develop/active/refactors/TWO_LEVEL_LOGGING_REDESIGN.md")
     parser.add_argument("--log-accumulate", action=argparse.BooleanOptionalAction, default=None,
                         help="Accumulate episode metrics across log interval (default: true). Use --no-log-accumulate for hard interval.")
     parser.add_argument("--profile", action="store_true",
@@ -489,11 +494,35 @@ def main():
         config.set('episodes', episodes)
     env_max_steps = config.get_mandatory('environment.max_steps')
     num_envs = args.num_envs or config.get_mandatory('training.num_envs')
+    from src.utils.rolling_logging import resolve_logging_cfg
+    # Two-level logging (docs/develop/active/refactors/TWO_LEVEL_LOGGING_REDESIGN.md).
+    # `logging_cfg is None` -> LEGACY log_interval path (unchanged behavior for configs
+    # that predate this block; the basic04 sweep depends on this).
+    logging_cfg = resolve_logging_cfg(
+        config.get,
+        defaults={'smoothing_episodes': 5000, 'interval_episodes': 4000,
+                  'smoothing_iters': 100, 'interval_iters': 50},
+    )
+    if logging_cfg is not None and args.log_interval is not None:
+        print("[WARN] --log-interval is IGNORED: this config uses the two-level `logging:` "
+              "block. Set logging.episode.interval_episodes / logging.step.interval_iters "
+              "in the config instead.", flush=True)
     log_interval = args.log_interval or config.get('training.log_interval', 1)
     log_accumulate = args.log_accumulate if args.log_accumulate is not None else config.get('training.log_accumulate', True)
+    if logging_cfg is None:
+        print("[DEPRECATION] training.log_interval is deprecated — it conflates smoothing "
+              "with interval and its unit (iterations) differs 128x between rPPO and Dreamer. "
+              "Migrate to the `logging:` block: "
+              "docs/develop/active/refactors/TWO_LEVEL_LOGGING_REDESIGN.md", flush=True)
     config.set('training.num_envs', num_envs)
     config.set('training.log_interval', log_interval)
     config.set('training.log_accumulate', log_accumulate)
+    if logging_cfg is not None:
+        # Persist resolved values so the dumped models/config.yaml records what actually ran.
+        config.set('logging.episode.smoothing_episodes', logging_cfg['smoothing_episodes'])
+        config.set('logging.episode.interval_episodes',  logging_cfg['interval_episodes'])
+        config.set('logging.step.smoothing_iters',       logging_cfg['smoothing_iters'])
+        config.set('logging.step.interval_iters',        logging_cfg['interval_iters'])
 
     # Budget scales with parallelization: episodes * steps per episode * num environments
     total_timesteps = args.total_timesteps or (episodes * env_max_steps * num_envs)
@@ -1050,8 +1079,16 @@ def main():
             if per_ep:
                 ep_log[f'{wandb_key_prefix}_{tag}'] = float(np.mean(per_ep))
 
-    # Buffer for episodes that finish across iterations (Stage 3)
+    # Buffer for episodes that finish across iterations (Stage 3) — LEGACY path only.
     iteration_episodes = []
+    # Two-level logging: Buffer B (episode stream) + Buffer S (iteration stream).
+    ep_window = step_window = None
+    if logging_cfg is not None:
+        from src.utils.rolling_logging import RollingWindow
+        ep_window = RollingWindow(logging_cfg['smoothing_episodes'],
+                                  logging_cfg['interval_episodes'], name="episode")
+        step_window = RollingWindow(logging_cfg['smoothing_iters'],
+                                    logging_cfg['interval_iters'], name="step")
 
     # --- Checkpoint Restoration (Continual Learning / Transfer) ---
     # H1 fix (diag_fable5_20260704/01 Finding 1): restore-to-target, FATAL on
@@ -1114,6 +1151,50 @@ def main():
         return {"stage/index": current_stage,
                 "stage/name": schedule.stage_names[current_stage]}
 
+    def _emit_episode_row(eps, total_eps):
+        """Emit one WandB row aggregated over `eps` (a window of episode dicts).
+        Shared by the two-level path (rolling window) and the legacy path
+        (cleared-per-interval list) so key coverage can never diverge."""
+        from src.utils.rolling_logging import spread
+        ep_log = {"Episode/Number": total_eps, **_stage_tag()}
+        # Spread on the two headline metrics: a mean survival of 133 that is secretly
+        # bimodal (~400 no-predator vs ~20 with-predator) looks fine while hiding a
+        # mixture — the std exposes it. (Reward_Min/Max already existed; keep names.)
+        spread([ep['r'] for ep in eps], "Episode/Reward", ep_log)
+        spread([ep['l'] for ep in eps], "Episode/Steps",  ep_log)
+        if 'ate_food' in eps[0]:
+            ep_log.update({
+                "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in eps]),
+                "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in eps]),
+                # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
+                "Episode/DangerHits": np.mean([ep['hit_hiding_predator'] for ep in eps]),
+                "Episode/RestCount": np.mean([ep['rested'] for ep in eps]),
+                "Episode/Collisions": np.mean([ep['event_collided'] for ep in eps]),
+                "Episode/TotalDamage": np.mean([ep['damage'] for ep in eps]),
+                "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in eps]),
+                "Episode/DamageDanger": np.mean([ep['damage_hiding_predator'] for ep in eps]),
+                "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in eps]),
+                "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in eps]),
+                "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in eps]),
+                "Episode/MeanDistRabbit": np.mean([ep['dist_to_neutral'] for ep in eps]),
+                "Episode/MeanDistHidingPredator": np.mean([ep['dist_to_hiding_predator'] for ep in eps]),
+                "Episode/RabbitHits": np.mean([ep['hit_neutral'] for ep in eps]),
+                "Episode/HidingPredatorHits": np.mean([ep['hit_hiding_predator'] for ep in eps]),
+            })
+            # Termination reason distribution (fraction of episodes ending each way)
+            term_reasons = [ep['termination_reason'] for ep in eps]
+            for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
+                ep_log[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
+            # Per-tag fan-out
+            _append_per_tag_means(ep_log, eps, neutral_tags,
+                                  'mean_dist_rabbit',   'Episode/MeanDistRabbit')
+            _append_per_tag_means(ep_log, eps, predator_tags,
+                                  'mean_dist_predator', 'Episode/MeanDistPredator')
+            # Behavior-measure toolkit v1: WandB fan-out (Site 1)
+            if bm_enabled:
+                _bm_log_wandb(ep_log, eps)
+        wandb.log(ep_log)
+
     with tqdm(total=episodes, disable=args.quiet, desc="Training") as pbar:
 
         try:
@@ -1155,6 +1236,18 @@ def main():
                             episode_dist_sums[_bk][:] = 0.0
                         if num_neutral_for_log  > 0: episode_dist_per_neutral_sums[:, :]  = 0.0
                         if num_predator_for_log > 0: episode_dist_per_predator_sums[:, :] = 0.0
+                        # Two-level path: Buffer B can hold up to smoothing_episodes
+                        # (production default 5000) completed episodes, spanning far
+                        # longer than a single log_interval window — long enough to
+                        # bridge a stage transition and average pre/post-transition
+                        # episodes into the same row. Not in the original plan's File
+                        # Changes for train.py (only dreamer_srl_main.py's stage-swap
+                        # was specified there) — added here for consistency with that
+                        # same fix, flagged in the Implementation Report. Reset the
+                        # counter too, so the warm-up gate re-arms post-swap.
+                        if ep_window is not None:
+                            ep_window.buf.clear()
+                            ep_window.count = 0
                         # Behavior-measure toolkit v1: stage-transition wipe.
                         # Use the canonical per-env reset helper (_bm_reset_env wraps
                         # bm_reset_env from src.behavior.accumulators) so this site
@@ -1194,9 +1287,12 @@ def main():
                         break
                 # ======================
 
-                # Reset behavior depends on accumulation mode
-                if not log_accumulate or (iteration - 1) % log_interval == 0:
-                    iteration_episodes = []
+                # Reset behavior depends on accumulation mode.
+                # Two-level path: Buffer B EVICTS (deque maxlen), never clears — the
+                # clear-after-emit is exactly what welds window to interval today.
+                if logging_cfg is None:
+                    if not log_accumulate or (iteration - 1) % log_interval == 0:
+                        iteration_episodes = []
 
                 if algorithm == "RecurrentPPO":
                     if args.debug: print(f"  [DEBUG] Collecting {num_steps * num_envs} steps of experience...", end="", flush=True)
@@ -1288,8 +1384,30 @@ def main():
 
                                 # Store for moving average (tqdm)
                                 ep_info_buffer.append(ep_data)
-                                # Store for iteration-level logging (Stage 3)
-                                iteration_episodes.append(ep_data)
+                                if logging_cfg is None:
+                                    # LEGACY: Buffer A drains into a cleared-per-window list.
+                                    iteration_episodes.append(ep_data)
+                                else:
+                                    # Two-level: push directly into Buffer B (rolling,
+                                    # maxlen=smoothing_episodes) as each episode is
+                                    # discovered — no intermediate Buffer A list, so
+                                    # nothing is ever capped at num_envs. This matters
+                                    # for rPPO specifically: one iteration is a whole
+                                    # jitted rollout (num_steps=128 x num_envs), and
+                                    # episodes are extracted post-hoc by this
+                                    # `for t in range(num_steps): ... for i in
+                                    # completed_indices:` loop, so a single iteration can
+                                    # yield up to num_steps*num_envs finishes (far more
+                                    # than num_envs) — capping at num_envs would silently
+                                    # drop episodes. Pushing one-at-a-time in t-ascending
+                                    # order (order within a t is irrelevant — simultaneous
+                                    # finishes are exchangeable) also means emission can
+                                    # fire mid-batch, exactly when the counter crosses a
+                                    # multiple of interval_episodes, not deferred to the
+                                    # end of the rollout.
+                                    if ep_window.push(ep_data) and wandb_enabled:
+                                        _emit_episode_row(list(ep_window.buf),
+                                                          total_episodes_completed)
 
                                 # Reset for next episode in this slot
                                 episode_returns[i] = 0.0
@@ -1305,51 +1423,10 @@ def main():
                                 if bm_enabled:
                                     _bm_reset_env(i)
 
-                    # Log AGGREGATED stats for the iteration (Stage 3)
-                    if wandb_enabled and iteration_episodes and iteration % log_interval == 0:
-                        rewards = [ep['r'] for ep in iteration_episodes]
-                        lengths = [ep['l'] for ep in iteration_episodes]
-                        ep_log = {
-                            "Episode/Reward": np.mean(rewards),
-                            "Episode/Reward_Min": np.min(rewards),
-                            "Episode/Reward_Max": np.max(rewards),
-                            "Episode/Steps": np.mean(lengths),
-                            "Episode/Number": total_episodes_completed,
-                            **_stage_tag(),
-                        }
-                        # Behavioral metrics
-                        if 'ate_food' in iteration_episodes[0]:
-                            ep_log.update({
-                                "Episode/FoodEaten": np.mean([ep['ate_food'] for ep in iteration_episodes]),
-                                "Episode/PredatorHits": np.mean([ep['hit_predator'] for ep in iteration_episodes]),
-                                # Note: WandB labels like 'Episode/DangerHits' are kept for dashboard-history continuity
-                                "Episode/DangerHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
-                                "Episode/RestCount": np.mean([ep['rested'] for ep in iteration_episodes]),
-                                "Episode/Collisions": np.mean([ep['event_collided'] for ep in iteration_episodes]),
-                                "Episode/TotalDamage": np.mean([ep['damage'] for ep in iteration_episodes]),
-                                "Episode/DamagePredator": np.mean([ep['damage_predator'] for ep in iteration_episodes]),
-                                "Episode/DamageDanger": np.mean([ep['damage_hiding_predator'] for ep in iteration_episodes]),
-                                "Episode/DamageObstacle": np.mean([ep['damage_obstacle'] for ep in iteration_episodes]),
-                                "Episode/MeanDistFood": np.mean([ep['dist_to_food'] for ep in iteration_episodes]),
-                                "Episode/MeanDistPredator": np.mean([ep['dist_to_pred'] for ep in iteration_episodes]),
-                                "Episode/MeanDistRabbit": np.mean([ep['dist_to_neutral'] for ep in iteration_episodes]),
-                                "Episode/MeanDistHidingPredator": np.mean([ep['dist_to_hiding_predator'] for ep in iteration_episodes]),
-                                "Episode/RabbitHits": np.mean([ep['hit_neutral'] for ep in iteration_episodes]),
-                                "Episode/HidingPredatorHits": np.mean([ep['hit_hiding_predator'] for ep in iteration_episodes]),
-                            })
-                            # Termination reason distribution (fraction of episodes ending each way)
-                            term_reasons = [ep['termination_reason'] for ep in iteration_episodes]
-                            for code, name in [(1, 'MaxSteps'), (2, 'Starvation'), (3, 'Overeating'), (4, 'Injury')]:
-                                ep_log[f"Episode/Term_{name}"] = np.mean([1.0 if r == code else 0.0 for r in term_reasons])
-                            # Per-tag fan-out
-                            _append_per_tag_means(ep_log, iteration_episodes, neutral_tags,
-                                                  'mean_dist_rabbit',   'Episode/MeanDistRabbit')
-                            _append_per_tag_means(ep_log, iteration_episodes, predator_tags,
-                                                  'mean_dist_predator', 'Episode/MeanDistPredator')
-                            # Behavior-measure toolkit v1: WandB fan-out (Site 1)
-                            if bm_enabled:
-                                _bm_log_wandb(ep_log, iteration_episodes)
-                        wandb.log(ep_log)
+                    # LEGACY path only — two-level path emits at the push site above.
+                    if (logging_cfg is None and wandb_enabled and iteration_episodes
+                            and iteration % log_interval == 0):
+                        _emit_episode_row(iteration_episodes, total_episodes_completed)
 
                     # Update progress bar based on total episodes completed
                     pbar.n = min(total_episodes_completed, episodes) if episodes > 0 else 0
@@ -1362,16 +1439,41 @@ def main():
                     avg_mod_grad_norm = jnp.mean(jnp.array([l[1][4] for l in losses]))
                     total_loss = jnp.mean(jnp.array([l[0] for l in losses]))
                     
-                    if wandb_enabled and iteration % log_interval == 0:
-                        wandb_logs = {
-                            "loss/total": total_loss,
-                            "loss/policy": avg_policy_loss,
-                            "loss/value": avg_value_loss,
-                            "loss/entropy": avg_ent_loss,
-                            "loss/grad_norm": avg_grad_norm,
-                        }
+                    # Two-level logging: only the five loss/* scalars are windowed
+                    # (pushed every iteration) and go through spread() at emission.
+                    # Values are kept as JAX scalars (NOT float()-converted here) so
+                    # pushing every iteration does not force a host sync every
+                    # iteration — spread()'s np.asarray() does one batched sync at
+                    # emission time only, mirroring today's async-dispatch pattern.
+                    # modulator/* is NOT windowed — computing jnp.mean/std over
+                    # mod_info every iteration (whether or not we're about to log)
+                    # would be a hot-path regression vs. today (those reductions were
+                    # only ever computed inside the log gate). Instead modulator/*
+                    # keeps its current single-iteration semantics by being computed
+                    # fresh, from THIS iteration's mod_info, only at emission time —
+                    # i.e. it is always the most-recent sample, never spread.
+                    _loss_sample = {
+                        "loss/total":     total_loss,
+                        "loss/policy":    avg_policy_loss,
+                        "loss/value":     avg_value_loss,
+                        "loss/entropy":   avg_ent_loss,
+                        "loss/grad_norm": avg_grad_norm,
+                    }
+                    if logging_cfg is None:
+                        _do_step_log = wandb_enabled and iteration % log_interval == 0
+                        _loss_vals = [_loss_sample]
+                    else:
+                        _emit = step_window.push(_loss_sample)
+                        _do_step_log = wandb_enabled and _emit
+                        _loss_vals = list(step_window.buf)
+                    if _do_step_log:
+                        from src.utils.rolling_logging import spread
+                        wandb_logs = {}
+                        for k in _loss_sample:
+                            spread([s[k] for s in _loss_vals if k in s], k, wandb_logs)
 
-                        # Add Modulator metrics if enabled
+                        # Add Modulator metrics if enabled (single-iteration semantics —
+                        # not part of the rolling window; see note above).
                         if mod_info is not None:
                             wandb_logs.update({
                                 "modulator/grad_norm": float(avg_mod_grad_norm),
@@ -1392,7 +1494,7 @@ def main():
                                     "modulator/beta_multi_mean": float(jnp.mean(mod_info.z_multimodal_add)),
                                     "modulator/beta_multi_std": float(jnp.std(mod_info.z_multimodal_add)),
                                 })
-                        
+
                         wandb_logs.update({
                             "timesteps": global_step,
                             "iteration": iteration,
