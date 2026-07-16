@@ -1,10 +1,20 @@
-# Default Training Configuration — SHARED by rPPO and Dreamer.
+# Default Training Configuration — the REFERENCE / documentation file.
 #
-# Only ALGORITHM-NEUTRAL values belong here. Per-algo values live in the two
-# override layers, each merged ABOVE this file by its own trainer:
+# This file documents EVERY available training/logging field, with a generic default
+# value for each, so someone can read this one file and know what knobs exist. It is
+# also the FALLBACK layer for algorithms that load neither per-algo override file
+# (DQN/DRQN/PPO).
+#
+# rPPO and Dreamer OVERRIDE these values in their own self-contained per-algo files,
+# merged ABOVE this file by their own trainer — those files are AUTHORITATIVE for their
+# algorithm, not this one:
 #   configs/train/recurrent_ppo.yaml  <- train.py (gated on agent.algorithm)
 #   configs/train/dreamer_srl.yaml    <- src/algorithms/dreamer_srl/dreamer_srl_main.py
-# See docs/develop/active/refactors/DREAMER_TRAIN_CONFIG_SPLIT.md
+# See docs/develop/active/refactors/DREAMER_TRAIN_CONFIG_SPLIT.md for the design history
+# (an earlier revision of this split structurally enforced a shared smoothing_episodes by
+# omitting it from both per-algo files; that enforcement was intentionally reversed —
+# values ARE now duplicated between this file and the two algo files on purpose, so each
+# file is independently readable and tunable).
 #
 # Config-owns-values convention: num_envs, seed, and checkpoint_frequency are
 # CONFIG-OWNED — standard launches must NOT pass --num-envs / --seed /
@@ -15,11 +25,13 @@
 # budget genuinely varies by run (smoke=100 / standard=10M / extended=100M).
 training:
   episodes: 100  # smoke-test safety placeholder only — real runs always pass --episodes explicitly
-  # rPPO-ONLY IN PRACTICE: train.py:496 reads this; dreamer_srl_main.py:533 takes
-  # num_envs from the REQUIRED --num-envs CLI flag and never reads this key.
-  # Dreamer runs 16 and would OOM at 128 — but cannot pick this up. Left here (not
-  # moved) because live rPPO runs depend on it. Do not copy it into dreamer_srl.yaml:
-  # a key Dreamer ignores would look authoritative and silently do nothing.
+  # FALLBACK FOR NON-rPPO/DREAMER ALGORITHMS. train.py:496 reads this via
+  # `args.num_envs or config.get_mandatory('training.num_envs')` — that line is SHARED
+  # across rPPO/DQN/DRQN/PPO and runs before the algo branches, so DQN/DRQN/PPO (which
+  # never load configs/train/recurrent_ppo.yaml) would raise a get_mandatory ValueError
+  # without this key. rPPO overrides to num_envs: 128 in recurrent_ppo.yaml (same value,
+  # declared for self-containment) and Dreamer overrides to num_envs: 16 in
+  # dreamer_srl.yaml — both win over this fallback for their own runs.
   num_envs: 128
   video_during_training: true
   stats_during_training: false
@@ -29,25 +41,35 @@ training:
   eval_stats_num_envs: 10
   seed: 42
   device: "auto"
-  # DEPRECATED — kept as the backward-compatible fallback. A config that declares a
-  # top-level `logging:` block (below) ignores these two entirely.
-  # See docs/develop/active/refactors/TWO_LEVEL_LOGGING_REDESIGN.md
+  # DEPRECATED — kept as the backward-compatible fallback for a config that declares NO
+  # `logging:` block at all. Since this file DOES declare one (below), any config that
+  # merges this file also gets a `logging:` block and takes the two-level path, not this
+  # legacy one. See docs/develop/active/refactors/TWO_LEVEL_LOGGING_REDESIGN.md
   log_interval: 10
   log_accumulate: true
 episodes: 100  # smoke-test safety placeholder only — real runs always pass --episodes explicitly
 seed: 42
 tag: "default"
 
-# Two-level logging — the UNIVERSAL knob only. Per-algo knobs (interval_episodes,
-# smoothing_iters, interval_iters) live in configs/train/recurrent_ppo.yaml and
-# configs/train/dreamer_srl.yaml, each merged above this file by its own trainer.
+# Two-level logging — the REFERENCE default for all four knobs. rPPO and Dreamer each
+# override this COMPLETE block in their own per-algo file (configs/train/recurrent_ppo.yaml,
+# configs/train/dreamer_srl.yaml) so those files are self-contained and independently
+# tunable; the values below are what DQN/DRQN/PPO actually use (they load neither algo
+# file) and what a reader sees as "the generic default" for each knob.
 # Every knob names its own unit. smoothing = NOISE (how many samples averaged per point);
 # interval = VOLUME (how often a row is written). They are independent on purpose.
+#
+# CONVENTION (not structurally enforced): logging.episode.smoothing_episodes should be
+# kept EQUAL across this file and both per-algo files so a Dreamer curve and an rPPO
+# curve average the same number of episodes per point and stay visually comparable.
 logging:
   episode:
-    # UNIVERSAL — must be IDENTICAL in every algorithm. This is the ONLY thing that makes
-    # a Dreamer curve and an rPPO curve equally noisy and therefore comparable.
-    # NEITHER per-algo file declares it — both inherit from here, and that inheritance IS
-    # the enforcement mechanism. Do not add it to either. Do not add a CLI flag for it.
     # 5000 eps ~= 3-4% of a run; first point lands ~16 min in (measured, see the doc).
     smoothing_episodes: 5000
+    # Generic default (row volume). rPPO/Dreamer override to their own throughput-tuned value.
+    interval_episodes: 200
+  step:
+    # Generic default. rPPO/Dreamer override to their own throughput-tuned value.
+    smoothing_iters: 200
+    # < smoothing -> overlapping rolling windows.
+    interval_iters: 100

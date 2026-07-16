@@ -13,18 +13,33 @@
 # Merged ABOVE configs/train/default.yaml but BELOW the experiment --config and
 # the --agent_config (and below CLI flags like --log-interval / --checkpoint-frequency),
 # so these remain overridable defaults. Dreamer never loads this file.
+#
+# SELF-CONTAINED CONVENTION (reversal of the earlier "smoothing_episodes lives only in
+# default.yaml" structural enforcement — see docs/develop/active/refactors/DREAMER_TRAIN_CONFIG_SPLIT.md
+# for the superseded rationale). This file declares its OWN complete set of values so it
+# can be read top-to-bottom without cross-referencing default.yaml or dreamer_srl.yaml.
+# configs/train/default.yaml ALSO declares every one of these keys (generic defaults, for
+# documentation + as the DQN/DRQN/PPO fallback) — the duplication is intentional; THIS
+# file wins for RecurrentPPO because it is merged above default.yaml. Intentional and
+# user-approved.
 training:
+  num_envs: 128                 # rPPO's parallel-env count (config-owned; see default.yaml note)
   # DEPRECATED — legacy fallback only; ignored when the `logging:` block is active.
   log_interval: 500             # one WandB row every 500 training iterations
   checkpoint_frequency: 200000  # checkpoint + eval video every 200,000 episodes
   max_checkpoints_to_keep: null # null -> Orbax max_to_keep=None -> keep ALL checkpoints (no rotation)
 
-# Two-level logging: rPPO's PER-ALGO overrides on top of configs/train/default.yaml.
-# NOTE the deliberate omission: logging.episode.smoothing_episodes is NOT set here.
-# It is inherited from default.yaml so that rPPO and Dreamer necessarily share it —
-# that inheritance is the mechanism that enforces the universality rule. Do not add it.
+# Two-level logging: rPPO's COMPLETE logging block (all four knobs), self-contained.
+# CONVENTION (not enforced structurally): logging.episode.smoothing_episodes should be kept
+# EQUAL to configs/train/dreamer_srl.yaml's value so rPPO and Dreamer learning curves
+# average the same number of episodes per point and remain visually comparable. The two
+# copies are intentionally duplicated (not inherited) so each file is self-contained and
+# independently tunable — keep them in sync by convention, not by code.
 logging:
   episode:
+    # 5000 eps ~= 3-4% of a run; first point lands ~16 min in (measured, see the doc).
+    # Keep equal to dreamer_srl.yaml's value for cross-algo comparability.
+    smoothing_episodes: 5000
     # rPPO's episode throughput is far below Dreamer's, so a larger interval keeps
     # rows/session in the same ballpark. 4000 < 5000 -> windows still overlap.
     interval_episodes: 4000

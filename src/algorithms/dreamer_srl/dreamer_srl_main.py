@@ -436,8 +436,13 @@ def main() -> None:
                              "config. Default: None (no env-step override).")
     parser.add_argument("--total-timesteps", type=int, default=None,
                         help="Alias for --total-steps for rPPO CLI compat (train.py:235).")
-    parser.add_argument("--num-envs", type=int, default=1,
-                        help="Number of parallel environments")
+    parser.add_argument("--num-envs", type=int, default=None,
+                        help="Number of parallel environments. Default: None -> read from "
+                             "config (training.num_envs, set in configs/train/dreamer_srl.yaml). "
+                             "Config-owned per CLAUDE.md convention; a CLI value here is an "
+                             "intentional, flagged deviation. MUST stay None — `1 or config...` "
+                             "would short-circuit on the truthy literal default and silently "
+                             "never read the config.")
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument("--log-interval", type=int, default=None,
                         help="DEPRECATED (use the config `logging:` block; ignored when that "
@@ -540,7 +545,12 @@ def main() -> None:
     replay_ratio = agent_cfg.get_mandatory("algo.replay_ratio", float)
     seq_len = agent_cfg.get_mandatory("algo.per_rank_sequence_length", int)
     batch_size = agent_cfg.get_mandatory("algo.per_rank_batch_size", int)
-    num_envs = args.num_envs  # CLI sets this; needed for total_timesteps calculation below
+    # Config-owned (mirrors train.py:496 rPPO pattern); CLI --num-envs is an
+    # intentional, flagged override when passed. env_cfg already holds
+    # configs/train/dreamer_srl.yaml's training.num_envs (merged above, both
+    # single-config and --configs-dir curriculum paths — see _load_stage_env_cfg
+    # and the single-config merge loop just above).
+    num_envs = args.num_envs or env_cfg.get_mandatory('training.num_envs', int)
     # WP-SRL P6: the config value is an ENV-STEP count (sheeprl semantics) —
     # the prefill covers learning_starts_cfg env steps at EVERY env count.
     # Pre-fix the raw value gated ITERATIONS, making prefill num_envs x too
