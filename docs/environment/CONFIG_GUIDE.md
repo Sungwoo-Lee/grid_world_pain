@@ -228,7 +228,33 @@ These gates must stay **green** on every config-system or schema change. A red p
 
 ---
 
-## 7. Pointers
+## 7. Training-config layering (`configs/train/`)
+
+This guide is mostly about `configs/environment/` (the world spec), but the same base-plus-override pattern also governs the **training-run** config — checkpoint cadence, logging cadence, and similar knobs that are not part of the environment itself. Two trainers read this layer: **rPPO** (`train.py`) and **Dreamer** (`src/algorithms/dreamer_srl/dreamer_srl_main.py`).
+
+**The rule: `configs/train/default.yaml` holds only ALGORITHM-NEUTRAL values.** Anything one trainer wants different from the other lives in that trainer's own override file, merged **above** `default.yaml`:
+
+- `configs/train/recurrent_ppo.yaml` — rPPO's per-algo layer. `train.py` merges it **only** when the agent config declares `agent.algorithm == "RecurrentPPO"` — a real gate, because `train.py` is shared across algorithms and must not apply rPPO's values to a non-rPPO run.
+- `configs/train/dreamer_srl.yaml` — Dreamer's per-algo layer. `dreamer_srl_main.py` merges it **unconditionally**, at both its merge sites (single-config and the `--configs-dir` curriculum path). There is no algorithm gate here, and this is a deliberate asymmetry with rPPO, not an oversight: `dreamer_srl_main.py` is a Dreamer-only entry point, so the gate would have no job to do — and it would actively break two real agent configs (`configs/models/dreamer_srl/agent_xs.yaml`, `configs/models/dreamer_srl/01_food_only_smoke.yaml`) that do not declare `agent.algorithm` at all.
+
+Full merge order (each stage's keys win over the ones before it):
+
+```
+get_default_config() (built-in seed)
+  → configs/train/default.yaml            (algorithm-neutral)
+  → configs/train/<algo>.yaml             (recurrent_ppo.yaml or dreamer_srl.yaml)
+  → configs/evaluation/default.yaml
+  → configs/visualization/default.yaml
+  → env --env-config  (or, for Dreamer curriculum, the per-stage env YAML)
+  → --agent-config
+  → CLI flags (e.g. --log-interval, --checkpoint-frequency)
+```
+
+**The `smoothing_episodes` inheritance invariant.** `logging.episode.smoothing_episodes` (how many episodes are averaged into each dashboard point) must be **identical** across algorithms, or one algorithm's learning curve looks artificially smoother than the other's for reasons that have nothing to do with the agent. This is enforced **structurally**, not by convention: the key is declared **only** in `configs/train/default.yaml`, and **neither** `recurrent_ppo.yaml` nor `dreamer_srl.yaml` redeclares it — both inherit the same shared value by construction. If a per-algo file ever declares this key, the guarantee degrades from "impossible to break" to "a comment asks you not to break it," and the two copies will eventually drift. Do not add it to either per-algo file. See [[DREAMER_TRAIN_CONFIG_SPLIT]] for the full design rationale.
+
+---
+
+## 8. Pointers
 
 - **[02_config_schema.md](02_config_schema.md)** — the deep, key-by-key reference (YAML → `EnvParams`, mandatory keys, expansion rules).
 - **`src/environment/config_loader.py`** — the source of truth. When the doc and the code disagree, the code wins and the doc is wrong; fix the doc.

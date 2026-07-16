@@ -116,8 +116,12 @@ def _load_stage_env_cfg(project_root: str, stage_yaml_path: str):
     from src.utils.config import get_default_config, Config as _Config
     from src.environment.config_loader import load_env_config as _load_env_config
     cfg = get_default_config()  # seed base (archived/standalone stage configs rely on this)
+    # Keep this list in lockstep with the single-config merge below (L514-521):
+    # dreamer_srl.yaml is Dreamer's per-algo override layer and must sit directly
+    # above train/default.yaml in both modes.
     for rel in [
         'configs/train/default.yaml',
+        'configs/train/dreamer_srl.yaml',
         'configs/evaluation/default.yaml',
         'configs/visualization/default.yaml',
     ]:
@@ -509,10 +513,16 @@ def main() -> None:
                 "Exactly one of --env-config or --configs-dir is required."
             )
         env_cfg = get_default_config()  # seed base (archived/standalone configs rely on this)
-        # Merge Training defaults (training.checkpoint_frequency etc.)
-        # Ported from train.py:L297-L327
+        # Merge Training defaults. Ported from train.py:L297-L336.
+        # configs/train/dreamer_srl.yaml is Dreamer's per-algo override layer — it MUST
+        # come immediately after train/default.yaml (above it in precedence), mirroring
+        # rPPO's train.py:316-328. It is merged UNCONDITIONALLY (no agent.algorithm gate):
+        # this entry point only ever runs Dreamer, and a gate would break the agent configs
+        # that omit agent.algorithm (agent_xs.yaml, 01_food_only_smoke.yaml).
+        # See docs/develop/active/refactors/DREAMER_TRAIN_CONFIG_SPLIT.md
         for _cfg_rel in [
             'configs/train/default.yaml',
+            'configs/train/dreamer_srl.yaml',
             'configs/evaluation/default.yaml',
             'configs/visualization/default.yaml',
         ]:
@@ -1241,7 +1251,7 @@ def main() -> None:
     # Resolution order mirrors rPPO's CLI > config pattern (train.py:447):
     #   --log-interval (CLI)
     #   > agent_cfg.training.log_interval (per-config; e.g. buf256k.yaml)
-    #   > env_cfg.training.log_interval   (env / global default at configs/train/default.yaml:15)
+    #   > env_cfg.training.log_interval   (env / global default at configs/train/default.yaml:35)
     #   > 50 (built-in fallback)
     # CAUTION: dreamer-srl "iteration" = one env-step batch (num_envs env-steps),
     # whereas rPPO "iteration" = one rollout (num_steps * num_envs env-steps). To get
