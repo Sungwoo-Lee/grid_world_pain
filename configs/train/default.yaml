@@ -33,6 +33,19 @@ training:
   # declared for self-containment) and Dreamer overrides to num_envs: 16 in
   # dreamer_srl.yaml — both win over this fallback for their own runs.
   num_envs: 128
+  # FALLBACK FOR NON-rPPO/DREAMER ALGORITHMS. train.py:2071 reads this via
+  # `args.checkpoint_frequency or config.get_mandatory('training.checkpoint_frequency')`
+  # on the shared (non-algo-gated) checkpoint-logic path, so DQN/DRQN/PPO (which never
+  # load configs/train/recurrent_ppo.yaml) would raise a get_mandatory ValueError without
+  # this key. rPPO overrides to 200000 in recurrent_ppo.yaml and Dreamer overrides to
+  # 10000 in dreamer_srl.yaml — both win over this fallback for their own runs.
+  checkpoint_frequency: 10000
+  # FALLBACK FOR NON-rPPO/DREAMER ALGORITHMS. train.py:628 reads this via
+  # `config.get('training.max_checkpoints_to_keep', _missing)` then raises the same
+  # Strict-Config ValueError if missing, on the same shared path as checkpoint_frequency
+  # above. rPPO overrides to null (keep all checkpoints) in recurrent_ppo.yaml and
+  # Dreamer overrides to 20 in dreamer_srl.yaml — both win over this fallback.
+  max_checkpoints_to_keep: 20
   video_during_training: true
   stats_during_training: false
   auto_analysis: false
