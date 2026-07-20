@@ -1974,3 +1974,70 @@ principle — *unbounded* history. A transformer attends over a **fixed window**
 frames, 9.6 s). Dreamer 4 traded a formally-unbounded (though practically 64-step-trained,
 cf. Q32) memory for a large-but-hard-capped one. Big win for 9.6 s of Minecraft; a
 ceiling the RSSM did not have for genuine long-horizon recall.
+
+### Q37 — In the first World Models paper, why an evolutionary algorithm for the controller?
+
+**A:** *(Clarification first: the EA does not select actions. CMA-ES optimises the
+controller's **weights**; the controller then selects actions by a plain linear map
+`a_t = W_c[z_t ; h_t] + b_c`. What is evolved is 867 numbers, offline — not per-step
+decisions.)*
+
+**Because the controller is deliberately tiny — that's the paper's thesis.**
+
+| component | job | params | trained by |
+|---|---|---|---|
+| **V** (VAE) | compress frames | large | backprop |
+| **M** (MDN-RNN) | predict next latent | large | backprop |
+| **C** (linear) | pick actions | **867** | **CMA-ES** |
+
+Put the parameter mass where the learning signal is *dense and cheap*; keep the part
+with the *hard* signal small enough that a crude optimiser suffices. V and M have dense,
+immediate, supervised targets (reconstruct this frame, predict the next latent) — every
+timestep gives full gradient information. C has **one scalar per episode**, arriving
+hundreds of steps after the actions that earned it. The move is to **shrink the search
+space** until the hard problem is tractable, rather than invent better credit assignment.
+
+Per the review: *backpropagation handles the high-dimensional but easy problem; evolution
+handles the low-dimensional but hard problem.*
+
+**Why CMA-ES specifically** — four reasons, all of which fail if C were large:
+
+1. **Only needs a scalar.** `F(θ) = E[Σ r_t]` — no gradient, no differentiability, no
+   per-step reward decomposition. Sparse/noisy/delayed rewards all fine.
+2. **The environment is a black box.** CarRacing fitness is the **true game engine's**
+   return; you cannot backprop through a game engine.
+3. **Covariance estimation is only tractable at small `n`.** CMA-ES maintains a full
+   multivariate Gaussian `θ ~ N(m_g, Σ_g)` — an `n×n` covariance. Fine at `n≈10³`,
+   hopeless at `n≈10⁶`. The 867-param controller is *chosen* to sit in that regime.
+4. **Embarrassingly parallel.** Population λ=64 × 16 rollouts each = 1024 independent
+   episodes per generation, one per CPU core, no gradient sync. CarRacing took ~1800
+   generations.
+
+**Why NOT backprop through M?** M *is* differentiable in principle. They declined
+because: M is an **MDN-RNN** that samples a mixture component — a discrete
+non-differentiable choice (the staircase of Q15, before straight-through was standard);
+gradients through hundreds of stochastic rollout steps were known to be unstable
+("chaotic gradients"); and dream-training deliberately **injects noise** via temperature
+`τ` to stop C exploiting M's flaws — backpropagating through noise you added on purpose
+to make the model less exploitable works against yourself.
+
+**This question sits on the lineage's fault line:**
+
+| | how behaviour is optimised | gradients through the world model? |
+|---|---|---|
+| **World Models (2018)** | CMA-ES on 867 params | ❌ |
+| **PlaNet (2019)** | CEM planning, re-run every step | ❌ |
+| **DreamerV1 (2020)** | actor-critic, **reparameterised gradients through learned dynamics** | ✅ |
+
+DreamerV1's headline contribution is exactly the rebuttal — *if you've built a
+differentiable simulator inside your network, why use derivative-free search?* It paid
+off (8× faster wall-clock than PlaNet, and it unlocked long-credit-assignment tasks CEM
+could not solve).
+
+**But DreamerV2 partly walked it back:** on Atari it uses **pure REINFORCE** (`ρ=1`), a
+score-function estimator — closer in spirit to evolution than to backprop-through-dynamics.
+That is the setting `dreamer_srl` runs. So the arc is not "evolution wrong, gradients
+right"; it is that **the right estimator depends on how much you trust the path from
+action to return** — and with discrete actions through 15 steps of imagined dynamics,
+Hafner also concluded you should not differentiate through it. (cf. Q31's bias/variance
+table.)
