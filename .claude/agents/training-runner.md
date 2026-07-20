@@ -199,49 +199,66 @@ If a Path B launch deviates from this convention (e.g., the user explicitly asks
      <other flags matching train_command-agent.sh exactly>
    EOF
    ```
-3. Launch via `run_command.py` pointing at the /tmp script (NOT `train_command-agent.sh`). As of the 2026-05-12 refactor, `run_command.py` takes just `<node> "<command>"` — no conda env arg, no project-root cd inside the wrapper. Your bash script is responsible for its own `cd` + interpreter path (`train_command-agent.sh` already has both at the top):
+3. Launch via `run_command.py` pointing at the /tmp script (NOT `train_command-agent.sh`). As of the 2026-05-12 refactor, `run_command.py` takes just `<node> "<command>"` — no conda env arg, no project-root cd inside the wrapper. Your bash script is responsible for its own `cd` + interpreter path (`train_command-agent.sh` already has both at the top). **Always pass `--no-tail`, and NEVER wrap this call in a local `timeout`** (see §4b step 1 for why):
    ```bash
-   python3 run_command.py <NODE> "bash $TMP_SCRIPT"
+   ./run_command.py --no-tail <NODE> "bash $TMP_SCRIPT"
    ```
 
 The content of `train_command-agent.sh` and `$TMP_SCRIPT` MUST match (modulo the `#!/bin/bash` shebang in the /tmp variant). The Edit on the NAS is the audit artifact; the /tmp copy is what actually runs.
 
 Notes:
 - `run_command.py` SSHes to the chosen node and starts the bash script under `nohup`, redirected to `logs/YYYYMMDD_HHMMSS.log`. It does **not** `cd` to the project root or activate any conda env — `train_command-agent.sh` (and its `/tmp` mirror) does both at its top (`cd /media/nas01/projects/Interoceptive-AI/grid_world_pain` + explicit interpreter path).
-- The script then opens an interactive `tail -f` of that log. That's fine — you don't need to manage it; the user can Ctrl-C the tail without affecting the remote nohup'd process.
-- If the SSH succeeds but the remote process exits within ~5 seconds (visible in the log tail), assume the launch failed (config error, missing GPU, syntax error in the launch script) and surface the error rather than declaring success.
+- Without `--no-tail` the script opens an interactive `tail -f` of that log — which is exactly what a local `timeout` would kill, producing a false failure report. Always pass `--no-tail` and verify per §4b instead.
+- Do NOT judge success or failure from the log in the first minutes — see §4b. Health is decided by `pgrep`, after a ≥60 s wait.
 - Do NOT reuse a `/tmp` path across launches — always include `$(date +%s)_${RANDOM}` (or similar uniqueness) so a stale CIFS cache on the same path is impossible.
 - /tmp scripts are not cleaned up by this workflow. The lab nodes auto-clean /tmp on reboot. If accumulation becomes a concern, the user can SSH and rm; that's outside your scope.
 
-### 4b. Post-launch sanity: confirm exactly ONE process started
+### 4b. LAUNCH → WAIT → VERIFY (mandatory, step-numbered)
 
-> ⚠️ **The post-launch check must be READ-ONLY — never re-invoke the launch path.**
-> Verify with `pgrep` / `nvidia-smi` / `echo "n" | ./terminate_command.py` **only**. Do NOT
-> wrap the check in `run_command.py <node> "...train.py..."` or `bash $TMP_SCRIPT` — that is a
-> **LAUNCH, not a check**, and fires a SECOND training process on the same GPU. This exact
-> mistake — a `sleep 15 && run_command.py <node> "bash ..."` verification step — produced a
-> duplicate run on 2026-06-30 (intended `eylrft3q` + accidental duplicate `uegqltpq` on node
-> 110 GPU 0). The wait-then-verify step is a plain `pgrep`/SSH read and nothing else.
+This protocol is **mandatory and supersedes** the earlier "verification must be read-only" guard (added 2026-06-30), which was too vague and did not prevent recurrence. Follow the six steps literally, in order.
 
-Right after `run_command.py` returns, verify exactly one `train.py` process matching this launch's `--tag` is alive on the target node. **Preferred check:** use `terminate_command.py` in scan-and-abort mode — it's already wired for this exact pattern, gives a tidy printout, and aborts cleanly when the user (or `--yes` is omitted) does not confirm a kill:
+**1. Launch with `--no-tail`, never under a local `timeout`.**
 
 ```bash
-echo "n" | ./terminate_command.py <NODE> "<TAG>"
+./run_command.py --no-tail <NODE> "bash $TMP_SCRIPT"
 ```
 
-This prints the matching PIDs and command lines, then exits without killing anything (because the prompt is answered "n"). Equivalent direct-SSH form is also fine when you don't want the wrapper:
+NEVER write `timeout 30 ./run_command.py ...`, and never background/pipe the launcher in a way that truncates it. **Rationale (the root cause of the 2026-07-21 double-launch):** `run_command.py` SSHes to the node, starts the job under `nohup`, then tails the log. A LOCAL `timeout` kills only the LOCAL tail — the REMOTE nohup'd process keeps running. The command therefore **reports failure while having actually succeeded**, and a retry launches a second real training run.
+
+**2. WAIT at least 60 seconds before ANY verification.** An explicit sleep:
+
+```bash
+sleep 60
+```
+
+Do not check earlier. There is no legitimate reason to check sooner. A freshly launched run sits in disk-sleep (`D` state) for **3–8 minutes** while the NAS/CIFS results directory is created, with an **empty log the whole time**, while being perfectly healthy.
+
+**3. Verify by PROCESS EXISTENCE only.**
 
 ```bash
 ssh -o BatchMode=yes -p 1800 vncuser@192.168.0.<NODE> "pgrep -af 'train.py.*--tag <TAG>'"
 ```
 
-Expected: a single PID (the one you just launched).
+Do NOT verify by log content, tqdm output, or results-dir contents — the 3–8 minute NAS disk-sleep window leaves all three empty on a perfectly healthy run.
 
-If 2+ PIDs come back — something went wrong (re-fired script, race in `run_command.py`, residue from a prior session, hook re-trigger). **Halt** and clean up via `terminate_command.py` per §4c. Do NOT declare success, do NOT auto-relaunch, do NOT update the manifest. If the two PIDs share the SAME `--tag` (the usual verification-relaunch case), `terminate_command.py <tag>` would kill BOTH — instead kill the specific duplicate PID only with `./run_command.py <node> "kill -INT <PID>"`, keeping the first/intended PID alive.
+**4. Expect exactly ONE pid for the tag.** If more than one comes back, a duplicate launched: keep the **earliest** PID, kill the extras **by exact PID** (never by tag — `terminate_command.py <tag>` would kill both):
 
-If 0 PIDs come back — the launch failed (config error, immediate exit). Tail the log for the error and surface it. Do not retry without surfacing the failure first.
+```bash
+./run_command.py --no-tail <NODE> "kill -INT <DUPLICATE_PID>"
+```
 
-This check is mandatory. A run with siloed duplicates wastes the GPU, produces multiple WandB runs that fight for the same name/tag, and makes downstream analysis ambiguous.
+Then report the duplicate to the user. Do NOT declare success and do NOT update the manifest until exactly one PID remains.
+
+**5. NEVER re-invoke `run_command.py` with a launch payload, `train_command-agent.sh`, `$TMP_SCRIPT`, or any other launch path as a way to "check."** Verification is strictly read-only: `pgrep`, `nvidia-smi`, `ps`. A `sleep 15 && run_command.py <node> "bash ..."` "verification" step produced a duplicate run on 2026-06-30 (intended `eylrft3q` + accidental `uegqltpq` on node 110 GPU 0).
+
+**6. If ZERO pids after the wait: do NOT immediately relaunch.** First re-run the `pgrep` once more. Then read the log for a *genuine* error (Python traceback, CUDA/driver error, OOM). Only relaunch after positively confirming nothing is alive AND identifying why it died. Surface the failure to the user before retrying.
+
+#### Anti-patterns (the two traps that caused real duplicate runs)
+
+- **(a) `timeout N ./run_command.py ...`** — the local timeout kills only the local tail; the remote `nohup`'d training run survives. The launcher reports failure on a successful launch → retry → two live runs. On 2026-07-21 this produced PIDs 44147 and 44318 on node 111, 9 s apart, both tagged `rppo_b04v01_slowmove_128env_n111`, each writing its own timestamped results dir.
+- **(b) Treating an empty log / no tqdm output as failure** — during the 3–8 minute NAS/CIFS results-dir creation the process is in `D` (disk-sleep) with a completely empty log. That is a healthy run, not a dead one. Only `pgrep` decides.
+
+This check is mandatory. Duplicate runs waste the GPU, produce multiple WandB runs fighting for the same name/tag, and make downstream analysis ambiguous.
 
 ### 4c. Process termination via `terminate_command.py`
 
