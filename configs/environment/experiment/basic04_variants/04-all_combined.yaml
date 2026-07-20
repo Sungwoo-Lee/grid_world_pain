@@ -1,0 +1,65 @@
+# basic04 variant — 04-all_combined
+# ---------------------------------------------------------------------------
+# WHAT THIS CHANGES (plain language): the fully-softened version of the harsh baseline
+# level `basic/04` (the "jump" level). It applies all three single-knob softenings from
+# variants 01-03 to the chasing predator at once:
+#   1. step cadence `move_interval` [1, 1] -> [1, 3]     — the predator is sometimes slower
+#      than the agent, so fleeing can actually work.
+#   2. pounce reach `attack_range` [2, 3] -> [1, 2]      — holding a 2-3 cell gap is safe again.
+#   3. hit damage `damage` 15-120 -> 15-80 injury points — no more one-shot kills, since the
+#      body dies at 100 injury (`body.max_injury`).
+#
+# WHY: use this when the goal is "can the agent learn the jump level at all", with the three
+# harshest pressures relaxed together. Variants 01-03 isolate which single knob was
+# responsible; this one gives the easiest setting.
+#
+# Everything else is identical to basic/04: 50% pounce hit rate, detection range [1,7],
+# stamina [30,150], attack delay [1,3], 0-2 predators, the rabbit, ambush predators 2-12,
+# bushes 4-10, random start injury, and no sensory noise.
+#
+# NOTE ON THE LIST-REPLACE FOOTGUN: `environment.entities` is a YAML list, and a child
+# config REPLACES the whole list rather than merging per entry. So the complete list is
+# restated below — predator AND rabbit — copied verbatim from basic/04 except for the
+# three changed lines. Nothing else (resources / obstacles / body / perceptual_noise) is
+# redeclared, so those stay inherited and cannot drift.
+extends: environment/experiment/basic/04-jump_attack_10x10
+
+environment:
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 3]          # CHANGED (was [1, 1]): predator may be slower than the agent
+      damage: [15.0, 80.0]           # CHANGED (was [15.0, 120.0]): no one-shot kill (max_injury = 100)
+      attack_delay: [1, 3]
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: [1, 7]
+      max_stamina: [30, 150]
+      stamina_recovery_rate: [1, 1]
+      hunt_stamina_threshold: [0.7, 0.7]
+      lose_interest_multiplier: [1.5, 1.5]
+      attack_range: [1, 2]           # CHANGED (was [2, 3]): shorter pounce reach
+      attack_success_rate: 0.5
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rabbit"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [0.0, 0.0]
+      attack_delay: [0, 0]
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]

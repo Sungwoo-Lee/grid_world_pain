@@ -1,0 +1,64 @@
+# basic04 variant — 02-short_attack_range
+# ---------------------------------------------------------------------------
+# WHAT THIS CHANGES (plain language): exactly one predator knob, versus the harsh
+# baseline level `basic/04` (the "jump" level). The pounce reach `attack_range` goes
+# from 2-or-3 cells [2, 3] down to 1-or-2 cells [1, 2]. Each episode draws one value
+# from that range.
+#
+# WHY: in basic/04 the predator can jump onto the agent from up to 3 cells away, so a
+# "keep your distance" policy stops working — there is barely any safe standoff band
+# left. Shortening the reach means an agent that holds a 2-3 cell gap is genuinely out
+# of pounce range again, so distance-keeping becomes a learnable defence rather than a
+# false sense of safety.
+#
+# Everything else is identical to basic/04: full-speed chase [1,1], 50% pounce hit rate,
+# damage up to 120, detection range [1,7], stamina [30,150], attack delay [1,3],
+# 0-2 predators, the rabbit, ambush predators 2-12, bushes 4-10, random start injury,
+# and no sensory noise.
+#
+# NOTE ON THE LIST-REPLACE FOOTGUN: `environment.entities` is a YAML list, and a child
+# config REPLACES the whole list rather than merging per entry. So the complete list is
+# restated below — predator AND rabbit — copied verbatim from basic/04 except for the
+# single changed line. Nothing else (resources / obstacles / body / perceptual_noise) is
+# redeclared, so those stay inherited and cannot drift.
+extends: environment/experiment/basic/04-jump_attack_10x10
+
+environment:
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [15.0, 120.0]
+      attack_delay: [1, 3]
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: [1, 7]
+      max_stamina: [30, 150]
+      stamina_recovery_rate: [1, 1]
+      hunt_stamina_threshold: [0.7, 0.7]
+      lose_interest_multiplier: [1.5, 1.5]
+      attack_range: [1, 2]           # CHANGED (was [2, 3]): shorter pounce reach
+      attack_success_rate: 0.5
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rabbit"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [0.0, 0.0]
+      attack_delay: [0, 0]
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
