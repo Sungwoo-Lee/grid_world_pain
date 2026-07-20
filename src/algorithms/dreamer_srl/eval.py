@@ -204,6 +204,307 @@ def dreamer_srl_eval_rollout(
     }
 
 
+def _dreamer_rollout_scan_jit(world_model, actor, env_params, states0, h0, z0,
+                               prev_action0, is_first0, step_key0,
+                               action_dim, max_steps):
+    """nnx.jit-wrapped scan body for the batched Dreamer eval rollout (Tier 2).
+
+    MUST be entered via `nnx.jit`, not called eagerly, and MUST NOT be wrapped in a
+    bare `jax.lax.scan` with no enclosing `nnx.jit` anywhere in the call stack.
+    See `scripts/eval/eval_rollout.py::_rollout_scan_jit`'s docstring for the full
+    root-cause argument (found empirically while building the rPPO batched eval):
+    after `nnx.update(model, restored_tree)` restores a checkpoint, an EAGER
+    `model(...)` call (or a bare `lax.scan` around one) reads a stale/inconsistent
+    view of the restored parameters -- only an `nnx.jit`-traced read correctly
+    materializes them. `world_model` and `actor` here are nnx.Module instances
+    restored via `nnx.update(...)` in exactly the same way, so the same trap
+    applies identically.
+
+    Per-step body mirrors `Player.get_actions` (dreamer_srl_main.py:304-352) --
+    the training-time rollout-collection path, which already runs encoder +
+    rssm.dynamic + actor forward at batch=num_envs with ONE shared PRNG key per
+    call (not one key per env). We reuse that exact convention here: `step_key0`
+    is ONE evolving key thread, split once per scan step and applied to the
+    WHOLE batch of N episodes via `world_model.rssm.dynamic(..., key=k_rssm)` --
+    this is the RSSM's native, already-tested batched interface, not a per-env
+    vmapped key split. The only departure from Player.get_actions is the action
+    head: eval uses `actor.forward_logits(latent)` + deterministic argmax (no
+    Gumbel-softmax sampling), matching `dreamer_srl_eval_rollout`'s single-env
+    action selection.
+
+    `is_first` is 1.0 only at t=0 (the initial RSSM state, set by the caller)
+    and 0.0 for every subsequent scan step -- unlike a live training rollout,
+    a dead episode is never "auto-reset" mid-scan here; steps recorded after an
+    episode's death are simply discarded by the caller via per-episode T[i]
+    slicing (mirrors `_run_episodes_batched`'s `T = argmax(done_seq, axis=0)+1`
+    in scripts/eval/eval_rollout.py), so post-death padding steps need no
+    special-cased is_first handling.
+    """
+    from src.environment.core import jax_step
+    from src.environment.sensor import get_observation
+
+    v_step = jax.vmap(jax_step, in_axes=(0, 0, None))
+    v_obs = jax.vmap(get_observation, in_axes=(0, None))
+
+    def scan_fn(carry, _):
+        state, recurrent_state, posterior_state, prev_action, is_first, step_key = carry
+
+        obs = v_obs(state, env_params)                          # [N, obs_dim] -- pre-step obs
+        embedded = jax.vmap(world_model.encoder)(obs)             # [N, dense_units]
+
+        step_key, k_rssm = jax.random.split(step_key)
+        recurrent_state, posterior_state, _prior, _post_logits, _prior_logits = world_model.rssm.dynamic(
+            posterior_state, recurrent_state, prev_action, embedded, is_first, k_rssm,
+        )
+
+        posterior_flat = posterior_state.reshape(posterior_state.shape[0], -1)   # [N, S*D]
+        latent = jnp.concatenate([posterior_flat, recurrent_state], axis=-1)      # [N, latent_dim]
+
+        logits = actor.forward_logits(latent)                     # [N, action_dim]
+        action = jnp.argmax(logits, axis=-1).astype(jnp.int32)    # [N] deterministic
+
+        next_state, reward, done, _info = v_step(state, action, env_params)
+        next_obs = v_obs(next_state, env_params)
+
+        prev_action_next = jax.nn.one_hot(action, action_dim, dtype=jnp.float32)
+        is_first_next = jnp.zeros_like(is_first)
+
+        step_out = {
+            "action": action,
+            "reward": reward,
+            "done": done,
+            "snap_agent_pos": next_state.agent_pos,
+            "snap_satiation": next_state.satiation,
+            "snap_nutrition": next_state.nutrition,
+            "snap_injury_level": next_state.injury_level,
+            "snap_rest_streak": next_state.rest_streak,
+            "snap_res_pos": next_state.res_pos,
+            "snap_res_active": next_state.res_active,
+            "snap_animal_pos": next_state.animal_pos,
+            "snap_obs_pos": next_state.obs_pos,
+            "obs": next_obs,
+        }
+        new_carry = (next_state, recurrent_state, posterior_state, prev_action_next,
+                     is_first_next, step_key)
+        return new_carry, step_out
+
+    init_carry = (states0, h0, z0, prev_action0, is_first0, step_key0)
+    _final_carry, scan_out = jax.lax.scan(scan_fn, init_carry, None, length=max_steps)
+    return scan_out
+
+
+def dreamer_srl_eval_rollout_batched(
+    world_model,
+    actor,
+    env_params,
+    config,
+    num_episodes: int,
+    seed: int,
+    results_dir: str,
+    checkpoint_pct: int,
+    render_video: bool = True,
+    quiet: bool = True,
+) -> dict:
+    """Batched (vmapped) sibling of `dreamer_srl_eval_rollout` -- ALL `num_episodes`
+    episodes run as ONE vmapped batch + `jax.lax.scan` over `max_steps`, instead of
+    a Python per-episode loop. Same signature, same return schema, same `.rec.gz`
+    recording format (episode_measures / render_recordings.py consume it unchanged).
+    Additive only -- `dreamer_srl_eval_rollout` is untouched and remains the
+    training-time eval path.
+
+    RNG convention -- DELIBERATELY DIFFERENT from the legacy single-env path,
+    per the design decision recorded in the implementation report (developer/
+    coordinator exchange, dated during this function's construction):
+
+      dreamer_srl_eval_rollout (legacy): ONE master key threaded SEQUENTIALLY
+      across ALL episodes AND all of their steps (`key, subkey =
+      jax.random.split(key)` fires once per reset and once per step, carrying
+      forward from episode i into episode i+1's reset). Episode i+1's starting
+      randomness is therefore NOT a precomputable function of the episode index
+      alone -- it depends on how many steps episode i happened to take, which is
+      itself a stochastic outcome of that trajectory (the RSSM's posterior
+      sampling consumes a key every step; the eval "argmax" is only deterministic
+      GIVEN that stochastic latent). This makes bit-exact reproduction by any
+      real (independent-stream) vmapped batch structurally impossible for N>1
+      episodes -- vmap requires each episode's RNG stream to be knowable up
+      front, not entangled with a sibling episode's emergent trajectory length.
+
+      dreamer_srl_eval_rollout_batched (this function): N INDEPENDENT per-episode
+      reset keys via `jax.random.split(jax.random.PRNGKey(seed), num_episodes)`
+      (mirrors the rPPO batched path's "each episode is a pure function of its
+      own reset key" argument). The RSSM/actor's per-step stochastic sampling
+      uses ONE shared step-key thread applied across the WHOLE batch at each
+      scan step -- this is the SAME convention `Player.get_actions`
+      (dreamer_srl_main.py:304-352) already uses natively during training
+      rollout collection at batch=num_envs, so it is not a novel/untested key
+      pattern.
+
+      Net effect: same `seed` reproduces the same DISTRIBUTION of behavior
+      (same aggregate statistics within Monte Carlo error), NOT bit-identical
+      per-episode trajectories vs. the legacy function. This is recorded
+      explicitly in the recordings' `run_meta.pkl` `extras['rng_convention']`
+      field so downstream consumers are never misled into diffing trajectories
+      episode-by-episode against a legacy-path recording.
+
+    Args: identical to `dreamer_srl_eval_rollout` (see that docstring).
+
+    Returns:
+        dict with keys: mean_reward, mean_length, episode_rewards,
+        episode_lengths, recordings_dir (str or None) -- identical schema to
+        `dreamer_srl_eval_rollout`.
+    """
+    import flax.nnx as nnx
+    from types import SimpleNamespace
+    from src.environment.core import jax_reset
+    from src.environment.sensor import get_observation
+    from src.utils.eval_recording import EpisodeRecorder, write_run_meta, _snapshot_state
+
+    N = int(num_episodes)
+    max_steps = int(env_params.max_steps)
+    action_dim = int(actor.action_dim)
+
+    # ------------------------------------------------------------------
+    # Setup recordings dir + run_meta.pkl (same layout as the legacy path;
+    # extras carries the RNG-convention note above so results are never
+    # mistaken for legacy-path bit-identical trajectories).
+    # ------------------------------------------------------------------
+    recordings_dir = Path(results_dir) / 'recordings' / str(checkpoint_pct)
+    if render_video:
+        recordings_dir.mkdir(parents=True, exist_ok=True)
+        _action_map = ['Up', 'Right', 'Down', 'Left']
+        if env_params.rest_action_enabled:
+            _action_map.append('Rest')
+        if env_params.eat_action_enabled:
+            _action_map.append('Eat')
+        icon_config = config.get('visualization.icons', None)
+        write_run_meta(
+            recordings_dir,
+            env_params,
+            icon_config,
+            _action_map,
+            getattr(config, 'source_path', ''),
+            extras={
+                'checkpoint_pct': checkpoint_pct,
+                'seed': seed,
+                'rollout_mode': 'dreamer_batched',
+                'rng_convention': (
+                    'independent per-episode reset keys via '
+                    'jax.random.split(PRNGKey(seed), num_episodes); RSSM/actor '
+                    'stochastic sampling uses ONE shared step-key thread applied '
+                    'across the whole batch at each scan step (matches the '
+                    'native training-time Player.get_actions batched '
+                    'convention). DIFFERENT RNG scheme from '
+                    'dreamer_srl_eval_rollout (legacy single-env path threads '
+                    'ONE master key sequentially across ALL episodes) -- same '
+                    'seed therefore reproduces the same behavior DISTRIBUTION, '
+                    'not bit-identical per-episode trajectories.'
+                ),
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # RNG setup: N independent per-episode reset keys + one shared step-key
+    # thread (see docstring above).
+    # ------------------------------------------------------------------
+    master_key = jax.random.PRNGKey(seed)
+    reset_master, step_master = jax.random.split(master_key)
+    episode_reset_keys = jax.random.split(reset_master, N)   # [N, 2]
+
+    v_reset = jax.vmap(jax_reset, in_axes=(None, 0))
+    v_obs = jax.vmap(get_observation, in_axes=(0, None))
+
+    states0 = v_reset(env_params, episode_reset_keys)
+
+    h0, z0 = world_model.rssm.get_initial_states(N)
+    prev_action0 = jnp.zeros((N, action_dim), dtype=jnp.float32)
+    is_first0 = jnp.ones((N, 1), dtype=jnp.float32)
+
+    scan_out = nnx.jit(_dreamer_rollout_scan_jit, static_argnames=("action_dim", "max_steps"))(
+        world_model, actor, env_params, states0, h0, z0, prev_action0, is_first0,
+        step_master, action_dim, max_steps,
+    )
+    assert scan_out["action"].shape == (max_steps, N), (
+        f"Expected batched action shape (max_steps={max_steps}, N={N}), "
+        f"got {scan_out['action'].shape}"
+    )
+    assert bool(jnp.all(scan_out["action"] < action_dim)), (
+        f"Batched action indices out of range for action_dim={action_dim} -- "
+        "argmax likely reduced over the wrong axis."
+    )
+
+    # Bring everything to host ONCE.
+    scan_out = jax.tree_util.tree_map(np.asarray, scan_out)
+    obs0_np = np.asarray(v_obs(states0, env_params))
+    states0_np = jax.tree_util.tree_map(np.asarray, states0)
+
+    done_seq = scan_out["done"]   # (max_steps, N) bool
+    # `max_steps` truncation guarantees every env reaches done=True within the
+    # scan window (core.py: truncated = next_step >= params.max_steps fires on
+    # the max_steps-th step call at the latest), so argmax always finds a hit.
+    T = np.argmax(done_seq, axis=0) + 1   # (N,) -- episode length (death step)
+
+    episode_rewards: list = []
+    episode_lengths: list = []
+
+    for i in range(N):
+        Ti = int(T[i])
+        total_reward = float(np.sum(scan_out["reward"][:Ti, i]))
+        episode_rewards.append(total_reward)
+        episode_lengths.append(Ti)
+
+        if render_video:
+            recorder = EpisodeRecorder(i + 1, checkpoint_pct, seed)
+
+            # Initial snapshot (pre-loop) -- matches
+            # dreamer_srl_eval_rollout's recorder.append(state, obs, None,
+            # action_idx=-1, reward=0.0) call.
+            init_state = SimpleNamespace(
+                agent_pos=states0_np.agent_pos[i], satiation=states0_np.satiation[i],
+                nutrition=states0_np.nutrition[i], injury_level=states0_np.injury_level[i],
+                rest_streak=states0_np.rest_streak[i], res_pos=states0_np.res_pos[i],
+                res_active=states0_np.res_active[i], animal_pos=states0_np.animal_pos[i],
+                obs_pos=states0_np.obs_pos[i],
+            )
+            recorder.snapshots.append(_snapshot_state(init_state))
+            recorder.obs.append(np.asarray(obs0_np[i]))
+            recorder.true_obs.append(None)   # true_obs never recorded for dreamer-srl (no noise API)
+            recorder.actions.append(-1)
+            recorder.rewards.append(0.0)
+
+            for t in range(Ti):
+                step_state = SimpleNamespace(
+                    agent_pos=scan_out["snap_agent_pos"][t, i],
+                    satiation=scan_out["snap_satiation"][t, i],
+                    nutrition=scan_out["snap_nutrition"][t, i],
+                    injury_level=scan_out["snap_injury_level"][t, i],
+                    rest_streak=scan_out["snap_rest_streak"][t, i],
+                    res_pos=scan_out["snap_res_pos"][t, i],
+                    res_active=scan_out["snap_res_active"][t, i],
+                    animal_pos=scan_out["snap_animal_pos"][t, i],
+                    obs_pos=scan_out["snap_obs_pos"][t, i],
+                )
+                recorder.snapshots.append(_snapshot_state(step_state))
+                recorder.obs.append(np.asarray(scan_out["obs"][t, i]))
+                recorder.true_obs.append(None)
+                recorder.actions.append(int(scan_out["action"][t, i]))
+                recorder.rewards.append(float(scan_out["reward"][t, i]))
+
+            ep_path = recordings_dir / f'episode_{i + 1:06d}.rec.gz'
+            recorder.write(ep_path)
+
+        if not quiet:
+            print(f'[eval-batched] ep {i + 1}/{N}: '
+                  f'reward={total_reward:.2f} steps={Ti}')
+
+    return {
+        'mean_reward':     float(np.mean(episode_rewards)) if episode_rewards else 0.0,
+        'mean_length':     float(np.mean(episode_lengths)) if episode_lengths else 0.0,
+        'episode_rewards': episode_rewards,
+        'episode_lengths': episode_lengths,
+        'recordings_dir':  str(recordings_dir) if render_video else None,
+    }
+
+
 def _render_and_upload(
     recordings_dir: str,
     results_dir: str,

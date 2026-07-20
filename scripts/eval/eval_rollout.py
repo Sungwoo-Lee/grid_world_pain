@@ -936,11 +936,6 @@ def main():
     if not args.quiet:
         print(f"[eval_rollout] Agent type: {agent_type}", flush=True)
 
-    if agent_type == "dreamer" and args.batched:
-        print("[eval_rollout] WARNING: --batched is not supported for the Dreamer agent "
-              "(dreamer_srl_eval_rollout is single-env only); falling back to a single-env "
-              "rollout. Batched Dreamer eval is a separate future task.", flush=True)
-
     if agent_type == "rppo":
         import flax.nnx as nnx
         from src.models.recurrent_ppo_network import ActorCriticRNN, get_action_and_value_nnx
@@ -1090,6 +1085,8 @@ def main():
         from src.algorithms.dreamer_srl.agent import build_agent
         from src.algorithms.dreamer_srl.checkpoint import make_checkpoint_manager
         from src.algorithms.dreamer_srl.eval import dreamer_srl_eval_rollout
+        if args.batched:
+            from src.algorithms.dreamer_srl.eval import dreamer_srl_eval_rollout_batched
 
         # --- Checkpoint-arg reconciliation: <run_dir>/checkpoints/<episode> ---
         # dreamer_srl's restore needs (run_dir, episode:int), not a single path,
@@ -1170,21 +1167,44 @@ def main():
         if not args.quiet:
             print(f"[eval_rollout] Dreamer model restored from step {dreamer_episode}.", flush=True)
 
-        # --- Rollout + record (single-env; writes the same .rec.gz format as
-        # the rPPO --record path, under the SAME out_dir/recordings/<pct> layout) ---
+        # --- Rollout + record (writes the same .rec.gz format as the rPPO
+        # --record path, under the SAME out_dir/recordings/<pct> layout) ---
+        # --batched: all n_eps episodes as one vmapped batch (Tier 2 perf path,
+        # ~10-30x speedup for offline probe sweeps). Uses an INDEPENDENT
+        # per-episode-key RNG convention, different from the legacy sequential-
+        # master-key single-env path -- same seed reproduces the same behavior
+        # DISTRIBUTION, not bit-identical trajectories. See
+        # dreamer_srl_eval_rollout_batched's docstring for the full argument.
         t_start = time.time()
-        result = dreamer_srl_eval_rollout(
-            world_model=world_model,
-            actor=actor,
-            env_params=dreamer_env_params,
-            config=dreamer_env_cfg,
-            num_episodes=n_eps,
-            seed=args.seed,
-            results_dir=str(out_dir),
-            checkpoint_pct=dreamer_episode,
-            render_video=args.record,
-            quiet=args.quiet,
-        )
+        if args.batched:
+            if not args.quiet:
+                print(f"[eval_rollout] Running batched Dreamer rollout: {n_eps} "
+                      f"episodes as one vmapped batch...", flush=True)
+            result = dreamer_srl_eval_rollout_batched(
+                world_model=world_model,
+                actor=actor,
+                env_params=dreamer_env_params,
+                config=dreamer_env_cfg,
+                num_episodes=n_eps,
+                seed=args.seed,
+                results_dir=str(out_dir),
+                checkpoint_pct=dreamer_episode,
+                render_video=args.record,
+                quiet=args.quiet,
+            )
+        else:
+            result = dreamer_srl_eval_rollout(
+                world_model=world_model,
+                actor=actor,
+                env_params=dreamer_env_params,
+                config=dreamer_env_cfg,
+                num_episodes=n_eps,
+                seed=args.seed,
+                results_dir=str(out_dir),
+                checkpoint_pct=dreamer_episode,
+                render_video=args.record,
+                quiet=args.quiet,
+            )
         wall_clock_s = time.time() - t_start
 
         if not args.quiet:
@@ -1205,7 +1225,7 @@ def main():
             "config_resolved": config_path,
             "checkpoint": args.checkpoint,
             "agent_type": agent_type,
-            "rollout_mode": "dreamer_single_env",
+            "rollout_mode": "dreamer_batched" if args.batched else "dreamer_single_env",
             "n_episodes": n_eps,
             "seeds": seeds,
             "mean_reward": result["mean_reward"],

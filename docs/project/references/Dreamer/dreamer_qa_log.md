@@ -2041,3 +2041,62 @@ right"; it is that **the right estimator depends on how much you trust the path 
 action to return** — and with discrete actions through 15 steps of imagined dynamics,
 Hafner also concluded you should not differentiate through it. (cf. Q31's bias/variance
 table.)
+
+### Q38 — How has action selection & planning evolved: World Models -> DreamerV1-V3?
+
+**Q:** How the action selection and planning has evolved from world model, dreamer v1-v3?
+
+**A:** The through-line across the lineage: **once you have a world model, how do you use
+it to pick actions?** The arc moves from *searching over actions* -> *differentiating
+through the model* -> *choosing the gradient estimator by how much you trust the
+imagined path*.
+
+**1. World Models (Ha & Schmidhuber, 2018) - evolution over a tiny controller.**
+V (VAE) and M (MDN-RNN) are large, backprop-trained. The controller C is deliberately
+tiny - a single linear map `a_t = W_c[z_t; h_t] + b_c` (867 params) - optimized by
+**CMA-ES** (derivative-free) against the episode return `F(theta) = E[sum_t r_t]`.
+No gradient flows from reward to actions. Logic: mass where the signal is dense (V, M);
+keep the part with the sparse per-episode signal small enough that crude search works.
+No explicit planning - C is reactive, trained inside M's dreams. (cf. Q37.)
+
+**2. PlaNet (2019) - no policy; plan online every step.** Drops the learned controller.
+At EVERY env step it solves a short-horizon optimization in latent space with the
+**Cross-Entropy Method (CEM / MPC)**:
+`a*_{t:t+H} = argmax E[sum_{tau=t}^{t+H} r_hat_tau]`.
+Sample action sequences from a Gaussian, roll through the RSSM, keep top-k by predicted
+return, refit, repeat; execute the first action, re-plan. No policy/critic to train and
+instant reward adaptation, but expensive at runtime and horizon-limited to H.
+
+**3. DreamerV1 (2020) - a learned actor, gradients THROUGH the dynamics.** If you have a
+differentiable simulator inside the net, why search? Replace planning with an
+**actor-critic learned in imagination**, pushing the policy gradient analytically through
+the learned dynamics via reparameterization (Gaussian latent `z = mu + sigma*eps`, so
+`dz/dmu` is smooth): `grad_phi E[sum_tau gamma^tau r_hat_tau]`, with a critic supplying a
+**lambda-return** target to bootstrap past the rollout. Faster at runtime than PlaNet
+(actor = one forward pass) and unlocks long-horizon tasks CEM cannot solve.
+
+**4. DreamerV2 -> V3 (2021-25) - same actor-critic, REINFORCE for discrete actions.**
+V2 swapped the Gaussian latent for a 32x32 categorical, which breaks clean
+reparameterization for the actor's ACTION choice. For discrete actions (Atari, grid
+worlds) V2/V3 use **pure REINFORCE** (score-function, rho=1) for the actor:
+`grad_phi E[ log pi_phi(a|s) * (V_lambda - v(s)) ]`.
+The critic is still a lambda-return regression (two-hot symexp head + return
+normalization). Reason is bias/variance: the actor's gradient would traverse ~15 steps of
+imagined dynamics where straight-through/reparameterization bias COMPOUNDS - so take the
+unbiased-but-noisy score function for the action, while keeping low-variance
+straight-through for the world model's internal latent sample. **This is the setting
+dreamer_srl runs** (`train.py:compute_actor_objective`, REINFORCE + S7 advantage norm;
+cf. Q20, Q31).
+
+**The pattern.** Behavior mechanism / gradients-through-model / runtime:
+- World Models: CMA-ES on 867-param controller / no / cheap
+- PlaNet: CEM planning re-solved each step / no / EXPENSIVE (plan every step)
+- DreamerV1: actor-critic, analytic value backprop / yes (reparam) / cheap
+- DreamerV2/V3: actor-critic in imagination, REINFORCE / partial (critic bootstraps;
+  actor = score-function) / cheap
+
+Deep lesson the lineage converges on: **the right way to turn a world model into actions
+depends on how much you trust the path from action to return.** Trust it fully ->
+differentiate through it (V1). Distrust a long discrete rollout -> score function (V2/V3).
+Cannot differentiate it -> search (World Models, PlaNet). Dreamer 4 continues this with
+PMPO, which trusts only the SIGN of the advantage (see Q36).
