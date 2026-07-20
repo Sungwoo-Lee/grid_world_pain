@@ -1582,3 +1582,294 @@ safer recipe keeps the encoder reconstruction-driven and lets pain enter only vi
 the reward/value heads. **`dreamer_srl` does not stop reward gradients** (it follows
 sheeprl's default); the ablation would be a `stop_gradient` on `latent` in the
 reward head's call — **not a config knob today**.
+
+## Session 2026-07-16 (cont.) — behaviour-learning setup, batch shape, replay, framework fit
+
+### Q31 — Behaviour learning: the setup (partial — thread detoured, actor/critic still open)
+
+**Q:** Let's move on to the actor and critic.
+
+**A:** *(Setup only — the conversation detoured into Q32-Q35 before λ-returns / the
+actor objective / the two-term critic were covered. **These remain unexplained.**)*
+
+**What changes:** behaviour learning runs on **imagined** data, and the world model
+is now **frozen** (`train.py:820-821` stop-gradient the posteriors and recurrent
+states — it has already taken its gradient step).
+
+**The leverage:** every posterior becomes a starting point.
+
+```
+posteriors [64,16,...] = 1024 real states  →  flattened to 1024 independent starts
+                                           →  1024 parallel dreams × 15 steps
+```
+
+Not "imagine from the last state" — **every one of the 64×16 latents is branched from,
+in parallel.** DreamerV2 reports **468B imagined states per 200M real steps** (10⁴×).
+That ratio is the economic argument for world models.
+
+**Three modules**, all reading the same 1280-wide latent the decoder read (they cannot
+tell a dreamed latent from a real one — which is what `L_dyn` bought):
+
+| module | maps | note |
+|---|---|---|
+| `actor` | 1280 → A logits | + unimix |
+| `critic` | 1280 → 255 | two-hot. **Output linear zero-init** |
+| `target_critic` | 1280 → 255 | same arch, separate weights, Polyak EMA |
+
+**The rollout** reuses the world model's own `gru_cell` + `transition_*`, identical
+weights. What's **absent** is the point:
+
+| module | in imagination? | why |
+|---|---|---|
+| `encoder` | ❌ | no `o_t` to encode |
+| `repr_*` (posterior) | ❌ | nothing to condition on — **where the prior earns its keep** |
+| `decoder` | ❌ | observations never materialised |
+| `gru_cell`, `transition_*` | ✅ | identical weights and code path |
+| `reward_model`, `continue_model`, `critic` | ✅ | read off imagined latents |
+
+Output: `r̂`, `v̂`, `ĉ` over `[16, 1024, 1]`. Everything downstream (λ-returns, the
+two-term critic, Moments, the actor objective) is *what you do with those three arrays*.
+
+**One closed loop:** our actor uses **pure REINFORCE**, no dynamics backprop
+(`train.py:905` stop-gradients the imagined latents) — DreamerV2's `ρ=1` for discrete
+actions. So the two halves make **opposite** bias/variance choices:
+
+| | estimator | bias | variance |
+|---|---|---|---|
+| **world model** (through the latent sample) | straight-through | biased ❌ | low ✅ |
+| **actor** (through the action sample) | REINFORCE | unbiased ✅ | high ❌ |
+
+Because the actor's gradient would traverse 15 steps of imagined dynamics, where ST's
+bias compounds.
+
+### Q32 — Why 64 × 16? Where do the numbers come from?
+
+**A:** Literally from `configs/models/dreamer_srl/01_food_only.yaml`
+(`per_rank_sequence_length: 64`, `per_rank_batch_size: 16`), copied from sheeprl,
+copied from Hafner's *"batch shape B=16, L=64."* **Tuned constants, no derivation.**
+But the two are different *kinds* of number.
+
+**`B = 16` — the ordinary one.** How many independent replayed sequences at once.
+Standard batch trade. **Parallel** — vectorised, nearly free on GPU.
+
+**`T = 64` — the one that carries meaning.** It is the **BPTT horizon**: *the longest
+dependency the world model can possibly learn.* Every chunk **starts from scratch** —
+`get_initial_states` (agent.py:1675) plus §S1 forcing `is_first[0]=1` (train.py:690)
+trips the §S4 reset on the first tick, so `h` is **not** carried in from wherever the
+chunk was sampled. A 100-step dependency is physically unreachable by the gradient.
+
+*(At **inference** the `Player` carries `h` across the whole episode unbroken — so
+this is a **learning** limit, not a runtime one. The GRU must generalise its
+64-step-learned dynamics to arbitrarily long rollouts.)*
+
+**They multiply:** `T × B = 1024` = the number of imagination starting points.
+
+**They cost differently:** the `T` loop is **sequential** (`h_t` needs `h_{t-1}` — 64
+GRU steps that cannot overlap); the `B` axis is **parallel**. So `T` is the wall-clock
+bottleneck and `B` the memory bottleneck. Doubling `B` costs memory; doubling `T` costs
+**time**, unrecoverable with a bigger GPU.
+
+**It shrank at V3:**
+
+| | B | T | states/batch |
+|---|---|---|---|
+| DreamerV1 | 50 | 50 | 2500 |
+| DreamerV2 | 50 | 50 | 2500 |
+| **DreamerV3** | **16** | **64** | **1024** |
+
+More than halved the batch while **lengthening** the sequence — trading gradient-noise
+reduction for a longer learnable horizon. A deliberate reallocation.
+
+**This project already sweeps it**: `01_food_only_seqlen{32,128}.yaml` (+ M-size
+variants). Given what `T` is, that sweep asks *"how far back does this grid world's
+structure reach?"* — not "what's a good batch size."
+
+### Q33 — Confirming: 64 = GRU horizon, 16 = batch, 15 = imagination horizon?
+
+**A:** Correct on all three, with three refinements.
+
+**1. "64 real trajectories" → 64 consecutive *timesteps*, possibly spanning several
+episodes.** V3 uses subsequence replay: a 64-step window dropped **anywhere** in the
+buffer, which can **straddle an episode boundary**. That is why `is_first` is a full
+`[64,16,1]` tensor — a flag at *every* step — and why §S4 lives **inside** the tick
+loop (agent.py:1043), not at initialisation.
+
+```
+chunk:      t=0 ..................... t=37 .................... t=63
+is_first:    1   0  0  0  ...  0   0    1    0  0  0  ...  0   0
+             ▲                          ▲
+        §S1 forces this           a real episode boundary
+```
+
+**2. 64 is the MAXIMUM horizon, not the actual one.** When `is_first=1`,
+`h_{t-1} := (1−1)·h_{t-1} + 1·h₀` — multiplied by **zero**, so the gradient through
+that path is zero. **The reset severs BPTT at the boundary** (correctly — memory must
+not leak across episodes). So:
+
+```
+effective horizon = min( 64 , steps since the last is_first = 1 )
+```
+
+Mostly benign here (episodes ~500 steps at parity), but in a short-episode regime the
+effective horizon collapses regardless of the config.
+
+**3. 15 imagined steps, but 16 latents.** `for i in range(1, horizon+1)` → i = 1…15.
+Index **0 is the starting latent — the POSTERIOR from real data, not dreamed**;
+indices 1–15 are imagined from the prior. Hence `H+1` throughout `train.py` and the
+`[:-1]` / `[1:]` slicing asymmetry (λ-returns have 15 entries; latents have 16).
+
+**Corrected arithmetic** (an earlier "1024 × 15 = 16,384" was wrong):
+
+```
+16 × 1024 = 16,384   latents total
+15 × 1024 = 15,360   actually imagined
+     1024            real posteriors (the starts)
+```
+
+**The full number map:**
+
+| number | symbol | what |
+|---|---|---|
+| 64 | `T` | consecutive timesteps/chunk; **max** BPTT horizon |
+| 16 | `B` | independent chunks/batch |
+| **1024** | `T×B` | **imagination starting points** |
+| 15 | `H` | imagined steps per start |
+| 16 | `H+1` | latents per dream (index 0 = real posterior) |
+| 15,360 | `H×T×B` | imagined states per gradient step |
+
+The two horizons are **independent**: the world model learns dynamics over **64** steps
+of real data; the actor plans over **15** steps of dreamed data. Nothing forces a match.
+
+### Q34 — Why does Dreamer allow subsequence replay instead of sampling within an episode?
+
+**A:** It's not "allowed" — it's a **change V3 made**. V1/V2 waited for episode
+completion; V3 dropped that, stated reason: **shortening the feedback loop**.
+
+**Why waiting is bad.** With `replay_ratio=1` and ~500-step episodes, the freshest
+trainable data is **500 steps stale** — every gradient step chases a policy the agent
+has already left. And at scale it becomes impossible: Minecraft Diamond is a 60-minute
+episode (~72,000 steps); you cannot build a buffer out of units that large.
+
+**Why it's SAFE — the reset is complete.** Exactly **three** things cross a tick
+boundary (`z_{t-1}`, `a_{t-1}`, `h_{t-1}`) and **all three** are reset
+(agent.py:1043-1071). That's 100% of the cross-tick channel; each is multiplied by
+zero when `is_first=1`.
+
+> **A 64-step chunk containing a boundary is semantically identical to two independent
+> chunks.** They merely share a tensor.
+
+So §S4's completeness is what **licenses** subsequence replay. Reset only `h` and
+forget `z`, and the model learns that the last frame of one life predicts the first of
+the next. Not hypothetical here: **"missing reset_data write" and "terminated/truncated
+conflation" were two of the five P-blockers** behind the v1 failure at ep_len 103.8.
+
+**A bonus that matters for this project:**
+
+| scheme | uniform over | consequence |
+|---|---|---|
+| sample an **episode**, then a window | **episodes** | a 20-step episode's transitions sampled as often as a 500-step episode's |
+| sample a **start index** over the buffer | **transitions** | every transition equally likely |
+
+Subsequence replay is **transition-uniform**. For a survival task — where episode
+length **is** the metric — episode-uniform sampling would over-weight the early,
+short, death-heavy episodes precisely *because* there are more of them, biasing the
+world model toward the failure regime it is trying to escape.
+
+**And post-boundary steps aren't wasted:** at inference, an agent at step 4 genuinely
+*has* only 4 steps of context. Those short-context segments are the only thing teaching
+the **early-episode regime**. Strict within-episode-full-length sampling would never
+train it.
+
+### Q35 — Does subsequence replay break our experiment framework? (basic04, random init, probes)
+
+**Q:** Basic motivation: put the agent in a **simpler** eval situation than the complex
+training env, to see behaviour isolated, starting from different init conditions
+(nutrition, injury). Level 04 was made for random init and rPPO shows proper behaviour.
+Does this work with DreamerV3?
+
+**A:** **No structural incompatibility — but the Dreamer eval path is a separate,
+new driver, and there is no Dreamer checkpoint worth probing yet.**
+
+**Naming, first — there are two basic04s.** The `basic/` ladder was re-levelled
+2026-07-04 (8 → 6 levels; `archive/basic_releveled_20260704/README.md`):
+
+| | old | current |
+|---|---|---|
+| basic04 | far-sight predator, **NO** random init | **jump attack**, HAS random init |
+
+Current `04-jump_attack_10x10.yaml` has `extends: environment/experiment/basic/03-random_init_10x10`,
+so it **inherits** random init. Random init is now level **03**, whose header notes
+*"was random-init only; variant-04 merged 2026-07-02."* The keys:
+
+```yaml
+body:
+  random_start_nutrition: true
+  start_nutrition_low: 0      # can start STARVING
+  start_nutrition_high: 100
+  random_start_injury: true
+  start_injury_low: 0
+  start_injury_high: 100      # can start NEARLY DEAD
+```
+
+`basic04_farsight` still appears in older docs; live sweeps (`rppo_basic04_jump_n109`,
+`dsrl_basic04_size_*`) are on the jump level.
+
+**The probe framework** (`configs/environment/experiment/behavior_probes/`, `core/`
+validated vs `explore/` one-off): `core/forage_nutrition/` (departure-delay satiety,
+`forage_nutr{000..100}`), `core/avoidance/` (12 configs: animal {pred,rabbit,none} ×
+injury {0,70} × smell ablations), `core/forage_direction/`. They `extends:
+environment/default` — **not** the training env, exactly as described. Init is pinned
+per-config via a **degenerate range** through the random path:
+
+```yaml
+random_start_injury: true
+start_injury_low: 0
+start_injury_high: 0        # low == high pins the exact value
+```
+
+(There is no `start_satiation_low/high` — satiation is derived from nutrition
+`S = MaxS·(N/MaxN)^scaling`, so probes vary nutrition.)
+
+**⚠️ The gap: `scripts/eval/eval_rollout.py` HARD-FAILS on Dreamer** —
+`raise NotImplementedError(f"Agent type '{agent_type}' not yet supported…")`.
+**`scripts/eval/dreamer_srl_probe_eval.py`** fills it, and the two **converge**: same
+probe YAMLs, same `.rec.gz` format, same `avoidance_stats_heatmap.py`. Two drivers, one
+pipeline.
+
+**Three things favour Dreamer here:**
+
+1. **Subsequence replay rehearses the probe condition.** §S1 forces `is_first=1` on
+   every chunk start → `h:=h₀`, `z:=z₀`, `a:=0` — *"you know nothing; here's an
+   observation; figure out where you are."* **That is a probe**, run 1024× per gradient
+   step. rPPO has no such mechanism; Dreamer's replay scheme is *better* matched to the
+   probe design than rPPO's.
+2. **Random init is coverage.** A world model wants the whole (nutrition × injury)
+   space, not one corner — more valuable to Dreamer than to a policy.
+3. **The pin-by-degenerate-range idiom already works for both.**
+
+**Three caveats, descending:**
+
+1. **The Dreamer probe driver has two commits ever** (`6d1d895` create, `69e0399` fix:
+   topology-agnostic CPU restore). Documents a live Orbax *"Topology mismatch"* trap
+   restoring GPU-saved checkpoints on CPU, and GPU OOM at ~18 concurrent processes
+   (hence `--device cpu` default).
+2. **`true_obs` is NOT recorded for dreamer_srl** (`eval.py:122` — "no noise API").
+   Harmless for `core/avoidance` / `core/forage_nutrition` (noise-free; the "smell
+   ablations" remove a channel, they don't add noise) — **but it forecloses noise
+   probes**, and `basic/05-sensory_noise_10x10` plus the whole `olfactory_ambiguity`
+   family exist.
+3. **Horizon × episode-length.** Dreamer's episodes are currently **5–68 steps**;
+   `T = 64`. Every chunk is boundary-dense, so the 64 isn't being used — paying 64
+   *sequential* GRU steps to learn ~30-step dependencies. Self-correcting as survival
+   improves; `seqlen32` (config exists) would be strictly cheaper meanwhile.
+
+**The empirical state (diary 2026-07-15, 16:43):**
+
+| | trained rPPO | Dreamer |
+|---|---|---|
+| checkpoint | `rppo_basic04_jump_128env_100M` @ **100M** | size-S @ **66k** |
+| behaviour | flees to bush & heals; cover 9/10 eps; injury 50→0; 4× full-500 survival | **dies in 5–68 steps**; injury→100; ~2% bush |
+
+**1,500× training gap — not a comparison.** The diary explicitly verified the near-zero
+Dreamer bush-dwell is *"genuine not-learned-yet, not an eval bug."* So the framework
+isn't the blocker; the absence of a trained Dreamer checkpoint is.
