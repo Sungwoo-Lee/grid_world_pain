@@ -731,6 +731,62 @@ def _resolve_continual_stage_config(config_arg: str, checkpoint_arg: str,
     return str(stage_cfg_path)
 
 
+def _load_dreamer_probe_env_cfg(env_config_path: str) -> Config:
+    """Merged env Config for a Dreamer probe eval, mirroring
+    `dreamer_srl_main.py`'s single-config path (L507-L520) and ported verbatim
+    from `scripts/eval/dreamer_srl_probe_eval.py::_load_probe_env_cfg`.
+
+    Deliberately NOT the same as the plain `load_env_config(config_path)` used
+    for the rPPO branch's `params`/`bm_cfg` above: Dreamer's own driver always
+    layers `get_default_config()` + `configs/{train,evaluation,visualization}/
+    default.yaml` UNDER the probe config before resolving its `extends:` chain,
+    so matching that chain exactly is required for restore/rollout parity with
+    `dreamer_srl_probe_eval.py`.
+    """
+    from src.utils.config import get_default_config
+    env_cfg = get_default_config()
+    for rel in ('configs/train/default.yaml', 'configs/evaluation/default.yaml',
+                'configs/visualization/default.yaml'):
+        path = PROJECT_ROOT / rel
+        if path.exists():
+            env_cfg.merge(Config.load_yaml(str(path)))
+    env_cfg.merge(load_env_config(env_config_path))
+    return env_cfg
+
+
+def _build_dreamer_restore_target(world_model, actor, critic, target_critic):
+    """Full abstract target tree matching every key `save_checkpoint()` writes
+    (src/algorithms/dreamer_srl/checkpoint.py:save_checkpoint), ported verbatim
+    from `scripts/eval/dreamer_srl_probe_eval.py::_build_restore_target`.
+
+    Values are REAL arrays built from the already-constructed (CPU-resident,
+    when `--device cpu` forced the platform before agent construction) agent,
+    so restoring into this target via `ocp.args.StandardRestore` makes orbax
+    derive each leaf's destination sharding from ITS OWN device placement
+    rather than the checkpoint's saved (GPU) sharding — this is what makes
+    restoring a GPU-trained checkpoint onto CPU work. See the module docstring
+    of `dreamer_srl_probe_eval.py` for the full topology-mismatch rationale.
+    """
+    import flax.nnx as nnx
+    from src.algorithms.dreamer_srl.utils import moments_init
+
+    moments = moments_init()
+    moments_target = {k: v for k, v in moments.__dict__.items() if isinstance(v, jax.Array)}
+    return {
+        'world_model': nnx.state(world_model, nnx.Param),
+        'actor': nnx.state(actor, nnx.Param),
+        'critic': nnx.state(critic, nnx.Param),
+        'target_critic': nnx.state(target_critic, nnx.Param),
+        'key': jax.random.PRNGKey(0),
+        'iter_num': jnp.array(0, dtype=jnp.int32),
+        'policy_step': jnp.array(0, dtype=jnp.int32),
+        'total_episodes_completed': jnp.array(0, dtype=jnp.int32),
+        'cumulative_grad_steps': jnp.array(0, dtype=jnp.int32),
+        'stage': jnp.array(0, dtype=jnp.int32),
+        'moments': moments_target,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Offline evaluation rollout for behavior-measure toolkit v1.",
@@ -741,13 +797,29 @@ def main():
     parser.add_argument("--agent_config", default=None,
                         help="Path to agent config YAML (used to infer agent type).")
     parser.add_argument("--checkpoint", required=True,
-                        help="Path to orbax checkpoint directory.")
+                        help="Path to orbax checkpoint directory. For rPPO: the "
+                             "CheckpointManager root or a <root>/<step> dir. For Dreamer: "
+                             "the checkpoint step dir, following the "
+                             "<run_dir>/checkpoints/<episode> convention (episode parsed "
+                             "from the basename, run_dir from two levels up). If "
+                             "--checkpoint doesn't parse this way (e.g. you passed a bare "
+                             "run_dir or its checkpoints/ dir), pass --episode explicitly.")
+    parser.add_argument("--episode", type=int, default=None,
+                        help="Dreamer checkpoint step to restore. Only needed when "
+                             "--checkpoint does not follow the <run_dir>/checkpoints/<episode> "
+                             "convention (i.e. its basename isn't an integer). Ignored for rPPO.")
     parser.add_argument("--output-root", default=None,
                         help="Output root dir. Defaults to behavior_measures.eval_output_root/<run_tag>/.")
     parser.add_argument("--eval-n-episodes", type=int, default=None,
                         help="Override behavior_measures.eval_n_episodes.")
     parser.add_argument("--eval-seeds", type=int, nargs="+", default=None,
                         help="Override behavior_measures.eval_seeds.")
+    parser.add_argument("--seed", type=int, default=0,
+                        help="Master RNG seed for the Dreamer rollout (dreamer_srl_eval_rollout "
+                             "derives all per-episode reset keys from this ONE seed via "
+                             "successive jax.random.split calls — unlike rPPO, which resets each "
+                             "episode from its own entry in --eval-seeds). Ignored for rPPO. "
+                             "Default 0 matches dreamer_srl_probe_eval.py's default, for parity.")
     parser.add_argument("--device", default="cpu", choices=["cpu", "gpu"],
                         help="JAX device.")
     parser.add_argument("--quiet", action="store_true")
@@ -863,6 +935,11 @@ def main():
 
     if not args.quiet:
         print(f"[eval_rollout] Agent type: {agent_type}", flush=True)
+
+    if agent_type == "dreamer" and args.batched:
+        print("[eval_rollout] WARNING: --batched is not supported for the Dreamer agent "
+              "(dreamer_srl_eval_rollout is single-env only); falling back to a single-env "
+              "rollout. Batched Dreamer eval is a separate future task.", flush=True)
 
     if agent_type == "rppo":
         import flax.nnx as nnx
@@ -1007,9 +1084,146 @@ def main():
                 eval_mode=deterministic,
             )
             return action, h_new
+
+    elif agent_type == "dreamer":
+        import flax.nnx as nnx
+        from src.algorithms.dreamer_srl.agent import build_agent
+        from src.algorithms.dreamer_srl.checkpoint import make_checkpoint_manager
+        from src.algorithms.dreamer_srl.eval import dreamer_srl_eval_rollout
+
+        # --- Checkpoint-arg reconciliation: <run_dir>/checkpoints/<episode> ---
+        # dreamer_srl's restore needs (run_dir, episode:int), not a single path,
+        # so parse both out of --checkpoint. `_pct_label` (computed above from
+        # `ckpt_path.name`) already tells us whether the basename parsed as an
+        # int; reuse it instead of re-deriving.
+        if _pct_label == "eval":
+            if args.episode is None:
+                raise ValueError(
+                    f"--checkpoint '{args.checkpoint}' does not follow the "
+                    f"<run_dir>/checkpoints/<episode> convention (basename "
+                    f"'{ckpt_path.name}' is not an integer episode). Pass --episode "
+                    f"explicitly, with --checkpoint pointing at either <run_dir> or "
+                    f"<run_dir>/checkpoints."
+                )
+            dreamer_episode = args.episode
+        else:
+            dreamer_episode = int(_pct_label)
+
+        if ckpt_path.name == "checkpoints":
+            dreamer_run_dir = ckpt_path.parent
+        elif ckpt_path.parent.name == "checkpoints":
+            dreamer_run_dir = ckpt_path.parent.parent
+        else:
+            dreamer_run_dir = ckpt_path  # --checkpoint given as the run_dir itself
+
+        # --- Env config: the FULL merge chain dreamer_srl_main.py uses, not the
+        # plain load_env_config() already used above for params/bm_cfg. ---
+        dreamer_env_cfg = _load_dreamer_probe_env_cfg(config_path)
+        dreamer_env_params = load_env_params(dreamer_env_cfg)
+
+        if not args.agent_config:
+            raise FileNotFoundError(
+                "Dreamer eval requires --agent_config (the run's models/agent_config.yaml)."
+            )
+        dreamer_agent_cfg = Config.load_yaml(args.agent_config)
+
+        obs_breakdown_d = get_observation_breakdown(dreamer_env_params)
+        obs_dim = sum(obs_breakdown_d.values())
+        action_dim_d = (4 + int(dreamer_env_params.rest_action_enabled)
+                         + int(dreamer_env_params.eat_action_enabled))
+
+        if not args.quiet:
+            print(f"[eval_rollout] Building dreamer_srl agent: obs_dim={obs_dim}, "
+                  f"action_dim={action_dim_d}", flush=True)
+
+        rngs = nnx.Rngs(args.seed)
+        world_model, actor, critic, target_critic = build_agent(
+            obs_dim=obs_dim, action_dim=action_dim_d, cfg=dreamer_agent_cfg.to_dict(), rngs=rngs,
+        )
+
+        # --- Restore checkpoint weights (topology-agnostic; see
+        # _build_dreamer_restore_target docstring) ---
+        if not args.quiet:
+            print(f"[eval_rollout] Restoring Dreamer checkpoint step={dreamer_episode} from "
+                  f"{dreamer_run_dir}/checkpoints/", flush=True)
+
+        manager = make_checkpoint_manager(str(dreamer_run_dir), max_to_keep=100)
+        restore_target = _build_dreamer_restore_target(world_model, actor, critic, target_critic)
+        try:
+            restored = manager.restore(dreamer_episode, args=ocp.args.StandardRestore(item=restore_target))
+        except Exception as e:
+            raise ValueError(
+                f"Failed to restore Dreamer checkpoint step={dreamer_episode} from "
+                f"{dreamer_run_dir}/checkpoints/ into the agent built from --agent_config "
+                f"(obs_dim={obs_dim}, action_dim={action_dim_d}). This usually means either "
+                f"the step doesn't exist (ls {dreamer_run_dir}/checkpoints/) or --config "
+                f"produces a different obs_dim/action_dim than the environment the "
+                f"checkpoint was trained on. Original error: {e}"
+            ) from e
+        if restored is None:
+            raise RuntimeError(
+                f"manager.restore returned None for step={dreamer_episode} under "
+                f"{dreamer_run_dir}/checkpoints/ — confirm the step exists."
+            )
+        nnx.update(world_model, restored["world_model"])
+        nnx.update(actor, restored["actor"])
+        if not args.quiet:
+            print(f"[eval_rollout] Dreamer model restored from step {dreamer_episode}.", flush=True)
+
+        # --- Rollout + record (single-env; writes the same .rec.gz format as
+        # the rPPO --record path, under the SAME out_dir/recordings/<pct> layout) ---
+        t_start = time.time()
+        result = dreamer_srl_eval_rollout(
+            world_model=world_model,
+            actor=actor,
+            env_params=dreamer_env_params,
+            config=dreamer_env_cfg,
+            num_episodes=n_eps,
+            seed=args.seed,
+            results_dir=str(out_dir),
+            checkpoint_pct=dreamer_episode,
+            render_video=args.record,
+            quiet=args.quiet,
+        )
+        wall_clock_s = time.time() - t_start
+
+        if not args.quiet:
+            print(f"[eval_rollout] {n_eps} episodes done in {wall_clock_s:.1f}s", flush=True)
+            print(f"[eval_rollout] mean_reward={result['mean_reward']:.3f} "
+                  f"mean_length={result['mean_length']:.1f}", flush=True)
+            if result["recordings_dir"]:
+                print(f"[eval_rollout] Wrote recordings under: {result['recordings_dir']}", flush=True)
+
+        # Dreamer's rollout writes its own recordings/run_meta (via
+        # dreamer_srl_eval_rollout -> write_run_meta) and doesn't produce the
+        # rPPO branch's per-step arrays needed for episodes/*.npz, the
+        # threat-onset index, or the online-replay cross-check — those are
+        # rPPO-specific behavior-measure-toolkit-v1 outputs. Write a Dreamer-
+        # appropriate metadata.json and stop here.
+        metadata = {
+            "config": args.config,
+            "config_resolved": config_path,
+            "checkpoint": args.checkpoint,
+            "agent_type": agent_type,
+            "rollout_mode": "dreamer_single_env",
+            "n_episodes": n_eps,
+            "seeds": seeds,
+            "mean_reward": result["mean_reward"],
+            "mean_length": result["mean_length"],
+            "wall_clock_s": wall_clock_s,
+            "jax_version": jax.__version__,
+            "git_commit": _get_git_commit(),
+            "jax_devices": [str(d) for d in jax.devices()],
+        }
+        with open(out_dir / "metadata.json", "w") as f:
+            json.dump(metadata, f, indent=2)
+
+        if not args.quiet:
+            print(f"[eval_rollout] Results saved to: {out_dir}", flush=True)
+        return
+
     else:
-        raise NotImplementedError(f"Agent type '{agent_type}' not yet supported by eval_rollout.py. "
-                                  f"Implement DreamerV3 checkpoint loading and add here.")
+        raise NotImplementedError(f"Agent type '{agent_type}' not yet supported by eval_rollout.py.")
 
     # --- Recording metadata (written once before the loop) ---
     if args.record:
