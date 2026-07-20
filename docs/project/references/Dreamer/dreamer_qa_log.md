@@ -1873,3 +1873,104 @@ pipeline.
 **1,500× training gap — not a comparison.** The diary explicitly verified the near-zero
 Dreamer bush-dwell is *"genuine not-learned-yet, not an eval bug."* So the framework
 isn't the blocker; the absence of a trained Dreamer checkpoint is.
+
+## Session 2026-07-20 — Dreamer 4
+
+> Logging was paused after Q35 at the user's request, then resumed here.
+
+### Q36 — How does Dreamer 4 use a transformer, and how does it differ from DreamerV3?
+
+**A:** **The headline swap:**
+
+```
+DreamerV3:   RSSM              = GRU (256) + 32×32 categorical latent    ~12M–400M params
+Dreamer 4:   tokenizer (400M) +  dynamics transformer (1.6B)             = 2B params
+```
+
+The RSSM had been stable since PlaNet (2019) — four papers, one backbone. Dreamer 4
+discards it.
+
+**The two new pieces.**
+
+1. **Causal tokenizer** (replaces encoder/decoder): block-causal transformer
+   encoder/decoder with a **tanh-projected continuous latent bottleneck**, trained as a
+   *masked autoencoder* — MSE + 0.2·LPIPS, patch dropout `p ~ U(0, 0.9)`.
+2. **Dynamics transformer** (replaces GRU + prior net): **2D block-causal** transformer
+   over an interleaved sequence of `[latents, actions, shortcut-noise control tokens]`.
+   Three speed tricks: **factored attention** (separate space-only and time-only layers
+   instead of full 3D), **sparse temporal attention** (temporal only every 4th layer),
+   **GQA** (shared KV heads → smaller cache). Plus QK-Norm, SwiGLU, RoPE, pre-RMSNorm,
+   attention-logit soft capping. → **21 FPS on a single H100** with 9.6 s context, fast
+   enough for a human to play inside.
+
+**Shortcut forcing — the real algorithmic change.** V3 predicted the next latent in
+**one GRU step**; Dreamer 4 **denoises** it over `K = 4` forward passes per frame. It
+fuses *diffusion forcing* (per-timestep noise levels in a sequence) with *shortcut
+models* (network conditioned on step size `d`, so inference takes few large steps).
+Corrupt as `z̃_t = (1−τ_t)z⁰_t + τ_t z¹_t`; at `d_min` the loss is squared error to the
+clean latent (flow matching), at larger `d` it is a **bootstrap** against the average of
+two half-step outputs computed in v-space and rescaled to x-space.
+
+**x-prediction, not v-prediction**: velocity is high-frequency, so iterating it
+autoregressively compounds into drift; the clean latent is low-frequency and stays
+stable over long rollouts. Equivalent at a given `τ`
+(`‖x̂₁−x₁‖² = (1−τ)²‖v̂_τ−v_τ‖²`) but the gradients differ — x-prediction doesn't blow
+up as `τ → 0`.
+
+**What DISAPPEARS — i.e. everything in Q3–Q10 of this log:**
+
+| DreamerV3 | Dreamer 4 |
+|---|---|
+| prior `p(z_t\|h_t)` vs posterior `q(z_t\|h_t,o_t)` | **gone** — no such split |
+| `L_dyn`, `L_rep`, KL balancing, free bits | **gone** — no KL anywhere |
+| aggregate posterior / prior hole | **gone** — dissolved by the objective |
+| straight-through gradients | **gone** — the latent is continuous |
+| 32×32 categorical | **continuous, tanh-projected** |
+
+The tokenizer is a *masked autoencoder*, not a VAE — no KL. The dynamics is trained by a
+denoising objective, already a generative model over latent space, so there is no "make
+the prior match the aggregate posterior" problem to solve.
+
+**But multimodality still has to live somewhere** — it moved from the **latent** to the
+**dynamics** (cf. Q12). A diffusion model is natively multimodal; once the dynamics can
+represent "either A or B" itself, the latent can return to being a smooth,
+easy-to-predict continuous code.
+
+**What SURVIVES from V3:** symexp twohot reward head; distributional critic with symexp
+twohot on λ-returns, `γ = 0.997`; and the core paradigm — train the agent inside the
+world model.
+
+**Training: online → offline, one phase → three.**
+
+| phase | trains | how |
+|---|---|---|
+| **1. Pretrain** | tokenizer + dynamics | 2.5K hours VPT contractor video |
+| **2. Finetune** | task tokens inserted into the *same* transformer | BC + reward via multi-token-prediction heads (L=8) |
+| **3. Imagine** | policy + value heads only, **transformer frozen** | RL purely on imagined rollouts |
+
+Phase 2's **token insertion**: agent tokens attend to everything, but *nothing attends to
+agent tokens*. That one-way mask prevents task conditioning from contaminating the
+dynamics — frames must still be predicted from prior frames and actions alone. A 50/50
+batch mix of BC-loss and dynamics-loss sequences keeps the world model honest.
+
+**The actor changes too — PMPO.** V3 scales returns by their 5–95th percentile range and
+does REINFORCE. Dreamer 4 **discards advantage magnitudes entirely**: positive-advantage
+states pushed up, negative pushed down, equally, plus a reverse-KL to the BC prior
+(`α=0.5`, `β=0.3`). Reasoning: V3's percentile scaling assumes imagined return
+*magnitudes* are roughly trustworthy; inside a 2B-param video model they aren't, but the
+*signs* still correlate with real reward. PMPO assumes only the sign. The behavioural-prior
+KL stops the policy drifting where the world model hallucinates — the "cheat the world
+model" problem from Ha & Schmidhuber, patched with a KL instead of a temperature knob.
+
+**Cost and payoff.** 2B params, 256–1024 TPU-v5p to train (inference is single-GPU).
+Bought: **first agent to obtain Minecraft diamonds with zero environment interaction** —
+0.7% of 60-minute episodes, purely offline. VPT-finetuned, plain BC, and a Gemma-3 VLA
+baseline all score **0%**; iron pickaxe 29% vs VLA's 11%. Honest limits: 0.7% is far
+below VPT-*online*'s ~20% (the price of pure offline), and inventory items go incoherent
+over long rollouts because the 9.6 s context bounds consistency.
+
+**⚠️ The one regression:** `h_t` in an RSSM is a recurrent state summarising — in
+principle — *unbounded* history. A transformer attends over a **fixed window** (192
+frames, 9.6 s). Dreamer 4 traded a formally-unbounded (though practically 64-step-trained,
+cf. Q32) memory for a large-but-hard-capped one. Big win for 9.6 s of Minecraft; a
+ceiling the RSSM did not have for genuine long-horizon recall.
