@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `behavior_measures` topic.
 
 **Folder definition**: Behavior-measure platform & probes
-**Insights**: 9
-**Last updated**: 2026-07-10
+**Insights**: 11
+**Last updated**: 2026-07-21
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-21 | 04:24 | `20260721_0424_dreamer_low_dwell_real_trajectory_verified` | The size-sweep Dreamer near-zero bush-dwell is a GENUINE not-learned-yet, not a pipeline bug - trajectory-verified in the training env: untrained Dreamer (66k) dies fast to predators, 100M rPPO flees-to-bush-and-heals. Predator randomization (0-2) works; no-predator videos were the ~1/3 zero-predator rolls. |
+| 2026-07-21 | 04:23 | `20260721_0423_batched_eval_layout_and_npar` | Two batched-eval gotchas: eval_rollout.py --batched writes recordings one dir DEEPER (run_tag/ckpt nesting) than the old driver -> aggregator needs a recursive glob; and batched needs LOW NPAR (~4-6, not 14-18) because its vmap spreads across cores despite 1-thread caps (NPAR=14 -> load 142). |
 | 2026-07-10 | 16:35 | `20260710_1635_bush_hiding_metastable_dwell_measure` | Bush-hiding on the hard-predator task is metastable/intermittent (policy flickers run<->hide across checkpoints), NOT a stable phase; coarse 1M sampling ALIASES it into a false spike. Use dwell% (time-in-bush), not bush_use% (binary entry overstates via pass-throughs). Config-system era does NOT explain behavior: predator difficulty (easy->stable hide, hard->transient) + training phase do; at matched difficulty+depth old/new agents match. Extended 128-env training raises dwell 13->19.5% post-10M but stays bistable. Refines 20260630_1718. |
 | 2026-07-10 | 16:34 | `20260710_1634_behavior_probe_eval_speed_parallel_batched_fdsafe` | Avoidance-probe eval sped ~8.8x (measured A/B/C): PARALLELISM is the dominant win (6.1x, per-process JAX startup ~14s dominates not rollout); batched single-process --batched rollout adds ~1.45x (parity 90/90 bit-exact; nnx.jit read-after-nnx.update trap = eager model() reads stale restored weights, scan body must be nnx.jit-wrapped). Parallel matplotlib render needs RLIMIT_NOFILE raised (Errno 24). Commits fa9ada0, 7ddacb7. |
 | 2026-07-04 | 20:14 | [20260704_2014_deterministic_probe_significance_inflates](20260704_2014_deterministic_probe_significance_inflates.md) | A near-deterministic probe (tiny within-model variance) inflates p-values AND Cohen's d, so any trivial difference is "significant" — judge model comparisons by effect size + absolute magnitude + overlap, not p. Spatial spread (radius of gyration) is significant but a WEAK run-vs-hide discriminator vs the categorical bush-use signal. Rendered-math stats tutorial written. |

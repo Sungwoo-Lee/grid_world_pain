@@ -4,9 +4,9 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-07-10
+**Last updated**: 2026-07-21
 **Active folders**: 10
-**Total insights**: 160
+**Total insights**: 164
 **Last audit**: (none)
 
 ---
@@ -18,13 +18,13 @@
 | `memory_system_design` | Claude memory system's own design decisions | 11 | 2026-06-09 | [memory, design, decision, skill, meta, learned_lesson] |
 | `subagent_engineering` | Subagent + worktree usage gotchas | 14 | 2026-06-09 | [meta, learned_lesson, worktree, subagent, decision, design] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 16 | 2026-05-28 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision] |
-| `dreamer_diagnosis` | DreamerV3 failure investigation | 19 | 2026-06-30 | [dreamer, decision, learned_lesson, refutation, meta, design] |
-| `cluster_ops` | Lab cluster ops and env mgmt | 37 | 2026-07-10 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
+| `dreamer_diagnosis` | DreamerV3 failure investigation | 20 | 2026-07-21 | [dreamer, decision, learned_lesson, refutation, meta, design] |
+| `cluster_ops` | Lab cluster ops and env mgmt | 38 | 2026-07-21 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
 | `hypervigilance` | Hypervigilance experiments | 27 | 2026-06-30 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise] |
 | `env_entities` | Env entity architecture decisions | 17 | 2026-07-03 | [design, decision, learned_lesson, meta, config, dreamer] |
 | `config_system` | Config loader/layering/schema | 5 | 2026-07-03 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 3 | 2026-06-24 | [learned_lesson, decision, refutation] |
-| `behavior_measures` | Behavior-measure platform & probes | 9 | 2026-07-10 | [design, decision, meta, learned_lesson, hypervigilance, refutation, noise] |
+| `behavior_measures` | Behavior-measure platform & probes | 11 | 2026-07-21 | [design, decision, meta, learned_lesson, hypervigilance, refutation, noise] |
 
 ---
 
@@ -55,6 +55,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-07-21: Captured 4 insights from the eval-speed + batched-Dreamer + size-sweep session: 1 into `cluster_ops` (`20260721_0421_eval_sweep_cpu_bound_not_nas` - eval sweep is CPU-bound not NAS-bound; load-137 jam = CPU thread oversubscription x stacked un-killable workers; fix compile-cache + 1-thread-cap + NPAR~=cores; corrected LAB_NODE_GPU_SPEC 8de24a0), 1 into `dreamer_diagnosis` (`20260721_0422_batched_dreamer_eval_rng_and_unify` - unified eval_rollout.py both algos + batched Dreamer eval 6.4x; stochastic-RSSM + sequential master key forbid bit-exact batching, use per-episode keys + distributional parity; 766938d/c023145), 2 into `behavior_measures` (`20260721_0423_batched_eval_layout_and_npar` - batched output nests deeper -> recursive glob, batched needs low NPAR ~4-6; `20260721_0424_dreamer_low_dwell_real_trajectory_verified` - Dreamer near-zero dwell is genuine not-learned-yet not a bug, trajectory-verified, predator randomization works). All tags reused (training_runner, learned_lesson, meta, decision, dreamer, design, refutation). No new tags.
 - 2026-07-10: Captured 4 insights from the 128-env relaunch + config-owns-values + bush-hiding checkpoint-probe session: 2 into `cluster_ops` (`20260710_1632_num_envs_cli_override_config_owns_values` — CLI --num-envs 16 silently shadowed the config's 128 on all ladder6 runs, train.py X=args.X or config.get, gpu-status skill documented 16 as standard; fix = config-owns-values convention per-algorithm, commits 944faab/0104d3c; `20260710_1633_rppo_resume_needs_matching_num_envs` — H1-fixed resume restores weights+optimizer+counters, must pass --num-envs matching the ckpt h_state batch dim or Orbax fatals, 128 envs ~8x faster), 2 into `behavior_measures` (`20260710_1634_behavior_probe_eval_speed_parallel_batched_fdsafe` — eval ~8.8x via parallelism 6.1x + --batched 1.45x, nnx.jit read-after-update trap, FD-safe render; `20260710_1635_bush_hiding_metastable_dwell_measure` — bush-hiding is metastable/intermittent not a phase, coarse sampling aliases it, use dwell not entry-rate, config-era doesn't explain it, extended training modestly raises dwell). All tags reused (training_runner, config, learned_lesson, decision, meta, design, refutation). No new tags.
 - 2026-07-04: Captured 3 insights into existing `behavior_measures` from the avoidance result-tables + videos + eval-organization session: `20260704_2012_noise_matched_frozen_probe` (noise-trained agents need a probe carrying their exact perceptual_noise block + entity smell-std + eval_obs_noise: training; verified the eval injects noise, agent obs != true_obs; extends the sensory-match principle), `20260704_2013_probe_rerun_stale_checkpoint_contamination` (re-running a sweep on an advanced ckpt writes new recordings alongside old ones and the auto-aggregating heatmap mixes checkpoints — 720/360; fix = rm -rf output-root before re-eval), `20260704_2014_deterministic_probe_significance_inflates` (near-deterministic probes inflate p AND Cohen's d; judge by effect size + magnitude + overlap; spatial spread R_g significant-but-weak vs categorical bush-use; rendered-math stats tutorial written). All tags reused (design, decision, noise, learned_lesson, meta). No new tags.
 - 2026-07-03: Captured 2 insights from the train.py extends-bug diagnosis: 1 into `config_system` (`20260703_1507_train_py_ignores_extends_drops_layers` — train.py loads --config via Config.load_yaml, NOT load_env_config, so extends: is never resolved and inherited layers silently drop to default; basic/07 trained without noise/random-init/all-combined; latent since v3.0; + the verify-actual-state methodology lesson now in CLAUDE.md), 1 into `env_entities` (`20260703_1508_eval_video_drops_true_obs_no_noise_contrast` — training video-eval drops true_obs so noise videos show no contrast; red herring vs the deeper bug). All tags reused. No new tags.
