@@ -68,6 +68,8 @@ environment:
       stamina_recovery_rate: [1, 1]      # fixed (degenerate range form)
       hunt_stamina_threshold: [0.7, 0.7] # fixed (degenerate range form)
       lose_interest_multiplier: [1.5, 1.5] # fixed (degenerate range form)
+      attack_range: [0, 0]           # explicit: no jump/pounce at this level (policy: no implicit defaults)
+      attack_success_rate: 0.0       # explicit: no jump/pounce at this level (policy: no implicit defaults)
     - class: "neutral"
       behaviour: "wander"
       tag: "rabbit"
