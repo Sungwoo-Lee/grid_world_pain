@@ -1,12 +1,12 @@
-> **Per-paper review — in-context-learning corpus, paper 14 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§14); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 25 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§25); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 14. Mittal et al. 2025 — Iterative Amortized Inference: Unifying ICL and Learned Optimizers
+# 25. Mittal et al. 2025 — Iterative Amortized Inference: Unifying ICL and Learned Optimizers
 
 **PDF:** `docs/project/references/in_context_learning/sources/Mittal et al. 2025 - Iterative Amortized Inference - Unifying ICL and Learned Optimizers.pdf`
 **Venue:** arXiv (Oct 2025). **Authors:** Sarthak Mittal, Divyat Mahajan, Guillaume Lajoie, Mohammad Pezeshki (Mila / Université de Montréal / FAIR at Meta).
 
-## Phase 1 — Foundational Overview (undergraduate level)
+## Phase 1: Foundational Overview (Undergraduate-Level)
 
 **The question in plain terms.** Many modern methods "learn to solve new tasks fast": meta-learning (MAML), in-context learning (ICL), prompt tuning, hypernetworks, and learned optimizers. They *look* different but share a goal — reuse structure across tasks so a new task needs only a little task-specific adaptation. This paper gives **one equation that contains all of them** and a **taxonomy** with three regimes, then proposes a scalable extension.
 
@@ -24,7 +24,7 @@
 
 **Initial takeaway.** This is the *organizing map* of the whole shard. It places "attention/ICL" (implicit), "hypernetworks" (parametric), and "neural processes" (explicit) as three faces of one $f_\gamma(x, g_\phi(\mathcal D_T))$ template, and shows the in-context adaptation is best understood as **iterative optimization**. **Bridge to the project:** it tells you exactly where a FiLM/hypernetwork conditioning module sits (parametric amortization: a learned $g_\phi$ generating the conditioning parameters $\theta_T$) versus where in-context conditioning sits (implicit), and frames both as instances of amortized inference — useful when deciding whether the project's conditioning should externalize a task code (interpretable, low-dim) or internalize it in a forward pass (expressive, expensive).
 
-## Phase 2 — Graduate-Level Deep Dive
+## Phase 2: Graduate-Level Deep Dive
 
 ### 3.1 The single-task baseline and its two failures
 

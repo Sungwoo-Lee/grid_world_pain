@@ -1,12 +1,12 @@
-> **Per-paper review — in-context-learning corpus, paper 13 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§13); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 31 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§31); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 13. Schlag et al. 2021 — Linear Transformers Are Secretly Fast Weight Programmers
+# 31. Schlag et al. 2021 — Linear Transformers Are Secretly Fast Weight Programmers
 
 **PDF:** `docs/project/references/in_context_learning/sources/Schlag et al. 2021 - Linear Transformers Are Secretly Fast Weight Programmers.pdf`
 **Venue:** ICML 2021. **Authors:** Imanol Schlag*, Kazuki Irie*, Jürgen Schmidhuber (IDSIA).
 
-## Phase 1 — Foundational Overview (undergraduate level)
+## Phase 1: Foundational Overview (Undergraduate-Level)
 
 **The question in plain terms.** Standard transformers attend over the whole sequence, which costs time quadratic in sequence length and memory that grows with length. "Linear transformers" replace the softmax with a kernel trick so cost is linear and memory is a *fixed-size matrix*. This paper's headline: that fixed-size matrix is **not new** — it is exactly the "fast weights" idea Schmidhuber introduced in 1991. A slow network (the trained weights) learns to write key→value associations into a fast-changing weight matrix via **outer products**, and reads them back by matrix-vector multiply. So a linear transformer is "secretly" a **Fast Weight Programmer (FWP)**.
 
@@ -21,7 +21,7 @@
 
 **Initial takeaway.** This paper is the historical + mathematical anchor of the whole "context as weights" corpus. It shows the transformer's context can *literally be a weight matrix built by outer products* — the exact algebra a hypernetwork or FiLM layer performs, but accumulated over the sequence. **Bridge to the project:** the outer-product write $\mathbf v\otimes\mathbf k$ and the delta-rule editable-memory view are the raw material behind "attention = hypernetwork" (Schug, §12, over the head index instead of the key index) and behind the neuromodulatory / fast-plasticity framings (fast weights ≈ synaptic modulation, explicitly cited to von der Malsburg 1981).
 
-## Phase 2 — Graduate-Level Deep Dive
+## Phase 2: Graduate-Level Deep Dive
 
 ### 2.1 The 1991 Fast Weight Programmer (Eqs. 1–3)
 

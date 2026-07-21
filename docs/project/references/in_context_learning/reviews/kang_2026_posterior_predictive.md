@@ -1,12 +1,12 @@
-> **Per-paper review — in-context-learning corpus, paper 11 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§11); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 24 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§24); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 11. Kang et al. 2026 — Transformers Can Learn Posterior Predictive Distributions In-Context
+# 24. Kang et al. 2026 — Transformers Can Learn Posterior Predictive Distributions In-Context
 
 **PDF:** `docs/project/references/in_context_learning/sources/Kang et al. 2026 - Transformers Can Learn Posterior Predictive Distributions In-Context.pdf`
 **Status:** arXiv preprint (arXiv:2605.26713v1, 26 May 2026); to appear ICML 2026 (PMLR 306). Authors: Gyeonghun Kang, Changwoo J. Lee, Xiang Cheng (Duke).
 
-## Phase 1 — Foundational Overview (undergraduate level)
+## Phase 1: Foundational Overview (Undergraduate-Level)
 
 **The problem in plain words.** PFNs (prior-data fitted networks) empirically produce astonishingly good uncertainty estimates: their 95% predictive intervals often match the truth. But *why* can a transformer do this? Previous theory only showed transformers can compute a **point prediction** (the posterior predictive *mean*) by implicitly running gradient descent in their forward pass. Predicting a *full distribution* is harder — you need the mean **and** the variance **and** a way to emit an actual probability density. This paper supplies the missing theory, for the tractable case of **Gaussian process (GP) regression** (where the true posterior predictive distribution is known in closed form, so you can check the transformer against ground truth).
 
@@ -24,7 +24,7 @@ They then prove **error bounds**: the approximation error shrinks **exponentiall
 
 **Initial takeaway.** This is the shard's **theory anchor**. It explains, mechanistically, *how* a transformer can be a **posterior-predictive-distribution estimator** (not just a point estimator) — bridging the von-Oswald/Akyürek "attention = gradient descent" line to the distributional PFN world, and giving concrete architectural prescriptions (depth, normalization, bin count) grounded in numerical-linear-algebra convergence theory.
 
-## Phase 2 — Graduate-Level Deep Dive
+## Phase 2: Graduate-Level Deep Dive
 
 ### 4.1 Setup: PFN output as a discretized PPD, and its population minimizer
 

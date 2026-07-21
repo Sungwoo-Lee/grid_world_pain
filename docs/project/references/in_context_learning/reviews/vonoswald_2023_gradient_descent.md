@@ -1,7 +1,7 @@
-> **Per-paper review — in-context-learning corpus, paper 7 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§7); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 9 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§9); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 7. von Oswald et al. 2023 — Transformers Learn In-Context by Gradient Descent
+# 9. von Oswald et al. 2023 — Transformers Learn In-Context by Gradient Descent
 
 **PDF:** `docs/project/references/in_context_learning/sources/von Oswald et al. 2023 - Transformers Learn In-Context by Gradient Descent.pdf` (ICML 2023, PMLR 202)
 

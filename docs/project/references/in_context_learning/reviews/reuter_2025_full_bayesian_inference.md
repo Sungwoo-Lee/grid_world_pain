@@ -1,12 +1,12 @@
-> **Per-paper review — in-context-learning corpus, paper 8 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§8); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 21 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§21); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 8. Reuter et al. 2025 — Can Transformers Learn Full Bayesian Inference In Context?
+# 21. Reuter et al. 2025 — Can Transformers Learn Full Bayesian Inference In Context?
 
 **PDF:** `docs/project/references/in_context_learning/sources/Reuter et al. 2025 - Can Transformers Learn Full Bayesian Inference in Context.pdf`
 **Venue:** ICML 2025 (PMLR 267). Authors: Arik Reuter, Tim G. J. Rudner, Vincent Fortuin, David Rügamer (LMU Munich / NYU / TU Munich / Helmholtz AI / MCML).
 
-## Phase 1 — Foundational Overview (undergraduate level)
+## Phase 1: Foundational Overview (Undergraduate-Level)
 
 **The problem in plain words.** Bayesian inference is the machine that, after seeing data, tells you not just a single best guess for a model's hidden parameters but a *whole probability distribution* over them — capturing how uncertain you should be, and where multiple explanations are plausible. The gold-standard way to compute this (MCMC, e.g. Hamiltonian Monte Carlo) is slow: you re-run an expensive sampler from scratch every single time new data arrives. Variational inference (VI) is faster but forces you to pick a rigid family of shapes for the answer (often a Gaussian), and it tends to collapse onto one mode and misjudge the spread.
 
@@ -25,7 +25,7 @@ Classic "prior-data fitted networks" (PFNs, and their tabular cousin TabPFN) alr
 
 **Initial takeaway.** This paper pushes ICL from "predict the next value" to "sample the full parameter posterior." It is the shard's clearest demonstration that a transformer, trained only on simulator draws, can *replace* MCMC/VI for full Bayesian inference on realistic models — a **distribution estimator** in the purest sense, and the natural counterpoint to the Mittal "point vs distribution" debate below.
 
-## Phase 2 — Graduate-Level Deep Dive
+## Phase 2: Graduate-Level Deep Dive
 
 ### 2.1 The amortization objective and the tractability trick
 

@@ -1,7 +1,7 @@
-> **Per-paper review — in-context-learning corpus, paper 3 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§3); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 7 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§7); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 3. Hu et al. 2024 — Amortizing Intractable Inference in Large Language Models
+# 7. Hu et al. 2024 — Amortizing Intractable Inference in Large Language Models
 
 **Venue:** ICLR 2024. **Group:** Mila – Quebec AI Institute / Université de Montréal (+ Oxford). Authors: Edward J. Hu*, Moksh Jain*, Eric Elmoznino, Younesse Kaddar, Guillaume Lajoie, Yoshua Bengio, Nikolay Malkin. (Same neighbourhood as papers 1–2 via Elmoznino/Lajoie; adds the Bengio/Malkin GFlowNet line.)
 **PDF:** `docs/project/references/in_context_learning/sources/Hu et al. 2024 - Amortizing intractable inference in large language models.pdf`

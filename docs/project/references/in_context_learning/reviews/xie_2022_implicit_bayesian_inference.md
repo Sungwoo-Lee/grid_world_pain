@@ -1,7 +1,7 @@
-> **Per-paper review — in-context-learning corpus, paper 4 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§4); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 1 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§1); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 4. Xie et al. 2022 — An Explanation of In-Context Learning as Implicit Bayesian Inference
+# 1. Xie et al. 2022 — An Explanation of In-Context Learning as Implicit Bayesian Inference
 
 **PDF:** `docs/project/references/in_context_learning/sources/Xie et al. 2022 - An Explanation of In-context Learning as Implicit Bayesian Inference.pdf` (ICLR 2022, arXiv:2111.02080v6)
 

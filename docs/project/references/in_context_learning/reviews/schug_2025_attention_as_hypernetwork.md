@@ -1,12 +1,12 @@
-> **Per-paper review — in-context-learning corpus, paper 12 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§12); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 37 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§37); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 12. Schug et al. 2025 — Attention as a Hypernetwork
+# 37. Schug et al. 2025 — Attention as a Hypernetwork
 
 **PDF:** `docs/project/references/in_context_learning/sources/Schug et al. 2025 - Attention as a Hypernetwork.pdf`
 **Venue:** ICLR 2025. **Authors:** Simon Schug, Seijin Kobayashi, Yassir Akram, João Sacramento, Razvan Pascanu (ETH Zürich / Google DeepMind).
 
-## Phase 1 — Foundational Overview (undergraduate level)
+## Phase 1: Foundational Overview (Undergraduate-Level)
 
 **The question in plain terms.** Transformers can sometimes solve *new combinations* of familiar pieces — e.g. if trained on tasks that use rules A, B, C, D in various pairs, they can handle the unseen pair (A, D). This is called **compositional generalization**. Why does the attention mechanism support it? This paper answers by showing that **multi-head attention is secretly a hypernetwork**.
 
@@ -23,7 +23,7 @@
 
 **Initial takeaway.** Multiple attention heads aren't just an engineering trick for stability — they give attention a built-in hypernetwork that composes reusable operations from a compact code. Strengthening that mechanism (HYLA) improves systematic generalization and even closes part of the linear-vs-softmax gap in language modeling. **Bridge to the project:** this is a first-principles argument that attention *is* conditional modulation — exactly the FiLM/hypernetwork family — so a FiLM or hypernetwork conditioning module is not an add-on foreign to attention, but a more explicit exposure of a mechanism attention already contains.
 
-## Phase 2 — Graduate-Level Deep Dive
+## Phase 2: Graduate-Level Deep Dive
 
 ### 2.1 Setup and notation
 

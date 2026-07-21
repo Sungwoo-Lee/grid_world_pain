@@ -1,12 +1,12 @@
-> **Per-paper review — in-context-learning corpus, paper 9 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§9); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 22 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§22); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 9. Mittal et al. 2025 — Amortized In-Context Bayesian Posterior Estimation
+# 22. Mittal et al. 2025 — Amortized In-Context Bayesian Posterior Estimation
 
 **PDF:** `docs/project/references/in_context_learning/sources/Mittal et al. 2025 - Amortized In-Context Bayesian Posterior Estimation.pdf`
 **Status:** arXiv preprint (arXiv:2502.06601v1, 10 Feb 2025). Authors: Sarthak Mittal, Niels Leif Bracher, Guillaume Lajoie, Priyank Jaini, Marcus Brubaker (Mila / RPI / Google DeepMind / York / Vector).
 
-## Phase 1 — Foundational Overview (undergraduate level)
+## Phase 1: Foundational Overview (Undergraduate-Level)
 
 **The problem in plain words.** Suppose you have a fixed probabilistic model (a likelihood + prior) and you keep getting new datasets — new poll results, new case counts, a new geographic region. Standard Bayesian tools (MCMC, VI) force you to re-run an expensive fit *from scratch* for every new dataset. **Amortization** is the trick of training a single neural network once so that, for any new dataset $\mathcal{D}$ handed to it as context, it *instantly* outputs an approximate posterior $q_\phi(\theta\mid\mathcal{D})$ — no re-fitting. Because the datasets are unordered bags of i.i.d. points, the network should be **permutation-invariant** (order of context examples must not matter).
 
@@ -23,7 +23,7 @@
 
 **Initial takeaway.** This is the shard's systematic "how to amortize a posterior" study. Its central lesson — **reverse KL for robustness and high-dim prediction, forward KL for capturing low-dim multimodality** — directly informs the design axis that Reuter (forward-KL/flow-matching, distribution) and Mittal-Parametric (point-vs-distribution) sit on.
 
-## Phase 2 — Graduate-Level Deep Dive
+## Phase 2: Graduate-Level Deep Dive
 
 ### 2.1 Setup: from per-dataset optimization to amortization
 

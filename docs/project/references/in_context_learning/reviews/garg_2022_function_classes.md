@@ -1,7 +1,7 @@
-> **Per-paper review — in-context-learning corpus, paper 6 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§6); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 8 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§8); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 6. Garg et al. 2022 — What Can Transformers Learn In-Context? A Case Study of Simple Function Classes
+# 8. Garg et al. 2022 — What Can Transformers Learn In-Context? A Case Study of Simple Function Classes
 
 **PDF:** `docs/project/references/in_context_learning/sources/Garg et al. 2022 - What Can Transformers Learn In-Context.pdf` (NeurIPS 2022)
 

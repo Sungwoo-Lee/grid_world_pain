@@ -1,7 +1,7 @@
-> **Per-paper review — in-context-learning corpus, paper 1 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§1); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 5 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§5); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 1. Elmoznino et al. 2025 — In-Context Learning and Occam's Razor
+# 5. Elmoznino et al. 2025 — In-Context Learning and Occam's Razor
 
 **Venue:** ICML 2025 (PMLR v267). **Group:** Mila – Quebec AI Institute / Université de Montréal (+ NVIDIA). Authors: Eric Elmoznino, Tom Marty, Tejas Kasetty, Leo Gagnon, Sarthak Mittal, Mahan Fathi, Dhanya Sridhar, Guillaume Lajoie.
 **PDF:** `docs/project/references/in_context_learning/sources/Elmoznino et al. 2025 - In-context learning and Occam's razor.pdf`

@@ -31,7 +31,7 @@ venue + arXiv id + which version is on disk. All PDFs live in `./sources/`, magi
 | # | Paper | Venue | arXiv | On-disk |
 |---|---|---|---|---|
 | 1 | Xie, Raghunathan, Liang, Ma — An Explanation of ICL as Implicit Bayesian Inference | ICLR 2022 | 2111.02080 | arXiv |
-| 2 | Wang, Zhu, Saxon, Steyvers, Wang — LLMs Are Latent Variable Models (good ICL demonstrations) | NeurIPS 2023 | 2301.11916 | **published** |
+| 2 | Wang et al. — LLMs Are Latent Variable Models (good ICL demonstrations) | NeurIPS 2023 | 2301.11916 | **published** |
 | 3 | Panwar, Ahuja, Goyal — In-Context Learning through the Bayesian Prism | ICLR 2024 | 2306.04891 | arXiv |
 | 4 | Wies, Levine, Shashua — The Learnability of In-Context Learning | NeurIPS 2023 | 2303.07895 | **published** |
 | 5 | Elmoznino et al. — In-context learning and Occam's razor | ICML 2025 (v267) | 2410.14086 | **published** |
@@ -44,18 +44,18 @@ venue + arXiv id + which version is on disk. All PDFs live in `./sources/`, magi
 |---|---|---|---|---|
 | 8 | Garg, Tsipras, Liang, Valiant — What Can Transformers Learn In-Context? (function classes) | NeurIPS 2022 | 2208.01066 | **published** |
 | 9 | von Oswald et al. — Transformers Learn In-Context by Gradient Descent | ICML 2023 (oral) | 2212.07677 | **published** |
-| 10 | Akyürek, Schuurmans, Andreas, Ma, Zhou — What learning algorithm is ICL? (linear models) | ICLR 2023 (oral) | 2211.15661 | arXiv |
-| 11 | Dai et al. — Why Can GPT Learn In-Context? (secretly gradient descent as meta-optimizers) | ACL 2023 Findings | 2212.10559 | **published** |
-| 12 | Bai, Chen, Wang, Xiong, Mei — Transformers as Statisticians (in-context algorithm selection) | NeurIPS 2023 (oral) | 2306.04637 | **published** |
-| 13 | Ahn, Cheng, Daneshmand, Sra — Transformers learn to implement preconditioned gradient descent | NeurIPS 2023 | 2306.00297 | **published** |
-| 14 | Li, Ildiz, Papailiopoulos, Oymak — Transformers as Algorithms (generalization & stability) | ICML 2023 | 2301.07067 | **published** |
+| 10 | Akyürek, Schuurmans, Andreas, Ma, Zhou — What learning algorithm is ICL? | ICLR 2023 (oral) | 2211.15661 | arXiv |
+| 11 | Dai et al. — Why Can GPT Learn In-Context? (secretly gradient descent) | ACL 2023 Findings | 2212.10559 | **published** |
+| 12 | Bai, Chen, Wang, Xiong, Mei — Transformers as Statisticians | NeurIPS 2023 (oral) | 2306.04637 | **published** |
+| 13 | Ahn, Cheng, Daneshmand, Sra — Transformers learn preconditioned gradient descent | NeurIPS 2023 | 2306.00297 | **published** |
+| 14 | Li, Ildiz, Papailiopoulos, Oymak — Transformers as Algorithms | ICML 2023 | 2301.07067 | **published** |
 | 15 | Zhang, Frei, Bartlett — Trained Transformers Learn Linear Models In-Context | JMLR 2024 (v25) | 2306.09927 | **published** |
 
 ## §3 — Amortized Bayesian inference: PFN / TabPFN / neural processes / posterior estimation
 
 | # | Paper | Venue | arXiv | On-disk |
 |---|---|---|---|---|
-| 16 | Müller, Hollmann, Pineda Arango, Grabocka, Hutter — Transformers Can Do Bayesian Inference (PFNs) | ICLR 2022 | 2112.10510 | arXiv |
+| 16 | Müller et al. — Transformers Can Do Bayesian Inference (PFNs) | ICLR 2022 | 2112.10510 | arXiv |
 | 17 | Hollmann, Müller, Eggensperger, Hutter — TabPFN | ICLR 2023 (oral) | 2207.01848 | arXiv |
 | 18 | Garnelo et al. — Conditional Neural Processes | ICML 2018 | 1807.01613 | **published** |
 | 19 | Kim et al. — Attentive Neural Processes | ICLR 2019 | 1901.05761 | arXiv |
@@ -64,39 +64,39 @@ venue + arXiv id + which version is on disk. All PDFs live in `./sources/`, magi
 | 22 | Mittal et al. — Amortized In-Context Bayesian Posterior Estimation | preprint (2025) | 2502.06601 | arXiv (preprint) |
 | 23 | Mittal et al. — In-Context Parametric Inference: Point or Distribution Estimators? | preprint (2025) | 2502.11617 | arXiv (preprint) |
 | 24 | Kang, Lee, Cheng — Transformers Can Learn Posterior Predictive Distributions In-Context | preprint (2026) | 2605.26713 | arXiv (preprint) |
+| 25 | Mittal et al. — Iterative Amortized Inference: Unifying ICL and Learned Optimizers | preprint (2025) | 2510.11471 | arXiv (preprint) |
 
 ## §4 — Emergence / task-diversity / latent-variable conditions for ICL
 
 | # | Paper | Venue | arXiv | On-disk |
 |---|---|---|---|---|
-| 25 | Chan et al. — Data Distributional Properties Drive Emergent ICL in Transformers | NeurIPS 2022 | 2205.05055 | **published** |
-| 26 | Raventós, Paul, Chen, Ganguli — Pretraining task diversity & emergence of non-Bayesian ICL | NeurIPS 2023 | 2306.15063 | **published** |
+| 26 | Chan et al. — Data Distributional Properties Drive Emergent ICL | NeurIPS 2022 | 2205.05055 | **published** |
+| 27 | Raventós, Paul, Chen, Ganguli — Pretraining task diversity & non-Bayesian ICL | NeurIPS 2023 | 2306.15063 | **published** |
 
 ## §5 — Hypernetworks & fast-weight programmers (attention ↔ weight generation)
 
 | # | Paper | Venue | arXiv | On-disk |
 |---|---|---|---|---|
-| 27 | Ha, Dai, Le — HyperNetworks | ICLR 2017 | 1609.09106 | arXiv |
-| 28 | Schmidhuber — Learning to Control Fast-Weight Memories | Neural Computation 4(1), 1992 | — | **❌ not OA (MIT Press paywall)** |
+| 28 | Ha, Dai, Le — HyperNetworks | ICLR 2017 | 1609.09106 | arXiv |
+| — | Schmidhuber — Learning to Control Fast-Weight Memories | Neural Computation 4(1), 1992 | — | **❌ not OA (MIT-Press paywall)** |
 | 29 | Ba, Hinton, Mnih, Leibo, Ionescu — Using Fast Weights to Attend to the Recent Past | NeurIPS 2016 | 1610.06258 | **published** |
 | 30 | Munkhdalai, Yu — Meta Networks | ICML 2017 | 1703.00837 | **published** |
 | 31 | Schlag, Irie, Schmidhuber — Linear Transformers Are Secretly Fast Weight Programmers | ICML 2021 | 2102.11174 | **published** |
-| 32 | Irie, Schlag, Csordás, Schmidhuber — Going Beyond Linear Transformers with Recurrent FWPs | NeurIPS 2021 | 2106.06295 | **published** |
-| 33 | Irie, Schlag, Csordás, Schmidhuber — A Modern Self-Referential Weight Matrix | ICML 2022 | 2202.05780 | **published** |
+| 32 | Irie et al. — Going Beyond Linear Transformers with Recurrent FWPs | NeurIPS 2021 | 2106.06295 | **published** |
+| 33 | Irie et al. — A Modern Self-Referential Weight Matrix | ICML 2022 | 2202.05780 | **published** |
 | 34 | von Oswald, Henning, Sacramento, Grewe — Continual learning with hypernetworks | ICLR 2020 | 1906.00695 | arXiv |
-| 35 | Zhmoginov, Sandler, Vladymyrov — HyperTransformer (few-shot model generation) | ICML 2022 | 2201.04182 | **published** |
+| 35 | Zhmoginov, Sandler, Vladymyrov — HyperTransformer | ICML 2022 | 2201.04182 | **published** |
 | 36 | Chen, Wang — Transformers as Meta-Learners for Implicit Neural Representations | ECCV 2022 | 2208.02801 | **published** |
 | 37 | Schug et al. — Attention as a Hypernetwork | ICLR 2025 (oral) | 2406.05816 | arXiv |
-| 38 | Chen, Hu, Jin, Lee, Kawaguchi — Exact Conversion of ICL to Model Weights (linearized attention) | ICML 2024 (v235) | 2406.02847 | **published** |
+| 38 | Chen, Hu, Jin, Lee, Kawaguchi — Exact Conversion of ICL to Model Weights | ICML 2024 (v235) | 2406.02847 | **published** |
 
 ## Status
 
-**39 papers in the corpus; 38 PDFs on disk** (magic-byte verified), **1 gap** (#28 Schmidhuber 1992,
-MIT-Press paywall — no legal OA copy). **25 stored as the published version of record** (PMLR / NeurIPS /
-JMLR / ACL Anthology / ECVA); the remaining 13 as arXiv — 6 ICLR papers whose version of record is the
-Cloudflare-walled OpenReview (camera-ready-equivalent), 3 arXiv-only preprints (#22/#23/#24), and 4 from
-the first batch not yet upgraded.
+**39 papers in the corpus; 38 PDFs on disk** (magic-byte verified), **1 gap** (Schmidhuber 1992,
+MIT-Press paywall — no legal OA copy). **24 stored as the published version of record**
+(PMLR / NeurIPS / JMLR / ACL Anthology / ECVA); the other 14 as arXiv — 10 ICLR papers whose version of
+record is the Cloudflare-walled OpenReview (camera-ready-equivalent), and 4 arXiv-only preprints.
 
 **Review status (2026-07-21):** all **38 on-disk papers are reviewed** — per-paper Phase 1 + Phase 2 in
-the master `in_context_learning_lit_review.md`, split into standalone docs under `reviews/`. Only #28
-Schmidhuber (no PDF) is unreviewed.
+the master `in_context_learning_lit_review.md`, split into standalone docs under `reviews/`
+(surname_year_topic naming). Only Schmidhuber (no PDF) is unreviewed.

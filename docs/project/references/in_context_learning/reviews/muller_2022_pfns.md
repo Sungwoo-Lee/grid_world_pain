@@ -1,7 +1,7 @@
-> **Per-paper review — in-context-learning corpus, paper 5 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§5); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 16 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§16); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 5. Müller et al. 2022 — Transformers Can Do Bayesian Inference (PFNs)
+# 16. Müller et al. 2022 — Transformers Can Do Bayesian Inference (PFNs)
 
 **PDF:** `docs/project/references/in_context_learning/sources/Muller et al. 2022 - Transformers Can Do Bayesian Inference (PFNs).pdf` (ICLR 2022, arXiv:2112.10510v7)
 

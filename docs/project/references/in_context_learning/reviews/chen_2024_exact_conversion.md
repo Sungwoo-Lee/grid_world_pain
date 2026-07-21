@@ -1,12 +1,12 @@
-> **Per-paper review — in-context-learning corpus, paper 15 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§15); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 38 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§38); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 15. Chen et al. 2024 — Exact Conversion of In-Context Learning to Model Weights
+# 38. Chen et al. 2024 — Exact Conversion of In-Context Learning to Model Weights
 
 **PDF:** `docs/project/references/in_context_learning/sources/Chen et al. 2024 - Exact Conversion of In-Context Learning to Model Weights.pdf`
 **Venue:** ICML 2024. **Authors:** Brian K Chen, Tianyang Hu, Hui Jin, Hwee Kuan Lee, Kenji Kawaguchi (NUS / A*STAR / Huawei Noah's Ark Lab).
 
-## Phase 1 — Foundational Overview (undergraduate level)
+## Phase 1: Foundational Overview (Undergraduate-Level)
 
 **The question in plain terms.** In-context learning (ICL) lets a language model adapt to a task by putting demonstration examples in the prompt — no fine-tuning, no weight updates. But the effect is *temporary*: it applies only to that one prompt and is thrown away afterward. Can we take those demonstration tokens and **bake them permanently into the model's weights** — exactly, not approximately, and cheaply? For **linearized-attention** transformers, this paper says yes: the whole ICL prompt collapses into a single **bias term** added to one internal matrix.
 
@@ -22,7 +22,7 @@
 
 **Initial takeaway.** This is the most literal member of the "context ↔ weights" family: it shows a demonstration prompt is *algebraically identical* to a specific weight (bias) edit in linear attention. **Bridge to the project:** it operationalizes the fast-weight / hypernetwork view (papers 1–3) — the outer-product sum $\sum_j\phi(K_j)V_j^\top$ (Schlag's fast weight $\mathbf W^{(i)}$) IS the thing you freeze into a bias, and Schug's "context generates a value network" becomes "context generates a storable weight offset." For a project using FiLM/hypernetwork conditioning, this is the proof-of-concept that a learned context code can be materialized as a permanent, composable, low-cost weight modification.
 
-## Phase 2 — Graduate-Level Deep Dive
+## Phase 2: Graduate-Level Deep Dive
 
 ### 4.1 Attention definitions and the Key-Value matrix
 

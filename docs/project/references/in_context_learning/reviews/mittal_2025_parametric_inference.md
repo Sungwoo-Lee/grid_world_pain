@@ -1,12 +1,12 @@
-> **Per-paper review — in-context-learning corpus, paper 10 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§10); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 23 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§23); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 10. Mittal et al. 2025 — In-Context Parametric Inference: Point or Distribution Estimators?
+# 23. Mittal et al. 2025 — In-Context Parametric Inference: Point or Distribution Estimators?
 
 **PDF:** `docs/project/references/in_context_learning/sources/Mittal et al. 2025 - In-Context Parametric Inference - Point or Distribution Estimators.pdf`
 **Status:** arXiv preprint (arXiv:2502.11617v1, 17 Feb 2025). Authors: Sarthak Mittal, Yoshua Bengio, Nikolay Malkin, Guillaume Lajoie (Mila / U. Edinburgh).
 
-## Phase 1 — Foundational Overview (undergraduate level)
+## Phase 1: Foundational Overview (Undergraduate-Level)
 
 **The problem in plain words.** When you infer a model's parameters from data you can either report **a single best value** (a "point estimate" — maximum likelihood MLE, or maximum-a-posteriori MAP) or **a whole distribution** over the parameters (the Bayesian posterior). Bayesian theory says that, *at optimality*, using the full posterior to make predictions is the right thing to do — you average over all plausible parameter values. But that optimality assumes you can represent the posterior perfectly. In practice, amortized/in-context estimators use limited families (a Gaussian, a normalizing flow) and must generalize to new datasets, introducing an **amortization gap**. So the practical question is genuinely open: **for downstream prediction, is it better to have an in-context network output a point estimate, or a full posterior?**
 
@@ -20,7 +20,7 @@
 
 **Initial takeaway.** This is the shard's most *deflationary* and most decision-relevant paper: it says that for the *practical goal of prediction*, the elaborate machinery of in-context distribution estimation (including Reuter-style flow matching) often does not pay off versus a plain amortized point estimate — precisely because of parameter-space multimodality/symmetry. It sets the pointed counter-hypothesis against Reuter's "full-distribution wins."
 
-## Phase 2 — Graduate-Level Deep Dive
+## Phase 2: Graduate-Level Deep Dive
 
 ### 3.1 The estimator taxonomy and its training objectives
 

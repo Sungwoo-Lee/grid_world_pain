@@ -1,7 +1,7 @@
-> **Per-paper review — in-context-learning corpus, paper 2 of 15 (original batch).**
-> Extracted from the [master review](../in_context_learning_lit_review.md) (§2); content is identical. Manifest: [[in_context_learning_sources]].
+> **Per-paper review — in-context-learning corpus, paper 6 of 38.**
+> Extracted from the [master review](../in_context_learning_lit_review.md) (§6); content is identical. Manifest: [[in_context_learning_sources]].
 
-# 2. Mittal et al. 2025 — Does Learning the Right Latent Variables Necessarily Improve In-Context Learning?
+# 6. Mittal et al. 2025 — Does Learning the Right Latent Variables Necessarily Improve In-Context Learning?
 
 **Venue:** ICML 2025 (PMLR v267). **Group:** Mila – Quebec AI Institute / Université de Montréal (+ Google DeepMind). Authors: Sarthak Mittal, Eric Elmoznino, Leo Gagnon, Sangnie Bhardwaj, Guillaume Lajoie, Dhanya Sridhar. (Same core group as paper 1; this is the paper whose bottlenecked architecture paper 1 borrows for its "train-risk vs. prequential" control.)
 **PDF:** `docs/project/references/in_context_learning/sources/Mittal et al. 2025 - Does learning the right latent variables improve in-context learning.pdf`
