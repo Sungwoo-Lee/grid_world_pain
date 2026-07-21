@@ -1,0 +1,34 @@
+# Reproduces the Dreamer basic04 replay-ratio sweep: 4 replay-ratio variants (1.0 / 0.5 /
+# 0.25 / 0.0625) of the size-M Dreamer run x the 12 core avoidance-probe conditions. See
+# scripts/eval/dwell_sweep/README.md for the pipeline + full spec schema.
+#
+# output_dir points at the EXISTING metrics_history_dreamer_basic04_rr dataset, so
+# re-running this spec as the runs train further just appends new checkpoint rows.
+# agent_config is auto-detected per run from <run>/models/agent_config.yaml -- no need
+# to list it explicitly unless a run is missing that saved file.
+#
+# Run with:
+#   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+#     scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/basic04_rr_dreamer.yaml
+#
+# `nodes` below must be FREE (no live GPU training) at run time -- check with the
+# gpu-status skill / scripts/lab/gpu_status.py first and edit the list if needed.
+name: basic04_rr
+algo: dreamer
+output_dir: results/eval/avoidance/metrics_history_dreamer_basic04_rr
+probe: clean
+conditions: all
+episodes: 30
+nodes: [106, 107, 108, 109]
+npar: 5
+x_axis: episodes
+plot_measures: [bush_dwell, spatial_spread, survival_steps]
+runs:
+  - label: rr1p0
+    path: results/JAX_DreamerSRL/20260717-025141_dsrl_b04_M_rr1p0
+  - label: rr0p5
+    path: results/JAX_DreamerSRL/20260717-025141_dsrl_b04_M_rr0p5
+  - label: rr0p25
+    path: results/JAX_DreamerSRL/20260717-025141_dsrl_b04_M_rr0p25
+  - label: rr0p0625
+    path: results/JAX_DreamerSRL/20260717-025141_dsrl_b04_M_rr0p0625
