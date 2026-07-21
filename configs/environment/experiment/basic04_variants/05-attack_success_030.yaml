@@ -1,0 +1,68 @@
+# basic04 variant — 05-attack_success_030
+# ---------------------------------------------------------------------------
+# WHAT THIS CHANGES (plain language): exactly one predator knob, versus the harsh
+# baseline level `basic/04` (the "jump" level). The pounce HIT RATE
+# `attack_success_rate` goes from 0.5 (half of pounces land) down to 0.3 (only
+# ~1 in 3 land). A pounce that misses lands the predator on a random adjacent
+# cell, giving the agent a chance to escape to a bush.
+#
+# WHY: the 2026-07-21 diary finding showed that HOW the predator is softened
+# matters for whether the agent keeps using bushes. Slowing the predator
+# (move_interval [1,3]) suppresses bush-hiding the most (~8% dwell), while a
+# FAST predator (move_interval [1,1]) keeps the hiding behaviour alive. This
+# variant keeps the fast chase [1,1] and instead softens the level through the
+# stochastic hit rate only — a cleaner difficulty knob that should NOT collapse
+# the hiding behaviour the way slowing the predator does.
+#
+# Everything else is identical to basic/04: full-speed chase [1,1], pounce reach
+# [2,3], damage up to 120, detection range [1,7], stamina [30,150], attack delay
+# [1,3], 0-2 predators, the rabbit, ambush predators 2-12, bushes 4-10, random
+# start injury, and no sensory noise.
+#
+# NOTE ON THE LIST-REPLACE FOOTGUN: `environment.entities` is a YAML list, and a
+# child config REPLACES the whole list rather than merging per entry. So the
+# complete list is restated below — predator AND rabbit — copied verbatim from
+# basic/04 except for the single changed line. Nothing else (resources /
+# obstacles / body / perceptual_noise) is redeclared, so those stay inherited and
+# cannot drift.
+extends: environment/experiment/basic/04-jump_attack_10x10
+
+environment:
+  entities:
+    - class: "predator"
+      behaviour: "hunt"
+      tag: "pred"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.7, 0.5, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 1, 0, 0]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [15.0, 120.0]
+      attack_delay: [1, 3]
+      nociception_intensity: 0.9
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
+      detection_range: [1, 7]
+      max_stamina: [30, 150]
+      stamina_recovery_rate: [1, 1]
+      hunt_stamina_threshold: [0.7, 0.7]
+      lose_interest_multiplier: [1.5, 1.5]
+      attack_range: [2, 3]
+      attack_success_rate: 0.3       # CHANGED (was 0.5): softer pounce hit-rate, misses land adjacent
+    - class: "neutral"
+      behaviour: "wander"
+      tag: "rabbit"
+      count_low: 0
+      count_high: 2
+      properties: [0.0, 0.5, 0.7, 0.0, 0.0]
+      properties_std: [0.0, 0.3, 0.3, 0.0, 0.0]
+      visual_properties: [0, 0, 0, 0, 0, 0, 0, 1]
+      visual_properties_std: [0, 0, 0, 0, 0, 0, 0, 0]
+      move_interval: [1, 1]
+      damage: [0.0, 0.0]
+      attack_delay: [0, 0]
+      nociception_intensity: 0.1
+      spawn_area: [[1, 1], [10, 10]]
+      patrol_area: [[1, 1], [10, 10]]
