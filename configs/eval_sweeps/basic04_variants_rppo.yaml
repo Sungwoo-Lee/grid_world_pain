@@ -1,34 +1,31 @@
-# Reproduces the rPPO basic04-variants dwell-history sweep: 4 predator/damage variants
-# of the "basic04" training run x the 12 core avoidance-probe conditions. See
-# scripts/eval/dwell_sweep/README.md for the pipeline + full spec schema.
+# rPPO basic04-variants dwell-history sweep: 8 predator-difficulty variants of the
+# "basic04" ranged-pounce world x the 12 core avoidance-probe conditions.
+# Each variant makes the predator easier one way (v01-04) or tunes hit-rate (v05-08).
+# See scripts/eval/dwell_sweep/README.md for the pipeline + full spec schema.
 #
-# output_dir points at the EXISTING metrics_history_rppo_basic04_variants dataset (built
-# by hand this session), so re-running this spec as the variants train further just
-# appends new checkpoint rows -- it does not create a separate parallel dataset.
-#
-# Run with:
+# output_dir is the EXISTING dataset, so re-running just appends new checkpoint rows
+# (incremental). Run with:
 #   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
 #     scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/basic04_variants_rppo.yaml
 #
-# `nodes` below must be FREE (no live GPU training) at run time -- check with the
-# gpu-status skill / scripts/lab/gpu_status.py first and edit the list if needed.
+# `nodes` must be FREE (no live GPU training) at run time -- check gpu_status first.
+# Exact run paths used (not globs): aborted 0-checkpoint dirs of the same label also
+# exist on disk, so a glob would be ambiguous.
 name: basic04_variants
 algo: rppo
 output_dir: results/eval/avoidance/metrics_history_rppo_basic04_variants
 probe: clean
 conditions: all
 episodes: 30
-nodes: [106, 107, 108, 109]
+nodes: [101, 102, 103, 104, 105, 108, 110, 113]
 x_axis: steps
 plot_measures: [bush_dwell, spatial_spread, survival_steps]
 runs:
-  # exact timestamp used (not a glob): an earlier aborted 044221 attempt at the same
-  # label also exists on disk with 0 checkpoints, so a glob would be ambiguous here.
-  - label: v01_slowmove
-    path: results/JAX_RecurrentPPO/20260721-044210_rppo_b04v01_slowmove_128env_n111
-  - label: v02_shortjump
-    path: "results/JAX_RecurrentPPO/*rppo_b04v02_shortjump*"
-  - label: v03_lowdmg
-    path: "results/JAX_RecurrentPPO/*rppo_b04v03_lowdmg*"
-  - label: v04_allcomb
-    path: "results/JAX_RecurrentPPO/*rppo_b04v04_allcomb*"
+  - {label: v01_slowmove, path: results/JAX_RecurrentPPO/20260721-044210_rppo_b04v01_slowmove_128env_n111}
+  - {label: v02_shortjump, path: results/JAX_RecurrentPPO/20260721-044920_rppo_b04v02_shortjump_128env_n111}
+  - {label: v03_lowdmg,    path: results/JAX_RecurrentPPO/20260721-045245_rppo_b04v03_lowdmg_128env_n112}
+  - {label: v04_allcomb,   path: results/JAX_RecurrentPPO/20260721-045642_rppo_b04v04_allcomb_128env_n112}
+  - {label: v05_asr030,    path: results/JAX_RecurrentPPO/20260721-205638_rppo_b04v05_asr030_128env_n106}
+  - {label: v06_asr070,    path: results/JAX_RecurrentPPO/20260721-205705_rppo_b04v06_asr070_128env_n106}
+  - {label: v07_comb030,   path: results/JAX_RecurrentPPO/20260721-205725_rppo_b04v07_comb030_128env_n107}
+  - {label: v08_comb070,   path: results/JAX_RecurrentPPO/20260721-205742_rppo_b04v08_comb070_128env_n107}
