@@ -669,6 +669,7 @@ def main():
             "project": args.wandb_project or config.get_mandatory('wandb.project'),
             "entity": args.wandb_entity or config.get_mandatory('wandb.entity'),
             "group": args.wandb_group or config.get_mandatory('wandb.group'),
+            "job_type": config.get_mandatory('wandb.job_type'),
             "name": args.wandb_name or tag,
             "reinit": True
         }

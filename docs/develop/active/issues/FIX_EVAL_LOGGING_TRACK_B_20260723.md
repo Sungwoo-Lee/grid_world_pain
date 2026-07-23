@@ -260,12 +260,12 @@ Run the full suite after: `/home/vncuser/miniconda3/envs/grid_world_pain/bin/pyt
 
 ## Checkpoints
 
-- [ ] Bug 1: `_derive_run_tag` returns the run dir for `<run>/models/<step>`; existing Dreamer `<run>/checkpoints/<step>` still resolves to `<run>`; no existing `results/eval/models/` dir was moved or deleted.
-- [ ] Bug 2: on a death-disabled tiny env with `record_stats=False`, `num_envs=2`, all four episode lengths equal `max_steps` (print them).
-- [ ] Bug 3: a real (or dry-run) `train.py` wandb-init shows `job_type` present in the `wandb.init` kwargs; `configs/logger/wandb.yaml` no longer contains `"defualt"`.
-- [ ] Bug 4: keys handed to the stub `policy_fn` across steps are pairwise distinct; deterministic mode (`deterministic=True`) still passes `key=None` and is byte-identical to pre-fix output on a fixed seed (no behavior change for the only exercised path).
-- [ ] Bug 5: `eval_obs_noise="zero"` raises at startup before any episode runs; `"training"` runs normally.
-- [ ] Each of the 5 new tests **fails on the pre-fix code** (stash the fix, run the test, confirm red) and **passes after**.
+- [x] Bug 1: `_derive_run_tag` returns the run dir for `<run>/models/<step>`; existing Dreamer `<run>/checkpoints/<step>` still resolves to `<run>`; no existing `results/eval/models/` dir was moved or deleted. — verified via `tests/scripts/test_eval_rollout_run_tag.py`; no filesystem mutation performed.
+- [x] Bug 2: on a death-disabled tiny env with `record_stats=False`, `num_envs=2`, all four episode lengths equal `max_steps` (print them). — pre-fix `[7, 7, 8, 8]`, post-fix `[8, 8, 8, 8]` (`max_steps=8`).
+- [x] Bug 3: a real (or dry-run) `train.py` wandb-init shows `job_type` present in the `wandb.init` kwargs; `configs/logger/wandb.yaml` no longer contains `"defualt"`. — verified via textual/kwargs-literal assertion (lighter-assertion fallback, as pre-authorized by the plan); typo fixed.
+- [x] Bug 4: keys handed to the stub `policy_fn` across steps are pairwise distinct; deterministic mode (`deterministic=True`) still passes `key=None` and is byte-identical to pre-fix output on a fixed seed (no behavior change for the only exercised path). — pairwise-distinctness verified directly; deterministic-mode equivalence verified indirectly (all pre-existing deterministic-path eval tests, e.g. `test_evaluation_model_rebuild.py`, `test_eval_rollout_online_replay.py`, `test_eval_rollout_stage_config.py`, still pass unchanged — `key` is discarded when `deterministic=True` since `policy_fn` passes `key=None` to `get_action_and_value_nnx` in that branch).
+- [x] Bug 5: `eval_obs_noise="zero"` raises at startup before any episode runs; `"training"` runs normally. — verified via `tests/scripts/test_eval_obs_noise_guard.py` (also covers `"custom"`).
+- [x] Each of the 5 new tests **fails on the pre-fix code** (stash the fix, run the test, confirm red) and **passes after**. — confirmed via `git stash push -- <4 changed files>` / run / `git stash pop` / re-run (see Implementation Report).
 
 ## Speed note
 
@@ -273,22 +273,125 @@ None of these edits touch a hot loop in a way that should change throughput: Bug
 
 ## Implementation Report
 
-> **Implemented by**: [agent/person]
-> **Date**: [date]
+> **Implemented by**: developer
+> **Date**: 2026-07-23
 
-<!-- developer fills: what changed, deviations, test red→green evidence per bug, speed reasoning confirmation -->
+### What this section says, in plain terms
+
+All five bugs were fixed exactly as specified in the plan — no design deviations. For each bug a regression test was written and confirmed to fail on the pre-fix code, then confirmed to pass after the fix (see "Red→green evidence" below). The wider eval/training test suite was re-run to check nothing else broke; one unrelated pre-existing failure was observed and is explained below (it traces to a different developer's in-flight, uncommitted edits on files this plan explicitly excludes — not to anything changed here).
+
+### File-by-file summary
+
+- **`scripts/eval/eval_rollout.py`**
+  - Bug 1: extracted the run-tag derivation into a new module-level helper `_derive_run_tag(ckpt_path: Path) -> str` (placed just above `_pad_ragged`), and replaced the inline one-liner at the call site (now `run_tag = _derive_run_tag(ckpt_path)`) with a call to it. Logic matches the plan's derivation rule exactly (`_CKPT_CONTAINER_DIRNAMES = {"checkpoints", "models"}`).
+  - Bug 4: in both `_run_episode` and `_run_episode_with_recording`, introduced a running `step_key = rng_key` before each episode's step loop, and inside the loop split a fresh `act_key` per step (`step_key, act_key = jax.random.split(step_key)`) before calling `policy_fn`. `rng_key` itself is untouched, so `jax_reset`'s seeding is unaffected.
+  - Bug 5: added a new module-level helper `_assert_eval_obs_noise_supported(bm_cfg) -> None` (placed just above `_pad_ragged`, alongside the Bug-1 helper) that raises `NotImplementedError` when `bm_cfg.eval_obs_noise != "training"`. Wired into `main()` immediately after `params = load_env_params(config)`, before any episode runs. Message text matches the plan verbatim.
+- **`src/utils/evaluation_core.py`** — Bug 2: removed the `if record_stats:` gate around the step-0 seeding loop in `_run_parallel_env_eval` (lines formerly 565–581); the loop body is now unconditional, so first-generation slots get the same step-0 sentinel entry the refill block already writes unconditionally. The nested `if record_true_obs:` guard on `slot_true_obs` is preserved unchanged.
+- **`configs/logger/wandb.yaml`** — Bug 3a: `job_type: "defualt"` → `job_type: "default"`.
+- **`train.py`** — Bug 3b: added `"job_type": config.get_mandatory('wandb.job_type'),` to the `wandb_kwargs` dict literal (lines 668–674), alongside the sibling `get_mandatory` reads for `project`/`entity`/`group`. No change to line 403 (CLI-flag → config write already lands in `wandb.job_type`).
+
+### Tests added (all under `tests/`, following existing import patterns)
+
+1. `tests/scripts/test_eval_rollout_run_tag.py::test_step_dir_invocation_preserves_run_identity`
+2. `tests/scripts/test_parallel_eval_step0_seeding.py::test_first_generation_episodes_not_undercounted`
+3. `tests/training/test_wandb_job_type_wiring.py::test_job_type_passed_to_wandb_init`
+4. `tests/scripts/test_eval_stochastic_key_distinct.py::test_policy_fn_receives_distinct_keys_per_step`
+5. `tests/scripts/test_eval_obs_noise_guard.py::test_non_training_noise_mode_raises` + `test_training_noise_mode_does_not_raise`
+
+### Red→green evidence (per bug)
+
+Method: `git stash push -m "track-b-prefix-check" -- configs/logger/wandb.yaml scripts/eval/eval_rollout.py src/utils/evaluation_core.py train.py` (reverts exactly the 4 fixed files to pre-fix `HEAD` state, leaving the 5 new test files in place) → run the 5 test files → `git stash pop` (restores the fix; diff confirmed byte-identical to what was stashed) → re-run.
+
+**Pre-fix (red), all 6 test functions across the 5 files:**
+```
+FAILED tests/scripts/test_eval_rollout_run_tag.py::test_step_dir_invocation_preserves_run_identity
+  - AttributeError: module 'eval_rollout' has no attribute '_derive_run_tag'
+FAILED tests/scripts/test_parallel_eval_step0_seeding.py::test_first_generation_episodes_not_undercounted
+  - AssertionError: episode_lengths=[7, 7, 8, 8], expected all == max_steps=8
+FAILED tests/training/test_wandb_job_type_wiring.py::test_job_type_passed_to_wandb_init
+  - AssertionError: assert 'defualt' == 'default'
+FAILED tests/scripts/test_eval_stochastic_key_distinct.py::test_policy_fn_receives_distinct_keys_per_step
+  - AssertionError: expected 5 pairwise-distinct per-step keys, got 1 unique
+FAILED tests/scripts/test_eval_obs_noise_guard.py::test_non_training_noise_mode_raises
+  - AttributeError: module 'eval_rollout' has no attribute '_assert_eval_obs_noise_supported'
+FAILED tests/scripts/test_eval_obs_noise_guard.py::test_training_noise_mode_does_not_raise
+  - AttributeError: module 'eval_rollout' has no attribute '_assert_eval_obs_noise_supported'
+6 failed in 19.53s
+```
+
+**Post-fix (green):**
+```
+tests/scripts/test_eval_rollout_run_tag.py . 
+tests/scripts/test_parallel_eval_step0_seeding.py . 
+tests/training/test_wandb_job_type_wiring.py . 
+tests/scripts/test_eval_stochastic_key_distinct.py . 
+tests/scripts/test_eval_obs_noise_guard.py . .
+6 passed in 20.60s
+```
+
+### Broader suite run
+
+`/home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest tests/scripts tests/training tests/environment -q`
+
+```
+1 failed, 78 passed, 25 warnings in 251.93s (0:04:11)
+FAILED tests/environment/test_behavior_measures.py::test_t8_real_train_py_smoke - Failed: train.py failed with returncode 1 (ValueError: Incompatible shapes for broadcasting: shapes=[(4, 1), (3, 2), (1, 2)], raised in src/environment/core.py:1269 jax_reset, via train.py's real-subprocess smoke test)
+```
+
+**This failure is not caused by this plan's changes.** `test_t8_real_train_py_smoke` spawns a real `train.py` subprocess (with `--no-wandb`, so my `wandb_kwargs["job_type"]` line is never reached), and the traceback is entirely inside `src/environment/core.py::jax_reset` / entity-placement shape logic — a file this plan never touches. At the time of both runs, `git status` showed `src/environment/config_loader.py` and `configs/environment/experiment/basic/05-sensory_noise_10x10.yaml` as concurrently modified and uncommitted (Track A's in-flight work, per this session's routing — explicitly out of scope per the task's scope guard). Re-running the single test twice reproduced the identical failure deterministically, consistent with an in-progress (not-yet-consistent) edit on those files rather than a flake. **Flagging per instructions rather than touching those files.** Recommend `senior-developer` re-run this one test once Track A's edits land/settle to confirm it's clean on the merged state.
+
+### Speed check
+
+Per the plan's Speed note, none of these edits touch a training hot loop:
+- Bug 1/3/5 are one-time startup/label logic (run once per `eval_rollout.py`/`train.py` invocation, not per-step).
+- Bug 2 adds one step-0 append per env slot (already happened for `record_stats=True`; now unconditional — O(`effective_num_envs`) one-time cost, negligible).
+- Bug 4 adds one `jax.random.split` per eval step — this is in the **offline eval rollout**, not the training loop; `train.py`'s own step loop is untouched.
+No training-speed measurement was taken, per the plan's explicit exemption. Confirmed no training-path file (`src/environment/core.py`, `src/models/`, `train.py`'s step loop) was touched — the one `train.py` edit is a single dict-literal key added inside the one-time, pre-loop WandB-init block.
+
+### Deviations from the plan
+
+None. All five fixes match the plan's exact derivation rules, decided semantics, and code snippets. The `02_config_schema.md` sanity-check the plan asked for was performed: that doc covers only `environment`/`behavior_measures` config (via `load_env_params`/`load_behavior_measure_cfg`), never `configs/logger/wandb.yaml` or any `wandb.*` key at all — so there is no existing "wandb.job_type" row to fix, and adding one would be out of that doc's scope (not a one-line completeness fix, since no logger-config section exists there at all). No edit made; noting for `senior-developer` to confirm this reading is correct.
+
+### Scope guard confirmation
+
+Touched only: `scripts/eval/eval_rollout.py`, `src/utils/evaluation_core.py`, `configs/logger/wandb.yaml`, `train.py`, plus the 5 new test files under `tests/`. Did not touch `src/environment/config_loader.py` or `configs/environment/` (Track A's files), despite the incidental failure observed there during the full-suite run (flagged above, not fixed).
+
+### Blockers / follow-ups
+
+- `tests/environment/test_behavior_measures.py::test_t8_real_train_py_smoke` failure — needs re-check by `senior-developer` once Track A's concurrent edits to `config_loader.py`/`05-sensory_noise_10x10.yaml` are committed/stable (see above).
+- Per the plan's "Docs / maintenance side-effects": after this lands, `bug-curator` should flip the KNOWN_BUGS rows for these five bugs from OPEN/LATENT to FIXED with the fix commit (not done here — commit hasn't happened yet, per instructions to leave the tree dirty for verification).
 
 ## Verification Report
 
-> **Verified by**: [senior-developer]
-> **Date**: [date]
+> **Verified by**: senior-developer
+> **Date**: 2026-07-23
+
+### Plain-language verdict
+
+**PASS-WITH-NOTES.** All five bug fixes are implemented exactly as the plan specifies, each ships a regression test that genuinely reproduces the bug (confirmed green: 32/32 in `tests/scripts` + `tests/training`), and the `wandb.job_type` change cannot crash any existing launch. The single material note is a **commit-hygiene hazard, not a correctness defect**: the working-tree copy of `scripts/eval/eval_rollout.py` also contains a large, unrelated, uncommitted `--config-list` (multi-condition dwell-sweep) refactor that is **not** part of this plan and **not** mentioned in the Implementation Report — it is a third developer's in-flight work (the dwell-sweep perf session, diary `4efbe660`), and Track B's three edits sit interleaved on top of it. Whoever commits Track B must stage only Track B's hunks, or the commit will silently sweep in that unreviewed feature. The smoke-test failure the developer flagged is correctly attributed to Track A.
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `scripts/eval/eval_rollout.py` | Bug 1 run_tag + Bug 4 PRNG + Bug 5 guard | | |
-| `src/utils/evaluation_core.py` | Bug 2 step-0 seeding | | |
-| `configs/logger/wandb.yaml` | Bug 3a typo | | |
-| `train.py` | Bug 3b job_type wiring | | |
-| tests (×5) | one regression test per bug | | |
+| `scripts/eval/eval_rollout.py` | Bug 1 run_tag + Bug 4 PRNG + Bug 5 guard | ⚠️ | All 3 Track B edits correct & present (`_derive_run_tag`, per-step `step_key` split in both episode loops with `rng_key` preserved, `_assert_eval_obs_noise_supported` called per-entry after `load_env_params`). **But** the file also carries a large out-of-plan `--config-list` dwell-sweep refactor (`_parse_config_list`, `_resolve_entry`, `_make_policy_fn`, `_run_rppo_entry`, per-entry loops in both rPPO & Dreamer branches). Out of scope — flagged for commit isolation, not reviewed here. |
+| `src/utils/evaluation_core.py` | Bug 2 step-0 seeding | ✅ | `if record_stats:` gate removed; loop body unconditional; nested `record_true_obs` guard preserved. Exactly matches plan. |
+| `configs/logger/wandb.yaml` | Bug 3a typo | ✅ | `"defualt"` → `"default"`. |
+| `train.py` | Bug 3b job_type wiring | ✅ | Single added line `"job_type": config.get_mandatory('wandb.job_type'),` in `wandb_kwargs`. Cannot crash: `job_type` is a sibling of `disabled`/`project`/`entity`/`group` in the same `configs/logger/wandb.yaml` block, all already read via `get_mandatory` on any path reaching `wandb.init`. |
+| tests (×5) | one regression test per bug | ✅ | All 5 present, all target the bug behavior (not implementation detail), all pass. Bug 3's test uses the plan-authorized textual-assertion fallback (grep of the `wandb_kwargs` literal); weakest of the five but explicitly pre-approved. |
 
-**Conclusion**: [one-line summary]
+### Checks against the task's 5 questions
+
+1. **Every plan item implemented as specified** — YES. run_tag grandparent rule handles all four forms (rPPO `<run>/models/<step>` → run, Dreamer `<run>/checkpoints/<step>` → run, CheckpointManager-root `<run>/models` → run, bare form → parent); step-0 seeding is now unconditional; `job_type` wired via `get_mandatory` and the `"defualt"` typo fixed; per-step key split leaves `rng_key` (the `jax_reset` key) untouched; `NotImplementedError` guard added and wired before any episode runs.
+2. **Regression tests meaningful** — YES. Spot-checked all five: they assert the bug (undercounted episode lengths, duplicate PRNG keys, missing helper / raise, collapsed run_tag), not incidental implementation. Developer's stash-based red→green evidence is consistent with the code.
+3. **Scope expansion** — the four Track B files themselves are surgical, **but** `eval_rollout.py` in the working tree is entangled with an unrelated `--config-list` refactor (third stream). Not attributable to the Track B developer (their "Deviations: None" is truthful about their own edits), but it is a real commit hazard. The other three files are clean.
+4. **`get_mandatory('wandb.job_type')` safety** — CANNOT crash existing launches. `job_type` lives in the same `wandb:` block as `disabled`/`entity`/`project`/`group`; those are already read via `get_mandatory` (the guard `get_mandatory('wandb.disabled')` and the three sibling reads in the same dict literal). Any config layering — including tag-based `train_command` launches — that reaches `wandb.init` must already provide the whole block or it would have crashed pre-change. Adding a sibling key from that same file introduces no new crash surface.
+5. **Tests re-run** — `pytest tests/scripts tests/training -q` → **32 passed, 0 failed** (245s), covering all 5 new tests plus the existing eval/training suites.
+
+### Smoke-test attribution (Track A) — HOLDS
+
+`tests/environment/test_behavior_measures.py::test_t8_real_train_py_smoke` fails with a broadcasting error `shapes=[(4,1),(3,2),(1,2)]` at `src/environment/core.py:1269` inside `jax_reset` — the entity off-grid-parking `jnp.where(activation_mask[:, None], pos, _off_grid[None, :])` logic, i.e. a mask-slot-count vs entity-count mismatch. That mismatch originates in the placement params built by `src/environment/config_loader.py`, which Track A has uncommitted (+41/−14) alongside `configs/environment/experiment/basic/05-sensory_noise_10x10.yaml`. Track B's diff **cannot** cause it: the smoke test runs with `--no-wandb` (so the new `job_type` line in `train.py` is never reached), `eval_rollout.py` is a standalone script not imported by `train.py`, and `evaluation_core.py`'s change is to `_run_parallel_env_eval` (eval-only, downstream of the reset that fails). Recommend re-running this single test once Track A lands and settles.
+
+### Speed
+
+No training-hot-loop impact; developer's reasoning confirmed (Bug 1/3/5 one-time startup/label; Bug 2 one step-0 append per slot; Bug 4 one `jax.random.split` per **eval** step only). ✅ no regression — no measurement required.
+
+**Conclusion**: PASS-WITH-NOTES — all five Track B fixes correct, tested, and safe; the only action item is to commit Track B's `eval_rollout.py` hunks in isolation so the unrelated in-flight `--config-list` dwell-sweep refactor is not swept in unreviewed.

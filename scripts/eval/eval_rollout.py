@@ -93,9 +93,11 @@ def _run_episode(
     }
     step = 0
     done = False
+    step_key = rng_key
     while step < max_steps and not done:
         obs = state  # obs = full state (policy sees sensory obs internally)
-        action, carry = policy_fn(obs, carry, rng_key, deterministic=deterministic)
+        step_key, act_key = jax.random.split(step_key)
+        action, carry = policy_fn(obs, carry, act_key, deterministic=deterministic)
         next_state, reward, done_flag, info = jax_step(state, action, params)
 
         records["agent_pos"].append(np.array(state.agent_pos))
@@ -132,6 +134,47 @@ def _run_episode(
         "termination_reason": np.int32(records["termination_reason"]),
         "length": np.int32(T),
     }
+
+
+# Checkpoint-container dir names: "checkpoints" (Dreamer), "models" (rPPO, train.py:623).
+# A step-dir invocation is <run>/<container>/<step>; the run identity is the grandparent.
+_CKPT_CONTAINER_DIRNAMES = {"checkpoints", "models"}
+
+
+def _derive_run_tag(ckpt_path: Path) -> str:
+    """Derive the run-identity tag from a checkpoint path.
+
+    If the checkpoint's immediate parent directory name is a known
+    checkpoint-container name (`_CKPT_CONTAINER_DIRNAMES`), the run tag is the
+    grandparent directory name (the run directory); otherwise the run tag is
+    the parent directory name.
+    """
+    return (
+        ckpt_path.parent.parent.name
+        if ckpt_path.parent.name in _CKPT_CONTAINER_DIRNAMES
+        else ckpt_path.parent.name
+    )
+
+
+def _assert_eval_obs_noise_supported(bm_cfg) -> None:
+    """Fail loud if `behavior_measures.eval_obs_noise` requests a mode the
+    rollout does not actually enforce.
+
+    Only "training" (the env's configured/training-time noise) is honored
+    today; "zero" and "custom" would require threading `apply_noise` through
+    four independent obs-computation code paths (see docs/develop/active/
+    issues/FIX_EVAL_LOGGING_TRACK_B_20260723.md, Bug 5). Rather than silently
+    running with training noise while `metadata.json` claims otherwise, raise
+    at startup before any episode runs.
+    """
+    if bm_cfg.eval_obs_noise != "training":
+        raise NotImplementedError(
+            f"behavior_measures.eval_obs_noise={bm_cfg.eval_obs_noise!r} is not enforced by the "
+            "rollout — the policy always sees the env's configured (training) noise. Only "
+            "'training' is currently honored; 'zero'/'custom' would require threading "
+            "apply_noise through every obs path (see docs/develop/active/issues/"
+            "FIX_EVAL_LOGGING_TRACK_B_20260723.md, Bug 5). Set eval_obs_noise: 'training'."
+        )
 
 
 def _pad_ragged(rows):
@@ -197,8 +240,10 @@ def _run_episode_with_recording(
     step = 0
     done = False
     info = {}
+    step_key = rng_key
     while step < max_steps and not done:
-        action, carry = policy_fn(state, carry, rng_key, deterministic=deterministic)
+        step_key, act_key = jax.random.split(step_key)
+        action, carry = policy_fn(state, carry, act_key, deterministic=deterministic)
         next_state, reward, done_flag, info = jax_step(state, action, params)
 
         records["agent_pos"].append(np.array(state.agent_pos))
@@ -893,6 +938,7 @@ def main():
         )
 
     params = load_env_params(config)
+    _assert_eval_obs_noise_supported(bm_cfg)
     max_steps = int(config.get_mandatory("environment.max_steps"))
 
     # --- Derive checkpoint_pct label (directory-name-safe) ---
@@ -905,7 +951,7 @@ def main():
 
     # --- Determine output dir ---
     ckpt_path = Path(args.checkpoint).resolve()
-    run_tag = ckpt_path.parent.name if ckpt_path.parent.name != "checkpoints" else ckpt_path.parent.parent.name
+    run_tag = _derive_run_tag(ckpt_path)
     out_root = Path(args.output_root) if args.output_root else Path(bm_cfg.eval_output_root)
     out_dir = out_root / run_tag / ckpt_path.name
     out_dir.mkdir(parents=True, exist_ok=True)

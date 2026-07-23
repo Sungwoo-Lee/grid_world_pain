@@ -562,23 +562,22 @@ def _run_parallel_env_eval(model, params, config, num_episodes, effective_num_en
     slot_obs = [[] for _ in range(effective_num_envs)]
     slot_true_obs = [[] for _ in range(effective_num_envs)] if record_true_obs else None
     
-    if record_stats:
-        for i in range(effective_num_envs):
-            slot_states[i].append({
-                'agent_pos': states.agent_pos[i], 'satiation': states.satiation[i], 'nutrition': states.nutrition[i],
-                'injury_level': states.injury_level[i], 'rest_streak': states.rest_streak[i],
-                'res_pos': states.res_pos[i], 'res_active': states.res_active[i],
-                'animal_pos': states.animal_pos[i], 'obs_pos': states.obs_pos[i],
-            })
-            slot_infos[i].append({})
-            slot_actions[i].append(-1)
-            slot_rewards[i].append(0.0)
-            slot_obs[i].append(obs[i])
-            if record_true_obs:
-                true_obs_i = get_observation(
-                    jax.tree_util.tree_map(lambda x: x[i], states), params_ref, apply_noise=False
-                )
-                slot_true_obs[i].append(true_obs_i)
+    for i in range(effective_num_envs):
+        slot_states[i].append({
+            'agent_pos': states.agent_pos[i], 'satiation': states.satiation[i], 'nutrition': states.nutrition[i],
+            'injury_level': states.injury_level[i], 'rest_streak': states.rest_streak[i],
+            'res_pos': states.res_pos[i], 'res_active': states.res_active[i],
+            'animal_pos': states.animal_pos[i], 'obs_pos': states.obs_pos[i],
+        })
+        slot_infos[i].append({})
+        slot_actions[i].append(-1)
+        slot_rewards[i].append(0.0)
+        slot_obs[i].append(obs[i])
+        if record_true_obs:
+            true_obs_i = get_observation(
+                jax.tree_util.tree_map(lambda x: x[i], states), params_ref, apply_noise=False
+            )
+            slot_true_obs[i].append(true_obs_i)
     
     h_state = model.initial_state(batch_size=effective_num_envs) if model is not None and hasattr(model, 'initial_state') else None
     completed_episodes = 0
