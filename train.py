@@ -224,11 +224,12 @@ PROBE_EVAL_DRAIN_TIMEOUT_S = 300
 # background CPU eval before the process actually exits.
 PROBE_EVAL_DRAIN_TIMEOUT_S_INTERRUPTED = 5
 
-# Live WandB gets a FOCUSED subset (3 measures x 3 conditions = 9 series); the full 11
-# measures x N conditions are always written to CSV regardless of this filter (see
-# probe_eval_checkpoint.py) -- a live-panel readability choice only, not a data-loss one.
-PROBE_EVAL_FOCUS_MEASURES = ("bush_dwell", "survival_steps", "spatial_spread")
-PROBE_EVAL_FOCUS_CONDS = ("pred_inj00", "none_inj00", "rabbit_inj00")
+# Live WandB gets bush_dwell + survival_steps for ALL 12 conditions (= 24 series);
+# PROBE_EVAL_FOCUS_CONDS = None means "no condition filter -- log every condition".
+# The full 11 measures x 12 conditions are always written to CSV regardless (see
+# probe_eval_checkpoint.py) -- this filter is a live-panel choice only, not data loss.
+PROBE_EVAL_FOCUS_MEASURES = ("bush_dwell", "survival_steps")
+PROBE_EVAL_FOCUS_CONDS = None  # None = all conditions; or a tuple of stems to restrict
 
 _PROBE_EVAL_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                    "scripts", "eval", "probe_eval_checkpoint.py")
@@ -329,7 +330,7 @@ def _poll_and_log_probe_results(probe_state, results_dir, iteration, global_step
                 flat = {}
                 for cond, meas in data.get("measures", {}).items():
                     short = cond.replace("avoid_", "")
-                    if short not in PROBE_EVAL_FOCUS_CONDS:
+                    if PROBE_EVAL_FOCUS_CONDS is not None and short not in PROBE_EVAL_FOCUS_CONDS:
                         continue
                     for k, v in meas.items():
                         if v is None or k not in PROBE_EVAL_FOCUS_MEASURES:
