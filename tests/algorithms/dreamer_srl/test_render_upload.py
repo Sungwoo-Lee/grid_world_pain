@@ -40,6 +40,7 @@ def test_render_and_upload_empty_dir(tmp_path):
         checkpoint_pct=0,
         fps=5,
         wandb_enabled=False,
+        policy_step=0,
         quiet=True,
     )
     # render_recordings.py should fail (no episodes) → returns None
@@ -85,6 +86,7 @@ def test_render_and_upload_produces_mp4(tmp_path):
         checkpoint_pct=5,
         fps=5,
         wandb_enabled=False,
+        policy_step=500,
         quiet=True,
     )
     assert mp4_path is not None, (

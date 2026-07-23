@@ -406,6 +406,20 @@ def _advance_episode_counters(episode_lengths, episode_rewards, rewards, dones,
     episode_rewards[alive] += rewards[alive].astype(np.float32)
 
 
+def _eval_scalar_prefix(is_video_pass: bool, stats_during_training: bool) -> str:
+    """Namespace for a checkpoint-eval pass's scalar metrics.
+
+    The many-episode stats pass owns the authoritative ``Eval/`` keys. The
+    small video pass falls back to ``Eval/`` only when the stats pass is off
+    (default config); otherwise it writes ``Eval/video/`` so it can never
+    contaminate the authoritative survival-step curve. See
+    docs/develop/active/dreamer/DREAMER_SRL_EVAL_TELEMETRY_FIX.md.
+    """
+    if is_video_pass and stats_during_training:
+        return "Eval/video/"
+    return "Eval/"
+
+
 def main() -> None:
     """Training-loop driver — port of sheeprl dreamer_v3.py:L361-L765 main()."""
 
@@ -1659,7 +1673,7 @@ def main() -> None:
                             "stage/transition":    1,
                             "stage/buffer_cleared": _pre_size,
                             "Episode/Number":      total_episodes_completed,
-                        })
+                        }, step=policy_step)
 
             # -------------------------------------------------------------------
             # Commit B — Orbax checkpoint trigger (episode-based).
@@ -1722,22 +1736,25 @@ def main() -> None:
                                 checkpoint_pct=total_episodes_completed,
                                 fps=viz_fps,
                                 wandb_enabled=use_wandb,
+                                policy_step=policy_step,
                                 quiet=args.quiet,
                             )
-                        # Log Eval/* to WandB (mirrors train.py:L2466-L2467)
-                        # Note: no explicit step= kwarg — render subprocess (~13s) advances
-                        # WandB's internal step counter during eval, so passing the old
-                        # policy_step triggers "Tried to log to step N < current step M".
-                        # define_metric("Eval/*", step_metric="timesteps") routes the
-                        # X-axis via the "timesteps" key in the dict instead.
+                        # Log the video pass's scalars. When the stats pass is
+                        # ALSO enabled it owns the authoritative Eval/Mean* keys,
+                        # so the video pass writes Eval/video/* instead (no
+                        # sawtooth). step=policy_step keeps the global WandB
+                        # counter monotone; the render subprocess does NOT touch
+                        # it (it is a child process).
                         if use_wandb:
                             import wandb as _wandb
+                            _p = _eval_scalar_prefix(is_video_pass=True,
+                                                     stats_during_training=stats_during_training)
                             _wandb.log({
-                                'Eval/MeanReward': _eval_result['mean_reward'],
-                                'Eval/MeanLength': _eval_result['mean_length'],
+                                f'{_p}MeanReward': _eval_result['mean_reward'],
+                                f'{_p}MeanLength': _eval_result['mean_length'],
                                 'iteration':       iter_num,
                                 'timesteps':       policy_step,
-                            })
+                            }, step=policy_step)
 
                     # Pass 2: Stats (no video; just scalar metrics)
                     if stats_during_training:
@@ -1758,11 +1775,11 @@ def main() -> None:
                         if use_wandb:
                             import wandb as _wandb
                             _wandb.log({
-                                'Eval/MeanReward': _stats_result['mean_reward'],
+                                'Eval/MeanReward': _stats_result['mean_reward'],  # N=eval_stats_episodes (authoritative)
                                 'Eval/MeanLength': _stats_result['mean_length'],
                                 'iteration':       iter_num,
                                 'timesteps':       policy_step,
-                            })
+                            }, step=policy_step)
 
         else:
             _just_saved_ckpt = False

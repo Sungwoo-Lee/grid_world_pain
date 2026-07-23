@@ -284,11 +284,11 @@ No new config keys. Routing is derived from the already-mandatory `training.stat
 
 ## Checkpoints
 
-- [ ] After the `eval.py` change, grep confirms `upload_video(` in `_render_and_upload` passes `step=policy_step` and `episode=checkpoint_pct` (two distinct values).
-- [ ] After the `dreamer_srl_main.py` changes, grep confirms **no** `wandb.log(` / `_wandb.log(` / `_wandb_stage.log(` in the eval/stage/checkpoint block (≈1650–1770) lacks an explicit `step=` kwarg.
-- [ ] `_eval_scalar_prefix(True, False) == "Eval/"`, `_eval_scalar_prefix(True, True) == "Eval/video/"`, `_eval_scalar_prefix(False, *) == "Eval/"`.
-- [ ] `python -c "import ast,sys; ast.parse(open('src/algorithms/dreamer_srl/dreamer_srl_main.py').read())"` and same for `eval.py` — files parse.
-- [ ] `stats_during_training` is in scope at line ~1733 (resolved at `:615`) — confirm before referencing it in the video-pass log.
+- [x] After the `eval.py` change, grep confirms `upload_video(` in `_render_and_upload` passes `step=policy_step` and `episode=checkpoint_pct` (two distinct values).
+- [x] After the `dreamer_srl_main.py` changes, grep confirms **no** `wandb.log(` / `_wandb.log(` / `_wandb_stage.log(` in the eval/stage/checkpoint block (≈1650–1770) lacks an explicit `step=` kwarg.
+- [x] `_eval_scalar_prefix(True, False) == "Eval/"`, `_eval_scalar_prefix(True, True) == "Eval/video/"`, `_eval_scalar_prefix(False, *) == "Eval/"`.
+- [x] `python -c "import ast,sys; ast.parse(open('src/algorithms/dreamer_srl/dreamer_srl_main.py').read())"` and same for `eval.py` — files parse.
+- [x] `stats_during_training` is in scope at line ~1733 (resolved at `:615`) — confirm before referencing it in the video-pass log.
 
 ---
 
@@ -314,26 +314,92 @@ Add `test_eval_telemetry.py` (and optionally `test_eval_telemetry_wandb.py`) to 
 
 ## Implementation Report
 
-> **Implemented by**: [agent/person]
-> **Date**: [date]
+> **Implemented by**: developer
+> **Date**: 2026-07-24
 
-<!-- Filled by the developer agent. Record: actual diff summary, any deviation from
-     the routing/seed decisions above, and — since these are wandb.log-timing changes
-     that do not touch the hot loop — a one-line note on whether step throughput
-     changed (expected: none; the added kwargs and helper are O(1) per checkpoint). -->
+### What this section is about (plain-language)
+
+This fixes three telemetry bugs in how the live "Dreamer" agent reports its training progress to the WandB dashboard: (1) eval videos never showed up because they were timestamped with an episode count instead of the env-step clock the dashboard actually uses, (2) three logging calls without an explicit timeline position could silently eat the next 1-3 real training rows, and (3) two different eval passes (a cheap 3-episode "video" pass and an optional expensive 100-episode "stats" pass) were both writing the same `Eval/MeanReward`/`Eval/MeanLength` keys, causing the curve to saw-tooth. All three are fixed exactly as specified in the plan; no behavior of the agent itself changed, only what gets logged and when.
+
+### Files changed
+
+1. **`src/algorithms/dreamer_srl/eval.py`** — `_render_and_upload()` gained a required `policy_step: int` parameter (positioned before `quiet`, matching the plan's spec exactly). The `upload_video(...)` call now passes `step=policy_step` (env-step clock, forward-moving) instead of `step=checkpoint_pct` (episode count, which was going backward relative to the dashboard's step axis and being silently dropped by WandB). `episode=checkpoint_pct` is unchanged (still the `eval/checkpoint_episode` label). Docstring updated to document the new param and the episode-label-vs-step-axis distinction.
+
+2. **`src/algorithms/dreamer_srl/dreamer_srl_main.py`**:
+   - Added the pure helper `_eval_scalar_prefix(is_video_pass, stats_during_training) -> str` (module scope, right before `main()`), exactly as specified in the plan — returns `"Eval/video/"` only when both the video pass is active and the stats pass is also enabled, else `"Eval/"`.
+   - Stage-transition log (`_wandb_stage.log(...)`, curriculum-mode stage swap): added `step=policy_step`.
+   - Video-pass `_render_and_upload(...)` call: now passes `policy_step=policy_step`.
+   - Video-pass `Eval/*` log: replaced the (now-incorrect) comment blaming the render subprocess for step-counter advancement with the real explanation; routes keys through `_eval_scalar_prefix(is_video_pass=True, stats_during_training=stats_during_training)`; added `step=policy_step`.
+   - Stats-pass `Eval/*` log: added an inline comment noting it is the authoritative N=`eval_stats_episodes` estimator; added `step=policy_step`.
+
+3. **`tests/algorithms/dreamer_srl/test_eval_telemetry.py`** (new) — T1 (video upload uses `policy_step`), T2 (`_eval_scalar_prefix` routing), T3 (locked paired-eval seed policy guard).
+
+4. **`tests/algorithms/dreamer_srl/test_eval_telemetry_wandb.py`** (new) — T4, implemented as the plan's primary (non-downgraded) integration spec: drives a real `dreamer_srl_main.main()` in-process against a tiny single-env config, `WANDB_MODE=offline` (no network call, but real WandB client-side step bookkeeping), and asserts explicit + monotone `step=` across every logged row, plus that the video-upload row and the `Eval/Mean*` row share the checkpoint's `policy_step`.
+
+### Deviation from the plan (flagged, not silent)
+
+**Unlisted file touched**: `tests/algorithms/dreamer_srl/test_render_upload.py` (2 call-site edits — added `policy_step=0` and `policy_step=500` to the two `_render_and_upload(...)` calls). This file is **not** in the plan's File Changes section. It broke as a direct, mechanical consequence of the plan's own required-signature change (`_render_and_upload` gained a required positional-or-keyword `policy_step` param with no default, exactly as the plan's BEFORE/AFTER diff specifies). Running the existing dreamer_srl suite after the fix (per my standing instructions) surfaced this as the sole regression: `test_render_and_upload_empty_dir` failed with `TypeError: _render_and_upload() missing 1 required positional argument: 'policy_step'`. Fixing it was the minimal, necessary action to keep a pre-existing test passing after the plan's intended signature change — no new scope, no behavior change beyond supplying the new required arg. Flagging here per the "stop and flag it" instruction rather than silently expanding the plan's file list.
+
+### T4 implementation note (not a downgrade)
+
+The plan offered a fallback ("if driving `main()` proves too heavy, downgrade to a documented manual smoke check"). Driving `main()` in-process worked without downgrading, using two techniques not spelled out in the plan:
+- `WANDB_MODE=offline` (+ `WANDB_DIR` pointed at `tmp_path`) lets `wandb.init()` run for real with no network call, so the test exercises WandB's actual client-side step bookkeeping rather than a hand-rolled stub.
+- Monkeypatching `wandb.log` directly does **not** work here: `wandb.init()` reassigns the `wandb.log` module attribute to a fresh bound method of the new `Run` right after init, silently overwriting any pre-init patch (verified empirically — first attempt captured zero calls). The fix patches `wandb.sdk.wandb_run.Run.log` (the **class** method) before calling `main()`; the bound-method reassignment inside `wandb.init()` then resolves against the already-patched class, so the capture survives. This is a discovery worth carrying forward for any future test that needs to intercept `wandb.log` around a real `wandb.init()` call.
+
+### Test results — per-item red→green
+
+| Test | Pre-fix | Post-fix |
+|---|---|---|
+| T1 `test_video_upload_uses_policy_step_clock` | **FAILED** — `TypeError: _render_and_upload() got an unexpected keyword argument 'policy_step'` | **PASSED** |
+| T2 `test_eval_scalar_prefix_routing` | **FAILED** — `ImportError: cannot import name '_eval_scalar_prefix'` | **PASSED** |
+| T3 `test_video_and_stats_share_seed_paired_eval` | **PASSED** (expected — this is a locked-design guard, not a regression test; documented in the test docstring and the plan) | **PASSED** |
+| T4 `test_eval_logs_monotone_explicit_steps` | not run pre-fix (plan spec: this test targets Items 1+2 jointly and is meaningful only once T1/T2 are green; its own red state would just be a duplicate of T1's TypeError since `main()` calls `_render_and_upload` the same way) | **PASSED** — all logged `step=` values are non-`None` ints, monotone non-decreasing across the whole run, and the `eval/video` row shares `step` with the `Eval/Mean*` row at each checkpoint |
+
+Commands:
+```
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest tests/algorithms/dreamer_srl/test_eval_telemetry.py -v
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest tests/algorithms/dreamer_srl/test_eval_telemetry_wandb.py -v -s
+```
+
+### Regression check — existing dreamer_srl suite
+
+Full fast suite (`-m "not slow"`, 139 collected, 4 deselected including the new T4):
+```
+/home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest tests/algorithms/dreamer_srl/ -m "not slow" -q --deselect tests/algorithms/dreamer_srl/test_eval_telemetry_wandb.py
+```
+First pass: **1 failed** (`test_render_upload.py::test_render_and_upload_empty_dir`, the flagged deviation above), **136 passed, 2 skipped, 4 deselected** (1397.16s). After fixing the call sites: **19/19 passed** on a targeted re-run covering the touched area (`test_render_upload.py`, `test_eval_telemetry.py`, `test_eval_telemetry_wandb.py`, `test_eval_rollout.py`, `test_eval_rollout_batched.py`, `test_checkpoint.py`) in 361.30s, plus the two `@pytest.mark.slow` end-to-end tests in `test_eval_video_smoke.py` (2/2 passed, 235.16s) — these directly exercise the checkpoint-triggered eval + video-render + WandB-log path this plan touches.
+
+No other regressions found. `wandb_utils.py` and `evaluation_core.py` (rPPO path) were not touched, per the plan's explicit constraint.
+
+### Speed check
+
+**Skipped, with justification**: the changed lines are (a) one new required function parameter threaded through, (b) four `step=` kwargs added to existing `wandb.log(...)` calls, and (c) one pure string-returning helper called once per checkpoint-eval pass. None of this touches the hot loop (env step, model forward/backward, vmap/jit boundaries) — it only runs inside the already-existing, already-gated `if use_wandb:` checkpoint-eval block, which fires once per `checkpoint_frequency` episodes, not per training iteration. The added work is O(1) per checkpoint and provably cannot affect steps-per-second. Confirmed no throughput-sensitive code path was touched by inspecting the diff (all edits are in the `if use_wandb:` / `if video_during_training or stats_during_training:` checkpoint-eval branch, `dreamer_srl_main.py:1650-1770` and `eval.py:_render_and_upload`).
+
+### Blockers / follow-ups
+
+None. All File Changes items complete; all Checkpoints confirmed (marked `[x]` above); all four T1-T4 test specs implemented per the plan (T4 without needing the documented fallback downgrade).
 
 ## Verification Report
 
-> **Verified by**: [agent/person]
-> **Date**: [date]
+> **Verified by**: senior-developer
+> **Date**: 2026-07-24
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/algorithms/dreamer_srl/eval.py` | `_render_and_upload` gains `policy_step`, uploads on env-step clock | | |
-| `src/algorithms/dreamer_srl/dreamer_srl_main.py` | helper + 4 log sites on `step=policy_step`, video/stats key split | | |
-| `src/utils/wandb_utils.py` | UNTOUCHED (rPPO byte-identical) | | |
-| `tests/algorithms/dreamer_srl/test_eval_telemetry*.py` | T1–T4 added | | |
+| `src/algorithms/dreamer_srl/eval.py` | `_render_and_upload` gains required `policy_step`, uploads `step=policy_step` / `episode=checkpoint_pct` | ✅ | Diff matches plan BEFORE/AFTER exactly (T1). Docstring updated. |
+| `src/algorithms/dreamer_srl/dreamer_srl_main.py` | `_eval_scalar_prefix` helper + stage/video/stats log sites on `step=policy_step`, video/stats key split | ✅ | Helper logic exact (`video&&stats→Eval/video/`, else `Eval/`); all three edited sites carry `step=policy_step`; misleading render-subprocess comment removed (T2). |
+| `src/utils/wandb_utils.py` | UNTOUCHED (rPPO byte-identical) | ✅ | Not in `git diff --stat`; grep confirms no rPPO path reaches the changed `_render_and_upload`. |
+| `src/algorithms/recurrent_ppo/{evaluation_core,train}.py` | UNTOUCHED (rPPO isolation) | ✅ | Not modified; the shared `upload_video` is reached via a different call site, left byte-identical. |
+| `tests/algorithms/dreamer_srl/test_render_upload.py` | deviation: 2 call sites gain `policy_step=` | ✅ | Minimal, forced by the required-signature change; scope-appropriate. |
+| `tests/algorithms/dreamer_srl/test_eval_telemetry.py` (new) | T1–T3 | ✅ | Asserts the decided semantics (step/episode split, 4-case routing, paired-eval lock). |
+| `tests/algorithms/dreamer_srl/test_eval_telemetry_wandb.py` (new) | T4 | ✅ | Real-`main()` monotone-step integration; passed. |
 
-**Conclusion**: [one-line summary]
+**Monotone-step audit**: every `wandb.log` in `dreamer_srl_main.py` (lines 1085 via all three `_emit_episode_row` callers, 1671, 1752, 1777, 2059) and the `upload_video` in `eval.py` now carries an explicit `step=policy_step`. No step-less `wandb.log` remains that could bump WandB's internal counter. ✅
+
+**Test re-run (this verification)**: `test_eval_telemetry.py` + `test_render_upload.py` 6/6 passed (111.79s); `test_eval_telemetry_wandb.py` 1/1 passed (148.36s); `test_eval_video_smoke.py` slow pair 2/2 passed (209.31s).
+
+**Speed**: ✅ no regression — all edits are inside the already-gated per-checkpoint `if use_wandb:` eval block (O(1) per checkpoint), not the hot loop; developer's skip justification is sound.
+
+**Conclusion**: ✅ All three telemetry defects fixed exactly per plan; rPPO path provably untouched; monotone-step guarantee holds; the sole deviation is minimal and forced. Approved — no issues.
 </content>
 </invoke>

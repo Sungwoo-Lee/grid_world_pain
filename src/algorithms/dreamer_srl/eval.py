@@ -511,6 +511,7 @@ def _render_and_upload(
     checkpoint_pct: int,
     fps: int,
     wandb_enabled: bool,
+    policy_step: int,
     quiet: bool = True,
 ) -> Optional[str]:
     """Subprocess-render recordings → consolidated MP4, then WandB-upload.
@@ -521,9 +522,15 @@ def _render_and_upload(
     Args:
         recordings_dir: path to <results_dir>/recordings/<checkpoint_pct>/.
         results_dir: root results dir (videos written to results_dir/videos/).
-        checkpoint_pct: episode label for the video filename.
+        checkpoint_pct: episode label for the video filename AND the
+            `eval/checkpoint_episode` payload (episode count, NOT the WandB
+            step axis).
         fps: frames-per-second for the rendered video.
         wandb_enabled: if True, upload the MP4 to the active WandB run.
+        policy_step: WandB step axis (env-step clock). The run's dashboard
+            timeline is driven by `policy_step`, not the episode count, so
+            the upload must be stamped with `step=policy_step` — otherwise
+            it lands backward on the timeline and WandB silently drops it.
         quiet: suppress subprocess stdout (stderr still printed on failure).
 
     Returns:
@@ -564,8 +571,8 @@ def _render_and_upload(
             from src.utils.wandb_utils import upload_video
             upload_video(
                 consolidated,
-                episode=checkpoint_pct,
-                step=checkpoint_pct,
+                episode=checkpoint_pct,   # -> eval/checkpoint_episode payload (episode label)
+                step=policy_step,         # env-step clock: forward step, no longer dropped
                 caption=f'Episode {checkpoint_pct}',
                 quiet=True,
             )
