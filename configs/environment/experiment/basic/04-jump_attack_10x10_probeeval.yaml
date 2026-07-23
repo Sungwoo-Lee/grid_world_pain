@@ -1,7 +1,0 @@
-# basic04 (ranged-pounce predator) + eval-during-training enabled.
-# Identical env to 04-jump_attack_10x10; adds the training override that opts this
-# run into the async behavior-probe eval -> live WandB (Probe/* series).
-# See docs/develop/active/behavior/PROBE_EVAL_DURING_TRAINING.md.
-extends: environment/experiment/basic/04-jump_attack_10x10
-training:
-  probe_eval_during_training: true

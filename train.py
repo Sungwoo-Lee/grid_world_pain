@@ -403,6 +403,8 @@ def main():
     parser.add_argument("--quiet", action="store_true", help="Suppress output and progress bar")
     parser.add_argument("--debug", action="store_true", help="Show verbose step-by-step progress logging")
     parser.add_argument("--checkpoint-frequency", type=int, help="Save checkpoint every N episodes/evals")
+    parser.add_argument("--probe-eval", action="store_true",
+                        help="Enable async behavior-probe eval during training (overrides training.probe_eval_during_training=true). rPPO only.")
     parser.add_argument("--load-checkpoint", type=str, help="Path to checkpoint to resume from")
     parser.add_argument("--wandb-resume-id", type=str, help="WandB Run ID to resume logging")
 
@@ -581,6 +583,7 @@ def main():
     if args.no_satiation: config.set('body.with_satiation', False)
     if args.no_overeating_death: config.set('body.overeating_death', False)
     if args.checkpoint_frequency is not None: config.set('training.checkpoint_frequency', args.checkpoint_frequency)
+    if args.probe_eval: config.set('training.probe_eval_during_training', True)
 
     # 1.5 Print Combined Configuration (Always)
     if not args.quiet:
