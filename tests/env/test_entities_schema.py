@@ -5,7 +5,8 @@ Tests:
   2. Byte-parity: smoke config (unified schema) vs legacy config
      (01-interoNocicept_sameProp.yaml) — 100 steps from seed 0,
      byte-identical obs.
-  3. Both legacy + unified sections present → loader prefers unified,
+  3. Both legacy + unified sections present → loader prefers the legacy sections
+     (precedence flipped by FIX_CONFIG_LAYER_SILENT_FAILURES_20260723 Bug 1),
      emits DeprecationWarning.
   4. Config with residual predator_enabled key raises ValueError.
   5. Unified config with behaviour: hunt and missing detection_range
@@ -226,8 +227,16 @@ def test_entities_smoke_byte_parity():
 
 # ── Test 3: Both schemas present → unified wins + DeprecationWarning ──────────
 
-def test_both_schemas_warns_and_prefers_unified():
-    """Loader emits DeprecationWarning when both entities: and legacy sections present."""
+def test_both_schemas_warns_and_prefers_legacy():
+    """Loader emits DeprecationWarning when both entities: and legacy sections present.
+
+    Precedence updated by FIX_CONFIG_LAYER_SILENT_FAILURES_20260723 (Bug 1): when the
+    user file itself authors legacy predators:/neutral_animals: sections, THOSE win —
+    even though an entities: list is also present here (in this test, authored
+    directly in the same file; in practice this precedence matters when entities:
+    instead arrives via the default.yaml base underlay under train.py). This keeps
+    train.py and eval_rollout.py agreeing on legacy configs' animal scene.
+    """
     both_yaml = """
 environment:
   entities:
@@ -274,12 +283,12 @@ environment:
                    for dw in dep_warnings), (
             f"DeprecationWarning not about entities/unified: {[str(dw.message) for dw in dep_warnings]}"
         )
-    # Unified took precedence: animal_tags from entities: schema
-    assert "wolf" in params.animal_tags, (
-        f"Expected 'wolf' (unified) in animal_tags, got {params.animal_tags}"
+    # Legacy took precedence: animal_tags from predators:/neutral_animals: schema
+    assert "legacy_wolf" in params.animal_tags, (
+        f"Expected 'legacy_wolf' (legacy) in animal_tags, got {params.animal_tags}"
     )
-    assert "legacy_wolf" not in params.animal_tags, (
-        f"legacy_wolf should have been ignored; animal_tags={params.animal_tags}"
+    assert "wolf" not in params.animal_tags, (
+        f"'wolf' (unified) should have been ignored; animal_tags={params.animal_tags}"
     )
 
 

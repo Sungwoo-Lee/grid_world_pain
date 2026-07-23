@@ -427,19 +427,13 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
 
     # Check for new entities: schema (CP3 will add full support)
     has_entities = config.get('environment.entities') is not None
-    has_legacy_predators = config.get('environment.predators') is not None
-    has_legacy_neutrals = config.get('environment.neutral_animals') is not None
+    # bool(...) → present AND non-empty; the base default.yaml never supplies legacy
+    # sections, so their presence is an unambiguous signal of user intent.
+    has_legacy = bool(config.get('environment.predators')) or \
+                 bool(config.get('environment.neutral_animals'))
 
-    if has_entities:
+    if has_entities and not has_legacy:
         # CP3 path — parse unified entities: list directly
-        if has_legacy_predators or has_legacy_neutrals:
-            warnings.warn(
-                "Config has both 'environment.entities:' and legacy "
-                "'environment.predators:'/'environment.neutral_animals:'. "
-                "The unified 'entities:' schema takes precedence; legacy sections are ignored.",
-                DeprecationWarning,
-                stacklevel=3,
-            )
         raw_entities = config.get('environment.entities') or []
         for i_raw, ent in enumerate(raw_entities):
             _lo, count = _resolve_count_range(ent, f'Entity[{i_raw}]')
@@ -478,6 +472,19 @@ def _load_animals(config: Config, visual_vector_size: int = 8):
                     'dist_source': ent,
                 })
     else:
+        # Legacy path (also runs when NEITHER schema is present → empty scene, unchanged).
+        # Legacy-scene precedence: when the user file authored legacy sections, they define
+        # the scene even if an `entities:` list arrived via the default.yaml underlay under
+        # train.py. This keeps train.py and eval_rollout.py agreeing on legacy configs.
+        if has_entities:
+            warnings.warn(
+                "Config presents legacy 'environment.predators:'/'neutral_animals:' sections "
+                "alongside an 'environment.entities:' list (typically inherited from "
+                "default.yaml under train.py). The legacy scene takes precedence. Migrate this "
+                "config to the unified 'entities:' schema.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
         # Legacy path: re-project predators (hunt) + neutrals (wander)
         raw_predators = config.get('environment.predators') or []
         for i_raw, p in enumerate(raw_predators):
@@ -1077,8 +1084,15 @@ def load_env_params(config: Config) -> EnvParams:
     animal_count_low_list = []   # per-entry int32 lower bound
     animal_count_high_list = []  # per-entry int32 upper bound
     animal_entry_id_list = []    # per-slot → entry index
+    # Mirror the SAME legacy-scene precedence used inside _load_animals() (see
+    # FIX_CONFIG_LAYER_SILENT_FAILURES_20260723 Bug 1) — this metadata must be
+    # built from whichever schema _load_animals() actually used, or the per-slot
+    # entry_id / count arrays here go out of sync with the animal_* arrays and
+    # jax_reset's activation-mask broadcast breaks with a shape mismatch.
     _has_entities = config.get('environment.entities') is not None
-    if _has_entities:
+    _has_legacy = bool(config.get('environment.predators')) or \
+                  bool(config.get('environment.neutral_animals'))
+    if _has_entities and not _has_legacy:
         _raw_ents = config.get('environment.entities') or []
         for i_raw, ent in enumerate(_raw_ents):
             lo, hi = _resolve_count_range(ent, f'Entity[{i_raw}]')
@@ -1505,9 +1519,22 @@ _YAML_KEY_TO_SENSOR_NAME = {
 
 def _parse_noise_config(config: Config):
     modalities_cfg = config.get('perceptual_noise.modalities') or {}
-    
+
+    unknown = set(modalities_cfg) - set(_YAML_KEY_TO_SENSOR_NAME)
+    if unknown:
+        raise ValueError(
+            f"Strict Config: unknown perceptual-noise modality key(s) {sorted(unknown)}. "
+            f"Valid keys: {sorted(_YAML_KEY_TO_SENSOR_NAME)}."
+        )
+
+    _VALID_NOISE_MODES = {'none': 0, 'constant': 1, 'state_dependent': 2}
     def _parse_mode(s):
-        return 2 if s == 'state_dependent' else 1 if s == 'constant' else 0
+        if s not in _VALID_NOISE_MODES:
+            raise ValueError(
+                f"Strict Config: unknown perceptual-noise mode {s!r}. "
+                f"Must be one of {sorted(_VALID_NOISE_MODES)}."
+            )
+        return _VALID_NOISE_MODES[s]
 
     noise_modality_order = tuple(
         _YAML_KEY_TO_SENSOR_NAME[k]

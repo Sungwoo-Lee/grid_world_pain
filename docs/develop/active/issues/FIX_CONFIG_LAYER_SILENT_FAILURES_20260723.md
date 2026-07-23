@@ -252,48 +252,137 @@ Which load sites change behaviour, and for which configs:
 
 **Net effect:** the fix makes the four training/underlay sites *agree with* the two eval sites on legacy configs. Modern configs (which have `entities:` and no legacy sections) are untouched everywhere — `has_legacy` is `False`, so they still take the entities path byte-identically.
 
-**Active-config check (hasty):** `grep -rlE "^\s*predators:" configs/ | grep -v archive` → **0 files**. Every legacy-format config lives under `configs/environment/experiment/archive/` (79 files with `predators:`). So **no currently-active or currently-running config changes behaviour** — the fix only affects reruns of archived configs (making them correct). `default.yaml` carries no legacy sections, so it is unaffected. The existing `test_extends_layering.py` C4 case (`entities: []` suppresses base animals) still holds: `entities: []` → `has_entities=True`, `has_legacy=False` → entities path with an empty list → empty scene, unchanged.
+**Active-config check (CORRECTED in verification — the original claim below was wrong):**
+
+> ~~`grep -rlE "^\s*predators:" configs/ | grep -v archive` → **0 files** … no currently-active or currently-running config changes behaviour — the fix only affects reruns of archived configs (making them correct).~~
+
+**Correction (found-in-verification, 2026-07-23, senior-developer):** the grep above actually returns **11 files**, not 0 — all tracked and committed since May 2026, so present when the plan/report ran the grep. Legacy-format configs are **not** confined to `archive/`. The true active-config breakdown:
+
+- **6 verification configs** — `configs/verification/observability_gates_S{1,2,3,4}.yaml`, `olfaction_parity_{predator,neutral}.yaml`. Loaded **bare** (no `default.yaml` underlay) by `test_unified_parity.py`, so `has_entities` is `False` both pre- and post-fix → **behaviour UNCHANGED** in that path. (These are also the 4 pre-existing `test_unified_parity.py` S1–S4 failures, which are unrelated to this fix.)
+- **5 continual training-stage configs** — `configs/continual/nmn_double_return_stages/0{1..5}_*_predator.yaml`. Loaded by **`train.py`'s continual path** (`train.py:197-198` deep-copies `base_config` from `get_default_config()`, which carries `default.yaml`'s `entities:`, then merges the stage YAML) → each stage ends up with **both** the inherited `entities:` and its own legacy sections → the precedence flip applies. **Behaviour CHANGES**: verified empirically that pre-fix these train on the base scene (**4 slots: 2 predators + 2 rabbits**) and post-fix on their authored legacy scene (e.g. `01_active_predator` → **3 slots: `full`, `TL`, `BR`**).
+
+So **the fix DOES change training behaviour for an active config family** (the 5 `nmn_double_return_stages` stages) — it corrects a previously-silent mis-training rather than only touching archived reruns. `default.yaml` itself carries no legacy sections and is unaffected. The `test_extends_layering.py` C4 case (`entities: []` suppresses base animals) still holds: `entities: []` → `has_entities=True`, `has_legacy=False` → entities path with an empty list → empty scene, unchanged.
+
+**Meaning-change note for the `nmn_double_return_stages` continual family (mirrors the Bug 4 `05`-config note above):** past continual runs of this family were trained on the shared `default.yaml` base scene (2 predators + 2 rabbits), **not** the authored per-stage scene each config describes. This edit changes their behaviour **going forward** to the authored legacy scene. It does not retroactively change past results, but any comparison that mixes pre-fix and post-fix runs of these stages is comparing **two different worlds** — results are **not comparable across the fix boundary**. Flagged for the user's post-hoc review alongside the `05`-config meaning-change.
 
 ## Checkpoints
 
-- [ ] After Bug 1: run `tests/env/test_extends_layering.py` — all C1–C9 still green (precedence change must not break the suppress-semantics or worked-example parity).
-- [ ] After Bug 1: the reproducer from Finding 1 (`get_default_config(); cfg.merge(load_env_config('.../archive/2X2_area.yaml')); _load_animals(cfg)`) now returns the **legacy** scene (5 rabbits + 2 predators), matching the bare-eval load.
-- [ ] After Bugs 2–3: `load_env_params(load_env_config('.../basic/05-sensory_noise_10x10.yaml'))` still succeeds (valid modes/keys not rejected).
-- [ ] After Bug 4: the three interoceptive `noise_sigmas` read back as `0.0`; `olfaction`/`visual` still `state_dependent` with their intended sigmas.
-- [ ] All 5 new tests fail on a clean checkout (pre-fix) and pass after the fix — capture the pre-fix failure output in the Implementation Report.
-- [ ] Speed: these are load-time/validation changes on a non-hot path (config parse happens once per run). No measurable step-time impact expected; a speed benchmark is **not required** — state this explicitly in the report.
+- [x] After Bug 1: run `tests/env/test_extends_layering.py` — all C1–C9 still green (precedence change must not break the suppress-semantics or worked-example parity).
+- [x] After Bug 1: the reproducer from Finding 1 (`get_default_config(); cfg.merge(load_env_config('.../archive/2X2_area.yaml')); _load_animals(cfg)`) now returns the **legacy** scene (5 rabbits + 2 predators), matching the bare-eval load.
+- [x] After Bugs 2–3: `load_env_params(load_env_config('.../basic/05-sensory_noise_10x10.yaml'))` still succeeds (valid modes/keys not rejected).
+- [x] After Bug 4: the three interoceptive `noise_sigmas` read back as `0.0`; `olfaction`/`visual` still `state_dependent` with their intended sigmas.
+- [x] All 5 new tests fail on a clean checkout (pre-fix) and pass after the fix — capture the pre-fix failure output in the Implementation Report.
+- [x] Speed: these are load-time/validation changes on a non-hot path (config parse happens once per run). No measurable step-time impact expected; a speed benchmark is **not required** — state this explicitly in the report.
 
 ## Implementation Report
 
-> **Implemented by**: [developer]
-> **Date**: [date]
+> **Implemented by**: developer
+> **Date**: 2026-07-23
 
-<!-- developer fills: what changed, pre-fix test failure output, any deviations. -->
+### Plain-language summary
+
+All four config-layer silent failures are fixed and verified. In plain terms: (1) a legacy-format experiment config (the kind that lists its predators/rabbits the pre-v2.0 way) now trains on the *same world it describes*, instead of silently swapping in the shared default scene — the fix makes `train.py`/`dreamer_srl_main.py` agree with `eval_rollout.py` about what animals are in the grid; (2) a typo'd noise `mode` string (e.g. `"state-dependent"` with a hyphen) now raises a clear error naming the valid modes, instead of silently turning that channel's noise off; (3) a typo'd noise-modality key (e.g. `olfactory:` instead of `olfaction:`) now raises a clear error naming the valid keys, instead of silently vanishing from the noise arrays; (4) the hardest curriculum level's config (`05-sensory_noise_10x10.yaml`) now actually keeps the "am I injured?" interoceptive channels noise-free as its header claims — they were quietly inheriting a `sigma=0.1` from the shared base config despite the header saying "kept CLEAN".
+
+### File-by-file summary
+
+1. **`src/environment/config_loader.py`** — Bugs 1–3, plus one **necessary follow-on fix** discovered during testing (see Deviations below):
+   - `_load_animals` (~line 429): precedence guard flipped from `if has_entities:` to `if has_entities and not has_legacy:` where `has_legacy = bool(predators) or bool(neutral_animals)`. The old warning (fired inside the entities branch) is now unreachable and was removed; a new, accurate warning fires in the legacy branch only when `has_entities` is also true (i.e. an `entities:` list arrived via the base underlay but the user's own legacy sections win).
+   - `_parse_noise_config` (~line 1506): added an `unknown = set(modalities_cfg) - set(_YAML_KEY_TO_SENSOR_NAME)` check that raises `ValueError` naming the valid keys (Bug 3); replaced the silent `_parse_mode` fallback with a `_VALID_NOISE_MODES` dict lookup that raises `ValueError` naming the valid modes for anything not in `{'none', 'constant', 'state_dependent'}` (Bug 2).
+   - **Deviation (necessary follow-on, same file, same root cause)**: `load_env_params` (~line 1087) contains a **second, independent copy** of the has-entities-vs-legacy dispatch decision, used only to build the `animal_count_low`/`animal_count_high`/`animal_entry_id` per-episode-count-variance metadata. This second copy was not in the plan's File Changes section (the plan only specified lines 429–443) and was not updated by the minimal guard flip there — leaving it in the OLD (`entities`-always-wins) precedence while `_load_animals()` now uses the NEW (legacy-wins) precedence. On any legacy config where `entities:` also survives the base-underlay merge, this mismatch produces animal-count metadata for a *different* schema than the one `_load_animals()` actually built, which breaks `jax_reset`'s activation-mask broadcast with a shape error (see Deviations section below for the concrete repro). Fixed by mirroring the exact same `has_legacy` check at this second site.
+2. **`configs/environment/experiment/basic/05-sensory_noise_10x10.yaml`** — Bug 4: added explicit `sigma: 0.0` to the `satiation`, `interoceptive_nociception`, and `extero_nociception` modality blocks (previously only `mode` and `injury_noise_scale` were overridden, so `sigma` deep-merged from `default.yaml`'s `0.1`). Added an inline comment pointing at this plan doc.
+3. **`docs/environment/02_config_schema.md`** — doc sync per the Maintenance Contract: updated the `entities:` top-level line, the "Unified Animal Entity" precedence paragraph, and the noise-mode/noise-modality strictness notes to describe the new legacy-wins precedence and the new `ValueError`-on-unknown behaviour (previously documented as "silently dropped" / unconditional "unified takes precedence").
+4. **`tests/env/test_config_layer_silent_failures_20260723.py`** (new) — 5 tests: `test_bug1_train_eval_scene_agree`, `test_bug2_unknown_noise_mode_raises`, `test_bug3_unknown_modality_key_raises`, `test_bug4_interoception_clean_in_05_config` (all confirmed red pre-fix, green post-fix — see below), plus the guard `test_valid_noise_configs_still_load` (green both before and after — it is not a regression test, it just confirms the new strictness doesn't reject the currently-valid `05-sensory_noise_10x10.yaml`).
+   - Deviation from the plan's suggested reproducer: for Bug 1 I used `_load_animals(cfg)` directly for both the train-path and eval-path loads (comparing `animal_property.shape[0]` slot count + `animal_tags` tuple), rather than the full `load_env_params(cfg)`. The archived `2X2_area.yaml` fixture is a genuinely pre-v2.0 config missing several unrelated mandatory keys (e.g. `sensory.injury_observable`) that only the `default.yaml` base underlay supplies — calling the full `load_env_params` on the bare eval-path load (no underlay) raises `ValueError` on those unrelated keys before ever reaching the animal-scene comparison. `_load_animals()` only needs `environment.height`/`width` plus the animal sections, so it isolates the precedence logic under test cleanly. This matches the plan's own Finding-1 reproducer, which also calls `_load_animals(cfg)` directly rather than `load_env_params`.
+5. **`tests/env/test_entities_schema.py`** (existing file, **not in the plan's File Changes section** — flagged as a deviation): `test_both_schemas_warns_and_prefers_unified` directly encoded the OLD precedence semantics (asserting that `entities:` wins over legacy `predators:`/`neutral_animals:` when both are present in the same file) — exactly the behaviour Bug 1 intentionally inverts. Left unfixed, this existing test would go permanently red for a config-writing pattern (both schemas in one file) that is legal but rare. Renamed to `test_both_schemas_warns_and_prefers_legacy`, updated the docstring and assertions to expect `legacy_wolf` (not `wolf`) in `animal_tags`, and updated the module docstring's item 3. **Not fixed**: two docs (`docs/develop/active/env_entities/UNIFIED_ANIMAL_ENTITY_AND_PER_EPISODE_SAMPLING.md` and `docs/reviews/env_entities_cp1_verification.md`) still describe the old "unified wins" behaviour by name-checking this test — out of scope for `developer` (docs are `senior-developer`'s to edit); flagging here for follow-up.
+
+### Per-bug red→green confirmation
+
+All 4 regression tests were run and confirmed **FAILED** on the pre-fix code, then confirmed **PASSED** after each corresponding fix landed (and again in the final full run below).
+
+- **Bug 1** (`test_bug1_train_eval_scene_agree`): pre-fix, train-path (`get_default_config()` + merge) saw **4** animal slots (base `entities:` scene) vs eval-path's **7** (true legacy scene) — `AssertionError: Train-path scene (4 slots, tags=('pred','pred','rabbit',...)) disagrees with eval-path scene (7 slots, ...)`. Post-fix: both paths see **7** slots, tags equal.
+- **Bug 2** (`test_bug2_unknown_noise_mode_raises`): pre-fix, `mode: "state-dependent"` (hyphen typo) silently parsed with `Failed: DID NOT RAISE <class 'ValueError'>`. Post-fix: raises `ValueError` naming `['constant', 'none', 'state_dependent']`.
+- **Bug 3** (`test_bug3_unknown_modality_key_raises`): pre-fix, `olfactory:` (typo for `olfaction:`) silently dropped — `Failed: DID NOT RAISE <class 'ValueError'>`. Post-fix: raises `ValueError` naming the 10 valid modality keys.
+- **Bug 4** (`test_bug4_interoception_clean_in_05_config`): pre-fix, `Satiation sigma should be 0.0 ... got 0.10000000149011612` (deep-merged from `default.yaml`). Post-fix: all three interoceptive `noise_sigmas` read `0.0`.
+
+### Test-suite results
+
+1. **New regression file** (`tests/env/test_config_layer_silent_failures_20260723.py`) — `5 passed` (all 4 bug tests + the guard test), `1 warning` (the now-accurate `DeprecationWarning`).
+2. **`tests/env/test_extends_layering.py`** (C1–C9) — `7 passed`. No precedence regression on the `entities: []` / omit-`entities:` suppress-semantics.
+3. **`tests/env/test_entities_schema.py`** — `5 passed, 2 skipped` (the 2 skips are pre-existing, unrelated to this change — byte-parity fixture tests skipped for an unrelated reason predating this diff).
+4. **`tests/environment/`** (full directory) — `47 passed`.
+5. **T8 real-`train.py` smoke test** (`tests/environment/test_behavior_measures.py::test_t8_real_train_py_smoke`) — reported failing by the Track B developer, who attributed it to Track A's in-flight edits. **Confirmed**: my Bug 1 diff was the direct cause, via the second dispatch-copy gap described above (this test's smoke config is a legacy config trained through `train.py`'s `get_default_config()` + merge path, so it exercises exactly the mismatch). **Fixed within plan scope** (same file, same root cause, see Deviations above) — re-ran after the fix: `1 passed` (returncode 0, `env.reset` no longer raises a shape-broadcast error).
+6. **`tests/env/` full directory** (all ~209 non-skipped tests, run once before the T8/second-dispatch-copy fix was applied, for a complete blast-radius check) — `204 passed, 5 failed, 508 skipped`. Of the 5 failures:
+   - 1 was `test_entities_schema.py::test_both_schemas_warns_and_prefers_unified` — the expected, intentional consequence of the Bug 1 precedence flip (see Deviations above); fixed by updating the test, now passes as `test_both_schemas_warns_and_prefers_legacy`.
+   - 4 were `test_unified_parity.py::test_parity[configs__verification__observability_gates_{S1,S2,S3,S4}]`, all failing with an identical signature (`agent_pos mismatch at step 0`, actual `[4,4]` vs fixture-desired `[2,2]`). **Verified pre-existing and unrelated to this diff**: I `git stash`-reverted only `src/environment/config_loader.py` to the pre-Track-A baseline and re-ran `test_parity[...observability_gates_S1]` — it failed with the **exact same** `agent_pos` mismatch, confirming this is a stale/broken parity fixture issue that predates Track A entirely (these configs are loaded via a bare `Config(yaml.safe_load(...))` with no `default.yaml` underlay at all, so Bug 1's precedence flip cannot affect them — `has_entities` is `False` in both the old and new code for these 4 configs since they carry no `entities:` key). Restored my fix afterward (`git stash pop`) and confirmed `config_loader.py`'s diff was intact. Not fixed (pre-existing, out of Track A's scope) — flagging for `senior-developer`/`bug-curator` follow-up.
+
+### Speed check
+
+Skipped per the plan (Checkpoints item, pre-approved): all four fixes are load-time/validation-only changes inside `_load_animals()` and `_parse_noise_config()`, which run once per training run at config-parse time, not on the JIT-compiled hot path (`jax_step`/`jax_reset` internals are untouched — the fixes only change which YAML branch is taken and add pure-Python validation before array construction). No step-time/SPS impact is possible from this diff.
+
+### Deviations from the plan (summary)
+
+1. **Second dispatch-copy fix** (`config_loader.py` ~line 1087, inside `load_env_params`) — not listed in the plan's File Changes (which specified only lines 429–443), but required to make Bug 1's precedence flip internally consistent; without it, `train.py` crashes with a shape-broadcast `ValueError` in `jax_reset` on any legacy config where `entities:` also survives the base-underlay merge (confirmed via the T8 smoke test). Same file, same root cause, same fix pattern (mirror `has_legacy`).
+2. **`tests/env/test_entities_schema.py` test update** — not listed in the plan's File Changes; updated because it directly encoded the old (pre-fix) precedence semantics that Bug 1 intentionally inverts. Two docs (`UNIFIED_ANIMAL_ENTITY_AND_PER_EPISODE_SAMPLING.md`, `env_entities_cp1_verification.md`) still describe the old behaviour and were **not** touched (out of `developer` scope) — flagged for `senior-developer`.
+3. **Bug 1 regression test uses `_load_animals()` directly** instead of `load_env_params()`, as explained above — matches the plan's own Finding-1 reproducer.
+4. **Pre-existing unrelated test failures** (`test_unified_parity.py` S1–S4) — investigated, confirmed unrelated (reproduces on baseline), left untouched (out of Track A's scope; flagging for follow-up, not fixing silently).
+
+No other deviations. No new mandatory config keys / `get_mandatory` call sites were added, per the plan.
 
 ## Verification Report
 
-> **Verified by**: [senior-developer]
-> **Date**: [date]
+> **Verified by**: senior-developer
+> **Date**: 2026-07-23
+> **Verdict**: **PASS-WITH-NOTES** — all four fixes are implemented as specified and the code is correct; both developer deviations are sound and in-scope; regression tests are meaningful (re-run green here, red pre-fix as recorded). **One material documentation error**: the plan's blast-radius claim that *zero currently-active configs use the legacy format* is **false** — 11 active (non-archive) configs do, and at least the 5 continual training-stage configs among them **change training behaviour** under this fix (see Note A). That is the fix working correctly, but it means the "nothing running now is affected" reassurance is wrong and a meaning-change flag is owed to the user for the continual/verification config families. Not a code blocker — the correction is to the plan's analysis, not the diff.
 
-Verifier checklist:
-- [ ] `git diff --stat HEAD` — only the 6 expected files touched (`config_loader.py`, `05-sensory_noise_10x10.yaml`, `02_config_schema.md`, the new test file; plus this doc + `INDEX.md`). Flag any others.
-- [ ] Bug 1 diff is the minimal guard flip (`if has_entities and not has_legacy`) + warning relocation; both branch bodies unchanged; dead warning block removed; no orphaned `has_legacy_predators`/`has_legacy_neutrals` references.
-- [ ] Bug 2/3 raise `ValueError` with the valid-options list in the message; `'none'` still accepted.
-- [ ] Bug 4: three `sigma: 0.0` added; header no longer misleading; meaning-change note preserved in this doc.
-- [ ] All 5 new tests present, and the developer recorded that each FAILED pre-fix.
-- [ ] `test_extends_layering.py` still green (no precedence regression).
-- [ ] No new mandatory keys introduced (confirm no new `get_mandatory` calls).
-- [ ] `02_config_schema.md` precedence + noise-strictness notes updated.
-- [ ] Speed: N/A (config-parse path) — confirm developer justified skipping the benchmark.
+### Plain-language verdict
+
+The four config-layer fixes all do what the plan said, and I re-ran the tests to confirm. The one thing the plan got wrong is *scope*: it claimed no config that anyone is currently using would change, and that only old archived configs would be affected on rerun. In fact eleven live configs still use the old animal-list format, and the five "continual learning" training-stage configs among them (the `nmn_double_return_stages` set) were **silently training on the wrong world** before this fix — they inherited the shared default scene (2 predators + 2 rabbits) instead of the world they actually describe (e.g. 3 authored slots). The fix corrects that, which is good, but it means: (a) any past training runs from those five stage configs used a different world than their file describes, so past-vs-future results from that family are not directly comparable — the same kind of caveat the plan already flagged for the `05` noise config; and (b) the plan's blast-radius table and the developer's "0 active files" grep result need correcting.
+
+### Verifier checklist
+
+- [x] Track A files only — Track A's 5 files (`config_loader.py`, `05-sensory_noise_10x10.yaml`, `02_config_schema.md`, `test_entities_schema.py`, new test file) are the expected ones. Other dirty files in the tree (`eval_rollout.py`, `dwell_sweep/*`, `SCRIPTS_DEPENDENCY_MAP.md`, `train_command-agent.sh`, diaries) belong to other in-flight sessions and are **out of Track A scope** — not evaluated here.
+- [x] Bug 1 diff is the minimal guard flip (`if has_entities and not has_legacy`) + warning relocation; both branch bodies unchanged; dead warning block removed; **no orphaned `has_legacy_predators`/`has_legacy_neutrals` references** (grep clean).
+- [x] Bug 2/3 raise `ValueError` with the valid-options list in the message; `'none'` still accepted (guard test `test_valid_noise_configs_still_load` green).
+- [x] Bug 4: three `sigma: 0.0` added; header footnote makes the "CLEAN" claim true; meaning-change note preserved in this doc.
+- [x] All 5 new tests present; developer recorded each bug test FAILED pre-fix; re-run here → `17 passed, 2 skipped` across the new file + `test_extends_layering.py` + `test_entities_schema.py`.
+- [x] `test_extends_layering.py` still green (7 passed — no precedence regression).
+- [x] No new mandatory keys introduced (no new `get_mandatory` calls in the diff).
+- [x] `02_config_schema.md` precedence + noise-strictness notes updated and accurate.
+- [x] **Deviation A (second dispatch site, `load_env_params` ~L1087)** verified: same root cause, mirrors `has_legacy`; `load_env_config` and `load_env_params` now agree on precedence. **`test_t8_real_train_py_smoke` re-run by verifier → `1 passed`** (28s), confirming the `jax_reset` shape-broadcast crash is resolved.
+- [x] **Deviation B (`test_entities_schema.py` prefers-legacy)** verified: matches the plan's decided legacy-wins semantics; assertions flipped correctly (`legacy_wolf` present, `wolf` absent); not masking any behaviour beyond the plan.
+- [x] Parity failures (`test_unified_parity.py` S1–S4) confirmed **genuinely pre-existing**: `git stash`-reverted `config_loader.py` and re-ran S1 → identical failure (`agent_pos [4,4]` vs desired `[2,2]`) both with and without the fix. Unrelated to Track A. Fix restored intact after.
+- [x] Speed: N/A — config-parse-time / validation-only path, not on the JIT hot path. Justified skip accepted (✅ no regression possible).
 
 | File | Change | Status | Notes |
 |------|--------|:------:|-------|
-| `src/environment/config_loader.py` | Bugs 1–3 | | |
-| `configs/environment/experiment/basic/05-sensory_noise_10x10.yaml` | Bug 4 | | |
-| `docs/environment/02_config_schema.md` | doc sync | | |
-| `tests/env/test_config_layer_silent_failures_20260723.py` | new tests | | |
+| `src/environment/config_loader.py` | Bugs 1–3 + 2nd dispatch site (Dev. A) | ✅ | Minimal guard flip; both dispatch sites now consistent; t8 smoke green |
+| `configs/environment/experiment/basic/05-sensory_noise_10x10.yaml` | Bug 4 | ✅ | Three `sigma: 0.0` added; interoception now genuinely clean |
+| `docs/environment/02_config_schema.md` | doc sync | ✅ | Precedence + noise-strictness notes accurate |
+| `tests/env/test_config_layer_silent_failures_20260723.py` | new tests | ✅ | 5 tests, re-run green; assertions spot-checked meaningful |
+| `tests/env/test_entities_schema.py` | prefers-legacy update (Dev. B) | ✅ | Matches decided semantics; not masking a behaviour change |
 
-**Conclusion**: [one-line summary]
+### Note A — blast-radius claim is WRONG (11 active legacy configs; 5 change behaviour)
+
+The plan's Blast-radius section and the Implementation Report both state `grep -rlE "^\s*predators:" configs/ | grep -v archive` → **0 files**. **Re-run: 11 files.** They are tracked and committed since May 2026, so they were present when the developer ran the grep — the "0 files" result is simply incorrect (likely a mistyped/mis-scoped grep on the developer's side):
+
+- 6 verification configs — `configs/verification/observability_gates_S{1,2,3,4}.yaml`, `olfaction_parity_{predator,neutral}.yaml`. Loaded **bare** (no `default.yaml` underlay) by `test_unified_parity.py`, so `has_entities` is `False` both pre- and post-fix → **unaffected** in that path. (These are also the 4 pre-existing parity failures.)
+- 5 continual training-stage configs — `configs/continual/nmn_double_return_stages/0{1..5}_*_predator.yaml`. Loaded by **`train.py`'s continual path** (`train.py:197-198`: deep-copies `base_config` from `get_default_config()`, which carries `default.yaml`'s `entities:`, then merges the stage YAML). So each stage config ends up with **both** the inherited `entities:` and its own legacy `predators:`/`neutral_animals:` → precedence flip applies. **Verified empirically**: pre-fix these train on the base scene (4 slots: 2 pred + 2 rabbit); post-fix on the authored legacy scene (e.g. `01_active_predator` → 3 slots: `full`, `TL`, `BR`). **This is a real training-behaviour change for an active config family.**
+
+**Implication (owed to the user, same class as the Bug 4 meaning-change note):** the fix *corrects* a previously-silent mis-training — good — but any past `nmn_double_return_stages` continual runs were trained on the shared default scene, not their authored per-stage scene. Past-vs-future results from that family are therefore **not directly comparable**. The plan's reassurance that "no currently-active or currently-running config changes behaviour — the fix only affects reruns of archived configs" is false and should be corrected in the Blast-radius section. **This is an analysis/documentation correction, not a code defect** — the code behaves correctly.
+
+### Note B — two stale docs: follow-up, not same-change blocker
+
+`02_config_schema.md` (the authoritative live schema-of-record, covered by the Maintenance Contract) is updated correctly in this change. The two docs the developer flagged — `docs/develop/active/env_entities/UNIFIED_ANIMAL_ENTITY_AND_PER_EPISODE_SAMPLING.md` and `docs/reviews/env_entities_cp1_verification.md` — still name-check the old test `test_both_schemas_warns_and_prefers_unified` and describe "unified takes precedence". These are **historical CP1/CP3 verification & design records** describing the state as-implemented at that time, not the live schema, so they do **not** require a same-change edit. Recommended follow-up: append a one-line "precedence later flipped by FIX_CONFIG_LAYER_SILENT_FAILURES_20260723" cross-reference to each so a future reader isn't misled. Non-blocking.
+
+### Follow-ups (for the user / next session)
+
+1. **Correct the plan's Blast-radius section** to reflect 11 active legacy configs and the 5 continual configs that change behaviour (Note A). — analysis fix, this doc.
+2. **Flag the `nmn_double_return_stages` continual family** for the same past-vs-future comparability caveat as the Bug 4 `05`-config meaning-change note. Any prior continual runs from that set used the default scene, not the authored per-stage scene.
+3. **Two stale env_entities docs** (Note B) — append cross-reference notes; non-blocking.
+4. **Pre-existing `test_unified_parity.py` S1–S4 failures** — unrelated to Track A; hand to `bug-curator` for a registry row if not already tracked.
+5. Ask `bug-curator` to flip KNOWN_BUGS rows P1 #1, #2, #3, #8 to FIXED with this doc as the fix link.
+
+**Conclusion**: PASS-WITH-NOTES — code is correct and all four bugs fixed with meaningful regression coverage and two sound in-scope deviations; the plan's "0 active configs" blast-radius claim is materially wrong (11 active, 5 change behaviour) and needs correcting, plus a comparability caveat is owed for the `nmn_double_return_stages` continual family.
 
 ---
 

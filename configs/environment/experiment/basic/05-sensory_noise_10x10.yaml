@@ -36,14 +36,20 @@ perceptual_noise:
   enabled: true
   modalities:
     # --- Interoception kept CLEAN (no injury coupling) so the pain-gate stays reliable ---
+    # (sigma explicitly 0.0 — do not rely on inherited defaults for the clean channels;
+    # see FIX_CONFIG_LAYER_SILENT_FAILURES_20260723 — sigma used to deep-merge from
+    # default.yaml's 0.1 here, silently contradicting this "CLEAN" claim.)
     satiation:
       mode: "constant"
+      sigma: 0.0
       injury_noise_scale: 0.0
     interoceptive_nociception:
       mode: "constant"
+      sigma: 0.0
       injury_noise_scale: 0.0
     extero_nociception:
       mode: "constant"
+      sigma: 0.0
       injury_noise_scale: 0.0
     # --- THREAT channel: clear when healthy, heavily degraded when injured (the lever) ---
     olfaction:

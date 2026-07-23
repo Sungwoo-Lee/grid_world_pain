@@ -43,7 +43,7 @@ environment:
   resources: [ list of resource defs ]
   predators: [ list — LEGACY; auto-projected as class=predator, behaviour=hunt ]
   neutral_animals: [ list — LEGACY; auto-projected as class=neutral, behaviour=wander ]
-  entities: [ list — NEW unified schema (CP3); takes precedence when present ]
+  entities: [ list — NEW unified schema (CP3) ] # precedence: legacy `predators:`/`neutral_animals:` win when the USER FILE authors them (even if `entities:` arrived only via the default.yaml base underlay); see FIX_CONFIG_LAYER_SILENT_FAILURES_20260723
   obstacles: [ list of obstacle defs ]
   location_areas: [ list of area type defs ]
   # NOTE: predator_enabled was REMOVED in v2.0 — raises ValueError if present
@@ -203,7 +203,7 @@ environment:
       ...
 ```
 
-If `environment.entities:` is present it takes precedence; legacy sections are ignored with a `DeprecationWarning`.
+**Precedence (updated by FIX_CONFIG_LAYER_SILENT_FAILURES_20260723):** if the user file itself authors legacy `predators:`/`neutral_animals:` sections, they take precedence and define the scene — even if an `entities:` list arrived only via the `default.yaml` base underlay (e.g. under `train.py`'s `get_default_config()` + `merge()`). A `DeprecationWarning` still fires (now naming the legacy scene as authoritative) so authors know to migrate. Only when the user file has NO legacy sections does the `entities:` list (own or inherited) take the path. This makes `train.py`/`dreamer_srl_main.py` (which underlay `default.yaml`) agree with `eval_rollout.py` (which loads bare, no underlay) on every legacy config's animal scene. See [[FIX_CONFIG_LAYER_SILENT_FAILURES_20260723]] for the full analysis.
 
 ### Mandatory / optional per entity
 
@@ -1142,7 +1142,7 @@ All entity types now uniformly use the **plural** form. The singular forms are d
 
 Implemented in `_parse_noise_config()` (`config_loader.py:957`).
 
-The YAML key order under `perceptual_noise.modalities` is the single source of truth for which index in the noise arrays corresponds to which modality. Unknown keys are **silently dropped** (the `if k in _YAML_KEY_TO_SENSOR_NAME` filter at `config_loader.py:965`). Typos are silent — double-check against the table below.
+The YAML key order under `perceptual_noise.modalities` is the single source of truth for which index in the noise arrays corresponds to which modality. **Unknown keys now raise `ValueError`** (updated by FIX_CONFIG_LAYER_SILENT_FAILURES_20260723 — was previously silently dropped by the `if k in _YAML_KEY_TO_SENSOR_NAME` filter). The error message lists the valid keys, matching the table below.
 
 All five noise arrays are padded to length **13** (`pad = max(0, 13 - len(noise_modality_order))`, `config_loader.py:968`). This keeps the array shape static regardless of how many modalities are configured.
 
@@ -1173,7 +1173,7 @@ Per-modality optional keys (defaults apply when absent):
 | `clip_min` | `-100.0` |
 | `clip_max` | `100.0` |
 
-Mode encoding: `"none"` → `0`, `"constant"` → `1`, `"state_dependent"` → `2`.
+Mode encoding: `"none"` → `0`, `"constant"` → `1`, `"state_dependent"` → `2`. **Any other `mode` string now raises `ValueError`** (updated by FIX_CONFIG_LAYER_SILENT_FAILURES_20260723 — was previously silently mapped to `0` = noise off, e.g. a `"state-dependent"` hyphen typo).
 
 Detail: see `docs/environment/10_perceptual_noise.md`.
 
