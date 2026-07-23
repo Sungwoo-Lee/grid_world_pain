@@ -28,7 +28,8 @@ sys.path.insert(0, _ROOT)
 from src.environment.config_loader import load_env_config, load_env_params
 from src.environment import core
 
-CFG = "configs/environment/experiment/basic/06-sensory_noise_10x10.yaml"
+# basic ladder re-level (b093023): 06-sensory_noise -> 05-sensory_noise (content unchanged).
+CFG = "configs/environment/experiment/basic/05-sensory_noise_10x10.yaml"
 
 
 def _load_params():
@@ -56,7 +57,7 @@ def test_timeout_no_death_penalty():
     """Surviving to max_steps (truncation) must NOT incur the death penalty."""
     params = _load_params()
     assert params.use_homeostatic_reward, (
-        "Test assumes homeostatic reward mode (per basic/06 config); "
+        "Test assumes homeostatic reward mode (per basic/05 config); "
         "adjust if the config changes."
     )
 
@@ -93,7 +94,7 @@ def test_starvation_applies_death_penalty():
     penalty from real deaths too)."""
     params = _load_params()
     death_penalty = float(params.death_penalty)
-    assert death_penalty > 0.0, "Test requires a nonzero death_penalty in basic/06."
+    assert death_penalty > 0.0, "Test requires a nonzero death_penalty in basic/05."
 
     reward, info, done = _run_episode(
         params, seed=0, max_steps_override=10000, action_fn=lambda t: 0
