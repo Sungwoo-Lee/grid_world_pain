@@ -3,7 +3,7 @@ title: "Known Bugs"
 topic: issues
 status: active
 created: 2026-07-04
-last_updated: 2026-07-23
+last_updated: 2026-07-24
 ---
 
 # Known Bugs
@@ -24,8 +24,11 @@ need a decision) come first, because those are the ones that can bite a new plan
 **archived-stack subsection** follows them: the in-house DreamerV3-NNX Dreamer was archived
 2026-07-10 (the live Dreamer is `dreamer_srl`), so its formerly-open rows are kept visible
 but are moot unless that stack is revived. **Fixed**
-items follow — split into the *2026-07-23 diagnosis P1 fix tracks cluster* (config-loader
-Track A + eval/logging Track B, both from the same-day whole-codebase diagnosis, see
+items follow — split into the *Track C dreamer eval-telemetry cluster* (2026-07-24, the third
+and last fix track from the 2026-07-23 whole-codebase diagnosis, see
+`docs/develop/active/dreamer/DREAMER_SRL_EVAL_TELEMETRY_FIX.md`), the *2026-07-23 diagnosis P1
+fix tracks cluster* (config-loader Track A + eval/logging Track B, both from the same-day
+whole-codebase diagnosis, see
 `docs/reviews/diagnosis_20260723/review_full_diagnosis_20260723.md`), the *NMN-trainer-parity
 review cluster* (rPPO/NMN trainer review 2026-07-22, fixes 2026-07-23, see
 `docs/reviews/review_nmn_trainer_parity_20260722.md`),
@@ -75,7 +78,7 @@ inheritance ignored, eval using the wrong stage, ghost predators).
 | **"Chasing rabbit" stays glued to the agent after contact** | The post-contact pause that normally separates agent and predator only fires for *damaging* animals; a non-damaging chased animal (e.g. a rabbit) gets no pause and keeps riding the agent's cell at zero distance — skews the chasing-rabbit / hypervigilance behavior read. | **OPEN** | Med (behavior-experiment interpretation, not training correctness) | env core (`core.py:629`) | memory `20260609_1722_renderer_no_neutral_icon_and_attack_delay_ride` |
 | **rPPO critic learning rate is a lie — `lr_critic` is dead in every config** (A1) | Every live rPPO config advertises a separate critic learning rate (0.0001), but the trainer never reads it: the critic **and the neuromodulator** train at the actor's rate (`lr_actor` 0.0005) — 5× the advertised value. Not a training-correctness defect, but anyone reasoning about NMN learning dynamics from the YAML is misled. Needs a wire-or-remove decision. | **OPEN — wire or remove** | Med (interpretation hazard for all rPPO/NMN sweeps) | `train.py` optimizer setup | [[00_combined_inspection]] A1 · [[01_rppo_core_path]] · [[02_rppo_nmn_wiring]] |
 | **rPPO continual stage swap keeps stage-0 metric accumulators** (A2) | On a continual stage transition the per-tag animal names/widths and behavior-measure accumulators are never rebuilt for the new stage's roster. Live today: the two-stage return sweep (`nmn_double_return_stages`) logs its stage-2 predator curves under silently wrong labels; a roster-**size** change across stages would drop metrics or crash. | **OPEN** | Med (mislabeled live metrics; continual crash risk) | `train.py` continual / behavior measures | [[00_combined_inspection]] A2 · [[01_rppo_core_path]] |
-| **dreamer_srl eval curve mixes two estimators** (A3) | The small-sample video-recording pass logs into the **same** `Eval/Mean*` metrics as the many-episode stats pass, so the live Dreamer's headline survival-steps eval curve blends a small-N estimate into the real one. (rPPO keeps the two passes separate — this is srl-only.) | **OPEN** | Med–Low (eval-curve hygiene) | dreamer_srl eval logging (`dreamer_srl_main.py`) | [[00_combined_inspection]] A3 · [[03_dreamer_srl_gaps_and_nmn_readiness]] |
+| **`training.eval_stats_num_envs` does nothing on the Dreamer path** (diagnosis Finding 2) | This config knob is supposed to control how many parallel environments the periodic evaluation pass uses, but on the Dreamer training path the value is read and then never applied — the eval pass always uses whatever env count the Dreamer trainer was already given. A user tuning this key for speed sees no effect. Explicitly **out of scope for the Track C eval-telemetry fix** (commit `39f851b`, see the Fixed cluster below). | **OPEN — reminder, out of Track C scope** | Low–Med (perf-tuning dead knob, not a correctness bug) | dreamer_srl eval config (`train.py:2129`) | `docs/reviews/diagnosis_20260723/findings_dreamer_main.md` Finding 2 |
 | **Config-boundary silent failures — latent traps** (B1–B4) | Places where a wrong config quietly does the wrong thing instead of erroring: an unknown `modulation.type` string silently builds the Multiplicative modulator (no whitelist; probe-verified); a missing or typo'd `agent.modulation` block silently trains the unmodulated baseline; sibling keys `unimodal_overrides`/`fc_layers` (declared in live configs) are unread; and an unknown `agent.algorithm` string spins the training loop forever with no error. **Struck 2026-07-23:** this row previously also listed `percept_bias_init` as a dead/unread config key — re-verified **false**, the key **is** now read (`recurrent_ppo_network.py:269`, mandatory when modulation is on), as are `mod_hidden_size`/`grouping_size`/`memory_bias_init`/`temp_clip`/`memory_clip`. One config-hardening package would kill the remaining class; named precondition for the next NMN sweep. | **OPEN — latent** (bites only on a typo'd/edited config) | Low–Med | config boundary (train.py / rPPO network / neuromodulator) | [[00_combined_inspection]] B1–B4 · [[01_rppo_core_path]] · [[02_rppo_nmn_wiring]] · `docs/reviews/diagnosis_20260723/findings_configs.md` P2-4 |
 | **Single-config resume pairs restored memory with fresh worlds** (B5) | Resuming a single-config rPPO run restores the checkpoint's recurrent hidden state but pairs it with freshly-reset environments — the agent's first post-resume window "remembers" episodes that no longer exist. The continual path re-initializes the state correctly; only the single-config path skips it. | **OPEN — latent** | Low–Med (resume correctness) | `train.py` single-config resume | [[00_combined_inspection]] B5 · [[01_rppo_core_path]] |
 | **The live Dreamer has no offline behavioral eval — finished runs can't be re-evaluated** (C1) — RESOLVED 2026-07-23, re-scoped | Previously: the offline eval path (`eval_rollout.py`) raised `NotImplementedError` for dreamer_srl checkpoints, and nothing else restored them for behavior. **Re-verified 2026-07-23: this capability gap is closed** — commit `766938d` ("unify Dreamer into eval_rollout") added a full restore+rollout+recording branch for dreamer_srl checkpoints; the old `NotImplementedError` at `eval_rollout.py:1246` is now dead code (the code path there is unreachable — `agent_type` is always `"rppo"` or `"dreamer"`). The optimizer-momentum row directly above is **still open** and separately blocks a faithful *resume* (not eval). | **RESOLVED — capability now exists; verify before closing row** | Med | dreamer_srl eval | [[00_combined_inspection]] C1 · [[03_dreamer_srl_gaps_and_nmn_readiness]] · `docs/reviews/diagnosis_20260723/findings_eval_tooling.md` F10 |
@@ -106,6 +109,27 @@ archaeology but are **not actionable** unless the stack is revived.
 | **`*_het_*` rPPO config names do NOT mean a heteroscedastic loss** (A4, naming clarification) | Recurring misreading: whether the `_het_` in the rPPO config family names means the modulator trains through a heteroscedastic auxiliary loss. | **NAMING ONLY** — `het` = the perceptual-noise **heterogeneity** sweep; no heteroscedastic aux loss exists anywhere in the live stack; the modulator trains solely through the shared PPO loss. | rPPO/NMN configs | [[00_combined_inspection]] A4 · [[02_rppo_nmn_wiring]] |
 
 ---
+
+## Fixed — Track C dreamer eval-telemetry cluster (2026-07-24)
+
+Source of record: `docs/develop/active/dreamer/DREAMER_SRL_EVAL_TELEMETRY_FIX.md` (Track C from
+the 2026-07-23 whole-codebase diagnosis, landed a day after Tracks A/B below). Fix commit
+`39f851b`, verified `senior-developer` APPROVED (9/9 tests incl. a slow smoke pair) +
+`code-reviewer` APPROVE (no blockers); review doc
+`docs/reviews/review_track_c_dreamer_telemetry_20260724.md`. **Design lock (deliberate, not a
+bug):** the live Dreamer's evaluation pass still uses a **fixed random seed per checkpoint** —
+kept on purpose so different checkpoints of the same run are compared on the exact same
+episodes (a paired comparison), with a test guard protecting the choice. One side effect of that
+lock is that the small "record a video" eval pass replays a bit-identical prefix of the larger
+"compute stats" eval pass's episodes — previously harmless-looking but actually the root cause
+tangled up with the two bugs below; now harmless in practice because the fix (row 1) gives the
+two passes separate WandB keys.
+
+| Bug | What happened | Status | Severity | Area | Fix commit + detail |
+|-----|---------------|--------|----------|------|---------------------|
+| **dreamer_srl eval curve mixed two estimators** (A3) | The small-sample video-recording eval pass and the many-episode stats eval pass both logged into the **same** `Eval/Mean*` WandB keys, so the live Dreamer's headline survival-steps eval curve blended a small-N estimate into the real one. Fixed by routing the video pass to its own `Eval/video/*` keys whenever the stats pass is also active, so `Eval/Mean*` is always owned by the one best-available estimator and never double-written. | FIXED | Med–Low (eval-curve hygiene) | dreamer_srl eval logging (`dreamer_srl_main.py`) | `39f851b` · `DREAMER_SRL_EVAL_TELEMETRY_FIX.md` · was [[00_combined_inspection]] A3 |
+| **Dreamer eval videos silently dropped from WandB (backward-step rejection)** (diagnosis Finding 1) | Eval videos were uploaded to WandB tagged with the episode count as their "step," while ordinary training metrics were logged against the environment step count — a much larger, always-increasing number. WandB treats an incoming point with a smaller step than one it already has as invalid and silently drops it, so eval videos vanished from the dashboard with no error. Fixed by uploading videos at the same environment-step clock as everything else. | FIXED | Med (diagnostics silently missing, not training-affecting) | dreamer_srl eval video upload (`eval.py`) | `39f851b` · `docs/reviews/diagnosis_20260723/findings_dreamer_main.md` Finding 1 |
+| **step-less WandB log calls dropped subsequent training rows at low env counts** (diagnosis Finding 1) | Two eval-logging call sites and the curriculum stage-transition log call omitted the "step" argument entirely; each step-less call silently bumped WandB's own internal step counter forward, so any ordinary training-metric row logged afterward with an already-passed step number got rejected as a duplicate/backward point — visible mainly when few parallel environments made eval passes a larger fraction of total log volume. Fixed by passing the explicit environment-step clock to every log call. | FIXED | Med (dropped training-curve rows at low `num_envs`, not training-affecting) | dreamer_srl logging (`dreamer_srl_main.py`) | `39f851b` · `docs/reviews/diagnosis_20260723/findings_dreamer_main.md` Finding 1 |
 
 ## Fixed — 2026-07-23 diagnosis P1 fix tracks (config-loader + eval/logging)
 
