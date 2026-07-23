@@ -32,6 +32,7 @@ Usage:
 import argparse
 import csv
 import glob as globmod
+import multiprocessing as mp
 import os
 import subprocess
 import sys
@@ -238,37 +239,80 @@ def poll_done(scratch_root, nodes, interval=15):
     print(f"  all {len(nodes)} node(s) done in {time.time() - t0:.0f}s")
 
 
-def aggregate(groups, scratch_root):
+def _measure_cell(step_dir):
+    """Compute the CSV row for ONE (group, checkpoint) scratch dir: recursive-glob its
+    recordings, decompress+parse+measure each, average the KEYS measures. Returns
+    (step:int, row:list) or None if no recordings are present.
+
+    MODULE-LEVEL (not nested) so it is picklable for multiprocessing.Pool -- imports of
+    episode_measures/load_episode/KEYS are already at module scope. Must stay byte-for-byte
+    identical to the inline serial logic it replaces (same rounding/NaN-handling)."""
+    step_dir = Path(step_dir)
+    step = int(step_dir.name)
+    # layout-agnostic recursive glob: eval_rollout.py --batched nests recordings one level
+    # deeper than a flat per-checkpoint output-root (see README.md).
+    recs = sorted(step_dir.glob("**/episode_*.rec.gz"))
+    if not recs:
+        return None
+    rows = [episode_measures(load_episode(str(r))) for r in recs]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        agg = {k: float(np.nanmean([row[k] for row in rows])) for k in KEYS}
+    vals = [step, f"{step / 1e6:.4f}"] + [
+        ("" if not np.isfinite(agg[k]) else f"{agg[k]:.4f}") for k in KEYS
+    ]
+    return step, vals
+
+
+def aggregate(groups, scratch_root, n_workers=None):
     """ONE aggregation path for both algorithms: recursive-glob each (run,cond,step)
     scratch dir for .rec.gz recordings, average the 11 measures, MERGE into the
-    existing CSV (never drops prior rows)."""
-    n_written = 0
-    for g in groups:
+    existing CSV (never drops prior rows).
+
+    The expensive per-cell work (decompress+parse+measure ~30 recordings per checkpoint)
+    is farmed out to a multiprocessing.Pool across ALL groups at once; the CSV read/merge/
+    write stays serial in the main process so output is byte-identical to the old
+    single-core version -- parallelism only changes speed, not content."""
+    if n_workers is None:
+        n_workers = min(os.cpu_count() or 8, 32)
+
+    # Seed each group's existing rows (unchanged serial logic) and collect every pending
+    # (group_index, step_dir) cell across ALL groups before dispatching to the pool.
+    by_step_per_group = []
+    cells = []
+    for gi, g in enumerate(groups):
         out_csv = g["out_csv"]
         by_step = {}
         if out_csv.exists():
             for r in csv.DictReader(open(out_csv)):
                 by_step[int(r["step"])] = [r.get(h, "") for h in HEAD]
+        by_step_per_group.append(by_step)
         scratch_dir = scratch_root / g["run_label"] / g["cond"]
         for step_dir in sorted(scratch_dir.glob("*")) if scratch_dir.is_dir() else []:
-            if not step_dir.name.isdigit():
+            if step_dir.name.isdigit():
+                cells.append((gi, step_dir))
+
+    if cells:
+        step_dirs = [str(sd) for _, sd in cells]
+        if n_workers <= 1:
+            results = [_measure_cell(sd) for sd in step_dirs]
+        else:
+            with mp.Pool(processes=n_workers) as pool:
+                # map() preserves input order so results[i] lines up with cells[i] --
+                # needed to route each cell's row back to the right group.
+                results = pool.map(_measure_cell, step_dirs)
+        for (gi, _), result in zip(cells, results):
+            if result is None:
                 continue
-            step = int(step_dir.name)
-            # layout-agnostic recursive glob: eval_rollout.py --batched nests recordings
-            # one level deeper than a flat per-checkpoint output-root (see README.md).
-            recs = sorted(step_dir.glob("**/episode_*.rec.gz"))
-            if not recs:
-                continue
-            rows = [episode_measures(load_episode(str(r))) for r in recs]
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                agg = {k: float(np.nanmean([row[k] for row in rows])) for k in KEYS}
-            vals = [step, f"{step / 1e6:.4f}"] + [
-                ("" if not np.isfinite(agg[k]) else f"{agg[k]:.4f}") for k in KEYS
-            ]
-            by_step[step] = vals
+            step, vals = result
+            by_step_per_group[gi][step] = vals
+
+    n_written = 0
+    for gi, g in enumerate(groups):
+        by_step = by_step_per_group[gi]
         if not by_step:
             continue
+        out_csv = g["out_csv"]
         out_csv.parent.mkdir(parents=True, exist_ok=True)
         rows = [by_step[s] for s in sorted(by_step)]
         with open(out_csv, "w", newline="") as f:
@@ -321,6 +365,9 @@ def main():
     ap.add_argument("--max-checkpoints", type=int, default=None,
                      help="Cap each (run,condition) to its newest N pending checkpoints "
                           "(overrides spec.max_checkpoints; useful for a quick smoke test).")
+    ap.add_argument("--agg-workers", type=int, default=None,
+                     help="Process count for the aggregation Pool (overrides spec.agg_workers; "
+                          "default auto = min(os.cpu_count(), 32) on the driver host).")
     args = ap.parse_args()
 
     spec = load_spec(args.spec)
@@ -331,6 +378,7 @@ def main():
     episodes = spec.get("episodes", 30)
     nodes = spec["nodes"]
     max_checkpoints = args.max_checkpoints if args.max_checkpoints is not None else spec.get("max_checkpoints")
+    agg_workers = args.agg_workers if args.agg_workers is not None else spec.get("agg_workers")
 
     print(f"=== dwell sweep: {spec['name']} ({algo}) ===")
     print(f"output: {output_dir}")
@@ -369,7 +417,7 @@ def main():
     poll_done(scratch_root, list(wl_paths.keys()))
 
     print("Aggregating...")
-    n_csv = aggregate(groups, scratch_root)
+    n_csv = aggregate(groups, scratch_root, n_workers=agg_workers)
     print(f"  wrote/updated {n_csv} CSV(s)")
 
     print("Plotting...")
