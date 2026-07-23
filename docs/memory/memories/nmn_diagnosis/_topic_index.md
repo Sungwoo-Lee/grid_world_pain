@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `nmn_diagnosis` topic.
 
 **Folder definition**: NMN performance diagnosis findings
-**Insights**: 16
-**Last updated**: 2026-05-28
+**Insights**: 17
+**Last updated**: 2026-07-23
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-23 | 19:11 | [20260723_1911_rppo_nmn_config_boundary_traps](20260723_1911_rppo_nmn_config_boundary_traps.md) | First dedicated rPPO-NMN audit: modulated forward is train-equals-eval correct (probe |dlogits| 5e-4), but config boundary hides silent traps. Dead lr_critic = critic AND modulator always trained at lr_actor 0.0005 not the advertised 0.0001 (interpretation hazard for every past NMN sweep). *_het_* = perceptual-noise HETEROGENEITY sweep, NOT heteroscedastic loss (none exists; total loss = policy+vf+ent only). Unknown modulation.type silently builds Multiplicative. Registry 50d9964. |
 | 2026-05-28 | 02:17 | `20260528_0217_episode_direction_4x3_framework_two_papers` | `project_plan.md` rewritten from 760-line Nature MI staged plan (G1′/G2′ gates, T/P modulator split, ~138–168 run budget) to 138-line stable direction context. Project rebranded EPISODE (Emergence of Pain In Simulated Organismic & Dynamic Environments). 4 behavioral categories of pain-like behavior (avoidance / recovery / managing conflict needs / hypervigilance) × 3 levels of analysis (behavioral / representational / algorithmic). Two papers committed: Nature Machine Intelligence (neuro + robotics — "pain is more than nociception") + NeurIPS (ML — neuromodulation-inspired modulators unify perceptual + hyperparameter + continual-learning). Both at perspective-plus-pilot calibration — demonstrate framework plausibility, NOT exhaustively solve any category. v8 null becomes evidence FOR the framework rather than a failure. Extends [[20260516_1504_symposium_substrate_right_rhetoric_wrong]] + [[20260516_1505_target_one_acknowledge_many_defer_full_coverage]]. |
 | 2026-05-16 | 15:09 | `20260516_1509_na_lc_natural_target_for_r2_anchor` | NA/LC is the natural targeted system for the NMN paper because the R2 anchor's modulator phasic burst at regime change IS the canonical Aston-Jones & Cohen 2005 LC-NA signature. v5 names NA/LC explicitly in §1 + §3 + frontmatter. |
 | 2026-05-16 | 15:08 | `20260516_1508_v5_last_rhetorical_round_before_experiments` | PI pace flag: project cycled through 4 versions of direction memo + concept memo + lineage investigation + active-inference memo + 4-professor symposium in 4 days; marginal improvement shrinking; empirical floor unchanged since 2026-05-13. Stop rule: v5 is the LAST rhetorical round; next decision is whether to authorise experimental execution. |

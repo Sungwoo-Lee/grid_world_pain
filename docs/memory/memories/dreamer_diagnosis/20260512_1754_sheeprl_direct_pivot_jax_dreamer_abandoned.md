@@ -64,4 +64,6 @@ A 1033-line clean re-implementation plan for sheeprl's DreamerV3 in JAX/NNX (cal
 - [[20260513_1417_jax_vmap_no_speedup_tiny_env]] (dreamer_diagnosis, 2026-05-13) — JAX-vmap parallel env over our 5×5 NoPred gridworld delivered no speedup vs shee
 - [[20260513_2308_strong_strategy_validates_on_cp1]] (dreamer_diagnosis, 2026-05-13) — The Strong (A+B+C+D) deviation-prevention strategy paid off on the first checkpo
 - [[20260518_1511_dreamer_srl_v2_parity_pass_outperform]] (dreamer_diagnosis, 2026-05-18) — dreamer-srl v2 PASS-OUTPERFORMs sheeprl on food-only parity (501 vs ~500) after 
+- [[20260723_1909_nnx_abandoned_archived_stack_confusion]] (dreamer_diagnosis, 2026-07-23) — DreamerV3-NNX is the abandoned stack (2026-05-12 pivot); dreamer_srl is live but
+- [[20260723_1912_fresh_empirical_reaudit_finds_new_bug_class]] (dreamer_diagnosis, 2026-07-23) — A second independent audit pass with a fresh model generation (Fable 5) that EMP
 <!-- END BACKLINKS -->

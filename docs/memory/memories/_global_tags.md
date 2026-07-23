@@ -3,7 +3,7 @@
 > Check this file before inventing a new tag. If a suitable tag already exists, use it exactly as written.
 > Tag drift leads to missed recall — use the canonical form.
 
-**Last updated**: 2026-07-21
+**Last updated**: 2026-07-23
 
 ---
 
@@ -55,6 +55,7 @@ These are not yet active — they become active when first used in an insight. R
 ---
 
 ## Change history
+- 2026-07-23: 4 insights from the Fable-5 re-diagnosis + sheeprl parity + NNX archival + live-path inspection session (`20260723_1909_nnx_abandoned_archived_stack_confusion`, `20260723_1910_sheeprl_parity_drift_lives_in_glue`, `20260723_1912_fresh_empirical_reaudit_finds_new_bug_class` into dreamer_diagnosis; `20260723_1911_rppo_nmn_config_boundary_traps` into nmn_diagnosis) reused existing tags `dreamer`, `decision`, `learned_lesson`, `meta`, `refutation`, `nmn`, `film`, `config`, `subagent` — no new tags promoted.
 - 2026-07-21: 4 insights from the eval-speed + batched-Dreamer + size-sweep session (`20260721_0421_eval_sweep_cpu_bound_not_nas` cluster_ops; `20260721_0422_batched_dreamer_eval_rng_and_unify` dreamer_diagnosis; `20260721_0423_batched_eval_layout_and_npar`, `20260721_0424_dreamer_low_dwell_real_trajectory_verified` behavior_measures) reused existing tags `training_runner`, `learned_lesson`, `meta`, `decision`, `dreamer`, `design`, `refutation` — no new tags promoted.
 - 2026-07-10: 4 insights from the 128-env relaunch + config-owns-values + bush-hiding session (`20260710_1632_num_envs_cli_override_config_owns_values`, `20260710_1633_rppo_resume_needs_matching_num_envs` into cluster_ops; `20260710_1634_behavior_probe_eval_speed_parallel_batched_fdsafe`, `20260710_1635_bush_hiding_metastable_dwell_measure` into behavior_measures) reused existing tags `training_runner`, `config`, `learned_lesson`, `decision`, `meta`, `design`, `refutation` — no new tags promoted.
 - 2026-07-04: 3 insights into existing `behavior_measures` (`20260704_2012_noise_matched_frozen_probe`, `20260704_2013_probe_rerun_stale_checkpoint_contamination`, `20260704_2014_deterministic_probe_significance_inflates`) reused existing tags `design`, `decision`, `noise`, `learned_lesson`, `meta` — no new tags promoted.

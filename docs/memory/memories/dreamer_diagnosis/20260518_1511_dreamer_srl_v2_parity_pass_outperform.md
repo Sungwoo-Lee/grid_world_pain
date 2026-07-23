@@ -59,4 +59,6 @@ The dreamer-srl v2 rebuild reached parity with sheeprl on the food-only task (ep
 - [[20260519_1507_dreamer_srl_v2_cpu_buffer_regression]] (dreamer_diagnosis, 2026-05-19) — dreamer-srl v2's replay buffer is 100% numpy/CPU (faithful to sheeprl's PyTorch 
 - [[20260521_0151_xla_scan_body_compile_dominates_module_count]] (dreamer_diagnosis, 2026-05-21) — Earlier claim — that dreamer-srl's 7-module decomposition CAUSED the 70× lax.sca
 - [[20260521_0152_parity_tested_refactor_verification_chain]] (subagent_engineering, 2026-05-21) — A 4-agent verification chain (senior-developer plan → code-reviewer + math-revie
+- [[20260723_1910_sheeprl_parity_drift_lives_in_glue]] (dreamer_diagnosis, 2026-07-23) — A from-scratch Fable-5 re-audit of both Dreamers vs sheeprl found the math cores
+- [[20260723_1912_fresh_empirical_reaudit_finds_new_bug_class]] (dreamer_diagnosis, 2026-07-23) — A second independent audit pass with a fresh model generation (Fable 5) that EMP
 <!-- END BACKLINKS -->
