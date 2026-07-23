@@ -5,12 +5,19 @@
 #
 # Promoted + unified from tmp/dist_metrics_worker.sh (rPPO) and
 # tmp/dist_dreamer_worker_batched.sh (Dreamer). Both algorithms go through the SAME call
-# to scripts/eval/eval_rollout.py --batched --device cpu --record (unified 2026-07-21);
-# they differ only in --checkpoint form (rPPO: <run>/models/<step>, Dreamer:
-# <run>/checkpoints/<episode>) and Dreamer's extra --agent_config (+ optional --episode).
+# to scripts/eval/eval_rollout.py --batched --device cpu --record --config-list (unified
+# 2026-07-21, moved to --config-list 2026-07-23 -- see docs/environment/
+# SCRIPTS_DEPENDENCY_MAP.md); they differ only in --checkpoint form (rPPO:
+# <run>/models/<step>, Dreamer: <run>/checkpoints/<episode>) and Dreamer's extra
+# --agent_config (+ optional --episode).
+#
+# CHECKPOINT-granularity worklist (one line = one checkpoint + ALL its pending
+# conditions, evaluated in ONE eval_rollout.py process -- builds the model + restores
+# the checkpoint ONCE instead of once per condition; see run_sweep.py's build_groups()
+# docstring for why the grouping is per-checkpoint, not per-condition).
 #
 # Usage: sweep_worker.sh <worklist_file> <node_id> <npar> <n_episodes>
-#   worklist line format: CONFIG|AGENT_CONFIG_OR_-|CHECKPOINT|EPISODE_OR_-|OUTPUT_ROOT
+#   worklist line format: CHECKPOINT|AGENT_CONFIG_OR_-|EPISODE_OR_-|CFG1,OUT1;CFG2,OUT2;...
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,15 +46,29 @@ echo "NODE=$NODE NPAR=$NPAR NEP=$NEP $(date)" > "$MARK/npar_$NODE"
 
 export PY NEP MARK NODE
 runeval() {
-  IFS='|' read -r cfg agent ckpt ep out <<<"$1"
-  mkdir -p "$out"
+  IFS='|' read -r ckpt agent ep cfg_out_list <<<"$1"
   extra=""
   [ "$agent" != "-" ] && extra="--agent_config $agent"
   [ "$ep" != "-" ] && extra="$extra --episode $ep"
-  "$PY" scripts/eval/eval_rollout.py --config "$cfg" $extra --checkpoint "$ckpt" \
-    --output-root "$out" --eval-n-episodes "$NEP" --record --record-n-episodes "$NEP" \
+
+  # Expand the ';'-separated 'cfg,out' pairs into a --config-list file (one
+  # '<cfg>\t<out>' line per pending condition for THIS checkpoint), creating each
+  # condition's output dir up front (eval_rollout.py also mkdir -p's it, but this
+  # keeps behavior identical to the pre-config-list worker).
+  cl_file="$(mktemp)"
+  IFS=';' read -ra pairs <<< "$cfg_out_list"
+  for pair in "${pairs[@]}"; do
+    pcfg="${pair%%,*}"
+    pout="${pair#*,}"
+    mkdir -p "$pout"
+    printf '%s\t%s\n' "$pcfg" "$pout" >> "$cl_file"
+  done
+
+  "$PY" scripts/eval/eval_rollout.py --config-list "$cl_file" $extra --checkpoint "$ckpt" \
+    --eval-n-episodes "$NEP" --record --record-n-episodes "$NEP" \
     --device cpu --quiet --batched --seed 0 >/dev/null 2>&1 \
     || echo "FAIL $1" >> "$MARK/fail_$NODE"
+  rm -f "$cl_file"
 }
 export -f runeval
 

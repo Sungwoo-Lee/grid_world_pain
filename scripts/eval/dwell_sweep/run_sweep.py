@@ -156,10 +156,27 @@ def read_existing_max_step(csv_path):
 
 
 def build_groups(spec, output_dir, max_checkpoints):
+    """Build the two group views this driver needs, at DIFFERENT granularities:
+
+    - `checkpoint_groups`: ONE entry per (run, checkpoint) that has at least one
+      PENDING condition -- `{"run_label", "run_dir", "step", "agent_config",
+      "conds": [{"cond","cfg_path","out_csv","out"}, ...]}` (each entry's `conds`
+      list holds ONLY the conditions still pending for THAT checkpoint -- a
+      checkpoint may be ahead on some conditions and behind on others under the
+      incremental filter). This is the LPT-partition/worklist unit: a whole
+      checkpoint (and every one of its pending conditions) is always routed to
+      ONE node, so a single `eval_rollout.py --config-list` process can build the
+      model + restore that checkpoint ONCE and loop over every pending condition
+      -- the entire point of this grouping (see module docstring).
+    - `cond_groups`: ONE entry per (run, cond) that has >=1 pending checkpoint --
+      `{"run_label", "cond", "out_csv"}` -- used only by `aggregate()`, which
+      still refreshes CSVs per (run, cond) exactly as before this change.
+    """
     algo = spec["algo"]
     pdir = probe_dir(spec.get("probe", "clean"))
     conditions = resolve_conditions(spec)
-    groups = []
+    checkpoint_groups = []
+    cond_groups = []
     for run in spec["runs"]:
         label = mandatory(run, "label", "runs[]")
         path = mandatory(run, "path", "runs[]")
@@ -170,6 +187,11 @@ def build_groups(spec, output_dir, max_checkpoints):
             agent_config = REPO_ROOT / agent_config if not Path(agent_config).is_absolute() else Path(agent_config)
         elif algo == "dreamer":
             agent_config = default_agent_config(run_dir)
+
+        # Per-condition pending-checkpoint sets, same incremental + max_checkpoints
+        # semantics as before (each condition capped to its OWN newest-N pending).
+        pending_by_cond = {}
+        cfg_by_cond = {}
         for cond in conditions:
             cfg_path = pdir / f"{cond}.yaml"
             if not cfg_path.exists():
@@ -179,36 +201,59 @@ def build_groups(spec, output_dir, max_checkpoints):
             newck = [c for c in all_ckpts if c > maxdone]
             if max_checkpoints:
                 newck = newck[-max_checkpoints:]
-            if not newck:
+            cfg_by_cond[cond] = (cfg_path, out_csv)
+            if newck:
+                pending_by_cond[cond] = set(newck)
+                cond_groups.append({"run_label": label, "cond": cond, "out_csv": out_csv})
+
+        # Union of pending steps across all conditions for this run -> one
+        # checkpoint_groups entry per step, carrying only the conditions pending
+        # for THAT step.
+        all_pending_steps = sorted(set().union(*pending_by_cond.values())) if pending_by_cond else []
+        for step in all_pending_steps:
+            conds_here = [c for c in conditions if step in pending_by_cond.get(c, ())]
+            if not conds_here:
                 continue
-            groups.append({
-                "run_label": label, "cond": cond, "checkpoints": newck,
-                "cfg_path": cfg_path, "agent_config": agent_config,
-                "run_dir": run_dir, "out_csv": out_csv,
+            checkpoint_groups.append({
+                "run_label": label, "run_dir": run_dir, "step": step,
+                "agent_config": agent_config,
+                "conds": [
+                    {"cond": c, "cfg_path": cfg_by_cond[c][0], "out_csv": cfg_by_cond[c][1]}
+                    for c in conds_here
+                ],
             })
-    return groups
+    return checkpoint_groups, cond_groups
 
 
-def lpt_partition(groups, nodes):
-    """Longest-Processing-Time-first: sort (run,cond) groups by size descending, assign
-    each whole group to whichever node currently has the smallest running total."""
+def lpt_partition(checkpoint_groups, nodes):
+    """Longest-Processing-Time-first: sort (run,checkpoint) cells by pending-condition
+    count descending, assign each WHOLE cell (checkpoint + all its pending conditions)
+    to whichever node currently has the smallest running total. A cell is never split
+    across nodes -- that's what lets ONE eval_rollout.py process build the model +
+    restore that checkpoint once and loop over every pending condition."""
     loads = {n: 0 for n in nodes}
     buckets = {n: [] for n in nodes}
-    for g in sorted(groups, key=lambda g: -len(g["checkpoints"])):
+    for g in sorted(checkpoint_groups, key=lambda g: -len(g["conds"])):
         n = min(nodes, key=lambda n: loads[n])
         buckets[n].append(g)
-        loads[n] += len(g["checkpoints"])
+        loads[n] += len(g["conds"])
     return buckets, loads
 
 
-def write_worklist(node, groups, scratch_root, algo):
+def write_worklist(node, checkpoint_groups, scratch_root, algo):
+    """One line per (run, checkpoint) cell: `CHECKPOINT|AGENT_OR_-|EPISODE_OR_-|
+    CFG1,OUT1;CFG2,OUT2;...` -- `sweep_worker.sh` expands the last field into a
+    `--config-list` file and calls `eval_rollout.py` ONCE per line, evaluating every
+    listed condition against that one checkpoint build+restore."""
     lines = []
-    for g in groups:
-        for step in g["checkpoints"]:
-            ck = checkpoint_path(algo, g["run_dir"], step)
-            out = scratch_root / g["run_label"] / g["cond"] / str(step)
-            agent = str(g["agent_config"]) if g["agent_config"] else "-"
-            lines.append(f'{g["cfg_path"]}|{agent}|{ck}|-|{out}')
+    for g in checkpoint_groups:
+        ck = checkpoint_path(algo, g["run_dir"], g["step"])
+        agent = str(g["agent_config"]) if g["agent_config"] else "-"
+        cfg_out = ";".join(
+            f'{c["cfg_path"]},{scratch_root / g["run_label"] / c["cond"] / str(g["step"])}'
+            for c in g["conds"]
+        )
+        lines.append(f'{ck}|{agent}|-|{cfg_out}')
     wl_dir = scratch_root / "_worklists"
     wl_dir.mkdir(parents=True, exist_ok=True)
     wl_path = wl_dir / f"worklist_{node}.txt"
@@ -383,16 +428,17 @@ def main():
     print(f"=== dwell sweep: {spec['name']} ({algo}) ===")
     print(f"output: {output_dir}")
 
-    groups = build_groups(spec, output_dir, max_checkpoints)
-    total_ck = sum(len(g["checkpoints"]) for g in groups)
-    print(f"{len(groups)} (run,condition) group(s) with pending work, {total_ck} checkpoint-eval(s) total")
+    checkpoint_groups, cond_groups = build_groups(spec, output_dir, max_checkpoints)
+    total_ck = sum(len(g["conds"]) for g in checkpoint_groups)
+    print(f"{len(checkpoint_groups)} (run,checkpoint) cell(s) with pending work "
+          f"({total_ck} checkpoint-eval(s) = checkpoints x pending conditions total)")
     if total_ck == 0:
         print("Nothing to do -- every (run,condition) CSV is already up to date with the newest checkpoint.")
         return
 
-    buckets, loads = lpt_partition(groups, nodes)
+    buckets, loads = lpt_partition(checkpoint_groups, nodes)
     for n in nodes:
-        print(f"  node {n}: {len(buckets[n])} group(s), {loads[n]} checkpoint-eval(s)")
+        print(f"  node {n}: {len(buckets[n])} checkpoint cell(s), {loads[n]} checkpoint-eval(s)")
 
     wl_paths = {}
     for n in nodes:
@@ -417,7 +463,7 @@ def main():
     poll_done(scratch_root, list(wl_paths.keys()))
 
     print("Aggregating...")
-    n_csv = aggregate(groups, scratch_root, n_workers=agg_workers)
+    n_csv = aggregate(cond_groups, scratch_root, n_workers=agg_workers)
     print(f"  wrote/updated {n_csv} CSV(s)")
 
     print("Plotting...")

@@ -776,6 +776,32 @@ def _resolve_continual_stage_config(config_arg: str, checkpoint_arg: str,
     return str(stage_cfg_path)
 
 
+def _parse_config_list(path: str):
+    """Parse a `--config-list` file: one pending probe condition per line,
+    tab-separated `<config_path>\\t<output_root>`. Blank lines and `#`-comment
+    lines are skipped. Returns a list of (config_path, output_root) string tuples,
+    in file order (order only affects which entry is "first" -- used to build
+    the model/restore the checkpoint -- it does not affect per-condition output).
+    """
+    entries = []
+    with open(path) as f:
+        for lineno, raw_line in enumerate(f, start=1):
+            line = raw_line.rstrip("\n")
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) != 2:
+                raise ValueError(
+                    f"{path}:{lineno}: expected '<config_path>\\t<output_root>', "
+                    f"got: {line!r}"
+                )
+            cfg, out_root = parts
+            entries.append((cfg, out_root))
+    if not entries:
+        raise ValueError(f"--config-list file {path} contains no entries.")
+    return entries
+
+
 def _load_dreamer_probe_env_cfg(env_config_path: str) -> Config:
     """Merged env Config for a Dreamer probe eval, mirroring
     `dreamer_srl_main.py`'s single-config path (L507-L520) and ported verbatim
@@ -837,8 +863,21 @@ def main():
         description="Offline evaluation rollout for behavior-measure toolkit v1.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--config", required=True,
-                        help="Path to environment/training config YAML.")
+    parser.add_argument("--config", default=None,
+                        help="Path to environment/training config YAML. Mutually exclusive "
+                             "with --config-list.")
+    parser.add_argument("--config-list", default=None,
+                        help="Path to a file listing MULTIPLE probe conditions to evaluate "
+                             "against the SAME checkpoint in one process: one condition per "
+                             "line, tab-separated '<config_path>\\t<output_root>' (blank "
+                             "lines and '#' comments skipped). The model is built and the "
+                             "checkpoint restored ONCE, then every condition's rollout runs "
+                             "in a loop, writing recordings under its own <output_root> "
+                             "exactly as a standalone --config run would -- this is the "
+                             "dwell-sweep perf path (avoids rebuilding+restoring the same "
+                             "checkpoint once per condition). Mutually exclusive with "
+                             "--config; --output-root is ignored (each line supplies its own "
+                             "output root instead).")
     parser.add_argument("--agent_config", default=None,
                         help="Path to agent config YAML (used to infer agent type).")
     parser.add_argument("--checkpoint", required=True,
@@ -883,92 +922,124 @@ def main():
     if args.device == "cpu":
         jax.config.update("jax_platform_name", "cpu")
 
+    # --- Resolve --config vs --config-list into a list of (config_arg, output_root_arg) ---
+    if args.config and args.config_list:
+        parser.error("Specify exactly one of --config or --config-list, not both.")
+    if not args.config and not args.config_list:
+        parser.error("Specify one of --config or --config-list.")
+    raw_entries = _parse_config_list(args.config_list) if args.config_list else [
+        (args.config, args.output_root)
+    ]
+
+    # --- Checkpoint-derived identifiers (config-independent; needed by _resolve_entry) ---
+    ckpt_path = Path(args.checkpoint).resolve()
+    run_tag = _derive_run_tag(ckpt_path)
+    # Use the step number from the checkpoint dir name if parseable, else "eval".
+    try:
+        _pct_label = str(int(ckpt_path.name))
+    except ValueError:
+        _pct_label = "eval"
+
     # --- Load configs ---
     # Finding E / L2 fix: for a continual (multi-stage curriculum) run whose
     # checkpoint is being evaluated via the default `--config <run>/models/config.yaml`
     # pattern, evaluate against the checkpoint's OWN stage config, not stage 0's.
     # See _resolve_continual_stage_config for the detection rule and rationale.
-    _stage_config_path = _resolve_continual_stage_config(args.config, args.checkpoint,
-                                                           quiet=args.quiet)
-    config_path = _stage_config_path if _stage_config_path is not None else args.config
-    config = load_env_config(config_path)  # honours `extends:` if present; standalone otherwise
-    bm_cfg = load_behavior_measure_cfg(config)
-    if bm_cfg is None:
-        print("WARNING: behavior_measures block absent in config; using defaults for eval.", flush=True)
-        # Construct a minimal BM cfg for offline use
-        from src.environment.config_loader import BehaviorMeasureCfg
-        bm_cfg = BehaviorMeasureCfg(
-            enabled=True,
-            cue_radius=3.0,
-            obs_window=5,
-            eval_n_episodes=args.eval_n_episodes or 10,
-            eval_seeds=tuple(range(args.eval_n_episodes or 10)),
-            eval_policy_mode="deterministic",
-            eval_max_steps=500,
-            eval_obs_noise="training",
-            motif_window_K=7,
-            motif_features=(
-                "net_displacement", "path_length", "threat_distance_change_rate",
-                "min_threat_distance", "bush_occupancy_fraction", "eat_events_per_window",
-                "action_entropy", "mode_action_fraction", "stay_in_place_fraction",
-                "drive_injury_change",
-            ),
-            motif_kmeans_k=6,
-            motif_kmeans_seed=42,
-            motif_standardise="zscore_pooled",
-            eval_output_root="results/eval",
-        )
+    # Applied PER ENTRY (a no-op for probe configs, which never match the default
+    # stage-0 config.yaml path that triggers stage resolution).
+    def _resolve_entry(config_arg: str, output_root_arg):
+        """Load one probe condition's env config + every field the ORIGINAL
+        single-`--config` flow computed before branching on agent_type. Called once
+        per `--config-list` line (or once, for the plain `--config` path) -- this is
+        what makes the single-`--config` path's output byte-identical to before:
+        with exactly one entry, this reproduces the old top-level code verbatim.
+        """
+        stage_cfg = _resolve_continual_stage_config(config_arg, args.checkpoint,
+                                                      quiet=args.quiet)
+        config_path_i = stage_cfg if stage_cfg is not None else config_arg
+        config_i = load_env_config(config_path_i)  # honours `extends:` if present
+        bm_cfg_i = load_behavior_measure_cfg(config_i)
+        if bm_cfg_i is None:
+            print(f"WARNING: behavior_measures block absent in config {config_arg}; "
+                  "using defaults for eval.", flush=True)
+            # Construct a minimal BM cfg for offline use
+            from src.environment.config_loader import BehaviorMeasureCfg
+            bm_cfg_i = BehaviorMeasureCfg(
+                enabled=True,
+                cue_radius=3.0,
+                obs_window=5,
+                eval_n_episodes=args.eval_n_episodes or 10,
+                eval_seeds=tuple(range(args.eval_n_episodes or 10)),
+                eval_policy_mode="deterministic",
+                eval_max_steps=500,
+                eval_obs_noise="training",
+                motif_window_K=7,
+                motif_features=(
+                    "net_displacement", "path_length", "threat_distance_change_rate",
+                    "min_threat_distance", "bush_occupancy_fraction", "eat_events_per_window",
+                    "action_entropy", "mode_action_fraction", "stay_in_place_fraction",
+                    "drive_injury_change",
+                ),
+                motif_kmeans_k=6,
+                motif_kmeans_seed=42,
+                motif_standardise="zscore_pooled",
+                eval_output_root="results/eval",
+            )
 
-    n_eps = args.eval_n_episodes or bm_cfg.eval_n_episodes
-    seeds = list(args.eval_seeds) if args.eval_seeds else list(bm_cfg.eval_seeds)
-    if len(seeds) < n_eps:
-        # Extend seeds if fewer than n_eps provided
-        extra = [seeds[-1] + i + 1 for i in range(n_eps - len(seeds))]
-        seeds = seeds + extra
-    seeds = seeds[:n_eps]
+        n_eps_i = args.eval_n_episodes or bm_cfg_i.eval_n_episodes
+        seeds_i = list(args.eval_seeds) if args.eval_seeds else list(bm_cfg_i.eval_seeds)
+        if len(seeds_i) < n_eps_i:
+            # Extend seeds if fewer than n_eps provided
+            extra = [seeds_i[-1] + i + 1 for i in range(n_eps_i - len(seeds_i))]
+            seeds_i = seeds_i + extra
+        seeds_i = seeds_i[:n_eps_i]
 
-    if args.batched and bm_cfg.eval_policy_mode != "deterministic":
-        raise NotImplementedError(
-            "--batched only supports eval_policy_mode == 'deterministic' (argmax). "
-            f"Got '{bm_cfg.eval_policy_mode}'. The batched path's parity argument "
-            "(docs/develop/active/refactors/EVAL_ROLLOUT_BATCHING_PERF.md) relies on "
-            "the eval policy being deterministic argmax with the RNG key unused; "
-            "stochastic batched sampling is out of scope for this change. Drop "
-            "--batched to use the legacy per-episode loop."
-        )
+        if args.batched and bm_cfg_i.eval_policy_mode != "deterministic":
+            raise NotImplementedError(
+                "--batched only supports eval_policy_mode == 'deterministic' (argmax). "
+                f"Got '{bm_cfg_i.eval_policy_mode}' for config {config_arg!r}. The batched "
+                "path's parity argument (docs/develop/active/refactors/"
+                "EVAL_ROLLOUT_BATCHING_PERF.md) relies on the eval policy being "
+                "deterministic argmax with the RNG key unused; stochastic batched "
+                "sampling is out of scope for this change. Drop --batched to use the "
+                "legacy per-episode loop."
+            )
 
-    params = load_env_params(config)
-    _assert_eval_obs_noise_supported(bm_cfg)
-    max_steps = int(config.get_mandatory("environment.max_steps"))
+        params_i = load_env_params(config_i)
+        _assert_eval_obs_noise_supported(bm_cfg_i)
+        max_steps_i = int(config_i.get_mandatory("environment.max_steps"))
 
-    # --- Derive checkpoint_pct label (directory-name-safe) ---
-    # Use the step number from the checkpoint dir name if parseable, else "eval".
-    _ckpt_name_for_pct = Path(args.checkpoint).resolve().name
-    try:
-        _pct_label = str(int(_ckpt_name_for_pct))
-    except ValueError:
-        _pct_label = "eval"
+        # --- Determine output dir ---
+        out_root_i = Path(output_root_arg) if output_root_arg else Path(bm_cfg_i.eval_output_root)
+        out_dir_i = out_root_i / run_tag / ckpt_path.name
+        out_dir_i.mkdir(parents=True, exist_ok=True)
+        (out_dir_i / "episodes").mkdir(exist_ok=True)
+        (out_dir_i / "windows").mkdir(exist_ok=True)
 
-    # --- Determine output dir ---
-    ckpt_path = Path(args.checkpoint).resolve()
-    run_tag = _derive_run_tag(ckpt_path)
-    out_root = Path(args.output_root) if args.output_root else Path(bm_cfg.eval_output_root)
-    out_dir = out_root / run_tag / ckpt_path.name
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "episodes").mkdir(exist_ok=True)
-    (out_dir / "windows").mkdir(exist_ok=True)
+        # --- Recording setup (--record) ---
+        rec_dir_i = out_dir_i / "recordings" / _pct_label
+        if args.record:
+            rec_dir_i.mkdir(parents=True, exist_ok=True)
 
-    # --- Recording setup (--record) ---
-    rec_n_eps = args.record_n_episodes if args.record else 0
-    rec_dir = out_dir / "recordings" / _pct_label
-    if args.record:
-        rec_dir.mkdir(parents=True, exist_ok=True)
+        return {
+            "config_arg": config_arg, "config_path": config_path_i, "config": config_i,
+            "bm_cfg": bm_cfg_i, "n_eps": n_eps_i, "seeds": seeds_i, "params": params_i,
+            "max_steps": max_steps_i, "out_dir": out_dir_i, "rec_dir": rec_dir_i,
+        }
+
+    entries = [_resolve_entry(cfg, out_root_arg) for cfg, out_root_arg in raw_entries]
 
     if not args.quiet:
-        print(f"[eval_rollout] Config: {args.config}", flush=True)
+        print(f"[eval_rollout] Config: {args.config if args.config else args.config_list}", flush=True)
         print(f"[eval_rollout] Checkpoint: {args.checkpoint}", flush=True)
-        print(f"[eval_rollout] Output: {out_dir}", flush=True)
-        print(f"[eval_rollout] Episodes: {n_eps}, seeds: {seeds[:5]}{'...' if n_eps > 5 else ''}", flush=True)
+        if len(entries) == 1:
+            print(f"[eval_rollout] Output: {entries[0]['out_dir']}", flush=True)
+        else:
+            print(f"[eval_rollout] {len(entries)} condition(s) from --config-list "
+                  "(model + checkpoint built/restored ONCE, looped per condition)", flush=True)
+        print(f"[eval_rollout] Episodes: {entries[0]['n_eps']}, "
+              f"seeds: {entries[0]['seeds'][:5]}{'...' if entries[0]['n_eps'] > 5 else ''}",
+              flush=True)
 
     # --- Load policy ---
     # Detect agent type from checkpoint directory structure or agent_config
@@ -1006,6 +1077,11 @@ def main():
                 )
 
         # --- Derive model dimensions from env params ---
+        # Built ONCE from the FIRST entry's params. With --config-list, every later
+        # entry is checked below (right before its rollout) for the SAME obs/action
+        # shape -- the multi-config perf path requires all conditions to share the
+        # checkpoint's architecture (see --config-list help text).
+        params = entries[0]["params"]
         obs_breakdown = get_observation_breakdown(params)
         input_dim  = sum(obs_breakdown.values())
         action_dim = 4 + int(params.rest_action_enabled) + int(params.eat_action_enabled)
@@ -1113,18 +1189,192 @@ def main():
         if not args.quiet:
             print(f"[eval_rollout] RPPO model restored from step {step}.", flush=True)
 
-        # --- Policy closure ---
+        # --- Policy closure factory (per entry: `params` differs per probe condition
+        # even though obs/action SHAPE is shared -- entity positions/content differ) ---
         h_init = model.initial_state(batch_size=None)  # no batch dim for single-agent eval
 
-        def policy_fn(state, carry, key, deterministic=True):
-            obs = get_observation(state, params)   # (input_dim,)
-            if carry is None:
-                carry = h_init
-            action, _log_prob, _value, h_new, _mod = get_action_and_value_nnx(
-                model, obs, carry, key=key if not deterministic else None,
-                eval_mode=deterministic,
-            )
-            return action, h_new
+        def _make_policy_fn(params_i):
+            def policy_fn(state, carry, key, deterministic=True):
+                obs = get_observation(state, params_i)   # (input_dim,)
+                if carry is None:
+                    carry = h_init
+                action, _log_prob, _value, h_new, _mod = get_action_and_value_nnx(
+                    model, obs, carry, key=key if not deterministic else None,
+                    eval_mode=deterministic,
+                )
+                return action, h_new
+            return policy_fn
+
+        def _run_rppo_entry(entry, policy_fn):
+            """Run the recording setup + episodes + threat-onset index + online-replay
+            cross-check + metadata.json for ONE probe condition. Mirrors, verbatim, what
+            the original single-`--config` flow did after building/restoring the model
+            (this function's body IS that trailing block, just parameterized per entry
+            so it can be called once for `--config`, or once per line for
+            `--config-list` reusing the SAME already-built/restored `model`)."""
+            config = entry["config"]; config_path_e = entry["config_path"]
+            bm_cfg = entry["bm_cfg"]; params_e = entry["params"]
+            max_steps = entry["max_steps"]; n_eps = entry["n_eps"]; seeds = entry["seeds"]
+            out_dir = entry["out_dir"]; rec_dir = entry["rec_dir"]
+
+            # --- Recording metadata (written once before the loop) ---
+            if args.record:
+                from src.utils.eval_recording import write_run_meta
+                _action_map = ["Up", "Right", "Down", "Left"]
+                if params_e.rest_action_enabled:
+                    _action_map.append("Rest")
+                if params_e.eat_action_enabled:
+                    _action_map.append("Eat")
+                _icon_config = config.get("visualization.icons", None)
+                write_run_meta(
+                    rec_dir, params_e, _icon_config, _action_map, entry["config_arg"],
+                    extras={"checkpoint_pct": _pct_label},
+                )
+                if not args.quiet:
+                    print(f"[eval_rollout] Recording to: {rec_dir}", flush=True)
+
+            # --- Run episodes ---
+            t_start = time.time()
+            rec_n_eps = args.record_n_episodes if args.record else 0
+            episodes = []
+            if args.batched:
+                # Tier 2 — all n_eps episodes as one vmapped batch + lax.scan over max_steps.
+                # See _run_episodes_batched docstring + the plan doc for the parity argument.
+                if not args.quiet:
+                    print(f"[eval_rollout] Running batched rollout: {n_eps} episodes as one "
+                          f"vmapped batch (max_steps={max_steps})...", flush=True)
+                episodes, recorders = _run_episodes_batched(
+                    params_e, model, seeds, max_steps,
+                    record=args.record, record_n_episodes=rec_n_eps,
+                )
+                for ep_idx, ep_data in enumerate(episodes):
+                    ep_data["seed"] = np.int32(seeds[ep_idx])
+                    np.savez_compressed(
+                        out_dir / "episodes" / f"{ep_idx:04d}.npz",
+                        **ep_data,
+                    )
+                    recorder = recorders[ep_idx]
+                    if recorder is not None:
+                        out_path = rec_dir / f"episode_{ep_idx:06d}.rec.gz"
+                        recorder.write(out_path)
+                        if not args.quiet:
+                            print(f"[eval_rollout] Wrote recording: {out_path}", flush=True)
+            else:
+                for ep_idx in range(n_eps):
+                    key = jax.random.PRNGKey(seeds[ep_idx])
+                    if not args.quiet:
+                        print(f"[eval_rollout] Episode {ep_idx + 1}/{n_eps} (seed={seeds[ep_idx]})...", end="\r", flush=True)
+
+                    # When recording, use the recorder-aware variant; otherwise use the fast path.
+                    should_record = args.record and ep_idx < rec_n_eps
+                    if should_record:
+                        ep_data, recorder = _run_episode_with_recording(
+                            params_e, policy_fn, key, max_steps=max_steps,
+                            deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
+                            episode_index=ep_idx,
+                            seed=seeds[ep_idx],
+                        )
+                    else:
+                        ep_data = _run_episode(
+                            params_e, policy_fn, key, max_steps=max_steps,
+                            deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
+                        )
+                        recorder = None
+
+                    ep_data["seed"] = np.int32(seeds[ep_idx])
+                    episodes.append(ep_data)
+
+                    # Save .npz (unchanged schema)
+                    np.savez_compressed(
+                        out_dir / "episodes" / f"{ep_idx:04d}.npz",
+                        **ep_data,
+                    )
+
+                    # Write recording file if applicable
+                    if should_record and recorder is not None:
+                        out_path = rec_dir / f"episode_{ep_idx:06d}.rec.gz"
+                        recorder.write(out_path)
+                        if not args.quiet:
+                            print(f"[eval_rollout] Wrote recording: {out_path}", flush=True)
+
+            if not args.quiet:
+                print(f"\n[eval_rollout] {n_eps} episodes done in {time.time() - t_start:.1f}s", flush=True)
+
+            # --- Threat-onset index ---
+            onsets = _detect_threat_onsets(episodes, bm_cfg)
+            if not args.quiet:
+                print(f"[eval_rollout] {len(onsets)} threat-onset events detected.", flush=True)
+
+            try:
+                import pandas as pd
+                df_onsets = pd.DataFrame(onsets) if onsets else pd.DataFrame(
+                    columns=["episode_idx", "t_star", "triggering_class", "triggering_tag",
+                             "window_start_t", "window_end_t"]
+                )
+                df_onsets.to_parquet(out_dir / "windows" / "threat_onsets.parquet", index=False)
+            except ImportError:
+                # Fallback: JSON
+                with open(out_dir / "windows" / "threat_onsets.json", "w") as f:
+                    json.dump(onsets, f, indent=2)
+                if not args.quiet:
+                    print("[eval_rollout] pyarrow/pandas not installed; wrote threat_onsets.json instead.", flush=True)
+
+            # --- Online replay (sanity cross-check) ---
+            replay = _compute_online_replay(episodes, bm_cfg)
+            with open(out_dir / "online_replay.json", "w") as f:
+                json.dump(replay, f, indent=2, default=lambda x: None if (isinstance(x, float) and x != x) else x)
+
+            # --- Metadata ---
+            metadata = {
+                "config": entry["config_arg"],
+                "config_resolved": config_path_e,
+                "checkpoint": args.checkpoint,
+                "agent_type": agent_type,
+                "rollout_mode": "batched" if args.batched else "legacy",
+                "n_episodes": n_eps,
+                "seeds": seeds,
+                "eval_policy_mode": bm_cfg.eval_policy_mode,
+                "eval_obs_noise": bm_cfg.eval_obs_noise,
+                "cue_radius": bm_cfg.cue_radius,
+                "obs_window": bm_cfg.obs_window,
+                "motif_window_K": bm_cfg.motif_window_K,
+                "wall_clock_s": time.time() - t_start,
+                "jax_version": jax.__version__,
+                "git_commit": _get_git_commit(),
+                "jax_devices": [str(d) for d in jax.devices()],
+            }
+            with open(out_dir / "metadata.json", "w") as f:
+                json.dump(metadata, f, indent=2)
+
+            if not args.quiet:
+                print(f"[eval_rollout] Results saved to: {out_dir}", flush=True)
+                for k, v in replay.items():
+                    if isinstance(v, float) and v != v:
+                        print(f"  {k}: NaN")
+                    elif isinstance(v, float):
+                        print(f"  {k}: {v:.4f}")
+
+        # --- Loop over every entry (1 for plain --config; N for --config-list),
+        # reusing the SAME model/checkpoint restored above. Each entry's episodes
+        # list is local to this iteration and goes out of scope (and is GC-able)
+        # before the next entry starts -- recordings are written to disk per
+        # entry, not accumulated in memory across entries. ---
+        for idx, entry in enumerate(entries):
+            if idx > 0:
+                obs_breakdown_i = get_observation_breakdown(entry["params"])
+                action_dim_i = (4 + int(entry["params"].rest_action_enabled)
+                                 + int(entry["params"].eat_action_enabled))
+                if obs_breakdown_i != obs_breakdown or action_dim_i != action_dim:
+                    raise ValueError(
+                        f"--config-list entry {entry['config_arg']!r} has a different "
+                        f"observation/action shape than the first entry "
+                        f"({entries[0]['config_arg']!r}) -- obs_breakdown {obs_breakdown_i} "
+                        f"vs {obs_breakdown}, action_dim {action_dim_i} vs {action_dim}. "
+                        "The multi-config path requires every condition to share the "
+                        "checkpoint's model architecture; run this condition through its "
+                        "own single --config invocation instead."
+                    )
+            _run_rppo_entry(entry, _make_policy_fn(entry["params"]))
 
     elif agent_type == "dreamer":
         import flax.nnx as nnx
@@ -1159,21 +1409,44 @@ def main():
         else:
             dreamer_run_dir = ckpt_path  # --checkpoint given as the run_dir itself
 
-        # --- Env config: the FULL merge chain dreamer_srl_main.py uses, not the
-        # plain load_env_config() already used above for params/bm_cfg. ---
-        dreamer_env_cfg = _load_dreamer_probe_env_cfg(config_path)
-        dreamer_env_params = load_env_params(dreamer_env_cfg)
-
         if not args.agent_config:
             raise FileNotFoundError(
                 "Dreamer eval requires --agent_config (the run's models/agent_config.yaml)."
             )
         dreamer_agent_cfg = Config.load_yaml(args.agent_config)
 
-        obs_breakdown_d = get_observation_breakdown(dreamer_env_params)
-        obs_dim = sum(obs_breakdown_d.values())
-        action_dim_d = (4 + int(dreamer_env_params.rest_action_enabled)
-                         + int(dreamer_env_params.eat_action_enabled))
+        # --- Env config: the FULL merge chain dreamer_srl_main.py uses, not the
+        # plain load_env_config() already used above for params/bm_cfg. --- Computed
+        # PER ENTRY (each probe condition merges its own config), but the agent is
+        # built + restored only ONCE below, from the FIRST entry's obs_dim/action_dim
+        # -- every later entry is shape-checked against it (see the loop after restore).
+        dreamer_envs = []
+        for entry in entries:
+            d_env_cfg = _load_dreamer_probe_env_cfg(entry["config_path"])
+            d_env_params = load_env_params(d_env_cfg)
+            d_obs_breakdown = get_observation_breakdown(d_env_params)
+            d_obs_dim = sum(d_obs_breakdown.values())
+            d_action_dim = (4 + int(d_env_params.rest_action_enabled)
+                             + int(d_env_params.eat_action_enabled))
+            dreamer_envs.append({
+                "env_cfg": d_env_cfg, "env_params": d_env_params,
+                "obs_breakdown": d_obs_breakdown, "obs_dim": d_obs_dim,
+                "action_dim": d_action_dim,
+            })
+
+        obs_dim = dreamer_envs[0]["obs_dim"]
+        action_dim_d = dreamer_envs[0]["action_dim"]
+        for i, de in enumerate(dreamer_envs[1:], start=1):
+            if de["obs_breakdown"] != dreamer_envs[0]["obs_breakdown"] or de["action_dim"] != action_dim_d:
+                raise ValueError(
+                    f"--config-list entry {entries[i]['config_arg']!r} has a different "
+                    f"observation/action shape than the first entry "
+                    f"({entries[0]['config_arg']!r}) -- obs_dim {de['obs_dim']} vs {obs_dim}, "
+                    f"action_dim {de['action_dim']} vs {action_dim_d}. The multi-config "
+                    "path requires every condition to share the checkpoint's agent "
+                    "architecture; run this condition through its own single --config "
+                    "invocation instead."
+                )
 
         if not args.quiet:
             print(f"[eval_rollout] Building dreamer_srl agent: obs_dim={obs_dim}, "
@@ -1213,219 +1486,91 @@ def main():
         if not args.quiet:
             print(f"[eval_rollout] Dreamer model restored from step {dreamer_episode}.", flush=True)
 
-        # --- Rollout + record (writes the same .rec.gz format as the rPPO
-        # --record path, under the SAME out_dir/recordings/<pct> layout) ---
+        # --- Rollout + record, ONE loop iteration per probe condition (writes the
+        # same .rec.gz format as the rPPO --record path, under the SAME
+        # out_dir/recordings/<pct> layout). Reuses the SAME world_model/actor
+        # restored once above -- no rebuild/restore per condition. Each condition
+        # calls dreamer_srl_eval_rollout(_batched) fresh with seed=args.seed, so it
+        # gets the SAME per-episode key sequence a standalone single-`--config` call
+        # for that condition would produce (the function reseeds from `seed` inside,
+        # it does not carry state across calls).
         # --batched: all n_eps episodes as one vmapped batch (Tier 2 perf path,
         # ~10-30x speedup for offline probe sweeps). Uses an INDEPENDENT
         # per-episode-key RNG convention, different from the legacy sequential-
         # master-key single-env path -- same seed reproduces the same behavior
         # DISTRIBUTION, not bit-identical trajectories. See
         # dreamer_srl_eval_rollout_batched's docstring for the full argument.
-        t_start = time.time()
-        if args.batched:
+        for entry, de in zip(entries, dreamer_envs):
+            n_eps = entry["n_eps"]; out_dir = entry["out_dir"]
+            t_start = time.time()
+            if args.batched:
+                if not args.quiet:
+                    print(f"[eval_rollout] Running batched Dreamer rollout: {n_eps} "
+                          f"episodes as one vmapped batch...", flush=True)
+                result = dreamer_srl_eval_rollout_batched(
+                    world_model=world_model,
+                    actor=actor,
+                    env_params=de["env_params"],
+                    config=de["env_cfg"],
+                    num_episodes=n_eps,
+                    seed=args.seed,
+                    results_dir=str(out_dir),
+                    checkpoint_pct=dreamer_episode,
+                    render_video=args.record,
+                    quiet=args.quiet,
+                )
+            else:
+                result = dreamer_srl_eval_rollout(
+                    world_model=world_model,
+                    actor=actor,
+                    env_params=de["env_params"],
+                    config=de["env_cfg"],
+                    num_episodes=n_eps,
+                    seed=args.seed,
+                    results_dir=str(out_dir),
+                    checkpoint_pct=dreamer_episode,
+                    render_video=args.record,
+                    quiet=args.quiet,
+                )
+            wall_clock_s = time.time() - t_start
+
             if not args.quiet:
-                print(f"[eval_rollout] Running batched Dreamer rollout: {n_eps} "
-                      f"episodes as one vmapped batch...", flush=True)
-            result = dreamer_srl_eval_rollout_batched(
-                world_model=world_model,
-                actor=actor,
-                env_params=dreamer_env_params,
-                config=dreamer_env_cfg,
-                num_episodes=n_eps,
-                seed=args.seed,
-                results_dir=str(out_dir),
-                checkpoint_pct=dreamer_episode,
-                render_video=args.record,
-                quiet=args.quiet,
-            )
-        else:
-            result = dreamer_srl_eval_rollout(
-                world_model=world_model,
-                actor=actor,
-                env_params=dreamer_env_params,
-                config=dreamer_env_cfg,
-                num_episodes=n_eps,
-                seed=args.seed,
-                results_dir=str(out_dir),
-                checkpoint_pct=dreamer_episode,
-                render_video=args.record,
-                quiet=args.quiet,
-            )
-        wall_clock_s = time.time() - t_start
+                print(f"[eval_rollout] {n_eps} episodes done in {wall_clock_s:.1f}s", flush=True)
+                print(f"[eval_rollout] mean_reward={result['mean_reward']:.3f} "
+                      f"mean_length={result['mean_length']:.1f}", flush=True)
+                if result["recordings_dir"]:
+                    print(f"[eval_rollout] Wrote recordings under: {result['recordings_dir']}", flush=True)
 
-        if not args.quiet:
-            print(f"[eval_rollout] {n_eps} episodes done in {wall_clock_s:.1f}s", flush=True)
-            print(f"[eval_rollout] mean_reward={result['mean_reward']:.3f} "
-                  f"mean_length={result['mean_length']:.1f}", flush=True)
-            if result["recordings_dir"]:
-                print(f"[eval_rollout] Wrote recordings under: {result['recordings_dir']}", flush=True)
+            # Dreamer's rollout writes its own recordings/run_meta (via
+            # dreamer_srl_eval_rollout -> write_run_meta) and doesn't produce the
+            # rPPO branch's per-step arrays needed for episodes/*.npz, the
+            # threat-onset index, or the online-replay cross-check — those are
+            # rPPO-specific behavior-measure-toolkit-v1 outputs. Write a Dreamer-
+            # appropriate metadata.json and move to the next entry (if any).
+            metadata = {
+                "config": entry["config_arg"],
+                "config_resolved": entry["config_path"],
+                "checkpoint": args.checkpoint,
+                "agent_type": agent_type,
+                "rollout_mode": "dreamer_batched" if args.batched else "dreamer_single_env",
+                "n_episodes": n_eps,
+                "seeds": entry["seeds"],
+                "mean_reward": result["mean_reward"],
+                "mean_length": result["mean_length"],
+                "wall_clock_s": wall_clock_s,
+                "jax_version": jax.__version__,
+                "git_commit": _get_git_commit(),
+                "jax_devices": [str(d) for d in jax.devices()],
+            }
+            with open(out_dir / "metadata.json", "w") as f:
+                json.dump(metadata, f, indent=2)
 
-        # Dreamer's rollout writes its own recordings/run_meta (via
-        # dreamer_srl_eval_rollout -> write_run_meta) and doesn't produce the
-        # rPPO branch's per-step arrays needed for episodes/*.npz, the
-        # threat-onset index, or the online-replay cross-check — those are
-        # rPPO-specific behavior-measure-toolkit-v1 outputs. Write a Dreamer-
-        # appropriate metadata.json and stop here.
-        metadata = {
-            "config": args.config,
-            "config_resolved": config_path,
-            "checkpoint": args.checkpoint,
-            "agent_type": agent_type,
-            "rollout_mode": "dreamer_batched" if args.batched else "dreamer_single_env",
-            "n_episodes": n_eps,
-            "seeds": seeds,
-            "mean_reward": result["mean_reward"],
-            "mean_length": result["mean_length"],
-            "wall_clock_s": wall_clock_s,
-            "jax_version": jax.__version__,
-            "git_commit": _get_git_commit(),
-            "jax_devices": [str(d) for d in jax.devices()],
-        }
-        with open(out_dir / "metadata.json", "w") as f:
-            json.dump(metadata, f, indent=2)
-
-        if not args.quiet:
-            print(f"[eval_rollout] Results saved to: {out_dir}", flush=True)
+            if not args.quiet:
+                print(f"[eval_rollout] Results saved to: {out_dir}", flush=True)
         return
 
     else:
         raise NotImplementedError(f"Agent type '{agent_type}' not yet supported by eval_rollout.py.")
-
-    # --- Recording metadata (written once before the loop) ---
-    if args.record:
-        from src.utils.eval_recording import write_run_meta
-        _action_map = ["Up", "Right", "Down", "Left"]
-        if params.rest_action_enabled:
-            _action_map.append("Rest")
-        if params.eat_action_enabled:
-            _action_map.append("Eat")
-        _icon_config = config.get("visualization.icons", None)
-        write_run_meta(
-            rec_dir, params, _icon_config, _action_map, args.config,
-            extras={"checkpoint_pct": _pct_label},
-        )
-        if not args.quiet:
-            print(f"[eval_rollout] Recording to: {rec_dir}", flush=True)
-
-    # --- Run episodes ---
-    t_start = time.time()
-    episodes = []
-    if args.batched:
-        # Tier 2 — all n_eps episodes as one vmapped batch + lax.scan over max_steps.
-        # See _run_episodes_batched docstring + the plan doc for the parity argument.
-        if not args.quiet:
-            print(f"[eval_rollout] Running batched rollout: {n_eps} episodes as one "
-                  f"vmapped batch (max_steps={max_steps})...", flush=True)
-        episodes, recorders = _run_episodes_batched(
-            params, model, seeds, max_steps,
-            record=args.record, record_n_episodes=rec_n_eps,
-        )
-        for ep_idx, ep_data in enumerate(episodes):
-            ep_data["seed"] = np.int32(seeds[ep_idx])
-            np.savez_compressed(
-                out_dir / "episodes" / f"{ep_idx:04d}.npz",
-                **ep_data,
-            )
-            recorder = recorders[ep_idx]
-            if recorder is not None:
-                out_path = rec_dir / f"episode_{ep_idx:06d}.rec.gz"
-                recorder.write(out_path)
-                if not args.quiet:
-                    print(f"[eval_rollout] Wrote recording: {out_path}", flush=True)
-    else:
-        for ep_idx in range(n_eps):
-            key = jax.random.PRNGKey(seeds[ep_idx])
-            if not args.quiet:
-                print(f"[eval_rollout] Episode {ep_idx + 1}/{n_eps} (seed={seeds[ep_idx]})...", end="\r", flush=True)
-
-            # When recording, use the recorder-aware variant; otherwise use the fast path.
-            should_record = args.record and ep_idx < rec_n_eps
-            if should_record:
-                ep_data, recorder = _run_episode_with_recording(
-                    params, policy_fn, key, max_steps=max_steps,
-                    deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
-                    episode_index=ep_idx,
-                    seed=seeds[ep_idx],
-                )
-            else:
-                ep_data = _run_episode(
-                    params, policy_fn, key, max_steps=max_steps,
-                    deterministic=(bm_cfg.eval_policy_mode == "deterministic"),
-                )
-                recorder = None
-
-            ep_data["seed"] = np.int32(seeds[ep_idx])
-            episodes.append(ep_data)
-
-            # Save .npz (unchanged schema)
-            np.savez_compressed(
-                out_dir / "episodes" / f"{ep_idx:04d}.npz",
-                **ep_data,
-            )
-
-            # Write recording file if applicable
-            if should_record and recorder is not None:
-                out_path = rec_dir / f"episode_{ep_idx:06d}.rec.gz"
-                recorder.write(out_path)
-                if not args.quiet:
-                    print(f"[eval_rollout] Wrote recording: {out_path}", flush=True)
-
-    if not args.quiet:
-        print(f"\n[eval_rollout] {n_eps} episodes done in {time.time() - t_start:.1f}s", flush=True)
-
-    # --- Threat-onset index ---
-    onsets = _detect_threat_onsets(episodes, bm_cfg)
-    if not args.quiet:
-        print(f"[eval_rollout] {len(onsets)} threat-onset events detected.", flush=True)
-
-    try:
-        import pandas as pd
-        df_onsets = pd.DataFrame(onsets) if onsets else pd.DataFrame(
-            columns=["episode_idx", "t_star", "triggering_class", "triggering_tag",
-                     "window_start_t", "window_end_t"]
-        )
-        df_onsets.to_parquet(out_dir / "windows" / "threat_onsets.parquet", index=False)
-    except ImportError:
-        # Fallback: JSON
-        with open(out_dir / "windows" / "threat_onsets.json", "w") as f:
-            json.dump(onsets, f, indent=2)
-        if not args.quiet:
-            print("[eval_rollout] pyarrow/pandas not installed; wrote threat_onsets.json instead.", flush=True)
-
-    # --- Online replay (sanity cross-check) ---
-    replay = _compute_online_replay(episodes, bm_cfg)
-    with open(out_dir / "online_replay.json", "w") as f:
-        json.dump(replay, f, indent=2, default=lambda x: None if (isinstance(x, float) and x != x) else x)
-
-    # --- Metadata ---
-    metadata = {
-        "config": args.config,
-        "config_resolved": config_path,
-        "checkpoint": args.checkpoint,
-        "agent_type": agent_type,
-        "rollout_mode": "batched" if args.batched else "legacy",
-        "n_episodes": n_eps,
-        "seeds": seeds,
-        "eval_policy_mode": bm_cfg.eval_policy_mode,
-        "eval_obs_noise": bm_cfg.eval_obs_noise,
-        "cue_radius": bm_cfg.cue_radius,
-        "obs_window": bm_cfg.obs_window,
-        "motif_window_K": bm_cfg.motif_window_K,
-        "wall_clock_s": time.time() - t_start,
-        "jax_version": jax.__version__,
-        "git_commit": _get_git_commit(),
-        "jax_devices": [str(d) for d in jax.devices()],
-    }
-    with open(out_dir / "metadata.json", "w") as f:
-        json.dump(metadata, f, indent=2)
-
-    if not args.quiet:
-        print(f"[eval_rollout] Results saved to: {out_dir}", flush=True)
-        for k, v in replay.items():
-            if isinstance(v, float) and v != v:
-                print(f"  {k}: NaN")
-            elif isinstance(v, float):
-                print(f"  {k}: {v:.4f}")
 
 
 if __name__ == "__main__":

@@ -16,6 +16,16 @@ and Dreamer (`JAX_DreamerSRL`), via the same unified `scripts/eval/eval_rollout.
 --batched --record` call -- they differ only in the `--checkpoint` path convention and
 Dreamer's extra `--agent_config`.
 
+**As of 2026-07-23**, each worker call evaluates ONE checkpoint against ALL of its still-
+pending probe conditions in a single `eval_rollout.py --config-list` process, instead of
+one process per (checkpoint, condition) pair -- the model is built and the checkpoint
+restored ONCE and reused across every condition. This matters because a single
+`eval_rollout.py` call's wall time is dominated by a flat ~7s "build model + restore
+checkpoint" cost that does not depend on episode count, so evaluating a checkpoint's 12
+core probe conditions used to mean paying that ~7s twelve times over; now it's paid once
+per checkpoint (~5.9x fewer core-seconds measured on a real rPPO checkpoint, see "Tuning
+notes").
+
 This was built as ad-hoc gitignored scripts under `tmp/` across ~7 real sweeps this
 session (`tmp/dist_metrics_worker.sh`, `tmp/dist_dreamer_worker_batched.sh`,
 `tmp/aggregate_dreamer_metrics.py`, `tmp/plot_metrics_summary.py`) and is promoted here
@@ -50,8 +60,8 @@ checkpoints -- useful for a quick smoke test before committing to a full sweep:
 
 | File | Role |
 |---|---|
-| `run_sweep.py` | The driver. Reads a spec, enumerates + incrementally filters checkpoints, LPT-partitions work across nodes, launches `sweep_worker.sh` on each node via `run_command.py`, polls for completion, aggregates recordings into CSVs, renders figures. |
-| `sweep_worker.sh` | The unified per-node worker. Eval-only: for each line in its worklist, runs `eval_rollout.py --batched --record` once and writes `.rec.gz` recordings to a scratch dir. No aggregation (that's the driver's job -- one path, not two). |
+| `run_sweep.py` | The driver. Reads a spec, enumerates + incrementally filters checkpoints, LPT-partitions work across nodes **by checkpoint** (see below), launches `sweep_worker.sh` on each node via `run_command.py`, polls for completion, aggregates recordings into CSVs, renders figures. |
+| `sweep_worker.sh` | The unified per-node worker. Eval-only: for each line in its worklist (one CHECKPOINT + all its pending conditions), expands the conditions into a `--config-list` file and runs `eval_rollout.py --batched --record --config-list` ONCE, writing every condition's `.rec.gz` recordings to its own scratch subdir. No aggregation (that's the driver's job -- one path, not two). |
 | `plot_summary.py` | Stacked-row history figures from a directory of `avoid_*.csv` files (one row per probe condition). Promoted as-is from `tmp/plot_metrics_summary.py`; `fig_for()` is imported directly by `run_sweep.py`. |
 
 ## Spec schema
@@ -123,11 +133,18 @@ spawn point, etc.).
   that nesting, and this is the SAME code path for both algorithms (unlike the
   original tmp/ scripts, which had a separate rPPO aggregator baked into the worker and
   a standalone Dreamer aggregator script).
-- **LPT partition.** Work is grouped by (run, condition) -- e.g. "v01_slowmove x
-  avoid_pred_inj00" is one group with N pending checkpoints. Groups are sorted largest
-  first and each whole group is assigned to whichever node currently has the smallest
-  running total, which balances node load well when group sizes vary (e.g. one run has
-  trained further than another).
+- **LPT partition -- CHECKPOINT-granularity, not condition-granularity.** Work is grouped
+  by (run, checkpoint) -- e.g. "v01_slowmove step 8900007" is one cell carrying every
+  condition still pending for that checkpoint (a checkpoint can be ahead on some
+  conditions and behind on others under the incremental filter; only the actually-pending
+  ones are attached). Cells are sorted by pending-condition count descending and each
+  WHOLE cell is assigned to whichever node currently has the smallest running total --
+  a cell is never split across nodes, because that's what lets one `eval_rollout.py
+  --config-list` process build the model + restore that checkpoint once and loop over
+  every pending condition (the entire point of the 2026-07-23 change -- see the top of
+  this README). The worklist line format is `CHECKPOINT|AGENT|EPISODE|CFG1,OUT1;
+  CFG2,OUT2;...`; `sweep_worker.sh` expands the `;`-separated pairs into a
+  `--config-list` file per invocation.
 
 ## Node safety
 
