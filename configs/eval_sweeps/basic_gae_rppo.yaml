@@ -1,0 +1,21 @@
+# rPPO GAE(lambda) return-mode ablation: basic03 + basic04 trained with
+# return_mode: GAE (vs the default MC returns). 2 runs x 12 core avoidance-probe
+# conditions. Compare against the MC-return baselines in metrics_history/b03 + /b04.
+# See scripts/eval/dwell_sweep/README.md for the pipeline + spec schema.
+#
+# Run with:
+#   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+#     scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/basic_gae_rppo.yaml
+# `nodes` must be FREE at run time -- check gpu_status first.
+name: basic_gae
+algo: rppo
+output_dir: results/eval/avoidance/metrics_history_rppo_gae
+probe: clean
+conditions: all
+episodes: 30
+nodes: [101, 103, 104, 105, 108, 110, 113]
+x_axis: steps
+plot_measures: [bush_dwell, spatial_spread, survival_steps]
+runs:
+  - {label: b03_gae, path: results/JAX_RecurrentPPO/20260722-200143_rppo_b03_gae_128env_n106}
+  - {label: b04_gae, path: results/JAX_RecurrentPPO/20260722-200240_rppo_b04_gae_128env_n106}
