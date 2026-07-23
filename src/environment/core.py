@@ -703,7 +703,8 @@ def jax_step(state: EnvState, action: int, params: EnvParams) -> tuple[EnvState,
     # 0: active, 1: max_steps, 2: starvation, 3: overeating, 4: injury
     reason = jnp.array(0, dtype=jnp.int32)
     reason = jnp.where(truncated, 1, reason)
-    reason = jnp.where(new_nutrition <= 0.0, 2, reason)
+    if params.with_nutrition:
+        reason = jnp.where(new_nutrition <= 0.0, 2, reason)
     if params.overeating_death:
         reason = jnp.where(new_satiation >= params.max_satiation, 3, reason)
     reason = jnp.where(new_injury >= params.max_injury, 4, reason)

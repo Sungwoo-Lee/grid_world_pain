@@ -217,6 +217,14 @@ class ActorCriticRNN(nnx.Module):
                 "Use type='FiLM' with use_layer_norm=false instead."
             )
 
+        if self.modulation_enabled and self.rnn_type == "LSTM":
+            raise ValueError(
+                "modulation with rnn_type='LSTM' is unsupported: Injection B "
+                "(memory gate bias) requires the GRU cell (ModulatedGRUCell); "
+                "nnx.LSTMCell has no gate_bias input, so the modulator's z_memory "
+                "head would be silently dropped (dead weight). Use rnn_type: \"GRU\"."
+            )
+
         # Observation Encoding (Flat or Hierarchical)
         if observation_breakdown is None:
             # Fallback for compatibility or if breakdown not provided

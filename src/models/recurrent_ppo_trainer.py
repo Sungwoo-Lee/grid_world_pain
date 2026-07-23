@@ -341,7 +341,9 @@ def update_step(model, optimizer, batch, config):
             # We can use jax.tree_util to find sub-trees, but a simple check often works for Param states
             if 'modulator' in grads:
                 mod_grad_norm = optax.global_norm(grads['modulator'])
-    except:
+    except (KeyError, TypeError):
+        # Narrowed from a bare `except` so a future flax State API change fails
+        # loudly instead of silently freezing modulator/grad_norm at 0.0.
         pass
 
     with jax.named_scope("rppo_optim"):
