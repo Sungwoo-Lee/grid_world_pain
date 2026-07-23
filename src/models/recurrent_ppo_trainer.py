@@ -57,8 +57,11 @@ def compute_gae(rewards, values, values_next, dones, terminateds, gamma, lmbda):
 
     RL-correct truncation handling (Finding B, Part 2 —
     docs/develop/active/issues/FIX_TRUNCATION_TREATED_AS_DEATH.md):
-      - the delta bootstrap is gated on `terminated` (REAL death, termination_reason in {2,3,4}) —
-        it is RETAINED (not zeroed) on timeout (truncation).
+      - the delta bootstrap is gated on `done AND terminated` (REAL death: the episode ended
+        AND the reason was death, termination_reason in {2,3,4}) — it is RETAINED (not zeroed)
+        on timeout (truncation). The AND with `done` guards the known env quirk where
+        `overeating_death=True` stamps termination_reason=3 without setting done (KNOWN_BUGS) —
+        a continuing episode must keep its bootstrap (mirror of `compute_mc_returns`' edge gate).
       - the GAE accumulation reset is still gated on `done` (death OR timeout) — an episode
         boundary still cuts the advantage chain on both, since a new episode starts either way.
     `values_next` MUST be V(s') of the TRUE next state (Transition.next_value, computed pre-reset
@@ -69,13 +72,15 @@ def compute_gae(rewards, values, values_next, dones, terminateds, gamma, lmbda):
         values:       (T,) V(s_t) for t = 0..T-1
         values_next:  (T,) V(s_{t+1}) for t = 0..T-1 — TRUE next-state value, pre-auto-reset
         dones:        (T,) episode-end flags (real death OR timeout) — gates accumulation reset only
-        terminateds:  (T,) real-termination flags (real death only) — gates the value bootstrap
+        terminateds:  (T,) real-termination flags — ANDed with `dones` to gate the value bootstrap
         gamma:        discount factor
         lmbda:        GAE lambda
     """
     def gae_scan(gae, x):
         reward, value, next_value, done, terminated = x
-        delta = reward + gamma * next_value * (1 - terminated) - value
+        # Real death = done AND terminated (overeating-quirk guard — see docstring).
+        real_death = done * terminated
+        delta = reward + gamma * next_value * (1 - real_death) - value
         gae = delta + gamma * lmbda * (1 - done) * gae
         return gae, gae
 

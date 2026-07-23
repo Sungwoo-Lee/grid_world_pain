@@ -89,6 +89,41 @@ def test_death_bootstrap_does_not_leak_across_episode_boundary():
     assert advantages[0] == pytest.approx(1.0, abs=1e-5)
 
 
+def test_bootstrap_retained_on_overeating_quirk_mid_episode():
+    """Overeating quirk guard: a step with terminated=1 but done=0 must RETAIN the bootstrap.
+
+    The known env quirk (KNOWN_BUGS): `overeating_death=True` stamps
+    `termination_reason=3` (so `terminateds`=1) WITHOUT setting `done` — the episode
+    actually continues. A continuing episode must keep its `gamma * V(s')` bootstrap;
+    only a REAL death (done AND terminated) may zero it. `compute_mc_returns` already
+    guards this at the window edge (trainer:114); this pins the same gate in
+    `compute_gae`'s delta. Pre-fix, `compute_gae` zeroed the bootstrap on `terminated`
+    alone, producing an incoherent mid-episode hybrid (bootstrap zeroed, accumulation
+    chain still running).
+    """
+    # t=0: quirk step — terminated=1 (reason=3 stamped) but done=0 (episode continues).
+    # t=1: ordinary non-terminal step.
+    rewards = jnp.array([2.0, 3.0])
+    values = jnp.array([1.0, 0.5])
+    values_next = jnp.array([5.0, 4.0])
+    dones = jnp.array([False, False])
+    terminateds = jnp.array([True, False])  # the quirk: terminated without done
+
+    advantages = compute_gae(rewards, values, values_next, dones, terminateds, GAMMA, LAMBDA)
+
+    # Since done=0 everywhere, the quirk step must behave exactly like an ordinary
+    # mid-episode step: delta_0 = r + gamma*V(s')*1 - V(s), plus the accumulation
+    # from t=1 (chain NOT cut — done=0).
+    delta_1 = rewards[1] + GAMMA * values_next[1] - values[1]  # 3 + 0.99*4 - 0.5 = 6.46
+    delta_0 = rewards[0] + GAMMA * values_next[0] - values[0]  # 2 + 0.99*5 - 1 = 5.95
+    expected_0 = delta_0 + GAMMA * LAMBDA * delta_1
+    assert advantages[0] == pytest.approx(float(expected_0), abs=1e-5), (
+        f"quirk step (terminated=1, done=0) must retain the bootstrap; got {advantages[0]}, "
+        f"expected {float(expected_0):.5f} (pre-fix zeroed-bootstrap value would be "
+        f"{float(expected_0 - GAMMA * values_next[0]):.5f})"
+    )
+
+
 def test_termination_reason_to_terminated_mask():
     """Pins the `termination_reason >= 2` mapping used in `train_iteration`:
     0 = still active, 1 = timeout (truncation, NOT terminated), 2/3/4 = real death
