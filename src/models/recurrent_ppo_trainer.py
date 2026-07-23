@@ -246,7 +246,12 @@ def collect_trajectories(model, env_params, last_state, last_h_state, last_key, 
 
         # 4. Handle Auto-Reset
         with jax.named_scope("rppo_env_reset"):
-            reset_key, _ = jax.random.split(key)
+            # Advance the carried key (never reuse a sub-key): the old
+            # `reset_key, _ = split(key)` re-split the already-carried key without
+            # advancing it, so step t's reset key was byte-identical to step t+1's
+            # master key (split(k, 2) == split(k, N)[:2]) — see
+            # docs/reviews/review_nmn_trainer_parity_20260722.md, findings row 1.
+            key, reset_key = jax.random.split(key)
             from src.environment.core import jax_reset
             reset_state = jax.vmap(jax_reset, in_axes=(None, 0))(env_params, jax.random.split(reset_key, state.agent_pos.shape[0]))
 
