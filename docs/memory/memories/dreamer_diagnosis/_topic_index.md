@@ -4,7 +4,7 @@
 > Read this file when the user's question narrows to the `dreamer_diagnosis` topic.
 
 **Folder definition**: DreamerV3 failure investigation
-**Insights**: 23
+**Insights**: 22
 **Last updated**: 2026-07-23
 
 ---
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-23 | 19:16 | [20260723_1916_train_ratio_replay_ratio_conversion](20260723_1916_train_ratio_replay_ratio_conversion.md) | PDF-verified: DreamerV3 train_ratio = our replay_ratio x batch*seq (x1024); our sweep {1,.5,.25,.0625} = train_ratio {1024,512,256,64} = DreamerV3's full data-scarce->rich range. |
+| 2026-07-23 | 19:13 | [20260723_1913_predator_mixture_inflates_survival_metric](20260723_1913_predator_mixture_inflates_survival_metric.md) | basic04/03 sample predator U{0,1,2}; ~1/3 episodes have no predator so survival mean is a MIXTURE (foraging, not competence). Size verdict RETRACTED; conditioned probes show all Dreamer sizes fail under predator (16-27 steps, max injury, ~0 bush) while rPPO szXS solved it (96.7, bush 100%). |
 | 2026-07-23 | 19:12 | [20260723_1912_fresh_empirical_reaudit_finds_new_bug_class](20260723_1912_fresh_empirical_reaudit_finds_new_bug_class.md) | A second independent audit with a fresh model generation (Fable 5) that EMPIRICALLY EXECUTES suspect paths and DIFFS ports against upstream found 10 new High bugs the first read-only (Opus) audit missed, while re-verifying all its fixes. Running the code beats reading it for integration/glue bugs; a fresh-model re-pass is worthwhile on integration-heavy code. |
 | 2026-07-23 | 19:10 | [20260723_1910_sheeprl_parity_drift_lives_in_glue](20260723_1910_sheeprl_parity_drift_lives_in_glue.md) | From-scratch parity re-audit of both Dreamers vs sheeprl: math cores bit-identical (lambda-returns/actor-loss/Moments diff 0.0), but 11 undeclared training-impact deviations ALL in the glue (optimizer wrapping, loss assembly, buffer writes, config constants). dreamer_srl: no grad clipping (WM loss ~1e30), recon loss 2x under-weighted (faithful fn existed but uncalled), gamma typo in 18 configs, multi-env replay hole-rows. num_envs=1 masked 2 of the worst. Fixed 8c0fcf9/867ec51. |
 | 2026-07-23 | 19:09 | [20260723_1909_nnx_abandoned_archived_stack_confusion](20260723_1909_nnx_abandoned_archived_stack_confusion.md) | Two Dreamers: DreamerV3-NNX (train.py path) was ABANDONED at the 2026-05-12 pivot; dreamer_srl is LIVE but has ZERO NMN hooks and NO offline eval. A full fix-batch (WP-NNX 32c67ca/7304e75) was misdirected onto NNX before a git-history check caught it. Archived NNX to a TRACKED archive/ path — never legacy/ (gitignored, *legacy* pattern silently untracks). fd7af84. Check stack-liveness before routing Dreamer work. |

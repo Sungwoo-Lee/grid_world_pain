@@ -27,6 +27,8 @@
 | `film` | `20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse` | FiLM-gating / conditional modulation (architecture, hyperparameters, behaviour under noise) |
 | `refutation` | `20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse` | Negative-result insight: a pre-registered hypothesis is refuted (or a candidate cause is ruled out) |
 | `config` | `20260619_0111_config_v3_extends_layering_default_base` | Config loader / layering / schema / authoring system |
+| `wandb` | `20260723_1914_dreamer_noise_is_logging_granularity_artifact` | WandB logging cadence, run tracking, metric granularity |
+| `rl` | `20260723_1916_train_ratio_replay_ratio_conversion` | Reinforcement-learning algorithm decisions (replay/train ratio, UTD) |
 
 ---
 

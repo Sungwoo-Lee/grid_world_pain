@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `config_system` topic.
 
 **Folder definition**: Config loader/layering/schema decisions
-**Insights**: 5
-**Last updated**: 2026-06-22
+**Insights**: 6
+**Last updated**: 2026-07-23
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-23 | 19:15 | [20260723_1915_two_level_logging_and_config_layering](20260723_1915_two_level_logging_and_config_layering.md) | Two-level logging: smoothing(window/noise) split from interval(cadence/volume), unit-bearing knobs; Buffer uncapped for rPPO's 128-step rollout. Added dreamer_srl.yaml (unconditional merge). Fixed Dreamer num_envs (was CLI-only, silently 1). Regression I caused: moving checkpoint keys out of default.yaml broke DQN/DRQN/PPO. Principle: default documents EVERY field. |
 | 2026-07-03 | 15:07 | `20260703_1507_train_py_ignores_extends_drops_layers` | SEVERE: train.py loads --config via Config.load_yaml (no extends resolution) -> training gets default.yaml + only the file's OWN keys; inherited layers (noise, random-init, all-combined) silently dropped. basic/07 trained noise-off/random-init-off/hiding-4. Latent since v3.0 (2026-06-19); tooling uses load_env_config so it looked fine. Fix: load --config via load_env_config. |
 | 2026-06-22 | 17:46 | [20260622_1746_start_injury_dead_needs_random_range](20260622_1746_start_injury_dead_needs_random_range.md) | A plain body.start_injury is DEAD in the reset path — injury starts at 0 unless random_start_injury:true (drawn from [low,high]); pin a fixed non-zero injury via a degenerate range (low==high). |
 | 2026-06-19 | 01:14 | [20260619_0114_config_guide_maintenance_contract](20260619_0114_config_guide_maintenance_contract.md) | docs/environment/CONFIG_GUIDE.md (collaborator-facing) + a Maintenance Contract wired into the 5 config-caring agent profiles (read-before / update-on-change) — the anti-rot mechanism for the v3.0 config system, enforced via profiles not memory. |
