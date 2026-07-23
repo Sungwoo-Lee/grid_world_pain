@@ -30,7 +30,9 @@ Usage:
     python train_jax.py --config configs/ablation/homeostatic/04_nociception.yaml --total-timesteps 100000
 """
 import argparse
+import json
 import os
+import subprocess
 import time
 import signal
 import sys
@@ -205,6 +207,173 @@ def _build_continual_schedule(base_config: Config,
         episode_boundaries=list(boundaries),
         checkpoint_frequencies=list(ckpt_freqs),
     )
+
+
+# ---------------------------------------------------------------------------
+# Behavior-probe eval during training (async, on-node CPU; RecurrentPPO only).
+# See docs/develop/active/behavior/PROBE_EVAL_DURING_TRAINING.md for the full design.
+# The eval subprocess (scripts/eval/probe_eval_checkpoint.py) NEVER touches WandB --
+# this trainer is the sole WandB writer, polling for its result.json files.
+# ---------------------------------------------------------------------------
+
+# Hardcoded, NOT a 6th config key (nit fix -- avoids a fallback default on a mandatory-key
+# path): bounded wait for an in-flight probe-eval subprocess at a NORMAL exit, before
+# wandb.finish(). On a Ctrl-C exit this is NOT used -- see PROBE_EVAL_DRAIN_TIMEOUT_S_INTERRUPTED.
+PROBE_EVAL_DRAIN_TIMEOUT_S = 300
+# Fix #4 (Ctrl-C policy): a user hitting Ctrl-C should not wait up to 300s for a
+# background CPU eval before the process actually exits.
+PROBE_EVAL_DRAIN_TIMEOUT_S_INTERRUPTED = 5
+
+# Live WandB gets a FOCUSED subset (3 measures x 3 conditions = 9 series); the full 11
+# measures x N conditions are always written to CSV regardless of this filter (see
+# probe_eval_checkpoint.py) -- a live-panel readability choice only, not a data-loss one.
+PROBE_EVAL_FOCUS_MEASURES = ("bush_dwell", "survival_steps", "spatial_spread")
+PROBE_EVAL_FOCUS_CONDS = ("pred_inj00", "none_inj00", "rabbit_inj00")
+
+_PROBE_EVAL_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "scripts", "eval", "probe_eval_checkpoint.py")
+
+
+def _probe_eval_env():
+    """Belt-and-braces GPU isolation (nit fix) for the probe-eval subprocess TREE: even
+    though `probe_eval_checkpoint.py` also caps its own child (`eval_rollout.py`), setting
+    JAX_PLATFORMS=cpu + CUDA_VISIBLE_DEVICES="" here too means nothing in the eval tree can
+    ever reach the training GPU, regardless of which layer would otherwise miss a path."""
+    env = dict(os.environ)
+    env["JAX_PLATFORMS"] = "cpu"
+    env["CUDA_VISIBLE_DEVICES"] = ""
+    env["OMP_NUM_THREADS"] = "1"
+    env["MKL_NUM_THREADS"] = "1"
+    env["OPENBLAS_NUM_THREADS"] = "1"
+    env["TF_NUM_INTRAOP_THREADS"] = "1"
+    env["TF_NUM_INTEROP_THREADS"] = "1"
+    return env
+
+
+def _maybe_dispatch_probe_eval(probe_cfg, probe_state, results_dir, models_dir,
+                                ep, global_step, iteration, quiet):
+    """Called once per checkpoint save (RecurrentPPO only; gated by the caller on
+    probe_cfg is not None). Increments a monotonic checkpoint index; returns early
+    unless this is the Nth checkpoint. At most one concurrent probe-eval subprocess:
+    if the previous one is still running, this checkpoint's eval is SKIPPED (logged,
+    non-fatal) rather than queued -- rPPO keeps every checkpoint on disk, and the
+    offline `run_sweep.py` pipeline can incrementally backfill any skipped checkpoint
+    later, so a skipped live-eval is never a data-loss event."""
+    proc = probe_state.get("proc")
+    if proc is not None and proc.poll() is None:
+        probe_state["ckpt_index"] += 1
+        if not quiet:
+            print(f"[probe-eval] checkpoint {ep}: previous probe eval (pid={proc.pid}) "
+                  f"still running -- skipping this checkpoint (offline-recoverable via "
+                  f"run_sweep.py's incremental backfill).")
+        return
+    probe_state["proc"] = None
+
+    probe_state["ckpt_index"] += 1
+    if probe_state["ckpt_index"] % probe_cfg["every_n_checkpoints"] != 0:
+        return
+
+    ep_dir = os.path.join(results_dir, "probe_eval", str(ep))
+    os.makedirs(ep_dir, exist_ok=True)
+    cmd = [
+        sys.executable, _PROBE_EVAL_SCRIPT,
+        "--checkpoint", os.path.abspath(os.path.join(models_dir, str(ep))),
+        "--result-json", os.path.abspath(os.path.join(ep_dir, "result.json")),
+        "--out-root", os.path.abspath(ep_dir),
+        "--conditions", str(probe_cfg["conditions"]),
+        "--episodes", str(probe_cfg["episodes"]),
+        "--checkpoint-key", str(ep),
+        "--global-step", str(global_step),
+        "--iteration", str(iteration),
+    ]
+    log_f = open(os.path.join(ep_dir, "log.txt"), "w")
+    proc = subprocess.Popen(cmd, env=_probe_eval_env(), stdout=log_f, stderr=subprocess.STDOUT)
+    probe_state["proc"] = proc
+    probe_state["proc_log_f"] = log_f
+    if not quiet:
+        print(f"[probe-eval] dispatched checkpoint {ep} (pid={proc.pid}); "
+              f"log: {os.path.join(ep_dir, 'log.txt')}")
+
+
+def _poll_and_log_probe_results(probe_state, results_dir, iteration, global_step,
+                                 wandb_enabled, quiet):
+    """Cheap, once-per-iteration poll for finished result.json files. Fix #1
+    (failure isolation): every internal step below has its OWN try/except, so a
+    malformed JSON, a NAS glob hiccup, or a wandb.log raise on ONE checkpoint's result
+    can never block or crash processing of the others -- and the call site in the main
+    loop ALSO wraps this whole function, as defense in depth."""
+    probe_dir = os.path.join(results_dir, "probe_eval")
+    try:
+        result_paths = glob.glob(os.path.join(probe_dir, "*", "result.json"))
+    except Exception as e:
+        print(f"[probe-eval] WARNING: glob failed (non-fatal): {e}")
+        return
+
+    for rp in result_paths:
+        ep_str = os.path.basename(os.path.dirname(rp))
+        if ep_str in probe_state["logged"]:
+            continue
+        try:
+            with open(rp) as f:
+                data = json.load(f)
+        except Exception as e:
+            # Truncated / mid-write read racing the atomic os.replace write in
+            # probe_eval_checkpoint.py -- skip WITHOUT marking handled, so the next
+            # iteration retries (a fully-written file is never truncated; this only
+            # guards a read racing an in-progress write).
+            print(f"[probe-eval] WARNING: could not read {rp} (non-fatal, will retry): {e}")
+            continue
+
+        try:
+            if data.get("status") == "ok" and wandb_enabled:
+                flat = {}
+                for cond, meas in data.get("measures", {}).items():
+                    short = cond.replace("avoid_", "")
+                    if short not in PROBE_EVAL_FOCUS_CONDS:
+                        continue
+                    for k, v in meas.items():
+                        if v is None or k not in PROBE_EVAL_FOCUS_MEASURES:
+                            continue
+                        flat[f"Probe/{k}/{short}"] = v
+                if flat:
+                    flat["Probe/checkpoint_episode"] = data.get("checkpoint_key", int(ep_str))
+                    flat["iteration"] = iteration
+                    flat["timesteps"] = global_step
+                    wandb.log(flat)
+            elif data.get("status") != "ok" and not quiet:
+                print(f"[probe-eval] checkpoint {ep_str}: eval failed, nothing logged "
+                      f"({str(data.get('error', ''))[-300:]})")
+        except Exception as e:
+            print(f"[probe-eval] WARNING: failed to log results for checkpoint {ep_str} "
+                  f"(non-fatal): {e}")
+        probe_state["logged"].add(ep_str)  # mark handled either way (ok, failed, or log error)
+
+
+def _drain_probe_results(probe_state, results_dir, iteration, global_step, wandb_enabled,
+                          quiet, interrupted):
+    """Final drain before wandb.finish(). Fix #4 (Ctrl-C + drain policy):
+    - Normal exit: bounded wait (PROBE_EVAL_DRAIN_TIMEOUT_S) for an in-flight eval so its
+      series reach WandB before the run closes. If it's STILL running past the timeout,
+      do NOT kill it -- leave it running (orphaned, on-node CPU only, harmless) so its
+      CSV still completes; only its final WandB point is missed.
+    - Ctrl-C (KeyboardInterrupt) exit: sharply shortened wait
+      (PROBE_EVAL_DRAIN_TIMEOUT_S_INTERRUPTED) -- the user asked training to stop NOW,
+      not in up to 300s."""
+    proc = probe_state.get("proc")
+    timeout_s = PROBE_EVAL_DRAIN_TIMEOUT_S_INTERRUPTED if interrupted else PROBE_EVAL_DRAIN_TIMEOUT_S
+    if proc is not None and proc.poll() is None:
+        try:
+            proc.wait(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            if not quiet:
+                print(f"[probe-eval] in-flight eval (pid={proc.pid}) did not finish within "
+                      f"{timeout_s}s at shutdown -- leaving it running in the background "
+                      f"(its CSV will still complete; its final WandB point will be missed).")
+    try:
+        _poll_and_log_probe_results(probe_state, results_dir, iteration, global_step,
+                                     wandb_enabled, quiet)
+    except Exception as e:
+        print(f"[probe-eval] WARNING: final drain poll failed (non-fatal): {e}")
 
 
 def main():
@@ -467,6 +636,31 @@ def main():
             "dreamer_v3_nnx/ — see its README and docs/develop/active/diagnosis/"
             "dreamer_sheeprl_parity_2026-07-06/archive_plan_dreamer_v3_nnx.md.")
 
+    # --- Behavior-probe eval during training: gate + mandatory-key validation at
+    # STARTUP, not at the first checkpoint (nit fix) -- a bad/incomplete config raises
+    # here, in the first second of the run, instead of hours in after training has
+    # already made progress. `training.probe_eval_during_training` is a shared key
+    # (declared in configs/train/default.yaml, default false) so every algorithm has it;
+    # the other four keys are only required when the gate is true.
+    probe_eval_enabled = config.get_mandatory('training.probe_eval_during_training')
+    if probe_eval_enabled and algorithm != "RecurrentPPO":
+        raise ValueError(
+            f"training.probe_eval_during_training=true is only supported for "
+            f"RecurrentPPO (see docs/develop/active/behavior/"
+            f"PROBE_EVAL_DURING_TRAINING.md), got algorithm={algorithm!r}.")
+    probe_eval_cfg = None
+    if probe_eval_enabled:
+        probe_eval_cfg = {
+            "every_n_checkpoints": config.get_mandatory('training.probe_eval_every_n_checkpoints'),
+            "conditions": config.get_mandatory('training.probe_eval_conditions'),
+            "episodes": config.get_mandatory('training.probe_eval_episodes'),
+            "on_node": config.get_mandatory('training.probe_eval_on_node'),
+        }
+        if probe_eval_cfg["on_node"] != "self":
+            raise ValueError(
+                f"training.probe_eval_on_node={probe_eval_cfg['on_node']!r} is not "
+                f"implemented (only 'self' — on-node Popen — is supported today).")
+
     if args.profile:
         profile_trace_dir = os.path.join(profile_parent, f"{algorithm}_trace")
         os.makedirs(profile_trace_dir, exist_ok=True)
@@ -622,7 +816,19 @@ def main():
     
     models_dir = os.path.join(results_dir, "models")
     os.makedirs(models_dir, exist_ok=True)
-    
+
+    # Behavior-probe eval during training: process/bookkeeping state, plus fix #2
+    # (resume double-logging) -- pre-seed "already logged" with every result.json that
+    # already exists under this results_dir (e.g. a prior session of a resumed run) so
+    # this session's poll loop does not re-log old checkpoints as duplicate WandB points.
+    probe_state = {"proc": None, "ckpt_index": 0, "logged": set()}
+    if probe_eval_enabled:
+        for _rj in glob.glob(os.path.join(results_dir, "probe_eval", "*", "result.json")):
+            probe_state["logged"].add(os.path.basename(os.path.dirname(_rj)))
+        if probe_state["logged"] and not args.quiet:
+            print(f"[probe-eval] resume: pre-seeded {len(probe_state['logged'])} "
+                  f"already-logged checkpoint(s) from a prior session.")
+
     # Orbax Setup (New API)
     _missing = object()
     max_checkpoints = config.get('training.max_checkpoints_to_keep', _missing)
@@ -713,6 +919,13 @@ def main():
         wandb.define_metric("WorldModel/*", step_metric="iteration")   # new — no pattern existed before
         wandb.define_metric("stage/index",      step_metric="Episode/Number")
         wandb.define_metric("stage/transition", step_metric="Episode/Number")
+        # Behavior-probe eval during training: distinct namespace + its OWN step-metric
+        # (NOT "Behavior/*" above, which is already bound to "iteration" -- a step-metric
+        # pattern can only carry one binding). checkpoint_episode is set explicitly in
+        # every Probe/* log call so a late-arriving async result still plots at the
+        # CORRECT x-position no matter how far training has advanced since dispatch.
+        wandb.define_metric("Probe/checkpoint_episode")
+        wandb.define_metric("Probe/*", step_metric="Probe/checkpoint_episode")
 
         wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py"))
 
@@ -2065,6 +2278,18 @@ def main():
                     })
                     pbar.refresh()
 
+                # Behavior-probe eval: cheap once-per-iteration poll for finished async
+                # eval results (fix #1: fully failure-isolated at BOTH this call site and
+                # inside the helper -- see _poll_and_log_probe_results docstring -- so a
+                # malformed result.json, a NAS glob hiccup, or a wandb.log raise can never
+                # stall or crash the training loop).
+                if probe_eval_enabled:
+                    try:
+                        _poll_and_log_probe_results(probe_state, results_dir, iteration,
+                                                     global_step, wandb_enabled, args.quiet)
+                    except Exception as e:
+                        print(f"[probe-eval] WARNING: poll skipped (non-fatal): {e}")
+
                 # Checkpoint Logic
                 if schedule is not None:
                     checkpoint_freq = schedule.checkpoint_frequencies[current_stage]
@@ -2098,7 +2323,21 @@ def main():
                         pbar.write(f"[CHECKPOINT] Saving model at episode {total_episodes_completed} (Iteration {iteration})...")
                         checkpointer.save(total_episodes_completed, args=ocp.args.StandardSave(ckpt_data))
                         checkpointer.wait_until_finished()  # Ensure sync for stability
-                        
+
+                        # Async behavior-probe eval (non-blocking, on-node CPU subprocess).
+                        # Failure-isolated: any error here is swallowed so training never
+                        # stalls (fix #1 -- see also the two internal try/excepts inside
+                        # _maybe_dispatch_probe_eval for the Popen-construction case).
+                        if algorithm == "RecurrentPPO" and probe_eval_enabled:
+                            try:
+                                _maybe_dispatch_probe_eval(
+                                    probe_eval_cfg, probe_state, results_dir, models_dir,
+                                    total_episodes_completed, global_step, iteration,
+                                    args.quiet,
+                                )
+                            except Exception as e:
+                                pbar.write(f"[probe-eval] dispatch skipped (non-fatal): {e}")
+
                         # Trigger evaluation after checkpoint
                         vis_flag = config.get_mandatory('visualization.enabled')
                         eval_v_flag = config.get_mandatory('training.video_during_training')
@@ -2178,8 +2417,21 @@ def main():
 
         except KeyboardInterrupt:
             print("\nTraining interrupted by user.")
-            
+            training_interrupted = True
+        else:
+            training_interrupted = False
+
     # Final cleanup
+    # Behavior-probe eval: bounded drain of any in-flight subprocess so its series reach
+    # WandB before the run closes (fix #4). Sharply shortened on a Ctrl-C exit -- the user
+    # asked training to stop NOW, not in up to 300s (see _drain_probe_results docstring).
+    if probe_eval_enabled:
+        try:
+            _drain_probe_results(probe_state, results_dir, iteration, global_step,
+                                  wandb_enabled, args.quiet, interrupted=training_interrupted)
+        except Exception as e:
+            print(f"[probe-eval] WARNING: final drain skipped (non-fatal): {e}")
+
     print(f"Training complete. Results saved to {results_dir}")
     if wandb_enabled:
         wandb.finish()
