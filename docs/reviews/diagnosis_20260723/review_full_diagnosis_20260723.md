@@ -1,0 +1,57 @@
+# Full-codebase diagnosis review — 2026-07-23
+
+**Scope**: environment core (`src/environment/`), recurrent-PPO stack (`src/models/`, `train.py`), live Dreamer stack (`src/algorithms/dreamer_srl/`), offline eval tooling (`scripts/eval/`, `src/utils/evaluation_core.py`), and the `configs/` YAML layer.
+**Method**: 13 per-unit deep reviews, each by an independent Fable sub-agent with a fresh context, seeded with the bug-curator's filtered known-bugs list (so already-recorded bugs were regression-checked, not re-reported). Report-only — no code was changed. Per-unit detail files sit next to this doc.
+
+## Verdict (plain English)
+
+**No P0 was found** — nothing indicates a currently-running training is being corrupted by an unknown bug. The core learning math on both stacks is in good shape: the Dreamer loss/return machinery was verified numerically against DreamerV3 semantics, the replay buffer was cleared with simulated-sampling checks, and every one of the ~40 previously-fixed bugs that reviewers regression-checked is still fixed.
+
+The pass found **10 P1-level issues** (wrong results in realistic use; two of them currently dormant/latent) and ~65 P2s. Three coherent stories dominate:
+
+1. **The config layer fails silently in exactly the places the project cares about most.** A typo'd noise-modality key or an unknown noise-mode string silently disables noise (the project's central experimental manipulation). The `entities:` underlay in `default.yaml` silently replaces the scene of all 81 legacy-format configs when loaded by `train.py` — while `eval_rollout.py` loads the true legacy scene, so train and eval can run different worlds. And one active noise-experiment config (`05-sensory_noise_10x10.yaml`) claims "interoception kept CLEAN" in its header while the merged result actually noises all three interoceptive channels at sigma 0.1.
+2. **The modulated-vs-baseline comparison is not initialization-matched.** The baseline arm uses `nnx.GRUCell` (orthogonal recurrent init); the modulated arm's `ModulatedGRUCell` uses lecun_normal with flipped gate polarity and duplicate biases, despite a docstring claiming functional identity. On top of that, FiLM "pass-through" init actually sign-flips features at step 1, and the temperature head starts at ~1.2–1.35 instead of 1.0 (modulated policies start flatter than baseline). Every headline modulation comparison carries this confound.
+3. **Eval tooling can silently misattribute or bias results.** rPPO step-dir eval invocations collapse their output identity to `results/eval/models/` (7 different runs' outputs already collide there on disk; same-step runs would overwrite each other). Parallel-env eval with `record_stats` off undercounts the first `num_envs` episodes' survival by 1 step. The MC-return window-edge bootstrap fix (H4) has a units mismatch (z-scored critic output folded into raw-reward returns), so the bias it targeted largely persists in death-heavy phases of MC-mode runs.
+
+Registry hygiene: three recorded rows are stale (two features since implemented, one dead-key claim now false) and three latent rows are now verified with evidence — bug-curator updates dispatched with this review.
+
+## P1 findings
+
+| # | Area | Location | Claim | Status |
+|---|---|---|---|---|
+| 1 | config loader | `config_loader.py:429-443` + `default.yaml:58` | `entities:` underlay silently replaces legacy `predators:`/`neutral_animals:` scenes under `train.py` (81 configs), while `eval_rollout.py` uses the true legacy scene — train/eval world divergence. Verified: `2X2_area.yaml` trains on the default scene. | live |
+| 2 | config loader | `config_loader.py:1510` | Unknown perceptual-noise `mode` string silently maps to 0 = noise off. | live |
+| 3 | config loader | `config_loader.py:1512-1542` | Typo'd modality key under `perceptual_noise.modalities` silently dropped from all noise arrays. | live |
+| 4 | rPPO network | `modulated_gru_cell.py:29-40` + `recurrent_ppo_network.py:249-254` | Baseline vs modulated arms use different GRU implementations with different recurrent init (orthogonal vs lecun_normal), flipped gate polarity, duplicate biases — systematic init confound in every modulated-vs-baseline comparison. | live |
+| 5 | rPPO trainer | `recurrent_ppo_trainer.py:374-380` | MC window-edge bootstrap (H4 fix) units mismatch: critic trained on per-window z-scored returns but its raw output seeds raw-reward return scans; with death_penalty=100 the bootstrap is ~std× too small — H4's window-edge bias largely persists in death-heavy phases of live MC-mode runs. | live |
+| 6 | eval tooling | `eval_rollout.py:908` | `run_tag` special-cases only "checkpoints", so rPPO step-dir invocations collapse to `run_tag="models"` — run identity lost, outputs from different runs collide/overwrite (7 colliding step dirs already on disk under `results/eval/models/`). | live |
+| 7 | eval tooling | `evaluation_core.py:565/696` | With `record_stats=False` and `num_envs>1`, the first `num_envs` episodes undercount survival steps by 1 and their `.rec.gz` recordings lack the initial frame. | live |
+| 8 | configs | `configs/environment/experiment/basic/05-sensory_noise_10x10.yaml` | Header claims interoception "kept CLEAN" but the merged config leaves sigma=0.1 noise on satiation + both nociception channels (sigma deep-merges through from `default.yaml`; loader-proven). | live |
+| 9 | logging | `configs/logger/wandb.yaml` + `train.py` | `wandb.job_type` is never passed to `wandb.init` — the documented prod/debug job-type facet is unset on all runs (and the fallback value is misspelled "defualt"). | live |
+| 10 | train entry | `train.py:1293+` | `iteration_episodes` never cleared for DQN/DRQN/plain-PPO paths (clear gated on `logging_cfg is None`, always non-None) — their Episode/* metrics are lifetime-cumulative means. rPPO path unaffected. | live (non-rPPO paths) |
+| — | eval tooling | `eval_rollout.py:98,201,1077` | Stochastic eval mode would reuse the episode's reset PRNG key unchanged for every step's action sample (degenerate correlated sampling). | dormant (all configs deterministic) |
+| — | eval tooling | `eval_rollout.py:1364` | `behavior_measures.eval_obs_noise: "zero"` validated + echoed into metadata.json but never enforced — metadata would claim noise-free while evaluating with training noise. | latent |
+
+## P2 highlights (full lists in per-unit files)
+
+- **Env core** (`findings_env_core.md`, 10 P2s): reused `damage_key` makes damage draws bit-correlated across resource/animal/obstacle sources; silent entity-placement failure modes (spawn-area overflow → (0,0) stacking or off-grid parking; random-start agent can spawn on hidden predators; step-time food respawn skips overlap resolution → unreachable food or instant auto-eat); distance metrics count parked inactive animals; `EnvState.terminated` actually stores done|truncated.
+- **Sensors/rendering** (`findings_env_world.md`, 6 P2s): `grid_world.py` is a dead stale copy of `renderer.py`; two eval-video rendering quirks (RCK/NEU color swap; ghost inactive entities drawn) that can mislead qualitative reads; latent noise-guard asymmetry and ring-1 channel-order permutation if visual range grows.
+- **Config loader** (`findings_config_loader.md`, 10 P2s): silent read-site defaults on every noise leaf; `nociception_intensity` defaults 0.0 (entities path) vs 0.9 (legacy path); YAML "1e-4"-as-string traps reach EnvParams; `deep_update` aliases lists between configs; `extends:` inside *agent* configs silently ignored.
+- **rPPO trainer/network** (`findings_rppo_trainer.md`, `findings_rppo_network.md`): per-window z-scoring gives the critic a nonstationary target (root enabler of P1 #5); instant-death mode (`with_injury: false`) deaths misclassified as timeouts by the `terminateds = reason>=2` mask (verified from both env and trainer side); hierarchical encoder silently drops trailing obs dims when breakdown sums short; FiLM/temperature init-centering issues; fifth config-boundary silent default (`percept_add_bias_init`).
+- **train.py** (`findings_train_entry.md`, 6 P2s): no final/exit checkpoint (short runs end with zero checkpoints); redundant checkpoint+eval immediately after resume; post-resume `Time/sps_env` inflated; YAML `wandb.name` ignored; stage swap clears only one of three metric windows.
+- **Dreamer stack** (`findings_dreamer_agent.md`, `findings_dreamer_loss.md`, `findings_dreamer_train.md`, `findings_dreamer_main.md`, `findings_dreamer_eval_ckpt.md`): eval videos never appear in WandB (backward-step logging, silently dropped); curriculum stage swap never rebinds behavior-measure config (a stage enabling BM gets no metrics); Ratio scheduler drops owed gradient steps at startup when `learning_starts//num_envs < seq_len`; `load_checkpoint()`'s documented contract broken (every caller carries a private workaround); Ratio scheduler + replay buffer never checkpointed (future-resume burst hazard); Dreamer eval recordings never store the noise-free observation (rPPO parity gap); eval stats/video passes are bit-identical nested samples on one fixed seed; `eval_stats_num_envs` mandatory-read but unused; `imagine()` gradient-leak trap; dead head classes; false "eager-read-stale-params" root-cause docstring (empirically disproven — the historical rPPO divergence likely traces to untargeted raw-dict restore instead).
+- **Configs** (`findings_configs.md`, 8 P2s): dead keys across all 12 rPPO model configs (`frame_stack`, `actor_fc_layers`, `critic_fc_layers`) and dead `env.num_envs` in dreamer_srl model configs; size-sweep `unimodal_overrides` silently ignored; continual schedules point at mismatched/nonexistent stage dirs; two uncommented `train_command-agent.sh` blocks reference renamed configs (would FileNotFoundError); `default.yaml` noise header says 9 modalities, block has 10.
+
+## Regression check — all pass
+
+Every FIXED registry row touching the reviewed units was verified still in place: rPPO H4 mechanics + GAE timeout + July PRNG/GAE-gate commits (18/18 trainer tests green), the six Dreamer replay/logging/compilation fixes, the three config-loader fixes (`extends:` resolved identically at all 6 entry-point load sites), and the five eval fixes (H8 column alignment verified column-for-column, H9, continual stage resolution, both noise-visibility fixes). No regressions anywhere.
+
+## Registry actions (dispatched to bug-curator)
+
+- **Stale → retire/re-scope**: "eval_rollout NotImplementedError for dreamer_srl" (full Dreamer branch exists since commit 766938d); "CLI overrides not saved to config" (appears fixed — re-verify); "percept_bias_init dead key" (it IS read now).
+- **Latent → verified**: overeating never terminates (core.py:117-126+708); termination-reason unreliable with a body system off — now with trainer-side consequence (GAE bootstraps out of corpse states); `auto_reset_step()` key arg confirmed dead code.
+- **New rows**: the 10 P1s above (+ the 2 dormant/latent P1s as latent rows).
+
+## Per-unit detail files
+
+`findings_env_core.md` · `findings_env_world.md` · `findings_config_loader.md` · `findings_rppo_trainer.md` · `findings_rppo_network.md` · `findings_train_entry.md` · `findings_dreamer_agent.md` · `findings_dreamer_loss.md` · `findings_dreamer_train.md` · `findings_dreamer_main.md` · `findings_dreamer_eval_ckpt.md` · `findings_eval_tooling.md` · `findings_configs.md` — all in this directory. Review generated 2026-07-23 by 13 independent Fable sub-agent reviewers; report-only.
