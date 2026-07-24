@@ -2,8 +2,8 @@
 """Eval ONE rPPO checkpoint against the 12-condition avoidance-probe battery -> per-condition
 CSVs (offline-pipeline schema) + a single `result.json` summary.
 
-This is the reusable "eval one checkpoint" core behind the during-training behavior-probe
-feature (see docs/develop/active/behavior/PROBE_EVAL_DURING_TRAINING.md). It is invoked two
+This is the reusable "eval one checkpoint" core behind the during-training experiment-eval
+feature (see docs/develop/active/behavior/EXPERIMENT_EVAL_DURING_TRAINING.md). It is invoked two
 ways:
   1. By `train.py`, via `subprocess.Popen`, once per Nth checkpoint save (async, non-blocking;
      the trainer never waits on this process — it only polls for `result.json`).
@@ -29,10 +29,10 @@ or a non-zero exit that could look like something to react to).
 
 Usage (hand-run smoke test):
   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \\
-      scripts/eval/probe_eval_checkpoint.py \\
+      scripts/eval/experiment_eval_checkpoint.py \\
       --checkpoint results/JAX_RecurrentPPO/<run>/models/<episode> \\
-      --result-json /tmp/probe_smoke/result.json \\
-      --out-root /tmp/probe_smoke \\
+      --result-json /tmp/experiment_smoke/result.json \\
+      --out-root /tmp/experiment_smoke \\
       --conditions avoid_pred_inj00,avoid_none_inj00,avoid_rabbit_inj00 \\
       --episodes 3 --checkpoint-key <episode> --global-step 0 --iteration 0
 """
@@ -46,7 +46,7 @@ import traceback
 from pathlib import Path
 
 _HERE = Path(__file__).resolve()
-REPO_ROOT = _HERE.parents[2]  # scripts/eval/probe_eval_checkpoint.py -> repo root (2 up)
+REPO_ROOT = _HERE.parents[2]  # scripts/eval/experiment_eval_checkpoint.py -> repo root (2 up)
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "scripts" / "eval" / "dwell_sweep"))
 from run_sweep import _measure_cell, HEAD, KEYS  # noqa: E402 (bare-name import, see SCRIPTS_DEPENDENCY_MAP.md)
@@ -72,7 +72,7 @@ def _capped_env(run_dir_hint: str) -> dict:
     env["TF_NUM_INTRAOP_THREADS"] = "1"
     env["TF_NUM_INTEROP_THREADS"] = "1"
     cache_key = hashlib.md5(run_dir_hint.encode()).hexdigest()[:12]
-    cache_dir = f"/tmp/jaxcache_probe_eval_{cache_key}"
+    cache_dir = f"/tmp/jaxcache_experiment_eval_{cache_key}"
     os.makedirs(cache_dir, exist_ok=True)
     env["JAX_COMPILATION_CACHE_DIR"] = cache_dir
     env["JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES"] = "0"
@@ -125,7 +125,7 @@ def _run_eval_and_measure(args, conds, probe_dir, out_root: Path):
     for cond, cond_out in cond_out_dirs.items():
         cell = _measure_cell(cond_out)
         if cell is None:
-            print(f"[probe-eval] WARNING: no recordings found for condition {cond!r} "
+            print(f"[experiment-eval] WARNING: no recordings found for condition {cond!r} "
                   f"at {cond_out}; skipping.", file=sys.stderr)
             measures[cond] = {k: None for k in KEYS}
             continue
