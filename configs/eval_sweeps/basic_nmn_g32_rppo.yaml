@@ -1,0 +1,23 @@
+# rPPO-NMN (rPPO + neural modulation, gain-32 FiLM variant) behavior-probe sweep.
+# 4 currently-training runs: basic03 + basic04, each x {MC returns, GAE returns}.
+# Compare against the plain-rPPO MC baselines in metrics_history/ and the GAE
+# baselines in metrics_history_rppo_gae/. See scripts/eval/dwell_sweep/README.md.
+#
+# Run with:
+#   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+#     scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/basic_nmn_g32_rppo.yaml
+# `nodes` must be FREE at run time -- check gpu_status first.
+name: basic_nmn_g32
+algo: rppo
+output_dir: results/eval/avoidance/metrics_history_rppo_nmn_g32
+probe: clean
+conditions: all
+episodes: 30
+nodes: [102, 107, 108, 110, 113]
+x_axis: steps
+plot_measures: [bush_dwell, spatial_spread, survival_steps]
+runs:
+  - {label: b03_mc,  path: results/JAX_RecurrentPPO/20260723-210710_rppo_nmn_g32_b03_mc_n112}
+  - {label: b03_gae, path: results/JAX_RecurrentPPO/20260723-210714_rppo_nmn_g32_b03_gae_n112}
+  - {label: b04_mc,  path: results/JAX_RecurrentPPO/20260723-210718_rppo_nmn_g32_b04_mc_n111}
+  - {label: b04_gae, path: results/JAX_RecurrentPPO/20260723-210724_rppo_nmn_g32_b04_gae_n111}

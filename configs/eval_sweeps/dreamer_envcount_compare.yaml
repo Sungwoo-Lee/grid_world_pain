@@ -1,0 +1,25 @@
+# Dreamer 16-env vs 128-env behavior comparison, matched at replay_ratio 0.0625.
+# The 16-env runs were trained then terminated; the 128-env runs are the current
+# (still-training) versions. basic03 + basic04. Re-run incrementally as the 128-env
+# runs train further. agent_config auto-detected from <run>/models/agent_config.yaml.
+# See scripts/eval/dwell_sweep/README.md for the pipeline + spec schema.
+#
+# Run with:
+#   /home/vncuser/miniconda3/envs/grid_world_pain/bin/python \
+#     scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/dreamer_envcount_compare.yaml
+# `nodes` must be FREE at run time -- check gpu_status first.
+name: dreamer_envcount
+algo: dreamer
+output_dir: results/eval/avoidance/metrics_history_dreamer_envcount
+probe: clean
+conditions: all
+episodes: 30
+nodes: [102, 107, 108, 110, 113]
+npar: 5
+x_axis: episodes
+plot_measures: [bush_dwell, spatial_spread, survival_steps]
+runs:
+  - {label: b04_16env,  path: results/JAX_DreamerSRL/20260717-025141_dsrl_b04_M_rr0p0625}
+  - {label: b04_128env, path: results/JAX_DreamerSRL/20260723-221645_dsrl_b04_M_128env_n114}
+  - {label: b03_16env,  path: results/JAX_DreamerSRL/20260722-023132_dsrl_b03_M_rr0p0625}
+  - {label: b03_128env, path: results/JAX_DreamerSRL/20260725-015711_dsrl_b03_M_rr0p0625_128env}
