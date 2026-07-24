@@ -6,3 +6,16 @@ testing:
   record_stats: true
   record_true_observations: true
   auto_render_after_eval: true   # post-eval: run render_recordings.py + upload to WandB
+
+# The behavior-probe experiment: evaluate a checkpoint on the avoidance probes -> 11 measures.
+# Runs OFFLINE (scripts/eval/dwell_sweep) OR automatically DURING training (during_training.enabled).
+# See docs/develop/active/behavior/EXPERIMENT_EVAL_DURING_TRAINING.md for the full design.
+experiment:
+  conditions: all                  # "all" = the 12 core avoidance probes; or a comma-separated list of stems (e.g. "avoid_pred_inj00,avoid_none_inj00")
+  episodes: 30                      # episodes evaluated per condition
+  log_measures: [bush_dwell, survival_steps]   # which of the 11 measures to surface LIVE on WandB (all 11 are ALWAYS written to CSV regardless). Valid names: bush_use_rate, bush_entry_step, bush_dwell, fid, time_near_animal, closest_approach, time_moving, spatial_spread, pursuit_duration, injury_change, survival_steps
+  log_conditions: all              # which conditions to surface on WandB: "all" or a comma-list of stems (all 12 always in CSV)
+  during_training:
+    enabled: false                 # opt-in: auto-run this experiment during training (rPPO only for now)
+    every_n_checkpoints: 1         # run at every Nth checkpoint save
+    on_node: self                  # "self" = on-node CPU subprocess (only value implemented; a node-id is a future option)

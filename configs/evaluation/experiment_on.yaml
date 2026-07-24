@@ -1,0 +1,6 @@
+# Turns the behavior-probe experiment ON during training. Inherits all settings
+# from evaluation/default; override episodes/log_measures/etc. here per run if needed.
+extends: evaluation/default
+experiment:
+  during_training:
+    enabled: true

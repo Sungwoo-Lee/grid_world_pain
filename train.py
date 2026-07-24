@@ -224,12 +224,14 @@ EXPERIMENT_EVAL_DRAIN_TIMEOUT_S = 300
 # background CPU eval before the process actually exits.
 EXPERIMENT_EVAL_DRAIN_TIMEOUT_S_INTERRUPTED = 5
 
-# Live WandB gets bush_dwell + survival_steps for ALL 12 conditions (= 24 series);
-# EXPERIMENT_EVAL_FOCUS_CONDS = None means "no condition filter -- log every condition".
-# The full 11 measures x 12 conditions are always written to CSV regardless (see
-# experiment_eval_checkpoint.py) -- this filter is a live-panel choice only, not data loss.
-EXPERIMENT_EVAL_FOCUS_MEASURES = ("bush_dwell", "survival_steps")
-EXPERIMENT_EVAL_FOCUS_CONDS = None  # None = all conditions; or a tuple of stems to restrict
+# Which measures/conditions to surface LIVE on WandB is config-driven (experiment.
+# log_measures / log_conditions in configs/evaluation/default.yaml), resolved once at startup
+# into experiment_eval_cfg["log_measures"] (tuple of measure names) and
+# experiment_eval_cfg["log_conditions"] (None = no filter, log every condition, or a tuple of
+# stems to restrict) and threaded through to _poll_and_log_experiment_results /
+# _drain_experiment_results below. The full 11 measures x 12 conditions are always written to
+# CSV regardless (see experiment_eval_checkpoint.py) -- this filter is a live-panel choice
+# only, not data loss.
 
 _EXPERIMENT_EVAL_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                    "scripts", "eval", "experiment_eval_checkpoint.py")
@@ -297,12 +299,17 @@ def _maybe_dispatch_experiment_eval(experiment_cfg, experiment_state, results_di
 
 
 def _poll_and_log_experiment_results(experiment_state, results_dir, iteration, global_step,
-                                 wandb_enabled, quiet):
+                                 wandb_enabled, quiet, focus_measures, focus_conds):
     """Cheap, once-per-iteration poll for finished result.json files. Fix #1
     (failure isolation): every internal step below has its OWN try/except, so a
     malformed JSON, a NAS glob hiccup, or a wandb.log raise on ONE checkpoint's result
     can never block or crash processing of the others -- and the call site in the main
-    loop ALSO wraps this whole function, as defense in depth."""
+    loop ALSO wraps this whole function, as defense in depth.
+
+    focus_measures: tuple of measure names to surface on WandB (from
+    experiment.log_measures). focus_conds: None (log every condition) or a
+    tuple of condition stems to restrict to (from experiment.log_conditions).
+    Both are config-driven filters on the LIVE panel only; CSVs always carry all 11x12."""
     experiment_dir = os.path.join(results_dir, "experiment_eval")
     try:
         result_paths = glob.glob(os.path.join(experiment_dir, "*", "result.json"))
@@ -330,10 +337,10 @@ def _poll_and_log_experiment_results(experiment_state, results_dir, iteration, g
                 flat = {}
                 for cond, meas in data.get("measures", {}).items():
                     short = cond.replace("avoid_", "")
-                    if EXPERIMENT_EVAL_FOCUS_CONDS is not None and short not in EXPERIMENT_EVAL_FOCUS_CONDS:
+                    if focus_conds is not None and short not in focus_conds:
                         continue
                     for k, v in meas.items():
-                        if v is None or k not in EXPERIMENT_EVAL_FOCUS_MEASURES:
+                        if v is None or k not in focus_measures:
                             continue
                         flat[f"Experiment/{k}/{short}"] = v
                 if flat:
@@ -352,7 +359,7 @@ def _poll_and_log_experiment_results(experiment_state, results_dir, iteration, g
 
 
 def _drain_experiment_results(experiment_state, results_dir, iteration, global_step, wandb_enabled,
-                          quiet, interrupted):
+                          quiet, interrupted, focus_measures, focus_conds):
     """Final drain before wandb.finish(). Fix #4 (Ctrl-C + drain policy):
     - Normal exit: bounded wait (EXPERIMENT_EVAL_DRAIN_TIMEOUT_S) for an in-flight eval so its
       series reach WandB before the run closes. If it's STILL running past the timeout,
@@ -373,7 +380,7 @@ def _drain_experiment_results(experiment_state, results_dir, iteration, global_s
                       f"(its CSV will still complete; its final WandB point will be missed).")
     try:
         _poll_and_log_experiment_results(experiment_state, results_dir, iteration, global_step,
-                                     wandb_enabled, quiet)
+                                     wandb_enabled, quiet, focus_measures, focus_conds)
     except Exception as e:
         print(f"[experiment-eval] WARNING: final drain poll failed (non-fatal): {e}")
 
@@ -405,8 +412,12 @@ def main():
     parser.add_argument("--quiet", action="store_true", help="Suppress output and progress bar")
     parser.add_argument("--debug", action="store_true", help="Show verbose step-by-step progress logging")
     parser.add_argument("--checkpoint-frequency", type=int, help="Save checkpoint every N episodes/evals")
-    parser.add_argument("--experiment-eval", action="store_true",
-                        help="Enable async experiment eval during training (overrides training.experiment_eval_during_training=true). rPPO only.")
+    parser.add_argument("--eval-config", type=str, default=None,
+                        help="Path to evaluation config YAML (selector layer: conditions/episodes/"
+                             "log filters/opt-in for the during-training behavior-probe experiment, "
+                             "rPPO only). Defaults to configs/evaluation/default.yaml. Supports "
+                             "`extends:` chains (e.g. configs/evaluation/experiment_on.yaml extends "
+                             "evaluation/default to turn the experiment on).")
     parser.add_argument("--load-checkpoint", type=str, help="Path to checkpoint to resume from")
     parser.add_argument("--wandb-resume-id", type=str, help="WandB Run ID to resume logging")
 
@@ -500,13 +511,19 @@ def main():
                 print(f"Loading rPPO train defaults from {rppo_train_path}")
             config.merge(Config.load_yaml(rppo_train_path))
 
-    # Merge Evaluation Defaults
-    eval_config_path = os.path.join(os.path.dirname(__file__), "configs", "evaluation", "default.yaml")
-    if os.path.exists(eval_config_path):
-        if not args.quiet:
-            print(f"Loading eval config from {eval_config_path}")
-        eval_defaults = Config.load_yaml(eval_config_path)
-        config.merge(eval_defaults)
+    # Merge Evaluation config (selector layer -- default.yaml, or a preset selected via
+    # --eval-config, e.g. configs/evaluation/experiment_on.yaml to opt into the during-training
+    # behavior-probe experiment). Resolve `extends:` chains (load_env_config) exactly like
+    # --config above, so a preset's `extends: evaluation/default` actually pulls in the base's
+    # keys rather than silently dropping them.
+    eval_config_path = args.eval_config or os.path.join(
+        os.path.dirname(__file__), "configs", "evaluation", "default.yaml")
+    if not os.path.exists(eval_config_path):
+        raise ValueError(f"--eval-config path not found: {eval_config_path!r}")
+    if not args.quiet:
+        print(f"Loading eval config from {eval_config_path}")
+    eval_defaults = load_env_config(eval_config_path)
+    config.merge(eval_defaults)
 
     # Merge Logger Config (WandB settings)
     logger_config_path = os.path.join(os.path.dirname(__file__), "configs", "logger", "wandb.yaml")
@@ -585,7 +602,6 @@ def main():
     if args.no_satiation: config.set('body.with_satiation', False)
     if args.no_overeating_death: config.set('body.overeating_death', False)
     if args.checkpoint_frequency is not None: config.set('training.checkpoint_frequency', args.checkpoint_frequency)
-    if args.experiment_eval: config.set('training.experiment_eval_during_training', True)
 
     # 1.5 Print Combined Configuration (Always)
     if not args.quiet:
@@ -644,26 +660,33 @@ def main():
     # --- Experiment eval during training: gate + mandatory-key validation at
     # STARTUP, not at the first checkpoint (nit fix) -- a bad/incomplete config raises
     # here, in the first second of the run, instead of hours in after training has
-    # already made progress. `training.experiment_eval_during_training` is a shared key
-    # (declared in configs/train/default.yaml, default false) so every algorithm has it;
-    # the other four keys are only required when the gate is true.
-    experiment_eval_enabled = config.get_mandatory('training.experiment_eval_during_training')
+    # already made progress. `experiment.during_training.enabled` lives in the
+    # evaluation config layer (configs/evaluation/default.yaml, default false; merged for
+    # every algorithm at L~504-514 above), so every algorithm has it; the other keys are
+    # only required when the gate is true. Opt in via `--eval-config
+    # configs/evaluation/experiment_on.yaml` (or any preset with during_training.enabled: true).
+    experiment_eval_enabled = config.get_mandatory('experiment.during_training.enabled')
     if experiment_eval_enabled and algorithm != "RecurrentPPO":
         raise ValueError(
-            f"training.experiment_eval_during_training=true is only supported for "
+            f"experiment.during_training.enabled=true is only supported for "
             f"RecurrentPPO (see docs/develop/active/behavior/"
             f"EXPERIMENT_EVAL_DURING_TRAINING.md), got algorithm={algorithm!r}.")
     experiment_eval_cfg = None
     if experiment_eval_enabled:
+        _log_conditions_raw = config.get_mandatory('experiment.log_conditions')
+        _log_conditions = (None if _log_conditions_raw == "all" else
+                            tuple(c.strip() for c in str(_log_conditions_raw).split(",") if c.strip()))
         experiment_eval_cfg = {
-            "every_n_checkpoints": config.get_mandatory('training.experiment_eval_every_n_checkpoints'),
-            "conditions": config.get_mandatory('training.experiment_eval_conditions'),
-            "episodes": config.get_mandatory('training.experiment_eval_episodes'),
-            "on_node": config.get_mandatory('training.experiment_eval_on_node'),
+            "every_n_checkpoints": config.get_mandatory('experiment.during_training.every_n_checkpoints'),
+            "conditions": config.get_mandatory('experiment.conditions'),
+            "episodes": config.get_mandatory('experiment.episodes'),
+            "on_node": config.get_mandatory('experiment.during_training.on_node'),
+            "log_measures": tuple(config.get_mandatory('experiment.log_measures')),
+            "log_conditions": _log_conditions,
         }
         if experiment_eval_cfg["on_node"] != "self":
             raise ValueError(
-                f"training.experiment_eval_on_node={experiment_eval_cfg['on_node']!r} is not "
+                f"experiment.during_training.on_node={experiment_eval_cfg['on_node']!r} is not "
                 f"implemented (only 'self' — on-node Popen — is supported today).")
 
     if args.profile:
@@ -2290,7 +2313,9 @@ def main():
                 if experiment_eval_enabled:
                     try:
                         _poll_and_log_experiment_results(experiment_state, results_dir, iteration,
-                                                     global_step, wandb_enabled, args.quiet)
+                                                     global_step, wandb_enabled, args.quiet,
+                                                     experiment_eval_cfg["log_measures"],
+                                                     experiment_eval_cfg["log_conditions"])
                     except Exception as e:
                         print(f"[experiment-eval] WARNING: poll skipped (non-fatal): {e}")
 
@@ -2432,7 +2457,9 @@ def main():
     if experiment_eval_enabled:
         try:
             _drain_experiment_results(experiment_state, results_dir, iteration, global_step,
-                                  wandb_enabled, args.quiet, interrupted=training_interrupted)
+                                  wandb_enabled, args.quiet, interrupted=training_interrupted,
+                                  focus_measures=experiment_eval_cfg["log_measures"],
+                                  focus_conds=experiment_eval_cfg["log_conditions"])
         except Exception as e:
             print(f"[experiment-eval] WARNING: final drain skipped (non-fatal): {e}")
 

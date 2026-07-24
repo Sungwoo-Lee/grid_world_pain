@@ -60,16 +60,6 @@ training:
   # legacy one. See docs/develop/active/refactors/TWO_LEVEL_LOGGING_REDESIGN.md
   log_interval: 10
   log_accumulate: true
-  # --- Experiment eval during training (async, on-node CPU; RecurrentPPO only; see
-  #     docs/develop/active/behavior/EXPERIMENT_EVAL_DURING_TRAINING.md) ---
-  experiment_eval_during_training: false   # master gate; rPPO runs opt in via their own config
-  # Every checkpoint (N=1): measured ~36s wall-time for the FULL 12-condition/30-episode
-  # battery on a 20-core node (see the plan doc's Implementation Report) -- cheap enough,
-  # fully async/non-blocking, to run on every save rather than skip most of them.
-  experiment_eval_every_n_checkpoints: 1
-  experiment_eval_conditions: "all"        # "all" (12 core avoidance conds) or a comma-list of stems
-  experiment_eval_episodes: 30             # episodes per condition
-  experiment_eval_on_node: "self"          # "self" = on-node Popen (only value implemented; node-id = future)
 episodes: 100  # smoke-test safety placeholder only — real runs always pass --episodes explicitly
 seed: 42
 tag: "default"
