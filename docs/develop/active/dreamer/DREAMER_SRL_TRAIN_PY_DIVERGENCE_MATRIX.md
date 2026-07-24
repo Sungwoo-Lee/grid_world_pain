@@ -1,0 +1,103 @@
+---
+title: "Dreamer-SRL vs train.py — entry-point divergence matrix (investigation notes)"
+topic: dreamer
+status: active
+created: 2026-07-24
+last_updated: 2026-07-24
+---
+
+# Dreamer-SRL vs train.py — entry-point divergence matrix
+
+> **Status**: INVESTIGATION NOTES (companion to [[DREAMER_SRL_TRAIN_PY_INTEGRATION_PLAN]])
+> **Opened**: 2026-07-24
+> **Related**: [[DREAMER_SRL_TRAIN_PY_INTEGRATION_PLAN]] · `docs/reviews/diagnosis_20260723/findings_train_entry.md` · `docs/reviews/diagnosis_20260723/findings_dreamer_main.md`
+
+## Context
+
+The project currently has **two separate training entry points**: `train.py` at the repo root (RecurrentPPO, DQN, DRQN, plain PPO) and `src/algorithms/dreamer_srl/dreamer_srl_main.py` (the live Dreamer world-model agent). Both do the same jobs — parse a command line, layer YAML config files, build the environment, start WandB, run a training loop, save checkpoints, run evaluations — but they do many of those jobs **differently**, because the Dreamer entry point was ported from the upstream sheeprl codebase and grew its own conventions. The user has decided to merge them: `train.py` becomes the single entry point, delegating to Dreamer's existing training loop unchanged.
+
+This document is the full inventory of **every place the two entry points do the same job differently**, produced by reading both files end-to-end (train.py @ 2,445 lines, dreamer_srl_main.py @ 2,112 lines, branch `v3.0`, HEAD `385b92f` + the committed `8afb961` rename). Each row carries a verdict: **unify-to-train.py** (train.py's convention wins on the integrated path), **keep-dreamer** (Dreamer's mechanics are preserved inside the delegated loop), or **needs-decision** (resolved in the plan doc; the chosen resolution is noted here). The integration plan's compatibility table is derived from the unify-to-train.py rows.
+
+Line numbers reference the working tree on 2026-07-24. **Caveat**: an uncommitted parallel-session refactor is currently moving the experiment-eval keys from `training.experiment_eval_*` to `evaluation.experiment.*` in train.py — rows touching that subsystem cite the mechanism, not exact lines.
+
+---
+
+## 1. CLI surface
+
+| # | Job | train.py | dreamer_srl_main.py | Verdict |
+|---|---|---|---|---|
+| 1.1 | Env config flag | `--config` (train.py:387) | `--env-config` (:430) | **unify-to-train.py** (`--config`); shim translates |
+| 1.2 | Agent config flag | `--agent_config` (underscore spelling, required; :395) | `--agent-config` (hyphen, required; :433) | **unify-to-train.py**; shim translates. (Recommend train.py also register `--agent-config` as an alias — cheap, kills a recurring typo.) |
+| 1.3 | Episode budget | `--episodes`, fallback config key `episodes` (top-level, train/default.yaml `episodes: 100`) (:688) | `--episodes`, fallback config key `training.episodes` (also 100) (:591) | **unify-to-train.py** (top-level `episodes`). Same 100-episode smoke default either way — the documented "instant exit" gotcha becomes uniform across algorithms and is fixed operationally by always passing `--episodes` (unchanged practice). |
+| 1.4 | Env-step budget | `--total-timesteps` (overrides derived product; loop still episode-driven when episodes>0) (:414, :727) | `--total-steps` **and** `--total-timesteps` alias; explicit env-step mode when `--episodes` absent (:447-452, :587-589) | **unify-to-train.py**: keep `--total-timesteps` only; env-step mode reachable via `--episodes 0 --total-timesteps N`. Shim translates a bare `--total-steps N` to that pair. Diagnosis Finding 4 (step cap advertised but unenforced in episode mode) is a **shared quirk on both sides** — deliberately NOT changed by this integration. |
+| 1.5 | Seed | `--seed` default None → config `seed` (42) (:386, :748) | `--seed` default **0** (:460) | **unify-to-train.py** (config-owned, 42). **Behavior delta** for launches that omitted `--seed`. Shim injects `--seed 0` when absent to preserve historical reproducibility. |
+| 1.6 | num_envs | `--num-envs` or `training.num_envs` (mandatory) (:695) | identical or-pattern, guarded default=None (:453-459, :567) | **already aligned** (Dreamer resolves 16 from configs/train/dreamer_srl.yaml) |
+| 1.7 | Checkpoint frequency | `--checkpoint-frequency` → `config.set('training.checkpoint_frequency')` (:407, :587) | **no flag** (documented gotcha; config-only) | **unify-to-train.py** — the flag now works for Dreamer (the Dreamer loop already reads `training.checkpoint_frequency` from env_cfg at :632). Gotcha fixed. |
+| 1.8 | Device / GPU | `--device` pre-parse sets `CUDA_VISIBLE_DEVICES` + `JAX_PLATFORMS` **before importing jax**; sets `XLA_PYTHON_CLIENT_PREALLOCATE=false` unconditionally (:40-55) | none — relies on caller-exported env vars (historical launch: `CUDA_VISIBLE_DEVICES=0 python dreamer_srl_main.py ...`, no PREALLOCATE var) | **unify-to-train.py**. **Behavior delta**: Dreamer runs via train.py get `PREALLOCATE=false` (direct launches today preallocate ~75% VRAM). Better citizen on shared GPUs; watch for allocator-fragmentation slowdowns at Gate 2. |
+| 1.9 | Tag | `--tag` or config `tag` (mandatory, "default") — feeds results-dir name + default WandB name (:396, :814) | none (WandB name is the only human label) | **unify-to-train.py**; new capability for Dreamer |
+| 1.10 | WandB flags | `--wandb-project/-entity/-group/-job-type/-name`, `--no-wandb`, plus config `wandb.*` (logger/wandb.yaml) and `wandb.disabled` (:400-404, :875-884) | `--wandb-project` (default "grid_world_pain"), `--wandb-name`, `--no-wandb`; entity **hardcoded** "sungwoolee" (:468-474, :867-872) | **unify-to-train.py** for value resolution (config + CLI). **keep-dreamer** for init mechanics — see §4. Same effective entity/project today, so no data moves. |
+| 1.11 | Dreamer-only flags | — | `--buffer-device {cpu,gpu}` (:481), `--legacy-grad-loop` (:485) | **add to train.py**, pass through the seam; **ValueError if passed with a non-dreamer algorithm** (no silent ignore) |
+| 1.12 | rPPO-only flags | `--load-checkpoint`, `--wandb-resume-id`, `--num-steps`, `--hidden-size`, `--lr`, `--log-accumulate`, `--profile`, `--experiment-eval` | — | **fail loudly** when combined with `agent.algorithm == dreamer_srl` (resume is explicitly out of scope — Dreamer has none today; its checkpoints also drop optimizer momentum, a separate OPEN bug) |
+| 1.13 | `--quiet` / `--debug` | yes | yes (same names) | aligned; pass through spec |
+| 1.14 | `--log-interval` (legacy) | deprecated, warned-ignored when `logging:` block present (:421, :705) | same semantics, own precedence chain CLI > agent_cfg > env_cfg > 50 (:461, :1284-1288) | **keep-dreamer** precedence inside the loop (moot in practice: train/default.yaml always supplies a `logging:` block → two-level path) |
+| 1.15 | `--no-satiation`, `--no-overeating-death` | set `body.*` keys pre-dump (:585-586) | none | **unify-to-train.py** — works for Dreamer for free via env_cfg → `load_env_params` |
+
+## 2. Config layering
+
+| # | Job | train.py | dreamer_srl_main.py | Verdict |
+|---|---|---|---|---|
+| 2.1 | Layer order | defaults → train/default.yaml → **train/recurrent_ppo.yaml (peek-gated on agent.algorithm)** → evaluation/default.yaml → **logger/wandb.yaml** → visualization/default.yaml → env `--config` (via `load_env_config`, `extends:` resolved) → agent config → CLI (:479-588) | defaults → train/default.yaml → **train/dreamer_srl.yaml (unconditional)** → evaluation/default.yaml → visualization/default.yaml → env `--env-config` (`extends:` resolved); **agent config NEVER merged into env_cfg** (:534-555) | **unify-to-train.py order** with two adaptations: (a) train.py gains a `dreamer_srl` peek-merge of configs/train/dreamer_srl.yaml exactly parallel to the rPPO peek (train.py:496-501); (b) the dreamer branch snapshots the merged config **before** the agent merge as `env_cfg` — the Dreamer loop's env_cfg/agent_cfg separation is load-bearing (`build_agent` reads `algo.*` from agent-config root; `_log_cfg_get` checks agent_cfg first). **Accepted delta**: env_cfg (and the dumped `models/env_config.yaml`) gains a `wandb:` block from the logger layer. |
+| 2.2 | `extends:` resolution | `load_env_config` at both single-config (:562) and per-stage (:200) sites | same (:553, :133) | **already aligned** |
+| 2.3 | Continual stage-config build | clone of the fully-merged base config + stage overlay (`_build_continual_schedule`, :159-209) | rebuilt from scratch per stage: defaults + fixed 4-file list + stage YAML (`_load_stage_env_cfg`, :102-134) | **unify-to-train.py** (stages inherit the full unified base incl. logger layer + CLI body overrides). Both `ContinualSchedule` dataclasses are field-identical and `stage_for_episode` is identical — train.py's schedule object is duck-type compatible with the Dreamer loop. |
+| 2.4 | Config dump | single merged `models/config.yaml` (:849-853) | separate `models/env_config.yaml` + `models/agent_config.yaml` (:919-932) | **keep-dreamer** — `scripts/eval/eval_rollout.py` **requires** `models/agent_config.yaml` for Dreamer checkpoint restore (eval_rollout.py:1414) and expects the `<run_dir>/checkpoints/<episode>` layout. Do not add a merged config.yaml to Dreamer run dirs (avoids confusing rPPO-vs-dreamer run-dir detection heuristics). |
+| 2.5 | CLI-override persistence | overrides `config.set(...)` **before** dump, so dumped YAML reflects what ran (G3/L4 fix) | seed/num_envs overrides not written back into dumped YAMLs (CLI provenance only in wandb.config) | **unify-to-train.py**: dispatch applies CLI overrides onto env_cfg before handing to the seam (seed, checkpoint_frequency, body flags), so Dreamer dumps become self-describing too |
+| 2.6 | Agent-config dead key `env.num_envs` | n/a | every Dreamer agent YAML carries a dead `env: {num_envs: 1}` block (diagnosis Finding 3, silent trap) | **out of scope** for the integration (pre-existing); noted for a follow-up config-hygiene pass |
+
+## 3. Algorithm dispatch & identity
+
+| # | Job | train.py | dreamer_srl_main.py | Verdict |
+|---|---|---|---|---|
+| 3.1 | Algorithm key | `agent.algorithm` mandatory; `DreamerV3` → hard error (archived NNX stack) (:633-642); **unknown string → silent infinite loop** (KNOWN_BUGS B1-B4, OPEN) | none — entry point IS the dispatch; 17/19 agent configs declare `agent.algorithm: "DreamerV3"` (WandB-filter comment only); `agent_xs.yaml` + `01_food_only_smoke.yaml` declare nothing | **unify-to-train.py** with a whitelist: after `get_mandatory('agent.algorithm')`, `algorithm not in {RecurrentPPO, DQN, DRQN, PPO, dreamer_srl}` → ValueError (kills the hang bug for every algorithm); `DreamerV3` keeps the archived-stack error, extended with a "did you mean dreamer_srl?" hint. All 19 `configs/models/dreamer_srl/*.yaml` change to `agent.algorithm: "dreamer_srl"` (17 edits, 2 additions). **Behavior delta**: WandB `agent.algorithm` filter value changes for new runs. |
+
+## 4. WandB
+
+| # | Job | train.py | dreamer_srl_main.py | Verdict |
+|---|---|---|---|---|
+| 4.1 | Enable/auth | `wandb.disabled` config key + `--no-wandb`; `wandb_login(quiet=True)` helper (:875-877) | `--no-wandb` only; relies on ambient auth (:820-823) | **unify-to-train.py** (value resolution in dispatch) |
+| 4.2 | init kwargs | project/entity/group/job_type from config (mandatory) + CLI; `name = wandb_name or tag`; `reinit=True` (:879-886) | project + name from CLI; entity hardcoded; no group/job_type/reinit (:867-872) | **unify-to-train.py values, keep-dreamer call site**: dispatch resolves the kwargs (incl. the new `wandb.job_type` wiring from commit 6e82fc3) and passes them through the run-spec; the `wandb.init` **call** stays inside the Dreamer code. **Delta**: new Dreamer runs carry group/job_type; name defaults to tag when `--wandb-name` omitted. |
+| 4.3 | config payload | flat rPPO-style payload (:887-905) | dreamer-specific payload (budget aliases, obs/action dims, env+agent spread, `agent.algorithm` defense) (:824-865) | **keep-dreamer** (payload built inside the loop, from spec fields). rPPO and Dreamer payloads differ today and continue to differ. |
+| 4.4 | define_metric | Loss/Modulator/Behavior/WorldModel → `iteration`; Episode/* → Episode/Number; catch-all → timesteps (:913-932). Diagnosis F2: train.py's own lowercase keys fall through — rPPO-side issue, untouched here. | Loss/WorldModel/Behavior/Time/Params/Diagnostic/Eval → `timesteps`; Episode/* → Episode/Number; stage/* → Episode/Number (:876-896) | **keep-dreamer** — Dreamer's bindings match its actually-logged uppercase keys and its explicit-step clock |
+| 4.5 | Step clock | step-less `wandb.log` everywhere (internal counter) | **explicit `step=policy_step` on every log call** — this IS the Track C fix (commit 39f851b; [[DREAMER_SRL_EVAL_TELEMETRY_FIX]]): video uploads on the policy_step clock, `Eval/` vs `Eval/video/` estimator split, no dropped rows | **keep-dreamer, load-bearing.** The single strongest reason the integration must delegate, not port: any re-implementation of Dreamer logging under train.py's step-less convention regresses Track C. |
+| 4.6 | log_code | uploads all `.py` files (:934) | none | **unify-to-train.py** (runs after init inside the seam, gated on spec) — minor startup cost, accepted delta |
+
+## 5. Results directory, checkpointing, eval
+
+| # | Job | train.py | dreamer_srl_main.py | Verdict |
+|---|---|---|---|---|
+| 5.1 | Results dir | `results/JAX_{algorithm}/{ts}_{tag}` (:813-820) | `results/JAX_DreamerSRL/{ts}_{wandb_run_name}`; `tmp/JAX_DreamerSRL_{ts}` under `--no-wandb` (:908-917) | **unify-to-train.py naming with an explicit dir-name mapping**: the dreamer branch pins the parent to `JAX_DreamerSRL` (NOT `JAX_dreamer_srl` — analysis/eval tooling globs the existing name) and uses `{ts}_{tag}`. **Delta**: name component tag-based; `--no-wandb` no longer diverts to tmp/. |
+| 5.2 | Checkpoint layout | Orbax `CheckpointManager` at `results_dir/models/`, keyed by episode; rPPO payload incl. optimizer state (:842-846, :2313-2329) | own `make_checkpoint_manager` at `results_dir/checkpoints/`; weights+moments+key+counters, **no optimizer momentum** (OPEN bug, out of scope) (:956-960, :1690-1704) | **keep-dreamer** — offline eval depends on `checkpoints/<episode>`; changing layout breaks `eval_rollout.py` |
+| 5.3 | Checkpoint cadence math | function-attribute `main.last_checkpoint_save`, `total >= last + freq` (:2305-2311) | `total // freq > last_ckpt // freq`, per-stage `checkpoint_frequency_active` (:1686-1706) | **keep-dreamer** (equivalent milestones; Dreamer's is cleaner and stage-aware). Shared quirk both sides: no final/exit checkpoint off-cadence (train.py F4) — out of scope. |
+| 5.4 | Checkpoint-triggered eval | `evaluate_jax_checkpoint` (rPPO model API), Eval logs step-less (:2353-2384) | `dreamer_srl_eval_rollout` + `_render_and_upload`, Track C semantics (:1710-1782) | **keep-dreamer**, byte-untouched |
+| 5.5 | Behavior-probe eval (a.k.a. experiment-eval, the async 12-condition avoidance battery) | rPPO-only; loud ValueError for other algorithms at startup (:650-655); key locations mid-refactor by a parallel session | none | **keep as-is**: Dreamer + `--experiment-eval` (or the config gate) keeps failing loudly. "Probe-eval as dreamer does it today" = the video+stats checkpoint eval above, nothing more. |
+| 5.6 | eval_stats_num_envs | live on rPPO stats pass | read (mandatory) but dead (diagnosis Finding 2; OPEN reminder) | **out of scope** per user decision — do not batch, do not remove the key in this change |
+
+## 6. Loop-adjacent machinery
+
+| # | Job | train.py | dreamer_srl_main.py | Verdict |
+|---|---|---|---|---|
+| 6.1 | Graceful shutdown | SIGINT/SIGTERM handlers set `stop_requested`; loop breaks, drains, finishes (:122-129, :437-438, :1420) | none — Ctrl-C is a raw KeyboardInterrupt kill | **keep-dreamer semantics**: train.py must register its handlers only on the non-dreamer path (registration moves below the dispatch point). Registering them around a loop that never reads `stop_requested` would *swallow* SIGTERM — `run_command.py`-based kill flows would hang. Adding graceful stop to the Dreamer loop = loop change = out of scope. |
+| 6.2 | Two-level logging defaults | `resolve_logging_cfg` defaults 5000/4000/100/50 (:700-704) | defaults 5000/200/200/100; agent_cfg-then-env_cfg getter (:1251-1258) | **keep-dreamer** (inside the loop). Moot in practice: configs/train/dreamer_srl.yaml supplies all four knobs. |
+| 6.3 | `iteration_episodes` lifetime-mean bug (train.py F1, P1 OPEN) | lives in train.py's inline DQN/DRQN/PPO branches | Dreamer loop has its own independent episode path; its only legacy-list leak needs a config with NO `logging:` block AND `--no-wandb` (diagnosis Finding 6) | **Dreamer branch is NOT exposed**: dispatch returns before train.py's loop; the Dreamer loop always takes the two-level path under the unified layering (train/default.yaml declares `logging:`). Documented so the integration can't be blamed for/entangled with the open P1. |
+| 6.4 | Continual restriction | `--configs-dir` rPPO-only guard (:678-682) | full curriculum support (own schedule, swap block, per-stage ckpt freq) | **extend guard** to `{RecurrentPPO, dreamer_srl}`; Dreamer stages delegated to the Dreamer loop. Dreamer's own fingerprint pre-flight (:697-726) runs inside the seam; train.py's rPPO-side validation is not duplicated (dispatch happens before it). Known Dreamer swap quirks (stage-0 BM cfg / eval cfg frozen — diagnosis Finding 5) ride along unchanged: out of scope. |
+| 6.5 | Seeding | `PRNGKey(seed)` only (:978) | `np.random.seed(seed)` **and** `PRNGKey(seed)` (:647-648) | **keep-dreamer** (both calls stay inside the seam, fed by spec.seed) |
+| 6.6 | Profiler | `--profile` warm-up/trace harness (:429-455) | none | rPPO-only; ValueError with dreamer_srl |
+
+## 7. Extraction-seam verdict
+
+**The seam is clean after one mechanical, behavior-preserving refactor.** `main()` in dreamer_srl_main.py is a monolith, but its data flow has a natural waist at line ~557: everything above it produces exactly four values — `env_cfg`, `agent_cfg`, `schedule` (or None), and the CLI namespace — and everything below it consumes only those four plus a dozen scalar `args.*` fields (`seed, num_envs*, episodes*, total_timesteps*, results_dir, wandb_project, wandb_name, no_wandb, quiet, debug, buffer_device, legacy_grad_loop, log_interval, env_config, agent_config, configs_dir, continual_schedule`; * = resolved pre-seam). No globals, no module state, no `args` escape into the loop other than these.
+
+Extraction: a frozen `DreamerRunSpec` dataclass carrying those fields + a `run_dreamer_training(spec, env_cfg, agent_cfg, schedule)` function containing lines ~557-2108 **in the same module** (budget/num_envs resolution, lines 567+574-594, moves to the callers — that is precisely the part being unified). Same-module extraction keeps every existing test import valid (`_advance_episode_counters`, `_eval_scalar_prefix`, `_reset_terminal_step_data`, `ContinualSchedule`, `main`).
+
+**Two non-clean edges, both handled in the plan:**
+1. `wandb.init` + `define_metric` + results-dir creation live inside the extracted body. Correct per §4.5/§5.1-5.2 (mechanics must stay Dreamer-owned), but it means the *values* (kwargs, dir path) must enter via the spec — the callers resolve them differently until Gate 3.
+2. `tests/algorithms/dreamer_srl/test_eval_telemetry_wandb.py` imports and drives `main()` directly; after the Gate 3 shim conversion it must target `run_dreamer_training` instead (listed in the plan's Phase 4 File Changes).
