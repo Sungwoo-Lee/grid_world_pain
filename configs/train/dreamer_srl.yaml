@@ -33,7 +33,7 @@
 # file wins for Dreamer because it is merged above default.yaml. Intentional and
 # user-approved.
 training:
-  num_envs: 16                  # Dreamer's parallel-env count (was CLI-only; now config-owned)
+  num_envs: 128                 # Dreamer's parallel-env count (was CLI-only; now config-owned)
   checkpoint_frequency: 10000   # checkpoint + eval video every 10,000 episodes
   max_checkpoints_to_keep: 20   # rotate; keep the 20 most recent
 
@@ -53,7 +53,7 @@ logging:
     interval_episodes: 200
   step:
     # PER-ALGO. Losses are never cross-compared between algorithms, so no
-    # universality rule. 200 iters = 3200 env-steps of loss averaging at num_envs=16.
+    # universality rule. 200 iters = 25600 env-steps of loss averaging at num_envs=128.
     smoothing_iters: 200
     # < smoothing -> overlapping rolling windows.
     interval_iters: 100
