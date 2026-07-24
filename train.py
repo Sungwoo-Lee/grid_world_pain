@@ -337,9 +337,10 @@ def _poll_and_log_probe_results(probe_state, results_dir, iteration, global_step
                             continue
                         flat[f"Probe/{k}/{short}"] = v
                 if flat:
-                    flat["Probe/checkpoint_episode"] = data.get("checkpoint_key", int(ep_str))
-                    flat["iteration"] = iteration
-                    flat["timesteps"] = global_step
+                    # Probe metrics are EPISODE-LEVEL: plot against Episode/Number (the
+                    # project's canonical episode x-axis), so they sit with the other
+                    # Episode/* metrics. checkpoint_key == total_episodes_completed.
+                    flat["Episode/Number"] = data.get("checkpoint_key", int(ep_str))
                     wandb.log(flat)
             elif data.get("status") != "ok" and not quiet:
                 print(f"[probe-eval] checkpoint {ep_str}: eval failed, nothing logged "
@@ -928,8 +929,7 @@ def main():
         # pattern can only carry one binding). checkpoint_episode is set explicitly in
         # every Probe/* log call so a late-arriving async result still plots at the
         # CORRECT x-position no matter how far training has advanced since dispatch.
-        wandb.define_metric("Probe/checkpoint_episode")
-        wandb.define_metric("Probe/*", step_metric="Probe/checkpoint_episode")
+        wandb.define_metric("Probe/*", step_metric="Episode/Number")  # episode-level x-axis
 
         wandb.run.log_code(".", include_fn=lambda path: path.endswith(".py"))
 
