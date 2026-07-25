@@ -45,4 +45,5 @@ The durable answer to "how do we keep the config system documented as it keeps c
 ## Backlinks
 - [[20260619_0111_config_v3_extends_layering_default_base]] (config_system, 2026-06-19) — v3.0 makes configs/environment/default.yaml the canonical BASE; experiment confi
 - [[20260630_1830_scripts_reorg_dependency_map_and_contract]] (cluster_ops, 2026-06-30) — Before reorganizing a flat script folder, build a four-surface caller-dependency
+- [[20260726_0416_critical_settings_registry_changelog_guardrail]] (config_system, 2026-07-26) — Created docs/environment/CONFIG_CRITICAL_SETTINGS.md — a registry of high-impact
 <!-- END BACKLINKS -->

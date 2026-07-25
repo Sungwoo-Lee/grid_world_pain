@@ -52,4 +52,5 @@ The config system was restructured so `configs/environment/default.yaml` is the 
 - [[20260619_0113_configurable_initial_state_ranges]] (config_system, 2026-06-19) — v3.0 exposes the agent's start nutrition/injury randomization bounds as config k
 - [[20260619_0114_config_guide_maintenance_contract]] (config_system, 2026-06-19) — To keep the v3.0 config system maintained across sessions, a collaborator-facing
 - [[20260703_1507_train_py_ignores_extends_drops_layers]] (config_system, 2026-07-03) — SEVERE: train.py loads --config via Config.load_yaml (plain YAML), which does NO
+- [[20260726_0419_experiment_eval_config_layer_selector]] (config_system, 2026-07-26) — The behavior-probe eval-during-training opt-in was moved from a --experiment-eva
 <!-- END BACKLINKS -->

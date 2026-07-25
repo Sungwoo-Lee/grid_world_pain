@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `behavior_measures` topic.
 
 **Folder definition**: Behavior-measure platform & probes
-**Insights**: 11
-**Last updated**: 2026-07-21
+**Insights**: 13
+**Last updated**: 2026-07-26
 
 ---
 
@@ -13,6 +13,8 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-26 | 04:18 | [20260726_0418_dreamer_imagination_dream_strip_contact_anchor](20260726_0418_dreamer_imagination_dream_strip_contact_anchor.md) | scripts/dreamer/visualize_dream.py renders the Dreamer imagination 'dream-strip'; to test whether the world model predicts a collision, anchor t=0 one step before spatial contact (agent_pos==animal_pos from snapshots) via --event-step=contact-1. Predator contact = nociceptive/damaging, rabbit contact = harmless (no injury). |
+| 2026-07-26 | 04:17 | [20260726_0417_dwell_sweep_rerun_silent_skip_traps](20260726_0417_dwell_sweep_rerun_silent_skip_traps.md) | Dwell-sweep incremental re-run has two silent-skip traps: (1) stale _run_markers/done_<node> make poll_done false-complete in ~1s + stack workers (fixed: clear markers before launch + worker rm-at-start); (2) a --max-checkpoints 1 smoke poisons the high-water-mark so the full run skips all older checkpoints (use a throwaway output dir). |
 | 2026-07-21 | 04:24 | `20260721_0424_dreamer_low_dwell_real_trajectory_verified` | The size-sweep Dreamer near-zero bush-dwell is a GENUINE not-learned-yet, not a pipeline bug - trajectory-verified in the training env: untrained Dreamer (66k) dies fast to predators, 100M rPPO flees-to-bush-and-heals. Predator randomization (0-2) works; no-predator videos were the ~1/3 zero-predator rolls. |
 | 2026-07-21 | 04:23 | `20260721_0423_batched_eval_layout_and_npar` | Two batched-eval gotchas: eval_rollout.py --batched writes recordings one dir DEEPER (run_tag/ckpt nesting) than the old driver -> aggregator needs a recursive glob; and batched needs LOW NPAR (~4-6, not 14-18) because its vmap spreads across cores despite 1-thread caps (NPAR=14 -> load 142). |
 | 2026-07-10 | 16:35 | `20260710_1635_bush_hiding_metastable_dwell_measure` | Bush-hiding on the hard-predator task is metastable/intermittent (policy flickers run<->hide across checkpoints), NOT a stable phase; coarse 1M sampling ALIASES it into a false spike. Use dwell% (time-in-bush), not bush_use% (binary entry overstates via pass-throughs). Config-system era does NOT explain behavior: predator difficulty (easy->stable hide, hard->transient) + training phase do; at matched difficulty+depth old/new agents match. Extended 128-env training raises dwell 13->19.5% post-10M but stays bistable. Refines 20260630_1718. |

@@ -4,9 +4,9 @@
 >
 > Read this file before classifying a new insight. Folder definitions here are the matching surface — if a new insight does not match any definition verbatim, the new-folder justification protocol applies (see CLAUDE.md, "Fragmentation safeguards").
 
-**Last updated**: 2026-07-23
+**Last updated**: 2026-07-26
 **Active folders**: 10
-**Total insights**: 168
+**Total insights**: 174
 **Last audit**: (none)
 
 ---
@@ -16,15 +16,15 @@
 | Folder | Definition (1 line) | Insights | Last update | Top tags |
 |---|---|---|---|---|
 | `memory_system_design` | Claude memory system's own design decisions | 11 | 2026-06-09 | [memory, design, decision, skill, meta, learned_lesson] |
-| `subagent_engineering` | Subagent + worktree usage gotchas | 14 | 2026-06-09 | [meta, learned_lesson, worktree, subagent, decision, design] |
+| `subagent_engineering` | Subagent + worktree usage gotchas | 15 | 2026-07-26 | [meta, learned_lesson, worktree, subagent, decision, design] |
 | `nmn_diagnosis` | NMN performance diagnosis findings | 17 | 2026-07-23 | [nmn, hypervigilance, film, learned_lesson, design, meta, training_runner, refutation, decision, config] |
 | `dreamer_diagnosis` | DreamerV3 failure investigation | 22 | 2026-07-23 | [dreamer, decision, learned_lesson, refutation, meta, design] |
 | `cluster_ops` | Lab cluster ops and env mgmt | 39 | 2026-07-23 | [meta, training_runner, learned_lesson, decision, design, dreamer] |
 | `hypervigilance` | Hypervigilance experiments | 27 | 2026-06-30 | [hypervigilance, dreamer, design, learned_lesson, decision, refutation, meta, noise] |
 | `env_entities` | Env entity architecture decisions | 17 | 2026-07-03 | [design, decision, learned_lesson, meta, config, dreamer] |
-| `config_system` | Config loader/layering/schema | 6 | 2026-07-23 | [config, design, decision, meta, learned_lesson] |
+| `config_system` | Config loader/layering/schema | 9 | 2026-07-26 | [config, design, decision, meta, learned_lesson] |
 | `curriculum_learning` | Curriculum/continual training | 3 | 2026-06-24 | [learned_lesson, decision, refutation] |
-| `behavior_measures` | Behavior-measure platform & probes | 11 | 2026-07-21 | [design, decision, meta, learned_lesson, hypervigilance, refutation, noise] |
+| `behavior_measures` | Behavior-measure platform & probes | 13 | 2026-07-26 | [design, decision, meta, learned_lesson, hypervigilance, refutation, noise, dreamer] |
 
 ---
 
@@ -55,6 +55,7 @@ Surface a merge proposal to the user when:
 ---
 
 ## Change history
+- 2026-07-26: Captured 6 insights from the decay_power-drift + config-governance + results-refresh + dreamer-imagination session: 3 into `config_system` (`20260726_0415_decay_power_silent_drift_reverted_1p0` - sensory.decay_power silently 1.0->2.0 in unrelated commit def81c1, found via SAVED config, reverted; `20260726_0416_critical_settings_registry_changelog_guardrail` - CONFIG_CRITICAL_SETTINGS.md registry+changelog guardrail wired into 5 agents+CLAUDE.md, context-efficient; `20260726_0419_experiment_eval_config_layer_selector` - experiment-eval opt-in -> config-layer --eval-config selector + self-documenting defaults), 2 into `behavior_measures` (`20260726_0417_dwell_sweep_rerun_silent_skip_traps` - stale done-markers false-complete + watermark poisoning on incremental re-run; `20260726_0418_dreamer_imagination_dream_strip_contact_anchor` - visualize_dream.py, anchor t=0 one step before spatial contact, predator=nociceptive vs rabbit=harmless), 1 into `subagent_engineering` (`20260726_0420_subagent_bg_job_orphan_idle_ping` - bg-driver orphan + idle-ping storm, parent-side monitor + SendMessage). All tags reused (config, design, decision, meta, learned_lesson, dreamer, subagent). No new tags. Added `dreamer` to behavior_measures top-tags.
 - 2026-07-23: Captured 4 insights from the logging-redesign + predator-mixture + replay-ratio session: 2 into `dreamer_diagnosis` (`20260723_1913_predator_mixture_inflates_survival_metric` - basic04/03 predator U{0,1,2} makes survival a mixture, size verdict retracted, conditioned probes show all Dreamer sizes fail vs rPPO szXS solves it; `20260723_1916_train_ratio_replay_ratio_conversion` - PDF-verified train_ratio = replay_ratio x1024, sweep spans DreamerV3's full 1024->64 range), 1 into `cluster_ops` (`20260723_1914_dreamer_noise_is_logging_granularity_artifact` - noisier curve is logging granularity + iteration-coupled block-mean, --log-interval 100 CLI shadowed tuned 2000), 1 into `config_system` (`20260723_1915_two_level_logging_and_config_layering` - two-level logging smoothing/interval split, dreamer_srl.yaml, num_envs config-fix, checkpoint regression, default-documents-all). Promoted tags `wandb`, `rl` from candidate. 
 - 2026-07-23: Captured 4 insights from the Fable-5 re-diagnosis + sheeprl parity fixes + NNX archival + live-path inspection session: 3 into `dreamer_diagnosis` (`20260723_1909_nnx_abandoned_archived_stack_confusion` - NNX abandoned/archived to tracked archive/ not gitignored legacy/, dreamer_srl live with no NMN/no offline eval, a fix-batch was misdirected; `20260723_1910_sheeprl_parity_drift_lives_in_glue` - cores bit-identical, 11 deviations all in the glue not the math, num_envs=1 masked 2 worst; `20260723_1912_fresh_empirical_reaudit_finds_new_bug_class` - run-the-code + diff-vs-upstream re-audit found 10 new High bugs the read-only pass missed), 1 into `nmn_diagnosis` (`20260723_1911_rppo_nmn_config_boundary_traps` - forward train=eval correct but dead lr_critic trained critic+modulator at 0.0005 not 0.0001, *_het_* is heterogeneity-sweep not heteroscedastic loss, unknown modulation.type silently Multiplicative). All tags reused (dreamer, decision, learned_lesson, meta, refutation, nmn, film, config, subagent); added `config` to nmn_diagnosis top-tags. No new tags.
 - 2026-07-21: Captured 4 insights from the eval-speed + batched-Dreamer + size-sweep session: 1 into `cluster_ops` (`20260721_0421_eval_sweep_cpu_bound_not_nas` - eval sweep is CPU-bound not NAS-bound; load-137 jam = CPU thread oversubscription x stacked un-killable workers; fix compile-cache + 1-thread-cap + NPAR~=cores; corrected LAB_NODE_GPU_SPEC 8de24a0), 1 into `dreamer_diagnosis` (`20260721_0422_batched_dreamer_eval_rng_and_unify` - unified eval_rollout.py both algos + batched Dreamer eval 6.4x; stochastic-RSSM + sequential master key forbid bit-exact batching, use per-episode keys + distributional parity; 766938d/c023145), 2 into `behavior_measures` (`20260721_0423_batched_eval_layout_and_npar` - batched output nests deeper -> recursive glob, batched needs low NPAR ~4-6; `20260721_0424_dreamer_low_dwell_real_trajectory_verified` - Dreamer near-zero dwell is genuine not-learned-yet not a bug, trajectory-verified, predator randomization works). All tags reused (training_runner, learned_lesson, meta, decision, dreamer, design, refutation). No new tags.

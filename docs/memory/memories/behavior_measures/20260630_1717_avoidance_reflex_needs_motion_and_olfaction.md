@@ -52,4 +52,5 @@ In the avoidance probe (agent centre, `hides_agent` bush, one animal approaching
 - [[20260630_1718_cover_use_late_emerging_run_vs_hide]] (behavior_measures, 2026-06-30) — Cross-model: an EARLY model (randpred, 1.5M) RUNS/kites around the grid perimete
 - [[20260710_1635_bush_hiding_metastable_dwell_measure]] (behavior_measures, 2026-07-10) — Bush-hiding on the hard-predator task is a metastable/intermittent mode (policy 
 - [[20260721_0424_dreamer_low_dwell_real_trajectory_verified]] (behavior_measures, 2026-07-21) — The near-zero bush-dwell of the size-sweep Dreamer agents is a GENUINE 'not lear
+- [[20260726_0418_dreamer_imagination_dream_strip_contact_anchor]] (behavior_measures, 2026-07-26) — scripts/dreamer/visualize_dream.py renders the Dreamer imagination 'dream-strip'
 <!-- END BACKLINKS -->
