@@ -65,6 +65,7 @@ For non-bug-fix plans (features, refactors, etc.), skip this section — standar
 - Missing YAML key → raise `ValueError` with a clear message naming the missing key.
 - New config keys must match the plan's File Changes section exactly (path + value). If the plan is ambiguous, **stop and ask** rather than guessing.
 - When your work touches the config system (`config_loader.py`, `state.py` `EnvParams`, or `configs/`), read [docs/environment/CONFIG_GUIDE.md](../../docs/environment/CONFIG_GUIDE.md) first; if the schema/system changes, update it (and `02_config_schema.md`) in the same change, per its Maintenance Contract.
+- Before changing anything under `configs/` or `src/environment/`, read [docs/environment/CONFIG_CRITICAL_SETTINGS.md](../../docs/environment/CONFIG_CRITICAL_SETTINGS.md) (the critical-settings registry). If your change alters a registry setting (e.g. `sensory.decay_power`), **follow the logging protocol**: add a dated change-log entry to that doc in the same commit, per its Maintenance Contract.
 
 ## Token Efficiency
 

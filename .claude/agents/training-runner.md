@@ -92,6 +92,7 @@ Before touching `train_command-agent.sh`:
 
 - Read the current active `python train.py …` block in `train_command-agent.sh`.
 - Read the `--config` YAML and the `--agent_config` YAML it references.
+- **READ [docs/environment/CONFIG_CRITICAL_SETTINGS.md](../../docs/environment/CONFIG_CRITICAL_SETTINGS.md) before launching** — part of pre-flight is confirming the run's critical settings (e.g. `sensory.decay_power`) match intent per the registry's canonical values. A mismatch between the config's value and the registry, or an undocumented deviation, is a halt-and-surface finding.
 - For trivial sanity checks (files exist, mandatory keys present, `--device` matches a real GPU index, `--num-envs` reasonable), do them inline.
 - For non-trivial checks — observation/noise modality consistency, `overeating_death`, `body.start_satiation`, `property` vs `properties`, sweep coherence — request the parent agent (or the user) to spawn `env-config-auditor`. **You cannot spawn it yourself** (no `Agent` tool). Wait for its report before launching, or proceed with the trivial inline checks if the parent decides the audit isn't needed.
 
