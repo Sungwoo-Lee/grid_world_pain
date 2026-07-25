@@ -189,7 +189,7 @@ sensory:
   olfactory_enabled: true
   sensor_radius: 20
   vector_size: 5
-  decay_power: 2.0
+  decay_power: 1.0
   #Collision sensor
   collision_sensor_range: 1
   #Location sensor
