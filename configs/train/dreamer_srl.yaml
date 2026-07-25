@@ -34,6 +34,11 @@
 # user-approved.
 training:
   num_envs: 128                 # Dreamer's parallel-env count (was CLI-only; now config-owned)
+  # Episode-based termination, matching rPPO's 100M-episode convention. Dreamer's
+  # loop is dual-mode: it stops on EPISODES unless --total-steps/--total-timesteps
+  # is passed, which silently switches it to an env-step cap (that is what ended
+  # dsrl_b04_M_128env_n114 at exactly 50M env-steps). Do NOT pass --total-steps.
+  episodes: 100000000
   checkpoint_frequency: 10000   # checkpoint + eval video every 10,000 episodes
   max_checkpoints_to_keep: 20   # rotate; keep the 20 most recent
 

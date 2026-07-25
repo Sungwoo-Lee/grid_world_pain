@@ -150,3 +150,73 @@ def test_checkpoint_actor_shapes_preserved(tmp_path, tiny_agent):
     for orig_l, rest_l in zip(orig_leaves, rest_leaves):
         assert np.asarray(orig_l).shape == np.asarray(rest_l).shape, \
             f"Shape mismatch: {np.asarray(orig_l).shape} vs {np.asarray(rest_l).shape}"
+
+
+# ---------------------------------------------------------------------------
+# Resume path (restore_dreamer_training_state) — added with --load-checkpoint.
+# ---------------------------------------------------------------------------
+
+def _make_opts(world_model, actor, critic):
+    from src.algorithms.dreamer_srl.utils import make_optim_tx
+    return (
+        nnx.Optimizer(world_model, make_optim_tx(1e-4, 1e-8, 1000.0), wrt=nnx.Param),
+        nnx.Optimizer(actor,       make_optim_tx(8e-5, 1e-5, 100.0),  wrt=nnx.Param),
+        nnx.Optimizer(critic,      make_optim_tx(8e-5, 1e-5, 100.0),  wrt=nnx.Param),
+    )
+
+
+def test_restore_roundtrip_without_optimizers(tmp_path, tiny_agent):
+    """Legacy-format checkpoint (no optimizer state) restores counters + params.
+
+    This is the format every checkpoint written before optimizer-saving uses —
+    including the b04 run the resume feature was built for, so it must keep working.
+    """
+    from src.algorithms.dreamer_srl.checkpoint import restore_dreamer_training_state
+    wm, actor, critic, target_critic, moments, key = tiny_agent
+    mgr = make_checkpoint_manager(str(tmp_path), max_to_keep=2)
+    save_checkpoint(mgr, 7, wm, actor, critic, target_critic, moments, key,
+                    iter_num=11, policy_step=22, total_episodes_completed=7,
+                    cumulative_grad_steps=33, stage=1)
+
+    out = restore_dreamer_training_state(
+        os.path.join(str(tmp_path), 'checkpoints'),
+        wm, actor, critic, target_critic, moments, key, quiet=True)
+
+    assert int(out['iter_num']) == 11
+    assert int(out['policy_step']) == 22
+    assert int(out['total_episodes_completed']) == 7
+    assert int(out['cumulative_grad_steps']) == 33
+    assert int(out['stage']) == 1
+    assert out['restored_optimizers'] is False
+
+
+def test_restore_roundtrip_with_optimizers(tmp_path, tiny_agent):
+    """New-format checkpoint carries optimizer state and reports it restored."""
+    from src.algorithms.dreamer_srl.checkpoint import (
+        restore_dreamer_training_state, checkpoint_has_optimizers)
+    wm, actor, critic, target_critic, moments, key = tiny_agent
+    wm_opt, actor_opt, critic_opt = _make_opts(wm, actor, critic)
+    mgr = make_checkpoint_manager(str(tmp_path), max_to_keep=2)
+    save_checkpoint(mgr, 5, wm, actor, critic, target_critic, moments, key,
+                    iter_num=1, policy_step=2, total_episodes_completed=5,
+                    cumulative_grad_steps=3, stage=0,
+                    wm_opt=wm_opt, actor_opt=actor_opt, critic_opt=critic_opt)
+
+    assert checkpoint_has_optimizers(mgr, 5) is True
+    out = restore_dreamer_training_state(
+        os.path.join(str(tmp_path), 'checkpoints'),
+        wm, actor, critic, target_critic, moments, key,
+        wm_opt, actor_opt, critic_opt, quiet=True)
+    assert out['restored_optimizers'] is True
+    assert int(out['total_episodes_completed']) == 5
+
+
+def test_restore_missing_checkpoint_is_fatal(tmp_path, tiny_agent):
+    """An empty checkpoint dir must raise, never silently train from scratch."""
+    from src.algorithms.dreamer_srl.checkpoint import restore_dreamer_training_state
+    wm, actor, critic, target_critic, moments, key = tiny_agent
+    empty = tmp_path / 'checkpoints'
+    empty.mkdir()
+    with pytest.raises(FileNotFoundError):
+        restore_dreamer_training_state(str(empty), wm, actor, critic,
+                                       target_critic, moments, key, quiet=True)

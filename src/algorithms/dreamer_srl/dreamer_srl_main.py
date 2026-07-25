@@ -488,6 +488,16 @@ def main() -> None:
                              "Preserves bit-identity for grad-parity tests (test_grad_parity.py). "
                              "Default: False (scan path). "
                              "See docs/develop/active/dreamer_srl_v2/buffer_perf_fix_plan_option_L.md §Step 3")
+    parser.add_argument("--load-checkpoint", type=str, default=None,
+                        help="Resume from a dreamer-srl checkpoint. Pass the run's "
+                             "checkpoints/ dir; the latest episode is used unless "
+                             "--load-episode is given. Networks + counters + moments "
+                             "are restored; the replay buffer is NOT checkpointed and "
+                             "is refilled with the restored policy before training "
+                             "resumes.")
+    parser.add_argument("--load-episode", type=int, default=None,
+                        help="Checkpoint episode to resume from (default: latest). "
+                             "Only meaningful with --load-checkpoint.")
     args = parser.parse_args()
 
     # -----------------------------------------------------------------------
@@ -587,6 +597,14 @@ def main() -> None:
     elif env_step_override is not None:
         episodes = 0                       # env-step mode
         total_timesteps = env_step_override
+        # --total-steps silently switches OFF episode-based termination. A run
+        # launched this way stops at the env-step cap regardless of how many
+        # episodes remain (this ended dsrl_b04_M_128env_n114 at exactly 50M
+        # env-steps). Announce it so the mode is never a surprise.
+        print(f"[dreamer-srl] WARNING: --total-steps/--total-timesteps given "
+              f"({env_step_override:,}) -> ENV-STEP termination mode. Episode-based "
+              f"termination is DISABLED. Pass --episodes instead (or omit both to use "
+              f"training.episodes from config) for episode-based termination.", flush=True)
     else:
         episodes = env_cfg.get_mandatory('training.episodes', int)
         total_timesteps = episodes * env_max_steps * num_envs
@@ -1245,6 +1263,58 @@ def main() -> None:
     iter_num = 0
     last_losses: Dict = {}
 
+    # -----------------------------------------------------------------------
+    # 12b. Resume from checkpoint (--load-checkpoint). Mirrors train.py:1338
+    #      (rPPO). Restore is fatal-on-failure: a swallowed restore would train
+    #      from scratch while reporting resumed counters.
+    # -----------------------------------------------------------------------
+    # First iteration allowed to take gradient steps. Without a resume this is
+    # just learning_starts, so non-resume behaviour is unchanged.
+    train_start_iter = learning_starts
+    if args.load_checkpoint:
+        from src.algorithms.dreamer_srl.checkpoint import restore_dreamer_training_state
+        print(f"[dreamer-srl] Restoring checkpoint from {args.load_checkpoint} ...",
+              flush=True)
+        _restored = restore_dreamer_training_state(
+            args.load_checkpoint, world_model, actor, critic, target_critic,
+            moments, key, wm_opt, actor_opt, critic_opt,
+            episode=args.load_episode, quiet=args.quiet,
+        )
+        key                      = _restored['key']
+        iter_num                 = int(_restored['iter_num'])
+        policy_step              = int(_restored['policy_step'])
+        total_episodes_completed = int(_restored['total_episodes_completed'])
+        cumulative_grad_steps    = int(_restored['cumulative_grad_steps'])
+        # MomentsState is a flax.struct.dataclass (.replace); NamedTuple would be
+        # ._replace. Rebuild the real type — leaving the restored plain dict here
+        # blows up inside the jitted train step (moments_update reads state.low).
+        _m = dict(_restored['moments'])
+        if hasattr(moments, 'replace'):
+            moments = moments.replace(**_m)
+        elif hasattr(moments, '_replace'):
+            moments = moments._replace(**_m)
+        else:
+            raise TypeError(
+                f"Cannot rebuild moments of type {type(moments).__name__} from a "
+                f"checkpoint dict — add a branch here.")
+        if schedule is not None:
+            current_stage = int(_restored['stage'])
+        # Do not re-save the episode we just loaded.
+        last_ckpt_episode = total_episodes_completed
+        # The replay buffer is NOT part of the checkpoint, so it starts EMPTY
+        # while the restored iter_num sits far past learning_starts. The normal
+        # gate would therefore train immediately against an empty buffer. Hold
+        # gradients off until enough fresh transitions exist to form a full
+        # seq_len sequence; collection meanwhile uses the RESTORED policy (the
+        # uniform-random prefill branch is keyed on iter_num <= learning_starts,
+        # which a resumed iter_num never satisfies).
+        refill_iters = max(learning_starts, seq_len + 1)
+        train_start_iter = iter_num + refill_iters
+        print(f"[dreamer-srl] RESUMED at episode {total_episodes_completed:,} "
+              f"(iter={iter_num:,}, policy_step={policy_step:,}, "
+              f"grad_steps={cumulative_grad_steps:,}). Refilling buffer for "
+              f"{refill_iters} iterations before gradients resume.", flush=True)
+
     from src.utils.rolling_logging import resolve_logging_cfg, RollingWindow
     # Two-level logging (docs/develop/active/refactors/TWO_LEVEL_LOGGING_REDESIGN.md).
     # Checked agent_cfg first, then env_cfg — mirrors the log_every precedence below.
@@ -1340,7 +1410,10 @@ def main() -> None:
         print(f"Observation Dim: {obs_dim}")
         print("=" * _banner_width + "\n")
 
-    pbar = tqdm(total=episodes if episodes > 0 else None, disable=args.quiet, desc="Training")
+    # initial= keeps the bar truthful on resume (otherwise a run restored at
+    # episode 380,002 renders as 0/381,500 until the first episode completes).
+    pbar = tqdm(total=episodes if episodes > 0 else None, disable=args.quiet,
+                desc="Training", initial=total_episodes_completed)
 
     # Dual-mode while-loop — mirrors train.py:1169.
     # episodes > 0  → episode-driven (rPPO + JAX Dreamer-V3 default).
@@ -1701,6 +1774,9 @@ def main() -> None:
                     total_episodes_completed=total_episodes_completed,
                     cumulative_grad_steps=cumulative_grad_steps,
                     stage=current_stage,
+                    wm_opt=wm_opt,
+                    actor_opt=actor_opt,
+                    critic_opt=critic_opt,
                 )
                 last_ckpt_episode = total_episodes_completed
                 _just_saved_ckpt = True
@@ -1803,7 +1879,7 @@ def main() -> None:
         # -------------------------------------------------------------------
         # TRAIN GATE (sheeprl L660-L698)
         # -------------------------------------------------------------------
-        if iter_num >= learning_starts:
+        if iter_num >= train_start_iter:
             # Compute how many gradient steps are owed.
             # WP-SRL P6: subtract prefill env-steps so the Ratio scheduler sees
             # only policy-phase steps. `prefill_steps` carries sheeprl's
