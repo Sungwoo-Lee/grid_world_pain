@@ -456,6 +456,15 @@ def main():
         return
 
     t0 = time.time()
+    # Clear stale `done_<node>` markers from a PRIOR run before launching -- without this,
+    # poll_done() below sees the old marker immediately and reports completion in ~1s,
+    # without waiting for the newly launched workers (this is exactly the incremental
+    # re-run case: output_dir already completed a prior sweep, so its markers are stale).
+    # Race-free because we control ordering here: clear -> launch -> poll, and a worker
+    # only re-touches its own marker once genuinely done (see sweep_worker.sh).
+    mark_dir = scratch_root / "_run_markers"
+    for n in wl_paths:
+        (mark_dir / f"done_{n}").unlink(missing_ok=True)
     print("\nLaunching...")
     for n, wl in wl_paths.items():
         launch_node(n, wl, npar, episodes, dry_run=False)

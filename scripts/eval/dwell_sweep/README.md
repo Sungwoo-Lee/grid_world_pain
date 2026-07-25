@@ -170,3 +170,14 @@ results/eval/avoidance/<name>/
     ├── _run_markers/{npar,prog,done,fail}_<node>
     └── <run_label>/<cond>/<step>/...recordings.../episode_*.rec.gz
 ```
+
+**Marker lifecycle.** `poll_done()` treats `_run_markers/done_<node>` as "this node's
+worker has finished." Because `output_dir` (and therefore `_scratch/`) persists across
+re-runs of the same spec (that's what makes the incremental refresh work), a `done_<node>`
+marker from a PRIOR completed sweep is still on disk when you launch a new one -- if
+nothing cleared it, `poll_done()` would see it immediately and report completion before
+the newly launched worker had done anything. To prevent this, `run_sweep.py` deletes
+`done_<node>` for every node about to be launched immediately before the launch loop
+(race-free: clear -> launch -> poll, and a worker only re-touches its own marker once it
+is genuinely done). `sweep_worker.sh` also clears its own `done_$NODE` marker at start,
+as a defense-in-depth backstop.

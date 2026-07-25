@@ -42,6 +42,11 @@ mkdir -p "$JAX_COMPILATION_CACHE_DIR"
 # Worklist lives at <output_dir>/_scratch/_worklists/worklist_<node>.txt; markers go one
 # level up, at <output_dir>/_scratch/_run_markers/.
 MARK="$(dirname "$(dirname "$WL")")/_run_markers"; mkdir -p "$MARK"
+# Defense-in-depth: clear our own stale completion marker from a prior run before doing
+# any work. run_sweep.py already clears this marker (race-free, since it controls launch
+# ordering) immediately before launching workers -- this is a backstop in case the worker
+# is ever invoked some other way.
+rm -f "$MARK/done_$NODE"
 echo "NODE=$NODE NPAR=$NPAR NEP=$NEP $(date)" > "$MARK/npar_$NODE"
 
 export PY NEP MARK NODE
