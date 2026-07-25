@@ -1712,10 +1712,92 @@ cd /media/nas01/projects/Interoceptive-AI/grid_world_pain
 #   --wandb-name rppo_nmn_g32_b03_mc_dp1_n113 --tag rppo_nmn_g32_b03_mc_dp1_n113
 #
 # Run 4: rppo_nmn_g32_b04_mc_dp1_n113 — LAUNCHED (node 113, cuda:1, PID 4038066)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g32_screen.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_baseline_dp1 --wandb-job-type prod \
+#   --wandb-name rppo_nmn_g32_b04_mc_dp1_n113 --tag rppo_nmn_g32_b04_mc_dp1_n113
+
+# ---------------------------------------------------------------------------
+# decay_power-1.0 corrected baselines — SECOND 4-run relaunch — 2026-07-26
+# Same family as the rppo_baseline_dp1 4-run relaunch above; extends the plain-
+# vs-NMN-g32 split to basic/01 + basic/02. Plain rPPO on node 107, NMN FiLM g32
+# on node 108 (mirrors the 110/113 plain/NMN split above).
+# basic/01-slow_predator_5x5: 5x5 grid, 1 slow hunt predator (move_interval 3,
+#   no jump), 2 static hiding predators, no rabbit.
+# basic/02-predator_and_rabbit_10x10: 10x10 grid, 1 fast hunt predator
+#   (move_interval 1, no jump), 4 hiding predators, 1 wandering rabbit.
+# All 4: RecurrentPPO, return_mode=MC, single-config from scratch (standalone),
+# num_envs=128, episodes=100000000, seed=42 (config default — not overridden,
+# per explicit instruction). wandb-group: rppo_baseline_dp1, job-type: prod.
+# checkpoint_frequency=100000, log_interval=50 (mirrors the 110/113 pair).
+# Nodes 107/108 pre-flighted by the user (NAS mounted, both GPUs idle, 0
+# compute procs) + JAX GPU-compile check passed (jax 0.9.0.1, real matmul on
+# GPU) on both nodes pre-launch by this agent. Launched ONE AT A TIME via
+# CIFS-bypass /tmp scripts per the LAUNCH->WAIT->VERIFY protocol (--no-tail,
+# 60s wait, pgrep-only verify) — this file is the audit record.
+# ---------------------------------------------------------------------------
+# Run 1: rppo_b01_mc_dp1_n107 — node 107, cuda:0 — plain rPPO, basic/01 (5x5, slow predator)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/01-slow_predator_5x5.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_baseline_dp1 --wandb-job-type prod \
+#   --wandb-name rppo_b01_mc_dp1_n107 --tag rppo_b01_mc_dp1_n107
+#
+# Run 2: rppo_b02_mc_dp1_n107 — node 107, cuda:1 — plain rPPO, basic/02 (10x10, predator+rabbit)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/02-predator_and_rabbit_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_baseline_dp1 --wandb-job-type prod \
+#   --wandb-name rppo_b02_mc_dp1_n107 --tag rppo_b02_mc_dp1_n107
+#
+# Run 3: rppo_nmn_g32_b01_mc_dp1_n108 — node 108, cuda:0 — NMN FiLM g32, basic/01
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/01-slow_predator_5x5.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g32_screen.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_baseline_dp1 --wandb-job-type prod \
+#   --wandb-name rppo_nmn_g32_b01_mc_dp1_n108 --tag rppo_nmn_g32_b01_mc_dp1_n108
+#
+# Run 1: rppo_b01_mc_dp1_n107 — LAUNCHED (node 107, cuda:0, PID 1403622)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/01-slow_predator_5x5.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_baseline_dp1 --wandb-job-type prod \
+#   --wandb-name rppo_b01_mc_dp1_n107 --tag rppo_b01_mc_dp1_n107
+#
+# Run 2: rppo_b02_mc_dp1_n107 — LAUNCHED (node 107, cuda:1, PID 1403874)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/02-predator_and_rabbit_10x10.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:1 --log-interval 50 \
+#   --wandb-group rppo_baseline_dp1 --wandb-job-type prod \
+#   --wandb-name rppo_b02_mc_dp1_n107 --tag rppo_b02_mc_dp1_n107
+#
+# Run 3: rppo_nmn_g32_b01_mc_dp1_n108 — LAUNCHED (node 108, cuda:0, PID 4009642)
+# /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
+#   --config configs/environment/experiment/basic/01-slow_predator_5x5.yaml \
+#   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g32_screen.yaml \
+#   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
+#   --device cuda:0 --log-interval 50 \
+#   --wandb-group rppo_baseline_dp1 --wandb-job-type prod \
+#   --wandb-name rppo_nmn_g32_b01_mc_dp1_n108 --tag rppo_nmn_g32_b01_mc_dp1_n108
+#
+# Run 4: rppo_nmn_g32_b02_mc_dp1_n108 — LAUNCHED (node 108, cuda:1, PID 4009895)
 /home/vncuser/miniconda3/envs/grid_world_pain/bin/python train.py \
-  --config configs/environment/experiment/basic/04-jump_attack_10x10.yaml \
+  --config configs/environment/experiment/basic/02-predator_and_rabbit_10x10.yaml \
   --agent_config configs/models/recurrent_ppo/recurrent_ppo_nmn_film_g32_screen.yaml \
   --num-envs 128 --episodes 100000000 --checkpoint-frequency 100000 \
   --device cuda:1 --log-interval 50 \
   --wandb-group rppo_baseline_dp1 --wandb-job-type prod \
-  --wandb-name rppo_nmn_g32_b04_mc_dp1_n113 --tag rppo_nmn_g32_b04_mc_dp1_n113
+  --wandb-name rppo_nmn_g32_b02_mc_dp1_n108 --tag rppo_nmn_g32_b02_mc_dp1_n108
