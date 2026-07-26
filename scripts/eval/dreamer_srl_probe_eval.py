@@ -204,11 +204,26 @@ def main():
     run_dir = os.path.abspath(args.run_dir)
     print(f'[probe-eval] Restoring checkpoint step={args.episode} from {run_dir}/checkpoints/ '
           f'(device={args.device})')
-    manager = make_checkpoint_manager(run_dir, max_to_keep=100)
+    # Training checkpoints written after the --load-checkpoint resume feature
+    # landed (checkpoint.py:save_checkpoint) ALSO carry wm_opt/actor_opt/
+    # critic_opt (Adam state). `StandardRestore` demands the target tree match
+    # the saved tree EXACTLY, so this model-only target fails structurally
+    # against those full-training-state checkpoints. Use `PyTreeRestore(...,
+    # partial_restore=True)`: it restores only the keys present in `target` and
+    # ignores extra keys in the checkpoint (optimizer subtrees included), so one
+    # code path serves both old model-only and new full-state checkpoints.
+    # A plain CheckpointManager (no `checkpointers=` kwarg) is required --
+    # make_checkpoint_manager() binds StandardCheckpointer, which registers only
+    # Standard{Save,Restore} handlers and rejects PyTreeRestore args.
+    # Same pattern as scripts/eval/eval_rollout.py and
+    # scripts/dreamer/visualize_dream.py.
+    manager = ocp.CheckpointManager(os.path.join(run_dir, 'checkpoints'))
     target = _build_restore_target(world_model, actor, critic, target_critic)
 
     try:
-        restored = manager.restore(args.episode, args=ocp.args.StandardRestore(item=target))
+        restored = manager.restore(
+            args.episode,
+            args=ocp.args.PyTreeRestore(item=target, partial_restore=True))
     except Exception as e:
         raise ValueError(
             f"Failed to restore checkpoint step={args.episode} from {run_dir}/checkpoints/ into "
