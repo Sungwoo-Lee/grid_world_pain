@@ -1,0 +1,24 @@
+# Behavior-probe sweep for the fresh decay_power=1.0 ("dp1") Dreamer battery.
+# 4 runs: {basic03, basic04} x {size-M replay-ratio 0.0625, size-XS}, all
+# decay_power 1.0 (verified from saved env_config.yaml). Matched to the current
+# 1.0 avoidance probes. agent_config auto-detected per run from
+# <run>/models/agent_config.yaml. Output under the new avoidance/dp1/ subfolder,
+# separate from the old 2.0-regime datasets.
+#
+# Run: python scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/dp1_dreamer.yaml
+# `nodes` must be FREE at run time — check gpu_status first.
+name: dp1_dreamer
+algo: dreamer
+output_dir: results/eval/avoidance/dp1/dreamer
+probe: clean
+conditions: all
+episodes: 30
+nodes: [102, 103, 104, 105, 106, 111, 112]
+npar: 5
+x_axis: episodes
+plot_measures: [bush_dwell, spatial_spread, survival_steps]
+runs:
+  - {label: b03_M,  path: results/JAX_DreamerSRL/20260726-042618_dsrl_b03_M_dp1}
+  - {label: b03_XS, path: results/JAX_DreamerSRL/20260726-042620_dsrl_b03_XS_dp1}
+  - {label: b04_M,  path: results/JAX_DreamerSRL/20260726-042624_dsrl_b04_M_dp1}
+  - {label: b04_XS, path: results/JAX_DreamerSRL/20260726-042624_dsrl_b04_XS_dp1}

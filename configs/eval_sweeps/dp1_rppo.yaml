@@ -1,0 +1,28 @@
+# Behavior-probe sweep for the fresh decay_power=1.0 ("dp1") rPPO battery — the
+# re-training under the reverted 1.0 olfactory falloff (see
+# docs/environment/CONFIG_CRITICAL_SETTINGS.md). 8 runs: {plain rPPO, rPPO-NMN
+# FiLM-g32} x {basic01..04}, all MC returns, all decay_power 1.0. Evaluated
+# against the current core avoidance probes (which now also resolve to 1.0) —
+# matched regime. Output kept SEPARATE from the old 2.0-regime metrics_history_*
+# datasets, under a new avoidance/dp1/ subfolder.
+#
+# Run: python scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/dp1_rppo.yaml
+# `nodes` must be FREE at run time — check gpu_status first.
+name: dp1_rppo
+algo: rppo
+output_dir: results/eval/avoidance/dp1/rppo
+probe: clean
+conditions: all
+episodes: 30
+nodes: [102, 103, 104, 105, 106, 111, 112]
+x_axis: steps
+plot_measures: [bush_dwell, spatial_spread, survival_steps]
+runs:
+  - {label: b01_mc,         path: results/JAX_RecurrentPPO/20260726-053721_rppo_b01_mc_dp1_n107}
+  - {label: b02_mc,         path: results/JAX_RecurrentPPO/20260726-053746_rppo_b02_mc_dp1_n107}
+  - {label: b03_mc,         path: results/JAX_RecurrentPPO/20260726-051209_rppo_b03_mc_dp1_n110}
+  - {label: b04_mc,         path: results/JAX_RecurrentPPO/20260726-051300_rppo_b04_mc_dp1_n110}
+  - {label: nmn_g32_b01_mc, path: results/JAX_RecurrentPPO/20260726-053813_rppo_nmn_g32_b01_mc_dp1_n108}
+  - {label: nmn_g32_b02_mc, path: results/JAX_RecurrentPPO/20260726-053840_rppo_nmn_g32_b02_mc_dp1_n108}
+  - {label: nmn_g32_b03_mc, path: results/JAX_RecurrentPPO/20260726-051332_rppo_nmn_g32_b03_mc_dp1_n113}
+  - {label: nmn_g32_b04_mc, path: results/JAX_RecurrentPPO/20260726-051402_rppo_nmn_g32_b04_mc_dp1_n113}
