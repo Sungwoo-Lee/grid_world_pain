@@ -1,0 +1,7 @@
+# basic03 (random-init, all-combined predator pressure) with checkpoint+video every
+# 1000 episodes, keep ALL. Thin override extending the canonical basic03 config.
+extends: environment/experiment/basic/03-random_init_10x10
+
+training:
+  checkpoint_frequency: 1000
+  max_checkpoints_to_keep: 1000000
