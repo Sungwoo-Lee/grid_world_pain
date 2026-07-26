@@ -44,4 +44,5 @@ The impression that Dreamer training is "much noisier" than rPPO on WandB is alm
 ## Backlinks
 - [[20260723_1913_predator_mixture_inflates_survival_metric]] (dreamer_diagnosis, 2026-07-23) — basic04/basic03 sample predator count U{0,1,2} per episode, so ~1/3 of episodes 
 - [[20260723_1915_two_level_logging_and_config_layering]] (config_system, 2026-07-23) — Two-level logging redesign: split SMOOTHING (rolling deque window = noise) from 
+- [[20260727_0542_eval_seed_testing_seed_config_owned_flags]] (config_system, 2026-07-27) — Training-time eval reused args.seed, so eval SCENARIOS followed the training see
 <!-- END BACKLINKS -->

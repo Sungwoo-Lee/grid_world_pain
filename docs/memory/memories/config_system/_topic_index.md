@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `config_system` topic.
 
 **Folder definition**: Config loader/layering/schema decisions
-**Insights**: 9
-**Last updated**: 2026-07-26
+**Insights**: 10
+**Last updated**: 2026-07-27
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-27 | 05:42 | `20260727_0542_eval_seed_testing_seed_config_owned_flags` | Training-time eval must use testing.seed not args.seed: seed-0 eval was permanently predator-free (12x apparent-perf swing on same checkpoint); fix b228117 reuses existing testing.seed 8217; config-owned flags stay off the CLI |
 | 2026-07-26 | 04:19 | [20260726_0419_experiment_eval_config_layer_selector](20260726_0419_experiment_eval_config_layer_selector.md) | experiment-eval opt-in moved from a --experiment-eval CLI flag to a config-layer --eval-config <preset> selector: default evaluation/default.yaml (off) documents every field with notes; experiment_on.yaml extends it and flips enabled:true. Config-selector (like --config) vs behavioral-flag; self-documenting defaults. rPPO-only. |
 | 2026-07-26 | 04:16 | [20260726_0416_critical_settings_registry_changelog_guardrail](20260726_0416_critical_settings_registry_changelog_guardrail.md) | Created docs/environment/CONFIG_CRITICAL_SETTINGS.md: a registry of high-impact settings (canonical value + meaning) + a dated change log with a same-commit logging protocol, to prevent silent config drift. Wired as required reading into 5 config/training agents + CLAUDE.md; context-efficient (compact 28-line doc, 1-line CLAUDE.md bullet, conditional reads). |
 | 2026-07-26 | 04:15 | [20260726_0415_decay_power_silent_drift_reverted_1p0](20260726_0415_decay_power_silent_drift_reverted_1p0.md) | sensory.decay_power silently drifted 1.0->2.0 inside an unrelated 2026-02-27 'scale to 10x10' commit (def81c1); found via the SAVED config (first lookup returned spurious None — key is under sensory. not olfaction.); reverted to 1.0. Training+probes were consistent at 2.0, just unintended. |

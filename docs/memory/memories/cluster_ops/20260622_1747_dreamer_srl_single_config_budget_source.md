@@ -48,4 +48,5 @@ None.
 ## Backlinks
 - [[20260622_1746_dreamer_srl_recompile_storm_done_count]] (dreamer_diagnosis, 2026-06-22) — dreamer_srl crashed all 5 basic-curriculum runs because the per-step env-reset p
 - [[20260629_1724_rppo_single_config_episode_budget]] (cluster_ops, 2026-06-29) — rPPO single-config training: --total-timesteps is SILENTLY IGNORED whenever epis
+- [[20260727_0541_total_steps_footgun_dreamer_resume_path]] (cluster_ops, 2026-07-27) — dsrl_b04_M_128env 'crash' was actually clean completion: --total-steps silently 
 <!-- END BACKLINKS -->

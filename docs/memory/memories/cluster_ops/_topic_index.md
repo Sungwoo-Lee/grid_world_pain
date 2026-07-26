@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `cluster_ops` topic.
 
 **Folder definition**: Lab cluster ops and env mgmt
-**Insights**: 39
-**Last updated**: 2026-07-23
+**Insights**: 40
+**Last updated**: 2026-07-27
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-27 | 05:41 | `20260727_0541_total_steps_footgun_dreamer_resume_path` | --total-steps silently disables episode termination (b04 'crash' = clean 50M-step completion; WandB crashed = dead uploader thread); resume path implemented (--load-checkpoint, optimizer state saved, buffer-refill gate) |
 | 2026-07-23 | 19:14 | [20260723_1914_dreamer_noise_is_logging_granularity_artifact](20260723_1914_dreamer_noise_is_logging_granularity_artifact.md) | Dreamer's noisier WandB curve is a LOGGING-granularity artifact not instability: 'iteration' means 128x different things, and episode metrics are a block-mean-then-cleared over the iteration-gated window (noise welded to cadence). --log-interval 100 CLI silently shadowed the tuned 2000. |
 | 2026-07-21 | 04:21 | `20260721_0421_eval_sweep_cpu_bound_not_nas` | The frozen-checkpoint eval sweep is CPU-bound (multithreaded XLA compile, ~13s/proc), NOT NAS-I/O-bound; the load-137 jam was CPU thread oversubscription amplified by stacked un-killable workers. Fix: persistent XLA compile cache + 1-thread cap/proc + NPAR~=cores. Corrected LAB_NODE_GPU_SPEC.md (8de24a0). |
 | 2026-07-10 | 16:33 | `20260710_1633_rppo_resume_needs_matching_num_envs` | H1-fixed rPPO resume genuinely restores weights (bit-exact) + optimizer (Adam moments) + counters and is fatal-on-mismatch; but a resume MUST pass --num-envs matching the checkpoint's h_state batch dim (128-env ckpt needs --num-envs 128) or Orbax fatals. 128 envs accumulates episodes ~8x faster than 16 (10M overnight vs ~4 days). Gate-tested before a 100M resume. |

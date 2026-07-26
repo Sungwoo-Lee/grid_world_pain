@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `dreamer_diagnosis` topic.
 
 **Folder definition**: DreamerV3 failure investigation
-**Insights**: 22
-**Last updated**: 2026-07-23
+**Insights**: 25
+**Last updated**: 2026-07-27
 
 ---
 
@@ -13,6 +13,9 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-27 | 05:39 | `20260727_0539_task_different_in_kind_reward_algebra` | Task vs DreamerV3 suite: different in kind — conventionally simpler but harder on untested axes; dense homeostatic reward near-potential-based so death is the only controllable signal; ceiling unmeasured (P1 oracle probe designed) |
+| 2026-07-27 | 05:38 | `20260727_0538_critic_twohot_bin_resolution_bottleneck` | Two-hot critic at ±20: 1 bin ≈ 52 survival-steps, whole task ~10 of 255 bins, all learning 1.2 bins; D-017 configurable range; bins±6 arms launched with clip-frac guards |
+| 2026-07-27 | 05:37 | `20260727_0537_dreamer_five_perspective_investigation_verdict` | 5-perspective investigation: implementation clean, healthy-but-slow, XS≈M (M oversized), rr premise inverted (bump wall-clock-positive), ~2x speed in stalls+unjitted actor; binding constraint = value pathway on rare lethal events |
 | 2026-07-23 | 19:16 | [20260723_1916_train_ratio_replay_ratio_conversion](20260723_1916_train_ratio_replay_ratio_conversion.md) | PDF-verified: DreamerV3 train_ratio = our replay_ratio x batch*seq (x1024); our sweep {1,.5,.25,.0625} = train_ratio {1024,512,256,64} = DreamerV3's full data-scarce->rich range. |
 | 2026-07-23 | 19:13 | [20260723_1913_predator_mixture_inflates_survival_metric](20260723_1913_predator_mixture_inflates_survival_metric.md) | basic04/03 sample predator U{0,1,2}; ~1/3 episodes have no predator so survival mean is a MIXTURE (foraging, not competence). Size verdict RETRACTED; conditioned probes show all Dreamer sizes fail under predator (16-27 steps, max injury, ~0 bush) while rPPO szXS solved it (96.7, bush 100%). |
 | 2026-07-23 | 19:12 | [20260723_1912_fresh_empirical_reaudit_finds_new_bug_class](20260723_1912_fresh_empirical_reaudit_finds_new_bug_class.md) | A second independent audit with a fresh model generation (Fable 5) that EMPIRICALLY EXECUTES suspect paths and DIFFS ports against upstream found 10 new High bugs the first read-only (Opus) audit missed, while re-verifying all its fixes. Running the code beats reading it for integration/glue bugs; a fresh-model re-pass is worthwhile on integration-heavy code. |

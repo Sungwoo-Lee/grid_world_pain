@@ -4,8 +4,8 @@
 > Read this file when the user's question narrows to the `hypervigilance` topic.
 
 **Folder definition**: Hypervigilance experiments
-**Insights**: 27
-**Last updated**: 2026-06-30
+**Insights**: 28
+**Last updated**: 2026-07-27
 
 ---
 
@@ -13,6 +13,7 @@
 
 | Date | Time | ID | Summary |
 |---|---|---|---|
+| 2026-07-27 | 05:40 | `20260727_0540_rppo_gamma095_myopic_survival_surrogate` | rPPO baselines train at gamma=0.95 (saved-config verified): death 40 steps out worth 0.13/100 — myopic surrogate; cross-algo comparisons asterisked; gamma sweep queued |
 | 2026-06-30 | 16:29 | `20260630_1629_injury_gated_olfactory_noise_hypervig` | Basic level 06: induce hypervigilance via INJURY-GATED OLFACTORY perceptual noise (precision-weighting) — injured -> smell channel degrades (sigma_eff=sigma_base*(1+alpha*injury)) -> danger-prior dominates -> defensive over-reaction. Design rules: couple injury to the THREAT channel not interoception (keep the pain-gate clean), maximise healthy<->injured contrast (low sigma_base + high alpha). Untested hypothesis; olfaction.injury_noise_scale is the key knob. |
 | 2026-06-24 | 05:17 | `20260624_0517_indist_random_init_reverses_hypervig` | REVERSAL: re-running on the IN-DISTRIBUTION model (random-init hg10, decay 2.0, 10M) shows the agent eats at every nutrition level, ignores both harmless rabbits, only the real predator kills it -> NO hypervigilance. The earlier 'hypervigilance/eat-failure' was an off-distribution artifact of a STATIC-init model on depleted starts. **Supersedes 1744.** |
 | 2026-06-23 | 16:23 | `20260623_1623_nutrition_runway_confounds_hypervig_read` | Nutrition sweep (injury 0, nutr 10→100): hg10's eat-failure is driven by initial nutrition + a wander-away-from-adjacent-food policy, NOT animal avoidance — at low nutrition it starves even with NO animal; the animal only raises the nutrition threshold. Confounds the earlier 'unconditional hypervigilance' read (1744). |
