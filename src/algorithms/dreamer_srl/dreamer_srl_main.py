@@ -622,6 +622,12 @@ def main() -> None:
     kl_regularizer = agent_cfg.get_mandatory("algo.kl_regularizer", float)
     continue_scale_factor = agent_cfg.get_mandatory("algo.continue_scale_factor", float)
 
+    # Two-hot bin range (symlog space) for the reward/critic heads. OPTIONAL keys —
+    # deliberately .get (not get_mandatory): existing configs lack them and must keep
+    # running bit-identically on the sheeprl-parity default ±20. See DEVIATION_LOG.md D-017.
+    twohot_low = float(agent_cfg.get("algo.twohot_low", -20.0))
+    twohot_high = float(agent_cfg.get("algo.twohot_high", 20.0))
+
     moments_decay = agent_cfg.get_mandatory("algo.actor.moments.decay", float)
     moments_max = agent_cfg.get_mandatory("algo.actor.moments.max", float)
     moments_pct_low = agent_cfg.get_mandatory("algo.actor.moments.percentile.low", float)
@@ -690,6 +696,7 @@ def main() -> None:
           f"total_timesteps={total_timesteps}, learning_starts={learning_starts} iters "
           f"(= {learning_starts_cfg} env steps / {num_envs} envs; WP-SRL P6)")
     print(f"[dreamer-srl] seq_len={seq_len}, batch_size={batch_size}, horizon={horizon}")
+    print(f"[dreamer-srl] twohot_range=[{twohot_low}, {twohot_high}]")
 
     # -----------------------------------------------------------------------
     # 4b. Pre-flight obs/action + modality-fingerprint check (curriculum only)
@@ -836,6 +843,8 @@ def main() -> None:
         moments_max=moments_max,
         moments_pct_low=moments_pct_low,
         moments_pct_high=moments_pct_high,
+        twohot_low=twohot_low,
+        twohot_high=twohot_high,
     )
 
     # -----------------------------------------------------------------------

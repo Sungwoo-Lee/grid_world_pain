@@ -505,3 +505,81 @@ def test_reconstruction_loss_with_symlog_po():
     assert abs(float(kl_loss_mean) - float(kl_l.mean())) < 1e-5
     assert abs(float(rew_mean) - float(rew_l.mean())) < 1e-5
     assert abs(float(cont_mean) - float(cont_l.mean())) < 1e-5
+
+
+# ---------------------------------------------------------------------------
+# D-017 — configurable two-hot bin range (algo.twohot_low / algo.twohot_high)
+#
+# The class default stays low=-20, high=20 (sheeprl parity — pinned by the
+# test_twohot_* bit-identity tests above). These tests cover the NON-default
+# range path used by the bins-resolution experiment (±6).
+# ---------------------------------------------------------------------------
+
+def test_twohot_custom_range_bins_linspace():
+    """Custom low/high produce bins = linspace(low, high, 255) in symlog space.
+
+    D-017: the bin range is configurable per instantiation site (train.py
+    threads algo.twohot_low/high); the grid must be a plain linspace over the
+    requested range — still in SYMLOG space, never symexp'd at storage.
+    """
+    dummy_logits = jnp.zeros((1, 255))
+    dist = TwoHotEncoding(dummy_logits, dims=0, low=-6.0, high=6.0)
+
+    expected = jnp.linspace(-6.0, 6.0, 255)
+    assert dist.bins.shape == (255,)
+    assert float(dist.bins[0]) == -6.0, f"bins[0]={float(dist.bins[0])}, expected -6.0"
+    assert float(dist.bins[254]) == 6.0, f"bins[254]={float(dist.bins[254])}, expected +6.0"
+    max_abs_diff = float(jnp.max(jnp.abs(dist.bins - expected)))
+    assert max_abs_diff == 0.0, (
+        f"custom-range bins differ from linspace(-6, 6, 255): "
+        f"max_abs_diff={max_abs_diff:.3e}"
+    )
+    # Guard against symexp-at-storage on the custom range (historical-bug class):
+    # symexp(-6) ≈ -402.4, not -6.0.
+    assert abs(float(dist.bins[0]) - (-6.0)) < 1e-6
+
+
+@pytest.mark.parametrize("target", [-100.0, -22.0, 0.0])
+def test_twohot_pm6_round_trip(target):
+    """Two-hot encode → decode round-trip at range ±6 recovers the target.
+
+    D-017: |symlog(-100)| ≈ 4.62 and |symlog(-22)| ≈ 3.14 — both inside the ±6
+    symlog-space grid, so the ±6 range must represent them without clipping.
+    Encode the target into its two-hot weight vector (same arithmetic as
+    log_prob), feed log(weights) back in as logits (softmax recovers the
+    two-hot distribution), and check that .mean decodes back to the original
+    value within one symlog-space bin width (12 / 254 ≈ 0.0472).
+    """
+    from src.algorithms.dreamer_srl.utils import symlog as _symlog
+
+    low, high = -6.0, 6.0
+    n_bins = 255
+    bin_width = (high - low) / (n_bins - 1)
+
+    # Bin grid for the custom range
+    bins = TwoHotEncoding(jnp.zeros((1, n_bins)), dims=1, low=low, high=high).bins
+
+    # Two-hot encode the target (same code path as log_prob; see
+    # test_twohot_encode_matches_sheeprl for the sheeprl-side derivation)
+    x = _symlog(jnp.asarray([[target]]))  # [1, 1] symlog-space target
+    below = (bins <= x).astype(jnp.int32).sum(axis=-1, keepdims=True) - 1
+    above = jnp.minimum(below + 1, n_bins - 1)
+    below = jnp.maximum(below, 0)
+    equal = below == above
+    dist_to_below = jnp.where(equal, jnp.ones_like(x), jnp.abs(bins[below] - x))
+    dist_to_above = jnp.where(equal, jnp.ones_like(x), jnp.abs(bins[above] - x))
+    total = dist_to_below + dist_to_above
+    twohot = (
+        jax.nn.one_hot(below, n_bins) * (dist_to_above / total)[..., None]
+        + jax.nn.one_hot(above, n_bins) * (dist_to_below / total)[..., None]
+    ).squeeze(-2)  # [1, 255]
+
+    # Decode: log(weights) as logits → softmax recovers the two-hot weights
+    dist = TwoHotEncoding(jnp.log(twohot + 1e-12), dims=1, low=low, high=high)
+    decoded = float(dist.mean[0, 0])
+
+    err_symlog = abs(float(_symlog(jnp.asarray(decoded))) - float(_symlog(jnp.asarray(target))))
+    assert err_symlog < bin_width, (
+        f"±6 round-trip failed for target={target}: decoded={decoded:.4f}, "
+        f"symlog-space error {err_symlog:.5f} >= bin width {bin_width:.5f}"
+    )

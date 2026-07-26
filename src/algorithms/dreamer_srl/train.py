@@ -161,7 +161,7 @@ from src.algorithms.dreamer_srl.loss import (
     TwoHotEncoding,
     reconstruction_loss,
 )
-from src.algorithms.dreamer_srl.utils import compute_lambda_values, moments_update, MomentsState
+from src.algorithms.dreamer_srl.utils import compute_lambda_values, moments_update, MomentsState, symlog
 from src.algorithms.dreamer_srl.agent import action_shift
 
 
@@ -234,6 +234,8 @@ def compute_critic_loss(
     lambda_values: jax.Array,
     target_critic_values: jax.Array,
     discount: jax.Array,
+    low: float = -20.0,
+    high: float = 20.0,
 ) -> Tuple[jax.Array, jax.Array, jax.Array]:
     """Two-term critic NLL loss with EMA self-regularization (cascade fix #29).
 
@@ -296,6 +298,12 @@ def compute_critic_loss(
                    In real reward space. stop_gradient'd by caller or here.
         discount: [H+1, BT, 1] from compute_discount(continues, gamma).
                    Already stop_gradient'd. The `[:-1]` slice is applied here.
+        low: lower endpoint of the two-hot bin grid in symlog space
+                   (default -20.0 = sheeprl parity; configurable via
+                   algo.twohot_low, see DEVIATION_LOG.md D-017).
+        high: upper endpoint of the two-hot bin grid in symlog space
+                   (default +20.0 = sheeprl parity; configurable via
+                   algo.twohot_high, see DEVIATION_LOG.md D-017).
 
     Returns:
         (value_loss, neg_lp1, neg_lp2)
@@ -308,7 +316,7 @@ def compute_critic_loss(
         tests/algorithms/dreamer_srl/test_train.py::test_critic_target_lambda
     """
     # Construct the critic distribution from logits — dims=1 matches sheeprl L307
-    qv = TwoHotEncoding(qv_logits, dims=1)
+    qv = TwoHotEncoding(qv_logits, dims=1, low=low, high=high)
 
     # sheeprl L314: value_loss = -qv.log_prob(lambda_values.detach())
     # JAX: stop_gradient on the lambda-target (do NOT let gradient flow through it)
@@ -629,6 +637,8 @@ def make_train_step(
     moments_max: float = 1.0,
     moments_pct_low: float = 0.05,
     moments_pct_high: float = 0.95,
+    twohot_low: float = -20.0,
+    twohot_high: float = 20.0,
 ):
     """Factory: returns a JIT'd one_train_step with static hyperparams baked in.
 
@@ -718,7 +728,9 @@ def make_train_step(
             # Distributions — sheeprl dreamer_v3.py:156-172
             # -----------------------------------------------------------------
             po = {"obs": SymlogDistribution(wm_outputs["reconstructed_obs"], dims=1)}
-            pr = TwoHotEncoding(wm_outputs["reward_logits"], dims=1)   # [T, B, 255]
+            pr = TwoHotEncoding(
+                wm_outputs["reward_logits"], dims=1, low=twohot_low, high=twohot_high
+            )   # [T, B, 255]
             pc = IndependentBernoulli(wm_outputs["continue_logits"])   # logits: [T, B, 1]
             # §S10: continue target = 1 - terminated (NO gamma multiplier)
             # sheeprl L168: continues_targets = 1 - data["terminated"]
@@ -766,13 +778,21 @@ def make_train_step(
             # Commit 6: additional WM quality probes.
             # Mirrors src/models/dreamer_v3_trainer.py:L260-L289
             # Reward MAE — absolute error between predicted and actual reward
-            rew_pred_mean = TwoHotEncoding(wm_outputs["reward_logits"], dims=1).mean  # [T, B, 1]
+            rew_pred_mean = TwoHotEncoding(
+                wm_outputs["reward_logits"], dims=1, low=twohot_low, high=twohot_high
+            ).mean  # [T, B, 1]
             rew_target = batch["rewards"]                             # [T, B, 1]
             rew_mae = jnp.mean(jnp.abs(rew_pred_mean - rew_target))
             pos_mask = (rew_target > 0.01).astype(jnp.float32)
             neg_mask = (rew_target < -0.01).astype(jnp.float32)
             rew_mae_pos = jnp.sum(jnp.abs(rew_pred_mean - rew_target) * pos_mask) / (jnp.sum(pos_mask) + 1e-8)
             rew_mae_neg = jnp.sum(jnp.abs(rew_pred_mean - rew_target) * neg_mask) / (jnp.sum(neg_mask) + 1e-8)
+            # D-017 clip guard: fraction of reward targets whose symlog encoding
+            # lands within 2% of the two-hot bin-grid endpoint (would be clipped
+            # or near-clipped by the [twohot_low, twohot_high] grid).
+            reward_target_clip_frac = jnp.mean(
+                (jnp.abs(symlog(rew_target)) >= 0.98 * twohot_high).astype(jnp.float32)
+            )
             # Latent entropy — posterior categorical entropy
             # Mirrors src/models/dreamer_v3_trainer.py:L270-L271
             q_dist = jax.nn.softmax(post_logits, axis=-1)    # [T, B, S, D]
@@ -802,6 +822,7 @@ def make_train_step(
                 "reward_mae":        rew_mae,
                 "reward_mae_pos":    rew_mae_pos,
                 "reward_mae_neg":    rew_mae_neg,
+                "reward_target_clip_frac": reward_target_clip_frac,  # D-017 clip guard
                 "latent_entropy":    latent_entropy,
                 "cont_acc":          cont_acc,
             }
@@ -847,7 +868,8 @@ def make_train_step(
 
         predicted_rewards_logits = jax.vmap(world_model.reward_model)(imag_flat)
         predicted_rewards = TwoHotEncoding(
-            predicted_rewards_logits.reshape(H_plus_1, BT, -1), dims=1
+            predicted_rewards_logits.reshape(H_plus_1, BT, -1), dims=1,
+            low=twohot_low, high=twohot_high,
         ).mean  # [H+1, BT, 1]
 
         # CP5-P1 / CP3-A3 fix: use live critic (not target_critic) for the predicted
@@ -861,7 +883,8 @@ def make_train_step(
         # Ported from sheeprl@33b6366:dreamer_v3.py:L244
         predicted_values_logits = jax.vmap(critic)(imag_flat)
         predicted_values = TwoHotEncoding(
-            predicted_values_logits.reshape(H_plus_1, BT, -1), dims=1
+            predicted_values_logits.reshape(H_plus_1, BT, -1), dims=1,
+            low=twohot_low, high=twohot_high,
         ).mean  # [H+1, BT, 1]
 
         continues_logits = jax.vmap(world_model.continue_model)(imag_flat)
@@ -979,7 +1002,15 @@ def make_train_step(
         target_critic_logits = jax.vmap(target_critic)(
             sg_latents_h.reshape(horizon * BT, -1)
         ).reshape(horizon, BT, -1)  # [H, BT, 255]
-        target_critic_values = TwoHotEncoding(target_critic_logits, dims=1).mean  # [H, BT, 1]
+        target_critic_values = TwoHotEncoding(
+            target_critic_logits, dims=1, low=twohot_low, high=twohot_high
+        ).mean  # [H, BT, 1]
+
+        # D-017 clip guard: fraction of critic regression targets (λ-returns)
+        # whose symlog encoding lands within 2% of the two-hot bin-grid endpoint.
+        value_target_clip_frac = jnp.mean(
+            (jnp.abs(symlog(lambda_values)) >= 0.98 * twohot_high).astype(jnp.float32)
+        )
 
         def critic_loss_fn(critic_module):
             """Two-term critic NLL with EMA target (cascade fix #29)."""
@@ -992,6 +1023,8 @@ def make_train_step(
                 lambda_values=lambda_values,
                 target_critic_values=target_critic_values,
                 discount=discount,
+                low=twohot_low,
+                high=twohot_high,
             )
             return value_loss
 
@@ -1016,6 +1049,8 @@ def make_train_step(
             "model_reward_mae":   wm_aux["reward_mae"],
             "model_reward_mae_pos": wm_aux["reward_mae_pos"],
             "model_reward_mae_neg": wm_aux["reward_mae_neg"],
+            "reward_target_clip_frac": wm_aux["reward_target_clip_frac"],  # D-017 clip guard
+            "value_target_clip_frac":  value_target_clip_frac,             # D-017 clip guard
             "model_latent_entropy": wm_aux["latent_entropy"],
             "model_cont_acc":     wm_aux["cont_acc"],
             # Behavior
