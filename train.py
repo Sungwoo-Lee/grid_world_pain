@@ -2377,6 +2377,12 @@ def main():
                                 print(f"  [DEBUG] Starting evaluation... Video={eval_v_flag}, Stats={eval_s_flag}", flush=True)
                             try:
                                 from src.utils.evaluation_core import evaluate_jax_checkpoint
+                                # Eval seed comes from configs/evaluation/default.yaml
+                                # `testing.seed` -- NOT the training seed. Re-using the
+                                # training seed made eval scenarios follow it, so a run
+                                # launched with --seed 0 evaluated on a predator-free
+                                # draw. Same key the standalone evaluator uses
+                                # (evaluation.py:250) and the dreamer-srl driver.
                                 
                                 # Pass 1: Video
                                 if eval_v_flag:
@@ -2385,7 +2391,8 @@ def main():
                                         print(f"  [EVAL] Pass 1: Video (eps={video_eps})")
                                     evaluate_jax_checkpoint(
                                         model=model,
-                                        params=params, config=config, num_episodes=video_eps, seed=seed,
+                                        params=params, config=config, num_episodes=video_eps,
+                                        seed=config.get_mandatory('testing.seed'),
                                         results_dir=results_dir, checkpoint_pct=total_episodes_completed,
                                         render_video=True, record_stats=False, wandb_enabled=wandb_enabled, debug=args.debug,
                                         quiet=not args.debug, num_envs=1, device=jax.config.values['jax_default_device']
@@ -2400,7 +2407,8 @@ def main():
                                         print(f"  [EVAL] Pass 2: Stats (eps={stats_eps}, envs={stats_envs})")
                                     eval_results = evaluate_jax_checkpoint(
                                         model=model,
-                                        params=params, config=config, num_episodes=stats_eps, seed=seed,
+                                        params=params, config=config, num_episodes=stats_eps,
+                                        seed=config.get_mandatory('testing.seed'),
                                         results_dir=results_dir, checkpoint_pct=total_episodes_completed,
                                         render_video=False, record_stats=True, wandb_enabled=wandb_enabled, debug=args.debug,
                                         quiet=not args.debug, num_envs=stats_envs, device=jax.config.values['jax_default_device']

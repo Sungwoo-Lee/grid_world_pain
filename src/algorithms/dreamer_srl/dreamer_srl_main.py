@@ -652,10 +652,18 @@ def main() -> None:
     viz_enabled           = env_cfg.get_mandatory('visualization.enabled')
     viz_fps               = env_cfg.get_mandatory('visualization.fps', int)
     auto_render           = env_cfg.get_mandatory('testing.auto_render_after_eval')
+    # Eval seed — the EXISTING evaluation-config key (configs/evaluation/default.yaml
+    # `testing.seed`), the same one the standalone evaluator honours (evaluation.py:250).
+    # Previously the checkpoint eval re-used args.seed (the TRAINING seed), which made
+    # eval scenarios follow the training seed: at --seed 0 the deterministic first eval
+    # episode on basic03/04 draws ZERO predators, so every checkpoint's video showed a
+    # predator-free world (measured: mean eval length 348 at seed 0 vs 28 at seed 42 on
+    # the SAME frozen checkpoint). testing.seed decouples the two and draws predators.
+    eval_seed             = env_cfg.get_mandatory('testing.seed', int)
 
     if args.debug:
         print(f"[dreamer-srl] eval config: video_during_training={video_during_training}, "
-              f"eval_video_episodes={eval_video_episodes}, stats_during_training={stats_during_training}, "
+              f"eval_video_episodes={eval_video_episodes}, eval_seed={eval_seed}, stats_during_training={stats_during_training}, "
               f"checkpoint_frequency={checkpoint_frequency}, viz_fps={viz_fps}, "
               f"auto_render={auto_render}, max_checkpoints_keep={max_checkpoints_keep}")
 
@@ -1799,7 +1807,7 @@ def main() -> None:
                             env_params=env_params,
                             config=env_cfg,
                             num_episodes=eval_video_episodes,
-                            seed=args.seed,
+                            seed=eval_seed,
                             results_dir=results_dir,
                             checkpoint_pct=total_episodes_completed,
                             render_video=True,
@@ -1842,7 +1850,7 @@ def main() -> None:
                             env_params=env_params,
                             config=env_cfg,
                             num_episodes=eval_stats_episodes,
-                            seed=args.seed,
+                            seed=eval_seed,
                             results_dir=results_dir,
                             checkpoint_pct=total_episodes_completed,
                             render_video=False,
