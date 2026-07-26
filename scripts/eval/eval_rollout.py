@@ -1379,7 +1379,6 @@ def main():
     elif agent_type == "dreamer":
         import flax.nnx as nnx
         from src.algorithms.dreamer_srl.agent import build_agent
-        from src.algorithms.dreamer_srl.checkpoint import make_checkpoint_manager
         from src.algorithms.dreamer_srl.eval import dreamer_srl_eval_rollout
         if args.batched:
             from src.algorithms.dreamer_srl.eval import dreamer_srl_eval_rollout_batched
@@ -1459,14 +1458,44 @@ def main():
 
         # --- Restore checkpoint weights (topology-agnostic; see
         # _build_dreamer_restore_target docstring) ---
+        # Eval only ever needs the model params, never the optimizer state --
+        # but training checkpoints saved after the --load-checkpoint resume
+        # feature was added (checkpoint.py:save_checkpoint) ALSO carry
+        # wm_opt/actor_opt/critic_opt (Adam state). A `StandardRestore` demands
+        # the target tree match the saved tree exactly, so a model-only target
+        # fails structurally against those full-state checkpoints. Use
+        # `PyTreeRestore(..., partial_restore=True)` instead: it restores only
+        # the keys present in `restore_target` and silently ignores any extra
+        # keys in the checkpoint (optimizer subtrees included), so the same
+        # code path works for both model-only and full-training-state
+        # checkpoints. This is the same pattern already used for the rPPO
+        # restore (~L1148 above) and `scripts/dreamer/visualize_dream.py`.
+        # A plain `ocp.CheckpointManager(<checkpoints dir>)` (no `checkpointers=`
+        # kwarg) is required here -- `make_checkpoint_manager()` binds the
+        # manager to `StandardCheckpointer` only, which registers just
+        # Standard{Save,Restore} handlers and rejects `PyTreeRestore` args.
         if not args.quiet:
             print(f"[eval_rollout] Restoring Dreamer checkpoint step={dreamer_episode} from "
                   f"{dreamer_run_dir}/checkpoints/", flush=True)
 
-        manager = make_checkpoint_manager(str(dreamer_run_dir), max_to_keep=100)
+        manager = ocp.CheckpointManager(
+            os.path.abspath(os.path.join(str(dreamer_run_dir), "checkpoints")))
         restore_target = _build_dreamer_restore_target(world_model, actor, critic, target_critic)
+        _cpu_device = jax.local_devices()[0]
+
+        def _cpu_restore_arg(_x):
+            return ocp.ArrayRestoreArgs(
+                restore_type=jax.Array,
+                sharding=jax.sharding.SingleDeviceSharding(_cpu_device),
+            )
+
+        restore_args = jax.tree_util.tree_map(_cpu_restore_arg, restore_target)
         try:
-            restored = manager.restore(dreamer_episode, args=ocp.args.StandardRestore(item=restore_target))
+            restored = manager.restore(
+                dreamer_episode,
+                args=ocp.args.PyTreeRestore(item=restore_target, restore_args=restore_args,
+                                             partial_restore=True),
+            )
         except Exception as e:
             raise ValueError(
                 f"Failed to restore Dreamer checkpoint step={dreamer_episode} from "
