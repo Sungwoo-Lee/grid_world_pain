@@ -176,3 +176,21 @@ Three arms × ≥3 seeds, XS, current best-known cadence settings; design-1 base
 | | | | |
 
 **Conclusion**: —
+
+---
+
+## Feedback from plan-reviewer
+
+> **Date**: 2026-07-28 · **Verdict**: **NOT READY AS WRITTEN — one 🔴 blocker, unilaterally fixable by `developer`; flips to SOUND WITH CONCERNS once the edit protocol below is adopted.** Full review: [plan_hierarchical_modality_encoder](../../../reviews/plan_hierarchical_modality_encoder.md). Tonight's autonomous chain may proceed with the remedies applied; no human decision required.
+
+- **🔴 B1 — §Live-jobs safety is factually wrong.** `scripts/eval/eval_rollout.py` is not only imported — it is **subprocess-spawned fresh from the NAS checkout** by the live rPPO runs' during-training experiment-eval chain (`train.py` → `experiment_eval_checkpoint.py` → `eval_rollout.py`, SCRIPTS_DEPENDENCY_MAP §1b) and by dwell-sweep workers; each spawn also freshly re-imports `src/algorithms/dreamer_srl/agent.py`. In-place edits risk a truncated read or a transient bug in an async, never-`wait()`-ed eval — silent degradation of 8 live runs' eval series. **Remedy**: atomic replace (edit a copy, `mv` over) for every edited file; then immediately smoke one existing rPPO eval + one existing flat-Dreamer eval on CPU — or defer File Changes 3–6 out of tonight's window (safe: an un-updated eval script meeting a hierarchical checkpoint fails loudly via this plan's own `ValueError`).
+- **🟡 C1 — Reparam test transplant axis**: the flat head kernel is `(in=256, out=27)` (`agent.py:1262`); per-key blocks are **column** slices `W[:, lo:hi]` + `b[lo:hi]`, not "row-blocks" as §Test Plan 2 says. As written the test shape-mismatches.
+- **🟡 C2 — Loss tolerance self-contradiction**: §Test Plan 2 asserts 1e-6 relative while citing a ~3e-6 worst-case bound. Use rtol 1e-5 for output/loss comparisons; keep 1e-6 for the gradient blocks.
+- **🟡 C3 — XS coincidence masks RSSM wiring**: `build_agent:2051` passes `enc_dense_units`; at XS `hidden_size` coincides (256), so forgetting the `encoder.output_dim` fix passes all planned tests. Add a unit test with `hidden_size ≠ encoder.dense_units`.
+- **🟡 C4 — File Change 7 vs bit-parity**: if the flat fixture check fails, compute the per-key diagnostics **outside** the grad closure from `wm_aux["wm_outputs"]` (`train.py:831-834`) instead of relaxing fixtures.
+- **🟡 C5 — Memory pre-flight**: OOM implausible (+1.3 M params ≈ 21 MB incl. Adam state; the ~37 GB on the live Adas is just JAX's default 75 % preallocation of 49 GB) — but run design 3 with the real launch config ~300–500 steps on node 114 GPU 1 with `XLA_PYTHON_CLIENT_PREALLOCATE=false`, confirm peak `nvidia-smi` memory < ~40 GB before the long burn.
+- **🟡 C6 — Skipped PI gate**: §Running-it's "PI consultation before launch" cannot run with the user asleep; tonight's 2-run launch proceeds on explicit prior user authorisation — record that in the Implementation Report + diary, and treat 1-seed-per-arm results as a feasibility probe, not a comparative finding.
+- **🟢 N1** — flat decoder trunk actually reads the *encoder's* `dense_units`/`mlp_layers` (`agent.py:2057-2061`); make `HeadsMLPDecoder` read the same source (or note the divergence in D-018). **🟢 N2** — keep hierarchical module attribute names disjoint from flat's so cross-mode Orbax restore stays structurally impossible.
+- **Verified clean**: breakdown ordering (parallel-by-construction with `get_observation`, rPPO precedent); eval consumers get `encoding_mode` via the run's saved `models/agent_config.yaml` (`dreamer_srl_main.py:977-983`); `probe_eval` already computes the breakdown (line 188); no existing config trips the new ValueError (grep empty); cross-mode restore fails loudly on the live paths (Known Bugs H1/L3 were elsewhere and are fixed).
+
+*Signed: plan-reviewer, 2026-07-28.*
