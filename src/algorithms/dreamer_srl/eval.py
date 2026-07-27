@@ -519,6 +519,12 @@ def _render_and_upload(
     Near-verbatim port of evaluation_core.py:L289-L321.
     Ported from src/utils/evaluation_core.py:L289-L321.
 
+    NOTE: this is the BLOCKING render path — kept as the in-training fallback
+    (kill-switch `training.async_video_render: false`) and unused otherwise.
+    The default in-training path is the non-blocking dispatch/poll/drain in
+    src/utils/async_render.py (docs/develop/active/refactors/
+    ASYNC_CHECKPOINT_VIDEO_RENDER.md), which Popens the exact same command.
+
     Args:
         recordings_dir: path to <results_dir>/recordings/<checkpoint_pct>/.
         results_dir: root results dir (videos written to results_dir/videos/).

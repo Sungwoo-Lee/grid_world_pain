@@ -240,10 +240,19 @@ def build_stat_headers(params, breakdown, record_true_obs):
 
 
 def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_dir, checkpoint_pct,
-                            render_video=False, record_stats=None, wandb_enabled=False, debug=False, quiet=True, num_envs=1, device=None):
+                            render_video=False, record_stats=None, wandb_enabled=False, debug=False, quiet=True, num_envs=1, device=None,
+                            async_render_state=None):
     """
     Runs deterministic evaluation episodes using the JAX model.
     When num_envs > 1, runs min(num_episodes, num_envs) envs in parallel (episode-ticket design).
+
+    async_render_state: None (default) → the auto-render below runs BLOCKING
+    (subprocess.run) exactly as before — every existing caller, including
+    standalone eval, keeps that path. When train.py passes its dispatch/poll/
+    drain state dict (training.async_video_render: true), the render is
+    Popen-dispatched via src/utils/async_render.py instead and the MP4/WandB
+    upload happens later at train.py's poll site (docs/develop/active/
+    refactors/ASYNC_CHECKPOINT_VIDEO_RENDER.md).
     """
     from src.environment.sensor import get_observation_breakdown
 
@@ -326,38 +335,63 @@ def evaluate_jax_checkpoint(model, params, config, num_episodes, seed, results_d
     # Auto-render recordings → consolidated MP4 → WandB upload (one path)
     last_video_path = None
     if render_video and config.get_mandatory('testing.auto_render_after_eval'):
-        import subprocess, sys as _sys
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        render_script = os.path.join(project_root, "scripts", "eval", "render_recordings.py")
-        consolidated_mp4 = os.path.join(video_dir, f"eval_{checkpoint_pct}.mp4")
-        fps = config.get('visualization.fps', 5)
-        cmd = [
-            _sys.executable, render_script,
-            recordings_dir,
-            "--concat",
-            "--skip-existing",
-            "--cleanup-per-episode",
-            "--fps", str(fps),
-        ]
-        child_env = dict(os.environ)
-        child_env["JAX_PLATFORMS"] = "cpu"  # avoid GPU OOM in render workers (ISSUE_05_PERFORMANCE_REPORT)
-        if not quiet:
-            print(f"  --- Auto-rendering recordings: {' '.join(cmd)} ---", flush=True)
-        result = subprocess.run(cmd, env=child_env, capture_output=quiet, text=True)
-        if result.returncode != 0:
-            print(f"Warning: auto-render failed (returncode={result.returncode}). "
-                  f"Recordings preserved at {recordings_dir}.")
-            if quiet and result.stderr:
-                print(f"  stderr: {result.stderr[:500]}")
+        if async_render_state is not None:
+            # ASYNC path (in-training only; docs/develop/active/refactors/
+            # ASYNC_CHECKPOINT_VIDEO_RENDER.md): non-blocking Popen dispatch of
+            # the exact same render command. The MP4 upload moves to the
+            # PARENT's per-iteration poll site in train.py (sole WandB writer),
+            # stamped step=checkpoint_pct exactly as the blocking path below
+            # does today ('checkpoint_pct' mode). last_video_path stays None —
+            # the video does not exist yet at return time.
+            from src.utils.async_render import dispatch_render
+            dispatch_render(
+                async_render_state,
+                recordings_dir=recordings_dir,
+                results_dir=results_dir,
+                checkpoint_pct=checkpoint_pct,
+                fps=config.get('visualization.fps', 5),
+                workers=config.get('training.render_workers', None),
+                every_n=config.get_mandatory('training.render_every_n_checkpoints'),
+                quiet=quiet,
+                wandb_enabled=wandb_enabled,
+                step=checkpoint_pct,
+                upload_step_mode='checkpoint_pct',
+            )
         else:
-            if os.path.exists(consolidated_mp4):
-                last_video_path = consolidated_mp4
-                if not quiet:
-                    print(f"  --- Consolidated Evaluation Video: {consolidated_mp4} ---", flush=True)
-                if wandb_enabled and WANDB_AVAILABLE and wandb.run:
-                    from src.utils.wandb_utils import upload_video
-                    upload_video(consolidated_mp4, episode=checkpoint_pct, step=checkpoint_pct,
-                                 caption=f"Episode {checkpoint_pct}", quiet=True)
+            # BLOCKING path — unchanged legacy behavior for every caller that
+            # does not pass async_render_state (standalone eval, kill-switch).
+            import subprocess, sys as _sys
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            render_script = os.path.join(project_root, "scripts", "eval", "render_recordings.py")
+            consolidated_mp4 = os.path.join(video_dir, f"eval_{checkpoint_pct}.mp4")
+            fps = config.get('visualization.fps', 5)
+            cmd = [
+                _sys.executable, render_script,
+                recordings_dir,
+                "--concat",
+                "--skip-existing",
+                "--cleanup-per-episode",
+                "--fps", str(fps),
+            ]
+            child_env = dict(os.environ)
+            child_env["JAX_PLATFORMS"] = "cpu"  # avoid GPU OOM in render workers (ISSUE_05_PERFORMANCE_REPORT)
+            if not quiet:
+                print(f"  --- Auto-rendering recordings: {' '.join(cmd)} ---", flush=True)
+            result = subprocess.run(cmd, env=child_env, capture_output=quiet, text=True)
+            if result.returncode != 0:
+                print(f"Warning: auto-render failed (returncode={result.returncode}). "
+                      f"Recordings preserved at {recordings_dir}.")
+                if quiet and result.stderr:
+                    print(f"  stderr: {result.stderr[:500]}")
+            else:
+                if os.path.exists(consolidated_mp4):
+                    last_video_path = consolidated_mp4
+                    if not quiet:
+                        print(f"  --- Consolidated Evaluation Video: {consolidated_mp4} ---", flush=True)
+                    if wandb_enabled and WANDB_AVAILABLE and wandb.run:
+                        from src.utils.wandb_utils import upload_video
+                        upload_video(consolidated_mp4, episode=checkpoint_pct, step=checkpoint_pct,
+                                     caption=f"Episode {checkpoint_pct}", quiet=True)
     elif render_video:
         if not quiet:
             print(f"  --- Recordings written to {recordings_dir}. "

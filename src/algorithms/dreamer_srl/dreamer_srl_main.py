@@ -57,6 +57,12 @@ from src.algorithms.dreamer_srl.utils import (
     make_optim_tx,
     moments_init,
 )
+from src.utils.async_render import (
+    new_render_state,
+    dispatch_render,
+    poll_render,
+    drain_render,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -666,6 +672,16 @@ def main() -> None:
     # predator-free world (measured: mean eval length 348 at seed 0 vs 28 at seed 42 on
     # the SAME frozen checkpoint). testing.seed decouples the two and draws predators.
     eval_seed             = env_cfg.get_mandatory('testing.seed', int)
+    # Async checkpoint-video render (docs/develop/active/refactors/
+    # ASYNC_CHECKPOINT_VIDEO_RENDER.md): true → MP4 render runs as a
+    # non-blocking Popen child (dispatch/poll/drain, src/utils/async_render.py);
+    # false → legacy blocking _render_and_upload (the kill-switch).
+    # render_workers is read via .get, NOT get_mandatory: null is a legitimate
+    # declared value (= renderer's own cpu_count-1 default) and get_mandatory
+    # treats None as missing.
+    async_video_render    = env_cfg.get_mandatory('training.async_video_render')
+    render_every_n_ckpts  = env_cfg.get_mandatory('training.render_every_n_checkpoints', int)
+    render_workers        = env_cfg.get('training.render_workers', None)
 
     if args.debug:
         print(f"[dreamer-srl] eval config: video_during_training={video_during_training}, "
@@ -1149,7 +1165,7 @@ def main() -> None:
     # all iterations as long as the input shapes and dtypes don't change.
     #
     # Pattern: src/models/dreamer_v3_trainer.py:683-833 (_scan_train_gpu)
-    # Insight: docs/memory/memories/dreamer_diagnosis/
+    # Insight: docs/llm_wiki/entries/dreamer_diagnosis/
     #          20260519_1509_nnx_lax_scan_split_merge_pattern.md
     # Plan:    docs/develop/active/dreamer_srl_v2/
     #          TRAIN_STEP_COMPILE_DIAGNOSIS_AND_FIX_PLAN.md §Fix 1
@@ -1426,6 +1442,10 @@ def main() -> None:
         print(f"Action Dim: {action_dim}")
         print(f"Observation Dim: {obs_dim}")
         print("=" * _banner_width + "\n")
+
+    # Async checkpoint-video render state (dispatch/poll/drain,
+    # src/utils/async_render.py) — used only when training.async_video_render.
+    async_render_state = new_render_state()
 
     # initial= keeps the bar truthful on resume (otherwise a run restored at
     # episode 380,002 renders as 0/381,500 until the first episode completes).
@@ -1823,15 +1843,39 @@ def main() -> None:
                             quiet=args.quiet,
                         )
                         if auto_render and _eval_result['recordings_dir']:
-                            _render_and_upload(
-                                recordings_dir=_eval_result['recordings_dir'],
-                                results_dir=results_dir,
-                                checkpoint_pct=total_episodes_completed,
-                                fps=viz_fps,
-                                wandb_enabled=use_wandb,
-                                policy_step=policy_step,
-                                quiet=args.quiet,
-                            )
+                            if async_video_render:
+                                # Non-blocking Popen dispatch; the MP4 upload
+                                # happens at the per-iteration poll_render site
+                                # below (parent = sole WandB writer). every_n
+                                # gating + skip-if-busy live inside dispatch.
+                                try:
+                                    dispatch_render(
+                                        async_render_state,
+                                        recordings_dir=_eval_result['recordings_dir'],
+                                        results_dir=results_dir,
+                                        checkpoint_pct=total_episodes_completed,
+                                        fps=viz_fps,
+                                        workers=render_workers,
+                                        every_n=render_every_n_ckpts,
+                                        quiet=args.quiet,
+                                        wandb_enabled=use_wandb,
+                                        step=policy_step,
+                                        upload_step_mode='policy_step',
+                                    )
+                                except Exception as _e:
+                                    pbar.write(f"[render] dispatch skipped (non-fatal): {_e}")
+                            else:
+                                # Kill-switch (async_video_render: false):
+                                # legacy BLOCKING render, byte-identical path.
+                                _render_and_upload(
+                                    recordings_dir=_eval_result['recordings_dir'],
+                                    results_dir=results_dir,
+                                    checkpoint_pct=total_episodes_completed,
+                                    fps=viz_fps,
+                                    wandb_enabled=use_wandb,
+                                    policy_step=policy_step,
+                                    quiet=args.quiet,
+                                )
                         # Log the video pass's scalars. When the stats pass is
                         # ALSO enabled it owns the authoritative Eval/Mean* keys,
                         # so the video pass writes Eval/video/* instead (no
@@ -2176,6 +2220,18 @@ def main() -> None:
                     f"sps={sps_env:.1f}"
                 )
 
+        # Async render: cheap once-per-iteration poll (a proc.poll()) for a
+        # finished render child → WandB MP4 upload from the parent (sole WandB
+        # writer). Failure-isolated at BOTH this call site and inside the
+        # helper — a render/upload problem must never crash training.
+        if async_video_render:
+            try:
+                poll_render(async_render_state, wandb_enabled=use_wandb,
+                            step=policy_step, upload_step_mode='policy_step',
+                            quiet=args.quiet)
+            except Exception as _e:
+                print(f"[render] WARNING: poll skipped (non-fatal): {_e}")
+
     # Two-level path: episode rows fire independently of the step-log gate, so a
     # short run (or a run that ends mid-window) can exit with unflushed episodes
     # still sitting in Buffer B. Flush once so it isn't silently row-less.
@@ -2183,6 +2239,22 @@ def main() -> None:
         _emit_episode_row(list(ep_window.buf), total_episodes_completed, policy_step)
 
     pbar.close()
+
+    # Async render: bounded drain so an in-flight render's MP4 still reaches
+    # WandB before wandb.finish(). The drain ENDS WITH A POLL (plan-reviewer
+    # finding 1) — without it the last video of every run would silently never
+    # be uploaded. On timeout the child is deliberately left running (finite
+    # CPU-only work; the MP4 still lands on disk). No KeyboardInterrupt
+    # handler wraps this loop, so interrupted is always False here (a Ctrl-C
+    # skips the drain entirely — accepted, same class as the known orphan
+    # behavior).
+    if async_video_render:
+        try:
+            drain_render(async_render_state, wandb_enabled=use_wandb,
+                         step=policy_step, upload_step_mode='policy_step',
+                         interrupted=False, quiet=args.quiet)
+        except Exception as _e:
+            print(f"[render] WARNING: final drain failed (non-fatal): {_e}")
 
     # -----------------------------------------------------------------------
     # 13. Final log + finish

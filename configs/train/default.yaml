@@ -49,6 +49,25 @@ training:
   video_during_training: true
   stats_during_training: false
   auto_analysis: false
+  # --- Async checkpoint-video render (dispatch/poll/drain, src/utils/async_render.py;
+  # docs/develop/active/refactors/ASYNC_CHECKPOINT_VIDEO_RENDER.md) ---
+  # true  -> the checkpoint MP4 render runs as a non-blocking CPU subprocess; the trainer
+  #          polls once per iteration and uploads the finished MP4 from the parent.
+  # false -> legacy BLOCKING subprocess.run render inline in the training loop (the
+  #          kill-switch, and the pre-plan behavior).
+  # FALLBACK FOR NON-rPPO/DREAMER ALGORITHMS: false preserves the pre-plan blocking
+  # behavior for DQN/DRQN/PPO. rPPO and Dreamer override to true in their own files.
+  async_video_render: false
+  # Render the MP4 only every Nth checkpoint (1 = every checkpoint, today's cadence).
+  # Applies to the ASYNC path only; recordings + checkpoints are still written at EVERY
+  # checkpoint regardless (a skipped MP4 is offline-recoverable from its recordings via
+  # scripts/eval/render_recordings.py).
+  render_every_n_checkpoints: 1
+  # --workers for the render subprocess. null = renderer's own default (cpu_count - 1).
+  # NOTE: render_recordings.py parallelises per EPISODE (one task per .rec.gz), so with
+  # eval_video_episodes: 3 at most 3 workers ever do work — this knob is a cap, not a
+  # contention lever. Read via .get (null is a legitimate declared value).
+  render_workers: null
   eval_video_episodes: 3
   eval_stats_episodes: 100
   eval_stats_num_envs: 10

@@ -5,6 +5,9 @@ visualization:
   
   # Video settings
   fps: 5
+  # DEAD KEY — nothing in src/ or scripts/ reads video_dpi; frames render at
+  # renderer.py's function default (dpi=100). Kept only pending a separate
+  # removal decision. See ASYNC_CHECKPOINT_VIDEO_RENDER.md §C.1.
   video_dpi: 300
   icon_scale: 1.0
   

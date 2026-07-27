@@ -23,7 +23,7 @@ sys.path.insert(0, '/media/nas01/projects/Interoceptive-AI/grid_world_pain')
 _ROOT = '/media/nas01/projects/Interoceptive-AI/grid_world_pain'
 
 
-def _write_smoke_config(path: str):
+def _write_smoke_config(path: str, async_video_render: bool = False):
     import yaml
     cfg = {
         'environment': {
@@ -45,18 +45,22 @@ def _write_smoke_config(path: str):
             'video_during_training': True,
             'stats_during_training': False,
             'eval_video_episodes': 1,
+            # ASYNC_CHECKPOINT_VIDEO_RENDER: false pins the LEGACY blocking
+            # render path this test's assertion (c) was written for (upload
+            # stamped with the checkpoint's own policy_step). The async path
+            # (now the per-algo default) uploads at poll/drain time with a
+            # LATER, still-monotone step — covered by the companion test
+            # test_eval_logs_monotone_async_render below.
+            'async_video_render': async_video_render,
         },
     }
     with open(path, 'w') as f:
         yaml.dump(cfg, f)
 
 
-@pytest.mark.slow
-def test_eval_logs_monotone_explicit_steps(tmp_path, monkeypatch):
-    """Every wandb.log() call in a real (tiny) training run carries an
-    explicit, monotone-non-decreasing `step=`, and the eval-video /
-    Eval/Mean* rows share the checkpoint's `policy_step`.
-    """
+def _run_and_capture(tmp_path, monkeypatch, async_video_render):
+    """Drive a tiny real main() run (offline WandB) and capture every
+    Run.log call as (sorted(keys), step). Shared by the sync/async tests."""
     wandb_dir = tmp_path / 'wandb_offline'
     wandb_dir.mkdir()
     monkeypatch.setenv('WANDB_MODE', 'offline')
@@ -66,7 +70,7 @@ def test_eval_logs_monotone_explicit_steps(tmp_path, monkeypatch):
     results_dir = tmp_path / 'results'
     results_dir.mkdir()
     cfg_path = tmp_path / 'smoke_config.yaml'
-    _write_smoke_config(str(cfg_path))
+    _write_smoke_config(str(cfg_path), async_video_render=async_video_render)
 
     argv = [
         'dreamer_srl_main.py',
@@ -107,7 +111,10 @@ def test_eval_logs_monotone_explicit_steps(tmp_path, monkeypatch):
             wandb.run.finish()
 
     assert calls, "no wandb.log(...) calls captured — smoke run produced no telemetry"
+    return calls
 
+
+def _assert_explicit_monotone(calls):
     # (a) every recorded step is an int (no step=None among eval/stage/video/training rows)
     none_step_calls = [c for c in calls if c[1] is None]
     assert not none_step_calls, (
@@ -123,14 +130,53 @@ def test_eval_logs_monotone_explicit_steps(tmp_path, monkeypatch):
             f"(full sequence: {steps})"
         )
 
-    # (c) the eval/video row and the Eval/Mean* row carry the same step as
-    #     the checkpoint's policy_step (i.e. some eval/video keys and some
-    #     Eval/Mean* keys share an identical step value).
+
+def _video_and_eval_steps(calls):
     video_steps = {c[1] for c in calls if any(k.startswith('eval/') for k in c[0])}
     eval_mean_steps = {c[1] for c in calls if any(k.startswith('Eval/Mean') for k in c[0])}
     assert video_steps, "no eval/* (video upload) wandb.log rows captured"
     assert eval_mean_steps, "no Eval/Mean* wandb.log rows captured"
+    return video_steps, eval_mean_steps
+
+
+@pytest.mark.slow
+def test_eval_logs_monotone_explicit_steps(tmp_path, monkeypatch):
+    """LEGACY (blocking, async_video_render: false — the kill-switch path):
+    every wandb.log() call carries an explicit, monotone-non-decreasing
+    `step=`, and the eval-video / Eval/Mean* rows share the checkpoint's
+    `policy_step` (the original Track C invariant).
+    """
+    calls = _run_and_capture(tmp_path, monkeypatch, async_video_render=False)
+    _assert_explicit_monotone(calls)
+
+    # (c) the eval/video row and the Eval/Mean* row carry the same step as
+    #     the checkpoint's policy_step (i.e. some eval/video keys and some
+    #     Eval/Mean* keys share an identical step value).
+    video_steps, eval_mean_steps = _video_and_eval_steps(calls)
     assert video_steps & eval_mean_steps, (
         f"eval/video step(s) {video_steps} and Eval/Mean* step(s) {eval_mean_steps} "
         f"never coincide — expected the same policy_step at a given checkpoint"
+    )
+
+
+@pytest.mark.slow
+def test_eval_logs_monotone_async_render(tmp_path, monkeypatch):
+    """ASYNC (async_video_render: true — the per-algo default since
+    ASYNC_CHECKPOINT_VIDEO_RENDER): the video upload happens at poll/drain
+    time, so it is stamped with a LATER policy_step than its checkpoint's
+    Eval row — but every step is still explicit and forward-monotone, and the
+    upload does happen (end-to-end dispatch → poll/drain → upload through the
+    real dreamer_srl_main loop).
+    """
+    calls = _run_and_capture(tmp_path, monkeypatch, async_video_render=True)
+    _assert_explicit_monotone(calls)
+
+    # (c') the video upload(s) landed AT or AFTER the first checkpoint's Eval
+    #      row — never before it (forward-monotone timeline; the exact-equality
+    #      coupling of the blocking path no longer holds by design).
+    video_steps, eval_mean_steps = _video_and_eval_steps(calls)
+    assert all(v >= min(eval_mean_steps) for v in video_steps), (
+        f"video upload step(s) {video_steps} precede the first checkpoint's "
+        f"Eval step ({min(eval_mean_steps)}) — async upload must never land "
+        f"backward on the timeline"
     )

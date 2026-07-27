@@ -85,6 +85,7 @@ from src.models.ppo_network import ActorCriticMLP, get_action_and_value_ppo_nnx
 from src.models.ppo_trainer import train_iteration_ppo
 from src.utils.config import get_default_config, Config, dump_config_yaml
 from src.utils.checkpoint_restore import restore_rppo_training_state
+from src.utils.async_render import new_render_state, poll_render, drain_render
 
 # Orbax
 import orbax.checkpoint as ocp
@@ -856,6 +857,14 @@ def main():
         if experiment_state["logged"] and not args.quiet:
             print(f"[experiment-eval] resume: pre-seeded {len(experiment_state['logged'])} "
                   f"already-logged checkpoint(s) from a prior session.")
+
+    # Async checkpoint-video render (docs/develop/active/refactors/
+    # ASYNC_CHECKPOINT_VIDEO_RENDER.md): master switch + dispatch/poll/drain
+    # state. true → the checkpoint video pass Popen-dispatches the MP4 render
+    # (evaluate_jax_checkpoint(async_render_state=...)) and this loop polls/
+    # uploads; false → legacy blocking subprocess.run render (kill-switch).
+    async_video_render = config.get_mandatory('training.async_video_render')
+    async_render_state = new_render_state()
 
     # Orbax Setup (New API)
     _missing = object()
@@ -2319,6 +2328,18 @@ def main():
                     except Exception as e:
                         print(f"[experiment-eval] WARNING: poll skipped (non-fatal): {e}")
 
+                # Async checkpoint-video render: cheap once-per-iteration poll for a
+                # finished render child → MP4 upload from THIS parent process (sole
+                # WandB writer), stamped step=checkpoint_pct exactly as the legacy
+                # blocking path did. Failure-isolated like the experiment-eval poll.
+                if async_video_render:
+                    try:
+                        poll_render(async_render_state, wandb_enabled=wandb_enabled,
+                                    step=global_step, upload_step_mode='checkpoint_pct',
+                                    quiet=args.quiet)
+                    except Exception as e:
+                        print(f"[render] WARNING: poll skipped (non-fatal): {e}")
+
                 # Checkpoint Logic
                 if schedule is not None:
                     checkpoint_freq = schedule.checkpoint_frequencies[current_stage]
@@ -2395,7 +2416,11 @@ def main():
                                         seed=config.get_mandatory('testing.seed'),
                                         results_dir=results_dir, checkpoint_pct=total_episodes_completed,
                                         render_video=True, record_stats=False, wandb_enabled=wandb_enabled, debug=args.debug,
-                                        quiet=not args.debug, num_envs=1, device=jax.config.values['jax_default_device']
+                                        quiet=not args.debug, num_envs=1, device=jax.config.values['jax_default_device'],
+                                        # Async render (non-blocking Popen dispatch) only when
+                                        # training.async_video_render; None keeps the legacy
+                                        # blocking render inside evaluate_jax_checkpoint.
+                                        async_render_state=async_render_state if async_video_render else None,
                                     )
                                 
                                 # Pass 2: Stats
@@ -2470,6 +2495,19 @@ def main():
                                   focus_conds=experiment_eval_cfg["log_conditions"])
         except Exception as e:
             print(f"[experiment-eval] WARNING: final drain skipped (non-fatal): {e}")
+
+    # Async checkpoint-video render: bounded drain (300s normal / 10s Ctrl-C) that
+    # ENDS WITH A POLL, so an in-flight render finishing within the window still
+    # gets its MP4 uploaded before wandb.finish() (plan-reviewer finding 1). On
+    # timeout the child is deliberately left running (finite CPU-only work; only
+    # the upload is missed — the MP4 still lands on disk).
+    if async_video_render:
+        try:
+            drain_render(async_render_state, wandb_enabled=wandb_enabled,
+                         step=global_step, upload_step_mode='checkpoint_pct',
+                         interrupted=training_interrupted, quiet=args.quiet)
+        except Exception as e:
+            print(f"[render] WARNING: final drain skipped (non-fatal): {e}")
 
     print(f"Training complete. Results saved to {results_dir}")
     if wandb_enabled:

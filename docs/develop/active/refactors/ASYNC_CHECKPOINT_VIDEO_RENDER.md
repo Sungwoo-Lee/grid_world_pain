@@ -461,7 +461,7 @@ would keep a truncated file).
 | Reworked telemetry tests | `pytest tests/algorithms/dreamer_srl/test_eval_telemetry_wandb.py -q` | **2 passed** (382 s) — sync (kill-switch) invariant + new async end-to-end (real Dreamer `main()` loop, offline WandB: explicit monotone steps, video uploaded at/after its checkpoint's step) |
 | Existing Dreamer suite | `pytest tests/algorithms/dreamer_srl/ -q` (first pass, `-x`) | **80 passed, 2 skipped (pre-existing skips), 1 failed** — the single failure was `test_eval_logs_monotone_explicit_steps`, whose assertion (c) hard-codes the *synchronous* video-step coupling this plan deliberately changes; reworked as flagged above, then **2/2 green**. Full combined re-run after the rework: see final line below. |
 | `tests/training/` (pre-existing) | `pytest tests/training/ -q` (excl. new file) | **8 passed** (235 s) |
-| Final combined re-run | `pytest tests/algorithms/dreamer_srl/ tests/training/ -q` | **101 passed, 2 skipped** (see command output; includes the 11 new + 2 reworked) |
+| Final combined re-run | `pytest tests/algorithms/dreamer_srl/ tests/training/ -q` | **161 passed, 9 skipped, 0 failed** (19 m 36 s; includes the 11 new + 2 reworked; skips are pre-existing conditional skips) |
 
 ### Smoke A/B + speed check (local CPU only — no lab node touched)
 

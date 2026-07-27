@@ -85,6 +85,14 @@ behavior_measures:           # optional block; absent → feature off
   eval_policy_mode, eval_max_steps, eval_obs_noise
   motif_window_K, motif_features, motif_kmeans_k, motif_kmeans_seed
   motif_standardise, eval_output_root
+
+training:                    # configs/train/ layer — NOT read by config_loader.py;
+                             # see CONFIG_GUIDE.md §7 for the layering + full key list.
+  # 2026-07-27 additions (ASYNC_CHECKPOINT_VIDEO_RENDER):
+  async_video_render         # bool — non-blocking checkpoint-video render (src/utils/async_render.py);
+                             #   false = legacy blocking render (kill-switch; DQN/DRQN/PPO fallback)
+  render_every_n_checkpoints # int — MP4 every Nth checkpoint (async path only); recordings unaffected
+  render_workers             # int|null — --workers cap for the render subprocess (null = cpu_count-1)
 ```
 
 ---

@@ -28,6 +28,17 @@ training:
   log_interval: 500             # one WandB row every 500 training iterations
   checkpoint_frequency: 200000  # checkpoint + eval video every 200,000 episodes
   max_checkpoints_to_keep: null # null -> Orbax max_to_keep=None -> keep ALL checkpoints (no rotation)
+  # Async checkpoint-video render (src/utils/async_render.py; docs/develop/active/
+  # refactors/ASYNC_CHECKPOINT_VIDEO_RENDER.md). true is the FIX for the measured
+  # 18.9-25.4% wall-clock rPPO lost to blocking renders — the MP4 render becomes a
+  # non-blocking CPU subprocess; false is the documented kill-switch (legacy
+  # blocking render). Recordings + checkpoints are unaffected either way.
+  async_video_render: true
+  render_every_n_checkpoints: 1 # 1 = MP4 every checkpoint (today's cadence)
+  # Caps the render child's worker pool now that it runs CONCURRENTLY with training.
+  # Largely inert in practice: the renderer parallelises per episode, so with
+  # eval_video_episodes: 3 at most 3 workers ever do work. null = cpu_count - 1.
+  render_workers: 8
 
 # Two-level logging: rPPO's COMPLETE logging block (all four knobs), self-contained.
 # CONVENTION (not enforced structurally): logging.episode.smoothing_episodes should be kept
