@@ -204,6 +204,12 @@ not the fix-era docs:
    `developer` via the normal senior-developer plan flow; the config-only
    variant (`checkpoint_frequency`, `video_dpi`) can be adopted by
    `experiment-designer` for the *next* launches without code.
+   → **Plan written (2026-07-27):** [[ASYNC_CHECKPOINT_VIDEO_RENDER]] — also
+   re-measures the stall on rPPO's live runs (19–25% lost there too; the
+   blocking render is the identical code path) and corrects two details of this
+   doc: `visualization.video_dpi` is a dead key (renders are at matplotlib
+   default dpi=100, not 300), and the eval rollout is only 2–13 s of each stall
+   (the render dominates).
 
 ## Links & provenance
 
