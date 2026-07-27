@@ -7,15 +7,15 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 | [agent-manager](.claude/agents/agent-manager.md) | opus | Plan multi-agent flows; route + sequence + parallelize. Returns a routing plan to the parent (top-level Claude), which spawns the sub-agents | returns plan; writes nothing; does NOT spawn |
 | [pi](.claude/agents/pi.md) | opus | Principal Investigator — portfolio-level focus-vs-explore calls at major decision points. Surfaces 2–4 candidate paths via `AskUserQuestion`; user decides; PI logs the call. Manual + proactive triggers (pre-launch, post-analysis, roadmap-level plan, new-direction proposal) | `docs/pi/` (primary); cross-process feedback append-allowed under any `docs/` subtree |
 | [senior-developer](.claude/agents/senior-developer.md) | opus | Platform-development planning + post-impl verification | `docs/develop/` |
-| [developer](.claude/agents/developer.md) | sonnet | Implement approved plans, test, report | full code |
-| [code-reviewer](.claude/agents/code-reviewer.md) | opus | JAX/Flax/vmap/PRNG correctness review | `docs/reviews/` |
-| [math-reviewer](.claude/agents/math-reviewer.md) | opus | Verify equations match cited papers | `docs/reviews/` |
+| [developer](.claude/agents/developer.md) | opus | Implement approved plans, test, report | full code |
+| [code-reviewer](.claude/agents/code-reviewer.md) | fable | JAX/Flax/vmap/PRNG correctness review | `docs/reviews/` |
+| [math-reviewer](.claude/agents/math-reviewer.md) | fable | Verify equations match cited papers | `docs/reviews/` |
 | [plan-reviewer](.claude/agents/plan-reviewer.md) | fable | Adversarial pre-mortem on any drafted plan (engineering + experiment) before code is written or training launched — unverifiable steps, circular verification, unstated assumptions, project-rule violations, data-loss hazards | `docs/reviews/` (blockers only); appends signed feedback to the plan doc |
-| [env-config-auditor](.claude/agents/env-config-auditor.md) | sonnet | YAML/env soundness, obs↔noise sync, pre-flight before training | `docs/reviews/` |
-| [bug-curator](.claude/agents/bug-curator.md) | sonnet | Owns + serves the Known Bugs registry — returns only the rows matching a query so callers skip the full doc; records/updates bugs. Does NOT fix code | `docs/develop/active/issues/KNOWN_BUGS.md` |
+| [env-config-auditor](.claude/agents/env-config-auditor.md) | opus | YAML/env soundness, obs↔noise sync, pre-flight before training | `docs/reviews/` |
+| [bug-curator](.claude/agents/bug-curator.md) | opus | Owns + serves the Known Bugs registry — returns only the rows matching a query so callers skip the full doc; records/updates bugs. Does NOT fix code | `docs/develop/active/issues/KNOWN_BUGS.md` |
 | [experiment-designer](.claude/agents/experiment-designer.md) | opus | Experiment design + config generation | `configs/`, `docs/experiments/active/<topic>/` |
 | [experiment-analyzer](.claude/agents/experiment-analyzer.md) | opus | Post-hoc training-result analysis (WandB, run comparisons) | `docs/experiments/active/<topic>/` |
-| [training-runner](.claude/agents/training-runner.md) | sonnet | Pre-flight check + launch training on lab nodes (101–114) via `run_command.py`; configs are read-only | `train_command-new.sh` |
+| [training-runner](.claude/agents/training-runner.md) | opus | Pre-flight check + launch training on lab nodes (101–114) via `run_command.py`; configs are read-only | `train_command-new.sh` |
 
 For known-bug context ("is this a known issue in X?"), **consult `bug-curator`** — it returns only the matching rows — rather than reading the full `docs/develop/active/issues/KNOWN_BUGS.md` into context.
 
