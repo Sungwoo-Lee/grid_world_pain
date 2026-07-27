@@ -394,6 +394,100 @@ _To be filled by `senior-developer` after implementation._
 
 ---
 
+## Feedback from `plan-reviewer` (2026-07-27)
+
+**Verdict: SOUND WITH CONCERNS** — safe to implement once the four 🟡 items below
+are folded in (all are cheap spec/verification amendments, not redesigns). No
+🔴 blocker found. In plain terms: the plan's measurements, code citations, and
+config wiring were independently re-verified and are correct; the residual risks
+are all of the "a video silently fails to appear on the dashboard" class, never
+of the "training data or conclusions are wrong" class.
+
+### Independently verified (so the implementer need not re-check)
+
+- **Every code citation is accurate**: the blocking `subprocess.run` sites
+  (`src/algorithms/dreamer_srl/eval.py:556`, `src/utils/evaluation_core.py:346`),
+  the async idiom (`train.py:256–385`), the call sites
+  (`dreamer_srl_main.py:1805–1834`, `train.py:2388–2399`), the renderer's
+  `--workers` default (`render_recordings.py:142`), and the final-log/`wandb.finish`
+  drain target (`dreamer_srl_main.py` §13).
+- **Config wiring is correct for both trainers.** Dreamer merges
+  `configs/train/default.yaml` + `configs/train/dreamer_srl.yaml` itself at
+  startup in both single-config (`dreamer_srl_main.py:553–560`) and curriculum
+  (`_load_stage_env_cfg`, `:123–124`) modes; `train.py` merges the same pair at
+  `:493–512`. So the three new keys land where both trainers actually read
+  `training.*`, and `get_mandatory` is safe because `default.yaml` declares them
+  (the "new mandatory key breaks old configs" trap is avoided).
+- **Critical-settings registry**: confirmed no `video_*` / render /
+  `checkpoint_frequency` rows exist — the plan's "no registry entry needed"
+  claim is true.
+- **Live-run blast radius is genuinely zero — but only because of the "No other
+  file may change" line.** Running trainers hold `train.py` /
+  `evaluation_core.py` / `dreamer_srl_main.py` in memory; the files live runs
+  *re-read from disk at every checkpoint* are the subprocess scripts
+  (`render_recordings.py`, `src/environment/renderer.py`, and rPPO's
+  `experiment_eval_checkpoint.py` → `run_sweep` → `eval_rollout.py` tree) — and
+  I verified none of them imports `evaluation_core` (only comment mentions in
+  `eval_rollout.py:207,235`). Implementer: treat that constraint as a **hard
+  invariant** — this working tree is the live deployment for those scripts,
+  hot-read every 8–21 minutes by 12 running jobs.
+- **Prior-art / known-bug check** (targeted grep of the registry, in lieu of a
+  `bug-curator` spawn): the orphan-render-workers-on-SIGINT record the plan
+  cites exists and matches the plan's orphan policy; the WandB backward-step
+  silent-drop row (fixed for Dreamer in `39f851b`) is correctly flagged by the
+  plan as a possible latent rPPO issue. The 2026-07-26
+  `subagent_bg_job_orphan_idle_ping` memory is about *Claude-session* background
+  jobs pinging an idle session — a different mechanism entirely; trainer-spawned
+  `Popen` orphans are finite CPU-only work and do **not** collide with that bug.
+- `train.py --checkpoint-frequency` exists (`:414`), so Verification step 2 is
+  runnable as written; the Dreamer smoke correctly uses `--episodes` (the
+  single-config budget gotcha is accounted for).
+
+### Findings
+
+| # | Sev | Location | Issue | Suggested fix | Owner |
+|---|---|---|---|---|---|
+| 1 | 🟡 | Proposed Solution §3 `drain_render` | The drain spec is wait + close log — it never uploads. A render in flight at normal exit *completes during the drain's 300 s wait*, but the poll loop has already ended, so **the last video of every run silently never reaches WandB**. The source idiom's drain ends with a final poll (`train.py:381–383`); the port drops that step. | `drain_render` calls `poll_render` once after the wait; Test 3 asserts the upload fires when the child finishes within the drain window. | `developer` (spec amendment first: `senior-developer`) |
+| 2 | 🟡 | Proposed Solution §1 `dispatch_render` | Dispatch-over-unpolled-completion race: if the render finishes in the window between the last per-iteration poll and the next checkpoint's dispatch, dispatch sees `proc` dead and overwrites `pending` → that completed video is never uploaded, silently. The experiment-eval idiom is immune (it discovers results by globbing `result.json` files); this port keys off in-memory state, so it inherits a race the original doesn't have. | `dispatch_render` runs the poll/upload logic first (or refuses to overwrite a completed-but-unuploaded `pending`). Add a unit test for this interleaving. | `developer` |
+| 3 | 🟡 | Verification Plan §1 (artifact parity) | "Same seed ⇒ same eval trajectories" assumes **bitwise-deterministic training across two separate GPU runs** — cuDNN/XLA autotune can break that. If checksums differ for that reason, you either burn hours debugging a non-bug or, worse, rationalise a real difference. | Run a sync-vs-sync same-seed control first to establish the determinism baseline; if not bitwise-stable, fall back to structural parity (file set, cadence, per-file step counts) + the already-planned code inspection that the recording path is untouched. | `senior-developer` |
+| 4 | 🟡 | Risks §"Skip-if-busy is expected to be rare" | The rarity claim extrapolates render durations measured **while training was paused** (renderer had the whole host). Post-fix, renders share the host with training and durations grow with agent survival; on the b03-style rPPO cadence (event every ~8.3 min, render already ~3 min) headroom is ~2.7×, not large. A skipped video today is one stdout line nobody greps. | Make drops observable where people look: count skips and log e.g. `Eval/video/render_skipped_total` from the parent at poll time (parent stays sole WandB writer). Then the drop policy is fine as designed. | `developer` |
+| 5 | 🟢 | Config surface, `render_workers: 8` | Largely inert knob with an overstated rationale: `render_recordings.py` parallelises **per episode** (one task per `.rec.gz`, `:182–186`) and `eval_video_episodes: 3`, so at most 3 workers ever do work, and the serial concat/re-encode in the main process is unaffected by `--workers`. Harmless to keep, but don't credit it with bounding contention. | Keep or default to `null`; correct the rationale comment. | `developer` |
+| 6 | 🟢 | Call-site changes (Dreamer) | `render_workers` read via `.get` while the key is declared in all three YAMLs — use `get_mandatory` (with `null` as a legitimate declared value) for consistency with the no-fallback rule. | One-word change. | `developer` |
+| 7 | 🟢 | Proposed Solution §1 skip message / §3 orphan policy | An orphan killed mid-encode (node reboot, SIGKILL) leaves a truncated `episode_*.mp4`; the advertised backfill (`render_recordings.py <dir>` — and the in-repo habit of `--skip-existing`) would then *skip the corrupt file* and concat a broken video. Pre-existing hazard, videos-only. | One line in the skip/backfill message: delete partial MP4s before backfilling. | `developer` |
+
+### Unstated assumptions (status)
+
+- **A. Live subprocesses don't import the edited files** — now VERIFIED (above);
+  load-bearing for the "future runs only" safety claim.
+- **B. Same-seed bitwise determinism** — UNVERIFIED (finding 3).
+- **C. Cadence ≫ render duration holds for future configs/agents** — plausible
+  today, UNVERIFIED as agents' survival grows (finding 4 makes violation
+  observable instead of silent).
+- **D. rPPO videos currently reach WandB at `step=checkpoint_pct`** —
+  UNVERIFIED, and the Dreamer analogue was a confirmed silent-drop bug. If rPPO
+  uploads are *already* being dropped, the smoke A/B's "video logged once" check
+  fails in **both** arms — anticipate that and don't attribute it to the async
+  change (plan already scopes the fix out; agreed).
+
+### Passes skipped
+
+Experiment-plan specifics (controls/seeds/confounds/obs-noise sync) — this is an
+engineering plan, not an experiment design; feasibility items (node choice via
+`gpu-status`, not-on-live-nodes) are already handled by the plan.
+
+### Cost of being wrong
+
+If the concerns above materialise, the cost is **missing dashboard videos**
+(final-video-per-run from #1, occasional raced/skipped checkpoints from #2/#4) —
+lost monitoring convenience, recoverable offline from the untouched recordings —
+plus, for #3, a few hours chasing a spurious parity failure. There is no path
+from this plan to training-artifact corruption, data loss, or a wrong scientific
+conclusion, provided the "No other file may change" invariant is honoured.
+
+*Reviewed by: `plan-reviewer`, 2026-07-27.*
+
+---
+
 ## Appendix A — Measurement method (reproducible)
 
 All parsing used the conda interpreter
