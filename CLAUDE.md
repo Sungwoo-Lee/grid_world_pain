@@ -26,12 +26,12 @@ Domain-expert agents that generate mathematical concepts, literature reviews, an
 | Agent | Model | Role | Primary write home (under `docs/project/`) |
 |---|---|---|---|
 | [research-postdoc](.claude/agents/research-postdoc.md) | opus | First responder for open-ended research questions; triages to professors or writes first-pass synthesis | `ideas/`, `triage/` |
-| [professor-bayesian-brain](.claude/agents/professor-bayesian-brain.md) | opus | Perceptual decision making, predictive coding, active inference, Bayesian decision theory | `concepts/`, `directions/`, `critiques/` |
-| [professor-pain-modeling](.claude/agents/professor-pain-modeling.md) | opus | Computational pain science; construct-validity guardian for "pain-like" claims | `concepts/`, `directions/`, `critiques/` |
-| [professor-rl](.claude/agents/professor-rl.md) | opus | Reinforcement learning — PPO, distributional / risk-sensitive RL, world models, POMDP, exploration, auxiliary objectives | `concepts/`, `directions/`, `critiques/` |
-| [professor-bayesian-nn](.claude/agents/professor-bayesian-nn.md) | opus | Bayesian neural networks only — VI, MC dropout, ensembles, heteroscedastic / evidential / Laplace, calibration, uncertainty disentanglement | `concepts/`, `directions/`, `critiques/` |
-| [professor-dl-theory](.claude/agents/professor-dl-theory.md) | opus | Mathematical theory of deep learning + conditional architectures — fiber bundles / gauge theory, geometric DL, FiLM / hypernet / MoE, NTK / mean-field, information geometry | `concepts/`, `directions/`, `critiques/` |
-| [professor-neuromodulation](.claude/agents/professor-neuromodulation.md) | opus | Computational models of ascending modulatory systems (ACh / NE / DA / 5-HT / opioid); biological-plausibility guardian | `concepts/`, `directions/`, `critiques/` |
+| [professor-bayesian-brain](.claude/agents/professor-bayesian-brain.md) | fable | Perceptual decision making, predictive coding, active inference, Bayesian decision theory | `concepts/`, `directions/`, `critiques/` |
+| [professor-pain-modeling](.claude/agents/professor-pain-modeling.md) | fable | Computational pain science; construct-validity guardian for "pain-like" claims | `concepts/`, `directions/`, `critiques/` |
+| [professor-rl](.claude/agents/professor-rl.md) | fable | Reinforcement learning — PPO, distributional / risk-sensitive RL, world models, POMDP, exploration, auxiliary objectives | `concepts/`, `directions/`, `critiques/` |
+| [professor-bayesian-nn](.claude/agents/professor-bayesian-nn.md) | fable | Bayesian neural networks only — VI, MC dropout, ensembles, heteroscedastic / evidential / Laplace, calibration, uncertainty disentanglement | `concepts/`, `directions/`, `critiques/` |
+| [professor-dl-theory](.claude/agents/professor-dl-theory.md) | fable | Mathematical theory of deep learning + conditional architectures — fiber bundles / gauge theory, geometric DL, FiLM / hypernet / MoE, NTK / mean-field, information geometry | `concepts/`, `directions/`, `critiques/` |
+| [professor-neuromodulation](.claude/agents/professor-neuromodulation.md) | fable | Computational models of ascending modulatory systems (ACh / NE / DA / 5-HT / opioid); biological-plausibility guardian | `concepts/`, `directions/`, `critiques/` |
 | [literature-reviewer](.claude/agents/literature-reviewer.md) | opus | Per-paper review (backbone + Phase 1/2 LaTeX) of PDFs in `docs/project/references/<topic>/sources/` | `references/<topic>/<topic>_lit_review.md` (review at topic root, source PDFs in `sources/`) |
 | [literature-curator](.claude/agents/literature-curator.md) | opus | Cross-paper synthesis, TOC, thematic regrouping of existing master reviews | `references/<topic>/<topic>_lit_review.md`, `references/<topic>/<topic>_synthesis.md` |
 
