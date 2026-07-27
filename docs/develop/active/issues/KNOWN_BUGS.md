@@ -137,7 +137,7 @@ Source of record: `docs/reviews/diagnosis_20260723/review_full_diagnosis_2026072
 whole-codebase diagnosis, 2026-07-23). Two fix tracks landed the same evening (both later than
 the NMN-trainer-parity cluster below): **Track A** (config loader) —
 `docs/develop/active/issues/FIX_CONFIG_LAYER_SILENT_FAILURES_20260723.md`, commit `828b77e`,
-verified `senior-developer` PASS-WITH-NOTES + `env-config-auditor` OK×4 (170/170 active configs
+verified `senior-developer` PASS-WITH-NOTES + `env-config-reviewer` OK×4 (170/170 active configs
 load). **Track B** (eval/logging) —
 `docs/develop/active/issues/FIX_EVAL_LOGGING_TRACK_B_20260723.md`, commit `6e82fc3`, verified
 `senior-developer` PASS (32/32 tests) + `code-reviewer` no blockers.

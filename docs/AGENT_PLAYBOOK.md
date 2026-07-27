@@ -23,7 +23,7 @@ developer       (implement, dirty tree)
         ↓
 senior-developer (Verification Protocol)
         +
-env-config-auditor (parallel) — only if the diff touches configs/, src/environment/,
+env-config-reviewer (parallel) — only if the diff touches configs/, src/environment/,
                                 or any sensor / observation-breakdown / perceptual-noise code.
                                 Audit goes to docs/reviews/config_<plan>.md.
 ```
@@ -58,7 +58,7 @@ plan-reviewer       (pre-mortem on the design: controls, seeds / statistical pow
                      confounds, pre-registered refutation criteria, GPU feasibility,
                      budget wiring)
         ↓
-env-config-auditor  (audit; resolve all 🔴 before launch)
+env-config-reviewer  (audit; resolve all 🔴 before launch)
         ↓
 pi                  (portfolio-level focus-vs-explore call; AskUserQuestion;
                      log under docs/pi/calls/)
@@ -143,8 +143,8 @@ Sharding rules for the parallel case:
 
 These apply across multiple flows. The `agent-manager` flags them as preconditions in its routing plan; the **parent** enforces them at spawn time. Other invoking agents (when bypassing the manager for single-agent tasks) enforce them directly.
 
-- **PI consultation at major decision points.** The `agent-manager` flags `pi` as a canonical step before launching a multi-run experiment (after `env-config-auditor` clean, before `training-runner`), after `experiment-analyzer` finishes a multi-run comparison, when `senior-developer` drafts a roadmap-level plan, and when `research-postdoc` / `literature-curator` propose a new direction. `pi` uses `AskUserQuestion` to surface the focus-vs-explore call; the user makes the final pick. `pi` does NOT run for bug fixes, single-config tweaks, doc-only edits, single-paper literature reviews, or one-off ad-hoc launches.
-- **env-config-auditor in parallel** with senior-developer's verification, whenever the diff touches configs/, src/environment/, or sensor/observation/noise code. Two orthogonal checks: SD verifies plan adherence; auditor verifies env↔config soundness.
+- **PI consultation at major decision points.** The `agent-manager` flags `pi` as a canonical step before launching a multi-run experiment (after `env-config-reviewer` clean, before `training-runner`), after `experiment-analyzer` finishes a multi-run comparison, when `senior-developer` drafts a roadmap-level plan, and when `research-postdoc` / `literature-curator` propose a new direction. `pi` uses `AskUserQuestion` to surface the focus-vs-explore call; the user makes the final pick. `pi` does NOT run for bug fixes, single-config tweaks, doc-only edits, single-paper literature reviews, or one-off ad-hoc launches.
+- **env-config-reviewer in parallel** with senior-developer's verification, whenever the diff touches configs/, src/environment/, or sensor/observation/noise code. Two orthogonal checks: SD verifies plan adherence; auditor verifies env↔config soundness.
 - **WandB analysis uses local files only.** `wandb/run-YYYYMMDD_HHMMSS-<id>/` — never the WandB web API.
 - **Survival steps as headline metric** for any RL evaluation. Cumulative reward is at best a secondary diagnostic.
 - **Temporal evolution mandatory** in any training analysis — not just end-of-training snapshots.
@@ -152,6 +152,19 @@ These apply across multiple flows. The `agent-manager` flags them as preconditio
 - **Frontmatter contracts**: develop tree is auto-INDEX'd via `scripts/claude/regen_dev_index.py`; experiments tree is by-convention only (no INDEX). Don't run `regen_dev_index.py` for `docs/experiments/`.
 - **Soft-split rule**: pre-existing experiment-shaped docs under `docs/develop/active/{hypervigilance,noise,diagnosis}/` are NOT migrated retroactively. Read as reference, write new docs to `docs/experiments/active/<topic>/`.
 - **Dirty working tree for verification.** `developer` does NOT commit; `senior-developer` reads the uncommitted diff. Once committed, the verification signal is lost.
+
+## Reviewer Coverage & Overlap
+
+Four reviewers, each reading a different object against a different ground truth:
+
+| Object | Reviewer | Ground truth |
+|---|---|---|
+| A drafted plan | `plan-reviewer` | Project rules, internal logic, prior art |
+| Equations (plan or code) | `math-reviewer` | The cited paper / design doc |
+| A code diff | `code-reviewer` | JAX/Flax conventions |
+| YAML configs | `env-config-reviewer` | Config schema + critical-settings registry |
+
+Their checklists overlap on purpose — `get_mandatory` discipline, static-field recompile risk, and the latent-bug registry are each checked from more than one angle. Treat that as independent double-checking, not redundancy to engineer away: the same rule can hold in the plan and be violated in the code. Selection and ordering are `agent-manager`'s job (see its Reviewer Sequencing section): upstream-first, same-stage reviewers in parallel, and no reviewer spawned before its object exists. Shared facts live in one place — the latent-bug set is owned by `ENVIRONMENT_SUMMARY.md §Cross-Doc Clarifications` + `bug-curator`, and reviewer profiles point at it rather than restating it.
 
 ## Anti-Patterns to Catch
 
@@ -180,7 +193,7 @@ The `agent-manager` flags these in its routing plan; the parent (or any directly
 - **`training-runner` halts on missing node/GPU** → orchestration bug, not a runner bug. The parent should have supplied node + GPU in the spawn prompt (the `agent-manager`'s routing plan flags this as an upfront ask). Collect them via `AskUserQuestion` and re-spawn — but treat this as a one-off; the proper path is to ask upfront, before the first spawn.
 - **`training-runner` halts on a plan-driven launch with `Status: running` or `completed` already** → the row was launched once already. Ask the user whether to re-launch (creates a duplicate WandB run) or pick a different row.
 - **`experiment-analyzer` finds a manifest row with `Status: planned` or `running`** → run not ready. Skip and surface to user; do not block the rest of the analysis.
-- **`env-config-auditor` flags 🔴** → resolve before any launch; loop back through `experiment-designer` if the design itself is wrong.
+- **`env-config-reviewer` flags 🔴** → resolve before any launch; loop back through `experiment-designer` if the design itself is wrong.
 - **`developer`'s regression test passes pre-fix** → wrong test; back to `senior-developer` to revise the plan.
 - **`developer` finds a file that needs changing but isn't in the plan** → halt, surface in Implementation Report; don't silently expand scope. `senior-developer` decides at verification.
 - **WandB analysis surfaces a bug** → fork to bug-fix flow; cross-link both directions.

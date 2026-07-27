@@ -4,7 +4,7 @@
 # below the header — the duplication exists because train.py's continual schedule machinery
 # requires one stage YAML per stage in alphabetic order (train.py:156). The NAS does not
 # support symlinks (per CLAUDE.md Git Safety), so this is a literal copy. If the upstream
-# canonical config changes, env-config-auditor must update all three active-stage copies
+# canonical config changes, env-config-reviewer must update all three active-stage copies
 # (01, 03, 05) to keep parity.
 #
 # Default Configuration for GridWorld Interoceptive AI

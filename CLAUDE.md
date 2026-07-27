@@ -11,13 +11,15 @@ Delegate to the matching agent — read its profile in `.claude/agents/` for ful
 | [code-reviewer](.claude/agents/code-reviewer.md) | fable | JAX/Flax/vmap/PRNG correctness review | `docs/reviews/` |
 | [math-reviewer](.claude/agents/math-reviewer.md) | fable | Verify equations match cited papers | `docs/reviews/` |
 | [plan-reviewer](.claude/agents/plan-reviewer.md) | fable | Adversarial pre-mortem on any drafted plan (engineering + experiment) before code is written or training launched — unverifiable steps, circular verification, unstated assumptions, project-rule violations, data-loss hazards | `docs/reviews/` (blockers only); appends signed feedback to the plan doc |
-| [env-config-auditor](.claude/agents/env-config-auditor.md) | opus | YAML/env soundness, obs↔noise sync, pre-flight before training | `docs/reviews/` |
+| [env-config-reviewer](.claude/agents/env-config-reviewer.md) | fable | YAML/env soundness, obs↔noise sync, pre-flight before training | `docs/reviews/` |
 | [bug-curator](.claude/agents/bug-curator.md) | opus | Owns + serves the Known Bugs registry — returns only the rows matching a query so callers skip the full doc; records/updates bugs. Does NOT fix code | `docs/develop/active/issues/KNOWN_BUGS.md` |
 | [experiment-designer](.claude/agents/experiment-designer.md) | opus | Experiment design + config generation | `configs/`, `docs/experiments/active/<topic>/` |
 | [experiment-analyzer](.claude/agents/experiment-analyzer.md) | opus | Post-hoc training-result analysis (WandB, run comparisons) | `docs/experiments/active/<topic>/` |
 | [training-runner](.claude/agents/training-runner.md) | opus | Pre-flight check + launch training on lab nodes (101–114) via `run_command.py`; configs are read-only | `train_command-new.sh` |
 
 For known-bug context ("is this a known issue in X?"), **consult `bug-curator`** — it returns only the matching rows — rather than reading the full `docs/develop/active/issues/KNOWN_BUGS.md` into context.
+
+**Reviewer sequencing (owned by `agent-manager`):** the team has four reviewers — `plan-reviewer` (a drafted plan), `math-reviewer` (equations against the cited paper), `code-reviewer` (a diff against JAX/Flax conventions), `env-config-reviewer` (YAML against the schema + critical-settings registry). Their coverage **deliberately overlaps**, and that is a feature: each reads a different object against a different ground truth, so a rule enforced at plan time can still be broken in the code, and two reviewers reaching the same finding is corroboration rather than waste. Do not trim a reviewer's checklist because another reviewer "owns" that check. Which reviewers a given job needs, and in what order, is `agent-manager`'s call — it sequences upstream-first (plan → config → code, since a finding is cheapest to fix earliest), parallelizes same-stage reviewers, and omits any reviewer whose object does not exist yet. Where two reviewers disagree on a verdict, both go to the user; nobody arbitrates silently.
 
 ### Researchers
 

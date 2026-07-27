@@ -25,4 +25,4 @@ Entry = **date — `setting` old→new — reason — commit — blast radius.**
 ## Protocol & required reading
 
 - **On any registry-value change:** add a same-commit change-log entry (date, path, old→new, reason, blast radius). A schema/system change also updates [CONFIG_GUIDE.md](CONFIG_GUIDE.md) + [02_config_schema.md](02_config_schema.md).
-- **Required reading** (registry + change log, before config/launch work): `env-config-auditor`, `experiment-designer`, `training-runner`, `developer`, `senior-developer`. They enforce the protocol — a registry change without an entry is a flagged regression.
+- **Required reading** (registry + change log, before config/launch work): `env-config-reviewer`, `experiment-designer`, `training-runner`, `developer`, `senior-developer`. They enforce the protocol — a registry change without an entry is a flagged regression.

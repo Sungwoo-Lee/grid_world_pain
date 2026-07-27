@@ -3,7 +3,7 @@
 # This file is BYTE-IDENTICAL to configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml
 # below the header — duplication required by the continual schedule machinery (train.py:156).
 # The NAS does not support symlinks (per CLAUDE.md Git Safety) so this is a literal copy.
-# If the upstream canonical passive config changes, env-config-auditor must update both
+# If the upstream canonical passive config changes, env-config-reviewer must update both
 # passive-stage copies (02, 04) to keep parity.
 #
 # Hypervigilance Round 2 — Cell A1: Passive predator (movement-signature ablation).

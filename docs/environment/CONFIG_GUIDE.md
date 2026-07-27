@@ -211,7 +211,7 @@ The project rule is **no fallback defaults**: critical keys are read with `confi
 2. **Read it in `config_loader.py`** via `config.get_mandatory(...)` (or, for a conditional key, gate the `get_mandatory` behind its enabling flag — see the initial-state range keys for the pattern). If it is shape-determining, store it on `EnvParams` as a static field (`struct.field(pytree_node=False)`); otherwise as a traced leaf.
 3. **Document it here** (in the quick-reference if it is a feature surface) **and in [02_config_schema.md](02_config_schema.md)** (the deep key list). Both move in the same change.
 4. **Add or extend a test** that proves the key is read and that a missing/invalid value raises. For a regression-class change, the test must fail before the code change and pass after.
-5. **For sensory / noise keys, keep observation↔noise width in sync.** Observation width is computed in one place, `get_observation_breakdown`; the per-modality noise block auto-resizes from it. A new sensor or a width change must keep the noise modality list aligned — route through `env-config-auditor`.
+5. **For sensory / noise keys, keep observation↔noise width in sync.** Observation width is computed in one place, `get_observation_breakdown`; the per-modality noise block auto-resizes from it. A new sensor or a width change must keep the noise modality list aligned — route through `env-config-reviewer`.
 
 If the key is experiment-facing, the schema/loader work is `senior-developer` + `developer`'s job first; only then does `experiment-designer` author configs that use it.
 
@@ -276,5 +276,5 @@ An earlier revision of this split enforced `logging.episode.smoothing_episodes` 
 
 **The agents below are bound to READ this guide before any config work and to UPDATE it (and `02_config_schema.md`) in the same change whenever the schema or system changes:**
 
-- `env-config-auditor` and `experiment-designer` — primary config owners.
+- `env-config-reviewer` and `experiment-designer` — primary config owners.
 - `developer`, `senior-developer`, `code-reviewer` — secondary, whenever their work touches `config_loader.py`, `state.py` (`EnvParams`), or `configs/`.

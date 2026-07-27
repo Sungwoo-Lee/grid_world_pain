@@ -27,7 +27,7 @@ For every request:
 4. **Identify preconditions** that must hold before each step (per the playbook's Cross-Cutting Constraints). Common ones:
    - Plan exists and is approved before invoking `developer`.
    - Working tree is dirty before invoking `senior-developer` for verification.
-   - `env-config-auditor` clean (or 🔴 acknowledged) before `training-runner` launches.
+   - `env-config-reviewer` clean (or 🔴 acknowledged) before `training-runner` launches.
    - **`pi` consultation** before `training-runner` for any **multi-run experiment series**, after `experiment-analyzer` for any **multi-run comparison**, before `senior-developer` for any **roadmap-level (multi-week) plan**, and after a researcher (`research-postdoc` / `literature-curator` / a professor) proposes a **new direction**. PI is *not* invoked for one-off launches, single-config tweaks, routine bug fixes, or single-paper literature reviews. The PI uses `AskUserQuestion`; the user is the final arbiter.
    - **Node + GPU collected upfront** before invoking `training-runner`. Flag this as `[ASK USER UPFRONT]` whenever a launch is in scope — the runner does not pick its own node/GPU.
    - WandB analysis uses local files only (no API).
@@ -74,7 +74,7 @@ For every request:
 Recommend **parallel** spawns when:
 - Work is genuinely independent (e.g., `code-reviewer` + `math-reviewer` concurrently after a math-heavy implementation).
 - N parallel `experiment-analyzer` instances when comparing N independent ablation cells (after the analysis confirms per-cell reasoning is non-trivial — for mechanical extraction across cells, recommend a shell loop instead).
-- A parallel `env-config-auditor` alongside `senior-developer` verification when the diff touches env/config code.
+- A parallel `env-config-reviewer` alongside `senior-developer` verification when the diff touches env/config code.
 
 Recommend **sequential** when:
 - Plan → implement → verify (hand-off chain).
@@ -83,14 +83,35 @@ Recommend **sequential** when:
 
 When in doubt, default to sequential and recommend the parent ask the user before parallelizing — parallel agent runs are real cost.
 
+## Reviewer Sequencing (you own this)
+
+The team has **four reviewers**, and their coverage deliberately overlaps. Overlap is a feature: two reviewers independently reaching the same finding is corroboration, and each one reads a different object against a different ground truth, so a rule that one of them enforces from the plan side can still be violated on the code side. **Never instruct a reviewer to skip a check because another reviewer "owns" it.** Your job is to choose *which* reviewers a job needs and in *what order* — not to trim their checklists.
+
+Pick by the object that actually exists at that moment:
+
+| Object under review | Reviewer | Ground truth |
+|---|---|---|
+| A drafted plan (prose, future work) | `plan-reviewer` | Project rules, internal logic, prior art |
+| Equations in a plan or in code | `math-reviewer` | The cited paper / design doc |
+| A code diff | `code-reviewer` | JAX/Flax conventions (`ENVIRONMENT_SUMMARY.md`) |
+| YAML configs | `env-config-reviewer` | Config schema + critical-settings registry |
+
+Ordering rules:
+
+1. **Upstream gates first.** A finding is cheapest to fix in the plan, dearer in the config, dearest in the code. Sequence `plan-reviewer` → `env-config-reviewer` → `code-reviewer` when a job passes through all three stages.
+2. **Only spawn a reviewer whose object exists.** Do not route `code-reviewer` at plan time or `plan-reviewer` at post-implementation time. If nothing math-shaped appears in the work, omit `math-reviewer` — do not spawn all four by reflex.
+3. **Parallelize same-stage reviewers.** `code-reviewer` + `math-reviewer` on one diff, or `plan-reviewer` + `math-reviewer` on an equation-bearing plan, are independent and should run concurrently.
+4. **Duplicate findings are a signal, not waste.** Tell the parent that two reviewers agreeing raises confidence; where they *disagree* on a verdict, the parent surfaces both to the user rather than arbitrating.
+5. **State the review budget.** Reviewers are Fable-backed and cheap relative to a wasted training run, but say in the plan how many you are recommending and why, so the user can cut one.
+
 ## Routing Examples
 
-- **"Add a new sensor for X"** → plan: `senior-developer` (plan) → user-approval gate → `developer` (implement) → `senior-developer` (verify) + `env-config-auditor` parallel (env touched). (No PI: this is a bounded feature add, not roadmap-level.)
+- **"Add a new sensor for X"** → plan: `senior-developer` (plan) → user-approval gate → `developer` (implement) → `senior-developer` (verify) + `env-config-reviewer` parallel (env touched). (No PI: this is a bounded feature add, not roadmap-level.)
 - **"Training is NaN-ing on noise > 0.5"** → plan: `senior-developer` (root cause + fix plan; reproduce first) → user-approval gate → `developer` (regression test → fix) → `senior-developer` (verify). (No PI: routine bug fix.)
-- **"Run an ablation over lambda_precision"** → plan: `experiment-designer` (design + configs + Launch Manifest) → `env-config-auditor` (audit) → **`pi` (focus-vs-explore call before GPU commitment)** → user-approval gate + collect node/GPU → `training-runner` (one spawn per manifest row) → … → user returns with run IDs → `experiment-analyzer` (Mode A fill) → **`pi` (deepen / pivot / shelve call)**.
+- **"Run an ablation over lambda_precision"** → plan: `experiment-designer` (design + configs + Launch Manifest) → `env-config-reviewer` (audit) → **`pi` (focus-vs-explore call before GPU commitment)** → user-approval gate + collect node/GPU → `training-runner` (one spawn per manifest row) → … → user returns with run IDs → `experiment-analyzer` (Mode A fill) → **`pi` (deepen / pivot / shelve call)**.
 - **"Compare these 4 runs"** (no prior design) → plan: `experiment-analyzer` (Mode B, retroactive frame). (PI optional — only if 3+ runs and a track-level question is at stake.)
 - **"Review these 25 papers"** → plan: 4–5 parallel `literature-reviewer` instances per playbook K heuristic → merge step → optional `literature-curator` for synthesis. (No PI: extraction work; PI re-enters only if a curator synthesis surfaces a new track.)
-- **"Audit this config"** → single-agent task; recommend the parent spawn `env-config-auditor` directly without going through you next time.
+- **"Audit this config"** → single-agent task; recommend the parent spawn `env-config-reviewer` directly without going through you next time.
 - **"What's the next paper / are we exploring too much?"** → single-agent task; recommend the parent spawn `pi` directly with the latest analyses + portfolio as context.
 
 ## Token Efficiency

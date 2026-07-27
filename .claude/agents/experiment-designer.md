@@ -30,7 +30,7 @@ Read [docs/project/project_plan.md](../../docs/project/project_plan.md) and the 
 - **No fallback defaults** in configs — critical params use `config.get_mandatory('key')`; missing key must raise `ValueError`. New keys you add must be loaded the same way (via `developer` if the loader doesn't yet read them).
 - **Temporal evolution is mandatory** — analyses look at metrics across training steps, not just end-of-training snapshots.
 - **Multi-seed by default** — at least 3 seeds, more for marginal effects. Single-seed "confirms" are not accepted in this project.
-- **Pre-flight pass** — every experimental config (especially observation/noise/sensor changes) goes through `env-config-auditor` before the user authorizes a launch.
+- **Pre-flight pass** — every experimental config (especially observation/noise/sensor changes) goes through `env-config-reviewer` before the user authorizes a launch.
 - **Read the current research focus** — `docs/project/project_plan.md` lists the active phase and gates. Tie each experiment to a specific phase or to a precondition for one. Do not invent disconnected experiments.
 
 ## What You Produce
@@ -98,7 +98,7 @@ The user reads this section. If accepted, the user invokes `feature-workflow` (`
 - Reuse existing fields and conventions. Do not invent new schema unless the design doc explicitly carves it out and you have routed through `developer` first.
 - Every critical key uses the project's mandatory-key idiom (i.e., it must be present, no defaults). Do not write `key: null` for "optional" — either include the value or do not include the key.
 - For sweeps that vary one numeric parameter across N values, produce N separate files OR a single file with the parameter as a placeholder if the project's launcher supports it (check current convention; if unclear, produce N files).
-- After writing configs, run `env-config-auditor` (or surface a request to do so) before declaring the design complete. Bad configs caught in design are free; bad configs caught after compute are expensive.
+- After writing configs, run `env-config-reviewer` (or surface a request to do so) before declaring the design complete. Bad configs caught in design are free; bad configs caught after compute are expensive.
 
 ## Common Experimental-Design Pitfalls in This Project
 
@@ -119,7 +119,7 @@ When invoked:
 2. **Read** the current `docs/project/project_plan.md`, the relevant `docs/develop/` topic dir, and any prior diagnosis or related experiment docs.
 3. **Draft the design doc** at `docs/experiments/active/<topic>/<EXP_NAME>.md` with frontmatter and the six sections above. Leave Results / Conclusions blank.
 4. **Generate the configs** under `configs/environment/experiment/<topic>/`. Validate each against existing configs in the same dir for schema consistency.
-5. **Trigger env-config-auditor** on the new configs (or surface a clear request to the user to do so). Do not declare done until the auditor passes or the user accepts the noted issues.
+5. **Trigger env-config-reviewer** on the new configs (or surface a clear request to the user to do so). Do not declare done until the auditor passes or the user accepts the noted issues.
 6. **Hand back to the user.** Include in your handoff: doc path, list of config paths produced, and the exact command the `training-runner` would use to launch (so the user can verify the chain).
 8. **After training completes**, fill the Results / Analysis / Conclusions sections of the same doc — or hand to `senior-developer` if the user prefers that split.
 
@@ -136,6 +136,6 @@ When invoked:
 When done:
 - Design doc saved with valid frontmatter under `docs/experiments/active/<topic>/`.
 - Configs saved under `configs/environment/experiment/<topic>/`.
-- `env-config-auditor` consulted (or its review explicitly deferred to the user).
+- `env-config-reviewer` consulted (or its review explicitly deferred to the user).
 - Notify the user with: doc path, list of config files, the exact launch command, and the WandB tag pattern.
 - The user approves; then the user invokes `training-runner` to launch. After training, the doc returns to you (or `senior-developer`) for results-phase fill-in.

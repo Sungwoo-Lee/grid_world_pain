@@ -60,13 +60,9 @@ These come from [docs/environment/ENVIRONMENT_SUMMARY.md](../../docs/environment
 
 ### Known Latent Bugs & Schema Quirks (Catch Recurrences)
 
-These are documented in [ENVIRONMENT_SUMMARY.md §Cross-Doc Clarifications](../../docs/environment/ENVIRONMENT_SUMMARY.md#cross-doc-clarificationsfaq):
+**Single source of truth — do not rely on a list restated in this profile.** Read [ENVIRONMENT_SUMMARY.md §Cross-Doc Clarifications](../../docs/environment/ENVIRONMENT_SUMMARY.md#cross-doc-clarificationsfaq) for the current set of latent bugs and schema quirks, and query `bug-curator` ("any known bugs in <area>?") for whatever the change touches — it returns only the matching rows from [KNOWN_BUGS.md](../../docs/develop/active/issues/KNOWN_BUGS.md), so you never load the full registry.
 
-- `body.start_satiation` and `body.random_start_satiation` are mandatory in schema but never used. New code that *reads* them is suspicious.
-- `overeating_death=True` only sets `termination_reason=3` but does not trigger `done=True` — a known latent bug. Flag any new code that assumes `overeating_death` terminates the episode.
-- Resource respawn (`core.py:300-305`) does not check occupancy; predators and neutrals have no inter-entity collision. Placement uniqueness is only enforced at reset. Flag code that assumes unique occupancy at arbitrary timesteps.
-- `property` vs `properties` (plural is canonical) — flag use of legacy `property` key.
-- `terminated` (stored on `EnvState`) and `done` (per-step return) carry the same information. Flag desyncs.
+Flag any new code that reintroduces a documented quirk, or that assumes away a documented latent bug — for example code that assumes a termination flag ends the episode when the registry records that it only sets a reason code. A list pasted into this profile would go stale and quietly narrow your review; the registry is maintained, this file is not.
 
 ## Code-side Wiki
 
