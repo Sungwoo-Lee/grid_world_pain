@@ -338,7 +338,7 @@ If Part 1 only is chosen, cases 3 is omitted and case 5's detection sub-case is 
 - **No `scripts/` files touched** → no `SCRIPTS_DEPENDENCY_MAP.md` update needed.
 - **No config-system schema change** (the YAML surface `[lo, hi]` is unchanged; only its runtime meaning) → `CONFIG_GUIDE.md` / `02_config_schema.md` do not strictly require edits. However, if either doc documents `detection_range`/`attack_range` as "float uniform", `developer` should correct that line to "inclusive integer".
 - **KNOWN_BUGS registry** — do NOT edit `KNOWN_BUGS.md` here (owned by `bug-curator`). After the fix lands, hand off to `bug-curator` to flip the "Fractional `attack_range` bound silently has no effect" row to fixed, linked to the fix commit.
-- **Break point / semantic-change record** — this is a per-episode-sampling semantic change to a range field (parallel to the earlier reward-fix break point). Once landed, record a memory insight (`/memorize`) noting that `[lo,hi]` on `attack_range`/`detection_range` changed from float-uniform to inclusive-integer as of the fix commit, so future analyses comparing pre/post-fix runs know the boundary.
+- **Break point / semantic-change record** — this is a per-episode-sampling semantic change to a range field (parallel to the earlier reward-fix break point). Once landed, record a memory insight (`/wiki-write`) noting that `[lo,hi]` on `attack_range`/`detection_range` changed from float-uniform to inclusive-integer as of the fix commit, so future analyses comparing pre/post-fix runs know the boundary.
 
 ### Affected configs
 
@@ -475,7 +475,7 @@ Batch-loaded every config under `configs/environment/experiment/`, `configs/veri
 ### Follow-ups (not this developer's scope)
 
 - **KNOWN_BUGS.md**: per instructions, not edited here. Hand off to `bug-curator` to flip the "Fractional `attack_range` bound silently has no effect" row to fixed, linked to commit `7ff8d1f`.
-- **`/memorize`**: the plan recommends a memory insight recording the semantic-change break point (pre/post-fix `attack_range`/`detection_range` behaviour) for future run-comparison analyses — not done in this session; flagging for `senior-developer`/user follow-up.
+- **`/wiki-write`**: the plan recommends a memory insight recording the semantic-change break point (pre/post-fix `attack_range`/`detection_range` behaviour) for future run-comparison analyses — not done in this session; flagging for `senior-developer`/user follow-up.
 - **Running-experiment relaunch**: per the plan's "Running-experiment implications" section, `rppo_basic07_jumpreach_n113` (using the now-reverted `06-jump_range_2to3.yaml`) and the six `detection_range: [1,7]` configs are unaffected while currently running (params loaded at launch) but should be relaunched with the corrected config to pick up the new semantics — this is an experiment-ownership action, not a code action, so left for the user/`senior-developer` to coordinate.
 
 ## Verification Report

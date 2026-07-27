@@ -270,7 +270,7 @@ re-run, pre-register the carry-forward prediction (e.g. "stage 2 reaches ≥90% 
   [[basic_curriculum_convergence]]
 - Curriculum design / world ladder rationale: [[basic_curriculum]]
 - Memory insight (over-training collapse + interval rationale):
-  `docs/memory/memories/curriculum_learning/20260622_1748_basic_curriculum_overtraining_collapse_and_intervals.md`
+  `docs/llm_wiki/entries/curriculum_learning/20260622_1748_basic_curriculum_overtraining_collapse_and_intervals.md`
 - Working files: `tmp/20260623_103000_basic_curriculum_continual.md`,
   `tmp/20260623_curriculum_history.json`, `tmp/20260623_eval_curve.json`
 - Run: WandB `mpql5i25` (`rppo_basic_curriculum_n106`, group `basic_curriculum`); local

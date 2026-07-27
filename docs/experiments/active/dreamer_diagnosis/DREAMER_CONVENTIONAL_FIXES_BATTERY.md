@@ -638,7 +638,7 @@ Per the §6.3 H₁(A1)/H₀(A2) row's prescription, adapted to the H₂-with-cav
 
 2. **(second priority) Extend Cell A1 to 1.5M env-steps (single seed)** — the H₂(A1) prescription. Disambiguates "slow learning toward competence" from "starvation-regime equilibrium." If the extension reaches survival ≥ 250 with `T_STARV_F ≤ 0.30` between 1.0–1.5M env-steps, that's H₁(A1); if it stays at the 100-step starvation-equilibrium plateau, the rr = 0.0625 regime has a different asymptote on this codebase than the published Hafner-2023 setting predicts.
 
-3. **(third priority) Per-action `cont` probe + reward-bin histograms on the predator task** with both knobs in place. The H₁(A1)/H₀(A2) row's standard recommendation. Targets the "structural mismatch" hypothesis at the WM-internal level — does the cont head fail to predict per-action terminations (the imagined-deaths-undifferentiated-per-action hypothesis from `docs/memory/memories/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md`)?
+3. **(third priority) Per-action `cont` probe + reward-bin histograms on the predator task** with both knobs in place. The H₁(A1)/H₀(A2) row's standard recommendation. Targets the "structural mismatch" hypothesis at the WM-internal level — does the cont head fail to predict per-action terminations (the imagined-deaths-undifferentiated-per-action hypothesis from `docs/llm_wiki/entries/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md`)?
 
 4. **(fourth priority) rPPO vs Dreamer cross-architecture comparison on the predator task** — does any value-based RL on this codebase learn the predator task within 700k env-steps? If rPPO succeeds, the issue is the WM; if neither, the predator task itself is the problem.
 

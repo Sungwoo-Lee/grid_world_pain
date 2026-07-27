@@ -4,9 +4,9 @@
 
 ## Purpose
 
-A compact, scannable record of what's happening across all parallel Claude sessions on this project. Where the in-repo memory layer at `docs/memory/` carries multi-section session insights, the diary carries the **short timeline**: when sessions started and ended, when implementations and verifications landed, when memory captures fired, and when training runs launched + finished.
+A compact, scannable record of what's happening across all parallel Claude sessions on this project. Where the LLM Wiki at `docs/llm_wiki/` carries multi-section session insights, the diary carries the **short timeline**: when sessions started and ended, when implementations and verifications landed, when memory captures fired, and when training runs launched + finished.
 
-The diary is intentionally compact. For details, each row links to the authoritative document — the plan in `docs/develop/`, the experiment doc in `docs/experiments/`, the insight in `docs/memory/`, the commit hash in git, the WandB run in the dashboard.
+The diary is intentionally compact. For details, each row links to the authoritative document — the plan in `docs/develop/`, the experiment doc in `docs/experiments/`, the insight in `docs/llm_wiki/`, the commit hash in git, the WandB run in the dashboard.
 
 ## Daily file structure
 
@@ -32,7 +32,7 @@ The helper script holds an exclusive `flock` on `/tmp/diary-<date>.lock` while i
 
 ## What's not here
 
-- Multi-section insights with rationale and rejected alternatives → `docs/memory/memories/<topic>/<id>.md` (use `/memorize`).
+- Multi-section insights with rationale and rejected alternatives → `docs/llm_wiki/entries/<topic>/<id>.md` (use `/wiki-write`).
 - Implementation plans → `docs/develop/active/<topic>/<plan>.md`.
 - Experimental designs and analyses → `docs/experiments/active/<topic>/<doc>.md`.
 - Code, configs, scripts → the rest of the repo.

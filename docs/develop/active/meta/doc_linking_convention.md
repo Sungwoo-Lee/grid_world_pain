@@ -68,7 +68,7 @@ A small set of docs are referenced from many places across the project. Locking 
 | `docs/develop/active/neuromodulation/NEUROMODULATION_ALGORITHM.md` | `neuromodulation_algorithm` | Frequently linked across project memos and professor outputs |
 | `docs/environment/ENVIRONMENT_SUMMARY.md` | `environment_summary` | Foundational reference; may get reorganised as the env evolves |
 | `docs/develop/active/meta/FRONTMATTER_CONTRACT.md` | `frontmatter_contract` | Governance doc; referenced in workflow instructions |
-| `docs/memory/CLAUDE.md` | `memory_operating_manual` | Memory layer governance |
+| `docs/llm_wiki/CLAUDE.md` | `memory_operating_manual` | Memory layer governance |
 | `docs/AGENT_PLAYBOOK.md` | `agent_playbook` | Cross-cutting workflow doc; referenced by the agent-manager |
 
 This list is not exhaustive. Add aliases to any doc that you expect to be linked from many places AND whose name might change in the future. Most docs do not need aliases.
@@ -81,7 +81,7 @@ This list is not exhaustive. Add aliases to any doc that you expect to be linked
 
 ## Relationship to other doc conventions
 
-- **`docs/memory/`** — already uses `[[YYYYMMDD_HHMM_slug]]` wikilinks where the id IS the filename stem. This convention extends the same idea to other doc trees where filenames are human-readable. The memory tree's `regen_memory_links.py` / `regen_memory_graph.py` scripts are memory-specific and do not run on other trees.
+- **`docs/llm_wiki/`** — already uses `[[YYYYMMDD_HHMM_slug]]` wikilinks where the id IS the filename stem. This convention extends the same idea to other doc trees where filenames are human-readable. The wiki tree's `regen_wiki_links.py` / `regen_wiki_graph.py` scripts are memory-specific and do not run on other trees.
 - **[FRONTMATTER_CONTRACT.md](FRONTMATTER_CONTRACT.md) (develop tree)** — governs `title, topic, status, created, last_updated` for `docs/develop/` files. The `aliases:` field added by this convention is an *optional* addition to that contract, not a replacement of any existing field. A develop-tree doc may add `aliases:` without changing any other frontmatter behavior.
 - **`docs/TEMPLATES/`** — templates (`issue_plan.md`, `training_analysis.md`) do not currently show wikilink examples. They can be updated opportunistically as authors touch them; not blocking for this convention.
 - **CLAUDE.md "Project-Wide Rules"** — carries a single one-line bullet pointing at this document. That bullet is the entry point future-Claude reads every session. Mechanism-level detail lives here, not in CLAUDE.md.

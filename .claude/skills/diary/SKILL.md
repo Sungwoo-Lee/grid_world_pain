@@ -1,6 +1,6 @@
 ---
 name: diary
-description: "Append an event to the project's daily diary at docs/diary/YYYY-MM-DD.md. ALWAYS use this skill when one of these moments fires, even if the user does not ask for it: (a) a top-level Claude session is starting or wrapping up, (b) the developer agent finishes implementing a plan or the senior-developer finishes verifying one, (c) /memorize captures one or more insights, (d) the training-runner launches a training run on a lab node, (e) the experiment-analyzer finishes analyzing a training run, (f) a multi-step session is wrapping up — in addition to session-end, fire progress-report to write a concise plain-language summary into the Progress reports section. Also trigger on the explicit slash command /diary or natural-language phrases like 'log this in the diary', 'add to today's diary', 'note this'. The skill records a single short row per event (or one concise Progress report per session — re-calls within the same session REPLACE the existing entry in place rather than appending a new one, keeping the diary scannable) and links out to the authoritative document — it does NOT duplicate plans, insights, or analyses. For training runs the same row is edited from 'running' to 'done' when the analysis completes, so the diary is a single-glance status board across parallel sessions. The skill calls scripts/claude/diary_append.py, which uses an exclusive flock to handle concurrent writes from parallel Claude sessions."
+description: "Append an event to the project's daily diary at docs/diary/YYYY-MM-DD.md. ALWAYS use this skill when one of these moments fires, even if the user does not ask for it: (a) a top-level Claude session is starting or wrapping up, (b) the developer agent finishes implementing a plan or the senior-developer finishes verifying one, (c) /wiki-write captures one or more insights, (d) the training-runner launches a training run on a lab node, (e) the experiment-analyzer finishes analyzing a training run, (f) a multi-step session is wrapping up — in addition to session-end, fire progress-report to write a concise plain-language summary into the Progress reports section. Also trigger on the explicit slash command /diary or natural-language phrases like 'log this in the diary', 'add to today's diary', 'note this'. The skill records a single short row per event (or one concise Progress report per session — re-calls within the same session REPLACE the existing entry in place rather than appending a new one, keeping the diary scannable) and links out to the authoritative document — it does NOT duplicate plans, insights, or analyses. For training runs the same row is edited from 'running' to 'done' when the analysis completes, so the diary is a single-glance status board across parallel sessions. The skill calls scripts/claude/diary_append.py, which uses an exclusive flock to handle concurrent writes from parallel Claude sessions."
 ---
 
 # Diary — log short-timeline events to `docs/diary/YYYY-MM-DD.md`
@@ -22,14 +22,14 @@ ALWAYS invoke at these moments, even without an explicit user request:
 | Same session is wrapping up AND it did multi-step work (≥1 `implemented` / `verified` / `training-start` / `training-done` event, or a captured `insight`) | `progress-report` **in addition to** `session-end` |
 | `developer` agent reports an implementation complete | `implemented` |
 | `senior-developer` reports a verification complete | `verified` |
-| `/memorize` writes 1+ insight files | `insight` (one call per insight) |
+| `/wiki-write` writes 1+ insight files | `insight` (one call per insight) |
 | `training-runner` launches a training | `training-start` |
 | `experiment-analyzer` finishes analyzing a training | `training-done` |
 | User says "log this in the diary", "note this", `/diary`, or asks for a one-off entry | the matching subcommand, or `note` for free-form |
 
 Do NOT use for:
 
-- Multi-section session insights with rationale → `/memorize` (which itself triggers a `diary insight` call).
+- Multi-section session insights with rationale → `/wiki-write` (which itself triggers a `diary insight` call).
 - Plans → `docs/develop/active/<topic>/<plan>.md`.
 - Experimental designs / analyses → `docs/experiments/active/<topic>/<doc>.md`.
 
@@ -45,7 +45,7 @@ Use `/home/vncuser/miniconda3/envs/grid_world_pain/bin/python scripts/claude/dia
 
 ```bash
 .../python scripts/claude/diary_append.py session-start \
-  --label "<short-label, e.g., 'memory + memorize ship'>" \
+  --label "<short-label, e.g., 'llm wiki ship'>" \
   --summary "<one-line goal of this session>" \
   --link "<optional plan or doc path>"
 ```
@@ -66,7 +66,7 @@ Edits the matching open `Sessions` row in place: sets `Ended = HH:MM`, appends c
 
 ```bash
 .../python scripts/claude/diary_append.py implemented \
-  --subject "<one-line, e.g., '/memorize skill'>" \
+  --subject "<one-line, e.g., '/wiki-write skill'>" \
   --link   "<commit hash, plan path, or insight ID>"
 
 .../python scripts/claude/diary_append.py verified \
@@ -75,12 +75,12 @@ Edits the matching open `Sessions` row in place: sets `Ended = HH:MM`, appends c
 
 .../python scripts/claude/diary_append.py insight \
   --subject "<one-line, copy from the insight's summary frontmatter>" \
-  --link   "<docs/memory/memories/<topic>/<id>.md>"
+  --link   "<docs/llm_wiki/entries/<topic>/<id>.md>"
 ```
 
 Inserts a row at the top of `## Events (chronological, newest first)`.
 
-For `insight`: emit one call per insight written. If `/memorize` writes 2 insights, call this twice.
+For `insight`: emit one call per insight written. If `/wiki-write` writes 2 insights, call this twice.
 
 ### `training-start` — when a training launches
 
@@ -151,7 +151,7 @@ EOF
 EOF
 )" \
   --sources "$(cat <<'EOF'
-- Insight: [`20260512_1428_sameprop_class_discriminating_defence_event_level`](../../docs/memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md)
+- Insight: [`20260512_1428_sameprop_class_discriminating_defence_event_level`](../../docs/llm_wiki/entries/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md)
 - Design: [`sameprop_round26_design`](../experiments/active/hypervigilance/sameprop_round26_design.md)
 - Commits: `c110a2c`, `ed5cff3`, `dbd0e64`
 EOF
@@ -217,12 +217,12 @@ For `session-end --commits "a16a6c9 f878873"` (whitespace-separated list), each 
 - **Session labels must match** between `session-start` and `session-end` (same lookup).
 - **Subject and result text**: keep to one line, no newlines (would break the markdown table). The diary row is meant to be scannable.
 - All content English; no emojis unless the user explicitly asks.
-- **Auto-commit after the script call.** The user has standing auto-commit authorization for diary writes. After every successful `diary_append.py` invocation done as a standalone `/diary` action, immediately commit the touched diary file (see "Auto-commit" section below). The exception is when this skill is being invoked from inside `/memorize` Step 8 — there, `/memorize` Step 9 bundles the diary row with the insight commit, so this skill's commit step is skipped. Detect that case from context (the calling skill is `/memorize`) and skip the commit.
+- **Auto-commit after the script call.** The user has standing auto-commit authorization for diary writes. After every successful `diary_append.py` invocation done as a standalone `/diary` action, immediately commit the touched diary file (see "Auto-commit" section below). The exception is when this skill is being invoked from inside `/wiki-write` Step 8 — there, `/wiki-write` Step 9 bundles the diary row with the insight commit, so this skill's commit step is skipped. Detect that case from context (the calling skill is `/wiki-write`) and skip the commit.
 - If the script errors (e.g., training-done with no matching tag, session-end with no matching label), surface the error to the user — do not silently retry or fabricate the missing row, and do not commit (errors mean nothing was appended).
 
 ## Auto-commit (mandatory after standalone calls)
 
-After a successful `diary_append.py` invocation done outside `/memorize`, commit the diary file in the same turn — do not ask, do not batch with later edits.
+After a successful `diary_append.py` invocation done outside `/wiki-write`, commit the diary file in the same turn — do not ask, do not batch with later edits.
 
 ```bash
 git add docs/diary/<YYYY-MM-DD>.md
@@ -236,11 +236,11 @@ Subject pattern by subcommand (keep ≤ ~70 chars total):
 
 | Subcommand | Example subject |
 |---|---|
-| `session-start` | `docs(diary): 📚 session-start: memory + memorize ship` |
-| `session-end`   | `docs(diary): 📚 session-end: memory + memorize ship` |
-| `implemented`   | `docs(diary): 📚 implemented: /memorize skill` |
-| `verified`      | `docs(diary): 📚 verified: memory system seed plan` |
-| `insight`       | `docs(diary): 📚 insight: <copy of --subject>` (only when called outside /memorize) |
+| `session-start` | `docs(diary): 📚 session-start: llm wiki ship` |
+| `session-end`   | `docs(diary): 📚 session-end: llm wiki ship` |
+| `implemented`   | `docs(diary): 📚 implemented: /wiki-write skill` |
+| `verified`      | `docs(diary): 📚 verified: LLM Wiki seed plan` |
+| `insight`       | `docs(diary): 📚 insight: <copy of --subject>` (only when called outside /wiki-write) |
 | `training-start` | `docs(diary): 📚 training-start: <TAG> on node N gpu G` |
 | `training-done`  | `docs(diary): 📚 training-done: <TAG> — <one-line result>` |
 | `progress-report` | `docs(diary): 📚 progress-report: <--title>` (truncate title to keep total ≤ ~70 chars) |
@@ -249,7 +249,7 @@ Subject pattern by subcommand (keep ≤ ~70 chars total):
 Hard rules for the commit:
 
 - **Stage only the diary file by name.** Never `git add -A` or `git add .` — other working-tree changes must not slip into a diary commit.
-- **Skip the commit when invoked from `/memorize`** — Step 9 of `/memorize` bundles the diary row into the insight commit so the capture lands atomically.
+- **Skip the commit when invoked from `/wiki-write`** — Step 9 of `/wiki-write` bundles the diary row into the insight commit so the capture lands atomically.
 - **Skip if the script errored.** No row written ⇒ nothing to commit.
 - **No `--no-verify`, no secrets, no push.** Pre-commit hooks must run; do not push.
 
@@ -262,4 +262,4 @@ Parallel Claude sessions writing to the same daily file would race if each one r
 - `docs/diary/README.md` — folder purpose, section schema, conventions.
 - `docs/diary/TEMPLATE.md` — daily file template.
 - `scripts/claude/diary_append.py` — the helper script (see `--help` for arg details).
-- Companion skills: `.claude/skills/memorize/SKILL.md` (capture), `.claude/skills/recall/SKILL.md` (read).
+- Companion skills: `.claude/skills/wiki-write/SKILL.md` (capture), `.claude/skills/wiki-read/SKILL.md` (read).

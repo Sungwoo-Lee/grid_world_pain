@@ -78,15 +78,15 @@ The investigation followed a refutation chain: each experiment ruled out a class
 
 Each insight carries the full reasoning behind its conclusion and explicitly names what it supersedes / refines:
 
-- [20260508_1431_diagnostic_battery_refutes_four_fixes](../../../docs/memory/memories/dreamer_diagnosis/20260508_1431_diagnostic_battery_refutes_four_fixes.md) — Experiment 1 verdict: all four candidate fixes refuted.
-- [20260508_1432_probe_refutes_imagined_death_absence](../../../docs/memory/memories/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md) — Experiment 2 verdict: structural hypothesis refuted; new working hypothesis (since superseded by Experiment 4's finding) was "imagined deaths miscalibrated in time and per-action."
-- [20260509_1535_conventional_fixes_battery_verdict_predator_refute](../../../docs/memory/memories/dreamer_diagnosis/20260509_1535_conventional_fixes_battery_verdict_predator_refute.md) — Experiment 3 verdict: top-2 conventional causes refuted on predator; partial NoPred win.
-- [20260509_1534_wm_reward_head_localized_failure_a1](../../../docs/memory/memories/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md) — Experiment 4 verdict (the week's headline): failure localized to the reward head; encoder + decoder + continuation head are sound.
+- [20260508_1431_diagnostic_battery_refutes_four_fixes](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260508_1431_diagnostic_battery_refutes_four_fixes.md) — Experiment 1 verdict: all four candidate fixes refuted.
+- [20260508_1432_probe_refutes_imagined_death_absence](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md) — Experiment 2 verdict: structural hypothesis refuted; new working hypothesis (since superseded by Experiment 4's finding) was "imagined deaths miscalibrated in time and per-action."
+- [20260509_1535_conventional_fixes_battery_verdict_predator_refute](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260509_1535_conventional_fixes_battery_verdict_predator_refute.md) — Experiment 3 verdict: top-2 conventional causes refuted on predator; partial NoPred win.
+- [20260509_1534_wm_reward_head_localized_failure_a1](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md) — Experiment 4 verdict (the week's headline): failure localized to the reward head; encoder + decoder + continuation head are sound.
 
 Two cross-cutting insights from the same window:
 
-- [20260509_1536_train_py_checkpoint_restore_nnx_skew](../../../docs/memory/memories/cluster_ops/20260509_1536_train_py_checkpoint_restore_nnx_skew.md) — the latent infrastructure bug surfaced while building Experiment 4's tooling.
-- [20260509_1537_professor_analysis_resets_exotic_investigation](../../../docs/memory/memories/subagent_engineering/20260509_1537_professor_analysis_resets_exotic_investigation.md) — the methodological pattern that produced Experiment 3's design (pull domain-expert analysis BEFORE writing more bespoke probes).
+- [20260509_1536_train_py_checkpoint_restore_nnx_skew](../../../docs/llm_wiki/entries/cluster_ops/20260509_1536_train_py_checkpoint_restore_nnx_skew.md) — the latent infrastructure bug surfaced while building Experiment 4's tooling.
+- [20260509_1537_professor_analysis_resets_exotic_investigation](../../../docs/llm_wiki/entries/subagent_engineering/20260509_1537_professor_analysis_resets_exotic_investigation.md) — the methodological pattern that produced Experiment 3's design (pull domain-expert analysis BEFORE writing more bespoke probes).
 
 ### Working files (raw analyzer extractions, intermediate notes)
 
@@ -114,11 +114,11 @@ Two cross-cutting insights from the same window:
 ## 6. Reading order if you have 10 minutes
 
 1. **This document** (5 min) — gets you the headline finding (failure is localized to the reward head) and the open follow-ups.
-2. Memory insight [20260509_1534_wm_reward_head_localized_failure_a1](../../../docs/memory/memories/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md) — the week's load-bearing finding with full evidence and verdict thresholds (3 min).
+2. Memory insight [20260509_1534_wm_reward_head_localized_failure_a1](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md) — the week's load-bearing finding with full evidence and verdict thresholds (3 min).
 3. The Verification Report section of [dreamer_offline_wm_imagination_test](../../develop/active/diagnosis/dreamer_offline_wm_imagination_test.md) — confirms the headline finding is methodologically sound and surfaces the proprioception clarification (2 min).
 
 If you have 30 minutes, also read:
 
 - The professor-rl analysis at [dreamer_conventional_failure_modes_for_our_setup](../../project/critiques/dreamer_conventional_failure_modes_for_our_setup.md) — the conventional-cause checklist that motivated Experiment 3.
-- Memory insight [20260508_1432_probe_refutes_imagined_death_absence](../../../docs/memory/memories/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md) — the structural-hypothesis refutation that triggered the pivot to conventional causes.
+- Memory insight [20260508_1432_probe_refutes_imagined_death_absence](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md) — the structural-hypothesis refutation that triggered the pivot to conventional causes.
 - The §6.3 verdict matrix in [DREAMER_CONVENTIONAL_FIXES_BATTERY](../active/dreamer_diagnosis/DREAMER_CONVENTIONAL_FIXES_BATTERY.md) — the pre-registered confirmation/refutation criteria and which row Experiment 3 actually hit.

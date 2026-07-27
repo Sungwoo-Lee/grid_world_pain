@@ -48,7 +48,7 @@ which `scripts/eval/eval_rollout.py --record` writes). It is animal-layout-agnos
 3. **`flee`** (and `flee --fresh`) — quantify pre-contact avoidance the right way (agent's own move, not raw distance which conflates the chase). Remember: a `Rest` is flee=0, so high %away over tiny n can still mean "mostly sitting".
 4. **`obs`** — decode what the agent actually sees at the decisive moments (e.g. is a class channel active? a count? a smell gradient?). Inference the agent *could* do (e.g. elimination by counting) lives here.
 5. **Design a control** if a mechanism is suspected: re-eval with the relevant entity removed/swapped (new config + `eval_rollout.py --record`), then re-run steps 1–4. The control is what settles it.
-6. **Make a short watchable clip** if the user wants to see it (see below). Hand the verdict to `experiment-analyzer` to write into the design doc; capture surprises via `/memorize`.
+6. **Make a short watchable clip** if the user wants to see it (see below). Hand the verdict to `experiment-analyzer` to write into the design doc; capture surprises via `/wiki-write`.
 
 ## Short watchable video (clips that actually open)
 
@@ -69,5 +69,5 @@ ffmpeg -y -f concat -safe 0 -i /tmp/c.txt -c copy "$VD/eval_first5.mp4"
 - Script: `scripts/eval/trajectory_story.py` (`--help` on each subcommand).
 - Recording format: `src/utils/eval_recording.py` (per-step snapshots: agent_pos, animal_pos, obs, actions, injury, nutrition, obs_pos); `--record` hook in `scripts/eval/eval_rollout.py`.
 - Worked example + the lessons: chasing-rabbit study `docs/experiments/active/hypervigilance/sameprop_chasing_rabbit.md`; obs audit `docs/reviews/chasingRabbit_obs_classLeak_audit.md`.
-- Memory: `docs/memory/memories/hypervigilance/20260609_1721_aggregate_stats_hide_conditional_behavior.md`, `…1747_avoidance_is_post_contact_not_preemptive.md`, `…1720_chasing_rabbit_avoidance_damage_driven.md`.
+- Memory: `docs/llm_wiki/entries/hypervigilance/20260609_1721_aggregate_stats_hide_conditional_behavior.md`, `…1747_avoidance_is_post_contact_not_preemptive.md`, `…1720_chasing_rabbit_avoidance_damage_driven.md`.
 - Siblings: `wandb-analysis` (training-metric curves), `summarize-study` (study-level report). Owner agent: `experiment-analyzer`.

@@ -11,7 +11,7 @@
 - prof-RL/BDL v1 (still on the record): [`nmn_meta_context_conditioning.md`](../directions/nmn_meta_context_conditioning.md).
 - prof-Neuromod **(unchanged)**: [`nmn_continual_lifelong_probe.md`](../directions/nmn_continual_lifelong_probe.md).
 - Triage anchor: [`20260509_1517_nmn_meta_continual_pivot.md`](../triage/20260509_1517_nmn_meta_continual_pivot.md).
-- Round 2 sameProp memory: `docs/memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md`.
+- Round 2 sameProp memory: `docs/llm_wiki/entries/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md`.
 
 **Project anchors** (unchanged from v1): `project_plan.md` §4 / §5 (Phase 0–4 ordering); `NMN_ARCHITECTURE_REVIEW.md` §2.1–§2.5; `NEUROMODULATION_ALGORITHM.md` §1.4 (H1–H5), §B.6 (NPN), §G (Lee), §I (Rodriguez-Garcia), §K (Tsuda).
 

@@ -379,7 +379,7 @@ because it was the source of the GPU compile regression documented in the REVERT
 above.
 
 The working hypothesis from the user's analysis (confirmed by the rPPO memory insight
-`docs/memory/memories/env_entities/20260623_1616_rppo_reset_recompile_immune.md`):
+`docs/llm_wiki/entries/env_entities/20260623_1616_rppo_reset_recompile_immune.md`):
 Fix 1+2 touch only the CPU-side Python hot path (Player.init_states + autoreset loop)
 and do NOT affect the train_step / scan body. Therefore they should not cause GPU
 compile cost inflation.

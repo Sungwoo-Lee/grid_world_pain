@@ -1,4 +1,4 @@
-"""Convert a Claude Code transcript JSONL into a chronological markdown export for docs/memory/_archive/raw_conversations/."""
+"""Convert a Claude Code transcript JSONL into a chronological markdown export for docs/llm_wiki/_archive/raw_conversations/."""
 
 import json
 import sys

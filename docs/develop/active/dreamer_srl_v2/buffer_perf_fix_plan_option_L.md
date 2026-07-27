@@ -12,9 +12,9 @@ phase: 3
 > **Status**: PLANNED
 > **Opened**: 2026-05-19
 > **Related**:
-> - Diagnosis: `docs/memory/memories/dreamer_diagnosis/20260519_1507_dreamer_srl_v2_cpu_buffer_regression.md`
-> - Engineering template: `docs/memory/memories/dreamer_diagnosis/20260519_1508_dreamer_jax_perf_retrofit_4_phases.md`
-> - Technique: `docs/memory/memories/dreamer_diagnosis/20260519_1509_nnx_lax_scan_split_merge_pattern.md`
+> - Diagnosis: `docs/llm_wiki/entries/dreamer_diagnosis/20260519_1507_dreamer_srl_v2_cpu_buffer_regression.md`
+> - Engineering template: `docs/llm_wiki/entries/dreamer_diagnosis/20260519_1508_dreamer_jax_perf_retrofit_4_phases.md`
+> - Technique: `docs/llm_wiki/entries/dreamer_diagnosis/20260519_1509_nnx_lax_scan_split_merge_pattern.md`
 > - Working reference: `src/models/dreamer_v3_trainer.py:791-833` (`train_multiple_gpu`)
 > - Companion v2 docs: `docs/develop/active/dreamer_srl_v2/IMPLEMENTATION_PLAN.md`, `GRAD_PARITY_METHODOLOGY.md`
 

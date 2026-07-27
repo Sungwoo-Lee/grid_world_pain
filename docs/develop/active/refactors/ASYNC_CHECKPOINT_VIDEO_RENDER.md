@@ -229,7 +229,7 @@ State dict (per run): `{"proc": None, "log_f": None, "pending": None}` where
      documented policy: the render is finite (~1–4 min), CPU-only, and
      `--skip-existing` makes any later re-render harmless. This is the same
      orphan class already known and accepted for SIGINT-killed runs (memory:
-     `docs/memory/memories/cluster_ops/20260513_0018_train_py_orphan_render_workers_on_sigint.md`);
+     `docs/llm_wiki/entries/cluster_ops/20260513_0018_train_py_orphan_render_workers_on_sigint.md`);
      after implementation, ask `bug-curator` to note the new dispatch site on
      that record.
    - Close `log_f`.
@@ -357,12 +357,12 @@ no change to the eval rollouts, no change to checkpoint saving.
 
 ## Checkpoints
 
-- [ ] 1. `async_render.py` written + unit tests 1–4 green
-- [ ] 2. Dreamer call sites wired; smoke run A/B done; artifact parity confirmed
-- [ ] 3. rPPO call sites wired; rPPO A/B done
-- [ ] 4. Configs + CONFIG_GUIDE/schema + SCRIPTS_DEPENDENCY_MAP updated
-- [ ] 5. Full test suite green; speed numbers recorded in the Implementation Report
-- [ ] 6. `bug-curator` notified: annotate the orphan-render-workers record with the new dispatch site
+- [x] 1. `async_render.py` written + unit tests 1–4 green — 11/11 tests in `tests/training/test_async_render_dispatch.py`, incl. both reviewer amendments (drain-final-poll, no-overwrite-on-late-finish)
+- [x] 2. Dreamer call sites wired; smoke run A/B done; artifact parity confirmed — Dreamer end-to-end async covered by the new `test_eval_logs_monotone_async_render` (real `main()` loop, offline WandB: dispatch → drain → upload, monotone steps); artifact-parity A/B was run on the rPPO trainer locally (see Implementation Report — GPU-node Dreamer A/B left to the Verification Plan, per the no-lab-nodes constraint)
+- [x] 3. rPPO call sites wired; rPPO A/B done — local CPU A/B, same seed: recordings decompressed-byte identical, checkpoint listings identical, shared MP4 byte-identical, training-loop time 84 s → 42 s
+- [x] 4. Configs + CONFIG_GUIDE/schema + SCRIPTS_DEPENDENCY_MAP updated
+- [x] 5. Full test suite green; speed numbers recorded in the Implementation Report
+- [ ] 6. `bug-curator` notified: annotate the orphan-render-workers record with the new dispatch site — **open**: `developer` cannot spawn agents; hand to top-level Claude / `senior-developer` at verification
 
 ## Risks & notes for the implementer
 
@@ -386,7 +386,155 @@ no change to the eval rollouts, no change to checkpoint saving.
 
 ## Implementation Report
 
-_To be filled by `developer`._
+**Status: implemented, all tests green, ready for verification.** In plain
+terms: both trainers now hand the checkpoint-video MP4 render to a background
+CPU process instead of freezing training for it; the training loop polls once
+per iteration and uploads the finished video itself. Recordings and checkpoints
+are written exactly as before (verified byte-level, see Smoke A/B below), and a
+config switch (`training.async_video_render: false`) restores the old blocking
+behavior unchanged. No live run, lab node, or hot-read script was touched.
+
+### Files changed (file-by-file)
+
+| File | What was done |
+|---|---|
+| `src/utils/async_render.py` | **NEW** (~270 lines incl. docs). `new_render_state` / `dispatch_render` / `poll_render` / `drain_render` + `RENDER_DRAIN_TIMEOUT_S=300` / `RENDER_DRAIN_TIMEOUT_S_INTERRUPTED=10`. Docstring names `train.py:256–385` as the source idiom and states the leave-orphan-on-timeout policy. Child env adopts `_experiment_eval_env`'s belt-and-braces GPU isolation (`JAX_PLATFORMS=cpu` + `CUDA_VISIBLE_DEVICES=""`). The `render_every_n_checkpoints` gate lives inside `dispatch_render` (an `every_n` param + `state["ckpt_index"]`), per the plan's "falls out of the same dispatch function". |
+| `src/algorithms/dreamer_srl/dreamer_srl_main.py` | 3 new config reads next to the eval-config block; module-level import of the helper; `async_render_state` created before the pbar; dispatch-vs-legacy branch at the Commit-F video pass (kill-switch keeps the byte-identical `_render_and_upload` call); per-iteration `poll_render` after the step-log block; `drain_render` after `pbar.close()`, before §13/`wandb.finish()`. |
+| `src/algorithms/dreamer_srl/eval.py` | Cross-reference comment added to `_render_and_upload`'s docstring (now the blocking kill-switch fallback). No behavior change. |
+| `src/utils/evaluation_core.py` | `evaluate_jax_checkpoint(..., async_render_state=None)`; when set, `dispatch_render` replaces the blocking block (`upload_step_mode='checkpoint_pct'`, preserving rPPO's existing step stamping); the entire legacy blocking block is preserved verbatim in the `else` branch (re-indented only). All other callers (`evaluation.py:429`, `main.py:92`, the stats pass) unchanged via the None default. |
+| `train.py` | Module import; `async_video_render` switch + `async_render_state` created next to `experiment_state`; video pass passes the state dict only when the switch is true; `poll_render` beside the experiment-eval poll; `drain_render` beside `_drain_experiment_results` (shares `training_interrupted`). |
+| `configs/train/default.yaml` | 3 new keys (`false` / `1` / `null`) with FALLBACK-comment documentation per the file's convention. |
+| `configs/train/dreamer_srl.yaml`, `configs/train/recurrent_ppo.yaml` | 3 new keys (`true` / `1` / `8`), self-contained-convention comments. |
+| `configs/visualization/default.yaml` | Comment marking `video_dpi` as a dead key (plan §C.1). The other occurrence is in an **archived** experiment config (`configs/environment/experiment/archive/hypervigilance/testbed_cellC_native_v2.yaml`) — left untouched (archives are historical snapshots). |
+| `docs/environment/CONFIG_GUIDE.md` | §7: new 3-key table (Maintenance Contract). |
+| `docs/environment/02_config_schema.md` | `training:` stanza added to the YAML top-level structure listing the 3 keys, pointing at CONFIG_GUIDE §7. |
+| `docs/environment/SCRIPTS_DEPENDENCY_MAP.md` | `render_recordings.py` caller edges: third `src/` subprocess row (`async_render.py:56` Popen), §2/§3 rows and the move-rule updated; stale line numbers for the two blocking sites refreshed (`evaluation_core.py:365`, `eval.py:546`). |
+| `tests/training/test_async_render_dispatch.py` | **NEW** — 11 tests, see below. |
+| `tests/algorithms/dreamer_srl/test_eval_telemetry_wandb.py` | **DEVIATION (flagged, see below)** — reworked into a shared driver + 2 tests: the original sync-coupling assertion pinned to `async_video_render: false` (kill-switch path), plus a new async-mode end-to-end test. |
+
+### The four 🟡 plan-reviewer amendments
+
+1. **Drain must poll (finding 1)** — implemented: `drain_render` ends with a
+   `poll_render` call after the bounded wait (mirrors `train.py:381–383`).
+   Tested by `test_drain_uploads_render_that_finishes_within_window` (dispatch →
+   straight to drain, no intervening poll → upload fires exactly once) and
+   observed live in the rPPO smoke arm B log (`[render] checkpoint 54 render
+   finished` printed at drain) and in the Dreamer async telemetry test (video
+   row logged at drain with a monotone step).
+2. **Dispatch must poll before overwriting (finding 2)** — implemented:
+   `dispatch_render`'s first action is a failure-isolated `poll_render`, so a
+   render that finished in the last-poll→next-dispatch window is uploaded
+   before `pending` is replaced. Tested by
+   `test_dispatch_does_not_overwrite_unpolled_completed_render` (child exits
+   with NO poll; next dispatch must yield upload #1 for the old checkpoint and
+   then dispatch the new one).
+3. **Determinism baseline for artifact parity (finding 3)** — owner
+   `senior-developer` (verification-plan amendment); noted here with one
+   implementation-side datum: **raw `.rec.gz` checksums differ even for
+   identical content because gzip embeds an mtime in its header** — parity
+   checks must compare *decompressed* payloads (`zcat | cmp`), which is what
+   the Smoke A/B below does.
+4. **Make skip drops observable (finding 4)** — implemented:
+   `state["skips"]` counter incremented on every skip-if-busy;
+   `poll_render` surfaces it as **`Eval/video/render_skipped_total`** (parent
+   is sole WandB writer; logged only when the counter advances; Dreamer mode
+   stamps `step=policy_step`, rPPO mode logs step-less like its other rows).
+   Tested by `test_skip_if_busy_single_child_and_skip_counter`.
+
+🟢 findings: **5** — `render_workers: 8` kept per the plan's table, with the
+rationale comment corrected in all three YAMLs + the module ("per-episode
+parallelism, ≤ eval_video_episodes workers ever active; a cap, not a contention
+lever"). **6** — **NOT applied as written** (deviation): `get_mandatory` raises
+on a declared `null` (`Config.get_mandatory` treats `None` as missing,
+`src/utils/config.py:73`), so `render_workers` *cannot* be read via
+`get_mandatory` while `null` is a legitimate value; kept the plan's original
+`.get('training.render_workers', None)` with an explanatory comment at both
+read sites. **7** — implemented: the skip/backfill message tells the operator
+to delete partial `episode_*.mp4` files before backfilling (`--skip-existing`
+would keep a truncated file).
+
+### Test results (all with `JAX_PLATFORMS=cpu`, conda interpreter)
+
+| Suite | Command | Result |
+|---|---|---|
+| New unit tests | `pytest tests/training/test_async_render_dispatch.py -v` | **11 passed** (7.4 s) — non-blocking dispatch (<1 s) / poll-detects-completion / upload-exactly-once; skip-if-busy single-child + skip counter; bounded drain leaves orphan + closes log; drain-final-poll (amendment 1); no-overwrite race (amendment 2); every_n gate; rPPO `checkpoint_pct` step mode; rc≠0 failure path; blocking-fallback signature default; `_render_and_upload` still blocking `subprocess.run` with unchanged cmd; child-env GPU isolation |
+| Reworked telemetry tests | `pytest tests/algorithms/dreamer_srl/test_eval_telemetry_wandb.py -q` | **2 passed** (382 s) — sync (kill-switch) invariant + new async end-to-end (real Dreamer `main()` loop, offline WandB: explicit monotone steps, video uploaded at/after its checkpoint's step) |
+| Existing Dreamer suite | `pytest tests/algorithms/dreamer_srl/ -q` (first pass, `-x`) | **80 passed, 2 skipped (pre-existing skips), 1 failed** — the single failure was `test_eval_logs_monotone_explicit_steps`, whose assertion (c) hard-codes the *synchronous* video-step coupling this plan deliberately changes; reworked as flagged above, then **2/2 green**. Full combined re-run after the rework: see final line below. |
+| `tests/training/` (pre-existing) | `pytest tests/training/ -q` (excl. new file) | **8 passed** (235 s) |
+| Final combined re-run | `pytest tests/algorithms/dreamer_srl/ tests/training/ -q` | **101 passed, 2 skipped** (see command output; includes the 11 new + 2 reworked) |
+
+### Smoke A/B + speed check (local CPU only — no lab node touched)
+
+Setup: rPPO (`recurrent_ppo_gae.yaml` agent), default env with
+`max_steps: 60`, `eval_video_episodes: 1`, `--episodes 60
+--checkpoint-frequency 15 --seed 7 --num-envs 8 --no-wandb --device cpu`,
+JAX_PLATFORMS=cpu; identical override configs except
+`training.async_video_render` (arm A false / arm B true). Artifacts under
+`tmp/20260727_async_smoke/` (A/, B/, A.log, B.log). Both arms hit checkpoints
+at episodes 54 and 102 and exited rc=0.
+
+- **Speed**: training-loop elapsed (tqdm) **84 s (sync) → 42 s (async)**, a
+  **50% wall-clock reduction** in this render-dominated smoke (2 blocking
+  renders ≈ 40 s removed from the critical path). Steady-state per-iteration
+  cost of the new poll is a single `proc.poll()` — not measurable at smoke
+  scale and architecturally negligible; the Verification Plan's GPU-node
+  steady-state check remains the authoritative number.
+- **Artifact integrity**: all 4 `.rec.gz` recordings **byte-identical after
+  decompression** (`zcat | cmp`; raw gzip bytes differ only by the header
+  mtime — see amendment 3 note), checkpoint directory listings identical, and
+  the video both arms produced (`eval_54.mp4`) **byte-identical**.
+- **Skip-if-busy observed as designed**: in arm B the checkpoint-102 dispatch
+  found the checkpoint-54 render still running (this smoke's cadence is
+  seconds, vs 8–21 min in production) and skipped; the drain then waited for
+  and finished render 54 (`[render] checkpoint 54 render finished`). The 102
+  recordings are on disk, offline-recoverable per design. No orphan
+  `render_recordings` process after either arm's exit.
+- Dreamer-side end-to-end (real loop, async on) is covered by
+  `test_eval_logs_monotone_async_render`; a GPU-node Dreamer A/B was **not**
+  run here (task constraint: local CPU only) — it is Verification Plan step 1.
+
+### Deviations from the plan (all flagged, none silent)
+
+1. **`tests/algorithms/dreamer_srl/test_eval_telemetry_wandb.py` modified** —
+   not in the File Changes list ("No other file may change"). Unavoidable: its
+   assertion (c) encodes the synchronous upload-step coupling the plan
+   deliberately removes, so with the per-algo default flipped to async it fails
+   by design. Rework keeps the original invariant verbatim on the kill-switch
+   path and adds the async-mode invariant (upload at/after its checkpoint's
+   step, still explicit + monotone) as a new test — a strict coverage increase.
+2. **Plan-reviewer finding 6 not applied** (`get_mandatory` for
+   `render_workers`) — factually incompatible with `Config.get_mandatory`,
+   which raises on a declared `null`. Kept the plan's original `.get`; both
+   read sites carry a comment saying why.
+3. **Drain interrupted-timeout = 10 s** as the plan's §3 specifies — noting the
+   plan's "same values as the experiment-eval drain" clause is slightly off
+   (the experiment-eval constant is 5 s); the plan's explicit number wins.
+4. **`video_dpi` dead-key comment** applied to `configs/visualization/default.yaml`
+   only; the second occurrence is in an archived config, left untouched.
+5. **State dict carries 3 extra keys** beyond the plan's minimal spec
+   (`ckpt_index`, `skips`, `skips_logged`) — required by the every_n gate and
+   amendment 4.
+
+### Blockers / follow-ups
+
+- **Checkpoint 6 open**: ask `bug-curator` to annotate the
+  orphan-render-workers record
+  (`docs/llm_wiki/entries/cluster_ops/20260513_0018_...sigint.md`) with the new
+  dispatch site (`src/utils/async_render.py`) — `developer` cannot spawn agents.
+- Verification Plan steps 1–5 (GPU-node A/B incl. the sync-vs-sync determinism
+  control of finding 3, steady-state speed check, post-landing live comparison)
+  → `senior-developer` / `experiment-analyzer`.
+- A parallel session's `docs/memory/` → `docs/llm_wiki/` rename landed on disk
+  mid-implementation; this plan doc's one memory-path citation was updated by
+  that session, and `async_render.py`'s docstring uses the new path. The
+  working tree contains that session's unrelated changes — this
+  implementation's commit stages only its own files (and only its own hunks of
+  `SCRIPTS_DEPENDENCY_MAP.md`, which the rename also touched).
+- `scripts/eval/render_recordings.py` was **NOT modified** (hard invariant;
+  `git status` shows no change to it or anything it imports). No lab node was
+  touched; everything above ran on the local workstation, CPU-only.
+
+Implemented by: `developer` (2026-07-27).
 
 ## Verification Report
 

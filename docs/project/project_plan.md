@@ -134,7 +134,7 @@ Those concrete artefacts are produced and maintained in subtask documents:
 - `docs/experiments/` — experimental designs, training-result analyses.
 - `docs/project/` (beyond this file) — concept memos and research-direction memos from the project's researcher agents.
 - `docs/pi/` — portfolio-level focus-vs-explore calls and strategic logs.
-- `docs/memory/` and `docs/diary/` — session-level memory and event log.
+- `docs/llm_wiki/` and `docs/diary/` — session-level memory and event log.
 
 Each subtask document should be locatable in the 4 × 3 matrix of §3 and should declare which paper (§4 or §5) it contributes to. When any Claude Code agent is consulted on a subtask in this project, this document is the frame the subtask operates inside.
 

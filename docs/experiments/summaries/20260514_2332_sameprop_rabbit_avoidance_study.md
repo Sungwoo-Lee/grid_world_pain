@@ -112,13 +112,13 @@ Normally each class carries its own **smell signature**, so the agent can tell t
 
 ### Memory insights
 
-- [`docs/memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md`](../../../docs/memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md) — **the event-level verdict** (+37 pp bush-dive gap, 0.75× / 1.19× eat-suppression, per-tag fan-out within noise).
-- [`docs/memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md`](../../../docs/memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md) — **the spatial-level verdict** (Round 2.5 mean-distance verdict; complementary, not superseded).
-- [`docs/memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md`](../../../docs/memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md) — Round 2 partial verdict at ~5% of budget.
-- [`docs/memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md`](../../../docs/memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md) — per-tag metric design rationale (methodological precursor to the §12 toolkit).
-- [`docs/memory/memories/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md`](../../../docs/memory/memories/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md) — Round 1 verdict + confound flag.
-- [`docs/memory/memories/hypervigilance/20260508_1445_sameprop_discriminating_channels.md`](../../../docs/memory/memories/hypervigilance/20260508_1445_sameprop_discriminating_channels.md) — Phase-1 channels memo.
-- [`docs/memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md`](../../../docs/memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md) — engineering lesson from the per-tag implementation week.
+- [`docs/llm_wiki/entries/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md`](../../../docs/llm_wiki/entries/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md) — **the event-level verdict** (+37 pp bush-dive gap, 0.75× / 1.19× eat-suppression, per-tag fan-out within noise).
+- [`docs/llm_wiki/entries/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md`](../../../docs/llm_wiki/entries/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md) — **the spatial-level verdict** (Round 2.5 mean-distance verdict; complementary, not superseded).
+- [`docs/llm_wiki/entries/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md`](../../../docs/llm_wiki/entries/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md) — Round 2 partial verdict at ~5% of budget.
+- [`docs/llm_wiki/entries/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md`](../../../docs/llm_wiki/entries/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md) — per-tag metric design rationale (methodological precursor to the §12 toolkit).
+- [`docs/llm_wiki/entries/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md`](../../../docs/llm_wiki/entries/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md) — Round 1 verdict + confound flag.
+- [`docs/llm_wiki/entries/hypervigilance/20260508_1445_sameprop_discriminating_channels.md`](../../../docs/llm_wiki/entries/hypervigilance/20260508_1445_sameprop_discriminating_channels.md) — Phase-1 channels memo.
+- [`docs/llm_wiki/entries/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md`](../../../docs/llm_wiki/entries/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md) — engineering lesson from the per-tag implementation week.
 
 ### Working files
 
@@ -164,11 +164,11 @@ Normally each class carries its own **smell signature**, so the agent can tell t
 
 1. **This summary, sections 1–4** (5 min) — gives you the take-home messages, the experiment table, the two-level verdict, and the open follow-ups.
 2. **§12 of [`sameprop_round25_design.md`](../active/hypervigilance/sameprop_round25_design.md)** (3 min) — the event-level toolkit appendix with the actual per-class numbers and the motif-clustering breakdown.
-3. **The event-level verdict insight, [`20260512_1428_sameprop_class_discriminating_defence_event_level.md`](../../../docs/memory/memories/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md)** (2 min) — the same verdict in 5-section memory form with the methodological generalization.
+3. **The event-level verdict insight, [`20260512_1428_sameprop_class_discriminating_defence_event_level.md`](../../../docs/llm_wiki/entries/hypervigilance/20260512_1428_sameprop_class_discriminating_defence_event_level.md)** (2 min) — the same verdict in 5-section memory form with the methodological generalization.
 
 If you have 30 minutes, also read:
 
 4. **§§9–11 of [`sameprop_round25_design.md`](../active/hypervigilance/sameprop_round25_design.md)** — the spatial-level verdict that the §12 appendix complements.
-5. **The spatial-level verdict insight, [`20260510_2237_sameprop_round25_no_class_avoidance.md`](../../../docs/memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md)** — two-confound decomposition.
+5. **The spatial-level verdict insight, [`20260510_2237_sameprop_round25_no_class_avoidance.md`](../../../docs/llm_wiki/entries/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md)** — two-confound decomposition.
 6. **The prior re-summary at [`20260513_1420_sameprop_rabbit_avoidance_study.md`](20260513_1420_sameprop_rabbit_avoidance_study.md)** — useful for seeing how the framing of the two-level verdict was developed (skip its "R2.6 in-flight" framing — it crashed).
 7. **The toolkit's biological grounding, [`docs/project/ideas/20260510_behavior_measure_toolkit.md`](../../project/ideas/20260510_behavior_measure_toolkit.md)** — why M1 / M2 / M5 map to the predictive-coding / active-inference defensive repertoire.

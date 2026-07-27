@@ -82,17 +82,17 @@ Performance is measured in **survival steps** (project rule), never cumulative r
 
 From this re-summary's new window (2026-05-09 → 2026-05-13):
 
-- [20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin](../../../docs/memory/memories/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md) — R2 continual verdict: catastrophic-forgetting resistance + reusable-subnetwork hypotheses confirmed at ~25× seed-noise floor; first clearly-positive finding.
-- [20260513_0015_active_swapped_geq_matched_reframes_meta](../../../docs/memory/memories/hypervigilance/20260513_0015_active_swapped_geq_matched_reframes_meta.md) — Specialist ceiling table refutes "swap is load-bearing"; reframes the meta head-to-head as a factorisation test.
-- [20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric](../../../docs/memory/memories/nmn_diagnosis/20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric.md) — The "half-the-dip" predicate is malformed for this schedule shape; modulator's contribution lives in recovery speed, not dip-depth.
-- [20260513_0017_mod_h_logging_gap_blocks_cka_precheck](../../../docs/memory/memories/nmn_diagnosis/20260513_0017_mod_h_logging_gap_blocks_cka_precheck.md) — Raw modulator hidden vector never logged; blocks Mahalanobis / CKA tests across all NMN runs; 3 metrics + 1 artifact hook requested.
+- [20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin](../../../docs/llm_wiki/entries/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md) — R2 continual verdict: catastrophic-forgetting resistance + reusable-subnetwork hypotheses confirmed at ~25× seed-noise floor; first clearly-positive finding.
+- [20260513_0015_active_swapped_geq_matched_reframes_meta](../../../docs/llm_wiki/entries/hypervigilance/20260513_0015_active_swapped_geq_matched_reframes_meta.md) — Specialist ceiling table refutes "swap is load-bearing"; reframes the meta head-to-head as a factorisation test.
+- [20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric](../../../docs/llm_wiki/entries/nmn_diagnosis/20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric.md) — The "half-the-dip" predicate is malformed for this schedule shape; modulator's contribution lives in recovery speed, not dip-depth.
+- [20260513_0017_mod_h_logging_gap_blocks_cka_precheck](../../../docs/llm_wiki/entries/nmn_diagnosis/20260513_0017_mod_h_logging_gap_blocks_cka_precheck.md) — Raw modulator hidden vector never logged; blocks Mahalanobis / CKA tests across all NMN runs; 3 metrics + 1 artifact hook requested.
 
 From the prior summary's window (2026-05-07 → 2026-05-09), still relevant:
 
-- [20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse](../../../docs/memory/memories/nmn_diagnosis/20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse.md) — Heterogeneity sweep verdict; the steady-state framing.
-- [20260508_2004_profile_dependent_temp_saturation_mc_film](../../../docs/memory/memories/nmn_diagnosis/20260508_2004_profile_dependent_temp_saturation_mc_film.md) — Temperature-saturation mechanism finding that motivated the temp-clip rerun.
-- [20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4](../../../docs/memory/memories/nmn_diagnosis/20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4.md) — Temp-clip rerun verdict; the steady-state "partial binder" reframing.
-- [20260509_1410_nmn_temp_head_natural_target_3_to_5](../../../docs/memory/memories/nmn_diagnosis/20260509_1410_nmn_temp_head_natural_target_3_to_5.md) — Temperature head's natural target sits in `[3.0, 5.0)`; basis for the canonical-config fix.
+- [20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse](../../../docs/llm_wiki/entries/nmn_diagnosis/20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse.md) — Heterogeneity sweep verdict; the steady-state framing.
+- [20260508_2004_profile_dependent_temp_saturation_mc_film](../../../docs/llm_wiki/entries/nmn_diagnosis/20260508_2004_profile_dependent_temp_saturation_mc_film.md) — Temperature-saturation mechanism finding that motivated the temp-clip rerun.
+- [20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4](../../../docs/llm_wiki/entries/nmn_diagnosis/20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4.md) — Temp-clip rerun verdict; the steady-state "partial binder" reframing.
+- [20260509_1410_nmn_temp_head_natural_target_3_to_5](../../../docs/llm_wiki/entries/nmn_diagnosis/20260509_1410_nmn_temp_head_natural_target_3_to_5.md) — Temperature head's natural target sits in `[3.0, 5.0)`; basis for the canonical-config fix.
 
 ### Working files (raw analyzer extractions, intermediate notes)
 
@@ -122,6 +122,6 @@ From the prior summary's window (2026-05-07 → 2026-05-09), still relevant:
 
 1. **This document** (5 min) — the reframed headline + open follow-ups.
 2. The R2 continual design doc's §5.5–§6 ([NMN_CONTINUAL_DOUBLE_RETURN_PROBE](../active/hypervigilance/NMN_CONTINUAL_DOUBLE_RETURN_PROBE.md)) — concrete per-stage survival numbers + the locked predicate verdicts.
-3. Memory insight [20260513_0014](../../../docs/memory/memories/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md) — the most-up-to-date verdict on the study's central question.
+3. Memory insight [20260513_0014](../../../docs/llm_wiki/entries/nmn_diagnosis/20260513_0014_nmn_r2_continual_h1b_h1c_confirmed_high_margin.md) — the most-up-to-date verdict on the study's central question.
 
-If you have 30 minutes, also read the meta-probe design doc's §5.5 (specialist ceiling table) and the two methodology insights — [20260513_0016 (predicate malformation)](../../../docs/memory/memories/nmn_diagnosis/20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric.md) and [20260513_0017 (logging gap)](../../../docs/memory/memories/nmn_diagnosis/20260513_0017_mod_h_logging_gap_blocks_cka_precheck.md) — these contain the methodological arguments that motivate follow-ups 2 and 3 in §4 above.
+If you have 30 minutes, also read the meta-probe design doc's §5.5 (specialist ceiling table) and the two methodology insights — [20260513_0016 (predicate malformation)](../../../docs/llm_wiki/entries/nmn_diagnosis/20260513_0016_h1a_half_the_dip_predicate_schedule_asymmetric.md) and [20260513_0017 (logging gap)](../../../docs/llm_wiki/entries/nmn_diagnosis/20260513_0017_mod_h_logging_gap_blocks_cka_precheck.md) — these contain the methodological arguments that motivate follow-ups 2 and 3 in §4 above.

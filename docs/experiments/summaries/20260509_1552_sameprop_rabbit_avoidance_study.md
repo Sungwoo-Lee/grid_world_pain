@@ -71,11 +71,11 @@ The environment has three classes of moving entities the agent encounters: a **p
 
 ### Memory insights
 
-- [`docs/memory/memories/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md`](../../../docs/memory/memories/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md) — Round 1 verdict + confound flag, captured at end of the analyzer chain.
-- [`docs/memory/memories/hypervigilance/20260508_1445_sameprop_discriminating_channels.md`](../../../docs/memory/memories/hypervigilance/20260508_1445_sameprop_discriminating_channels.md) — channels memo's findings (movement signature dominant, visual ch.5/ch.7 at contact, extero-noc contact-only) and the `hunt_stamina_threshold > 1.0` structural-disable trick used in Cell A1.
-- [`docs/memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md`](../../../docs/memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md) — Round 2 partial verdict (this week): Cell C sign-flip, Cell A1 contamination by §5 row-2 failure mode.
-- [`docs/memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md`](../../../docs/memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md) — design rationale for the per-tag metrics that supersede the originally-planned quadrant-hardcoded approach.
-- [`docs/memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md`](../../../docs/memory/memories/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md) — the wiring-bug + verification-practice lesson encountered during the per-tag implementation.
+- [`docs/llm_wiki/entries/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md`](../../../docs/llm_wiki/entries/hypervigilance/20260508_1444_sameprop_round1_finding_and_confound.md) — Round 1 verdict + confound flag, captured at end of the analyzer chain.
+- [`docs/llm_wiki/entries/hypervigilance/20260508_1445_sameprop_discriminating_channels.md`](../../../docs/llm_wiki/entries/hypervigilance/20260508_1445_sameprop_discriminating_channels.md) — channels memo's findings (movement signature dominant, visual ch.5/ch.7 at contact, extero-noc contact-only) and the `hunt_stamina_threshold > 1.0` structural-disable trick used in Cell A1.
+- [`docs/llm_wiki/entries/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md`](../../../docs/llm_wiki/entries/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md) — Round 2 partial verdict (this week): Cell C sign-flip, Cell A1 contamination by §5 row-2 failure mode.
+- [`docs/llm_wiki/entries/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md`](../../../docs/llm_wiki/entries/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md) — design rationale for the per-tag metrics that supersede the originally-planned quadrant-hardcoded approach.
+- [`docs/llm_wiki/entries/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md`](../../../docs/llm_wiki/entries/subagent_engineering/20260509_1534_synthetic_smoke_masks_dict_assembly_bugs.md) — the wiring-bug + verification-practice lesson encountered during the per-tag implementation.
 
 ### Working files
 
@@ -104,9 +104,9 @@ The environment has three classes of moving entities the agent encounters: a **p
 
 1. **This summary** — start here (5 minutes).
 2. **§9 of [`sameprop_round2_design.md`](../active/hypervigilance/sameprop_round2_design.md)** — the truncated-data partial analysis with the actual numbers per cell, the §5 row-2 failure-mode mapping that explains the Cell A1 caveat, and the explicit "what's needed to complete the round" recommendation (3 minutes).
-3. **The Round 2 truncated-verdict insight, [`20260509_1532_sameprop_round2_truncated_verdict.md`](../../../docs/memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md)** — the same verdict in 5-section form with rationale (2 minutes).
+3. **The Round 2 truncated-verdict insight, [`20260509_1532_sameprop_round2_truncated_verdict.md`](../../../docs/llm_wiki/entries/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md)** — the same verdict in 5-section form with rationale (2 minutes).
 
 If you have 30 minutes, also read:
 
-4. **The tag-based-design insight, [`20260509_1533_tag_based_distance_supersedes_quadrant.md`](../../../docs/memory/memories/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md)** — why the new per-tag metric is the right disambiguator and what it costs.
+4. **The tag-based-design insight, [`20260509_1533_tag_based_distance_supersedes_quadrant.md`](../../../docs/llm_wiki/entries/hypervigilance/20260509_1533_tag_based_distance_supersedes_quadrant.md)** — why the new per-tag metric is the right disambiguator and what it costs.
 5. **[`round1_relog_baseline_analysis.md`](../active/hypervigilance/round1_relog_baseline_analysis.md)** — the full Round 1 numbers + per-seed agreement check + the confound the analyzer flagged in parallel.

@@ -1,6 +1,6 @@
 ---
 name: summarize-study
-description: "Generate a study-level summary report under docs/experiments/summaries/ that fans out to design docs, memory insights, working files, diary days, and commits. Use whenever the user says '/summarize-study', 'summarize this study', 'write me a study report', 'make a summary report of <topic>', 'generate a study summary for <topic>', 'summarise the <topic> work', or 'give me a reader-facing summary of the <topic> experiments'. **Stand-alone principle**: the summary must be readable cold — a reader who never opens any of the links should be able to understand the verdict, the methods, and the implications. Output is a 7-section summary (headline blockquote → 6-bullet take-home → §0 Vocabulary → §1 Question → §2 Experiments + pre-registered thresholds inlined → §3 Verdict table + narrative → §4 What's next → §5 Links → §6 Reading order) plus an optional Appendix A glossary whenever the study uses non-standard or project-specific behaviour metrics. Symbolic predicate names (H₀, H₁a, Δ_X) are translated to plain English; project shorthand (cell names, config slugs, run IDs) is defined in §0 Vocabulary on first use. The skill writes the summary file with a timestamped filename, prepends a row to the folder's README index, appends a `note` row to today's diary, and auto-commits the three files. Re-summaries write a fresh dated file (timestamped to the minute) — older summaries stay as historical snapshots; do not edit them in place. Distinct from /memorize (per-finding rationale), /diary (short-timeline events), experiment-designer (per-experiment design docs), and experiment-analyzer (per-experiment results)."
+description: "Generate a study-level summary report under docs/experiments/summaries/ that fans out to design docs, memory insights, working files, diary days, and commits. Use whenever the user says '/summarize-study', 'summarize this study', 'write me a study report', 'make a summary report of <topic>', 'generate a study summary for <topic>', 'summarise the <topic> work', or 'give me a reader-facing summary of the <topic> experiments'. **Stand-alone principle**: the summary must be readable cold — a reader who never opens any of the links should be able to understand the verdict, the methods, and the implications. Output is a 7-section summary (headline blockquote → 6-bullet take-home → §0 Vocabulary → §1 Question → §2 Experiments + pre-registered thresholds inlined → §3 Verdict table + narrative → §4 What's next → §5 Links → §6 Reading order) plus an optional Appendix A glossary whenever the study uses non-standard or project-specific behaviour metrics. Symbolic predicate names (H₀, H₁a, Δ_X) are translated to plain English; project shorthand (cell names, config slugs, run IDs) is defined in §0 Vocabulary on first use. The skill writes the summary file with a timestamped filename, prepends a row to the folder's README index, appends a `note` row to today's diary, and auto-commits the three files. Re-summaries write a fresh dated file (timestamped to the minute) — older summaries stay as historical snapshots; do not edit them in place. Distinct from /wiki-write (per-finding rationale), /diary (short-timeline events), experiment-designer (per-experiment design docs), and experiment-analyzer (per-experiment results)."
 ---
 
 # Summarize-Study — generate a multi-experiment study report under `docs/experiments/summaries/`
@@ -22,7 +22,7 @@ Do **not** use for:
 
 - Per-experiment design docs → `experiment-designer` (writes to `docs/experiments/active/<topic>/`).
 - Per-experiment analysis fill-in (Results / Analysis / Conclusions sections) → `experiment-analyzer`.
-- Per-finding insights with rationale, rejected alternatives, debugging arcs → `/memorize`.
+- Per-finding insights with rationale, rejected alternatives, debugging arcs → `/wiki-write`.
 - Implementation plans → `senior-developer`.
 - Daily event log (start/end of session, training-start/done, insight rows) → `/diary`.
 - Single-experiment reports — at minimum 2 experiments should be in scope. If only one is available, suggest the user wait or use the experiment doc itself.
@@ -33,7 +33,7 @@ Do **not** use for:
 |---|---|---|
 | Authoritative contract | `docs/experiments/summaries/README.md` | Folder purpose, filename rules, section structure. |
 | Output folder | `docs/experiments/summaries/` | Sibling to `active/` and `meta/` under `docs/experiments/`. |
-| Filename pattern | `YYYYMMDD_HHMM_<slug>.md` | `date +%Y%m%d_%H%M`; slug ≤ ~6 words English snake_case. Matches `docs/memory/` insight convention. |
+| Filename pattern | `YYYYMMDD_HHMM_<slug>.md` | `date +%Y%m%d_%H%M`; slug ≤ ~6 words English snake_case. Matches `docs/llm_wiki/` insight convention. |
 | Frontmatter (5 fields) | `title`, `study`, `generated`, `window`, `status: snapshot` | `window` is the date range the summary covers, NOT the generation date. |
 | Document shape (in order) | Headline-paragraph blockquote → Take-home bullets → §0 Vocabulary → §1 Study question → §2 Experiments + pre-registered thresholds → §3 Verdict table + narrative → §4 What's next → §5 Links → §6 Reading order → (optional) Appendix A | Section names verbatim — do not re-style. §0 Vocabulary is required whenever the study uses any project-specific shorthand; Appendix A is required whenever the study uses non-standard behaviour metrics. |
 | Stand-alone principle | A reader who never opens any link should be able to understand the verdict, methods, and implications. | The summary inlines pre-registered thresholds + verdict numbers; it does NOT just point at the design doc. |
@@ -43,7 +43,7 @@ Do **not** use for:
 
 ## Why a separate folder + skill
 
-The project already has three documentation layers — design docs in `docs/experiments/active/<topic>/` (full pre-registered design + results per experiment), memory insights in `docs/memory/memories/<topic>/` (per-finding 5-section files with rationale), and the daily diary in `docs/diary/` (one-line event rows). What's missing is a **study-level reader-facing layer** that names a coherent multi-experiment thread, explains it in plain language, and points at everything else. That's what `summaries/` provides; that's what this skill writes.
+The project already has three documentation layers — design docs in `docs/experiments/active/<topic>/` (full pre-registered design + results per experiment), memory insights in `docs/llm_wiki/entries/<topic>/` (per-finding 5-section files with rationale), and the daily diary in `docs/diary/` (one-line event rows). What's missing is a **study-level reader-facing layer** that names a coherent multi-experiment thread, explains it in plain language, and points at everything else. That's what `summaries/` provides; that's what this skill writes.
 
 The reader-facing constraint is the load-bearing one. There are two specific commitments:
 
@@ -67,7 +67,7 @@ The user invokes the skill in one of four ways:
 
 | Input shape | What you do |
 |---|---|
-| Study label / topic name (e.g., "NMN comparison study") | Auto-discover from `docs/experiments/active/<topic>/` + `docs/memory/memories/<topic>/`. |
+| Study label / topic name (e.g., "NMN comparison study") | Auto-discover from `docs/experiments/active/<topic>/` + `docs/llm_wiki/entries/<topic>/`. |
 | Topic folder under `docs/experiments/active/<topic>/` | Auto-discover from that folder + the matching memory subfolder. |
 | Date window (e.g., "2026-05-07 to 2026-05-09") | Scan all topic folders for design docs whose latest analysis row falls in the window. |
 | Explicit list of experiment doc paths | Use those exactly; no auto-discovery. |
@@ -214,7 +214,7 @@ Repo-relative paths only. Subsections (write `(none for this study)` rather than
 
 - **Design docs** — every in-scope `docs/experiments/active/<topic>/<doc>.md`.
 - **Supporting plans** — relevant `docs/develop/active/<topic>/<plan>.md`.
-- **Memory insights** — every in-scope `docs/memory/memories/<topic>/<id>.md`, with a one-line gloss explaining what each carries (verdict, mechanism, design-rationale, etc.).
+- **Memory insights** — every in-scope `docs/llm_wiki/entries/<topic>/<id>.md`, with a one-line gloss explaining what each carries (verdict, mechanism, design-rationale, etc.).
 - **Working files** — every relevant `tmp/<file>.md` or `tmp/<file>.json` from the analyzer chain.
 - **Eval-rollout outputs / results paths** — when applicable, point at `results/eval/.../<ckpt>/` or equivalent.
 - **Diary days** — every `docs/diary/YYYY-MM-DD.md` covering the window, with a one-line gloss of what happened that day.
@@ -284,7 +284,7 @@ The diary file is at `docs/diary/<today>.md`; the helper handles flock + path-fo
 
 ### Step 7 — Auto-commit
 
-Mandatory; mirrors `/memorize` Step 9. After all writes succeed, bundle every file this skill touched into a single commit. Stage by name (NEVER `git add -A` or `git add .`):
+Mandatory; mirrors `/wiki-write` Step 9. After all writes succeed, bundle every file this skill touched into a single commit. Stage by name (NEVER `git add -A` or `git add .`):
 
 ```bash
 git add \
@@ -368,7 +368,7 @@ Reproduce the commit-message tone, README-index row format, and diary note forma
 ## References
 
 - `docs/experiments/summaries/README.md` — folder operating contract (sections: Purpose, Filename convention, What goes inside, What's NOT here, Index, Conventions).
-- `.claude/skills/memorize/SKILL.md` — companion skill; same auto-commit pattern at Step 9.
+- `.claude/skills/wiki-write/SKILL.md` — companion skill; same auto-commit pattern at Step 9.
 - `.claude/skills/diary/SKILL.md` — companion skill; this skill calls the `note` subcommand.
 - `scripts/claude/diary_append.py` — diary helper script (see `--help` for arg details).
 - Project root `CLAUDE.md` — project-wide rules (no fallback defaults, conda env, auto-commit authorization, git safety).

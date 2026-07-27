@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture a point-in-time code-graph snapshot into docs/memory/code_snapshots/.
+"""Capture a point-in-time code-graph snapshot into docs/llm_wiki/code_snapshots/.
 
 Run:
     python scripts/snapshot_code_graph.py <label> [--scope src|all] [--no-regen] [--no-commit]
@@ -7,9 +7,9 @@ Run:
 Behavior:
 1. Unless --no-regen, run regen_code_graph.py to refresh the live graph.
 2. Read <repo_root>/<scope>/graphify-out/GRAPH_REPORT.md.
-3. Write to docs/memory/code_snapshots/YYYYMMDD_HHMM_<label>.md with a
+3. Write to docs/llm_wiki/code_snapshots/YYYYMMDD_HHMM_<label>.md with a
    frontmatter header.
-4. Update docs/memory/code_snapshots/README.md index.
+4. Update docs/llm_wiki/code_snapshots/README.md index.
 5. Unless --no-commit, stage + commit the snapshot and updated index.
 
 Idempotency: if the target filename already exists, append _2, _3, etc.
@@ -28,7 +28,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SNAPSHOTS_DIR = REPO_ROOT / "docs" / "memory" / "code_snapshots"
+SNAPSHOTS_DIR = REPO_ROOT / "docs" / "llm_wiki" / "code_snapshots"
 CONDA_PIP = "/home/vncuser/miniconda3/envs/grid_world_pain/bin/pip"
 
 
@@ -131,9 +131,9 @@ session_id: {session_id}
 
 Captured `{captured}` from commit `{short_sha}`.
 
-To compare with the current code state: `python scripts/regen_code_graph.py && diff {scope}/graphify-out/GRAPH_REPORT.md docs/memory/code_snapshots/{snapshot_filename}`.
+To compare with the current code state: `python scripts/regen_code_graph.py && diff {scope}/graphify-out/GRAPH_REPORT.md docs/llm_wiki/code_snapshots/{snapshot_filename}`.
 
-To re-enter the originating conversation: `python scripts/open_conversation.py {session_id}` (if the session was a `/memorize` invocation).
+To re-enter the originating conversation: `python scripts/open_conversation.py {session_id}` (if the session was a `/wiki-write` invocation).
 
 ---
 
@@ -149,7 +149,7 @@ def _update_readme(
     community_count: str,
     snapshot_filename: str,
 ) -> None:
-    """Prepend a row to the snapshots table in docs/memory/code_snapshots/README.md."""
+    """Prepend a row to the snapshots table in docs/llm_wiki/code_snapshots/README.md."""
     readme = SNAPSHOTS_DIR / "README.md"
     text = readme.read_text(encoding="utf-8")
 
@@ -174,7 +174,7 @@ def _update_readme(
         text = text[:insert_pos] + "\n" + new_row + after
 
     readme.write_text(text, encoding="utf-8")
-    print(f"Updated: docs/memory/code_snapshots/README.md")
+    print(f"Updated: docs/llm_wiki/code_snapshots/README.md")
 
 
 def _run_regen(scope: str) -> None:
@@ -204,7 +204,7 @@ def _git_commit(snapshot_path: Path, scope: str, label: str, short_sha: str,
     subprocess.run(stage_cmd, cwd=str(REPO_ROOT), check=True)
 
     commit_msg = (
-        f"docs(memory): \U0001f4ca code-graph snapshot — {label}\n\n"
+        f"docs(wiki): \U0001f4ca code-graph snapshot — {label}\n\n"
         f"Source commit: {short_sha}\n"
         f"Scope: {scope}\n"
         f"Stats: {node_count} nodes / {edge_count} edges / {community_count} communities\n\n"
@@ -236,7 +236,7 @@ def _git_commit(snapshot_path: Path, scope: str, label: str, short_sha: str,
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Capture a code-graph snapshot into docs/memory/code_snapshots/.",
+        description="Capture a code-graph snapshot into docs/llm_wiki/code_snapshots/.",
     )
     p.add_argument(
         "label",

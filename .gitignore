@@ -37,14 +37,14 @@ skills/notebooklm/data/
 skills/notebooklm/.venv/
 !skills/
 
-# Claude session-memory soft-delete bin (track placeholder, ignore the rest)
-docs/memory/.trash/*
-!docs/memory/.trash/.gitkeep
+# LLM Wiki soft-delete bin (track placeholder, ignore the rest)
+docs/llm_wiki/.trash/*
+!docs/llm_wiki/.trash/.gitkeep
 
-# (deprecated) Claude session-memory raw archives — superseded by claude_data/
+# (deprecated) LLM Wiki raw archives — superseded by claude_data/
 # (raw conversations are now read directly from the synced JSONL under
 #  claude_data/.claude/projects/<proj>/<UUID>.jsonl; the local _archive/
-#  directory was removed when /memorize Step 7 changed to point at the JSONL)
+#  directory was removed when /wiki-write Step 7 changed to point at the JSONL)
 
 # Skill eval workspaces — iteration outputs are transient
 .claude/skills/*-workspace/

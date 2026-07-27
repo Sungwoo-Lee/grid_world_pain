@@ -15,7 +15,7 @@ supersedes: []
 > **Author**: experiment-designer
 > **Related**:
 > - Idea memo (definitions + biological grounding): [`docs/project/ideas/20260510_behavior_measure_toolkit.md`](../../../project/ideas/20260510_behavior_measure_toolkit.md)
-> - Immediate motivating verdict: insight `20260510_2237_sameprop_round25_no_class_avoidance` ([file](../../../../docs/memory/memories/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md))
+> - Immediate motivating verdict: insight `20260510_2237_sameprop_round25_no_class_avoidance` ([file](../../../../docs/llm_wiki/entries/hypervigilance/20260510_2237_sameprop_round25_no_class_avoidance.md))
 > - Architectural precedent (per-tag distance): [`docs/develop/active/hypervigilance/per_quadrant_and_per_rabbit_logging.md`](../../../develop/active/hypervigilance/per_quadrant_and_per_rabbit_logging.md)
 > - Round 2.5 design (the toolkit's first paper-grade demonstration target): [`docs/experiments/active/hypervigilance/sameprop_round25_design.md`](../hypervigilance/sameprop_round25_design.md)
 

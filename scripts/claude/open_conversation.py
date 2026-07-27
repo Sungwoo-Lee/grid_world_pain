@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-MEMORIES_ROOT = ROOT / "docs" / "memory" / "memories"
+ENTRIES_ROOT = ROOT / "docs" / "llm_wiki" / "entries"
 
 # Insight ID pattern: YYYYMMDD_HHMM_<slug>
 INSIGHT_ID_RE = re.compile(r"^\d{8}_\d{4}_[a-z0-9_]+$")
@@ -53,10 +53,10 @@ def _parse_frontmatter(text: str) -> dict[str, str] | None:
 
 def _collect_all_insights() -> list[Path]:
     """Return all insight .md paths (excluding index files and archive)."""
-    if not MEMORIES_ROOT.is_dir():
+    if not ENTRIES_ROOT.is_dir():
         return []
     paths = []
-    for p in sorted(MEMORIES_ROOT.rglob("*.md")):
+    for p in sorted(ENTRIES_ROOT.rglob("*.md")):
         if p.name in ("_topic_index.md", "_global_tags.md"):
             continue
         parts = set(p.parts)
@@ -95,7 +95,7 @@ def _handle_insight(insight_path: Path, insight_id: str, all_paths: list[Path]) 
     raw_source = fm.get("raw_source", "").strip()
     folder = fm.get("folder", insight_path.parent.name)
 
-    print(f"Insight  : docs/memory/memories/{folder}/{insight_id}.md")
+    print(f"Insight  : docs/llm_wiki/entries/{folder}/{insight_id}.md")
 
     # Detect pre-sync / archive source
     if not raw_source or raw_source == "none":

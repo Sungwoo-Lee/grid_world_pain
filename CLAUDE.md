@@ -97,7 +97,7 @@ The **first body section** of any plan / design / analysis / summary / review / 
 In that entry-point section:
 
 - **Translate every cited result on first mention.** "The modulator did not beat the baseline (H₁a refuted)", not just "H₁a refuted". The English first; the symbol after, in parens.
-- **No bare WandB run IDs** like `f96lhxpe` — link through the design doc or memory insight that names them.
+- **No bare WandB run IDs** like `f96lhxpe` — link through the design doc or wiki entry that names them.
 - **No bare config paths** like `configs/models/recurrent_ppo/recurrent_ppo_nmn_het_film_g1.yaml` — describe what the config does ("the FiLM agent config with the modulator's temperature ceiling raised from 3.0 to 10.0") and link the path elsewhere.
 - **No bare predicate / shorthand names** (`H₁a`, `H₀`, `Δ_SS`, `Cand. A1`, `Phase 0`, `T/P split`, etc.) without a one-clause translation.
 - **Concrete examples beat abstract claims.** If the doc proposes "a 2-context mixture", show what the two contexts ARE — not just "context A vs. context B".
@@ -118,19 +118,19 @@ The rule applies to every new doc going forward. **Existing docs are not retroac
 
 ---
 
-## Session memory
+## LLM Wiki
 
-This project carries two memory layers; future-Claude must know which one to write to.
+This project carries two recall layers; future-Claude must know which one to write to. They are deliberately named apart: **Claude's built-in auto-memory** is the harness's own store, while the **LLM Wiki** is this repo's.
 
 - **Built-in auto-memory** at `~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/memory/MEMORY.md` — short typed rules another agent must obey on every invocation, with a sibling `feedback_*.md` per rule. User-and-machine-local; not under git.
-- **In-repo session memory** at `docs/memory/` — multi-section session insights with rationale, decisions, follow-ups, and an optional raw-conversation archive. Version-controlled with the repo.
+- **In-repo LLM Wiki** at `docs/llm_wiki/` — multi-section session insights with rationale, decisions, follow-ups, and an optional raw-conversation archive. Version-controlled with the repo.
 
-When memory work is requested, read `docs/memory/CLAUDE.md` (operating manual) and `docs/memory/ROOT_INDEX.md` (topic registry) before capturing or recalling. The division-of-labor decision rule and capture triggers live in `docs/memory/CLAUDE.md`; the design rationale and worked routing examples live in [docs/develop/active/meta/claude_memory_system_design.md](docs/develop/active/meta/claude_memory_system_design.md).
+When wiki work is requested, read `docs/llm_wiki/CLAUDE.md` (operating manual) and `docs/llm_wiki/ROOT_INDEX.md` (topic registry) before capturing or recalling. The division-of-labor decision rule and capture triggers live in `docs/llm_wiki/CLAUDE.md`; the design rationale and worked routing examples live in [docs/develop/active/meta/llm_wiki_system_design.md](docs/develop/active/meta/llm_wiki_system_design.md).
 
 ---
 
 ## Diary protocol
 
-The project keeps a daily event log at [docs/diary/YYYY-MM-DD.md](docs/diary/) — a single-glance status board across all parallel Claude sessions. **Update it whenever a notable event fires, even without an explicit user request.** Missing entries create invisible gaps when a parallel session looks at "what's happening today". Top-level Claude is responsible for `session-start` / `session-end` and `progress-report` on multi-step wrap-up; sub-agents fire their own subcommand on completion; `/memorize` chains `insight` rows automatically.
+The project keeps a daily event log at [docs/diary/YYYY-MM-DD.md](docs/diary/) — a single-glance status board across all parallel Claude sessions. **Update it whenever a notable event fires, even without an explicit user request.** Missing entries create invisible gaps when a parallel session looks at "what's happening today". Top-level Claude is responsible for `session-start` / `session-end` and `progress-report` on multi-step wrap-up; sub-agents fire their own subcommand on completion; `/wiki-write` chains `insight` rows automatically.
 
 The full contract — subcommand-to-event mapping, Session-column convention (full UUID vs. 8-char prefix, sub-agent `parent/role` form), link auto-formatting rules, and the per-call auto-commit pattern — lives in the `/diary` skill at [.claude/skills/diary/SKILL.md](.claude/skills/diary/SKILL.md). The skill calls `scripts/claude/diary_append.py`, which holds a `flock` so parallel sessions queue rather than clobber.

@@ -22,7 +22,7 @@ Configs are split by how stable/maintained they are:
   directions or findings that were later superseded (see the linked memory insights).
   - `conflict/` — eat-vs-flee spatial probe (earlier direction).
   - `hypervigilance/` — predator-vs-rabbit probes; the "hypervigilance" read was reversed as an
-    off-distribution artifact (`docs/memory/memories/hypervigilance/20260624_0517_*`).
+    off-distribution artifact (`docs/llm_wiki/entries/hypervigilance/20260624_0517_*`).
   - `nutrition_sweep/` — decay-1.0 sweep for the static-init model (off-distribution).
   - `nutrition_sweep_d2/` — decay-2.0 random-init sweep; superseded by `core/forage_nutrition/`.
 

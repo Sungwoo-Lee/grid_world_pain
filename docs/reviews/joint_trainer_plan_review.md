@@ -89,9 +89,9 @@ Reviewed by: code-reviewer
 
 - Plan under review: [`docs/develop/active/dreamer_srl_v2/joint_trainer_refactor_plan.md`](../develop/active/dreamer_srl_v2/joint_trainer_refactor_plan.md)
 - Math review (parallel; forward reference): `docs/reviews/joint_trainer_plan_math_review.md`
-- Canonical NNX-with-scan pattern: [`docs/memory/memories/dreamer_diagnosis/20260519_1509_nnx_lax_scan_split_merge_pattern.md`](../memory/memories/dreamer_diagnosis/20260519_1509_nnx_lax_scan_split_merge_pattern.md)
-- Triggering perf regression: [`docs/memory/memories/dreamer_diagnosis/20260519_1507_dreamer_srl_v2_cpu_buffer_regression.md`](../memory/memories/dreamer_diagnosis/20260519_1507_dreamer_srl_v2_cpu_buffer_regression.md)
-- 4-phase original-Dreamer retrofit history: [`docs/memory/memories/dreamer_diagnosis/20260519_1508_dreamer_jax_perf_retrofit_4_phases.md`](../memory/memories/dreamer_diagnosis/20260519_1508_dreamer_jax_perf_retrofit_4_phases.md)
+- Canonical NNX-with-scan pattern: [`docs/llm_wiki/entries/dreamer_diagnosis/20260519_1509_nnx_lax_scan_split_merge_pattern.md`](../memory/memories/dreamer_diagnosis/20260519_1509_nnx_lax_scan_split_merge_pattern.md)
+- Triggering perf regression: [`docs/llm_wiki/entries/dreamer_diagnosis/20260519_1507_dreamer_srl_v2_cpu_buffer_regression.md`](../memory/memories/dreamer_diagnosis/20260519_1507_dreamer_srl_v2_cpu_buffer_regression.md)
+- 4-phase original-Dreamer retrofit history: [`docs/llm_wiki/entries/dreamer_diagnosis/20260519_1508_dreamer_jax_perf_retrofit_4_phases.md`](../memory/memories/dreamer_diagnosis/20260519_1508_dreamer_jax_perf_retrofit_4_phases.md)
 - Working reference (proven-correct composite-trainer pattern): `src/models/dreamer_v3_trainer.py:685-833` (`_scan_train_gpu` + `train_multiple_gpu`)
 - Current dreamer-srl v2 grad-step block under refactor: `src/algorithms/dreamer_srl/dreamer_srl_main.py:860-1090`
 - L2 test fixture (will not be touched per Plan §line 209): `tests/algorithms/dreamer_srl/test_lax_scan_train.py:90-286`

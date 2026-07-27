@@ -13,7 +13,7 @@ phase: 1
 > **Doc role**: doubles as design doc + Launch Manifest (the user has pre-authorised proceeding through implementation and training launch on node 113 without further gates).
 > **Related**:
 >   - [`docs/project/concepts/dreamer_v3_implementation.md`](../../../project/concepts/dreamer_v3_implementation.md) §6 item 27 + §9.11.4 — the deviation this plan acts on.
->   - [`docs/memory/memories/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md`](../../../../docs/memory/memories/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md) — the empirical finding (reward MAE 0.39 vs threshold 0.15) this plan targets.
+>   - [`docs/llm_wiki/entries/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md`](../../../../docs/llm_wiki/entries/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md) — the empirical finding (reward MAE 0.39 vs threshold 0.15) this plan targets.
 >   - [`docs/experiments/active/dreamer_diagnosis/DREAMER_CONVENTIONAL_FIXES_BATTERY.md`](../../../experiments/active/dreamer_diagnosis/DREAMER_CONVENTIONAL_FIXES_BATTERY.md) — Cell A1 baseline (`czfnljf0`) this run is compared against.
 >   - [`docs/develop/active/diagnosis/dreamer_offline_wm_imagination_test.md`](./dreamer_offline_wm_imagination_test.md) — the offline diagnostic that produced the reward-head finding and will be re-run on this checkpoint.
 

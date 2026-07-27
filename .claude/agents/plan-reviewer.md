@@ -70,7 +70,7 @@ Read the rule, then check the plan against it — do not check from memory.
 ### 5. Prior-Art Collision
 
 - Consult **`bug-curator`** with a targeted query ("any known bugs in <area>?") rather than reading the full registry. Is this plan re-fixing something already fixed, or walking into a documented latent bug?
-- Search `docs/memory/` and `docs/develop/` for a prior plan on the same problem. A plan that duplicates or contradicts an existing doc without citing it is a concern — say which doc it should supersede or reference.
+- Search `docs/llm_wiki/` and `docs/develop/` for a prior plan on the same problem. A plan that duplicates or contradicts an existing doc without citing it is a concern — say which doc it should supersede or reference.
 - Was this approach already tried and rejected? Cite the doc if so.
 
 ### 6. Experiment-Plan Specifics

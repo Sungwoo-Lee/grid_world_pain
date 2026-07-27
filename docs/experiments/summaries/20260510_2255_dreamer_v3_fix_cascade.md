@@ -100,10 +100,10 @@ Table covers experiments from the predecessor summary (rows 0a–0d, marked *(pr
 
 ### Memory insights (per-finding rationale, methodology rules)
 
-- [20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry](../../../docs/memory/memories/dreamer_diagnosis/20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry.md) — Experiment 2 verdict + the residual-asymmetry mechanism that picked Experiment 3.
-- [20260510_2240_reference_impl_compare_only_act_intersections](../../../docs/memory/memories/subagent_engineering/20260510_2240_reference_impl_compare_only_act_intersections.md) — the rule for handling reference-impl comparisons.
-- [20260510_2241_residual_error_pattern_directs_next_fix](../../../docs/memory/memories/subagent_engineering/20260510_2241_residual_error_pattern_directs_next_fix.md) — the methodology rule for sequencing fixes via residual-error pattern matching.
-- *(prior — predecessor summary)* [20260509_1534_wm_reward_head_localized_failure_a1](../../../docs/memory/memories/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md), [20260509_1535_conventional_fixes_battery_verdict_predator_refute](../../../docs/memory/memories/dreamer_diagnosis/20260509_1535_conventional_fixes_battery_verdict_predator_refute.md), [20260508_1431_diagnostic_battery_refutes_four_fixes](../../../docs/memory/memories/dreamer_diagnosis/20260508_1431_diagnostic_battery_refutes_four_fixes.md), [20260508_1432_probe_refutes_imagined_death_absence](../../../docs/memory/memories/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md).
+- [20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry.md) — Experiment 2 verdict + the residual-asymmetry mechanism that picked Experiment 3.
+- [20260510_2240_reference_impl_compare_only_act_intersections](../../../docs/llm_wiki/entries/subagent_engineering/20260510_2240_reference_impl_compare_only_act_intersections.md) — the rule for handling reference-impl comparisons.
+- [20260510_2241_residual_error_pattern_directs_next_fix](../../../docs/llm_wiki/entries/subagent_engineering/20260510_2241_residual_error_pattern_directs_next_fix.md) — the methodology rule for sequencing fixes via residual-error pattern matching.
+- *(prior — predecessor summary)* [20260509_1534_wm_reward_head_localized_failure_a1](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260509_1534_wm_reward_head_localized_failure_a1.md), [20260509_1535_conventional_fixes_battery_verdict_predator_refute](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260509_1535_conventional_fixes_battery_verdict_predator_refute.md), [20260508_1431_diagnostic_battery_refutes_four_fixes](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260508_1431_diagnostic_battery_refutes_four_fixes.md), [20260508_1432_probe_refutes_imagined_death_absence](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260508_1432_probe_refutes_imagined_death_absence.md).
 
 ### Working files (raw analyzer extractions)
 
@@ -138,11 +138,11 @@ Table covers experiments from the predecessor summary (rows 0a–0d, marked *(pr
 ## 6. Reading order if you have 10 minutes
 
 1. **This document** (5 min) — gets you the headline finding (zero-init helps; paper-canonical bins is the next test, in flight) and what each Z2 outcome would mean.
-2. Memory insight [20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry](../../../docs/memory/memories/dreamer_diagnosis/20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry.md) — Experiment 2 verdict with the load-bearing pos/neg asymmetry numbers (3 min).
+2. Memory insight [20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry](../../../docs/llm_wiki/entries/dreamer_diagnosis/20260510_2239_z1_zero_init_h2_partial_pos_neg_asymmetry.md) — Experiment 2 verdict with the load-bearing pos/neg asymmetry numbers (3 min).
 3. The Verification Report section of [dreamer_zero_init_reward_critic_fix](../../develop/active/diagnosis/dreamer_zero_init_reward_critic_fix.md) — concrete A1-vs-Z1 metric tables and the per-channel breakdown (2 min).
 
 If you have 30 minutes, also read:
 
 - The §6 deviation list in [dreamer_v3_implementation](../../project/concepts/dreamer_v3_implementation.md) — items 2, 27–30 are the active candidates; the rest is context for what the cascade is working through.
 - The §9 sheeprl-comparison section in the same document — Experiment 1's full output, including the rows of the differences table that the cascade has not yet acted on.
-- The two methodology insights from this window — [20260510_2240_reference_impl_compare_only_act_intersections](../../../docs/memory/memories/subagent_engineering/20260510_2240_reference_impl_compare_only_act_intersections.md) and [20260510_2241_residual_error_pattern_directs_next_fix](../../../docs/memory/memories/subagent_engineering/20260510_2241_residual_error_pattern_directs_next_fix.md) — the rules for using external reference impls as comparators and for sequencing fixes by residual error.
+- The two methodology insights from this window — [20260510_2240_reference_impl_compare_only_act_intersections](../../../docs/llm_wiki/entries/subagent_engineering/20260510_2240_reference_impl_compare_only_act_intersections.md) and [20260510_2241_residual_error_pattern_directs_next_fix](../../../docs/llm_wiki/entries/subagent_engineering/20260510_2241_residual_error_pattern_directs_next_fix.md) — the rules for using external reference impls as comparators and for sequencing fixes by residual error.

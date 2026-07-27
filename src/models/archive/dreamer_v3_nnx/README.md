@@ -9,7 +9,7 @@ JAX/Flax-NNX world-model agent that was trained through the shared `train.py` en
 point. It was **abandoned as a research vehicle on 2026-05-11**, when a PI call
 pivoted the world-model line to a direct port of the reference sheeprl
 implementation. The pivot decision is recorded in the memory insight
-[sheeprl direct pivot, JAX Dreamer abandoned (2026-05-12)](../../../../docs/memory/memories/dreamer_diagnosis/20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned.md).
+[sheeprl direct pivot, JAX Dreamer abandoned (2026-05-12)](../../../../docs/llm_wiki/entries/dreamer_diagnosis/20260512_1754_sheeprl_direct_pivot_jax_dreamer_abandoned.md).
 
 The stack was physically archived because it kept attracting real engineering effort
 by accident: in the week of 2026-07-06 an entire recipe-alignment fix batch — seven

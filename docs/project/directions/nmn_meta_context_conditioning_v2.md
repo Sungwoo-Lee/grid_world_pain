@@ -12,7 +12,7 @@
 - The two existing sameProp configs: `configs/experiment/hypervigilance/01-interoNocicept_sameProp.yaml`, `configs/experiment/hypervigilance/02-sameProp_R2_passivePredator.yaml`.
 - The non-sameProp default: `configs/experiment/hypervigilance/01-interoNocicept.yaml`.
 - Verification harness: `configs/verification/olfaction_parity_predator.yaml`, `configs/verification/olfaction_parity_neutral.yaml`.
-- Round 2 sameProp partial verdict: `docs/memory/memories/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md`.
+- Round 2 sameProp partial verdict: `docs/llm_wiki/entries/hypervigilance/20260509_1532_sameprop_round2_truncated_verdict.md`.
 
 ---
 

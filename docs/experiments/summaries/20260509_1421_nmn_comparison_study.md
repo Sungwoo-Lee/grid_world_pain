@@ -69,12 +69,12 @@ Performance is measured in **survival steps** (project rule), never cumulative r
 
 Each insight carries the full reasoning behind its conclusion and explicitly names what it supersedes / refines:
 
-- [20260508_1426_v8_noise_bug_refuted](../../../docs/memory/memories/nmn_diagnosis/20260508_1426_v8_noise_bug_refuted.md) — pre-experiment-1 audit closed a v8-flagged config bug as not present in current code.
-- [20260508_1427_nmn_heterogeneity_sweep_design](../../../docs/memory/memories/nmn_diagnosis/20260508_1427_nmn_heterogeneity_sweep_design.md) — Experiment 1 design rationale (matched-mean σ, R-gradient).
-- [20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse](../../../docs/memory/memories/nmn_diagnosis/20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse.md) — Experiment 1 verdict.
-- [20260508_2004_profile_dependent_temp_saturation_mc_film](../../../docs/memory/memories/nmn_diagnosis/20260508_2004_profile_dependent_temp_saturation_mc_film.md) — Experiment 1 mechanism finding (the ceiling-saturation that motivated Experiment 2).
-- [20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4](../../../docs/memory/memories/nmn_diagnosis/20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4.md) — Experiment 2 verdict, including the partial-binder reframing of Experiment 1.
-- [20260509_1410_nmn_temp_head_natural_target_3_to_5](../../../docs/memory/memories/nmn_diagnosis/20260509_1410_nmn_temp_head_natural_target_3_to_5.md) — Experiment 2 mechanism finding (the temperature head's natural target sits in `[3.0, 5.0)`; basis for the canonical-config fix).
+- [20260508_1426_v8_noise_bug_refuted](../../../docs/llm_wiki/entries/nmn_diagnosis/20260508_1426_v8_noise_bug_refuted.md) — pre-experiment-1 audit closed a v8-flagged config bug as not present in current code.
+- [20260508_1427_nmn_heterogeneity_sweep_design](../../../docs/llm_wiki/entries/nmn_diagnosis/20260508_1427_nmn_heterogeneity_sweep_design.md) — Experiment 1 design rationale (matched-mean σ, R-gradient).
+- [20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse](../../../docs/llm_wiki/entries/nmn_diagnosis/20260508_2003_nmn_heterogeneity_sweep_verdict_film_worse.md) — Experiment 1 verdict.
+- [20260508_2004_profile_dependent_temp_saturation_mc_film](../../../docs/llm_wiki/entries/nmn_diagnosis/20260508_2004_profile_dependent_temp_saturation_mc_film.md) — Experiment 1 mechanism finding (the ceiling-saturation that motivated Experiment 2).
+- [20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4](../../../docs/llm_wiki/entries/nmn_diagnosis/20260509_1409_nmn_tempceil10_verdict_h1b_confirmed_p4.md) — Experiment 2 verdict, including the partial-binder reframing of Experiment 1.
+- [20260509_1410_nmn_temp_head_natural_target_3_to_5](../../../docs/llm_wiki/entries/nmn_diagnosis/20260509_1410_nmn_temp_head_natural_target_3_to_5.md) — Experiment 2 mechanism finding (the temperature head's natural target sits in `[3.0, 5.0)`; basis for the canonical-config fix).
 
 ### Working files (raw analyzer extractions, intermediate notes)
 

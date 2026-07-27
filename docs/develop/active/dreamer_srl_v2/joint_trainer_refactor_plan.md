@@ -14,11 +14,11 @@ phase: 3
 > **Opened**: 2026-05-20
 > **Related**:
 > - Triggering finding: [`docs/develop/active/dreamer_srl_v2/buffer_perf_fix_plan_option_L.md`](buffer_perf_fix_plan_option_L.md) §Step 3 — the current 7-module decomposition makes the scanned grad-step loop **~70× SLOWER** than the Python for-loop, with a CUDA-graph memory leak.
-> - Perf-regression diagnosis: [`docs/memory/memories/dreamer_diagnosis/20260519_1507_dreamer_srl_v2_cpu_buffer_regression.md`](../../../memory/memories/dreamer_diagnosis/20260519_1507_dreamer_srl_v2_cpu_buffer_regression.md)
-> - The 4-phase retrofit that fixed the same class of bug on the original JAX Dreamer: [`docs/memory/memories/dreamer_diagnosis/20260519_1508_dreamer_jax_perf_retrofit_4_phases.md`](../../../memory/memories/dreamer_diagnosis/20260519_1508_dreamer_jax_perf_retrofit_4_phases.md)
-> - The `nnx.split / nnx.merge` rule-set this plan inherits: [`docs/memory/memories/dreamer_diagnosis/20260519_1509_nnx_lax_scan_split_merge_pattern.md`](../../../memory/memories/dreamer_diagnosis/20260519_1509_nnx_lax_scan_split_merge_pattern.md)
-> - The parity-pass discipline this plan extends: [`docs/memory/memories/dreamer_diagnosis/20260518_1511_dreamer_srl_v2_parity_pass_outperform.md`](../../../memory/memories/dreamer_diagnosis/20260518_1511_dreamer_srl_v2_parity_pass_outperform.md)
-> - The Strong A+B+C+D audit-chain discipline: [`docs/memory/memories/dreamer_diagnosis/20260513_2308_strong_strategy_validates_on_cp1.md`](../../../memory/memories/dreamer_diagnosis/20260513_2308_strong_strategy_validates_on_cp1.md)
+> - Perf-regression diagnosis: [`docs/llm_wiki/entries/dreamer_diagnosis/20260519_1507_dreamer_srl_v2_cpu_buffer_regression.md`](../../../memory/memories/dreamer_diagnosis/20260519_1507_dreamer_srl_v2_cpu_buffer_regression.md)
+> - The 4-phase retrofit that fixed the same class of bug on the original JAX Dreamer: [`docs/llm_wiki/entries/dreamer_diagnosis/20260519_1508_dreamer_jax_perf_retrofit_4_phases.md`](../../../memory/memories/dreamer_diagnosis/20260519_1508_dreamer_jax_perf_retrofit_4_phases.md)
+> - The `nnx.split / nnx.merge` rule-set this plan inherits: [`docs/llm_wiki/entries/dreamer_diagnosis/20260519_1509_nnx_lax_scan_split_merge_pattern.md`](../../../memory/memories/dreamer_diagnosis/20260519_1509_nnx_lax_scan_split_merge_pattern.md)
+> - The parity-pass discipline this plan extends: [`docs/llm_wiki/entries/dreamer_diagnosis/20260518_1511_dreamer_srl_v2_parity_pass_outperform.md`](../../../memory/memories/dreamer_diagnosis/20260518_1511_dreamer_srl_v2_parity_pass_outperform.md)
+> - The Strong A+B+C+D audit-chain discipline: [`docs/llm_wiki/entries/dreamer_diagnosis/20260513_2308_strong_strategy_validates_on_cp1.md`](../../../memory/memories/dreamer_diagnosis/20260513_2308_strong_strategy_validates_on_cp1.md)
 > - Working reference (the proven-correct composite-trainer pattern): `src/models/dreamer_v3_trainer.py:685-833` (the `_scan_train_gpu` body + `train_multiple_gpu` driver).
 
 ---

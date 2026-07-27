@@ -68,6 +68,6 @@ Multi-env throughput scales strongly from envs=1 to envs=4: **+205% SPS gain** (
 ## §6 Open Follow-ups
 
 1. **Envs=8 and envs=16 training-SPS**: re-run with `--total-steps 20000` to clear the `N × 1024` prefill requirement for all cells. The prefill-only SPS (314 for envs=8, 274 for envs=16) shows fast env-step throughput but no GPU gradient utilization.
-2. **GPU memory peak**: no peak-memory capture was done. Add `nvidia-smi` polling during the run or use `XLA_PYTHON_CLIENT_PREALLOCATE=false` memory reporting to capture this in a future sweep.
+2. **GPU memory peak**: no peak-wiki capture was done. Add `nvidia-smi` polling during the run or use `XLA_PYTHON_CLIENT_PREALLOCATE=false` memory reporting to capture this in a future sweep.
 3. **Scaling plateau**: with envs=4 at 20.1 SPS and the env-step loop suspected to be single-threaded (per the earlier JAX vector-env benchmark finding), a plateau around envs=4–8 is expected. Confirm by running envs=8 with adequate budget.
 4. **v2 vs v1 SPS anomaly at envs=1**: v2 is 15% slower than v1 at envs=1. This may reflect the corrected config's smaller batch or different optimizer schedule. Worth a targeted investigation if single-env training is used for ablations.

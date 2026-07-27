@@ -75,13 +75,13 @@ The dependency map tells us *who calls* each file; this section adds *what each 
 |---|---|
 | `diary_append.py` | Appends an event row to `docs/diary/YYYY-MM-DD.md`. **Most-wired dependency in the repo (7 callers).** |
 | `regen_dev_index.py` | Regenerates `docs/develop/INDEX.md` from frontmatter. |
-| `regen_memory_links.py` | Rewrites `related:` frontmatter from `[[id]]` wikilinks in memory bodies. |
-| `regen_memory_graph.py` | Builds the memory insight+session graph + per-insight backlinks. |
+| `regen_wiki_links.py` | Rewrites `related:` frontmatter from `[[id]]` wikilinks in memory bodies. |
+| `regen_wiki_graph.py` | Builds the memory insight+session graph + per-insight backlinks. |
 | `regen_code_graph.py` | Wrapper around `graphify` producing `GRAPH_REPORT.md` (output gitignored). |
-| `snapshot_code_graph.py` | Captures a point-in-time code-graph snapshot under `docs/memory/`. |
+| `snapshot_code_graph.py` | Captures a point-in-time code-graph snapshot under `docs/llm_wiki/`. |
 | `claude_jsonl_to_md.py` | Converts a Claude Code transcript JSONL to a markdown archive. |
 | `open_conversation.py` | Resolves an insight/session ID to its source JSONL + restore commands. |
-| `lint_memory.py` | Read-only 11-check lint of `docs/memory/`. |
+| `lint_wiki.py` | Read-only 11-check lint of `docs/llm_wiki/`. |
 
 **`scripts/lab/` — lab-node training-launch shell scripts**
 | File | What it does |
@@ -126,9 +126,9 @@ scripts/
   eval/             (NEW) eval_rollout, render_recordings, trajectory_story, motif_cluster, benchmark_render
   dreamer/          (NEW) dreamer_offline_wm_test, dreamer_srl_offline_wm_test,
                           dreamer_srl_offline_check, sheeprl_jax_diff, visualize_dream
-  claude/           (NEW) diary_append, regen_dev_index, regen_memory_links, regen_memory_graph,
+  claude/           (NEW) diary_append, regen_dev_index, regen_wiki_links, regen_wiki_graph,
                           regen_code_graph, snapshot_code_graph, claude_jsonl_to_md,
-                          open_conversation, lint_memory
+                          open_conversation, lint_wiki
   lab/              (NEW) launch_sheeprl.sh, bootstrap_lab_ssh.sh
   media/            (NEW) record_env_demo, video_to_gif, md_to_pdf
   fixtures/         (exists) gen_cp1..8 + generate_parity_fixtures
@@ -181,15 +181,15 @@ Legend for "Depth fix": the exact line whose `parent.parent` / double-`dirname` 
 | `scripts/dreamer_srl_offline_check.py` | `scripts/dreamer/dreamer_srl_offline_check.py` | L81 `dirname(dirname(...))` -> add one `dirname` | **TEST** `tests/algorithms/dreamer_srl/test_end_to_end_parity.py:48` subprocess path |
 | `scripts/sheeprl_jax_diff.py` | `scripts/dreamer/sheeprl_jax_diff.py` | ~30 `dirname(dirname(...))` occurrences (grep `os.path.dirname(os.path.dirname(os.path.abspath(__file__)))`) -> add one `dirname` **each** | docs/tests-README mentions (non-breaking) |
 | `scripts/visualize_dream.py` | `scripts/dreamer/visualize_dream.py` | L76 `Path(__file__).parent.parent.resolve()` -> add one `.parent` | none |
-| `scripts/diary_append.py` | `scripts/claude/diary_append.py` | L66 `parent.parent` -> `parents[2]` | **7 callers** — skills `diary`, `memorize`(L182), `summarize-study`(L279,L373); agents `developer`(L94), `senior-developer`(L97), `experiment-analyzer`(L114), `training-runner`(L286) |
+| `scripts/diary_append.py` | `scripts/claude/diary_append.py` | L66 `parent.parent` -> `parents[2]` | **7 callers** — skills `diary`, `wiki-write`(L182), `summarize-study`(L279,L373); agents `developer`(L94), `senior-developer`(L97), `experiment-analyzer`(L114), `training-runner`(L286) |
 | `scripts/regen_dev_index.py` | `scripts/claude/regen_dev_index.py` | L21 `parent.parent` -> `parents[2]` | `senior-developer` agent L52; contracts `CLAUDE.md` L62, `AGENT_PLAYBOOK.md` L144, `FRONTMATTER_CONTRACT.md`; negative mentions in `experiment-analyzer`/`experiment-designer` |
-| `scripts/regen_memory_links.py` | `scripts/claude/regen_memory_links.py` | L11 `parent.parent` -> `parents[2]` | `memorize` skill L198; `docs/memory/CLAUDE.md` |
-| `scripts/regen_memory_graph.py` | `scripts/claude/regen_memory_graph.py` | L20 `parent.parent` -> `parents[2]` | `memorize` skill L248 |
-| `scripts/regen_code_graph.py` | `scripts/claude/regen_code_graph.py` | L103 `parent.parent` -> `parents[2]` | on-demand hints: `recall` skill L53, `senior-developer`/`code-reviewer` agents, README |
-| `scripts/snapshot_code_graph.py` | `scripts/claude/snapshot_code_graph.py` | L30 `parent.parent` -> `parents[2]` | `memorize` skill L34,L79 |
-| `scripts/claude_jsonl_to_md.py` | `scripts/claude/claude_jsonl_to_md.py` | none | `memorize` skill L40,L156,L280 |
+| `scripts/regen_wiki_links.py` | `scripts/claude/regen_wiki_links.py` | L11 `parent.parent` -> `parents[2]` | `wiki-write` skill L198; `docs/llm_wiki/CLAUDE.md` |
+| `scripts/regen_wiki_graph.py` | `scripts/claude/regen_wiki_graph.py` | L20 `parent.parent` -> `parents[2]` | `wiki-write` skill L248 |
+| `scripts/regen_code_graph.py` | `scripts/claude/regen_code_graph.py` | L103 `parent.parent` -> `parents[2]` | on-demand hints: `wiki-read` skill L53, `senior-developer`/`code-reviewer` agents, README |
+| `scripts/snapshot_code_graph.py` | `scripts/claude/snapshot_code_graph.py` | L30 `parent.parent` -> `parents[2]` | `wiki-write` skill L34,L79 |
+| `scripts/claude_jsonl_to_md.py` | `scripts/claude/claude_jsonl_to_md.py` | none | `wiki-write` skill L40,L156,L280 |
 | `scripts/open_conversation.py` | `scripts/claude/open_conversation.py` | L20 `parent.parent` -> `parents[2]` | design-doc mention |
-| `scripts/lint_memory.py` | `scripts/claude/lint_memory.py` | L15 `parent.parent` -> `parents[2]` | `docs/memory/CLAUDE.md` mention |
+| `scripts/lint_wiki.py` | `scripts/claude/lint_wiki.py` | L15 `parent.parent` -> `parents[2]` | `docs/llm_wiki/CLAUDE.md` mention |
 | `scripts/launch_sheeprl.sh` | `scripts/lab/launch_sheeprl.sh` | check shell `cd`/dir logic (not Python depth) | `training-runner` agent L16; `run_command.py` docstrings L26,L126; `pytorch_agents/run_dreamer_v3.py:10` docstring |
 | `scripts/bootstrap_lab_ssh.sh` | `scripts/lab/bootstrap_lab_ssh.sh` | check shell dir logic | `training-runner` agent L81 |
 | `scripts/record_env_demo.py` | `scripts/media/record_env_demo.py` | L8 `dirname(dirname(...))` -> add one `dirname` | README usage block |
@@ -220,10 +220,10 @@ These two one-shots have completed their job (their docstrings declare them disp
 | `tests/algorithms/dreamer_srl/test_end_to_end_parity.py` (L48) | subprocess path to moved `dreamer_srl_offline_check` |
 | `.claude/skills/wandb-analysis/SKILL.md` | `PYTHONPATH` + `wandb_metrics.py`/`compare_wandb_runs.py` paths |
 | `.claude/skills/trajectory-story/SKILL.md` (incl. L60) | `eval_rollout`/`render_recordings`/`trajectory_story` paths |
-| `.claude/skills/memorize/SKILL.md` (L34,40,79,156,182,198,248,280) | `regen_memory_*`, `snapshot_code_graph`, `claude_jsonl_to_md`, `diary_append` paths |
+| `.claude/skills/wiki-write/SKILL.md` (L34,40,79,156,182,198,248,280) | `regen_wiki_*`, `snapshot_code_graph`, `claude_jsonl_to_md`, `diary_append` paths |
 | `.claude/skills/summarize-study/SKILL.md` (L279,373) | `diary_append` path |
 | `.claude/skills/diary/SKILL.md` | `diary_append` path |
-| `.claude/skills/recall/SKILL.md` (L53) | `regen_code_graph` hint |
+| `.claude/skills/wiki-read/SKILL.md` (L53) | `regen_code_graph` hint |
 | `.claude/agents/developer.md` (L94) | `diary_append` command |
 | `.claude/agents/senior-developer.md` (L52,L97) | `regen_dev_index` + `diary_append` commands |
 | `.claude/agents/experiment-analyzer.md` (L59,L114) | `eval_rollout`/`trajectory_story` + `diary_append` |
@@ -235,7 +235,7 @@ These two one-shots have completed their job (their docstrings declare them disp
 | `CLAUDE.md` (L62) | `regen_dev_index` contract path |
 | `docs/AGENT_PLAYBOOK.md` (L144) | `regen_dev_index` contract path |
 | `docs/develop/active/meta/FRONTMATTER_CONTRACT.md` | `regen_dev_index` contract path |
-| `docs/memory/CLAUDE.md` | `regen_memory_links`, `lint_memory` mentions |
+| `docs/llm_wiki/CLAUDE.md` | `regen_wiki_links`, `lint_wiki` mentions |
 | `docs/environment/12_renderer.md` | `render_recordings.py` path + internal line citations (L31/L45) |
 | **`docs/environment/SCRIPTS_DEPENDENCY_MAP.md`** | **MANDATORY (Maintenance Contract):** rewrite §1-§5 tables with the new paths + line numbers |
 | **`scripts/README.md`** | **MANDATORY:** update the demo/GIF usage blocks to `scripts/media/...`; refresh the folder-layout description |
@@ -256,7 +256,7 @@ The migration runs **one folder at a time** (a phase), each phase committed sepa
 - [x] **Phase 4 — `scripts/claude/`.** Committed 2026-06-30 (`8253952`). `git mv` 9 dev-tooling files; depth fixes applied (landed in Phase 7 commit due to staging gap). Updated all skill/agent/contract references. `regen_dev_index.py` exits 0; `diary_append.py` resolves repo root correctly.
 - [x] **Phase 5 — `scripts/lab/` + `scripts/media/`.** Committed 2026-06-30 (`81d874c`). `git mv` 2 shell + 3 media files; depth fix applied to `record_env_demo.py`. Updated `training-runner` agent, `run_command.py`/`run_dreamer_v3.py` docstrings, README media block.
 - [x] **Phase 6 — additions to existing folders + deletions.** Committed 2026-06-30 (`f538809`). `git mv generate_parity_fixtures.py fixtures/` (depth fix applied); `git mv verify_noise.py verification/`; `git mv analyze_noise_diagnostics.py verification/`. `git rm` both one-shots confirmed with no live callers.
-- [x] **Phase 7 — map + README + global sweep.** Committed 2026-06-30 (`f82b86e`). Rewrote SCRIPTS_DEPENDENCY_MAP.md §1-§5; finalized scripts/README.md; patched remaining stale references found by grep sweep. Zero stale flat-`scripts/<file>` paths remain in operational files (only frozen eval-workspace snapshots in `.claude/skills/memorize-workspace/` retain old paths — these are non-operational historical artifacts).
+- [x] **Phase 7 — map + README + global sweep.** Committed 2026-06-30 (`f82b86e`). Rewrote SCRIPTS_DEPENDENCY_MAP.md §1-§5; finalized scripts/README.md; patched remaining stale references found by grep sweep. Zero stale flat-`scripts/<file>` paths remain in operational files (only frozen eval-workspace snapshots in `.claude/skills/wiki-write-workspace/` retain old paths — these are non-operational historical artifacts).
 - [x] **Phase 8 — full test pass.** `test_end_to_end_parity.py` PASSED; `test_offline_wm_smoke` has pre-existing failure (RuntimeError: only 36 valid starting states, not caused by reorg). `diary_append.py` REPO_ROOT verified correct. No speed regression (pure relocation — no hot-path code changed).
 
 ## Decisions — Resolved (settled 2026-06-30)
@@ -284,7 +284,7 @@ All four are closed. Outcomes summarized at the top under [Decisions (settled 20
 
 **Phase 3 (`scripts/dreamer/`):** Moved 5 files. Depth fixes: `dreamer_offline_wm_test.py` L73, `dreamer_srl_offline_wm_test.py` L65, `dreamer_srl_offline_check.py` L81, `visualize_dream.py` L76. `sheeprl_jax_diff.py`: 29 occurrences of `dirname(dirname(abspath(__file__)))` replaced via `replace_all` + 1 additional at L630 (different form `os.path.join(dirname(dirname(...)))`). Edited test files: `tests/scripts/test_dreamer_srl_offline_wm_test.py:107` (import), `tests/algorithms/dreamer_srl/test_end_to_end_parity.py:48` (subprocess path). Commit `d2f6102`.
 
-**Phase 4 (`scripts/claude/`):** Moved 9 files (`diary_append.py`, `regen_dev_index.py`, `regen_memory_links.py`, `regen_memory_graph.py`, `regen_code_graph.py`, `snapshot_code_graph.py`, `claude_jsonl_to_md.py`, `open_conversation.py`, `lint_memory.py`). Depth fixes applied to all 8 files that have root walking (all except `claude_jsonl_to_md.py`). NOTE: the depth fixes were staged in Phase 7 commit due to a staging gap at Phase 4 commit time (Phase 4 commit showed `| 0` for all these files — the moves were committed but the edits weren't). Updated: 6 agent profiles (`code-reviewer`, `developer`, `experiment-analyzer`, `experiment-designer`, `senior-developer`, `training-runner`), 4 skill docs (`diary`, `memorize`, `recall`, `summarize-study`), and 5 contract docs (`CLAUDE.md` ×2 occurrences, `AGENT_PLAYBOOK.md`, `FRONTMATTER_CONTRACT.md`, `docs/memory/CLAUDE.md`). Commits `8253952` (moves) + `f82b86e` (depth fixes).
+**Phase 4 (`scripts/claude/`):** Moved 9 files (`diary_append.py`, `regen_dev_index.py`, `regen_wiki_links.py`, `regen_wiki_graph.py`, `regen_code_graph.py`, `snapshot_code_graph.py`, `claude_jsonl_to_md.py`, `open_conversation.py`, `lint_wiki.py`). Depth fixes applied to all 8 files that have root walking (all except `claude_jsonl_to_md.py`). NOTE: the depth fixes were staged in Phase 7 commit due to a staging gap at Phase 4 commit time (Phase 4 commit showed `| 0` for all these files — the moves were committed but the edits weren't). Updated: 6 agent profiles (`code-reviewer`, `developer`, `experiment-analyzer`, `experiment-designer`, `senior-developer`, `training-runner`), 4 skill docs (`diary`, `wiki-write`, `wiki-read`, `summarize-study`), and 5 contract docs (`CLAUDE.md` ×2 occurrences, `AGENT_PLAYBOOK.md`, `FRONTMATTER_CONTRACT.md`, `docs/llm_wiki/CLAUDE.md`). Commits `8253952` (moves) + `f82b86e` (depth fixes).
 
 **Phase 5 (`scripts/lab/` + `scripts/media/`):** Moved `launch_sheeprl.sh`, `bootstrap_lab_ssh.sh` → `lab/`; `record_env_demo.py` (+ depth fix), `video_to_gif.py`, `md_to_pdf.py` → `media/`. Updated `training-runner.md`, `run_command.py` (docstrings L26+L126), `pytorch_agents/run_dreamer_v3.py` (docstring L10), `scripts/README.md` (usage blocks). Updated self-referential usage comments in both shell scripts. Commit `81d874c`.
 

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Where `docs/experiments/active/` carries the **detailed design + results** for each individual experiment, and `docs/memory/memories/` carries the **per-finding multi-section insights**, this folder carries **study-level summaries**:
+Where `docs/experiments/active/` carries the **detailed design + results** for each individual experiment, and `docs/llm_wiki/entries/` carries the **per-finding multi-section insights**, this folder carries **study-level summaries**:
 
 - A single document that names every experiment in a study (e.g., "the NMN comparison study"), the question each one tested, what was found, and what changed about our understanding.
 - Written for a reader who has **not seen the detailed plans** — explanations are in plain language, no `H₁a / H₁b / H₁c` jargon without translation, no bare WandB IDs, no bare config paths.
@@ -18,7 +18,7 @@ The pattern matches `docs/diary/README.md` in spirit: this folder is an **index 
 YYYYMMDD_HHMM_<slug>.md
 ```
 
-- `YYYYMMDD_HHMM` = generation timestamp (Asia/Seoul), to the minute. Matches the `docs/memory/` insight filename convention.
+- `YYYYMMDD_HHMM` = generation timestamp (Asia/Seoul), to the minute. Matches the `docs/llm_wiki/` insight filename convention.
 - `<slug>` = English snake_case, ≤ ~6 words, identifies the study (e.g., `nmn_comparison_study`, `dreamer_v3_diagnosis`, `hypervigilance_round3`).
 
 The timestamp anchors the summary to a specific moment in the project's history. Re-running a summary on the same study after new experiments land is encouraged — write a new file with a fresh timestamp; do **not** edit an old summary in place. The index below shows which summaries exist; older summaries remain readable as snapshots of what we knew at the time.
@@ -45,7 +45,7 @@ A summary that is missing the Links section is broken — the whole point is als
 ## What's NOT here
 
 - The full design + results for each individual experiment → `docs/experiments/active/<topic>/<doc>.md`.
-- Per-finding insights with rationale and rejected alternatives → `docs/memory/memories/<topic>/<id>.md`.
+- Per-finding insights with rationale and rejected alternatives → `docs/llm_wiki/entries/<topic>/<id>.md`.
 - Implementation plans → `docs/develop/active/<topic>/<plan>.md`.
 - Daily event log (start/end of session, training-start/done, insight rows) → `docs/diary/YYYY-MM-DD.md`.
 

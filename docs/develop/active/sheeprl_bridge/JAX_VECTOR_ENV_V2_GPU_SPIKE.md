@@ -242,7 +242,7 @@ Read SPS from the LAST `Time/sps_env_interaction` value in each run's WandB summ
 
 - **GO (≥ 960)**: spike succeeds. Close the spike. Plan v2.1 for accumulator preservation + production configs + per-env seed + terminated/truncated split (the existing v1 v2-backlog items).
 - **Close-miss [768, 960]**: re-run G3 at `total_steps=3000` on the same hardware. If the re-run hits ≥ 960 → GO (JIT-compile cost was the bottleneck, amortized away). If still < 960 → FAIL.
-- **FAIL (< 768, or close-miss re-run still < 960)**: STOP. Write a memory insight under `docs/memory/dreamer_diagnosis/` titled "JAX-vmap-GPU also misses 1.5× — boundary cost dominates". Mark this spike doc as superseded with a `superseded_by:` pointing to the memory-insight path. Escalate to user with the option-(b) DLPack plan as a possible follow-up spike, but **do not implement it without explicit user approval**.
+- **FAIL (< 768, or close-miss re-run still < 960)**: STOP. Write a memory insight under `docs/llm_wiki/dreamer_diagnosis/` titled "JAX-vmap-GPU also misses 1.5× — boundary cost dominates". Mark this spike doc as superseded with a `superseded_by:` pointing to the memory-insight path. Escalate to user with the option-(b) DLPack plan as a possible follow-up spike, but **do not implement it without explicit user approval**.
 
 ---
 

@@ -115,8 +115,8 @@ steps). This is the justification for `smoothing_episodes = 5000`:
 > **⚠️ Stale memory to correct.** The memory insight
 > `20260529_1825_log_interval_anchored_rows_per_session` quotes "~38 SPS, 20–40k eps/24h". That
 > was measured at `replay_ratio=1`. Our current runs use `replay_ratio=0.0625`, which is ~4×
-> faster (147 SPS, ~131k eps/24h). **Follow-up:** ask `/memorize` (or `bug-curator`-style
-> curation of the memory layer) to append a correction to that insight. Any reasoning that
+> faster (147 SPS, ~131k eps/24h). **Follow-up:** ask `/wiki-write` (or `bug-curator`-style
+> curation of the LLM Wiki) to append a correction to that insight. Any reasoning that
 > derives a log cadence from the old figures will be wrong by ~4×.
 
 ### Why spread, not just mean
@@ -947,7 +947,7 @@ smoke, so take a low-tier card):
 - **Correct the stale memory.** `20260529_1825_log_interval_anchored_rows_per_session` quotes
   ~38 SPS / 20–40k eps/24h from a `replay_ratio=1` run. Current runs at `replay_ratio=0.0625` do
   147 SPS / ~131k eps/24h — ~4× faster. Anyone deriving a cadence from the old numbers will be off
-  by 4×. Append a correction via `/memorize`.
+  by 4×. Append a correction via `/wiki-write`.
 - **Migrate the existing Dreamer configs.** `configs/models/dreamer_srl/01_food_only_buf256k.yaml`
   and its `_log5k` / `_log50k` siblings exist *only* to sweep `log_interval`. Once the `logging:`
   block is live and the noise/volume axes are separate, that sweep is obsolete and those variant

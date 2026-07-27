@@ -75,13 +75,13 @@ These three should be cheap (one is a 5k-step re-run, one is a flag toggle, one 
 
 ### For shipping the structural win to memory
 
-A session-insight should be captured under `docs/memory/memories/dreamer_diagnosis/` documenting the distinction the implementation revealed:
+A session-insight should be captured under `docs/llm_wiki/entries/dreamer_diagnosis/` documenting the distinction the implementation revealed:
 
 - **The originally hypothesized cause** (seven-module decomposition → seven splits/merges per iteration → 70× slowdown + memory leak) was a partial story. JointTrainer fixed the pytree-shape side cleanly (L2 5/5 at `atol=1e-5`) but did not deliver the measured SPS win.
 - **The dominant cost** turned out to be XLA-GPU compile time on the full Dreamer-V3 train-step body inside `lax.scan` — a compile pathology distinct from the module-count cost.
 - This is a useful diagnostic distinction for any future "scan path is slow" investigation: separate "pytree-shape cost" (visible in `nnx.split/merge` count + traversal depth) from "compile cost" (visible in JAX_LOG_COMPILES output + HLO size).
 
-Recommend `/memorize` capture this with title `dreamer_srl_v2_xla_compile_distinct_from_module_count` (or similar), cross-linking the plan + this verification doc + the deferred follow-up experiments.
+Recommend `/wiki-write` capture this with title `dreamer_srl_v2_xla_compile_distinct_from_module_count` (or similar), cross-linking the plan + this verification doc + the deferred follow-up experiments.
 
 ## Cross-links
 

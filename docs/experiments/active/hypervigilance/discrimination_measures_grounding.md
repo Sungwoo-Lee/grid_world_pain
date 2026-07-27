@@ -209,5 +209,5 @@ the internal-state decoder is worth running.
 ## Links
 
 - Study summary (incl. Appendix A behaviour-measure definitions): `docs/experiments/summaries/20260612_1625_predator_rabbit_discrimination.md`
-- The methodology post-mortem this memo exists to honour: `docs/memory/memories/hypervigilance/20260609_1721_aggregate_stats_hide_conditional_behavior.md`
+- The methodology post-mortem this memo exists to honour: `docs/llm_wiki/entries/hypervigilance/20260609_1721_aggregate_stats_hide_conditional_behavior.md`
 - Recording format: `src/utils/eval_recording.py`; eval driver: `scripts/eval_rollout.py`; trajectory microscope: `scripts/trajectory_story.py`.

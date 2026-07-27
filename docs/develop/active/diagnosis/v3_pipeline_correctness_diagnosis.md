@@ -140,7 +140,7 @@ The termination expression is
 - `episodes` is resolved from `schedule.episode_boundaries[-1]` (continual), else
   `args.episodes`, else **`config.get_mandatory('episodes')`** (line 467). Because it is
   `get_mandatory`, a missing key raises `ValueError` — there is **no silent `episodes=100`
-  fallback in `train.py`**. The "default-100 trap" from session memory belongs to the *separate*
+  fallback in `train.py`**. The "default-100 trap" from LLM Wiki belongs to the *separate*
   `dreamer_srl` single-config trainer (which reads its budget from `env_cfg.training.*`), not to
   this entry point. In `train.py` the episodes-based branch is always taken (episodes is always
   a positive int), and the timesteps branch is effectively unreachable — correct and safe.
