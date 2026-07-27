@@ -125,7 +125,9 @@ This project carries two recall layers; future-Claude must know which one to wri
 - **Built-in auto-memory** at `~/.claude/projects/-media-nas01-projects-Interoceptive-AI-grid-world-pain/memory/MEMORY.md` — short typed rules another agent must obey on every invocation, with a sibling `feedback_*.md` per rule. User-and-machine-local; not under git.
 - **In-repo LLM Wiki** at `docs/llm_wiki/` — multi-section session insights with rationale, decisions, follow-ups, and an optional raw-conversation archive. Version-controlled with the repo.
 
-When wiki work is requested, read `docs/llm_wiki/CLAUDE.md` (operating manual) and `docs/llm_wiki/ROOT_INDEX.md` (topic registry) before capturing or recalling. The division-of-labor decision rule and capture triggers live in `docs/llm_wiki/CLAUDE.md`; the design rationale and worked routing examples live in [docs/develop/active/meta/llm_wiki_system_design.md](docs/develop/active/meta/llm_wiki_system_design.md).
+**Consult before acting (the pull gate).** Before any non-trivial task — bug fix, feature, refactor, experiment launch, config change — read the **Active folders table** at the top of `docs/llm_wiki/ROOT_INDEX.md` (~2 KB; stop before the change-log tail, which is another 50 KB) and check whether a folder covers the area you are about to touch. Drill into that folder's `_topic_index.md` only on a match, and open an individual entry only when its one-line summary looks relevant. On no match, proceed. The goal is to learn *whether* the wiki knows something, not to load what it knows — cost model and drill-down levels in `docs/llm_wiki/CLAUDE.md` §3.
+
+When wiki work itself is requested (capture, recall, audit), read `docs/llm_wiki/CLAUDE.md` (operating manual) first. The division-of-labor decision rule and capture triggers live there; the design rationale and worked routing examples live in [docs/develop/active/meta/llm_wiki_system_design.md](docs/develop/active/meta/llm_wiki_system_design.md).
 
 ---
 

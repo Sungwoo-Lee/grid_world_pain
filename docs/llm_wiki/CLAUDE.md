@@ -7,7 +7,7 @@ aliases: [llm_wiki_operating_manual]
 > Authoritative single source for this LLM Wiki's policies, workflows, and templates.
 > The project root `CLAUDE.md` routes future-Claude here. Do not duplicate this content elsewhere.
 
-**Last updated**: 2026-05-16  <!-- §14 code-graph snapshots added -->
+**Last updated**: 2026-07-27  <!-- §3 consult gate + cost model added -->
 **Related**: [project CLAUDE.md](../CLAUDE.md), [ROOT_INDEX.md](ROOT_INDEX.md), [design plan](../docs/develop/active/meta/llm_wiki_system_design.md)
 
 ---
@@ -46,7 +46,24 @@ Concrete routing examples:
 
 ---
 
-## 3. New-session flow
+## 3. When to consult, and how far to drill
+
+### The pull gate
+
+Nothing in this layer is auto-loaded. The root `CLAUDE.md` sets the trigger: **before any non-trivial task**, check the Active-folders table for a folder covering the area about to be touched — not just when wiki work is explicitly requested. That check is deliberately cheap, and the levels below are deliberately not.
+
+| Read | Cost | When |
+|---|---|---|
+| `ROOT_INDEX.md` **Active folders table** (top ~30 lines) | ~2 KB | Every non-trivial task. This is the gate. |
+| `ROOT_INDEX.md` **whole file** | ~52 KB | Audits only. The tail is a dated change log — never load it just to classify a topic. |
+| `entries/<topic>/_topic_index.md` | 3–25 KB | Only when the gate matched that folder. |
+| `entries/<topic>/<id>.md` | 3–10 KB | Only when a topic-index summary looks relevant to the task in hand. |
+
+The gate answers *"does the wiki know anything about this area?"* — a yes/no that costs 2 KB. It does not answer *"what does it know?"*; that costs more and is paid only after a match. Reading entries speculatively defeats the lazy-load design and is the failure mode this table exists to prevent.
+
+**On no match, proceed.** A miss is the expected outcome for most tasks and is not a reason to widen the search.
+
+### New-session flow
 
 1. Read this file (`CLAUDE.md`) — policies and templates.
 2. On any wiki work (capture, recall, audit): read `ROOT_INDEX.md` and `entries/_global_tags.md` (one-time per session).
@@ -203,10 +220,13 @@ Rules:
 
 ## 9. Lazy-load levels (L0–L4)
 
+Level codes for the drill-down described in §3; the *when to start at all* rule lives there.
+
 | Level | What | When |
 |---|---|---|
 | L0 | `docs/llm_wiki/CLAUDE.md` (this file) | Whenever the user mentions the wiki / recall, or at the start of any session touching this layer. |
-| L1 | `ROOT_INDEX.md` + `entries/_global_tags.md` | First read of any wiki operation (capture, recall, audit). |
+| L1a | `ROOT_INDEX.md` **Active-folders table only** (~2 KB) | The §3 pull gate — before any non-trivial task, wiki-related or not. |
+| L1b | `ROOT_INDEX.md` full file + `entries/_global_tags.md` | An explicit wiki operation (capture, recall, audit). Not for topic classification alone. |
 | L2 | `entries/<topic>/_topic_index.md` | When the user's question narrows to one topic. |
 | L3 | `entries/<topic>/<id>.md` | When the user wants details on a specific insight, or when an L2 entry's one-line summary is insufficient. |
 | L4 | `_archive/raw_conversations/<id>.md` | **Only after explicit user confirmation.** |
