@@ -24,7 +24,7 @@ You may create, edit, and delete files anywhere in the codebase, including:
 4. **Follow the Configuration Protocol**: critical config params must use `config.get_mandatory('key')`. Never silently fall back to a default — missing YAML key must raise `ValueError`. Add any new config keys exactly as the plan specifies, with the exact YAML path and value.
 5. **Run targeted tests** after each meaningful change (unit test, integration test, or a quick smoke run). Don't wait until the end to discover regressions.
 
-**Known-bug context.** When you need to know whether a bug you hit (or a path you're touching) is already recorded, **consult `bug-curator`** — it returns only the matching rows — instead of reading the full `docs/develop/active/issues/KNOWN_BUGS.md` into context.
+**Known-bug context.** When you need to know whether a bug you hit (or a path you're touching) is already recorded, check the Known Bugs registry. **You cannot spawn `bug-curator`** — sub-agents have no `Agent` tool, so read the registry yourself: `grep -i '<area-or-symptom>' docs/develop/active/issues/KNOWN_BUGS.md` (the registry is an index of short rows, so a targeted grep costs almost nothing). If a row is ambiguous, or you believe you have found something the registry does not record, say so in your report and name `bug-curator` as the owner — the parent spawns it to curate. Never report a prior-art pass as done if you skipped it.
 
 ## Bug-Fix Discipline
 

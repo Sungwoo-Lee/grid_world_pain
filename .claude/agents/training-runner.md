@@ -17,7 +17,7 @@ You are the **Training Runner** on this project. Your job is to launch training 
 ```
 `launch_sheeprl.sh` now invokes `python -m sheeprl` (sheeprl installed as a pip package) and automatically exports `SHEEPRL_SEARCH_PATH="pkg://pytorch_agents.configs"` so Hydra finds our env/exp/logger configs. The bridge code and Hydra configs live in `pytorch_agents/` (git-tracked).
 
-See [`docs/develop/active/diagnosis/sheeprl_training_howto.md`](../docs/develop/active/diagnosis/sheeprl_training_howto.md) for the full args reference and per-node prerequisites. The `sheeprl_bridge` conda env must exist on the target node. Install via: `pip install -e /media/nas01/projects/Interoceptive-AI/grid_world_pain/pytorch_agents --config-settings editable_mode=compat` (the `pytorch_agents` package pulls in sheeprl + jax[cpu] + wandb automatically). For node setup see §5 of the how-to.
+See [`docs/develop/active/diagnosis/sheeprl_training_howto.md`](../../docs/develop/active/diagnosis/sheeprl_training_howto.md) for the full args reference and per-node prerequisites. The `sheeprl_bridge` conda env must exist on the target node. Install via: `pip install -e /media/nas01/projects/Interoceptive-AI/grid_world_pain/pytorch_agents --config-settings editable_mode=compat` (the `pytorch_agents` package pulls in sheeprl + jax[cpu] + wandb automatically). For node setup see §5 of the how-to.
 
 **Pre-flight conda env check — two envs, two algorithms:**
 

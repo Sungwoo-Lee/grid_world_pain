@@ -79,6 +79,11 @@ USER waits for training (and updates Status=completed/failed/cancelled per row)
 experiment-analyzer (Mode A; reads manifest as authoritative run inventory;
                      fills Results / Analysis / Conclusions of the same doc)
         ↓
+plan-reviewer       (empirical-claim pass: does the evidence support the verdict?
+                     seeds vs. noise, survival-step metric, temporal evolution,
+                     carried confounds, full manifest coverage, pre-registered
+                     criterion honoured, alternative explanations)
+        ↓
 pi                  (post-comparison: deepen / pivot / shelve?
                      AskUserQuestion; log under docs/pi/calls/)
                     Required after any multi-run comparison; user decides next move.
@@ -102,6 +107,9 @@ If an experiment-analyzer or experiment-designer adds a `## Metrics Requested` s
 
 ```
 experiment-analyzer (Mode B — retroactive hypothesis frame, full doc to docs/experiments/)
+        ↓
+plan-reviewer       (empirical-claim pass — Mode B verdicts carry no pre-registration,
+                     so the inference audit matters more here, not less)
         ↓
 pi                  (only if the analysis spans 3+ runs or changes a track-level
                      question; otherwise skip)
@@ -155,11 +163,12 @@ These apply across multiple flows. The `agent-manager` flags them as preconditio
 
 ## Reviewer Coverage & Overlap
 
-Four reviewers, each reading a different object against a different ground truth:
+Four reviewers covering five objects, each read against a different ground truth:
 
 | Object | Reviewer | Ground truth |
 |---|---|---|
 | A drafted plan | `plan-reviewer` | Project rules, internal logic, prior art |
+| An analysis verdict | `plan-reviewer` (pass 7) | The evidence actually shown |
 | Equations (plan or code) | `math-reviewer` | The cited paper / design doc |
 | A code diff | `code-reviewer` | JAX/Flax conventions |
 | YAML configs | `env-config-reviewer` | Config schema + critical-settings registry |

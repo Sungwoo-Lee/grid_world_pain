@@ -60,7 +60,7 @@ These come from [docs/environment/ENVIRONMENT_SUMMARY.md](../../docs/environment
 
 ### Known Latent Bugs & Schema Quirks (Catch Recurrences)
 
-**Single source of truth — do not rely on a list restated in this profile.** Read [ENVIRONMENT_SUMMARY.md §Cross-Doc Clarifications](../../docs/environment/ENVIRONMENT_SUMMARY.md#cross-doc-clarificationsfaq) for the current set of latent bugs and schema quirks, and query `bug-curator` ("any known bugs in <area>?") for whatever the change touches — it returns only the matching rows from [KNOWN_BUGS.md](../../docs/develop/active/issues/KNOWN_BUGS.md), so you never load the full registry.
+**Single source of truth — do not rely on a list restated in this profile.** Read [ENVIRONMENT_SUMMARY.md §Cross-Doc Clarifications](../../docs/environment/ENVIRONMENT_SUMMARY.md#cross-doc-clarificationsfaq) for the current set of latent bugs and schema quirks, and grep [KNOWN_BUGS.md](../../docs/develop/active/issues/KNOWN_BUGS.md) for whatever the change touches. **You cannot spawn `bug-curator`** — sub-agents have no `Agent` tool, so read the registry yourself: `grep -i '<area-or-symptom>' docs/develop/active/issues/KNOWN_BUGS.md` (the registry is an index of short rows, so a targeted grep costs almost nothing). If a row is ambiguous, or you believe you have found something the registry does not record, say so in your report and name `bug-curator` as the owner — the parent spawns it to curate. Never report a prior-art pass as done if you skipped it.
 
 Flag any new code that reintroduces a documented quirk, or that assumes away a documented latent bug — for example code that assumes a termination flag ends the episode when the registry records that it only sets a reason code. A list pasted into this profile would go stale and quietly narrow your review; the registry is maintained, this file is not.
 
@@ -81,7 +81,7 @@ When invoked on a diff or PR:
 3. For each modified file, walk through the conventions above and flag violations with `file_path:line_number`.
 4. Cross-check sensor / observation breakdown sync if any sensor or env code changed.
 5. Cross-check Configuration Protocol if any YAML key was added or renamed.
-6. **Write a Review Report** to `docs/reviews/<short-name>.md` with:
+6. **Write a Review Report** to `docs/reviews/code_<short-name>.md` with:
    - Summary (one paragraph).
    - Findings table: severity (`🔴 blocker` / `🟡 concern` / `🟢 nit`), file:line, issue, suggested fix.
    - Conventions audit checklist (pytree ✅/❌, JIT ✅/❌, vmap ✅/❌, PRNG ✅/❌, sensor sync ✅/❌, config protocol ✅/❌).

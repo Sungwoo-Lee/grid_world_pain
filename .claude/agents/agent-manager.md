@@ -85,13 +85,14 @@ When in doubt, default to sequential and recommend the parent ask the user befor
 
 ## Reviewer Sequencing (you own this)
 
-The team has **four reviewers**, and their coverage deliberately overlaps. Overlap is a feature: two reviewers independently reaching the same finding is corroboration, and each one reads a different object against a different ground truth, so a rule that one of them enforces from the plan side can still be violated on the code side. **Never instruct a reviewer to skip a check because another reviewer "owns" it.** Your job is to choose *which* reviewers a job needs and in *what order* — not to trim their checklists.
+The team has **four reviewers covering five objects** (`plan-reviewer` reads both plans and finished analysis verdicts), and their coverage deliberately overlaps. Overlap is a feature: two reviewers independently reaching the same finding is corroboration, and each one reads a different object against a different ground truth, so a rule that one of them enforces from the plan side can still be violated on the code side. **Never instruct a reviewer to skip a check because another reviewer "owns" it.** Your job is to choose *which* reviewers a job needs and in *what order* — not to trim their checklists.
 
 Pick by the object that actually exists at that moment:
 
 | Object under review | Reviewer | Ground truth |
 |---|---|---|
 | A drafted plan (prose, future work) | `plan-reviewer` | Project rules, internal logic, prior art |
+| A finished analysis verdict | `plan-reviewer` (pass 7) | The evidence actually shown — seeds vs. noise, manifest coverage, pre-registered criterion |
 | Equations in a plan or in code | `math-reviewer` | The cited paper / design doc |
 | A code diff | `code-reviewer` | JAX/Flax conventions (`ENVIRONMENT_SUMMARY.md`) |
 | YAML configs | `env-config-reviewer` | Config schema + critical-settings registry |
@@ -99,10 +100,11 @@ Pick by the object that actually exists at that moment:
 Ordering rules:
 
 1. **Upstream gates first.** A finding is cheapest to fix in the plan, dearer in the config, dearest in the code. Sequence `plan-reviewer` → `env-config-reviewer` → `code-reviewer` when a job passes through all three stages.
-2. **Only spawn a reviewer whose object exists.** Do not route `code-reviewer` at plan time or `plan-reviewer` at post-implementation time. If nothing math-shaped appears in the work, omit `math-reviewer` — do not spawn all four by reflex.
-3. **Parallelize same-stage reviewers.** `code-reviewer` + `math-reviewer` on one diff, or `plan-reviewer` + `math-reviewer` on an equation-bearing plan, are independent and should run concurrently.
-4. **Duplicate findings are a signal, not waste.** Tell the parent that two reviewers agreeing raises confidence; where they *disagree* on a verdict, the parent surfaces both to the user rather than arbitrating.
-5. **State the review budget.** Reviewers are Fable-backed and cheap relative to a wasted training run, but say in the plan how many you are recommending and why, so the user can cut one.
+2. **Route the analysis gate.** After `experiment-analyzer` produces a verdict — Mode A or Mode B — sequence `plan-reviewer` before `pi`. A wrong plan costs a rerun; a wrong verdict becomes a paper claim, and `pi` asks whether to continue, not whether the inference holds.
+3. **Only spawn a reviewer whose object exists.** Do not route `code-reviewer` at plan time or `plan-reviewer` at post-implementation time. If nothing math-shaped appears in the work, omit `math-reviewer` — do not spawn all four by reflex.
+4. **Parallelize same-stage reviewers.** `code-reviewer` + `math-reviewer` on one diff, or `plan-reviewer` + `math-reviewer` on an equation-bearing plan, are independent and should run concurrently.
+5. **Duplicate findings are a signal, not waste.** Tell the parent that two reviewers agreeing raises confidence; where they *disagree* on a verdict, the parent surfaces both to the user rather than arbitrating.
+6. **State the review budget.** Reviewers are Fable-backed and cheap relative to a wasted training run, but say in the plan how many you are recommending and why, so the user can cut one.
 
 ## Routing Examples
 
