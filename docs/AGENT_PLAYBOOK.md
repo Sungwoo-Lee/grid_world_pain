@@ -15,7 +15,9 @@ Keep this doc small. Anything agent-specific belongs in the agent's profile. Onl
 ```
 [pi consultation — only for roadmap-level / multi-week plans]
         ↓
-senior-developer (plan, docs/develop/)        ← User approves plan
+senior-developer (plan, docs/develop/)
+        ↓
+plan-reviewer   (pre-mortem on the plan)      ← User approves plan (blockers resolved first)
         ↓
 developer       (implement, dirty tree)
         ↓
@@ -33,7 +35,9 @@ Plan-first is non-negotiable: the user approves the *plan* before any code chang
 ### Fixing a bug
 
 ```
-senior-developer (root cause + fix plan)      ← User approves diagnosis + fix
+senior-developer (root cause + fix plan)
+        ↓
+plan-reviewer   (pre-mortem on the fix plan)  ← User approves diagnosis + fix
         ↓
 developer       (regression test FIRST → fix → confirm test passes)
         ↓
@@ -49,6 +53,10 @@ experiment-designer (design doc + configs + LAUNCH MANIFEST §3)
                     Manifest has one row per run with planned:
                       Tag, wandb-name, wandb-group, wandb-job-type, Seed
                     Plus §3.1 mapping each row to env+agent config YAMLs.
+        ↓
+plan-reviewer       (pre-mortem on the design: controls, seeds / statistical power,
+                     confounds, pre-registered refutation criteria, GPU feasibility,
+                     budget wiring)
         ↓
 env-config-auditor  (audit; resolve all 🔴 before launch)
         ↓
