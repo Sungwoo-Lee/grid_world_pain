@@ -1,0 +1,25 @@
+# Behavior-probe sweep for the NEW bins±6 Dreamer arms launched 2026-07-27 by the
+# parallel dreamer-investigation session (SYNTHESIS_20260727). Both are XS /
+# basic03 / seed 0 / 128-env, decay_power 1.0 (verified from saved env_config),
+# critic two-hot range narrowed to ±6 (D-017) — the single variable under test
+# vs the ±20 controls, which already live in avoidance/dp1/dreamer (b03_XS/M).
+#   arm1 rr0p0625 = replay ratio 0.0625;  arm2 rr0p25 = replay ratio 0.25.
+# Same seed-0 pipeline as the dp1 dataset so these arms are directly comparable
+# to the existing ±20 controls. Output kept SEPARATE under avoidance/dp1/dreamer_bins6/.
+# Runs are STILL TRAINING — this is an incremental snapshot up to the current ckpt.
+#
+# Run: python scripts/eval/dwell_sweep/run_sweep.py configs/eval_sweeps/dp1_dreamer_bins6.yaml
+# `nodes` must be FREE at run time — check gpu_status first.
+name: dp1_dreamer_bins6
+algo: dreamer
+output_dir: results/eval/avoidance/dp1/dreamer_bins6
+probe: clean
+conditions: all
+episodes: 30
+nodes: [102, 103, 104, 105, 106, 111, 112]
+npar: 5
+x_axis: episodes
+plot_measures: [bush_dwell, spatial_spread, survival_steps]
+runs:
+  - {label: b03_XS_bins6_rr0p0625, path: results/JAX_DreamerSRL/20260727-052352_dsrl_b03_XS_bins6_rr0p0625}
+  - {label: b03_XS_bins6_rr0p25,   path: results/JAX_DreamerSRL/20260727-052358_dsrl_b03_XS_bins6_rr0p25}
