@@ -9,7 +9,7 @@ aliases: [dreamer_hier_encoder_plan]
 
 # Modality-Hierarchical Encoder/Decoder for dreamer_srl — three designs
 
-> **Status**: PLANNED
+> **Status**: IMPLEMENTED (2026-07-28, pending senior-developer verification; File Changes 3–6 deferred per plan-review B1)
 > **Opened**: 2026-07-28
 > **Related**: [[evaaa_vs_gridworld_algorithm_inversion]] (dimension #24, cause R1), [[SYNTHESIS_20260727]] (investigation synthesis), [dreamer_multimodal_obs_encoding_and_recon_loss](../../../project/concepts/dreamer_multimodal_obs_encoding_and_recon_loss.md) (professor-rl memo — resolves symlog + loss form), [[DEVIATION_LOG]] (D-018 to be appended), [[dreamer_srl_settings_regime_critique]]
 
@@ -154,17 +154,78 @@ Three arms × ≥3 seeds, XS, current best-known cadence settings; design-1 base
 
 ## Checkpoints
 
-- [ ] After File Change 1: flat `build_agent` param tree byte-identical (`jax.tree_util.tree_map(shape)` compare on the XS config).
-- [ ] Existing 141-test suite green **before** writing new tests (catches flat-path drift early).
-- [ ] Reparameterisation unit test passes at 1e-6 (outputs, loss, gradients).
-- [ ] After File Change 2: flat config smoke prints unchanged `build_agent OK`; design-2/3 smokes print modality table + param counts (expect ≈ 3.17 / 3.92 / 4.47 M).
-- [ ] After File Change 7: `wm/recon_mse/*` + `wm/target_var/*` present in a flat smoke; loss values unchanged vs pre-change fixture.
-- [ ] D-018 row present in the same commit as the code.
+- [x] After File Change 1: flat `build_agent` param tree byte-identical — verified stronger than shapes: sha256 of every param leaf's bytes identical pre/post change on the XS bins±6 config (`tmp/20260728_flat_tree_{before,after}.txt`, diff empty apart from the new param-count print line).
+- [x] Existing suite green **before** writing new tests — 142 passed, 9 skipped (the plan's "141" count had grown by 1 since writing).
+- [x] Reparameterisation unit test passes — at the **plan-reviewer's amended tolerances** (C1 column transplant, C2 rtol 1e-5 outputs/loss, 1e-6 per-block gradients), not the plan's original row-blocks/1e-6.
+- [x] After File Change 2: flat probe prints unchanged `build_agent OK`; design-2/3 probes print modality table + param counts — measured 3.17 M / 3.92 M / 4.46 M (excl. target_critic, matching the plan's table; incl. target_critic: 3.57 / 4.31 / 4.86 M).
+- [x] After File Change 7: `wm/recon_mse/*` + `wm/target_var/*` present (14 keys, 7 modalities × 2) in a flat train step; loss values **bit-identical** with vs without the diagnostics (all shared keys `==`, CPU micro-bench `tmp/20260728_flat_diag_bench.log`).
+- [x] D-018 row present in the same commit as the code.
 
 ## Implementation Report
 
-> **Implemented by**: —
-> **Date**: —
+> **Implemented by**: developer
+> **Date**: 2026-07-28
+
+### What was implemented (file-by-file)
+
+1. **`src/algorithms/dreamer_srl/agent.py`** — new `HierGroupedLinear` (local bias-free einsum grouped linear, Hafner or uniform(1.0) init — no import from `recurrent_ppo_network.py`), `HierarchicalMLPEncoder` (symlog → static split/zero-pad → grouped branches `default_mlp`+[hidden] → concat → hub `multimodal_hub`+[hidden]; every block Linear(bias=False)→LN(1e-3)→SiLU; `output_dim = hidden_size`), `HeadsMLPDecoder` (flat-identical trunk sized from the **encoder's** `dense_units`/`mlp_layers` — the same source the flat decoder reads, per reviewer N1 — + thin per-key heads, uniform(1.0)), `MirrorMLPDecoder` (reversed hub → grouped expansion → reversed `default_mlp` grouped branches → per-key output linears). `build_agent` gains keyword-only `observation_breakdown=None`; encoding-mode resolution + ALL validation happens before any constructor call, so the flat branch is textually unchanged and consumes the rngs stream identically (proved by the byte-identical tree dump). Hierarchical RSSM consumes `encoder.output_dim` (reviewer C3). Fail-loud matrix: unknown mode / flat+`hierarchical_params` (incl. mirror-only block) / non-bool mirror / missing breakdown / breakdown-sum mismatch → `ValueError`; missing `hierarchical_params` or sub-keys → `KeyError`. Added a per-module param-count print (run-manifest record). Hierarchical attribute names disjoint from flat's (reviewer N2) so cross-mode Orbax restore fails structurally.
+2. **`src/algorithms/dreamer_srl/dreamer_srl_main.py`** — computes `get_observation_breakdown(env_params)` after the obs_dim probe, asserts sum == probed obs_dim, prints the modality table when hierarchical, passes the breakdown to `build_agent` and (as a static tuple) to `make_train_step`.
+3. **`src/algorithms/dreamer_srl/train.py`** — `make_train_step(..., obs_breakdown=None)`; per-modality `wm/recon_mse/<slug>` + `wm/target_var/<slug>` computed **outside the grad closure** from `wm_aux["wm_outputs"]` (reviewer C4's remedy adopted up-front rather than waiting for a fixture trip — deviation from the plan's "in `wm_loss_fn`'s aux dict" wording, same observable keys, zero backward-graph risk). `loss.py` untouched.
+4. **`configs/models/dreamer_srl/xs_bins6_rr0p25_hier_heads.yaml`** / **`xs_bins6_rr0p25_hier_mirror.yaml`** — diff-verified to differ from `xs_bins6_rr0p25.yaml` ONLY in the `encoding_mode`/`hierarchical_params` block (`default_mlp [256]`, `multimodal_hub [128,128]`, `hidden_size 256`, mirror false/true).
+5. **`tests/algorithms/dreamer_srl/test_hierarchical_encoder.py`** — 28 tests (20 functions, parametrized): flat-with-kwarg ≡ flat-without (values, not just shapes); explicit `flat` ≡ defaulted; reparameterisation (C1 **column** transplant of the `(256→dense, 27→obs)` `(in,out)` kernel, C2 tolerances); shapes/finiteness/vmap + full `observe()` for both designs; the full ValueError/KeyError matrix incl. the mirror-only-block case; gradient reaches every encoder branch and every mirror-decoder branch + output head; **C3 test with `hidden_size 192 ≠ dense_units 256`** (both designs); checkpoint roundtrip per design; flat-checkpoint-into-design-2/3 raises; train-step smoke per design with diagnostics-key presence; legacy path (no breakdown) has an unchanged losses key set.
+6. **`docs/develop/active/dreamer_srl_v1/DEVIATION_LOG.md`** — D-018 appended (bottom row, `☐ pending`, frontmatter `last_updated` updated).
+
+### Deferred (reviewer B1 — deliberate, not an omission)
+
+**File Changes 3–6 (eval-script plumbing) NOT implemented tonight**: `scripts/eval/eval_rollout.py`, `scripts/eval/dreamer_srl_probe_eval.py`, `scripts/dreamer/visualize_dream.py`, `scripts/dreamer/dreamer_srl_offline_wm_test.py` are untouched. The live rPPO runs subprocess-spawn `eval_rollout.py` fresh from this NAS tree (SCRIPTS_DEPENDENCY_MAP §1b), so these edits were deferred out of the overnight window per the plan-review B1 remedy. Safe because an un-plumbed eval of a hierarchical checkpoint fails LOUDLY via this change's own `ValueError` (hierarchical + `observation_breakdown=None`); flat/rPPO evals are unaffected (optional kwarg, and the post-change suite's eval_rollout tests are green). **Follow-up owner: next `developer` pass — each is a one-line pass-through (breakdowns already computed or trivially computable at each call site).** `scripts/eval/render_recordings.py` untouched (hot-read by live jobs; strictly off-limits).
+
+All three edited source files were replaced **atomically** (edit a copy, `mv` over the original — same-filesystem rename) because live-run eval chains freshly re-import `agent.py`; no partially-written `.py` ever existed on disk. Live jobs on 114 GPU 0/2 and the rPPO nodes verified healthy afterwards.
+
+### Test results
+
+- Baseline (pre-change): `tests/algorithms/dreamer_srl/` → **142 passed, 9 skipped** (`tmp/20260728_hier_baseline_suite.log`).
+- Post-change full suite (incl. new file): → **170 passed, 9 skipped, 0 failed** (`tmp/20260728_hier_postchange_suite.log`); sheeprl bit-identity parity tests (`test_end_to_end_parity`, `test_grad_parity`, `test_checkpoint`, `test_lax_scan_train`, `test_agent`) all green.
+- Command: `JAX_PLATFORMS=cpu /home/vncuser/miniconda3/envs/grid_world_pain/bin/python -m pytest tests/algorithms/dreamer_srl/ -q`.
+- Flat param tree: sha256-per-leaf identical pre/post (Checkpoint 1).
+
+### Speed check
+
+- **Flat hot-path delta** (the only flat-path change = the per-modality diagnostics): CPU micro-bench of the jitted `one_train_step` (XS arch, T=16 B=8 H=5, N=10 steps post-compile): 150.2 ms/step without vs 146.3 ms/step with diagnostics (−2.6%, i.e. within noise); **all shared loss values bit-identical** (`tmp/20260728_flat_diag_bench.log`).
+- **GPU probes** (node 114 GPU 1, real launch config `--num-envs 128 --buffer-device cpu`, `XLA_PYTHON_CLIENT_PREALLOCATE=false`, ~20 min/leg): see OOM-probe table below — flat leg reached iter 363 at **sps≈74** (early-run figure; the live pre-change flat run reports sps≈221–227 at 10M steps steady state — early-run vs steady-state numbers are not comparable; the like-for-like comparison is flat-probe vs hier-probes at identical budget).
+
+### OOM probe (reviewer C5 — mandatory pre-launch)
+
+Three sequential ~20-min legs on node 114 GPU 1 only (GPUs 0/2/3 untouched; GPU 1 back to 1 MiB after), real launch command mirroring the live `dsrl_b03_XS_bins6_rr0p25` line (`--num-envs 128 --buffer-device cpu --seed 0`), `XLA_PYTHON_CLIENT_PREALLOCATE=false` so nvidia-smi shows true usage. Raw logs: `tmp/20260728_oom_probe_{flat,hier_heads,hier_mirror}/`, summary `tmp/20260728_oom_probe_summary.txt`.
+
+| leg | config | iterations reached | env-steps | sps at leg end | peak GPU mem (MiB) | OOM |
+|---|---|---|---|---|---|---|
+| flat (reference) | `xs_bins6_rr0p25.yaml` | 363 | 46,464 | 73.7 | 2,821 | none |
+| design 2 (heads) | `xs_bins6_rr0p25_hier_heads.yaml` | 1,163 | 148,864 | 133.1 | 2,835 | none |
+| design 3 (mirror) | `xs_bins6_rr0p25_hier_mirror.yaml` | 1,263 | 161,664 | 138.8 | 2,839 | none |
+
+Both designs trained steadily well past 300 iterations with finite, decreasing WM loss (heads 3.02→2.93 across the window; mirror 2.93 at leg end), and each design's peak memory is within ~20 MiB of flat — the reviewer's C5 analysis confirmed empirically (the live runs' ~37 GB readings are JAX's 75 % preallocation, not real usage). **`num_envs` stays 128 — no reduction was needed.** The sps column is a same-budget probe-window figure (compile + warm-up included, cumulative): the flat leg spent longer in first-compile, so its 73.7 under-reads; the flat steady-state reference from the live pre-change run is 221–227 sps at 10M steps. The hierarchical designs show no probe-window slowdown vs flat; steady-state hier-vs-flat SPS will be read off the real runs.
+
+### Reviewer amendments — disposition
+
+| # | Amendment | Disposition |
+|---|---|---|
+| B1 | Atomic replace + defer FC 3–6 | Done (mv-replace all 3 source files; FC 3–6 deferred, see above; `render_recordings.py` untouched) |
+| C1 | Reparam transplant by **columns** | Done — test slices `W[:, lo:hi]` + `b[lo:hi]` of the `(in=256, out=27)` kernel |
+| C2 | rtol 1e-5 loss/outputs, 1e-6 gradients | Done — exactly these tolerances in the test |
+| C3 | `hidden_size ≠ dense_units` test | Done — 192 vs 256, both designs, end-to-end `observe()` |
+| C4 | Diagnostics outside grad closure | Adopted up-front (not as a fallback); flat losses bit-identical |
+| C5 | OOM probe on 114 GPU 1, prealloc off | Done — table above; GPUs 0/2/3 untouched |
+| C6 | PI gate skipped tonight | Recorded here + diary: any launch of these configs tonight proceeds on the user's explicit prior authorisation; PI review deferred to the ≥3-seed follow-up; 1-seed results are a feasibility probe, not a comparative finding |
+| N1 | Heads trunk reads flat's sizing source | Done — reads encoder `dense_units`/`mlp_layers` (same as flat) |
+| N2 | Disjoint attribute names | Done — `branch_/hub_/trunk_/heads/mirror_hub_/output_heads` vs flat's `hidden_/output_head` |
+
+### Blockers / follow-ups
+
+- FC 3–6 eval plumbing (above) — one-line pass-throughs, blocked only on the live-jobs window.
+- The in-flight flat control runs (pre-change code) lack the new `wm/recon_mse/*` metrics (reviewer assumption 5) — per-key reconstruction comparisons against flat need a future flat rerun; survival-step comparison is unaffected.
+- D-018 status flip to ✅ reserved for senior-developer verification.
+
+> Implemented by: developer
 
 ## Verification Report
 

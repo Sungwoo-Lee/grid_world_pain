@@ -149,7 +149,7 @@ Two key points:
 """
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -639,8 +639,20 @@ def make_train_step(
     moments_pct_high: float = 0.95,
     twohot_low: float = -20.0,
     twohot_high: float = 20.0,
+    obs_breakdown: Optional[Tuple[Tuple[str, int], ...]] = None,
 ):
     """Factory: returns a JIT'd one_train_step with static hyperparams baked in.
+
+    D-018 File Change 7 (professor-rl memo §8 instrumentation): when
+    `obs_breakdown` is given — a STATIC tuple of (modality_name, width) pairs
+    in observation order, e.g. tuple(get_observation_breakdown(p).items()) —
+    the returned losses dict additionally carries logging-only per-modality
+    reconstruction diagnostics for every design incl. the flat baseline:
+        wm/recon_mse/<slug>   symlog-space MSE over the modality's slice
+        wm/target_var/<slug>  symlog-space target variance for the same slice
+    Together they make the memo's variance-normalised starved-modality
+    signature L-tilde_k computable at analysis time. Default None = pre-D-018
+    behaviour, bit-identical (parity fixtures pin this path).
 
     Ported from sheeprl@33b6366:sheeprl/algos/dreamer_v3/dreamer_v3.py:L48-L358.
 
@@ -833,6 +845,30 @@ def make_train_step(
         )(world_model)
         wm_outputs = wm_aux["wm_outputs"]
         wm_opt.update(world_model, wm_grads)
+
+        # -----------------------------------------------------------------------
+        # D-018 File Change 7 — per-modality reconstruction diagnostics
+        # (logging-only, memo §8 instrumentation). Computed OUTSIDE the grad
+        # closure from wm_aux["wm_outputs"] (plan-review C4 remedy): the
+        # backward graph is untouched, so the flat-parity fixtures cannot
+        # shift. obs_breakdown is a static tuple baked into the closure
+        # (D-017 mechanism — Python-unrolled at trace time, no new jit
+        # boundary). Slices of the SAME [T, B, obs_dim] tensors the loss
+        # uses; loss.py itself is untouched (memo §4: per-key split is
+        # loss-neutral, so diagnostics never need to enter the objective).
+        # -----------------------------------------------------------------------
+        per_key_diags: Dict[str, jax.Array] = {}
+        if obs_breakdown is not None:
+            _recon_symlog = wm_outputs["reconstructed_obs"]   # [T, B, obs_dim] symlog-space
+            _target_symlog = symlog(batch["obs"])             # [T, B, obs_dim]
+            _lo = 0
+            for _mname, _mwidth in obs_breakdown:
+                _slug = _mname.lower().replace(" ", "_")
+                _r = _recon_symlog[..., _lo:_lo + _mwidth]
+                _t = _target_symlog[..., _lo:_lo + _mwidth]
+                per_key_diags[f"wm/recon_mse/{_slug}"] = jnp.mean((_r - _t) ** 2)
+                per_key_diags[f"wm/target_var/{_slug}"] = jnp.var(_t)
+                _lo += _mwidth
 
         # -----------------------------------------------------------------------
         # Sub-step 6: Imagined trajectory rollout (from posterior latent)
@@ -1068,6 +1104,9 @@ def make_train_step(
             # Bookkeeping
             "moments_invscale":   moments_invscale,
         }
+        # D-018: merge per-modality reconstruction diagnostics (empty dict when
+        # obs_breakdown is None — key set unchanged on the legacy path).
+        losses.update(per_key_diags)
 
         return new_moments, losses
 

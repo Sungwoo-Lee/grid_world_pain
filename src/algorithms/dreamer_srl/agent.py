@@ -1294,6 +1294,379 @@ class MLPDecoder(nnx.Module):
 
 
 # ---------------------------------------------------------------------------
+# D-018 — Modality-hierarchical encoder/decoder (opt-in; flat default untouched)
+#
+# Three designs (docs/develop/active/dreamer_srl_v2/
+# hierarchical_modality_encoder_plan.md, user decision 2026-07-28):
+#   1. flat (default)             — MLPEncoder + MLPDecoder above (sheeprl parity)
+#   2. hierarchical + heads       — HierarchicalMLPEncoder + HeadsMLPDecoder
+#   3. hierarchical + mirror      — HierarchicalMLPEncoder + MirrorMLPDecoder
+#
+# All new blocks use Dreamer's idiom — Linear(bias=False) → LayerNorm(eps=1e-3)
+# → SiLU with Hafner truncated-normal init (init_weights) — NOT rPPO's
+# Linear+bias → ReLU idiom. Output projections use uniform_init_weights(1.0)
+# with bias, matching the flat decoder head (sheeprl L1178 idiom).
+# No imports from src/models/recurrent_ppo_network.py (stacks stay decoupled);
+# the GroupedLinear einsum pattern is re-implemented locally.
+# Attribute names are deliberately DISJOINT from the flat modules'
+# (branch_/hub_/trunk_/heads vs hidden_/output_head) so a flat checkpoint can
+# never structurally restore into a hierarchical module or vice versa
+# (plan-review N2 — cross-mode Orbax restore must fail loudly).
+# ---------------------------------------------------------------------------
+
+class HierGroupedLinear(nnx.Module):
+    """Per-modality (grouped) linear layer via a single einsum kernel.
+
+    Weights: [G, I, O] — one independent linear map per modality group,
+    applied in a single kernel launch (pattern from
+    src/models/recurrent_ppo_network.py:11-30, re-idiomed for dreamer_srl).
+
+    Init: per-group Hafner truncated-normal (`init_weights`, the encoder/trunk
+    idiom) or per-group `uniform_init_weights(1.0)` (the output-head idiom).
+    Bias-free by default (a LayerNorm follows in every non-output position).
+
+    Args:
+        num_groups (int): number of modality groups G.
+        in_features (int): per-group input width I.
+        out_features (int): per-group output width O.
+        use_bias (bool): add a per-group bias [G, O] (zeros init).
+        init (str): 'hafner' | 'uniform1' — kernel initializer per group.
+        rngs (nnx.Rngs): NNX RNG container.
+    """
+
+    def __init__(
+        self,
+        num_groups: int,
+        in_features: int,
+        out_features: int,
+        *,
+        use_bias: bool,
+        init: str,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.num_groups = num_groups
+        self.in_features = in_features
+        self.out_features = out_features
+        self.use_bias = use_bias
+
+        key = rngs.params()
+        kernels = []
+        for _ in range(num_groups):
+            key, k = jax.random.split(key)
+            if init == 'hafner':
+                kernels.append(init_weights(in_features, out_features, k))
+            elif init == 'uniform1':
+                kernels.append(uniform_init_weights(1.0, in_features, out_features, k))
+            else:
+                raise ValueError(f"HierGroupedLinear: unknown init {init!r} "
+                                 "(expected 'hafner' or 'uniform1')")
+        self.weights = nnx.Param(jnp.stack(kernels))  # [G, I, O]
+        if use_bias:
+            self.bias = nnx.Param(jnp.zeros((num_groups, out_features), dtype=jnp.float32))
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        """[..., G, I] → [..., G, O] (independent linear map per group)."""
+        y = jnp.einsum('...gi,gio->...go', x, self.weights[...])
+        if self.use_bias:
+            y = y + self.bias[...]
+        return y
+
+
+class HierarchicalMLPEncoder(nnx.Module):
+    """Per-modality branched encoder with a multimodal fusion hub (designs 2+3).
+
+    Structure (every block: Linear(bias=False) → LayerNorm(eps=1e-3) → SiLU):
+        symlog(obs)                                       [..., obs_dim]
+          (uniform on all dims — professor-rl memo §3 ruling, no exemptions)
+        static split by breakdown widths, zero-pad to max_in
+          → stack                                         [..., G, max_in]
+        branches: for h in default_mlp + [hidden_size]:
+          HierGroupedLinear → LN → SiLU                   [..., G, hidden_size]
+        concat                                            [..., G*hidden_size]
+        hub: for h in multimodal_hub + [hidden_size]:
+          Linear → LN → SiLU                              [..., hidden_size]
+
+    output_dim = hidden_size — consumed by build_agent for the RSSM's
+    representation-model input width (plan-review C3: must NOT be conflated
+    with encoder.dense_units, which the flat path uses).
+
+    Branch LayerNorm scale/bias are shared across groups (the LN normalises
+    each group's feature vector independently; sharing parameters across
+    groups mirrors rPPO's vmap-of-one-LN idiom at recurrent_ppo_network.py:120).
+
+    vmap-safe: the split/pad uses only static shapes, so
+    `jax.vmap(encoder)(obs[B, obs_dim])` works as used by WorldModel.observe.
+
+    Args:
+        observation_breakdown (dict): ordered {modality_name: width} from
+            src/environment/sensor.py:get_observation_breakdown (order is
+            parallel-by-construction with get_observation's assembly order).
+        default_mlp (list[int]): per-modality branch hidden layer widths.
+        multimodal_hub (list[int]): fusion-hub hidden layer widths.
+        hidden_size (int): branch output width = hub output width = output_dim.
+        rngs (nnx.Rngs): NNX RNG container.
+    """
+
+    def __init__(
+        self,
+        observation_breakdown: dict,
+        default_mlp: list,
+        multimodal_hub: list,
+        hidden_size: int,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.modality_names = tuple(observation_breakdown.keys())
+        self.modality_widths = tuple(int(w) for w in observation_breakdown.values())
+        self.obs_dim = int(sum(self.modality_widths))
+        self.num_groups = len(self.modality_widths)
+        self.max_in = int(max(self.modality_widths))
+        self.hidden_size = hidden_size
+        self.output_dim = hidden_size  # C3: RSSM must consume THIS, not dense_units
+
+        # Phase 1 — per-modality branches (grouped): default_mlp hidden widths,
+        # ending in a grouped projection to hidden_size. Every layer LN+SiLU.
+        branch_widths = list(default_mlp) + [hidden_size]
+        b_lins, b_norms = [], []
+        in_d = self.max_in
+        for h in branch_widths:
+            b_lins.append(HierGroupedLinear(
+                self.num_groups, in_d, h, use_bias=False, init='hafner', rngs=rngs))
+            b_norms.append(nnx.LayerNorm(num_features=h, epsilon=1e-3, rngs=rngs))
+            in_d = h
+        self.branch_linears = nnx.List(b_lins)
+        self.branch_norms = nnx.List(b_norms)
+
+        # Phase 2 — multimodal hub: concat(G × hidden_size) → multimodal_hub
+        # widths → hidden_size. Every layer LN+SiLU, Hafner init.
+        hub_widths = list(multimodal_hub) + [hidden_size]
+        h_lins, h_norms = [], []
+        in_d = self.num_groups * hidden_size
+        key = rngs.params()
+        for h in hub_widths:
+            lin = nnx.Linear(in_d, h, use_bias=False, rngs=rngs)
+            key, k = jax.random.split(key)
+            I, O = lin.kernel[...].shape
+            lin.kernel = nnx.Param(init_weights(I, O, k))
+            h_lins.append(lin)
+            h_norms.append(nnx.LayerNorm(num_features=h, epsilon=1e-3, rngs=rngs))
+            in_d = h
+        self.hub_linears = nnx.List(h_lins)
+        self.hub_norms = nnx.List(h_norms)
+
+    def __call__(self, obs: jax.Array) -> jax.Array:
+        """Forward: symlog → split/pad → grouped branches → fusion hub.
+
+        Args:
+            obs: [..., obs_dim] float array (raw observation, not symlog'd)
+
+        Returns:
+            embedded: [..., hidden_size]
+        """
+        from src.algorithms.dreamer_srl.utils import symlog as _symlog
+        x = _symlog(obs)  # uniform symlog on all dims (memo §3)
+
+        batch_shape = x.shape[:-1]
+        # Static split by breakdown widths + zero-pad to max_in → [..., G, max_in]
+        x_padded = jnp.zeros(batch_shape + (self.num_groups, self.max_in), dtype=x.dtype)
+        start = 0
+        for i, width in enumerate(self.modality_widths):
+            x_padded = x_padded.at[..., i, :width].set(x[..., start:start + width])
+            start += width
+
+        h = x_padded
+        for lin, norm in zip(self.branch_linears, self.branch_norms):
+            h = lin(h)
+            h = norm(h)
+            h = jax.nn.silu(h)
+        # [..., G, hidden_size] → [..., G*hidden_size]
+        fused = h.reshape(batch_shape + (self.num_groups * self.hidden_size,))
+        for lin, norm in zip(self.hub_linears, self.hub_norms):
+            fused = lin(fused)
+            fused = norm(fused)
+            fused = jax.nn.silu(fused)
+        return fused
+
+
+class HeadsMLPDecoder(nnx.Module):
+    """Shared-trunk decoder with thin per-modality output heads (design 2).
+
+    The trunk is structurally identical to the flat MLPDecoder's body
+    (mlp_layers × [Linear(bias=False) → LN(eps=1e-3) → SiLU], Hafner init) and
+    reads the SAME sizing source as the flat decoder (encoder dense_units /
+    mlp_layers — plan-review N1: designs 1 vs 2 differ only in the head).
+    The single Linear(dense_units → obs_dim) head is replaced by one
+    Linear(dense_units → d_k) per modality, kernels uniform_init_weights(1.0)
+    (sheeprl L274 + L1178 native multi-key idiom), concatenated in breakdown
+    order — an exact reparameterisation of the single head (memo §6.1: same
+    function class, parameter count, and gradients; only RNG draw order
+    differs).
+
+    Args:
+        latent_dim (int): input latent size (stochastic + recurrent).
+        observation_breakdown (dict): ordered {modality_name: width}.
+        dense_units (int): trunk hidden width (same source as flat decoder).
+        mlp_layers (int): trunk depth (same source as flat decoder).
+        rngs (nnx.Rngs): NNX RNG container.
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        observation_breakdown: dict,
+        dense_units: int,
+        mlp_layers: int,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.latent_dim = latent_dim
+        self.modality_names = tuple(observation_breakdown.keys())
+        self.modality_widths = tuple(int(w) for w in observation_breakdown.values())
+        self.obs_dim = int(sum(self.modality_widths))
+        self.dense_units = dense_units
+        self.mlp_layers = mlp_layers
+
+        # Shared trunk — same structure as flat MLPDecoder body
+        t_lins, t_norms = [], []
+        in_size = latent_dim
+        for _ in range(mlp_layers):
+            t_lins.append(nnx.Linear(in_size, dense_units, use_bias=False, rngs=rngs))
+            t_norms.append(nnx.LayerNorm(num_features=dense_units, epsilon=1e-3, rngs=rngs))
+            in_size = dense_units
+        self.trunk_linears = nnx.List(t_lins)
+        self.trunk_norms = nnx.List(t_norms)
+
+        # Thin per-modality output heads (sheeprl L274 idiom)
+        heads = []
+        for width in self.modality_widths:
+            heads.append(nnx.Linear(dense_units, width, use_bias=True, rngs=rngs))
+        self.heads = nnx.List(heads)
+
+        # Init: Hafner on trunk, uniform_init_weights(1.0) on heads (L1178)
+        key = rngs.params()
+        for lin in self.trunk_linears:
+            key, k = jax.random.split(key)
+            I, O = lin.kernel[...].shape
+            lin.kernel = nnx.Param(init_weights(I, O, k))
+        for head in self.heads:
+            key, k = jax.random.split(key)
+            I, O = head.kernel[...].shape
+            head.kernel = nnx.Param(uniform_init_weights(1.0, I, O, k))
+
+    def __call__(self, latent: jax.Array) -> jax.Array:
+        """latent [..., latent_dim] → symlog-space obs prediction [..., obs_dim]."""
+        x = latent
+        for lin, norm in zip(self.trunk_linears, self.trunk_norms):
+            x = lin(x)
+            x = norm(x)
+            x = jax.nn.silu(x)
+        outs = [head(x) for head in self.heads]
+        return jnp.concatenate(outs, axis=-1)  # breakdown order
+
+
+class MirrorMLPDecoder(nnx.Module):
+    """Depth-symmetric per-modality decoder (design 3).
+
+    Mirrors the HierarchicalMLPEncoder back-to-front:
+        latent → hub-mirror: for h in reversed(multimodal_hub):
+                   Linear(bias=False) → LN → SiLU
+                 grouped expansion Linear(→ G*hidden_size) → LN → SiLU
+        reshape                                            [..., G, hidden_size]
+        branches: for h in reversed(default_mlp):
+                   HierGroupedLinear(bias=False) → LN → SiLU
+        per-modality output: Linear(branch_width → d_k), kernels
+        uniform_init_weights(1.0) + bias, concat in breakdown order → [..., obs_dim]
+
+    The memo (§6.2) predicts the 1-dim branches starve on 1/27 of the
+    reconstruction signal; this class exists to test that empirically.
+
+    Args:
+        latent_dim (int): input latent size.
+        observation_breakdown (dict): ordered {modality_name: width}.
+        default_mlp (list[int]): encoder branch widths (reversed here).
+        multimodal_hub (list[int]): encoder hub widths (reversed here).
+        hidden_size (int): per-branch entry width (= encoder branch output).
+        rngs (nnx.Rngs): NNX RNG container.
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        observation_breakdown: dict,
+        default_mlp: list,
+        multimodal_hub: list,
+        hidden_size: int,
+        *,
+        rngs: nnx.Rngs,
+    ) -> None:
+        self.latent_dim = latent_dim
+        self.modality_names = tuple(observation_breakdown.keys())
+        self.modality_widths = tuple(int(w) for w in observation_breakdown.values())
+        self.obs_dim = int(sum(self.modality_widths))
+        self.num_groups = len(self.modality_widths)
+        self.hidden_size = hidden_size
+
+        # Hub-mirror: reversed hub widths, then grouped expansion to G*hidden_size
+        hub_widths = list(reversed(multimodal_hub)) + [self.num_groups * hidden_size]
+        m_lins, m_norms = [], []
+        in_d = latent_dim
+        for h in hub_widths:
+            m_lins.append(nnx.Linear(in_d, h, use_bias=False, rngs=rngs))
+            m_norms.append(nnx.LayerNorm(num_features=h, epsilon=1e-3, rngs=rngs))
+            in_d = h
+        self.mirror_hub_linears = nnx.List(m_lins)
+        self.mirror_hub_norms = nnx.List(m_norms)
+
+        # Per-modality branches (grouped): reversed default_mlp widths
+        branch_widths = list(reversed(default_mlp))
+        b_lins, b_norms = [], []
+        in_d = hidden_size
+        for h in branch_widths:
+            b_lins.append(HierGroupedLinear(
+                self.num_groups, in_d, h, use_bias=False, init='hafner', rngs=rngs))
+            b_norms.append(nnx.LayerNorm(num_features=h, epsilon=1e-3, rngs=rngs))
+            in_d = h
+        self.branch_linears = nnx.List(b_lins)
+        self.branch_norms = nnx.List(b_norms)
+        self._branch_out_width = in_d
+
+        # Per-modality output projections: Linear(branch_width → d_k)
+        heads = []
+        for width in self.modality_widths:
+            heads.append(nnx.Linear(in_d, width, use_bias=True, rngs=rngs))
+        self.output_heads = nnx.List(heads)
+
+        # Init: Hafner on hub-mirror linears (branch HierGroupedLinears are
+        # Hafner-init in their own __init__); uniform_init_weights(1.0) on outputs
+        key = rngs.params()
+        for lin in self.mirror_hub_linears:
+            key, k = jax.random.split(key)
+            I, O = lin.kernel[...].shape
+            lin.kernel = nnx.Param(init_weights(I, O, k))
+        for head in self.output_heads:
+            key, k = jax.random.split(key)
+            I, O = head.kernel[...].shape
+            head.kernel = nnx.Param(uniform_init_weights(1.0, I, O, k))
+
+    def __call__(self, latent: jax.Array) -> jax.Array:
+        """latent [..., latent_dim] → symlog-space obs prediction [..., obs_dim]."""
+        batch_shape = latent.shape[:-1]
+        x = latent
+        for lin, norm in zip(self.mirror_hub_linears, self.mirror_hub_norms):
+            x = lin(x)
+            x = norm(x)
+            x = jax.nn.silu(x)
+        # [..., G*hidden_size] → [..., G, hidden_size]
+        h = x.reshape(batch_shape + (self.num_groups, self.hidden_size))
+        for lin, norm in zip(self.branch_linears, self.branch_norms):
+            h = lin(h)
+            h = norm(h)
+            h = jax.nn.silu(h)
+        outs = [self.output_heads[i](h[..., i, :]) for i in range(self.num_groups)]
+        return jnp.concatenate(outs, axis=-1)  # breakdown order
+
+
+# ---------------------------------------------------------------------------
 # CP9 — ContinueHead
 # Sheeprl builds inline at agent.py:L1114-L1127 (discount_model = MLP(..., output_dim=1, ...))
 # and L1176: world_model.continue_model.model[-1].apply(uniform_init_weights(1.0))
@@ -1941,6 +2314,8 @@ def build_agent(
     action_dim: int,
     cfg: dict,
     rngs: nnx.Rngs,
+    *,
+    observation_breakdown: dict = None,
 ) -> Tuple["WorldModel", "Actor", CriticHead, CriticHead]:
     """Factory: construct WorldModel, Actor, Critic, target_critic.
 
@@ -1992,6 +2367,23 @@ def build_agent(
             cfg['algo']['critic']['bins']
             cfg['algo']['unimix']
         rngs (nnx.Rngs): NNX RNG container.
+        observation_breakdown (dict, optional): ordered {modality_name: width}
+            from src/environment/sensor.py:get_observation_breakdown. REQUIRED
+            when cfg['algo']['world_model']['encoding_mode'] == 'hierarchical'
+            (D-018); ignored (but validated harmless) under the default 'flat'
+            mode, so existing flat callers keep working unchanged.
+
+    D-018 optional keys (read with .get — D-017 precedent; the default 'flat'
+    path is bit-identical to the pre-D-018 code and pinned by the parity suite):
+            cfg['algo']['world_model']['encoding_mode']: 'flat' (default) | 'hierarchical'
+            cfg['algo']['world_model']['hierarchical_params']:   # required iff hierarchical
+                mirror_encoder_in_decoder: bool  # REQUIRED there; no default.
+                    false → HeadsMLPDecoder (design 2), true → MirrorMLPDecoder (design 3)
+                default_mlp: list[int]
+                multimodal_hub: list[int]
+                hidden_size: int
+        A 'flat' config that nevertheless contains hierarchical_params is
+        REJECTED with ValueError (a silently inert block is config drift).
 
     Returns:
         (world_model, actor, critic, target_critic)
@@ -2030,37 +2422,138 @@ def build_agent(
 
     unimix = cfg['algo']['unimix']
 
-    # 1. Encoder
-    encoder = MLPEncoder(
-        obs_dim=obs_dim,
-        dense_units=enc_dense_units,
-        mlp_layers=enc_mlp_layers,
-        rngs=rngs,
-    )
+    # -----------------------------------------------------------------------
+    # D-018 — encoding-mode resolution + fail-loud validation.
+    # ALL mode selection and validation happens BEFORE any constructor call,
+    # so the default flat path consumes the rngs stream identically to the
+    # pre-D-018 code (init bits cannot move; parity suite pins this).
+    # -----------------------------------------------------------------------
+    encoding_mode = wm_cfg.get('encoding_mode', 'flat')  # D-017 .get pattern: default = parity
+    if encoding_mode not in ('flat', 'hierarchical'):
+        raise ValueError(
+            f"algo.world_model.encoding_mode must be 'flat' or 'hierarchical', "
+            f"got {encoding_mode!r}"
+        )
+    if encoding_mode == 'flat' and 'hierarchical_params' in wm_cfg:
+        # Rejected combination — a silently inert hierarchical_params block
+        # (incl. one that only sets mirror_encoder_in_decoder) is exactly the
+        # config drift the project's no-fallback rule exists to prevent.
+        raise ValueError(
+            "algo.world_model.hierarchical_params is present but encoding_mode "
+            "is 'flat' (explicit or defaulted). Either set "
+            "encoding_mode: hierarchical or delete the hierarchical_params block."
+        )
+    if encoding_mode == 'hierarchical':
+        # Sub-keys hard-indexed — missing key raises KeyError (no fallback).
+        h_params = wm_cfg['hierarchical_params']
+        hier_mirror_decoder = h_params['mirror_encoder_in_decoder']  # REQUIRED boolean
+        if not isinstance(hier_mirror_decoder, bool):
+            raise ValueError(
+                "algo.world_model.hierarchical_params.mirror_encoder_in_decoder "
+                f"must be a boolean, got {hier_mirror_decoder!r} "
+                f"({type(hier_mirror_decoder).__name__})"
+            )
+        hier_default_mlp = h_params['default_mlp']
+        hier_multimodal_hub = h_params['multimodal_hub']
+        hier_hidden_size = h_params['hidden_size']
+        if observation_breakdown is None:
+            raise ValueError(
+                "encoding_mode: hierarchical requires observation_breakdown. "
+                "Callers must pass observation_breakdown="
+                "get_observation_breakdown(env_params) "
+                "(src/environment/sensor.py) to build_agent — see "
+                "dreamer_srl_main.py for the reference wiring."
+            )
+        _bd_sum = sum(observation_breakdown.values())
+        if _bd_sum != obs_dim:
+            raise ValueError(
+                f"observation_breakdown sums to {_bd_sum} but obs_dim is "
+                f"{obs_dim} — the breakdown does not describe this observation "
+                f"vector (breakdown: {dict(observation_breakdown)})"
+            )
 
-    # 2. RSSM
-    rssm = RSSM(
-        recurrent_state_size=recurrent_state_size,
-        recurrent_dense_units=recurrent_dense_units,
-        action_dim=action_dim,
-        stochastic_size=stoch_flat_size,
-        transition_hidden_size=transition_hidden_size,
-        repr_hidden_size=repr_hidden_size,
-        num_categoricals=stochastic_size,
-        num_classes=discrete_size,
-        encoder_output_dim=enc_dense_units,
-        unimix=unimix,
-        rngs=rngs,
-    )
+    if encoding_mode == 'flat':
+        # 1. Encoder
+        encoder = MLPEncoder(
+            obs_dim=obs_dim,
+            dense_units=enc_dense_units,
+            mlp_layers=enc_mlp_layers,
+            rngs=rngs,
+        )
 
-    # 3. Decoder
-    decoder = MLPDecoder(
-        latent_dim=latent_dim,
-        obs_dim=obs_dim,
-        dense_units=enc_dense_units,    # matches encoder dense_units (symmetric)
-        mlp_layers=enc_mlp_layers,
-        rngs=rngs,
-    )
+        # 2. RSSM
+        rssm = RSSM(
+            recurrent_state_size=recurrent_state_size,
+            recurrent_dense_units=recurrent_dense_units,
+            action_dim=action_dim,
+            stochastic_size=stoch_flat_size,
+            transition_hidden_size=transition_hidden_size,
+            repr_hidden_size=repr_hidden_size,
+            num_categoricals=stochastic_size,
+            num_classes=discrete_size,
+            encoder_output_dim=enc_dense_units,
+            unimix=unimix,
+            rngs=rngs,
+        )
+
+        # 3. Decoder
+        decoder = MLPDecoder(
+            latent_dim=latent_dim,
+            obs_dim=obs_dim,
+            dense_units=enc_dense_units,    # matches encoder dense_units (symmetric)
+            mlp_layers=enc_mlp_layers,
+            rngs=rngs,
+        )
+    else:
+        # D-018 hierarchical mode (designs 2/3). Same construction ORDER as
+        # flat (encoder → RSSM → decoder) on the same rngs stream.
+        # 1. Encoder — per-modality branches + fusion hub
+        encoder = HierarchicalMLPEncoder(
+            observation_breakdown=observation_breakdown,
+            default_mlp=hier_default_mlp,
+            multimodal_hub=hier_multimodal_hub,
+            hidden_size=hier_hidden_size,
+            rngs=rngs,
+        )
+
+        # 2. RSSM — consumes encoder.output_dim (= hierarchical hidden_size),
+        # NOT enc_dense_units (plan-review C3: the two coincide at XS only).
+        rssm = RSSM(
+            recurrent_state_size=recurrent_state_size,
+            recurrent_dense_units=recurrent_dense_units,
+            action_dim=action_dim,
+            stochastic_size=stoch_flat_size,
+            transition_hidden_size=transition_hidden_size,
+            repr_hidden_size=repr_hidden_size,
+            num_categoricals=stochastic_size,
+            num_classes=discrete_size,
+            encoder_output_dim=encoder.output_dim,
+            unimix=unimix,
+            rngs=rngs,
+        )
+
+        # 3. Decoder — heads (design 2) or mirror (design 3), selected by the
+        # required boolean hierarchical_params.mirror_encoder_in_decoder.
+        if hier_mirror_decoder:
+            decoder = MirrorMLPDecoder(
+                latent_dim=latent_dim,
+                observation_breakdown=observation_breakdown,
+                default_mlp=hier_default_mlp,
+                multimodal_hub=hier_multimodal_hub,
+                hidden_size=hier_hidden_size,
+                rngs=rngs,
+            )
+        else:
+            # N1: trunk reads the SAME sizing source as the flat decoder
+            # (encoder dense_units / mlp_layers) so designs 1 vs 2 differ
+            # only in the output head.
+            decoder = HeadsMLPDecoder(
+                latent_dim=latent_dim,
+                observation_breakdown=observation_breakdown,
+                dense_units=enc_dense_units,
+                mlp_layers=enc_mlp_layers,
+                rngs=rngs,
+            )
 
     # 4. RewardMLP — full MLP with zero-init output linear (cascade fix #27)
     # Sheeprl L1100-L1112: reward_model = MLP(input_dims=latent, output_dim=bins, hidden_sizes=[du]*layers, ...)
@@ -2137,5 +2630,25 @@ def build_agent(
         raise RuntimeError(
             f"CP3 zero-init regression: critic.output_linear.kernel max = {float(critic_kernel_max):.3e} != 0.0"
         )
+
+    # D-018: per-module param-count print (run-manifest record; plan File
+    # Change 1). Pure logging — consumes no rngs, touches no params.
+    def _n_params(module) -> int:
+        return sum(int(leaf.size) for leaf in
+                   jax.tree_util.tree_leaves(nnx.state(module, nnx.Param)))
+
+    _counts = {
+        'encoder':        _n_params(world_model.encoder),
+        'rssm':           _n_params(world_model.rssm),
+        'decoder':        _n_params(world_model.decoder),
+        'reward_model':   _n_params(world_model.reward_model),
+        'continue_model': _n_params(world_model.continue_model),
+        'actor':          _n_params(actor),
+        'critic':         _n_params(critic),
+        'target_critic':  _n_params(target_critic),
+    }
+    print(f"[build_agent] encoding_mode={encoding_mode} | params: "
+          + ", ".join(f"{k}={v:,}" for k, v in _counts.items())
+          + f" | total={sum(_counts.values()):,}")
 
     return world_model, actor, critic, target_critic

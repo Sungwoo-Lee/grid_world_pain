@@ -707,6 +707,19 @@ def main() -> None:
     obs_dim = int(probe_obs.shape[-1])
     action_dim = 4 + int(env_params.rest_action_enabled) + int(env_params.eat_action_enabled)
 
+    # D-018: modality breakdown — feeds the (opt-in) hierarchical encoder in
+    # build_agent and the per-modality reconstruction diagnostics in
+    # make_train_step (all designs incl. flat). Mirrors train.py:1021.
+    from src.environment.sensor import get_observation_breakdown
+    obs_breakdown = get_observation_breakdown(env_params)
+    _bd_sum = sum(obs_breakdown.values())
+    if _bd_sum != obs_dim:
+        raise ValueError(
+            f"get_observation_breakdown sums to {_bd_sum} but the probed "
+            f"obs_dim is {obs_dim} — sensor.py's breakdown has drifted from "
+            f"get_observation's assembly (breakdown: {dict(obs_breakdown)})"
+        )
+
     print(f"[dreamer-srl] obs_dim={obs_dim}, action_dim={action_dim}, num_envs={num_envs}")
     print(f"[dreamer-srl] episodes={episodes} (0=env-step mode), "
           f"total_timesteps={total_timesteps}, learning_starts={learning_starts} iters "
@@ -777,12 +790,21 @@ def main() -> None:
     # -----------------------------------------------------------------------
     # 5. Build agent
     # -----------------------------------------------------------------------
+    # D-018: print the modality table when the hierarchical encoder is active
+    # (mirrors train.py:1024-1031 rPPO startup print).
+    _encoding_mode = agent_cfg.to_dict()['algo']['world_model'].get('encoding_mode', 'flat')
+    if _encoding_mode == 'hierarchical':
+        print("[dreamer-srl] hierarchical encoder — modality breakdown:")
+        for _mname, _mdim in obs_breakdown.items():
+            print(f"  {_mname:.<28} {_mdim}")
+
     rngs = nnx.Rngs(key)
     world_model, actor, critic, target_critic = build_agent(
         obs_dim=obs_dim,
         action_dim=action_dim,
         cfg=agent_cfg.to_dict(),
         rngs=rngs,
+        observation_breakdown=obs_breakdown,
     )
     print("[dreamer-srl] build_agent OK")
 
@@ -861,6 +883,10 @@ def main() -> None:
         moments_pct_high=moments_pct_high,
         twohot_low=twohot_low,
         twohot_high=twohot_high,
+        # D-018 File Change 7: static (name, width) tuple → per-modality
+        # wm/recon_mse/* + wm/target_var/* diagnostics in every design
+        # (incl. the flat baseline).
+        obs_breakdown=tuple(obs_breakdown.items()),
     )
 
     # -----------------------------------------------------------------------
