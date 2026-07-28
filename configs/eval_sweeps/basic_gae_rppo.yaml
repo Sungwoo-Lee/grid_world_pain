@@ -13,7 +13,7 @@ output_dir: results/eval/avoidance/metrics_history_rppo_gae
 probe: clean
 conditions: all
 episodes: 30
-nodes: [101, 103, 104, 105, 108, 110, 113]
+nodes: [102, 107, 108, 110, 113]
 x_axis: steps
 plot_measures: [bush_dwell, spatial_spread, survival_steps]
 runs:

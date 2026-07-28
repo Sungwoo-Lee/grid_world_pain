@@ -1,0 +1,2 @@
+# Curriculum stage 2 (final) — thin override of basic level 03 (10x10, random init).
+extends: environment/experiment/basic/03-random_init_10x10

@@ -1,0 +1,2 @@
+# Curriculum stage 1 — thin override of basic level 02 (10x10, predator + rabbit).
+extends: environment/experiment/basic/02-predator_and_rabbit_10x10

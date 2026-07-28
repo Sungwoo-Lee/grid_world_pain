@@ -1,0 +1,28 @@
+# 3-stage Dreamer curriculum over the basic ladder: 01 -> 02 -> 03.
+#
+# Stages (alphabetic order in configs/environment/experiment/curriculum_basic_01_02_03/):
+#   01-slow_predator_5x5          -- 5x5, slow predator + cover
+#   02-predator_and_rabbit_10x10  -- 10x10, + harmless rabbit distractor
+#   03-random_init_10x10          -- 10x10, random init (the target task)
+#
+# All three share obs_dim=27, action_dim=6 and breakdown [1,1,1,5,5,6,8]
+# (verified), so the startup dim/fingerprint guard passes and the D-018
+# hierarchical encoder's per-modality slicing is valid across stages.
+#
+# Boundaries follow the precedent of dreamer_srl_3stage_size_curriculum
+# ([15000, 75000, 760000]) — short early stages, unbounded final stage.
+# Both early stages are >> the 5000-episode smoothing window, and partial-window
+# emission now works anyway (rolling_logging fix, commit e834ec1).
+# Easy-stage overtraining collapse was measured (rPPO) at ~3.8M/9.0M episodes,
+# far above these caps, so the short budgets dodge it by construction.
+
+continual:
+  # Cumulative episode boundaries; stage i runs while episode_count < boundaries[i].
+  # Stage lengths: [20k, 60k, ~100M] — the final stage is effectively unbounded,
+  # matching the --episodes 100000000 convention of the sibling single-stage runs.
+  episode_boundaries: [20000, 80000, 100000000]
+
+  # Per-stage checkpoint+video cadence (episodes). 1000 matches the sibling runs
+  # so checkpoints are directly comparable; async render (default ON for Dreamer)
+  # keeps the cadence cheap.
+  checkpoint_frequencies: [1000, 1000, 1000]

@@ -1,0 +1,3 @@
+# Curriculum stage 0 — thin override of basic level 01 (5x5, slow predator).
+# Stage order is ALPHABETIC by filename; keep the NN- prefixes.
+extends: environment/experiment/basic/01-slow_predator_5x5
