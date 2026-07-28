@@ -83,7 +83,9 @@ When invoked on a diff or PR:
 5. Cross-check Configuration Protocol if any YAML key was added or renamed.
 6. **Write a Review Report** to `docs/reviews/code_<short-name>.md` with:
    - Summary (one paragraph).
-   - Findings table: severity (`🔴 blocker` / `🟡 concern` / `🟢 nit`), file:line, issue, suggested fix.
+**Severity legend — reproduce it verbatim in every report so the labels never need looking up:** 🔴 Critical = fix before going further · 🟡 Moderate = likely costs a re-run · 🟢 Low = cosmetic · ❓ Open = an assumption nobody has verified yet.
+
+   - Findings table: severity (`🔴 Critical` / `🟡 Moderate` / `🟢 Low`), file:line, issue, suggested fix.
    - Conventions audit checklist (pytree ✅/❌, JIT ✅/❌, vmap ✅/❌, PRNG ✅/❌, sensor sync ✅/❌, config protocol ✅/❌).
    - One-line conclusion. Sign as `Reviewed by: code-reviewer`.
 

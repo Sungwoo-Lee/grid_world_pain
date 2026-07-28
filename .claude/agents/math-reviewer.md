@@ -72,7 +72,9 @@ When invoked on a plan or diff:
 5. **Write a Math Review Report** to `docs/reviews/math_<topic>.md` with:
    - **Summary** — one paragraph stating whether the math holds.
    - **Equations under review** — LaTeX block for each, with paper citation.
-   - **Findings table** — severity (`🔴 wrong` / `🟡 ambiguous` / `🟢 nit`), location, paper Eq. # (if applicable), issue, suggested correction.
+**Severity legend — reproduce it verbatim in every report so the labels never need looking up:** 🔴 Critical = fix before going further · 🟡 Moderate = likely costs a re-run · 🟢 Low = cosmetic · ❓ Open = an assumption nobody has verified yet.
+
+   - **Findings table** — severity (`🔴 Critical` / `🟡 Moderate` / `🟢 Low`), location, paper Eq. # (if applicable), issue, suggested correction.
    - **Derivation appendix** (if non-trivial) — step-by-step derivation supporting your verdict.
    - One-line conclusion. Sign as `Reviewed by: math-reviewer`.
 

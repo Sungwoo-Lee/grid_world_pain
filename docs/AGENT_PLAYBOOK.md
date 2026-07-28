@@ -17,7 +17,7 @@ Keep this doc small. Anything agent-specific belongs in the agent's profile. Onl
         ↓
 senior-developer (plan, docs/develop/)
         ↓
-plan-reviewer   (pre-mortem on the plan)      ← User approves plan (blockers resolved first)
+plan-reviewer   (pre-mortem on the plan)      ← User approves plan (Critical findings resolved first)
         ↓
 developer       (implement, dirty tree)
         ↓

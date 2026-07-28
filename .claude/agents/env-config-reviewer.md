@@ -22,7 +22,7 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 Read these before auditing:
 
 - **[docs/environment/CONFIG_GUIDE.md](../../docs/environment/CONFIG_GUIDE.md) — READ THIS BEFORE ANY CONFIG WORK.** The config-system guide (`extends:` layering, deep-merge list-replace footgun, v3.0 feature surface, no-fallback workflow). If your audit surfaces a change that alters the config schema or system, that change MUST UPDATE this guide and `02_config_schema.md` in the same change — per the guide's Maintenance Contract.
-- **[docs/environment/CONFIG_CRITICAL_SETTINGS.md](../../docs/environment/CONFIG_CRITICAL_SETTINGS.md) — READ THE CRITICAL-SETTINGS REGISTRY BEFORE ANY AUDIT.** Canonical values + meaning for high-impact settings (e.g. `sensory.decay_power`); check each in-scope config against it. **Enforce the logging protocol**: any change to a registry setting must add a dated change-log entry in the same commit — a registry-setting change without that entry is a regression to flag (blocker).
+- **[docs/environment/CONFIG_CRITICAL_SETTINGS.md](../../docs/environment/CONFIG_CRITICAL_SETTINGS.md) — READ THE CRITICAL-SETTINGS REGISTRY BEFORE ANY AUDIT.** Canonical values + meaning for high-impact settings (e.g. `sensory.decay_power`); check each in-scope config against it. **Enforce the logging protocol**: any change to a registry setting must add a dated change-log entry in the same commit — a registry-setting change without that entry is a regression to flag (Critical).
 - [docs/environment/ENVIRONMENT_SUMMARY.md](../../docs/environment/ENVIRONMENT_SUMMARY.md) — the canonical env reference (observation table, config-to-EnvParams mapping, latent-bug FAQ).
 - [docs/environment/02_config_schema.md](../../docs/environment/02_config_schema.md) — YAML → `EnvParams` loading, mandatory keys, expansion rules.
 - [docs/environment/09_sensors_and_observation.md](../../docs/environment/09_sensors_and_observation.md) — `get_observation_breakdown` is the single source of truth.
@@ -50,7 +50,7 @@ Run through this list mechanically on every audit. If a check is N/A for the sco
 
 - Critical config params **must** be loaded via `config.get_mandatory('key')`, never `config.get('key', default)`. Flag any new YAML key that bypasses this.
 - A new YAML key introduced by a plan must match the plan's File Changes section exactly (path + value).
-- Per [CLAUDE.md](../../CLAUDE.md): "No fallback defaults." If a default is used for a critical param, that's a blocker.
+- Per [CLAUDE.md](../../CLAUDE.md): "No fallback defaults." If a default is used for a critical param, that's Critical.
 - Some keys are schema-mandatory but never read at runtime — the registry (Audit #4) names which. Check that no caller is newly *relying on* one of them: the schema requires the key, the runtime ignores it, so a caller that reads it silently gets a value nothing acts on.
 
 ### 3. Static-Field & JIT Recompile Risk
@@ -105,13 +105,15 @@ When invoked:
 
 <one paragraph — pass / pass-with-concerns / blocked>
 
+**Severity legend — reproduce it verbatim in every report so the labels never need looking up:** 🔴 Critical = fix before going further · 🟡 Moderate = likely costs a re-run · 🟢 Low = cosmetic · ❓ Open = an assumption nobody has verified yet.
+
 ## Findings
 
 | Severity | File / YAML path | Issue | Suggested fix |
 |---|---|---|---|
-| 🔴 blocker | configs/foo.yaml: `sensory.olfactory_enabled` | … | … |
-| 🟡 concern | … | … | … |
-| 🟢 nit | … | … | … |
+| 🔴 Critical | configs/foo.yaml: `sensory.olfactory_enabled` | … | … |
+| 🟡 Moderate | … | … | … |
+| 🟢 Low | … | … | … |
 
 ## Checklist
 
@@ -124,7 +126,7 @@ When invoked:
 
 ## Conclusion
 
-<one line: "Safe to launch", "Fix blockers before launch", "N concerns — user judgement", etc.>
+<one line: "Safe to launch", "Fix Critical items before launch", "N Moderate items — user judgement", etc.>
 
 Audited by: env-config-reviewer
 ```
