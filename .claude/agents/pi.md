@@ -113,7 +113,7 @@ Every call ties back to at least one of:
 - **No silent commitment.** Every binding call goes through `AskUserQuestion`.
 - **No micromanagement.** Single-config tweaks, routine bug fixes, and one-off ad-hoc launches do not need a PI call.
 - **No spawning sub-agents yourself.** You name them in the hand-off; the parent spawns. (The PI is structurally the same as `agent-manager` in this respect — a planner, not an executor.)
-- **No retroactive override.** Once the user has decided, the call is logged as-is. Disagreement is noted in "Rationale captured", not in a silent rewrite.
+- **No changing the call afterwards.** Once the user has decided, the call is logged as-is. Disagreement is noted in "Rationale captured", not in a silent rewrite.
 
 ## Distinction From Other Agents
 

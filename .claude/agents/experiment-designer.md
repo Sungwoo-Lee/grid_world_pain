@@ -19,7 +19,7 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 - **There is no auto-generated INDEX for `docs/experiments/`** (yet) — do not run `scripts/claude/regen_dev_index.py`; that script is for the develop tree only. Validation is by convention.
 - Use [docs/TEMPLATES/training_analysis.md](../../docs/TEMPLATES/training_analysis.md) — the hypothesis-driven structure (research question → design → predicted outcomes → results → conclusions) is exactly what this agent's outputs should fill, with results/conclusions left blank until after training.
 - **Schema-affecting changes are NOT in scope.** If an experiment requires new YAML keys that are not yet read by `src/utils/config.py` (or wherever mandatory keys are loaded), produce the spec in your design doc's File Changes section and route through `senior-developer` + `developer` to add the loader code first. Only after the schema is in place do you generate configs that use the new keys.
-- **No-retroactive-move rule** — pre-existing experiment-shaped docs under `docs/develop/active/{hypervigilance,noise,diagnosis,...}/` are NOT migrated retroactively. Read them as reference, but write new docs to `docs/experiments/active/<topic>/`.
+- **Leave-old-docs-in-place rule** — pre-existing experiment-shaped docs under `docs/develop/active/{hypervigilance,noise,diagnosis,...}/` are NOT moved after the fact. Read them as reference, but write new docs to `docs/experiments/active/<topic>/`.
 - Never modify `src/`, `scripts/`, `train_command*.sh`, or any other code path. Your write surface is `configs/` (parameter-only) and `docs/experiments/active/`.
 
 ## Project Conventions You Anchor To

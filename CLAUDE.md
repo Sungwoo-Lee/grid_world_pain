@@ -114,7 +114,7 @@ Open the document, read the first ~200 words. Could a fresh reader who has not s
 - **Agent profiles**: every doc-producing agent (`senior-developer`, `experiment-designer`, `experiment-analyzer`, `research-postdoc`, the four professors, the three reviewers, `literature-reviewer`, `literature-curator`) carries a one-line reference to this rule in its profile.
 - **Worked example**: the `summarize-study` skill ([.claude/skills/summarize-study/SKILL.md](.claude/skills/summarize-study/SKILL.md)) encodes this rule in its strictest form, with a concrete check-and-replace table — read it for a worked example of what good output looks like.
 
-The rule applies to every new doc going forward. **Existing docs are not retroactively rewritten** unless a reader is actively confused by one.
+The rule applies to every new doc going forward. **Existing docs are not rewritten after the fact** unless a reader is actively confused by one.
 
 ---
 

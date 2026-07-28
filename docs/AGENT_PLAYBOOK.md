@@ -106,9 +106,9 @@ If an experiment-analyzer or experiment-designer adds a `## Metrics Requested` s
 ### Analyzing existing runs (no prior design)
 
 ```
-experiment-analyzer (Mode B (retroactive) — retroactive hypothesis frame, full doc to docs/experiments/)
+experiment-analyzer (Mode B (unplanned) — hypothesis written after the runs, full doc to docs/experiments/)
         ↓
-plan-reviewer       (empirical-claim pass — Mode B (retroactive) verdicts carry no pre-registration,
+plan-reviewer       (empirical-claim pass — Mode B (unplanned) verdicts carry no pre-registration,
                      so the inference audit matters more here, not less)
         ↓
 pi                  (only if the analysis spans 3+ runs or changes a track-level
@@ -158,7 +158,7 @@ These apply across multiple flows. The `agent-manager` flags them as preconditio
 - **Temporal evolution mandatory** in any training analysis — not just end-of-training snapshots.
 - **No fallback defaults** for critical config params — `config.get_mandatory()` everywhere, missing key → `ValueError`. Plans list new keys explicitly.
 - **Frontmatter contracts**: develop tree is auto-INDEX'd via `scripts/claude/regen_dev_index.py`; experiments tree is by-convention only (no INDEX). Don't run `regen_dev_index.py` for `docs/experiments/`.
-- **No-retroactive-move rule**: pre-existing experiment-shaped docs under `docs/develop/active/{hypervigilance,noise,diagnosis}/` are NOT migrated retroactively. Read as reference, write new docs to `docs/experiments/active/<topic>/`.
+- **Leave-old-docs-in-place rule**: pre-existing experiment-shaped docs under `docs/develop/active/{hypervigilance,noise,diagnosis}/` are NOT moved after the fact. Read as reference, write new docs to `docs/experiments/active/<topic>/`.
 - **Dirty working tree for verification.** `developer` does NOT commit; `senior-developer` reads the uncommitted diff. Once committed, the verification signal is lost.
 
 ## Reviewer Coverage & Overlap
@@ -179,7 +179,7 @@ Their checklists overlap on purpose — `get_mandatory` discipline, static-field
 
 The `agent-manager` flags these in its routing plan; the parent (or any directly-invoking agent) pushes back on them before spawning sub-agents:
 
-- **"Analysis but no design exists"** — user asks for analysis of pre-registered hypothesis but there's no design doc. Push back: do you want Mode B (retroactive) post-hoc (weaker), or should we design first?
+- **"Analysis but no design exists"** — user asks for analysis of pre-registered hypothesis but there's no design doc. Push back: do you want Mode B (unplanned) post-hoc (weaker), or should we design first?
 - **"Bug fix but the plan rewrites the design"** — root cause is a project-design issue, not a localized bug. Escalate to feature flow.
 - **"Skip user approval because the plan looks obvious"** — there is no such thing as an obviously correct plan. Always pause at user-approval gates.
 - **"Skip the PI on a multi-week / multi-paper-shaped commitment"** — the PI's whole purpose is the focus-vs-explore call at portfolio scope. A roadmap-level plan or a multi-run experiment series that goes straight from `experiment-designer` to `training-runner` without a PI call is a missed opportunity to ask "is this the right thing to spend GPU-weeks on?". Conversely, **invoking `pi` for a one-line config tweak or a routine bug fix** is also wrong — the PI declines and tells the user.

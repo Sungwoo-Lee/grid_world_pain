@@ -19,7 +19,7 @@ Every doc you produce must lead with a plain-language entry-point section (Quest
 
 ## Two Analysis Modes
 
-### Mode A (planned) — Fill in a design doc written before the runs
+### Mode A (planned) — Fill in a design doc that was written before the runs
 
 Triggered when an `experiment-designer` doc exists at `docs/experiments/active/<topic>/<EXP_NAME>.md` with empty Results / Analysis / Conclusions sections, and the user returns to interpret the runs.
 
@@ -31,11 +31,11 @@ Triggered when an `experiment-designer` doc exists at `docs/experiments/active/<
 6. **Fill in Conclusions**: did the design's hypothesis hold? If yes, with what effect size and seed stability? If no, was it the architecture, the run, or the design? Reference the failure-mode catalog explicitly.
 7. **Bump frontmatter** `last_updated` to today. **Do not edit the Launch Manifest** — its planned columns belong to `experiment-designer`, the actual columns belong to `training-runner`. You read it; you don't write to it.
 
-### Mode B (retroactive) — Analyse runs that were never designed
+### Mode B (unplanned) — Analyse runs that were never designed; the hypothesis is written afterwards
 
 Triggered when the user attaches a screenshot or run IDs and asks a question, and there is no prior design doc.
 
-1. **Frame the analysis as a hypothesis** anyway, even retroactively. Write the doc's research question to match what the user is actually asking ("Did adding noise reduce survival on the LayerNorm baseline?"). This is what keeps post-hoc work honest.
+1. **Frame the analysis as a hypothesis** anyway, even after the fact. Write the doc's research question to match what the user is actually asking ("Did adding noise reduce survival on the LayerNorm baseline?"). This is what keeps post-hoc work honest.
 2. **Run the WandB workflow** on the runs.
 3. **Write a fresh doc** at `docs/experiments/active/<topic>/<NAME>.md` with full frontmatter and the `training_analysis.md` template structure. Pick `topic` per the experiments [Frontmatter Contract](../../docs/experiments/meta/FRONTMATTER_CONTRACT.md) — typically `diagnosis`, `comparison`, or the experimental theme.
 4. **Be explicit that this is post-hoc** in the doc — note the absence of pre-registered predictions and that conclusions are weaker than for a pre-registered design.
@@ -46,7 +46,7 @@ When given run IDs (typically `YYYYMMDD_HHMMSS`):
 
 1. **Extract run IDs**:
    - **Mode A (planned) with a populated manifest**: pull WandB run IDs from the `## 3. Launch Manifest` table. The manifest's `WandB run ID` and `Log path` columns are authoritative.
-   - **Mode B (retroactive) or Mode A (planned) without a manifest**: extract run datetime IDs from the user's screenshot/message.
+   - **Mode B (unplanned) or Mode A (planned) without a manifest**: extract run datetime IDs from the user's screenshot/message.
 2. **Locate local WandB logs** in `wandb/run-YYYYMMDD_HHMMSS-<wandb_id>/`. **Do NOT query the WandB web API** — local files only. Project convention.
 3. **Invoke the `wandb-analysis` skill** to parse logs.
 4. **Save intermediate extractions** to `tmp/YYYYMMDD_HHMMSS_<topic>.md` after each step (Working File Convention). Multiple analyses may run in parallel — each gets its own timestamped file.
@@ -64,7 +64,7 @@ WandB metrics answer "what do the summary numbers say"; they do NOT answer "what
 
 - **Analysis docs** under `docs/experiments/active/<topic>/<NAME>.md` per the [experiments Frontmatter Contract](../../docs/experiments/meta/FRONTMATTER_CONTRACT.md).
 - **Required frontmatter**: `title`, `topic`, `status: active`, `created`, `last_updated`. Optional: `phase`, `wandb_tag` (the runs' tag pattern), `develop_link` (if tied to a develop-side spec), `supersedes` / `superseded_by`.
-- **Template**: [docs/TEMPLATES/training_analysis.md](../../docs/TEMPLATES/training_analysis.md) — hypothesis-driven structure (research question → design → predicted outcomes → results → analysis → conclusions). Mode A (planned) fills the back half; Mode B (retroactive) fills the entire doc with a retroactive frame.
+- **Template**: [docs/TEMPLATES/training_analysis.md](../../docs/TEMPLATES/training_analysis.md) — hypothesis-driven structure (research question → design → predicted outcomes → results → analysis → conclusions). Mode A (planned) fills the back half; Mode B (unplanned) fills the entire doc with a hypothesis written after the runs.
 - **Working files** in `tmp/YYYYMMDD_HHMMSS_<topic>.md`, written after each extraction step.
 - **No INDEX script** — `docs/experiments/` is not auto-indexed (yet). Do NOT run `scripts/claude/regen_dev_index.py`.
 
@@ -86,7 +86,7 @@ The user reads this section. If accepted, the user invokes `feature-workflow` (`
 - If the analysis surfaces a **bug** or unexpected behavior in the codebase, add a `## Related Issues` link to a separate `bug-fix-workflow` plan under `docs/develop/active/<topic>/`. Cross-reference both directions.
 - If the analysis surfaces a **needed code change** beyond logging (new feature, refactor), the user invokes `feature-workflow`. Note it in `## Related Issues`.
 - If the analysis is paired with an `experiment-designer` design doc (Mode A (planned)), they share the same file — no cross-link needed; you fill in the bottom half of the doc the designer wrote.
-- If you write a fresh post-hoc doc (Mode B (retroactive)) that should later be re-run as a pre-registered experiment, add a TODO to the doc and surface it to the user.
+- If you write a fresh unplanned-mode doc (Mode B) that should later be re-run as a pre-registered experiment, add a TODO to the doc and surface it to the user.
 
 ## Common Mistakes to Avoid
 
